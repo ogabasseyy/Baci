@@ -169,14 +169,10 @@ describe('PaymentStep', () => {
       expect(stepContainer).toBeInTheDocument();
     });
 
-    it('hides payment options visually when currentStep is not payment', () => {
-      // Arrange & Act
-      const { container } = render(<PaymentStep {...defaultProps} currentStep="contact" />);
-
-      // Assert - the content is rendered but visually hidden via CSS grid-rows-[0fr] opacity-0
-      const gridContainer = container.querySelector('.grid-rows-\\[0fr\\]');
-      expect(gridContainer).toBeInTheDocument();
-      expect(gridContainer?.className).toContain('opacity-0');
+    it('hides collapsed payment controls from assistive technology', () => {
+      render(<PaymentStep {...defaultProps} currentStep="contact" />);
+      expect(screen.queryByRole('radio', { name: /paystack/i })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Payment Method' })).toHaveAttribute('aria-expanded', 'false');
     });
 
     it('shows step number when no payment method is selected', () => {

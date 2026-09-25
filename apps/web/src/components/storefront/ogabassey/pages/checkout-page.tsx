@@ -1,4 +1,7 @@
 'use client';
+import { buildCheckoutOrderRequest } from './checkout/build-checkout-order-request';
+import { useLoadResumedOrder } from './checkout/hooks/use-load-resumed-order';
+import { useOrderTotals } from './checkout/hooks/use-order-totals';
 
 import { useAirportQuoteRecovery } from './checkout/hooks/use-airport-quote-recovery';
 import {
@@ -9,10 +12,6 @@ import { isAirportDeliveryReady } from './checkout/is-airport-delivery-ready';
 import { canShowDeliveryMethods } from './checkout/can-show-delivery-methods';
 
 import { DeferredCryptoSelectorModal as CryptoSelectorModal } from './checkout/components/DeferredCryptoSelectorModal';
-import {
-  isAirportDeliveryEligible,
-  isPickupEligible,
-} from '@baci/shared';
 import {
   CHECKOUT_FUNNEL_EVENTS,
   buildCheckoutFunnelProperties,
@@ -25,19 +24,16 @@ import {
   ChevronRight,
   CreditCard,
   Loader2,
-  Plane,
   ShieldCheck,
-  Truck,
   Check,
   Copy,
   Clock,
   User,
   X,
-  Eye,
-  EyeOff,
 } from 'lucide-react';
-import { SmartQuoteLoader } from '../components/SmartQuoteLoader';
-import { DoorDeliveryQuoteOptions } from './checkout/components/DoorDeliveryQuoteOptions';
+import { CheckoutStepSection } from './checkout/components/CheckoutStepSection';
+import { DeliveryAddressFields, type SavedCheckoutAddress as SavedAddress } from './checkout/components/DeliveryAddressFields';
+import { DeliveryOptions } from './checkout/components/DeliveryOptions';
 import { isCheckoutDeliveryAddressReady } from './checkout/is-checkout-delivery-address-ready';
 import {
   checkoutShippingQuoteDeliveryPreference,
@@ -77,7 +73,6 @@ import type {
 } from './checkout/types';
 import { mapApiOrderToResumedOrder } from './checkout/map-api-order-to-resumed-order';
 import {
-  loadResumedCheckoutOrder,
   loadShippingStates,
   loadWalletBalance,
   requestDvaInitialization,
@@ -87,23 +82,18 @@ import {
   usePersistedState,
 } from '@/hooks/use-persisted-state';
 import { useAuthSafe } from '@/contexts/auth-context';
-import { PhoneInput } from '@/components/ui/phone-input';
 import { DeferredCheckoutAuthModal as CheckoutAuthModal } from './checkout/components/DeferredCheckoutAuthModal';
 import {
-  AddressAutocomplete,
   type PlaceDetails,
 } from '@/components/address-autocomplete';
 import { openCredPalCheckout } from '@/lib/credpal';
 import { openCreditDirectCheckout } from '@/lib/credit-direct-client';
 import { asRoute } from '@/lib/routes';
-import { AUTO_FRACTION_OPTIONS } from '@/lib/currency';
 import { getCountryByCode } from '@/lib/countries';
-import { formatAmountInCurrency } from '@/lib/resolve-merchant-currency';
 import type { ShippingQuote } from '@/types/shipping-quote';
 import { getSubdivisions } from '@/lib/shipping/merchant-rates/subdivisions';
 import { toast } from '@/hooks/use-toast';
 import { createClient } from '@/lib/supabase/client';
-import { calculateCommerce } from '@/lib/supabase/client';
 import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
 import { toCreditDirectItems } from '@/lib/checkout/credit-direct-items';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
@@ -119,7 +109,7 @@ import {
   isPaystackCheckoutAvailable,
 } from '@/lib/checkout/payment-gateway-availability';
 import { isNgnChargeCurrency } from './checkout/components/payment-step-availability';
-import { isValidPhoneNumber } from 'react-phone-number-input';
+import { ContactStep } from './checkout/components/ContactStep';
 import {
   buildPendingCheckoutFingerprint,
   CHECKOUT_PENDING_ORDER_STORAGE_KEY,
@@ -156,7 +146,6 @@ import {
   parseRedvaultOrderQuote,
 } from './checkout/redvault-payment-response';
 import { getRedvaultCompatibleCheckoutValues } from './checkout/redvault-compatible-checkout-values';
-import { AirportDeliveryOptions } from './checkout/components/AirportDeliveryOptions';
 import {
   invalidatePendingQuoteRequests,
   loadCheckoutShippingQuotes,
@@ -170,7 +159,6 @@ import {
   getDoorDeliveryQuotes,
   getForwardableSelectedQuoteId,
   getMerchantRateId,
-  getPickupStationCopy,
   getStationPickupAddressText,
   getStationPickupQuote,
   getStationPickupQuotes,
@@ -198,18 +186,6 @@ import {
   type CheckoutItem,
 } from './checkout/components/DesktopOrderSummary';
 
-interface SavedAddress {
-  id: number;
-  label: string;
-  address: string;
-  phone: string;
-  isDefault: boolean;
-}
-
-interface ShippingLocation {
-  city: string;
-  state: string;
-}
 
 interface InferredCheckoutAddressLocation {
   city: string;
@@ -360,6 +336,8 @@ export const CheckoutPage: React.FC = () => {
   const currentStep = isHydrated ? rawCurrentStep : 'contact';
   const completedSteps = isHydrated ? rawCompletedSteps : { contact: false, delivery: false };
 
+  const [focusActiveStep, setFocusActiveStep] = useState(false);
+
   // Convenient setters that update the persisted form
   const setFirstName = (v: string) => setCheckoutField('firstName', v);
   const setLastName = (v: string) => setCheckoutField('lastName', v);
@@ -367,7 +345,7 @@ export const CheckoutPage: React.FC = () => {
   const setCustomerPhone = (v: string) => setCheckoutField('customerPhone', v);
   const setNewAddressState = (v: string) => setCheckoutField('newAddressState', v);
   const setNewAddressCity = (v: string) => setCheckoutField('newAddressCity', v);
-  const setCurrentStep = (v: 'contact' | 'delivery' | 'payment') => setCheckoutField('currentStep', v);
+  const setCurrentStep = (v: 'contact' | 'delivery' | 'payment') => { setFocusActiveStep(true); setCheckoutField('currentStep', v); };
   const setCompletedSteps = (v: { contact: boolean; delivery: boolean } | ((prev: { contact: boolean; delivery: boolean }) => { contact: boolean; delivery: boolean })) => {
     if (typeof v === 'function') {
       setCheckoutField('completedSteps', v(completedSteps));
@@ -408,10 +386,7 @@ export const CheckoutPage: React.FC = () => {
   const [createAccount, setCreateAccount] = useState(false);
   const [accountPassword, setAccountPassword] = useState('');
   const setNewsletterOptIn = (value: boolean) => setCheckoutField('newsletterOptIn', value);
-  const [showPasswordInput, setShowPasswordInput] = useState(false);
-  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [contactValidationAttempted, setContactValidationAttempted] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -434,16 +409,6 @@ export const CheckoutPage: React.FC = () => {
       console.error('Clipboard API not available:', err);
     }
   };
-
-  // Validation States (hydration-safe: default to false during SSR to match disabled="" on server)
-  const rawIsContactValid = (() => {
-    const hasRequiredFields = firstName.trim() && lastName.trim() && customerEmail.trim() && customerPhone;
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const isPhoneValid = customerPhone && isValidPhoneNumber(customerPhone);
-    return !!(hasRequiredFields && emailRegex.test(customerEmail.trim()) && isPhoneValid);
-  })();
-  const isContactValid = isHydrated ? rawIsContactValid : false;
-
 
   // Dedicated Virtual Account (DVA) state
   const [dvaData, setDvaData] = useState<DvaModalData | null>(null);
@@ -682,7 +647,6 @@ export const CheckoutPage: React.FC = () => {
 
   // Shipping State
   const [shippingStates, setShippingStates] = useState<string[]>([]);
-  const [shippingCities, setShippingCities] = useState<string[]>([]);
   const [isLoadingLocations, setIsLoadingLocations] = useState(false);
   const [shippingQuotes, setShippingQuotes] = useState<ShippingQuote[]>([]);
   const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
@@ -844,33 +808,11 @@ export const CheckoutPage: React.FC = () => {
     setPaymentMethod(nextMethod);
   };
 
-  // Fetch resumed order from mobile app when orderId is in URL.
-  // The async try/catch/finally flow lives in module-scope
-  // `loadResumedCheckoutOrder` so the compiler can memoize this component.
-  useEffect(() => {
-    if (!resumeOrderId || !resumeMerchantSlug) return;
-
-    loadResumedCheckoutOrder({
-      resumeOrderId,
-      resumeMerchantSlug,
-      resumeTrackingToken,
-      resumeLookupEmail,
-      preferredGateway,
-      setIsLoadingResumedOrder,
-      setResumedOrder,
-      setCheckoutFields,
-      setPaymentTab,
-      setPaymentMethod: selectPaymentMethod,
-      setResumeOrderError,
-    });
-  }, [
-    preferredGateway,
-    resumeOrderId,
-    resumeLookupEmail,
-    resumeMerchantSlug,
-    resumeTrackingToken,
-    setCheckoutFields,
-  ]);
+  useLoadResumedOrder({
+    resumeOrderId, resumeMerchantSlug, resumeTrackingToken, resumeLookupEmail,
+    preferredGateway, setIsLoadingResumedOrder, setResumedOrder, setCheckoutFields,
+    setPaymentTab, setPaymentMethod: selectPaymentMethod, setResumeOrderError,
+  });
 
   // Load the address state list. NG hits /api/shipping/locations (rich data);
   // non-NG markets derive their states from the subdivision vocabulary. Keyed
@@ -888,45 +830,6 @@ export const CheckoutPage: React.FC = () => {
       controller.abort();
     };
   }, [merchantCountry]);
-
-  // Clear stale city options inline during render when the selected state is
-  // reset (react.dev "adjusting state when a prop changes" pattern — avoids a
-  // synchronous setState-in-effect and the extra commit it forces).
-  const [prevCityFetchState, setPrevCityFetchState] = useState(newAddressState);
-  if (newAddressState !== prevCityFetchState) {
-    setPrevCityFetchState(newAddressState);
-    if (!newAddressState) {
-      setShippingCities([]);
-    }
-  }
-
-  // Fetch Cities when State changes. NG-only: the /api/shipping/locations city
-  // dataset is Nigerian. Non-NG cities come from the typed address via
-  // inferAddressLocationFromInput's rawCity (no list lookup needed), so a NG
-  // city fetch must never fire for a non-NG address.
-  useEffect(() => {
-    if (merchantCountry !== 'NG' || !newAddressState) {
-      return;
-    }
-    const fetchCities = async () => {
-      try {
-        const res = await fetch(
-          `/api/shipping/locations?state=${encodeURIComponent(newAddressState)}`
-        );
-        if (res.ok) {
-          const data = await res.json();
-          // Extract unique cities from the locations
-          const cities = [
-            ...new Set((data.locations as ShippingLocation[]).map((l) => l.city)),
-          ].sort();
-          setShippingCities(cities);
-        }
-      } catch (error) {
-        console.error('Failed to fetch cities', error);
-      }
-    };
-    fetchCities();
-  }, [merchantCountry, newAddressState]);
 
   // Function to fetch quotes. The async core (with its try/finally and
   // synchronous loading-state writes) lives in module-scope
@@ -1104,7 +1007,6 @@ export const CheckoutPage: React.FC = () => {
   const [walletLoading, setWalletLoading] = useState(false);
   const [payWithWallet, setPayWithWallet] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [orderTotals, setOrderTotals] = useState<{ total: number; taxAmount: number } | null>(null);
   const [appliedDiscount, setAppliedDiscount] =
     useState<DiscountResult | null>(null);
 
@@ -1188,6 +1090,15 @@ export const CheckoutPage: React.FC = () => {
     airportType,
   );
 
+  const taxRate = merchant?.vat_registration_status === 'registered'
+    ? (merchant.vat_rate ?? 7.5) / 100
+    : 0;
+  const orderTotals = useOrderTotals({
+    cartTotal: effectiveItemSubtotal,
+    deliveryCost,
+    taxRate,
+  });
+
   // Server-computed discount amount (the route re-validates against the
   // canonical subtotal); fall back to a local estimate only if it's missing.
   const discountAmount = appliedDiscount
@@ -1219,26 +1130,6 @@ export const CheckoutPage: React.FC = () => {
   const walletAmountUsed = checkoutValues.walletAmountUsed;
   const remainingAmount = total - walletAmountUsed;
 
-
-  const taxRate = merchant?.vat_registration_status === 'registered'
-    ? (merchant.vat_rate ?? 7.5) / 100
-    : 0;
-
-  useEffect(() => {
-    const fetchTotals = async () => {
-      try {
-        const result = await calculateCommerce('calculate_order', {
-          subtotal: effectiveItemSubtotal,
-          shippingFee: deliveryCost,
-          taxRate,
-        });
-        setOrderTotals(result);
-      } catch (err) {
-        console.error("Failed to fetch totals from brain", err);
-      }
-    };
-    fetchTotals();
-  }, [effectiveItemSubtotal, deliveryCost, taxRate]);
 
   // Thin caller: the resumed BNPL flow lives in the direct-payment
   // handler (Boy Scout extraction); this just binds component state.
@@ -1731,100 +1622,15 @@ export const CheckoutPage: React.FC = () => {
             'Content-Type': 'application/json',
             'Idempotency-Key': checkoutIdempotencyKey,
           },
-          body: JSON.stringify({
-            merchant_id: merchant.id,
-            customer_email: customerEmail,
-            customer_name: `${firstName} ${lastName}`.trim(),
-            customer_phone: customerPhone,
+          body: JSON.stringify(buildCheckoutOrderRequest({
+            merchantId: merchant.id,
             items: orderItems,
-            subtotal: checkoutCartTotal,
-            shipping_fee: deliveryCost,
-            // B3.5 (Δ-31, Δ-34, Δ-39): pass the calculate-commerce
-            // VAT figure AND the gift-wrapping fee AND the client's
-            // expected total straight through to the API. No hidden
-            // fallback math — pre-B3.5 this body omitted `tax_amount`
-            // entirely so the RPC defaulted it to 0, the trigger
-            // later overwrote `orders.tax_amount` from order_items
-            // VAT, and `orders.total` was left stale: customer saw
-            // ₦X (with VAT) but the row recorded ₦X-without-VAT.
-            // The RPC enforces VAT itself (Δ-42) so any drift here
-            // surfaces as `tax_amount_mismatch` 4xx, not silent.
-            tax_amount: orderTotals?.taxAmount ?? 0,
-            tax_basis: 'exclusive',
-            gift_wrapping_fee: giftWrappingCost,
-            // Client-side total snapshot for the API's parity check
-            // (Δ-39). Must match the RPC formula:
-            //   subtotal + shipping + gift + tax - discount.
-            // The local `total` variable (line ~953) is
-            // `orderTotals?.total || (cartTotal + deliveryCost +
-            // giftWrappingCost)` — `orderTotals.total` from
-            // `calculate_order` is `subtotal + shipping + tax` and
-            // OMITS gift wrapping (the action's input is just
-            // {subtotal, shippingFee, taxRate}, no gift param).
-            // Sending `total` directly when orderTotals is present
-            // would always trip ORDER_TOTAL_MISMATCH whenever
-            // `giftWrappingCost > 1`. Compose the snapshot from the
-            // explicit components instead so it always matches the
-            // server side (Codex P1 on PR #1622).
-            // Net of the applied discount so the RPC parity formula
-            // (subtotal + shipping + gift + tax - discount) matches; the route
-            // recomputes + validates the discount from the canonical subtotal.
-            expected_total: Math.max(
-              0,
-              checkoutCartTotal +
-                deliveryCost +
-                giftWrappingCost +
-                (orderTotals?.taxAmount ?? 0) -
-                checkoutValues.discountAmount
-            ),
-            client_total: Math.max(
-              0,
-              checkoutCartTotal +
-                deliveryCost +
-                giftWrappingCost +
-                (orderTotals?.taxAmount ?? 0) -
-                checkoutValues.discountAmount
-            ),
-            ...(checkoutValues.discountCode
-              ? { discount_code: checkoutValues.discountCode }
-              : {}),
-            payment_method: normalizedPaymentMethod,
-            payment_status: 'unpaid',
-            shipping_status: 'pending',
-            shipping_address: shippingAddressData,
-            source: 'online_store',
-            delivery_method: deliveryMethod,
-            ...(deliveryMethod === 'airport' &&
-            !selectedQuoteMatchesDeliveryMethod
-              ? { airport_type: airportType }
-              : {}),
-            shipping_provider: shippingProvider,
-            // Merchant-rate orders: send the bare rate id and force the null
-            // shipping_provider/selected_quote_id path (there is no persisted
-            // quote row to book). The route recomputes + verifies the fee.
-            ...(merchantRateId ? { shipping_rate_id: merchantRateId } : {}),
-            // B3 review fix (PR #1611): explicit null on the wire. The RPC
-            // schema is `.nullable().optional()` so null is canonical. Merchant
-            // rates always resolve to null here (they carry shipping_rate_id);
-            // pickup/airport and an empty/dangling selection also resolve to
-            // null. Shared with the reuse path so the two can't drift.
-            selected_quote_id:
-              deliveryMethod === 'airport'
-                ? selectedQuoteMatchesDeliveryMethod
-                  ? selectedQuoteId || null
-                  : null
-                : (getForwardableSelectedQuoteId(
-                    deliveryMethod,
-                    selectedQuoteId,
-                  ) ?? null),
-            // Wallet redemption (2025: auto-apply at checkout)
-            use_wallet_credit: checkoutValues.useWalletCredit,
-            wallet_amount: walletAmountUsed,
-            // Link customer to auth user (2025: unified customer identity)
-            user_id: user?.id,
-            // Marketing Consent
-            accepts_marketing: newsletterOptIn,
-          }),
+            paymentMethod: normalizedPaymentMethod,
+            acceptsMarketing: newsletterOptIn,
+            customer: { name: `${firstName} ${lastName}`.trim(), email: customerEmail, phone: customerPhone, userId: user?.id },
+            money: { subtotal: checkoutCartTotal, shipping: deliveryCost, tax: orderTotals?.taxAmount ?? 0, giftWrapping: giftWrappingCost, discountAmount: checkoutValues.discountAmount, discountCode: checkoutValues.discountCode, useWalletCredit: checkoutValues.useWalletCredit, walletAmount: walletAmountUsed },
+            delivery: { method: deliveryMethod, airportType, quoteMatchesMethod: selectedQuoteMatchesDeliveryMethod, selectedQuoteId, merchantRateId, provider: shippingProvider, address: shippingAddressData },
+          })),
         });
 
         if (!orderResponse.ok) {
@@ -2687,37 +2493,6 @@ export const CheckoutPage: React.FC = () => {
       });
   };
 
-  // Unified Next Step Handler for Mobile Action Bar
-  const handleNextStep = () => {
-    if (currentStep === 'contact') {
-      // Validation Logic (Same as desktop button)
-      setContactValidationAttempted(true);
-
-      const trimmedFirstName = firstName.trim();
-      const trimmedLastName = lastName.trim();
-      const trimmedEmail = customerEmail.trim();
-
-      // Validate all required fields
-      const hasErrors = !trimmedFirstName || !trimmedLastName || !trimmedEmail || !customerPhone || !isValidPhoneNumber(customerPhone);
-
-      if (hasErrors) return; // Inline errors will show
-
-      // Basic email validation
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(trimmedEmail)) return;
-
-      setCompletedSteps(prev => ({ ...prev, contact: true }));
-      setCurrentStep('delivery');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else if (currentStep === 'delivery') {
-      setCompletedSteps(prev => ({ ...prev, delivery: true }));
-      setCurrentStep('payment');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else if (currentStep === 'payment') {
-      handlePlaceOrder();
-    }
-  };
-
   const isPayForMeValid =
     paymentMethod === 'payforme'
       ? Boolean(payForMeDetails.name && payForMeDetails.contact)
@@ -3259,277 +3034,31 @@ export const CheckoutPage: React.FC = () => {
               </div>
             )}
 
-            {/* Accordion Step 1: Contact Information */}
-            <div className={`bg-white rounded-2xl shadow-sm border ${currentStep === 'contact' ? 'border-store-primary ring-1 ring-store-primary/20' : 'border-gray-100'} overflow-hidden transition-all duration-300`}>
-              <button
-                type="button"
-                onClick={() => setCurrentStep('contact')}
-                className="w-full px-6 py-4 flex items-center justify-between gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-store-primary focus-visible:ring-inset"
-              >
-                <div className="min-w-0">
-                  <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                    <div className={`size-6 rounded-full flex items-center justify-center text-xs transition-colors ${completedSteps.contact ? 'bg-green-100 text-green-600' : currentStep === 'contact' ? 'bg-store-primary/10 text-store-primary' : 'bg-gray-100 text-gray-500'
-                      }`}>
-                      {completedSteps.contact ? <Check size={14} /> : '1'}
-                    </div>
-                    Contact Information
-                  </h2>
-                  {completedSteps.contact && currentStep !== 'contact' && (firstName || customerPhone) && (
-                    <p className="mt-1 pl-8 text-xs font-normal text-gray-500 truncate">
-                      {[firstName, lastName].filter(Boolean).join(' ')}
-                      {customerPhone ? ` · ${customerPhone}` : ''}
-                    </p>
-                  )}
-                </div>
-                {completedSteps.contact && currentStep !== 'contact' && (
-                  <span className="text-sm font-semibold text-store-primary underline-offset-4 hover:underline shrink-0">Edit</span>
-                )}
-              </button>
+            <ContactStep
+              focusOnActivate={focusActiveStep}
+              active={currentStep === 'contact'}
+              completed={completedSteps.contact}
+              values={{ firstName, lastName, customerEmail, customerPhone }}
+              onChange={setCheckoutField}
+              account={{ createAccount, password: accountPassword }}
+              onAccountChange={({ createAccount: nextCreateAccount, password }) => {
+                setCreateAccount(nextCreateAccount);
+                setAccountPassword(password);
+              }}
+              signedIn={Boolean(user)}
+              onOpen={() => setCurrentStep('contact')}
+              onComplete={() => { setFocusActiveStep(true); setCheckoutFields({ currentStep: 'delivery', completedSteps: { ...completedSteps, contact: true } }); }}
+            />
 
-              {/* Collapsible Content */}
-              <div className={`grid transition-all duration-300 ease-in-out ${currentStep === 'contact' ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
-                <div className="overflow-hidden">
-                  <div className="p-6 pt-0 space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
-                          First Name *
-                        </label>
-                        <input
-                          type="text"
-                          value={firstName}
-                          onChange={(e) => setFirstName(e.target.value)}
-                          placeholder="John"
-                          className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:outline-hidden text-sm text-gray-900 placeholder:text-gray-400 ${contactValidationAttempted && !firstName.trim()
-                            ? 'border-red-500 focus:border-red-500 bg-store-primary/5'
-                            : firstName.trim()
-                              ? 'border-store-primary/40 focus:border-store-primary focus:ring-1 focus:ring-store-primary/20'
-                              : 'border-gray-200 focus:border-store-primary focus:ring-1 focus:ring-store-primary/20'
-                            }`}
-                          required
-                        />
-                        {contactValidationAttempted && !firstName.trim() && (
-                          <p className="text-red-500 text-xs mt-1">First name is required</p>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
-                          Last Name *
-                        </label>
-                        <input
-                          type="text"
-                          value={lastName}
-                          onChange={(e) => setLastName(e.target.value)}
-                          placeholder="Doe"
-                          className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:outline-hidden text-sm text-gray-900 placeholder:text-gray-400 ${contactValidationAttempted && !lastName.trim()
-                            ? 'border-red-500 focus:border-red-500 bg-store-primary/5'
-                            : lastName.trim()
-                              ? 'border-store-primary/40 focus:border-store-primary focus:ring-1 focus:ring-store-primary/20'
-                              : 'border-gray-200 focus:border-store-primary focus:ring-1 focus:ring-store-primary/20'
-                            }`}
-                          required
-                        />
-                        {contactValidationAttempted && !lastName.trim() && (
-                          <p className="text-red-500 text-xs mt-1">Last name is required</p>
-                        )}
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
-                          Email Address *
-                        </label>
-                        <input
-                          type="email"
-                          value={customerEmail}
-                          onChange={(e) => setCustomerEmail(e.target.value)}
-                          placeholder="john@example.com"
-                          className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:outline-hidden text-sm text-gray-900 placeholder:text-gray-400 ${contactValidationAttempted && (!customerEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim()))
-                            ? 'border-red-500 focus:border-red-500 bg-store-primary/5'
-                            : /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim())
-                              ? 'border-store-primary/40 focus:border-store-primary focus:ring-1 focus:ring-store-primary/20'
-                              : 'border-gray-200 focus:border-store-primary focus:ring-1 focus:ring-store-primary/20'
-                            }`}
-                          required
-                        />
-                        {contactValidationAttempted && !customerEmail.trim() && (
-                          <p className="text-red-500 text-xs mt-1">Email address is required</p>
-                        )}
-                        {contactValidationAttempted && customerEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim()) && (
-                          <p className="text-red-500 text-xs mt-1">Please enter a valid email address</p>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
-                        Phone Number *
-                      </label>
-                      <div className={contactValidationAttempted && (!customerPhone || !isValidPhoneNumber(customerPhone)) ? "rounded-lg border border-red-500" : ""}>
-                        <PhoneInput
-                          value={customerPhone}
-                          onChange={(value) => setCustomerPhone(value || '')}
-                          placeholder="+234 800 000 0000"
-                          defaultCountry="NG"
-                          className="w-full text-sm"
-                        />
-                      </div>
-                      {contactValidationAttempted && !customerPhone && (
-                        <p className="text-red-500 text-xs mt-1">Phone number is required</p>
-                      )}
-                      {contactValidationAttempted && customerPhone && !isValidPhoneNumber(customerPhone) && (
-                        <p className="text-red-500 text-xs mt-1">Please enter a valid phone number</p>
-                      )}
-                    </div>
-
-                    {/* Guest Account Creation & Newsletter (2026 Conversion Pattern) */}
-                    {!user && (
-                      <div className="md:col-span-2 space-y-4 pt-4">
-
-                        {/* 2. Account Creation Checkbox (Retention) */}
-                        <div className={`bg-gray-50 rounded-xl p-4 border transition-all duration-300 ${createAccount ? 'border-store-primary/30 bg-store-primary/5' : 'border-gray-100 hover:border-store-primary/20'}`}>
-                          <label className="flex items-start gap-3 cursor-pointer group mb-2">
-                            <div className="relative flex items-center pt-0.5">
-                              <input
-                                type="checkbox"
-                                checked={createAccount}
-                                onChange={(e) => {
-                                  setCreateAccount(e.target.checked);
-                                  setShowPasswordInput(e.target.checked);
-                                }}
-                                className="peer size-5 rounded border-gray-300 text-store-primary focus:ring-store-primary"
-                              />
-                            </div>
-                            <div>
-                              <span className="block text-sm font-bold text-gray-900 group-hover:text-store-primary transition-colors">
-                                Save my information for a faster checkout next time
-                              </span>
-                              <span className="text-xs text-gray-500 mt-0.5 block">
-                                Securely save your address details for future orders.
-                              </span>
-                            </div>
-                          </label>
-
-                          {/* 3. Sliding Password Input */}
-                          <div className={`overflow-hidden transition-all duration-300 ease-in-out ${showPasswordInput ? 'max-h-24 opacity-100 mt-3 pl-8' : 'max-h-0 opacity-0'}`}>
-                            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
-                              Create a Password
-                            </label>
-                            <div className="relative">
-                              <input
-                                type={isPasswordVisible ? "text" : "password"}
-                                value={accountPassword}
-                                onChange={(e) => setAccountPassword(e.target.value)}
-                                placeholder="Min. 6 characters"
-                                className={`w-full px-4 py-3 bg-white border rounded-xl focus:outline-hidden text-sm text-gray-900 placeholder:text-gray-400 pr-12 ${contactValidationAttempted && createAccount && accountPassword.length < 6
-                                  ? 'border-red-500 focus:border-red-500'
-                                  : 'border-gray-200 focus:border-store-primary'
-                                  }`}
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setIsPasswordVisible(!isPasswordVisible)}
-                                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                                aria-label="Show password"
-                                aria-pressed={isPasswordVisible}
-                              >
-                                {isPasswordVisible ? (
-                                  <EyeOff aria-hidden="true" size={18} />
-                                ) : (
-                                  <Eye aria-hidden="true" size={18} />
-                                )}
-                              </button>
-                            </div>
-                            {contactValidationAttempted && createAccount && accountPassword.length < 6 && (
-                              <p className="text-red-500 text-xs mt-1">Password must be at least 6 characters</p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="pt-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCompletedSteps(prev => ({ ...prev, contact: true }));
-                          setCurrentStep('delivery');
-                        }}
-                        disabled={!isContactValid || (createAccount && accountPassword.length < 6)}
-                        className="px-6 py-3 bg-store-primary text-white font-bold rounded-xl hover:bg-store-primary/90 transition-colors w-full md:w-auto disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed shadow-lg disabled:shadow-none"
-                      >
-                        Continue to Delivery
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Step 2: Delivery Method */}
-            <div className={`bg-white rounded-2xl shadow-sm border ${currentStep === 'delivery' ? 'border-store-primary ring-1 ring-store-primary/20' : 'border-gray-100'} transition-all duration-300`}>
-              <button
-                type="button"
-                onClick={() => completedSteps.contact && setCurrentStep('delivery')}
-                disabled={!completedSteps.contact}
-                className="w-full px-6 py-4 flex items-center justify-between gap-3 text-left disabled:opacity-50 disabled:cursor-not-allowed hidden-disabled focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-store-primary focus-visible:ring-inset"
-              >
-                <div className="min-w-0">
-                  <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                    <div className={`size-6 rounded-full flex items-center justify-center text-xs transition-colors ${completedSteps.delivery ? 'bg-green-100 text-green-600' : currentStep === 'delivery' ? 'bg-store-primary/10 text-store-primary' : 'bg-gray-100 text-gray-500'
-                      }`}>
-                      {completedSteps.delivery ? <Check size={14} /> : '2'}
-                    </div>
-                    Delivery Method
-                  </h2>
-                  {completedSteps.delivery && currentStep !== 'delivery' && (
-                    <p className="mt-1 pl-8 text-xs font-normal text-gray-500 truncate">
-                      {deliveryMethod === 'door'
-                        ? 'By Road'
-                        : deliveryMethod === 'pickup_station'
-                          ? 'Pickup Station'
-                        : deliveryMethod === 'pickup'
-                          ? 'Store Pickup'
-                            : 'By Air'}
-                      {deliveryMethod === 'door' && newAddressCity ? ` · ${newAddressCity}` : ''}
-                    </p>
-                  )}
-                </div>
-                {completedSteps.delivery && currentStep !== 'delivery' && (
-                  <span className="text-sm font-semibold text-store-primary underline-offset-4 hover:underline shrink-0">Edit</span>
-                )}
-              </button>
-
-              <div className={`grid transition-all duration-300 ease-in-out ${currentStep === 'delivery' ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
-                <div className={currentStep === 'delivery' ? 'overflow-visible' : 'overflow-hidden'}>
-                  <div className="p-6 pt-0 space-y-4">
-                    {/* STEP 1: Address Input FIRST */}
-                    <div className="space-y-4">
-                      {/* Saved Addresses (for logged in users) */}
-                      {user && addresses.length > 0 && (
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <label className="text-xs font-bold text-gray-700 uppercase tracking-wide">
-                              Where should we deliver?
-                            </label>
-                            <button
-                              type="button"
-                              onClick={() => setIsNewAddressMode(!isNewAddressMode)}
-                              className="text-xs font-bold text-store-primary hover:underline"
-                            >
-                              {isNewAddressMode ? 'Select Saved Address' : '+ New Address'}
-                            </button>
-                          </div>
-                          {!isNewAddressMode && addresses.map((addr) => (
-                            <label
-                              key={addr.id}
-                              className={`flex items-start p-4 rounded-xl border cursor-pointer transition-all focus-within:ring-2 focus-within:ring-store-primary focus-within:ring-offset-2 ${selectedAddressId === addr.id
-                                ? 'border-store-primary bg-store-primary/5'
-                                : 'border-gray-200 hover:border-gray-300'
-                                }`}
-                            >
-                              <input
-                                type="radio"
-                                name="address"
-                                checked={selectedAddressId === addr.id}
-                                onChange={() => {
+            <CheckoutStepSection focusOnActivate={focusActiveStep} id="checkout-delivery" title="Delivery Method" number={2}
+              active={currentStep === 'delivery'} completed={completedSteps.delivery} disabled={!completedSteps.contact}
+              summary={deliveryMethod === 'door' ? `By Road${newAddressCity ? ` · ${newAddressCity}` : ''}` : deliveryMethod === 'pickup_station' ? 'Pickup Station' : deliveryMethod === 'pickup' ? 'Store Pickup' : 'By Air'}
+              onOpen={() => setCurrentStep('delivery')}>
+              <DeliveryAddressFields signedIn={Boolean(user)} addresses={addresses} isNewAddressMode={isNewAddressMode}
+                selectedAddressId={selectedAddressId} newAddressStreet={newAddressStreet} newAddressCity={newAddressCity} newAddressState={newAddressState}
+                merchantCountry={merchantCountry} addressReady={isHydrated && isNewDeliveryAddressReady}
+                onToggleAddressMode={() => setIsNewAddressMode(!isNewAddressMode)}
+                                onSelectAddress={(addr) => {
                                   setSelectedAddressId(addr.id);
                                   setIsNewAddressMode(false);
                                   clearInferredLocationDebounce();
@@ -3541,35 +3070,7 @@ export const CheckoutPage: React.FC = () => {
                                     setNewAddressCity(parts[parts.length - 2] || '');
                                   }
                                 }}
-                                className="mt-1 size-4 text-store-primary focus:ring-store-primary border-gray-300"
-                              />
-                              <div className="ml-3">
-                                <p className="font-bold text-gray-900 text-sm">
-                                  {addr.label || 'Saved Address'}
-                                </p>
-                                <p className="text-gray-600 text-sm mt-0.5">
-                                  {addr.address}
-                                </p>
-                                <p className="text-gray-500 text-xs mt-1">
-                                  {addr.phone}
-                                </p>
-                              </div>
-                            </label>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* New Address Form */}
-                      {(isNewAddressMode || !user || addresses.length === 0) && (
-                        <div className="space-y-4" style={{ overflow: 'visible' }}>
-                          <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide">
-                            {user && addresses.length > 0 ? 'Enter New Address' : 'Delivery Address'}
-                          </label>
-                          <AddressAutocomplete
-                            value={newAddressStreet}
-                            useThemedInput={true}
-                            onChange={(val) => {
-                              const newVal = typeof val === 'string' ? val : val.target.value;
+                            onStreetChange={(newVal) => {
                               setCheckoutFields({
                                 newAddressStreet: newVal,
                                 newAddressCity: '',
@@ -3605,7 +3106,7 @@ export const CheckoutPage: React.FC = () => {
                                 resetQuotesForAddressChange();
                               }
                             }}
-                            onSelect={(place: PlaceDetails) => {
+                            onSelectPlace={(place: PlaceDetails) => {
                               clearInferredLocationDebounce();
                               resetQuotesForAddressChange();
                               setCheckoutFields({
@@ -3622,236 +3123,23 @@ export const CheckoutPage: React.FC = () => {
                                     : null,
                               });
                             }}
-                            placeholder="Start typing your address..."
-                            country={merchantCountry}
-                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus-visible:ring-0 focus:border-store-primary text-sm text-gray-900 placeholder:text-gray-400"
-                          />
-                          {isHydrated && isNewDeliveryAddressReady && (
-                            <p className="text-xs text-green-600 flex items-center gap-1">
-                              <Check size={12} /> Detected: {newAddressCity}, {newAddressState}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
 
-                    {/* STEP 2: Delivery Method Cards - ONLY show AFTER address is detected */}
-                    {canShowDeliveryMethods({ isHydrated, isNewAddressMode, selectedAddressId, city: newAddressCity, state: newAddressState }) && (
-                      <>
-                        <div className="mt-6 pt-4 border-t border-gray-100">
-                          <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-3">
-                            How would you like to receive your order?
-                          </label>
-                          <div className="flex gap-3 overflow-x-auto pb-1">
-                            {(['door', 'airport', 'pickup_station', 'pickup'] as const).map((method) => {
-                              // Store ships from Lagos: the legacy in-store
-                              // pickup is Lagos-only and airport is for non-Lagos
-                              // states with an airport. Shared with the mobile
-                              // storefront so they can't drift. Exception: a
-                              // merchant/GIGL station quote reveals the
-                              // provider-aware pickup_station tab even in Lagos,
-                              // so merchant-configured pickup rates aren't hidden.
-                              if (
-                                method === 'pickup_station' &&
-                                isPickupEligible(newAddressState) &&
-                                !stationPickupQuote &&
-                                !hasMerchantPickupQuote
-                              ) {
-                                return null;
-                              }
-                              if (
-                                method === 'pickup' &&
-                                (merchant?.slug !== 'ogabassey' ||
-                                  !isPickupEligible(newAddressState) ||
-                                  hasMerchantPickupQuote)
-                              ) {
-                                // Hide the hardcoded in-store pickup once the
-                                // merchant configures its own pickup rate — the
-                                // pickup_station tab renders it (avoids a
-                                // duplicate "Store Pickup" affordance).
-                                return null;
-                              }
-                              if (
-                                method === 'airport' &&
-                                !isAirportDeliveryEligible(newAddressState)
-                              ) {
-                                return null;
-                              }
-
-                              // Merchant `pickup` rates reuse the station-pickup
-                              // tab with neutral (non-GIGL) copy.
-                              const pickupStationCopy =
-                                getPickupStationCopy(stationPickupQuote);
-                              const Icon = method === 'door' ? Truck : method === 'airport' ? Plane : Building2;
-                              const label =
-                                method === 'door'
-                                  ? 'By Road'
-                                  : method === 'pickup_station'
-                                    ? pickupStationCopy.methodLabel
-                                    : method === 'pickup'
-                                      ? 'Store Pickup'
-                                      : 'By Air';
-                              const subtitle =
-                                method === 'door'
-                                  ? 'To your address'
-                                  : method === 'pickup_station'
-                                    ? pickupStationCopy.methodSubtitle
-                                    : method === 'pickup'
-                                      ? 'Collect at store'
-                                      : 'Via air cargo';
-
-                              return (
-                                <button type="button"
-                                  key={method}
-                                  onClick={() => selectDeliveryMethod(method)}
-                                  className={`flex-1 flex flex-col items-center justify-center p-3 sm:p-4 rounded-xl border-2 transition-all gap-1 min-w-[100px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-store-primary focus-visible:ring-offset-2 ${deliveryMethod === method
-                                    ? 'border-store-primary bg-store-primary/5 text-store-primary'
-                                    : 'border-gray-100 bg-white text-gray-500 hover:border-gray-200 hover:bg-gray-50'
-                                    }`}
-                                >
-                                  <Icon className={`size-6 ${deliveryMethod === method ? 'text-store-primary' : 'text-gray-400'}`} />
-                                  <span className="text-xs sm:text-sm font-bold">{label}</span>
-                                  <span className="text-[10px] text-gray-400">{subtitle}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* STEP 3: Delivery Method Details */}
-                        {/* Pickup Info */}
-                        {deliveryMethod === 'pickup' && (
-                          <div className="mt-4 bg-gray-50 p-4 rounded-xl border border-gray-100 flex items-start gap-4 animate-in fade-in">
-                            <div className="bg-white p-2 rounded-lg border border-gray-200">
-                              <Building2 size={24} className="text-gray-600" />
-                            </div>
-                            <div>
-                              <h4 className="font-bold text-gray-900 text-sm">Main Office Pickup</h4>
-                              <p className="text-sm text-gray-600 mt-1">
-                                Available for pickup at our Ikeja Store. Usually ready within 2 hours.
-                              </p>
-                              <div className="mt-2 text-xs font-mono bg-white inline-block px-2 py-1 rounded border border-gray-200 text-gray-500">
-                                Pickup closes at 6 PM
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {deliveryMethod === 'pickup_station' &&
-                          (isLoadingQuotes ? (
-                            <SmartQuoteLoader />
-                          ) : stationPickupQuotes.length > 0 ? (
-                            // A merchant/GIGL zone can expose several pickup
-                            // locations: render every one as an individually
-                            // selectable option instead of collapsing to the
-                            // first. Copy is provider-aware (GIGL vs merchant
-                            // "Store Pickup") via getPickupStationCopy.
-                            <fieldset className="m-0 mt-4 min-w-0 border-0 p-0 animate-in fade-in">
-                              <legend className="mb-3 text-xs font-bold uppercase tracking-wide text-store-background-text/70">
-                                {getPickupStationCopy(stationPickupQuote).detailHeading}
-                              </legend>
-                              <div className="space-y-3">
-                                {stationPickupQuotes.map((quote) => (
-                                  <label
-                                    key={quote.id}
-                                    className={`flex items-start justify-between gap-3 p-4 rounded-xl border cursor-pointer hover:border-store-primary/60 transition-all focus-within:ring-2 focus-within:ring-store-primary focus-within:ring-offset-2 ${selectedQuoteId === quote.id
-                                      ? 'border-store-primary bg-store-primary/5 ring-1 ring-store-primary'
-                                      : 'border-store-background-text/10 bg-store-background'
-                                      }`}
-                                  >
-                                    <div className="flex min-w-0 items-start gap-3">
-                                      <input
-                                        type="radio"
-                                        name="station_pickup_quote"
-                                        checked={selectedQuoteId === quote.id}
-                                        onChange={() => setSelectedQuoteId(quote.id)}
-                                        className="mt-0.5 size-4 border-store-background-text/25 text-store-primary focus:ring-store-primary"
-                                      />
-                                      <div className="min-w-0">
-                                        <span className="text-sm font-bold text-store-background-text">
-                                          {quote.displayName}
-                                        </span>
-                                        <p className="mt-0.5 text-xs text-store-background-text/65">
-                                          {quote.stationAddress ||
-                                            getPickupStationCopy(quote).detailFallback}
-                                        </p>
-                                        {quote.stationInstructions && (
-                                          <p className="mt-1 text-xs text-store-background-text/55">
-                                            {quote.stationInstructions}
-                                          </p>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <span className="shrink-0 text-sm font-bold text-store-background-text">
-                                      {formatAmountInCurrency(quote.price, quote.currency, AUTO_FRACTION_OPTIONS)}
-                                    </span>
-                                  </label>
-                                ))}
-                              </div>
-                            </fieldset>
-                          ) : (
-                            <div className="mt-4 rounded-xl border border-store-background-text/10 bg-store-background p-4 text-sm text-store-background-text/65">
-                              No nearby GIG Logistics pickup station is available for this address yet.
-                            </div>
-                          ))}
-
-                        {/* Airport Options */}
-                        {deliveryMethod === 'airport' && (
-                          <AirportDeliveryOptions
-                            airportType={airportType}
-                            requiresProviderQuote={airportRequiresQuote}
-                            city={newAddressCity}
-                            state={newAddressState}
-                            selectedQuoteId={selectedQuoteId}
-                            selectedQuoteMatchesDeliveryMethod={
-                              selectedQuoteMatchesDeliveryMethod
-                            }
-                            airDeliveryQuotes={airDeliveryQuotes}
-                            onSelectAirportType={(type) => {
-                              setAirportType(type);
-                              setCheckoutField('airportRequiresQuote', false);
-                              setSelectedQuoteId('');
-                            }}
-                            onSelectQuote={(id) => {
-                              setCheckoutField('airportRequiresQuote', true);
-                              setSelectedQuoteId(id);
-                            }}
-                          />
-                        )}
-
-                        {/* Door Delivery - Quote Selector */}
-                        {deliveryMethod === 'door' && (
-                          <DoorDeliveryQuoteOptions
-                            isLoadingQuotes={isLoadingQuotes}
-                            doorDeliveryQuotes={doorDeliveryQuotes}
-                            stationPickupQuote={stationPickupQuote}
-                            selectedQuoteId={selectedQuoteId}
-                            onSelectQuote={setSelectedQuoteId}
-                            onSelectStationPickup={(quoteId) => {
-                              setSelectedQuoteId(quoteId);
-                              setDeliveryMethod('pickup_station');
-                            }}
-                            onRefreshRates={() => {
-                              if (isNewDeliveryAddressReady) {
-                                fetchShippingQuotes(
-                                  newAddressStreet,
-                                  newAddressState,
-                                  newAddressCity,
-                                  customerPhone,
-                                  firstName,
-                                  lastName,
-                                  customerEmail,
-                                );
-                              }
-                            }}
-                          />
-                        )}
-                      </>
-                    )}
-
-                    <div className="pt-2">
-                      <button
-                        type="button"
+              />
+              {canShowDeliveryMethods({ isHydrated, isNewAddressMode, selectedAddressId, city: newAddressCity, state: newAddressState }) && <DeliveryOptions
+                tabs={{ deliveryMethod, newAddressState, merchantSlug: merchant?.slug, stationPickupQuote, hasMerchantPickupQuote, onSelect: selectDeliveryMethod }}
+                station={{ isLoadingQuotes, stationPickupQuote, stationPickupQuotes, selectedQuoteId, setSelectedQuoteId }}
+                airport={{ airportType, requiresProviderQuote: airportRequiresQuote, city: newAddressCity, state: newAddressState,
+                  selectedQuoteId, selectedQuoteMatchesDeliveryMethod, airDeliveryQuotes,
+                  onSelectAirportType: type => { setAirportType(type); setCheckoutField('airportRequiresQuote', false); setSelectedQuoteId(''); },
+                  onSelectQuote: id => { setCheckoutField('airportRequiresQuote', true); setSelectedQuoteId(id); }
+                }}
+                door={{ isLoadingQuotes, doorDeliveryQuotes, stationPickupQuote, selectedQuoteId, onSelectQuote: setSelectedQuoteId,
+                  onSelectStationPickup: quoteId => { setSelectedQuoteId(quoteId); setDeliveryMethod('pickup_station'); },
+                  onRefreshRates: () => { if (isNewDeliveryAddressReady) fetchShippingQuotes(newAddressStreet, newAddressState, newAddressCity, customerPhone, firstName, lastName, customerEmail); }
+                }}
+              />}
+              <div className="pt-2">
+                <button type="button" disabled={!isDeliveryValid}
                         onClick={() => {
                           captureClientEvent(
                             CHECKOUT_FUNNEL_EVENTS.checkoutStepCompleted,
@@ -3864,20 +3152,16 @@ export const CheckoutPage: React.FC = () => {
                           setCompletedSteps(prev => ({ ...prev, delivery: true }));
                           setCurrentStep('payment');
                         }}
-                        className="w-full md:w-auto px-6 py-3 bg-store-primary text-white font-bold rounded-xl hover:bg-store-primary/90 transition-colors flex items-center justify-center gap-2 shadow-lg hover:shadow-store-primary/20 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed disabled:shadow-none"
-                        disabled={!isDeliveryValid}
-                      >
-                        Continue to Payment
-                        <ChevronRight size={18} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
+
+                  className="w-full md:w-auto px-6 py-3 bg-store-primary text-white font-bold rounded-xl hover:bg-store-primary/90 transition-colors flex items-center justify-center gap-2 shadow-lg hover:shadow-store-primary/20 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed disabled:shadow-none">
+                  Continue to Payment <ChevronRight size={18} />
+                </button>
               </div>
-            </div>
+            </CheckoutStepSection>
 
             {/* Step 3: Payment Method */}
             <PaymentStep
+              focusOnActivate={focusActiveStep}
               currentStep={currentStep}
               completedSteps={completedSteps}
               paymentTab={paymentTab}

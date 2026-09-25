@@ -58,6 +58,7 @@ const mockSupabase = {
                 Object.assign(run(), {
                   eq: () => ({ select: () => run() }),
                   is: () => ({ select: () => run() }),
+                  or: () => ({ select: () => run() }),
                 }),
             };
           },

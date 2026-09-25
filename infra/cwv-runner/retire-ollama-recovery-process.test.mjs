@@ -39,7 +39,7 @@ async function shell(command, args = [], env = {}) {
     'sh',
     [
       '-c',
-      `. "$1"; SCRIPT_DIR=$(dirname "$1"); RECOVERY_HELPER="$SCRIPT_DIR/retire-ollama-recovery.sh"; . "$RECOVERY_HELPER"; [ "$(id -u):$(id -g)" = "$RETIRE_OLLAMA_EXPECT_TEST_ID" ] && [ "$RECOVERY_PROC_ROOT" = "$RETIRE_OLLAMA_EXPECT_PROC_ROOT" ] || exit 79; [ -z "\${RETIRE_OLLAMA_RECOVERY_TEST_ROOT:-}" ] || RECOVERY_RECEIPT_ROOT="\${RETIRE_OLLAMA_RECOVERY_TEST_ROOT:-}"; ${command}`,
+      `RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; . "$1"; SCRIPT_DIR=$(dirname "$1"); RECOVERY_HELPER="$SCRIPT_DIR/retire-ollama-recovery.sh"; . "$RECOVERY_HELPER"; [ "$(id -u):$(id -g)" = "$RETIRE_OLLAMA_EXPECT_TEST_ID" ] && [ "$RECOVERY_PROC_ROOT" = "$RETIRE_OLLAMA_EXPECT_PROC_ROOT" ] || exit 79; [ -z "\${RETIRE_OLLAMA_RECOVERY_TEST_ROOT:-}" ] || RECOVERY_RECEIPT_ROOT="\${RETIRE_OLLAMA_RECOVERY_TEST_ROOT:-}"; ${command}`,
       'retire-ollama-recovery-process-test',
       script.pathname,
       ...args,
@@ -59,7 +59,7 @@ async function shell(command, args = [], env = {}) {
 
 test('classifies residual and held dpkg package states', async () => {
   const { stdout } = await shell(
-    "recovery_dpkg_query() { printf 'rc  0.1\\n'; }; init_temp_root; trap cleanup_temp EXIT; recovery_package_snapshot"
+    "recovery_dpkg_query() { printf 'rc  0.1\\n'; }; RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; init_temp_root; trap cleanup_temp EXIT; recovery_package_snapshot"
   );
   assert.deepEqual(JSON.parse(stdout), {
     name: 'ollama',
@@ -67,14 +67,14 @@ test('classifies residual and held dpkg package states', async () => {
     version: null,
   });
   const held = await shell(
-    "recovery_dpkg_query() { printf 'hi  0.1\\n'; }; init_temp_root; trap cleanup_temp EXIT; recovery_package_snapshot"
+    "recovery_dpkg_query() { printf 'hi  0.1\\n'; }; RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; init_temp_root; trap cleanup_temp EXIT; recovery_package_snapshot"
   );
   assert.equal(JSON.parse(held.stdout).state, 'present');
 });
 test('records valid partial and reinst-required dpkg states explicitly', async () => {
   for (const packageOutput of ['iU  0.1', 'iHR 0.1', 'iiR 0.1']) {
     const { stdout } = await shell(
-      `recovery_dpkg_query() { printf '${packageOutput}\\n'; }; init_temp_root; trap cleanup_temp EXIT; recovery_package_snapshot`
+      `recovery_dpkg_query() { printf '${packageOutput}\\n'; }; RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; init_temp_root; trap cleanup_temp EXIT; recovery_package_snapshot`
     );
     assert.deepEqual(JSON.parse(stdout), {
       name: 'ollama',
@@ -102,14 +102,14 @@ test('records post-action absent container and model states without identities',
   const container = JSON.parse(
     (
       await shell(
-        'recovery_docker() { case "$1" in inspect) printf "Error: No such object: ollama-loopback\\n" >&2; return 1;; ps) :;; esac; }; init_temp_root; trap cleanup_temp EXIT; recovery_container_snapshot'
+        'recovery_docker() { case "$1" in inspect) printf "Error: No such object: ollama-loopback\\n" >&2; return 1;; ps) :;; esac; }; RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; init_temp_root; trap cleanup_temp EXIT; recovery_container_snapshot'
       )
     ).stdout
   );
   const model = JSON.parse(
     (
       await shell(
-        'STORE=/missing/ollama; init_temp_root; trap cleanup_temp EXIT; recovery_model_snapshot'
+        'STORE=/missing/ollama; RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; init_temp_root; trap cleanup_temp EXIT; recovery_model_snapshot'
       )
     ).stdout
   );
@@ -129,7 +129,7 @@ test('records a stopped container with inspect identity and checks absent proces
     NetworkSettings: { Networks: {} },
   });
   const { stdout } = await shell(
-    `recovery_docker() { printf '%s\\n' '${inspected}'; }; init_temp_root; trap cleanup_temp EXIT; recovery_container_snapshot`
+    `recovery_docker() { printf '%s\\n' '${inspected}'; }; RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; init_temp_root; trap cleanup_temp EXIT; recovery_container_snapshot`
   );
   const snapshot = JSON.parse(stdout);
   assert.equal(snapshot.state, 'stopped');
@@ -147,7 +147,7 @@ test('rejects a lingering Ollama process through the synthetic proc root', async
       await writeFixtureFile(processes, `41 1 ${command}\n`);
       await assert.rejects(
         shell(
-          'init_temp_root; trap cleanup_temp EXIT; recovery_absent_process_snapshot "$2"',
+          'RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; init_temp_root; trap cleanup_temp EXIT; recovery_absent_process_snapshot "$2"',
           [processes]
         ),
         (error) =>
@@ -157,7 +157,7 @@ test('rejects a lingering Ollama process through the synthetic proc root', async
     }
     await writeFixtureFile(processes, '41 1 /usr/bin/other-service\n');
     const { stdout } = await shell(
-      'init_temp_root; trap cleanup_temp EXIT; recovery_absent_process_snapshot "$2"',
+      'RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; init_temp_root; trap cleanup_temp EXIT; recovery_absent_process_snapshot "$2"',
       [processes]
     );
     const snapshot = JSON.parse(stdout);
@@ -176,7 +176,7 @@ test('rejects an Ollama executable even when it is a scanner ancestor', async ()
     await writeFixtureFile(processes, '41 1 /usr/bin/ollama serve\n');
     await assert.rejects(
       shell(
-        'init_temp_root; trap cleanup_temp EXIT; RECOVERY_SCANNER_PID_SET=" 41 "; recovery_absent_process_snapshot "$2"',
+        'RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; init_temp_root; trap cleanup_temp EXIT; RECOVERY_SCANNER_PID_SET=" 41 "; recovery_absent_process_snapshot "$2"',
         [processes]
       ),
       (error) =>
@@ -196,7 +196,7 @@ test('rejects an Ollama wrapper even when it is a scanner ancestor', async () =>
     );
     await assert.rejects(
       shell(
-        'init_temp_root; trap cleanup_temp EXIT; RECOVERY_SELF_PID=41; recovery_build_scanner_ancestors() { RECOVERY_SCANNER_PID_SET=" 41 "; }; recovery_absent_process_snapshot "$2"',
+        'RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; init_temp_root; trap cleanup_temp EXIT; RECOVERY_SELF_PID=41; recovery_build_scanner_ancestors() { RECOVERY_SCANNER_PID_SET=" 41 "; }; recovery_absent_process_snapshot "$2"',
         [processes]
       ),
       (error) =>
@@ -219,11 +219,11 @@ test('rejects uppercase Ollama wrapper references while running or absent', asyn
     await writeFixtureFile(ports, '{}\n');
     for (const [command, args] of [
       [
-        'recovery_socket_snapshot() { :; }; init_temp_root; trap cleanup_temp EXIT; recovery_process_snapshot 40 container-cgroup container-ns "$2" "$3"',
+        'recovery_socket_snapshot() { :; }; RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; init_temp_root; trap cleanup_temp EXIT; recovery_process_snapshot 40 container-cgroup container-ns "$2" "$3"',
         [ports, processes],
       ],
       [
-        'recovery_socket_snapshot() { RECOVERY_SOCKET_SNAPSHOT_SHA=none; RECOVERY_LISTENING_SOCKETS="[]"; }; init_temp_root; trap cleanup_temp EXIT; recovery_absent_process_snapshot "$2"',
+        'recovery_socket_snapshot() { RECOVERY_SOCKET_SNAPSHOT_SHA=none; RECOVERY_LISTENING_SOCKETS="[]"; }; RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; init_temp_root; trap cleanup_temp EXIT; recovery_absent_process_snapshot "$2"',
         [processes],
       ],
     ]) {
@@ -240,7 +240,7 @@ test('rejects uppercase Ollama wrapper references while running or absent', asyn
 
 test('parses authentic installed dpkg status bytes without a leading version space', async () => {
   const { stdout } = await shell(
-    "recovery_dpkg_query() { printf 'ii  0.1\\n'; }; init_temp_root; trap cleanup_temp EXIT; recovery_package_snapshot"
+    "recovery_dpkg_query() { printf 'ii  0.1\\n'; }; RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; init_temp_root; trap cleanup_temp EXIT; recovery_package_snapshot"
   );
   assert.deepEqual(JSON.parse(stdout), {
     name: 'ollama',
@@ -256,7 +256,7 @@ test('rejects foreign scanner substrings, mismatched proxy tuples, and proxy-onl
   const processes = join(directory, 'processes');
   const ports = join(directory, 'ports.json');
   const identity =
-    'recovery_process_identity() { printf "cgroup namespace\\n"; }; recovery_process_executable() { printf "{\\"path\\":\\"/usr/bin/%s\\",\\"sha256\\":\\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\\",\\"identitySha256\\":\\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\\",\\"uid\\":\\"0\\",\\"startTime\\":\\"1\\",\\"expected\\":\\"%s\\"}\\n" "$2" "$2"; }; init_temp_root; trap cleanup_temp EXIT; recovery_process_snapshot 40 cgroup namespace "$2" "$3"';
+    'recovery_process_identity() { printf "cgroup namespace\\n"; }; recovery_process_executable() { printf "{\\"path\\":\\"/usr/bin/%s\\",\\"sha256\\":\\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\\",\\"identitySha256\\":\\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\\",\\"uid\\":\\"0\\",\\"startTime\\":\\"1\\",\\"expected\\":\\"%s\\"}\\n" "$2" "$2"; }; RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; init_temp_root; trap cleanup_temp EXIT; recovery_process_snapshot 40 cgroup namespace "$2" "$3"';
   try {
     await writeFixtureFile(
       ports,

@@ -58,7 +58,7 @@ function shell(procRoot, processes, scratch, command) {
     'sh',
     [
       '-c',
-      `. "$1"; SCRIPT_DIR=$(dirname "$1"); . "$SCRIPT_DIR/retire-ollama-recovery.sh"; [ "$(id -u):$(id -g)" = "$RETIRE_OLLAMA_EXPECT_TEST_ID" ] || exit 79; init_temp_root; trap cleanup_temp EXIT; ${command}`,
+      `RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; . "$1"; SCRIPT_DIR=$(dirname "$1"); . "$SCRIPT_DIR/retire-ollama-recovery.sh"; [ "$(id -u):$(id -g)" = "$RETIRE_OLLAMA_EXPECT_TEST_ID" ] || exit 79; init_temp_root; trap cleanup_temp EXIT; ${command}`,
       'retire-ollama-recovery-process-environment-test',
       script.pathname,
       processes,
@@ -78,7 +78,7 @@ function shell(procRoot, processes, scratch, command) {
 test('keeps the privileged recovery proc root canonical', async () => {
   const { stdout } = await execFileAsync('sh', [
     '-c',
-    '. "$1"; SCRIPT_DIR=$(dirname "$1"); . "$SCRIPT_DIR/retire-ollama-recovery.sh"; recovery_proc_root_for_uid 0 /unsafe-test-proc',
+    'RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; . "$1"; SCRIPT_DIR=$(dirname "$1"); . "$SCRIPT_DIR/retire-ollama-recovery.sh"; recovery_proc_root_for_uid 0 /unsafe-test-proc',
     'retire-ollama-recovery-process-environment-test',
     script.pathname,
   ]);

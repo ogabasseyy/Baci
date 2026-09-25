@@ -17,9 +17,11 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const script = new URL('./retire-ollama.sh', import.meta.url);
+const containerId =
+  '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 const unprivileged = process.getuid?.() === 0 ? { gid: 65534, uid: 65534 } : {};
 const prelude =
-  'sha256sum() { /usr/bin/shasum -a 256 "$@"; }; stat() { if [ "$1" = -c ] && [ "$2" = %d ]; then printf 1; elif [ "$1" = -c ] && [ "$2" = %F ]; then [ -d "$3" ] && printf "directory\\n" || printf "regular file\\n"; elif [ "$1" = -c ] && [ "$2" = "%f:%s:%u:%g:%a" ]; then printf "81a4:17:501:20:644\\n"; else inode=$(/bin/ls -di "$3" | /usr/bin/awk "{print \\$1}"); printf "1:%s:81a4:10:501:20:644\\n" "$inode"; fi; }; findmnt() { printf "/ fixture apfs ro\\n"; }; ';
+  'sha256sum() { /usr/bin/shasum -a 256 "$@"; }; stat() { if [ "$1" = -c ] && [ "$2" = %d ]; then printf 1; elif [ "$1" = -c ] && [ "$2" = %F ]; then [ -d "$3" ] && printf "directory\\n" || printf "regular file\\n"; elif [ "$1" = -c ] && [ "$2" = %s ]; then /usr/bin/wc -c <"$3" | /usr/bin/tr -d " "; elif [ "$1" = -c ] && [ "$2" = "%f:%s:%u:%g:%a" ]; then printf "81a4:17:501:20:644\\n"; else inode=$(/bin/ls -di "$3" | /usr/bin/awk "{print \\$1}"); printf "1:%s:81a4:10:501:20:644\\n" "$inode"; fi; }; findmnt() { printf "/ fixture apfs ro\\n"; }; ';
 
 async function scanVolume(directory, mounts, volume) {
   const bin = join(directory, 'bin');
@@ -35,12 +37,12 @@ async function scanVolume(directory, mounts, volume) {
       join(bin, 'docker'),
       `#!/bin/sh
 case "$*" in
-  *' ps -a '*) printf 'generic-api\\n' ;;
-  *'inspect -f {{.Name}} generic-api') printf '/generic-api\\n' ;;
-  *'inspect -f {{json .State.Running}} generic-api') printf 'false\\n' ;;
-  *' cp generic-api:/bin/true '*) for destination do :; done; printf '#!/bin/sh\\nexit 0\\n' >"$destination" ;;
-  *'inspect -f {{.Id}} '* ) printf 'generic-api /generic-api /bin/true [] [] '; cat '${state}/mounts.json'; printf ' {} {} {} [] "bridge"\\n' ;;
-  *'inspect -f {{json .Mounts}} generic-api') cat '${state}/mounts.json' ;;
+  *' ps -a '*) printf '${containerId}\\n' ;;
+  *'inspect -f {{.Name}} ${containerId}') printf '/generic-api\\n' ;;
+  *'inspect -f {{json .State.Running}} ${containerId}') printf 'false\\n' ;;
+  *' cp ${containerId}:/bin/true '*) for destination do :; done; printf '#!/bin/sh\\nexit 0\\n' >"$destination" ;;
+  *'inspect -f {{.Id}} '* ) printf '${containerId} /generic-api /bin/true [] [] '; cat '${state}/mounts.json'; printf ' {} {} {} [] "bridge"\\n' ;;
+  *'inspect -f {{json .Mounts}} ${containerId}') cat '${state}/mounts.json' ;;
   *'volume inspect -f {{json .}} '*) cat '${state}/volume.json' ;;
 esac
 `
@@ -58,7 +60,13 @@ esac
       'retire-ollama-volume-test',
       script.pathname,
     ],
-    { ...unprivileged, env: { ...process.env, RETIRE_OLLAMA_TEST_BIN: bin } }
+    {
+      ...unprivileged,
+      env: {
+        ...process.env,
+        RETIRE_OLLAMA_TEST_BIN: bin,
+      },
+    }
   );
 }
 

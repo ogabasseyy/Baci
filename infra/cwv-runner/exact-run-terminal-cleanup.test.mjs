@@ -176,8 +176,8 @@ async function fixture(t, options = {}) {
       .replaceAll('/run/baci-cwv/docker/docker.sock', socket)
       .replaceAll('/run/baci-cwv/docker.sock', socket)
       .replaceAll(
-        '[ -S "${DOCKER_SOCKET#unix://}" ]',
-        '[ -e "${DOCKER_SOCKET#unix://}" ]'
+        '[ -S "$' + '{DOCKER_SOCKET#unix://}" ]',
+        '[ -e "$' + '{DOCKER_SOCKET#unix://}" ]'
       )
       .replaceAll('/bin/systemctl', systemctl)
       .replaceAll('/usr/bin/docker', docker)

@@ -34,6 +34,11 @@ at_unmount_submission_spool() {
 
 # shellcheck disable=SC2086 # The validated stat record is intentionally split on colon.
 at_submission_state() {
+  if type cron_inventory_at_scheduler_absent >/dev/null 2>&1 &&
+    cron_inventory_at_scheduler_absent; then
+    jq -cn '{scheduler:"absent"}'
+    return
+  fi
   at_dir=$AT_JOB_DIR
   at_sequence=$at_dir/.SEQ
   [ -d "$at_dir" ] && [ ! -L "$at_dir" ] &&
@@ -61,6 +66,10 @@ at_submission_state() {
 
 assert_at_submission_identity() {
   at_expected=$1
+  if printf '%s\n' "$at_expected" | jq -e 'type=="object" and .scheduler=="absent" and length==1' >/dev/null; then
+    cron_inventory_at_scheduler_absent || die 'at scheduler absence drift'
+    return
+  fi
   at_path=$(printf '%s\n' "$at_expected" | jq -er '.path') ||
     die 'at rollback state invalid'
   at_identity=$(printf '%s\n' "$at_expected" | jq -er '.identity') ||
@@ -77,6 +86,11 @@ assert_at_submission_identity() {
 assert_at_submissions_quiesced() {
   at_expected=$1
   assert_at_submission_identity "$at_expected"
+  if printf '%s\n' "$at_expected" | jq -e '.scheduler=="absent"' >/dev/null; then
+    [ "$(at_submission_mount_state)" = absent ] &&
+      cron_inventory_require_empty_at_queue || die 'at scheduler absence drift'
+    return
+  fi
   [ "$(at_submission_mount_state)" = ro ] ||
     die 'at submission quiescence drift'
   cron_inventory_require_empty_at_queue || die 'queued work or an unsafe queue'
@@ -86,6 +100,9 @@ quiesce_at_submissions() {
   at_expected=$1
   [ "$(at_submission_state)" = "$at_expected" ] ||
     die 'at submission spool changed'
+  if printf '%s\n' "$at_expected" | jq -e '.scheduler=="absent"' >/dev/null; then
+    die 'absent at scheduler cannot be quiesced'
+  fi
   at_create_bind_mount
   [ "$(at_submission_mount_state)" = rw ] ||
     die 'at submission bind mount state invalid'
@@ -162,7 +179,7 @@ reconcile_interrupted_at_quiescence() {
   at_actions="$RECEIPT_DIR/pre-destructive.actions"
   [ -e "$at_pre" ] || return 0
   safe_file "$at_pre" || die 'unsafe pre-destructive receipt'
-  at_expected=$(jq -ce '.atSubmissionRollback | select(.path == $path and .originalMountState == "absent" and .quiescedMountState == "ro-bind" and (.identity | test("^[0-9]+:[0-9]+:[0-9]+:[0-9]+$")) and (.sequenceIdentity | test("^[0-9]+:[0-9]+:[0-9]+:[0-9]+$")))' --arg path "$AT_JOB_DIR" "$at_pre") ||
+  at_expected=$(jq -ce '.atSubmissionRollback | select((.scheduler == "absent" and length == 1) or (.path == $path and .originalMountState == "absent" and .quiescedMountState == "ro-bind" and (.identity | test("^[0-9]+:[0-9]+:[0-9]+:[0-9]+$")) and (.sequenceIdentity | test("^[0-9]+:[0-9]+:[0-9]+:[0-9]+$"))))' --arg path "$AT_JOB_DIR" "$at_pre") ||
     die 'at rollback receipt invalid'
   cron_expected=$(jq -ce '.cronMutationRollback // []' "$at_pre") || die 'cron rollback receipt invalid'
   if [ -e "$at_actions" ]; then
@@ -172,6 +189,9 @@ reconcile_interrupted_at_quiescence() {
     case "$(at_submission_mount_state)" in
       absent) assert_at_submission_identity "$at_expected" ;;
       rw|ro)
+        if printf '%s\n' "$at_expected" | jq -e '.scheduler == "absent"' >/dev/null; then
+          die 'at scheduler absence drift'
+        fi
         assert_at_submission_identity "$at_expected"
         at_unmount_submission_spool
         [ "$(at_submission_mount_state)" = absent ] ||

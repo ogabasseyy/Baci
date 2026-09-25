@@ -16,13 +16,11 @@ cron_inventory_hourly_dir() { cron_inventory_override_or_default "${RETIRE_OLLAM
 cron_inventory_daily_dir() { cron_inventory_override_or_default "${RETIRE_OLLAMA_CRON_DAILY_DIR:-}" /etc/cron.daily; }
 cron_inventory_weekly_dir() { cron_inventory_override_or_default "${RETIRE_OLLAMA_CRON_WEEKLY_DIR:-}" /etc/cron.weekly; }
 cron_inventory_monthly_dir() { cron_inventory_override_or_default "${RETIRE_OLLAMA_CRON_MONTHLY_DIR:-}" /etc/cron.monthly; }
-cron_inventory_require_empty_at_queue() { if [ "$(id -u)" -eq 0 ] || [ -z "${RETIRE_OLLAMA_TEST_BIN:-}" ]; then atq=/usr/bin/atq; [ -x "$atq" ] || return 1; else atq=${RETIRE_OLLAMA_ATQ:-/usr/bin/true}; cron_inventory_real_file "$atq" && [ -x "$atq" ] || return 1; fi; at_snapshot=$(temp_path); "$atq" >"$at_snapshot" 2>/dev/null || { rm -f "$at_snapshot"; return 1; }; [ ! -s "$at_snapshot" ]; at_status=$?; rm -f "$at_snapshot"; return "$at_status"; }
-cron_inventory_valid_name() {
-  case "$1" in ''|.*|*[!A-Za-z0-9_.-]*) return 1;; *) return 0;; esac
-}
-cron_inventory_run_parts_name() {
-  case "$1" in ''|.*|*[!A-Za-z0-9_-]*) return 1;; *) return 0;; esac
-}
+cron_inventory_at_absence_root() { cron_inventory_override_or_default "${RETIRE_OLLAMA_AT_ABSENCE_ROOT:-}" ''; }
+cron_inventory_at_scheduler_absent() { at_root=$(cron_inventory_at_absence_root); for suffix in /usr/bin/at /usr/bin/atq /usr/bin/atrm /usr/sbin/atd /etc/init.d/atd /etc/systemd/system/atd.service /lib/systemd/system/atd.service /usr/lib/systemd/system/atd.service /var/spool/cron/atjobs /var/spool/cron/atspool /var/spool/at /var/spool/atjobs /var/spool/atspool; do at_path=$at_root$suffix; [ ! -e "$at_path" ] && [ ! -L "$at_path" ] || return 1; done; }
+cron_inventory_require_empty_at_queue() { if [ "$(id -u)" -eq 0 ] || [ -z "${RETIRE_OLLAMA_TEST_BIN:-}" ]; then atq=/usr/bin/atq; else atq=${RETIRE_OLLAMA_ATQ:-/usr/bin/true}; fi; if [ ! -e "$atq" ] && [ ! -L "$atq" ]; then cron_inventory_at_scheduler_absent; return $?; fi; cron_inventory_real_file "$atq" && [ -x "$atq" ] || return 1; at_snapshot=$(temp_path); "$atq" >"$at_snapshot" 2>/dev/null || { rm -f "$at_snapshot"; return 1; }; [ ! -s "$at_snapshot" ]; at_status=$?; rm -f "$at_snapshot"; return "$at_status"; }
+cron_inventory_valid_name() { case "$1" in ''|.*|*[!A-Za-z0-9_.-]*) return 1;; *) return 0;; esac; }
+cron_inventory_run_parts_name() { case "$1" in ''|.*|*[!A-Za-z0-9_-]*) return 1;; *) return 0;; esac; }
 cron_inventory_real_file() {
   path=$1; [ -f "$path" ] && [ ! -L "$path" ] || return 1
   real=$(readlink -f -- "$path") || return 1

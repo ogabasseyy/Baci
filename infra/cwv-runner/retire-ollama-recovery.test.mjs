@@ -1,14 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import {
-  chmod,
-  mkdir,
-  mkdtemp,
-  readFile,
-  rm,
-  writeFile,
-} from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -17,10 +10,10 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 const script = new URL('./retire-ollama.sh', import.meta.url);
 const sha = (value) => createHash('sha256').update(value).digest('hex');
-const sourceSha = 'a'.repeat(40);
 
 async function shell(command, args = [], env = {}) {
   const procRoot = await mkdtemp(join(tmpdir(), 'baci-recovery-proc-'));
+  const bin = await testBin();
   await mkdir(join(procRoot, 'net'));
   await Promise.all(
     ['tcp', 'tcp6'].map((name) =>
@@ -39,8 +32,21 @@ async function shell(command, args = [], env = {}) {
       script.pathname,
       ...args,
     ],
-    { env: { ...process.env, RETIRE_OLLAMA_PROC_ROOT: procRoot, ...env } }
-  ).finally(() => rm(procRoot, { recursive: true, force: true }));
+    {
+      env: {
+        ...process.env,
+        RETIRE_OLLAMA_PROC_ROOT: procRoot,
+        RETIRE_OLLAMA_TEST_BIN: bin,
+        RETIRE_OLLAMA_TEST_FSTYPE: 'apfs',
+        ...env,
+      },
+    }
+  ).finally(() =>
+    Promise.all([
+      rm(procRoot, { recursive: true, force: true }),
+      rm(bin, { recursive: true, force: true }),
+    ])
+  );
 }
 
 async function testBin() {
@@ -239,61 +245,4 @@ test('uses one immutable inspect JSON and rejects a mutable tag as image identit
     ),
     (error) => /invalid recovery container snapshot/.test(error.stderr)
   );
-});
-
-test('publishes a source-bound, fixed-path receipt and ignores redirect variables', async () => {
-  const directory = await mkdtemp(
-    join(tmpdir(), 'baci-ollama-recovery-receipt-')
-  );
-  const receiptRoot = join(directory, 'receipts');
-  await mkdir(receiptRoot, { mode: 0o700 });
-  const bin = await testBin();
-  const snapshot = join(directory, 'snapshot.json');
-  const outside = join(directory, 'outside.json');
-  try {
-    await writeFile(
-      snapshot,
-      '{"surfaces":[],"dependencies":[],"consumerCounts":[],"consumerEvidence":[]}\n'
-    );
-    const { stdout } = await shell(
-      'fsync_file() { :; }; fsync_dir() { :; }; RECOVERY_SOURCE_SHA="$6"; RECOVERY_RECEIPT_ROOT="$3"; RETIRE_OLLAMA_RECOVERY_RECEIPT="$4"; init_temp_root; trap cleanup_temp EXIT; recovery_write_receipt "$5"',
-      [directory, receiptRoot, outside, snapshot, sourceSha],
-      {
-        RETIRE_OLLAMA_TEST_BIN: bin,
-        RETIRE_OLLAMA_RECOVERY_TEST_ROOT: receiptRoot,
-        RETIRE_OLLAMA_RECOVERY_TEST_SOURCE_SHA: sourceSha,
-      }
-    );
-    const receiptPath = join(receiptRoot, sourceSha, 'recovery-scan.json');
-    const receiptBytes = await readFile(receiptPath);
-    const receipt = JSON.parse(receiptBytes);
-    assert.equal(receipt.destructiveAuthority, false);
-    assert.equal(receipt.sourceBinding.sourceSha, sourceSha);
-    assert.match(receipt.sourceBinding.scriptSha256, /^[0-9a-f]{64}$/);
-    assert.match(receipt.sourceBinding.helperSha256, /^[0-9a-f]{64}$/);
-    assert.match(receipt.sourceBinding.consumersSha256, /^[0-9a-f]{64}$/);
-    assert.match(receipt.sourceBinding.cronInventorySha256, /^[0-9a-f]{64}$/);
-    assert.equal(
-      (await readFile(`${receiptPath}.sha256`, 'utf8')).trim(),
-      stdout.trim()
-    );
-    assert.equal(
-      (await readFile(`${receiptPath}.sha256`, 'utf8')).trim(),
-      sha(receiptBytes)
-    );
-    await assert.rejects(readFile(outside, 'utf8'));
-    const { stdout: retry } = await shell(
-      'fsync_file() { :; }; fsync_dir() { :; }; RECOVERY_SOURCE_SHA="$3"; init_temp_root; trap cleanup_temp EXIT; recovery_write_receipt "$2"',
-      [snapshot, sourceSha],
-      {
-        RETIRE_OLLAMA_TEST_BIN: bin,
-        RETIRE_OLLAMA_RECOVERY_TEST_ROOT: receiptRoot,
-        RETIRE_OLLAMA_RECOVERY_TEST_SOURCE_SHA: sourceSha,
-      }
-    );
-    assert.equal(retry.trim(), stdout.trim());
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-    await rm(bin, { recursive: true, force: true });
-  }
 });

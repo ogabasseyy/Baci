@@ -8,8 +8,9 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const script = new URL('./retire-ollama.sh', import.meta.url);
+const containerId = '0123456789abcdef'.repeat(4);
 const prelude =
-  'sha256sum() { /usr/bin/shasum -a 256 "$@"; }; findmnt() { printf "/ fixture apfs ro\\n"; }; ';
+  'RETIRE_OLLAMA_TEST_BIN=/usr/bin; native_sha256sum=$(command -v sha256sum 2>/dev/null || :); native_shasum=$(command -v shasum 2>/dev/null || :); sha256sum() { if [ -n "$native_sha256sum" ]; then "$native_sha256sum" "$@"; elif [ -n "$native_shasum" ]; then "$native_shasum" -a 256 "$@"; else return 2; fi; }; findmnt() { printf "/ fixture apfs ro\\n"; }; ';
 
 function scanContainer(
   directory,
@@ -21,7 +22,7 @@ function scanContainer(
 ) {
   return execFileAsync('sh', [
     '-c',
-    `${prelude}wrapper_body=$3; configuration_body=$4; nested_body=$5; executable=$6; inspect_cleanup=$7; stat() { if [ "$executable" = 1 ]; then printf '1:2:81ed:10:0:0:755\\n'; else printf '1:2:81a4:10:0:0:600\\n'; fi; }; docker() { case "$*" in *' ps -a '*) printf 'generic-api\\n' ;; *'inspect -f {{.Name}} generic-api') printf '/generic-api\\n' ;; *'inspect -f {{json .State.Running}} generic-api') printf 'false\\n' ;; *'inspect -f {{.Id}} '*) printf 'generic-api /generic-api /opt/application-wrapper [] [] {} null [] {} {} {} [] "bridge"\\n' ;; *'inspect -f {{json .Mounts}} generic-api') printf '[]\\n' ;; *' cp generic-api:/opt/application-wrapper '*) for destination do :; done; printf '%s' "$wrapper_body" >"$destination" ;; *' cp generic-api:/etc/application.conf '*) for destination do :; done; printf '%s' "$configuration_body" >"$destination" ;; *' cp generic-api:/etc/nested.conf '*) for destination do :; done; printf '%s' "$nested_body" >"$destination" ;; *) return 2 ;; esac; }; . "$1"; SCRIPT_DIR=$(dirname "$1"); RETIRE_OLLAMA_TMPDIR="$2"; init_temp_root; trap cleanup_temp EXIT; CANONICAL_DOCKER_SOCKET=/run/docker.sock; CONTAINER=ollama-loopback; if [ "$inspect_cleanup" = 1 ]; then if scan_container_rows all >/dev/null; then scan_status=0; else scan_status=$?; fi; leaked=$(find "$TEMP_ROOT" -type f | wc -l | tr -d ' '); printf '%s %s\\n' "$scan_status" "$leaked"; else scan_container_rows all; fi`,
+    `${prelude}wrapper_body=$3; configuration_body=$4; nested_body=$5; executable=$6; inspect_cleanup=$7; stat() { if [ "$executable" = 1 ]; then printf '1:2:81ed:10:0:0:755\\n'; else printf '1:2:81a4:10:0:0:600\\n'; fi; }; docker() { case "$*" in *' ps -a '*) printf '${containerId}\\n' ;; *'inspect -f {{.Name}} ${containerId}') printf '/generic-api\\n' ;; *'inspect -f {{json .State.Running}} ${containerId}') printf 'false\\n' ;; *'inspect -f {{.Id}} '*) printf '${containerId} /generic-api /opt/application-wrapper [] [] {} null [] {} {} {} [] "bridge"\\n' ;; *'inspect -f {{json .Mounts}} ${containerId}') printf '[]\\n' ;; *' cp ${containerId}:/opt/application-wrapper '*) for destination do :; done; printf '%s' "$wrapper_body" >"$destination" ;; *' cp ${containerId}:/etc/application.conf '*) for destination do :; done; printf '%s' "$configuration_body" >"$destination" ;; *' cp ${containerId}:/etc/nested.conf '*) for destination do :; done; printf '%s' "$nested_body" >"$destination" ;; *) return 2 ;; esac; }; . "$1"; SCRIPT_DIR=$(dirname "$1"); RETIRE_OLLAMA_TMPDIR="$2"; init_temp_root; trap cleanup_temp EXIT; CANONICAL_DOCKER_SOCKET=/run/docker.sock; CONTAINER=ollama-loopback; if [ "$inspect_cleanup" = 1 ]; then if scan_container_rows all >/dev/null; then scan_status=0; else scan_status=$?; fi; leaked=$(find "$TEMP_ROOT" -type f | wc -l | tr -d ' '); printf '%s %s\\n' "$scan_status" "$leaked"; else scan_container_rows all; fi`,
     'retire-ollama-container-wrapper-source-test',
     script.pathname,
     directory,

@@ -70,7 +70,7 @@ test('normal inventory rejects a generic process connected to port 11434', async
     await assert.rejects(
       execFileAsync('sh', [
         '-c',
-        `. "$1"; SCRIPT_DIR=$(dirname "$1"); . "$SCRIPT_DIR/retire-ollama-recovery.sh"; RECOVERY_PROC_ROOT="$2"; recovery_process_lifetime_marker() { printf '%s\\n' stable; }; recovery_listener_executable() { printf '%s\\n' '{"path":"/usr/bin/python","realPath":"/usr/bin/python","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","identitySha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","uid":"1000","startTime":"1"}'; }; init_temp_root; trap cleanup_temp EXIT; records='[]'; deps='[]'; consumer_counts='[]'; consumer_evidence='[]'; record_running_process_sockets "$3"`,
+        `RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; . "$1"; SCRIPT_DIR=$(dirname "$1"); . "$SCRIPT_DIR/retire-ollama-recovery.sh"; RECOVERY_PROC_ROOT="$2"; recovery_process_lifetime_marker() { printf '%s\\n' stable; }; recovery_listener_executable() { printf '%s\\n' '{"path":"/usr/bin/python","realPath":"/usr/bin/python","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","identitySha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","uid":"1000","startTime":"1"}'; }; init_temp_root; trap cleanup_temp EXIT; records='[]'; deps='[]'; consumer_counts='[]'; consumer_evidence='[]'; record_running_process_sockets "$3"`,
         'retire-ollama-destructive-client-socket-test',
         script.pathname,
         procRoot,
@@ -136,7 +136,7 @@ test('normal client inventory records the Ollama service listener without reject
 
     const { stdout } = await execFileAsync('sh', [
       '-c',
-      `. "$1"; SCRIPT_DIR=$(dirname "$1"); . "$SCRIPT_DIR/retire-ollama-recovery.sh"; RECOVERY_PROC_ROOT="$2"; recovery_process_lifetime_marker() { printf '%s\\n' stable; }; init_temp_root; trap cleanup_temp EXIT; records='[]'; deps='[]'; consumer_counts='[]'; consumer_evidence='[]'; record_running_process_sockets "$3"; printf '%s\\n' "$records"`,
+      `RETIRE_OLLAMA_TEST_BIN=/sbin; RETIRE_OLLAMA_TEST_FSTYPE=apfs; . "$1"; SCRIPT_DIR=$(dirname "$1"); . "$SCRIPT_DIR/retire-ollama-recovery.sh"; RECOVERY_PROC_ROOT="$2"; recovery_process_lifetime_marker() { printf '%s\\n' stable; }; init_temp_root; trap cleanup_temp EXIT; records='[]'; deps='[]'; consumer_counts='[]'; consumer_evidence='[]'; record_running_process_sockets "$3"; printf '%s\\n' "$records"`,
       'retire-ollama-approved-listener-test',
       script.pathname,
       procRoot,

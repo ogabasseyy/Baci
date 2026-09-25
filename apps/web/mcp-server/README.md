@@ -158,6 +158,7 @@ Once connected, users can ask:
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Public Supabase key used under RLS for shopping tools |
 | `MCP_PUBLIC_ORIGIN` | No | Public HTTPS origin for proxied product images (default: `https://mcp.ogabassey.com`; set to the temporary tunnel origin for local ChatGPT QA) |
+| `MCP_TRUST_PROXY_REAL_IP` | No | Default `false`: rate-limit by the socket address. Set `true` only after verifying the private reverse proxy overwrites `X-Real-IP` on every request; never trust a client-supplied forwarded header. |
 | `BACI_AGENTIC_ACCESS_TOKEN` | Yes for checkout | Baci-owned bearer token for agentic checkout APIs; this is not an OpenAI Platform API key |
 | `BACI_AGENTIC_SIGNING_KEY` | Yes for checkout | Baci-owned HMAC signing key for agentic checkout APIs |
 | `OPENAI_AGENTIC_API_KEY` | Legacy alias | Backwards-compatible alias for `BACI_AGENTIC_ACCESS_TOKEN` |

@@ -85,6 +85,22 @@ describe('MCP catalog claims', () => {
     }
   });
 
+  it('masks raw variant quantities for untracked products', async () => {
+    const server = await startMcpServerWithPostgrest({});
+    try {
+      const result = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+        id: 90,
+        method: 'tools/call',
+        params: { name: 'get_product', arguments: { product_id: 'untracked-variant-product' } },
+      }));
+      expect(result.structuredContent).toMatchObject({
+        variants: [expect.objectContaining({ stock: null, availability: 'unconfirmed' })],
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
   it('preserves an object-shaped catalog image in recommendations', async () => {
     const server = await startMcpServerWithPostgrest({});
     try {

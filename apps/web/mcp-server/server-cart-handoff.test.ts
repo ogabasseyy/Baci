@@ -63,6 +63,25 @@ describe('MCP cart handoff', () => {
       });
       expect(JSON.stringify(availableVariant)).not.toContain('cart_url');
 
+      const legacyStock = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+        id: 70,
+        method: 'tools/call',
+        params: { name: 'add_to_cart', arguments: { product_id: 'legacy-stock-product', quantity: 3 } },
+      }));
+      expect(legacyStock.structuredContent).toMatchObject({ success: true });
+
+      const conditionOffer = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+        id: 71,
+        method: 'tools/call',
+        params: { name: 'add_to_cart', arguments: { product_id: 'condition-offer-product', quantity: 1 } },
+      }));
+      expect(conditionOffer.structuredContent).toMatchObject({
+        success: false,
+        requires_variant_selection: true,
+        product_url: 'https://ogabassey.com/products/used-offer-phone',
+      });
+      expect(JSON.stringify(conditionOffer)).not.toContain('cart_url');
+
       const insufficientVariantQuantity = getResultRecord(
         await postMcpJsonRpc(server.baseUrl, {
           id: 8,

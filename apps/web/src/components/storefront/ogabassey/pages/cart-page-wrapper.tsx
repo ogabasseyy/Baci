@@ -3,6 +3,7 @@
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useCart } from '@/hooks/cart';
+import { findMergingCartLineIndex } from '@/hooks/cart/find-merging-cart-line';
 import { useToast } from '@/hooks/use-toast';
 import {
   getPrimaryProductImage,
@@ -69,7 +70,7 @@ async function fetchAndAddCartItems({
     const { data: products, error } = await supabase
       .from('products')
       .select(
-        'id, name, description, status, price, manage_stock, stock, brand, gtin, mpn, merchant_id, images, imageHint:image_hint'
+        'id, name, description, status, price, manage_stock, stock, stock_quantity, brand, gtin, mpn, merchant_id, images, imageHint:image_hint'
       )
       .eq('merchant_id', merchantId)
       .in('id', ids)
@@ -108,6 +109,7 @@ async function fetchAndAddCartItems({
 
     // Add each product to cart
     let addedCount = 0;
+    const rejectedIds: string[] = [];
     for (const product of activeProducts) {
       const resolvedImage =
         getPrimaryProductImage(product.images) ||
@@ -116,12 +118,27 @@ async function fetchAndAddCartItems({
       const alreadyClaimedPrize = hasQuizPrizeVoucher &&
         cart.some(item => item.quizAwardId === quizAwardId);
       if (!alreadyClaimedPrize) {
+        const productForCart = {
+          ...product,
+          image: resolvedImage,
+          imageLarge: resolvedImage,
+        };
+        const existingIndex = findMergingCartLineIndex(cart, productForCart);
+        const existingQuantity = existingIndex >= 0 ? cart[existingIndex].quantity : 0;
+        const effectiveStock = Number(product.stock_quantity ?? 0) > 0
+          ? Number(product.stock_quantity)
+          : Number(product.stock ?? 0);
+        if (!hasQuizPrizeVoucher && product.manage_stock && existingQuantity + quantity > effectiveStock) {
+          rejectedIds.push(product.id);
+          toast({
+            title: 'Not enough stock',
+            description: `Only ${effectiveStock} unit${effectiveStock === 1 ? '' : 's'} of ${product.name} are currently available. Adjust your cart, then reload to retry this link.`,
+            variant: 'destructive',
+          });
+          continue;
+        }
         addToCart(
-          {
-            ...product,
-            image: resolvedImage,
-            imageLarge: resolvedImage,
-          },
+          productForCart,
           hasQuizPrizeVoucher ? 1 : quantity,
           hasQuizPrizeVoucher
             ? {
@@ -146,10 +163,14 @@ async function fetchAndAddCartItems({
       });
     }
 
-    // Clean up URL by removing item_id parameter
+    // Keep rejected IDs in the handoff URL so a corrected cart can retry.
     const url = new URL(window.location.href);
-    url.searchParams.delete('item_id');
-    url.searchParams.delete('qty');
+    if (rejectedIds.length > 0) {
+      url.searchParams.set('item_id', rejectedIds.join(','));
+    } else {
+      url.searchParams.delete('item_id');
+      url.searchParams.delete('qty');
+    }
     url.searchParams.delete('quiz_award_id');
     url.searchParams.delete('quiz_voucher_token');
     url.searchParams.delete('variant_id');

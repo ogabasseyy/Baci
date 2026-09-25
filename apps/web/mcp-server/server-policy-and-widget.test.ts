@@ -68,6 +68,23 @@ describe('MCP policy and widget responses', () => {
     }
   });
 
+  it('serves the same validated premium widget through the render endpoint', async () => {
+    const server = await startMcpServerWithPostgrest({});
+    try {
+      const resource = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+        id: 91,
+        method: 'resources/read',
+        params: { uri: 'ui://widget/store.html' },
+      }));
+      const contents = resource.contents as Array<{ text: string }>;
+      const render = await fetch(`${server.baseUrl}/mcp/render/store`);
+      expect(render.status).toBe(200);
+      expect(await render.text()).toBe(contents[0].text);
+    } finally {
+      await server.close();
+    }
+  });
+
   it('withholds a numeric delivery quote when the public policy has no rate schedule', async () => {
     const server = await startMcpServerWithPostgrest({});
     try {

@@ -21,7 +21,11 @@ vi.mock('@/templates/registry', () => ({
 }));
 
 vi.mock('next/link', () => ({
-  default: vi.fn(({ children }: { children: React.ReactNode }) => children),
+  default: vi.fn(
+    ({ children, href }: { children: React.ReactNode; href: string }) => (
+      <a href={href}>{children}</a>
+    )
+  ),
 }));
 
 const { DeleteAccountContent, generateMetadata } = await import('./page');
@@ -54,6 +58,28 @@ describe('delete-account metadata', () => {
 });
 
 describe('Ogabassey account deletion guidance', () => {
+  it('keeps the privacy link inside a development path storefront', async () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    try {
+      vi.mocked(getMerchantByIdentifier).mockResolvedValue({
+        business_name: 'Ogabassey',
+        email: 'privacy@ogabassey.com',
+        logo_url: null,
+        slug: 'ogabassey',
+      } as unknown as Awaited<ReturnType<typeof getMerchantByIdentifier>>);
+      render(
+        await DeleteAccountContent({
+          params: Promise.resolve({ slug: 'ogabassey' }),
+        })
+      );
+      expect(
+        screen.getByRole('link', { name: 'Privacy Policy' })
+      ).toHaveAttribute('href', '/ogabassey/privacy');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('uses the current privacy and tax retention periods instead of 90 days', async () => {
     vi.mocked(getMerchantByIdentifier).mockResolvedValue({
       business_name: 'Ogabassey',
@@ -79,5 +105,11 @@ describe('Ogabassey account deletion guidance', () => {
     expect(
       screen.queryByText(/Retained for Legal\/Business Purposes \(90 days\)/)
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'Privacy Policy' })
+    ).toHaveAttribute(
+      'href',
+      process.env.NODE_ENV === 'development' ? '/ogabassey/privacy' : '/privacy'
+    );
   });
 });

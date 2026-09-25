@@ -178,6 +178,34 @@ describe('CartPageWrapper', () => {
     expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Added to cart' }));
   });
 
+  it('rejects a handoff that would exceed stock after merging with a persisted line', async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams('item_id=55555555-5555-4555-8555-555555555555&qty=3') as ReturnType<typeof useSearchParams>
+    );
+    window.history.pushState({}, '', '/ogabassey/cart?item_id=55555555-5555-4555-8555-555555555555&qty=3');
+    const addToCart = mockUseCart({
+      cart: [{ id: '55555555-5555-4555-8555-555555555555', quantity: 2 }],
+    });
+    setupProductsQuery({ data: [{
+      id: '55555555-5555-4555-8555-555555555555',
+      name: 'Phone',
+      status: 'active',
+      images: [],
+      manage_stock: true,
+      stock_quantity: 3,
+      stock: 3,
+    }], error: null });
+
+    render(<CartPageWrapper merchantId="merchant-1" />);
+
+    await waitFor(() => expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Not enough stock', variant: 'destructive' })
+    ));
+    expect(addToCart).not.toHaveBeenCalled();
+    expect(mockToast).not.toHaveBeenCalledWith(expect.objectContaining({ title: 'Added to cart' }));
+    expect(window.location.search).toContain('item_id=55555555-5555-4555-8555-555555555555');
+  });
+
   it('falls back to one unit for an invalid handoff quantity', async () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams('item_id=55555555-5555-4555-8555-555555555555&qty=0') as ReturnType<typeof useSearchParams>

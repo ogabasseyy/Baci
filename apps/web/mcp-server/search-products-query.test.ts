@@ -100,15 +100,16 @@ describe('loadMcpSearchProducts', () => {
   });
 
   it('does not force phone accessories into the Smartphones category', async () => {
-    const { supabase } = createRankedSearchSupabase('Accessories');
-    const result = await loadMcpSearchProducts({
-      args: { query: 'phone screen protector', limit: 2 },
-      merchantId: 'merchant-1',
-      sanitizeString: (input) => input,
-      supabase,
-    });
-
-    expect(result.products).toHaveLength(2);
+    for (const query of ['phone screen protector', 'phone stand', 'phone mount', 'phone holder', 'phone tripod']) {
+      const { supabase } = createRankedSearchSupabase('Accessories');
+      const result = await loadMcpSearchProducts({
+        args: { query, limit: 2 },
+        merchantId: 'merchant-1',
+        sanitizeString: (input) => input,
+        supabase,
+      });
+      expect(result.products).toHaveLength(2);
+    }
   });
 
   it('caps ranked post-filter pagination when hydrated rows keep failing filters', async () => {

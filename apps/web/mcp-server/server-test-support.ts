@@ -4,9 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect } from 'vitest';
 
-interface JsonRpcResponse {
-  result?: unknown;
-}
+type JsonRpcResponse = { result?: unknown };
 
 interface McpToolDefinition {
   name: string;
@@ -22,10 +20,7 @@ interface StartedMcpServer {
 const webRootDirectory = dirname(dirname(fileURLToPath(import.meta.url)));
 const repoRootDirectory = dirname(dirname(webRootDirectory));
 const tsxExecutable = join(
-  repoRootDirectory,
-  'node_modules',
-  '.bin',
-  process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
+  repoRootDirectory, 'node_modules/.bin', process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
 );
 
 async function postMcpJsonRpc(
@@ -93,6 +88,12 @@ async function startPostgrestStub() {
         response.end(JSON.stringify({ id: 'variant-available-product', name: 'Variant Available Phone', slug: 'variant-available-phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: true }));
       } else if (url.searchParams.get('id') === 'eq.untracked-offer-product') {
         response.end(JSON.stringify({ id: 'untracked-offer-product', name: 'Untracked Offer Phone', slug: 'untracked-offer-phone', price: 100000, manage_stock: false, stock_quantity: 0, has_condition_offers: true }));
+      } else if (url.searchParams.get('id') === 'eq.legacy-stock-product') {
+        response.end(JSON.stringify({ id: 'legacy-stock-product', name: 'Legacy Stock Phone', slug: 'legacy-stock-phone', price: 100000, manage_stock: true, stock_quantity: 0, stock: 3, has_variants: false }));
+      } else if (url.searchParams.get('id') === 'eq.condition-offer-product') {
+        response.end(JSON.stringify({ id: 'condition-offer-product', name: 'Used Offer Phone', slug: 'used-offer-phone', price: 100000, manage_stock: true, stock_quantity: 0, stock: 0, has_variants: false, has_condition_offers: true }));
+      } else if (url.searchParams.get('id') === 'eq.untracked-variant-product') {
+        response.end(JSON.stringify({ id: 'untracked-variant-product', name: 'Untracked Variant Phone', slug: 'untracked-variant-phone', price: 100000, manage_stock: false, stock_quantity: 0, has_variants: true }));
       } else if (!url.searchParams.has('id') && !url.searchParams.has('name')) {
         response.end(JSON.stringify([
           { id: 'available-product', name: 'Test Phone', slug: 'test-phone', price: 100000, compare_at_price: 120000, images: ['https://images.example.test/phone.jpg'], manage_stock: false, stock_quantity: 0, has_variants: false },
@@ -114,6 +115,7 @@ async function startPostgrestStub() {
         { product_id: 'available-product', attributes: { storage: '128GB' }, price_override: 100000, stock_quantity: 0, condition: 'new', sku: 'TEST-128' },
         { product_id: 'variant-sold-out-product', attributes: { storage: '128GB' }, stock_quantity: 0 },
         { product_id: 'variant-available-product', attributes: { storage: '256GB' }, stock_quantity: 2 },
+        { product_id: 'untracked-variant-product', attributes: { storage: '128GB' }, stock_quantity: 0 },
       ];
       let body = '';
       request.on('data', (chunk: Buffer) => { body += chunk.toString(); });

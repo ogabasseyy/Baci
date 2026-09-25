@@ -237,7 +237,14 @@ export async function DeleteAccountContent({ params }: PageProps) {
               at least six years after the relevant year of assessment under
               section 31(5) of the Nigeria Tax Administration Act, 2025. We
               restrict access to records retained for legal purposes. See our{' '}
-              <Link href="/privacy" className="text-primary underline">
+              <Link
+                href={
+                  process.env.NODE_ENV === 'development'
+                    ? `/${merchant.slug}/privacy`
+                    : '/privacy'
+                }
+                className="text-primary underline"
+              >
                 Privacy Policy
               </Link>{' '}
               for details and contact us if you need a copy of your data.

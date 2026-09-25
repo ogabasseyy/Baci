@@ -19,6 +19,7 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from 'node:http';
+import { isIP } from 'node:net';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -200,9 +201,11 @@ interface RateLimitEntry {
 const rateLimitMap = new Map<string, RateLimitEntry>();
 
 function getClientIP(req: IncomingMessage): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') {
-    return forwarded.split(',')[0].trim();
+  // Trust a forwarded client address only when the operator has verified that
+  // the private reverse proxy overwrites this header on every request.
+  const realIp = req.headers['x-real-ip'];
+  if (process.env.MCP_TRUST_PROXY_REAL_IP === 'true' && typeof realIp === 'string' && isIP(realIp.trim()) > 0) {
+    return realIp.trim();
   }
   return req.socket.remoteAddress || 'unknown';
 }
@@ -1453,14 +1456,14 @@ function createOgabasseyServer() {
 
         const { data: product, error: productError } = await supabase
           .from('products')
-          .select('name, slug, price, manage_stock, stock_quantity, has_variants')
+          .select('name, slug, price, manage_stock, stock_quantity, stock, has_variants, has_condition_offers')
           .eq('id', args.product_id)
           .eq('merchant_id', merchantId)
           .eq('status', 'active')
           .single();
 
         let unavailable = Boolean(productError || !product);
-        if (product?.manage_stock === true) {
+        if (product?.manage_stock === true && product.has_condition_offers !== true) {
           if (product.has_variants === true) {
             const { data: variants, error: variantsError } = await supabase.rpc(
               'get_storefront_product_variants',
@@ -1472,7 +1475,10 @@ function createOgabasseyServer() {
                 Number(variant.stock_quantity ?? 0) >= (args.quantity ?? 1)
               );
           } else {
-            unavailable = Number(product.stock_quantity ?? 0) < (args.quantity ?? 1);
+            const effectiveStock = Number(product.stock_quantity ?? 0) > 0
+              ? Number(product.stock_quantity)
+              : Number(product.stock ?? 0);
+            unavailable = effectiveStock < (args.quantity ?? 1);
           }
         }
 
@@ -1483,10 +1489,10 @@ function createOgabasseyServer() {
           };
         }
 
-        if (product.has_variants === true) {
+        if (product.has_variants === true || product.has_condition_offers === true) {
           if (!product.slug) {
             return {
-              content: [{ type: 'text', text: 'This product needs variant selection on Ogabassey, but its product page is unavailable.' }],
+              content: [{ type: 'text', text: 'This product needs option selection on Ogabassey, but its product page is unavailable.' }],
               structuredContent: { success: false },
             };
           }
@@ -1494,7 +1500,7 @@ function createOgabasseyServer() {
           return {
             content: [{
               type: 'text',
-              text: `Choose the color, storage, and other options for **${product.name}** on Ogabassey before adding it to your cart.\n\n[Select product options](${productUrl})`,
+              text: `Choose the available options for **${product.name}** on Ogabassey before adding it to your cart.\n\n[Select product options](${productUrl})`,
             }],
             structuredContent: {
               success: false,
@@ -2043,7 +2049,8 @@ function createOgabasseyServer() {
           variants: variants.map((v) => ({
             attributes: v.attributes,
             price: v.price_override,
-            stock: v.stock_quantity,
+            stock: product.manage_stock ? v.stock_quantity : null,
+            availability: getMcpOfferAvailability(product.manage_stock, v.stock_quantity).availability,
             condition: v.condition,
           })),
           condition_offers: conditionOffers.map((offer) => ({
@@ -3162,7 +3169,7 @@ const httpServer = createServer(
       res.setHeader('Content-Type', 'text/html+skybridge; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=3600');
       res.writeHead(200);
-      res.end(widgetHtml);
+      res.end(premiumWidgetHtml);
       logAudit({
         timestamp: new Date().toISOString(),
         requestId,

@@ -75,8 +75,6 @@ import { mapApiOrderToResumedOrder } from './checkout/map-api-order-to-resumed-o
 import {
   loadShippingStates,
   loadWalletBalance,
-  requestDvaInitialization,
-  type DvaBillingAddress,
 } from './checkout/checkout-page-data-loaders';
 import {
   usePersistedState,
@@ -86,8 +84,7 @@ import { DeferredCheckoutAuthModal as CheckoutAuthModal } from './checkout/compo
 import {
   type PlaceDetails,
 } from '@/components/address-autocomplete';
-import { openCredPalCheckout } from '@/lib/credpal';
-import { openCreditDirectCheckout } from '@/lib/credit-direct-client';
+import { openCheckoutCreditDirect } from './checkout/handlers/open-checkout-credit-direct';
 import { asRoute } from '@/lib/routes';
 import { getCountryByCode } from '@/lib/countries';
 import type { ShippingQuote } from '@/types/shipping-quote';
@@ -95,7 +92,6 @@ import { getSubdivisions } from '@/lib/shipping/merchant-rates/subdivisions';
 import { toast } from '@/hooks/use-toast';
 import { createClient } from '@/lib/supabase/client';
 import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
-import { toCreditDirectItems } from '@/lib/checkout/credit-direct-items';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import {
   calculateCartCatalogSubtotal,
@@ -114,7 +110,6 @@ import {
   buildPendingCheckoutFingerprint,
   CHECKOUT_PENDING_ORDER_STORAGE_KEY,
   normalizeOrderPaymentMethod,
-  resolvePendingCheckoutOrder,
   type PendingCheckoutOrderSnapshot,
 } from './checkout/pending-checkout-order';
 import {
@@ -130,21 +125,24 @@ import {
 import { captureCheckoutPaymentCompleted } from './checkout/capture-checkout-payment-completed';
 import { captureCheckoutPaymentFailed } from './checkout/capture-checkout-payment-failed';
 import { captureCheckoutPaymentStarted } from './checkout/capture-checkout-payment-started';
-import { captureCreditDirectClientCompletion } from './checkout/credit-direct-client-completion';
-import { writeCreditDirectPopupMarker } from './checkout/credit-direct-popup-return';
-import { buildCreditDirectVerificationPath } from './checkout/handlers/build-credit-direct-verification-path';
 import { executeResumedDirectPayment } from './checkout/handlers/direct-payment';
-import { persistCreditDirectPopupReference } from './checkout/persist-credit-direct-popup-reference';
 import { getCheckoutOrderErrorMessage } from './checkout/checkout-order-error-message';
+import {
+  resolveCheckoutOrderSubmission,
+  submitCheckoutOrder,
+  type CheckoutPaymentOrder,
+  type CheckoutWalletRedemption,
+} from './checkout/handlers/submit-checkout-order';
+import { initializeCheckoutDva } from './checkout/handlers/initialize-checkout-dva';
+import { initializeCheckoutGateway } from './checkout/handlers/initialize-checkout-gateway';
+import { openCheckoutCredpal } from './checkout/handlers/open-checkout-credpal';
+import { completeCheckoutOrder } from './checkout/handlers/complete-checkout-order';
 import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
 import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import { selectRejectedVoucherLines } from './checkout/select-rejected-voucher-lines';
 import { PaymentStep } from './checkout/components/PaymentStep';
 import type { RedvaultQuoteSummary } from './checkout/components/redvault/RedvaultPaymentOption';
-import {
-  initializeRedvaultPayment,
-  parseRedvaultOrderQuote,
-} from './checkout/redvault-payment-response';
+import { initializeRedvaultPayment } from './checkout/redvault-payment-response';
 import { getRedvaultCompatibleCheckoutValues } from './checkout/redvault-compatible-checkout-values';
 import {
   invalidatePendingQuoteRequests,
@@ -214,18 +212,6 @@ function raiseCheckoutError(message: string): never {
 }
 
 
-
-/**
- * /api/orders rejection codes raised by the merchant-shipping-rate money guard.
- * They all mean "the fee the client quoted no longer matches the merchant's
- * rate config for this destination/subtotal" — surface a single re-quote hint.
- */
-const SHIPPING_RATE_REJECTION_CODES = new Set([
-  'SHIPPING_FEE_MISMATCH',
-  'SHIPPING_RATE_INVALID',
-  'SHIPPING_RATE_ZONE_MISMATCH',
-  'SHIPPING_RATE_CONDITION_UNMET',
-]);
 
 // Module-scope helper: probes DVA settlement server-side so "Confirm
 // Transfer Sent" only records a conversion for a detected transfer.
@@ -1531,28 +1517,11 @@ export const CheckoutPage: React.FC = () => {
     }
 
     try {
-      let order: {
-        id: string;
-        order_number?: string;
-        payment_status?: string;
-        total?: number;
-        tracking_token?: string;
-        /** Stamped orders.currency (returned by /api/orders and /api/orders/reuse). */
-        currency?: string | null;
-        /**
-         * Server-authoritative method: the API rewrites this to
-         * wallet/store_credit/savings/quiz_voucher when credits or prizes
-         * cover the order, so it differs from the UI selection then.
-         */
-        payment_method?: string | null;
-      };
-      let walletResult: {
-        amountUsed: number;
-        newBalance: number;
-      } | null = null;
+      let order: CheckoutPaymentOrder;
+      let walletResult: CheckoutWalletRedemption | null = null;
       let amountDueToGateway = total;
 
-      const reusablePendingOrder = await resolvePendingCheckoutOrder({
+      const reuse = {
         pendingOrder: pendingCheckoutOrder,
         merchantId: merchant.id,
         merchantSlug: merchant.slug,
@@ -1560,31 +1529,23 @@ export const CheckoutPage: React.FC = () => {
         checkoutFingerprint,
         paymentMethod: normalizedPaymentMethod,
         shippingProvider,
-        // Airport (GIGL GoFaster) forwards its real carrier quote id only when
-        // the current selection matches the airport method. Door/pickup use
-        // `getForwardableSelectedQuoteId`, which additionally omits a merchant
-        // rate's synthetic `mrate_<uuid>` id — the reuse route validates
-        // `selected_quote_id` as a UUID and would 400 (clearing the stored
-        // pending order). Reuse reopens an already-fee-verified order and does
-        // not re-verify shipping, so omitting the id is safe.
+        // Airport forwards its real carrier quote only when it still matches
+        // the selected method. Merchant-rate synthetic ids stay omitted.
         selectedQuoteId:
           deliveryMethod === 'airport'
             ? selectedQuoteMatchesDeliveryMethod
               ? selectedQuoteId || undefined
               : undefined
             : getForwardableSelectedQuoteId(deliveryMethod, selectedQuoteId),
-        // R14-3: forward the BARE merchant rate id so the reuse route can
-        // re-stamp fulfillment metadata if the original stamp failed. This is
-        // the null-provider path's identity (selected_quote_id stays omitted
-        // above — the `mrate_` id is not a uuid the reuse schema accepts).
         shippingRateId: merchantRateId ?? undefined,
-      });
+      };
+      const pendingOrderResolution = await resolveCheckoutOrderSubmission(reuse);
 
       // The REDVAULT pending-order fence verdict (paid routing, blocking
-      // cancels, live replay) lives in the extracted submit handler.
+      // cancels, live replay) stays ahead of a create-or-reuse transition.
       if (
         await resolveRedvaultSubmitFence({
-          fence: reusablePendingOrder,
+          fence: pendingOrderResolution,
           checkoutFingerprint,
           customerEmail,
           merchantId: merchant.id,
@@ -1608,86 +1569,73 @@ export const CheckoutPage: React.FC = () => {
         return;
       }
 
-      if (reusablePendingOrder.reusableOrder) {
-        order = reusablePendingOrder.reusableOrder.order;
-        amountDueToGateway = reusablePendingOrder.reusableOrder.amountDueToGateway;
-      } else {
-        const checkoutIdempotencyKey =
-          await getCheckoutIdempotencyKey(checkoutFingerprint);
-
-        // 1. Create order in database via API (with wallet redemption if applicable)
-        const orderResponse = await fetch('/api/orders', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Idempotency-Key': checkoutIdempotencyKey,
+      // resolveRedvaultSubmitFence above either returned/threw for a paid or
+      // live fence, or cancelled/cleared every non-reusable snapshot. Pass a
+      // deliberately fence-clean result so submitCheckoutOrder rejects any
+      // future call site that attempts to create through an unresolved fence.
+      const resolvedOrderForSubmission = {
+        reusableOrder: pendingOrderResolution.reusableOrder,
+        clearStoredOrder: false,
+      };
+      const submittedOrder = await submitCheckoutOrder({
+        resolvedPendingOrder: resolvedOrderForSubmission,
+        getIdempotencyKey: () => getCheckoutIdempotencyKey(checkoutFingerprint),
+        orderRequest: buildCheckoutOrderRequest({
+          merchantId: merchant.id,
+          items: orderItems,
+          paymentMethod: normalizedPaymentMethod,
+          acceptsMarketing: newsletterOptIn,
+          customer: {
+            name: `${firstName} ${lastName}`.trim(),
+            email: customerEmail,
+            phone: customerPhone,
+            userId: user?.id,
           },
-          body: JSON.stringify(buildCheckoutOrderRequest({
-            merchantId: merchant.id,
-            items: orderItems,
-            paymentMethod: normalizedPaymentMethod,
-            acceptsMarketing: newsletterOptIn,
-            customer: { name: `${firstName} ${lastName}`.trim(), email: customerEmail, phone: customerPhone, userId: user?.id },
-            money: { subtotal: checkoutCartTotal, shipping: deliveryCost, tax: orderTotals?.taxAmount ?? 0, giftWrapping: giftWrappingCost, discountAmount: checkoutValues.discountAmount, discountCode: checkoutValues.discountCode, useWalletCredit: checkoutValues.useWalletCredit, walletAmount: walletAmountUsed },
-            delivery: { method: deliveryMethod, airportType, quoteMatchesMethod: selectedQuoteMatchesDeliveryMethod, selectedQuoteId, merchantRateId, provider: shippingProvider, address: shippingAddressData },
-          })),
-        });
-
-        if (!orderResponse.ok) {
-          const errorData = await orderResponse.json();
-          const errorCode =
-            typeof errorData.code === 'string' ? errorData.code : '';
-          if (
-            errorCode === 'CHECKOUT_ORDER_NOT_REUSABLE' ||
-            errorCode === 'CHECKOUT_IDEMPOTENCY_CONFLICT'
-          ) {
-            clearPendingCheckoutOrder();
-            await clearCheckoutIdempotencyKey(checkoutFingerprint);
-          }
-          // A quiz voucher rejected server-side (used / not-approved / expired)
-          // would otherwise stick in the cart at ₦0 and re-fail every future
-          // checkout. Prune ONLY the unredeemable line(s) so the shopper can
-          // proceed — never a still-valid prize from a multi-voucher cart. A
-          // sign-in-required rejection is excluded (voucher valid once signed
-          // in); see selectRejectedVoucherLines for the full policy.
+          money: {
+            subtotal: checkoutCartTotal,
+            shipping: deliveryCost,
+            tax: orderTotals?.taxAmount ?? 0,
+            giftWrapping: giftWrappingCost,
+            discountAmount: checkoutValues.discountAmount,
+            discountCode: checkoutValues.discountCode,
+            useWalletCredit: checkoutValues.useWalletCredit,
+            walletAmount: walletAmountUsed,
+          },
+          delivery: {
+            method: deliveryMethod,
+            airportType,
+            quoteMatchesMethod: selectedQuoteMatchesDeliveryMethod,
+            selectedQuoteId,
+            merchantRateId,
+            provider: shippingProvider,
+            address: shippingAddressData,
+          },
+        }),
+        paymentMethod,
+        total,
+        onVoucherRejected: (errorData) => {
           for (const line of selectRejectedVoucherLines(cart, errorData)) {
-            // removeFromCart matches a cartItemId directly, but its product-id
-            // branch compares against item.id — so passing both a cartItemId
-            // and a variantId never matches. Prefer the cartItemId alone; fall
-            // back to (productId, variantId).
             if (line.cartItemId) {
               removeFromCart(line.cartItemId);
             } else {
               removeFromCart(line.id, line.variantId);
             }
           }
-          console.error('Order creation failed:', {
-            status: orderResponse.status,
-            error: errorData.error,
-            details: errorData.details,
-            fullResponse: errorData
-          });
-          if (SHIPPING_RATE_REJECTION_CODES.has(errorCode)) {
-            // The merchant re-priced / re-zoned their rate under us; ask the
-            // customer to refresh so a fresh quote (and fee) is fetched.
-            raiseCheckoutError(
-              'Shipping cost changed — please refresh and try again.'
-            );
-          }
-          raiseCheckoutError(getCheckoutOrderErrorMessage(errorData));
-        }
-
-        const orderData = await orderResponse.json();
-        order = orderData.order;
-        if (paymentMethod === 'uba_redvault') {
-          const summary = parseRedvaultOrderQuote(orderData);
-          setRedvaultSummary(summary);
-          amountDueToGateway = summary.payableKobo / 100;
-        }
-        walletResult = orderData.wallet;
-        if (paymentMethod !== 'uba_redvault') {
-          amountDueToGateway = orderData.amountDueToGateway ?? total;
-        }
+        },
+        onPendingOrderInvalidated: async () => {
+          clearPendingCheckoutOrder();
+          await clearCheckoutIdempotencyKey(checkoutFingerprint);
+        },
+        onShippingRateRejected: () => {
+          raiseCheckoutError('Shipping cost changed — please refresh and try again.');
+        },
+        getOrderErrorMessage: getCheckoutOrderErrorMessage,
+      });
+      order = submittedOrder.order;
+      walletResult = submittedOrder.wallet;
+      amountDueToGateway = submittedOrder.amountDueToGateway;
+      if (submittedOrder.redvaultSummary) {
+        setRedvaultSummary(submittedOrder.redvaultSummary);
       }
 
       createdOrderId = order.id;
@@ -1864,46 +1812,21 @@ export const CheckoutPage: React.FC = () => {
       // Special case: If wallet fully covers the order, no payment gateway needed
       // Order API already marks it as paid, just redirect to success
       if (paymentMethod !== 'uba_redvault' && paymentAmount <= 0) {
-        // Nothing is due at a gateway, but a conversion requires the
-        // authoritative paid status: zero due without server-finalized
-        // coverage (e.g. a 100% discount, where the API leaves the order
-        // unpaid) must not fabricate a paid payment_completed — no
-        // provider or server payment confirmation occurred.
-        if (order.payment_status === 'paid') {
-          // Wallet/server-side credit covered the full amount and the order
-          // API already marked the order paid: record the conversion before
-          // leaving. Attribute the server-returned method
-          // (wallet/store_credit/savings/quiz_voucher after full coverage),
-          // not the UI selection.
-          const zeroDuePaymentMethod = order.payment_method || paymentMethod;
-          captureCheckoutPaymentCompleted({
+        await completeCheckoutOrder({
+          order,
+          checkoutFingerprint,
+          completion: {
+            kind: 'zero_due',
+            paymentMethod,
             currency: orderChargeCurrency,
-            orderId: order.id,
             orderNumber: createdOrderNumber,
-            paymentMethod: zeroDuePaymentMethod,
-            total: order.total ?? total,
-          });
-        } else if (paymentMethod === 'invoice') {
-          // Zero due without paid coverage (e.g. a 100% discount): the
-          // server still generates and emails a proforma, but the
-          // generation is confirmed asynchronously in after() — the
-          // success page captures invoice_generated only once the
-          // lookup carries the terminal delivery flag, so recording it
-          // here would book a conversion for generation that may fail.
-        }
-        clearPendingCheckoutOrder();
-        await clearCheckoutIdempotencyKey(checkoutFingerprint);
-        clearCheckoutSession();
-        // Defer clearCart to avoid flashing empty state before redirect
-        const successQuery = new URLSearchParams({
-          orderId: order.id,
-          wallet: 'true',
+            total,
+          },
+          clearPendingCheckoutOrder,
+          clearCheckoutSession,
+          clearCart,
+          pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
         });
-        if (order.tracking_token) {
-          successQuery.set('trackingToken', order.tracking_token);
-        }
-        router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
-        setTimeout(clearCart, 500);
         return;
       }
 
@@ -1973,14 +1896,49 @@ export const CheckoutPage: React.FC = () => {
           return;
         }
 
-        await handleBankTransfer(
-          order,
-          paymentAmount,
-          billingAddress,
-          capturePaymentStarted,
+        await initializeCheckoutDva({
+          merchantId: merchant.id,
+          customerEmail,
+          customerName: `${firstName} ${lastName}`.trim(),
+          customerPhone,
           checkoutFingerprint,
-          () => paymentStarted
-        );
+          billingAddress,
+          currencyCode,
+          paymentAmount,
+          total,
+          order,
+          setDvaData,
+          setDvaCountdown,
+          setIsProcessing,
+          setIsInitializingDva,
+          releaseSubmitLock: () => {
+            isOrderInFlightRef.current = false;
+          },
+          onDvaReady: capturePaymentStarted,
+          onPaymentFailure: () => {
+            if (!paymentStarted) {
+              return;
+            }
+            captureCheckoutPaymentFailed({
+              currency: orderChargeCurrency,
+              orderId: order.id,
+              paymentMethod: 'bank_transfer',
+              reason: 'bank_transfer_error',
+              total: order.total ?? total,
+            });
+          },
+          onError: (error) => {
+            console.error('DVA initialization error:', error);
+            toast({
+              title: 'Bank Transfer Failed',
+              description:
+                error instanceof Error
+                  ? error.message
+                  : 'Failed to initialize bank transfer',
+              variant: 'destructive',
+            });
+          },
+        });
         return;
       }
 
@@ -2063,29 +2021,18 @@ export const CheckoutPage: React.FC = () => {
           return;
         }
 
-        // Initialize payment via API - supports Paystack and Korapay
-        // Amount is adjusted for wallet credit (if used)
-        const paymentResponse = await fetch('/api/payments/initialize', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            merchant_id: merchant.id,
-            order_id: order.id,
-            currency: orderChargeCurrency,
-            customer_email: customerEmail,
-            customer_name: `${firstName} ${lastName}`.trim(),
-            customer_phone: customerPhone,
-            gateway: paymentMethod,
-            billing_address: billingAddress,
-          }),
+        // Initialization is isolated from the component; redirect/crypto UI
+        // state remains here because it is owned by this checkout screen.
+        const paymentResult = await initializeCheckoutGateway({
+          merchantId: merchant.id,
+          order,
+          currency: orderChargeCurrency,
+          customerEmail,
+          customerName: `${firstName} ${lastName}`.trim(),
+          customerPhone,
+          gateway: paymentMethod,
+          billingAddress,
         });
-
-        if (!paymentResponse.ok) {
-          const errorData = await paymentResponse.json();
-          raiseCheckoutError(errorData.error || 'Payment initialization failed');
-        }
-
-        const paymentResult = await paymentResponse.json();
 
         if (paymentResult.success && paymentResult.crypto_payment) {
           // Juicyway crypto payment - show wallet address modal
@@ -2130,248 +2077,121 @@ export const CheckoutPage: React.FC = () => {
           raiseCheckoutError('Payment initialization failed: No auth URL returned');
         }
       } else if (paymentMethod === 'credit_direct') {
-        // Credit Direct BNPL - Client-side popup checkout
-        // Note: BNPL typically uses full total (wallet credits may not apply)
-        // The opener swallows init failures into onError, so the start fires
-        // from onPopup: only a real popup opening proves the flow started.
-        await openCreditDirectCheckout({
+        await openCheckoutCreditDirect({
           merchantSlug: merchant.slug || '',
-          orderId: order.id,
-          trackingToken: order.tracking_token ?? '',
+          order,
           amount: paymentAmount,
-          customerEmail,
-          customerPhone,
-          customerName: `${firstName} ${lastName}`.trim(),
-
-          // Weight the Credit Direct allocation by the CANONICAL order-item
-          // prices (negotiated applied, quiz vouchers 0) — not displayItems,
-          // whose price is the raw cart price. Using display prices would
-          // finance a voucher-covered item and under-allocate a paid one.
-          items: toCreditDirectItems(orderItems),
-          onSuccess: ({ checkoutTransactionId, sessionId }) => {
-            const completionMarker = captureCreditDirectClientCompletion({
-              orderId: order.id,
-              checkoutTransactionId,
-              customerEmail,
-              sessionId,
-              trackingToken: order.tracking_token,
-            });
-            router.push(
-              asRoute(
-                getHref(
-                  buildCreditDirectVerificationPath({
-                    orderId: order.id,
-                    merchantSlug: merchant.slug || '',
-                    completionMarker,
-                    trackingToken: order.tracking_token,
-                    customerEmail,
-                  })
-                )
-              )
-            );
+          currency: orderChargeCurrency,
+          orderNumber: createdOrderNumber,
+          total,
+          customer: {
+            email: customerEmail,
+            phone: customerPhone,
+            name: `${firstName} ${lastName}`.trim(),
           },
-          onError: (error) => {
-            console.error('Credit Direct error:', error);
-            // The opener swallows SDK initialization failures into onError
-            // without opening a popup: only attribute a payment failure
-            // when onPopup already proved the provider flow started.
-            if (paymentStarted) {
-              captureCheckoutPaymentFailed({
-                currency: orderChargeCurrency,
-                orderId: order.id,
-                orderNumber: createdOrderNumber,
-                paymentMethod,
-                reason: 'credit_direct_error',
-                reference: initializedReference,
-                // Canonical order total (same rule as the start/creation
-                // events): paymentAmount is only the residual provider
-                // charge after wallet/savings credit.
-                total: order.total ?? total,
-              });
-            }
+          items: orderItems,
+          onPaymentStarted: (reference) => {
+            initializedReference = reference;
+            capturePaymentStarted(reference);
+          },
+          onIdle: () => {
+            setIsProcessing(false);
+            isOrderInFlightRef.current = false;
+          },
+          navigate: (path) => router.push(asRoute(getHref(path))),
+        });
+        return;
+      } else if (paymentMethod === 'credpal') {
+        await openCheckoutCredpal({
+          key: process.env.NEXT_PUBLIC_CREDPAL_KEY,
+          amount: paymentAmount,
+          product: cart.map((item) => item.name).join(', '),
+          customerEmail,
+          customerName: `${firstName} ${lastName}`.trim(),
+          customerPhone,
+          order,
+          checkoutFingerprint,
+          onPaymentStarted: () => capturePaymentStarted(),
+          paymentStarted: () => paymentStarted,
+          onPaymentCompleted: (reference) => {
+            captureCheckoutPaymentCompleted({
+              currency: orderChargeCurrency,
+              orderId: order.id,
+              orderNumber: createdOrderNumber,
+              paymentMethod,
+              reference,
+              total: order.total ?? paymentAmount,
+            });
+          },
+          onPaymentFailed: () => {
+            captureCheckoutPaymentFailed({
+              currency: orderChargeCurrency,
+              orderId: order.id,
+              orderNumber: createdOrderNumber,
+              paymentMethod,
+              reason: 'credpal_error',
+              total: order.total ?? total,
+            });
+          },
+          clearPendingCheckoutOrder,
+          clearCheckoutIdempotencyKey,
+          clearCheckoutSession,
+          clearCart,
+          navigate: (path) => router.push(asRoute(getHref(path))),
+          onUnavailable: () => {
             toast({
-              title: 'Credit Direct Failed',
-              description: error || 'Credit Direct checkout failed. Please try again.',
+              title: 'CredPal Unavailable',
+              description:
+                'CredPal payment is not available at this time. Please select a different payment method.',
               variant: 'destructive',
             });
             setIsProcessing(false);
-            isOrderInFlightRef.current = false;
-          },
-          onClose: () => {
-            setIsProcessing(false);
-            isOrderInFlightRef.current = false;
-          },
-          onPopup: async ({ checkoutTransactionId, sessionId }) => {
-            initializedReference = checkoutTransactionId || sessionId;
-            capturePaymentStarted(initializedReference);
-            writeCreditDirectPopupMarker(
-              order.id,
-              checkoutTransactionId || sessionId
-            );
-            if (!checkoutTransactionId) {
-              return;
-            }
-            try {
-              await persistCreditDirectPopupReference(
-                order,
-                checkoutTransactionId
-              );
-            } catch (error) {
-              console.error(
-                'Failed to persist Credit Direct popup reference:',
-                error instanceof Error ? error.message : error
-              );
-            }
-          },
-        });
-        // Don't proceed further - callbacks handle the flow
-        return;
-      } else if (paymentMethod === 'credpal') {
-        // CredPal BNPL - Client-side popup checkout
-        const credpalKey = process.env.NEXT_PUBLIC_CREDPAL_KEY;
-
-        if (!credpalKey) {
-          // CredPal not configured - show error, don't proceed to success
-          toast({
-            title: 'CredPal Unavailable',
-            description: 'CredPal payment is not available at this time. Please select a different payment method.',
-            variant: 'destructive',
-          });
-          setIsProcessing(false);
-          isOrderInFlightRef.current = false;
-          return;
-        }
-
-        // Open CredPal popup. The opener throws on script/SDK init failure,
-        // so the start fires from the widget's load confirmation instead of
-        // before initialization: a failed load records only the failure.
-        await openCredPalCheckout({
-          key: credpalKey,
-          amount: paymentAmount,
-          product: cart.map(item => item.name).join(', '),
-          customerEmail,
-          customerName: `${firstName} ${lastName}`.trim(),
-          customerPhone,
-          onLoad: () => {
-            capturePaymentStarted();
-          },
-          onSuccess: async (data) => {
-            console.log('CredPal success:', data);
-            // Accepted-but-pending applications are not paid conversions, but
-            // the shopper must still reach the success experience: cleanup and
-            // navigation run for both outcomes, capture only for success.
-            if (data.status === 'success') {
-              // paymentAmount is only the residual sent to CredPal
-              // after wallet credits; revenue is the full order total.
-              captureCheckoutPaymentCompleted({
-                currency: orderChargeCurrency,
-                orderId: order.id,
-                orderNumber: createdOrderNumber,
-                paymentMethod,
-                reference: data.order_no,
-                total: order.total ?? paymentAmount,
-              });
-            }
-            clearPendingCheckoutOrder();
-            await clearCheckoutIdempotencyKey(checkoutFingerprint);
-            clearCheckoutSession();
-            clearCart();
-            const successQuery = new URLSearchParams({
-              type: 'credpal',
-              orderId: order.id,
-              credpalRef: data.order_no,
-            });
-            if (data.status) {
-              // Lets native hosts skip paid attribution for pending results.
-              successQuery.set('credpalStatus', data.status);
-            }
-            if (order.tracking_token) {
-              successQuery.set('trackingToken', order.tracking_token);
-            }
-            router.push(
-              asRoute(getHref(`/order-success?${successQuery.toString()}`))
-            );
           },
           onError: (error) => {
             console.error('CredPal error:', error);
-            // Widget setup failures invoke onError before onLoad: only
-            // attribute a payment failure when the widget already proved
-            // the provider flow started (same per-attempt gate as Credit
-            // Direct). Unopened failures keep the toast + retry below.
-            if (paymentStarted) {
-              captureCheckoutPaymentFailed({
-                currency: orderChargeCurrency,
-                orderId: order.id,
-                orderNumber: createdOrderNumber,
-                paymentMethod,
-                reason: 'credpal_error',
-                // Canonical order total, matching the start event —
-                // paymentAmount is only the residual provider charge.
-                total: order.total ?? total,
-              });
-            }
             toast({
               title: 'CredPal Failed',
               description: error.message || 'CredPal checkout failed. Please try again.',
               variant: 'destructive',
             });
             setIsProcessing(false);
-            isOrderInFlightRef.current = false;
           },
-          onClose: () => {
+          releaseSubmitLock: () => {
             setIsProcessing(false);
             isOrderInFlightRef.current = false;
           },
         });
-        // Don't proceed further - callbacks handle the flow
         return;
       } else if (paymentMethod === 'invoice') {
-        // invoice_generated is captured on the success page only after
-        // the server confirms terminal artifact delivery (see
-        // useInvoiceGeneratedCapture) — never optimistically here.
-        clearPendingCheckoutOrder();
-        await clearCheckoutIdempotencyKey(checkoutFingerprint);
-        clearCheckoutSession();
-        const successQuery = new URLSearchParams({
-          type: 'invoice',
-          orderId: order.id,
+        await completeCheckoutOrder({
+          order,
+          checkoutFingerprint,
+          completion: { kind: 'invoice' },
+          clearPendingCheckoutOrder,
+          clearCheckoutSession,
+          clearCart,
+          pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
         });
-        if (order.tracking_token) {
-          successQuery.set('trackingToken', order.tracking_token);
-        }
-        router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
-        setTimeout(clearCart, 500);
       } else if (paymentMethod === 'payforme') {
-        // Pay for Me handoff: nothing is delivered to the payer contact —
-        // the requester's email carries the transfer details and the
-        // success page hands them the shareable payment link to forward.
-        clearPendingCheckoutOrder();
-        await clearCheckoutIdempotencyKey(checkoutFingerprint);
-        clearCheckoutSession();
-        const successQuery = new URLSearchParams({
-          type: 'payforme',
-          orderId: order.id,
-          payerName: payForMeDetails.name,
+        await completeCheckoutOrder({
+          order,
+          checkoutFingerprint,
+          completion: { kind: 'payforme', payerName: payForMeDetails.name },
+          clearPendingCheckoutOrder,
+          clearCheckoutSession,
+          clearCart,
+          pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
         });
-        if (order.tracking_token) {
-          successQuery.set('trackingToken', order.tracking_token);
-        }
-        router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
-        setTimeout(clearCart, 500);
       } else {
-        // Default: POD or other
-        clearPendingCheckoutOrder();
-        await clearCheckoutIdempotencyKey(checkoutFingerprint);
-        clearCheckoutSession();
-        const successQuery = new URLSearchParams({
-          type: 'standard',
-          orderId: order.id,
+        await completeCheckoutOrder({
+          order,
+          checkoutFingerprint,
+          completion: { kind: 'standard' },
+          clearPendingCheckoutOrder,
+          clearCheckoutSession,
+          clearCart,
+          pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
         });
-        if (order.tracking_token) {
-          successQuery.set('trackingToken', order.tracking_token);
-        }
-        router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
-        setTimeout(clearCart, 500);
       }
     } catch (error) {
       console.error('Checkout error:', error);
@@ -2400,97 +2220,6 @@ export const CheckoutPage: React.FC = () => {
       // Ensure steps stay completed so user doesn't have to re-enter info
       setCompletedSteps({ contact: true, delivery: true });
     }
-  };
-
-  // Dedicated Virtual Account (DVA) Handler. The fetch + throw flow lives in
-  // module-scope `requestDvaInitialization`; the promise chain replaces
-  // try/catch/finally, which would bail React Compiler.
-  const handleBankTransfer = async (
-    order: {
-      id: string;
-      currency?: string | null;
-      order_number?: string | null;
-      tracking_token?: string | null;
-      total?: number | null;
-    },
-    paymentAmount: number,
-    billingAddress: DvaBillingAddress,
-    onDvaReady?: (reference?: string) => void,
-    checkoutFingerprint?: string,
-    // Proves the provider flow opened (same per-attempt flag as the BNPL
-    // gates): initialization failures before a DVA is ready keep the
-    // error UI but must not emit an unmatched payment_failed.
-    didPaymentStart?: () => boolean
-  ) => {
-    if (!merchant) {
-      isOrderInFlightRef.current = false;
-      return;
-    }
-
-    setIsInitializingDva(true);
-    // Stamped order currency is authoritative; fall back to the
-    // merchant-resolved code only if the row value is ever absent. Stored
-    // on the modal state so completion labels the same currency even if
-    // the merchant changes payout currency before the shopper confirms.
-    const stampedDvaCurrency =
-      typeof order.currency === 'string' && order.currency.trim()
-        ? order.currency.trim().toUpperCase()
-        : currencyCode;
-    await requestDvaInitialization({
-      merchantId: merchant.id,
-      orderId: order.id,
-      customerEmail,
-      customerName: `${firstName} ${lastName}`.trim(),
-      customerPhone,
-      billingAddress,
-      orderCurrency: stampedDvaCurrency,
-    })
-      .then((result) => {
-        setDvaData({
-          ...result.dva,
-          amount: paymentAmount,
-          // Canonical row total first (same rule as order_created):
-          // the client-computed total can lag the server row.
-          total: order.total ?? total,
-          reference: result.reference,
-          orderId: order.id,
-          orderNumber: order.order_number ?? undefined,
-          trackingToken: order.tracking_token,
-          checkoutFingerprint,
-          orderCurrency: stampedDvaCurrency,
-        });
-        setDvaCountdown(3600);
-        onDvaReady?.(result.reference);
-        isOrderInFlightRef.current = false;
-      })
-      .catch((error: unknown) => {
-        console.error('DVA initialization error:', error);
-        if (didPaymentStart?.()) {
-          captureCheckoutPaymentFailed({
-            currency:
-              typeof order.currency === 'string' && order.currency.trim()
-                ? order.currency.trim().toUpperCase()
-                : currencyCode,
-            orderId: order.id,
-            paymentMethod: 'bank_transfer',
-            reason: 'bank_transfer_error',
-            // Canonical row total first (same rule as order_created):
-            // paymentAmount is only the residual DVA charge.
-            total: order.total ?? total,
-          });
-        }
-        toast({
-          title: 'Bank Transfer Failed',
-          description:
-            error instanceof Error ? error.message : 'Failed to initialize bank transfer',
-          variant: 'destructive',
-        });
-        isOrderInFlightRef.current = false;
-      })
-      .finally(() => {
-        setIsProcessing(false);
-        setIsInitializingDva(false);
-      });
   };
 
   const isPayForMeValid =

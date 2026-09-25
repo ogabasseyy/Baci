@@ -97,6 +97,75 @@ describe('runCheckoutFinalization purchase emission proof', () => {
     expect(mockRelease).not.toHaveBeenCalled();
   });
 
+  it('passes the stamped currency to the creation purchase on claim success', async () => {
+    mockClaim.mockResolvedValue(true);
+    const { trackCheckoutRoutePurchaseCompleted } = jest.requireMock(
+      '@/services/tiktok-checkout-route-tracking'
+    ) as {
+      trackCheckoutRoutePurchaseCompleted: jest.Mock;
+    };
+    const params = baseParams(Promise.resolve(undefined));
+    (
+      params.orderResponse as unknown as {
+        order: { currency?: string };
+      }
+    ).order.currency = 'USD';
+
+    await runCheckoutFinalization(params);
+
+    // The successful claim settles the purchase permanently — the
+    // completion lane never re-emits — so the creation call itself
+    // must carry the currency.
+    expect(trackCheckoutRoutePurchaseCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({ currency: 'USD' })
+    );
+  });
+
+  it('passes completion attribution with the stamped currency to the finalizer', async () => {
+    mockClaim.mockResolvedValue(false);
+    const params = baseParams(Promise.resolve(undefined));
+    (
+      params.orderResponse as unknown as {
+        order: { currency?: string };
+      }
+    ).order.currency = 'USD';
+
+    await runCheckoutFinalization(params);
+
+    expect(jest.mocked(runFinalizeCheckoutPayment)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attribution: {
+          customerEmail: 'ada@example.com',
+          customerPhone: '08012345678',
+          items: [],
+          subtotal: 5000,
+          shipping: 0,
+          tax: 0,
+          currency: 'USD',
+        },
+      })
+    );
+  });
+
+  it('omits currency from attribution when the order stamps none', async () => {
+    mockClaim.mockResolvedValue(false);
+
+    await runCheckoutFinalization(baseParams(Promise.resolve(undefined)));
+
+    expect(jest.mocked(runFinalizeCheckoutPayment)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attribution: {
+          customerEmail: 'ada@example.com',
+          customerPhone: '08012345678',
+          items: [],
+          subtotal: 5000,
+          shipping: 0,
+          tax: 0,
+        },
+      })
+    );
+  });
+
   it('releases the claim when the creation emission rejects', async () => {
     mockClaim.mockResolvedValue(true);
     let rejectEmission!: (reason?: unknown) => void;

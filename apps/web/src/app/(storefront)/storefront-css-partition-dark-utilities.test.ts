@@ -172,6 +172,9 @@ describe('storefront CSS partitioning (dark utilities)', () => {
     const imageSurfaceSourceFiles = [
       '../../components/storefront/ogabassey/pages/cart.tsx',
       '../../components/storefront/ogabassey/components/cart-sidebar-line-item.tsx',
+      // checkout-page.tsx renders its order-summary thumbnails through
+      // the mobile/desktop summary renderers since the desktop summary
+      // restore; it keeps no product thumbnail markup of its own.
       '../../components/storefront/ogabassey/pages/checkout/components/DesktopOrderSummary.tsx',
       '../../components/storefront/ogabassey/components/MobileOrderSummary.tsx',
       '../../components/storefront/ogabassey/pages/receipts.tsx',

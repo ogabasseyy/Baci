@@ -34,6 +34,13 @@ export interface CheckoutCompletionAttribution {
   subtotal?: number;
   shipping?: number;
   tax?: number;
+  /**
+   * Stamped order currency: forwarded to the funnel payment_completed
+   * (via the shared event builder) and the ad/legacy purchase so a
+   * non-NGN attempt keeps one currency on every stage. Absent values
+   * keep the NGN default.
+   */
+  currency?: string;
 }
 
 type CheckoutPaymentCompletionInput = CheckoutCompletionAttribution & {
@@ -42,13 +49,6 @@ type CheckoutPaymentCompletionInput = CheckoutCompletionAttribution & {
   paymentMethod: string;
   reference?: string;
   value?: number;
-  /**
-   * Stamped order currency: forwarded to the funnel payment_completed
-   * (via the shared event builder) and the ad/legacy purchase so a
-   * non-NGN attempt keeps one currency on every stage. Absent values
-   * keep the NGN default.
-   */
-  currency?: string;
 };
 
 // Shared with the REDVAULT completion path, which emits the funnel event

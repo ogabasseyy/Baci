@@ -25,8 +25,10 @@ export interface ParamReconciliationVerification {
   verified: boolean | undefined;
   /**
    * True once the bounded retries are spent while the lookup stays
-   * inconclusive (e.g. a network/API outage). The caller should leave
-   * the blank pending state for an explicit error state with `retry`.
+   * inconclusive (e.g. a network/API outage), or immediately when the
+   * reconciliation param carries no order id (nothing can verify). The
+   * caller should leave the blank pending state for an explicit error
+   * state with `retry`.
    */
   exhausted: boolean;
   /** Restart bounded verification after exhaustion (or re-run on demand). */
@@ -60,7 +62,15 @@ export function useParamReconciliationVerification({
   useEffect(() => {
     setVerified(undefined);
     setExhausted(false);
-    if (!isParamReconciliation || !orderId) {
+    if (!isParamReconciliation) {
+      return;
+    }
+    if (!orderId) {
+      // Malformed deep link (reconciliation param without an order id):
+      // no verification can run, so surface exhaustion immediately —
+      // the gate renders the explicit error state with retry and
+      // continue-shopping instead of stranding the screen blank.
+      setExhausted(true);
       return;
     }
     let cancelled = false;

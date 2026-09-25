@@ -1887,7 +1887,10 @@ describe('BnplLauncher', () => {
       );
     }
 
-    function stubOrderStatusFetch(paymentStatus: string | null) {
+    function stubOrderStatusFetch(
+      paymentStatus: string | null,
+      inventoryConfirmed = true
+    ) {
       vi.stubGlobal(
         'fetch',
         vi.fn().mockResolvedValue({
@@ -1895,6 +1898,7 @@ describe('BnplLauncher', () => {
           json: async () => ({
             id: 'order-1',
             payment_status: paymentStatus,
+            inventory_confirmed: inventoryConfirmed,
             total: 1000,
             items: [
               {
@@ -1977,6 +1981,27 @@ describe('BnplLauncher', () => {
       ).not.toBeNull();
     });
 
+    it('keeps confirming when approval lands before the inventory proof', async () => {
+      seedPopupMarker('order-1', 'txn-123');
+      seedCheckoutRecoveryState();
+      stubOrderStatusFetch('bnpl_approved', false);
+
+      render(<BnplLauncher />);
+
+      expect(
+        await screen.findByRole('heading', { name: 'Confirming your payment' })
+      ).toBeInTheDocument();
+      // The heading renders when polling starts, before the mocked
+      // order-status response resolves: flush the response so the
+      // assertions below observe the post-approval state rather than
+      // racing it.
+      await waitFor(() => expect(fetch).toHaveBeenCalled());
+      await act(async () => {});
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(mockClearCart).not.toHaveBeenCalled();
+      expect(readCreditDirectPopupMarker('order-1')).not.toBeNull();
+    });
+
     it('honors an SDK completion handoff when session storage is unavailable', async () => {
       mockSearchParams.mockReturnValue(
         new URLSearchParams({
@@ -2057,6 +2082,7 @@ describe('BnplLauncher', () => {
           json: async () => ({
             id: 'order-1',
             payment_status: 'bnpl_approved',
+            inventory_confirmed: true,
             total: 42000,
             currency: 'NGN',
           }),

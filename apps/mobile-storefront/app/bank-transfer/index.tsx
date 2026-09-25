@@ -90,6 +90,7 @@ export default function BankTransferScreen() {
     subtotal: routeSubtotal,
     shipping: routeShipping,
     tax: routeTax,
+    currency: routeCurrency,
   } = walletRouteData ?? {};
   const intentId = walletRouteData?.intentId;
   const merchantId = walletRouteData?.merchantId;
@@ -165,6 +166,7 @@ export default function BankTransferScreen() {
         void trackCheckoutPaymentCompletedOnce({
           ...(routeCustomerEmail && { customerEmail: routeCustomerEmail }),
           ...(routeCustomerPhone && { customerPhone: routeCustomerPhone }),
+          ...(routeCurrency && { currency: routeCurrency }),
           items: useCartStore.getState().items,
           orderId,
           orderNumber: orderNumber || orderId,

@@ -32,6 +32,9 @@ const BankTransferBaseParamsSchema = z.object({
   subtotal: optionalMoney('Subtotal must be a valid number'),
   shipping: optionalMoney('Shipping must be a valid number'),
   tax: optionalMoney('Tax must be a valid number'),
+  // Stamped order currency: without it the wallet-funded completion
+  // falls back to the NGN default for non-NGN stores.
+  currency: z.string().trim().optional(),
   trackingToken: z.string().trim().optional(),
 });
 

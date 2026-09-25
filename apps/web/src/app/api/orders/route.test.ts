@@ -265,6 +265,16 @@ vi.mock('@/lib/immediate-order/notification-completion-proof', () => ({
   createImmediateNotificationCompletionProof: () => 'proof-route-1',
 }));
 
+// Provisioning retry: the loop sleeps on real timers, so route tests
+// pin the outcome (the loop itself is covered in
+// notification-completion-retry.test.ts).
+const retryMocks = vi.hoisted(() => ({
+  completeWithRetry: vi.fn(async () => ({ completed: true })),
+}));
+vi.mock('@/lib/immediate-order/notification-completion-retry', () => ({
+  completeNotificationWithProvisioningRetry: retryMocks.completeWithRetry,
+}));
+
 const MERCHANT_ID = '123e4567-e89b-12d3-a456-426614174000';
 const CUSTOMER_ID = '11111111-2222-3333-4444-555555555555';
 const AUTH_USER_ID = '123e4567-e89b-12d3-a456-426614174099';
@@ -7681,28 +7691,28 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     // and retries instead of the shopper receiving an attachment-less
     // message marked delivered.
     await vi.waitFor(
-      () =>
-        expect(supabase.rpc).toHaveBeenCalledWith(
-          'complete_immediate_order_notification_with_proof',
-          {
-            p_order_id: 'order-id',
-            p_tracking_token: 'track-default-1',
-            p_sent: false,
-            p_claim_token: 'lease-default-1',
-            p_completion_proof: 'proof-route-1',
-          }
-        ),
+      () => {
+        expect(retryMocks.completeWithRetry).toHaveBeenCalledWith(
+          expect.anything(),
+          'order-id',
+          'track-default-1',
+          false,
+          'lease-default-1'
+        );
+        // Gate on the artifacts error log alongside the failed
+        // completion — only the failed-artifacts path emits it.
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message:
+              'Persisted order items unavailable for invoice email; skipping non-canonical invoice artifacts',
+            orderId: 'order-id',
+          })
+        );
+      },
       { timeout: 1000 }
     );
     expect(mockSendEmail).not.toHaveBeenCalled();
     expect(mockGenerateReceiptBlob).not.toHaveBeenCalled();
-    expect(logger.error).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message:
-          'Persisted order items unavailable for invoice email; skipping non-canonical invoice artifacts',
-        orderId: 'order-id',
-      })
-    );
   });
 
   it('marks the won claim started before delivery artifacts build', async () => {
@@ -7746,6 +7756,7 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
       { timeout: 1000 }
     );
   });
+
   it('renders invoice attachments from persisted canonical order items', async () => {
     const supabase = buildMockSupabase({
       create_storefront_order: {
@@ -8540,18 +8551,23 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     // retries instead of sending a DVA-less message marked delivered.
     // The credited-balance math stays covered by 'counts wallet credit
     // as paid in generated invoice emails', which does send.
+    // Gate on the after() catch log alongside the failed completion —
+    // only the failed-artifacts path emits it.
     await vi.waitFor(
-      () =>
-        expect(supabase.rpc).toHaveBeenCalledWith(
-          'complete_immediate_order_notification_with_proof',
-          {
-            p_order_id: 'order-id',
-            p_tracking_token: 'track-default-1',
-            p_sent: false,
-            p_claim_token: 'lease-default-1',
-            p_completion_proof: 'proof-route-1',
-          }
-        ),
+      () => {
+        expect(retryMocks.completeWithRetry).toHaveBeenCalledWith(
+          expect.anything(),
+          'order-id',
+          'track-default-1',
+          false,
+          'lease-default-1'
+        );
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: 'Error sending order confirmation email',
+          })
+        );
+      },
       { timeout: 1000 }
     );
     expect(mockSendEmail).not.toHaveBeenCalled();

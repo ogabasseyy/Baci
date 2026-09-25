@@ -172,4 +172,23 @@ describe('useParamReconciliationVerification', () => {
     expect(result.current.exhausted).toBe(false);
     expect(mockedVerify).not.toHaveBeenCalled();
   });
+
+  it('exhausts immediately when the reconciliation param carries no order id', async () => {
+    const { result } = renderHook(() =>
+      useParamReconciliationVerification({
+        isParamReconciliation: true,
+        orderId: undefined,
+        retryDelayMs: 100,
+      })
+    );
+
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(500);
+    });
+    // Nothing can verify, so the gate renders the explicit error state
+    // (retry + continue-shopping) instead of stranding the screen blank.
+    expect(result.current.verified).toBeUndefined();
+    expect(result.current.exhausted).toBe(true);
+    expect(mockedVerify).not.toHaveBeenCalled();
+  });
 });

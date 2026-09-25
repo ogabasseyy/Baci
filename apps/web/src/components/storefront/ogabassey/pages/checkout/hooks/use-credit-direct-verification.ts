@@ -28,6 +28,7 @@ interface OrderStatusResponse {
   payment_status?: string | null;
   total?: unknown;
   currency?: unknown;
+  inventory_confirmed?: boolean;
 }
 
 export interface CreditDirectConfirmedOrder {
@@ -40,7 +41,10 @@ export interface CreditDirectConfirmedOrder {
  * is pending confirmation. Credit Direct's SDK offers no redirect URL or
  * status API, so once its hosted popup replaces the launcher page the only
  * way to detect completion is watching the order's payment_status flip to
- * bnpl_approved/paid via the provider webhook.
+ * bnpl_approved/paid via the provider webhook. Confirmation additionally
+ * requires the server-confirmed inventory proof: the webhook writes
+ * approval before inventory confirmation lands (rolling it back on
+ * failure), so the approved status alone can precede a rollback.
  */
 export function useCreditDirectVerification({
   active,
@@ -95,7 +99,10 @@ export function useCreditDirectVerification({
         if (response.ok) {
           const order = (await response.json()) as OrderStatusResponse;
           const paymentStatus = order.payment_status || '';
-          if (CONFIRMED_PAYMENT_STATUSES.has(paymentStatus)) {
+          if (
+            CONFIRMED_PAYMENT_STATUSES.has(paymentStatus) &&
+            order.inventory_confirmed === true
+          ) {
             if (!disposed) {
               const confirmedTotal = Number(order.total);
               const confirmedCurrency =

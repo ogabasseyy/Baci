@@ -13,7 +13,12 @@ import {
 interface StartWalletFundedBankTransferCheckoutParams {
   attribution?: Pick<
     CheckoutCompletionAttribution,
-    'customerEmail' | 'customerPhone' | 'subtotal' | 'shipping' | 'tax'
+    | 'customerEmail'
+    | 'customerPhone'
+    | 'subtotal'
+    | 'shipping'
+    | 'tax'
+    | 'currency'
   >;
   isOrderInFlight: MutableRefObject<boolean>;
   orderId: string;
@@ -117,6 +122,9 @@ function routeToWalletFundedBankTransfer({
       }),
       ...(typeof attribution?.tax === 'number' && {
         tax: String(attribution.tax),
+      }),
+      ...(attribution?.currency && {
+        currency: attribution.currency,
       }),
     },
   });

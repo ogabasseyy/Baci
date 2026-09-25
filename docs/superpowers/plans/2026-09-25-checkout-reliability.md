@@ -87,8 +87,10 @@ tests, plus their call sites in `checkout-page.tsx`.
   record full-suite failures and focused reruns separately.
 - [x] Run CodeRabbit uncommitted review and one fresh-context branch review;
   fix the validated findings and record the remaining lint debt.
-- [ ] Commit and open a reviewable PR with exact evidence and remaining external
+- [x] Commit and open a reviewable PR with exact evidence and remaining external
   gates. Keep merge, deployment and production verification distinct.
+- [ ] Drive existing PR #3499 through the current-head review and CI loop;
+  incorporate validated audit findings in this PR without opening more drafts.
 - [ ] Exercise available provider sandbox/staging flows and reconcile outcomes;
   record unavailable credentials/environment or settlement evidence explicitly.
 
@@ -108,13 +110,19 @@ when hydrating resumed orders. The 8,337-line page test was split without
 removing any of its 91 test cases; new modules have restored lint coverage.
 
 The remaining submission/provider orchestration and order API migration are
-still open. They need separate reviewable changes: the API currently has several
+still open. They need focused implementation and verification: the API currently has several
 admin reads/writes that cannot simply be replaced with normal clients because
 guest requests rely on them. Removing those edges requires narrow database
 contracts, disposable-database authorization tests, and staging replay/fulfillment
 evidence. Existing local Supabase containers belong to savings/REDVAULT work;
 this change does not repurpose them. No claim of complete modernization or
 provider settlement verification is made by this checkpoint.
+
+The follow-up [architecture and performance audit](2026-09-25-checkout-performance-audit.md)
+records removal of an unused request, totals-race fixes, a static bundle baseline, prioritized
+improvements and the remaining evidence needed. The user requested one agent
+drive the existing PR through review; this is not a plan to open multiple draft
+PRs for the current findings.
 
 ## Checkpoint verification and remaining gates
 

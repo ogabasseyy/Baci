@@ -1,6 +1,7 @@
 'use client';
 import { buildCheckoutOrderRequest } from './checkout/build-checkout-order-request';
 import { useLoadResumedOrder } from './checkout/hooks/use-load-resumed-order';
+import { useOrderTotals } from './checkout/hooks/use-order-totals';
 
 import { useAirportQuoteRecovery } from './checkout/hooks/use-airport-quote-recovery';
 import {
@@ -93,7 +94,6 @@ import type { ShippingQuote } from '@/types/shipping-quote';
 import { getSubdivisions } from '@/lib/shipping/merchant-rates/subdivisions';
 import { toast } from '@/hooks/use-toast';
 import { createClient } from '@/lib/supabase/client';
-import { calculateCommerce } from '@/lib/supabase/client';
 import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
 import { toCreditDirectItems } from '@/lib/checkout/credit-direct-items';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
@@ -186,11 +186,6 @@ import {
   type CheckoutItem,
 } from './checkout/components/DesktopOrderSummary';
 
-
-interface ShippingLocation {
-  city: string;
-  state: string;
-}
 
 interface InferredCheckoutAddressLocation {
   city: string;
@@ -652,7 +647,6 @@ export const CheckoutPage: React.FC = () => {
 
   // Shipping State
   const [shippingStates, setShippingStates] = useState<string[]>([]);
-  const [shippingCities, setShippingCities] = useState<string[]>([]);
   const [isLoadingLocations, setIsLoadingLocations] = useState(false);
   const [shippingQuotes, setShippingQuotes] = useState<ShippingQuote[]>([]);
   const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
@@ -837,45 +831,6 @@ export const CheckoutPage: React.FC = () => {
     };
   }, [merchantCountry]);
 
-  // Clear stale city options inline during render when the selected state is
-  // reset (react.dev "adjusting state when a prop changes" pattern — avoids a
-  // synchronous setState-in-effect and the extra commit it forces).
-  const [prevCityFetchState, setPrevCityFetchState] = useState(newAddressState);
-  if (newAddressState !== prevCityFetchState) {
-    setPrevCityFetchState(newAddressState);
-    if (!newAddressState) {
-      setShippingCities([]);
-    }
-  }
-
-  // Fetch Cities when State changes. NG-only: the /api/shipping/locations city
-  // dataset is Nigerian. Non-NG cities come from the typed address via
-  // inferAddressLocationFromInput's rawCity (no list lookup needed), so a NG
-  // city fetch must never fire for a non-NG address.
-  useEffect(() => {
-    if (merchantCountry !== 'NG' || !newAddressState) {
-      return;
-    }
-    const fetchCities = async () => {
-      try {
-        const res = await fetch(
-          `/api/shipping/locations?state=${encodeURIComponent(newAddressState)}`
-        );
-        if (res.ok) {
-          const data = await res.json();
-          // Extract unique cities from the locations
-          const cities = [
-            ...new Set((data.locations as ShippingLocation[]).map((l) => l.city)),
-          ].sort();
-          setShippingCities(cities);
-        }
-      } catch (error) {
-        console.error('Failed to fetch cities', error);
-      }
-    };
-    fetchCities();
-  }, [merchantCountry, newAddressState]);
-
   // Function to fetch quotes. The async core (with its try/finally and
   // synchronous loading-state writes) lives in module-scope
   // `loadShippingQuotes` so neither the compiler nor the effect below trips
@@ -1052,7 +1007,6 @@ export const CheckoutPage: React.FC = () => {
   const [walletLoading, setWalletLoading] = useState(false);
   const [payWithWallet, setPayWithWallet] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [orderTotals, setOrderTotals] = useState<{ total: number; taxAmount: number } | null>(null);
   const [appliedDiscount, setAppliedDiscount] =
     useState<DiscountResult | null>(null);
 
@@ -1136,6 +1090,15 @@ export const CheckoutPage: React.FC = () => {
     airportType,
   );
 
+  const taxRate = merchant?.vat_registration_status === 'registered'
+    ? (merchant.vat_rate ?? 7.5) / 100
+    : 0;
+  const orderTotals = useOrderTotals({
+    cartTotal: effectiveItemSubtotal,
+    deliveryCost,
+    taxRate,
+  });
+
   // Server-computed discount amount (the route re-validates against the
   // canonical subtotal); fall back to a local estimate only if it's missing.
   const discountAmount = appliedDiscount
@@ -1167,26 +1130,6 @@ export const CheckoutPage: React.FC = () => {
   const walletAmountUsed = checkoutValues.walletAmountUsed;
   const remainingAmount = total - walletAmountUsed;
 
-
-  const taxRate = merchant?.vat_registration_status === 'registered'
-    ? (merchant.vat_rate ?? 7.5) / 100
-    : 0;
-
-  useEffect(() => {
-    const fetchTotals = async () => {
-      try {
-        const result = await calculateCommerce('calculate_order', {
-          subtotal: effectiveItemSubtotal,
-          shippingFee: deliveryCost,
-          taxRate,
-        });
-        setOrderTotals(result);
-      } catch (err) {
-        console.error("Failed to fetch totals from brain", err);
-      }
-    };
-    fetchTotals();
-  }, [effectiveItemSubtotal, deliveryCost, taxRate]);
 
   // Thin caller: the resumed BNPL flow lives in the direct-payment
   // handler (Boy Scout extraction); this just binds component state.

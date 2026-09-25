@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   forIntegration: vi.fn(),
   updateStock: vi.fn(),
+  reconcileJumiaStockFeeds: vi.fn(),
 }));
 
 vi.mock('@/lib/jumia/client', () => ({
@@ -13,6 +14,10 @@ vi.mock('@/lib/jumia/client', () => ({
 
 vi.mock('@/lib/jumia/feeds', () => ({
   updateStock: mocks.updateStock,
+}));
+
+vi.mock('@/lib/jumia/reconcile-jumia-stock-feeds', () => ({
+  reconcileJumiaStockFeeds: mocks.reconcileJumiaStockFeeds,
 }));
 
 import { syncJumiaStockForIntegration } from './sync-jumia-stock-integration';
@@ -45,6 +50,12 @@ describe('syncJumiaStockForIntegration', () => {
       marketplaceKey: 'key-1',
     });
     mocks.updateStock.mockResolvedValue('feed-1');
+    mocks.reconcileJumiaStockFeeds.mockResolvedValue({
+      feedsChecked: 0,
+      cursorsReset: 0,
+      feedsConfirmed: 0,
+      failures: 0,
+    });
   });
 
   it('pushes changed stock and records tracking', async () => {
@@ -90,6 +101,7 @@ describe('syncJumiaStockForIntegration', () => {
       updated: 1,
       skipped: 0,
       trackingFailures: 0,
+      reconciliationFailures: 0,
       feedId: 'feed-1',
     });
   });
@@ -264,6 +276,7 @@ describe('syncJumiaStockForIntegration', () => {
       updated: 1,
       skipped: 0,
       trackingFailures: 1,
+      reconciliationFailures: 0,
       feedId: 'feed-1',
     });
   });
@@ -298,6 +311,92 @@ describe('syncJumiaStockForIntegration', () => {
       updated: 0,
       skipped: 0,
       trackingFailures: 0,
+      reconciliationFailures: 0,
+      feedId: null,
+    });
+  });
+
+  it('propagates reconciliation failures in the result', async () => {
+    mocks.reconcileJumiaStockFeeds.mockResolvedValue({
+      feedsChecked: 1,
+      cursorsReset: 0,
+      feedsConfirmed: 0,
+      failures: 2,
+    });
+    const update = vi.fn(() => ({
+      eq: vi.fn().mockResolvedValue({ error: null }),
+    }));
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === 'jumia_product_mappings') {
+          const query = mappingsQuery([
+            {
+              id: 'mapping-1',
+              product_id: 'product-1',
+              variant_id: null,
+              jumia_seller_sku: 'SKU-1',
+              jumia_product_id: 'pid-1',
+              baci_stock_at_last_sync: 2,
+            },
+          ]);
+          return { ...query, update };
+        }
+        return inQuery([{ id: 'product-1', stock: 5, stock_quantity: 5 }]);
+      }),
+    };
+
+    const result = await syncJumiaStockForIntegration({
+      supabase: supabase as never,
+      merchantId: 'merchant-1',
+      integrationId: 'integration-1',
+    });
+
+    expect(result).toEqual({
+      updated: 1,
+      skipped: 0,
+      trackingFailures: 0,
+      reconciliationFailures: 2,
+      feedId: 'feed-1',
+    });
+  });
+
+  it('carries reconciliation failures through skipped deltas', async () => {
+    mocks.reconcileJumiaStockFeeds.mockResolvedValue({
+      feedsChecked: 1,
+      cursorsReset: 0,
+      feedsConfirmed: 0,
+      failures: 1,
+    });
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === 'jumia_product_mappings') {
+          return mappingsQuery([
+            {
+              id: 'mapping-1',
+              product_id: 'product-1',
+              variant_id: null,
+              jumia_seller_sku: 'SKU-1',
+              jumia_product_id: 'pid-1',
+              baci_stock_at_last_sync: 5,
+            },
+          ]);
+        }
+        return inQuery([{ id: 'product-1', stock: 5, stock_quantity: 5 }]);
+      }),
+    };
+
+    const result = await syncJumiaStockForIntegration({
+      supabase: supabase as never,
+      merchantId: 'merchant-1',
+      integrationId: 'integration-1',
+    });
+
+    expect(mocks.updateStock).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      updated: 0,
+      skipped: 0,
+      trackingFailures: 0,
+      reconciliationFailures: 1,
       feedId: null,
     });
   });

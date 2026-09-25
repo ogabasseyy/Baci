@@ -4,12 +4,17 @@ import { getAllOrders, getOrderItems } from '@/lib/jumia/orders';
 
 const mocks = vi.hoisted(() => ({
   forIntegration: vi.fn(),
+  syncJumiaStockForIntegration: vi.fn(),
 }));
 
 vi.mock('@/lib/jumia/client', () => ({
   JumiaClient: {
     forIntegration: mocks.forIntegration,
   },
+}));
+
+vi.mock('@/lib/jumia/sync-jumia-stock-integration', () => ({
+  syncJumiaStockForIntegration: mocks.syncJumiaStockForIntegration,
 }));
 
 vi.mock('@/lib/jumia/orders', () => ({
@@ -662,5 +667,45 @@ describe('syncJumiaOrdersForActiveIntegrations', () => {
       'Failed to resolve Jumia stock scope for merchant-1: db down',
     ]);
     expect(mocks.forIntegration).not.toHaveBeenCalled();
+  });
+
+  it('records stock reconciliation failures as sync errors', async () => {
+    const marketplaceQuery = createQuery(
+      {
+        data: [
+          {
+            id: 'integration-1',
+            merchant_id: 'merchant-1',
+            shop_id: 'shop-1',
+            connection_method: 'self_authorization',
+            jumia_authorization_id: 'authorization-1',
+            last_sync_at: null,
+            sync_config: { orders: false, stock: true },
+          },
+        ],
+        error: null,
+      },
+      { terminalEqCall: 2 }
+    );
+    const scopeQuery = createQuery(
+      { data: [{ marketplace_key: 'NG-main' }], error: null },
+      { terminalEqCall: 4 }
+    );
+    const supabase = createSupabaseMock({
+      marketplace_integrations: [marketplaceQuery, scopeQuery],
+    });
+    mocks.syncJumiaStockForIntegration.mockResolvedValue({
+      updated: 0,
+      skipped: 1,
+      trackingFailures: 0,
+      reconciliationFailures: 2,
+      feedId: null,
+    });
+
+    const result = await syncJumiaOrdersForActiveIntegrations(supabase);
+
+    expect(result.errors).toEqual([
+      'merchant-1/stock: 2 mapping(s) failed to reconcile stock feeds',
+    ]);
   });
 });

@@ -190,6 +190,20 @@ export async function syncJumiaOrdersForActiveIntegrations(
           route: JUMIA_ORDER_SYNC_ROUTE,
         });
       }
+      if (stock.reconciliationFailures > 0) {
+        // A rejected feed's cursor was not reset, so delta detection keeps
+        // skipping the stale stock. Surface it as a sync error instead of
+        // reporting a clean run while Jumia retains stale inventory.
+        const message = `${integration.merchant_id}/stock: ${stock.reconciliationFailures} mapping(s) failed to reconcile stock feeds`;
+        result.errors.push(message);
+        logger.error({
+          message: 'Jumia stock feed reconciliation failed',
+          error: message,
+          integrationId: integration.id,
+          merchant_id: integration.merchant_id,
+          route: JUMIA_ORDER_SYNC_ROUTE,
+        });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       result.errors.push(`${integration.merchant_id}/stock: ${message}`);

@@ -14,6 +14,7 @@ export interface JumiaStockSyncResult {
   updated: number;
   skipped: number;
   trackingFailures: number;
+  reconciliationFailures: number;
   feedId: string | null;
 }
 
@@ -38,6 +39,7 @@ export async function syncJumiaStockForIntegration(args: {
     updated: 0,
     skipped: 0,
     trackingFailures: 0,
+    reconciliationFailures: 0,
     feedId: null,
   };
   const jumiaClient = await JumiaClient.forIntegration(
@@ -75,11 +77,16 @@ export async function syncJumiaStockForIntegration(args: {
       'mapping(s)'
     );
   }
+  // A failed cursor reset leaves baci_stock_at_last_sync advanced, so delta
+  // detection can skip the stale mapping below; the count must still reach
+  // the worker result instead of dying in this log line.
+  const reconciliationFailures = reconciliation.failures;
 
   const { pushReady, skipped: initialSkipped } =
     getPushReadyJumiaStockMappings(mappings);
   let skipped = initialSkipped;
-  if (pushReady.length === 0) return { ...empty, skipped };
+  if (pushReady.length === 0)
+    return { ...empty, skipped, reconciliationFailures };
 
   const variantIds = Array.from(
     new Set(
@@ -164,7 +171,8 @@ export async function syncJumiaStockForIntegration(args: {
       stock,
     });
   }
-  if (stockUpdates.length === 0) return { ...empty, skipped };
+  if (stockUpdates.length === 0)
+    return { ...empty, skipped, reconciliationFailures };
 
   const feedId = await updateStock(
     jumiaClient,
@@ -186,6 +194,7 @@ export async function syncJumiaStockForIntegration(args: {
     updated: stockUpdates.length,
     skipped,
     trackingFailures,
+    reconciliationFailures,
     feedId,
   };
 }

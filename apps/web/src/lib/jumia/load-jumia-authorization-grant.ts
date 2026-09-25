@@ -7,7 +7,7 @@ import {
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
 import { JumiaApiError } from '@/lib/jumia/jumia-api-error';
-import { createJumiaCredentialServiceClient } from '@/lib/jumia/server-credential-client';
+import { createJumiaCredentialLoaderClient } from '@/lib/jumia/jumia-credential-loader-client';
 
 type JumiaCredentialRpcClient = {
   rpc: (
@@ -28,8 +28,10 @@ type JumiaAuthorizationGrantRow = {
 };
 
 /**
- * Resolves the server-only client for the credential RPC after enforcing
- * the owner/manage check the RPC body used to run for requester JWTs.
+ * Resolves the narrow capability client for the credential RPC after
+ * enforcing the owner/manage check up front (fail fast). The RPC
+ * re-verifies the minted user/merchant claims and the permission rule in
+ * the database, so no service-role elevation enters user-facing graphs.
  * Throws 403 when the caller is not authorized for this merchant.
  */
 async function authorizedCredentialClient(
@@ -47,7 +49,7 @@ async function authorizedCredentialClient(
   ) {
     throw new JumiaApiError(403, 'Jumia authorization grant access denied');
   }
-  return createJumiaCredentialServiceClient();
+  return createJumiaCredentialLoaderClient(userId, merchantId);
 }
 
 export async function loadJumiaAuthorizationGrant(
@@ -55,11 +57,12 @@ export async function loadJumiaAuthorizationGrant(
   authorizationId: string,
   merchantId: string
 ): Promise<JumiaAuthorizationGrantRow> {
-  // The grant RPC is executable by the server credential role only: browser
-  // clients must never invoke it directly, even with a manage-authorized
-  // JWT. User-facing callers pass their requester client; the owner/manage
-  // check runs here before the server-only credential client executes the
-  // call. Privileged callers (workers) pass a sessionless credential client,
+  // The grant RPC is executable by the service role (workers) and the
+  // narrow jumia_credential_loader capability role only: browser clients
+  // must never invoke it directly, even with a manage-authorized JWT.
+  // User-facing callers pass their requester client; the owner/manage
+  // check runs here before a short-lived capability JWT executes the call.
+  // Privileged callers (workers) pass a sessionless credential client,
   // which is used as-is — anything else fails closed with 42501.
   const {
     data: { user },

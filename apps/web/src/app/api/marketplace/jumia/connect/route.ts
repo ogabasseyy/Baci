@@ -262,11 +262,24 @@ export async function DELETE(request: NextRequest) {
 
     let cleanupPending = false;
     try {
-      cleanupPending = !(await purgeOrphanedJumiaAuthorization(
+      const purgeStatus = await purgeOrphanedJumiaAuthorization(
         auth.supabase,
         merchantContext.merchantId,
         integrationId
-      ));
+      );
+      if (purgeStatus === 'reactivated') {
+        // A concurrent reconnect won the shop lock after our deactivation:
+        // the integration is live again, so report the conflict instead of
+        // a success toast for a disconnect that did not take effect.
+        return NextResponse.json(
+          {
+            error:
+              'Integration was reconnected during disconnect; try again if you still want to disconnect',
+          },
+          { status: 409 }
+        );
+      }
+      cleanupPending = purgeStatus === 'failed';
     } catch (cleanupError) {
       cleanupPending = true;
       console.error(

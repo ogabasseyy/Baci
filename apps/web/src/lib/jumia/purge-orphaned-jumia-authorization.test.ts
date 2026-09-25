@@ -7,7 +7,7 @@ vi.mock('@/lib/logger', () => ({
 
 describe('purgeOrphanedJumiaAuthorization', () => {
   it('invokes the authenticated purge RPC', async () => {
-    const rpc = vi.fn().mockResolvedValue({ error: null });
+    const rpc = vi.fn().mockResolvedValue({ data: 'purged', error: null });
 
     await expect(
       purgeOrphanedJumiaAuthorization(
@@ -15,7 +15,7 @@ describe('purgeOrphanedJumiaAuthorization', () => {
         'merchant-1',
         'integration-1'
       )
-    ).resolves.toBe(true);
+    ).resolves.toBe('purged');
 
     expect(rpc).toHaveBeenCalledWith('purge_orphaned_jumia_authorization', {
       p_merchant_id: 'merchant-1',
@@ -23,8 +23,21 @@ describe('purgeOrphanedJumiaAuthorization', () => {
     });
   });
 
+  it('reports a reactivated integration so the route answers 409', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: 'reactivated', error: null });
+
+    await expect(
+      purgeOrphanedJumiaAuthorization(
+        { rpc } as never,
+        'merchant-1',
+        'integration-1'
+      )
+    ).resolves.toBe('reactivated');
+  });
+
   it('reports a deferred cleanup when the RPC fails', async () => {
     const rpc = vi.fn().mockResolvedValue({
+      data: null,
       error: { message: 'database unavailable' },
     });
 
@@ -34,6 +47,18 @@ describe('purgeOrphanedJumiaAuthorization', () => {
         'merchant-1',
         'integration-1'
       )
-    ).resolves.toBe(false);
+    ).resolves.toBe('failed');
+  });
+
+  it('reports a deferred cleanup on an unexpected RPC status', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: 'bogus', error: null });
+
+    await expect(
+      purgeOrphanedJumiaAuthorization(
+        { rpc } as never,
+        'merchant-1',
+        'integration-1'
+      )
+    ).resolves.toBe('failed');
   });
 });

@@ -349,6 +349,22 @@ BEGIN
     RAISE EXCEPTION 'authenticated callers can load Jumia authorization credentials directly';
   END IF;
 
+  IF NOT has_function_privilege(
+    'jumia_credential_loader',
+    to_regprocedure('public.load_jumia_authorization_credentials(uuid,uuid)'),
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'capability role cannot load Jumia authorization credentials';
+  END IF;
+
+  IF NOT has_function_privilege(
+    'service_role',
+    to_regprocedure('public.load_jumia_authorization_credentials(uuid,uuid)'),
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'worker callers cannot load Jumia authorization credentials';
+  END IF;
+
   IF has_function_privilege(
     'anon',
     to_regprocedure('public.load_jumia_authorization_credentials(uuid,uuid)'),

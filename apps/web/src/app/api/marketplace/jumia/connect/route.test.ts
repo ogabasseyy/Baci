@@ -799,7 +799,7 @@ describe('Connect DELETE', () => {
     vi.clearAllMocks();
     mockHasPermission.mockReset();
     mockHasPermission.mockReturnValue(true);
-    mockPurgeOrphanedAuthorization.mockResolvedValue(true);
+    mockPurgeOrphanedAuthorization.mockResolvedValue('purged');
     setupAuth();
     mockAuthenticateApiRequest.mockResolvedValue({
       user: { id: 'u1' },
@@ -956,8 +956,30 @@ describe('Connect DELETE', () => {
     });
   });
 
+  it('returns 409 when a reconnect wins the race during disconnect', async () => {
+    mockPurgeOrphanedAuthorization.mockResolvedValueOnce('reactivated');
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: { id: INTEGRATION_ID },
+      error: null,
+    });
+    const select = vi.fn().mockReturnValue({ maybeSingle });
+    const eqMerchant = vi.fn().mockReturnValue({ select });
+    const eqId = vi.fn().mockReturnValue({ eq: eqMerchant });
+    mockSupabase.from.mockReturnValueOnce({
+      update: vi.fn().mockReturnValue({ eq: eqId }),
+    });
+
+    const res = await DELETE(makeBearerDeleteRequest(`?id=${INTEGRATION_ID}`));
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toEqual({
+      error:
+        'Integration was reconnected during disconnect; try again if you still want to disconnect',
+    });
+  });
+
   it('returns successful disconnect with cleanup pending when purge fails', async () => {
-    mockPurgeOrphanedAuthorization.mockResolvedValueOnce(false);
+    mockPurgeOrphanedAuthorization.mockResolvedValueOnce('failed');
     const maybeSingle = vi.fn().mockResolvedValue({
       data: { id: INTEGRATION_ID },
       error: null,

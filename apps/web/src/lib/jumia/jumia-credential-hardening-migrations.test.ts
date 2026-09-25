@@ -122,6 +122,31 @@ describe('Jumia credential hardening migrations', () => {
     );
   });
 
+  it('loads grants through a merchant-bound capability role', () => {
+    const sql = readFileSync(
+      path.join(
+        migrationsRoot,
+        '20260924160000_jumia_credential_loader_capability.sql'
+      ),
+      'utf8'
+    );
+
+    expect(sql).toMatch(/CREATE ROLE jumia_credential_loader NOLOGIN/i);
+    expect(sql).toMatch(/GRANT jumia_credential_loader TO authenticator/i);
+    expect(sql).toMatch(/jumia_credential_context/i);
+    expect(sql).toMatch(/jumia_credential_merchant_id/i);
+    expect(sql).toMatch(/jumia_credential_user_id/i);
+    expect(sql).toMatch(
+      /check_staff_permission\(\s*v_capability_user_id,\s*p_merchant_id,\s*'integrations',\s*'manage'\s*\)/i
+    );
+    expect(sql).toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.load_jumia_authorization_credentials\(uuid, uuid\)[\s\S]*?TO service_role, jumia_credential_loader/i
+    );
+    expect(sql).not.toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.load_jumia_authorization_credentials\(uuid, uuid\)[\s\S]*?TO authenticated/i
+    );
+  });
+
   it('overrides the active-view experiment with manage-only credential RPCs', () => {
     const sql = readFileSync(
       path.join(

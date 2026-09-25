@@ -1,3 +1,5 @@
+import { eventPipelineJumiaLoaderCredentialPaths } from './event-pipeline-jumia-loader-credential-paths';
+
 const envPath = 'apps/web/src/env.ts';
 const client = 'apps/web/src/lib/jumia/client.ts';
 const clientConfig = 'apps/web/src/lib/jumia/jumia-client-config.ts';
@@ -279,4 +281,5 @@ export const eventPipelineJumiaCredentialPaths = [
   [manualOrderSync, expoPush, supabaseAdmin, envPath],
   [ordersRoute, manualOrderSync, expoPush, envPath],
   [ordersRoute, manualOrderSync, expoPush, supabaseAdmin, envPath],
+  ...eventPipelineJumiaLoaderCredentialPaths,
 ] as const;

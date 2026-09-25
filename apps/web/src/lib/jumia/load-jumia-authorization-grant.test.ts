@@ -17,14 +17,14 @@ vi.mock('@/lib/get-merchant-for-api-request', async (importOriginal) => {
   };
 });
 
-vi.mock('@/lib/jumia/server-credential-client', () => ({
-  createJumiaCredentialServiceClient: vi.fn(() => ({
+vi.mock('@/lib/jumia/jumia-credential-loader-client', () => ({
+  createJumiaCredentialLoaderClient: vi.fn(() => ({
     rpc: mockCredentialRpc,
   })),
 }));
 
+import { createJumiaCredentialLoaderClient } from '@/lib/jumia/jumia-credential-loader-client';
 import { loadJumiaAuthorizationGrant } from '@/lib/jumia/load-jumia-authorization-grant';
-import { createJumiaCredentialServiceClient } from '@/lib/jumia/server-credential-client';
 
 const supabase = {
   rpc: mockRpc,
@@ -71,7 +71,7 @@ describe('loadJumiaAuthorizationGrant', () => {
         p_merchant_id: 'merchant-1',
       }
     );
-    expect(createJumiaCredentialServiceClient).not.toHaveBeenCalled();
+    expect(createJumiaCredentialLoaderClient).not.toHaveBeenCalled();
   });
 
   it('returns a retryable service error when the worker RPC fails', async () => {
@@ -114,7 +114,7 @@ describe('loadJumiaAuthorizationGrant', () => {
     ).rejects.toMatchObject({ status: 404 });
   });
 
-  it('authorizes the user then executes with the server credential client', async () => {
+  it('authorizes the user then executes with the capability client', async () => {
     mockGetUser.mockResolvedValue({
       data: { user: { id: 'user-1' } },
       error: null,
@@ -129,7 +129,10 @@ describe('loadJumiaAuthorizationGrant', () => {
     expect(mockMerchantForApiRequest).toHaveBeenCalledWith(supabase, 'user-1', {
       requestedMerchantId: 'merchant-1',
     });
-    expect(createJumiaCredentialServiceClient).toHaveBeenCalledTimes(1);
+    expect(createJumiaCredentialLoaderClient).toHaveBeenCalledWith(
+      'user-1',
+      'merchant-1'
+    );
     expect(mockRpc).not.toHaveBeenCalled();
     expect(mockCredentialRpc).toHaveBeenCalledWith(
       'load_jumia_authorization_credentials',
@@ -159,7 +162,7 @@ describe('loadJumiaAuthorizationGrant', () => {
       loadJumiaAuthorizationGrant(supabase as never, 'auth-1', 'merchant-1')
     ).rejects.toMatchObject({ status: 403 });
 
-    expect(createJumiaCredentialServiceClient).not.toHaveBeenCalled();
+    expect(createJumiaCredentialLoaderClient).not.toHaveBeenCalled();
     expect(mockRpc).not.toHaveBeenCalled();
     expect(mockCredentialRpc).not.toHaveBeenCalled();
   });
@@ -175,7 +178,7 @@ describe('loadJumiaAuthorizationGrant', () => {
       loadJumiaAuthorizationGrant(supabase as never, 'auth-1', 'merchant-1')
     ).rejects.toMatchObject({ status: 403 });
 
-    expect(createJumiaCredentialServiceClient).not.toHaveBeenCalled();
+    expect(createJumiaCredentialLoaderClient).not.toHaveBeenCalled();
     expect(mockCredentialRpc).not.toHaveBeenCalled();
   });
 });

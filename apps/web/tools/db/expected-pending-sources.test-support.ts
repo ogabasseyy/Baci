@@ -448,6 +448,21 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   {
     repositoryPath:
+      'supabase/migrations/20260924140000_revoke_jumia_credential_rpc_from_authenticated.sql',
+    sha256: 'b15f28ed9fb5118d3369a4dbb576720bef93e63ea7ecdc9bfd8d15e780f3fa20',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260924150000_report_jumia_disconnect_reconnect_races.sql',
+    sha256: 'b9ddf0070753616236a5625ba24cbcd791b29e92c1d8efd2e67fd666795a1a0a',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260924160000_jumia_credential_loader_capability.sql',
+    sha256: '933390d3e7b821bfeb047a58653a968bcf11fe12fae9c47e75f1c6e89f7cd414',
+  },
+  {
+    repositoryPath:
       'supabase/migrations/20260831153000_optimize_storefront_pdp_semantic_reads.sql',
     sha256: 'a402b932c082f876b44feb1cd98ef4d879641a0a5e075b52a05fb0a9b7df43dc',
   },

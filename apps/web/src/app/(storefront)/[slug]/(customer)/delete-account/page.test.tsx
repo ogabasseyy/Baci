@@ -1,3 +1,4 @@
+import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { getMerchantByIdentifier } from '@/lib/cached-data';
 
@@ -23,7 +24,7 @@ vi.mock('next/link', () => ({
   default: vi.fn(({ children }: { children: React.ReactNode }) => children),
 }));
 
-const { generateMetadata } = await import('./page');
+const { DeleteAccountContent, generateMetadata } = await import('./page');
 
 describe('delete-account metadata', () => {
   it('returns fallback title when merchant is missing', async () => {
@@ -49,5 +50,34 @@ describe('delete-account metadata', () => {
 
     expect(metadata.title).toBe('Delete Account | Test Store');
     expect(metadata.robots).toEqual({ index: false, follow: false });
+  });
+});
+
+describe('Ogabassey account deletion guidance', () => {
+  it('uses the current privacy and tax retention periods instead of 90 days', async () => {
+    vi.mocked(getMerchantByIdentifier).mockResolvedValue({
+      business_name: 'Ogabassey',
+      email: 'privacy@ogabassey.com',
+      logo_url: null,
+      slug: 'ogabassey',
+    } as unknown as Awaited<ReturnType<typeof getMerchantByIdentifier>>);
+
+    render(
+      await DeleteAccountContent({
+        params: Promise.resolve({ slug: 'ogabassey' }),
+      })
+    );
+
+    expect(
+      screen.getByText(/no later than six calendar months/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /at least six years after the relevant year of assessment/
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Retained for Legal\/Business Purposes \(90 days\)/)
+    ).not.toBeInTheDocument();
   });
 });

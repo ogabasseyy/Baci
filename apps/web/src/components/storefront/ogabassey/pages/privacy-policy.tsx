@@ -27,6 +27,7 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
   const email = merchant?.email || 'support@ogabassey.com';
   const address = merchant?.business_address || 'Lagos, Nigeria';
   const customContent = merchant?.pages?.privacy;
+  const isOgabassey = merchant?.slug === 'ogabassey';
 
   const sections = [
     {
@@ -100,7 +101,16 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
     {
       title: 'Sharing Your Information',
       icon: Share2,
-      content: (
+      content: isOgabassey ? (
+        <p>
+          We share only the information needed with our hosting and database
+          providers, payment processors, delivery partners, and support providers
+          to run the store and fulfil orders. When you use our ChatGPT app,
+          OpenAI processes your conversation under its own privacy terms and
+          sends us the tool inputs needed to answer your request. We do not sell
+          your personal information.
+        </p>
+      ) : (
         <p>
           We do not sell, trade, or otherwise transfer to outside parties your
           Personally Identifiable Information unless we provide users with
@@ -121,6 +131,55 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
         </p>
       ),
     },
+    ...(isOgabassey
+      ? [
+          {
+            title: 'How Long We Keep Your Information',
+            icon: Database,
+            content: (
+              <div className="space-y-3">
+                <p>
+                  We keep account and contact details while they are needed to
+                  provide your account, fulfil orders, and handle support. When
+                  that purpose ends, we delete or de-identify personal data no
+                  later than six calendar months afterwards unless a law or a
+                  legal claim requires us to keep specific records longer.
+                </p>
+                <p>
+                  Tax-relevant accounting and transaction records are kept for
+                  at least six years after the year of assessment to which they
+                  relate, as required by section 31(5) of the Nigeria Tax
+                  Administration Act, 2025. We limit access to records kept for
+                  legal purposes and delete or de-identify them when that basis
+                  ends.
+                </p>
+                <p>
+                  Catalog searches in our ChatGPT app do not create a saved
+                  Ogabassey account search history. Our server processes the
+                  tool request to return products; ChatGPT controls the
+                  retention of your conversation under OpenAI&apos;s own policy.
+                </p>
+              </div>
+            ),
+          },
+          {
+            title: 'Your Privacy Choices',
+            icon: Eye,
+            content: (
+              <p>
+                You can ask us to access, correct, or delete your personal
+                information, or object to or restrict processing where the law
+                allows. You can also withdraw consent for optional processing.
+                Email us at <a href={`mailto:${email}`} className="underline">{email}</a>
+                {' '}from your registered address so we can verify your request.
+                We may retain the minimum records required for tax, disputes,
+                fraud prevention, or other legal obligations and will explain
+                any limit that applies to your request.
+              </p>
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (

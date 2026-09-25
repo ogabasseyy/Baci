@@ -84,13 +84,14 @@ async function DeleteAccountJsonLd({ params }: PageProps) {
   return <JsonLd data={pageSchema} />;
 }
 
-async function DeleteAccountContent({ params }: PageProps) {
+export async function DeleteAccountContent({ params }: PageProps) {
   const { slug } = await params;
   const merchant = await getMerchantByIdentifier(slug);
 
   if (!merchant) {
     notFound();
   }
+  const isOgabassey = merchant.slug === 'ogabassey';
 
   // Resolve template component server-side for SEO (H1 in SSR HTML)
   const templateId = merchant.template_id;
@@ -222,35 +223,59 @@ async function DeleteAccountContent({ params }: PageProps) {
         <h2 className="text-xl font-semibold text-gray-900 mb-6">
           What Data is Deleted
         </h2>
-        <div className="bg-gray-50 rounded-lg p-6">
-          <h3 className="font-medium text-gray-900 mb-3">
-            Immediately Deleted:
-          </h3>
-          <ul className="list-disc list-inside text-gray-600 space-y-2 mb-6">
-            <li>Your profile information (name, email, phone number)</li>
-            <li>Saved addresses</li>
-            <li>Wishlist items</li>
-            <li>Shopping cart contents</li>
-          </ul>
+        {isOgabassey ? (
+          <div className="bg-gray-50 rounded-lg p-6 space-y-4 text-gray-600">
+            <p>
+              After a verified request, we remove account profile details, saved
+              addresses, wishlist items, and cart contents when they are no
+              longer needed. Personal data without a longer legal basis is
+              deleted or de-identified no later than six calendar months after
+              its purpose ends.
+            </p>
+            <p>
+              Tax-relevant accounting and transaction records must be kept for
+              at least six years after the relevant year of assessment under
+              section 31(5) of the Nigeria Tax Administration Act, 2025. We
+              restrict access to records retained for legal purposes. See our{' '}
+              <Link href="/privacy" className="text-primary underline">
+                Privacy Policy
+              </Link>{' '}
+              for details and contact us if you need a copy of your data.
+            </p>
+          </div>
+        ) : (
+          <div className="bg-gray-50 rounded-lg p-6">
+            <h3 className="font-medium text-gray-900 mb-3">
+              Immediately Deleted:
+            </h3>
+            <ul className="list-disc list-inside text-gray-600 space-y-2 mb-6">
+              <li>Your profile information (name, email, phone number)</li>
+              <li>Saved addresses</li>
+              <li>Wishlist items</li>
+              <li>Shopping cart contents</li>
+            </ul>
 
-          <h3 className="font-medium text-gray-900 mb-3">
-            Retained for Legal/Business Purposes (90 days):
-          </h3>
-          <ul className="list-disc list-inside text-gray-600 space-y-2 mb-6">
-            <li>Order history (for refunds, disputes, and warranty claims)</li>
-            <li>Transaction records (legal/tax compliance)</li>
-          </ul>
+            <h3 className="font-medium text-gray-900 mb-3">
+              Retained for Legal/Business Purposes (90 days):
+            </h3>
+            <ul className="list-disc list-inside text-gray-600 space-y-2 mb-6">
+              <li>
+                Order history (for refunds, disputes, and warranty claims)
+              </li>
+              <li>Transaction records (legal/tax compliance)</li>
+            </ul>
 
-          <h3 className="font-medium text-gray-900 mb-3">
-            Permanently Retained (Anonymized):
-          </h3>
-          <ul className="list-disc list-inside text-gray-600 space-y-2">
-            <li>
-              Aggregated analytics data (e.g., total orders, no personal
-              identifiers)
-            </li>
-          </ul>
-        </div>
+            <h3 className="font-medium text-gray-900 mb-3">
+              Permanently Retained (Anonymized):
+            </h3>
+            <ul className="list-disc list-inside text-gray-600 space-y-2">
+              <li>
+                Aggregated analytics data (e.g., total orders, no personal
+                identifiers)
+              </li>
+            </ul>
+          </div>
+        )}
       </section>
 
       {/* Contact Section */}

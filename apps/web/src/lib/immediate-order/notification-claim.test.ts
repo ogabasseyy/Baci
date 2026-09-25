@@ -4,7 +4,6 @@ import {
   claimImmediateOrderNotificationWithProof,
   completeImmediateOrderNotification,
   completeImmediateOrderNotificationWithProof,
-  probeImmediateNotificationCompletionProvisioned,
 } from './notification-claim';
 
 vi.mock('@/lib/logger', () => ({
@@ -243,118 +242,6 @@ describe('immediate order notification claim', () => {
       true,
       'lease-1'
     );
-    expect(rpc).not.toHaveBeenCalled();
-  });
-
-  it('probes provisioned when the failed release reclaims with a fresh lease', async () => {
-    const rpc = vi
-      .fn()
-      .mockResolvedValueOnce({ data: null, error: null })
-      .mockResolvedValueOnce({
-        data: [
-          {
-            claimed: true,
-            claim_status: 'processing',
-            claim_token: 'lease-2',
-          },
-        ],
-        error: null,
-      });
-
-    await expect(
-      probeImmediateNotificationCompletionProvisioned(
-        clientFor(rpc),
-        'order-1',
-        'tok-1',
-        'lease-1'
-      )
-    ).resolves.toEqual({ provisioned: true, claimToken: 'lease-2' });
-    expect(rpc).toHaveBeenNthCalledWith(
-      1,
-      'complete_immediate_order_notification_with_proof',
-      {
-        p_order_id: 'order-1',
-        p_tracking_token: 'tok-1',
-        p_sent: false,
-        p_claim_token: 'lease-1',
-        p_completion_proof: 'proof-1',
-      }
-    );
-    expect(rpc).toHaveBeenNthCalledWith(
-      2,
-      'claim_immediate_order_notification_with_proof',
-      { p_order_id: 'order-1', p_tracking_token: 'tok-1' }
-    );
-  });
-
-  it('probes unprovisioned when the reclaim loses on our own fresh lock', async () => {
-    const rpc = vi
-      .fn()
-      .mockResolvedValueOnce({ data: null, error: null })
-      .mockResolvedValueOnce({
-        data: [{ claimed: false, claim_status: 'processing' }],
-        error: null,
-      });
-
-    await expect(
-      probeImmediateNotificationCompletionProvisioned(
-        clientFor(rpc),
-        'order-1',
-        'tok-1',
-        'lease-1'
-      )
-    ).resolves.toEqual({ provisioned: false, claimToken: null });
-  });
-
-  it('probes unprovisioned without calling the RPC when the secret is unconfigured', async () => {
-    proofMocks.createProof.mockImplementation(() => {
-      throw new Error('not configured');
-    });
-    const rpc = vi.fn();
-
-    await expect(
-      probeImmediateNotificationCompletionProvisioned(
-        clientFor(rpc),
-        'order-1',
-        'tok-1',
-        'lease-1'
-      )
-    ).resolves.toEqual({ provisioned: false, claimToken: null });
-    expect(rpc).not.toHaveBeenCalled();
-  });
-
-  it('probes unprovisioned without rejecting on probe failure', async () => {
-    const rpc = vi.fn().mockRejectedValue(new Error('db down'));
-
-    await expect(
-      probeImmediateNotificationCompletionProvisioned(
-        clientFor(rpc),
-        'order-1',
-        'tok-1',
-        'lease-1'
-      )
-    ).resolves.toEqual({ provisioned: false, claimToken: null });
-  });
-
-  it('probes unprovisioned without calling the RPC when tokens are missing', async () => {
-    const rpc = vi.fn();
-
-    await expect(
-      probeImmediateNotificationCompletionProvisioned(
-        clientFor(rpc),
-        'order-1',
-        null,
-        'lease-1'
-      )
-    ).resolves.toEqual({ provisioned: false, claimToken: null });
-    await expect(
-      probeImmediateNotificationCompletionProvisioned(
-        clientFor(rpc),
-        'order-1',
-        'tok-1',
-        null
-      )
-    ).resolves.toEqual({ provisioned: false, claimToken: null });
     expect(rpc).not.toHaveBeenCalled();
   });
 });

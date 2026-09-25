@@ -932,13 +932,21 @@ describe('POST /api/payments/credit-direct/webhook', () => {
       expect(data.code).toBe('serialized_inventory_unavailable');
       // The bnpl_approved flip rolls back to the pre-webhook statuses
       // (the customer branch sets no amount_paid) so the status poll
-      // cannot confirm an order with unconfirmed inventory.
+      // cannot confirm an order with unconfirmed inventory. The restore
+      // is fenced to rows still in bnpl_approved so a concurrent
+      // merchant webhook that settled the order is never corrupted.
       expect(
         rollbackOrderStatusAfterInventoryConfirmationFailure
-      ).toHaveBeenCalledWith(supabaseMock, 'merchant_123', 'order_abc', {
-        payment_status: 'pending',
-        shipping_status: null,
-      });
+      ).toHaveBeenCalledWith(
+        supabaseMock,
+        'merchant_123',
+        'order_abc',
+        {
+          payment_status: 'pending',
+          shipping_status: null,
+        },
+        { onlyIfPaymentStatus: ['bnpl_approved'] }
+      );
       expect(fileInventoryConfirmationFailureReview).not.toHaveBeenCalled();
     });
 

@@ -352,4 +352,76 @@ describe('rollbackOrderStatusAfterInventoryConfirmationFailure', () => {
       'rollback_order_status_after_inventory_confirmation_failure failed: JSON object requested, multiple (or no) rows returned'
     );
   });
+
+  it('fences the restore to the guarded current statuses', async () => {
+    const inMock = vi.fn();
+    const maybeSingleMock = vi
+      .fn()
+      .mockResolvedValue({ data: { id: 'order-123' }, error: null });
+    const builder = {
+      eq: vi.fn(function (this: unknown) {
+        return this;
+      }),
+      in: inMock,
+      select: vi.fn(function (this: unknown) {
+        return this;
+      }),
+      single: vi.fn(),
+      maybeSingle: maybeSingleMock,
+    };
+    inMock.mockReturnValue(builder);
+    const updateMock = vi.fn(() => builder);
+    const mockSupabase: MockOrderRollbackClient = {
+      from: vi.fn(() => ({ update: updateMock })),
+    };
+
+    await rollbackOrderStatusAfterInventoryConfirmationFailure(
+      asSupabaseClient(mockSupabase),
+      'merchant-123',
+      'order-123',
+      {
+        payment_status: 'pending',
+        shipping_status: 'pending',
+      },
+      { onlyIfPaymentStatus: ['bnpl_approved'] }
+    );
+
+    expect(inMock).toHaveBeenCalledWith('payment_status', ['bnpl_approved']);
+    expect(maybeSingleMock).toHaveBeenCalledOnce();
+  });
+
+  it('resolves silently when the fenced row already moved on', async () => {
+    const builder = {
+      eq: vi.fn(function (this: unknown) {
+        return this;
+      }),
+      in: vi.fn(function (this: unknown) {
+        return this;
+      }),
+      select: vi.fn(function (this: unknown) {
+        return this;
+      }),
+      single: vi.fn(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+    };
+    const updateMock = vi.fn(() => builder);
+    const mockSupabase: MockOrderRollbackClient = {
+      from: vi.fn(() => ({ update: updateMock })),
+    };
+
+    // A concurrent writer settled the order past the guarded state:
+    // zero matching rows is a skip, not a failure.
+    await expect(
+      rollbackOrderStatusAfterInventoryConfirmationFailure(
+        asSupabaseClient(mockSupabase),
+        'merchant-123',
+        'order-123',
+        {
+          payment_status: 'pending',
+          shipping_status: 'pending',
+        },
+        { onlyIfPaymentStatus: ['bnpl_approved'] }
+      )
+    ).resolves.toBeUndefined();
+  });
 });

@@ -265,6 +265,24 @@ vi.mock('@/lib/immediate-order/notification-completion-proof', () => ({
   createImmediateNotificationCompletionProof: () => 'proof-route-1',
 }));
 
+// Provisioning probe: the retry loop sleeps on real timers, so route
+// tests pin the verdict (the loop itself is covered in
+// notification-completion-probe.test.ts).
+const probeMocks = vi.hoisted(() => ({
+  probe: vi.fn(
+    async (): Promise<{
+      provisioned: boolean;
+      claimToken: string | null;
+    }> => ({
+      provisioned: true,
+      claimToken: 'lease-default-1',
+    })
+  ),
+}));
+vi.mock('@/lib/immediate-order/notification-completion-probe', () => ({
+  probeImmediateNotificationCompletionProvisioned: probeMocks.probe,
+}));
+
 const MERCHANT_ID = '123e4567-e89b-12d3-a456-426614174000';
 const CUSTOMER_ID = '11111111-2222-3333-4444-555555555555';
 const AUTH_USER_ID = '123e4567-e89b-12d3-a456-426614174099';
@@ -7752,33 +7770,14 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
   });
 
   it('skips the send when the completion provisioning probe loses', async () => {
-    // First claim wins, but the probe reclaim loses (completion secret
-    // unprovisioned): after() sends nothing and marks nothing — the
-    // never-started claim expires and a replay resumes delivery.
-    const supabase = buildMockSupabase({
-      claim_immediate_order_notification_with_proof: [
-        {
-          data: [
-            {
-              claimed: true,
-              claim_status: 'processing',
-              claim_token: 'lease-default-1',
-            },
-          ],
-          error: null,
-        },
-        {
-          data: [
-            {
-              claimed: false,
-              claim_status: 'processing',
-              claim_token: null,
-            },
-          ],
-          error: null,
-        },
-      ] as never,
+    // The probe reports unprovisioned (completion secret unavailable):
+    // after() sends nothing and marks nothing — the never-started
+    // claim expires and a replay resumes delivery.
+    probeMocks.probe.mockResolvedValueOnce({
+      provisioned: false,
+      claimToken: null,
     });
+    const supabase = buildMockSupabase({});
     const { backgroundSupabase } = createBackgroundSupabaseMock();
     mockCreateAdminClient.mockReturnValue(backgroundSupabase);
 
@@ -7802,17 +7801,20 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
 
     const response = await POST(request);
     expect(response.status).toBe(201);
+    // Gate on the probe verdict (the delivery helper returns right
+    // after it) before asserting nothing else ran.
     await vi.waitFor(
       () =>
-        expect(logger.warn).toHaveBeenCalledWith(
-          expect.objectContaining({
-            message:
-              'Immediate order notification completion secret unprovisioned; deferring delivery to replay',
-            orderId: 'order-id',
-          })
+        expect(probeMocks.probe).toHaveBeenCalledWith(
+          expect.anything(),
+          'order-id',
+          'track-default-1',
+          'lease-default-1'
         ),
       { timeout: 1000 }
     );
+    // Let the after() callback settle past the gated return.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(mockSendEmail).not.toHaveBeenCalled();
     expect(supabase.rpc).not.toHaveBeenCalledWith(
       'mark_immediate_order_notification_started_with_proof',

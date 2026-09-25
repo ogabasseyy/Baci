@@ -1,4 +1,3 @@
-import type { ReceiptOrder } from '@baci/shared';
 import { cookies } from 'next/headers';
 import { after, type NextRequest, NextResponse } from 'next/server';
 import { getQuizPhaseEnv, getQuizProductionApprovedEnv } from '@/env';
@@ -43,26 +42,19 @@ import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
+import { deliverClaimedImmediateOrderNotification } from '@/lib/immediate-order/deliver-claimed-notification';
+import { claimImmediateOrderNotificationWithProof } from '@/lib/immediate-order/notification-claim';
 import {
-  claimImmediateOrderNotificationWithProof,
-  completeImmediateOrderNotificationWithProof,
-  probeImmediateNotificationCompletionProvisioned,
-} from '@/lib/immediate-order/notification-claim';
-import { markImmediateOrderNotificationStartedWithProof } from '@/lib/immediate-order/notification-start-marker';
-import {
-  buildImmediateInvoiceArtifacts,
   getOrderItemCondition,
   getOrderItemDisplayName,
   getOrderItemProductId,
   getOrderItemVariantLabel,
   type ImmediateOrderNotificationContext,
   type PreResponsePayformeProvisioning,
-  provisionPayformeRetryDva,
   provisionPreResponsePayformeDva,
   queueMerchantOrderNotifications,
   roundCurrency,
   SERVER_ASSURANCE_RATE,
-  sendImmediateOrderConfirmationEmail,
   toFiniteNumber,
 } from '@/lib/immediate-order-notification';
 import { logger } from '@/lib/logger';
@@ -3061,103 +3053,19 @@ export async function POST(request: NextRequest) {
             notificationCtx.trackingToken
           );
         if (notificationClaim.shouldDeliver) {
+          // Delivery runs in after() so slow/failing sends never block
+          // the order response; ownership was decided pre-response
+          // above. The orchestration lives in the delivery helper
+          // (Boy Scout rule) — behavior is unchanged.
+          const delivery = {
+            notificationCtx,
+            orderId: order.id,
+            effectivePaymentMethod,
+            claimToken: notificationClaim.claimToken,
+            preResponsePayforme,
+          };
           after(async () => {
-            // Hoisted for the catch: a mid-send failure completes
-            // failed on the probe's fresh lease (never null here —
-            // an unprovisioned probe returns before any throw — but
-            // the completion helper no-ops null leases regardless).
-            let deliveryClaimToken: string | null = null;
-            try {
-              // Gate the send on completion provisioning: when the
-              // HMAC secret is not yet provisioned, completion
-              // silently no-ops — sending first would leave a
-              // delivered email stuck in processing (or duplicated by
-              // a later reclaim). The probe re-wins our own claim with
-              // a fresh lease when provisioned; otherwise it returns
-              // unprovisioned and this attempt sends nothing — the
-              // never-started claim expires on its short grace and a
-              // replay resumes delivery after provisioning.
-              const provisionProbe =
-                await probeImmediateNotificationCompletionProvisioned(
-                  notificationCtx.supabase,
-                  order.id,
-                  notificationCtx.trackingToken,
-                  notificationClaim.claimToken
-                );
-              if (!provisionProbe.provisioned || !provisionProbe.claimToken) {
-                return;
-              }
-              deliveryClaimToken = provisionProbe.claimToken;
-              // Mark the won claim started (extends it to the full
-              // 5-minute crash window): fire-and-forget first step so
-              // the marker lands while artifacts build, without
-              // delaying the send. Never rejects (a marker failure
-              // keeps the short never-started grace, and completion
-              // stays lease-fenced either way).
-              void markImmediateOrderNotificationStartedWithProof(
-                notificationCtx.supabase,
-                order.id,
-                notificationCtx.trackingToken,
-                deliveryClaimToken
-              );
-              let invoiceVirtualAccount: ReceiptOrder['virtual_account'] = null;
-              let attachments:
-                | Array<{ name: string; content: string; mime_type: string }>
-                | undefined;
-              if (effectivePaymentMethod === 'invoice') {
-                // Invoice-only artifacts (persisted items, DVA, PDF,
-                // reminders); a failure rejects so the claim completes
-                // failed and a replay retries instead of sending an
-                // attachment-less message marked sent.
-                ({ attachments, invoiceVirtualAccount } =
-                  await buildImmediateInvoiceArtifacts(notificationCtx));
-              }
-              if (effectivePaymentMethod === 'payforme') {
-                // Pay for Me skips the invoice-only artifacts above and
-                // provisions through the proof-bound reservation RPC —
-                // never the service-role client (AGENTS.md).
-                const retryVirtualAccount = await provisionPayformeRetryDva(
-                  notificationCtx,
-                  preResponsePayforme
-                );
-                if (retryVirtualAccount) {
-                  invoiceVirtualAccount = retryVirtualAccount;
-                }
-              }
-              // Rendered here (not with emailData above) so the proforma
-              // body carries the provisioned DVA as bank-transfer payment
-              // instructions — the tracking link shows status only and
-              // cannot take payment.
-              await sendImmediateOrderConfirmationEmail(notificationCtx, {
-                attachments,
-                invoiceVirtualAccount,
-              });
-              // Sent is terminal: replays observe it and skip. Failed
-              // releases the claim so the next replay resumes delivery.
-              // The lease token (minted by our winning claim) fences
-              // completion to this attempt: a stale worker that outlives
-              // the reclaim window cannot complete the replacement's
-              // claim.
-              await completeImmediateOrderNotificationWithProof(
-                notificationCtx.supabase,
-                order.id,
-                notificationCtx.trackingToken,
-                true,
-                deliveryClaimToken
-              );
-            } catch (emailError) {
-              await completeImmediateOrderNotificationWithProof(
-                notificationCtx.supabase,
-                order.id,
-                notificationCtx.trackingToken,
-                false,
-                deliveryClaimToken
-              );
-              logger.error({
-                message: 'Error sending order confirmation email',
-                error: emailError,
-              });
-            }
+            await deliverClaimedImmediateOrderNotification(delivery);
           });
         }
       }

@@ -18,6 +18,7 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import type { JumiaMapping } from '@/lib/jumia/types';
 import {
+  getJumiaSaveErrorMessage,
   type JumiaOverridesState,
   saveJumiaOverrides,
 } from './save-jumia-overrides';
@@ -137,7 +138,7 @@ export function JumiaProductOverrides({
       .catch((error) => {
         toast({
           title: 'Update Failed',
-          description: error instanceof Error ? error.message : 'Unknown error',
+          description: getJumiaSaveErrorMessage(error),
           variant: 'destructive',
         });
       })

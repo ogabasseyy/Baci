@@ -14,6 +14,39 @@ interface JumiaUpdateResponse {
   success?: boolean;
   errors?: unknown;
   error?: unknown;
+  feedIds?: unknown;
+}
+
+/**
+ * Thrown when Jumia accepted the feed but local persistence failed. Carries
+ * the accepted feed ids so the caller can surface the reconciliation handle
+ * instead of reporting a bare failure.
+ */
+export class JumiaPartialUpdateError extends Error {
+  feedIds: string[];
+
+  constructor(message: string, feedIds: string[]) {
+    super(message);
+    this.name = 'JumiaPartialUpdateError';
+    this.feedIds = feedIds;
+  }
+}
+
+export function getJumiaSaveErrorMessage(error: unknown): string {
+  if (error instanceof JumiaPartialUpdateError) {
+    const suffix =
+      error.feedIds.length > 0
+        ? ` (Jumia feed: ${error.feedIds.join(', ')})`
+        : '';
+    return `${error.message}${suffix}`;
+  }
+  return error instanceof Error ? error.message : 'Unknown error';
+}
+
+function toStringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string')
+    : [];
 }
 
 // Module-scope helper so the component body stays free of try/finally and
@@ -60,13 +93,10 @@ export async function saveJumiaOverrides(
 
   const data = (await response.json()) as JumiaUpdateResponse;
   if (data?.success === false) {
-    const errors = Array.isArray(data.errors)
-      ? data.errors.filter(
-          (entry): entry is string => typeof entry === 'string'
-        )
-      : [];
-    throw new Error(
-      errors.length > 0 ? errors.join(' ') : 'Failed to update overrides'
+    const errors = toStringList(data.errors);
+    throw new JumiaPartialUpdateError(
+      errors.length > 0 ? errors.join(' ') : 'Failed to update overrides',
+      toStringList(data.feedIds)
     );
   }
 }

@@ -206,4 +206,42 @@ describe('POST /api/marketplace/jumia/products/update', () => {
       expect.stringMatching(/accepted the price feed/),
     ]);
   });
+
+  it('preserves earlier provider errors when post-push persistence fails', async () => {
+    vi.mocked(harness.loadCurrency).mockResolvedValue({
+      ok: true,
+      currency: 'NGN',
+    });
+    harness.mocks.pushStatusUpdates.mockImplementationOnce(
+      async (...args: unknown[]) => {
+        (args[4] as string[]).push('Status update failed: provider rejected');
+      }
+    );
+    harness.mocks.pushPriceUpdates.mockImplementationOnce(
+      async (...args: unknown[]) => {
+        (args[4] as string[]).push('feed-1');
+        return { submittedSkus: ['SKU-1'] };
+      }
+    );
+    harness.mocks.mappingUpdate
+      .mockResolvedValueOnce({ error: null })
+      .mockResolvedValueOnce({ data: null, error: { message: 'db down' } });
+
+    const response = await harness.post(
+      harness.makeRequest({
+        integrationId: INTEGRATION_ID,
+        overrides: { is_active: false, jumia_price: 900 },
+        productId: PRODUCT_ID,
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(false);
+    expect(body.feedIds).toEqual(['feed-1']);
+    expect(body.errors).toEqual([
+      'Status update failed: provider rejected',
+      expect.stringMatching(/accepted the price feed/),
+    ]);
+  });
 });

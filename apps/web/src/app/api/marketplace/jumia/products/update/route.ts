@@ -262,7 +262,11 @@ export async function POST(request: NextRequest) {
     });
     if (!persistResult.ok) {
       return NextResponse.json(
-        { success: false, feedIds, errors: [persistResult.error] },
+        {
+          success: false,
+          feedIds,
+          errors: [...feedErrors, persistResult.error],
+        },
         { status: 200 }
       );
     }

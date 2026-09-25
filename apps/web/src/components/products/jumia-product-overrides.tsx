@@ -17,8 +17,8 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import type { JumiaMapping } from '@/lib/jumia/types';
+import { getJumiaSaveErrorMessage } from './get-jumia-save-error-message';
 import {
-  getJumiaSaveErrorMessage,
   type JumiaOverridesState,
   saveJumiaOverrides,
 } from './save-jumia-overrides';

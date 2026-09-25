@@ -44,8 +44,20 @@ const mockSupabase = {
           }),
           in: (...inArgs: unknown[]) => {
             mockMappingUpdateIn(...inArgs);
+            // Shared terminal promise: the pre-push write awaits the first
+            // .eq() directly while the post-push write continues through a
+            // second .eq() to .select(). Memoizing keeps exactly one mock
+            // call per update regardless of chain length.
+            let result: Promise<unknown> | null = null;
+            const run = () =>
+              (result ??= Promise.resolve().then(() =>
+                mockMappingUpdate(...args)
+              ));
             return {
-              eq: () => mockMappingUpdate(...args),
+              eq: () =>
+                Object.assign(run(), {
+                  eq: () => ({ select: () => run() }),
+                }),
             };
           },
         }),

@@ -59,11 +59,17 @@ export async function persistSubmittedJumiaPriceUpdate(args: {
     Object.keys(submittedPriceUpdate).length > 1 &&
     submittedMappingIds.length > 0
   ) {
-    const { error: submittedPriceError } = await supabase
+    // Optimistic guard: only overwrite rows still stamped with this
+    // request's pre-push timestamp. A concurrent save lands a newer stamp,
+    // so a shortfall means this feed was superseded and must reconcile
+    // instead of regressing the newer local values.
+    const { data: updatedRows, error: submittedPriceError } = await supabase
       .from('jumia_product_mappings')
       .update(submittedPriceUpdate)
       .in('id', submittedMappingIds)
-      .eq('merchant_id', merchantId);
+      .eq('merchant_id', merchantId)
+      .eq('updated_at', updatedAt)
+      .select('id');
     if (submittedPriceError) {
       logger.error({
         message: 'Local submitted-price update failed',
@@ -72,6 +78,12 @@ export async function persistSubmittedJumiaPriceUpdate(args: {
       return {
         ok: false,
         error: `Jumia accepted the price feed but the local sale details could not be saved. ${ACCEPTED_FEED_RETRY_GUIDANCE}`,
+      };
+    }
+    if (!updatedRows || updatedRows.length < submittedMappingIds.length) {
+      return {
+        ok: false,
+        error: `Another save updated this product while the Jumia feed was submitting. ${ACCEPTED_FEED_RETRY_GUIDANCE}`,
       };
     }
   }

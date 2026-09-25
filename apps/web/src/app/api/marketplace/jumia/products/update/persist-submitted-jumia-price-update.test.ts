@@ -8,15 +8,26 @@ import type { JumiaVariantPriceMapping } from './apply-jumia-variant-price-updat
 import { persistSubmittedJumiaPriceUpdate } from './persist-submitted-jumia-price-update';
 
 const mockUpdateIn = vi.fn();
+const mockUpdateEq = vi.fn();
 const mockRpc = vi.fn();
 
-function stubSupabase(updateResult: { error: unknown }) {
+function stubSupabase(updateResult: { data: unknown; error: unknown }) {
   return {
     from: () => ({
       update: (payload: unknown) => ({
         in: (column: string, ids: unknown) => {
           mockUpdateIn(payload, column, ids);
-          return { eq: () => updateResult };
+          return {
+            eq: (...eqArgs: unknown[]) => {
+              mockUpdateEq(...eqArgs);
+              return {
+                eq: (...guardArgs: unknown[]) => {
+                  mockUpdateEq(...guardArgs);
+                  return { select: () => updateResult };
+                },
+              };
+            },
+          };
         },
       }),
     }),
@@ -44,7 +55,7 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
 
   it('scopes the sale write to the submitted SKU subset', async () => {
     const result = await persistSubmittedJumiaPriceUpdate({
-      supabase: stubSupabase({ error: null }) as never,
+      supabase: stubSupabase({ data: [{ id: 'map-1' }], error: null }) as never,
       merchantId: MERCHANT_ID,
       mappings: [
         mapping(),
@@ -76,11 +87,14 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
       p_merchant_id: MERCHANT_ID,
       p_updates: [{ id: 'map-1', price: 900 }],
     });
+    // Optimistic guard: only rows still stamped with this request's
+    // pre-push timestamp may be overwritten.
+    expect(mockUpdateEq).toHaveBeenCalledWith('updated_at', UPDATED_AT);
   });
 
   it('persists nothing when the feed submitted no SKUs', async () => {
     const result = await persistSubmittedJumiaPriceUpdate({
-      supabase: stubSupabase({ error: null }) as never,
+      supabase: stubSupabase({ data: [], error: null }) as never,
       merchantId: MERCHANT_ID,
       mappings: [mapping()],
       overrides: { jumia_price: 900, jumia_sale_price: 800 },
@@ -95,7 +109,7 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
 
   it('skips price writes for status-only overrides', async () => {
     const result = await persistSubmittedJumiaPriceUpdate({
-      supabase: stubSupabase({ error: null }) as never,
+      supabase: stubSupabase({ data: [], error: null }) as never,
       merchantId: MERCHANT_ID,
       mappings: [mapping()],
       overrides: {},
@@ -110,7 +124,10 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
 
   it('reports the accepted feed when the sale write fails', async () => {
     const result = await persistSubmittedJumiaPriceUpdate({
-      supabase: stubSupabase({ error: { message: 'db down' } }) as never,
+      supabase: stubSupabase({
+        data: null,
+        error: { message: 'db down' },
+      }) as never,
       merchantId: MERCHANT_ID,
       mappings: [mapping()],
       overrides: { jumia_sale_price: 800 },
@@ -128,7 +145,7 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
     mockRpc.mockResolvedValueOnce({ error: { message: 'rpc down' } });
 
     const result = await persistSubmittedJumiaPriceUpdate({
-      supabase: stubSupabase({ error: null }) as never,
+      supabase: stubSupabase({ data: [], error: null }) as never,
       merchantId: MERCHANT_ID,
       mappings: [mapping()],
       overrides: { jumia_prices: { 'SKU-1': 900 } },
@@ -140,5 +157,22 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
     expect(result.ok ? '' : result.error).toMatch(
       /accepted the price feed.*variant prices.*Refresh before retrying/
     );
+  });
+
+  it('reports a reconciliation case when a concurrent save superseded the write', async () => {
+    const result = await persistSubmittedJumiaPriceUpdate({
+      supabase: stubSupabase({ data: [], error: null }) as never,
+      merchantId: MERCHANT_ID,
+      mappings: [mapping()],
+      overrides: { jumia_sale_price: 800 },
+      submittedSkus: ['SKU-1'],
+      updatedAt: UPDATED_AT,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.ok ? '' : result.error).toMatch(
+      /Another save updated this product.*Refresh before retrying/
+    );
+    expect(mockRpc).not.toHaveBeenCalled();
   });
 });

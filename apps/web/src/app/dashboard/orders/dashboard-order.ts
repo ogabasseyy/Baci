@@ -4,17 +4,7 @@ import type {
   ShippingStatus,
 } from '@/app/dashboard/orders/order-statuses';
 import type { MerchantPickupAddress } from '@/lib/shipping/merchant-rates/types';
-
-export interface Transaction {
-  id: string;
-  reference?: string;
-  gateway_reference?: string;
-  status: string;
-  amount: number;
-  currency: string;
-  gateway: string;
-  created_at: string;
-}
+import type { Transaction } from './dashboard-transaction';
 
 export interface Order extends OrderFinancialFields {
   id: string;
@@ -66,11 +56,4 @@ export interface Order extends OrderFinancialFields {
     hasAssurance?: boolean;
   }>;
   transactions?: Transaction[];
-}
-
-export interface OrderStats {
-  totalOrders: number;
-  completedOrders: number;
-  unpaidOrders: number;
-  urgentOrders: number;
 }

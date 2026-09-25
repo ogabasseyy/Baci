@@ -29,6 +29,8 @@ import {
   GetOrdersInputSchema,
   ResendOrderConfirmationInputSchema,
 } from '@/schemas/dashboard-order-actions';
+import type { Order } from './dashboard-order';
+import type { Transaction } from './dashboard-transaction';
 import { resolveJumiaDashboardOrderScope } from './jumia-dashboard-order-scope';
 import type { JumiaOrder } from './map-jumia-dashboard-order';
 import { mapJumiaDashboardOrder } from './map-jumia-dashboard-order';
@@ -36,10 +38,12 @@ import {
   type DashboardOrderRecord,
   mapDashboardOrderRecord,
 } from './order-record-mapper';
-import type { Order, OrderStats, Transaction } from './order-types';
+import type { OrderStats } from './order-stats';
 
+export type { Order } from './dashboard-order';
+export type { Transaction } from './dashboard-transaction';
+export type { OrderStats } from './order-stats';
 export type { PaymentStatus, ShippingStatus } from './order-statuses';
-export type { Order, OrderStats, Transaction } from './order-types';
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 

@@ -1,4 +1,5 @@
 import { fetchWithCsrf } from '@/lib/api-client';
+import { JumiaPartialUpdateError } from './jumia-partial-update-error';
 
 export interface JumiaOverridesState {
   price: string;
@@ -15,32 +16,6 @@ interface JumiaUpdateResponse {
   errors?: unknown;
   error?: unknown;
   feedIds?: unknown;
-}
-
-/**
- * Thrown when Jumia accepted the feed but local persistence failed. Carries
- * the accepted feed ids so the caller can surface the reconciliation handle
- * instead of reporting a bare failure.
- */
-export class JumiaPartialUpdateError extends Error {
-  feedIds: string[];
-
-  constructor(message: string, feedIds: string[]) {
-    super(message);
-    this.name = 'JumiaPartialUpdateError';
-    this.feedIds = feedIds;
-  }
-}
-
-export function getJumiaSaveErrorMessage(error: unknown): string {
-  if (error instanceof JumiaPartialUpdateError) {
-    const suffix =
-      error.feedIds.length > 0
-        ? ` (Jumia feed: ${error.feedIds.join(', ')})`
-        : '';
-    return `${error.message}${suffix}`;
-  }
-  return error instanceof Error ? error.message : 'Unknown error';
 }
 
 function toStringList(value: unknown): string[] {

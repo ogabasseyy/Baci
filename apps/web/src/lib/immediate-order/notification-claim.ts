@@ -17,6 +17,13 @@ export interface ImmediateOrderNotificationClaim {
    * and risk a duplicate send on replay).
    */
   claimToken: string | null;
+  /**
+   * Raw claim row status after the call (pending, processing, sent, or
+   * failed); null when the call errored or returned no row. Lets
+   * callers distinguish a recorded terminal status from an unlanded
+   * completion without a second read.
+   */
+  claimStatus: string | null;
 }
 
 /**
@@ -33,11 +40,16 @@ function parseClaimToken(row: Record<string, unknown>): string | null {
   return typeof token === 'string' && token.length > 0 ? token : null;
 }
 
+function parseClaimStatus(row: Record<string, unknown>): string | null {
+  const status = row.claim_status;
+  return typeof status === 'string' && status.length > 0 ? status : null;
+}
+
 export async function claimImmediateOrderNotification(
   supabase: SupabaseClient,
   orderId: string
 ): Promise<ImmediateOrderNotificationClaim> {
-  const skipped = { shouldDeliver: false, claimToken: null };
+  const skipped = { shouldDeliver: false, claimToken: null, claimStatus: null };
   try {
     const { data, error } = await supabase.rpc(
       'claim_immediate_order_notification',
@@ -52,10 +64,15 @@ export async function claimImmediateOrderNotification(
       return skipped;
     }
     const row = Array.isArray(data) ? data[0] : data;
-    if (!row || typeof row !== 'object' || row.claimed !== true) {
+    if (!row || typeof row !== 'object') {
       return skipped;
     }
-    const claimToken = parseClaimToken(row as Record<string, unknown>);
+    const typedRow = row as Record<string, unknown>;
+    const claimStatus = parseClaimStatus(typedRow);
+    if (row.claimed !== true) {
+      return { shouldDeliver: false, claimToken: null, claimStatus };
+    }
+    const claimToken = parseClaimToken(typedRow);
     if (!claimToken) {
       logger.error({
         message:
@@ -64,7 +81,7 @@ export async function claimImmediateOrderNotification(
       });
       return skipped;
     }
-    return { shouldDeliver: true, claimToken };
+    return { shouldDeliver: true, claimToken, claimStatus };
   } catch (error) {
     logger.error({
       message: 'Immediate order notification claim raised; skipping delivery',
@@ -87,7 +104,7 @@ export async function claimImmediateOrderNotificationWithProof(
   orderId: string,
   trackingToken: string | null
 ): Promise<ImmediateOrderNotificationClaim> {
-  const skipped = { shouldDeliver: false, claimToken: null };
+  const skipped = { shouldDeliver: false, claimToken: null, claimStatus: null };
   if (!trackingToken) {
     logger.error({
       message:
@@ -111,10 +128,15 @@ export async function claimImmediateOrderNotificationWithProof(
       return skipped;
     }
     const row = Array.isArray(data) ? data[0] : data;
-    if (!row || typeof row !== 'object' || row.claimed !== true) {
+    if (!row || typeof row !== 'object') {
       return skipped;
     }
-    const claimToken = parseClaimToken(row as Record<string, unknown>);
+    const typedRow = row as Record<string, unknown>;
+    const claimStatus = parseClaimStatus(typedRow);
+    if (row.claimed !== true) {
+      return { shouldDeliver: false, claimToken: null, claimStatus };
+    }
+    const claimToken = parseClaimToken(typedRow);
     if (!claimToken) {
       logger.error({
         message:
@@ -123,7 +145,7 @@ export async function claimImmediateOrderNotificationWithProof(
       });
       return skipped;
     }
-    return { shouldDeliver: true, claimToken };
+    return { shouldDeliver: true, claimToken, claimStatus };
   } catch (error) {
     logger.error({
       message:

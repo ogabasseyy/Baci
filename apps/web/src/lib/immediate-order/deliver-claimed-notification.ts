@@ -2,8 +2,7 @@ import type { ReceiptOrder } from '@baci/shared';
 import { logger } from '@/lib/logger';
 import { sendImmediateOrderConfirmationEmail } from './confirmation-email';
 import { buildImmediateInvoiceArtifacts } from './invoice-artifacts';
-import { completeImmediateOrderNotificationWithProof } from './notification-claim';
-import { probeImmediateNotificationCompletionProvisioned } from './notification-completion-probe';
+import { completeNotificationWithProvisioningRetry } from './notification-completion-retry';
 import type {
   ImmediateOrderNotificationContext,
   PreResponsePayformeProvisioning,
@@ -21,13 +20,15 @@ export interface ClaimedNotificationDelivery {
 }
 
 /**
- * Runs the won notification claim's after() delivery: gates the send on
- * completion provisioning, marks the claim started, builds
- * method-specific artifacts, sends the confirmation email, and records
- * the terminal outcome. Any failure completes failed (releasable) so a
- * replay resumes instead of the shopper receiving a partial message
- * marked delivered. Never rejects: errors are completed + logged.
- * Extracted from the orders POST route (Boy Scout rule).
+ * Runs the won notification claim's after() delivery: marks the claim
+ * started, builds method-specific artifacts, sends the confirmation
+ * email, and records the terminal outcome through the provisioning
+ * retry (completion silently no-ops while the HMAC secret is
+ * unprovisioned, so the outcome is re-attempted until observably
+ * recorded). Any failure completes failed (releasable) so a replay
+ * resumes instead of the shopper receiving a partial message marked
+ * delivered. Never rejects: errors are completed + logged. Extracted
+ * from the orders POST route (Boy Scout rule).
  */
 export async function deliverClaimedImmediateOrderNotification(
   input: ClaimedNotificationDelivery
@@ -39,32 +40,7 @@ export async function deliverClaimedImmediateOrderNotification(
     claimToken,
     preResponsePayforme,
   } = input;
-  // Hoisted for the catch: a mid-send failure completes
-  // failed on the probe's fresh lease (never null here —
-  // an unprovisioned probe returns before any throw — but
-  // the completion helper no-ops null leases regardless).
-  let deliveryClaimToken: string | null = null;
   try {
-    // Gate the send on completion provisioning: when the
-    // HMAC secret is not yet provisioned, completion
-    // silently no-ops — sending first would leave a
-    // delivered email stuck in processing (or duplicated by
-    // a later reclaim). The probe re-wins our own claim with
-    // a fresh lease when provisioned; otherwise it returns
-    // unprovisioned and this attempt sends nothing — the
-    // never-started claim expires on its short grace and a
-    // replay resumes delivery after provisioning.
-    const provisionProbe =
-      await probeImmediateNotificationCompletionProvisioned(
-        notificationCtx.supabase,
-        orderId,
-        notificationCtx.trackingToken,
-        claimToken
-      );
-    if (!provisionProbe.provisioned || !provisionProbe.claimToken) {
-      return;
-    }
-    deliveryClaimToken = provisionProbe.claimToken;
     // Mark the won claim started (extends it to the full
     // 5-minute crash window): fire-and-forget first step so
     // the marker lands while artifacts build, without
@@ -75,7 +51,7 @@ export async function deliverClaimedImmediateOrderNotification(
       notificationCtx.supabase,
       orderId,
       notificationCtx.trackingToken,
-      deliveryClaimToken
+      claimToken
     );
     let invoiceVirtualAccount: ReceiptOrder['virtual_account'] = null;
     let attachments:
@@ -114,21 +90,23 @@ export async function deliverClaimedImmediateOrderNotification(
     // The lease token (minted by our winning claim) fences
     // completion to this attempt: a stale worker that outlives
     // the reclaim window cannot complete the replacement's
-    // claim.
-    await completeImmediateOrderNotificationWithProof(
+    // claim. The retry re-attempts until the terminal status is
+    // observably recorded (completion no-ops while the HMAC
+    // secret is unprovisioned).
+    await completeNotificationWithProvisioningRetry(
       notificationCtx.supabase,
       orderId,
       notificationCtx.trackingToken,
       true,
-      deliveryClaimToken
+      claimToken
     );
   } catch (emailError) {
-    await completeImmediateOrderNotificationWithProof(
+    await completeNotificationWithProvisioningRetry(
       notificationCtx.supabase,
       orderId,
       notificationCtx.trackingToken,
       false,
-      deliveryClaimToken
+      claimToken
     );
     logger.error({
       message: 'Error sending order confirmation email',

@@ -40,7 +40,11 @@ describe('immediate order notification claim', () => {
 
     await expect(
       claimImmediateOrderNotification(clientFor(rpc), 'order-1')
-    ).resolves.toEqual({ shouldDeliver: true, claimToken: 'lease-1' });
+    ).resolves.toEqual({
+      shouldDeliver: true,
+      claimToken: 'lease-1',
+      claimStatus: 'processing',
+    });
     expect(rpc).toHaveBeenCalledWith('claim_immediate_order_notification', {
       p_order_id: 'order-1',
     });
@@ -55,7 +59,11 @@ describe('immediate order notification claim', () => {
 
       await expect(
         claimImmediateOrderNotification(clientFor(rpc), 'order-1')
-      ).resolves.toEqual({ shouldDeliver: false, claimToken: null });
+      ).resolves.toEqual({
+        shouldDeliver: false,
+        claimToken: null,
+        claimStatus: claim_status,
+      });
     }
   });
 
@@ -73,7 +81,11 @@ describe('immediate order notification claim', () => {
 
     await expect(
       claimImmediateOrderNotification(clientFor(rpc), 'order-1')
-    ).resolves.toEqual({ shouldDeliver: true, claimToken: 'lease-1' });
+    ).resolves.toEqual({
+      shouldDeliver: true,
+      claimToken: 'lease-1',
+      claimStatus: 'processing',
+    });
   });
 
   it('skips a won claim that carries no lease token', async () => {
@@ -84,7 +96,11 @@ describe('immediate order notification claim', () => {
 
     await expect(
       claimImmediateOrderNotification(clientFor(rpc), 'order-1')
-    ).resolves.toEqual({ shouldDeliver: false, claimToken: null });
+    ).resolves.toEqual({
+      shouldDeliver: false,
+      claimToken: null,
+      claimStatus: null,
+    });
   });
 
   it('skips completion without calling the RPC when the lease is missing', async () => {
@@ -106,7 +122,11 @@ describe('immediate order notification claim', () => {
 
     await expect(
       claimImmediateOrderNotification(clientFor(rpc), 'order-1')
-    ).resolves.toEqual({ shouldDeliver: false, claimToken: null });
+    ).resolves.toEqual({
+      shouldDeliver: false,
+      claimToken: null,
+      claimStatus: null,
+    });
   });
 
   it('records sent and failed completions', async () => {
@@ -168,7 +188,11 @@ describe('immediate order notification claim', () => {
         'order-1',
         'tok-1'
       )
-    ).resolves.toEqual({ shouldDeliver: true, claimToken: 'lease-1' });
+    ).resolves.toEqual({
+      shouldDeliver: true,
+      claimToken: 'lease-1',
+      claimStatus: 'processing',
+    });
     expect(rpc).toHaveBeenCalledWith(
       'claim_immediate_order_notification_with_proof',
       { p_order_id: 'order-1', p_tracking_token: 'tok-1' }
@@ -180,7 +204,11 @@ describe('immediate order notification claim', () => {
 
     await expect(
       claimImmediateOrderNotificationWithProof(clientFor(rpc), 'order-1', null)
-    ).resolves.toEqual({ shouldDeliver: false, claimToken: null });
+    ).resolves.toEqual({
+      shouldDeliver: false,
+      claimToken: null,
+      claimStatus: null,
+    });
     expect(rpc).not.toHaveBeenCalled();
   });
 

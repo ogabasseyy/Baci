@@ -97,6 +97,30 @@ describe('runCheckoutFinalization purchase emission proof', () => {
     expect(mockRelease).not.toHaveBeenCalled();
   });
 
+  it('passes the stamped currency to the creation purchase on claim success', async () => {
+    mockClaim.mockResolvedValue(true);
+    const { trackCheckoutRoutePurchaseCompleted } = jest.requireMock(
+      '@/services/tiktok-checkout-route-tracking'
+    ) as {
+      trackCheckoutRoutePurchaseCompleted: jest.Mock;
+    };
+    const params = baseParams(Promise.resolve(undefined));
+    (
+      params.orderResponse as unknown as {
+        order: { currency?: string };
+      }
+    ).order.currency = 'USD';
+
+    await runCheckoutFinalization(params);
+
+    // The successful claim settles the purchase permanently — the
+    // completion lane never re-emits — so the creation call itself
+    // must carry the currency.
+    expect(trackCheckoutRoutePurchaseCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({ currency: 'USD' })
+    );
+  });
+
   it('passes completion attribution with the stamped currency to the finalizer', async () => {
     mockClaim.mockResolvedValue(false);
     const params = baseParams(Promise.resolve(undefined));

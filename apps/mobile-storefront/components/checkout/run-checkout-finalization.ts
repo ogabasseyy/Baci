@@ -69,6 +69,16 @@ export async function runCheckoutFinalization({
   user: UseCheckoutSubmitParams['user'];
   walletFundedBankTransferOptionEnabled: UseCheckoutSubmitParams['walletFundedBankTransferOptionEnabled'];
 }): Promise<void> {
+  // Stamped order currency for both emission lanes: the creation
+  // purchase must carry it (otherwise a successful claim permanently
+  // records a non-NGN order as NGN — the completion lane never
+  // re-emits a settled claim), and the finalizer fallback needs it for
+  // the same reason.
+  const finalizedCurrency =
+    typeof orderResponse.order.currency === 'string' &&
+    orderResponse.order.currency.trim() !== ''
+      ? orderResponse.order.currency
+      : undefined;
   // Purchase tracking claims first so a duplicate delivery of the same
   // order id never double-counts; finalization clears the cart only after
   // the payment route is confirmed.
@@ -78,6 +88,7 @@ export async function runCheckoutFinalization({
     // a failed emission must not pose as a recorded purchase or the
     // completion would emit the funnel without any ad purchase at all.
     const creationEmission = trackCheckoutRoutePurchaseCompleted({
+      ...(finalizedCurrency ? { currency: finalizedCurrency } : {}),
       customerEmail,
       customerPhone,
       items: itemsSnapshot,
@@ -118,11 +129,6 @@ export async function runCheckoutFinalization({
   // creation purchase above fails, the fully-paid / wallet-funded paths
   // emit the conversion instead and need identity, breakdown, and
   // currency now — the durable claim prevents a later richer retry.
-  const finalizedCurrency =
-    typeof orderResponse.order.currency === 'string' &&
-    orderResponse.order.currency.trim() !== ''
-      ? orderResponse.order.currency
-      : undefined;
   await runFinalizeCheckoutPayment({
     attribution: {
       customerEmail,

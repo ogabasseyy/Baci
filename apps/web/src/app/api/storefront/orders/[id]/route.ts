@@ -12,6 +12,7 @@ import { loadStorefrontCustomerTransactions } from '@/lib/storefront-customer-tr
 import { createAnonClient } from '@/lib/supabase/anon';
 import { createClient } from '@/lib/supabase/server';
 import { fetchAuthenticatedDeliveryFlag } from './fetch-authenticated-delivery-flag';
+import { fetchOrderInventoryProof } from './fetch-inventory-proof';
 import { fetchProductRouteDetails } from './fetch-product-route-details';
 import { mapOrderItemsWithRoutes } from './map-order-items-with-routes';
 import { mapTrackingPaymentAccounts } from './map-tracking-payment-accounts';
@@ -153,11 +154,14 @@ export async function GET(
 
         // biome-ignore format: compact call preserves the 300-line route gate.
         const notificationDelivered = await fetchAuthenticatedDeliveryFlag(supabase, order.id);
+        // biome-ignore format: compact call preserves the 300-line route gate.
+        const inventoryConfirmed = await fetchOrderInventoryProof(supabase, order.id, token ?? null);
 
         return NextResponse.json(
           sanitizePublicOrder({
             ...orderForResponse,
             notification_delivered: notificationDelivered,
+            inventory_confirmed: inventoryConfirmed,
             shipping_cost: order.shipping_fee,
             short_id: order.order_number,
             items: mapOrderItemsWithRoutes(items || []),
@@ -254,12 +258,16 @@ export async function GET(
         new Date()
       ) || null;
 
+    // biome-ignore format: compact call preserves the 300-line route gate.
+    const inventoryConfirmed = await fetchOrderInventoryProof(anon, order.id, token || null);
+
     return NextResponse.json(
       sanitizePublicOrder({
         id: order.id,
         order_number: order.order_number,
         short_id: order.order_number,
         currency: order.currency,
+        inventory_confirmed: inventoryConfirmed,
         subtotal: order.subtotal,
         tax_amount: order.tax_amount ?? 0,
         discount_amount: order.discount_amount ?? 0,

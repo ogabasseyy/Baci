@@ -180,6 +180,33 @@ describe('GET /api/storefront/orders/[id] public lookup', () => {
     expect(pending.notification_delivered).toBe(false);
   });
 
+  it('projects the server-confirmed inventory bit for the status poll', async () => {
+    const request = new NextRequest(
+      'http://localhost/api/storefront/orders/order-uuid-123?token=track-token-123&merchant_slug=test-store'
+    );
+    mockSupabaseClient.auth.getUser.mockResolvedValue({
+      data: { user: null },
+    });
+    // First RPC resolves the order, second resolves the proof.
+    mockAnonClient.rpc
+      .mockResolvedValueOnce({
+        data: [{ ...mockOrderData, items: [] }],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: true, error: null });
+
+    const confirmed = await (
+      await GET(request, { params: Promise.resolve({ id: 'order-uuid-123' }) })
+    ).json();
+
+    expect(mockAnonClient.rpc).toHaveBeenNthCalledWith(
+      2,
+      'get_order_inventory_proof',
+      { p_order_id: mockOrderData.id, p_tracking_token: 'track-token-123' }
+    );
+    expect(confirmed.inventory_confirmed).toBe(true);
+  });
+
   it('returns the active provisioned DVA for a guest Pay for Me lookup', async () => {
     const request = new NextRequest(
       'http://localhost/api/storefront/orders/order-uuid-123?token=track-token-123&merchant_slug=test-store'

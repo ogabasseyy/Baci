@@ -8,16 +8,18 @@ BEGIN;
 -- write cannot move after confirmation). A slow confirmation lets two
 -- consecutive reads observe approval that later rolls back. This
 -- narrow RPC exposes only the EXISTS-style confirmed bit for orders
--- the caller may see (creation tracking token, auth.uid() customer
--- ownership, or merchant view — the same authorization the tracking
--- and delivered lookups use). Denials read as not confirmed (unknown
+-- the caller may see (creation tracking token, order email,
+-- auth.uid() customer ownership, or merchant view — the same
+-- authorization the tracking and delivered lookups use). Denials
+-- read as not confirmed (unknown
 -- order, failing authorization, or unconfirmed inventory are
 -- indistinguishable). The serialized_strict proof mirrors the guest
 -- payment snapshot: every tracked unit must be sold or
 -- expiry-cleared reserved, with nothing else outstanding.
 CREATE OR REPLACE FUNCTION public.get_order_inventory_proof(
   p_order_id uuid,
-  p_tracking_token text DEFAULT NULL
+  p_tracking_token text DEFAULT NULL,
+  p_email text DEFAULT NULL
 )
 RETURNS boolean
 LANGUAGE sql
@@ -73,6 +75,11 @@ AS $$
             AND trim(p_tracking_token) <> ''
             AND o.tracking_token = p_tracking_token
           )
+          OR (
+            p_email IS NOT NULL
+            AND trim(p_email) <> ''
+            AND lower(o.customer_email) = lower(trim(p_email))
+          )
           OR c.user_id = auth.uid()
           OR public.has_merchant_access(o.merchant_id)
         )
@@ -81,13 +88,13 @@ AS $$
   );
 $$;
 
-REVOKE ALL ON FUNCTION public.get_order_inventory_proof(uuid, text)
+REVOKE ALL ON FUNCTION public.get_order_inventory_proof(uuid, text, text)
   FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.get_order_inventory_proof(uuid, text)
+GRANT EXECUTE ON FUNCTION public.get_order_inventory_proof(uuid, text, text)
   TO anon, authenticated, service_role;
 
-COMMENT ON FUNCTION public.get_order_inventory_proof(uuid, text) IS
-  'Inventory-confirmed bit for orders the caller may see via tracking token, customer ownership, or merchant view. Used by GET /api/storefront/orders/[id] so status polls gate confirmation on server-confirmed inventory instead of the approved status alone.';
+COMMENT ON FUNCTION public.get_order_inventory_proof(uuid, text, text) IS
+  'Inventory-confirmed bit for orders the caller may see via tracking token, order email, customer ownership, or merchant view. Used by GET /api/storefront/orders/[id] so status polls gate confirmation on server-confirmed inventory instead of the approved status alone.';
 
 NOTIFY pgrst, 'reload schema';
 

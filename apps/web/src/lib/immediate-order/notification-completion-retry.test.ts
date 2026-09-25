@@ -153,11 +153,8 @@ describe('provisioning completion retry', () => {
     expect(sleep).not.toHaveBeenCalled();
   });
 
-  it('records failed outcomes against the failed terminal status', async () => {
-    const rpc = vi
-      .fn()
-      .mockResolvedValueOnce({ data: null, error: null })
-      .mockResolvedValueOnce(checkRow('failed', false, null));
+  it('completes failed outcomes once without a reclaiming status check', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
 
     await expect(
       completeNotificationWithProvisioningRetry(
@@ -168,8 +165,10 @@ describe('provisioning completion retry', () => {
         'lease-1'
       )
     ).resolves.toEqual({ completed: true });
-    expect(rpc).toHaveBeenNthCalledWith(
-      1,
+    // Exactly one completion, no claim RPC: checking would reclaim
+    // the failed row it is looking for and loop forever.
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith(
       'complete_immediate_order_notification_with_proof',
       expect.objectContaining({ p_sent: false })
     );

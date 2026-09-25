@@ -15,6 +15,20 @@ describe('fetchOrderInventoryProof', () => {
     expect(rpc).toHaveBeenCalledWith('get_order_inventory_proof', {
       p_order_id: 'order-1',
       p_tracking_token: 'tok-1',
+      p_email: null,
+    });
+  });
+
+  it('forwards the order email for the email fallback lookup', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+
+    await expect(
+      fetchOrderInventoryProof({ rpc } as never, 'order-1', null, 'a@b.c')
+    ).resolves.toBe(true);
+    expect(rpc).toHaveBeenCalledWith('get_order_inventory_proof', {
+      p_order_id: 'order-1',
+      p_tracking_token: null,
+      p_email: 'a@b.c',
     });
   });
 

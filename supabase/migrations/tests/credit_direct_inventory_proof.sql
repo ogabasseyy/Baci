@@ -58,12 +58,12 @@ BEGIN
   -- B: approved with a durable hold (confirm converged). C: sold.
   INSERT INTO public.orders (
     id, merchant_id, order_number, customer_id, customer_name,
-    payment_status, subtotal, total, source, tracking_token
+    customer_email, payment_status, subtotal, total, source, tracking_token
   )
   VALUES
-    ('9f000000-0000-4000-8000-000000000821', v_merchant_id, 'ORD-INV-PROOF-A', v_customer_id, 'Proof Customer', 'bnpl_approved', 180000, 180000, 'physical', 'track-inv-proof-a'),
-    ('9f000000-0000-4000-8000-000000000822', v_merchant_id, 'ORD-INV-PROOF-B', v_customer_id, 'Proof Customer', 'bnpl_approved', 180000, 180000, 'physical', 'track-inv-proof-b'),
-    ('9f000000-0000-4000-8000-000000000823', v_merchant_id, 'ORD-INV-PROOF-C', v_customer_id, 'Proof Customer', 'paid', 180000, 180000, 'physical', 'track-inv-proof-c');
+    ('9f000000-0000-4000-8000-000000000821', v_merchant_id, 'ORD-INV-PROOF-A', v_customer_id, 'Proof Customer', 'proof@example.com', 'bnpl_approved', 180000, 180000, 'physical', 'track-inv-proof-a'),
+    ('9f000000-0000-4000-8000-000000000822', v_merchant_id, 'ORD-INV-PROOF-B', v_customer_id, 'Proof Customer', 'proof@example.com', 'bnpl_approved', 180000, 180000, 'physical', 'track-inv-proof-b'),
+    ('9f000000-0000-4000-8000-000000000823', v_merchant_id, 'ORD-INV-PROOF-C', v_customer_id, 'Proof Customer', 'proof@example.com', 'paid', 180000, 180000, 'physical', 'track-inv-proof-c');
   INSERT INTO public.order_items (
     id, order_id, product_id, variant_id, name, price, quantity, product_match_status
   )
@@ -118,6 +118,14 @@ BEGIN
   ) INTO v_proof;
   ASSERT v_proof = false, 'wrong token must read unconfirmed';
   SELECT public.get_order_inventory_proof(
+    '9f000000-0000-4000-8000-000000000822', NULL, 'proof@example.com'
+  ) INTO v_proof;
+  ASSERT v_proof = true, 'matching order email must read confirmed';
+  SELECT public.get_order_inventory_proof(
+    '9f000000-0000-4000-8000-000000000822', NULL, 'stranger@example.com'
+  ) INTO v_proof;
+  ASSERT v_proof = false, 'wrong email must read unconfirmed';
+  SELECT public.get_order_inventory_proof(
     '9f000000-0000-4000-8000-000000000822', NULL
   ) INTO v_proof;
   ASSERT v_proof = false, 'missing token must read unconfirmed for anon';
@@ -129,21 +137,21 @@ BEGIN
   -- Privilege shape: the poll reads through the anon client.
   IF NOT pg_catalog.has_function_privilege(
     'anon',
-    'public.get_order_inventory_proof(uuid, text)',
+    'public.get_order_inventory_proof(uuid, text, text)',
     'EXECUTE'
   ) THEN
     RAISE EXCEPTION 'anon must execute get_order_inventory_proof(uuid, text)';
   END IF;
   IF NOT pg_catalog.has_function_privilege(
     'authenticated',
-    'public.get_order_inventory_proof(uuid, text)',
+    'public.get_order_inventory_proof(uuid, text, text)',
     'EXECUTE'
   ) THEN
     RAISE EXCEPTION 'authenticated must execute get_order_inventory_proof(uuid, text)';
   END IF;
   IF NOT pg_catalog.has_function_privilege(
     'service_role',
-    'public.get_order_inventory_proof(uuid, text)',
+    'public.get_order_inventory_proof(uuid, text, text)',
     'EXECUTE'
   ) THEN
     RAISE EXCEPTION 'service_role must execute get_order_inventory_proof(uuid, text)';

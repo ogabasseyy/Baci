@@ -400,7 +400,11 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
     expect(data.inventory_confirmed).toBe(confirmed);
     expect(mockSupabaseClient.rpc).toHaveBeenCalledWith(
       'get_order_inventory_proof',
-      { p_order_id: mockOrderData.id, p_tracking_token: 'track-token-123' }
+      {
+        p_order_id: mockOrderData.id,
+        p_tracking_token: 'track-token-123',
+        p_email: null,
+      }
     );
   });
 

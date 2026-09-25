@@ -313,6 +313,6 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260925100000_credit_direct_inventory_proof.sql',
-    sha256: '4b70ea1d5f7dda79caea7e73142e04ebfc3ff6e5c4aa42bbecad1ee021208fdf',
+    sha256: 'd48421f956f86ef4c18a4fcf84eb74f0f4ea9a486393fc957e5ac659d1691eea',
   },
 ].sort((a, b) => a.repositoryPath.localeCompare(b.repositoryPath));

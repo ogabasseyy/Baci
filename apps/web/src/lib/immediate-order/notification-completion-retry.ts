@@ -8,19 +8,20 @@ import { createImmediateNotificationCompletionProof } from './notification-compl
 
 export interface CompletionRetryOptions {
   /**
-   * Complete/check rounds before giving up. Default covers the
-   * migration-to-first-provision-cron window (eleven rounds at the
-   * default delay span five minutes).
+   * Complete/check rounds before giving up. Bounded to fit the
+   * orders route's maxDuration = 60 (three rounds at the default
+   * delay span ~30 seconds plus RPC time): a longer loop would be
+   * terminated mid-budget without emitting its exhaustion alert.
    */
   maxAttempts?: number;
-  /** Delay between rounds. Defaults to 30 seconds. */
+  /** Delay between rounds. Defaults to 15 seconds. */
   retryDelayMs?: number;
   /** Injectable wait (tests pass a synchronous stub). */
   sleep?: (ms: number) => Promise<unknown>;
 }
 
-const DEFAULT_MAX_ATTEMPTS = 11;
-const DEFAULT_RETRY_DELAY_MS = 30_000;
+const DEFAULT_MAX_ATTEMPTS = 3;
+const DEFAULT_RETRY_DELAY_MS = 15_000;
 
 const defaultSleep = (ms: number): Promise<unknown> =>
   new Promise((resolve) => {
@@ -28,17 +29,22 @@ const defaultSleep = (ms: number): Promise<unknown> =>
   });
 
 /**
- * Records the terminal claim status, retrying across the HMAC
- * provisioning window until the status is observably recorded. The
+ * Records the terminal claim status, retrying across HMAC
+ * provisioning outages until the status is observably recorded. The
  * completion RPC returns void by design (a boolean would oracle the
- * server secret to anon callers), so each round completes and then
- * re-reads the claim: only the terminal status counts as landed.
- * A re-won lease (stale expiry mid-retry) is adopted for the next
- * round. Never rejects: exhaustion returns completed false with an
- * alert-worthy error (the email was already sent for sent outcomes,
- * so the stuck bookkeeping needs operator attention). An
- * unconfigured server secret throws inside the proof helper on the
- * first round, failing fast without burning the retry budget.
+ * server secret to anon callers), so each sent round completes and
+ * then re-reads the claim: only the recorded sent status counts as
+ * landed (sent rows are never reclaimable, so the check cannot
+ * disturb them). A re-won lease (stale expiry mid-retry) is adopted
+ * for the next round. Failed outcomes complete exactly once with no
+ * status check: the check itself would reclaim the failed row it is
+ * looking for, looping forever and leaving processing instead of
+ * the immediately-retryable failed state. Never rejects: exhaustion
+ * returns completed false with an alert-worthy error (the email was
+ * already sent for sent outcomes, so the stuck bookkeeping needs
+ * operator attention). An unconfigured server secret throws inside
+ * the proof helper on the first round, failing fast without burning
+ * the retry budget.
  */
 export async function completeNotificationWithProvisioningRetry(
   supabase: SupabaseClient,
@@ -48,9 +54,24 @@ export async function completeNotificationWithProvisioningRetry(
   claimToken: string | null,
   options: CompletionRetryOptions = {}
 ): Promise<{ completed: boolean }> {
-  const terminal = sent ? 'sent' : 'failed';
   if (!trackingToken || !claimToken) {
     return { completed: false };
+  }
+  if (!sent) {
+    // Failed releases the claim for replay; a status check here
+    // would reclaim the failed row it is looking for (failed rows
+    // are immediately reclaimable), so complete once and report the
+    // attempt. The delivery helper treats failed as best-effort:
+    // nothing replays the claim yet, and a no-op (unprovisioned)
+    // simply keeps the never-started grace before the same outcome.
+    await completeImmediateOrderNotificationWithProof(
+      supabase,
+      orderId,
+      trackingToken,
+      false,
+      claimToken
+    );
+    return { completed: true };
   }
   const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
@@ -85,7 +106,7 @@ export async function completeNotificationWithProvisioningRetry(
       orderId,
       trackingToken
     );
-    if (check.claimStatus === terminal) {
+    if (check.claimStatus === 'sent') {
       return { completed: true };
     }
     if (check.shouldDeliver && check.claimToken) {

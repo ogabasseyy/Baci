@@ -202,7 +202,11 @@ describe('GET /api/storefront/orders/[id] public lookup', () => {
     expect(mockAnonClient.rpc).toHaveBeenNthCalledWith(
       2,
       'get_order_inventory_proof',
-      { p_order_id: mockOrderData.id, p_tracking_token: 'track-token-123' }
+      {
+        p_order_id: mockOrderData.id,
+        p_tracking_token: 'track-token-123',
+        p_email: null,
+      }
     );
     expect(confirmed.inventory_confirmed).toBe(true);
   });

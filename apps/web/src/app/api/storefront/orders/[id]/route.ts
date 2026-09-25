@@ -11,6 +11,7 @@ import { loadStorefrontCustomerPaymentAccounts } from '@/lib/storefront-customer
 import { loadStorefrontCustomerTransactions } from '@/lib/storefront-customer-transactions';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { createClient } from '@/lib/supabase/server';
+import { buildGuestOrderResponse } from './build-guest-order-response';
 import { fetchAuthenticatedDeliveryFlag } from './fetch-authenticated-delivery-flag';
 import { fetchOrderInventoryProof } from './fetch-inventory-proof';
 import { fetchProductRouteDetails } from './fetch-product-route-details';
@@ -155,7 +156,7 @@ export async function GET(
         // biome-ignore format: compact call preserves the 300-line route gate.
         const notificationDelivered = await fetchAuthenticatedDeliveryFlag(supabase, order.id);
         // biome-ignore format: compact call preserves the 300-line route gate.
-        const inventoryConfirmed = await fetchOrderInventoryProof(supabase, order.id, token ?? null);
+        const inventoryConfirmed = await fetchOrderInventoryProof(supabase, order.id, token ?? null, email ?? null);
 
         return NextResponse.json(
           sanitizePublicOrder({
@@ -259,40 +260,15 @@ export async function GET(
       ) || null;
 
     // biome-ignore format: compact call preserves the 300-line route gate.
-    const inventoryConfirmed = await fetchOrderInventoryProof(anon, order.id, token || null);
+    const inventoryConfirmed = await fetchOrderInventoryProof(anon, order.id, token || null, email || null);
 
     return NextResponse.json(
-      sanitizePublicOrder({
-        id: order.id,
-        order_number: order.order_number,
-        short_id: order.order_number,
-        currency: order.currency,
-        inventory_confirmed: inventoryConfirmed,
-        subtotal: order.subtotal,
-        tax_amount: order.tax_amount ?? 0,
-        discount_amount: order.discount_amount ?? 0,
-        gift_wrapping_fee: order.gift_wrapping_fee ?? 0,
-        shipping_cost: order.shipping_cost ?? order.shipping_fee ?? 0,
-        total: order.total,
-        amount_paid: order.amount_paid,
-        customer_name: order.customer_name,
-        customer_email: order.customer_email,
-        customer_phone: order.customer_phone,
-        shipping_address: order.shipping_address,
-        payment_status: order.payment_status,
-        shipping_status: order.shipping_status,
-        payment_method: order.payment_method,
-        external_source: order.external_source ?? null,
-        import_job_id: order.import_job_id ?? null,
-        merchant_id: order.merchant_id,
-        tracking_token: token || null,
+      buildGuestOrderResponse({
+        order,
+        token: token || null,
         items,
-        virtual_account: guestVirtualAccount,
-        // Terminal after() delivery (invoice artifacts built and proforma
-        // emailed): success screens gate invoice_generated on this instead
-        // of claiming it at order creation. Absent on older RPC
-        // projections, which read as not delivered.
-        notification_delivered: order.notification_delivered ?? false,
+        virtualAccount: guestVirtualAccount,
+        inventoryConfirmed,
       })
     );
   } catch (error) {

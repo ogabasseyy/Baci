@@ -109,6 +109,7 @@ async function fetchAndAddCartItems({
 
     // Add each product to cart
     let addedCount = 0;
+    let firstAddedProductName: string | null = null;
     const rejectedIds: string[] = [];
     for (const product of activeProducts) {
       const resolvedImage =
@@ -122,12 +123,11 @@ async function fetchAndAddCartItems({
           ...product,
           image: resolvedImage,
           imageLarge: resolvedImage,
+          stock: product.manage_stock ? Number(product.stock_quantity ?? 0) : product.stock,
         };
         const existingIndex = findMergingCartLineIndex(cart, productForCart);
         const existingQuantity = existingIndex >= 0 ? cart[existingIndex].quantity : 0;
-        const effectiveStock = Number(product.stock_quantity ?? 0) > 0
-          ? Number(product.stock_quantity)
-          : Number(product.stock ?? 0);
+        const effectiveStock = Number(product.stock_quantity ?? 0);
         if (!hasQuizPrizeVoucher && product.manage_stock && existingQuantity + quantity > effectiveStock) {
           rejectedIds.push(product.id);
           toast({
@@ -151,6 +151,7 @@ async function fetchAndAddCartItems({
             : undefined
         );
         addedCount++;
+        firstAddedProductName ??= product.name;
       }
     }
 
@@ -158,7 +159,7 @@ async function fetchAndAddCartItems({
       toast({
         title: addedCount === 1 ? 'Added to cart' : `${addedCount} items added`,
         description: addedCount === 1
-          ? `${activeProducts[0].name} has been added to your cart.`
+          ? `${firstAddedProductName} has been added to your cart.`
           : `${addedCount} products have been added to your cart.`,
       });
     }

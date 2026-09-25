@@ -27,6 +27,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import 'dotenv/config';
+import { normalizeOgabasseyCdnImageUrl } from '../src/lib/ogabassey-cdn-image-url';
 import {
   AGENTIC_CHECKOUT_AGENT_ID,
   type AgenticCheckoutClientConfig,
@@ -427,7 +428,7 @@ function getSafeCatalogImageUrl(
 
   let parsed: URL;
   try {
-    parsed = new URL(imageUrl, 'https://cdn.ogabassey.com');
+    parsed = new URL(normalizeOgabasseyCdnImageUrl(imageUrl), 'https://cdn.ogabassey.com');
   } catch {
     return undefined;
   }
@@ -1299,6 +1300,7 @@ function createOgabasseyServer() {
           .filter((p) => p.has_variants)
           .map((p) => p.id);
         const variantsMap = new Map<string, McpProductVariantRow[]>();
+        let variantLookupSucceeded = productIds.length === 0;
 
         if (productIds.length > 0) {
           const { data: variants, error: variantsError } = await supabase
@@ -1310,6 +1312,7 @@ function createOgabasseyServer() {
               variantsError
             );
           } else {
+            variantLookupSucceeded = true;
             (variants as McpProductVariantRow[] | null)?.forEach((variant) => {
               const current = variantsMap.get(variant.product_id);
               if (current) {
@@ -1321,9 +1324,23 @@ function createOgabasseyServer() {
           }
         }
 
+        const offersMap = new Map<string, Array<{ stock_quantity: number | null }>>();
+        await Promise.all(products.filter((product) => product.has_condition_offers).map(async (product) => {
+          const { data, error } = await supabase.rpc('get_product_offers', { p_product_id: product.id });
+          if (error) {
+            console.error('Failed to fetch product offers for search:', error);
+            return;
+          }
+          offersMap.set(product.id, data ?? []);
+        }));
+
         // 3. Buyer Intelligence & Formatting
         const formatted = products.map((p) => {
-          const stockSummary = getMcpProductStockSummary(p, p.has_variants ? variantsMap.get(p.id) : undefined);
+          const stockSummary = getMcpProductStockSummary(
+            p,
+            p.has_variants && variantLookupSucceeded ? (variantsMap.get(p.id) ?? []) : undefined,
+            p.has_condition_offers ? offersMap.get(p.id) : undefined
+          );
 
           // A compare-at price indicates a listed discount, not a price trend.
           const isDiscounted =
@@ -1475,9 +1492,7 @@ function createOgabasseyServer() {
                 Number(variant.stock_quantity ?? 0) >= (args.quantity ?? 1)
               );
           } else {
-            const effectiveStock = Number(product.stock_quantity ?? 0) > 0
-              ? Number(product.stock_quantity)
-              : Number(product.stock ?? 0);
+            const effectiveStock = Number(product.stock_quantity ?? 0);
             unavailable = effectiveStock < (args.quantity ?? 1);
           }
         }
@@ -1958,7 +1973,11 @@ function createOgabasseyServer() {
       const rating = product.schema_markup?.aggregateRating?.ratingValue;
       const reviewCount = product.schema_markup?.aggregateRating?.reviewCount;
 
-      const stockSummary = getMcpProductStockSummary(product, product.has_variants ? variants : undefined);
+      const stockSummary = getMcpProductStockSummary(
+        product,
+        product.has_variants ? variants : undefined,
+        product.has_condition_offers ? conditionOffers : undefined
+      );
       const formatted = {
         id: product.id,
         name: product.name,

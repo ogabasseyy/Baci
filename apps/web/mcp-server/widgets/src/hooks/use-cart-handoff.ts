@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { getCartHandoffUrl, getVariantSelectionUrl } from '../cart-handoff-result';
+import { getCartHandoffUrl } from '../cart-handoff-result';
+import { getVariantSelectionUrl } from '../variant-selection-url';
 import type { Product, WidgetState } from '../widget-types';
 import { createDefaultState } from '../widget-types';
 import { useWidgetState } from './use-widget-state';
@@ -21,8 +22,12 @@ export function useCartHandoff() {
   const handleAddToCart = async (product: Product) => {
     const requestId = ++handoffRequestId.current;
     setCartError(null);
+    if (!window.openai?.callTool) {
+      setCartError('ChatGPT cannot prepare a cart link here. Use Review on Ogabassey to continue.');
+      return;
+    }
     try {
-      const result = await window.openai?.callTool?.('add_to_cart', {
+      const result = await window.openai.callTool('add_to_cart', {
         product_id: product.id,
       });
       if (requestId !== handoffRequestId.current) return;

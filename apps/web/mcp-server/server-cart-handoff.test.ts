@@ -17,7 +17,10 @@ describe('MCP cart handoff', () => {
           },
         })
       );
-      expect(available.structuredContent).toMatchObject({ success: true });
+      expect(available.structuredContent).toMatchObject({
+        success: true,
+        cart_url: 'https://ogabassey.com/cart?item_id=available-product&qty=1',
+      });
       expect(JSON.stringify(available)).toContain('Cart link ready');
       expect(JSON.stringify(available)).not.toContain('added to cart');
 
@@ -68,7 +71,8 @@ describe('MCP cart handoff', () => {
         method: 'tools/call',
         params: { name: 'add_to_cart', arguments: { product_id: 'legacy-stock-product', quantity: 3 } },
       }));
-      expect(legacyStock.structuredContent).toMatchObject({ success: true });
+      expect(legacyStock.structuredContent).toMatchObject({ success: false });
+      expect(JSON.stringify(legacyStock)).not.toContain('cart_url');
 
       const conditionOffer = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
         id: 71,

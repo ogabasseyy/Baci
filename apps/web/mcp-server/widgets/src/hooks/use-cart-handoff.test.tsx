@@ -7,6 +7,15 @@ const product = { id: 'phone-1', name: 'Redmi', slug: 'redmi', price: 90000 };
 afterEach(() => { delete window.openai; });
 
 describe('useCartHandoff', () => {
+  it('identifies a missing ChatGPT tool capability without blaming product availability', async () => {
+    window.openai = {};
+    const { result } = renderHook(() => useCartHandoff());
+    await act(async () => { await result.current.handleAddToCart(product); });
+    expect(result.current.cart).toEqual([]);
+    expect(result.current.cartError).toContain('ChatGPT cannot prepare');
+    expect(result.current.cartError).not.toContain('unavailable');
+  });
+
   it('reports tool failures without creating a shopping link', async () => {
     window.openai = { callTool: vi.fn().mockRejectedValue(new Error('offline')) };
     const { result } = renderHook(() => useCartHandoff());

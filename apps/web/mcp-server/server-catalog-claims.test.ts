@@ -4,6 +4,52 @@ import { mcpServerTestSupport } from './server-test-support';
 const { getResultRecord, postMcpJsonRpc, startMcpServerWithPostgrest } = mcpServerTestSupport;
 
 describe('MCP catalog claims', () => {
+  it('proxies a transformed CDN product image to the widget', async () => {
+    const server = await startMcpServerWithPostgrest({});
+    try {
+      const result = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+        id: 101,
+        method: 'tools/call',
+        params: { name: 'search_products', arguments: { limit: 10 } },
+      }));
+      expect(result.structuredContent).toMatchObject({
+        products: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'transformed-image-product',
+            image: 'https://mcp.ogabassey.com/images/core-assets/products/phone.avif',
+          }),
+        ]),
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('reports offer stock and a successful empty variant lookup consistently', async () => {
+    const server = await startMcpServerWithPostgrest({});
+    try {
+      const search = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+        id: 102,
+        method: 'tools/call',
+        params: { name: 'search_products', arguments: { limit: 10 } },
+      }));
+      expect(search.structuredContent).toMatchObject({
+        products: expect.arrayContaining([
+          expect.objectContaining({ id: 'condition-offer-product', in_stock: true }),
+          expect.objectContaining({ id: 'variant-empty-product', in_stock: false }),
+        ]),
+      });
+      const detail = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+        id: 103,
+        method: 'tools/call',
+        params: { name: 'get_product', arguments: { product_id: 'condition-offer-product' } },
+      }));
+      expect(detail.structuredContent).toMatchObject({ products: [{ in_stock: true }] });
+    } finally {
+      await server.close();
+    }
+  });
+
   it('does not invent price trends or warranty terms from catalog prices', async () => {
     const server = await startMcpServerWithPostgrest({});
     try {

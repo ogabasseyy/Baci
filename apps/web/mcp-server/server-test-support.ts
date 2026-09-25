@@ -86,6 +86,8 @@ async function startPostgrestStub() {
         response.end(JSON.stringify({ id: 'variant-sold-out-product', name: 'Variant Sold Out Phone', slug: 'variant-sold-out-phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: true }));
       } else if (url.searchParams.get('id') === 'eq.variant-available-product') {
         response.end(JSON.stringify({ id: 'variant-available-product', name: 'Variant Available Phone', slug: 'variant-available-phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: true }));
+      } else if (url.searchParams.get('id') === 'eq.variant-empty-product') {
+        response.end(JSON.stringify({ id: 'variant-empty-product', name: 'Variant Empty Phone', slug: 'variant-empty-phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: true }));
       } else if (url.searchParams.get('id') === 'eq.untracked-offer-product') {
         response.end(JSON.stringify({ id: 'untracked-offer-product', name: 'Untracked Offer Phone', slug: 'untracked-offer-phone', price: 100000, manage_stock: false, stock_quantity: 0, has_condition_offers: true }));
       } else if (url.searchParams.get('id') === 'eq.legacy-stock-product') {
@@ -99,6 +101,9 @@ async function startPostgrestStub() {
           { id: 'available-product', name: 'Test Phone', slug: 'test-phone', price: 100000, compare_at_price: 120000, images: ['https://images.example.test/phone.jpg'], manage_stock: false, stock_quantity: 0, has_variants: false },
           { id: 'avif-product', name: 'AVIF Phone', slug: 'avif-phone', price: 120000, images: ['https://cdn.ogabassey.com/core-assets/products/redmi-15-midnight-black.avif'], manage_stock: false, stock_quantity: 0, has_variants: false },
           { id: 'object-image-product', name: 'Object Image Phone', slug: 'object-image-phone', price: 130000, images: [{ url: 'https://cdn.ogabassey.com/core-assets/products/redmi-15-midnight-black.avif' }], manage_stock: false, stock_quantity: 0, has_variants: false },
+          { id: 'transformed-image-product', name: 'Transformed Image Phone', slug: 'transformed-image-phone', price: 140000, images: ['https://cdn.ogabassey.com/image/width=750/core-assets/products/phone.avif'], manage_stock: false, stock_quantity: 0, has_variants: false },
+          { id: 'condition-offer-product', name: 'Used Offer Phone', slug: 'used-offer-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: false, has_condition_offers: true },
+          { id: 'variant-empty-product', name: 'Variant Empty Phone', slug: 'variant-empty-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
         ]));
       } else {
         response.statusCode = 406;
@@ -132,7 +137,9 @@ async function startPostgrestStub() {
         const requested = JSON.parse(body) as { p_product_id?: string };
         response.end(JSON.stringify(requested.p_product_id === 'untracked-offer-product'
           ? [{ condition: 'used', price: 80000, stock_quantity: 0, grade: 'A', condition_notes: null }]
-          : []));
+          : requested.p_product_id === 'condition-offer-product'
+            ? [{ condition: 'used', price: 80000, stock_quantity: 2, grade: 'A', condition_notes: null }]
+            : []));
       });
       return;
     }

@@ -154,5 +154,50 @@ describe('CartPageWrapper', () => {
     await waitFor(() => expect(addToCart).toHaveBeenCalledWith(expect.any(Object), 1, undefined));
   });
 
+  it('rejects a zero-quantity managed item despite positive legacy stock and names the item actually added', async () => {
+    const rejectedId = '55555555-5555-4555-8555-555555555555';
+    const addedId = '66666666-6666-4666-8666-666666666666';
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams(`item_id=${rejectedId},${addedId}&qty=1`) as ReturnType<typeof useSearchParams>
+    );
+    window.history.pushState({}, '', `/ogabassey/cart?item_id=${rejectedId},${addedId}&qty=1`);
+    const addToCart = mockUseCart();
+    setupProductsQuery({
+      data: [
+        { id: rejectedId, name: 'Sold Out Phone', status: 'active', images: [], manage_stock: true, stock_quantity: 0, stock: 5 },
+        { id: addedId, name: 'Available Phone', status: 'active', images: [], manage_stock: false },
+      ],
+      error: null,
+    });
+
+    render(<CartPageWrapper merchantId="merchant-1" />);
+
+    await waitFor(() => expect(addToCart).toHaveBeenCalledOnce());
+    expect(addToCart).toHaveBeenCalledWith(expect.objectContaining({ id: addedId }), 1, undefined);
+    expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Added to cart',
+      description: 'Available Phone has been added to your cart.',
+    }));
+    expect(window.location.search).toContain(rejectedId);
+  });
+
+  it('passes canonical managed stock to the cart provider when legacy stock is zero', async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams('item_id=55555555-5555-4555-8555-555555555555&qty=1') as ReturnType<typeof useSearchParams>
+    );
+    const addToCart = mockUseCart();
+    setupProductsQuery({ data: [{
+      id: '55555555-5555-4555-8555-555555555555',
+      name: 'Available Phone', status: 'active', images: [],
+      manage_stock: true, stock_quantity: 2, stock: 0,
+    }], error: null });
+
+    render(<CartPageWrapper merchantId="merchant-1" />);
+
+    await waitFor(() => expect(addToCart).toHaveBeenCalledWith(
+      expect.objectContaining({ stock: 2 }), 1, undefined
+    ));
+  });
+
 
 });

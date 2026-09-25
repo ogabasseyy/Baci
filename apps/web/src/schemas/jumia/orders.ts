@@ -83,7 +83,7 @@ export const JumiaShipmentProvidersResponseSchema = z.object({
         z.object({
           id: z.string().min(1),
           name: z.string().min(1),
-          requireTrackingCode: z.boolean(),
+          trackingCodeRequired: z.boolean(),
         })
       ),
     })

@@ -25,6 +25,24 @@ describe('event pipeline credential-path authority', () => {
 
     expect(manifest.authority.credentialPaths).toEqual([
       [
+        'apps/web/src/app/api/agentic/catalog/lookup/route.ts',
+        'apps/web/src/lib/agentic/mutation-request.ts',
+        'apps/web/src/lib/agentic/request-integrity.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/agentic/catalog/product/route.ts',
+        'apps/web/src/lib/agentic/mutation-request.ts',
+        'apps/web/src/lib/agentic/request-integrity.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/agentic/catalog/search/route.ts',
+        'apps/web/src/lib/agentic/mutation-request.ts',
+        'apps/web/src/lib/agentic/request-integrity.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
         'apps/web/src/app/api/payments/initialize/route.ts',
         'apps/web/src/lib/payments/initialize-redvault-paystack-checkout.ts',
         'apps/web/src/lib/payments/redvault-payment-attempt-client.ts',

@@ -3,12 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetUser = vi.fn();
 const mockMerchantSingle = vi.fn();
-const mockMappingSingle = vi.fn();
+const mockMappingsOrder = vi.fn();
 const mockMappingUpdate = vi.fn();
+const mockRpc = vi.fn();
 const mockForIntegration = vi.fn();
 const mockRequireMerchantFeatureAccess = vi.fn();
-const mockUpdatePrice = vi.fn();
-const mockUpdateStatus = vi.fn();
+const mockPushStatusUpdates = vi.fn();
+const mockPushPriceUpdates = vi.fn();
 
 const mockSupabase = {
   auth: { getUser: mockGetUser },
@@ -28,12 +29,19 @@ const mockSupabase = {
         select: () => ({
           eq: () => ({
             eq: () => ({
-              single: mockMappingSingle,
+              eq: () => ({
+                eq: () => ({
+                  order: mockMappingsOrder,
+                }),
+              }),
             }),
           }),
         }),
         update: (...args: unknown[]) => ({
           eq: () => ({
+            eq: () => mockMappingUpdate(...args),
+          }),
+          in: () => ({
             eq: () => mockMappingUpdate(...args),
           }),
         }),
@@ -42,6 +50,7 @@ const mockSupabase = {
 
     return {};
   }),
+  rpc: (...args: unknown[]) => mockRpc(...args),
 };
 
 vi.mock('next/headers', () => ({ cookies: vi.fn().mockResolvedValue({}) }));
@@ -57,8 +66,21 @@ vi.mock('@/lib/jumia/client', () => ({
   },
 }));
 vi.mock('@/lib/jumia/feeds', () => ({
-  updatePrice: (...args: unknown[]) => mockUpdatePrice(...args),
-  updateStatus: (...args: unknown[]) => mockUpdateStatus(...args),
+  updatePrice: vi.fn(),
+  updateStatus: vi.fn(),
+}));
+vi.mock('./jumia-product-update-feeds', async () => {
+  const actual = await vi.importActual<
+    typeof import('./jumia-product-update-feeds')
+  >('./jumia-product-update-feeds');
+  return {
+    ...actual,
+    pushStatusUpdates: (...args: unknown[]) => mockPushStatusUpdates(...args),
+    pushPriceUpdates: (...args: unknown[]) => mockPushPriceUpdates(...args),
+  };
+});
+vi.mock('@/lib/jumia/jumia-marketplace-currency', () => ({
+  loadJumiaMarketplaceCurrency: vi.fn(),
 }));
 vi.mock('@/lib/jumia/helpers', () => ({
   JumiaApiError: class extends Error {
@@ -99,6 +121,9 @@ function makeRequest(body: Record<string, unknown>) {
 }
 
 const { POST } = await import('./route');
+const { loadJumiaMarketplaceCurrency } = await import(
+  '@/lib/jumia/jumia-marketplace-currency'
+);
 
 describe('POST /api/marketplace/jumia/products/update', () => {
   beforeEach(() => {
@@ -109,6 +134,39 @@ describe('POST /api/marketplace/jumia/products/update', () => {
       error: null,
     });
     mockRequireMerchantFeatureAccess.mockResolvedValue(null);
+    mockForIntegration.mockResolvedValue({
+      shopId: 'shop-1',
+      marketplaceKey: 'NG',
+    });
+    mockMappingsOrder.mockResolvedValue({
+      data: [
+        {
+          id: 'map-1',
+          product_id: PRODUCT_ID,
+          variant_id: null,
+          jumia_sku: 'SKU-1',
+          jumia_seller_sku: 'SKU-1',
+          jumia_product_id: 'JUMIA-1',
+          jumia_price: 1000,
+          jumia_sale_price: null,
+          jumia_sale_start: null,
+          jumia_sale_end: null,
+          is_active: true,
+          sync_inventory: true,
+          sync_price: false,
+          sync_status: 'synced',
+          last_synced_at: null,
+          sync_error: null,
+          created_at: '2026-08-13T10:00:00Z',
+          updated_at: '2026-08-13T10:00:00Z',
+        },
+      ],
+      error: null,
+    });
+    mockMappingUpdate.mockResolvedValue({ error: null });
+    mockPushStatusUpdates.mockResolvedValue(undefined);
+    mockPushPriceUpdates.mockResolvedValue(undefined);
+    mockRpc.mockResolvedValue({ error: null });
   });
 
   it('returns 401 when user is not authenticated', async () => {
@@ -157,7 +215,221 @@ describe('POST /api/marketplace/jumia/products/update', () => {
     );
     expect(mockForIntegration).not.toHaveBeenCalled();
     expect(mockMappingUpdate).not.toHaveBeenCalled();
-    expect(mockUpdatePrice).not.toHaveBeenCalled();
-    expect(mockUpdateStatus).not.toHaveBeenCalled();
+    expect(mockPushStatusUpdates).not.toHaveBeenCalled();
+    expect(mockPushPriceUpdates).not.toHaveBeenCalled();
+  });
+
+  it('returns before updating mappings when marketplace currency loading fails for price updates', async () => {
+    const { loadJumiaMarketplaceCurrency } = await import(
+      '@/lib/jumia/jumia-marketplace-currency'
+    );
+    vi.mocked(loadJumiaMarketplaceCurrency).mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      error: 'Failed to load Jumia integration currency',
+    });
+
+    const response = await POST(
+      makeRequest({
+        integrationId: INTEGRATION_ID,
+        overrides: { jumia_price: 1500 },
+        productId: PRODUCT_ID,
+      })
+    );
+
+    expect(response.status).toBe(500);
+    expect(mockMappingUpdate).not.toHaveBeenCalled();
+    expect(mockPushPriceUpdates).not.toHaveBeenCalled();
+  });
+
+  it('does not persist overrides when a mapped variant is not ready on Jumia', async () => {
+    mockMappingsOrder.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'map-pending',
+          product_id: PRODUCT_ID,
+          variant_id: 'variant-1',
+          jumia_product_id: null,
+          jumia_sku: 'SKU-1',
+          jumia_price: 1000,
+          jumia_sale_price: null,
+          jumia_sale_start: null,
+          jumia_sale_end: null,
+        },
+      ],
+      error: null,
+    });
+
+    const response = await POST(
+      makeRequest({
+        integrationId: INTEGRATION_ID,
+        overrides: { is_active: false, jumia_price: 900 },
+        productId: PRODUCT_ID,
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body).toEqual({
+      success: false,
+      feedIds: [],
+      errors: [
+        'Status update skipped: product has not been assigned a Jumia product ID yet (feed may still be processing)',
+        'Price update skipped: product has not been assigned a Jumia product ID yet (feed may still be processing)',
+      ],
+    });
+    expect(mockMappingUpdate).not.toHaveBeenCalled();
+    expect(mockPushStatusUpdates).not.toHaveBeenCalled();
+    expect(mockPushPriceUpdates).not.toHaveBeenCalled();
+  });
+
+  it('verifies OAuth scope before mutating mappings', async () => {
+    mockForIntegration.mockResolvedValue({
+      shopId: 'shop-1',
+      marketplaceKey: 'oauth',
+    });
+
+    const response = await POST(
+      makeRequest({
+        integrationId: INTEGRATION_ID,
+        overrides: { is_active: false },
+        productId: PRODUCT_ID,
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body).toEqual({
+      success: false,
+      feedIds: [],
+      errors: ['Unable to verify the Jumia shop marketplace scope. Try again.'],
+    });
+    expect(mockMappingUpdate).not.toHaveBeenCalled();
+    expect(mockPushStatusUpdates).not.toHaveBeenCalled();
+    expect(mockPushPriceUpdates).not.toHaveBeenCalled();
+  });
+
+  it('persists variant prices after the price feed is accepted', async () => {
+    vi.mocked(loadJumiaMarketplaceCurrency).mockResolvedValue({
+      ok: true,
+      currency: 'NGN',
+    });
+    mockPushPriceUpdates.mockResolvedValue({ submittedSkus: ['SKU-1'] });
+
+    const response = await POST(
+      makeRequest({
+        integrationId: INTEGRATION_ID,
+        overrides: { jumia_prices: { 'SKU-1': 900 } },
+        productId: PRODUCT_ID,
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(mockPushPriceUpdates).toHaveBeenCalled();
+    expect(mockRpc).toHaveBeenCalledWith('apply_jumia_variant_price_updates', {
+      p_merchant_id: MERCHANT_ID,
+      p_updates: [{ id: 'map-1', price: 900 }],
+    });
+  });
+
+  it('skips variant price persistence when the price feed fails', async () => {
+    vi.mocked(loadJumiaMarketplaceCurrency).mockResolvedValue({
+      ok: true,
+      currency: 'NGN',
+    });
+    mockPushPriceUpdates.mockImplementationOnce(async (...args: unknown[]) => {
+      (args[5] as string[]).push('Price feed rejected');
+      return { submittedSkus: [] as string[] };
+    });
+
+    const response = await POST(
+      makeRequest({
+        integrationId: INTEGRATION_ID,
+        overrides: { jumia_prices: { 'SKU-1': 900 } },
+        productId: PRODUCT_ID,
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(false);
+    expect(body.errors).toEqual(['Price feed rejected']);
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('persists the submitted subset of a partial price feed', async () => {
+    vi.mocked(loadJumiaMarketplaceCurrency).mockResolvedValue({
+      ok: true,
+      currency: 'NGN',
+    });
+    mockMappingsOrder.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'map-1',
+          product_id: PRODUCT_ID,
+          variant_id: null,
+          jumia_sku: 'SKU-1',
+          jumia_seller_sku: 'SKU-1',
+          jumia_product_id: 'JUMIA-1',
+          jumia_price: 1000,
+          jumia_sale_price: null,
+          jumia_sale_start: null,
+          jumia_sale_end: null,
+          is_active: true,
+          sync_inventory: true,
+          sync_price: false,
+          sync_status: 'synced',
+          last_synced_at: null,
+          sync_error: null,
+          created_at: '2026-08-13T10:00:00Z',
+          updated_at: '2026-08-13T10:00:00Z',
+        },
+        {
+          id: 'map-2',
+          product_id: PRODUCT_ID,
+          variant_id: null,
+          jumia_sku: 'SKU-2',
+          jumia_seller_sku: 'SKU-2',
+          jumia_product_id: 'JUMIA-2',
+          jumia_price: null,
+          jumia_sale_price: null,
+          jumia_sale_start: null,
+          jumia_sale_end: null,
+          is_active: true,
+          sync_inventory: true,
+          sync_price: false,
+          sync_status: 'synced',
+          last_synced_at: null,
+          sync_error: null,
+          created_at: '2026-08-13T10:00:00Z',
+          updated_at: '2026-08-13T10:00:00Z',
+        },
+      ],
+      error: null,
+    });
+    mockPushPriceUpdates.mockImplementationOnce(async (...args: unknown[]) => {
+      (args[5] as string[]).push(
+        'Price update skipped for SKU-2: no price available (override or existing)'
+      );
+      return { submittedSkus: ['SKU-1'] };
+    });
+
+    const response = await POST(
+      makeRequest({
+        integrationId: INTEGRATION_ID,
+        overrides: { jumia_prices: { 'SKU-1': 900 } },
+        productId: PRODUCT_ID,
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(false);
+    expect(mockRpc).toHaveBeenCalledWith('apply_jumia_variant_price_updates', {
+      p_merchant_id: MERCHANT_ID,
+      p_updates: [{ id: 'map-1', price: 900 }],
+    });
   });
 });

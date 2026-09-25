@@ -329,6 +329,27 @@ describe('Jumia order sync operations', () => {
     ).resolves.toEqual(notificationResult);
   });
 
+  it('forwards token exclusions for partial-delivery retries', async () => {
+    mocks.notifyMerchant.mockResolvedValue({
+      sent: 1,
+      failed: 0,
+      errors: [],
+    });
+
+    await notifySyncedJumiaOrder('merchant-1', order, 'baci-order-1', {
+      excludeTokens: ['token-a'],
+    });
+
+    expect(mocks.notifyMerchant).toHaveBeenCalledWith(
+      'merchant-1',
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({ jumia_order_id: order.id }),
+      'orders',
+      { excludeTokens: ['token-a'] }
+    );
+  });
+
   it('propagates notification delivery errors', async () => {
     mocks.notifyMerchant.mockRejectedValue(new Error('Push service down'));
 

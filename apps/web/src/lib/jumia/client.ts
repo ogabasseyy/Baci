@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { z } from 'zod';
+import { getJumiaClientId } from '@/env';
 import {
   getJumiaBaseUrl,
   getJumiaEnvironment,
@@ -11,57 +12,84 @@ import {
   loadJumiaIntegrationConfig,
   loadSingleJumiaMerchantIntegrationConfig,
 } from '@/lib/jumia/jumia-client-config';
+import { refreshJumiaClientAccessToken } from '@/lib/jumia/jumia-client-token-persistence';
 import { waitForJumiaRequestSlot } from '@/lib/jumia/jumia-rate-limiter';
+import type { JumiaCredentialServiceClient } from '@/lib/supabase/service';
 import type { JumiaShop } from '@/schemas/jumia';
-import {
-  JumiaShopsResponseSchema,
-  JumiaTokenResponseSchema,
-} from '@/schemas/jumia';
+import { JumiaShopsResponseSchema } from '@/schemas/jumia';
 
 export { JumiaApiError, jumiaErrorResponse } from '@/lib/jumia/helpers';
 
 const REQUEST_TIMEOUT_MS = 30_000;
-const MISSING_REFRESH_TOKEN_SYNC_ERROR =
-  'Reconnect Jumia to resume syncing. Jumia did not return a refresh token for this OAuth connection.';
 type JumiaRequestMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 
 export class JumiaClient {
   readonly integrationId: string;
   readonly merchantId: string;
   readonly shopId: string;
+  readonly countryCode: string | null;
+  readonly marketplaceKey: string;
   private accessToken: string | null;
   private tokenExpiresAt: Date | null;
+  private refreshTokenExpiresAt: Date | null;
   private refreshToken: string;
+  private clientId: string;
+  private authorizationId: string | undefined;
+  private authorizationRotationVersion: number | undefined;
   private environment: JumiaEnvironment;
   private supabase: SupabaseClient | null;
+  private credentialClient: JumiaCredentialServiceClient | null;
 
   constructor(config: {
     integrationId: string;
     merchantId: string;
     shopId: string;
+    countryCode?: string | null;
+    marketplaceKey: string;
     accessToken: string | null;
     refreshToken: string;
+    clientId?: string;
+    authorizationId?: string;
+    authorizationRotationVersion?: number;
     tokenExpiresAt: Date | null;
+    refreshTokenExpiresAt?: Date | null;
     environment?: JumiaEnvironment;
     supabase?: SupabaseClient;
+    credentialClient?: JumiaCredentialServiceClient;
   }) {
     this.integrationId = config.integrationId;
     this.merchantId = config.merchantId;
     this.shopId = config.shopId;
+    this.countryCode = config.countryCode ?? null;
+    this.marketplaceKey = config.marketplaceKey;
     this.accessToken = config.accessToken;
     this.refreshToken = config.refreshToken;
+    this.clientId = config.clientId ?? getJumiaClientId() ?? '';
+    if (!this.clientId) {
+      throw new JumiaApiError(500, 'Jumia client ID is not configured');
+    }
+    this.authorizationId = config.authorizationId;
+    this.authorizationRotationVersion = config.authorizationRotationVersion;
     this.tokenExpiresAt = config.tokenExpiresAt;
+    this.refreshTokenExpiresAt = config.refreshTokenExpiresAt ?? null;
     this.environment = config.environment ?? getJumiaEnvironment();
     this.supabase = config.supabase ?? null;
+    this.credentialClient = config.credentialClient ?? null;
   }
 
   static async forIntegration(
     supabase: SupabaseClient,
     merchantId: string,
-    integrationId: string
+    integrationId: string,
+    options?: { credentialClient?: JumiaCredentialServiceClient }
   ): Promise<JumiaClient> {
     return new JumiaClient(
-      await loadJumiaIntegrationConfig(supabase, merchantId, integrationId)
+      await loadJumiaIntegrationConfig(
+        supabase,
+        merchantId,
+        integrationId,
+        options
+      )
     );
   }
 
@@ -85,93 +113,42 @@ export class JumiaClient {
     );
   }
 
-  private getScopedSupabaseForPersistence(): SupabaseClient {
-    if (this.supabase) {
-      return this.supabase;
-    }
-
-    throw new JumiaApiError(
-      500,
-      'Scoped Supabase client is required to persist Jumia token state'
-    );
-  }
-
   async refreshAccessToken(): Promise<void> {
-    if (!this.refreshToken?.trim()) {
-      const sb = this.getScopedSupabaseForPersistence();
-      const { error: updateError } = await sb
-        .from('marketplace_integrations')
-        .update({ sync_error: MISSING_REFRESH_TOKEN_SYNC_ERROR })
-        .eq('id', this.integrationId)
-        .eq('merchant_id', this.merchantId);
+    const updates = await refreshJumiaClientAccessToken(
+      {
+        integrationId: this.integrationId,
+        merchantId: this.merchantId,
+        accessToken: this.accessToken,
+        refreshToken: this.refreshToken,
+        clientId: this.clientId,
+        authorizationId: this.authorizationId,
+        authorizationRotationVersion: this.authorizationRotationVersion,
+        tokenExpiresAt: this.tokenExpiresAt,
+        refreshTokenExpiresAt: this.refreshTokenExpiresAt,
+        supabase: this.supabase,
+        credentialClient: this.credentialClient,
+        apiBase: this.apiBase,
+      },
+      (url, init) => this.fetchWithThrottle(url, init)
+    );
 
-      throw new JumiaApiError(
-        401,
-        MISSING_REFRESH_TOKEN_SYNC_ERROR,
-        updateError ?? undefined
-      );
+    if (updates.accessToken !== undefined) {
+      this.accessToken = updates.accessToken;
     }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-    try {
-      const response = await this.fetchWithThrottle(`${this.apiBase}/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_type: 'refresh_token',
-          refresh_token: this.refreshToken,
-          client_id: process.env.JUMIA_CLIENT_ID || '',
-        }),
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        throw new JumiaApiError(
-          response.status,
-          'Token refresh failed',
-          await response.text()
-        );
-      }
-
-      const json = await response.json();
-      const data = JumiaTokenResponseSchema.parse(json);
-
-      this.accessToken = data.access_token;
-      if (data.refresh_token) {
-        this.refreshToken = data.refresh_token;
-      }
-      this.tokenExpiresAt = new Date(Date.now() + data.expires_in * 1000);
-
-      const sb = this.getScopedSupabaseForPersistence();
-      const { error: updateError } = await sb
-        .from('marketplace_integrations')
-        .update({
-          access_token: data.access_token,
-          refresh_token: data.refresh_token || this.refreshToken,
-          token_expires_at: this.tokenExpiresAt.toISOString(),
-        })
-        .eq('id', this.integrationId)
-        .eq('merchant_id', this.merchantId);
-
-      if (updateError) {
-        throw new JumiaApiError(
-          500,
-          `Failed to persist refreshed token for integration ${this.integrationId}`,
-          updateError
-        );
-      }
-    } catch (error) {
-      if (
-        (error instanceof Error || error instanceof DOMException) &&
-        error.name === 'AbortError'
-      ) {
-        throw new JumiaApiError(408, 'Token refresh request timed out');
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
+    if (updates.refreshToken !== undefined) {
+      this.refreshToken = updates.refreshToken;
+    }
+    if (updates.tokenExpiresAt !== undefined) {
+      this.tokenExpiresAt = updates.tokenExpiresAt;
+    }
+    if (updates.refreshTokenExpiresAt !== undefined) {
+      this.refreshTokenExpiresAt = updates.refreshTokenExpiresAt ?? null;
+    }
+    if (updates.clientId !== undefined) {
+      this.clientId = updates.clientId;
+    }
+    if (updates.authorizationRotationVersion !== undefined) {
+      this.authorizationRotationVersion = updates.authorizationRotationVersion;
     }
   }
 

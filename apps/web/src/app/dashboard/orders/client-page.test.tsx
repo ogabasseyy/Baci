@@ -29,6 +29,7 @@ vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchant: vi.fn(() => ({
     merchant: { id: 'm-1', slug: 'test', currency: 'NGN' },
     loading: false,
+    hasPermission: vi.fn(() => true),
   })),
 }));
 vi.mock('@/hooks/use-toast', () => ({
@@ -163,6 +164,24 @@ describe('OrdersClientPage', () => {
       expect(mocks.getOrders).toHaveBeenCalledWith(
         'm-1',
         expect.objectContaining({ source: 'agentic' })
+      );
+    });
+  });
+
+  it('threads the Jumia link scope into the order query', async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams('source=jumia&integrationId=int-1') as never
+    );
+
+    render(<OrdersClientPage />);
+
+    await waitFor(() => {
+      expect(mocks.getOrders).toHaveBeenCalledWith(
+        'm-1',
+        expect.objectContaining({
+          source: 'jumia',
+          jumiaIntegrationId: 'int-1',
+        })
       );
     });
   });

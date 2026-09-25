@@ -6,6 +6,7 @@ const commonEnv = {
   BACI_REPO_DIR: '/opt/baci/app',
   BACI_WEB_BASE_URL: 'https://usebaci.com',
   IMEI_IDENTIFIER_ENCRYPTION_KEY: 'encryption-key',
+  JUMIA_AUTHORIZATION_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64'),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon-key',
   NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co',
   PETROCK_API_TOKEN: 'petrock-token',
@@ -15,6 +16,7 @@ const commonEnv = {
   QUIZ_PHASE: '1a',
   QUIZ_PRODUCTION_APPROVED: 'false',
   SUPABASE_SERVICE_ROLE_KEY: 'service-role-key',
+  SUPABASE_JUMIA_CREDENTIAL_KEY: 'jumia-credential-key',
   ZEPTOMAIL_TOKEN: 'zeptomail-token',
 };
 
@@ -53,6 +55,28 @@ describe('direct worker environment preflight', () => {
     });
 
     assert.deepEqual(problems, ['ZEPTOMAIL_TOKEN is required']);
+  });
+
+  it('requires the shared Jumia authorization encryption key', () => {
+    const problems = getDirectWorkerPreflightProblems({
+      ...commonEnv,
+      JUMIA_AUTHORIZATION_ENCRYPTION_KEY: '',
+    });
+
+    assert.deepEqual(problems, [
+      'JUMIA_AUTHORIZATION_ENCRYPTION_KEY is required',
+    ]);
+  });
+
+  it('rejects a Jumia authorization key that is not 32 decoded bytes', () => {
+    const problems = getDirectWorkerPreflightProblems({
+      ...commonEnv,
+      JUMIA_AUTHORIZATION_ENCRYPTION_KEY: Buffer.alloc(16).toString('base64'),
+    });
+
+    assert.deepEqual(problems, [
+      'JUMIA_AUTHORIZATION_ENCRYPTION_KEY must be Base64-encoded 32 bytes',
+    ]);
   });
 
   it('requires the full quiz production gate', () => {

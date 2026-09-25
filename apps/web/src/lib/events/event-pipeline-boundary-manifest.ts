@@ -157,6 +157,7 @@ const factoryExports: Readonly<Record<FactoryKind, readonly string[]>> = {
 };
 const serviceSentinels: Readonly<Record<string, string>> = {
   'apps/web/src/lib/ads/server-credential-client.ts': 'ads-credentials',
+  'apps/web/src/lib/jumia/server-credential-client.ts': 'jumia-credentials',
   'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts':
     'wallet-funding-recovery',
   'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts':

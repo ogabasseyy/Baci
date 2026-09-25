@@ -4,12 +4,17 @@ import { getAllOrders, getOrderItems } from '@/lib/jumia/orders';
 
 const mocks = vi.hoisted(() => ({
   forIntegration: vi.fn(),
+  syncJumiaStockForIntegration: vi.fn(),
 }));
 
 vi.mock('@/lib/jumia/client', () => ({
   JumiaClient: {
     forIntegration: mocks.forIntegration,
   },
+}));
+
+vi.mock('@/lib/jumia/sync-jumia-stock-integration', () => ({
+  syncJumiaStockForIntegration: mocks.syncJumiaStockForIntegration,
 }));
 
 vi.mock('@/lib/jumia/orders', () => ({
@@ -60,6 +65,7 @@ describe('syncJumiaOrdersForActiveIntegrations', () => {
       canonicalCreated: 0,
       canonicalUpdated: 0,
       notified: 0,
+      stockUpdated: 0,
       orderErrors: 0,
       errors: [],
     });
@@ -74,6 +80,8 @@ describe('syncJumiaOrdersForActiveIntegrations', () => {
             id: 'integration-1',
             merchant_id: 'merchant-1',
             shop_id: 'shop-1',
+            connection_method: 'self_authorization',
+            jumia_authorization_id: 'authorization-1',
             last_sync_at: '2026-04-25T07:00:00.000Z',
             sync_config: { orders: true },
           },
@@ -144,11 +152,133 @@ describe('syncJumiaOrdersForActiveIntegrations', () => {
         source: 'jumia',
         jumia_order_id: order.id,
       }),
-      'orders'
+      'orders',
+      undefined
     );
     expect(notifyUpdateQuery.update).toHaveBeenCalledWith({
       notification_sent: true,
     });
+  });
+
+  it('skips resending a push that a previous run already delivered', async () => {
+    const marketplaceQuery = createQuery(
+      {
+        data: [
+          {
+            id: 'integration-1',
+            merchant_id: 'merchant-1',
+            shop_id: 'shop-1',
+            connection_method: 'self_authorization',
+            jumia_authorization_id: 'authorization-1',
+            last_sync_at: '2026-04-25T07:00:00.000Z',
+            sync_config: { orders: true },
+          },
+        ],
+        error: null,
+      },
+      { terminalEqCall: 2 }
+    );
+    const existingJumiaQuery = createQuery({
+      data: [
+        {
+          jumia_order_id: order.id,
+          notification_sent: false,
+          baci_order_id: null,
+        },
+      ],
+      error: null,
+    });
+    const existingCanonicalQuery = createQuery({ data: [], error: null });
+    const insertOrderQuery = createQuery({
+      data: {
+        id: 'baci-order-1',
+        external_id: order.id,
+        tracking_token: 'tracking-token',
+      },
+      error: null,
+    });
+    const cacheQuery = createQuery({ error: null }, { terminalUpsert: true });
+    const notifyUpdateQuery = createQuery({
+      data: { jumia_order_id: order.id },
+      error: null,
+    });
+    const deliveredQuery = createQuery(
+      { data: [{ id: 'attempt-1' }], error: null },
+      { terminalIn: true }
+    );
+    const syncCursorQuery = createQuery({ error: null }, { terminalEqCall: 1 });
+    const supabase = createSupabaseMock(
+      {
+        marketplace_integrations: [marketplaceQuery, syncCursorQuery],
+        jumia_orders: [existingJumiaQuery, cacheQuery, notifyUpdateQuery],
+        orders: [existingCanonicalQuery, insertOrderQuery],
+        push_notification_attempts: [deliveredQuery],
+      },
+      {
+        replace_order_items: [{ error: null }],
+      }
+    );
+
+    mocks.forIntegration.mockResolvedValue({ client: true });
+    vi.mocked(getAllOrders).mockResolvedValue([order]);
+    vi.mocked(getOrderItems).mockResolvedValue({
+      orderId: order.id,
+      orderNumber: order.number,
+      items: [item],
+    });
+
+    const result = await syncJumiaOrdersForActiveIntegrations(supabase);
+
+    expect(result.synced).toBe(1);
+    expect(result.notified).toBe(0);
+    expect(notifyMerchant).not.toHaveBeenCalled();
+    // The stale marker is repaired so later runs skip via the cheap check.
+    expect(notifyUpdateQuery.update).toHaveBeenCalledWith({
+      notification_sent: true,
+    });
+  });
+
+  it('forwards the restricted credential client when creating Jumia clients', async () => {
+    const marketplaceQuery = createQuery(
+      {
+        data: [
+          {
+            id: 'integration-1',
+            merchant_id: 'merchant-1',
+            shop_id: 'shop-1',
+            connection_method: 'self_authorization',
+            jumia_authorization_id: 'authorization-1',
+            last_sync_at: '2026-04-25T07:00:00.000Z',
+            sync_config: { orders: true },
+          },
+        ],
+        error: null,
+      },
+      { terminalEqCall: 2 }
+    );
+    const existingJumiaQuery = createQuery({ data: [], error: null });
+    const existingCanonicalQuery = createQuery({ data: [], error: null });
+    const syncCursorQuery = createQuery({ error: null }, { terminalEqCall: 1 });
+    const supabase = createSupabaseMock({
+      marketplace_integrations: [marketplaceQuery, syncCursorQuery],
+      jumia_orders: [existingJumiaQuery],
+      orders: [existingCanonicalQuery],
+    });
+
+    mocks.forIntegration.mockResolvedValue({ client: true });
+    vi.mocked(getAllOrders).mockResolvedValue([]);
+    const credentialClient = { credential: true };
+
+    await syncJumiaOrdersForActiveIntegrations(supabase, {
+      credentialClient: credentialClient as never,
+    });
+
+    expect(mocks.forIntegration).toHaveBeenCalledWith(
+      supabase,
+      'merchant-1',
+      'integration-1',
+      { credentialClient }
+    );
   });
 
   it('keeps the sync cursor in place when every Jumia order fails', async () => {
@@ -188,6 +318,7 @@ describe('syncJumiaOrdersForActiveIntegrations', () => {
       canonicalCreated: 0,
       canonicalUpdated: 0,
       notified: 0,
+      stockUpdated: 0,
       orderErrors: 1,
       errors: ['merchant-1/jumia-order-1: item API timeout'],
     });
@@ -204,6 +335,110 @@ describe('syncJumiaOrdersForActiveIntegrations', () => {
       expect.objectContaining({
         jumia_full_failure: expect.objectContaining({
           cursor: '2026-04-25T07:00:00.000Z',
+          count: 1,
+        }),
+      })
+    );
+  });
+
+  it('never advances the cursor past unpersisted orders on repeated full failures', async () => {
+    const marketplaceQuery = createQuery(
+      {
+        data: [
+          {
+            id: 'integration-1',
+            merchant_id: 'merchant-1',
+            shop_id: 'shop-1',
+            last_sync_at: '2026-04-25T07:00:00.000Z',
+            sync_config: {
+              orders: true,
+              jumia_full_failure: {
+                cursor: '2026-04-25T07:00:00.000Z',
+                count: 5,
+              },
+            },
+          },
+        ],
+        error: null,
+      },
+      { terminalEqCall: 2 }
+    );
+    const existingJumiaQuery = createQuery({ data: [], error: null });
+    const existingCanonicalQuery = createQuery({ data: [], error: null });
+    const syncCursorQuery = createQuery({ error: null }, { terminalEqCall: 1 });
+    const supabase = createSupabaseMock({
+      marketplace_integrations: [marketplaceQuery, syncCursorQuery],
+      jumia_orders: [existingJumiaQuery],
+      orders: [existingCanonicalQuery],
+    });
+
+    mocks.forIntegration.mockResolvedValue({ client: true });
+    vi.mocked(getAllOrders).mockResolvedValue([order]);
+    vi.mocked(getOrderItems).mockRejectedValue(new Error('item API timeout'));
+
+    const result = await syncJumiaOrdersForActiveIntegrations(supabase);
+
+    expect(result.orderErrors).toBe(1);
+    const updatePayload = syncCursorQuery.update.mock.calls[0]?.[0] as
+      | Record<string, unknown>
+      | undefined;
+    expect(updatePayload).not.toHaveProperty('last_sync_at');
+    expect(updatePayload?.sync_config).toEqual(
+      expect.objectContaining({
+        jumia_full_failure: expect.objectContaining({
+          cursor: '2026-04-25T07:00:00.000Z',
+          count: 6,
+        }),
+      })
+    );
+  });
+
+  it('persists a stable lower bound when a never-synced integration fully fails', async () => {
+    const marketplaceQuery = createQuery(
+      {
+        data: [
+          {
+            id: 'integration-1',
+            merchant_id: 'merchant-1',
+            shop_id: 'shop-1',
+            last_sync_at: null,
+            sync_config: { orders: true },
+          },
+        ],
+        error: null,
+      },
+      { terminalEqCall: 2 }
+    );
+    const existingJumiaQuery = createQuery({ data: [], error: null });
+    const existingCanonicalQuery = createQuery({ data: [], error: null });
+    const syncCursorQuery = createQuery({ error: null }, { terminalEqCall: 1 });
+    const supabase = createSupabaseMock({
+      marketplace_integrations: [marketplaceQuery, syncCursorQuery],
+      jumia_orders: [existingJumiaQuery],
+      orders: [existingCanonicalQuery],
+    });
+
+    mocks.forIntegration.mockResolvedValue({ client: true });
+    vi.mocked(getAllOrders).mockResolvedValue([order]);
+    vi.mocked(getOrderItems).mockRejectedValue(new Error('item API timeout'));
+
+    const result = await syncJumiaOrdersForActiveIntegrations(supabase);
+
+    expect(result.orderErrors).toBe(1);
+    const updatePayload = syncCursorQuery.update.mock.calls[0]?.[0] as
+      | Record<string, unknown>
+      | undefined;
+    // The persisted bound pins the next run's window instead of letting a
+    // recomputed seven-day lookback age the failed order out.
+    expect(typeof updatePayload?.last_sync_at).toBe('string');
+    const lowerBoundAgeMs =
+      Date.now() - Date.parse(updatePayload?.last_sync_at as string);
+    expect(lowerBoundAgeMs).toBeGreaterThan(6.9 * 86_400_000);
+    expect(lowerBoundAgeMs).toBeLessThan(7.1 * 86_400_000);
+    expect(updatePayload?.sync_config).toEqual(
+      expect.objectContaining({
+        jumia_full_failure: expect.objectContaining({
+          cursor: 'initial-sync',
           count: 1,
         }),
       })
@@ -378,11 +613,9 @@ describe('syncJumiaOrdersForActiveIntegrations', () => {
 
     expect(result.synced).toBe(0);
     expect(result.canonicalCreated).toBe(1);
-    expect(result.notified).toBe(1);
+    expect(result.notified).toBe(0);
     expect(result.orderErrors).toBe(1);
-    expect(notifyUpdateQuery.update).toHaveBeenCalledWith({
-      notification_sent: true,
-    });
+    expect(notifyUpdateQuery.update).not.toHaveBeenCalled();
     expect(result.errors).toEqual(
       expect.arrayContaining([
         expect.stringContaining(
@@ -399,5 +632,80 @@ describe('syncJumiaOrdersForActiveIntegrations', () => {
       })
     );
     expect(updatePayload).not.toHaveProperty('last_sync_at');
+  });
+
+  it('records stock-scope lookup failures instead of silently skipping', async () => {
+    const marketplaceQuery = createQuery(
+      {
+        data: [
+          {
+            id: 'integration-1',
+            merchant_id: 'merchant-1',
+            shop_id: 'shop-1',
+            connection_method: 'self_authorization',
+            jumia_authorization_id: 'authorization-1',
+            last_sync_at: null,
+            sync_config: { orders: false, stock: true },
+          },
+        ],
+        error: null,
+      },
+      { terminalEqCall: 2 }
+    );
+    const scopeQuery = createQuery(
+      { data: null, error: { message: 'db down' } },
+      { terminalEqCall: 4 }
+    );
+    const supabase = createSupabaseMock({
+      marketplace_integrations: [marketplaceQuery, scopeQuery],
+    });
+
+    const result = await syncJumiaOrdersForActiveIntegrations(supabase);
+
+    expect(result.stockUpdated).toBe(0);
+    expect(result.errors).toEqual([
+      'Failed to resolve Jumia stock scope for merchant-1: db down',
+    ]);
+    expect(mocks.forIntegration).not.toHaveBeenCalled();
+  });
+
+  it('records stock reconciliation failures as sync errors', async () => {
+    const marketplaceQuery = createQuery(
+      {
+        data: [
+          {
+            id: 'integration-1',
+            merchant_id: 'merchant-1',
+            shop_id: 'shop-1',
+            connection_method: 'self_authorization',
+            jumia_authorization_id: 'authorization-1',
+            last_sync_at: null,
+            sync_config: { orders: false, stock: true },
+          },
+        ],
+        error: null,
+      },
+      { terminalEqCall: 2 }
+    );
+    const scopeQuery = createQuery(
+      { data: [{ marketplace_key: 'NG-main' }], error: null },
+      { terminalEqCall: 4 }
+    );
+    const supabase = createSupabaseMock({
+      marketplace_integrations: [marketplaceQuery, scopeQuery],
+    });
+    mocks.syncJumiaStockForIntegration.mockResolvedValue({
+      updated: 0,
+      skipped: 1,
+      trackingFailures: 0,
+      reconciliationFailures: 2,
+      feedId: null,
+    });
+
+    const result = await syncJumiaOrdersForActiveIntegrations(supabase);
+
+    expect(result.errors).toEqual([
+      'merchant-1/stock: 2 mapping(s) failed to reconcile stock feeds',
+    ]);
   });
 });

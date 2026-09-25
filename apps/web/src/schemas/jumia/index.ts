@@ -4,6 +4,8 @@
  */
 
 export {
+  type JumiaSelfAuthorizationTokenResponse,
+  JumiaSelfAuthorizationTokenResponseSchema,
   type JumiaTokenError,
   JumiaTokenErrorSchema,
   type JumiaTokenResponse,
@@ -49,6 +51,14 @@ export {
   JumiaApiErrorSchema,
 } from '@/schemas/jumia/errors';
 export {
+  type JumiaExportProduct,
+  jumiaExportProductSchema,
+} from '@/schemas/jumia/export-product';
+export {
+  type JumiaExportProductVariation,
+  jumiaExportProductVariationSchema,
+} from '@/schemas/jumia/export-product-variation';
+export {
   type JumiaFeedCreateResponse,
   JumiaFeedCreateResponseSchema,
   type JumiaFeedDetailsResponse,
@@ -64,6 +74,7 @@ export {
   type JumiaReadyToShipResponse,
   JumiaReadyToShipResponseSchema,
 } from '@/schemas/jumia/fulfillment';
+export { jumiaMobileTicketSchema } from '@/schemas/jumia/mobile-ticket';
 export {
   type JumiaOrder,
   type JumiaOrderItem,
@@ -83,6 +94,8 @@ export {
   FulfillmentErrorItemSchema,
   type FulfillmentPackage,
   FulfillmentPackageSchema,
+  type ReadyToShipPackage,
+  ReadyToShipPackageSchema,
   type ShippingAddress,
   ShippingAddressSchema,
 } from '@/schemas/jumia/shared';

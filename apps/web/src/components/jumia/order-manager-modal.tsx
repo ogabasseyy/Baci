@@ -1,22 +1,10 @@
 'use client';
 
-import { AlertCircle, Loader2, Package, Printer, Truck, X } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -25,8 +13,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { fetchWithCsrf } from '@/lib/api-client';
-import { stripHtmlTags } from '@/lib/sanitize-core';
+import { JumiaOrderActionControls } from './jumia-order-action-controls';
+import {
+  type JumiaOrderAction,
+  runJumiaOrderAction,
+} from './run-jumia-order-action';
 
 function isValidHttpUrl(url: string | undefined): url is string {
   if (!url) return false;
@@ -51,19 +42,13 @@ interface JumiaOrderItem {
   trackingUrl?: string;
 }
 
-interface ActionResponse {
-  error?: string;
-  success?: boolean;
-  message?: string;
-  labels?: Array<{ label?: string }>;
-}
-
 interface OrderManagerModalProps {
   orderId: string;
   orderNumber: string;
   integrationId: string;
   isOpen?: boolean;
   onClose: () => void;
+  canManage?: boolean;
 }
 
 interface FetchItemsCallbacks {
@@ -101,133 +86,13 @@ async function loadOrderItems(
   }
 }
 
-interface ActionCallbacks {
-  setLabelUrls: (value: string[]) => void;
-  setBlockedLabelUrl: (value: string | null) => void;
-  setActionLoading: (value: string | null) => void;
-  refetch: () => void;
-  toast: ReturnType<typeof useToast>['toast'];
-}
-
-async function runOrderAction(
-  action: 'pack' | 'ready_to_ship' | 'print_label' | 'cancel',
-  orderId: string,
-  integrationId: string,
-  itemIds: string[],
-  {
-    setLabelUrls,
-    setBlockedLabelUrl,
-    setActionLoading,
-    refetch,
-    toast,
-  }: ActionCallbacks
-): Promise<void> {
-  setLabelUrls([]);
-  setBlockedLabelUrl(null);
-  setActionLoading(action);
-  try {
-    const res = await fetchWithCsrf('/api/marketplace/jumia/actions', {
-      method: 'POST',
-      body: JSON.stringify({
-        action,
-        integrationId,
-        orderId,
-        itemIds,
-      }),
-    });
-
-    let data: ActionResponse;
-    let jsonParsed = true;
-    const text = await res.text();
-    try {
-      data = JSON.parse(text);
-    } catch {
-      jsonParsed = false;
-      const MAX_RAW_LENGTH = 200;
-      const sanitized = stripHtmlTags(text).slice(0, MAX_RAW_LENGTH);
-      data = { error: sanitized } as ActionResponse;
-    }
-
-    if (!res.ok) throw new Error(data.error || 'Action failed');
-
-    // Treat non-JSON 200 responses as failures
-    if (!jsonParsed) {
-      throw new Error(
-        data.error || 'Server returned an unexpected non-JSON response'
-      );
-    }
-
-    if (action !== 'print_label') {
-      toast({
-        title: 'Success',
-        description: data.message || 'Action completed',
-      });
-      refetch();
-      return;
-    }
-
-    // print_label path
-    if (!data.labels || data.labels.length === 0) {
-      toast({
-        title: 'No Labels',
-        description: data.labels
-          ? 'No labels were generated for this order.'
-          : 'No labels returned for this order.',
-      });
-      refetch();
-      return;
-    }
-
-    const validLabels = data.labels.filter(
-      (entry): entry is { label: string } =>
-        typeof entry.label === 'string' && isValidHttpUrl(entry.label)
-    );
-
-    if (validLabels.length === 0) {
-      toast({
-        title: 'No Valid Labels',
-        description: 'No valid printable label URLs were returned.',
-        variant: 'destructive',
-      });
-      refetch();
-      return;
-    }
-
-    if (validLabels.length === 1) {
-      const popup = window.open(
-        validLabels[0].label,
-        '_blank',
-        'noopener,noreferrer'
-      );
-      if (!popup) {
-        setBlockedLabelUrl(validLabels[0].label);
-      }
-    }
-
-    setLabelUrls(validLabels.map((entry) => entry.label));
-    const count = validLabels.length;
-    toast({
-      title: 'Labels Generated',
-      description: `${count} label${count === 1 ? '' : 's'} ready`,
-    });
-    refetch();
-  } catch (err: unknown) {
-    toast({
-      title: 'Action Failed',
-      description: err instanceof Error ? err.message : 'Unknown error',
-      variant: 'destructive',
-    });
-  } finally {
-    setActionLoading(null);
-  }
-}
-
 export function OrderManagerModal({
   orderId,
   orderNumber,
   integrationId,
   isOpen = true,
   onClose,
+  canManage = true,
 }: OrderManagerModalProps) {
   const [items, setItems] = useState<JumiaOrderItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -261,10 +126,8 @@ export function OrderManagerModal({
     }
   }, [isOpen, orderId, integrationId]);
 
-  const handleAction = (
-    action: 'pack' | 'ready_to_ship' | 'print_label' | 'cancel'
-  ) =>
-    runOrderAction(
+  const handleAction = (action: JumiaOrderAction) =>
+    runJumiaOrderAction(
       action,
       orderId,
       integrationId,
@@ -366,122 +229,14 @@ export function OrderManagerModal({
               ))}
             </div>
 
-            {/* Actions Toolbar */}
-            <div className="flex flex-wrap gap-2 pt-4 border-t">
-              <Button
-                onClick={() => handleAction('pack')}
-                disabled={!!actionLoading}
-                variant="secondary"
-              >
-                {actionLoading === 'pack' ? (
-                  <Loader2 className="mr-2 size-4 animate-spin" />
-                ) : (
-                  <Package className="mr-2 size-4" />
-                )}
-                Pack All
-              </Button>
-
-              <Button
-                className="bg-orange-600 hover:bg-orange-700 text-white"
-                onClick={() => handleAction('ready_to_ship')}
-                disabled={!!actionLoading}
-              >
-                {actionLoading === 'ready_to_ship' ? (
-                  <Loader2 className="mr-2 size-4 animate-spin" />
-                ) : (
-                  <Truck className="mr-2 size-4" />
-                )}
-                Ready to Ship
-              </Button>
-
-              <Button
-                onClick={() => handleAction('print_label')}
-                disabled={!!actionLoading}
-                variant="outline"
-              >
-                {actionLoading === 'print_label' ? (
-                  <Loader2 className="mr-2 size-4 animate-spin" />
-                ) : (
-                  <Printer className="mr-2 size-4" />
-                )}
-                Print Label
-              </Button>
-
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button disabled={!!actionLoading} variant="destructive">
-                    {actionLoading === 'cancel' ? (
-                      <Loader2 className="mr-2 size-4 animate-spin" />
-                    ) : (
-                      <X className="mr-2 size-4" />
-                    )}
-                    Cancel
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      Cancel all items in this order?
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This action cannot be undone. All items in order #
-                      {orderNumber} will be cancelled on Jumia.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Go Back</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={() => handleAction('cancel')}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      Yes, Cancel Order
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </div>
-
-            {blockedLabelUrl && (
-              <Alert>
-                <AlertCircle className="size-4" />
-                <AlertTitle>Popup Blocked</AlertTitle>
-                <AlertDescription>
-                  Your browser blocked the label popup.{' '}
-                  <a
-                    href={blockedLabelUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium underline text-blue-600 hover:text-blue-800"
-                  >
-                    Click here to open the label
-                  </a>
-                  .
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {labelUrls.length > 0 && (
-              <div className="space-y-1 pt-2 border-t">
-                <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                  Shipping Labels:
-                </p>
-                <ul className="space-y-1">
-                  {labelUrls.map((url, index) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: index needed to handle duplicate label URLs
-                    <li key={`${url}-${index}`}>
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-blue-600 hover:text-blue-800 underline break-all"
-                      >
-                        {url}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <JumiaOrderActionControls
+              actionLoading={actionLoading}
+              blockedLabelUrl={blockedLabelUrl}
+              canManage={canManage}
+              handleAction={handleAction}
+              labelUrls={labelUrls}
+              orderNumber={orderNumber}
+            />
 
             <p className="text-xs text-gray-500 text-center">
               Actions apply to all items in this order. Shipment provider is

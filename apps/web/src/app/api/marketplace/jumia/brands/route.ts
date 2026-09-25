@@ -1,7 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import {
   authenticateApiRequest,
-  getMerchantIdForApiUser,
+  getUserAccess,
+  hasPermission,
 } from '@/lib/api-auth';
 import { getAllBrands } from '@/lib/jumia/catalog';
 import { JumiaClient } from '@/lib/jumia/client';
@@ -33,7 +34,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const merchantId = await getMerchantIdForApiUser(auth.supabase);
+    const access = await getUserAccess(auth.supabase);
+    if (!access || !hasPermission(access, 'integrations', 'manage')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    const merchantId = access.merchantId;
     if (!merchantId) {
       return NextResponse.json(
         { error: 'Merchant not found' },

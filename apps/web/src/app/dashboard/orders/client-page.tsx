@@ -28,11 +28,13 @@ import {
   isAgenticOrderSource,
   parseAgenticOrderSourceFilter,
 } from './agentic-order-source';
+import { parseJumiaOrderSourceFilter } from './jumia-order-source-filter';
 import type { PaymentStatus } from './order-statuses';
 import { OrdersFiltersBar } from './orders-filters-bar';
 import { OrdersListCard } from './orders-list-card';
 import { OrdersStatsCards } from './orders-stats-cards';
 import { OrdersUrgentAlert } from './orders-urgent-alert';
+import { resolveJumiaIntegrationId } from './resolve-jumia-integration-id';
 
 const _currencyFormatterCache = new Map<string, Intl.NumberFormat>();
 function getCurrencyFormatter(
@@ -73,7 +75,8 @@ export default function OrdersClientPage({
   },
 }: OrdersClientPageProps) {
   const searchParams = useSearchParams();
-  const { merchant, loading: merchantLoading } = useMerchant();
+  const { merchant, loading: merchantLoading, hasPermission } = useMerchant();
+  const canManageIntegrations = hasPermission('integrations', 'manage');
   const { loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [paymentFilter, setPaymentFilter] = useState<PaymentStatus | 'All'>(
@@ -94,7 +97,12 @@ export default function OrdersClientPage({
     null
   );
   const [jumiaIntegrations, setJumiaIntegrations] = useState<
-    Array<{ id: string; shop_name: string }>
+    Array<{
+      id: string;
+      shop_id?: string | null;
+      marketplace_key?: string | null;
+      shop_name: string;
+    }>
   >([]);
   const [jumiaConnectLoading, setJumiaConnectLoading] = useState(true);
   const [jumiaConnectError, setJumiaConnectError] = useState<string | null>(
@@ -102,9 +110,10 @@ export default function OrdersClientPage({
   );
   const agenticIssue = searchParams.get('agentic_issue');
   const agenticOrdersContext = getAgenticOrdersContext(agenticIssue);
-  const sourceFilter = parseAgenticOrderSourceFilter(
-    searchParams.get('source')
-  );
+  const sourceFilter =
+    parseAgenticOrderSourceFilter(searchParams.get('source')) ??
+    parseJumiaOrderSourceFilter(searchParams.get('source'));
+  const requestedJumiaIntegrationId = searchParams.get('integrationId');
   const isHydrated = useRef(false);
   const merchantId = merchant?.id ?? null;
   const [prevMerchantId, setPrevMerchantId] = useState<
@@ -138,7 +147,12 @@ export default function OrdersClientPage({
           ? data.integrations.filter(
               (
                 i: unknown
-              ): i is { id: string; shop_name: string; [k: string]: unknown } =>
+              ): i is {
+                id: string;
+                shop_id?: string | null;
+                shop_name: string;
+                [k: string]: unknown;
+              } =>
                 typeof i === 'object' &&
                 i !== null &&
                 typeof (i as Record<string, unknown>).id === 'string'
@@ -165,18 +179,13 @@ export default function OrdersClientPage({
     return () => controller.abort();
   }, [merchantId]);
 
-  /** Resolve the correct integration ID for a given order.
-   *  With a single integration, return it directly.
-   *  With multiple, return the first match — callers should prompt the user
-   *  when null is returned.
-   */
-  const getIntegrationIdForOrder = (_order: Order): string | null => {
-    if (jumiaIntegrations.length === 1) return jumiaIntegrations[0].id;
-    // Multiple integrations: without a per-order integration_id field,
-    // we cannot auto-resolve. Return null to signal the caller.
-    if (jumiaIntegrations.length > 1) return null;
-    return null;
-  };
+  const getIntegrationIdForOrder = (order: Order): string | null =>
+    resolveJumiaIntegrationId(
+      jumiaIntegrations,
+      requestedJumiaIntegrationId,
+      order.jumiaShopId,
+      order.jumiaMarketplaceKey
+    );
 
   useEffect(() => {
     if (
@@ -207,6 +216,9 @@ export default function OrdersClientPage({
         shippingStatus: shippingFilter,
         search: searchTerm,
         ...(sourceFilter ? { source: sourceFilter } : {}),
+        ...(requestedJumiaIntegrationId
+          ? { jumiaIntegrationId: requestedJumiaIntegrationId }
+          : {}),
       })
         .then((fetchedOrders) => {
           if (isStale) return;
@@ -242,6 +254,7 @@ export default function OrdersClientPage({
     initialOrders.length,
     merchantId,
     paymentFilter,
+    requestedJumiaIntegrationId,
     searchTerm,
     shippingFilter,
     sourceFilter,
@@ -545,9 +558,10 @@ export default function OrdersClientPage({
       {selectedJumiaOrder && getIntegrationIdForOrder(selectedJumiaOrder) && (
         <OrderManagerModal
           onClose={() => setSelectedJumiaOrder(null)}
-          orderId={selectedJumiaOrder.id}
+          orderId={selectedJumiaOrder.jumiaOrderId ?? selectedJumiaOrder.id}
           orderNumber={selectedJumiaOrder.orderNumber}
           integrationId={getIntegrationIdForOrder(selectedJumiaOrder) as string}
+          canManage={canManageIntegrations}
         />
       )}
     </div>

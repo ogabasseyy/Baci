@@ -43,6 +43,11 @@ export interface DashboardOrderRecord {
   customer_phone?: string;
   notes?: string;
   order_items?: DashboardOrderItem[];
+  import_metadata?: {
+    shopId?: unknown;
+    jumiaOrderId?: unknown;
+    [key: string]: unknown;
+  } | null;
 }
 
 interface DashboardTransactionRecord {
@@ -96,6 +101,26 @@ export function mapDashboardOrderRecord(
     }),
     createdAt: new Date(order.created_at).getTime(),
     source: order.source,
+    // Synced marketplace rows carry their provider shop in import
+    // metadata; surface it so multi-shop orders resolve their own
+    // integration for fulfillment.
+    jumiaShopId:
+      typeof order.import_metadata?.shopId === 'string'
+        ? order.import_metadata.shopId
+        : undefined,
+    // Two integrations can share one shop id across business clients;
+    // the marketplace key disambiguates them for fulfillment.
+    jumiaMarketplaceKey:
+      typeof order.import_metadata?.marketplaceKey === 'string'
+        ? order.import_metadata.marketplaceKey
+        : undefined,
+    // The fulfillment modal addresses Jumia by provider order ID, while
+    // the mapped id stays the local order UUID; legacy cache rows already
+    // use the provider ID as their id.
+    jumiaOrderId:
+      typeof order.import_metadata?.jumiaOrderId === 'string'
+        ? order.import_metadata.jumiaOrderId
+        : undefined,
     tracking_number: order.tracking_number,
     shipping_provider: order.shipping_provider,
     delivery_method: order.delivery_method,

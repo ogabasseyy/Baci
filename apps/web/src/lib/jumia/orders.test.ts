@@ -228,7 +228,7 @@ describe('getShipmentProviders', () => {
     );
   });
 
-  it('calls GET /orders/shipment-providers with orderItemIds params', async () => {
+  it('calls GET /orders/shipment-providers with repeated orderItemId params', async () => {
     const mockResponse = { shipmentProviders: [{ id: 'SP-1', name: 'DHL' }] };
     const client = createMockClient(mockResponse);
 
@@ -242,7 +242,7 @@ describe('getShipmentProviders', () => {
 
     const calledPath = getMockCalledPath(client);
     const url = new URL(`https://x${calledPath}`);
-    expect(url.searchParams.getAll('orderItemIds')).toEqual([
+    expect(url.searchParams.getAll('orderItemId')).toEqual([
       'ITEM-1',
       'ITEM-2',
     ]);

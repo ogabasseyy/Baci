@@ -1,7 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import {
   authenticateApiRequest,
-  getMerchantIdForApiUser,
+  getUserAccess,
+  hasPermission,
 } from '@/lib/api-auth';
 import {
   JumiaApiError,
@@ -14,6 +15,7 @@ import {
   integrationIdSchema,
   jumiaOrderIdParamSchema,
 } from '@/schemas/marketplace';
+import { getCachedJumiaOrderItems } from './get-cached-jumia-order-items';
 
 export async function GET(
   request: NextRequest,
@@ -56,12 +58,51 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const merchantId = await getMerchantIdForApiUser(auth.supabase);
+    const access = await getUserAccess(auth.supabase);
+    if (!access || !hasPermission(access, 'integrations', 'view')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    const merchantId = access.merchantId;
     if (!merchantId) {
       return NextResponse.json(
         { error: 'Merchant not found' },
         { status: 403 }
       );
+    }
+
+    if (!hasPermission(access, 'integrations', 'manage')) {
+      const cached = await getCachedJumiaOrderItems({
+        supabase: auth.supabase,
+        merchantId,
+        integrationId,
+        orderId: id,
+      });
+      if (cached.kind === 'database_error') {
+        logger.error({
+          message: 'Failed to load cached Jumia order items',
+          integrationId,
+          orderId: id,
+          error: cached.message,
+        });
+        return NextResponse.json(
+          { error: 'Failed to fetch cached items' },
+          { status: 500 }
+        );
+      }
+      if (cached.kind === 'missing') {
+        return NextResponse.json(
+          {
+            error:
+              'Order items are not cached; ask an integrations manager to sync Jumia orders',
+          },
+          { status: 503 }
+        );
+      }
+      return NextResponse.json({
+        orderId: cached.orderId,
+        orderNumber: cached.orderNumber,
+        items: cached.items,
+      });
     }
 
     let jumiaClient: JumiaClient;

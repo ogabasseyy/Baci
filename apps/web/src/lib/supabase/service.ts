@@ -8,6 +8,9 @@ const serviceRoleClientBrand: unique symbol = Symbol(
 const adsCredentialsClientBrand: unique symbol = Symbol(
   'baci.ads-credentials.service-role-client'
 );
+const jumiaCredentialsClientBrand: unique symbol = Symbol(
+  'baci.jumia-credentials.service-role-client'
+);
 const walletFundingRecoveryClientBrand: unique symbol = Symbol(
   'baci.wallet-funding-recovery.service-role-client'
 );
@@ -33,6 +36,17 @@ export type ServiceRoleClient = SupabaseClient<Database> & {
  */
 export type AdsCredentialServiceClient = SupabaseClient<Database> & {
   readonly [adsCredentialsClientBrand]: true;
+};
+
+/**
+ * A service-role client reserved for the server-only Jumia credential RPC.
+ *
+ * Keep this type distinct from the other privileged clients so Jumia
+ * ciphertext reads cannot accidentally flow through an unrelated worker or
+ * admin boundary.
+ */
+export type JumiaCredentialServiceClient = SupabaseClient<Database> & {
+  readonly [jumiaCredentialsClientBrand]: true;
 };
 
 /**
@@ -87,6 +101,9 @@ export function createServiceClient(
   sentinel: 'ads-credentials'
 ): AdsCredentialServiceClient;
 export function createServiceClient(
+  sentinel: 'jumia-credentials'
+): JumiaCredentialServiceClient;
+export function createServiceClient(
   sentinel: 'wallet-funding-recovery'
 ): WalletFundingRecoveryServiceClient;
 export function createServiceClient(
@@ -100,6 +117,7 @@ export function createServiceClient(
   sentinel?:
     | 'event-pipeline'
     | 'ads-credentials'
+    | 'jumia-credentials'
     | 'wallet-funding-recovery'
     | 'shipping-quote-booking-economics'
     | 'immediate-notification-completion'
@@ -113,7 +131,9 @@ export function createServiceClient(
     sentinel === 'ads-credentials'
       ? process.env.SUPABASE_ADS_CREDENTIAL_KEY ||
         process.env.SUPABASE_SERVICE_ROLE_KEY
-      : process.env.SUPABASE_SERVICE_ROLE_KEY;
+      : sentinel === 'jumia-credentials'
+        ? process.env.SUPABASE_JUMIA_CREDENTIAL_KEY
+        : process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url) {
     throw new Error(
@@ -125,7 +145,9 @@ export function createServiceClient(
     throw new Error(
       sentinel === 'ads-credentials'
         ? 'SUPABASE_ADS_CREDENTIAL_KEY or SUPABASE_SERVICE_ROLE_KEY is missing. This is required for Ads credential handlers.'
-        : 'SUPABASE_SERVICE_ROLE_KEY is missing. This is required for webhook handlers.'
+        : sentinel === 'jumia-credentials'
+          ? 'SUPABASE_JUMIA_CREDENTIAL_KEY is missing. This is required for Jumia credential handlers.'
+          : 'SUPABASE_SERVICE_ROLE_KEY is missing. This is required for webhook handlers.'
     );
   }
 
@@ -144,6 +166,11 @@ export function createServiceClient(
   if (sentinel === 'ads-credentials') {
     return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
       [adsCredentialsClientBrand]: serviceRoleBrandValue,
+    });
+  }
+  if (sentinel === 'jumia-credentials') {
+    return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
+      [jumiaCredentialsClientBrand]: serviceRoleBrandValue,
     });
   }
   if (sentinel === 'wallet-funding-recovery') {

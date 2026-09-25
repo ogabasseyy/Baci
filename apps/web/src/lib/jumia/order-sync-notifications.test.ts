@@ -40,7 +40,9 @@ import {
 } from './order-sync.test-helpers';
 import {
   getJumiaNotificationAttemptKey,
+  hasSentJumiaOrderNotification,
   markJumiaNotificationSent,
+  sendJumiaOrderNotification,
 } from './order-sync-notifications';
 
 describe('Jumia order sync notification markers', () => {
@@ -52,6 +54,160 @@ describe('Jumia order sync notification markers', () => {
     expect(getJumiaNotificationAttemptKey('merchant:1', 'order/1')).toBe(
       'merchant%3A1:order%2F1'
     );
+  });
+
+  it('detects a previously delivered push from the attempt log', async () => {
+    const attemptsQuery = createQuery(
+      { data: [{ id: 'attempt-1' }], error: null },
+      { terminalIn: true }
+    );
+    const supabase = createSupabaseMock({
+      push_notification_attempts: [attemptsQuery],
+    });
+
+    await expect(
+      hasSentJumiaOrderNotification(supabase, 'merchant-1', 'jumia-order-1')
+    ).resolves.toBe(true);
+    expect(attemptsQuery.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
+    expect(attemptsQuery.eq).toHaveBeenCalledWith(
+      'notification_type',
+      'new_order'
+    );
+    expect(attemptsQuery.eq).toHaveBeenCalledWith(
+      'payload->>jumia_order_id',
+      'jumia-order-1'
+    );
+    expect(attemptsQuery.in).toHaveBeenCalledWith('status', ['sent']);
+  });
+
+  it('fails open when the delivery lookup errors', async () => {
+    const errorQuery = createQuery(
+      { data: null, error: { message: 'lookup offline' } },
+      { terminalIn: true }
+    );
+    const emptyQuery = createQuery(
+      { data: [], error: null },
+      { terminalIn: true }
+    );
+
+    await expect(
+      hasSentJumiaOrderNotification(
+        createSupabaseMock({ push_notification_attempts: [errorQuery] }),
+        'merchant-1',
+        'jumia-order-1'
+      )
+    ).resolves.toBe(false);
+    await expect(
+      hasSentJumiaOrderNotification(
+        createSupabaseMock({ push_notification_attempts: [emptyQuery] }),
+        'merchant-1',
+        'jumia-order-1'
+      )
+    ).resolves.toBe(false);
+    // Unknown tables throw inside the mock; the lookup still fails open.
+    await expect(
+      hasSentJumiaOrderNotification(
+        createSupabaseMock({}),
+        'merchant-1',
+        'jumia-order-1'
+      )
+    ).resolves.toBe(false);
+  });
+
+  it('leaves partially failed push deliveries unmarked for retry', async () => {
+    const attemptsQuery = createQuery(
+      { data: [], error: null },
+      { terminalIn: true }
+    );
+    const markerQuery = createQuery({
+      data: { jumia_order_id: order.id },
+      error: null,
+    });
+    const supabase = createSupabaseMock({
+      push_notification_attempts: [attemptsQuery],
+      jumia_orders: [markerQuery],
+    });
+    const notifySyncedJumiaOrder = vi.fn().mockResolvedValue({
+      sent: 1,
+      failed: 1,
+      errors: [],
+    });
+    const onNotified = vi.fn();
+    const existingJumiaOrders = new Map();
+
+    await expect(
+      sendJumiaOrderNotification(supabase, {
+        merchantId: 'merchant-1',
+        integrationId: 'integration-1',
+        order,
+        canonicalOrderId: 'baci-order-1',
+        notificationKey: getJumiaNotificationAttemptKey('merchant-1', order.id),
+        attemptedNotificationKeys: new Set<string>(),
+        existingJumiaOrders,
+        notifySyncedJumiaOrder,
+        buildExistingJumiaCacheEntry: vi.fn(),
+        onNotified,
+      })
+    ).rejects.toThrow('Failed to notify merchant for Jumia order');
+    expect(markerQuery.update).not.toHaveBeenCalled();
+    expect(onNotified).not.toHaveBeenCalled();
+    expect(existingJumiaOrders.size).toBe(0);
+  });
+
+  it('resends only to tokens missed by earlier partial attempts', async () => {
+    const attemptsQuery = createQuery(
+      { data: [], error: null },
+      { terminalIn: true }
+    );
+    const deliveredQuery = createQuery(
+      {
+        data: [
+          { payload: { delivered_tokens: ['token-a'] } },
+          { payload: { delivered_tokens: ['token-b', 123] } },
+          { payload: {} },
+        ],
+        error: null,
+      },
+      { terminalEqCall: 3 }
+    );
+    const markerQuery = createQuery({
+      data: { jumia_order_id: order.id },
+      error: null,
+    });
+    const supabase = createSupabaseMock({
+      push_notification_attempts: [attemptsQuery, deliveredQuery],
+      jumia_orders: [markerQuery],
+    });
+    const notifySyncedJumiaOrder = vi.fn().mockResolvedValue({
+      sent: 1,
+      failed: 0,
+      errors: [],
+    });
+    const onNotified = vi.fn();
+
+    await sendJumiaOrderNotification(supabase, {
+      merchantId: 'merchant-1',
+      integrationId: 'integration-1',
+      order,
+      canonicalOrderId: 'baci-order-1',
+      notificationKey: getJumiaNotificationAttemptKey('merchant-1', order.id),
+      attemptedNotificationKeys: new Set<string>(),
+      existingJumiaOrders: new Map(),
+      notifySyncedJumiaOrder,
+      buildExistingJumiaCacheEntry: vi.fn(),
+      onNotified,
+    });
+
+    expect(notifySyncedJumiaOrder).toHaveBeenCalledWith(
+      'merchant-1',
+      order,
+      'baci-order-1',
+      { excludeTokens: ['token-a', 'token-b'] }
+    );
+    expect(markerQuery.update).toHaveBeenCalledWith({
+      notification_sent: true,
+    });
+    expect(onNotified).toHaveBeenCalledTimes(1);
   });
 
   it('retries notification_sent updates and scopes them to the merchant', async () => {
@@ -209,6 +365,7 @@ describe('Jumia order sync notification markers', () => {
         canonicalCreated: 1,
         canonicalUpdated: 1,
         notified: 1,
+        stockUpdated: 0,
         orderErrors: 0,
       })
     );
@@ -285,6 +442,7 @@ describe('Jumia order sync notification markers', () => {
         synced: 1,
         canonicalCreated: 1,
         notified: 0,
+        stockUpdated: 0,
         orderErrors: 0,
       })
     );

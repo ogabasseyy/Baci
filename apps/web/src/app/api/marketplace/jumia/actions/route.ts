@@ -8,17 +8,15 @@ import {
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
 import { JumiaClient } from '@/lib/jumia/client';
-import {
-  cancelItems,
-  packOrderV2,
-  printLabels,
-  readyToShip,
-} from '@/lib/jumia/fulfillment';
+import { cancelItems, printLabels, readyToShip } from '@/lib/jumia/fulfillment';
 import { JumiaApiError } from '@/lib/jumia/helpers';
-import { getOrderItems, getShipmentProviders } from '@/lib/jumia/orders';
+import { getOrderItems } from '@/lib/jumia/orders';
 import { logger } from '@/lib/logger';
 import { createClient } from '@/lib/supabase/server';
 import { integrationIdSchema } from '@/schemas/marketplace';
+import { executePackAction } from './pack-action';
+import { resolveJumiaActionTargetItems } from './resolve-jumia-action-target-items';
+import { updateJumiaActionOrderStatus } from './sync-jumia-action-status';
 
 /** Derive overall action status from Jumia success/error totals */
 function computeActionStatus(
@@ -31,28 +29,14 @@ function computeActionStatus(
   return 'failed';
 }
 
-/** Update local jumia_orders status and return a sync warning if the DB write fails */
-async function updateOrderStatus(
+/** Update local order status and return a sync warning if a DB write fails */
+function updateOrderStatus(
   supabase: Awaited<ReturnType<typeof createClient>>,
   orderId: string,
   merchantId: string,
   newStatus: string
-): Promise<{ syncWarning: string; details: string } | undefined> {
-  const { error } = await supabase
-    .from('jumia_orders')
-    .update({ status: newStatus })
-    .eq('jumia_order_id', orderId)
-    .eq('merchant_id', merchantId);
-
-  if (error) {
-    logger.error({
-      message: `Failed to update order status to ${newStatus}`,
-      error,
-      orderId,
-    });
-    return { syncWarning: 'Failed to update local DB', details: error.message };
-  }
-  return undefined;
+) {
+  return updateJumiaActionOrderStatus(supabase, orderId, merchantId, newStatus);
 }
 
 const ActionSchema = z.object({
@@ -155,6 +139,16 @@ export async function POST(request: NextRequest) {
       }
       targetItemIds = orderItems.items.map((i) => i.id);
       isAllItems = true;
+    } else {
+      // Explicit IDs can still cover the whole order: the order modal always
+      // sends the full item list. Compare against the provider's complete set.
+      const resolved = await resolveJumiaActionTargetItems(
+        jumiaClient,
+        orderId,
+        targetItemIds
+      );
+      if (!resolved.ok) return resolved.response;
+      isAllItems = resolved.isAllItems;
     }
 
     if (targetItemIds.length === 0) {
@@ -167,74 +161,24 @@ export async function POST(request: NextRequest) {
     // Execute action
     switch (action) {
       case 'pack': {
-        // V2 pack requires shipmentProviderId per package
-        let providerByItem: Map<string, string>;
-        if (shipmentProviderId) {
-          // Caller supplied a single provider — apply to every item
-          providerByItem = new Map(
-            targetItemIds.map((id) => [id, shipmentProviderId])
-          );
-        } else {
-          const providers = await getShipmentProviders(
-            jumiaClient,
-            targetItemIds
-          );
-          providerByItem = new Map<string, string>();
-          const orderItemsList = Array.isArray(providers?.orderItems)
-            ? providers.orderItems
-            : [];
-          for (const oi of orderItemsList) {
-            const firstProvider = oi.shipmentProviders?.[0]?.id;
-            if (firstProvider) {
-              providerByItem.set(oi.id, firstProvider);
-            }
-          }
-          if (providerByItem.size === 0) {
-            return NextResponse.json(
-              { error: 'No shipment provider available' },
-              { status: 400 }
-            );
-          }
-        }
-
-        const skippedItems = targetItemIds.filter(
-          (id) => !providerByItem.has(id)
-        );
-
-        const packResult = await packOrderV2(
-          jumiaClient,
-          targetItemIds
-            .filter((id) => providerByItem.has(id))
-            .map((id) => ({
-              orderItems: id,
-              // biome-ignore lint/style/noNonNullAssertion: filtered above
-              shipmentProviderId: providerByItem.get(id)!,
-              trackingCode,
-            }))
-        );
-
-        const packStatus = computeActionStatus(
-          packResult.success?.total ?? 0,
-          packResult.error?.total ?? 0
-        );
-
-        // Only update order-level status when ALL items were targeted (not a subset)
-        const syncWarning =
-          packStatus === 'full' && skippedItems.length === 0 && isAllItems
-            ? await updateOrderStatus(supabase, orderId, merchantId, 'Packed')
-            : undefined;
-
-        return NextResponse.json({
-          status: packStatus,
-          successCount: packResult.success?.total ?? 0,
-          errorCount: packResult.error?.total ?? 0,
-          packages: packResult.success?.packages ?? [],
-          ...(skippedItems.length > 0 && {
-            skippedItems: skippedItems,
-            skippedReason: 'No shipment provider available for these items',
-          }),
-          ...syncWarning,
+        const packResult = await executePackAction({
+          client: jumiaClient,
+          targetItemIds,
+          shipmentProviderId,
+          trackingCode,
+          isAllItems,
+          orderId,
+          merchantId,
+          updateOrderStatus: (id, merchant, status) =>
+            updateOrderStatus(supabase, id, merchant, status),
         });
+        if ('error' in packResult) {
+          return NextResponse.json(
+            { error: packResult.error },
+            { status: 400 }
+          );
+        }
+        return NextResponse.json(packResult);
       }
 
       case 'ready_to_ship': {

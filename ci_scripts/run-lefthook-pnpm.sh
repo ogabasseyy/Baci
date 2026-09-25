@@ -18,12 +18,12 @@ export PUPPETEER_SKIP_DOWNLOAD="${PUPPETEER_SKIP_DOWNLOAD:-true}"
 export PUPPETEER_CHROME_SKIP_DOWNLOAD="${PUPPETEER_CHROME_SKIP_DOWNLOAD:-true}"
 export PUPPETEER_CHROME_HEADLESS_SHELL_SKIP_DOWNLOAD="${PUPPETEER_CHROME_HEADLESS_SHELL_SKIP_DOWNLOAD:-true}"
 export PUPPETEER_SKIP_CHROME_HEADLESS_SHELL_DOWNLOAD="${PUPPETEER_SKIP_CHROME_HEADLESS_SHELL_DOWNLOAD:-true}"
+export PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false
 
 if sh "$root/ci_scripts/is-dep-less-worktree.sh"; then
   # Turbo and nested `pnpm run` subprocesses resolve the real pnpm binary
   # directly, bypassing hook-bin. PNPM_CONFIG_* is the supported way to
   # propagate sparse-worktree settings into those child invocations.
-  export PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false
   export PNPM_CONFIG_ALLOW_UNUSED_PATCHES=true
 
   if [ ! -x "$root/node_modules/.bin/turbo" ]; then

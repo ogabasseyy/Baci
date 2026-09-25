@@ -132,6 +132,30 @@ describe('supabase-history-replay sources', () => {
     );
   });
 
+  it('registers the Jumia authorization repair migrations in the replay input', () => {
+    expect(rows(PENDING_SOURCES)).toEqual(
+      expect.arrayContaining([
+        'e4b0d916cd49b542c2e7a4f3060b756bcebc7e9b5332a230277afa667fcb25a8 20260822100000_mark_reactivated_jumia_self_authorization_as_inserted.sql',
+        'b083e3e5682da5828f34d9593304d2371a1b38abb8020701e22e6ec1e1350f67 20260823100000_jumia_orphan_authorization_sweep.sql',
+        '3afab9495b805517ee42d7492a9666a608ffba11172321a3a810a0cb1c597780 20260823110000_harden_jumia_orphan_authorization_sweep.sql',
+        '629f967ffa25a8f79c38387262007e184e6ccb99d9bf0ef40cf5e43940ca00fa 20260824230000_allow_jumia_view_credential_refresh.sql',
+        '1cb9abb1ef1bd5b9026c44958c78ee8534be0fbc065076112d6f979ead65921e 20260824230100_lock_each_jumia_orphan_shop.sql',
+        'af3fa5a276348e8ec9ead71449beb1704a71a61adf6bd13e7a66542d5c2bfac2 20260825000001_restore_jumia_manage_credential_rotation.sql',
+        'f051891d4b3b48e8928e8e7ef0879ac97909ad3bbdfdd21a7d86169cfcd45852 20260825000100_serialize_jumia_disconnect_purge.sql',
+        'bd59247310c087e6811ff611507b462588a63fcbb43250007e15cc4d72715293 20260825000200_scope_jumia_disconnect_purge_to_locked_shop.sql',
+        '7d27621520df2f173b3382fca053d7f7d9ed57999317b6c2ff2e05bef5413c2a 20260825000300_claim_jumia_discovery_and_fix_handoff.sql',
+        '6d1ca4f4cc494923cd60ef008cb8cc1844a7811676c16297f551da2a67cd61b1 20260825000400_order_jumia_multi_shop_locks.sql',
+        '2ef84cf47dd191d491b8be7d61238389b9a43bd43956f84fa9b3dc56d97422cd 20260825000500_schedule_jumia_orphan_authorization_sweep.sql',
+        '7d8dda99f5415f36db99afc7692edbae2a438eb39223e5cb840ede0eb1bbf50f 20260825000600_harden_jumia_shop_locks_and_orphan_sweep.sql',
+        '0158b4a2394428b1c259f39ef391e662f37e0e99c09a9c357eceb2c44ab82d33 20260825000700_persist_jumia_oauth_integrations_atomically.sql',
+        '55494b40db1fdcc8eb8f352976a03ac9b3577d4eb94673840fd7dab4b6d73e73 20260825000800_require_legacy_jumia_self_authorization_reconnect.sql',
+        '9b0d19fa7a5e6b478b6785997f03c89d263ed6f01d311776a58ad5a62f4c6ee9 20260825000900_persist_existing_jumia_authorization_rotation.sql',
+        'bfd04e28d8c15b5fa354fe95060d7a222dfb4867c27e564499f3b07213ce1c3c 20260825001000_purge_displaced_jumia_authorizations.sql',
+        '2fba4e5bb89671a1b26c4f51157887b2118d5cd762530ae61672de6a1adf0570 20260825001100_allow_active_jumia_view_credential_refresh.sql',
+      ])
+    );
+  });
+
   it('registers the append-only sales collision repair for replay verification', () => {
     expect(rows(PENDING_SOURCES)).toContain(
       '2676132ef759384de03f6ad7eeed2f7e1e38abac02013aaca634bfb957106482 20260907111036_repair_sales_exclusion_wallet_version_collision.sql'

@@ -4981,6 +4981,7 @@ export type Database = {
           jumia_order_id: string;
           jumia_order_number: string | null;
           jumia_shop_id: string;
+          marketplace_key: string;
           merchant_id: string;
           notification_sent: boolean;
           shipping_address: Json | null;
@@ -5000,6 +5001,7 @@ export type Database = {
           jumia_order_id: string;
           jumia_order_number?: string | null;
           jumia_shop_id: string;
+          marketplace_key?: string;
           merchant_id: string;
           notification_sent?: boolean;
           shipping_address?: Json | null;
@@ -5019,6 +5021,7 @@ export type Database = {
           jumia_order_id?: string;
           jumia_order_number?: string | null;
           jumia_shop_id?: string;
+          marketplace_key?: string;
           merchant_id?: string;
           notification_sent?: boolean;
           shipping_address?: Json | null;
@@ -16862,6 +16865,30 @@ export type Database = {
         }[];
       };
       cleanup_old_oauth_handoff_tickets: { Args: never; Returns: undefined };
+      create_jumia_oauth_handoff_ticket: {
+        Args: { p_expires_at: string; p_merchant_id: string };
+        Returns: { expires_at: string; id: string }[];
+      };
+      redeem_jumia_oauth_handoff_ticket: {
+        Args: {
+          p_oauth_state: string;
+          p_redeemed_expires_at: string;
+          p_ticket_id: string;
+        };
+        Returns: boolean;
+      };
+      exchange_jumia_oauth_handoff_ticket: {
+        Args: { p_merchant_id: string; p_ticket_id: string };
+        Returns: boolean;
+      };
+      finalize_jumia_oauth_handoff_ticket: {
+        Args: { p_merchant_id: string; p_ticket_id: string };
+        Returns: boolean;
+      };
+      release_jumia_oauth_handoff_ticket: {
+        Args: { p_merchant_id: string; p_ticket_id: string };
+        Returns: boolean;
+      };
       cleanup_old_push_attempts: { Args: never; Returns: number };
       cleanup_old_push_tickets: { Args: never; Returns: number };
       cleanup_rate_limit_logs: {

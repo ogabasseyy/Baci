@@ -35,6 +35,39 @@ const baseOrder = {
 };
 
 describe('mapDashboardOrderRecord', () => {
+  it('propagates the synced marketplace shop id for fulfillment', () => {
+    const result = mapDashboardOrderRecord(
+      {
+        ...baseOrder,
+        source: 'jumia',
+        import_metadata: {
+          platform: 'jumia',
+          shopId: 'shop-9',
+          marketplaceKey: 'NG-main',
+          jumiaOrderId: 'provider-123',
+        },
+      },
+      { orderItemImageMap: new Map() }
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: 'order-1',
+        jumiaShopId: 'shop-9',
+        jumiaMarketplaceKey: 'NG-main',
+        jumiaOrderId: 'provider-123',
+      })
+    );
+  });
+
+  it('leaves the shop id undefined without marketplace metadata', () => {
+    const result = mapDashboardOrderRecord(baseOrder, {
+      orderItemImageMap: new Map(),
+    });
+
+    expect(result).toEqual(expect.objectContaining({ jumiaShopId: undefined }));
+  });
+
   it('preserves airport delivery metadata and uses the product image fallback', () => {
     const result = mapDashboardOrderRecord(baseOrder, {
       orderItemImageMap: new Map([

@@ -69,10 +69,10 @@ it('does not serialize an ordinary discount or wallet credit after selecting RED
               eligible_subtotal_kobo: 500_000,
               discount_kobo: 25_000,
               ineligible_subtotal_kobo: 0,
-              tax_kobo: 750,
+              tax_kobo: 375,
               shipping_kobo: 500,
               gift_wrapping_kobo: 0,
-              payable_kobo: 476_250,
+              payable_kobo: 475_875,
               mixed_basket: false,
             },
           },
@@ -123,8 +123,8 @@ it('does not serialize an ordinary discount or wallet credit after selecting RED
   const body = JSON.parse(String(orderCall?.[1]?.body));
   expect(body).toMatchObject({
     payment_method: 'uba_redvault',
-    expected_total: 5_750,
-    client_total: 5_750,
+    expected_total: 5_375,
+    client_total: 5_375,
     use_wallet_credit: false,
     wallet_amount: 0,
   });

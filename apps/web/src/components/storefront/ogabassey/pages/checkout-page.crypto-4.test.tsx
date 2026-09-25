@@ -72,9 +72,9 @@ it('records the full order total for crypto completion after wallet credits', as
         return {
           ok: true,
           json: async () => ({
-            // Wallet credits cover all but 750: provider initialization
+            // Wallet credits cover all but 375: provider initialization
             // runs on the residual while revenue stays the full total.
-            amountDueToGateway: 750,
+            amountDueToGateway: 375,
             order: {
               id: 'order-juicy-1',
               order_number: 'ORD-JUICY-1',
@@ -96,7 +96,7 @@ it('records the full order total for crypto completion after wallet credits', as
               address: 'T7WHdR7vj4i3L4575w8V5hV8tKf9w2Q3xY',
               chain: 'TRX',
               currency: 'USDT',
-              amount: 750,
+              amount: 375,
               crypto_amount: '1.5',
               confirmation_time: '10 minutes',
               payment_id: 'pay-1',
@@ -148,7 +148,7 @@ it('records the full order total for crypto completion after wallet credits', as
     });
 
     // Server-confirmed verification records the FULL order total, not
-    // the 750 residual the provider initialized.
+    // the 375 residual the provider initialized.
     fireEvent.click(
       await screen.findByRole('button', { name: /i've sent the payment/i })
     );
@@ -160,7 +160,7 @@ it('records the full order total for crypto completion after wallet credits', as
           payment_method: 'juicyway',
           payment_status: 'paid',
           reference: 'juicy-ref-1',
-          total: 5750,
+          total: 5375,
         })
       );
     });

@@ -72,7 +72,7 @@ it('traverses the Juicyway funnel from selector init to confirmed completion', a
         return {
           ok: true,
           json: async () => ({
-            amountDueToGateway: 5750,
+            amountDueToGateway: 5375,
             order: {
               id: 'order-juicy-1',
               order_number: 'ORD-JUICY-1',
@@ -96,7 +96,7 @@ it('traverses the Juicyway funnel from selector init to confirmed completion', a
               address: 'T7WHdR7vj4i3L4575w8V5hV8tKf9w2Q3xY',
               chain: 'TRX',
               currency: 'USDT',
-              amount: 5750,
+              amount: 5375,
               crypto_amount: '1.5',
               confirmation_time: '10 minutes',
               payment_id: 'pay-1',
@@ -159,7 +159,7 @@ it('traverses the Juicyway funnel from selector init to confirmed completion', a
     expect(juicywayPaymentStartedCalls()[0]?.[2]).toEqual(
       expect.objectContaining({
         payment_method: 'juicyway',
-        total: 5750,
+        total: 5375,
       })
     );
 
@@ -175,7 +175,7 @@ it('traverses the Juicyway funnel from selector init to confirmed completion', a
           payment_method: 'juicyway',
           payment_status: 'paid',
           reference: 'juicy-ref-1',
-          total: 5750,
+          total: 5375,
         })
       );
     });

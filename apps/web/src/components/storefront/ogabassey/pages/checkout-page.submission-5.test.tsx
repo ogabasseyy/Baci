@@ -102,12 +102,6 @@ it('strips/ignores negotiated price and cartDiscount when merchant is not entitl
     isHydrated: true,
   } as unknown as ReturnType<typeof useCart>);
 
-  const { calculateCommerce } = await import('@/lib/supabase/client');
-  vi.mocked(calculateCommerce).mockResolvedValue({
-    total: 10000,
-    taxAmount: 750, // 10000 * 7.5%
-  });
-
   const fetchMock = vi
     .spyOn(globalThis, 'fetch')
     .mockImplementation(async (input) => {
@@ -135,14 +129,6 @@ it('strips/ignores negotiated price and cartDiscount when merchant is not entitl
     });
 
   render(<CheckoutPage />);
-
-  // Expect calculateCommerce to be called with baseline subtotal (10000), not negotiated/discounted
-  await waitFor(() => {
-    expect(calculateCommerce).toHaveBeenCalledWith(
-      'calculate_order',
-      expect.objectContaining({ subtotal: 10000 })
-    );
-  });
 
   // Let's submit the order
   fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));

@@ -12,7 +12,7 @@ import {
   waitFor,
 } from './checkout-page-test-support';
 
-it('invokes calculateCommerce with subtotal excluding assurance and sends quantity-multiplied assurance to /api/orders', async () => {
+it('previews tax from subtotal excluding assurance and sends quantity-multiplied assurance to /api/orders', async () => {
   vi.mocked(hasPriceNegotiationEntitlement).mockReturnValue(true);
 
   // Set up cart with a negotiated price + assurance + quantity > 1
@@ -41,12 +41,6 @@ it('invokes calculateCommerce with subtotal excluding assurance and sends quanti
     isHydrated: true,
   } as unknown as ReturnType<typeof useCart>);
 
-  const { calculateCommerce } = await import('@/lib/supabase/client');
-  vi.mocked(calculateCommerce).mockResolvedValue({
-    total: 8000,
-    taxAmount: 600, // 8000 * 7.5%
-  });
-
   const fetchMock = vi
     .spyOn(globalThis, 'fetch')
     .mockImplementation(async (input) => {
@@ -74,14 +68,6 @@ it('invokes calculateCommerce with subtotal excluding assurance and sends quanti
     });
 
   render(<CheckoutPage />);
-
-  // Expect calculateCommerce to be called with itemSubtotal (8000), not checkoutCartTotal (8400)
-  await waitFor(() => {
-    expect(calculateCommerce).toHaveBeenCalledWith(
-      'calculate_order',
-      expect.objectContaining({ subtotal: 8000 })
-    );
-  });
 
   // Let's submit the order
   fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
@@ -112,7 +98,7 @@ it('invokes calculateCommerce with subtotal excluding assurance and sends quanti
       }),
     ]);
 
-    //expected_total = checkoutCartTotal (8400) + deliveryCost (0) + giftWrappingCost (0) + taxAmount (600) = 9000
+    // expected_total = checkoutCartTotal (8400) + deliveryCost (0) + giftWrappingCost (0) + taxAmount (600) = 9000
     expect(body.tax_amount).toBe(600);
     expect(body.expected_total).toBe(9000);
     expect(body.client_total).toBe(9000);

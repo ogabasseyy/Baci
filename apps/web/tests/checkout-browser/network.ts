@@ -13,15 +13,6 @@ export const test = base.extend<{ networkGuard: undefined }>({
       await context.route('**/*', (route) => {
         const request = route.request();
         const url = new URL(request.url());
-        if (url.pathname === '/functions/v1/calculate-commerce') {
-          const { data } = request.postDataJSON();
-          return route.fulfill({
-            json: {
-              taxAmount: data.subtotal * data.taxRate,
-              total: data.subtotal * (1 + data.taxRate) + data.shippingFee,
-            },
-          });
-        }
         const responses: Record<string, unknown> = {
           '/api/cart/validate': { invalidProductIds: [], priceChanges: [] },
           '/api/csrf': { token: 'fixture-csrf-token' },

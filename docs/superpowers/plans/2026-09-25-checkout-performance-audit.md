@@ -18,24 +18,19 @@ evidence and unmeasured production performance remain material gaps.
 | Problem | Change | Regression evidence |
 | --- | --- | --- |
 | Every state selection fetches a city list that checkout never uses | Remove the unused request and state; retain address detection and the state vocabulary lookup | Select a different autocomplete address and verify its city/state remain visible with zero city-list requests |
-| Old totals remain visible during recalculation or overwrite a newer result | Reuse `useOrderTotals`; key results to the current inputs, ignore obsolete successes/errors, replace duplicate page effect | Change subtotal/shipping/tax rate; resolve older results last; fail the current calculation after an earlier success |
+| Checkout tax preview depended on a remote pure-math request, so totals could be stale, pending or fail during submission | Extract the Edge function's exact preview arithmetic and use it synchronously in checkout; retain the order route's canonical per-line validation | Fractional, zero-rate and default-rate parity cases; checkout updates its preview immediately when subtotal, shipping or tax rate changes |
 
 The unused-lookup regression reproduced two unnecessary requests before removal
-and zero after removal, while preserving the detected address. The totals race
-was reproduced with deferred responses. Review additionally exposed stale totals
-during a pending/failed recalculation; four assertions reproduced that issue
-before results were keyed to the current inputs.
+and zero after removal, while preserving the detected address. The old totals
+request race was reproduced with deferred responses. Review then exposed that a
+current pending calculation could submit zero tax. Checkout no longer makes that
+request: its preview now uses the same arithmetic as `calculate-commerce`, so
+there is no pending/error/retry state or stale response to submit.
 
-The final 53 checkout page suites and 9 totals-hook cases passed all 108 tests.
-This preserves the commerce-service calculation and order API monetary
-validation. The totals helper has no cancellation interface: obsolete results
-are ignored, not network-aborted.
-
-The UI still maps unavailable totals to its existing zero-tax fallback. A future
-pricing boundary should explicitly model pending/error/ready state, tie readiness
-to the current cart fingerprint, and preserve server-authoritative amounts and
-retry identity when deciding whether submission may proceed. This audit does
-not claim that the complete pricing-loading contract has been redesigned.
+The order API remains authoritative: it recomputes canonical per-line tax and
+validates the submitted expected total. The synchronous helper is only a UI
+preview and deliberately keeps the Edge function's aggregate rounding behavior;
+it does not replace server pricing or provider validation.
 
 ## Static bundle observation
 
@@ -73,7 +68,6 @@ comparison.
 | High | `/api/orders/route.ts` remains 3,243 lines with legacy privileged data operations | Separate parsing, pricing/delivery, idempotent creation and post-commit work. Replace privileged edges only through narrowly scoped database contracts with disposable-DB guest/tenant/authorization tests. No expired exception is renewed by this PR. |
 | Medium | `ui/phone-input.tsx` eagerly imports the complete `react-phone-number-input/flags` map | Measure isolating the country picker/flags from initial checkout JavaScript. Preserve international selection, accessible names, keyboard behavior and existing asset/CSP rules. Compare emitted chunks and matched browser traces; do not assume a byte saving. |
 | Medium | Checkout imports analytics from `@baci/shared/contracts`, whose public barrel spans multiple domains | Evaluate focused public exports/imports, then compare bundle output. Avoid a blanket `sideEffects: false` claim without checking package initialization. Shared package changes require consumer and monorepo validation. |
-| Medium | Tax calculation is an asynchronous commerce-service request; loading/error state is implicit | Make current-cart pricing readiness explicit, avoid duplicate initial requests when hydration has not settled, and test failure/retry behavior. Do not replace server pricing with unchecked client amounts. |
 | Medium | Browser fixture mocks auth, orders, shipping and payments | Add staging evidence for actual sign-in, tenant routing, provider cancellation, webhook reconciliation and retry. A mocked payment handoff does not prove a charge or fulfillment. |
 
 ## Existing good decisions to preserve

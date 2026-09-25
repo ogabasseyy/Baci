@@ -87,6 +87,53 @@ for (const authenticated of [false, true]) {
   });
 }
 
+test('previews and submits VAT locally without a calculate-commerce request', async ({
+  page,
+}) => {
+  await seedCheckout(page);
+  let commerceRequests = 0;
+  await page.route('**/functions/v1/calculate-commerce', (route) => {
+    commerceRequests++;
+    return route.abort('blockedbyclient');
+  });
+  await page.route('**/api/orders', (route) => {
+    expect(route.request().postDataJSON()).toMatchObject({
+      expected_total: 107500,
+      tax_amount: 7500,
+    });
+    return route.fulfill({ json: { order, amountDueToGateway: 107500 } });
+  });
+  await page.route('**/api/payments/initialize', (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        reference: 'fixture-payment-reference',
+        authorization_url: '/payment-handoff',
+      },
+    })
+  );
+  const initialValidation = page.waitForResponse('**/api/cart/validate');
+  await page.goto('/checkout');
+  await (await initialValidation).finished();
+
+  await expect(
+    page.getByText('VAT (7.5%)', { exact: true }).filter({ visible: true })
+  ).toBeVisible();
+  await expect(
+    page.getByText('₦7,500', { exact: true }).filter({ visible: true })
+  ).toBeVisible();
+  await expect(
+    page.getByText('₦107,500', { exact: true }).filter({ visible: true })
+  ).toBeVisible();
+  await expect.poll(() => commerceRequests).toBe(0);
+
+  await page.getByRole('radio', { name: /paystack/i }).press('Space');
+  const orderResponse = page.waitForResponse('**/api/orders');
+  await page.getByRole('button', { name: 'Place Order', exact: true }).click();
+  await orderResponse;
+  await expect.poll(() => commerceRequests).toBe(0);
+});
+
 test('resumed order shows server totals and contact details with an empty cart', async ({
   page,
 }) => {
@@ -104,6 +151,9 @@ test('resumed order shows server totals and contact details with an empty cart',
   );
   await expect(
     page.getByRole('heading', { name: 'Order Summary' })
+  ).toBeVisible();
+  await expect(
+    page.getByText('₦107,500', { exact: true }).filter({ visible: true })
   ).toBeVisible();
   await expect(
     page

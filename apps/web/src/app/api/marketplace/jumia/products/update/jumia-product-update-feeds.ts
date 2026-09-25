@@ -247,9 +247,17 @@ export async function pushPriceUpdates(
     return { submittedSkus: [] };
   }
 
+  const scopedPrices = Object.hasOwn(overrides, 'jumia_prices')
+    ? overrides.jumia_prices
+    : undefined;
   const priceItems = readyMappings.flatMap((mapping) => {
-    const resolvedPrice = Object.hasOwn(overrides, 'jumia_prices')
-      ? (overrides.jumia_prices?.[mapping.jumia_sku] ?? mapping.jumia_price)
+    if (scopedPrices && !Object.hasOwn(scopedPrices, mapping.jumia_sku)) {
+      // The per-SKU override form scopes the feed to requested SKUs only;
+      // never resubmit stale cached prices for omitted variants.
+      return [];
+    }
+    const resolvedPrice = scopedPrices
+      ? (scopedPrices[mapping.jumia_sku] ?? mapping.jumia_price)
       : Object.hasOwn(overrides, 'jumia_price')
         ? overrides.jumia_price
         : mapping.jumia_price;

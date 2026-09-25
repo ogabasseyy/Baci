@@ -396,7 +396,7 @@ describe('pushPriceUpdates', () => {
           id: 'map-2',
           jumia_product_id: 'JUMIA-2',
           jumia_sku: 'SKU-2',
-          jumia_price: null,
+          jumia_price: 1200,
           jumia_sale_price: null,
           jumia_sale_start: null,
           jumia_sale_end: null,
@@ -410,7 +410,10 @@ describe('pushPriceUpdates', () => {
 
     expect(result).toEqual({ submittedSkus: ['SKU-1'] });
     expect(feedIds).toEqual(['feed-price-partial']);
-    expect(feedErrors).toHaveLength(1);
+    expect(feedErrors).toHaveLength(0);
+    expect(mockUpdatePrice).toHaveBeenCalledWith(expect.anything(), [
+      expect.objectContaining({ sellerSku: 'SKU-1' }),
+    ]);
   });
 
   it('returns no submitted SKUs when feed submission fails', async () => {

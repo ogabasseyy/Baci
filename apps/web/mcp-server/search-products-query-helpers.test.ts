@@ -1,11 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
   getConditionPrefilterClauses,
+  inferSmartphoneCategory,
   matchesConditionFamily,
   matchesRowConditionFamily,
 } from './search-products-query-helpers';
 
 describe('search-products condition helpers', () => {
+  it('infers phones without reclassifying accessory or mixed-device searches', () => {
+    expect(inferSmartphoneCategory('Redmi phones', undefined)).toBe('Smartphones');
+    expect(inferSmartphoneCategory('phone under 300000', undefined)).toBe('Smartphones');
+    expect(inferSmartphoneCategory('phone stand', undefined)).toBeUndefined();
+    expect(inferSmartphoneCategory('smartphone mount', undefined)).toBeUndefined();
+    expect(inferSmartphoneCategory('phones and tablets', undefined)).toBeUndefined();
+    expect(inferSmartphoneCategory('Redmi phones', 'Accessories')).toBeUndefined();
+  });
+
   it('keeps catalog condition prefilters as safe supersets', () => {
     expect(getConditionPrefilterClauses('open_box')).toEqual(
       expect.arrayContaining([

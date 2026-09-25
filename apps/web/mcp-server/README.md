@@ -98,6 +98,12 @@ server {
 }
 ```
 
+Before deploying with the production Compose default
+`MCP_TRUST_PROXY_REAL_IP=true`, verify the active nginx `location` for
+`mcp.ogabassey.com` overwrites `X-Real-IP` with `$remote_addr` on every request.
+The Compose port is loopback-only. If that proxy contract cannot be verified,
+set `MCP_TRUST_PROXY_REAL_IP=false` in the deployment environment until it is.
+
 ## Connecting to ChatGPT
 
 1. Go to **ChatGPT Settings → Apps & Connectors → Advanced settings**
@@ -158,7 +164,8 @@ Once connected, users can ask:
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Public Supabase key used under RLS for shopping tools |
 | `MCP_PUBLIC_ORIGIN` | No | Public HTTPS origin for proxied product images (default: `https://mcp.ogabassey.com`; set to the temporary tunnel origin for local ChatGPT QA) |
-| `MCP_TRUST_PROXY_REAL_IP` | No | Default `false`: rate-limit by the socket address. Set `true` only after verifying the private reverse proxy overwrites `X-Real-IP` on every request; never trust a client-supplied forwarded header. |
+| `MCP_TRUST_PROXY_REAL_IP` | No | Server default `false`; production Compose default `true` for the loopback nginx proxy. Verify nginx overwrites `X-Real-IP` before deploying, or override to `false`. |
+| `MCP_ENABLE_AGENTIC_CHECKOUT_TOOLS` | No | Explicitly forwarded by Compose; defaults to `false`. Set `true` only when checkout credentials and APIs are ready. |
 | `BACI_AGENTIC_ACCESS_TOKEN` | Yes for checkout | Baci-owned bearer token for agentic checkout APIs; this is not an OpenAI Platform API key |
 | `BACI_AGENTIC_SIGNING_KEY` | Yes for checkout | Baci-owned HMAC signing key for agentic checkout APIs |
 | `OPENAI_AGENTIC_API_KEY` | Legacy alias | Backwards-compatible alias for `BACI_AGENTIC_ACCESS_TOKEN` |

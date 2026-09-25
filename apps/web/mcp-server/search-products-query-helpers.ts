@@ -193,3 +193,16 @@ export function matchesMcpPostHydrationFilters(
 
   return matchesConditionFamily(product, filters.condition);
 }
+
+/** Infer a handset category only when the query clearly names a phone itself. */
+export function inferSmartphoneCategory(
+  query: string | undefined,
+  explicitCategory: string | undefined
+): 'Smartphones' | undefined {
+  if (!query || explicitCategory) return undefined;
+  const handset = /\b(?:smartphones?|mobile phones?|phones?)\b(?=\s*(?:$|[?.!,]|\b(?:under|below|between|for|with|priced|costing|from|at|that|which|in)\b))/i;
+  const competingCategory = /\b(?:tablets?|ipads?|laptops?|computers?|cases?|covers?|accessories|chargers?|screen protectors?|repairs?|parts?|batteries|cables?)\b/i;
+  return handset.test(query) && !competingCategory.test(query)
+    ? 'Smartphones'
+    : undefined;
+}

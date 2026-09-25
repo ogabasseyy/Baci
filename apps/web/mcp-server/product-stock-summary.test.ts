@@ -2,16 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { getMcpProductStockSummary } from './product-stock-summary';
 
 describe('getMcpProductStockSummary', () => {
-  it('treats unmanaged stock as available even when quantity is zero', () => {
+  it('keeps untracked items browsable without claiming confirmed stock', () => {
     expect(
       getMcpProductStockSummary({
         manage_stock: false,
         stock_quantity: 0,
       })
     ).toEqual({
-      confidence: 'high',
-      inStock: true,
-      level: 'Available',
+      confidence: 'unconfirmed',
+      inStock: null,
+      level: 'Confirm availability',
     });
   });
 
@@ -92,9 +92,9 @@ describe('getMcpProductStockSummary', () => {
         stock_quantity: null,
       })
     ).toEqual({
-      confidence: 'high',
-      inStock: true,
-      level: 'Available',
+      confidence: 'unconfirmed',
+      inStock: null,
+      level: 'Confirm availability',
     });
 
     expect(

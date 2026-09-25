@@ -6,10 +6,11 @@ import {
 } from './search-products-ranking';
 import { loadMcpSearchProducts } from './search-products-query';
 
-function createRankedSearchSupabase() {
+function createRankedSearchSupabase(category?: string) {
   const inMock = vi.fn(async (_column: string, productIds: string[]) => ({
     data: productIds.map((id) => ({
       brand: 'Samsung',
+      category,
       id,
       name: `Product ${id}`,
     })),
@@ -74,6 +75,18 @@ function createCatalogSearchSupabase() {
 }
 
 describe('loadMcpSearchProducts', () => {
+  it('keeps tablet matches out of an explicit phone search', async () => {
+    const { supabase } = createRankedSearchSupabase('Tablets');
+    const result = await loadMcpSearchProducts({
+      args: { query: 'Redmi phones', limit: 2 },
+      merchantId: 'merchant-1',
+      sanitizeString: (input) => input,
+      supabase,
+    });
+
+    expect(result.products).toEqual([]);
+  });
+
   it('caps ranked post-filter pagination when hydrated rows keep failing filters', async () => {
     const { rpc, select, supabase } = createRankedSearchSupabase();
 

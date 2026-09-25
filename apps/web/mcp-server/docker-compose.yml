@@ -10,15 +10,14 @@ services:
     environment:
       - NODE_ENV=production
       - MCP_PORT=8787
+      - MCP_PUBLIC_ORIGIN=${MCP_PUBLIC_ORIGIN:-https://mcp.ogabassey.com}
       - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
-      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
       - BACI_AGENTIC_ACCESS_TOKEN=${BACI_AGENTIC_ACCESS_TOKEN}
       - BACI_AGENTIC_SIGNING_KEY=${BACI_AGENTIC_SIGNING_KEY}
       - OPENAI_AGENTIC_API_KEY=${OPENAI_AGENTIC_API_KEY}
       - OPENAI_AGENTIC_SIGNING_KEY=${OPENAI_AGENTIC_SIGNING_KEY}
       - MCP_AGENTIC_CHECKOUT_BASE_URL=${MCP_AGENTIC_CHECKOUT_BASE_URL:-https://ogabassey.com}
-    env_file:
-      - .env
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8787/health"]
       interval: 30s

@@ -10,9 +10,9 @@ export function getMcpProductStockSummary(source: ProductStockSource) {
 
   if (!managesStock) {
     return {
-      confidence: 'high',
-      inStock: true,
-      level: 'Available',
+      confidence: 'unconfirmed',
+      inStock: null,
+      level: 'Confirm availability',
     };
   }
 

@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { BrandLogo } from './brand-logo';
+import { getCartHandoffUrl } from './cart-handoff-result';
+import { getProductImageUrl } from './product-image';
 import { useOpenAiGlobal } from './hooks/use-openai-global';
 import { useWidgetState } from './hooks/use-widget-state';
 
@@ -11,6 +14,7 @@ interface Product {
   price: number;
   compare_at_price?: number;
   image_url?: string;
+  image?: string;
   images?: string[];
   condition?: string;
   stock_level?: string;
@@ -25,7 +29,7 @@ interface CartItem {
 
 interface WidgetState {
   cart: CartItem[];
-  cartId?: string;
+  cartUrl?: string;
   [key: string]: unknown; // Index signature for type compatibility
 }
 
@@ -55,6 +59,7 @@ function ProductCard({
   onAddToCart: (product: Product) => void;
 }) {
   const [imageError, setImageError] = useState(false);
+  const imageUrl = getProductImageUrl(product);
   const hasDiscount =
     product.compare_at_price && product.compare_at_price > product.price;
   const discountPercent = hasDiscount
@@ -64,9 +69,9 @@ function ProductCard({
   return (
     <div className="product-card">
       <div className="product-image">
-        {product.image_url && !imageError ? (
+        {imageUrl && !imageError ? (
           <img
-            src={product.image_url}
+            src={imageUrl}
             alt={product.name}
             onError={() => setImageError(true)}
             loading="lazy"
@@ -126,7 +131,7 @@ function ProductCard({
               >
                 <polyline points="20 6 9 17 4 12" />
               </svg>
-              Added
+              Link Ready
             </>
           ) : (
             <>
@@ -142,19 +147,22 @@ function ProductCard({
                 <circle cx="20" cy="21" r="1" />
                 <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
               </svg>
-              Add to Cart
+              Prepare Cart Link
             </>
           )}
         </button>
         <button type="button"
           className="btn-buy-now"
           onClick={() => {
-            const url = `https://ogabassey.com/ogabassey/cart?item_id=${product.id}`;
-            window.openai?.openExternal?.({ href: url }) ||
+            const url = `https://ogabassey.com/products/${encodeURIComponent(product.slug)}`;
+            if (window.openai?.openExternal) {
+              window.openai.openExternal({ href: url });
+            } else {
               window.open(url, '_blank');
+            }
           }}
         >
-          Buy Now
+          Review on Ogabassey
         </button>
       </div>
     </div>
@@ -215,82 +223,94 @@ function CartSummary({
         ))}
       </div>
       <button type="button" className="btn-checkout" onClick={onViewCart}>
-        Proceed to Checkout →
+        Review Cart on Ogabassey →
       </button>
     </div>
   );
 }
 
 // Main App Component
-function App() {
+export function App() {
   const toolOutput = useOpenAiGlobal('toolOutput') as {
     products?: Product[];
   } | null;
   const theme = useOpenAiGlobal('theme') || 'dark';
+  const displayMode = useOpenAiGlobal('displayMode') || 'inline';
   const [widgetState, setWidgetState] =
     useWidgetState<WidgetState>(createDefaultState);
+  const [cartError, setCartError] = useState<string | null>(null);
+  const handoffRequestId = useRef(0);
 
-  const cart = widgetState?.cart || [];
+  const cart = widgetState?.cartUrl ? widgetState.cart : [];
   const products = toolOutput?.products || [];
+
+  useEffect(() => {
+    window.openai?.setOpenInAppUrl?.({ href: 'https://ogabassey.com' });
+  }, []);
 
   // Add item to cart
   const handleAddToCart = async (product: Product) => {
-    // Optimistic UI update
-    setWidgetState((prev) => {
-      const existingItem = prev?.cart.find(
-        (item) => item.product.id === product.id
-      );
-      if (existingItem) {
-        return prev; // Already in cart
-      }
-      return {
-        ...prev!,
-        cart: [...(prev?.cart || []), { product, quantity: 1 }],
-      };
-    });
-
-    // Call server tool to sync cart
+    const requestId = ++handoffRequestId.current;
+    setCartError(null);
     try {
-      await window.openai?.callTool?.('add_to_cart', {
+      const result = await window.openai?.callTool?.('add_to_cart', {
         product_id: product.id,
-        session_id: widgetState?.cartId || 'default',
       });
-
-      // Send follow-up message so assistant knows what happened
-      window.openai?.sendFollowUpMessage?.(`Added ${product.name} to cart.`);
-    } catch (error) {
-      console.error('Failed to sync cart:', error);
+      const cartUrl = getCartHandoffUrl(result, product.id);
+      if (requestId !== handoffRequestId.current) return;
+      if (!cartUrl) {
+        setCartError('This item is unavailable for cart handoff. Please choose another product.');
+        return;
+      }
+      // The MCP handoff supports one product at a time.
+      setWidgetState((prev) => ({
+        ...prev!,
+        cart: [{ product, quantity: 1 }],
+        cartUrl,
+      }));
+    } catch {
+      if (requestId !== handoffRequestId.current) return;
+      setCartError('Could not prepare the cart link. Please try again.');
     }
   };
 
   // Remove item from cart
   const handleRemoveItem = (productId: string) => {
+    handoffRequestId.current += 1;
     setWidgetState((prev) => ({
       ...prev!,
       cart: prev?.cart.filter((item) => item.product.id !== productId) || [],
+      cartUrl: undefined,
     }));
   };
 
   // View cart / checkout
   const handleViewCart = () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || !widgetState?.cartUrl) return;
 
-    const itemIds = cart.map((item) => item.product.id).join(',');
-    const checkoutUrl = `https://ogabassey.com/ogabassey/cart?item_id=${itemIds}`;
-    window.openai?.openExternal?.({ href: checkoutUrl }) ||
-      window.open(checkoutUrl, '_blank');
+    if (window.openai?.openExternal) {
+      window.openai.openExternal({ href: widgetState.cartUrl });
+    } else {
+      window.open(widgetState.cartUrl, '_blank');
+    }
   };
 
   return (
-    <div className={`ogabassey-widget theme-${theme}`}>
+    <div className={`ogabassey-widget theme-${theme} ${displayMode === 'fullscreen' ? 'mode-fullscreen' : 'mode-inline'}`}>
       <header className="widget-header">
         <div className="brand">
-          <div className="brand-logo">OGA</div>
+          <div className="brand-logo"><BrandLogo /></div>
           <div className="brand-text">
             <h1>Ogabassey</h1>
             <p>Premium Tech & Gadgets</p>
           </div>
         </div>
+        <div className="header-actions">
+        {products.length > 1 && displayMode !== 'fullscreen' && window.openai?.requestDisplayMode && (
+          <button type="button" className="expand-button" onClick={() => void window.openai?.requestDisplayMode?.({ mode: 'fullscreen' })}>
+            Expand catalog
+          </button>
+        )}
         {cart.length > 0 && (
           <button type="button" className="cart-badge" onClick={handleViewCart}>
             <svg
@@ -308,10 +328,13 @@ function App() {
             <span className="cart-badge-count">{cart.length}</span>
           </button>
         )}
+        </div>
       </header>
 
+      {cartError && <p role="alert" className="cart-error">{cartError}</p>}
+
       {products.length > 0 ? (
-        <div className="products-grid">
+        <div className={`products-grid ${products.length === 1 ? 'products-grid--single' : ''}`}>
           {products.slice(0, 6).map((product) => (
             <ProductCard
               key={product.id}
@@ -351,7 +374,7 @@ function App() {
             className="btn-negotiate-icon"
             onClick={() => {
               window.openai?.sendFollowUpMessage?.(
-                'I would like to negotiate the price for my cart items.'
+                { prompt: 'I would like to negotiate the price for my selected item.' }
               );
             }}
             aria-label="Negotiate Price"
@@ -372,7 +395,7 @@ function App() {
             </svg>
           </button>
           <button type="button" className="btn-checkout-sticky" onClick={handleViewCart}>
-            Proceed to Checkout →
+              Review Cart on Ogabassey →
           </button>
         </div>
       )}
@@ -381,8 +404,11 @@ function App() {
         <button type="button"
           className="btn-browse-more"
           onClick={() => {
-            window.openai?.openExternal?.({ href: 'https://ogabassey.com' }) ||
+            if (window.openai?.openExternal) {
+              window.openai.openExternal({ href: 'https://ogabassey.com' });
+            } else {
               window.open('https://ogabassey.com', '_blank');
+            }
           }}
         >
           Browse All Products →

@@ -10,6 +10,7 @@ interface JsonRpcResponse {
 
 interface McpToolDefinition {
   name: string;
+  description?: string;
   inputSchema: { properties: Record<string, unknown> };
 }
 
@@ -67,31 +68,64 @@ async function startPostgrestStub() {
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
     response.setHeader('content-type', 'application/json');
+    if (request.headers.authorization !== 'Bearer test-anon-key') {
+      response.statusCode = 403;
+      response.end(JSON.stringify({ message: 'Expected anonymous client' }));
+      return;
+    }
+    if (url.pathname.endsWith('/rest/v1/orders') || url.pathname.endsWith('/rest/v1/chat_orders')) {
+      response.statusCode = 403;
+      response.end(JSON.stringify({ message: 'Private tables are unavailable' }));
+      return;
+    }
     if (url.pathname.endsWith('/rest/v1/merchants')) {
       response.end(JSON.stringify({ id: 'merchant-1' }));
       return;
     }
-    if (url.pathname.endsWith('/rest/v1/chat_orders')) {
-      const emailFilter = url.searchParams.get('customer_email') ?? '';
-      const completeMetadata = {
-        account_name: 'Test Buyer',
-        account_number: '1234567890',
-        bank_name: 'Test Bank',
-      };
-      response.end(
-        JSON.stringify([
-          {
-            id: 'chat-order-1',
-            metadata: emailFilter.includes('incomplete')
-              ? { account_number: '1234567890' }
-              : completeMetadata,
-            paid_at: null,
-            payment_reference: 'CHAT-TEST-1',
-            status: 'pending_payment',
-            total: 500000,
-          },
-        ])
-      );
+    if (url.pathname.endsWith('/rest/v1/products')) {
+      if (url.searchParams.get('id') === 'eq.available-product') {
+        response.end(JSON.stringify({ id: 'available-product', name: 'Test Phone', slug: 'test-phone', price: 100000, manage_stock: false }));
+      } else if (url.searchParams.get('id') === 'eq.sold-out-product') {
+        response.end(JSON.stringify({ id: 'sold-out-product', name: 'Sold Out Phone', slug: 'sold-out-phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: false }));
+      } else if (url.searchParams.get('id') === 'eq.variant-sold-out-product') {
+        response.end(JSON.stringify({ id: 'variant-sold-out-product', name: 'Variant Sold Out Phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: true }));
+      } else if (url.searchParams.get('id') === 'eq.variant-available-product') {
+        response.end(JSON.stringify({ id: 'variant-available-product', name: 'Variant Available Phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: true }));
+      } else if (!url.searchParams.has('id') && !url.searchParams.has('name')) {
+        response.end(JSON.stringify([
+          { id: 'available-product', name: 'Test Phone', slug: 'test-phone', price: 100000, compare_at_price: 120000, images: ['https://images.example.test/phone.jpg'], manage_stock: false, stock_quantity: 0, has_variants: false },
+          { id: 'avif-product', name: 'AVIF Phone', slug: 'avif-phone', price: 120000, images: ['https://cdn.ogabassey.com/core-assets/products/redmi-15-midnight-black.avif'], manage_stock: false, stock_quantity: 0, has_variants: false },
+        ]));
+      } else {
+        response.statusCode = 406;
+        response.end(JSON.stringify({ code: 'PGRST116', message: 'No rows' }));
+      }
+      return;
+    }
+    if (url.pathname.endsWith('/rest/v1/product_variants')) {
+      response.end(JSON.stringify([{ attributes: { storage: '128GB' }, price_override: 100000, stock_quantity: 0, condition: 'new', sku: 'TEST-128' }]));
+      return;
+    }
+    if (url.pathname.endsWith('/rest/v1/rpc/get_storefront_product_variants')) {
+      const rows = [
+        { product_id: 'available-product', attributes: { storage: '128GB' }, price_override: 100000, stock_quantity: 0, condition: 'new', sku: 'TEST-128' },
+        { product_id: 'variant-sold-out-product', attributes: { storage: '128GB' }, stock_quantity: 0 },
+        { product_id: 'variant-available-product', attributes: { storage: '256GB' }, stock_quantity: 2 },
+      ];
+      let body = '';
+      request.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      request.on('end', () => {
+        const requested = JSON.parse(body) as { p_product_ids?: string[] };
+        response.end(JSON.stringify(rows.filter((row) => requested.p_product_ids?.includes(row.product_id))));
+      });
+      return;
+    }
+    if (url.pathname.endsWith('/rest/v1/rpc/get_product_offers')) {
+      response.end('[]');
+      return;
+    }
+    if (url.pathname.endsWith('/rest/v1/product_offers')) {
+      response.end('[]');
       return;
     }
     response.statusCode = 404;
@@ -166,7 +200,7 @@ function buildMcpServerEnv(overrides: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     OPENAI_AGENTIC_API_KEY: 'test-agentic-key',
     OPENAI_AGENTIC_SIGNING_KEY: 'test-signing-key',
     PAYSTACK_SECRET_KEY: 'test-paystack-key',
-    SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key',
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test-anon-key',
     ...overrides,
   };
   if (!Object.hasOwn(overrides, 'MCP_ENABLE_AGENTIC_CHECKOUT_TOOLS')) {

@@ -52,18 +52,19 @@ import { getMcpProductStockSummary } from './product-stock-summary';
 // =============================================================================
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const OGABASSEY_SLUG = 'ogabassey';
 const PORT = Number(process.env.MCP_PORT ?? 8787);
 const MCP_PATH = '/mcp';
+const MCP_PUBLIC_ORIGIN = process.env.MCP_PUBLIC_ORIGIN?.trim() || 'https://mcp.ogabassey.com';
 const MCP_ALLOWED_HEADERS = 'content-type, mcp-protocol-version, mcp-session-id';
 const MCP_ALLOWED_METHODS = 'POST, GET, OPTIONS, DELETE, HEAD';
 const AGENTIC_CHECKOUT_TOOLS_ENABLED =
   process.env.MCP_ENABLE_AGENTIC_CHECKOUT_TOOLS === '1' ||
   process.env.MCP_ENABLE_AGENTIC_CHECKOUT_TOOLS === 'true';
-const ORDER_PAYMENT_TOOLS_ENABLED =
-  process.env.MCP_ENABLE_ORDER_PAYMENT_TOOLS === '1' ||
-  process.env.MCP_ENABLE_ORDER_PAYMENT_TOOLS === 'true';
+// These legacy tools accept buyer identifiers without authentication. Keep them
+// unavailable until they are rebuilt on an authorized customer session.
+const ORDER_PAYMENT_TOOLS_ENABLED = false;
 const AGENTIC_CHECKOUT_API_BASE_URL =
   process.env.MCP_AGENTIC_CHECKOUT_BASE_URL ?? 'https://ogabassey.com';
 const AGENTIC_CHECKOUT_API_KEY = getAgenticCredential(
@@ -174,16 +175,16 @@ const productLookupInputSchema = {
 };
 
 // Validate required environment variables at startup (fail closed)
-if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.error('FATAL: Missing required environment variables');
   console.error(
-    'Required: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY'
+    'Required: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY'
   );
   process.exit(1);
 }
 
-// Create Supabase admin client
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+// Public shopping tools use the normal RLS-scoped anonymous client.
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // =============================================================================
 // RATE LIMITING
@@ -412,38 +413,27 @@ function formatPrice(price: number): string {
   return NGN_PRICE_FORMATTER.format(price);
 }
 
-/**
- * Ensure image URL is in a format ChatGPT can render.
- * - Converts .avif to .jpg (ChatGPT may not support AVIF)
- * - Fixes path mismatch: database has /products/, CDN has /core-assets/products/
- */
-function ensureJpgImageUrl(
+/** Serve catalog images from our MCP origin because the store CDN blocks
+ * requests with ChatGPT's sandbox origin as their referrer. */
+function getSafeCatalogImageUrl(
   imageUrl: string | null | undefined
 ): string | undefined {
-  if (!imageUrl) return undefined;
+  if (typeof imageUrl !== 'string' || !imageUrl) return undefined;
 
-  let url = String(imageUrl);
-
-  // If it's a relative path or doesn't start with https, make it absolute
-  if (!url.startsWith('https://')) {
-    if (url.startsWith('/')) {
-      url = `https://cdn.ogabassey.com${url}`;
-    } else {
-      url = `https://cdn.ogabassey.com/${url}`;
-    }
+  let parsed: URL;
+  try {
+    parsed = new URL(imageUrl, 'https://cdn.ogabassey.com');
+  } catch {
+    return undefined;
   }
-
+  // Only store CDN product assets may be proxied to the widget.
+  if (parsed.origin !== 'https://cdn.ogabassey.com') return undefined;
   // Fix path mismatch: database stores /products/ but CDN serves from /core-assets/products/
-  if (url.includes('/products/') && !url.includes('/core-assets/products/')) {
-    url = url.replace('/products/', '/core-assets/products/');
+  if (parsed.pathname.includes('/products/') && !parsed.pathname.includes('/core-assets/products/')) {
+    parsed.pathname = parsed.pathname.replace('/products/', '/core-assets/products/');
   }
-
-  // Convert AVIF to JPG for better compatibility
-  if (url.endsWith('.avif')) {
-    url = url.replace(/\.avif$/, '.jpg');
-  }
-
-  return url;
+  if (!parsed.pathname.startsWith('/core-assets/products/')) return undefined;
+  return `${MCP_PUBLIC_ORIGIN}/images${parsed.pathname}`;
 }
 
 // =============================================================================
@@ -1049,8 +1039,8 @@ const widgetHtml = `<!DOCTYPE html>
       String(value ?? '').replace(/[&<>"']/g, (char) => ESCAPE_HTML_MAP[char]);
 
     const openLink = (url) => window.openai?.openExternal?.({ href: url }) || window.open(url, '_blank');
-    const productUrl = (slug) => 'https://ogabassey.com/ogabassey/' + encodeURIComponent(slug);
-    const cartUrl = (productId) => 'https://ogabassey.com/ogabassey/cart?item_id=' + encodeURIComponent(productId);
+    const productUrl = (slug) => 'https://ogabassey.com/products/' + encodeURIComponent(slug);
+    const cartUrl = (productId) => 'https://ogabassey.com/cart?item_id=' + encodeURIComponent(productId);
 
     const renderProducts = (products) => {
       if (!products?.length) {
@@ -1198,7 +1188,26 @@ function createOgabasseyServer() {
           uri: 'ui://widget/store.html',
           mimeType: 'text/html+skybridge',
           text: premiumWidgetHtml,
-          _meta: { 'openai/widgetPrefersBorder': true },
+          _meta: {
+            ui: {
+              prefersBorder: true,
+              domain: MCP_PUBLIC_ORIGIN,
+              csp: {
+                connectDomains: [],
+                resourceDomains: [MCP_PUBLIC_ORIGIN],
+              },
+            },
+            'openai/widgetPrefersBorder': true,
+            'openai/widgetCSP': {
+              connect_domains: [],
+              resource_domains: [MCP_PUBLIC_ORIGIN],
+              redirect_domains: ['https://ogabassey.com'],
+            },
+            'openai/widgetDomain': MCP_PUBLIC_ORIGIN,
+            'openai/ui': {
+              availableDisplayModes: ['inline', 'fullscreen'],
+            },
+          },
         },
       ],
     })
@@ -1211,7 +1220,7 @@ function createOgabasseyServer() {
       title: 'Search Products',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
-        'Search for products in Ogabassey store. Returns rich details including variants (colors/sizes), stock confidence, and price trends. Always use this for general product queries.',
+        'Search the Ogabassey public catalog by name, brand, category, condition, and price. When the buyer asks for phones or smartphones, set category to Smartphones so tablets are excluded. Returns listed prices, variant options, and reported availability; it does not confirm a live stock reservation.',
       inputSchema: {
         query: z
           .string()
@@ -1226,7 +1235,7 @@ function createOgabasseyServer() {
           .string()
           .max(50)
           .optional()
-          .describe('Category (e.g., phones, laptops)'),
+          .describe('Catalog category. Use Smartphones for phone requests, Tablets for tablet requests, and Laptops for laptop requests.'),
         brand: z.string().max(50).optional().describe('Brand name'),
         min_price: z.number().min(0).optional(),
         max_price: z.number().min(0).optional(),
@@ -1288,10 +1297,7 @@ function createOgabasseyServer() {
 
         if (productIds.length > 0) {
           const { data: variants, error: variantsError } = await supabase
-            .from('product_variants')
-            .select('product_id, attributes, stock_quantity, price_override')
-            .in('product_id', productIds)
-            .eq('merchant_id', merchantId);
+            .rpc('get_storefront_product_variants', { p_product_ids: productIds });
 
           if (variantsError) {
             console.error(
@@ -1314,10 +1320,9 @@ function createOgabasseyServer() {
         const formatted = products.map((p) => {
           const stockSummary = getMcpProductStockSummary(p);
 
-          // Price Intelligence
+          // A compare-at price indicates a listed discount, not a price trend.
           const isDiscounted =
             p.compare_at_price && p.compare_at_price > p.price;
-          const priceTrend = isDiscounted ? 'falling' : 'stable';
 
           // Variant Summary (e.g., "Available in: Black, White")
           const variants = (variantsMap.get(p.id) || []).filter(
@@ -1342,7 +1347,7 @@ function createOgabasseyServer() {
             slug: p.slug,
             price: p.price,
             compare_at_price: p.compare_at_price,
-            image: ensureJpgImageUrl(p.images?.[0]?.url || p.images?.[0]),
+            image: getSafeCatalogImageUrl(p.images?.[0]?.url || p.images?.[0]),
             condition: resolveMcpSearchProductCondition(p, args.condition),
             brand: p.brand,
             category: p.category,
@@ -1351,10 +1356,8 @@ function createOgabasseyServer() {
             // New Intelligence Fields
             stock_level: stockSummary.level,
             stock_confidence: stockSummary.confidence,
-            price_trend: priceTrend,
+            price_status: isDiscounted ? 'discounted' : 'regular',
             available_variants: availableOptions || 'Standard',
-            warranty: 'Standard Warranty',
-            in_the_box: undefined,
             last_updated: p.updated_at,
           };
         });
@@ -1372,7 +1375,12 @@ function createOgabasseyServer() {
             structuredContent: { products: [], status: 'empty' },
           };
         }
-        const resultText = `Found ${count} products. Top match: ${formatted[0].name} (${formatted[0].stock_level}).`;
+        const resultText = [
+          `Found ${count} Ogabassey products. Prices are listed in NGN; confirm availability before checkout.`,
+          ...formatted.map((product) =>
+            `${product.name} — ₦${Number(product.price).toLocaleString('en-NG')} (${product.stock_level}); ${product.available_variants}.`
+          ),
+        ].join('\n');
 
         return {
           content: [{ type: 'text', text: resultText }],
@@ -1413,9 +1421,9 @@ function createOgabasseyServer() {
     {
       title: 'Add to Cart',
 
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
-        'Add a product to the shopping cart. This tool is accessible from the in-chat widget for real-time cart updates.',
+        'Prepare an Ogabassey cart handoff link for a public product. This tool does not save an item to a server-side cart or start checkout.',
       inputSchema: {
         product_id: z.string().describe('The product ID to add to cart'),
         quantity: z
@@ -1425,12 +1433,11 @@ function createOgabasseyServer() {
           .optional()
           .default(1)
           .describe('Quantity to add'),
-        session_id: z.string().optional().describe('Cart session identifier'),
       },
       _meta: {
         'openai/widgetAccessible': true, // Enable widget-initiated calls
-        'openai/toolInvocation/invoking': 'Adding to cart...',
-        'openai/toolInvocation/invoked': 'Added to cart',
+        'openai/toolInvocation/invoking': 'Preparing cart link...',
+        'openai/toolInvocation/invoked': 'Cart link ready',
       },
     },
     async (args) => {
@@ -1442,19 +1449,41 @@ function createOgabasseyServer() {
           };
         }
 
-        // For now, generate cart URL - in production this would update server-side cart
-        const cartUrl = `https://ogabassey.com/ogabassey/cart?item_id=${encodeURIComponent(args.product_id)}&qty=${args.quantity || 1}`;
-
-        // Get product details for confirmation message
-        const { data: product } = await supabase
+        const { data: product, error: productError } = await supabase
           .from('products')
-          .select('name, price')
+          .select('name, price, manage_stock, stock_quantity, has_variants')
           .eq('id', args.product_id)
           .eq('merchant_id', merchantId)
+          .eq('status', 'active')
           .single();
 
-        const productName = product?.name || 'Product';
-        const price = product?.price
+        let unavailable = Boolean(productError || !product);
+        if (product?.manage_stock === true) {
+          if (product.has_variants === true) {
+            const { data: variants, error: variantsError } = await supabase.rpc(
+              'get_storefront_product_variants',
+              { p_product_ids: [args.product_id] }
+            );
+            unavailable = Boolean(variantsError) || !Array.isArray(variants) ||
+              !variants.some((variant) =>
+                variant.product_id === args.product_id &&
+                Number(variant.stock_quantity ?? 0) >= (args.quantity ?? 1)
+              );
+          } else {
+            unavailable = Number(product.stock_quantity ?? 0) < (args.quantity ?? 1);
+          }
+        }
+
+        if (unavailable || !product) {
+          return {
+            content: [{ type: 'text', text: 'This product is not currently available for cart handoff.' }],
+            structuredContent: { success: false },
+          };
+        }
+
+        const cartUrl = `https://ogabassey.com/cart?item_id=${encodeURIComponent(args.product_id)}&qty=${args.quantity || 1}`;
+        const productName = product.name;
+        const price = product.price
           ? NGN_PRICE_FORMATTER.format(product.price)
           : '';
 
@@ -1462,7 +1491,7 @@ function createOgabasseyServer() {
           content: [
             {
               type: 'text',
-              text: `✅ **${productName}** added to cart!${price ? ` (${price})` : ''}\n\n[View Cart & Checkout](${cartUrl})`,
+              text: `Cart link ready for **${productName}**${price ? ` (${price})` : ''}. Open Ogabassey and verify the item and final price before checkout.\n\n[Open cart on Ogabassey](${cartUrl})`,
             },
           ],
           structuredContent: {
@@ -1823,7 +1852,7 @@ function createOgabasseyServer() {
       let productQuery = supabase
         .from('products')
         .select(`
-          id, name, slug, price, compare_at_price, images, description, stock_quantity,
+          id, name, slug, price, compare_at_price, images, description, stock_quantity, manage_stock,
           condition, condition_detail, brand, category, has_variants, has_condition_offers,
           weight_value, weight_unit, dimensions, schema_markup
         `)
@@ -1865,13 +1894,14 @@ function createOgabasseyServer() {
         images: unknown[];
       }> = [];
       if (product.has_variants) {
-        const { data: variantData } = await supabase
-          .from('product_variants')
-          .select(
-            'attributes, price_override, stock_quantity, condition, images'
-          )
-          .eq('product_id', product.id)
-          .eq('merchant_id', merchantId);
+        const { data: variantData, error: variantError } = await supabase.rpc(
+          'get_storefront_product_variants',
+          { p_product_ids: [product.id] }
+        );
+        if (variantError) {
+          console.error('Failed to fetch public product variants:', variantError);
+          return { content: [{ type: 'text', text: 'Product variants are temporarily unavailable.' }] };
+        }
         variants = variantData || [];
       }
 
@@ -1884,11 +1914,13 @@ function createOgabasseyServer() {
         condition_notes: string | null;
       }> = [];
       if (product.has_condition_offers) {
-        const { data: offerData } = await supabase
-          .from('product_offers')
-          .select('condition, price, stock_quantity, grade, condition_notes')
-          .eq('product_id', product.id)
-          .eq('status', 'active');
+        const { data: offerData, error: offerError } = await supabase.rpc('get_product_offers', {
+          p_product_id: product.id,
+        });
+        if (offerError) {
+          console.error('Failed to fetch public product offers:', offerError);
+          return { content: [{ type: 'text', text: 'Product offers are temporarily unavailable.' }] };
+        }
         conditionOffers = offerData || [];
       }
 
@@ -1896,18 +1928,21 @@ function createOgabasseyServer() {
       const rating = product.schema_markup?.aggregateRating?.ratingValue;
       const reviewCount = product.schema_markup?.aggregateRating?.reviewCount;
 
+      const stockSummary = getMcpProductStockSummary(product);
       const formatted = {
         id: product.id,
         name: product.name,
         slug: product.slug,
         price: product.price,
         compare_at_price: product.compare_at_price,
-        image: product.images?.[0]?.url || product.images?.[0] || null,
+        image: getSafeCatalogImageUrl(product.images?.[0]?.url || product.images?.[0]) ?? null,
         condition: product.condition || 'new',
         condition_detail: product.condition_detail,
         brand: product.brand,
         category: product.category,
-        in_stock: (product.stock_quantity || 0) > 0,
+        in_stock: stockSummary.inStock,
+        stock_confidence: stockSummary.confidence,
+        stock_level: stockSummary.level,
         has_variants: product.has_variants,
       };
 
@@ -1971,8 +2006,11 @@ function createOgabasseyServer() {
       }
 
       // Stock & Link
-      text += `\n**Stock:** ${formatted.in_stock ? 'In Stock' : 'Out of Stock'}`;
-      text += `\n\n🔗 [View Product](https://ogabassey.com/ogabassey/${product.slug})`;
+      text += `\n**Availability:** ${product.manage_stock === true ? (formatted.in_stock ? 'In Stock' : 'Out of Stock') : 'Confirm at checkout'}`;
+      const productPageUrl = product.slug
+        ? `https://ogabassey.com/products/${encodeURIComponent(product.slug)}`
+        : 'https://ogabassey.com/products';
+      text += `\n\n🔗 [View Product](${productPageUrl})`;
 
       return {
         content: [{ type: 'text', text }],
@@ -2121,7 +2159,7 @@ function createOgabasseyServer() {
     {
       title: 'Get Store Information',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-      description: 'Get information about Ogabassey store.',
+      description: 'Get Ogabassey public store information and current policy page links. Confirm delivery and payment details at checkout.',
       inputSchema: {
         topic: z
           .enum(['contact', 'shipping', 'returns', 'payment', 'general'])
@@ -2136,15 +2174,15 @@ function createOgabasseyServer() {
     async (args) => {
       const info: Record<string, string> = {
         general:
-          "**Ogabassey** is Nigeria's premium destination for authentic tech products. We offer competitive prices and genuine products with warranty.\n\nWebsite: https://ogabassey.com",
+          '**Ogabassey** sells physical consumer electronics. Browse products and check current details at https://ogabassey.com.',
         contact:
-          '**Contact**\n\nWebsite: https://ogabassey.com\nWhatsApp: Available on website\n\nWe respond within 24 hours.',
+          '**Contact**\n\nUse the current Ogabassey help page: https://ogabassey.com/contact.',
         shipping:
-          '**Shipping**\n\n- Lagos: 1-2 days\n- Other states: 3-5 days\n- International: 7-14 days\n\nShipped via GIGL, Topship.',
+          '**Shipping**\n\nReview the current policy at https://ogabassey.com/shipping. Delivery availability, fees, and timing depend on the order and must be confirmed at checkout.',
         returns:
-          '**Returns**\n\n- 7-day return window\n- Original packaging required\n- Defective items exchanged/refunded',
+          '**Returns**\n\nReview eligibility and the current process at https://ogabassey.com/returns. Contact support before sending an item back.',
         payment:
-          '**Payment**\n\n- Bank Transfer\n- Card (Visa, Mastercard)\n- Pay on Delivery (Lagos)\n- Buy Now Pay Later',
+          '**Payment**\n\nAvailable payment methods are shown during checkout on https://ogabassey.com.',
       };
       return {
         content: [{ type: 'text', text: info[args.topic || 'general'] }],
@@ -2205,7 +2243,7 @@ function createOgabasseyServer() {
         )
         .eq('merchant_id', merchantId)
         .eq('status', 'active')
-        .gt('stock_quantity', 0)
+        .or('manage_stock.is.false,manage_stock.is.null,stock_quantity.gt.0')
         .order('created_at', { ascending: false })
         .limit(8);
 
@@ -2233,7 +2271,7 @@ function createOgabasseyServer() {
         name: p.name,
         slug: p.slug,
         price: p.price,
-        image: ensureJpgImageUrl(p.images?.[0]),
+        image: getSafeCatalogImageUrl(p.images?.[0]),
       }));
 
       return {
@@ -2265,7 +2303,7 @@ function createOgabasseyServer() {
       title: 'Get Product Variants',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
-        'Get all available variants (colors, storage options, conditions) for a product. Use product_id when available; otherwise use the exact product_name returned by search_products.',
+        'Get listed variants (colors, storage options, conditions) for a product. Availability is confirmed only when stock is tracked. Use product_id when available; otherwise use the exact product_name returned by search_products.',
       inputSchema: productLookupInputSchema,
       _meta: {
         'openai/toolInvocation/invoking': 'Loading variants...',
@@ -2302,7 +2340,7 @@ function createOgabasseyServer() {
       // First find the product
       let productQuery = supabase
         .from('products')
-        .select('id, name, has_variants, has_condition_offers')
+        .select('id, name, has_variants, has_condition_offers, manage_stock')
         .eq('merchant_id', merchantId)
         .eq('status', 'active');
 
@@ -2332,18 +2370,23 @@ function createOgabasseyServer() {
       }
 
       // Fetch variants
-      const { data: variants } = await supabase
-        .from('product_variants')
-        .select('attributes, price_override, stock_quantity, condition, sku')
-        .eq('product_id', product.id)
-        .eq('merchant_id', merchantId);
+      const { data: variants, error: variantsError } = await supabase.rpc(
+        'get_storefront_product_variants',
+        { p_product_ids: [product.id] }
+      );
+      if (variantsError) {
+        console.error('Failed to fetch public product variants:', variantsError);
+        return { content: [{ type: 'text', text: 'Product variants are temporarily unavailable.' }] };
+      }
 
       // Fetch condition offers
-      const { data: offers } = await supabase
-        .from('product_offers')
-        .select('condition, price, stock_quantity, grade, condition_notes')
-        .eq('product_id', product.id)
-        .eq('status', 'active');
+      const { data: offers, error: offersError } = await supabase.rpc('get_product_offers', {
+        p_product_id: product.id,
+      });
+      if (offersError) {
+        console.error('Failed to fetch public product offers:', offersError);
+        return { content: [{ type: 'text', text: 'Product offers are temporarily unavailable.' }] };
+      }
 
       if (
         (!variants || variants.length === 0) &&
@@ -2388,7 +2431,11 @@ function createOgabasseyServer() {
           const price = v.price_override
             ? formatPrice(v.price_override)
             : 'Base price';
-          const stock = v.stock_quantity > 0 ? 'In Stock' : 'Out of Stock';
+          const stock = !product.manage_stock
+            ? 'Confirm availability with Ogabassey'
+            : v.stock_quantity > 0
+              ? 'In Stock'
+              : 'Out of Stock';
           text += `• ${attrs} - ${price} (${stock})\n`;
         }
       }
@@ -2407,7 +2454,15 @@ function createOgabasseyServer() {
         content: [{ type: 'text', text }],
         structuredContent: {
           product_name: product.name,
-          variants: variants || [],
+          variants: (variants || []).map((variant) => ({
+            ...variant,
+            stock_quantity: product.manage_stock ? variant.stock_quantity : null,
+            availability: !product.manage_stock
+              ? 'unconfirmed'
+              : variant.stock_quantity > 0
+                ? 'in_stock'
+                : 'out_of_stock',
+          })),
           condition_offers: offers || [],
         },
       };
@@ -2441,7 +2496,7 @@ function createOgabasseyServer() {
         .select('category')
         .eq('merchant_id', merchantId)
         .eq('status', 'active')
-        .gt('stock_quantity', 0);
+        .or('manage_stock.is.false,manage_stock.is.null,stock_quantity.gt.0');
 
       const categories = [
         ...new Set((products || []).map((p) => p.category).filter(Boolean)),
@@ -2492,7 +2547,7 @@ function createOgabasseyServer() {
         .select('brand')
         .eq('merchant_id', merchantId)
         .eq('status', 'active')
-        .gt('stock_quantity', 0);
+        .or('manage_stock.is.false,manage_stock.is.null,stock_quantity.gt.0');
 
       if (args.category) {
         const sanitizedCategory = sanitizeString(args.category, 50);
@@ -2527,225 +2582,45 @@ function createOgabasseyServer() {
   // [REMOVED] book_repair
 
 
-  // Tool: Get Shipping Quote / Calculate Delivery Fee
+  // The public shipping policy does not publish a fixed fee schedule.
   server.registerTool(
     'get_shipping_quote',
     {
-      title: 'Calculate Delivery Fee',
+      title: 'Check Delivery Fee Information',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
-        'Calculate shipping/delivery cost based on location. Provides real-time quotes from multiple carriers (GIGL, Topship).',
+        'Explain how to obtain the final Ogabassey delivery fee for a Nigerian destination. The public policy does not specify fixed rates, so this tool cannot provide a numeric quote; the buyer must confirm the fee and timing at checkout.',
       inputSchema: {
-        state: z
-          .string()
-          .min(2)
-          .max(50)
-          .describe('Nigerian state for delivery (e.g., Lagos, Abuja, Rivers)'),
-        city: z
-          .string()
-          .min(2)
-          .max(100)
-          .optional()
-          .describe('City within the state'),
-        address: z
-          .string()
-          .max(200)
-          .optional()
-          .describe('Full delivery address'),
-        product_ids: z
-          .string()
-          .optional()
-          .describe('Comma-separated product IDs to calculate shipping for'),
-        estimated_weight: z
-          .number()
-          .optional()
-          .describe('Estimated total weight in kg (if products not specified)'),
+        state: z.string().min(2).max(50).describe('Nigerian delivery state'),
+        city: z.string().min(2).max(100).optional().describe('Delivery city'),
       },
       _meta: {
-        'openai/toolInvocation/invoking': 'Calculating delivery fee...',
-        'openai/toolInvocation/invoked': 'Shipping quote ready',
+        'openai/toolInvocation/invoking': 'Checking delivery information...',
+        'openai/toolInvocation/invoked': 'Delivery information ready',
       },
     },
     async (args) => {
-      const merchantId = await getMerchantId();
-      if (!merchantId) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: '❌ Unable to calculate shipping. Please try again later.',
-            },
-          ],
-        };
-      }
-
       const state = sanitizeString(args.state, 50);
-      const city = args.city ? sanitizeString(args.city, 100) : state;
-
-      // Nigerian states with shipping zones
-      const shippingZones: Record<
-        string,
-        {
-          zone: 'lagos' | 'southwest' | 'south' | 'north';
-          baseRate: number;
-          estimatedDays: string;
-        }
-      > = {
-        lagos: { zone: 'lagos', baseRate: 2500, estimatedDays: '1-2 days' },
-        ogun: { zone: 'southwest', baseRate: 3500, estimatedDays: '2-3 days' },
-        oyo: { zone: 'southwest', baseRate: 4000, estimatedDays: '2-3 days' },
-        osun: { zone: 'southwest', baseRate: 4000, estimatedDays: '2-3 days' },
-        ondo: { zone: 'southwest', baseRate: 4500, estimatedDays: '2-3 days' },
-        ekiti: { zone: 'southwest', baseRate: 4500, estimatedDays: '2-3 days' },
-        kwara: { zone: 'southwest', baseRate: 5000, estimatedDays: '3-4 days' },
-        abuja: { zone: 'north', baseRate: 5000, estimatedDays: '3-4 days' },
-        fct: { zone: 'north', baseRate: 5000, estimatedDays: '3-4 days' },
-        rivers: { zone: 'south', baseRate: 5500, estimatedDays: '3-4 days' },
-        delta: { zone: 'south', baseRate: 5500, estimatedDays: '3-4 days' },
-        edo: { zone: 'south', baseRate: 5000, estimatedDays: '3-4 days' },
-        'cross river': {
-          zone: 'south',
-          baseRate: 6000,
-          estimatedDays: '3-5 days',
-        },
-        'akwa ibom': {
-          zone: 'south',
-          baseRate: 6000,
-          estimatedDays: '3-5 days',
-        },
-        enugu: { zone: 'south', baseRate: 5500, estimatedDays: '3-4 days' },
-        anambra: { zone: 'south', baseRate: 5500, estimatedDays: '3-4 days' },
-        imo: { zone: 'south', baseRate: 5500, estimatedDays: '3-4 days' },
-        abia: { zone: 'south', baseRate: 5500, estimatedDays: '3-4 days' },
-        kano: { zone: 'north', baseRate: 6500, estimatedDays: '4-5 days' },
-        kaduna: { zone: 'north', baseRate: 6000, estimatedDays: '4-5 days' },
-        plateau: { zone: 'north', baseRate: 6000, estimatedDays: '4-5 days' },
-        kogi: { zone: 'north', baseRate: 5500, estimatedDays: '3-4 days' },
-        nassarawa: { zone: 'north', baseRate: 5500, estimatedDays: '3-4 days' },
-        niger: { zone: 'north', baseRate: 6000, estimatedDays: '4-5 days' },
-        benue: { zone: 'north', baseRate: 6000, estimatedDays: '4-5 days' },
-        taraba: { zone: 'north', baseRate: 7000, estimatedDays: '4-6 days' },
-        adamawa: { zone: 'north', baseRate: 7000, estimatedDays: '4-6 days' },
-        bauchi: { zone: 'north', baseRate: 7000, estimatedDays: '4-6 days' },
-        gombe: { zone: 'north', baseRate: 7000, estimatedDays: '4-6 days' },
-        borno: { zone: 'north', baseRate: 8000, estimatedDays: '5-7 days' },
-        yobe: { zone: 'north', baseRate: 8000, estimatedDays: '5-7 days' },
-        sokoto: { zone: 'north', baseRate: 7500, estimatedDays: '4-6 days' },
-        kebbi: { zone: 'north', baseRate: 7500, estimatedDays: '4-6 days' },
-        zamfara: { zone: 'north', baseRate: 7500, estimatedDays: '4-6 days' },
-        katsina: { zone: 'north', baseRate: 7000, estimatedDays: '4-5 days' },
-        jigawa: { zone: 'north', baseRate: 7000, estimatedDays: '4-5 days' },
-        bayelsa: { zone: 'south', baseRate: 6500, estimatedDays: '3-5 days' },
-        ebonyi: { zone: 'south', baseRate: 6000, estimatedDays: '3-5 days' },
-      };
-
-      // Find matching state
-      const stateKey = state.toLowerCase();
-      const zoneInfo = shippingZones[stateKey] || {
-        zone: 'north',
-        baseRate: 7000,
-        estimatedDays: '4-6 days',
-      };
-
-      // Calculate weight-based adjustments
-      let weight = args.estimated_weight || 1;
-      let products: Array<{ name: string; weight?: number }> = [];
-
-      // If product IDs provided, fetch products and calculate weight
-      if (args.product_ids) {
-        const ids = args.product_ids
-          .split(',')
-          .map((id) => id.trim())
-          .filter(Boolean);
-        if (ids.length > 0) {
-          const { data: fetchedProducts } = await supabase
-            .from('products')
-            .select('id, name, weight')
-            .in('id', ids)
-            .eq('merchant_id', merchantId);
-
-          if (fetchedProducts && fetchedProducts.length > 0) {
-            products = fetchedProducts;
-            weight = fetchedProducts.reduce(
-              (sum, p) => sum + (p.weight || 0.5),
-              0
-            );
-          }
-        }
-      }
-
-      // Weight-based pricing adjustments
-      let weightMultiplier = 1;
-      if (weight > 5) weightMultiplier = 1.5;
-      else if (weight > 2) weightMultiplier = 1.25;
-      else if (weight > 1) weightMultiplier = 1.1;
-
-      const estimatedFee = Math.round(zoneInfo.baseRate * weightMultiplier);
-      const expressRate = Math.round(estimatedFee * 1.5);
-
-      // Shipping options
-      const options = [
-        {
-          name: 'Standard Delivery',
-          carrier: 'GIGL/Topship',
-          price: estimatedFee,
-          days: zoneInfo.estimatedDays,
-        },
-        {
-          name: 'Express Delivery',
-          carrier: 'Express Courier',
-          price: expressRate,
-          days: zoneInfo.zone === 'lagos' ? 'Same day' : '1-2 days faster',
-        },
-      ];
-
-      // Free shipping threshold
-      const freeShippingThreshold = 150000;
-      const freeShippingNote = `💡 **Free Shipping** on orders over ${formatPrice(freeShippingThreshold)}!`;
-
-      let text = `**🚚 Shipping to ${city}, ${state}**\n\n`;
-
-      if (products.length > 0) {
-        text += `**Items:**\n`;
-        products.forEach((p) => {
-          text += `• ${p.name}\n`;
-        });
-        text += `**Total Weight:** ${weight.toFixed(1)}kg\n\n`;
-      }
-
-      text += `**Delivery Options:**\n\n`;
-
-      options.forEach((opt) => {
-        text += `📦 **${opt.name}**\n`;
-        text += `   • ${formatPrice(opt.price)}\n`;
-        text += `   • ${opt.days}\n`;
-        text += `   • via ${opt.carrier}\n\n`;
-      });
-
-      text += `---\n${freeShippingNote}\n\n`;
-
-      if (zoneInfo.zone === 'lagos') {
-        text += `🏪 **Pickup Available!** Save on shipping by picking up from our Lagos location.`;
-      }
-
+      const city = args.city ? sanitizeString(args.city, 100) : null;
+      const destination = city ? `${city}, ${state}` : state;
+      const policyUrl = 'https://ogabassey.com/shipping';
       return {
-        content: [{ type: 'text', text }],
+        content: [{
+          type: 'text',
+          text: `Ogabassey does not publish a fixed delivery fee for ${destination}. Enter the delivery address at checkout to confirm the fee, eligibility for any free delivery, and timing. Read the current shipping policy: ${policyUrl}`,
+        }],
         structuredContent: {
-          state,
           city,
-          zone: zoneInfo.zone,
-          shipping_options: options,
-          estimated_weight: weight,
-          free_shipping_threshold: freeShippingThreshold,
+          fee: null,
+          policy_url: policyUrl,
+          quote_available: false,
+          state,
+          status: 'requires_checkout',
         },
       };
     }
   );
-  // [REMOVED] save_delivery_address
-  // [REMOVED] get_related_products
-  // [REMOVED] suggest_cart_addons
-  // [REMOVED] set_price_alert
-  // [REMOVED] manage_wishlist
+
   // [REMOVED] ask_santa
 
 
@@ -3179,24 +3054,18 @@ const httpServer = createServer(
       return;
     }
 
-    // Health check endpoint
+    // ChatGPT uses the widget origin as a fallback for "Open in app".
+    // Keep its root shopper-facing; readiness lives at /health.
     if (req.method === 'GET' && url.pathname === '/') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(
-        JSON.stringify({
-          name: 'Ogabassey ChatGPT MCP Server',
-          version: '1.0.0',
-          status: 'ok',
-          timestamp: new Date().toISOString(),
-        })
-      );
+      res.writeHead(302, { Location: 'https://ogabassey.com' });
+      res.end();
       logAudit({
         timestamp: new Date().toISOString(),
         requestId,
         ip,
         method: 'GET',
         path: '/',
-        statusCode: 200,
+        statusCode: 302,
         durationMs: Date.now() - startTime,
       });
       return;
@@ -3223,6 +3092,47 @@ const httpServer = createServer(
         res.end(
           JSON.stringify({ status: 'unhealthy', database: 'connection failed' })
         );
+      }
+      return;
+    }
+
+    // The CDN's hotlink policy blocks ChatGPT's sandbox referrer. Fetch only
+    // published product assets from the fixed CDN origin and serve them here.
+    if (req.method === 'GET' && url.pathname.startsWith('/images/')) {
+      if (!url.pathname.startsWith('/images/core-assets/products/')) {
+        res.writeHead(404).end('Not Found');
+        return;
+      }
+      const assetPath = url.pathname.slice('/images'.length);
+      try {
+        const cdnUrl = `https://cdn.ogabassey.com/image/width=640,quality=70,format=webp${assetPath}`;
+        const upstream = await fetch(cdnUrl, {
+          redirect: 'error',
+          signal: AbortSignal.timeout(8000),
+        });
+        const contentType = upstream.headers.get('content-type') || '';
+        if (!upstream.ok || !/^image\/(?:avif|jpeg|png|webp)(?:;|$)/i.test(contentType)) {
+          res.writeHead(404).end('Not Found');
+          return;
+        }
+        const contentLength = Number(upstream.headers.get('content-length'));
+        if (Number.isFinite(contentLength) && contentLength > 5_000_000) {
+          res.writeHead(502).end('Image too large');
+          return;
+        }
+        const image = Buffer.from(await upstream.arrayBuffer());
+        if (image.byteLength > 5_000_000) {
+          res.writeHead(502).end('Image too large');
+          return;
+        }
+        res.writeHead(200, {
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'public, max-age=3600',
+          'Content-Type': contentType,
+        });
+        res.end(image);
+      } catch {
+        res.writeHead(502).end('Image unavailable');
       }
       return;
     }

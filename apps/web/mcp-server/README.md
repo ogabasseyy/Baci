@@ -111,24 +111,24 @@ server {
 
 | Tool | Description |
 |------|-------------|
-| `add_to_cart` | Add a selected product to the in-chat cart handoff |
+| `add_to_cart` | Prepare a storefront cart URL without saving a server-side cart |
 | `browse_categories` | Browse active store categories |
 | `cancel_agentic_checkout_session` | Cancel a mutable signed Baci agentic checkout session |
 | `cancel_ucp_cart` | Cancel an active UCP cart |
-| `check_order` | Look up order status by order number or phone |
-| `check_payment_status` | Check whether a bank-transfer payment has been received |
+| `check_order` | Unavailable until customer authorization is implemented |
+| `check_payment_status` | Unavailable until customer authorization is implemented |
 | `complete_agentic_checkout_session` | Complete a signed Baci agentic checkout session with buyer authorization |
 | `convert_ucp_cart_to_checkout` | Create or reuse a checkout session from a UCP cart |
 | `create_agentic_checkout_session` | Create a signed Baci agentic checkout session with authoritative totals and fulfillment options |
 | `create_ucp_cart` | Create a persistent UCP cart session |
-| `generate_payment_account` | Generate a Paystack dedicated bank account for bank-transfer payment |
+| `generate_payment_account` | Unavailable until customer authorization is implemented |
 | `get_agentic_checkout_session` | Read a signed Baci agentic checkout session state |
 | `get_brands` | Browse active store brands |
 | `get_ucp_cart` | Read a UCP cart session |
 | `get_product` | Get detailed product information |
 | `get_product_variants` | Get variants, conditions, prices, and availability for a product |
-| `get_recommendations` | AI-powered product recommendations |
-| `get_shipping_quote` | Estimate delivery options for a destination |
+| `get_recommendations` | Heuristic product suggestions by use case and budget |
+| `get_shipping_quote` | Explain where to confirm the final delivery fee at checkout |
 | `get_store_info` | Shipping, returns, payment info |
 | `lookup_ucp_catalog_items` | Fetch exact product IDs through the UCP catalog lookup route |
 | `search_ucp_catalog` | Search Ogabassey products using the UCP catalog route |
@@ -142,7 +142,7 @@ Once connected, users can ask:
 
 - "Show me phones under 500,000 naira"
 - "What's the iPhone 15 Pro Max price?"
-- "Where's my order ORD-12345?"
+- "Show me the current order tracking page"
 - "What's your shipping policy?"
 - "I need a laptop for gaming, budget 800k"
 - "Create a checkout session for two iPhone 15 Pro Max units"
@@ -156,7 +156,8 @@ Once connected, users can ask:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service role key |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Public Supabase key used under RLS for shopping tools |
+| `MCP_PUBLIC_ORIGIN` | No | Public HTTPS origin for proxied product images (default: `https://mcp.ogabassey.com`; set to the temporary tunnel origin for local ChatGPT QA) |
 | `BACI_AGENTIC_ACCESS_TOKEN` | Yes for checkout | Baci-owned bearer token for agentic checkout APIs; this is not an OpenAI Platform API key |
 | `BACI_AGENTIC_SIGNING_KEY` | Yes for checkout | Baci-owned HMAC signing key for agentic checkout APIs |
 | `OPENAI_AGENTIC_API_KEY` | Legacy alias | Backwards-compatible alias for `BACI_AGENTIC_ACCESS_TOKEN` |

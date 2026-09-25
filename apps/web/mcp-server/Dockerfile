@@ -23,6 +23,7 @@ COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc /a
 COPY --chown=node:node apps/web/package.json ./package.json
 COPY --chown=node:node apps/web/tsconfig.json ./tsconfig.json
 COPY --chown=node:node apps/web/mcp-server ./mcp-server
+RUN test ! -e ./mcp-server/.env
 COPY --chown=node:node apps/web/src ./src
 COPY --chown=node:node packages/shared /app/packages/shared
 

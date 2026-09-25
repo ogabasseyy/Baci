@@ -1,20 +1,82 @@
 -- Guard per-variant Jumia price writes against concurrent saves.
 --
--- The product update route stamps every ready mapping with the request's
--- pre-push timestamp before submitting the provider feed. Two overlapping
+-- The product update route stamps every ready mapping with a unique
+-- per-request token before submitting the provider feed. Two overlapping
 -- saves can otherwise interleave so the earlier request's feed resolves
--- last and its RPC call overwrites the later request's local prices. The
--- expected stamp is now a predicate of the atomic update: rows touched by
--- a newer save no longer match, the row-count check reports the call as
+-- last and overwrites the later request's local prices. The expected
+-- token is a predicate of the atomic update: rows restamped by a newer
+-- save no longer match, the row-count check reports the call as
 -- superseded (SQLSTATE 40001) instead of silently regressing them, and
 -- genuinely missing targets keep the original 22023 failure.
+--
+-- Predeploy safety: the live route still calls the two-argument signature
+-- while this migration runs ahead of the Vercel deploy, so the unguarded
+-- overload is retained as a deprecated compatibility shim. Remove it in a
+-- postdeploy migration once the token-passing revision is live.
 
-DROP FUNCTION IF EXISTS public.apply_jumia_variant_price_updates(uuid, jsonb);
+ALTER TABLE public.jumia_product_mappings
+  ADD COLUMN IF NOT EXISTS update_token text;
+
+-- Deprecated compatibility shim for the live route during the predeploy
+-- window. Matches the pre-guard behavior exactly (no token predicate).
+CREATE OR REPLACE FUNCTION public.apply_jumia_variant_price_updates(
+  p_merchant_id uuid,
+  p_updates jsonb
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_user_id uuid := (SELECT auth.uid());
+  v_update_count integer;
+BEGIN
+  IF v_user_id IS NULL OR NOT (
+    EXISTS (
+      SELECT 1 FROM public.merchants AS merchant
+      WHERE merchant.id = p_merchant_id AND merchant.user_id = v_user_id
+    ) OR public.check_staff_permission(
+      v_user_id, p_merchant_id, 'integrations', 'manage'
+    )
+  ) THEN
+    RAISE EXCEPTION 'Not authorized to manage Jumia connections'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF jsonb_typeof(p_updates) IS DISTINCT FROM 'array'
+    OR jsonb_array_length(p_updates) < 1
+    OR EXISTS (
+      SELECT 1
+      FROM jsonb_to_recordset(p_updates) AS update_row(id uuid, price numeric)
+      WHERE update_row.id IS NULL
+        OR update_row.price IS NULL
+        OR update_row.price <= 0
+    )
+  THEN
+    RAISE EXCEPTION 'Invalid Jumia price updates' USING ERRCODE = '22023';
+  END IF;
+
+  UPDATE public.jumia_product_mappings AS mapping
+  SET
+    jumia_price = update_row.price,
+    updated_at = now()
+  FROM jsonb_to_recordset(p_updates) AS update_row(id uuid, price numeric)
+  WHERE mapping.id = update_row.id
+    AND mapping.merchant_id = p_merchant_id;
+
+  GET DIAGNOSTICS v_update_count = ROW_COUNT;
+  IF v_update_count <> jsonb_array_length(p_updates) THEN
+    RAISE EXCEPTION 'Jumia price update target not found'
+      USING ERRCODE = '22023';
+  END IF;
+END;
+$$;
 
 CREATE OR REPLACE FUNCTION public.apply_jumia_variant_price_updates(
   p_merchant_id uuid,
   p_updates jsonb,
-  p_expected_updated_at timestamptz
+  p_expected_update_token text
 )
 RETURNS void
 LANGUAGE plpgsql
@@ -57,7 +119,7 @@ BEGIN
   FROM jsonb_to_recordset(p_updates) AS update_row(id uuid, price numeric)
   WHERE mapping.id = update_row.id
     AND mapping.merchant_id = p_merchant_id
-    AND mapping.updated_at = p_expected_updated_at;
+    AND mapping.update_token = p_expected_update_token;
 
   GET DIAGNOSTICS v_update_count = ROW_COUNT;
   IF v_update_count <> jsonb_array_length(p_updates) THEN
@@ -80,8 +142,14 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.apply_jumia_variant_price_updates(
-  uuid, jsonb, timestamptz
+  uuid, jsonb
 ) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.apply_jumia_variant_price_updates(
-  uuid, jsonb, timestamptz
+  uuid, jsonb
+) TO authenticated;
+REVOKE ALL ON FUNCTION public.apply_jumia_variant_price_updates(
+  uuid, jsonb, text
+) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.apply_jumia_variant_price_updates(
+  uuid, jsonb, text
 ) TO authenticated;

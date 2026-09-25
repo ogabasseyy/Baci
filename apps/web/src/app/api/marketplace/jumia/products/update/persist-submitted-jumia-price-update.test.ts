@@ -45,6 +45,7 @@ function mapping(overrides: Partial<JumiaVariantPriceMapping> = {}) {
 }
 
 const MERCHANT_ID = 'merchant-1';
+const UPDATE_TOKEN = 'token-1';
 const UPDATED_AT = '2026-09-25T00:00:00.000Z';
 
 describe('persistSubmittedJumiaPriceUpdate', () => {
@@ -69,6 +70,7 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
       },
       submittedSkus: ['SKU-1'],
       updatedAt: UPDATED_AT,
+      updateToken: UPDATE_TOKEN,
     });
 
     expect(result).toEqual({ ok: true });
@@ -86,11 +88,11 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
     expect(mockRpc).toHaveBeenCalledWith('apply_jumia_variant_price_updates', {
       p_merchant_id: MERCHANT_ID,
       p_updates: [{ id: 'map-1', price: 900 }],
-      p_expected_updated_at: UPDATED_AT,
+      p_expected_update_token: UPDATE_TOKEN,
     });
     // Optimistic guard: only rows still stamped with this request's
-    // pre-push timestamp may be overwritten.
-    expect(mockUpdateEq).toHaveBeenCalledWith('updated_at', UPDATED_AT);
+    // unique pre-push token may be overwritten.
+    expect(mockUpdateEq).toHaveBeenCalledWith('update_token', UPDATE_TOKEN);
   });
 
   it('persists nothing when the feed submitted no SKUs', async () => {
@@ -101,6 +103,7 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
       overrides: { jumia_price: 900, jumia_sale_price: 800 },
       submittedSkus: [],
       updatedAt: UPDATED_AT,
+      updateToken: UPDATE_TOKEN,
     });
 
     expect(result).toEqual({ ok: true });
@@ -116,6 +119,7 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
       overrides: {},
       submittedSkus: [],
       updatedAt: UPDATED_AT,
+      updateToken: UPDATE_TOKEN,
     });
 
     expect(result).toEqual({ ok: true });
@@ -134,6 +138,7 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
       overrides: { jumia_sale_price: 800 },
       submittedSkus: ['SKU-1'],
       updatedAt: UPDATED_AT,
+      updateToken: UPDATE_TOKEN,
     });
 
     expect(result.ok).toBe(false);
@@ -152,6 +157,7 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
       overrides: { jumia_prices: { 'SKU-1': 900 } },
       submittedSkus: ['SKU-1'],
       updatedAt: UPDATED_AT,
+      updateToken: UPDATE_TOKEN,
     });
 
     expect(result.ok).toBe(false);
@@ -168,6 +174,7 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
       overrides: { jumia_sale_price: 800 },
       submittedSkus: ['SKU-1'],
       updatedAt: UPDATED_AT,
+      updateToken: UPDATE_TOKEN,
     });
 
     expect(result.ok).toBe(false);
@@ -178,14 +185,14 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
   });
 
   it('rejects a stale per-SKU save that resolves after a newer save', async () => {
-    const stampOlder = '2026-09-25T10:00:00.000Z';
-    const stampNewer = '2026-09-25T10:00:01.000Z';
-    const stampDbNow = '2026-09-25T10:00:02.000Z';
+    // Both saves start within the same millisecond tick: only the unique
+    // request tokens distinguish them.
+    const sameTick = '2026-09-25T10:00:00.000Z';
     const rows = new Map([
-      ['map-1', { updated_at: stampOlder, jumia_price: 1000 }],
+      ['map-1', { update_token: 'token-older', jumia_price: 1000 }],
     ]);
     // Stateful stand-in that enforces the same contracts as Postgres: eq
-    // predicates filter, the RPC rejects stamps that no longer match.
+    // predicates filter, the RPC rejects tokens that no longer match.
     const stateful = {
       from: () => ({
         update: (payload: Record<string, unknown>) => ({
@@ -217,12 +224,12 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
         _name: string,
         params: {
           p_updates: Array<{ id: string; price: number }>;
-          p_expected_updated_at: string;
+          p_expected_update_token: string;
         }
       ) => {
         const stale = params.p_updates.some(
           (update) =>
-            rows.get(update.id)?.updated_at !== params.p_expected_updated_at
+            rows.get(update.id)?.update_token !== params.p_expected_update_token
         );
         if (stale) {
           return {
@@ -238,7 +245,6 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
             rows.set(update.id, {
               ...current,
               jumia_price: update.price,
-              updated_at: stampDbNow,
             });
           }
         }
@@ -247,17 +253,18 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
     };
     const mappings = [{ id: 'map-1', jumia_sku: 'SKU-1', jumia_price: 1000 }];
 
-    // The newer save lands first: its pre-push stamp replaces the older
+    // The newer save lands first: its pre-push token replaces the older
     // one, then its per-SKU prices persist.
     const newerRow = rows.get('map-1');
-    if (newerRow) newerRow.updated_at = stampNewer;
+    if (newerRow) newerRow.update_token = 'token-newer';
     const newer = await persistSubmittedJumiaPriceUpdate({
       supabase: stateful as never,
       merchantId: MERCHANT_ID,
       mappings,
       overrides: { jumia_prices: { 'SKU-1': 900 } },
       submittedSkus: ['SKU-1'],
-      updatedAt: stampNewer,
+      updatedAt: sameTick,
+      updateToken: 'token-newer',
     });
     expect(newer).toEqual({ ok: true });
 
@@ -269,7 +276,8 @@ describe('persistSubmittedJumiaPriceUpdate', () => {
       mappings,
       overrides: { jumia_prices: { 'SKU-1': 700 } },
       submittedSkus: ['SKU-1'],
-      updatedAt: stampOlder,
+      updatedAt: sameTick,
+      updateToken: 'token-older',
     });
     expect(older.ok).toBe(false);
     expect(older.ok ? '' : older.error).toMatch(/Another save updated/);

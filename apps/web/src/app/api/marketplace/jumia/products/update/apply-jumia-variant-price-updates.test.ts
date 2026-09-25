@@ -32,7 +32,7 @@ describe('applyJumiaVariantPriceUpdates', () => {
       merchantId: 'merchant-1',
       mappings: MAPPINGS,
       prices: { 'SKU-1': 900, 'SKU-2': 1800 },
-      expectedUpdatedAt: '2026-09-25T00:00:00.000Z',
+      expectedUpdateToken: 'token-1',
     });
 
     expect(result).toEqual({ ok: true });
@@ -43,7 +43,7 @@ describe('applyJumiaVariantPriceUpdates', () => {
         { id: 'map-1', price: 900 },
         { id: 'map-2', price: 1800 },
       ],
-      p_expected_updated_at: '2026-09-25T00:00:00.000Z',
+      p_expected_update_token: 'token-1',
     });
   });
 
@@ -55,7 +55,7 @@ describe('applyJumiaVariantPriceUpdates', () => {
       merchantId: 'merchant-1',
       mappings: MAPPINGS,
       prices: { 'SKU-2': 1800 },
-      expectedUpdatedAt: '2026-09-25T00:00:00.000Z',
+      expectedUpdateToken: 'token-1',
     });
 
     expect(result).toEqual({ ok: true });
@@ -63,7 +63,7 @@ describe('applyJumiaVariantPriceUpdates', () => {
     expect(rpc).toHaveBeenCalledWith('apply_jumia_variant_price_updates', {
       p_merchant_id: 'merchant-1',
       p_updates: [{ id: 'map-2', price: 1800 }],
-      p_expected_updated_at: '2026-09-25T00:00:00.000Z',
+      p_expected_update_token: 'token-1',
     });
 
     const empty = await applyJumiaVariantPriceUpdates({
@@ -71,7 +71,7 @@ describe('applyJumiaVariantPriceUpdates', () => {
       merchantId: 'merchant-1',
       mappings: MAPPINGS,
       prices: {},
-      expectedUpdatedAt: '2026-09-25T00:00:00.000Z',
+      expectedUpdateToken: 'token-1',
     });
     expect(empty).toEqual({ ok: true });
     expect(rpc).toHaveBeenCalledTimes(1);
@@ -87,7 +87,7 @@ describe('applyJumiaVariantPriceUpdates', () => {
       merchantId: 'merchant-1',
       mappings: MAPPINGS,
       prices: { 'SKU-1': 900, 'SKU-2': 1800 },
-      expectedUpdatedAt: '2026-09-25T00:00:00.000Z',
+      expectedUpdateToken: 'token-1',
     });
 
     expect(result).toEqual({
@@ -108,7 +108,7 @@ describe('applyJumiaVariantPriceUpdates', () => {
       merchantId: 'merchant-1',
       mappings: MAPPINGS,
       prices: { 'SKU-1': 900 },
-      expectedUpdatedAt: '2026-09-25T00:00:00.000Z',
+      expectedUpdateToken: 'token-1',
     });
 
     expect(result).toEqual({

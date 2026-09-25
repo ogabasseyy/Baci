@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { flattenError } from 'zod';
@@ -193,12 +194,17 @@ export async function POST(request: NextRequest) {
       }
     }
     const updatedAt = new Date().toISOString();
+    // Collision-free optimistic-lock token: timestamps only have
+    // millisecond precision, so same-tick saves would share a stamp and
+    // both pass the post-feed guard.
+    const updateToken = randomUUID();
     // Status pushes target every ready variant, so the local status write
     // keeps the pre-push blanket scope. Price/sale fields are persisted after
     // the feed instead, scoped to submitted SKUs: a jumia_prices subset must
     // not stamp sale metadata on variants Jumia never received.
     const mappingUpdate: Record<string, unknown> = {
       updated_at: updatedAt,
+      update_token: updateToken,
     };
     if (Object.hasOwn(overrides, 'is_active')) {
       mappingUpdate.is_active = overrides.is_active;
@@ -259,6 +265,7 @@ export async function POST(request: NextRequest) {
       overrides,
       submittedSkus: submittedPriceSkus,
       updatedAt,
+      updateToken,
     });
     if (!persistResult.ok) {
       return NextResponse.json(

@@ -171,7 +171,7 @@ describe('POST /api/marketplace/jumia/products/update', () => {
       {
         p_merchant_id: MERCHANT_ID,
         p_updates: [{ id: 'map-1', price: 900 }],
-        p_expected_updated_at: expect.any(String),
+        p_expected_update_token: expect.any(String),
       }
     );
   });

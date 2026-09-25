@@ -22,7 +22,7 @@ export async function applyJumiaVariantPriceUpdates(args: {
   merchantId: string;
   mappings: readonly JumiaVariantPriceMapping[];
   prices: Record<string, number>;
-  expectedUpdatedAt: string;
+  expectedUpdateToken: string;
 }): Promise<{ ok: true } | { ok: false; error: string; code?: string }> {
   const updates = [];
   for (const mapping of args.mappings) {
@@ -37,7 +37,7 @@ export async function applyJumiaVariantPriceUpdates(args: {
     {
       p_merchant_id: args.merchantId,
       p_updates: updates,
-      p_expected_updated_at: args.expectedUpdatedAt,
+      p_expected_update_token: args.expectedUpdateToken,
     }
   );
   if (priceUpdateError) {

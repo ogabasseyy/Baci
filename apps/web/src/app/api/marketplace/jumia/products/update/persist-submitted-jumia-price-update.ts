@@ -28,6 +28,7 @@ export async function persistSubmittedJumiaPriceUpdate(args: {
   overrides: JumiaSubmittedPriceOverrides;
   submittedSkus: readonly string[];
   updatedAt: string;
+  updateToken: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const {
     supabase,
@@ -36,6 +37,7 @@ export async function persistSubmittedJumiaPriceUpdate(args: {
     overrides,
     submittedSkus,
     updatedAt,
+    updateToken,
   } = args;
   const submittedPriceUpdate: Record<string, unknown> = {
     updated_at: updatedAt,
@@ -60,15 +62,15 @@ export async function persistSubmittedJumiaPriceUpdate(args: {
     submittedMappingIds.length > 0
   ) {
     // Optimistic guard: only overwrite rows still stamped with this
-    // request's pre-push timestamp. A concurrent save lands a newer stamp,
-    // so a shortfall means this feed was superseded and must reconcile
-    // instead of regressing the newer local values.
+    // request's unique pre-push token. A concurrent save restamps with its
+    // own token, so a shortfall means this feed was superseded and must
+    // reconcile instead of regressing the newer local values.
     const { data: updatedRows, error: submittedPriceError } = await supabase
       .from('jumia_product_mappings')
       .update(submittedPriceUpdate)
       .in('id', submittedMappingIds)
       .eq('merchant_id', merchantId)
-      .eq('updated_at', updatedAt)
+      .eq('update_token', updateToken)
       .select('id');
     if (submittedPriceError) {
       logger.error({
@@ -99,7 +101,7 @@ export async function persistSubmittedJumiaPriceUpdate(args: {
       merchantId,
       mappings,
       prices: submittedPrices,
-      expectedUpdatedAt: updatedAt,
+      expectedUpdateToken: updateToken,
     });
     if (!priceResult.ok) {
       if (priceResult.code === '40001') {

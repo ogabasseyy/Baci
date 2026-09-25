@@ -1,9 +1,11 @@
 -- =============================================
 -- REGRESSION TEST: jumia variant price optimistic guard
 --   apply_jumia_variant_price_updates() must only overwrite rows still
---   stamped with the caller's expected updated_at. A newer stamp means a
---   concurrent save landed first: the call fails with 40001 and leaves the
---   newer prices untouched instead of regressing them.
+--   stamped with the caller's expected update token. A token restamped by
+--   a concurrent save means this feed was superseded: the call fails with
+--   40001 and leaves the newer prices untouched instead of regressing
+--   them. The deprecated two-argument overload keeps the exact pre-guard
+--   behavior for the live route during the predeploy window.
 --
 -- USAGE:
 --   psql $DATABASE_URL -v ON_ERROR_STOP=1 -f supabase/migrations/tests/jumia_variant_price_optimistic_guard.sql
@@ -20,8 +22,8 @@ DECLARE
   v_product_id uuid := '00000000-0000-4000-8000-00000000f201';
   v_mapping_id uuid := '00000000-0000-4000-8000-00000000f301';
   v_missing_id uuid := '00000000-0000-4000-8000-00000000f302';
-  v_stamp_old timestamptz := '2026-09-25T10:00:00Z';
-  v_stamp_new timestamptz := '2026-09-25T10:00:01Z';
+  v_token_older text := '00000000-0000-4000-8000-00000000f401';
+  v_token_newer text := '00000000-0000-4000-8000-00000000f402';
   v_price numeric;
 BEGIN
   INSERT INTO auth.users (
@@ -69,7 +71,7 @@ BEGIN
     jumia_sku,
     jumia_shop_id,
     jumia_price,
-    updated_at
+    update_token
   ) VALUES (
     v_mapping_id,
     v_merchant_id,
@@ -77,7 +79,7 @@ BEGIN
     'GUARD-SKU-1',
     'shop-guard',
     1000,
-    v_stamp_old
+    v_token_older
   );
 
   PERFORM set_config(
@@ -86,11 +88,11 @@ BEGIN
     true
   );
 
-  -- Matching stamp: the price update applies.
+  -- Matching token: the price update applies.
   PERFORM public.apply_jumia_variant_price_updates(
     v_merchant_id,
     jsonb_build_array(jsonb_build_object('id', v_mapping_id, 'price', 900)),
-    v_stamp_old
+    v_token_older
   );
 
   SELECT jumia_price INTO v_price
@@ -98,22 +100,22 @@ BEGIN
   WHERE id = v_mapping_id;
 
   IF v_price <> 900 THEN
-    RAISE EXCEPTION 'matching stamp did not apply the price update';
+    RAISE EXCEPTION 'matching token did not apply the price update';
   END IF;
 
-  -- A newer stamp won the race: the stale call fails with 40001 and the
+  -- A newer token won the race: the stale call fails with 40001 and the
   -- newer price survives.
   UPDATE public.jumia_product_mappings
-  SET jumia_price = 850, updated_at = v_stamp_new
+  SET jumia_price = 850, update_token = v_token_newer
   WHERE id = v_mapping_id;
 
   BEGIN
     PERFORM public.apply_jumia_variant_price_updates(
       v_merchant_id,
       jsonb_build_array(jsonb_build_object('id', v_mapping_id, 'price', 800)),
-      v_stamp_old
+      v_token_older
     );
-    RAISE EXCEPTION 'stale stamp did not raise a superseded error';
+    RAISE EXCEPTION 'stale token did not raise a superseded error';
   EXCEPTION WHEN SQLSTATE '40001' THEN
     -- Expected: concurrent save wins.
   END;
@@ -131,12 +133,27 @@ BEGIN
     PERFORM public.apply_jumia_variant_price_updates(
       v_merchant_id,
       jsonb_build_array(jsonb_build_object('id', v_missing_id, 'price', 700)),
-      v_stamp_old
+      v_token_older
     );
     RAISE EXCEPTION 'missing target did not raise a not-found error';
   EXCEPTION WHEN SQLSTATE '22023' THEN
     -- Expected: fail closed on unknown targets.
   END;
+
+  -- Deprecated two-argument overload: pre-guard behavior is preserved for
+  -- the live route during the predeploy window.
+  PERFORM public.apply_jumia_variant_price_updates(
+    v_merchant_id,
+    jsonb_build_array(jsonb_build_object('id', v_mapping_id, 'price', 750))
+  );
+
+  SELECT jumia_price INTO v_price
+  FROM public.jumia_product_mappings
+  WHERE id = v_mapping_id;
+
+  IF v_price <> 750 THEN
+    RAISE EXCEPTION 'compatibility overload did not apply the price update';
+  END IF;
 END $$;
 
 ROLLBACK;

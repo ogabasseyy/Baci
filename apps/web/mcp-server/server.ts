@@ -47,6 +47,7 @@ import { resolveMcpSearchProductCondition } from './product-condition-filter';
 import { loadMcpSearchProducts } from './search-products-query';
 import { getMcpOfferAvailability, getMcpProductStockSummary } from './product-stock-summary';
 import { serveProductImage } from './product-image-proxy';
+import { checkProductImageRateLimit } from './product-image-rate-limit';
 
 // =============================================================================
 // CONFIGURATION
@@ -3024,6 +3025,17 @@ const httpServer = createServer(
 
     const url = new URL(req.url, `http://${req.headers.host ?? 'localhost'}`);
 
+    // Image loads have a separate bounded budget from MCP tool calls.
+    if (req.method === 'GET' && url.pathname.startsWith('/images/')) {
+      const imageLimit = checkProductImageRateLimit(ip);
+      if (!imageLimit.allowed) {
+        res.writeHead(429, { 'Retry-After': imageLimit.retryAfterSeconds }).end('Too Many Requests');
+        return;
+      }
+      await serveProductImage(url.pathname, res);
+      return;
+    }
+
     // Rate limiting
     const rateLimit = checkRateLimit(ip);
     res.setHeader('X-RateLimit-Limit', RATE_LIMIT_MAX_REQUESTS);
@@ -3124,12 +3136,6 @@ const httpServer = createServer(
           JSON.stringify({ status: 'unhealthy', database: 'connection failed' })
         );
       }
-      return;
-    }
-
-    // Proxy only published product images through the fixed CDN origin.
-    if (req.method === 'GET' && url.pathname.startsWith('/images/')) {
-      await serveProductImage(url.pathname, res);
       return;
     }
 

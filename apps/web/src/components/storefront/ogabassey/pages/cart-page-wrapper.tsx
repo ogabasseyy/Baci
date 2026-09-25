@@ -112,11 +112,10 @@ async function fetchAndAddCartItems({
       const resolvedImage =
         getPrimaryProductImage(product.images) ||
         PRODUCT_IMAGE_PLACEHOLDER_URL;
-      // Check if already in cart
-      const existsInCart = hasQuizPrizeVoucher
-        ? cart.some(item => item.quizAwardId === quizAwardId)
-        : cart.some(item => item.id === product.id && !item.quizAwardId);
-      if (!existsInCart) {
+      // Prize awards are single-use; ordinary cart lines merge in addToCart.
+      const alreadyClaimedPrize = hasQuizPrizeVoucher &&
+        cart.some(item => item.quizAwardId === quizAwardId);
+      if (!alreadyClaimedPrize) {
         addToCart(
           {
             ...product,

@@ -172,7 +172,7 @@ describe('storefront CSS partitioning (dark utilities)', () => {
     const imageSurfaceSourceFiles = [
       '../../components/storefront/ogabassey/pages/cart.tsx',
       '../../components/storefront/ogabassey/components/cart-sidebar-line-item.tsx',
-      '../../components/storefront/ogabassey/pages/checkout-page.tsx',
+      '../../components/storefront/ogabassey/pages/checkout/components/DesktopOrderSummary.tsx',
       '../../components/storefront/ogabassey/components/MobileOrderSummary.tsx',
       '../../components/storefront/ogabassey/pages/receipts.tsx',
       '../../components/storefront/ogabassey/pages/order-details-item-row.tsx',

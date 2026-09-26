@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSlugForCustomDomain } from '@/lib/domain-cache-simple';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
+import { resolveStorefrontProductSlugResolution } from '@/lib/storefront-product-slug-membership';
 import { proxy } from './proxy';
 
 // Self-contained mocks. This lives in its OWN file rather than proxy.test.ts so
@@ -21,6 +22,11 @@ vi.mock('@/lib/supabase/middleware', () => ({
 }));
 vi.mock('@/lib/rate-limit', () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
+}));
+vi.mock('@/lib/storefront-product-slug-membership', () => ({
+  resolveStorefrontProductSlugResolution: vi
+    .fn()
+    .mockResolvedValue({ kind: 'present-or-unknown' }),
 }));
 
 const CUSTOM_DOMAIN = 'ogabassey.com';
@@ -88,9 +94,9 @@ describe('bugfix: retired-slug prefix strip shadowed a live storefront route', (
       // the alias lookup would resolve to them — the live route must still win.
       vi.mocked(getSlugForCustomDomain).mockResolvedValue(MERCHANT_SLUG);
       vi.mocked(getCurrentSlugForAlias).mockResolvedValue(MERCHANT_SLUG);
-      const request = new NextRequest(
-        `https://${CUSTOM_DOMAIN}/${segment}/my-post`
-      );
+      const livePath =
+        segment === 'unlock-orders' ? `/${segment}` : `/${segment}/my-post`;
+      const request = new NextRequest(`https://${CUSTOM_DOMAIN}${livePath}`);
       request.headers.set('host', CUSTOM_DOMAIN);
 
       // Act
@@ -128,15 +134,36 @@ describe('bugfix: retired-slug prefix strip shadowed a live storefront route', (
       `https://${CUSTOM_DOMAIN}/summer-sale`
     );
   });
+
+  it('still strips a suffixed retired unlock-orders alias', async () => {
+    vi.mocked(getSlugForCustomDomain).mockResolvedValue(MERCHANT_SLUG);
+    vi.mocked(getCurrentSlugForAlias).mockImplementation(
+      async (slug: string) => (slug === 'unlock-orders' ? MERCHANT_SLUG : null)
+    );
+    const request = new NextRequest(
+      `https://${CUSTOM_DOMAIN}/unlock-orders/summer-sale`
+    );
+    request.headers.set('host', CUSTOM_DOMAIN);
+
+    const response = await proxy(request);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get('location')).toBe(
+      `https://${CUSTOM_DOMAIN}/summer-sale`
+    );
+  });
 });
 
 describe('reserving a route segment must not spill into unrelated proxy paths', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(resolveStorefrontProductSlugResolution).mockResolvedValue({
+      kind: 'present-or-unknown',
+    });
   });
 
   /**
-   * `unlock-orders` belongs in NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS, NOT in
+   * `unlock-orders` belongs in RETIRED_SLUG_STRIP_LIVE_PAGE_SEGMENTS, NOT in
    * RESERVED_STOREFRONT_SEGMENTS. The reserved set additionally drives
    * merchant-slug validity, the metadata-cache partition, and the PDP
    * hard-404 / canonical-308 helpers, so reserving it there would penalise a
@@ -150,9 +177,12 @@ describe('reserving a route segment must not spill into unrelated proxy paths', 
 
     const response = await proxy(request);
 
-    // A reserved first segment makes isStorefrontHomeDocument reject the URL,
-    // and the merchant loses its public cache headers entirely.
-    expect(response.headers.get('cache-control')).not.toBe('no-store');
+    expect(response.headers.get('Cache-Control')).toBe(
+      'public, max-age=0, must-revalidate'
+    );
+    expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe(
+      'max-age=300, stale-while-revalidate=86400'
+    );
   });
 
   it('still rewrites the retired-alias API subtree for unlock-orders', async () => {
@@ -170,8 +200,15 @@ describe('reserving a route segment must not spill into unrelated proxy paths', 
 
     const response = await proxy(request);
 
-    // A 302 here means it fell through to the page strip instead.
-    expect(response.status).not.toBe(302);
+    expect(response.headers.get('x-middleware-rewrite')).toBe(
+      `https://${CUSTOM_DOMAIN}/api/storefront/customer`
+    );
+    expect(response.headers.get('x-middleware-request-x-custom-domain')).toBe(
+      CUSTOM_DOMAIN
+    );
+    expect(response.headers.get('x-middleware-request-x-merchant-domain')).toBe(
+      CUSTOM_DOMAIN
+    );
   });
 
   it('still classifies a PDP whose CATEGORY is slugged unlock-orders', async () => {
@@ -181,16 +218,36 @@ describe('reserving a route segment must not spill into unrelated proxy paths', 
       `https://${CUSTOM_DOMAIN}/unlock-orders/some-product`
     );
     request.headers.set('host', CUSTOM_DOMAIN);
+    const cachedPdpResponse = await proxy(request);
 
-    const response = await proxy(request);
+    expect(cachedPdpResponse.headers.get('Cache-Control')).toBe(
+      'public, max-age=0, must-revalidate'
+    );
+    expect(cachedPdpResponse.headers.get('Vercel-CDN-Cache-Control')).toBe(
+      'max-age=300, stale-while-revalidate=86400'
+    );
 
-    // NON_CACHEABLE membership would force no-store on a legitimate PDP.
-    expect(response.headers.get('cache-control')).not.toBe('no-store');
+    vi.mocked(resolveStorefrontProductSlugResolution).mockResolvedValue({
+      kind: 'missing',
+    });
+    const missingProductRequest = new NextRequest(
+      `https://${CUSTOM_DOMAIN}/unlock-orders/some-product`
+    );
+    missingProductRequest.headers.set('host', CUSTOM_DOMAIN);
+    const missingProductResponse = await proxy(missingProductRequest);
+
+    expect(resolveStorefrontProductSlugResolution).toHaveBeenCalledWith(
+      expect.objectContaining({ productSlug: 'some-product' })
+    );
+    expect(missingProductResponse.status).toBe(404);
   });
 
   it('still treats a PRODUCT slugged unlock-orders as a product URL', async () => {
     vi.mocked(getSlugForCustomDomain).mockResolvedValue(MERCHANT_SLUG);
     vi.mocked(getCurrentSlugForAlias).mockResolvedValue(null);
+    vi.mocked(resolveStorefrontProductSlugResolution).mockResolvedValue({
+      kind: 'missing',
+    });
     const request = new NextRequest(
       `https://${CUSTOM_DOMAIN}/products/unlock-orders`
     );
@@ -198,8 +255,9 @@ describe('reserving a route segment must not spill into unrelated proxy paths', 
 
     const response = await proxy(request);
 
-    // The PDP helpers bail out early on a reserved second segment, which would
-    // hand the request to the streamed App Router response they exist to avoid.
-    expect(response.status).not.toBe(404);
+    expect(resolveStorefrontProductSlugResolution).toHaveBeenCalledWith(
+      expect.objectContaining({ productSlug: 'unlock-orders' })
+    );
+    expect(response.status).toBe(404);
   });
 });

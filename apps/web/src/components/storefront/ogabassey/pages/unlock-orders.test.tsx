@@ -48,6 +48,12 @@ describe('OgabasseyUnlockOrders', () => {
     expect(screen.getByText('AT&T')).toBeInTheDocument();
     expect(screen.getByText(/in progress/i)).toBeInTheDocument();
     expect(screen.getByText(/₦100,000/)).toBeInTheDocument();
+    expect(screen.getByText(/in progress/i).className).toContain(
+      'text-[var(--store-background-text'
+    );
+    expect(
+      screen.getByText('The carrier is processing your request.').className
+    ).toContain('text-store-background-text/70');
     expect(screen.queryByText(/provider order/i)).toBeNull();
     expect(mocks.list).toHaveBeenCalledWith('ogabassey');
     expect(screen.getByRole('link', { name: /new check/i })).toHaveAttribute(
@@ -67,6 +73,19 @@ describe('OgabasseyUnlockOrders', () => {
     expect(screen.getByRole('link', { name: /new check/i })).toHaveAttribute(
       'href',
       '/imei-check'
+    );
+  });
+
+  it('uses storefront background text tokens for empty-state contrast', async () => {
+    mocks.list.mockResolvedValue([]);
+    render(<OgabasseyUnlockOrders />);
+
+    const heading = await screen.findByRole('heading', {
+      name: 'No unlock orders yet',
+    });
+    expect(heading.className).toContain('text-[var(--store-background-text');
+    expect(screen.getByText(/eligible clean carrier-unlock options/i).className).toContain(
+      'text-store-background-text/70'
     );
   });
 });

@@ -10,6 +10,29 @@ const product = {
 };
 
 describe('buildMcpProductDetail', () => {
+  it('lists only stocked offers as available while retaining sold-out offers in structured output', async () => {
+    const supabase = { rpc: vi.fn(async () => ({
+      data: [
+        { condition: 'new', price: 100000, stock_quantity: 2, grade: null, condition_notes: null },
+        { condition: 'used', price: 70000, stock_quantity: 0, grade: null, condition_notes: null },
+      ], error: null,
+    })) } as unknown as SupabaseClient;
+    const result = await buildMcpProductDetail({
+      product: { ...product, has_variants: false, has_condition_offers: true },
+      supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+    });
+
+    expect(result.content[0].text).toContain('**Available Conditions:**');
+    expect(result.content[0].text).toContain('• new: 100000 - In Stock');
+    expect(result.content[0].text).not.toContain('• used: 70000');
+    expect(result.structuredContent).toMatchObject({
+      condition_offers: [
+        { condition: 'new', availability: 'in_stock' },
+        { condition: 'used', availability: 'out_of_stock' },
+      ],
+    });
+  });
+
   it('keeps sold-out-only colors out of the available-option summary', async () => {
     const supabase = { rpc: vi.fn(async () => ({
       data: [

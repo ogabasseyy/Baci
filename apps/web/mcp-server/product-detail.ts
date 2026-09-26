@@ -156,9 +156,12 @@ export async function buildMcpProductDetail({
   }
 
   // Condition offers summary
-  if (conditionOffers.length > 0) {
+  const availableOffers = product.manage_stock
+    ? conditionOffers.filter((offer) => Number(offer.stock_quantity ?? 0) > 0)
+    : conditionOffers;
+  if (availableOffers.length > 0) {
     text += '\n\n**Available Conditions:**\n';
-    for (const offer of conditionOffers) {
+    for (const offer of availableOffers) {
       text += `• ${offer.condition}${offer.grade ? ` (Grade ${offer.grade})` : ''}: ${formatPrice(offer.price)}`;
       text += ` - ${getMcpOfferAvailability(product.manage_stock, offer.stock_quantity).label}`;
       text += '\n';

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { inferSmartphoneCategory } from './infer-smartphone-category';
 import {
   buildSearchProductsV2RpcArgs,
   MAX_POST_FILTER_RESULT_PAGES,
@@ -257,7 +258,7 @@ export async function loadMcpSearchProducts({
   const sanitizedBrand = args.brand ? sanitizeString(args.brand, 50) : undefined;
   const sanitizedCategory = args.category
     ? sanitizeString(args.category, 50)
-    : undefined;
+    : inferSmartphoneCategory(sanitizedQuery, args.category);
   const sanitizedCondition = args.condition
     ? sanitizeString(args.condition, 50)
     : undefined;

@@ -1,0 +1,14 @@
+.mode-inline .products-grid--single .product-card {
+  display: grid;
+  grid-template-columns: minmax(96px, 32%) minmax(0, 1fr);
+  grid-template-rows: 1fr auto;
+}
+
+.mode-inline .products-grid--single .product-image {
+  grid-row: 1 / 3;
+  aspect-ratio: 1;
+}
+
+.mode-inline .products-grid--single .product-actions {
+  align-self: end;
+}

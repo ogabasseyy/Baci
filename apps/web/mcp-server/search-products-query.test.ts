@@ -6,10 +6,11 @@ import {
 } from './search-products-ranking';
 import { loadMcpSearchProducts } from './search-products-query';
 
-function createRankedSearchSupabase() {
+function createRankedSearchSupabase(category?: string) {
   const inMock = vi.fn(async (_column: string, productIds: string[]) => ({
     data: productIds.map((id) => ({
       brand: 'Samsung',
+      category,
       id,
       name: `Product ${id}`,
     })),
@@ -74,6 +75,43 @@ function createCatalogSearchSupabase() {
 }
 
 describe('loadMcpSearchProducts', () => {
+  it('keeps tablet matches out of an explicit phone search', async () => {
+    const { supabase } = createRankedSearchSupabase('Tablets');
+    const result = await loadMcpSearchProducts({
+      args: { query: 'Redmi phones', limit: 2 },
+      merchantId: 'merchant-1',
+      sanitizeString: (input) => input,
+      supabase,
+    });
+
+    expect(result.products).toEqual([]);
+  });
+
+  it('keeps mixed phone and tablet searches open to both categories', async () => {
+    const { supabase } = createRankedSearchSupabase('Tablets');
+    const result = await loadMcpSearchProducts({
+      args: { query: 'phones and tablets', limit: 2 },
+      merchantId: 'merchant-1',
+      sanitizeString: (input) => input,
+      supabase,
+    });
+
+    expect(result.products).toHaveLength(2);
+  });
+
+  it('does not force phone accessories into the Smartphones category', async () => {
+    for (const query of ['phone screen protector', 'phone stand', 'phone mount', 'phone holder', 'phone tripod', 'iPhone 15 stand', 'iPhone 15 holder', 'iPhone 15 lens', 'iPhone 15 pouch', 'iPhone 15 wallet', 'iPhone 15 earbuds', 'case for iPhone 15', 'charger for phone', 'case iPhone 15', 'charger phone', 'screen protector iPhone 15']) {
+      const { supabase } = createRankedSearchSupabase('Accessories');
+      const result = await loadMcpSearchProducts({
+        args: { query, limit: 2 },
+        merchantId: 'merchant-1',
+        sanitizeString: (input) => input,
+        supabase,
+      });
+      expect(result.products).toHaveLength(2);
+    }
+  });
+
   it('caps ranked post-filter pagination when hydrated rows keep failing filters', async () => {
     const { rpc, select, supabase } = createRankedSearchSupabase();
 

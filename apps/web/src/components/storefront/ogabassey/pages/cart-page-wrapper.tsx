@@ -3,6 +3,7 @@
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useCart } from '@/hooks/cart';
+import { findMergingCartLineIndex } from '@/hooks/cart/find-merging-cart-line';
 import { useToast } from '@/hooks/use-toast';
 import {
   getPrimaryProductImage,
@@ -21,6 +22,7 @@ interface CartPageWrapperProps {
 
 interface FetchAndAddCartItemsOptions {
   itemIds: string;
+  quantity: number;
   quizAwardId: string | null;
   quizVoucherToken: string | null;
   variantId?: string;
@@ -36,6 +38,7 @@ interface FetchAndAddCartItemsOptions {
 // React Compiler can memoize CartPageWrapper.
 async function fetchAndAddCartItems({
   itemIds,
+  quantity,
   quizAwardId,
   quizVoucherToken,
   variantId,
@@ -67,7 +70,7 @@ async function fetchAndAddCartItems({
     const { data: products, error } = await supabase
       .from('products')
       .select(
-        'id, name, description, status, price, manage_stock, stock, brand, gtin, mpn, merchant_id, images, imageHint:image_hint'
+        'id, name, description, status, price, manage_stock, stock, stock_quantity, has_variants, has_condition_offers, brand, gtin, mpn, merchant_id, images, imageHint:image_hint'
       )
       .eq('merchant_id', merchantId)
       .in('id', ids)
@@ -106,22 +109,46 @@ async function fetchAndAddCartItems({
 
     // Add each product to cart
     let addedCount = 0;
+    let firstAddedProductName: string | null = null;
+    const rejectedIds: string[] = [];
     for (const product of activeProducts) {
       const resolvedImage =
         getPrimaryProductImage(product.images) ||
         PRODUCT_IMAGE_PLACEHOLDER_URL;
-      // Check if already in cart
-      const existsInCart = hasQuizPrizeVoucher
-        ? cart.some(item => item.quizAwardId === quizAwardId)
-        : cart.some(item => item.id === product.id && !item.quizAwardId);
-      if (!existsInCart) {
+      // Prize awards are single-use; ordinary cart lines merge in addToCart.
+      const alreadyClaimedPrize = hasQuizPrizeVoucher &&
+        cart.some(item => item.quizAwardId === quizAwardId);
+      if (!alreadyClaimedPrize) {
+        if (!hasQuizPrizeVoucher && (product.has_variants || product.has_condition_offers)) {
+          rejectedIds.push(product.id);
+          toast({
+            title: 'Choose product options',
+            description: `Choose the variant or condition for ${product.name} on its product page before adding it to your cart.`,
+            variant: 'destructive',
+          });
+          continue;
+        }
+        const effectiveStock = Number(product.stock_quantity ?? 0);
+        const productForCart = {
+          ...product,
+          image: resolvedImage,
+          imageLarge: resolvedImage,
+          stock: product.manage_stock ? effectiveStock : product.stock,
+        };
+        const existingIndex = findMergingCartLineIndex(cart, productForCart);
+        const existingQuantity = existingIndex >= 0 ? cart[existingIndex].quantity : 0;
+        if (!hasQuizPrizeVoucher && product.manage_stock && existingQuantity + quantity > effectiveStock) {
+          rejectedIds.push(product.id);
+          toast({
+            title: 'Not enough stock',
+            description: `Only ${effectiveStock} unit${effectiveStock === 1 ? '' : 's'} of ${product.name} are currently available. Adjust your cart, then reload to retry this link.`,
+            variant: 'destructive',
+          });
+          continue;
+        }
         addToCart(
-          {
-            ...product,
-            image: resolvedImage,
-            imageLarge: resolvedImage,
-          },
-          1,
+          productForCart,
+          hasQuizPrizeVoucher ? 1 : quantity,
           hasQuizPrizeVoucher
             ? {
                 condition,
@@ -133,6 +160,7 @@ async function fetchAndAddCartItems({
             : undefined
         );
         addedCount++;
+        firstAddedProductName ??= product.name;
       }
     }
 
@@ -140,14 +168,19 @@ async function fetchAndAddCartItems({
       toast({
         title: addedCount === 1 ? 'Added to cart' : `${addedCount} items added`,
         description: addedCount === 1
-          ? `${activeProducts[0].name} has been added to your cart.`
+          ? `${firstAddedProductName} has been added to your cart.`
           : `${addedCount} products have been added to your cart.`,
       });
     }
 
-    // Clean up URL by removing item_id parameter
+    // Keep rejected IDs in the handoff URL so a corrected cart can retry.
     const url = new URL(window.location.href);
-    url.searchParams.delete('item_id');
+    if (rejectedIds.length > 0) {
+      url.searchParams.set('item_id', rejectedIds.join(','));
+    } else {
+      url.searchParams.delete('item_id');
+      url.searchParams.delete('qty');
+    }
     url.searchParams.delete('quiz_award_id');
     url.searchParams.delete('quiz_voucher_token');
     url.searchParams.delete('variant_id');
@@ -184,6 +217,11 @@ export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 
 
   useEffect(() => {
     const itemIds = searchParams.get('item_id');
+    const rawQuantity = searchParams.get('qty');
+    const parsedQuantity = rawQuantity && /^\d+$/.test(rawQuantity) ? Number(rawQuantity) : 1;
+    const quantity = Number.isSafeInteger(parsedQuantity) && parsedQuantity >= 1 && parsedQuantity <= 10
+      ? parsedQuantity
+      : 1;
     const quizAwardId = searchParams.get('quiz_award_id')?.trim() || null;
     const quizVoucherToken =
       searchParams.get('quiz_voucher_token')?.trim() || null;
@@ -227,6 +265,7 @@ export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 
 
     void fetchAndAddCartItems({
       itemIds,
+      quantity,
       quizAwardId,
       quizVoucherToken,
       variantId,

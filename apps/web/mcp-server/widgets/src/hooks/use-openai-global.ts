@@ -37,8 +37,10 @@ declare global {
         args: Record<string, unknown>
       ) => Promise<unknown>;
       openExternal?: (options: { href: string }) => void;
+      setOpenInAppUrl?: (options: { href: string }) => void;
       requestModal?: (options: unknown) => void;
-      sendFollowUpMessage?: (message: string) => void;
+      requestDisplayMode?: (options: { mode: 'inline' | 'fullscreen' | 'pip' }) => Promise<unknown>;
+      sendFollowUpMessage?: (message: { prompt: string; scrollToBottom?: boolean }) => void;
     };
   }
 }

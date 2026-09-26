@@ -2,16 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { getMcpProductStockSummary } from './product-stock-summary';
 
 describe('getMcpProductStockSummary', () => {
-  it('treats unmanaged stock as available even when quantity is zero', () => {
+  it('keeps untracked items browsable without claiming confirmed stock', () => {
     expect(
       getMcpProductStockSummary({
         manage_stock: false,
         stock_quantity: 0,
       })
     ).toEqual({
-      confidence: 'high',
-      inStock: true,
-      level: 'Available',
+      confidence: 'unconfirmed',
+      inStock: null,
+      level: 'Confirm availability',
     });
   });
 
@@ -85,6 +85,40 @@ describe('getMcpProductStockSummary', () => {
     });
   });
 
+  it('uses variant quantities for tracked variant products', () => {
+    expect(getMcpProductStockSummary(
+      { has_variants: true, manage_stock: true, stock_quantity: 0 },
+      [{ stock_quantity: 0 }, { stock_quantity: 2 }]
+    )).toEqual({ confidence: 'low', inStock: true, level: 'Last Units' });
+
+    expect(getMcpProductStockSummary(
+      { has_variants: true, manage_stock: true, stock_quantity: 0 }
+    )).toEqual({ confidence: 'unconfirmed', inStock: null, level: 'Confirm availability' });
+  });
+
+  it('counts available condition offers and distinguishes empty results from failed lookups', () => {
+    const product = {
+      has_condition_offers: true,
+      has_variants: true,
+      manage_stock: true,
+      stock_quantity: 0,
+    };
+    expect(getMcpProductStockSummary(product, [], [{ stock_quantity: 2 }])).toEqual({
+      confidence: 'low', inStock: true, level: 'Last Units',
+    });
+    expect(getMcpProductStockSummary(product, [], [])).toEqual({
+      confidence: 'none', inStock: false, level: 'Out of Stock',
+    });
+    expect(getMcpProductStockSummary(product)).toEqual({
+      confidence: 'unconfirmed', inStock: null, level: 'Confirm availability',
+    });
+    expect(getMcpProductStockSummary(
+      { has_condition_offers: true, manage_stock: true, stock_quantity: 10 },
+      undefined,
+      [{ stock_quantity: 2 }]
+    )).toEqual({ confidence: 'low', inStock: true, level: 'Low Stock' });
+  });
+
   it('keeps nullish stock inputs on the documented default paths', () => {
     expect(
       getMcpProductStockSummary({
@@ -92,9 +126,9 @@ describe('getMcpProductStockSummary', () => {
         stock_quantity: null,
       })
     ).toEqual({
-      confidence: 'high',
-      inStock: true,
-      level: 'Available',
+      confidence: 'unconfirmed',
+      inStock: null,
+      level: 'Confirm availability',
     });
 
     expect(

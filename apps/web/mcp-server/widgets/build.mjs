@@ -12,12 +12,9 @@ if (!fs.existsSync(ASSETS_DIR)) {
   fs.mkdirSync(ASSETS_DIR, { recursive: true });
 }
 
-async function buildWidget() {
+export async function createWidgetHtml() {
   const entryPoint = path.join(SRC_DIR, 'index.tsx');
   const cssPath = path.join(SRC_DIR, 'styles.css');
-  const outPath = path.join(ASSETS_DIR, 'ogabassey-store.html');
-
-  console.log('Building Ogabassey Premium Widget...');
 
   // Bundle JS/TSX
   const jsResult = await esbuild.build({
@@ -38,10 +35,10 @@ async function buildWidget() {
   const jsCode = jsResult.outputFiles[0].text;
 
   // Read CSS
-  let cssCode = '';
-  if (fs.existsSync(cssPath)) {
-    cssCode = fs.readFileSync(cssPath, 'utf8');
-  }
+  const cssCode = fs.readFileSync(cssPath, 'utf8').replace(
+    /\/\* @include:(styles-(?:header|single-card|product-card|responsive)\.css) \*\//g,
+    (_, file) => fs.readFileSync(path.join(SRC_DIR, file), 'utf8')
+  );
 
   // Create HTML bundle with skybridge compatibility
   const htmlContent = `<!DOCTYPE html>
@@ -58,20 +55,31 @@ async function buildWidget() {
 </body>
 </html>`;
 
+  return htmlContent;
+}
+
+async function main() {
+  const outPath = path.join(ASSETS_DIR, 'ogabassey-store.html');
+  const htmlContent = await createWidgetHtml();
+  if (process.argv.includes('--check')) {
+    const committed = fs.readFileSync(outPath, 'utf8');
+    if (committed !== htmlContent) throw new Error('Committed widget bundle is stale. Run pnpm --filter ogabassey-widgets build.');
+    console.log('Committed widget bundle matches source.');
+    return;
+  }
+  console.log('Building Ogabassey Premium Widget...');
   fs.writeFileSync(outPath, htmlContent);
   console.log(
     `✓ Built ${outPath} (${(htmlContent.length / 1024).toFixed(1)}KB)`
   );
 }
 
-async function main() {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    await buildWidget();
+    await main();
     console.log('\n✅ Widget build complete!');
   } catch (err) {
     console.error('Build failed:', err);
     process.exit(1);
   }
 }
-
-main();

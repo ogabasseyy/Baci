@@ -3,13 +3,13 @@ import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect } from 'vitest';
+import { serveCatalogFixture } from './server-catalog-fixtures';
 
-interface JsonRpcResponse {
-  result?: unknown;
-}
+type JsonRpcResponse = { result?: unknown };
 
 interface McpToolDefinition {
   name: string;
+  description?: string;
   inputSchema: { properties: Record<string, unknown> };
 }
 
@@ -21,10 +21,7 @@ interface StartedMcpServer {
 const webRootDirectory = dirname(dirname(fileURLToPath(import.meta.url)));
 const repoRootDirectory = dirname(dirname(webRootDirectory));
 const tsxExecutable = join(
-  repoRootDirectory,
-  'node_modules',
-  '.bin',
-  process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
+  repoRootDirectory, 'node_modules/.bin', process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
 );
 
 async function postMcpJsonRpc(
@@ -67,33 +64,21 @@ async function startPostgrestStub() {
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
     response.setHeader('content-type', 'application/json');
+    if (request.headers.authorization !== 'Bearer test-anon-key') {
+      response.statusCode = 403;
+      response.end(JSON.stringify({ message: 'Expected anonymous client' }));
+      return;
+    }
+    if (url.pathname.endsWith('/rest/v1/orders') || url.pathname.endsWith('/rest/v1/chat_orders')) {
+      response.statusCode = 403;
+      response.end(JSON.stringify({ message: 'Private tables are unavailable' }));
+      return;
+    }
     if (url.pathname.endsWith('/rest/v1/merchants')) {
       response.end(JSON.stringify({ id: 'merchant-1' }));
       return;
     }
-    if (url.pathname.endsWith('/rest/v1/chat_orders')) {
-      const emailFilter = url.searchParams.get('customer_email') ?? '';
-      const completeMetadata = {
-        account_name: 'Test Buyer',
-        account_number: '1234567890',
-        bank_name: 'Test Bank',
-      };
-      response.end(
-        JSON.stringify([
-          {
-            id: 'chat-order-1',
-            metadata: emailFilter.includes('incomplete')
-              ? { account_number: '1234567890' }
-              : completeMetadata,
-            paid_at: null,
-            payment_reference: 'CHAT-TEST-1',
-            status: 'pending_payment',
-            total: 500000,
-          },
-        ])
-      );
-      return;
-    }
+    if (serveCatalogFixture(request, response, url)) return;
     response.statusCode = 404;
     response.end(JSON.stringify({ message: 'not found' }));
   });
@@ -166,7 +151,7 @@ function buildMcpServerEnv(overrides: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     OPENAI_AGENTIC_API_KEY: 'test-agentic-key',
     OPENAI_AGENTIC_SIGNING_KEY: 'test-signing-key',
     PAYSTACK_SECRET_KEY: 'test-paystack-key',
-    SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key',
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test-anon-key',
     ...overrides,
   };
   if (!Object.hasOwn(overrides, 'MCP_ENABLE_AGENTIC_CHECKOUT_TOOLS')) {

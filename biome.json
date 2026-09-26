@@ -49,6 +49,7 @@
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/contact.test-support.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/contact-validation.test.ts",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/contact-validation.ts",
+      "apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/recover-pending-checkout-order*.ts",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/submit-checkout-order.ts",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/submit-checkout-order.test.ts",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/initialize-checkout-dva.ts",

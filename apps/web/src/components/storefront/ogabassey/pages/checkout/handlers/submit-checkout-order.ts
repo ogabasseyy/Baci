@@ -1,10 +1,6 @@
 import type { buildCheckoutOrderRequest } from '../build-checkout-order-request';
 import type { RedvaultQuoteSummary } from '../components/redvault/RedvaultPaymentOption';
-import {
-  type ResolvePendingCheckoutOrderOptions,
-  type ResolvePendingCheckoutOrderResult,
-  resolvePendingCheckoutOrder,
-} from '../pending-checkout-order';
+import type { ResolvePendingCheckoutOrderResult } from '../pending-checkout-order';
 import { parseRedvaultOrderQuote } from '../redvault-payment-response';
 import type { PaymentMethod } from '../types';
 
@@ -87,13 +83,6 @@ async function readOrderError(
   } catch {
     return {};
   }
-}
-
-/** Resolves a stored order before its REDVAULT fence can decide whether to stop. */
-export function resolveCheckoutOrderSubmission(
-  reuse: ResolvePendingCheckoutOrderOptions
-): Promise<ResolvePendingCheckoutOrderResult> {
-  return resolvePendingCheckoutOrder(reuse);
 }
 
 /**

@@ -110,6 +110,7 @@ import {
   buildPendingCheckoutFingerprint,
   CHECKOUT_PENDING_ORDER_STORAGE_KEY,
   normalizeOrderPaymentMethod,
+  resolvePendingCheckoutOrder,
   type PendingCheckoutOrderSnapshot,
 } from './checkout/pending-checkout-order';
 import {
@@ -128,7 +129,6 @@ import { captureCheckoutPaymentStarted } from './checkout/capture-checkout-payme
 import { executeResumedDirectPayment } from './checkout/handlers/direct-payment';
 import { getCheckoutOrderErrorMessage } from './checkout/checkout-order-error-message';
 import {
-  resolveCheckoutOrderSubmission,
   submitCheckoutOrder,
   type CheckoutPaymentOrder,
   type CheckoutWalletRedemption,
@@ -1539,7 +1539,7 @@ export const CheckoutPage: React.FC = () => {
             : getForwardableSelectedQuoteId(deliveryMethod, selectedQuoteId),
         shippingRateId: merchantRateId ?? undefined,
       };
-      const pendingOrderResolution = await resolveCheckoutOrderSubmission(reuse);
+      const pendingOrderResolution = await resolvePendingCheckoutOrder(reuse);
 
       // The REDVAULT pending-order fence verdict (paid routing, blocking
       // cancels, live replay) stays ahead of a create-or-reuse transition.

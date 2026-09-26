@@ -116,6 +116,17 @@ function assertCancelGuard(activeSlot, failures) {
       );
     }
 
+    // Integer#times returns the (truthy) integer, so a missing tail would
+    // report an unsettled submission as settled. Pin the fail-closed tail.
+    if (
+      !settleWaiter ||
+      !/\n\s*(?:false|return\s+false)\s*\n\s*end\s*$/.test(settleWaiter)
+    ) {
+      failures.push(
+        'asc_version_slot.rb: wait_for_settled_review_submission must return false once polling is exhausted'
+      );
+    }
+
     if (
       !settleWaiter ||
       !settleWaiter.includes('CLOCK_MONOTONIC') ||

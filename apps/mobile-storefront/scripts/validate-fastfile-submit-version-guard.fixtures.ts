@@ -46,7 +46,7 @@ RETRYABLE_REVIEW_POLL_ERRORS = [
 
 def wait_for_settled_review_submission(submission_id)
   deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + REVIEW_SETTLE_TIMEOUT_SECONDS
-  EDITABLE_VERSION_POLL_ATTEMPTS.times do
+  EDITABLE_VERSION_POLL_ATTEMPTS.times do |attempt|
     remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
     return false if remaining <= 0
     begin
@@ -61,7 +61,11 @@ def wait_for_settled_review_submission(submission_id)
       return false
     end
     return true if !state.nil? && !UNSETTLED_REVIEW_SUBMISSION_STATES.include?(state)
+
+    sleep(EDITABLE_VERSION_POLL_INTERVAL_SECONDS) unless attempt == EDITABLE_VERSION_POLL_ATTEMPTS - 1
   end
+
+  false
 end
 
 def winding_down_review_submission?(app, platform)

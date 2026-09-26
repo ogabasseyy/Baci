@@ -94,7 +94,7 @@ describe('settle wait wall-clock and winding-down guards', () => {
 
   it('rejects a settle wait that fetches only once', () => {
     const oneShot = VALID_SLOT.replace(
-      '  EDITABLE_VERSION_POLL_ATTEMPTS.times do\n    remaining = deadline',
+      '  EDITABLE_VERSION_POLL_ATTEMPTS.times do |attempt|\n    remaining = deadline',
       '  if EDITABLE_VERSION_POLL_ATTEMPTS.positive?\n    remaining = deadline'
     );
 
@@ -118,6 +118,19 @@ describe('settle wait wall-clock and winding-down guards', () => {
       validateFastfileSubmitVersionGuard(VALID_FASTFILE, noDeadline)
     ).toContain(
       'asc_version_slot.rb: wait_for_settled_review_submission must enforce a monotonic REVIEW_SETTLE_TIMEOUT_SECONDS deadline because one rate-limited read can sleep for an hour'
+    );
+  });
+
+  it('rejects a settle wait that succeeds once polling is exhausted', () => {
+    const failOpenTail = VALID_SLOT.replace(
+      '  end\n\n  false\nend\n\ndef winding_down_review_submission?',
+      '  end\nend\n\ndef winding_down_review_submission?'
+    );
+
+    expect(
+      validateFastfileSubmitVersionGuard(VALID_FASTFILE, failOpenTail)
+    ).toContain(
+      'asc_version_slot.rb: wait_for_settled_review_submission must return false once polling is exhausted'
     );
   });
 

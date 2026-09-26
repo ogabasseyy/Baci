@@ -87,6 +87,21 @@ describe('loadMcpSearchProducts', () => {
     expect(result.products).toEqual([]);
   });
 
+  it.each(['show me some phones', 'I need a phone'])(
+    'keeps non-phone matches out of the handset request %s',
+    async (query) => {
+      const { supabase } = createRankedSearchSupabase('Accessories');
+      const result = await loadMcpSearchProducts({
+        args: { query, limit: 2 },
+        merchantId: 'merchant-1',
+        sanitizeString: (input) => input,
+        supabase,
+      });
+
+      expect(result.products).toEqual([]);
+    }
+  );
+
   it('keeps mixed phone and tablet searches open to both categories', async () => {
     const { supabase } = createRankedSearchSupabase('Tablets');
     const result = await loadMcpSearchProducts({

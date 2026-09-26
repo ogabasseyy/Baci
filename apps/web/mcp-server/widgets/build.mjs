@@ -36,7 +36,7 @@ export async function createWidgetHtml() {
 
   // Read CSS
   const cssCode = fs.readFileSync(cssPath, 'utf8').replace(
-    /\/\* @include:(styles-(?:header|single-card|responsive)\.css) \*\//g,
+    /\/\* @include:(styles-(?:header|single-card|product-card|responsive)\.css) \*\//g,
     (_, file) => fs.readFileSync(path.join(SRC_DIR, file), 'utf8')
   );
 

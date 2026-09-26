@@ -231,4 +231,19 @@ describe('MCP catalog claims', () => {
     }
   });
 
+  it('links a slugless product detail to its ID route', async () => {
+    const server = await startMcpServerWithPostgrest({});
+    try {
+      const result = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+        id: 125,
+        method: 'tools/call',
+        params: { name: 'get_product', arguments: { product_id: 'slugless-variant-product' } },
+      }));
+      expect(JSON.stringify(result)).toContain('https://ogabassey.com/products/slugless-variant-product');
+      expect(JSON.stringify(result)).not.toContain('https://ogabassey.com/products/null');
+    } finally {
+      await server.close();
+    }
+  });
+
 });

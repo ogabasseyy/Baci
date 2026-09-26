@@ -24,6 +24,10 @@
     gap: 8px;
   }
 
+  .products-grid--single {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .product-name {
     font-size: 12px;
   }

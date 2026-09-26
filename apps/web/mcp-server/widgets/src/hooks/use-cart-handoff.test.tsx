@@ -17,7 +17,7 @@ describe('useCartHandoff', () => {
   });
 
   it('reports tool failures without creating a shopping link', async () => {
-    window.openai = { callTool: vi.fn().mockRejectedValue(new Error('offline')) };
+    window.openai = { openExternal: vi.fn(), callTool: vi.fn().mockRejectedValue(new Error('offline')) };
     const { result } = renderHook(() => useCartHandoff());
     await act(async () => { await result.current.handleAddToCart(product); });
     expect(result.current.cart).toEqual([]);
@@ -62,14 +62,45 @@ describe('useCartHandoff', () => {
   });
 
   it('opens the validated cart in a browser tab when ChatGPT navigation is unavailable', async () => {
-    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const pendingTab = { location: { href: 'about:blank' }, close: vi.fn() } as unknown as Window;
+    const open = vi.spyOn(window, 'open').mockReturnValueOnce(pendingTab).mockReturnValue(null);
     window.openai = { callTool: vi.fn().mockResolvedValue({ structuredContent: {
       success: true, cart_url: 'https://ogabassey.com/cart?item_id=phone-1',
     } }) };
     const { result } = renderHook(() => useCartHandoff());
     await act(async () => { await result.current.handleAddToCart(product); });
+    expect(open).toHaveBeenCalledWith('about:blank', '_blank');
+    expect(pendingTab.location.href).toBe('https://ogabassey.com/cart?item_id=phone-1');
     act(() => { result.current.handleViewCart(); });
     expect(open).toHaveBeenCalledWith('https://ogabassey.com/cart?item_id=phone-1', '_blank');
     open.mockRestore();
+  });
+
+  it('reports a blocked fallback tab before requesting a cart handoff', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    const callTool = vi.fn();
+    window.openai = { callTool };
+    try {
+      const { result } = renderHook(() => useCartHandoff());
+      await act(async () => { await result.current.handleAddToCart(product); });
+      expect(callTool).not.toHaveBeenCalled();
+      expect(result.current.cartError).toContain('blocked the cart tab');
+    } finally {
+      open.mockRestore();
+    }
+  });
+
+  it('closes the reserved tab if the cart tool fails', async () => {
+    const pendingTab = { location: { href: 'about:blank' }, close: vi.fn() } as unknown as Window;
+    const open = vi.spyOn(window, 'open').mockReturnValue(pendingTab);
+    window.openai = { callTool: vi.fn().mockRejectedValue(new Error('offline')) };
+    try {
+      const { result } = renderHook(() => useCartHandoff());
+      await act(async () => { await result.current.handleAddToCart(product); });
+      expect(pendingTab.close).toHaveBeenCalledOnce();
+      expect(result.current.cartError).toContain('Could not open the cart');
+    } finally {
+      open.mockRestore();
+    }
   });
 });

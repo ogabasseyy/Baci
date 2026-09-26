@@ -5,9 +5,11 @@ import type { Product, WidgetState } from '../widget-types';
 import { createDefaultState } from '../widget-types';
 import { useWidgetState } from './use-widget-state';
 
-function openOgabasseyUrl(url: string): void {
+function openOgabasseyUrl(url: string, pendingTab?: Window | null): void {
   if (window.openai?.openExternal) {
     window.openai.openExternal({ href: url });
+  } else if (pendingTab) {
+    pendingTab.location.href = url;
   } else {
     window.open(url, '_blank');
   }
@@ -26,21 +28,31 @@ export function useCartHandoff() {
       setCartError('ChatGPT cannot open the cart here. Use Review on Ogabassey to continue.');
       return;
     }
+    // Reserve the fallback tab while the click still has a user gesture.
+    const pendingTab = window.openai.openExternal ? null : window.open('about:blank', '_blank');
+    if (!window.openai.openExternal && !pendingTab) {
+      setCartError('Your browser blocked the cart tab. Allow popups or use Review on Ogabassey.');
+      return;
+    }
     try {
       const result = await window.openai.callTool('add_to_cart', {
         product_id: product.id,
       });
-      if (requestId !== handoffRequestId.current) return;
+      if (requestId !== handoffRequestId.current) {
+        pendingTab?.close();
+        return;
+      }
 
       const variantSelectionUrl = getVariantSelectionUrl(result, product.id, product.slug || product.id);
       if (variantSelectionUrl) {
         setWidgetState((previous) => ({ ...previous!, cart: [], cartUrl: undefined }));
-        openOgabasseyUrl(variantSelectionUrl);
+        openOgabasseyUrl(variantSelectionUrl, pendingTab);
         return;
       }
 
       const cartUrl = getCartHandoffUrl(result, product.id);
       if (!cartUrl) {
+        pendingTab?.close();
         setCartError('This item cannot be added right now. Please choose another product.');
         return;
       }
@@ -50,8 +62,9 @@ export function useCartHandoff() {
         cart: [{ product, quantity: 1 }],
         cartUrl,
       }));
-      openOgabasseyUrl(cartUrl);
+      openOgabasseyUrl(cartUrl, pendingTab);
     } catch {
+      pendingTab?.close();
       if (requestId !== handoffRequestId.current) return;
       setCartError('Could not open the cart. Please try again.');
     }

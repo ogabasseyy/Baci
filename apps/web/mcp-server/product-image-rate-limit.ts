@@ -35,5 +35,3 @@ export function createProductImageRateLimiter() {
     return { allowed: true, retryAfterSeconds: 0 };
   };
 }
-
-export const checkProductImageRateLimit = createProductImageRateLimiter();

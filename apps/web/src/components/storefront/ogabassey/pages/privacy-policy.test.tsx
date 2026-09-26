@@ -59,6 +59,7 @@ describe('OgabasseyV2PrivacyPolicy', () => {
       expect(screen.getByText(/at least six years after the year of assessment/)).toBeInTheDocument();
       expect(screen.getByText(/do not create a saved Ogabassey account search history/)).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Your Privacy Choices' })).toBeInTheDocument();
+      expect(screen.getByText(/If you cannot use that address, email us/)).toBeInTheDocument();
       expect(
         screen.getAllByRole('link', { name: 'privacy@ogabassey.com' }),
       ).toHaveLength(2);

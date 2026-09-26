@@ -175,6 +175,8 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
                 allows. You can also withdraw consent for optional processing.
                 Email us at <a href={`mailto:${email}`} className="underline">{email}</a>
                 {' '}from your registered address so we can verify your request.
+                If you cannot use that address, email us and provide other
+                information that can help us verify your identity.
                 We may retain the minimum records required for tax, disputes,
                 fraud prevention, or other legal obligations and will explain
                 any limit that applies to your request.

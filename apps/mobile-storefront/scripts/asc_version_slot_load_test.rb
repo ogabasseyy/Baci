@@ -15,11 +15,16 @@ module Spaceship
   class GatewayTimeoutError < StandardError; end
 end
 
+module Faraday
+  class ConnectionFailed < StandardError; end
+  class TimeoutError < StandardError; end
+end
+
 class AscVersionSlotLoadTest < Minitest::Test
   def test_slot_file_loads_without_name_errors
     load File.expand_path('../fastlane/asc_version_slot.rb', __dir__)
     assert defined?(UNSETTLED_REVIEW_SUBMISSION_STATES)
     assert defined?(RETRYABLE_REVIEW_POLL_ERRORS)
-    assert_equal 5, RETRYABLE_REVIEW_POLL_ERRORS.length
+    assert_equal 7, RETRYABLE_REVIEW_POLL_ERRORS.length
   end
 end

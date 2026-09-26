@@ -224,8 +224,8 @@ describe('bugfix: reject_if_possible silently withdrew a live App Review', () =>
 describe('bugfix: editable shortcut skipped the opt-in during a live review', () => {
   it('rejects trusting the editable version before consulting the live review', () => {
     const editableFastPathFirst = VALID_SLOT.replace(
-      `  submission = app.get_in_progress_review_submission(platform: platform)\n  if submission.nil?\n    return true if app.get_edit_app_store_version(platform: platform)\n    return false\n  end\n`,
-      `  return true if app.get_edit_app_store_version(platform: platform)\n\n  submission = app.get_in_progress_review_submission(platform: platform)\n  return false if submission.nil?\n`
+      `  submission = app.get_in_progress_review_submission(platform: platform)\n  if submission.nil?\n    if winding_down_review_submission?(app, platform)\n      return false\n    end\n    return true if app.get_edit_app_store_version(platform: platform)\n    return false\n  end\n`,
+      `  return true if app.get_edit_app_store_version(platform: platform)\n\n  submission = app.get_in_progress_review_submission(platform: platform)\n  if submission.nil?\n    if winding_down_review_submission?(app, platform)\n      return false\n    end\n    return false\n  end\n`
     );
 
     expect(

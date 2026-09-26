@@ -102,22 +102,32 @@ UNSETTLED_REVIEW_SUBMISSION_STATES = %w[
   COMPLETING
 ].freeze
 
-# Failures worth another poll iteration: rate limiting, timeouts, and upstream
-# 5xx responses. Anything else (notably auth failures) raises immediately —
-# retrying those for ten minutes cannot help.
+# Failures worth another poll iteration: rate limiting, timeouts, upstream 5xx
+# responses, and transport failures (Fastlane does not rescue those for us).
+# Anything else (notably auth failures) raises immediately — retrying those
+# for ten minutes cannot help.
 RETRYABLE_REVIEW_POLL_ERRORS = [
   Spaceship::TooManyRequestsError,
   Spaceship::AppleTimeoutError,
   Spaceship::InternalServerError,
   Spaceship::BadGatewayError,
-  Spaceship::GatewayTimeoutError
+  Spaceship::GatewayTimeoutError,
+  Faraday::ConnectionFailed,
+  Faraday::TimeoutError
 ].freeze
+
+# Wall-clock budget for waiting out one cancelled submission. Attempt counts
+# alone cannot bound this wait: Fastlane retries rate-limited reads inside a
+# single GET with exponential backoff (up to ~1h), so the waiter below also
+# enforces this monotonic deadline.
+REVIEW_SETTLE_TIMEOUT_SECONDS = EDITABLE_VERSION_POLL_ATTEMPTS * EDITABLE_VERSION_POLL_INTERVAL_SECONDS
 
 # Wait until the cancelled submission leaves every active state, re-fetching
 # it by id (the in-progress query cannot observe CANCELING). An unobservable
 # submission counts as still settling: the caller fails loudly on timeout
 # instead of submitting blind.
 def wait_for_settled_review_submission(submission_id)
+  deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + REVIEW_SETTLE_TIMEOUT_SECONDS
   EDITABLE_VERSION_POLL_ATTEMPTS.times do |attempt|
     begin
       state = Spaceship::ConnectAPI::ReviewSubmission.get(
@@ -127,11 +137,28 @@ def wait_for_settled_review_submission(submission_id)
       state = nil
     end
     return true if !state.nil? && !UNSETTLED_REVIEW_SUBMISSION_STATES.include?(state)
+    return false if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
 
     sleep(EDITABLE_VERSION_POLL_INTERVAL_SECONDS) unless attempt == EDITABLE_VERSION_POLL_ATTEMPTS - 1
   end
 
   false
+end
+
+# True when a submission from any run (including a crashed one we never
+# waited out) is still winding down. Only CANCELING is queried here: it is
+# the verified transient state, and filtering on speculative states could make
+# Apple reject the query itself.
+def winding_down_review_submission?(app, platform)
+  states = [
+    Spaceship::ConnectAPI::ReviewSubmission::ReviewSubmissionState::CANCELING
+  ].join(",")
+  submissions = app.get_review_submissions(
+    filter: { state: states, platform: platform }
+  )
+  submissions.any? do |submission|
+    UNSETTLED_REVIEW_SUBMISSION_STATES.include?(submission.state)
+  end
 end
 
 # Returns true when an editable version is available (so set_changelog can
@@ -150,6 +177,15 @@ def app_store_version_slot_ready?(app_version:, build_number:)
   # first keeps every withdrawal behind the opt-in below.
   submission = app.get_in_progress_review_submission(platform: platform)
   if submission.nil?
+    if winding_down_review_submission?(app, platform)
+      UI.important(
+        "A previous App Store review cancellation is still settling; skipping " \
+        "submission so this run cannot deliver into the wind-down. Re-run once " \
+        "it settles."
+      )
+      return false
+    end
+
     return true if app.get_edit_app_store_version(platform: platform)
 
     # Nothing is in review, yet the slot is still occupied — e.g. a version in
@@ -189,8 +225,8 @@ def app_store_version_slot_ready?(app_version:, build_number:)
   unless wait_for_settled_review_submission(submission.id)
     UI.user_error!(
       "Cancelled the previous App Review submission but it did not settle " \
-      "within #{EDITABLE_VERSION_POLL_ATTEMPTS * EDITABLE_VERSION_POLL_INTERVAL_SECONDS} " \
-      "seconds — finish the submission from App Store Connect."
+      "within #{REVIEW_SETTLE_TIMEOUT_SECONDS} seconds — finish the " \
+      "submission from App Store Connect."
     )
   end
 

@@ -38,15 +38,37 @@ UNSETTLED_REVIEW_SUBMISSION_STATES = %w[
   COMPLETING
 ].freeze
 
+RETRYABLE_REVIEW_POLL_ERRORS = [
+  Spaceship::TooManyRequestsError,
+  Faraday::ConnectionFailed,
+  Faraday::TimeoutError
+].freeze
+
 def wait_for_settled_review_submission(submission_id)
-  begin
-    state = Spaceship::ConnectAPI::ReviewSubmission.get(
-      review_submission_id: submission_id
-    )&.state
-  rescue *RETRYABLE_REVIEW_POLL_ERRORS
-    state = nil
+  deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + REVIEW_SETTLE_TIMEOUT_SECONDS
+  EDITABLE_VERSION_POLL_ATTEMPTS.times do
+    begin
+      state = Spaceship::ConnectAPI::ReviewSubmission.get(
+        review_submission_id: submission_id
+      )&.state
+    rescue *RETRYABLE_REVIEW_POLL_ERRORS
+      state = nil
+    end
+    return true if !state.nil? && !UNSETTLED_REVIEW_SUBMISSION_STATES.include?(state)
+    return false if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
   end
-  return !state.nil? && !UNSETTLED_REVIEW_SUBMISSION_STATES.include?(state)
+end
+
+def winding_down_review_submission?(app, platform)
+  states = [
+    Spaceship::ConnectAPI::ReviewSubmission::ReviewSubmissionState::CANCELING
+  ].join(",")
+  submissions = app.get_review_submissions(
+    filter: { state: states, platform: platform }
+  )
+  submissions.any? do |submission|
+    UNSETTLED_REVIEW_SUBMISSION_STATES.include?(submission.state)
+  end
 end
 
 def app_store_version_slot_ready?(app_version:, build_number:)
@@ -54,6 +76,9 @@ def app_store_version_slot_ready?(app_version:, build_number:)
   platform = Spaceship::ConnectAPI::Platform::IOS
   submission = app.get_in_progress_review_submission(platform: platform)
   if submission.nil?
+    if winding_down_review_submission?(app, platform)
+      return false
+    end
     return true if app.get_edit_app_store_version(platform: platform)
     return false
   end

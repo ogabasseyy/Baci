@@ -204,19 +204,29 @@ describe('bugfix: reject_if_possible silently withdrew a live App Review', () =>
     // deliver's own reject_if_possible cancels whatever is in App Review,
     // bypassing the opt-in guard — it withdrew build 2.1.527 when 2.1.528 shipped.
     const withRejectIfPossible = VALID_FASTFILE.replace(
-      `  deliver_opts = {
-    submit_for_review: true
-  }`,
-      `  deliver_opts = {
-    reject_if_possible: true,
-    submit_for_review: true
-  }`
+      '    reject_if_possible: false,',
+      '    reject_if_possible: true,'
     );
 
     expect(
       validateFastfileSubmitVersionGuard(withRejectIfPossible, VALID_SLOT)
     ).toContain(
-      'Fastfile: submit lane must not pass reject_if_possible — cancellation is owned solely by app_store_version_slot_ready? (opt-in via IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT); deliver reject_if_possible is an unguarded second path that withdraws live App Reviews'
+      'Fastfile: submit lane must not pass reject_if_possible: true — cancellation is owned solely by app_store_version_slot_ready? (opt-in via IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT); deliver reject_if_possible is an unguarded second path that withdraws live App Reviews'
+    );
+  });
+
+  it('rejects a submit lane that omits the reject_if_possible pin', () => {
+    // Omission is not a pin: deliver reads DELIVER_REJECT_IF_POSSIBLE when
+    // the option is omitted, silently re-enabling the unguarded path.
+    const omitsPin = VALID_FASTFILE.replace(
+      '    reject_if_possible: false,\n',
+      ''
+    );
+
+    expect(
+      validateFastfileSubmitVersionGuard(omitsPin, VALID_SLOT)
+    ).toContain(
+      'Fastfile: submit lane must pin reject_if_possible: false explicitly — deliver reads DELIVER_REJECT_IF_POSSIBLE when the option is omitted, which would silently re-enable its unguarded cancellation path'
     );
   });
 });

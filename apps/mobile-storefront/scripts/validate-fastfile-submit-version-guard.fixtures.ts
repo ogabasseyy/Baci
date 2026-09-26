@@ -119,6 +119,7 @@ const VALID_FASTFILE = `import("asc_version_slot.rb")
 lane :submit do
   api_key = asc_api_key
   deliver_opts = {
+    reject_if_possible: false,
     submit_for_review: true
   }
 

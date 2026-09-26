@@ -57,10 +57,16 @@ function validateFastfileSubmitVersionGuard(fastfileSource, versionSlotSource) {
   // it withdraws whatever is in App Review regardless of the
   // IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT opt-in that
   // app_store_version_slot_ready? enforces. It silently cancelled build 2.1.527's
-  // review when 2.1.528 shipped. Cancellation must be owned solely by the guard.
-  if (submitLane.includes('reject_if_possible')) {
+  // review when 2.1.528 shipped. Omission is not a pin: deliver reads
+  // DELIVER_REJECT_IF_POSSIBLE when the option is omitted, so the lane must
+  // pass false explicitly. Cancellation must be owned solely by the guard.
+  if (/reject_if_possible\s*:\s*true/.test(submitLane)) {
     failures.push(
-      'Fastfile: submit lane must not pass reject_if_possible — cancellation is owned solely by app_store_version_slot_ready? (opt-in via IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT); deliver reject_if_possible is an unguarded second path that withdraws live App Reviews'
+      'Fastfile: submit lane must not pass reject_if_possible: true — cancellation is owned solely by app_store_version_slot_ready? (opt-in via IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT); deliver reject_if_possible is an unguarded second path that withdraws live App Reviews'
+    );
+  } else if (!/reject_if_possible\s*:\s*false/.test(submitLane)) {
+    failures.push(
+      'Fastfile: submit lane must pin reject_if_possible: false explicitly — deliver reads DELIVER_REJECT_IF_POSSIBLE when the option is omitted, which would silently re-enable its unguarded cancellation path'
     );
   }
 

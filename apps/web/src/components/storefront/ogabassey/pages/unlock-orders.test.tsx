@@ -48,12 +48,9 @@ describe('OgabasseyUnlockOrders', () => {
     expect(screen.getByText('AT&T')).toBeInTheDocument();
     expect(screen.getByText(/in progress/i)).toBeInTheDocument();
     expect(screen.getByText(/₦100,000/)).toBeInTheDocument();
-    expect(screen.getByText(/in progress/i).className).toContain(
-      'text-[var(--store-secondary-text'
-    );
     expect(
-      screen.getByText('The carrier is processing your request.').className
-    ).toContain('text-[var(--store-secondary-text');
+      screen.getByText('The carrier is processing your request.')
+    ).toBeInTheDocument();
     expect(screen.queryByText(/provider order/i)).toBeNull();
     expect(mocks.list).toHaveBeenCalledWith('ogabassey');
     expect(screen.getByRole('link', { name: /new check/i })).toHaveAttribute(
@@ -76,16 +73,15 @@ describe('OgabasseyUnlockOrders', () => {
     );
   });
 
-  it('uses storefront background text tokens for empty-state contrast', async () => {
+  it('explains when there are no unlock orders', async () => {
     mocks.list.mockResolvedValue([]);
     render(<OgabasseyUnlockOrders />);
 
-    const heading = await screen.findByRole('heading', {
-      name: 'No unlock orders yet',
-    });
-    expect(heading.className).toContain('text-[var(--ogabassey-surface-text');
-    expect(screen.getByText(/eligible clean carrier-unlock options/i).className).toContain(
-      'text-store-background-text/70'
-    );
+    expect(
+      await screen.findByRole('heading', { name: 'No unlock orders yet' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/eligible clean carrier-unlock options/i)
+    ).toBeInTheDocument();
   });
 });

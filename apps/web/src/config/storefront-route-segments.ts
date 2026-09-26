@@ -1,4 +1,4 @@
-export const RESERVED_STOREFRONT_SEGMENTS = new Set([
+const RESERVED_STOREFRONT_SEGMENTS = new Set([
   'about',
   'account',
   'api',
@@ -36,7 +36,7 @@ export const RESERVED_STOREFRONT_SEGMENTS = new Set([
 // caching any of these would leak per-user content (orders, receipts, etc.).
 // The canonical PDP/category shape (`/<category>/<product>`) is intentionally
 // NOT in this set, so it remains cacheable.
-export const NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS = new Set<string>([
+const NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS = new Set<string>([
   ...RESERVED_STOREFRONT_SEGMENTS,
   // Singular `/product/{slug}` is a legacy redirect-only / noindex route (not in
   // RESERVED, which only has plural `products`) — keep it no-store.
@@ -63,7 +63,7 @@ export const NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS = new Set<string>([
 // legacy /<oldSlug>/... link and stripped to /post. A live route always wins
 // over redirects for a narrow set of ambiguous legacy links. Keep in sync with
 // the (storefront)/[slug] route groups.
-export const STOREFRONT_ROUTE_FIRST_SEGMENTS = new Set<string>([
+const STOREFRONT_ROUTE_FIRST_SEGMENTS = new Set<string>([
   ...NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS,
   'compare',
   'search',
@@ -104,7 +104,7 @@ export const STOREFRONT_ROUTE_FIRST_SEGMENTS = new Set<string>([
 // the strip, so it preserves the exact page path; the page checks for a matching
 // retired alias and redirects non-OgaBassey stores to their home. A suffixed
 // `/unlock-orders/<path>` remains eligible for the proxy's retired-alias redirect.
-export const RETIRED_SLUG_STRIP_LIVE_PAGE_SEGMENTS = new Set<string>([
+const RETIRED_SLUG_STRIP_LIVE_PAGE_SEGMENTS = new Set<string>([
   ...STOREFRONT_ROUTE_FIRST_SEGMENTS,
   'unlock-orders',
 ]);
@@ -120,12 +120,12 @@ export const RETIRED_SLUG_STRIP_LIVE_PAGE_SEGMENTS = new Set<string>([
 // Tradeoff: an exotic genuine retired link custom.example/auth/<path> (old slug
 // was "auth") no longer 301-strips and falls through to the storefront 404 —
 // preserving the security-critical live /auth/confirm route is the right call.
-export const CUSTOM_DOMAIN_APP_ROUTE_FIRST_SEGMENTS = new Set<string>([
+const CUSTOM_DOMAIN_APP_ROUTE_FIRST_SEGMENTS = new Set<string>([
   'auth',
   'feeds',
 ]);
 
-export function shouldStripRetiredSlugPrefix(
+function shouldStripRetiredSlugPrefix(
   firstSegment: string,
   pathSegmentCount: number
 ): boolean {
@@ -138,3 +138,12 @@ export function shouldStripRetiredSlugPrefix(
     !CUSTOM_DOMAIN_APP_ROUTE_FIRST_SEGMENTS.has(firstSegment)
   );
 }
+
+export const storefrontRouteSegments = {
+  CUSTOM_DOMAIN_APP_ROUTE_FIRST_SEGMENTS,
+  NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS,
+  RESERVED_STOREFRONT_SEGMENTS,
+  RETIRED_SLUG_STRIP_LIVE_PAGE_SEGMENTS,
+  STOREFRONT_ROUTE_FIRST_SEGMENTS,
+  shouldStripRetiredSlugPrefix,
+};

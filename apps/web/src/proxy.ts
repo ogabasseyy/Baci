@@ -32,13 +32,7 @@ import {
   STOREFRONT_METADATA_CACHE_BUCKET_HEADER,
   STOREFRONT_METADATA_CACHE_BUCKET_QUERY_PARAM,
 } from '@/config/storefront-metadata-cache-bots';
-import {
-  CUSTOM_DOMAIN_APP_ROUTE_FIRST_SEGMENTS,
-  NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS,
-  RESERVED_STOREFRONT_SEGMENTS,
-  STOREFRONT_ROUTE_FIRST_SEGMENTS,
-  shouldStripRetiredSlugPrefix,
-} from '@/config/storefront-route-segments';
+import { storefrontRouteSegments } from '@/config/storefront-route-segments';
 import { getInternalApiSecret } from '@/env';
 import type { BlogListingStatusIntent } from '@/lib/cached-storefront-blog-listing-status';
 import {
@@ -572,7 +566,7 @@ function shouldPartitionStorefrontMetadataCache(
       !slugSegment ||
       !isValidSubdomain(slugSegment) ||
       RESERVED_SUBDOMAINS.has(slugSegment) ||
-      RESERVED_STOREFRONT_SEGMENTS.has(slugSegment) ||
+      storefrontRouteSegments.RESERVED_STOREFRONT_SEGMENTS.has(slugSegment) ||
       PLATFORM_ROOT_ROUTE_SEGMENTS.has(slugSegment)
     ) {
       return false;
@@ -746,7 +740,7 @@ function isStorefrontHomeDocument(
     slugSegment !== undefined &&
     isValidSubdomain(slugSegment) &&
     !RESERVED_SUBDOMAINS.has(slugSegment) &&
-    !RESERVED_STOREFRONT_SEGMENTS.has(slugSegment) &&
+    !storefrontRouteSegments.RESERVED_STOREFRONT_SEGMENTS.has(slugSegment) &&
     !PLATFORM_ROOT_ROUTE_SEGMENTS.has(slugSegment)
   );
 }
@@ -884,7 +878,9 @@ function isStorefrontPdpDocument(
 
   return (
     firstSegment !== undefined &&
-    !NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS.has(firstSegment)
+    !storefrontRouteSegments.NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS.has(
+      firstSegment
+    )
   );
 }
 
@@ -955,7 +951,9 @@ function isCacheablePublicStorefrontDocument(
   const firstSegment = contentSegments[0]?.toLowerCase();
   if (
     firstSegment !== undefined &&
-    NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS.has(firstSegment)
+    storefrontRouteSegments.NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS.has(
+      firstSegment
+    )
   ) {
     return (
       isPublicReservedStorefrontDocument(pathname, hostname, contentSegments) ||
@@ -1007,7 +1005,9 @@ function shouldSetStorefrontDocumentCacheControl(
   return (
     contentSegments.length === 1 ||
     (firstSegment !== undefined &&
-      NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS.has(firstSegment))
+      storefrontRouteSegments.NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS.has(
+        firstSegment
+      ))
   );
 }
 
@@ -1259,8 +1259,8 @@ function matchAliasApiPrefixShape(
   const prefix = first.toLowerCase();
   if (
     !isValidSubdomain(prefix) ||
-    STOREFRONT_ROUTE_FIRST_SEGMENTS.has(prefix) ||
-    CUSTOM_DOMAIN_APP_ROUTE_FIRST_SEGMENTS.has(prefix)
+    storefrontRouteSegments.STOREFRONT_ROUTE_FIRST_SEGMENTS.has(prefix) ||
+    storefrontRouteSegments.CUSTOM_DOMAIN_APP_ROUTE_FIRST_SEGMENTS.has(prefix)
   ) {
     return null;
   }
@@ -1907,7 +1907,7 @@ function resolveUnsafeStorefrontPdpPath(
   if (
     !hasUnsafeStorefrontPdpSegments(
       contentSegments,
-      NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS
+      storefrontRouteSegments.NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS
     )
   ) {
     return null;
@@ -1968,7 +1968,7 @@ async function resolveStorefrontPdpHardNotFound(
   // otherwise an encoded-but-real slug looks absent and gets falsely 404ed.
   const firstSegmentGate = getStorefrontPdpFirstSegmentGate(
     contentSegments,
-    NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS
+    storefrontRouteSegments.NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS
   );
   const { firstSegment, isNonPdpFirstSegment, isProductsFallbackPdp } =
     firstSegmentGate;
@@ -1988,7 +1988,9 @@ async function resolveStorefrontPdpHardNotFound(
   }
   if (
     !productSlug ||
-    RESERVED_STOREFRONT_SEGMENTS.has(productSlug.toLowerCase())
+    storefrontRouteSegments.RESERVED_STOREFRONT_SEGMENTS.has(
+      productSlug.toLowerCase()
+    )
   ) {
     return null;
   }
@@ -2120,13 +2122,18 @@ async function resolveStorefrontPdpCanonicalRedirect(
 
   if (
     !isProductsFallbackPdp &&
-    (!firstSegment || NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS.has(firstSegment))
+    (!firstSegment ||
+      storefrontRouteSegments.NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS.has(
+        firstSegment
+      ))
   ) {
     return { response: null, skipHardNotFound: false };
   }
   if (
     !productSlug ||
-    RESERVED_STOREFRONT_SEGMENTS.has(productSlug.toLowerCase())
+    storefrontRouteSegments.RESERVED_STOREFRONT_SEGMENTS.has(
+      productSlug.toLowerCase()
+    )
   ) {
     return { response: null, skipHardNotFound: false };
   }
@@ -2269,7 +2276,7 @@ const resolveStorefrontComparePageHardStatus =
     getRouteType,
     getStorefrontContentSegments,
     nonCacheableStorefrontFirstSegments:
-      NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS,
+      storefrontRouteSegments.NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS,
     buildHardStatusStorefrontResponse,
   });
 
@@ -3332,7 +3339,10 @@ export async function proxy(request: NextRequest) {
           // SAME limitation the pre-existing current-slug canonicalization below
           // (~/<currentSlug>/<cat>/<prod>) already has — a per-request category
           // membership DB lookup on every custom-domain path isn't worth it.
-          shouldStripRetiredSlugPrefix(firstSegment, domainPathSegments.length)
+          storefrontRouteSegments.shouldStripRetiredSlugPrefix(
+            firstSegment,
+            domainPathSegments.length
+          )
         ) {
           const aliasCurrentSlug = await getCurrentSlugForAlias(firstSegment);
           if (
@@ -3443,7 +3453,9 @@ export async function proxy(request: NextRequest) {
           normalizedTermsAliasPathname === strippedPathname &&
           strippedSegments.length === 2 &&
           !!firstStrippedSegment &&
-          !RESERVED_STOREFRONT_SEGMENTS.has(firstStrippedSegment);
+          !storefrontRouteSegments.RESERVED_STOREFRONT_SEGMENTS.has(
+            firstStrippedSegment
+          );
 
         const normalizedPathname =
           normalizedTermsAliasPathname !== strippedPathname
@@ -3521,8 +3533,12 @@ export async function proxy(request: NextRequest) {
           // prefix strip): the backfill records a grandfathered infra slug (e.g.
           // `support`, `cdn`) as this merchant's alias, so store.example/support/api/…
           // must still rewrite. The merchant-scoped alias check below gates it.
-          !STOREFRONT_ROUTE_FIRST_SEGMENTS.has(aliasPrefix) &&
-          !CUSTOM_DOMAIN_APP_ROUTE_FIRST_SEGMENTS.has(aliasPrefix)
+          !storefrontRouteSegments.STOREFRONT_ROUTE_FIRST_SEGMENTS.has(
+            aliasPrefix
+          ) &&
+          !storefrontRouteSegments.CUSTOM_DOMAIN_APP_ROUTE_FIRST_SEGMENTS.has(
+            aliasPrefix
+          )
         ) {
           const aliasCurrentSlug = await getCurrentSlugForAlias(aliasPrefix);
           if (

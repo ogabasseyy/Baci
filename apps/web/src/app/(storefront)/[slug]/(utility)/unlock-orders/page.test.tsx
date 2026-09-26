@@ -37,6 +37,8 @@ const { default: UnlockOrdersPage, metadata } = await import('./page');
 
 describe('UnlockOrdersPage', () => {
   beforeEach(() => {
+    notFound.mockClear();
+    redirect.mockClear();
     vi.mocked(getCachedMerchant).mockReset();
     vi.mocked(getCachedMerchantByDomain).mockReset();
     vi.mocked(getCurrentSlugForAlias).mockReset().mockResolvedValue(null);
@@ -79,5 +81,39 @@ describe('UnlockOrdersPage', () => {
       })
     ).rejects.toThrow('NEXT_REDIRECT:/?campaign=summer&tag=one&tag=two');
     expect(getCurrentSlugForAlias).toHaveBeenCalledWith('unlock-orders');
+  });
+
+  it('does not redirect when the custom-domain slug is not a retired alias', async () => {
+    vi.mocked(isDomainIdentifier).mockReturnValue(true);
+    vi.mocked(getCachedMerchantByDomain).mockResolvedValue({
+      slug: 'zorvexa',
+      template_id: 'classic',
+    } as never);
+    vi.mocked(getCurrentSlugForAlias).mockResolvedValue(null);
+
+    await expect(
+      UnlockOrdersPage({
+        params: Promise.resolve({ slug: 'shop.example' }),
+      })
+    ).rejects.toThrow('NEXT_NOT_FOUND');
+    expect(notFound).toHaveBeenCalledOnce();
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it('does not redirect when the retired alias belongs to another merchant', async () => {
+    vi.mocked(isDomainIdentifier).mockReturnValue(true);
+    vi.mocked(getCachedMerchantByDomain).mockResolvedValue({
+      slug: 'zorvexa',
+      template_id: 'classic',
+    } as never);
+    vi.mocked(getCurrentSlugForAlias).mockResolvedValue('another-store');
+
+    await expect(
+      UnlockOrdersPage({
+        params: Promise.resolve({ slug: 'shop.example' }),
+      })
+    ).rejects.toThrow('NEXT_NOT_FOUND');
+    expect(notFound).toHaveBeenCalledOnce();
+    expect(redirect).not.toHaveBeenCalled();
   });
 });

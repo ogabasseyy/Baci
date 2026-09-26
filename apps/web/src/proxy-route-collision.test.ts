@@ -114,7 +114,7 @@ describe('bugfix: retired-slug prefix strip shadowed a live storefront route', (
 
     // Anything listed here is a live route that a retired slug of the same name
     // would shadow — add it to RETIRED_SLUG_STRIP_LIVE_PAGE_SEGMENTS in
-    // proxy.ts, the set this strip consults.
+    // storefront-route-segments.ts, the set this strip consults.
     expect(stripped).toEqual([]);
   });
 

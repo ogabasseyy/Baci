@@ -109,6 +109,15 @@ describe('MCP cart handoff', () => {
       expect(soldOutOffer.structuredContent).toMatchObject({ success: false });
       expect(JSON.stringify(soldOutOffer)).not.toContain('requires_variant_selection');
 
+      const combinedOptions = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+        id: 79, method: 'tools/call',
+        params: { name: 'add_to_cart', arguments: { product_id: 'combined-options-product', quantity: 1 } },
+      }));
+      expect(combinedOptions.structuredContent).toMatchObject({
+        requires_variant_selection: true,
+        product_url: 'https://ogabassey.com/products/combined-options-phone',
+      });
+
       const insufficientOfferQuantity = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
         id: 75, method: 'tools/call',
         params: { name: 'add_to_cart', arguments: { product_id: 'condition-offer-product', quantity: 3 } },

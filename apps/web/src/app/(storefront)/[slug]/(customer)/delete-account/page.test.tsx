@@ -33,7 +33,8 @@ vi.mock('next/link', () => ({
   ),
 }));
 
-const { DeleteAccountContent, generateMetadata } = await import('./page');
+const { generateMetadata } = await import('./page');
+const { DeleteAccountContent } = await import('./delete-account-content');
 
 describe('delete-account metadata', () => {
   it('returns fallback title when merchant is missing', async () => {

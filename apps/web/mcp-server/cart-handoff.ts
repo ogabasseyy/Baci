@@ -28,6 +28,7 @@ export async function prepareCartHandoff({
 
   let unavailable = Boolean(productError || !product);
   if (product?.manage_stock === true) {
+    let optionAvailable = product.has_condition_offers === true && Number(product.stock_quantity ?? 0) >= quantity;
     if (product.has_condition_offers === true) {
       const { data: offers, error: offersError } = await supabase
         .from('product_offers')
@@ -35,22 +36,24 @@ export async function prepareCartHandoff({
         .eq('merchant_id', merchantId)
         .eq('product_id', productId)
         .eq('status', 'active');
-      unavailable = Boolean(offersError) ||
-        (Number(product.stock_quantity ?? 0) < quantity &&
-          !offers?.some((offer) => Number(offer.stock_quantity ?? 0) >= quantity));
-    } else if (product.has_variants === true) {
+      optionAvailable ||= !offersError && Boolean(offers?.some((offer) => Number(offer.stock_quantity ?? 0) >= quantity));
+    }
+    if (product.has_variants === true) {
       const { data: variants, error: variantsError } = await supabase.rpc(
         'get_storefront_product_variants',
         { p_product_ids: [productId] }
       );
-      unavailable = Boolean(variantsError) || !Array.isArray(variants) ||
-        !variants.some((variant) =>
+      optionAvailable ||= !variantsError && Array.isArray(variants) &&
+        variants.some((variant) =>
           variant.product_id === productId &&
           Number(variant.stock_quantity ?? 0) >= quantity
         );
+    }
+    if (product.has_condition_offers === true || product.has_variants === true) {
+      unavailable ||= !optionAvailable;
     } else {
       const effectiveStock = Number(product.stock_quantity ?? 0);
-      unavailable = effectiveStock < quantity;
+      unavailable ||= effectiveStock < quantity;
     }
   }
 

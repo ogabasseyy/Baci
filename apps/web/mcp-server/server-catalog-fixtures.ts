@@ -22,6 +22,8 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
         response.end(JSON.stringify({ id: 'condition-offer-product', name: 'Used Offer Phone', slug: 'used-offer-phone', price: 100000, manage_stock: true, stock_quantity: 0, stock: 0, has_variants: false, has_condition_offers: true }));
       } else if (url.searchParams.get('id') === 'eq.condition-offer-sold-out-product') {
         response.end(JSON.stringify({ id: 'condition-offer-sold-out-product', name: 'Sold Out Offer Phone', slug: 'sold-out-offer-phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: false, has_condition_offers: true }));
+      } else if (url.searchParams.get('id') === 'eq.combined-options-product') {
+        response.end(JSON.stringify({ id: 'combined-options-product', name: 'Combined Options Phone', slug: 'combined-options-phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: true, has_condition_offers: true }));
       } else if (url.searchParams.get('id') === 'eq.condition-offer-parent-stock-product') {
         response.end(JSON.stringify({ id: 'condition-offer-parent-stock-product', name: 'Parent Stock Offer Phone', slug: 'parent-stock-offer-phone', price: 100000, manage_stock: true, stock_quantity: 2, has_variants: false, has_condition_offers: true }));
       } else if (url.searchParams.get('id') === 'eq.untracked-variant-product') {
@@ -72,6 +74,7 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
         { product_id: 'available-product', attributes: { storage: '128GB' }, price_override: 100000, stock_quantity: 0, condition: 'new', sku: 'TEST-128' },
         { product_id: 'variant-sold-out-product', attributes: { storage: '128GB' }, stock_quantity: 0 },
         { product_id: 'variant-available-product', attributes: { storage: '256GB' }, stock_quantity: 2 },
+        { product_id: 'combined-options-product', attributes: { storage: '256GB' }, stock_quantity: 2 },
         { product_id: 'slugless-variant-product', attributes: { storage: '256GB' }, stock_quantity: 2 },
         { product_id: 'untracked-variant-product', attributes: { storage: '128GB' }, stock_quantity: 0 },
       ];

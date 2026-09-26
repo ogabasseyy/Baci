@@ -1,179 +1,18 @@
-import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { updateRouteTestHarness as harness } from './route.test-support';
 
-const mockGetUser = vi.fn();
-const mockMerchantSingle = vi.fn();
-const mockMappingsOrder = vi.fn();
-const mockMappingUpdate = vi.fn();
-const mockRpc = vi.fn();
-const mockForIntegration = vi.fn();
-const mockRequireMerchantFeatureAccess = vi.fn();
-const mockPushStatusUpdates = vi.fn();
-const mockPushPriceUpdates = vi.fn();
-
-const mockSupabase = {
-  auth: { getUser: mockGetUser },
-  from: vi.fn((table: string) => {
-    if (table === 'merchants') {
-      return {
-        select: () => ({
-          eq: () => ({
-            single: mockMerchantSingle,
-          }),
-        }),
-      };
-    }
-
-    if (table === 'jumia_product_mappings') {
-      return {
-        select: () => ({
-          eq: () => ({
-            eq: () => ({
-              eq: () => ({
-                eq: () => ({
-                  order: mockMappingsOrder,
-                }),
-              }),
-            }),
-          }),
-        }),
-        update: (...args: unknown[]) => ({
-          eq: () => ({
-            eq: () => mockMappingUpdate(...args),
-          }),
-          in: () => ({
-            eq: () => mockMappingUpdate(...args),
-          }),
-        }),
-      };
-    }
-
-    return {};
-  }),
-  rpc: (...args: unknown[]) => mockRpc(...args),
-};
-
-vi.mock('next/headers', () => ({ cookies: vi.fn().mockResolvedValue({}) }));
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(() => mockSupabase),
-}));
-vi.mock('@/lib/csrf', () => ({
-  checkCsrfProtection: vi.fn().mockResolvedValue({ valid: true }),
-}));
-vi.mock('@/lib/jumia/client', () => ({
-  JumiaClient: {
-    forIntegration: (...args: unknown[]) => mockForIntegration(...args),
-  },
-}));
-vi.mock('@/lib/jumia/feeds', () => ({
-  updatePrice: vi.fn(),
-  updateStatus: vi.fn(),
-}));
-vi.mock('./jumia-product-update-feeds', async () => {
-  const actual = await vi.importActual<
-    typeof import('./jumia-product-update-feeds')
-  >('./jumia-product-update-feeds');
-  return {
-    ...actual,
-    pushStatusUpdates: (...args: unknown[]) => mockPushStatusUpdates(...args),
-    pushPriceUpdates: (...args: unknown[]) => mockPushPriceUpdates(...args),
-  };
-});
-vi.mock('@/lib/jumia/jumia-marketplace-currency', () => ({
-  loadJumiaMarketplaceCurrency: vi.fn(),
-}));
-vi.mock('@/lib/jumia/helpers', () => ({
-  JumiaApiError: class extends Error {
-    status: number;
-    constructor(status: number, message: string) {
-      super(message);
-      this.status = status;
-    }
-  },
-}));
-vi.mock('@/lib/logger', () => ({
-  logger: {
-    error: vi.fn(),
-    warn: vi.fn(),
-    info: vi.fn(),
-    debug: vi.fn(),
-    trace: vi.fn(),
-  },
-}));
-vi.mock('@/lib/merchant-feature-gates', () => ({
-  requireMerchantFeatureAccess: (...args: unknown[]) =>
-    mockRequireMerchantFeatureAccess(...args),
-}));
-
-const INTEGRATION_ID = '00000000-0000-4000-8000-000000000099';
-const MERCHANT_ID = '00000000-0000-4000-8000-000000000001';
-const PRODUCT_ID = '00000000-0000-4000-8000-000000000002';
-
-function makeRequest(body: Record<string, unknown>) {
-  return new NextRequest(
-    'http://localhost/api/marketplace/jumia/products/update',
-    {
-      method: 'POST',
-      body: JSON.stringify(body),
-      headers: { 'Content-Type': 'application/json' },
-    }
-  );
-}
-
-const { POST } = await import('./route');
-const { loadJumiaMarketplaceCurrency } = await import(
-  '@/lib/jumia/jumia-marketplace-currency'
-);
+const { INTEGRATION_ID, MERCHANT_ID, PRODUCT_ID } = harness.ids;
 
 describe('POST /api/marketplace/jumia/products/update', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-1' } } });
-    mockMerchantSingle.mockResolvedValue({
-      data: { id: MERCHANT_ID },
-      error: null,
-    });
-    mockRequireMerchantFeatureAccess.mockResolvedValue(null);
-    mockForIntegration.mockResolvedValue({
-      shopId: 'shop-1',
-      marketplaceKey: 'NG',
-    });
-    mockMappingsOrder.mockResolvedValue({
-      data: [
-        {
-          id: 'map-1',
-          product_id: PRODUCT_ID,
-          variant_id: null,
-          jumia_sku: 'SKU-1',
-          jumia_seller_sku: 'SKU-1',
-          jumia_product_id: 'JUMIA-1',
-          jumia_price: 1000,
-          jumia_sale_price: null,
-          jumia_sale_start: null,
-          jumia_sale_end: null,
-          is_active: true,
-          sync_inventory: true,
-          sync_price: false,
-          sync_status: 'synced',
-          last_synced_at: null,
-          sync_error: null,
-          created_at: '2026-08-13T10:00:00Z',
-          updated_at: '2026-08-13T10:00:00Z',
-        },
-      ],
-      error: null,
-    });
-    mockMappingUpdate.mockResolvedValue({ error: null });
-    mockPushStatusUpdates.mockResolvedValue(undefined);
-    mockPushPriceUpdates.mockResolvedValue(undefined);
-    mockRpc.mockResolvedValue({ error: null });
+    harness.reset();
   });
 
   it('returns 401 when user is not authenticated', async () => {
-    mockGetUser.mockResolvedValue({ data: { user: null } });
+    harness.mocks.getUser.mockResolvedValue({ data: { user: null } });
 
-    const response = await POST(
-      makeRequest({
+    const response = await harness.post(
+      harness.makeRequest({
         integrationId: INTEGRATION_ID,
         overrides: { is_active: false },
         productId: PRODUCT_ID,
@@ -184,7 +23,7 @@ describe('POST /api/marketplace/jumia/products/update', () => {
   });
 
   it('returns 402 before reading mappings or creating a Jumia client when marketplace sync is locked', async () => {
-    mockRequireMerchantFeatureAccess.mockResolvedValueOnce(
+    harness.mocks.requireMerchantFeatureAccess.mockResolvedValueOnce(
       Response.json(
         {
           code: 'requires_upgrade',
@@ -194,8 +33,8 @@ describe('POST /api/marketplace/jumia/products/update', () => {
       )
     );
 
-    const response = await POST(
-      makeRequest({
+    const response = await harness.post(
+      harness.makeRequest({
         integrationId: INTEGRATION_ID,
         overrides: { is_active: false },
         productId: PRODUCT_ID,
@@ -205,32 +44,29 @@ describe('POST /api/marketplace/jumia/products/update', () => {
 
     expect(response.status).toBe(402);
     expect(body.code).toBe('requires_upgrade');
-    expect(mockRequireMerchantFeatureAccess).toHaveBeenCalledWith(
-      mockSupabase,
+    expect(harness.mocks.requireMerchantFeatureAccess).toHaveBeenCalledWith(
+      harness.supabase,
       MERCHANT_ID,
       'marketplace_sync'
     );
-    expect(mockSupabase.from).not.toHaveBeenCalledWith(
+    expect(harness.supabase.from).not.toHaveBeenCalledWith(
       'jumia_product_mappings'
     );
-    expect(mockForIntegration).not.toHaveBeenCalled();
-    expect(mockMappingUpdate).not.toHaveBeenCalled();
-    expect(mockPushStatusUpdates).not.toHaveBeenCalled();
-    expect(mockPushPriceUpdates).not.toHaveBeenCalled();
+    expect(harness.mocks.forIntegration).not.toHaveBeenCalled();
+    expect(harness.mocks.mappingUpdate).not.toHaveBeenCalled();
+    expect(harness.mocks.pushStatusUpdates).not.toHaveBeenCalled();
+    expect(harness.mocks.pushPriceUpdates).not.toHaveBeenCalled();
   });
 
   it('returns before updating mappings when marketplace currency loading fails for price updates', async () => {
-    const { loadJumiaMarketplaceCurrency } = await import(
-      '@/lib/jumia/jumia-marketplace-currency'
-    );
-    vi.mocked(loadJumiaMarketplaceCurrency).mockResolvedValueOnce({
+    vi.mocked(harness.loadCurrency).mockResolvedValueOnce({
       ok: false,
       status: 500,
       error: 'Failed to load Jumia integration currency',
     });
 
-    const response = await POST(
-      makeRequest({
+    const response = await harness.post(
+      harness.makeRequest({
         integrationId: INTEGRATION_ID,
         overrides: { jumia_price: 1500 },
         productId: PRODUCT_ID,
@@ -238,12 +74,12 @@ describe('POST /api/marketplace/jumia/products/update', () => {
     );
 
     expect(response.status).toBe(500);
-    expect(mockMappingUpdate).not.toHaveBeenCalled();
-    expect(mockPushPriceUpdates).not.toHaveBeenCalled();
+    expect(harness.mocks.mappingUpdate).not.toHaveBeenCalled();
+    expect(harness.mocks.pushPriceUpdates).not.toHaveBeenCalled();
   });
 
   it('does not persist overrides when a mapped variant is not ready on Jumia', async () => {
-    mockMappingsOrder.mockResolvedValueOnce({
+    harness.mocks.mappingsOrder.mockResolvedValueOnce({
       data: [
         {
           id: 'map-pending',
@@ -260,8 +96,8 @@ describe('POST /api/marketplace/jumia/products/update', () => {
       error: null,
     });
 
-    const response = await POST(
-      makeRequest({
+    const response = await harness.post(
+      harness.makeRequest({
         integrationId: INTEGRATION_ID,
         overrides: { is_active: false, jumia_price: 900 },
         productId: PRODUCT_ID,
@@ -278,19 +114,19 @@ describe('POST /api/marketplace/jumia/products/update', () => {
         'Price update skipped: product has not been assigned a Jumia product ID yet (feed may still be processing)',
       ],
     });
-    expect(mockMappingUpdate).not.toHaveBeenCalled();
-    expect(mockPushStatusUpdates).not.toHaveBeenCalled();
-    expect(mockPushPriceUpdates).not.toHaveBeenCalled();
+    expect(harness.mocks.mappingUpdate).not.toHaveBeenCalled();
+    expect(harness.mocks.pushStatusUpdates).not.toHaveBeenCalled();
+    expect(harness.mocks.pushPriceUpdates).not.toHaveBeenCalled();
   });
 
   it('verifies OAuth scope before mutating mappings', async () => {
-    mockForIntegration.mockResolvedValue({
+    harness.mocks.forIntegration.mockResolvedValue({
       shopId: 'shop-1',
       marketplaceKey: 'oauth',
     });
 
-    const response = await POST(
-      makeRequest({
+    const response = await harness.post(
+      harness.makeRequest({
         integrationId: INTEGRATION_ID,
         overrides: { is_active: false },
         productId: PRODUCT_ID,
@@ -304,20 +140,22 @@ describe('POST /api/marketplace/jumia/products/update', () => {
       feedIds: [],
       errors: ['Unable to verify the Jumia shop marketplace scope. Try again.'],
     });
-    expect(mockMappingUpdate).not.toHaveBeenCalled();
-    expect(mockPushStatusUpdates).not.toHaveBeenCalled();
-    expect(mockPushPriceUpdates).not.toHaveBeenCalled();
+    expect(harness.mocks.mappingUpdate).not.toHaveBeenCalled();
+    expect(harness.mocks.pushStatusUpdates).not.toHaveBeenCalled();
+    expect(harness.mocks.pushPriceUpdates).not.toHaveBeenCalled();
   });
 
   it('persists variant prices after the price feed is accepted', async () => {
-    vi.mocked(loadJumiaMarketplaceCurrency).mockResolvedValue({
+    vi.mocked(harness.loadCurrency).mockResolvedValue({
       ok: true,
       currency: 'NGN',
     });
-    mockPushPriceUpdates.mockResolvedValue({ submittedSkus: ['SKU-1'] });
+    harness.mocks.pushPriceUpdates.mockResolvedValue({
+      submittedSkus: ['SKU-1'],
+    });
 
-    const response = await POST(
-      makeRequest({
+    const response = await harness.post(
+      harness.makeRequest({
         integrationId: INTEGRATION_ID,
         overrides: { jumia_prices: { 'SKU-1': 900 } },
         productId: PRODUCT_ID,
@@ -327,27 +165,37 @@ describe('POST /api/marketplace/jumia/products/update', () => {
 
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
-    expect(mockPushPriceUpdates).toHaveBeenCalled();
-    expect(mockRpc).toHaveBeenCalledWith('apply_jumia_variant_price_updates', {
-      p_merchant_id: MERCHANT_ID,
-      p_updates: [{ id: 'map-1', price: 900 }],
-    });
+    expect(harness.mocks.pushPriceUpdates).toHaveBeenCalled();
+    expect(harness.mocks.rpc).toHaveBeenCalledWith(
+      'apply_jumia_submitted_price_updates',
+      {
+        p_merchant_id: MERCHANT_ID,
+        p_scalar: { values: {}, targets: [] },
+        p_updates: [{ id: 'map-1', price: 900, expected_token: 'token-0' }],
+        p_update_token: expect.any(String),
+      }
+    );
   });
 
-  it('skips variant price persistence when the price feed fails', async () => {
-    vi.mocked(loadJumiaMarketplaceCurrency).mockResolvedValue({
+  it('keeps accepted feed ids when post-push persistence fails', async () => {
+    vi.mocked(harness.loadCurrency).mockResolvedValue({
       ok: true,
       currency: 'NGN',
     });
-    mockPushPriceUpdates.mockImplementationOnce(async (...args: unknown[]) => {
-      (args[5] as string[]).push('Price feed rejected');
-      return { submittedSkus: [] as string[] };
+    harness.mocks.pushPriceUpdates.mockImplementationOnce(
+      async (...args: unknown[]) => {
+        (args[4] as string[]).push('feed-1');
+        return { submittedSkus: ['SKU-1'] };
+      }
+    );
+    harness.mocks.rpc.mockResolvedValueOnce({
+      error: { message: 'db down' },
     });
 
-    const response = await POST(
-      makeRequest({
+    const response = await harness.post(
+      harness.makeRequest({
         integrationId: INTEGRATION_ID,
-        overrides: { jumia_prices: { 'SKU-1': 900 } },
+        overrides: { jumia_price: 900 },
         productId: PRODUCT_ID,
       })
     );
@@ -355,71 +203,37 @@ describe('POST /api/marketplace/jumia/products/update', () => {
 
     expect(response.status).toBe(200);
     expect(body.success).toBe(false);
-    expect(body.errors).toEqual(['Price feed rejected']);
-    expect(mockRpc).not.toHaveBeenCalled();
+    expect(body.feedIds).toEqual(['feed-1']);
+    expect(body.errors).toEqual([
+      expect.stringMatching(/accepted the price feed/),
+    ]);
   });
 
-  it('persists the submitted subset of a partial price feed', async () => {
-    vi.mocked(loadJumiaMarketplaceCurrency).mockResolvedValue({
+  it('preserves earlier provider errors when post-push persistence fails', async () => {
+    vi.mocked(harness.loadCurrency).mockResolvedValue({
       ok: true,
       currency: 'NGN',
     });
-    mockMappingsOrder.mockResolvedValueOnce({
-      data: [
-        {
-          id: 'map-1',
-          product_id: PRODUCT_ID,
-          variant_id: null,
-          jumia_sku: 'SKU-1',
-          jumia_seller_sku: 'SKU-1',
-          jumia_product_id: 'JUMIA-1',
-          jumia_price: 1000,
-          jumia_sale_price: null,
-          jumia_sale_start: null,
-          jumia_sale_end: null,
-          is_active: true,
-          sync_inventory: true,
-          sync_price: false,
-          sync_status: 'synced',
-          last_synced_at: null,
-          sync_error: null,
-          created_at: '2026-08-13T10:00:00Z',
-          updated_at: '2026-08-13T10:00:00Z',
-        },
-        {
-          id: 'map-2',
-          product_id: PRODUCT_ID,
-          variant_id: null,
-          jumia_sku: 'SKU-2',
-          jumia_seller_sku: 'SKU-2',
-          jumia_product_id: 'JUMIA-2',
-          jumia_price: null,
-          jumia_sale_price: null,
-          jumia_sale_start: null,
-          jumia_sale_end: null,
-          is_active: true,
-          sync_inventory: true,
-          sync_price: false,
-          sync_status: 'synced',
-          last_synced_at: null,
-          sync_error: null,
-          created_at: '2026-08-13T10:00:00Z',
-          updated_at: '2026-08-13T10:00:00Z',
-        },
-      ],
-      error: null,
-    });
-    mockPushPriceUpdates.mockImplementationOnce(async (...args: unknown[]) => {
-      (args[5] as string[]).push(
-        'Price update skipped for SKU-2: no price available (override or existing)'
-      );
-      return { submittedSkus: ['SKU-1'] };
+    harness.mocks.pushStatusUpdates.mockImplementationOnce(
+      async (...args: unknown[]) => {
+        (args[4] as string[]).push('Status update failed: provider rejected');
+      }
+    );
+    harness.mocks.pushPriceUpdates.mockImplementationOnce(
+      async (...args: unknown[]) => {
+        (args[4] as string[]).push('feed-1');
+        return { submittedSkus: ['SKU-1'] };
+      }
+    );
+    harness.mocks.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'db down' },
     });
 
-    const response = await POST(
-      makeRequest({
+    const response = await harness.post(
+      harness.makeRequest({
         integrationId: INTEGRATION_ID,
-        overrides: { jumia_prices: { 'SKU-1': 900 } },
+        overrides: { is_active: false, jumia_price: 900 },
         productId: PRODUCT_ID,
       })
     );
@@ -427,9 +241,10 @@ describe('POST /api/marketplace/jumia/products/update', () => {
 
     expect(response.status).toBe(200);
     expect(body.success).toBe(false);
-    expect(mockRpc).toHaveBeenCalledWith('apply_jumia_variant_price_updates', {
-      p_merchant_id: MERCHANT_ID,
-      p_updates: [{ id: 'map-1', price: 900 }],
-    });
+    expect(body.feedIds).toEqual(['feed-1']);
+    expect(body.errors).toEqual([
+      'Status update failed: provider rejected',
+      expect.stringMatching(/accepted the price feed/),
+    ]);
   });
 });

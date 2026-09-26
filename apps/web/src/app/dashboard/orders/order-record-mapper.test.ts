@@ -143,4 +143,13 @@ describe('mapDashboardOrderRecord', () => {
       })
     );
   });
+
+  it('preserves a missing currency as null so renderers use the merchant fallback', () => {
+    const result = mapDashboardOrderRecord(
+      { ...baseOrder, currency: null },
+      { orderItemImageMap: new Map() }
+    );
+
+    expect(result.currency).toBeNull();
+  });
 });

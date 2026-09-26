@@ -99,10 +99,12 @@ export async function serveProductImage(
     const contentType = upstream.headers.get('content-type') || '';
     const contentLength = Number(upstream.headers.get('content-length'));
     if (!upstream.ok || !/^image\/(?:avif|jpeg|png|webp)(?:;|$)/i.test(contentType)) {
+      await upstream.body?.cancel();
       response.writeHead(404).end('Not Found');
       return;
     }
     if (Number.isFinite(contentLength) && contentLength > MAX_IMAGE_BYTES) {
+      await upstream.body?.cancel();
       response.writeHead(502).end('Image too large');
       return;
     }

@@ -10,6 +10,8 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
         response.end(JSON.stringify({ id: 'variant-sold-out-product', name: 'Variant Sold Out Phone', slug: 'variant-sold-out-phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: true }));
       } else if (url.searchParams.get('id') === 'eq.variant-available-product') {
         response.end(JSON.stringify({ id: 'variant-available-product', name: 'Variant Available Phone', slug: 'variant-available-phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: true }));
+      } else if (url.searchParams.get('id') === 'eq.slugless-variant-product') {
+        response.end(JSON.stringify({ id: 'slugless-variant-product', name: 'Slugless Variant Phone', slug: null, price: 100000, manage_stock: true, stock_quantity: 0, has_variants: true }));
       } else if (url.searchParams.get('id') === 'eq.variant-empty-product') {
         response.end(JSON.stringify({ id: 'variant-empty-product', name: 'Variant Empty Phone', slug: 'variant-empty-phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: true }));
       } else if (url.searchParams.get('id') === 'eq.untracked-offer-product') {
@@ -70,6 +72,7 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
         { product_id: 'available-product', attributes: { storage: '128GB' }, price_override: 100000, stock_quantity: 0, condition: 'new', sku: 'TEST-128' },
         { product_id: 'variant-sold-out-product', attributes: { storage: '128GB' }, stock_quantity: 0 },
         { product_id: 'variant-available-product', attributes: { storage: '256GB' }, stock_quantity: 2 },
+        { product_id: 'slugless-variant-product', attributes: { storage: '256GB' }, stock_quantity: 2 },
         { product_id: 'untracked-variant-product', attributes: { storage: '128GB' }, stock_quantity: 0 },
       ];
       let body = '';

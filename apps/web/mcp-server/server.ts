@@ -13,6 +13,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { prepareCartHandoff } from './cart-handoff';
 import * as fs from 'node:fs';
 import {
   createServer,
@@ -1473,92 +1474,13 @@ function createOgabasseyServer() {
           };
         }
 
-        const { data: product, error: productError } = await supabase
-          .from('products')
-          .select('name, slug, price, manage_stock, stock_quantity, stock, has_variants, has_condition_offers')
-          .eq('id', args.product_id)
-          .eq('merchant_id', merchantId)
-          .eq('status', 'active')
-          .single();
-
-        let unavailable = Boolean(productError || !product);
-        if (product?.manage_stock === true) {
-          if (product.has_condition_offers === true) {
-            const { data: offers, error: offersError } = await supabase
-              .from('product_offers')
-              .select('stock_quantity')
-              .eq('merchant_id', merchantId)
-              .eq('product_id', args.product_id)
-              .eq('status', 'active');
-            unavailable = Boolean(offersError) ||
-              (Number(product.stock_quantity ?? 0) < args.quantity &&
-                !offers?.some((offer) => Number(offer.stock_quantity ?? 0) >= args.quantity));
-          } else if (product.has_variants === true) {
-            const { data: variants, error: variantsError } = await supabase.rpc(
-              'get_storefront_product_variants',
-              { p_product_ids: [args.product_id] }
-            );
-            unavailable = Boolean(variantsError) || !Array.isArray(variants) ||
-              !variants.some((variant) =>
-                variant.product_id === args.product_id &&
-                Number(variant.stock_quantity ?? 0) >= (args.quantity ?? 1)
-              );
-          } else {
-            const effectiveStock = Number(product.stock_quantity ?? 0);
-            unavailable = effectiveStock < (args.quantity ?? 1);
-          }
-        }
-
-        if (unavailable || !product) {
-          return {
-            content: [{ type: 'text', text: 'This product is not currently available for cart handoff.' }],
-            structuredContent: { success: false },
-          };
-        }
-
-        if (product.has_variants === true || product.has_condition_offers === true) {
-          if (!product.slug) {
-            return {
-              content: [{ type: 'text', text: 'This product needs option selection on Ogabassey, but its product page is unavailable.' }],
-              structuredContent: { success: false },
-            };
-          }
-          const productUrl = `https://ogabassey.com/products/${encodeURIComponent(product.slug)}`;
-          return {
-            content: [{
-              type: 'text',
-              text: `Choose the available options for **${product.name}** on Ogabassey before adding it to your cart.\n\n[Select product options](${productUrl})`,
-            }],
-            structuredContent: {
-              success: false,
-              requires_variant_selection: true,
-              product_id: args.product_id,
-              product_url: productUrl,
-            },
-          };
-        }
-
-        const cartUrl = `https://ogabassey.com/cart?item_id=${encodeURIComponent(args.product_id)}&qty=${args.quantity || 1}`;
-        const productName = product.name;
-        const price = product.price
-          ? NGN_PRICE_FORMATTER.format(product.price)
-          : '';
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Cart link ready for **${productName}**${price ? ` (${price})` : ''}. Open Ogabassey and verify the item and final price before checkout.\n\n[Open cart on Ogabassey](${cartUrl})`,
-            },
-          ],
-          structuredContent: {
-            success: true,
-            product_id: args.product_id,
-            product_name: productName,
-            quantity: args.quantity || 1,
-            cart_url: cartUrl,
-          },
-        };
+        return prepareCartHandoff({
+          supabase,
+          merchantId,
+          productId: args.product_id,
+          quantity: args.quantity,
+          formatPrice,
+        });
       } catch (error) {
         console.error('Add to cart error:', error);
         return {

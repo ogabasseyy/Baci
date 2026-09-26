@@ -132,7 +132,7 @@ describe('Ogabassey account deletion guidance', () => {
     );
 
     expect(
-      screen.getByText(/no later than six calendar months/)
+      screen.getByText(/generally limits storage to six calendar months/)
     ).toBeInTheDocument();
     expect(
       screen.getByText(

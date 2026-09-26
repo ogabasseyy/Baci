@@ -35,10 +35,10 @@ export async function createWidgetHtml() {
   const jsCode = jsResult.outputFiles[0].text;
 
   // Read CSS
-  let cssCode = '';
-  if (fs.existsSync(cssPath)) {
-    cssCode = fs.readFileSync(cssPath, 'utf8');
-  }
+  const cssCode = fs.readFileSync(cssPath, 'utf8').replace(
+    /\/\* @include:(styles-(?:header|single-card|responsive)\.css) \*\//g,
+    (_, file) => fs.readFileSync(path.join(SRC_DIR, file), 'utf8')
+  );
 
   // Create HTML bundle with skybridge compatibility
   const htmlContent = `<!DOCTYPE html>

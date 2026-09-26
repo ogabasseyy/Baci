@@ -66,6 +66,16 @@ describe('MCP cart handoff', () => {
       });
       expect(JSON.stringify(availableVariant)).not.toContain('cart_url');
 
+      const sluglessVariant = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+        id: 78,
+        method: 'tools/call',
+        params: { name: 'add_to_cart', arguments: { product_id: 'slugless-variant-product', quantity: 1 } },
+      }));
+      expect(sluglessVariant.structuredContent).toMatchObject({
+        requires_variant_selection: true,
+        product_url: 'https://ogabassey.com/products/slugless-variant-product',
+      });
+
       const legacyStock = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
         id: 70,
         method: 'tools/call',

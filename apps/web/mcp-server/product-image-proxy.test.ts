@@ -77,6 +77,23 @@ describe('serveProductImage', () => {
     expect(oversized.end).toHaveBeenCalledWith('Image too large');
   });
 
+  it('cancels a slow rejected upstream body before releasing its slot', async () => {
+    const canceled = vi.fn();
+    const upstream = new Response(new ReadableStream<Uint8Array>({
+      cancel: canceled,
+    }), { status: 404, headers: { 'content-type': 'text/html' } });
+    const { response, writeHead } = createResponse();
+
+    await serveProductImage(
+      '/images/core-assets/products/missing.webp',
+      response,
+      vi.fn(async () => upstream) as unknown as typeof fetch
+    );
+
+    expect(canceled).toHaveBeenCalledOnce();
+    expect(writeHead).toHaveBeenCalledWith(404);
+  });
+
   it('queues a six-card image burst behind four active fetches', async () => {
     const pending: Array<(response: Response) => void> = [];
     const fetchImage = vi.fn(() => new Promise<Response>((resolve) => pending.push(resolve))) as unknown as typeof fetch;

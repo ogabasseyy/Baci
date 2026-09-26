@@ -2,6 +2,45 @@ const stripRubyComments = require('./validate-fastfile-strip-ruby-comments.cjs')
 const extractIndentedBlock = require('./validate-fastfile-extract-indented-block.cjs');
 const assertCancelGuard = require('./validate-fastfile-cancel-guard.cjs');
 
+// Balanced-brace scan from an opening brace, skipping quoted strings so
+// braces inside string literals cannot unbalance the depth count.
+function scanBraceBlock(source, openIndex) {
+  let depth = 0;
+  let quote = null;
+  for (let i = openIndex; i < source.length; i++) {
+    const ch = source[i];
+    if (quote) {
+      if (ch === '\\') i++;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return source.slice(openIndex, i + 1);
+    }
+  }
+  return null;
+}
+
+// The options hash actually received by deliver: either an inline hash or
+// the assigned value of the variable passed to deliver(...).
+function extractDeliverOptions(submitLane) {
+  const call = /\bdeliver\(\s*/.exec(submitLane);
+  if (!call) return null;
+  const argStart = call.index + call[0].length;
+  if (submitLane[argStart] === '{') return scanBraceBlock(submitLane, argStart);
+  const name = /^[A-Za-z_]\w*/.exec(submitLane.slice(argStart))?.[0];
+  if (!name) return null;
+  const assign = new RegExp(`\\b${name}\\s*=\\s*\\{`).exec(submitLane);
+  if (!assign) return null;
+  return scanBraceBlock(submitLane, assign.index + assign[0].length - 1);
+}
+
 /**
  * App Store Connect keeps one editable version. When a prior version still
  * holds that slot, `set_changelog` tries to CREATE the newly minted version and
@@ -64,10 +103,18 @@ function validateFastfileSubmitVersionGuard(fastfileSource, versionSlotSource) {
     failures.push(
       'Fastfile: submit lane must not pass reject_if_possible: true — cancellation is owned solely by app_store_version_slot_ready? (opt-in via IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT); deliver reject_if_possible is an unguarded second path that withdraws live App Reviews'
     );
-  } else if (!/reject_if_possible\s*:\s*false/.test(submitLane)) {
-    failures.push(
-      'Fastfile: submit lane must pin reject_if_possible: false explicitly — deliver reads DELIVER_REJECT_IF_POSSIBLE when the option is omitted, which would silently re-enable its unguarded cancellation path'
-    );
+  } else {
+    // A false pin in some unrelated hash must not satisfy this: trace the
+    // options hash actually passed to deliver and require the pin there.
+    const deliverOptions = extractDeliverOptions(submitLane);
+    if (
+      !deliverOptions ||
+      !/reject_if_possible\s*:\s*false/.test(deliverOptions)
+    ) {
+      failures.push(
+        'Fastfile: the options hash passed to deliver must pin reject_if_possible: false explicitly — deliver reads DELIVER_REJECT_IF_POSSIBLE when the option is omitted, which would silently re-enable its unguarded cancellation path'
+      );
+    }
   }
 
   const cancellationGate =

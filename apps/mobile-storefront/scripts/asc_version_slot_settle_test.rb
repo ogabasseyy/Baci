@@ -2,9 +2,9 @@
 
 # Behavioral coverage for wait_for_settled_review_submission: executes the REAL
 # waiter from asc_version_slot.rb against a scripted ReviewSubmission API
-# (states, transient errors, timeouts) instead of matching its source text.
-# Sleep is stubbed so exhaustion runs all 40 iterations instantly; the
-# monotonic deadline and Timeout bounding stay real.
+# (states, transient errors, timeouts, blocked fetches) instead of matching
+# its source text. Sleep is stubbed so exhaustion runs all 40 iterations
+# instantly; the monotonic deadline and Timeout bounding stay real.
 require 'minitest/autorun'
 
 module Kernel
@@ -36,7 +36,8 @@ module Spaceship
           @calls += 1
           raise step if step.is_a?(Class)
 
-          Struct.new(:state).new(step)
+          state = step.is_a?(Proc) ? step.call : step
+          Struct.new(:state).new(state)
         end
       end
     end
@@ -84,5 +85,31 @@ class SettleWaitBehaviorTest < Minitest::Test
     review_submission.script = [Timeout::Error]
 
     refute wait_for_settled_review_submission('sub-4')
+  end
+
+  def test_slow_fetch_that_recovers_still_settles
+    review_submission.script = [
+      -> { IO.select(nil, nil, nil, 0.2); 'CANCELING' },
+      'ACCEPTED'
+    ]
+
+    assert wait_for_settled_review_submission('sub-5')
+    assert_equal 2, review_submission.calls
+  end
+
+  def test_blocked_fetch_past_deadline_fails_closed
+    # The production deadline is 600s; shrink it for this test only so a
+    # truly blocked fetch fails closed in ~1s instead of ~10 minutes.
+    # Restored in ensure so randomized ordering cannot leak the override.
+    original = REVIEW_SETTLE_TIMEOUT_SECONDS
+    Object.send(:remove_const, :REVIEW_SETTLE_TIMEOUT_SECONDS)
+    Object.const_set(:REVIEW_SETTLE_TIMEOUT_SECONDS, 1)
+    review_submission.script = [-> { Queue.new.pop }]
+
+    refute wait_for_settled_review_submission('sub-6')
+    assert_equal 1, review_submission.calls
+  ensure
+    Object.send(:remove_const, :REVIEW_SETTLE_TIMEOUT_SECONDS)
+    Object.const_set(:REVIEW_SETTLE_TIMEOUT_SECONDS, original)
   end
 end

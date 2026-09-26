@@ -226,7 +226,31 @@ describe('bugfix: reject_if_possible silently withdrew a live App Review', () =>
     expect(
       validateFastfileSubmitVersionGuard(omitsPin, VALID_SLOT)
     ).toContain(
-      'Fastfile: submit lane must pin reject_if_possible: false explicitly — deliver reads DELIVER_REJECT_IF_POSSIBLE when the option is omitted, which would silently re-enable its unguarded cancellation path'
+      'Fastfile: the options hash passed to deliver must pin reject_if_possible: false explicitly — deliver reads DELIVER_REJECT_IF_POSSIBLE when the option is omitted, which would silently re-enable its unguarded cancellation path'
+    );
+  });
+
+  it('rejects a pin that is not in the options hash passed to deliver', () => {
+    // A false pin in an unrelated hash must not satisfy the check while
+    // deliver receives an unpinned hash (env could re-enable cancellation).
+    const unusedPin = VALID_FASTFILE.replace(
+      `  deliver_opts = {
+    reject_if_possible: false,
+    submit_for_review: true
+  }`,
+      `  audit_opts = {
+    reject_if_possible: false
+  }
+
+  deliver_opts = {
+    submit_for_review: true
+  }`
+    );
+
+    expect(
+      validateFastfileSubmitVersionGuard(unusedPin, VALID_SLOT)
+    ).toContain(
+      'Fastfile: the options hash passed to deliver must pin reject_if_possible: false explicitly — deliver reads DELIVER_REJECT_IF_POSSIBLE when the option is omitted, which would silently re-enable its unguarded cancellation path'
     );
   });
 });

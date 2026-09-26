@@ -1,3 +1,4 @@
+import { normalizeProductSelectionParamKey } from './normalize-product-selection-param-key';
 import { normalizeCanonicalProductCondition } from './product-condition';
 import type {
   ProductDefaultVariantLike,
@@ -52,17 +53,6 @@ export interface VariantSelectionParamResolution<
   type: VariantSelectionParamResolutionType;
 }
 
-function normalizeParamKey(value: string | null | undefined) {
-  if (typeof value !== 'string') {
-    return '';
-  }
-
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, '_');
-}
-
 function normalizeParamValue(value: SearchParamValue) {
   if (Array.isArray(value)) {
     return normalizeParamValue(value[0]);
@@ -103,7 +93,7 @@ export function getDeclaredVariantAxes<
   const seen = new Set<string>();
 
   const registerAxis = (axis: string | null | undefined) => {
-    const normalized = normalizeParamKey(axis);
+    const normalized = normalizeProductSelectionParamKey(axis);
     if (!normalized || seen.has(normalized)) {
       return;
     }
@@ -134,7 +124,7 @@ function getSelectionAxisMap<TVariant extends ProductDefaultVariantLike>(
 ) {
   return new Map(
     getDeclaredVariantAxes(product).map((axis) => [
-      normalizeParamKey(axis),
+      normalizeProductSelectionParamKey(axis),
       axis,
     ])
   );
@@ -146,7 +136,7 @@ function normalizeVariantAttributes(
   const normalized: Record<string, string> = {};
 
   for (const [key, value] of Object.entries(attributes || {})) {
-    const normalizedKey = normalizeParamKey(key);
+    const normalizedKey = normalizeProductSelectionParamKey(key);
     const normalizedValue = normalizeParamValue(value);
 
     if (!normalizedKey || !normalizedValue) {
@@ -182,7 +172,7 @@ export function extractVariantSelectionParams<
   };
 
   for (const [key, rawValue] of toSearchParamEntries(searchParams)) {
-    const normalizedKey = normalizeParamKey(key);
+    const normalizedKey = normalizeProductSelectionParamKey(key);
     const normalizedValue = normalizeParamValue(rawValue);
 
     if (!normalizedKey || !normalizedValue) {

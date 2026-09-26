@@ -21,14 +21,36 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
       } else if (url.searchParams.get('id') === 'eq.untracked-variant-product') {
         response.end(JSON.stringify({ id: 'untracked-variant-product', name: 'Untracked Variant Phone', slug: 'untracked-variant-phone', price: 100000, manage_stock: false, stock_quantity: 0, has_variants: true }));
       } else if (!url.searchParams.has('id') && !url.searchParams.has('name')) {
-        response.end(JSON.stringify([
+        const rows = [
           { id: 'available-product', name: 'Test Phone', slug: 'test-phone', price: 100000, compare_at_price: 120000, images: ['https://images.example.test/phone.jpg'], manage_stock: false, stock_quantity: 0, has_variants: false },
           { id: 'avif-product', name: 'AVIF Phone', slug: 'avif-phone', price: 120000, images: ['https://cdn.ogabassey.com/core-assets/products/redmi-15-midnight-black.avif'], manage_stock: false, stock_quantity: 0, has_variants: false },
           { id: 'object-image-product', name: 'Object Image Phone', slug: 'object-image-phone', price: 130000, images: [{ url: 'https://cdn.ogabassey.com/core-assets/products/redmi-15-midnight-black.avif' }], manage_stock: false, stock_quantity: 0, has_variants: false },
           { id: 'transformed-image-product', name: 'Transformed Image Phone', slug: 'transformed-image-phone', price: 140000, images: ['https://cdn.ogabassey.com/image/width=750/core-assets/products/phone.avif'], manage_stock: false, stock_quantity: 0, has_variants: false },
           { id: 'condition-offer-product', name: 'Used Offer Phone', slug: 'used-offer-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: false, has_condition_offers: true },
+          { id: 'variant-available-product', name: 'Variant Available Phone', slug: 'variant-available-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
+          { id: 'variant-sold-out-product', name: 'Variant Sold Out Phone', slug: 'variant-sold-out-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
           { id: 'variant-empty-product', name: 'Variant Empty Phone', slug: 'variant-empty-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
-        ]));
+        ];
+        const isRecommendation = url.searchParams.get('select')?.includes('description,condition,brand,category,manage_stock');
+        const candidates = isRecommendation
+          ? [
+              ...Array.from({ length: 32 }, (_, index) => index < 4
+                ? {
+                    id: `unrelated-available-${index}`, name: 'Other Gadget',
+                    slug: `other-gadget-${index}`, price: 100000, images: [],
+                    manage_stock: false, stock_quantity: 0, has_variants: false,
+                  }
+                : {
+                    id: `sold-out-option-${index}`, name: 'Sold Out Variant Phone',
+                    slug: `sold-out-option-${index}`, price: 100000, images: [],
+                    manage_stock: true, stock_quantity: 0, has_variants: true,
+                  }),
+              ...rows,
+            ]
+          : rows;
+        const offset = Number(url.searchParams.get('offset') ?? 0);
+        const limit = Number(url.searchParams.get('limit') ?? candidates.length);
+        response.end(JSON.stringify(candidates.slice(offset, offset + limit)));
       } else {
         response.statusCode = 406;
         response.end(JSON.stringify({ code: 'PGRST116', message: 'No rows' }));
@@ -68,7 +90,9 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
       return true;
     }
     if (url.pathname.endsWith('/rest/v1/product_offers')) {
-      response.end('[]');
+      response.end(JSON.stringify(url.searchParams.get('product_id')?.includes('condition-offer-product')
+        ? [{ product_id: 'condition-offer-product', stock_quantity: 2 }]
+        : []));
       return true;
     }
   return false;

@@ -60,7 +60,7 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const OGABASSEY_SLUG = 'ogabassey';
 const PORT = Number(process.env.MCP_PORT ?? 8787);
 const MCP_PATH = '/mcp';
-const MCP_PUBLIC_ORIGIN = process.env.MCP_PUBLIC_ORIGIN?.trim() || 'https://mcp.ogabassey.com';
+const MCP_PUBLIC_ORIGIN = new URL(process.env.MCP_PUBLIC_ORIGIN?.trim() || 'https://mcp.ogabassey.com').origin;
 const MCP_ALLOWED_HEADERS = 'content-type, mcp-protocol-version, mcp-session-id';
 const MCP_ALLOWED_METHODS = 'POST, GET, OPTIONS, DELETE, HEAD';
 const AGENTIC_CHECKOUT_TOOLS_ENABLED =
@@ -2293,32 +2293,77 @@ function createOgabasseyServer() {
       let query = supabase
         .from('products')
         .select(
-          'id, name, slug, price, compare_at_price, images, description, condition, brand, category'
+          'id, name, slug, price, compare_at_price, images, description, condition, brand, category, manage_stock, stock_quantity, has_variants, has_condition_offers'
         )
         .eq('merchant_id', merchantId)
         .eq('status', 'active')
-        .or('manage_stock.is.false,manage_stock.is.null,stock_quantity.gt.0')
+        .or('manage_stock.is.false,manage_stock.is.null,stock_quantity.gt.0,has_variants.is.true,has_condition_offers.is.true')
         .order('created_at', { ascending: false })
-        .limit(8);
+        .order('id', { ascending: false })
+        // Option-level stock is checked after this read. Fetch beyond the four
+        // displayed cards so sold-out parents do not consume all candidates.
+        .limit(32);
 
       if (args.budget) {
         query = query.lte('price', sanitizePrice(args.budget) ?? 1000000000);
       }
 
-      const { data: products } = await query;
-
-      const filtered = (products || [])
-        .filter((p) =>
-          kws.some(
-            (kw) =>
-              p.name.toLowerCase().includes(kw) ||
-              p.description?.toLowerCase().includes(kw)
-          )
-        )
-        .slice(0, 4);
-
-      const final =
-        filtered.length > 0 ? filtered : (products || []).slice(0, 4);
+      const { data: firstPage } = await query;
+      const fallbackProducts: NonNullable<typeof firstPage> = [];
+      const matchedProducts: NonNullable<typeof firstPage> = [];
+      const matchesUseCase = (product: NonNullable<typeof firstPage>[number]) =>
+        kws.some((kw) => product.name.toLowerCase().includes(kw) || product.description?.toLowerCase().includes(kw));
+      let products = firstPage ?? [];
+      let offset = 0;
+      while (products.length > 0 && matchedProducts.length < 4) {
+        const candidates = fallbackProducts.length < 4 ? products : products.filter(matchesUseCase);
+        const optionProducts = candidates.filter((product) =>
+          product.manage_stock === true && (product.has_variants || product.has_condition_offers)
+        );
+        const variantIds = optionProducts.filter((product) => product.has_variants).map((product) => product.id);
+        const variantsMap = new Map<string, McpProductVariantRow[]>();
+        let variantLookupSucceeded = variantIds.length === 0;
+        if (variantIds.length > 0) {
+          const { data, error } = await supabase.rpc('get_storefront_product_variants', { p_product_ids: variantIds });
+          if (!error) {
+            variantLookupSucceeded = true;
+            for (const variant of (data ?? []) as McpProductVariantRow[]) {
+              variantsMap.set(variant.product_id, [...(variantsMap.get(variant.product_id) ?? []), variant]);
+            }
+          }
+        }
+        const offersMap = new Map<string, Array<{ stock_quantity: number | null }>>();
+        const offerIds = optionProducts.filter((product) => product.has_condition_offers).map((product) => product.id);
+        if (offerIds.length > 0) {
+          const { data, error } = await supabase.from('product_offers')
+            .select('product_id, stock_quantity')
+            .eq('merchant_id', merchantId)
+            .eq('status', 'active')
+            .in('product_id', offerIds);
+          if (!error) {
+            for (const offer of data ?? []) {
+              offersMap.set(offer.product_id, [...(offersMap.get(offer.product_id) ?? []), offer]);
+            }
+            for (const id of offerIds) offersMap.set(id, offersMap.get(id) ?? []);
+          }
+        }
+        for (const product of candidates) {
+          const stock = getMcpProductStockSummary(
+            product,
+            product.has_variants && variantLookupSucceeded ? variantsMap.get(product.id) ?? [] : undefined,
+            product.has_condition_offers ? offersMap.get(product.id) : undefined
+          );
+          if (stock.inStock === false) continue;
+          if (fallbackProducts.length < 4) fallbackProducts.push(product);
+          if (matchesUseCase(product) && matchedProducts.length < 4) matchedProducts.push(product);
+        }
+        if (products.length < 32 || offset >= 96) break;
+        offset += 32;
+        const { data: nextPage, error: nextPageError } = await query.range(offset, offset + 31);
+        if (nextPageError) break;
+        products = nextPage ?? [];
+      }
+      const final = matchedProducts.length > 0 ? matchedProducts : fallbackProducts;
 
       const formatted = final.map((p) => ({
         id: p.id,

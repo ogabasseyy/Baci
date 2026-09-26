@@ -10,6 +10,7 @@ export interface Product {
   images?: string[];
   condition?: string;
   stock_level?: string;
+  in_stock?: boolean | null;
   brand?: string;
   category?: string;
 }

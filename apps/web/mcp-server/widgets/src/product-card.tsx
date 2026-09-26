@@ -72,9 +72,11 @@ export function ProductCard({
         <button type="button"
           className={`btn-add-cart ${isInCart ? 'in-cart' : ''}`}
           onClick={() => onAddToCart(product)}
-          disabled={isInCart}
+          disabled={isInCart || product.in_stock === false}
         >
-          {isInCart ? (
+          {product.in_stock === false ? (
+            <>Out of Stock</>
+          ) : isInCart ? (
             <>
               <svg
                 width="16"

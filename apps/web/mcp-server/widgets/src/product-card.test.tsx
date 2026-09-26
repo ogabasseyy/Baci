@@ -30,6 +30,16 @@ describe('ProductCard', () => {
     expect(openExternal).toHaveBeenCalledWith({ href: 'https://ogabassey.com/products/redmi' });
   });
 
+  it('disables shopping-link preparation for confirmed sold-out products', () => {
+    const onAddToCart = vi.fn();
+    render(<ProductCard product={{ ...product, in_stock: false, stock_level: 'Out of Stock' }} isInCart={false} onAddToCart={onAddToCart} />);
+    const button = screen.getByRole('button', { name: 'Out of Stock' });
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(onAddToCart).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Review on Ogabassey' })).toBeEnabled();
+  });
+
   it('opens a browser tab when the ChatGPT navigation API is absent', () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     render(<ProductCard product={product} isInCart={false} onAddToCart={vi.fn()} />);

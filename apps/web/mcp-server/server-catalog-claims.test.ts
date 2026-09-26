@@ -25,6 +25,25 @@ describe('MCP catalog claims', () => {
     }
   });
 
+  it('normalizes a configured MCP origin with a trailing slash for image URLs', async () => {
+    const server = await startMcpServerWithPostgrest({ MCP_PUBLIC_ORIGIN: 'https://mcp.example.test/' });
+    try {
+      const result = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+        id: 111, method: 'tools/call',
+        params: { name: 'search_products', arguments: { limit: 10 } },
+      }));
+      expect(result.structuredContent).toMatchObject({ products: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'transformed-image-product',
+          image: 'https://mcp.example.test/images/core-assets/products/phone.avif',
+        }),
+      ]) });
+      expect(JSON.stringify(result)).not.toContain('mcp.example.test//images');
+    } finally {
+      await server.close();
+    }
+  });
+
   it('reports offer stock and a successful empty variant lookup consistently', async () => {
     const server = await startMcpServerWithPostgrest({});
     try {
@@ -161,6 +180,31 @@ describe('MCP catalog claims', () => {
           image: 'https://mcp.ogabassey.com/images/core-assets/products/redmi-15-midnight-black.avif',
         }),
       ]) });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('recommends stocked options while excluding sold-out option products', async () => {
+    const server = await startMcpServerWithPostgrest({});
+    try {
+      const variants = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+        id: 112, method: 'tools/call',
+        params: { name: 'get_recommendations', arguments: { use_case: 'variant' } },
+      }));
+      expect(variants.structuredContent).toMatchObject({ products: [
+        expect.objectContaining({ id: 'variant-available-product' }),
+      ] });
+      expect(JSON.stringify(variants)).not.toContain('variant-sold-out-product');
+      expect(JSON.stringify(variants)).not.toContain('variant-empty-product');
+
+      const offers = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+        id: 113, method: 'tools/call',
+        params: { name: 'get_recommendations', arguments: { use_case: 'used offer' } },
+      }));
+      expect(offers.structuredContent).toMatchObject({ products: [
+        expect.objectContaining({ id: 'condition-offer-product' }),
+      ] });
     } finally {
       await server.close();
     }

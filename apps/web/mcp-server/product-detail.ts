@@ -137,12 +137,15 @@ export async function buildMcpProductDetail({
 
   // Variants summary
   if (variants.length > 0) {
+    const availableVariants = product.manage_stock
+      ? variants.filter((variant) => Number(variant.stock_quantity ?? 0) > 0)
+      : variants;
     const colors = [
-      ...new Set(variants.map((v) => v.attributes?.color).filter(Boolean)),
+      ...new Set(availableVariants.map((v) => v.attributes?.color).filter(Boolean)),
     ];
     const storageOptions = [
       ...new Set(
-        variants.map((v) => v.attributes?.storage).filter(Boolean)
+        availableVariants.map((v) => v.attributes?.storage).filter(Boolean)
       ),
     ];
     if (colors.length > 0)

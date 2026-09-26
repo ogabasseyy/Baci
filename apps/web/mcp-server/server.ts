@@ -14,6 +14,8 @@
 
 import { randomUUID } from 'node:crypto';
 import { prepareCartHandoff } from './cart-handoff';
+import { createCatalogImageUrlResolver } from './catalog-image-url';
+import { loadMcpBrowseFacetValues } from './browse-catalog-facets';
 import * as fs from 'node:fs';
 import {
   createServer,
@@ -28,7 +30,6 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import 'dotenv/config';
-import { normalizeOgabasseyCdnImageUrl } from '../src/lib/ogabassey-cdn-image-url';
 import {
   AGENTIC_CHECKOUT_AGENT_ID,
   type AgenticCheckoutClientConfig,
@@ -419,28 +420,7 @@ function formatPrice(price: number): string {
   return NGN_PRICE_FORMATTER.format(price);
 }
 
-/** Serve catalog images from our MCP origin because the store CDN blocks
- * requests with ChatGPT's sandbox origin as their referrer. */
-function getSafeCatalogImageUrl(
-  imageUrl: string | null | undefined
-): string | undefined {
-  if (typeof imageUrl !== 'string' || !imageUrl) return undefined;
-
-  let parsed: URL;
-  try {
-    parsed = new URL(normalizeOgabasseyCdnImageUrl(imageUrl), 'https://cdn.ogabassey.com');
-  } catch {
-    return undefined;
-  }
-  // Only store CDN product assets may be proxied to the widget.
-  if (parsed.origin !== 'https://cdn.ogabassey.com') return undefined;
-  // Fix path mismatch: database stores /products/ but CDN serves from /core-assets/products/
-  if (parsed.pathname.includes('/products/') && !parsed.pathname.includes('/core-assets/products/')) {
-    parsed.pathname = parsed.pathname.replace('/products/', '/core-assets/products/');
-  }
-  if (!parsed.pathname.startsWith('/core-assets/products/')) return undefined;
-  return `${MCP_PUBLIC_ORIGIN}/images${parsed.pathname}${parsed.search}`;
-}
+const getSafeCatalogImageUrl = createCatalogImageUrlResolver(MCP_PUBLIC_ORIGIN);
 
 // =============================================================================
 // WIDGET HTML (CSP-compliant, no inline event handlers in production)
@@ -2131,17 +2111,9 @@ function createOgabasseyServer() {
         };
       }
 
-      // Get unique categories from products
-      const { data: products } = await supabase
-        .from('products')
-        .select('category')
-        .eq('merchant_id', merchantId)
-        .eq('status', 'active')
-        .or('manage_stock.is.false,manage_stock.is.null,stock_quantity.gt.0');
-
-      const categories = [
-        ...new Set((products || []).map((p) => p.category).filter(Boolean)),
-      ];
+      const categories = await loadMcpBrowseFacetValues({
+        supabase, merchantId, facet: 'category',
+      });
 
       if (categories.length === 0) {
         return { content: [{ type: 'text', text: 'No categories found.' }] };
@@ -2183,23 +2155,10 @@ function createOgabasseyServer() {
         };
       }
 
-      let query = supabase
-        .from('products')
-        .select('brand')
-        .eq('merchant_id', merchantId)
-        .eq('status', 'active')
-        .or('manage_stock.is.false,manage_stock.is.null,stock_quantity.gt.0');
-
-      if (args.category) {
-        const sanitizedCategory = sanitizeString(args.category, 50);
-        query = query.ilike('category', `%${sanitizedCategory}%`);
-      }
-
-      const { data: products } = await query;
-
-      const brands = [
-        ...new Set((products || []).map((p) => p.brand).filter(Boolean)),
-      ];
+      const brands = await loadMcpBrowseFacetValues({
+        supabase, merchantId, facet: 'brand',
+        category: args.category ? sanitizeString(args.category, 50) : undefined,
+      });
 
       if (brands.length === 0) {
         return { content: [{ type: 'text', text: 'No brands found.' }] };

@@ -398,6 +398,16 @@ pnpm --filter @baci/web typecheck:tools-workers
 
 **Task 1A — minimal pre-screen inventory:**
 
+Repository snapshot validation (25 September 2026): the checked-in inventory is
+self-hash verified and compared against canonical regeneration from committed
+HEAD, excluding only historical `originMainSha` and its enclosing self-digest
+from the content comparison. All source bytes, included paths, policy, rows and
+hostname digests remain checked. This repository-only check survives squash and
+rebase without fetching discarded objects; it does not attest the historical
+source commit. The strict operational generator/validator still requires the
+independently supplied exact source SHA. Regenerate operational evidence for the
+intended source; a passing repository snapshot is not Task 0A or release proof.
+
 - [x] Make `docs/superpowers/evidence/storefront-edge/task-1a-inventory.json` the only Task 0A inventory input. The schema-v6 artifact is bound to the reviewed branch head at regeneration time, externally reviewed synthetic candidate `baci-edge-pilot.usebaci.com`, the strict normalized PostHog relay path `/baci-relay`, and the current `inventorySha256` recorded in `validate-storefront-edge-inventory.test.ts`; it contains no credentials, customer traffic, timestamps, or mutable PR state.
 - [x] Inventory all 76 unique current storefront entrypoints plus separately classified automatic route-handler `OPTIONS` rows through one exhaustive reviewed classification map, both storefront Server Action POST surfaces, RSC/prefetch and Markdown-negotiation origin overrides, draft-mode cookie overrides, locale-sensitive blog rendering, slug-prefixed and unprefixed query-dependent listing/PDP renders bound to their exact resolved storefront entrypoint identities, public assets, `/ads.txt`, registered-custom-domain `/auth/confirm`, Markdown mirrors, the exact origin-dynamic PostHog relay root and empty-trailing-slash child, exact current- and retired-slug API rows, rewrites, predicate-bound Proxy host/path classes, Vercel Insights browser paths and beacon POSTs, destination-aware storefront Supabase subresources, external media/storage subresources (including checkout payment logos, GA4 collection, and legal-page texture backgrounds), and every exact current Next API handler path/method required to preserve same-host application behavior. The frozen artifact row count is recorded in `validate-storefront-edge-inventory.test.ts`, each classified `edge_release`, `edge_redirect`, `origin_dynamic`, or `edge_terminal`.
 - [x] Define the proposed eligible denominator and complete-browser path classes needed by Task 0A without building release schemas, component adapters, migrations, Workers, or provider resources.

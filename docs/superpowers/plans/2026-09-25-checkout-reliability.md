@@ -1,5 +1,15 @@
 # Checkout reliability implementation
 
+## Current status
+
+PR #3499 was merged on 25 September 2026 as `a00fc7481a`. Its final
+current-head CI, CodeRabbit and Codex review passed. The production deployment
+failed in a pre-existing shipping migration, so merge is not evidence that the
+fix is live. Task 3 continues in the
+[payment orchestration follow-up](2026-09-25-checkout-payment-orchestration.md).
+The checkpoint below records the earlier foundation work, not final release
+verification.
+
 ## Goal
 
 Make the OgaBassey web checkout easier to change safely, starting with browser
@@ -89,7 +99,7 @@ tests, plus their call sites in `checkout-page.tsx`.
   fix the validated findings and record the remaining lint debt.
 - [x] Commit and open a reviewable PR with exact evidence and remaining external
   gates. Keep merge, deployment and production verification distinct.
-- [ ] Drive existing PR #3499 through the current-head review and CI loop;
+- [x] Drive existing PR #3499 through the current-head review and CI loop;
   incorporate validated audit findings in this PR without opening more drafts.
 - [ ] Exercise available provider sandbox/staging flows and reconcile outcomes;
   record unavailable credentials/environment or settlement evidence explicitly.

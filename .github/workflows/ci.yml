@@ -447,7 +447,7 @@ jobs:
         run: pnpm --filter @baci/web check:quiz-approval
       - name: Run Storefront Guardrail Unit Tests
         if: needs.changes.outputs.mobile_storefront == 'true'
-        run: pnpm --filter @baci/mobile-storefront exec jest scripts/check-platform-drift.test.ts scripts/check-module-size.test.ts scripts/check-ad-tracking-native-config.test.ts --runInBand
+        run: pnpm --filter @baci/mobile-storefront exec jest scripts/check-platform-drift.test.ts scripts/check-module-size.test.ts scripts/check-ad-tracking-native-config.test.ts scripts/validate-fastfile-submit-version-guard.test.ts scripts/validate-fastfile-submit-version-guard-settle.test.ts --runInBand
       - name: Verify Storefront Ad Tracking Native Config
         if: needs.changes.outputs.mobile_storefront == 'true'
         run: pnpm --filter @baci/mobile-storefront check:ad-tracking-native-config

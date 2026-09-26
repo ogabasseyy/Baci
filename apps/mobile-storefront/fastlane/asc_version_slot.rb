@@ -87,6 +87,53 @@ def wait_for_editable_app_store_version(app, platform)
   nil
 end
 
+# States in which a previous submission still blocks a replacement submit.
+# CANCELING is deliberately included: cancel_submission returns while Apple is
+# still winding the review down, and the cancelled submission drops out of the
+# in-progress query at that point — so an already-present editable version
+# would otherwise let the lane deliver into a live wind-down. COMPLETING is
+# included defensively for the cancel-vs-finish race (it is not in fastlane's
+# ReviewSubmissionState enum, so this arm costs nothing unless Apple emits it).
+UNSETTLED_REVIEW_SUBMISSION_STATES = %w[
+  WAITING_FOR_REVIEW
+  IN_REVIEW
+  UNRESOLVED_ISSUES
+  CANCELING
+  COMPLETING
+].freeze
+
+# Failures worth another poll iteration: rate limiting, timeouts, and upstream
+# 5xx responses. Anything else (notably auth failures) raises immediately —
+# retrying those for ten minutes cannot help.
+RETRYABLE_REVIEW_POLL_ERRORS = [
+  Spaceship::TooManyRequestsError,
+  Spaceship::AppleTimeoutError,
+  Spaceship::InternalServerError,
+  Spaceship::BadGatewayError,
+  Spaceship::GatewayTimeoutError
+].freeze
+
+# Wait until the cancelled submission leaves every active state, re-fetching
+# it by id (the in-progress query cannot observe CANCELING). An unobservable
+# submission counts as still settling: the caller fails loudly on timeout
+# instead of submitting blind.
+def wait_for_settled_review_submission(submission_id)
+  EDITABLE_VERSION_POLL_ATTEMPTS.times do |attempt|
+    begin
+      state = Spaceship::ConnectAPI::ReviewSubmission.get(
+        review_submission_id: submission_id
+      )&.state
+    rescue *RETRYABLE_REVIEW_POLL_ERRORS
+      state = nil
+    end
+    return true if !state.nil? && !UNSETTLED_REVIEW_SUBMISSION_STATES.include?(state)
+
+    sleep(EDITABLE_VERSION_POLL_INTERVAL_SECONDS) unless attempt == EDITABLE_VERSION_POLL_ATTEMPTS - 1
+  end
+
+  false
+end
+
 # Returns true when an editable version is available (so set_changelog can
 # rename it into the version we are shipping) and false when submission must be
 # skipped this run. Skipping is deliberate: the IPA is already on TestFlight, so
@@ -96,10 +143,15 @@ def app_store_version_slot_ready?(app_version:, build_number:)
   UI.user_error!("Could not find App Store Connect app #{BUNDLE_ID}") unless app
 
   platform = Spaceship::ConnectAPI::Platform::IOS
-  return true if app.get_edit_app_store_version(platform: platform)
 
+  # Consult the live review BEFORE trusting the editable shortcut: an editable
+  # version can briefly coexist with an in-progress review (the state in which
+  # deliver's reject_if_possible withdrew build 2.1.527). Checking the review
+  # first keeps every withdrawal behind the opt-in below.
   submission = app.get_in_progress_review_submission(platform: platform)
   if submission.nil?
+    return true if app.get_edit_app_store_version(platform: platform)
+
     # Nothing is in review, yet the slot is still occupied — e.g. a version in
     # PENDING_DEVELOPER_RELEASE or PENDING_APPLE_RELEASE. There is no safe
     # automatic remedy (clearing those means releasing an already-approved
@@ -133,6 +185,14 @@ def app_store_version_slot_ready?(app_version:, build_number:)
 
   submission.cancel_submission
   UI.message("Requested cancellation of the in-progress App Store review submission")
+
+  unless wait_for_settled_review_submission(submission.id)
+    UI.user_error!(
+      "Cancelled the previous App Review submission but it did not settle " \
+      "within #{EDITABLE_VERSION_POLL_ATTEMPTS * EDITABLE_VERSION_POLL_INTERVAL_SECONDS} " \
+      "seconds — finish the submission from App Store Connect."
+    )
+  end
 
   return true if wait_for_editable_app_store_version(app, platform)
 

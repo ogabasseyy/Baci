@@ -35,7 +35,7 @@ function extractIndentedBlock(source, declarationPattern, closingToken) {
 /** Index of a call site, ignoring the `def` line that shares the same name. */
 function callSiteIndex(source, methodName) {
   const match = new RegExp(
-    `^[ \\t]*(?:return\\s+\\w+\\s+if\\s+)?${methodName.replace(/[!?]/g, '\\$&')}\\(`,
+    `^[ \\t]*(?:return\\s+\\w+\\s+if\\s+|unless\\s+)?${methodName.replace(/[!?]/g, '\\$&')}\\(`,
     'm'
   ).exec(source);
   return match ? match.index : -1;
@@ -92,12 +92,48 @@ function validateFastfileSubmitVersionGuard(fastfileSource, versionSlotSource) {
     failures.push('Fastfile: submit lane is missing set_changelog');
   }
 
+  // deliver's own reject_if_possible is a SECOND, unguarded cancellation path:
+  // it withdraws whatever is in App Review regardless of the
+  // IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT opt-in that
+  // app_store_version_slot_ready? enforces. It silently cancelled build 2.1.527's
+  // review when 2.1.528 shipped. Cancellation must be owned solely by the guard.
+  if (submitLane.includes('reject_if_possible')) {
+    failures.push(
+      'Fastfile: submit lane must not pass reject_if_possible — cancellation is owned solely by app_store_version_slot_ready? (opt-in via IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT); deliver reject_if_possible is an unguarded second path that withdraws live App Reviews'
+    );
+  }
+
   const cancellationGate =
     /def\s+review_cancellation_allowed\?[\s\S]*?IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT/;
   if (!cancellationGate.test(activeSlot)) {
     failures.push(
       'asc_version_slot.rb: withdrawing a build from App Review must stay gated behind IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT'
     );
+  }
+
+  // An editable version can briefly coexist with a live review (this is the
+  // state in which deliver's reject_if_possible withdrew build 2.1.527), so
+  // the guard must consult the in-progress review before trusting the
+  // editable shortcut — otherwise the opt-in below is skipped.
+  const slotGuard = extractIndentedBlock(
+    activeSlot,
+    /^\s*def\s+app_store_version_slot_ready\?/,
+    'end'
+  );
+  if (slotGuard) {
+    const submissionIndex = slotGuard.indexOf(
+      'get_in_progress_review_submission'
+    );
+    const editableIndex = slotGuard.indexOf('get_edit_app_store_version');
+    if (
+      submissionIndex === -1 ||
+      editableIndex === -1 ||
+      submissionIndex > editableIndex
+    ) {
+      failures.push(
+        'asc_version_slot.rb: app_store_version_slot_ready? must query get_in_progress_review_submission before the get_edit_app_store_version shortcut'
+      );
+    }
   }
 
   const cancelIndex = activeSlot.indexOf('cancel_submission');
@@ -130,6 +166,64 @@ function validateFastfileSubmitVersionGuard(fastfileSource, versionSlotSource) {
     if (waitIndex === -1 || waitIndex < cancelIndex) {
       failures.push(
         'asc_version_slot.rb: after cancel_submission the lane must wait via wait_for_editable_app_store_version'
+      );
+    }
+
+    // Cancelling drops the submission from the in-progress query while Apple
+    // is still winding it down (CANCELING) — and an editable version may
+    // already exist — so the lane must wait out the cancelled submission
+    // itself before trusting the editable version.
+    const settleIndex = callSiteIndex(
+      activeSlot,
+      'wait_for_settled_review_submission'
+    );
+    if (settleIndex === -1 || settleIndex < cancelIndex) {
+      failures.push(
+        'asc_version_slot.rb: after cancel_submission the lane must wait via wait_for_settled_review_submission before trusting the editable version'
+      );
+    }
+
+    const settleWaiter = extractIndentedBlock(
+      activeSlot,
+      /^\s*def\s+wait_for_settled_review_submission\b/,
+      'end'
+    );
+    if (!settleWaiter || !settleWaiter.includes('ReviewSubmission.get')) {
+      failures.push(
+        'asc_version_slot.rb: wait_for_settled_review_submission must re-fetch the cancelled submission by id, not the in-progress review submission'
+      );
+    }
+
+    if (
+      !settleWaiter ||
+      !settleWaiter.includes('UNSETTLED_REVIEW_SUBMISSION_STATES')
+    ) {
+      failures.push(
+        'asc_version_slot.rb: wait_for_settled_review_submission must consult UNSETTLED_REVIEW_SUBMISSION_STATES so every active state blocks delivery'
+      );
+    }
+
+    const unsettledStates = extractIndentedBlock(
+      activeSlot,
+      /^\s*UNSETTLED_REVIEW_SUBMISSION_STATES\s*=/,
+      '].freeze'
+    );
+    if (
+      !unsettledStates ||
+      !unsettledStates.includes('CANCELING') ||
+      !unsettledStates.includes('COMPLETING')
+    ) {
+      failures.push(
+        'asc_version_slot.rb: UNSETTLED_REVIEW_SUBMISSION_STATES must include CANCELING and COMPLETING so the settle wait cannot pass during a live wind-down'
+      );
+    }
+
+    if (
+      !settleWaiter ||
+      !settleWaiter.includes('RETRYABLE_REVIEW_POLL_ERRORS')
+    ) {
+      failures.push(
+        'asc_version_slot.rb: wait_for_settled_review_submission must retry transient fetch failures via RETRYABLE_REVIEW_POLL_ERRORS instead of aborting the lane'
       );
     }
 

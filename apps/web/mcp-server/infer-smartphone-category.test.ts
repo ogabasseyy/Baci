@@ -12,6 +12,9 @@ describe('inferSmartphoneCategory', () => {
     expect(inferSmartphoneCategory('phone 5G', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('iPhone 15 4G', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('looking for iPhone 15', undefined)).toBe('Smartphones');
+    expect(inferSmartphoneCategory('show me an iPhone 15', undefined)).toBe('Smartphones');
+    expect(inferSmartphoneCategory('find me a phone', undefined)).toBe('Smartphones');
+    expect(inferSmartphoneCategory('I want an iPhone', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('looking for Redmi phones', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('Samsung Galaxy phone', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('cheap Redmi phone', undefined)).toBe('Smartphones');
@@ -29,6 +32,7 @@ describe('inferSmartphoneCategory', () => {
     expect(inferSmartphoneCategory('smartphone mount', undefined)).toBeUndefined();
     expect(inferSmartphoneCategory('phones and tablets', undefined)).toBeUndefined();
     expect(inferSmartphoneCategory('case for iPhone 15', undefined)).toBeUndefined();
+    expect(inferSmartphoneCategory('find me a case for iPhone 15', undefined)).toBeUndefined();
     expect(inferSmartphoneCategory('charger for phone', undefined)).toBeUndefined();
     expect(inferSmartphoneCategory('case iPhone 15', undefined)).toBeUndefined();
     expect(inferSmartphoneCategory('charger phone', undefined)).toBeUndefined();

@@ -29,12 +29,19 @@ external requests; keep production credentials out of this fixture.
   transitions and collapsed content in Chromium and WebKit.
 - Guest and authenticated **session endpoint responses**, duplicate submit,
   persistence across a full navigation, and reuse of the same order on return.
+- Interrupted order creation followed by a full reload: the second request
+  retains the same body and idempotency key, and only the recovered response
+  opens payment. This covers both session responses in Chromium and WebKit.
+- VAT preview and submission use local arithmetic without a remote
+  `calculate-commerce` request.
 - A resumed order with an empty cart. This caught an actual repeated-fetch
   render loop hidden by the original unit mocks; editing hydrated details must
   not trigger another load.
 
-Orders, shipping, tax and payment initialization use deterministic intercepted
-responses. This is browser UI/integration evidence, not a live sign-in test,
+Orders, shipping and payment initialization use deterministic intercepted
+responses. Tests can permit a bounded number of exact console messages for
+injected failures; unhandled page errors and unexpected network requests still
+fail the suite. This is browser UI/integration evidence, not a live sign-in test,
 full tenant/proxy route test, database RLS test, or provider settlement proof.
 Real provider cancellation, webhook delivery, refunds and reconciliation remain
 separate sandbox/staging gates. The successful payment-handoff page does not

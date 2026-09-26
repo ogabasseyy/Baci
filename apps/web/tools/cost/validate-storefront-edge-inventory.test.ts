@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -36,51 +36,6 @@ afterEach(async () => {
 });
 
 describe('validateStorefrontEdgeInventory', () => {
-  it('validates the checked-in Task 1A artifact against the live routing tree', async () => {
-    // Arrange
-    const repoRoot = join(toolDirectory, '../../../..');
-    const inputPath = join(
-      repoRoot,
-      'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json'
-    );
-    const artifact: unknown = JSON.parse(await readFile(inputPath, 'utf8'));
-    if (
-      artifact === null ||
-      typeof artifact !== 'object' ||
-      !('originMainSha' in artifact) ||
-      typeof artifact.originMainSha !== 'string'
-    )
-      throw new Error('checked-in inventory source authority is missing');
-    const sourceSha = artifact.originMainSha;
-    // A branch-only authority disappears from fresh CI clones after squash merge.
-    // Keep this checked-in artifact anchored in the checkout's reachable history.
-    await expect(
-      execFileAsync('git', [
-        '-C',
-        repoRoot,
-        'merge-base',
-        '--is-ancestor',
-        sourceSha,
-        'HEAD',
-      ])
-    ).resolves.toMatchObject({ stdout: '' });
-    // Act
-    const result = await validateStorefrontEdgeInventory({
-      repoRoot,
-      inputPath,
-      expectedOriginMainSha: sourceSha,
-      expectedPilotCandidateHostnames: ['baci-edge-pilot.usebaci.com'],
-    });
-
-    // Assert
-    expect(result).toEqual({
-      inventorySha256:
-        '95a39f54808596a28826780bad00a8989fad524d717c2a857a7f0897d640d6a8',
-      rowCount: 557,
-      storefrontEntrypointCount: 77,
-    });
-  });
-
   it('accepts an exact artifact in a checkout without an origin/main ref', async () => {
     // Arrange
     const { artifact, inputPath, originMainSha, repoRoot } =

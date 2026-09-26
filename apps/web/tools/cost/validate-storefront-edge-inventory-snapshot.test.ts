@@ -2,12 +2,12 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { rehashSnapshot } from './rehash-storefront-edge-snapshot.test-support';
 import {
   arrangeSnapshot,
-  rehashSnapshot,
-  snapshotGit,
   snapshotInput,
 } from './storefront-edge-inventory-snapshot.test-support';
+import { snapshotGit } from './storefront-edge-snapshot-git.test-support';
 import { validateStorefrontEdgeInventory } from './validate-storefront-edge-inventory';
 import { validateStorefrontEdgeInventorySnapshot } from './validate-storefront-edge-inventory-snapshot';
 

@@ -1,34 +1,13 @@
-import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { createStorefrontEdgeInventory } from './create-storefront-edge-inventory';
-import { canonicalizeStorefrontEdgeInventoryValue } from './storefront-edge-canonical-json';
 import { createStorefrontEdgeInventoryFixture } from './storefront-edge-inventory.test-support';
+import { snapshotGit } from './storefront-edge-snapshot-git.test-support';
 
-const execFileAsync = promisify(execFile);
 export const snapshotInput =
   'apps/web/src/components/storefront/ogabassey/pages/checkout-page.tsx';
 export const snapshotHosts = ['pilot.usebaci.com'];
-
-export async function snapshotGit(repoRoot: string, ...args: string[]) {
-  const { stdout } = await execFileAsync('git', [
-    '-C',
-    repoRoot,
-    '-c',
-    'core.hooksPath=/dev/null',
-    '-c',
-    'commit.gpgsign=false',
-    '-c',
-    'user.name=Snapshot Test',
-    '-c',
-    'user.email=snapshot@example.invalid',
-    ...args,
-  ]);
-  return stdout.trim();
-}
 
 export async function arrangeSnapshot(roots: string[]) {
   const repoRoot = await mkdtemp(join(tmpdir(), 'inventory-snapshot-'));
@@ -58,15 +37,5 @@ export async function arrangeSnapshot(roots: string[]) {
     artifact,
     inputPath,
     expectedPilotCandidateHostnames: snapshotHosts,
-  };
-}
-
-export function rehashSnapshot(value: Record<string, unknown>) {
-  const { inventorySha256: _digest, ...payload } = value;
-  return {
-    ...payload,
-    inventorySha256: createHash('sha256')
-      .update(canonicalizeStorefrontEdgeInventoryValue(payload))
-      .digest('hex'),
   };
 }

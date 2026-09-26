@@ -24,7 +24,7 @@ describe('Ogabassey deletion policy', () => {
       'text-card-foreground'
     );
     expect(
-      screen.getByText(/six calendar months after its purpose ends/i)
+      screen.getByText(/six calendar months after a purpose ends/i)
     ).toBeInTheDocument();
     expect(
       screen.getByText(/six years after the relevant year of assessment/i)

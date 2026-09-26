@@ -141,9 +141,12 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
                 <p>
                   We keep account and contact details while they are needed to
                   provide your account, fulfil orders, and handle support. When
-                  that purpose ends, we delete or de-identify personal data no
-                  later than six calendar months afterwards unless a law or a
-                  legal claim requires us to keep specific records longer.
+                  that purpose ends, the NDP Act GAID 2025 generally limits
+                  storage to six calendar months where no other legal period
+                  applies. A legal obligation or claim may justify keeping
+                  specific records longer. We are reviewing our retention
+                  controls against these requirements; you can request deletion
+                  using the contact details below.
                 </p>
                 <p>
                   Tax-relevant accounting and transaction records are kept for

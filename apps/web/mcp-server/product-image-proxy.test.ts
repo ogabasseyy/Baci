@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import type { ServerResponse } from 'node:http';
 import { describe, expect, it, vi } from 'vitest';
 import { serveProductImage } from './product-image-proxy';
@@ -5,9 +6,15 @@ import { serveProductImage } from './product-image-proxy';
 function createResponse() {
   const end = vi.fn();
   const writeHead = vi.fn(() => ({ end }));
+  const emitter = new EventEmitter();
+  const mockedResponse = Object.assign(emitter, { writeHead, end, destroyed: false });
   return {
     end,
-    response: { writeHead, end } as unknown as ServerResponse,
+    close: () => {
+      mockedResponse.destroyed = true;
+      emitter.emit('close');
+    },
+    response: mockedResponse as unknown as ServerResponse,
     writeHead,
   };
 }
@@ -70,26 +77,97 @@ describe('serveProductImage', () => {
     expect(oversized.end).toHaveBeenCalledWith('Image too large');
   });
 
-  it('caps simultaneous buffered image fetches and releases capacity afterward', async () => {
+  it('queues a six-card image burst behind four active fetches', async () => {
     const pending: Array<(response: Response) => void> = [];
     const fetchImage = vi.fn(() => new Promise<Response>((resolve) => pending.push(resolve))) as unknown as typeof fetch;
-    const responses = Array.from({ length: 4 }, createResponse);
+    const responses = Array.from({ length: 6 }, createResponse);
     const requests = responses.map(({ response }) =>
       serveProductImage('/images/core-assets/products/phone.webp', response, fetchImage)
     );
+    await vi.waitFor(() => expect(fetchImage).toHaveBeenCalledTimes(4));
+    expect(responses.slice(4).every(({ writeHead }) => writeHead.mock.calls.length === 0)).toBe(true);
 
-    const busy = createResponse();
-    await serveProductImage('/images/core-assets/products/phone.webp', busy.response, fetchImage);
-    expect(busy.writeHead).toHaveBeenCalledWith(503, { 'Retry-After': '1' });
-    expect(fetchImage).toHaveBeenCalledTimes(4);
+    for (const resolve of pending.slice(0, 4)) {
+      resolve(new Response('image bytes', { headers: { 'content-type': 'image/webp' } }));
+    }
+    await vi.waitFor(() => expect(fetchImage).toHaveBeenCalledTimes(6));
+    for (const resolve of pending.slice(4)) {
+      resolve(new Response('image bytes', { headers: { 'content-type': 'image/webp' } }));
+    }
+    await Promise.all(requests);
+    for (const { writeHead } of responses) {
+      expect(writeHead).toHaveBeenCalledWith(200, expect.any(Object));
+    }
+  });
+
+  it('rejects requests beyond the bounded queue and drains admitted requests', async () => {
+    const pending: Array<(response: Response) => void> = [];
+    const fetchImage = vi.fn(() => new Promise<Response>((resolve) => pending.push(resolve))) as unknown as typeof fetch;
+    const admitted = Array.from({ length: 36 }, createResponse);
+    const requests = admitted.map(({ response }) =>
+      serveProductImage('/images/core-assets/products/phone.webp', response, fetchImage)
+    );
+    await vi.waitFor(() => expect(fetchImage).toHaveBeenCalledTimes(4));
+
+    const overflow = createResponse();
+    await serveProductImage('/images/core-assets/products/phone.webp', overflow.response, fetchImage);
+    expect(overflow.writeHead).toHaveBeenCalledWith(503, { 'Retry-After': '1' });
+
+    for (let start = 0; start < 36; start += 4) {
+      for (const resolve of pending.slice(start, start + 4)) {
+        resolve(new Response('image bytes', { headers: { 'content-type': 'image/webp' } }));
+      }
+      if (start + 4 < 36) {
+        await vi.waitFor(() => expect(fetchImage).toHaveBeenCalledTimes(start + 8));
+      }
+    }
+    await Promise.all(requests);
+    expect(admitted.every(({ writeHead }) => writeHead.mock.calls[0]?.[0] === 200)).toBe(true);
+  });
+
+  it('removes a queued image request when its client disconnects', async () => {
+    const pending: Array<(response: Response) => void> = [];
+    const fetchImage = vi.fn(() => new Promise<Response>((resolve) => pending.push(resolve))) as unknown as typeof fetch;
+    const active = Array.from({ length: 4 }, createResponse);
+    const activeRequests = active.map(({ response }) =>
+      serveProductImage('/images/core-assets/products/phone.webp', response, fetchImage)
+    );
+    await vi.waitFor(() => expect(fetchImage).toHaveBeenCalledTimes(4));
+
+    const disconnected = createResponse();
+    const queued = serveProductImage('/images/core-assets/products/phone.webp', disconnected.response, fetchImage);
+    disconnected.close();
+    await queued;
+    expect(disconnected.writeHead).not.toHaveBeenCalled();
 
     for (const resolve of pending) {
       resolve(new Response('image bytes', { headers: { 'content-type': 'image/webp' } }));
     }
-    await Promise.all(requests);
-    const recovered = createResponse();
-    await serveProductImage('/images/core-assets/products/phone.webp', recovered.response,
-      vi.fn(async () => new Response('image bytes', { headers: { 'content-type': 'image/webp' } })) as unknown as typeof fetch);
-    expect(recovered.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
+    await Promise.all(activeRequests);
+    expect(fetchImage).toHaveBeenCalledTimes(4);
+  });
+
+  it('times out a queued request without consuming a later slot', async () => {
+    const pending: Array<(response: Response) => void> = [];
+    const fetchImage = vi.fn(() => new Promise<Response>((resolve) => pending.push(resolve))) as unknown as typeof fetch;
+    const activeRequests = Array.from({ length: 4 }, createResponse).map(({ response }) =>
+      serveProductImage('/images/core-assets/products/phone.webp', response, fetchImage)
+    );
+    await vi.waitFor(() => expect(fetchImage).toHaveBeenCalledTimes(4));
+    const timedOut = createResponse();
+    vi.useFakeTimers();
+    try {
+      const queued = serveProductImage('/images/core-assets/products/phone.webp', timedOut.response, fetchImage);
+      await vi.advanceTimersByTimeAsync(12_000);
+      await queued;
+      expect(timedOut.writeHead).toHaveBeenCalledWith(503, { 'Retry-After': '1' });
+    } finally {
+      vi.useRealTimers();
+      for (const resolve of pending) {
+        resolve(new Response('image bytes', { headers: { 'content-type': 'image/webp' } }));
+      }
+      await Promise.all(activeRequests);
+    }
+    expect(fetchImage).toHaveBeenCalledTimes(4);
   });
 });

@@ -53,7 +53,9 @@ describe('OgabasseyV2PrivacyPolicy', () => {
       );
 
       expect(screen.getByRole('heading', { name: 'How Long We Keep Your Information' })).toBeInTheDocument();
-      expect(screen.getByText(/six calendar months afterwards/)).toBeInTheDocument();
+      expect(screen.getByText(/generally limits storage to six calendar months/)).toBeInTheDocument();
+      expect(screen.getByText(/reviewing our retention controls/)).toBeInTheDocument();
+      expect(screen.queryByText(/we delete or de-identify personal data no later than/)).not.toBeInTheDocument();
       expect(screen.getByText(/at least six years after the year of assessment/)).toBeInTheDocument();
       expect(screen.getByText(/do not create a saved Ogabassey account search history/)).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Your Privacy Choices' })).toBeInTheDocument();

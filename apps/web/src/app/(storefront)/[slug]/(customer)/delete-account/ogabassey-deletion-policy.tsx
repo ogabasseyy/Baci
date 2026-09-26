@@ -11,8 +11,9 @@ export function OgabasseyDeletionPolicy({
       <p>
         After a verified request, we remove account profile details, saved
         addresses, wishlist items, and cart contents when they are no longer
-        needed. Personal data without a longer legal basis is deleted or
-        de-identified no later than six calendar months after its purpose ends.
+        needed. The NDP Act GAID 2025 generally limits storage to six calendar
+        months after a purpose ends where no other legal period applies. You can
+        request deletion of other personal data through our privacy contact.
       </p>
       <p>
         Tax-relevant accounting and transaction records must be kept for at

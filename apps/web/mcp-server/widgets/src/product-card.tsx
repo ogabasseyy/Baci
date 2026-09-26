@@ -8,10 +8,12 @@ export function ProductCard({
   product,
   isInCart,
   onAddToCart,
+  onViewCart,
 }: {
   product: Product;
   isInCart: boolean;
   onAddToCart: (product: Product) => void;
+  onViewCart: () => void;
 }) {
   const [imageError, setImageError] = useState(false);
   const imageUrl = getProductImageUrl(product);
@@ -71,8 +73,8 @@ export function ProductCard({
       <div className="product-actions">
         <button type="button"
           className={`btn-add-cart ${isInCart ? 'in-cart' : ''}`}
-          onClick={() => onAddToCart(product)}
-          disabled={isInCart || product.in_stock === false}
+          onClick={() => isInCart ? onViewCart() : onAddToCart(product)}
+          disabled={product.in_stock === false}
         >
           {product.in_stock === false ? (
             <>Out of Stock</>
@@ -88,7 +90,7 @@ export function ProductCard({
               >
                 <polyline points="20 6 9 17 4 12" />
               </svg>
-              Link Ready
+              View cart
             </>
           ) : (
             <>
@@ -104,7 +106,7 @@ export function ProductCard({
                 <circle cx="20" cy="21" r="1" />
                 <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
               </svg>
-              Prepare Shopping Link
+              Add to cart
             </>
           )}
         </button>

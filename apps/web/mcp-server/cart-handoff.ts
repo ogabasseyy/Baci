@@ -56,7 +56,7 @@ export async function prepareCartHandoff({
 
   if (unavailable || !product) {
     return {
-      content: [{ type: 'text', text: 'This product is not currently available for cart handoff.' }],
+      content: [{ type: 'text', text: 'This product is not currently available to add to cart.' }],
       structuredContent: { success: false },
     };
   }
@@ -87,7 +87,7 @@ export async function prepareCartHandoff({
     content: [
       {
         type: 'text',
-        text: `Cart link ready for **${productName}**${price ? ` (${price})` : ''}. Open Ogabassey and verify the item and final price before checkout.\n\n[Open cart on Ogabassey](${cartUrl})`,
+        text: `To add **${productName}**${price ? ` (${price})` : ''} to your cart, open Ogabassey and verify the item and final price before checkout.\n\n[Add to cart on Ogabassey](${cartUrl})`,
       },
     ],
     structuredContent: {

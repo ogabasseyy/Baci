@@ -1447,7 +1447,7 @@ function createOgabasseyServer() {
 
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
-        'Prepare an Ogabassey shopping handoff for a public product. Products with variants link to their product page for option selection; simple products can link to the cart. This tool does not save an item to a server-side cart or start checkout.',
+        'Help the shopper add a public product to their Ogabassey cart. Simple products return a cart URL that adds the item when opened; products with options link to their product page for selection. This tool does not save an item inside ChatGPT or start checkout.',
       inputSchema: {
         product_id: z.string().describe('The product ID to add to cart'),
         quantity: z
@@ -1461,8 +1461,8 @@ function createOgabasseyServer() {
       },
       _meta: {
         'openai/widgetAccessible': true, // Enable widget-initiated calls
-        'openai/toolInvocation/invoking': 'Preparing cart link...',
-        'openai/toolInvocation/invoked': 'Cart link ready',
+        'openai/toolInvocation/invoking': 'Finding your cart on Ogabassey...',
+        'openai/toolInvocation/invoked': 'Ready to add on Ogabassey',
       },
     },
     async (args) => {

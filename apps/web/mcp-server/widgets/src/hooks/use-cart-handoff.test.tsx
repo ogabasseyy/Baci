@@ -12,7 +12,7 @@ describe('useCartHandoff', () => {
     const { result } = renderHook(() => useCartHandoff());
     await act(async () => { await result.current.handleAddToCart(product); });
     expect(result.current.cart).toEqual([]);
-    expect(result.current.cartError).toContain('ChatGPT cannot prepare');
+    expect(result.current.cartError).toContain('ChatGPT cannot open the cart');
     expect(result.current.cartError).not.toContain('unavailable');
   });
 
@@ -21,19 +21,22 @@ describe('useCartHandoff', () => {
     const { result } = renderHook(() => useCartHandoff());
     await act(async () => { await result.current.handleAddToCart(product); });
     expect(result.current.cart).toEqual([]);
-    expect(result.current.cartError).toContain('Could not prepare');
+    expect(result.current.cartError).toContain('Could not open the cart');
   });
 
   it('removes a prepared link when the shopper removes its product', async () => {
+    const openExternal = vi.fn();
     window.openai = {
       callTool: vi.fn().mockResolvedValue({ structuredContent: {
         success: true, cart_url: 'https://ogabassey.com/cart?item_id=phone-1',
       } }),
       setWidgetState: vi.fn(),
+      openExternal,
     };
     const { result } = renderHook(() => useCartHandoff());
     await act(async () => { await result.current.handleAddToCart(product); });
     expect(result.current.cart).toHaveLength(1);
+    expect(openExternal).toHaveBeenCalledWith({ href: 'https://ogabassey.com/cart?item_id=phone-1' });
     act(() => { result.current.handleRemoveItem(product.id); });
     expect(result.current.cart).toEqual([]);
     expect(window.openai?.setWidgetState).toHaveBeenLastCalledWith({ cart: [], cartUrl: undefined });

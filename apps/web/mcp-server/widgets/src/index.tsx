@@ -73,6 +73,7 @@ export function App() {
               product={product}
               isInCart={cart.some((item) => item.product.id === product.id)}
               onAddToCart={handleAddToCart}
+              onViewCart={handleViewCart}
             />
           ))}
         </div>

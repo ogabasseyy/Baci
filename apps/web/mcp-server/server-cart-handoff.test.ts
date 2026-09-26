@@ -21,7 +21,7 @@ describe('MCP cart handoff', () => {
         success: true,
         cart_url: 'https://ogabassey.com/cart?item_id=available-product&qty=1',
       });
-      expect(JSON.stringify(available)).toContain('Cart link ready');
+      expect(JSON.stringify(available)).toContain('Add to cart on Ogabassey');
       expect(JSON.stringify(available)).not.toContain('added to cart');
 
       const soldOut = getResultRecord(

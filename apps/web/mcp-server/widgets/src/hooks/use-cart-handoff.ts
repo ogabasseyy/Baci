@@ -23,7 +23,7 @@ export function useCartHandoff() {
     const requestId = ++handoffRequestId.current;
     setCartError(null);
     if (!window.openai?.callTool) {
-      setCartError('ChatGPT cannot prepare a cart link here. Use Review on Ogabassey to continue.');
+      setCartError('ChatGPT cannot open the cart here. Use Review on Ogabassey to continue.');
       return;
     }
     try {
@@ -41,7 +41,7 @@ export function useCartHandoff() {
 
       const cartUrl = getCartHandoffUrl(result, product.id);
       if (!cartUrl) {
-        setCartError('This item is unavailable for cart handoff. Please choose another product.');
+        setCartError('This item cannot be added right now. Please choose another product.');
         return;
       }
       // The MCP handoff supports one product at a time.
@@ -50,9 +50,10 @@ export function useCartHandoff() {
         cart: [{ product, quantity: 1 }],
         cartUrl,
       }));
+      openOgabasseyUrl(cartUrl);
     } catch {
       if (requestId !== handoffRequestId.current) return;
-      setCartError('Could not prepare the cart link. Please try again.');
+      setCartError('Could not open the cart. Please try again.');
     }
   };
 

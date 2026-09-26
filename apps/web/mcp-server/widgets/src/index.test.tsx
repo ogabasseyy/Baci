@@ -26,15 +26,17 @@ describe('Ogabassey cart handoff widget', () => {
 
   it('keeps the latest item when an older handoff finishes late', async () => {
     const pending = new Map<string, (value: unknown) => void>();
+    const openExternal = vi.fn();
     window.openai = {
       toolOutput: { products },
+      openExternal,
       callTool: (_name, args) => new Promise((resolve) => {
         pending.set(String(args.product_id), resolve);
       }),
     };
     render(<App />);
 
-    const buttons = screen.getAllByRole('button', { name: 'Prepare Shopping Link' });
+    const buttons = screen.getAllByRole('button', { name: 'Add to cart' });
     fireEvent.click(buttons[0]);
     fireEvent.click(buttons[1]);
 
@@ -57,6 +59,8 @@ describe('Ogabassey cart handoff widget', () => {
 
     expect(screen.getByText('Phone Two', { selector: '.cart-item-name' })).toBeTruthy();
     expect(screen.queryByText('Phone One', { selector: '.cart-item-name' })).toBeNull();
+    expect(openExternal).toHaveBeenCalledTimes(1);
+    expect(openExternal).toHaveBeenCalledWith({ href: 'https://ogabassey.com/cart?item_id=phone-2' });
   });
 
   it('lets a shopper replace a legacy selection with no handoff URL', () => {
@@ -66,7 +70,7 @@ describe('Ogabassey cart handoff widget', () => {
     };
     render(<App />);
 
-    expect(screen.getAllByRole('button', { name: 'Prepare Shopping Link' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Add to cart' })).toHaveLength(2);
     expect(screen.queryByRole('button', { name: 'Review Cart on Ogabassey →' })).toBeNull();
   });
 
@@ -99,7 +103,7 @@ describe('Ogabassey cart handoff widget', () => {
     render(<App />);
 
     await act(async () => {
-      fireEvent.click(screen.getAllByRole('button', { name: 'Prepare Shopping Link' })[0]);
+      fireEvent.click(screen.getAllByRole('button', { name: 'Add to cart' })[0]);
     });
 
     expect(openExternal).toHaveBeenCalledWith({ href: 'https://ogabassey.com/products/phone-one' });
@@ -127,7 +131,7 @@ describe('Ogabassey cart handoff widget', () => {
     render(<App />);
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Prepare Shopping Link' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Add to cart' }));
     });
 
     expect(openExternal).toHaveBeenCalledWith({ href: 'https://ogabassey.com/products/phone-one' });

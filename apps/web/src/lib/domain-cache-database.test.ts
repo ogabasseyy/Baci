@@ -1,169 +1,78 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mockCreatePublicClient = vi.fn();
+vi.mock('./supabase/public', () => ({
+  createPublicClient: (...args: unknown[]) => mockCreatePublicClient(...args),
+}));
+
 import { fetchCustomDomain, fetchSlugForDomain } from './domain-cache-database';
 
-function createQuery(result: unknown) {
-  const query = {
-    eq: vi.fn(() => query),
-    limit: vi.fn(() => query),
-    maybeSingle: vi.fn(() => Promise.resolve(result)),
-    select: vi.fn(() => query),
+function createPublicClientResult(result: unknown) {
+  return {
+    rpc: vi.fn(() => Promise.resolve(result)),
   };
-  return query;
 }
 
-describe('domain cache database fallbacks', () => {
+describe('public domain cache resolver', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('returns the active primary custom domain for a merchant slug', async () => {
-    const query = createQuery({
-      data: {
-        id: 'merchant-1',
-        domains: [
-          {
-            domain: 'shop.example.com',
-            is_primary: true,
-            status: 'active',
-            domain_type: 'custom',
-          },
-        ],
-      },
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('uses the public custom-domain RPC and returns its scalar mapping', async () => {
+    const client = createPublicClientResult({
+      data: 'shop.example.com',
       error: null,
     });
-    const client = {
-      from: vi.fn(() => query),
-    } as unknown as SupabaseClient;
+    mockCreatePublicClient.mockReturnValue(client);
 
-    await expect(fetchCustomDomain(client, 'shop')).resolves.toBe(
-      'shop.example.com'
+    await expect(fetchCustomDomain('shop')).resolves.toEqual({
+      outcome: 'resolved',
+      value: 'shop.example.com',
+    });
+    expect(mockCreatePublicClient).toHaveBeenCalledWith({
+      clientInfo: 'baci-domain-cache-resolver',
+    });
+    expect(client.rpc).toHaveBeenCalledWith(
+      'resolve_storefront_custom_domain',
+      { p_slug: 'shop' }
     );
   });
 
-  it('returns the merchant slug for an active custom domain', async () => {
-    const query = createQuery({
-      data: { merchants: { slug: 'shop' } },
-      error: null,
-    });
-    const client = {
-      from: vi.fn(() => query),
-    } as unknown as SupabaseClient;
+  it('uses the public domain-slug RPC and preserves an authoritative miss', async () => {
+    const client = createPublicClientResult({ data: null, error: null });
+    mockCreatePublicClient.mockReturnValue(client);
 
-    await expect(fetchSlugForDomain(client, 'shop.example.com')).resolves.toBe(
-      'shop'
-    );
-    expect(query.eq).toHaveBeenCalledWith('status', 'active');
+    await expect(fetchSlugForDomain('missing.example.com')).resolves.toEqual({
+      outcome: 'not-found',
+    });
+    expect(client.rpc).toHaveBeenCalledWith('resolve_storefront_domain_slug', {
+      p_domain: 'missing.example.com',
+    });
   });
 
-  it('fails open when the database lookup rejects', async () => {
-    const client = {
-      from: vi.fn(() => {
-        throw new Error('database unavailable');
-      }),
-    } as unknown as SupabaseClient;
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  it.each([
+    [{ data: null, error: { code: '42501', message: 'denied' } }],
+    [{ data: { slug: 'not-a-scalar' }, error: null }],
+    [{ data: '', error: null }],
+  ])('does not turn an RPC error or malformed payload into a cacheable miss', async (result) => {
+    mockCreatePublicClient.mockReturnValue(createPublicClientResult(result));
 
-    await expect(
-      fetchSlugForDomain(client, 'shop.example.com')
-    ).resolves.toBeNull();
-    await expect(fetchCustomDomain(client, 'shop')).resolves.toBeNull();
-    errorSpy.mockRestore();
+    await expect(fetchSlugForDomain('shop.example.com')).resolves.toEqual({
+      outcome: 'unavailable',
+    });
   });
 
-  it('fails open when database results are missing or contain an error', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const missingQuery = createQuery({ data: null, error: null });
-    const errorQuery = createQuery({
-      data: null,
-      error: { message: 'database unavailable' },
+  it('fails open when public client configuration is absent', async () => {
+    mockCreatePublicClient.mockImplementation(() => {
+      throw new Error('Public Supabase configuration is missing');
     });
-    const missingClient = {
-      from: vi.fn(() => missingQuery),
-    } as unknown as SupabaseClient;
-    const errorClient = {
-      from: vi.fn(() => errorQuery),
-    } as unknown as SupabaseClient;
 
-    await expect(
-      fetchSlugForDomain(missingClient, 'missing.example.com')
-    ).resolves.toBeNull();
-    await expect(fetchCustomDomain(errorClient, 'missing')).resolves.toBeNull();
-    expect(errorSpy).toHaveBeenCalledTimes(1);
-    errorSpy.mockRestore();
-  });
-
-  it('does not guess when multiple active domains have no primary', async () => {
-    const query = createQuery({
-      data: {
-        id: 'merchant-1',
-        domains: [
-          {
-            domain: 'one.example.com',
-            is_primary: false,
-            status: 'active',
-            domain_type: 'custom',
-          },
-          {
-            domain: 'two.example.com',
-            is_primary: false,
-            status: 'active',
-            domain_type: 'purchased',
-          },
-        ],
-      },
-      error: null,
+    await expect(fetchCustomDomain('shop')).resolves.toEqual({
+      outcome: 'unavailable',
     });
-    const client = {
-      from: vi.fn(() => query),
-    } as unknown as SupabaseClient;
-
-    await expect(fetchCustomDomain(client, 'shop')).resolves.toBeNull();
-  });
-
-  it('treats a nullable primary flag as non-primary for a lone active domain', async () => {
-    const query = createQuery({
-      data: {
-        id: 'merchant-1',
-        domains: [
-          {
-            domain: 'nullable-primary.example.com',
-            is_primary: null,
-            status: 'active',
-            domain_type: 'custom',
-          },
-        ],
-      },
-      error: null,
-    });
-    const client = { from: vi.fn(() => query) } as unknown as SupabaseClient;
-
-    await expect(fetchCustomDomain(client, 'shop')).resolves.toBe(
-      'nullable-primary.example.com'
-    );
-  });
-
-  it('ignores malformed joined domain rows without throwing', async () => {
-    const query = createQuery({
-      data: {
-        id: 'merchant-1',
-        domains: [
-          null,
-          { domain: 'missing-fields.example.com', status: 'active' },
-          {
-            domain: 'valid.example.com',
-            is_primary: true,
-            status: 'active',
-            domain_type: 'custom',
-          },
-        ],
-      },
-      error: null,
-    });
-    const client = { from: vi.fn(() => query) } as unknown as SupabaseClient;
-
-    await expect(fetchCustomDomain(client, 'shop')).resolves.toBe(
-      'valid.example.com'
-    );
   });
 });

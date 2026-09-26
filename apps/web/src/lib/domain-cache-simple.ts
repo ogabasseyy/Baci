@@ -3,11 +3,11 @@
  *
  * Strategy:
  * 1. Read from Vercel Edge Config (global, low-latency mapping)
- * 2. Fall back to in-memory cache + DB query during missing keys or outages
+ * 2. Fall back to an anonymous scalar resolver with a warm in-memory cache
  *
  * Edge Config is synced by the domain webhook through /api/edge-config/sync.
- * Domain mappings are public routing data. The DB fallback is read-only and
- * uses the admin client because middleware runs before an authenticated session.
+ * Domain mappings are public routing data. The resolver is read-only and uses
+ * the anonymous public client because middleware has no authenticated session.
  */
 
 import {
@@ -15,9 +15,12 @@ import {
   getEdgeConfigSlugKey,
 } from '@/lib/edge-config-keys';
 import { createWarmPositiveCache } from './create-warm-positive-cache';
-import { fetchCustomDomain, fetchSlugForDomain } from './domain-cache-database';
+import {
+  fetchCustomDomain,
+  fetchSlugForDomain,
+  type PublicDomainResolution,
+} from './domain-cache-database';
 import { SingleFlight } from './single-flight';
-import { createAdminClient } from './supabase/admin';
 
 interface CacheEntry {
   customDomain: string | null;
@@ -46,6 +49,15 @@ const edgeReverseGenerations = new Map<string, number>();
 let generationSequence = 0;
 let reverseInvalidationEpoch = 0;
 const reverseSlugInvalidationEpochs = new Map<string, number>();
+
+function cacheableDomainResolution(
+  result: PublicDomainResolution
+): string | null | undefined {
+  if (result.outcome === 'resolved') return result.value;
+  if (result.outcome === 'not-found') return null;
+  return undefined;
+}
+
 function bumpGeneration(map: Map<string, number>, key: string): void {
   if (!map.has(key) && map.size >= MAX_CACHE_SIZE) {
     const oldest = map.keys().next().value;
@@ -137,14 +149,16 @@ function getFromCacheOrDb(merchantSlug: string): Promise<string | null> {
       return refreshed.customDomain;
     }
 
-    const customDomain = await fetchCustomDomain(
-      createAdminClient(),
-      merchantSlug
-    );
+    const resolution = await fetchCustomDomain(merchantSlug);
+    const customDomain = cacheableDomainResolution(resolution);
 
     if ((edgeForwardGenerations.get(merchantSlug) ?? 0) !== generation) {
-      return customDomain;
+      return customDomain ?? null;
     }
+
+    // An unavailable RPC is fail-open, but is not an authoritative absent
+    // mapping and therefore must not create a five-minute negative entry.
+    if (customDomain === undefined) return null;
 
     if (domainCache.size >= MAX_CACHE_SIZE) {
       const firstKey = domainCache.keys().next().value;
@@ -240,19 +254,21 @@ export async function getSlugForCustomDomain(
       return refreshed.slug;
     }
 
-    const slug = await fetchSlugForDomain(
-      createAdminClient(),
-      normalizedDomain
-    );
+    const resolution = await fetchSlugForDomain(normalizedDomain);
+    const slug = cacheableDomainResolution(resolution);
 
     if (
       (edgeReverseGenerations.get(normalizedDomain) ?? 0) !== generation ||
       reverseInvalidationEpoch > invalidationEpoch ||
-      (slug !== null &&
+      (typeof slug === 'string' &&
         (reverseSlugInvalidationEpochs.get(slug) ?? 0) > invalidationEpoch)
     ) {
-      return slug;
+      return slug ?? null;
     }
+
+    // A transport/configuration/payload failure is deliberately not cached as
+    // a negative lookup; a later request can retry the public RPC.
+    if (slug === undefined) return null;
 
     if (reverseDomainCache.size >= MAX_CACHE_SIZE) {
       const firstKey = reverseDomainCache.keys().next().value;

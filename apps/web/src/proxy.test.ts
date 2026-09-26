@@ -53,6 +53,9 @@ vi.mock('@/lib/slug-alias-cache', () => ({
 vi.mock('@/env', () => ({
   getSupabaseUrl: () => 'https://example.supabase.co',
   getSupabaseAnonKey: () => 'anon-key',
+}));
+
+vi.mock('@/lib/internal-api-secret', () => ({
   getInternalApiSecret: () => 'test-internal-secret',
 }));
 

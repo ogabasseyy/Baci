@@ -1,8 +1,30 @@
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { STOREFRONT_EDGE_INVENTORY_POLICY } from './storefront-edge-inventory-policy';
 import { STOREFRONT_EDGE_INVENTORY_ROUTING_INPUT_PATHS } from './storefront-edge-inventory-routing-input-paths';
 
 describe('storefront edge inventory routing input paths', () => {
+  it('includes every runtime proxy module and excludes proxy tests', () => {
+    const proxyDirectory = join(process.cwd(), 'src/lib/proxy');
+    const runtimeProxyPaths = readdirSync(proxyDirectory)
+      .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
+      .map((name) => `apps/web/src/lib/proxy/${name}`)
+      .sort();
+
+    expect(runtimeProxyPaths).toHaveLength(32);
+    expect(STOREFRONT_EDGE_INVENTORY_ROUTING_INPUT_PATHS).toEqual(
+      expect.arrayContaining(runtimeProxyPaths)
+    );
+    expect(
+      STOREFRONT_EDGE_INVENTORY_ROUTING_INPUT_PATHS.some(
+        (path) =>
+          path.startsWith('apps/web/src/lib/proxy/') &&
+          path.endsWith('.test.ts')
+      )
+    ).toBe(false);
+  });
+
   it('binds checkout payment logos and legal texture pages into the inventory digest', () => {
     expect(STOREFRONT_EDGE_INVENTORY_ROUTING_INPUT_PATHS).toEqual(
       expect.arrayContaining([
@@ -56,6 +78,17 @@ describe('storefront edge inventory routing input paths', () => {
         'apps/web/src/components/storefront/webmcp-storefront-tools-types.ts',
         'apps/web/src/schemas/webmcp-storefront-tools-contract.ts',
         'apps/web/src/schemas/webmcp-storefront-tools.ts',
+      ])
+    );
+  });
+
+  it('binds public domain resolution and the focused internal secret accessor', () => {
+    expect(STOREFRONT_EDGE_INVENTORY_ROUTING_INPUT_PATHS).toEqual(
+      expect.arrayContaining([
+        'apps/web/src/lib/domain-cache-simple.ts',
+        'apps/web/src/lib/domain-cache-database.ts',
+        'apps/web/src/lib/internal-api-secret.ts',
+        'supabase/migrations/20260926120000_public_storefront_domain_resolution.sql',
       ])
     );
   });

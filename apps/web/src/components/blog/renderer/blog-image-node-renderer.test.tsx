@@ -43,6 +43,21 @@ describe('BlogImageNodeRenderer', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it('renders content-addressed release media without dropping it', () => {
+    mockIsLegacy.mockReturnValue(false);
+    mockIsTrusted.mockReturnValue(false);
+    const stableSrc = `/release-assets/${'b'.repeat(64)}.webp`;
+
+    render(
+      <BlogImageNodeRenderer
+        node={{ type: 'image', attrs: { src: stableSrc, alt: 'Release' } }}
+        nodePath="0.1"
+      />
+    );
+
+    expect(screen.getByRole('img', { name: 'Release' })).toBeInTheDocument();
+  });
+
   it('drops legacy ogabassey CDN blog images', () => {
     mockIsLegacy.mockReturnValue(true);
 

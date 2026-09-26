@@ -16,7 +16,6 @@ import { useAuth } from '@/contexts/auth-context';
 import { useMerchant } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
 import { apiPatch } from '@/lib/api-client';
-import { getCountryByCode } from '@/lib/countries';
 import {
   getOrders,
   type Order,
@@ -28,6 +27,7 @@ import {
   isAgenticOrderSource,
   parseAgenticOrderSourceFilter,
 } from './agentic-order-source';
+import { formatOrderCurrency } from './format-order-currency';
 import { parseJumiaOrderSourceFilter } from './jumia-order-source-filter';
 import type { PaymentStatus } from './order-statuses';
 import { OrdersFiltersBar } from './orders-filters-bar';
@@ -35,24 +35,6 @@ import { OrdersListCard } from './orders-list-card';
 import { OrdersStatsCards } from './orders-stats-cards';
 import { OrdersUrgentAlert } from './orders-urgent-alert';
 import { resolveJumiaIntegrationId } from './resolve-jumia-integration-id';
-
-const _currencyFormatterCache = new Map<string, Intl.NumberFormat>();
-function getCurrencyFormatter(
-  locale: string,
-  currency: string
-): Intl.NumberFormat {
-  const key = `${locale}:${currency}`;
-  let formatter = _currencyFormatterCache.get(key);
-  if (!formatter) {
-    formatter = new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency,
-      currencyDisplay: 'symbol',
-    });
-    _currencyFormatterCache.set(key, formatter);
-  }
-  return formatter;
-}
 
 interface OrdersClientPageProps {
   initialOrders?: Order[];
@@ -304,14 +286,8 @@ export default function OrdersClientPage({
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    const country = merchant?.country
-      ? getCountryByCode(merchant.country)
-      : undefined;
-    const locale = country ? `en-${country.code}` : 'en-US';
-    const currency = country ? country.currency : 'USD';
-    return getCurrencyFormatter(locale, currency).format(amount);
-  };
+  const formatCurrency = (amount: number, currency?: string | null) =>
+    formatOrderCurrency(amount, currency, merchant?.country);
 
   const filteredOrders = orders.filter((order) => {
     const paymentMatch =

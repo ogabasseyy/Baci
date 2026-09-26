@@ -29,21 +29,24 @@ describe('mapJumiaDashboardOrder', () => {
       jumiaOrderId: 'J-1',
       customerName: 'Adaeze Obi',
       total: 5000,
-      currency: 'NGN',
+      currency: null,
       source: 'jumia',
       shippingStatus: 'Pending',
       paymentStatus: 'Paid',
     });
   });
 
-  it('passes through the stored currency and defaults to NGN when blank', () => {
+  it('passes through the stored currency and preserves a missing value as null', () => {
     expect(
       mapJumiaDashboardOrder(jumiaOrder({ currency: 'DZD' })).currency
     ).toBe('DZD');
     expect(
       mapJumiaDashboardOrder(jumiaOrder({ currency: '  ' })).currency
-    ).toBe('NGN');
-    expect(mapJumiaDashboardOrder(jumiaOrder()).currency).toBe('NGN');
+    ).toBeNull();
+    expect(mapJumiaDashboardOrder(jumiaOrder()).currency).toBeNull();
+    expect(
+      mapJumiaDashboardOrder(jumiaOrder({ currency: null })).currency
+    ).toBeNull();
   });
 
   it('maps canceled and failed Jumia statuses', () => {

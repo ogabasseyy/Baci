@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export const INTEGRATION_SCOPED_MAPPING_SELECT =
-  'id, product_id, variant_id, jumia_sku, jumia_seller_sku, jumia_product_id, jumia_price, jumia_sale_price, jumia_sale_start, jumia_sale_end, is_active, sync_inventory, sync_price, sync_status, last_synced_at, sync_error, created_at, updated_at';
+  'id, product_id, variant_id, jumia_sku, jumia_seller_sku, jumia_product_id, jumia_price, jumia_sale_price, jumia_sale_start, jumia_sale_end, is_active, sync_inventory, sync_price, sync_status, last_synced_at, sync_error, created_at, updated_at, update_token';
 
 export type IntegrationScopedMapping = {
   id: string;
@@ -22,6 +22,7 @@ export type IntegrationScopedMapping = {
   sync_error: string | null;
   created_at: string;
   updated_at: string;
+  update_token: string | null;
 };
 
 type LoadIntegrationScopedMappingsArgs = {

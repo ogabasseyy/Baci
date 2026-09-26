@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { flattenError } from 'zod';
@@ -10,7 +11,6 @@ import { logger } from '@/lib/logger';
 import { requireMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
 import { createClient } from '@/lib/supabase/server';
 import { jumiaProductUpdateSchema } from '@/schemas/jumia-product-update';
-import { applyJumiaVariantPriceUpdates } from './apply-jumia-variant-price-updates';
 import {
   getJumiaPriceOverrideError,
   getJumiaProductUpdateReadiness,
@@ -18,6 +18,7 @@ import {
   pushPriceUpdates,
   pushStatusUpdates,
 } from './jumia-product-update-feeds';
+import { persistSubmittedJumiaPriceUpdate } from './persist-submitted-jumia-price-update';
 import { verifyJumiaUpdateOAuthScope } from './verify-jumia-update-oauth-scope';
 
 export async function POST(request: NextRequest) {
@@ -192,23 +193,20 @@ export async function POST(request: NextRequest) {
         );
       }
     }
+    const updatedAt = new Date().toISOString();
+    // Collision-free optimistic-lock token: timestamps only have
+    // millisecond precision, so same-tick saves would share a stamp and
+    // both pass the post-feed guard.
+    const updateToken = randomUUID();
+    // Status pushes target every ready variant, so the local status write
+    // keeps the pre-push blanket scope. Price/sale fields are persisted after
+    // the feed instead, scoped to submitted SKUs: a jumia_prices subset must
+    // not stamp sale metadata on variants Jumia never received.
     const mappingUpdate: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
+      updated_at: updatedAt,
     };
-    if (Object.hasOwn(overrides, 'jumia_price')) {
-      mappingUpdate.jumia_price = overrides.jumia_price;
-    }
     if (Object.hasOwn(overrides, 'is_active')) {
       mappingUpdate.is_active = overrides.is_active;
-    }
-    if (Object.hasOwn(overrides, 'jumia_sale_price')) {
-      mappingUpdate.jumia_sale_price = overrides.jumia_sale_price;
-    }
-    if (Object.hasOwn(overrides, 'jumia_sale_start')) {
-      mappingUpdate.jumia_sale_start = overrides.jumia_sale_start;
-    }
-    if (Object.hasOwn(overrides, 'jumia_sale_end')) {
-      mappingUpdate.jumia_sale_end = overrides.jumia_sale_end;
     }
     const mappingIds = readyMappings.map((mapping) => mapping.id);
     const { error: updateError } = await supabase
@@ -256,22 +254,27 @@ export async function POST(request: NextRequest) {
 
     // Persist only what Jumia accepted: committing beforehand would leave
     // local prices ahead of the provider when submission fails, while a
-    // partial feed must still persist its submitted subset.
-    if (overrides.jumia_prices) {
-      const submittedPrices = Object.fromEntries(
-        Object.entries(overrides.jumia_prices).filter(([sku]) =>
-          submittedPriceSkus.includes(sku)
-        )
+    // partial feed must still persist its submitted subset. A post-push
+    // persistence failure keeps the accepted feed ids so the caller can
+    // reconcile instead of blindly resubmitting.
+    const persistResult = await persistSubmittedJumiaPriceUpdate({
+      supabase,
+      merchantId,
+      mappings: readyMappings,
+      overrides,
+      submittedSkus: submittedPriceSkus,
+      updatedAt,
+      updateToken,
+    });
+    if (!persistResult.ok) {
+      return NextResponse.json(
+        {
+          success: false,
+          feedIds,
+          errors: [...feedErrors, persistResult.error],
+        },
+        { status: 200 }
       );
-      const priceResult = await applyJumiaVariantPriceUpdates({
-        supabase,
-        merchantId,
-        mappings: readyMappings,
-        prices: submittedPrices,
-      });
-      if (!priceResult.ok) {
-        return NextResponse.json({ error: priceResult.error }, { status: 500 });
-      }
     }
 
     return NextResponse.json({

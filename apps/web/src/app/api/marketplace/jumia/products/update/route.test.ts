@@ -167,9 +167,10 @@ describe('POST /api/marketplace/jumia/products/update', () => {
     expect(body.success).toBe(true);
     expect(harness.mocks.pushPriceUpdates).toHaveBeenCalled();
     expect(harness.mocks.rpc).toHaveBeenCalledWith(
-      'apply_jumia_variant_price_updates',
+      'apply_jumia_submitted_price_updates',
       {
         p_merchant_id: MERCHANT_ID,
+        p_scalar: { values: {}, targets: [] },
         p_updates: [{ id: 'map-1', price: 900, expected_token: 'token-0' }],
         p_update_token: expect.any(String),
       }
@@ -187,9 +188,9 @@ describe('POST /api/marketplace/jumia/products/update', () => {
         return { submittedSkus: ['SKU-1'] };
       }
     );
-    harness.mocks.mappingUpdate
-      .mockResolvedValueOnce({ error: null })
-      .mockResolvedValueOnce({ error: { message: 'db down' } });
+    harness.mocks.rpc.mockResolvedValueOnce({
+      error: { message: 'db down' },
+    });
 
     const response = await harness.post(
       harness.makeRequest({
@@ -224,9 +225,10 @@ describe('POST /api/marketplace/jumia/products/update', () => {
         return { submittedSkus: ['SKU-1'] };
       }
     );
-    harness.mocks.mappingUpdate
-      .mockResolvedValueOnce({ error: null })
-      .mockResolvedValueOnce({ data: null, error: { message: 'db down' } });
+    harness.mocks.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'db down' },
+    });
 
     const response = await harness.post(
       harness.makeRequest({

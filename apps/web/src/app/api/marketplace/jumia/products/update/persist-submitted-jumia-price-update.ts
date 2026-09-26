@@ -1,9 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
-import {
-  applyJumiaVariantPriceUpdates,
-  type JumiaVariantPriceMapping,
-} from './apply-jumia-variant-price-updates';
+
+export type JumiaVariantPriceMapping = {
+  id: string;
+  jumia_sku: string;
+  jumia_price: number | null;
+  update_token: string | null;
+};
 
 export interface JumiaSubmittedPriceOverrides {
   jumia_price?: number;
@@ -20,6 +23,11 @@ const ACCEPTED_FEED_RETRY_GUIDANCE =
  * Persists price/sale overrides only for SKUs the Jumia feed accepted. A
  * per-SKU `jumia_prices` subset must not stamp sale metadata on omitted
  * variants, and a failed feed must persist nothing.
+ *
+ * The scalar sale write and the per-variant price write commit in a single
+ * transactional RPC: every row must still carry its load-time baseline
+ * token, and any miss raises 40001 and rolls back every row, so a
+ * superseded save can never leave a product half-claimed.
  */
 export async function persistSubmittedJumiaPriceUpdate(args: {
   supabase: SupabaseClient;
@@ -39,107 +47,75 @@ export async function persistSubmittedJumiaPriceUpdate(args: {
     updatedAt,
     updateToken,
   } = args;
-  const submittedPriceUpdate: Record<string, unknown> = {
-    updated_at: updatedAt,
-  };
-  if (Object.hasOwn(overrides, 'jumia_price')) {
-    submittedPriceUpdate.jumia_price = overrides.jumia_price;
-  }
-  if (Object.hasOwn(overrides, 'jumia_sale_price')) {
-    submittedPriceUpdate.jumia_sale_price = overrides.jumia_sale_price;
-  }
-  if (Object.hasOwn(overrides, 'jumia_sale_start')) {
-    submittedPriceUpdate.jumia_sale_start = overrides.jumia_sale_start;
-  }
-  if (Object.hasOwn(overrides, 'jumia_sale_end')) {
-    submittedPriceUpdate.jumia_sale_end = overrides.jumia_sale_end;
-  }
   const submittedMappings = mappings.filter((mapping) =>
     submittedSkus.includes(mapping.jumia_sku)
   );
-  const claimedIds = new Set<string>();
-  if (
-    Object.keys(submittedPriceUpdate).length > 1 &&
-    submittedMappings.length > 0
-  ) {
-    // Write-time claim: only rows still carrying a load-time baseline
-    // token may be overwritten, and the write restamps them with this
-    // request's token. Failed saves never stamp, so only an accepted save
-    // can supersede another save. Every baseline rides one statement so a
-    // split-baseline product cannot be left half-claimed by an
-    // interleaving save between grouped writes. Tokens are UUIDs, so they
-    // need no escaping inside the OR filter.
-    const baselines = new Set(
-      submittedMappings.map((mapping) => mapping.update_token ?? null)
-    );
-    const baselineFilter = [...baselines]
-      .map((baseline) =>
-        baseline === null
-          ? 'update_token.is.null'
-          : `update_token.eq.${baseline}`
-      )
-      .join(',');
-    const { data: updatedRows, error: submittedPriceError } = await supabase
-      .from('jumia_product_mappings')
-      .update({ ...submittedPriceUpdate, update_token: updateToken })
-      .in(
-        'id',
-        submittedMappings.map((mapping) => mapping.id)
-      )
-      .eq('merchant_id', merchantId)
-      .or(baselineFilter)
-      .select('id');
-    if (submittedPriceError) {
-      logger.error({
-        message: 'Local submitted-price update failed',
-        error: submittedPriceError,
-      });
-      return {
-        ok: false,
-        error: `Jumia accepted the price feed but the local sale details could not be saved. ${ACCEPTED_FEED_RETRY_GUIDANCE}`,
-      };
+  const scalarValues: Record<string, unknown> = {};
+  if (Object.hasOwn(overrides, 'jumia_price')) {
+    scalarValues.jumia_price = overrides.jumia_price;
+  }
+  if (Object.hasOwn(overrides, 'jumia_sale_price')) {
+    scalarValues.jumia_sale_price = overrides.jumia_sale_price;
+  }
+  if (Object.hasOwn(overrides, 'jumia_sale_start')) {
+    scalarValues.jumia_sale_start = overrides.jumia_sale_start;
+  }
+  if (Object.hasOwn(overrides, 'jumia_sale_end')) {
+    scalarValues.jumia_sale_end = overrides.jumia_sale_end;
+  }
+  const scalarTargets =
+    Object.keys(scalarValues).length > 0 && submittedMappings.length > 0
+      ? submittedMappings.map((mapping) => ({
+          id: mapping.id,
+          expected_token: mapping.update_token,
+        }))
+      : [];
+  if (scalarTargets.length > 0) {
+    scalarValues.updated_at = updatedAt;
+  }
+  const submittedPrices = Object.fromEntries(
+    Object.entries(overrides.jumia_prices ?? {}).filter(([sku]) =>
+      submittedSkus.includes(sku)
+    )
+  );
+  const priceUpdates = [];
+  for (const mapping of mappings) {
+    const price = submittedPrices[mapping.jumia_sku];
+    if (price == null) continue;
+    priceUpdates.push({
+      id: mapping.id,
+      price,
+      expected_token: mapping.update_token,
+    });
+  }
+  if (scalarTargets.length === 0 && priceUpdates.length === 0) {
+    return { ok: true };
+  }
+
+  const { error: submittedPriceError } = await supabase.rpc(
+    'apply_jumia_submitted_price_updates',
+    {
+      p_merchant_id: merchantId,
+      p_scalar: { values: scalarValues, targets: scalarTargets },
+      p_updates: priceUpdates,
+      p_update_token: updateToken,
     }
-    if ((updatedRows?.length ?? 0) < submittedMappings.length) {
+  );
+  if (submittedPriceError) {
+    logger.error({
+      message: 'Local submitted-price update failed',
+      error: submittedPriceError,
+    });
+    if (submittedPriceError.code === '40001') {
       return {
         ok: false,
         error: `Another save updated this product while the Jumia feed was submitting. ${ACCEPTED_FEED_RETRY_GUIDANCE}`,
       };
     }
-    for (const mapping of submittedMappings) claimedIds.add(mapping.id);
-  }
-
-  if (overrides.jumia_prices) {
-    const submittedPrices = Object.fromEntries(
-      Object.entries(overrides.jumia_prices).filter(([sku]) =>
-        submittedSkus.includes(sku)
-      )
-    );
-    // Rows claimed above now carry this request's token; rebase their
-    // baselines so the RPC guard sees the post-claim state instead of the
-    // stale load-time token.
-    const priceResult = await applyJumiaVariantPriceUpdates({
-      supabase,
-      merchantId,
-      mappings: mappings.map((mapping) =>
-        claimedIds.has(mapping.id)
-          ? { ...mapping, update_token: updateToken }
-          : mapping
-      ),
-      prices: submittedPrices,
-      updateToken,
-    });
-    if (!priceResult.ok) {
-      if (priceResult.code === '40001') {
-        return {
-          ok: false,
-          error: `Another save updated this product while the Jumia feed was submitting. ${ACCEPTED_FEED_RETRY_GUIDANCE}`,
-        };
-      }
-      return {
-        ok: false,
-        error: `Jumia accepted the price feed but the local variant prices could not be saved. ${ACCEPTED_FEED_RETRY_GUIDANCE}`,
-      };
-    }
+    return {
+      ok: false,
+      error: `Jumia accepted the price feed but the local details could not be saved. ${ACCEPTED_FEED_RETRY_GUIDANCE}`,
+    };
   }
 
   return { ok: true };

@@ -380,6 +380,11 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   {
     repositoryPath:
+      'supabase/migrations/20260926090000_apply_jumia_submitted_price_updates_atomically.sql',
+    sha256: '75f00aadd41e720fa515b2915f3a2f9a326a904c2f70be127b1e42c7628592a1',
+  },
+  {
+    repositoryPath:
       'supabase/migrations/20260831153000_optimize_storefront_pdp_semantic_reads.sql',
     sha256: 'a402b932c082f876b44feb1cd98ef4d879641a0a5e075b52a05fb0a9b7df43dc',
   },

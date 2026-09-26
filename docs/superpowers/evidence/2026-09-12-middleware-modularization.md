@@ -120,7 +120,9 @@ passed with the same two pre-existing warnings. Logs:
 
 The earlier full-web run is retained above; it was not repeated wholesale after
 this bounded extension. Unrelated date-expired analytics authority/fanout tests
-and inventory/clean-worktree release preconditions are not claimed fixed.
+are not claimed fixed. After the reviewed source/evidence commits, the clean-tree
+Cloudflare process-isolation and checked-in inventory tests passed: 13 tests
+across two files. Log: `/tmp/baci-middleware-clean-tree-final-20260926.log`.
 
 ## Remaining release evidence and review
 

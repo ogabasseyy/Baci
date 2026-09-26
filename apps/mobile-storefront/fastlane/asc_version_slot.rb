@@ -11,6 +11,8 @@
 # actively reviewing, so it is opt-in: without it we skip submission and leave
 # the (already uploaded) build on TestFlight to submit by hand.
 
+require "timeout"
+
 EDITABLE_VERSION_POLL_ATTEMPTS = 40
 EDITABLE_VERSION_POLL_INTERVAL_SECONDS = 15
 
@@ -129,15 +131,24 @@ REVIEW_SETTLE_TIMEOUT_SECONDS = EDITABLE_VERSION_POLL_ATTEMPTS * EDITABLE_VERSIO
 def wait_for_settled_review_submission(submission_id)
   deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + REVIEW_SETTLE_TIMEOUT_SECONDS
   EDITABLE_VERSION_POLL_ATTEMPTS.times do |attempt|
+    remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    return false if remaining <= 0
     begin
-      state = Spaceship::ConnectAPI::ReviewSubmission.get(
-        review_submission_id: submission_id
-      )&.state
+      # Fastlane retries rate-limited reads inside the GET itself (up to ~1h
+      # of backoff), so the deadline check below cannot bound the call: cap
+      # each fetch at the remaining budget instead. A timeout here means the
+      # deadline expired mid-read, which is the same fail-closed outcome.
+      state = Timeout.timeout(remaining) do
+        Spaceship::ConnectAPI::ReviewSubmission.get(
+          review_submission_id: submission_id
+        )&.state
+      end
     rescue *RETRYABLE_REVIEW_POLL_ERRORS
       state = nil
+    rescue Timeout::Error
+      return false
     end
     return true if !state.nil? && !UNSETTLED_REVIEW_SUBMISSION_STATES.include?(state)
-    return false if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
 
     sleep(EDITABLE_VERSION_POLL_INTERVAL_SECONDS) unless attempt == EDITABLE_VERSION_POLL_ATTEMPTS - 1
   end

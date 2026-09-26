@@ -3,10 +3,8 @@
  * must hold once `cancel_submission` is reachable (opt-in order, replacement
  * verification, settle waits, and timeout behavior).
  */
-const {
-  extractIndentedBlock,
-  callSiteIndex,
-} = require('./validate-fastfile-slot-parse.cjs');
+const extractIndentedBlock = require('./validate-fastfile-extract-indented-block.cjs');
+const callSiteIndex = require('./validate-fastfile-call-site-index.cjs');
 
 function assertCancelGuard(activeSlot, failures) {
   const cancelIndex = activeSlot.indexOf('cancel_submission');
@@ -125,6 +123,12 @@ function assertCancelGuard(activeSlot, failures) {
     ) {
       failures.push(
         'asc_version_slot.rb: wait_for_settled_review_submission must enforce a monotonic REVIEW_SETTLE_TIMEOUT_SECONDS deadline because one rate-limited read can sleep for an hour'
+      );
+    }
+
+    if (!settleWaiter || !settleWaiter.includes('Timeout.timeout(')) {
+      failures.push(
+        'asc_version_slot.rb: wait_for_settled_review_submission must bound each fetch with Timeout.timeout(remaining) so one rate-limited read cannot outlive the deadline'
       );
     }
 

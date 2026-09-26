@@ -66,8 +66,8 @@ describe('bugfix: cancelled review still winding down while editable exists', ()
 
   it('rejects a settle wait that aborts on the first transient fetch failure', () => {
     const noRetry = VALID_SLOT.replace(
-      `    begin\n      state = Spaceship::ConnectAPI::ReviewSubmission.get(\n        review_submission_id: submission_id\n      )&.state\n    rescue *RETRYABLE_REVIEW_POLL_ERRORS\n      state = nil\n    end\n`,
-      `    state = Spaceship::ConnectAPI::ReviewSubmission.get(\n      review_submission_id: submission_id\n    )&.state\n`
+      `    rescue *RETRYABLE_REVIEW_POLL_ERRORS\n      state = nil\n`,
+      ''
     );
 
     expect(
@@ -94,8 +94,8 @@ describe('settle wait wall-clock and winding-down guards', () => {
 
   it('rejects a settle wait that fetches only once', () => {
     const oneShot = VALID_SLOT.replace(
-      '  EDITABLE_VERSION_POLL_ATTEMPTS.times do\n    begin\n',
-      '  if EDITABLE_VERSION_POLL_ATTEMPTS.positive?\n    begin\n'
+      '  EDITABLE_VERSION_POLL_ATTEMPTS.times do\n    remaining = deadline',
+      '  if EDITABLE_VERSION_POLL_ATTEMPTS.positive?\n    remaining = deadline'
     );
 
     expect(
@@ -110,7 +110,7 @@ describe('settle wait wall-clock and winding-down guards', () => {
       '  deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + REVIEW_SETTLE_TIMEOUT_SECONDS\n',
       ''
     ).replace(
-      '    return false if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline\n',
+      '    remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)\n',
       ''
     );
 
@@ -118,6 +118,19 @@ describe('settle wait wall-clock and winding-down guards', () => {
       validateFastfileSubmitVersionGuard(VALID_FASTFILE, noDeadline)
     ).toContain(
       'asc_version_slot.rb: wait_for_settled_review_submission must enforce a monotonic REVIEW_SETTLE_TIMEOUT_SECONDS deadline because one rate-limited read can sleep for an hour'
+    );
+  });
+
+  it('rejects a settle wait with an unbounded fetch', () => {
+    const unboundedFetch = VALID_SLOT.replace(
+      '      state = Timeout.timeout(remaining) do\n',
+      '      state = begin\n'
+    );
+
+    expect(
+      validateFastfileSubmitVersionGuard(VALID_FASTFILE, unboundedFetch)
+    ).toContain(
+      'asc_version_slot.rb: wait_for_settled_review_submission must bound each fetch with Timeout.timeout(remaining) so one rate-limited read cannot outlive the deadline'
     );
   });
 

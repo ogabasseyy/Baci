@@ -1,7 +1,5 @@
-const {
-  stripRubyComments,
-  extractIndentedBlock,
-} = require('./validate-fastfile-slot-parse.cjs');
+const stripRubyComments = require('./validate-fastfile-strip-ruby-comments.cjs');
+const extractIndentedBlock = require('./validate-fastfile-extract-indented-block.cjs');
 const assertCancelGuard = require('./validate-fastfile-cancel-guard.cjs');
 
 /**

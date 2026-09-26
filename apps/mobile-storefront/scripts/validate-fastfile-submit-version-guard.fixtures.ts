@@ -47,15 +47,20 @@ RETRYABLE_REVIEW_POLL_ERRORS = [
 def wait_for_settled_review_submission(submission_id)
   deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + REVIEW_SETTLE_TIMEOUT_SECONDS
   EDITABLE_VERSION_POLL_ATTEMPTS.times do
+    remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    return false if remaining <= 0
     begin
-      state = Spaceship::ConnectAPI::ReviewSubmission.get(
-        review_submission_id: submission_id
-      )&.state
+      state = Timeout.timeout(remaining) do
+        Spaceship::ConnectAPI::ReviewSubmission.get(
+          review_submission_id: submission_id
+        )&.state
+      end
     rescue *RETRYABLE_REVIEW_POLL_ERRORS
       state = nil
+    rescue Timeout::Error
+      return false
     end
     return true if !state.nil? && !UNSETTLED_REVIEW_SUBMISSION_STATES.include?(state)
-    return false if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
   end
 end
 

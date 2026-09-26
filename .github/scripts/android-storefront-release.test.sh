@@ -90,4 +90,6 @@ ANDROID_HOME="$valid_root" bash "$script" link-cmdline-tools-latest
 [ ! -L "$valid_root/cmdline-tools/latest" ]
 [ -x "$valid_root/cmdline-tools/latest/bin/sdkmanager" ]
 
+grep -q 'app:bundleRelease -PreactNativeArchitectures=arm64-v8a' "$script"
+
 echo 'Android storefront release script checks passed'

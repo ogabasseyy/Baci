@@ -61,23 +61,39 @@ through the approved VPS flow are still release prerequisites.
   are recorded in the follow-up PR. Mocked endpoints do not establish real
   authentication, tenant isolation, provider settlement or reconciliation.
 
-## Source inventory and merge sequencing
+## Source inventory after squash/rebase
 
-The checkout page is an explicit input to the frozen storefront inventory.
-Its receipt must therefore be regenerated against a committed source revision
-after this refactor. The six extracted runtime handlers are added to the
-inventory inputs so moving code out of the page preserves source coverage.
-The source validator and existing checkout routing inputs remain unchanged.
+The checked-in Task 1A file is a regression snapshot. CI validates its self-hash
+and compares every policy, row, hostname and source-content digest against a
+fresh inventory generated from local committed HEAD. Only the historical
+`originMainSha` and the digest that includes it differ during comparison. The
+original digest is verified separately; historical identity is not certified.
 
-GitHub permits squash/rebase merges for this repository, which replace branch
-commit identities. The #3499 receipt points at `7140dd5414`, which ceased to be
-an ancestor of main after its squash merge. A receipt regenerated on this
-branch can establish current-PR validity, but cannot establish validity after
-another squash/rebase merge.
+The existing source-authority reader still rejects dirty files, added/deleted
+routes, symlinks and byte mismatches. The six extracted runtime handlers remain
+in the inventory input list. CI no longer fetches a discarded branch commit to
+validate a checked-in snapshot. A fresh-clone regression covers an actual squash
+whose original source object is unavailable.
 
-Immediately after merging, regenerate the two-file receipt (inventory JSON and
-its expected test digest) against the actual merged `origin/main` revision.
-That source commit remains an ancestor when the receipt-only follow-up merges,
-because it changes no inventory source inputs. This existing repository
-contract is a required postmerge gate; do not remove the ancestry assertion,
-omit checkout inputs or claim a green branch proves the postmerge gate.
+Operational evidence creation and `validateStorefrontEdgeInventory` retain the
+exact independently supplied source-SHA contract. Such evidence must be
+regenerated from the intended committed source; repository snapshot validation
+cannot substitute for provenance or release approval. This separation removes
+the need for a corrective receipt-only PR after every squash merge while
+preserving the repository's linear-history policy.
+
+[GitHub documents that squash/rebase rewrites commit identities](https://docs.github.com/en/pull-requests/reference/pull-request-merges).
+The distinction between artifact digests and source provenance is consistent
+with [SLSA's provenance model](https://slsa.dev/spec/v1.1/provenance); this change
+does not claim SLSA certification.
+
+## Next checkout work
+
+1. Repair the independent database predeploy failure, then deploy through the
+   approved VPS flow when authorized and verify desktop/mobile checkout live.
+2. Exercise real staging payment initiation, cancellation, return, timeout and
+   reconciliation with the appropriate provider test accounts.
+3. Extract the remaining form, address/shipping and REDVAULT coordination in
+   focused increments with behavior tests. The page is still 2,955 lines.
+4. Measure checkout JavaScript, interaction latency and request waterfalls;
+   optimize confirmed costs and compare matching before/after traces.

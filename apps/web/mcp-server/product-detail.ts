@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getMcpOfferAvailability, getMcpProductStockSummary } from './product-stock-summary';
+import { getMcpOfferAvailability } from './product-offer-availability';
+import { getMcpProductStockSummary } from './product-stock-summary';
 
 interface ProductDetailSource {
   id: string;

@@ -97,8 +97,12 @@ export async function serveProductImage(
   try {
     if (response.destroyed) return;
     const assetPath = pathname.slice('/images'.length);
+    const version = new URLSearchParams(search).get('v');
+    const safeSearch = version && /^[\w.-]{1,32}$/.test(version)
+      ? `?v=${encodeURIComponent(version)}`
+      : '';
     const upstream = await fetchImage(
-      `${CDN_ORIGIN}/image/width=640,quality=70,format=webp${assetPath}${search}`,
+      `${CDN_ORIGIN}/image/width=640,quality=70,format=webp${assetPath}${safeSearch}`,
       { redirect: 'error', signal: controller.signal }
     );
     const contentType = upstream.headers.get('content-type') || '';

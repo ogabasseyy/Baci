@@ -3,6 +3,7 @@ import type { McpSearchProductRow } from './search-products-query-helpers';
 import { getMcpProductStockSummary } from './product-stock-summary';
 
 type BrowseFacet = 'brand' | 'category';
+const OFFER_ID_BATCH_SIZE = 100;
 
 /** List public facet values from products that are not confirmed sold out. */
 export async function loadMcpBrowseFacetValues({
@@ -36,34 +37,39 @@ export async function loadMcpBrowseFacetValues({
   );
   const variantIds = optionProducts.filter((product) => product.has_variants).map((product) => product.id);
   const offerIds = optionProducts.filter((product) => product.has_condition_offers).map((product) => product.id);
-  const [variantResult, offerResult] = await Promise.all([
+  const offerBatches = Array.from({ length: Math.ceil(offerIds.length / OFFER_ID_BATCH_SIZE) }, (_, index) =>
+    offerIds.slice(index * OFFER_ID_BATCH_SIZE, (index + 1) * OFFER_ID_BATCH_SIZE));
+  const [variantResult, offerResults] = await Promise.all([
     variantIds.length > 0
       ? supabase.rpc('get_storefront_product_variants', { p_product_ids: variantIds })
       : Promise.resolve({ data: [], error: null }),
-    offerIds.length > 0
-      ? supabase.from('product_offers')
+    Promise.all(offerBatches.map((ids) =>
+      supabase.from('product_offers')
           .select('product_id, stock_quantity')
           .eq('merchant_id', merchantId)
           .eq('status', 'active')
-          .in('product_id', offerIds)
-      : Promise.resolve({ data: [], error: null }),
+          .in('product_id', ids)
+    )),
   ]);
   if (variantResult.error) console.error('Failed to load public variant facet stock:', variantResult.error);
-  if (offerResult.error) console.error('Failed to load public offer facet stock:', offerResult.error);
+  const offerError = offerResults.find((result) => result.error)?.error;
+  if (offerError) console.error('Failed to load public offer facet stock:', offerError);
 
   const variantStock = new Map<string, Array<{ stock_quantity: number | null }>>();
   const offerStock = new Map<string, Array<{ stock_quantity: number | null }>>();
   for (const row of variantResult.data ?? []) {
     variantStock.set(row.product_id, [...(variantStock.get(row.product_id) ?? []), row]);
   }
-  for (const row of offerResult.data ?? []) {
-    offerStock.set(row.product_id, [...(offerStock.get(row.product_id) ?? []), row]);
+  for (const result of offerResults) {
+    for (const row of result.data ?? []) {
+      offerStock.set(row.product_id, [...(offerStock.get(row.product_id) ?? []), row]);
+    }
   }
   const soldOutIds = new Set(optionProducts.filter((product) =>
     getMcpProductStockSummary(
       product,
       product.has_variants && !variantResult.error ? variantStock.get(product.id) ?? [] : undefined,
-      product.has_condition_offers && !offerResult.error ? offerStock.get(product.id) ?? [] : undefined
+      product.has_condition_offers && !offerError ? offerStock.get(product.id) ?? [] : undefined
     ).inStock === false
   ).map((product) => product.id));
   return [...new Set(products

@@ -49,7 +49,7 @@ import { resolveMcpPaystackDvaAccess } from './mcp-paystack-dva-access';
 import { registerAgenticUcpTools } from './agentic-ucp-tools';
 import { resolveMcpSearchProductCondition } from './product-condition-filter';
 import { loadMcpSearchProducts } from './search-products-query';
-import { getMcpOfferAvailability } from './product-stock-summary';
+import { getMcpOfferAvailability } from './product-offer-availability';
 import { buildMcpProductDetail } from './product-detail';
 import { loadMcpProductVariants } from './product-variants';
 import { serveProductImage } from './product-image-proxy';

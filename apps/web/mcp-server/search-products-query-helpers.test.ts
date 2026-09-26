@@ -20,6 +20,9 @@ describe('search-products condition helpers', () => {
     expect(inferSmartphoneCategory('phone stand', undefined)).toBeUndefined();
     expect(inferSmartphoneCategory('smartphone mount', undefined)).toBeUndefined();
     expect(inferSmartphoneCategory('phones and tablets', undefined)).toBeUndefined();
+    expect(inferSmartphoneCategory('case for iPhone 15', undefined)).toBeUndefined();
+    expect(inferSmartphoneCategory('charger for phone', undefined)).toBeUndefined();
+    expect(inferSmartphoneCategory('tablets and phones', undefined)).toBeUndefined();
     expect(inferSmartphoneCategory('Redmi phones', 'Accessories')).toBeUndefined();
   });
 

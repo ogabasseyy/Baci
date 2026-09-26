@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getMcpOfferAvailability } from './product-stock-summary';
+import { getMcpOfferAvailability } from './product-offer-availability';
 
 /** Returns public variant and condition-offer choices for one active product. */
 export async function loadMcpProductVariants({

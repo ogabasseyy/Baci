@@ -52,6 +52,25 @@ describe('serveProductImage', () => {
     );
   });
 
+  it('ignores arbitrary and invalid image query parameters', async () => {
+    const fetchImage = vi.fn(async () => new Response('image bytes', {
+      headers: { 'content-type': 'image/webp' },
+    })) as unknown as typeof fetch;
+    for (const search of ['?x=random', '?v=2&x=random', '?v=too-long-a-version-value-that-should-be-rejected']) {
+      const { response } = createResponse();
+      await serveProductImage('/images/core-assets/products/phone.webp', response, fetchImage, search);
+    }
+    expect(fetchImage).toHaveBeenNthCalledWith(1,
+      'https://cdn.ogabassey.com/image/width=640,quality=70,format=webp/core-assets/products/phone.webp',
+      expect.anything());
+    expect(fetchImage).toHaveBeenNthCalledWith(2,
+      'https://cdn.ogabassey.com/image/width=640,quality=70,format=webp/core-assets/products/phone.webp?v=2',
+      expect.anything());
+    expect(fetchImage).toHaveBeenNthCalledWith(3,
+      'https://cdn.ogabassey.com/image/width=640,quality=70,format=webp/core-assets/products/phone.webp',
+      expect.anything());
+  });
+
   it('rejects paths outside the product prefix and encoded path separators', async () => {
     const fetchImage = vi.fn() as unknown as typeof fetch;
     for (const pathname of [

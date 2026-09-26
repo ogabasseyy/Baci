@@ -1,84 +1,12 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import submitVersionGuardValidator from './validate-fastfile-submit-version-guard.cjs';
+import {
+  VALID_FASTFILE,
+  VALID_SLOT,
+  readFastlaneFile,
+} from './validate-fastfile-submit-version-guard.fixtures';
 
 const { validateFastfileSubmitVersionGuard } = submitVersionGuardValidator;
 
-const VALID_SLOT = `def review_cancellation_allowed?
-  %w[1 true yes].include?(ENV["IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT"].to_s.strip.downcase)
-end
-
-def ensure_replacement_build_exists!(app, platform, app_version:, build_number:)
-  build = Spaceship::ConnectAPI::Build.all(
-    app_id: app.id,
-    version: requested_version,
-    build_number: requested_build,
-    platform: platform,
-    processing_states: SUBMITTABLE_BUILD_PROCESSING_STATE
-  ).reject(&:expired).first
-
-  return build if build
-
-  UI.user_error!("no replacement build")
-end
-
-def wait_for_editable_app_store_version(app, platform)
-  EDITABLE_VERSION_POLL_ATTEMPTS.times do
-    version = app.get_edit_app_store_version(platform: platform)
-    return version if version
-
-    sleep(EDITABLE_VERSION_POLL_INTERVAL_SECONDS)
-  end
-
-  nil
-end
-
-def app_store_version_slot_ready?(app_version:, build_number:)
-  app = Spaceship::ConnectAPI::App.find(BUNDLE_ID)
-  platform = Spaceship::ConnectAPI::Platform::IOS
-  submission = app.get_in_progress_review_submission(platform: platform)
-  if submission.nil?
-    return true if app.get_edit_app_store_version(platform: platform)
-    return false
-  end
-
-  unless review_cancellation_allowed?
-    return false
-  end
-
-  ensure_replacement_build_exists!(
-    app,
-    platform,
-    app_version: app_version,
-    build_number: build_number
-  )
-
-  submission.cancel_submission
-
-  return true if wait_for_editable_app_store_version(app, platform)
-
-  UI.user_error!("cancelled but no editable version appeared")
-end`;
-
-const VALID_FASTFILE = `import("asc_version_slot.rb")
-
-lane :submit do
-  api_key = asc_api_key
-  deliver_opts = {
-    submit_for_review: true
-  }
-
-  unless app_store_version_slot_ready?(app_version: app_version, build_number: build_number)
-    next
-  end
-
-  set_changelog(changelog_opts)
-  update_app_review_notes!(review_notes_text, app_version: app_version)
-  deliver(deliver_opts)
-end`;
-
-const readFastlaneFile = (name: string) =>
-  readFileSync(join(__dirname, '..', 'fastlane', name), 'utf8');
 
 describe('validateFastfileSubmitVersionGuard', () => {
   it('accepts a submit lane that frees the version slot before set_changelog', () => {
@@ -306,6 +234,34 @@ describe('bugfix: editable shortcut skipped the opt-in during a live review', ()
       validateFastfileSubmitVersionGuard(VALID_FASTFILE, editableFastPathFirst)
     ).toContain(
       'asc_version_slot.rb: app_store_version_slot_ready? must query get_in_progress_review_submission before the get_edit_app_store_version shortcut'
+    );
+  });
+});
+
+describe('bugfix: cancelled review still winding down while editable exists', () => {
+  it('rejects trusting the editable version without waiting out the cancelled review', () => {
+    const noSettleWait = VALID_SLOT.replace(
+      `  unless wait_for_settled_review_submission(submission.id)\n    UI.user_error!("cancelled but the review never settled")\n  end\n\n`,
+      ''
+    );
+
+    expect(
+      validateFastfileSubmitVersionGuard(VALID_FASTFILE, noSettleWait)
+    ).toContain(
+      'asc_version_slot.rb: after cancel_submission the lane must wait via wait_for_settled_review_submission before trusting the editable version'
+    );
+  });
+
+  it('rejects a settle wait that polls the in-progress query instead of the submission', () => {
+    const pollsWrongResource = VALID_SLOT.replace(
+      'Spaceship::ConnectAPI::ReviewSubmission.get(',
+      'app.get_in_progress_review_submission('
+    );
+
+    expect(
+      validateFastfileSubmitVersionGuard(VALID_FASTFILE, pollsWrongResource)
+    ).toContain(
+      'asc_version_slot.rb: wait_for_settled_review_submission must re-fetch the cancelled submission by id, not the in-progress review submission'
     );
   });
 });

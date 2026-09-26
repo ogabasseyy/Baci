@@ -35,7 +35,7 @@ function extractIndentedBlock(source, declarationPattern, closingToken) {
 /** Index of a call site, ignoring the `def` line that shares the same name. */
 function callSiteIndex(source, methodName) {
   const match = new RegExp(
-    `^[ \\t]*(?:return\\s+\\w+\\s+if\\s+)?${methodName.replace(/[!?]/g, '\\$&')}\\(`,
+    `^[ \\t]*(?:return\\s+\\w+\\s+if\\s+|unless\\s+)?${methodName.replace(/[!?]/g, '\\$&')}\\(`,
     'm'
   ).exec(source);
   return match ? match.index : -1;
@@ -166,6 +166,31 @@ function validateFastfileSubmitVersionGuard(fastfileSource, versionSlotSource) {
     if (waitIndex === -1 || waitIndex < cancelIndex) {
       failures.push(
         'asc_version_slot.rb: after cancel_submission the lane must wait via wait_for_editable_app_store_version'
+      );
+    }
+
+    // Cancelling drops the submission from the in-progress query while Apple
+    // is still winding it down (CANCELING) — and an editable version may
+    // already exist — so the lane must wait out the cancelled submission
+    // itself before trusting the editable version.
+    const settleIndex = callSiteIndex(
+      activeSlot,
+      'wait_for_settled_review_submission'
+    );
+    if (settleIndex === -1 || settleIndex < cancelIndex) {
+      failures.push(
+        'asc_version_slot.rb: after cancel_submission the lane must wait via wait_for_settled_review_submission before trusting the editable version'
+      );
+    }
+
+    const settleWaiter = extractIndentedBlock(
+      activeSlot,
+      /^\s*def\s+wait_for_settled_review_submission\b/,
+      'end'
+    );
+    if (!settleWaiter || !settleWaiter.includes('ReviewSubmission.get')) {
+      failures.push(
+        'asc_version_slot.rb: wait_for_settled_review_submission must re-fetch the cancelled submission by id, not the in-progress review submission'
       );
     }
 

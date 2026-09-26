@@ -87,6 +87,35 @@ def wait_for_editable_app_store_version(app, platform)
   nil
 end
 
+# States in which a previous submission still blocks a replacement submit.
+# CANCELING is deliberately included: cancel_submission returns while Apple is
+# still winding the review down, and the cancelled submission drops out of the
+# in-progress query at that point — so an already-present editable version
+# would otherwise let the lane deliver into a live wind-down.
+UNSETTLED_REVIEW_SUBMISSION_STATES = %w[
+  WAITING_FOR_REVIEW
+  IN_REVIEW
+  UNRESOLVED_ISSUES
+  CANCELING
+].freeze
+
+# Wait until the cancelled submission leaves every active state, re-fetching
+# it by id (the in-progress query cannot observe CANCELING). An unobservable
+# submission counts as still settling: the caller fails loudly on timeout
+# instead of submitting blind.
+def wait_for_settled_review_submission(submission_id)
+  EDITABLE_VERSION_POLL_ATTEMPTS.times do |attempt|
+    state = Spaceship::ConnectAPI::ReviewSubmission.get(
+      review_submission_id: submission_id
+    )&.state
+    return true if !state.nil? && !UNSETTLED_REVIEW_SUBMISSION_STATES.include?(state)
+
+    sleep(EDITABLE_VERSION_POLL_INTERVAL_SECONDS) unless attempt == EDITABLE_VERSION_POLL_ATTEMPTS - 1
+  end
+
+  false
+end
+
 # Returns true when an editable version is available (so set_changelog can
 # rename it into the version we are shipping) and false when submission must be
 # skipped this run. Skipping is deliberate: the IPA is already on TestFlight, so
@@ -138,6 +167,14 @@ def app_store_version_slot_ready?(app_version:, build_number:)
 
   submission.cancel_submission
   UI.message("Requested cancellation of the in-progress App Store review submission")
+
+  unless wait_for_settled_review_submission(submission.id)
+    UI.user_error!(
+      "Cancelled the previous App Review submission but it did not settle " \
+      "within #{EDITABLE_VERSION_POLL_ATTEMPTS * EDITABLE_VERSION_POLL_INTERVAL_SECONDS} " \
+      "seconds — finish the submission from App Store Connect."
+    )
+  end
 
   return true if wait_for_editable_app_store_version(app, platform)
 

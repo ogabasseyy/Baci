@@ -1,10 +1,17 @@
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { STOREFRONT_EDGE_INVENTORY_POLICY } from './storefront-edge-inventory-policy';
 import { STOREFRONT_EDGE_INVENTORY_ROUTING_INPUT_PATHS } from './storefront-edge-inventory-routing-input-paths';
 
 describe('storefront edge inventory routing input paths', () => {
+  it('references existing routing inputs after source moves or removals', () => {
+    const missingPaths = STOREFRONT_EDGE_INVENTORY_ROUTING_INPUT_PATHS.filter(
+      (path) => !existsSync(join(process.cwd(), '../..', path))
+    );
+    expect(missingPaths).toEqual([]);
+  });
+
   it('includes every runtime proxy module and excludes proxy tests', () => {
     const proxyDirectory = join(process.cwd(), 'src/lib/proxy');
     const runtimeProxyPaths = readdirSync(proxyDirectory)

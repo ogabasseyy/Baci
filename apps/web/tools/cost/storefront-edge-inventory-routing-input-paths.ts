@@ -49,7 +49,6 @@ export const STOREFRONT_EDGE_INVENTORY_ROUTING_INPUT_PATHS = [
   'apps/web/src/lib/proxy/storefront-preflight.ts',
   'apps/web/src/lib/proxy/subdomain-routing.ts',
   'apps/web/src/lib/proxy/terms-redirects.ts',
-  'apps/web/src/components/analytics/deferred-platform-insights.tsx',
   'apps/web/src/components/analytics/posthog-client-bootstrap.tsx',
   'apps/web/src/components/analytics/posthog-pageview-tracker.tsx',
   'apps/web/src/components/analytics/web-vitals-reporter.tsx',

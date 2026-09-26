@@ -37,6 +37,8 @@ describe('useCartHandoff', () => {
     await act(async () => { await result.current.handleAddToCart(product); });
     expect(result.current.cart).toHaveLength(1);
     expect(openExternal).toHaveBeenCalledWith({ href: 'https://ogabassey.com/cart?item_id=phone-1' });
+    act(() => { result.current.handleViewCart(); });
+    expect(openExternal).toHaveBeenLastCalledWith({ href: 'https://ogabassey.com/cart' });
     act(() => { result.current.handleRemoveItem(product.id); });
     expect(result.current.cart).toEqual([]);
     expect(window.openai?.setWidgetState).toHaveBeenLastCalledWith({ cart: [], cartUrl: undefined });
@@ -61,6 +63,22 @@ describe('useCartHandoff', () => {
     expect(result.current.cartError).toBeNull();
   });
 
+  it('does not replay an older persisted add URL when reviewing the cart', () => {
+    const openExternal = vi.fn();
+    window.openai = {
+      widgetState: {
+        cart: [{ product, quantity: 1 }],
+        cartUrl: 'https://ogabassey.com/cart?item_id=phone-1',
+      },
+      openExternal,
+    };
+    const { result } = renderHook(() => useCartHandoff());
+
+    act(() => { result.current.handleViewCart(); });
+
+    expect(openExternal).toHaveBeenCalledWith({ href: 'https://ogabassey.com/cart' });
+  });
+
   it('opens the validated cart in a browser tab when ChatGPT navigation is unavailable', async () => {
     const pendingTab = { location: { href: 'about:blank' }, close: vi.fn() } as unknown as Window;
     const open = vi.spyOn(window, 'open').mockReturnValueOnce(pendingTab).mockReturnValue(null);
@@ -72,7 +90,7 @@ describe('useCartHandoff', () => {
     expect(open).toHaveBeenCalledWith('about:blank', '_blank');
     expect(pendingTab.location.href).toBe('https://ogabassey.com/cart?item_id=phone-1');
     act(() => { result.current.handleViewCart(); });
-    expect(open).toHaveBeenCalledWith('https://ogabassey.com/cart?item_id=phone-1', '_blank');
+    expect(open).toHaveBeenCalledWith('https://ogabassey.com/cart', '_blank');
     open.mockRestore();
   });
 

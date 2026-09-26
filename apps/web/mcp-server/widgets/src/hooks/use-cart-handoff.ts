@@ -60,7 +60,7 @@ export function useCartHandoff() {
       setWidgetState((previous) => ({
         ...previous!,
         cart: [{ product, quantity: 1 }],
-        cartUrl,
+        cartUrl: 'https://ogabassey.com/cart',
       }));
       openOgabasseyUrl(cartUrl, pendingTab);
     } catch {
@@ -81,7 +81,7 @@ export function useCartHandoff() {
 
   const handleViewCart = () => {
     if (cart.length === 0 || !widgetState?.cartUrl) return;
-    openOgabasseyUrl(widgetState.cartUrl);
+    openOgabasseyUrl('https://ogabassey.com/cart');
   };
 
   return {

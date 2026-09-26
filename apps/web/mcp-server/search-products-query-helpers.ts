@@ -200,9 +200,13 @@ export function inferSmartphoneCategory(
   explicitCategory: string | undefined
 ): 'Smartphones' | undefined {
   if (!query || explicitCategory) return undefined;
-  const handset = /\b(?:iphones?|smartphones?|mobile phones?|phones?)\b(?=\s*(?:$|[?.!,]|\b(?:under|below|between|for|with|priced|costing|from|at|that|which|in|\d+(?:GB|TB)?)\b))/i;
-  const competingCategory = /\b(?:tablets?|ipads?|laptops?|computers?|cases?|covers?|accessories|chargers?|screen protectors?|repairs?|parts?|batteries|cables?|stands?|holders?|mounts?|tripods?|lens(?:es)?|grips?|docks?|adapters?)\b/i;
-  return handset.test(query) && !competingCategory.test(query)
-    ? 'Smartphones'
-    : undefined;
+  const handset = /\b(?:iphones?|smartphones?|mobile phones?|phones?)\b/i.exec(query);
+  if (!handset) return undefined;
+
+  let remainder = query.slice(handset.index + handset[0].length).trim().replace(/[?.!,]+$/, '').trim();
+  remainder = remainder.replace(/^\d{1,3}[a-z]?(?:\s+(?:pro|max|plus|mini|ultra)){0,2}(?=\s|$)/i, '').trim();
+  remainder = remainder.replace(/^\d+(?:GB|TB)(?=\s|$)/i, '').trim();
+  const priceOnly = /^(?:under|below|from|at)\s+[₦$]?\d[\d,.]*(?:\s*(?:ngn|naira))?$/i.test(remainder) ||
+    /^between\s+[₦$]?\d[\d,.]*\s+and\s+[₦$]?\d[\d,.]*$/i.test(remainder);
+  return !remainder || priceOnly ? 'Smartphones' : undefined;
 }

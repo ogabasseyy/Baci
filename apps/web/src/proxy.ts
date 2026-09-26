@@ -32,6 +32,7 @@ import {
   STOREFRONT_METADATA_CACHE_BUCKET_HEADER,
   STOREFRONT_METADATA_CACHE_BUCKET_QUERY_PARAM,
 } from '@/config/storefront-metadata-cache-bots';
+import { storefrontRouteSegments } from '@/config/storefront-route-segments';
 import { getInternalApiSecret } from '@/env';
 import type { BlogListingStatusIntent } from '@/lib/cached-storefront-blog-listing-status';
 import {
@@ -565,7 +566,7 @@ function shouldPartitionStorefrontMetadataCache(
       !slugSegment ||
       !isValidSubdomain(slugSegment) ||
       RESERVED_SUBDOMAINS.has(slugSegment) ||
-      RESERVED_STOREFRONT_SEGMENTS.has(slugSegment) ||
+      storefrontRouteSegments.RESERVED_STOREFRONT_SEGMENTS.has(slugSegment) ||
       PLATFORM_ROOT_ROUTE_SEGMENTS.has(slugSegment)
     ) {
       return false;
@@ -655,36 +656,6 @@ const CASE_PRESERVING_PREFIXES = [
   '/manifest.webmanifest',
 ];
 
-const RESERVED_STOREFRONT_SEGMENTS = new Set([
-  'about',
-  'account',
-  'api',
-  'blog',
-  'cart',
-  // Legacy category roots — `/category/{slug}` and `/product-category/{slug}`
-  // resolve to category pages (see storefront-link-normalization.ts), so they
-  // must NOT be collapsed to `/products/{slug}` when stripping a merchant slug
-  // prefix on custom domains.
-  'category',
-  'checkout',
-  'faq',
-  'llms-full.txt',
-  'llms.txt',
-  'pages',
-  'privacy-policy',
-  'product-category',
-  'products',
-  'repair',
-  'repairs',
-  'robots.txt',
-  'sitemap',
-  'swap',
-  'terms',
-  'track-order',
-  'wallet',
-  'wishlist',
-]);
-
 // Public single-segment storefront documents that are safe to edge-cache for
 // every tenant. Merchant-specific category roots belong in per-tenant sets.
 const CACHEABLE_PUBLIC_STOREFRONT_FIRST_SEGMENTS = new Set([
@@ -734,71 +705,6 @@ const CACHEABLE_PUBLIC_STOREFRONT_CATEGORY_SEGMENTS_BY_SLUG = new Map<
   ])
 );
 
-// First content segments that must NEVER be edge-cached as a public document.
-// = RESERVED_STOREFRONT_SEGMENTS plus the per-user/authenticated route groups
-// not already reserved: (customer) my-account/delete-account/receipts,
-// (commerce) order-success, (utility) member-status/imei-check/quiz/reviews.
-// Keep this in sync with the (customer)/(commerce)/(utility) route groups —
-// caching any of these would leak per-user content (orders, receipts, etc.).
-// The canonical PDP/category shape (`/<category>/<product>`) is intentionally
-// NOT in this set, so it remains cacheable.
-const NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS = new Set<string>([
-  ...RESERVED_STOREFRONT_SEGMENTS,
-  // Singular `/product/{slug}` is a legacy redirect-only / noindex route (not in
-  // RESERVED, which only has plural `products`) — keep it no-store.
-  'product',
-  'my-account',
-  'delete-account',
-  'receipts',
-  'order-success',
-  'member-status',
-  'imei-check',
-  'quiz',
-  'reviews',
-]);
-
-// Every FIRST URL segment that resolves to a real storefront route under
-// (storefront)/[slug]/... — verified exhaustively against that route tree
-// (blog/catalog/commerce/content/customer/utility groups + the top-level
-// `storefront` legacy segment). Superset of NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS.
-//
-// Used ONLY by the retired-slug PREFIX strip on custom domains: a merchant can
-// retire a slug that happens to equal a route name (e.g. a store once slugged
-// "blog"), which becomes an alias. On its custom domain, custom.example/blog/post
-// is a LIVE /blog route serving many URLs, so it must NOT be mistaken for a
-// legacy /<oldSlug>/... link and stripped to /post. A live route always wins
-// over redirects for a narrow set of ambiguous legacy links. Keep in sync with
-// the (storefront)/[slug] route groups.
-const STOREFRONT_ROUTE_FIRST_SEGMENTS = new Set<string>([
-  ...NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS,
-  'compare',
-  'search',
-  'contact',
-  'privacy',
-  'returns',
-  'shipping',
-  'warranty',
-  'terms-and-conditions',
-  'terms-of-service',
-  'storefront',
-]);
-
-// First URL segments that are PLATFORM/app routes reachable on a custom domain
-// but are NOT (storefront)/[slug] routes — so they don't belong in
-// STOREFRONT_ROUTE_FIRST_SEGMENTS (that set is kept in sync with the storefront
-// route tree and would prune these). Like the storefront set, these must be
-// excluded from the retired-slug PREFIX strip so a merchant whose retired slug
-// is literally "auth" or "feeds" doesn't break the live route:
-//   - 'auth'  -> the /auth/confirm magic-link pass-through (further down this branch)
-//   - 'feeds' -> the machine-readable feed pass-through (isPublicMachineReadablePath)
-// Tradeoff: an exotic genuine retired link custom.example/auth/<path> (old slug
-// was "auth") no longer 301-strips and falls through to the storefront 404 —
-// preserving the security-critical live /auth/confirm route is the right call.
-const CUSTOM_DOMAIN_APP_ROUTE_FIRST_SEGMENTS = new Set<string>([
-  'auth',
-  'feeds',
-]);
-
 // Query-param names that unambiguously carry the MERCHANT slug (merchantSlug:
 // shipping/quotes; merchant_slug: order tracking, order detail, feeds; merchant:
 // customer wallet). When a stale client on a just-retired subdomain calls such an
@@ -834,7 +740,7 @@ function isStorefrontHomeDocument(
     slugSegment !== undefined &&
     isValidSubdomain(slugSegment) &&
     !RESERVED_SUBDOMAINS.has(slugSegment) &&
-    !RESERVED_STOREFRONT_SEGMENTS.has(slugSegment) &&
+    !storefrontRouteSegments.RESERVED_STOREFRONT_SEGMENTS.has(slugSegment) &&
     !PLATFORM_ROOT_ROUTE_SEGMENTS.has(slugSegment)
   );
 }
@@ -972,7 +878,9 @@ function isStorefrontPdpDocument(
 
   return (
     firstSegment !== undefined &&
-    !NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS.has(firstSegment)
+    !storefrontRouteSegments.NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS.has(
+      firstSegment
+    )
   );
 }
 
@@ -1043,7 +951,9 @@ function isCacheablePublicStorefrontDocument(
   const firstSegment = contentSegments[0]?.toLowerCase();
   if (
     firstSegment !== undefined &&
-    NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS.has(firstSegment)
+    storefrontRouteSegments.NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS.has(
+      firstSegment
+    )
   ) {
     return (
       isPublicReservedStorefrontDocument(pathname, hostname, contentSegments) ||
@@ -1095,7 +1005,9 @@ function shouldSetStorefrontDocumentCacheControl(
   return (
     contentSegments.length === 1 ||
     (firstSegment !== undefined &&
-      NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS.has(firstSegment))
+      storefrontRouteSegments.NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS.has(
+        firstSegment
+      ))
   );
 }
 
@@ -1347,8 +1259,8 @@ function matchAliasApiPrefixShape(
   const prefix = first.toLowerCase();
   if (
     !isValidSubdomain(prefix) ||
-    STOREFRONT_ROUTE_FIRST_SEGMENTS.has(prefix) ||
-    CUSTOM_DOMAIN_APP_ROUTE_FIRST_SEGMENTS.has(prefix)
+    storefrontRouteSegments.STOREFRONT_ROUTE_FIRST_SEGMENTS.has(prefix) ||
+    storefrontRouteSegments.CUSTOM_DOMAIN_APP_ROUTE_FIRST_SEGMENTS.has(prefix)
   ) {
     return null;
   }
@@ -1995,7 +1907,7 @@ function resolveUnsafeStorefrontPdpPath(
   if (
     !hasUnsafeStorefrontPdpSegments(
       contentSegments,
-      NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS
+      storefrontRouteSegments.NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS
     )
   ) {
     return null;
@@ -2056,7 +1968,7 @@ async function resolveStorefrontPdpHardNotFound(
   // otherwise an encoded-but-real slug looks absent and gets falsely 404ed.
   const firstSegmentGate = getStorefrontPdpFirstSegmentGate(
     contentSegments,
-    NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS
+    storefrontRouteSegments.NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS
   );
   const { firstSegment, isNonPdpFirstSegment, isProductsFallbackPdp } =
     firstSegmentGate;
@@ -2076,7 +1988,9 @@ async function resolveStorefrontPdpHardNotFound(
   }
   if (
     !productSlug ||
-    RESERVED_STOREFRONT_SEGMENTS.has(productSlug.toLowerCase())
+    storefrontRouteSegments.RESERVED_STOREFRONT_SEGMENTS.has(
+      productSlug.toLowerCase()
+    )
   ) {
     return null;
   }
@@ -2208,13 +2122,18 @@ async function resolveStorefrontPdpCanonicalRedirect(
 
   if (
     !isProductsFallbackPdp &&
-    (!firstSegment || NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS.has(firstSegment))
+    (!firstSegment ||
+      storefrontRouteSegments.NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS.has(
+        firstSegment
+      ))
   ) {
     return { response: null, skipHardNotFound: false };
   }
   if (
     !productSlug ||
-    RESERVED_STOREFRONT_SEGMENTS.has(productSlug.toLowerCase())
+    storefrontRouteSegments.RESERVED_STOREFRONT_SEGMENTS.has(
+      productSlug.toLowerCase()
+    )
   ) {
     return { response: null, skipHardNotFound: false };
   }
@@ -2357,7 +2276,7 @@ const resolveStorefrontComparePageHardStatus =
     getRouteType,
     getStorefrontContentSegments,
     nonCacheableStorefrontFirstSegments:
-      NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS,
+      storefrontRouteSegments.NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS,
     buildHardStatusStorefrontResponse,
   });
 
@@ -3420,8 +3339,10 @@ export async function proxy(request: NextRequest) {
           // SAME limitation the pre-existing current-slug canonicalization below
           // (~/<currentSlug>/<cat>/<prod>) already has — a per-request category
           // membership DB lookup on every custom-domain path isn't worth it.
-          !STOREFRONT_ROUTE_FIRST_SEGMENTS.has(firstSegment) &&
-          !CUSTOM_DOMAIN_APP_ROUTE_FIRST_SEGMENTS.has(firstSegment)
+          storefrontRouteSegments.shouldStripRetiredSlugPrefix(
+            firstSegment,
+            domainPathSegments.length
+          )
         ) {
           const aliasCurrentSlug = await getCurrentSlugForAlias(firstSegment);
           if (
@@ -3532,7 +3453,9 @@ export async function proxy(request: NextRequest) {
           normalizedTermsAliasPathname === strippedPathname &&
           strippedSegments.length === 2 &&
           !!firstStrippedSegment &&
-          !RESERVED_STOREFRONT_SEGMENTS.has(firstStrippedSegment);
+          !storefrontRouteSegments.RESERVED_STOREFRONT_SEGMENTS.has(
+            firstStrippedSegment
+          );
 
         const normalizedPathname =
           normalizedTermsAliasPathname !== strippedPathname
@@ -3610,8 +3533,12 @@ export async function proxy(request: NextRequest) {
           // prefix strip): the backfill records a grandfathered infra slug (e.g.
           // `support`, `cdn`) as this merchant's alias, so store.example/support/api/…
           // must still rewrite. The merchant-scoped alias check below gates it.
-          !STOREFRONT_ROUTE_FIRST_SEGMENTS.has(aliasPrefix) &&
-          !CUSTOM_DOMAIN_APP_ROUTE_FIRST_SEGMENTS.has(aliasPrefix)
+          !storefrontRouteSegments.STOREFRONT_ROUTE_FIRST_SEGMENTS.has(
+            aliasPrefix
+          ) &&
+          !storefrontRouteSegments.CUSTOM_DOMAIN_APP_ROUTE_FIRST_SEGMENTS.has(
+            aliasPrefix
+          )
         ) {
           const aliasCurrentSlug = await getCurrentSlugForAlias(aliasPrefix);
           if (

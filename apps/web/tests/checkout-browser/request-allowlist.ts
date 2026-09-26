@@ -13,6 +13,7 @@ export function isFixtureAssetRequest(request: FixtureRequest): boolean {
     '/cart',
     '/checkout',
     '/payment-handoff',
+    '/unlock-orders',
   ].includes(url.pathname);
   if (isPage)
     return (

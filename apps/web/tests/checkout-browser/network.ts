@@ -27,6 +27,26 @@ export const test = base.extend<{
           '/api/cart/validate': { invalidProductIds: [], priceChanges: [] },
           '/api/csrf': { token: 'fixture-csrf-token' },
           '/api/storefront/auth/session': { authenticated: false },
+          '/api/storefront/imei-remediation/orders': {
+            orders: [
+              {
+                amountNgn: 100_000,
+                amountUsdt: null,
+                carrier: 'AT&T',
+                completedAt: null,
+                createdAt: '2026-07-11T12:00:00.000Z',
+                customerMessage: 'The carrier is processing your request.',
+                deviceModel: 'iPhone 17 Pro Max',
+                id: 'unlock-order-fixture',
+                paymentCurrency: 'NGN',
+                refundPolicy: 'refundable',
+                status: 'in_progress',
+                successRate: 82,
+                turnaround: '1-7 Days',
+                updatedAt: '2026-07-11T12:03:00.000Z',
+              },
+            ],
+          },
           '/api/payments/redvault/availability': {
             enabled: false,
             available: false,

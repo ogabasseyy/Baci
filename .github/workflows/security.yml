@@ -228,7 +228,12 @@ jobs:
           # Allow packages with compound/dual licenses or approved source-available tooling.
           # Sentry CLI uses FSL-1.1-MIT and is required by the official React Native SDK
           # for native symbol and source-map uploads; keep the exception package-scoped.
+          # nkf (Ruby/BSD-2-Clause, fastlane dep) and rdoc (dual Ruby/GPL-2.0,
+          # fastlane->irb dep, build tooling only) are flagged only because of
+          # scancode compound-expression artifacts; Ruby terms apply to both.
           allow-dependencies-licenses: >-
+            pkg:gem/nkf,
+            pkg:gem/rdoc,
             pkg:npm/big-integer,
             pkg:npm/protobufjs,
             pkg:npm/unicode-match-property-value-ecmascript,

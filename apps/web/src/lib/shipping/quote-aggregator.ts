@@ -93,7 +93,9 @@ export class QuoteAggregator {
         providers.length,
         failedProviderCount
       );
-      console.warn(diagnostics.message, diagnostics.context);
+      // Literal format string: diagnostics.message must never be interpreted
+      // as a format pattern (CWE-134, semgrep unsafe-formatstring).
+      console.warn('%s', diagnostics.message, diagnostics.context);
       return createFallbackQuoteResponse(request.sessionId, warnings);
     }
 

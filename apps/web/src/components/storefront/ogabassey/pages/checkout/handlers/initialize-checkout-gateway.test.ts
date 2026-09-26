@@ -56,4 +56,15 @@ describe('initializeCheckoutGateway', () => {
       initializeCheckoutGateway({ ...options, request })
     ).rejects.toThrow('Payment initialization failed');
   });
+  it.each([
+    '<html>upstream error</html>',
+    'null',
+    '',
+  ])('uses a safe error for an unreadable successful payment response: %s', async (body) => {
+    const request = vi.fn(async () => new Response(body, { status: 200 }));
+    await expect(
+      initializeCheckoutGateway({ ...options, request })
+    ).rejects.toThrow('Payment initialization failed');
+    expect(request).toHaveBeenCalledTimes(1);
+  });
 });

@@ -159,8 +159,10 @@ export async function submitCheckoutOrder({
     throw new Error(getOrderErrorMessage(errorData));
   }
 
-  const result = (await response.json()) as CheckoutOrderResponse;
-  if (!result.order?.id) {
+  const result = (await response
+    .json()
+    .catch(() => null)) as CheckoutOrderResponse | null;
+  if (!result?.order?.id) {
     throw new Error('Order creation failed');
   }
 

@@ -76,5 +76,9 @@ export async function initializeCheckoutGateway({
     throw new Error(message);
   }
 
-  return (await response.json()) as InitializedCheckoutGatewayPayment;
+  const result: unknown = await response.json().catch(() => null);
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    throw new Error('Payment initialization failed');
+  }
+  return result as InitializedCheckoutGatewayPayment;
 }

@@ -218,4 +218,28 @@ describe('submitCheckoutOrder', () => {
       })
     );
   });
+  it.each([
+    '<html>upstream error</html>',
+    'null',
+    '',
+  ])('uses a safe error for an unreadable successful order response: %s', async (body) => {
+    const onPendingOrderInvalidated = vi.fn(async () => undefined);
+    const request = vi.fn(async () => new Response(body, { status: 200 }));
+    await expect(
+      submitCheckoutOrder({
+        resolvedPendingOrder: { reusableOrder: null, clearStoredOrder: false },
+        getIdempotencyKey: async () => 'retained-key',
+        orderRequest: orderRequest(),
+        paymentMethod: 'paystack',
+        total: 5000,
+        onVoucherRejected: vi.fn(),
+        onPendingOrderInvalidated,
+        onShippingRateRejected: vi.fn(),
+        getOrderErrorMessage: () => 'Try again',
+        request,
+      })
+    ).rejects.toThrow('Order creation failed');
+    expect(onPendingOrderInvalidated).not.toHaveBeenCalled();
+    expect(request).toHaveBeenCalledTimes(1);
+  });
 });

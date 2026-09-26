@@ -92,7 +92,7 @@ BEGIN
     v_merchant_id,
     v_product_id,
     'GUARD-SKU-2',
-    'shop-guard',
+    'shop-guard-2',
     2000,
     NULL
   );

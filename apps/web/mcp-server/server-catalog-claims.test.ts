@@ -16,7 +16,7 @@ describe('MCP catalog claims', () => {
         products: expect.arrayContaining([
           expect.objectContaining({
             id: 'transformed-image-product',
-            image: 'https://mcp.ogabassey.com/images/core-assets/products/phone.avif',
+            image: 'https://mcp.ogabassey.com/images/core-assets/products/phone.avif?v=2',
           }),
         ]),
       });
@@ -35,7 +35,7 @@ describe('MCP catalog claims', () => {
       expect(result.structuredContent).toMatchObject({ products: expect.arrayContaining([
         expect.objectContaining({
           id: 'transformed-image-product',
-          image: 'https://mcp.example.test/images/core-assets/products/phone.avif',
+          image: 'https://mcp.example.test/images/core-assets/products/phone.avif?v=2',
         }),
       ]) });
       expect(JSON.stringify(result)).not.toContain('mcp.example.test//images');

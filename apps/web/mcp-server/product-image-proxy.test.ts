@@ -38,6 +38,20 @@ describe('serveProductImage', () => {
     expect(end).toHaveBeenCalledWith(Buffer.from('image bytes'));
   });
 
+  it('forwards a version query to the fixed CDN transform', async () => {
+    const { response } = createResponse();
+    const fetchImage = vi.fn(async () => new Response('image bytes', {
+      headers: { 'content-type': 'image/webp' },
+    })) as unknown as typeof fetch;
+
+    await serveProductImage('/images/core-assets/products/phone.webp', response, fetchImage, '?v=2');
+
+    expect(fetchImage).toHaveBeenCalledWith(
+      'https://cdn.ogabassey.com/image/width=640,quality=70,format=webp/core-assets/products/phone.webp?v=2',
+      expect.objectContaining({ redirect: 'error' })
+    );
+  });
+
   it('rejects paths outside the product prefix and encoded path separators', async () => {
     const fetchImage = vi.fn() as unknown as typeof fetch;
     for (const pathname of [

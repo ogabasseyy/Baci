@@ -50,6 +50,7 @@ import { resolveMcpSearchProductCondition } from './product-condition-filter';
 import { loadMcpSearchProducts } from './search-products-query';
 import { getMcpOfferAvailability, getMcpProductStockSummary } from './product-stock-summary';
 import { serveProductImage } from './product-image-proxy';
+import { hydrateSearchProductAvailability } from './search-product-availability';
 import { checkProductImageRateLimit } from './product-image-rate-limit';
 import { selectRecommendedProducts } from './recommendation-products';
 
@@ -87,12 +88,7 @@ type ConfiguredAgenticCheckoutClientConfig = AgenticCheckoutClientConfig & {
   signingKey: string;
 };
 
-interface McpProductVariantRow {
-  attributes: Record<string, unknown> | null;
-  price_override?: number | null;
-  product_id: string;
-  stock_quantity?: number | null;
-}
+
 
 function getAgenticCredential(primaryName: string, legacyName: string) {
   const primary = process.env[primaryName]?.trim();
@@ -441,7 +437,7 @@ function getSafeCatalogImageUrl(
     parsed.pathname = parsed.pathname.replace('/products/', '/core-assets/products/');
   }
   if (!parsed.pathname.startsWith('/core-assets/products/')) return undefined;
-  return `${MCP_PUBLIC_ORIGIN}/images${parsed.pathname}`;
+  return `${MCP_PUBLIC_ORIGIN}/images${parsed.pathname}${parsed.search}`;
 }
 
 // =============================================================================
@@ -1297,63 +1293,12 @@ function createOgabasseyServer() {
           };
         }
 
-        // 2. Normalization: Fetch Variants for valid products
-        const productIds = products
-          .filter((p) => p.has_variants)
-          .map((p) => p.id);
-        const variantsMap = new Map<string, McpProductVariantRow[]>();
-        let variantLookupSucceeded = productIds.length === 0;
-
-        if (productIds.length > 0) {
-          const { data: variants, error: variantsError } = await supabase
-            .rpc('get_storefront_product_variants', { p_product_ids: productIds });
-
-          if (variantsError) {
-            console.error(
-              'Failed to fetch product variants for search:',
-              variantsError
-            );
-          } else {
-            variantLookupSucceeded = true;
-            (variants as McpProductVariantRow[] | null)?.forEach((variant) => {
-              const current = variantsMap.get(variant.product_id);
-              if (current) {
-                current.push(variant);
-              } else {
-                variantsMap.set(variant.product_id, [variant]);
-              }
-            });
-          }
-        }
-
-        const offersMap = new Map<string, Array<{ stock_quantity: number | null }>>();
-        await Promise.all(products.filter((product) => product.has_condition_offers).map(async (product) => {
-          const { data, error } = await supabase.rpc('get_product_offers', { p_product_id: product.id });
-          if (error) {
-            console.error('Failed to fetch product offers for search:', error);
-            return;
-          }
-          offersMap.set(product.id, data ?? []);
-        }));
-
-        // 3. Buyer Intelligence & Formatting
-        const formatted = products.map((p) => {
-          const stockSummary = getMcpProductStockSummary(
-            p,
-            p.has_variants && variantLookupSucceeded ? (variantsMap.get(p.id) ?? []) : undefined,
-            p.has_condition_offers ? offersMap.get(p.id) : undefined
-          );
-
+        const hydratedProducts = await hydrateSearchProductAvailability(products, supabase);
+        const formatted = hydratedProducts.map(({ product: p, stockSummary, availableVariants: variants }) => {
           // A compare-at price indicates a listed discount, not a price trend.
-          const isDiscounted =
-            p.compare_at_price && p.compare_at_price > p.price;
+          const isDiscounted = p.compare_at_price && p.compare_at_price > p.price;
 
           // Variant Summary (e.g., "Available in: Black, White")
-          const variants = (variantsMap.get(p.id) || []).filter(
-            (variant) =>
-              p.manage_stock !== true ||
-              Number(variant.stock_quantity ?? 0) > 0
-          );
           const variantOptions: Record<string, Set<string>> = {};
           variants.forEach((v) => {
             Object.entries(v.attributes || {}).forEach(([key, val]) => {
@@ -2997,7 +2942,7 @@ const httpServer = createServer(
         res.writeHead(429, { 'Retry-After': imageLimit.retryAfterSeconds }).end('Too Many Requests');
         return;
       }
-      await serveProductImage(url.pathname, res);
+      await serveProductImage(url.pathname, res, undefined, url.search);
       return;
     }
 

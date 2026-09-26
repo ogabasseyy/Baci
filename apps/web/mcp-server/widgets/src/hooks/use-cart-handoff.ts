@@ -32,7 +32,7 @@ export function useCartHandoff() {
       });
       if (requestId !== handoffRequestId.current) return;
 
-      const variantSelectionUrl = getVariantSelectionUrl(result, product.id, product.slug);
+      const variantSelectionUrl = getVariantSelectionUrl(result, product.id, product.slug || product.id);
       if (variantSelectionUrl) {
         setWidgetState((previous) => ({ ...previous!, cart: [], cartUrl: undefined }));
         openOgabasseyUrl(variantSelectionUrl);

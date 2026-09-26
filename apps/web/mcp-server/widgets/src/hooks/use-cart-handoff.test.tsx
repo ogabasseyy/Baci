@@ -42,6 +42,25 @@ describe('useCartHandoff', () => {
     expect(window.openai?.setWidgetState).toHaveBeenLastCalledWith({ cart: [], cartUrl: undefined });
   });
 
+  it('opens a slugless option product by ID for variant selection', async () => {
+    const openExternal = vi.fn();
+    window.openai = {
+      openExternal,
+      callTool: vi.fn().mockResolvedValue({ structuredContent: {
+        success: false,
+        requires_variant_selection: true,
+        product_id: 'phone-1',
+        product_url: 'https://ogabassey.com/products/phone-1',
+      } }),
+    };
+    const { result } = renderHook(() => useCartHandoff());
+
+    await act(async () => { await result.current.handleAddToCart({ ...product, slug: null }); });
+
+    expect(openExternal).toHaveBeenCalledWith({ href: 'https://ogabassey.com/products/phone-1' });
+    expect(result.current.cartError).toBeNull();
+  });
+
   it('opens the validated cart in a browser tab when ChatGPT navigation is unavailable', async () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     window.openai = { callTool: vi.fn().mockResolvedValue({ structuredContent: {

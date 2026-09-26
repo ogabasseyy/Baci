@@ -72,7 +72,8 @@ async function readBoundedImage(response: Response): Promise<Buffer | null> {
 export async function serveProductImage(
   pathname: string,
   response: ServerResponse,
-  fetchImage: typeof fetch = fetch
+  fetchImage: typeof fetch = fetch,
+  search = ''
 ): Promise<void> {
   if (
     !pathname.startsWith(PRODUCT_IMAGE_PREFIX) ||
@@ -93,7 +94,7 @@ export async function serveProductImage(
     if (response.destroyed) return;
     const assetPath = pathname.slice('/images'.length);
     const upstream = await fetchImage(
-      `${CDN_ORIGIN}/image/width=640,quality=70,format=webp${assetPath}`,
+      `${CDN_ORIGIN}/image/width=640,quality=70,format=webp${assetPath}${search}`,
       { redirect: 'error', signal: AbortSignal.timeout(8000) }
     );
     const contentType = upstream.headers.get('content-type') || '';

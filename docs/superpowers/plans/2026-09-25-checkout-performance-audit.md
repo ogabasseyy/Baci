@@ -2,11 +2,11 @@
 
 ## Scope and verdict
 
-Continue the existing PR #3499 through its review loop. The review agent owns
-review findings, CI fixes and final commit/head verification; the parent owns
-this audit, the unused city lookup and the totals request races. Do not open additional draft PRs
-for these findings. Merge, deployment and production verification remain
-separate actions.
+PR #3499 completed its review loop and was merged on 25 September 2026.
+Submission/recovery work continues in one
+[payment orchestration follow-up](2026-09-25-checkout-payment-orchestration.md).
+The production deployment failed before building, in the shipping-policy
+migration. Merge, deployment and production verification remain separate actions.
 
 The checkout uses current React/Next capabilities, but its overall implementation
 cannot yet be described as fully modernized. The browser regression gate is a

@@ -1,14 +1,24 @@
 import { test as base, expect } from '@playwright/test';
 import { isFixtureAssetRequest } from './request-allowlist';
 
-export const test = base.extend<{ networkGuard: undefined }>({
+export const test = base.extend<{
+  networkGuard: undefined;
+  allowedConsoleErrors: string[];
+}>({
+  // Each entry permits at most one exact console message. This is only for
+  // deliberately injected failures; unhandled page errors are never allowed.
+  allowedConsoleErrors: [[], { option: true }],
   networkGuard: [
-    async ({ context, page }, use) => {
+    async ({ context, page, allowedConsoleErrors }, use) => {
       const unexpected: string[] = [];
       const errors: string[] = [];
+      const remainingAllowedErrors = [...allowedConsoleErrors];
       page.on('pageerror', (error) => errors.push(error.message));
       page.on('console', (message) => {
-        if (message.type() === 'error') errors.push(message.text());
+        if (message.type() !== 'error') return;
+        const expectedIndex = remainingAllowedErrors.indexOf(message.text());
+        if (expectedIndex >= 0) remainingAllowedErrors.splice(expectedIndex, 1);
+        else errors.push(message.text());
       });
       await context.route('**/*', (route) => {
         const request = route.request();

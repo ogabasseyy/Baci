@@ -90,12 +90,16 @@ export async function serveProductImage(
     return;
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8_000);
+  const disconnect = () => controller.abort();
+  response.once('close', disconnect);
   try {
     if (response.destroyed) return;
     const assetPath = pathname.slice('/images'.length);
     const upstream = await fetchImage(
       `${CDN_ORIGIN}/image/width=640,quality=70,format=webp${assetPath}${search}`,
-      { redirect: 'error', signal: AbortSignal.timeout(8000) }
+      { redirect: 'error', signal: controller.signal }
     );
     const contentType = upstream.headers.get('content-type') || '';
     const contentLength = Number(upstream.headers.get('content-length'));
@@ -114,6 +118,7 @@ export async function serveProductImage(
       response.writeHead(502).end('Image too large');
       return;
     }
+    if (response.destroyed) return;
     response.writeHead(200, {
       'Access-Control-Allow-Origin': '*',
       'Cache-Control': 'public, max-age=3600',
@@ -121,8 +126,10 @@ export async function serveProductImage(
     });
     response.end(image);
   } catch {
-    response.writeHead(502).end('Image unavailable');
+    if (!response.destroyed) response.writeHead(502).end('Image unavailable');
   } finally {
+    clearTimeout(timeout);
+    response.off('close', disconnect);
     releaseImageSlot();
   }
 }

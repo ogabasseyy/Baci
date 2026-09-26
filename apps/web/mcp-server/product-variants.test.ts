@@ -8,7 +8,7 @@ function createSupabase() {
     eq: vi.fn(),
     limit: vi.fn(),
     single: vi.fn(async () => ({
-      data: { id: 'phone-1', name: 'Phone', manage_stock: true, has_condition_offers: false },
+      data: { id: 'phone-1', name: 'Phone', manage_stock: true, has_variants: true, has_condition_offers: false },
       error: null,
     })),
   };
@@ -70,7 +70,7 @@ describe('loadMcpProductVariants', () => {
   it('preserves the unavailable response when a declared offer lookup fails', async () => {
     const supabase = createSupabase();
     supabase.query.single.mockResolvedValue({
-      data: { id: 'phone-1', name: 'Phone', manage_stock: true, has_condition_offers: true },
+      data: { id: 'phone-1', name: 'Phone', manage_stock: true, has_variants: false, has_condition_offers: true },
       error: null,
     });
     supabase.rpc.mockImplementation(async (name: string) =>
@@ -87,6 +87,7 @@ describe('loadMcpProductVariants', () => {
       });
       expect(result.content[0].text).toBe('Product offers are temporarily unavailable.');
       expect(result.structuredContent).toBeUndefined();
+      expect(supabase.rpc).not.toHaveBeenCalledWith('get_storefront_product_variants', expect.anything());
     } finally {
       log.mockRestore();
     }

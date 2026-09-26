@@ -66,14 +66,21 @@ export async function loadMcpProductVariants({
     };
   }
 
-  // Fetch variants
-  const { data: variants, error: variantsError } = await supabase.rpc(
-    'get_storefront_product_variants',
-    { p_product_ids: [product.id] }
-  );
-  if (variantsError) {
-    console.error('Failed to fetch public product variants:', variantsError);
-    return { content: [{ type: 'text', text: 'Product variants are temporarily unavailable.' }] };
+  let variants: Array<{
+    attributes: Record<string, string> | null;
+    price_override: number | null;
+    stock_quantity: number;
+  }> = [];
+  if (product.has_variants) {
+    const { data, error } = await supabase.rpc(
+      'get_storefront_product_variants',
+      { p_product_ids: [product.id] }
+    );
+    if (error) {
+      console.error('Failed to fetch public product variants:', error);
+      return { content: [{ type: 'text', text: 'Product variants are temporarily unavailable.' }] };
+    }
+    variants = data || [];
   }
 
   let offers: Array<{

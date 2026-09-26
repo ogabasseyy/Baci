@@ -101,7 +101,7 @@ describe('MCP catalog claims', () => {
           method: 'tools/call',
           params: {
             name: 'get_product_variants',
-            arguments: { product_id: 'available-product' },
+            arguments: { product_id: 'untracked-variant-product' },
           },
         })
       );

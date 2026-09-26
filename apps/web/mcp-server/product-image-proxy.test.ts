@@ -178,6 +178,34 @@ describe('serveProductImage', () => {
     expect(fetchImage).toHaveBeenCalledTimes(4);
   });
 
+  it('aborts an active CDN request and frees its slot when the client disconnects', async () => {
+    const pending: Array<(response: Response) => void> = [];
+    const fetchImage = vi.fn((_url: string, options?: RequestInit) =>
+      new Promise<Response>((resolve, reject) => {
+        pending.push(resolve);
+        options?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+      })
+    ) as unknown as typeof fetch;
+    const active = Array.from({ length: 4 }, createResponse);
+    const activeRequests = active.map(({ response }) =>
+      serveProductImage('/images/core-assets/products/phone.webp', response, fetchImage)
+    );
+    await vi.waitFor(() => expect(fetchImage).toHaveBeenCalledTimes(4));
+    const waiting = createResponse();
+    const waitingRequest = serveProductImage('/images/core-assets/products/phone.webp', waiting.response, fetchImage);
+
+    active[0].close();
+    await activeRequests[0];
+    await vi.waitFor(() => expect(fetchImage).toHaveBeenCalledTimes(5));
+    expect(active[0].writeHead).not.toHaveBeenCalled();
+
+    for (const resolve of pending.slice(1)) {
+      resolve(new Response('image bytes', { headers: { 'content-type': 'image/webp' } }));
+    }
+    await Promise.all([...activeRequests.slice(1), waitingRequest]);
+    expect(waiting.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
+  });
+
   it('times out a queued request without consuming a later slot', async () => {
     const pending: Array<(response: Response) => void> = [];
     const fetchImage = vi.fn(() => new Promise<Response>((resolve) => pending.push(resolve))) as unknown as typeof fetch;

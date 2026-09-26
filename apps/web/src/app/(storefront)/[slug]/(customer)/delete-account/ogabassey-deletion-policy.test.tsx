@@ -19,6 +19,10 @@ describe('Ogabassey deletion policy', () => {
       <OgabasseyDeletionPolicy privacyHref={'/ogabassey/privacy' as Route} />
     );
 
+    expect(screen.getByText(/six calendar months/).closest('div')).toHaveClass(
+      'bg-card',
+      'text-card-foreground'
+    );
     expect(
       screen.getByText(/six calendar months after its purpose ends/i)
     ).toBeInTheDocument();

@@ -7,7 +7,7 @@ export function OgabasseyDeletionPolicy({
   privacyHref: Route;
 }) {
   return (
-    <div className="bg-gray-50 rounded-lg p-6 space-y-4 text-gray-600">
+    <div className="rounded-lg bg-card p-6 space-y-4 text-card-foreground">
       <p>
         After a verified request, we remove account profile details, saved
         addresses, wishlist items, and cart contents when they are no longer

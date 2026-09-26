@@ -200,9 +200,9 @@ describe('CartPageWrapper', () => {
   });
 
 
-  it('uses positive legacy stock for a managed handoff and the cart provider', async () => {
+  it('rejects managed legacy stock when checkout stock_quantity is zero', async () => {
     vi.mocked(useSearchParams).mockReturnValue(
-      new URLSearchParams('item_id=55555555-5555-4555-8555-555555555555&qty=3') as ReturnType<typeof useSearchParams>
+      new URLSearchParams('item_id=55555555-5555-4555-8555-555555555555&qty=1') as ReturnType<typeof useSearchParams>
     );
     const addToCart = mockUseCart();
     setupProductsQuery({ data: [{
@@ -210,9 +210,29 @@ describe('CartPageWrapper', () => {
       status: 'active', images: [], manage_stock: true, stock_quantity: 0, stock: 3,
     }], error: null });
     render(<CartPageWrapper merchantId="merchant-1" />);
-    await waitFor(() => expect(addToCart).toHaveBeenCalledWith(
-      expect.objectContaining({ stock: 3 }), 3, undefined
+    await waitFor(() => expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Not enough stock', variant: 'destructive' })
     ));
+    expect(addToCart).not.toHaveBeenCalled();
   });
+
+  it.each(['has_variants', 'has_condition_offers'])(
+    'rejects direct Google Shopping handoff for %s products', async (optionFlag) => {
+      vi.mocked(useSearchParams).mockReturnValue(
+        new URLSearchParams('item_id=55555555-5555-4555-8555-555555555555&qty=1') as ReturnType<typeof useSearchParams>
+      );
+      const addToCart = mockUseCart({ cart: [{ id: '55555555-5555-4555-8555-555555555555', variantId: 'variant-1', quantity: 1 }] });
+      setupProductsQuery({ data: [{
+        id: '55555555-5555-4555-8555-555555555555', name: 'Option Phone',
+        status: 'active', images: [], manage_stock: true, stock_quantity: 3,
+        [optionFlag]: true,
+      }], error: null });
+      render(<CartPageWrapper merchantId="merchant-1" />);
+      await waitFor(() => expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Choose product options', variant: 'destructive' })
+      ));
+      expect(addToCart).not.toHaveBeenCalled();
+    }
+  );
 
 });

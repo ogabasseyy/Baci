@@ -1,10 +1,12 @@
 import type { Metadata, Route } from 'next';
+import { headers } from 'next/headers';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { type ComponentType, Suspense } from 'react';
 import { JsonLd } from '@/components/seo/json-ld';
 import { getMerchantByIdentifier } from '@/lib/cached-data';
 import { toTemplateMerchantData } from '@/lib/merchant-template-data';
+import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
 import { getTemplate, type TemplatePageProps } from '@/templates/registry';
 import { OgabasseyDeletionPolicy } from './ogabassey-deletion-policy';
 
@@ -93,10 +95,7 @@ export async function DeleteAccountContent({ params }: PageProps) {
     notFound();
   }
   const isOgabassey = merchant.slug === 'ogabassey';
-  const privacyHref =
-    process.env.NODE_ENV === 'development'
-      ? `/${merchant.slug}/privacy`
-      : '/privacy';
+  const privacyHref = `${getStorefrontPathPrefix(await headers(), merchant)}/privacy`;
 
   // Resolve template component server-side for SEO (H1 in SSR HTML)
   const templateId = merchant.template_id;

@@ -9,7 +9,6 @@ import {
   getPrimaryProductImage,
   PRODUCT_IMAGE_PLACEHOLDER_URL,
 } from '@/lib/product-image';
-import { getEffectiveProductStock } from '@/lib/product-stock';
 import { createClient } from '@/lib/supabase/client';
 import { CartPage } from './cart-page';
 
@@ -71,7 +70,7 @@ async function fetchAndAddCartItems({
     const { data: products, error } = await supabase
       .from('products')
       .select(
-        'id, name, description, status, price, manage_stock, stock, stock_quantity, brand, gtin, mpn, merchant_id, images, imageHint:image_hint'
+        'id, name, description, status, price, manage_stock, stock, stock_quantity, has_variants, has_condition_offers, brand, gtin, mpn, merchant_id, images, imageHint:image_hint'
       )
       .eq('merchant_id', merchantId)
       .in('id', ids)
@@ -120,7 +119,16 @@ async function fetchAndAddCartItems({
       const alreadyClaimedPrize = hasQuizPrizeVoucher &&
         cart.some(item => item.quizAwardId === quizAwardId);
       if (!alreadyClaimedPrize) {
-        const effectiveStock = getEffectiveProductStock(product);
+        if (!hasQuizPrizeVoucher && (product.has_variants || product.has_condition_offers)) {
+          rejectedIds.push(product.id);
+          toast({
+            title: 'Choose product options',
+            description: `Choose the variant or condition for ${product.name} on its product page before adding it to your cart.`,
+            variant: 'destructive',
+          });
+          continue;
+        }
+        const effectiveStock = Number(product.stock_quantity ?? 0);
         const productForCart = {
           ...product,
           image: resolvedImage,

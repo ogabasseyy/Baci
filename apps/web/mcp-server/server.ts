@@ -27,7 +27,6 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import 'dotenv/config';
-import { getEffectiveProductStock } from '../src/lib/product-stock';
 import { normalizeOgabasseyCdnImageUrl } from '../src/lib/ogabassey-cdn-image-url';
 import {
   AGENTIC_CHECKOUT_AGENT_ID,
@@ -1493,7 +1492,7 @@ function createOgabasseyServer() {
                 Number(variant.stock_quantity ?? 0) >= (args.quantity ?? 1)
               );
           } else {
-            const effectiveStock = getEffectiveProductStock(product);
+            const effectiveStock = Number(product.stock_quantity ?? 0);
             unavailable = effectiveStock < (args.quantity ?? 1);
           }
         }

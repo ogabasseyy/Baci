@@ -1,6 +1,11 @@
 import { render, screen } from '@testing-library/react';
+import { headers } from 'next/headers';
 import { describe, expect, it, vi } from 'vitest';
 import { getMerchantByIdentifier } from '@/lib/cached-data';
+
+vi.mock('next/headers', () => ({
+  headers: vi.fn(() => new Headers([['host', 'usebaci.com']])),
+}));
 
 vi.mock('@/lib/cached-data', () => ({
   getMerchantByIdentifier: vi.fn(),
@@ -58,8 +63,13 @@ describe('delete-account metadata', () => {
 });
 
 describe('Ogabassey account deletion guidance', () => {
-  it('keeps the privacy link inside a development path storefront', async () => {
-    vi.stubEnv('NODE_ENV', 'development');
+  it('keeps the privacy link inside a production path storefront', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.mocked(headers).mockResolvedValue(
+      new Headers([['host', 'usebaci.com']]) as Awaited<
+        ReturnType<typeof headers>
+      >
+    );
     try {
       vi.mocked(getMerchantByIdentifier).mockResolvedValue({
         business_name: 'Ogabassey',
@@ -80,7 +90,34 @@ describe('Ogabassey account deletion guidance', () => {
     }
   });
 
+  it('uses a root privacy link on the merchant custom domain', async () => {
+    vi.mocked(headers).mockResolvedValue(
+      new Headers([
+        ['host', 'ogabassey.com'],
+        ['x-custom-domain', 'ogabassey.com'],
+      ]) as Awaited<ReturnType<typeof headers>>
+    );
+    vi.mocked(getMerchantByIdentifier).mockResolvedValue({
+      business_name: 'Ogabassey',
+      slug: 'ogabassey',
+      custom_domain: 'ogabassey.com',
+    } as Awaited<ReturnType<typeof getMerchantByIdentifier>>);
+    render(
+      await DeleteAccountContent({
+        params: Promise.resolve({ slug: 'ogabassey' }),
+      })
+    );
+    expect(
+      screen.getByRole('link', { name: 'Privacy Policy' })
+    ).toHaveAttribute('href', '/privacy');
+  });
+
   it('uses the current privacy and tax retention periods instead of 90 days', async () => {
+    vi.mocked(headers).mockResolvedValue(
+      new Headers([['host', 'usebaci.com']]) as Awaited<
+        ReturnType<typeof headers>
+      >
+    );
     vi.mocked(getMerchantByIdentifier).mockResolvedValue({
       business_name: 'Ogabassey',
       email: 'privacy@ogabassey.com',
@@ -107,9 +144,6 @@ describe('Ogabassey account deletion guidance', () => {
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole('link', { name: 'Privacy Policy' })
-    ).toHaveAttribute(
-      'href',
-      process.env.NODE_ENV === 'development' ? '/ogabassey/privacy' : '/privacy'
-    );
+    ).toHaveAttribute('href', '/ogabassey/privacy');
   });
 });

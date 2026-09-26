@@ -96,10 +96,15 @@ def app_store_version_slot_ready?(app_version:, build_number:)
   UI.user_error!("Could not find App Store Connect app #{BUNDLE_ID}") unless app
 
   platform = Spaceship::ConnectAPI::Platform::IOS
-  return true if app.get_edit_app_store_version(platform: platform)
 
+  # Consult the live review BEFORE trusting the editable shortcut: an editable
+  # version can briefly coexist with an in-progress review (the state in which
+  # deliver's reject_if_possible withdrew build 2.1.527). Checking the review
+  # first keeps every withdrawal behind the opt-in below.
   submission = app.get_in_progress_review_submission(platform: platform)
   if submission.nil?
+    return true if app.get_edit_app_store_version(platform: platform)
+
     # Nothing is in review, yet the slot is still occupied — e.g. a version in
     # PENDING_DEVELOPER_RELEASE or PENDING_APPLE_RELEASE. There is no safe
     # automatic remedy (clearing those means releasing an already-approved

@@ -111,6 +111,31 @@ function validateFastfileSubmitVersionGuard(fastfileSource, versionSlotSource) {
     );
   }
 
+  // An editable version can briefly coexist with a live review (this is the
+  // state in which deliver's reject_if_possible withdrew build 2.1.527), so
+  // the guard must consult the in-progress review before trusting the
+  // editable shortcut — otherwise the opt-in below is skipped.
+  const slotGuard = extractIndentedBlock(
+    activeSlot,
+    /^\s*def\s+app_store_version_slot_ready\?/,
+    'end'
+  );
+  if (slotGuard) {
+    const submissionIndex = slotGuard.indexOf(
+      'get_in_progress_review_submission'
+    );
+    const editableIndex = slotGuard.indexOf('get_edit_app_store_version');
+    if (
+      submissionIndex === -1 ||
+      editableIndex === -1 ||
+      submissionIndex > editableIndex
+    ) {
+      failures.push(
+        'asc_version_slot.rb: app_store_version_slot_ready? must query get_in_progress_review_submission before the get_edit_app_store_version shortcut'
+      );
+    }
+  }
+
   const cancelIndex = activeSlot.indexOf('cancel_submission');
   if (cancelIndex !== -1) {
     // Presence of the gate is not enough — it has to sit BEFORE the

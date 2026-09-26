@@ -36,10 +36,11 @@ end
 def app_store_version_slot_ready?(app_version:, build_number:)
   app = Spaceship::ConnectAPI::App.find(BUNDLE_ID)
   platform = Spaceship::ConnectAPI::Platform::IOS
-  return true if app.get_edit_app_store_version(platform: platform)
-
   submission = app.get_in_progress_review_submission(platform: platform)
-  return false if submission.nil?
+  if submission.nil?
+    return true if app.get_edit_app_store_version(platform: platform)
+    return false
+  end
 
   unless review_cancellation_allowed?
     return false
@@ -290,6 +291,21 @@ describe('bugfix: reject_if_possible silently withdrew a live App Review', () =>
       validateFastfileSubmitVersionGuard(withRejectIfPossible, VALID_SLOT)
     ).toContain(
       'Fastfile: submit lane must not pass reject_if_possible — cancellation is owned solely by app_store_version_slot_ready? (opt-in via IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT); deliver reject_if_possible is an unguarded second path that withdraws live App Reviews'
+    );
+  });
+});
+
+describe('bugfix: editable shortcut skipped the opt-in during a live review', () => {
+  it('rejects trusting the editable version before consulting the live review', () => {
+    const editableFastPathFirst = VALID_SLOT.replace(
+      `  submission = app.get_in_progress_review_submission(platform: platform)\n  if submission.nil?\n    return true if app.get_edit_app_store_version(platform: platform)\n    return false\n  end\n`,
+      `  return true if app.get_edit_app_store_version(platform: platform)\n\n  submission = app.get_in_progress_review_submission(platform: platform)\n  return false if submission.nil?\n`
+    );
+
+    expect(
+      validateFastfileSubmitVersionGuard(VALID_FASTFILE, editableFastPathFirst)
+    ).toContain(
+      'asc_version_slot.rb: app_store_version_slot_ready? must query get_in_progress_review_submission before the get_edit_app_store_version shortcut'
     );
   });
 });

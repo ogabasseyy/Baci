@@ -368,6 +368,10 @@ jobs:
         run: bash .github/scripts/run-migration-applier-tests.sh
       - name: Verify Migration Versions
         run: bash .github/scripts/check-migration-versions.sh
+      - name: Test Mobile Gem Floors
+        run: bash .github/scripts/check-mobile-gem-floors.test.sh
+      - name: Verify Mobile Gem Floors
+        run: bash .github/scripts/check-mobile-gem-floors.sh
       - name: Run CI Test Planner Unit Tests
         if: needs.changes.outputs.web == 'true'
         run: node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/quiz-production-approval-workflow.test.mjs

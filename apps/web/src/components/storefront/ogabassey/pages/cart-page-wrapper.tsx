@@ -9,6 +9,7 @@ import {
   getPrimaryProductImage,
   PRODUCT_IMAGE_PLACEHOLDER_URL,
 } from '@/lib/product-image';
+import { getEffectiveProductStock } from '@/lib/product-stock';
 import { createClient } from '@/lib/supabase/client';
 import { CartPage } from './cart-page';
 
@@ -119,15 +120,15 @@ async function fetchAndAddCartItems({
       const alreadyClaimedPrize = hasQuizPrizeVoucher &&
         cart.some(item => item.quizAwardId === quizAwardId);
       if (!alreadyClaimedPrize) {
+        const effectiveStock = getEffectiveProductStock(product);
         const productForCart = {
           ...product,
           image: resolvedImage,
           imageLarge: resolvedImage,
-          stock: product.manage_stock ? Number(product.stock_quantity ?? 0) : product.stock,
+          stock: product.manage_stock ? effectiveStock : product.stock,
         };
         const existingIndex = findMergingCartLineIndex(cart, productForCart);
         const existingQuantity = existingIndex >= 0 ? cart[existingIndex].quantity : 0;
-        const effectiveStock = Number(product.stock_quantity ?? 0);
         if (!hasQuizPrizeVoucher && product.manage_stock && existingQuantity + quantity > effectiveStock) {
           rejectedIds.push(product.id);
           toast({

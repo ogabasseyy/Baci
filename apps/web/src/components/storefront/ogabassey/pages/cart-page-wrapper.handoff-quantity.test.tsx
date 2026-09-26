@@ -128,7 +128,7 @@ describe('CartPageWrapper', () => {
       status: 'active',
       images: [],
       manage_stock: true,
-      stock_quantity: 3,
+      stock_quantity: 0,
       stock: 3,
     }], error: null });
 
@@ -154,7 +154,7 @@ describe('CartPageWrapper', () => {
     await waitFor(() => expect(addToCart).toHaveBeenCalledWith(expect.any(Object), 1, undefined));
   });
 
-  it('rejects a zero-quantity managed item despite positive legacy stock and names the item actually added', async () => {
+  it('rejects an out-of-stock managed item and names the item actually added', async () => {
     const rejectedId = '55555555-5555-4555-8555-555555555555';
     const addedId = '66666666-6666-4666-8666-666666666666';
     vi.mocked(useSearchParams).mockReturnValue(
@@ -164,7 +164,7 @@ describe('CartPageWrapper', () => {
     const addToCart = mockUseCart();
     setupProductsQuery({
       data: [
-        { id: rejectedId, name: 'Sold Out Phone', status: 'active', images: [], manage_stock: true, stock_quantity: 0, stock: 5 },
+        { id: rejectedId, name: 'Sold Out Phone', status: 'active', images: [], manage_stock: true, stock_quantity: 0, stock: 0 },
         { id: addedId, name: 'Available Phone', status: 'active', images: [], manage_stock: false },
       ],
       error: null,
@@ -199,5 +199,20 @@ describe('CartPageWrapper', () => {
     ));
   });
 
+
+  it('uses positive legacy stock for a managed handoff and the cart provider', async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams('item_id=55555555-5555-4555-8555-555555555555&qty=3') as ReturnType<typeof useSearchParams>
+    );
+    const addToCart = mockUseCart();
+    setupProductsQuery({ data: [{
+      id: '55555555-5555-4555-8555-555555555555', name: 'Legacy Phone',
+      status: 'active', images: [], manage_stock: true, stock_quantity: 0, stock: 3,
+    }], error: null });
+    render(<CartPageWrapper merchantId="merchant-1" />);
+    await waitFor(() => expect(addToCart).toHaveBeenCalledWith(
+      expect.objectContaining({ stock: 3 }), 3, undefined
+    ));
+  });
 
 });

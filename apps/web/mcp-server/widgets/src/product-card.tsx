@@ -109,7 +109,7 @@ export function ProductCard({
         <button type="button"
           className="btn-buy-now"
           onClick={() => {
-            const url = `https://ogabassey.com/products/${encodeURIComponent(product.slug)}`;
+            const url = `https://ogabassey.com/products/${encodeURIComponent(product.slug || product.id)}`;
             if (window.openai?.openExternal) {
               window.openai.openExternal({ href: url });
             } else {

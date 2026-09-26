@@ -2,7 +2,7 @@
 export interface Product {
   id: string;
   name: string;
-  slug: string;
+  slug: string | null;
   price: number;
   compare_at_price?: number;
   image_url?: string;

@@ -37,4 +37,12 @@ describe('ProductCard', () => {
     expect(open).toHaveBeenCalledWith('https://ogabassey.com/products/redmi', '_blank');
     open.mockRestore();
   });
+  it.each([null, ''])('uses the product ID when the slug is %s', (slug) => {
+    const openExternal = vi.fn();
+    window.openai = { openExternal };
+    render(<ProductCard product={{ ...product, id: 'phone/id', slug }} isInCart={false} onAddToCart={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Review on Ogabassey' }));
+    expect(openExternal).toHaveBeenCalledWith({ href: 'https://ogabassey.com/products/phone%2Fid' });
+  });
+
 });

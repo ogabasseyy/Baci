@@ -49,11 +49,11 @@ describe('OgabasseyUnlockOrders', () => {
     expect(screen.getByText(/in progress/i)).toBeInTheDocument();
     expect(screen.getByText(/₦100,000/)).toBeInTheDocument();
     expect(screen.getByText(/in progress/i).className).toContain(
-      'text-[var(--store-background-text'
+      'text-[var(--store-secondary-text'
     );
     expect(
       screen.getByText('The carrier is processing your request.').className
-    ).toContain('text-store-background-text/70');
+    ).toContain('text-[var(--store-secondary-text');
     expect(screen.queryByText(/provider order/i)).toBeNull();
     expect(mocks.list).toHaveBeenCalledWith('ogabassey');
     expect(screen.getByRole('link', { name: /new check/i })).toHaveAttribute(
@@ -83,7 +83,7 @@ describe('OgabasseyUnlockOrders', () => {
     const heading = await screen.findByRole('heading', {
       name: 'No unlock orders yet',
     });
-    expect(heading.className).toContain('text-[var(--store-background-text');
+    expect(heading.className).toContain('text-[var(--ogabassey-surface-text');
     expect(screen.getByText(/eligible clean carrier-unlock options/i).className).toContain(
       'text-store-background-text/70'
     );

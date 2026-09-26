@@ -80,14 +80,14 @@ export function OgabasseyUnlockOrders() {
         {loading ? (
           <div
             aria-label="Loading unlock orders"
-            className="mt-8 flex justify-center rounded-2xl border border-[var(--store-border,#e5e7eb)] bg-[var(--store-surface,#fff)] p-12"
+            className="mt-8 flex justify-center rounded-2xl border border-[var(--store-border,#e5e7eb)] bg-[var(--ogabassey-surface)] p-12"
             role="status"
           >
             <RefreshCw aria-hidden="true" className="animate-spin" />
           </div>
         ) : orders.length === 0 ? (
-          <div className="mt-8 rounded-2xl border border-[var(--store-border,#e5e7eb)] bg-[var(--store-surface,#fff)] p-8 text-center">
-            <h2 className="font-bold text-[var(--store-background-text,#111827)]">
+          <div className="mt-8 rounded-2xl border border-[var(--store-border,#e5e7eb)] bg-[var(--ogabassey-surface)] p-8 text-center">
+            <h2 className="font-bold text-[var(--ogabassey-surface-text)]">
               No unlock orders yet
             </h2>
             <p className="mt-2 text-sm text-store-background-text/70">
@@ -98,7 +98,7 @@ export function OgabasseyUnlockOrders() {
           <div className="mt-8 space-y-4">
             {orders.map((order) => (
               <article
-                className="rounded-2xl border border-[var(--store-border,#e5e7eb)] bg-[var(--store-surface,#fff)] p-5 shadow-sm"
+                className="rounded-2xl border border-[var(--store-border,#e5e7eb)] bg-[var(--ogabassey-surface)] p-5 shadow-sm"
                 key={order.id}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -106,11 +106,11 @@ export function OgabasseyUnlockOrders() {
                     <p className="text-xs font-bold uppercase text-[var(--store-primary,#dc2626)]">
                       {order.carrier || 'Carrier unlock'}
                     </p>
-                    <h2 className="mt-1 font-bold text-[var(--store-background-text,#111827)]">
+                    <h2 className="mt-1 font-bold text-[var(--ogabassey-surface-text)]">
                       {order.deviceModel || 'Device unlock'}
                     </h2>
                   </div>
-                  <span className="rounded-full bg-[var(--store-option-secondary,#f3f4f6)] px-3 py-1 text-xs font-bold text-[var(--store-background-text,#111827)]">
+                  <span className="rounded-full bg-[var(--store-option-secondary,#f3f4f6)] px-3 py-1 text-xs font-bold text-[var(--store-secondary-text,#111827)]">
                     {statusLabel(order.status)}
                   </span>
                 </div>
@@ -119,7 +119,7 @@ export function OgabasseyUnlockOrders() {
                     <dt className="text-store-background-text/70">
                       Paid
                     </dt>
-                    <dd className="font-bold text-[var(--store-background-text,#111827)]">
+                    <dd className="font-bold text-[var(--ogabassey-surface-text)]">
                       {amount(order)}
                     </dd>
                   </div>
@@ -127,7 +127,7 @@ export function OgabasseyUnlockOrders() {
                     <dt className="text-store-background-text/70">
                       Turnaround
                     </dt>
-                    <dd className="font-bold text-[var(--store-background-text,#111827)]">
+                    <dd className="font-bold text-[var(--ogabassey-surface-text)]">
                       {order.turnaround || 'Carrier estimate pending'}
                     </dd>
                   </div>
@@ -135,13 +135,13 @@ export function OgabasseyUnlockOrders() {
                     <dt className="text-store-background-text/70">
                       Updated
                     </dt>
-                    <dd className="font-bold text-[var(--store-background-text,#111827)]">
+                    <dd className="font-bold text-[var(--ogabassey-surface-text)]">
                       {new Date(order.updatedAt).toLocaleDateString('en-NG')}
                     </dd>
                   </div>
                 </dl>
                 {order.customerMessage ? (
-                  <p className="mt-4 flex gap-2 rounded-xl bg-[var(--store-option-secondary,#f9fafb)] p-3 text-sm text-store-background-text/70">
+                  <p className="mt-4 flex gap-2 rounded-xl bg-[var(--store-option-secondary,#f9fafb)] p-3 text-sm text-[var(--store-secondary-text,#111827)]">
                     <Clock3 aria-hidden="true" className="shrink-0" size={17} />
                     {order.customerMessage}
                   </p>

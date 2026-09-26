@@ -103,9 +103,11 @@ describe('bugfix: retired-slug prefix strip shadowed a live storefront route', (
       const response = await proxy(request);
 
       // Assert (collected, so a failure names every offending segment at once)
-      if (
-        response.headers.get('location') === `https://${CUSTOM_DOMAIN}/my-post`
-      ) {
+      const location = response.headers.get('location');
+      const strippedPath = location ? new URL(location).pathname : null;
+      const unexpectedRedirectPath =
+        segment === 'unlock-orders' ? '/' : '/my-post';
+      if (strippedPath === unexpectedRedirectPath) {
         stripped.push(segment);
       }
     }

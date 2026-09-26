@@ -349,6 +349,7 @@ jobs:
           --sql-check supabase/migrations/tests/pr3468_followup_payment_hardening.sql
           --sql-check supabase/migrations/tests/credit_direct_inventory_proof.sql
           --sql-check supabase/migrations/tests/jumia_variant_price_optimistic_guard.sql
+          --sql-check supabase/migrations/tests/jumia_submitted_price_update_faults.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
       - name: Test Cache Invalidation Outbox SQL

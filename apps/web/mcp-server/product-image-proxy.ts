@@ -1,8 +1,10 @@
 import type { ServerResponse } from 'node:http';
 
 const MAX_IMAGE_BYTES = 5_000_000;
+const MAX_CONCURRENT_IMAGE_REQUESTS = 4;
 const PRODUCT_IMAGE_PREFIX = '/images/core-assets/products/';
 const CDN_ORIGIN = 'https://cdn.ogabassey.com';
+let activeImageRequests = 0;
 
 async function readBoundedImage(response: Response): Promise<Buffer | null> {
   if (!response.body) return null;
@@ -38,6 +40,12 @@ export async function serveProductImage(
     return;
   }
 
+  if (activeImageRequests >= MAX_CONCURRENT_IMAGE_REQUESTS) {
+    response.writeHead(503, { 'Retry-After': '1' }).end('Image service busy');
+    return;
+  }
+  activeImageRequests += 1;
+
   try {
     const assetPath = pathname.slice('/images'.length);
     const upstream = await fetchImage(
@@ -67,5 +75,7 @@ export async function serveProductImage(
     response.end(image);
   } catch {
     response.writeHead(502).end('Image unavailable');
+  } finally {
+    activeImageRequests -= 1;
   }
 }

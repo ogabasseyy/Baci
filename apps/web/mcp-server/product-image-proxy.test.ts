@@ -69,4 +69,27 @@ describe('serveProductImage', () => {
     expect(oversized.writeHead).toHaveBeenCalledWith(502);
     expect(oversized.end).toHaveBeenCalledWith('Image too large');
   });
+
+  it('caps simultaneous buffered image fetches and releases capacity afterward', async () => {
+    const pending: Array<(response: Response) => void> = [];
+    const fetchImage = vi.fn(() => new Promise<Response>((resolve) => pending.push(resolve))) as unknown as typeof fetch;
+    const responses = Array.from({ length: 4 }, createResponse);
+    const requests = responses.map(({ response }) =>
+      serveProductImage('/images/core-assets/products/phone.webp', response, fetchImage)
+    );
+
+    const busy = createResponse();
+    await serveProductImage('/images/core-assets/products/phone.webp', busy.response, fetchImage);
+    expect(busy.writeHead).toHaveBeenCalledWith(503, { 'Retry-After': '1' });
+    expect(fetchImage).toHaveBeenCalledTimes(4);
+
+    for (const resolve of pending) {
+      resolve(new Response('image bytes', { headers: { 'content-type': 'image/webp' } }));
+    }
+    await Promise.all(requests);
+    const recovered = createResponse();
+    await serveProductImage('/images/core-assets/products/phone.webp', recovered.response,
+      vi.fn(async () => new Response('image bytes', { headers: { 'content-type': 'image/webp' } })) as unknown as typeof fetch);
+    expect(recovered.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
+  });
 });

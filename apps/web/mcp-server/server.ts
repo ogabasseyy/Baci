@@ -1450,6 +1450,7 @@ function createOgabasseyServer() {
         product_id: z.string().describe('The product ID to add to cart'),
         quantity: z
           .number()
+          .int()
           .min(1)
           .max(10)
           .optional()
@@ -1480,8 +1481,18 @@ function createOgabasseyServer() {
           .single();
 
         let unavailable = Boolean(productError || !product);
-        if (product?.manage_stock === true && product.has_condition_offers !== true) {
-          if (product.has_variants === true) {
+        if (product?.manage_stock === true) {
+          if (product.has_condition_offers === true) {
+            const { data: offers, error: offersError } = await supabase
+              .from('product_offers')
+              .select('stock_quantity')
+              .eq('merchant_id', merchantId)
+              .eq('product_id', args.product_id)
+              .eq('status', 'active');
+            unavailable = Boolean(offersError) ||
+              (Number(product.stock_quantity ?? 0) < args.quantity &&
+                !offers?.some((offer) => Number(offer.stock_quantity ?? 0) >= args.quantity));
+          } else if (product.has_variants === true) {
             const { data: variants, error: variantsError } = await supabase.rpc(
               'get_storefront_product_variants',
               { p_product_ids: [args.product_id] }

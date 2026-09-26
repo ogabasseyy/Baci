@@ -92,6 +92,33 @@ describe('MCP cart handoff', () => {
       });
       expect(JSON.stringify(conditionOffer)).not.toContain('cart_url');
 
+      const soldOutOffer = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+        id: 74, method: 'tools/call',
+        params: { name: 'add_to_cart', arguments: { product_id: 'condition-offer-sold-out-product', quantity: 1 } },
+      }));
+      expect(soldOutOffer.structuredContent).toMatchObject({ success: false });
+      expect(JSON.stringify(soldOutOffer)).not.toContain('requires_variant_selection');
+
+      const insufficientOfferQuantity = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+        id: 75, method: 'tools/call',
+        params: { name: 'add_to_cart', arguments: { product_id: 'condition-offer-product', quantity: 3 } },
+      }));
+      expect(insufficientOfferQuantity.structuredContent).toMatchObject({ success: false });
+      expect(JSON.stringify(insufficientOfferQuantity)).not.toContain('requires_variant_selection');
+
+      const stockedParentOffer = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+        id: 76, method: 'tools/call',
+        params: { name: 'add_to_cart', arguments: { product_id: 'condition-offer-parent-stock-product', quantity: 2 } },
+      }));
+      expect(stockedParentOffer.structuredContent).toMatchObject({ requires_variant_selection: true });
+
+      const fractionalQuantity = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+        id: 77, method: 'tools/call',
+        params: { name: 'add_to_cart', arguments: { product_id: 'available-product', quantity: 1.5 } },
+      }));
+      expect(fractionalQuantity.isError).toBe(true);
+      expect(JSON.stringify(fractionalQuantity)).not.toContain('cart_url');
+
       const insufficientVariantQuantity = getResultRecord(
         await postMcpJsonRpc(server.baseUrl, {
           id: 8,

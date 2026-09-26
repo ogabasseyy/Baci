@@ -18,6 +18,10 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
         response.end(JSON.stringify({ id: 'legacy-stock-product', name: 'Legacy Stock Phone', slug: 'legacy-stock-phone', price: 100000, manage_stock: true, stock_quantity: 0, stock: 3, has_variants: false }));
       } else if (url.searchParams.get('id') === 'eq.condition-offer-product') {
         response.end(JSON.stringify({ id: 'condition-offer-product', name: 'Used Offer Phone', slug: 'used-offer-phone', price: 100000, manage_stock: true, stock_quantity: 0, stock: 0, has_variants: false, has_condition_offers: true }));
+      } else if (url.searchParams.get('id') === 'eq.condition-offer-sold-out-product') {
+        response.end(JSON.stringify({ id: 'condition-offer-sold-out-product', name: 'Sold Out Offer Phone', slug: 'sold-out-offer-phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: false, has_condition_offers: true }));
+      } else if (url.searchParams.get('id') === 'eq.condition-offer-parent-stock-product') {
+        response.end(JSON.stringify({ id: 'condition-offer-parent-stock-product', name: 'Parent Stock Offer Phone', slug: 'parent-stock-offer-phone', price: 100000, manage_stock: true, stock_quantity: 2, has_variants: false, has_condition_offers: true }));
       } else if (url.searchParams.get('id') === 'eq.untracked-variant-product') {
         response.end(JSON.stringify({ id: 'untracked-variant-product', name: 'Untracked Variant Phone', slug: 'untracked-variant-phone', price: 100000, manage_stock: false, stock_quantity: 0, has_variants: true }));
       } else if (!url.searchParams.has('id') && !url.searchParams.has('name')) {
@@ -92,6 +96,8 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
     if (url.pathname.endsWith('/rest/v1/product_offers')) {
       response.end(JSON.stringify(url.searchParams.get('product_id')?.includes('condition-offer-product')
         ? [{ product_id: 'condition-offer-product', stock_quantity: 2 }]
+        : url.searchParams.get('product_id')?.includes('condition-offer-sold-out-product')
+          ? [{ product_id: 'condition-offer-sold-out-product', stock_quantity: 0 }]
         : []));
       return true;
     }

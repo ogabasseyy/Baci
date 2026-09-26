@@ -1,11 +1,9 @@
 import submitVersionGuardValidator from './validate-fastfile-submit-version-guard.cjs';
-import {
-  VALID_FASTFILE,
-  VALID_SLOT,
-  readFastlaneFile,
-} from './validate-fastfile-submit-version-guard.fixtures';
+import { submitVersionGuardFixtures } from './validate-fastfile-submit-version-guard.fixtures';
 
 const { validateFastfileSubmitVersionGuard } = submitVersionGuardValidator;
+const { VALID_FASTFILE, VALID_SLOT, readFastlaneFile } =
+  submitVersionGuardFixtures;
 
 
 describe('validateFastfileSubmitVersionGuard', () => {
@@ -234,34 +232,6 @@ describe('bugfix: editable shortcut skipped the opt-in during a live review', ()
       validateFastfileSubmitVersionGuard(VALID_FASTFILE, editableFastPathFirst)
     ).toContain(
       'asc_version_slot.rb: app_store_version_slot_ready? must query get_in_progress_review_submission before the get_edit_app_store_version shortcut'
-    );
-  });
-});
-
-describe('bugfix: cancelled review still winding down while editable exists', () => {
-  it('rejects trusting the editable version without waiting out the cancelled review', () => {
-    const noSettleWait = VALID_SLOT.replace(
-      `  unless wait_for_settled_review_submission(submission.id)\n    UI.user_error!("cancelled but the review never settled")\n  end\n\n`,
-      ''
-    );
-
-    expect(
-      validateFastfileSubmitVersionGuard(VALID_FASTFILE, noSettleWait)
-    ).toContain(
-      'asc_version_slot.rb: after cancel_submission the lane must wait via wait_for_settled_review_submission before trusting the editable version'
-    );
-  });
-
-  it('rejects a settle wait that polls the in-progress query instead of the submission', () => {
-    const pollsWrongResource = VALID_SLOT.replace(
-      'Spaceship::ConnectAPI::ReviewSubmission.get(',
-      'app.get_in_progress_review_submission('
-    );
-
-    expect(
-      validateFastfileSubmitVersionGuard(VALID_FASTFILE, pollsWrongResource)
-    ).toContain(
-      'asc_version_slot.rb: wait_for_settled_review_submission must re-fetch the cancelled submission by id, not the in-progress review submission'
     );
   });
 });

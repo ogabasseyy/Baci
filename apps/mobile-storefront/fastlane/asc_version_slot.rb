@@ -91,12 +91,26 @@ end
 # CANCELING is deliberately included: cancel_submission returns while Apple is
 # still winding the review down, and the cancelled submission drops out of the
 # in-progress query at that point — so an already-present editable version
-# would otherwise let the lane deliver into a live wind-down.
+# would otherwise let the lane deliver into a live wind-down. COMPLETING is
+# included defensively for the cancel-vs-finish race (it is not in fastlane's
+# ReviewSubmissionState enum, so this arm costs nothing unless Apple emits it).
 UNSETTLED_REVIEW_SUBMISSION_STATES = %w[
   WAITING_FOR_REVIEW
   IN_REVIEW
   UNRESOLVED_ISSUES
   CANCELING
+  COMPLETING
+].freeze
+
+# Failures worth another poll iteration: rate limiting, timeouts, and upstream
+# 5xx responses. Anything else (notably auth failures) raises immediately —
+# retrying those for ten minutes cannot help.
+RETRYABLE_REVIEW_POLL_ERRORS = [
+  Spaceship::TooManyRequestsError,
+  Spaceship::AppleTimeoutError,
+  Spaceship::InternalServerError,
+  Spaceship::BadGatewayError,
+  Spaceship::GatewayTimeoutError
 ].freeze
 
 # Wait until the cancelled submission leaves every active state, re-fetching
@@ -105,9 +119,13 @@ UNSETTLED_REVIEW_SUBMISSION_STATES = %w[
 # instead of submitting blind.
 def wait_for_settled_review_submission(submission_id)
   EDITABLE_VERSION_POLL_ATTEMPTS.times do |attempt|
-    state = Spaceship::ConnectAPI::ReviewSubmission.get(
-      review_submission_id: submission_id
-    )&.state
+    begin
+      state = Spaceship::ConnectAPI::ReviewSubmission.get(
+        review_submission_id: submission_id
+      )&.state
+    rescue *RETRYABLE_REVIEW_POLL_ERRORS
+      state = nil
+    end
     return true if !state.nil? && !UNSETTLED_REVIEW_SUBMISSION_STATES.include?(state)
 
     sleep(EDITABLE_VERSION_POLL_INTERVAL_SECONDS) unless attempt == EDITABLE_VERSION_POLL_ATTEMPTS - 1

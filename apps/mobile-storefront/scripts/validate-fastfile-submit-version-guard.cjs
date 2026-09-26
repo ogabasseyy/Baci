@@ -194,6 +194,39 @@ function validateFastfileSubmitVersionGuard(fastfileSource, versionSlotSource) {
       );
     }
 
+    if (
+      !settleWaiter ||
+      !settleWaiter.includes('UNSETTLED_REVIEW_SUBMISSION_STATES')
+    ) {
+      failures.push(
+        'asc_version_slot.rb: wait_for_settled_review_submission must consult UNSETTLED_REVIEW_SUBMISSION_STATES so every active state blocks delivery'
+      );
+    }
+
+    const unsettledStates = extractIndentedBlock(
+      activeSlot,
+      /^\s*UNSETTLED_REVIEW_SUBMISSION_STATES\s*=/,
+      '].freeze'
+    );
+    if (
+      !unsettledStates ||
+      !unsettledStates.includes('CANCELING') ||
+      !unsettledStates.includes('COMPLETING')
+    ) {
+      failures.push(
+        'asc_version_slot.rb: UNSETTLED_REVIEW_SUBMISSION_STATES must include CANCELING and COMPLETING so the settle wait cannot pass during a live wind-down'
+      );
+    }
+
+    if (
+      !settleWaiter ||
+      !settleWaiter.includes('RETRYABLE_REVIEW_POLL_ERRORS')
+    ) {
+      failures.push(
+        'asc_version_slot.rb: wait_for_settled_review_submission must retry transient fetch failures via RETRYABLE_REVIEW_POLL_ERRORS instead of aborting the lane'
+      );
+    }
+
     const waiter = extractIndentedBlock(
       activeSlot,
       /^\s*def\s+wait_for_editable_app_store_version\b/,

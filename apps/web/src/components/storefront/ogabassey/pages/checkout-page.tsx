@@ -110,7 +110,6 @@ import {
   buildPendingCheckoutFingerprint,
   CHECKOUT_PENDING_ORDER_STORAGE_KEY,
   normalizeOrderPaymentMethod,
-  resolvePendingCheckoutOrder,
   type PendingCheckoutOrderSnapshot,
 } from './checkout/pending-checkout-order';
 import {
@@ -118,7 +117,7 @@ import {
   type RedvaultPreparedOrder,
   type RedvaultStatus,
 } from './checkout/handlers/redvault-prepared-order-submit';
-import { resolveRedvaultSubmitFence } from './checkout/handlers/redvault-submit-fence';
+import { recoverPendingCheckoutOrder } from './checkout/handlers/recover-pending-checkout-order';
 import {
   clearCheckoutIdempotencyKey,
   getCheckoutIdempotencyKey,
@@ -1539,16 +1538,9 @@ export const CheckoutPage: React.FC = () => {
             : getForwardableSelectedQuoteId(deliveryMethod, selectedQuoteId),
         shippingRateId: merchantRateId ?? undefined,
       };
-      const pendingOrderResolution = await resolvePendingCheckoutOrder(reuse);
-
-      // The REDVAULT pending-order fence verdict (paid routing, blocking
-      // cancels, live replay) stays ahead of a create-or-reuse transition.
-      if (
-        await resolveRedvaultSubmitFence({
-          fence: pendingOrderResolution,
-          checkoutFingerprint,
-          customerEmail,
-          merchantId: merchant.id,
+      const recovery = await recoverPendingCheckoutOrder({
+        reuse,
+        context: {
           firstName,
           lastName,
           customerPhone,
@@ -1564,21 +1556,12 @@ export const CheckoutPage: React.FC = () => {
           clearCheckoutSession,
           clearCart,
           pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
-        })
-      ) {
-        return;
-      }
+        },
+      });
+      if (recovery.kind === 'handled') return;
 
-      // resolveRedvaultSubmitFence above either returned/threw for a paid or
-      // live fence, or cancelled/cleared every non-reusable snapshot. Pass a
-      // deliberately fence-clean result so submitCheckoutOrder rejects any
-      // future call site that attempts to create through an unresolved fence.
-      const resolvedOrderForSubmission = {
-        reusableOrder: pendingOrderResolution.reusableOrder,
-        clearStoredOrder: false,
-      };
       const submittedOrder = await submitCheckoutOrder({
-        resolvedPendingOrder: resolvedOrderForSubmission,
+        resolvedPendingOrder: recovery.pendingOrder,
         getIdempotencyKey: () => getCheckoutIdempotencyKey(checkoutFingerprint),
         orderRequest: buildCheckoutOrderRequest({
           merchantId: merchant.id,

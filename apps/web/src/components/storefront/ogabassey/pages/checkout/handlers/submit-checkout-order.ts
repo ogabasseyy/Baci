@@ -80,7 +80,10 @@ async function readOrderError(
   response: Response
 ): Promise<CheckoutOrderErrorData> {
   try {
-    return await response.json();
+    const data: unknown = await response.json();
+    return data && typeof data === 'object' && !Array.isArray(data)
+      ? (data as CheckoutOrderErrorData)
+      : {};
   } catch {
     return {};
   }

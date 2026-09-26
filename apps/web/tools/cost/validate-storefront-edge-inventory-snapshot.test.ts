@@ -180,6 +180,6 @@ describe('repository inventory snapshot validation', () => {
     await symlink(fixture.inputPath, link);
     await expect(
       validateStorefrontEdgeInventorySnapshot({ ...fixture, inputPath: link })
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ code: 'ELOOP' });
   });
 });

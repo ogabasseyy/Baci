@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildCheckoutOrderRequest } from '../build-checkout-order-request';
-import { submitCheckoutOrder } from './submit-checkout-order';
+import { getCheckoutOrderErrorMessage } from '../checkout-order-error-message';
+import { selectRejectedVoucherLines } from '../select-rejected-voucher-lines';
+import {
+  type CheckoutOrderErrorData,
+  submitCheckoutOrder,
+} from './submit-checkout-order';
 
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status });
@@ -241,5 +246,30 @@ describe('submitCheckoutOrder', () => {
     ).rejects.toThrow('Order creation failed');
     expect(onPendingOrderInvalidated).not.toHaveBeenCalled();
     expect(request).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    null,
+    42,
+    'error',
+    [],
+  ])('normalizes a non-object failed order response: %j', async (body) => {
+    const onVoucherRejected = vi.fn((value: CheckoutOrderErrorData) => {
+      selectRejectedVoucherLines([], value);
+    });
+    await expect(
+      submitCheckoutOrder({
+        resolvedPendingOrder: { reusableOrder: null, clearStoredOrder: false },
+        getIdempotencyKey: async () => 'retained-key',
+        orderRequest: orderRequest(),
+        paymentMethod: 'paystack',
+        total: 5000,
+        onVoucherRejected,
+        onPendingOrderInvalidated: vi.fn(async () => undefined),
+        onShippingRateRejected: vi.fn(),
+        getOrderErrorMessage: getCheckoutOrderErrorMessage,
+        request: vi.fn(async () => response(body, 502)),
+      })
+    ).rejects.toThrow('Failed to create order');
+    expect(onVoucherRejected).toHaveBeenCalledWith({});
   });
 });

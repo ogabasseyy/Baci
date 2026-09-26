@@ -118,17 +118,20 @@ export async function loadMcpProductVariants({
   let text = `**Variants for ${product.name}:**\n\n`;
 
   if (variants && variants.length > 0) {
+    const displayVariants = product.manage_stock
+      ? variants.filter((variant) => Number(variant.stock_quantity ?? 0) > 0)
+      : variants;
     // Group by attribute type
     const colors = [
-      ...new Set(variants.map((v) => v.attributes?.color).filter(Boolean)),
+      ...new Set(displayVariants.map((v) => v.attributes?.color).filter(Boolean)),
     ];
     const storages = [
       ...new Set(
-        variants.map((v) => v.attributes?.storage).filter(Boolean)
+        displayVariants.map((v) => v.attributes?.storage).filter(Boolean)
       ),
     ];
     const sizes = [
-      ...new Set(variants.map((v) => v.attributes?.size).filter(Boolean)),
+      ...new Set(displayVariants.map((v) => v.attributes?.size).filter(Boolean)),
     ];
 
     if (colors.length > 0) text += `**Colors:** ${colors.join(', ')}\n`;
@@ -136,8 +139,10 @@ export async function loadMcpProductVariants({
       text += `**Storage:** ${storages.join(', ')}\n`;
     if (sizes.length > 0) text += `**Sizes:** ${sizes.join(', ')}\n`;
 
-    text += '\n**Available Combinations:**\n';
-    for (const v of variants.slice(0, 10)) {
+    text += displayVariants.length > 0
+      ? '\n**Available Combinations:**\n'
+      : '\nNo available combinations.\n';
+    for (const v of displayVariants.slice(0, 10)) {
       const attrs = Object.entries(v.attributes || {})
         .map(([k, val]) => `${k}: ${val}`)
         .join(', ');

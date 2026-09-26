@@ -12,6 +12,9 @@ describe('search-products condition helpers', () => {
     expect(inferSmartphoneCategory('phone under 300000', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('Redmi phone 128GB', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('iPhone 15', undefined)).toBe('Smartphones');
+    for (const accessoryQuery of ['iPhone 15 stand', 'iPhone 15 holder', 'iPhone 15 lens']) {
+      expect(inferSmartphoneCategory(accessoryQuery, undefined)).toBeUndefined();
+    }
     expect(inferSmartphoneCategory('phone stand', undefined)).toBeUndefined();
     expect(inferSmartphoneCategory('smartphone mount', undefined)).toBeUndefined();
     expect(inferSmartphoneCategory('phones and tablets', undefined)).toBeUndefined();

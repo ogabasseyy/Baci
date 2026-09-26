@@ -201,7 +201,7 @@ export function inferSmartphoneCategory(
 ): 'Smartphones' | undefined {
   if (!query || explicitCategory) return undefined;
   const handset = /\b(?:iphones?|smartphones?|mobile phones?|phones?)\b(?=\s*(?:$|[?.!,]|\b(?:under|below|between|for|with|priced|costing|from|at|that|which|in|\d+(?:GB|TB)?)\b))/i;
-  const competingCategory = /\b(?:tablets?|ipads?|laptops?|computers?|cases?|covers?|accessories|chargers?|screen protectors?|repairs?|parts?|batteries|cables?)\b/i;
+  const competingCategory = /\b(?:tablets?|ipads?|laptops?|computers?|cases?|covers?|accessories|chargers?|screen protectors?|repairs?|parts?|batteries|cables?|stands?|holders?|mounts?|tripods?|lens(?:es)?|grips?|docks?|adapters?)\b/i;
   return handset.test(query) && !competingCategory.test(query)
     ? 'Smartphones'
     : undefined;

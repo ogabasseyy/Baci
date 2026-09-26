@@ -27,6 +27,30 @@ function createSupabase() {
 }
 
 describe('loadMcpProductVariants', () => {
+  it('shows stocked combinations even when the first ten variants are sold out', async () => {
+    const supabase = createSupabase();
+    supabase.rpc.mockResolvedValue({
+      data: [
+        ...Array.from({ length: 10 }, (_, index) => ({
+          attributes: { color: `Sold Out ${index}` }, price_override: null, stock_quantity: 0,
+        })),
+        { attributes: { color: 'Available Red' }, price_override: null, stock_quantity: 2 },
+      ],
+      error: null,
+    });
+    const result = await loadMcpProductVariants({
+      args: { product_id: 'phone-1' }, merchantId: 'merchant-1',
+      supabase: supabase as unknown as SupabaseClient,
+      sanitizeString: (value) => value, formatPrice: String,
+    });
+    expect(result.content[0].text).toContain('Available Red');
+    expect(result.content[0].text).not.toContain('Sold Out 0');
+    expect(result.structuredContent).toMatchObject({ variants: expect.arrayContaining([
+      expect.objectContaining({ availability: 'out_of_stock' }),
+      expect.objectContaining({ availability: 'in_stock' }),
+    ]) });
+  });
+
   it('returns tracked variant availability for a selected product', async () => {
     const supabase = createSupabase();
     const result = await loadMcpProductVariants({

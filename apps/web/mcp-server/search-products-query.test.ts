@@ -100,7 +100,7 @@ describe('loadMcpSearchProducts', () => {
   });
 
   it('does not force phone accessories into the Smartphones category', async () => {
-    for (const query of ['phone screen protector', 'phone stand', 'phone mount', 'phone holder', 'phone tripod']) {
+    for (const query of ['phone screen protector', 'phone stand', 'phone mount', 'phone holder', 'phone tripod', 'iPhone 15 stand', 'iPhone 15 holder', 'iPhone 15 lens']) {
       const { supabase } = createRankedSearchSupabase('Accessories');
       const result = await loadMcpSearchProducts({
         args: { query, limit: 2 },

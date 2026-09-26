@@ -10,7 +10,8 @@ interface ProductVariant {
 
 export async function hydrateSearchProductAvailability(
   products: McpSearchProductRow[],
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  merchantId: string
 ) {
   const productIds = products.filter((product) => product.has_variants).map((product) => product.id);
   const variantsMap = new Map<string, ProductVariant[]>();
@@ -35,14 +36,22 @@ export async function hydrateSearchProductAvailability(
   }
 
   const offersMap = new Map<string, Array<{ stock_quantity: number | null }>>();
-  await Promise.all(products.filter((product) => product.has_condition_offers).map(async (product) => {
-    const { data, error } = await supabase.rpc('get_product_offers', { p_product_id: product.id });
+  const offerIds = products.filter((product) => product.has_condition_offers).map((product) => product.id);
+  if (offerIds.length > 0) {
+    const { data, error } = await supabase.from('product_offers')
+      .select('product_id, stock_quantity')
+      .eq('merchant_id', merchantId)
+      .eq('status', 'active')
+      .in('product_id', offerIds);
     if (error) {
       console.error('Failed to fetch product offers for search:', error);
-      return;
+    } else {
+      for (const offer of data ?? []) {
+        offersMap.set(offer.product_id, [...(offersMap.get(offer.product_id) ?? []), offer]);
+      }
+      for (const id of offerIds) offersMap.set(id, offersMap.get(id) ?? []);
     }
-    offersMap.set(product.id, data ?? []);
-  }));
+  }
 
   return products.map((product) => ({
     product,

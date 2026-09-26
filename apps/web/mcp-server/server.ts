@@ -1275,7 +1275,7 @@ function createOgabasseyServer() {
           };
         }
 
-        const hydratedProducts = await hydrateSearchProductAvailability(products, supabase);
+        const hydratedProducts = await hydrateSearchProductAvailability(products, supabase, merchantId);
         const formatted = hydratedProducts.map(({ product: p, stockSummary, availableVariants: variants }) => {
           // A compare-at price indicates a listed discount, not a price trend.
           const isDiscounted = p.compare_at_price && p.compare_at_price > p.price;

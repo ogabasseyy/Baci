@@ -15,6 +15,34 @@
 
 BEGIN;
 
+-- Seed the owner row as the session superuser (service_role cannot write
+-- the auth schema).
+INSERT INTO auth.users (
+  id,
+  instance_id,
+  aud,
+  role,
+  email,
+  encrypted_password,
+  email_confirmed_at,
+  created_at,
+  updated_at,
+  raw_app_meta_data,
+  raw_user_meta_data
+) VALUES (
+  '00000000-0000-4000-8000-00000000f100',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated',
+  'authenticated',
+  'jumia-guard-owner@example.com',
+  'test',
+  now(),
+  now(),
+  now(),
+  '{}'::jsonb,
+  '{}'::jsonb
+);
+
 -- merchants writes fire the identity-audit trigger, whose canonical writer
 -- requires an audit actor (raises audit_actor_required/28000 without one):
 -- run fixtures as service_role like the other merchants-seeding replay
@@ -31,32 +59,6 @@ DECLARE
   v_unstamped_id uuid := '00000000-0000-4000-8000-00000000f303';
   v_token_older text := '00000000-0000-4000-8000-00000000f401';
 BEGIN
-  INSERT INTO auth.users (
-    id,
-    instance_id,
-    aud,
-    role,
-    email,
-    encrypted_password,
-    email_confirmed_at,
-    created_at,
-    updated_at,
-    raw_app_meta_data,
-    raw_user_meta_data
-  ) VALUES (
-    v_owner_user_id,
-    '00000000-0000-0000-0000-000000000000',
-    'authenticated',
-    'authenticated',
-    'jumia-guard-owner@example.com',
-    'test',
-    now(),
-    now(),
-    now(),
-    '{}'::jsonb,
-    '{}'::jsonb
-  );
-
   INSERT INTO public.merchants (id, user_id, email, business_name, slug)
   VALUES (
     v_merchant_id,

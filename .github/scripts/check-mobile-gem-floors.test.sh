@@ -51,6 +51,16 @@ if bash "$checker" "$boundary_root" >"$fixture_root/boundary.log" 2>&1; then
 fi
 grep -q "3.3.9" "$fixture_root/boundary.log"
 
+# Prerelease at the floor sorts below it in RubyGems semantics: fails.
+prerelease_root="$fixture_root/prerelease"
+write_lock "$prerelease_root" apps/mobile-admin '    rubyzip (3.4.0.pre)'
+write_lock "$prerelease_root" apps/mobile-storefront '    rubyzip (3.7.0)'
+if bash "$checker" "$prerelease_root" >"$fixture_root/prerelease.log" 2>&1; then
+  echo "Expected rubyzip 3.4.0.pre to fail the floor check" >&2
+  exit 1
+fi
+grep -q "3.4.0.pre" "$fixture_root/prerelease.log"
+
 # Missing rubyzip entry: fails closed.
 missing_root="$fixture_root/missing"
 write_lock "$missing_root" apps/mobile-admin '    rubyzip (3.7.0)'

@@ -12,7 +12,14 @@ floor_minor=4
 floor_patch=0
 
 # Prints 0 (true) when $1 (a dotted version) is below the security floor.
+# Fails closed on prerelease suffixes: RubyGems orders e.g. 3.4.0.pre below
+# 3.4.0, so a suffixed version never satisfies the floor without review.
 version_below_floor() {
+  case "$1" in
+    *[!0-9.]*)
+      return 0
+      ;;
+  esac
   local major='' minor='' patch=''
   IFS=. read -r major minor patch _ <<<"$1"
   major="${major%%[!0-9]*}"

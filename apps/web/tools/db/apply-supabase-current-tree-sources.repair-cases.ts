@@ -109,4 +109,14 @@ export const REPAIR_CASES = [
       'supabase/migrations/20260815220000_repair_capture_private_expense_receipt_cleanup.sql',
     ordinal: 129,
   },
+  {
+    label: 'Shipping provider policy audit',
+    historicalPath:
+      'supabase/migrations/20260921100200_enforce_merchant_shipping_provider_policy.sql',
+    historicalSha256:
+      'c89fb79e44148fe68caf65d99aed81de7a1ffd0d42b6ff85fbd41d9d98eceda3',
+    repairPath:
+      'supabase/migrations/20260926130000_repair_shipping_provider_policy_audit.sql',
+    ordinal: 129,
+  },
 ] as const;

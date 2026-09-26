@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { inferSmartphoneCategory } from './infer-smartphone-category';
 import {
   buildSearchProductsV2RpcArgs,
   MAX_POST_FILTER_RESULT_PAGES,
@@ -9,7 +10,6 @@ import {
   extractRankedProductIds,
   getConditionPrefilterClauses,
   getRankedProductTotal,
-  inferSmartphoneCategory,
   matchesConditionFamily,
   matchesMcpPostHydrationFilters,
   type McpSearchProductRow,

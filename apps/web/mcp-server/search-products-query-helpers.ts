@@ -193,22 +193,3 @@ export function matchesMcpPostHydrationFilters(
 
   return matchesConditionFamily(product, filters.condition);
 }
-
-/** Infer a handset category only when the query clearly names a phone itself. */
-export function inferSmartphoneCategory(
-  query: string | undefined,
-  explicitCategory: string | undefined
-): 'Smartphones' | undefined {
-  if (!query || explicitCategory) return undefined;
-  const handset = /\b(?:iphones?|smartphones?|mobile phones?|phones?)\b/i.exec(query);
-  if (!handset) return undefined;
-  const prefix = query.slice(0, handset.index);
-  if (/\b(?:for|with|and|or|cases?|covers?|chargers?|screen protectors?|stands?|holders?|mounts?|tripods?|lenses?|pouches?|wallets?|earbuds?)\b|&/i.test(prefix)) return undefined;
-
-  let remainder = query.slice(handset.index + handset[0].length).trim().replace(/[?.!,]+$/, '').trim();
-  remainder = remainder.replace(/^\d{1,3}[a-z]?(?:\s+(?:pro|max|plus|mini|ultra)){0,2}(?=\s|$)/i, '').trim();
-  remainder = remainder.replace(/^\d+(?:GB|TB)(?=\s|$)/i, '').trim();
-  const priceOnly = /^(?:under|below|from|at)\s+[₦$]?\d[\d,.]*(?:\s*(?:ngn|naira))?$/i.test(remainder) ||
-    /^between\s+[₦$]?\d[\d,.]*\s+and\s+[₦$]?\d[\d,.]*$/i.test(remainder);
-  return !remainder || priceOnly ? 'Smartphones' : undefined;
-}

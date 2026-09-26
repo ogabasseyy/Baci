@@ -10,6 +10,52 @@ const product = {
 };
 
 describe('buildMcpProductDetail', () => {
+  it('keeps product details and stocked offers when the variant lookup fails', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const rpc = vi.fn(async (name: string) => name === 'get_storefront_product_variants'
+      ? { data: null, error: { message: 'variants unavailable' } }
+      : { data: [{ condition: 'used', price: 70000, stock_quantity: 2, grade: null, condition_notes: null }], error: null });
+    try {
+      const result = await buildMcpProductDetail({
+        product: { ...product, description: 'A useful phone', has_condition_offers: true },
+        supabase: { rpc } as unknown as SupabaseClient,
+        formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+      });
+      expect(rpc).toHaveBeenCalledWith('get_product_offers', { p_product_id: product.id });
+      expect(result.content[0].text).toContain('A useful phone');
+      expect(result.content[0].text).toContain('• used: 70000 - In Stock');
+      expect(result.structuredContent).toMatchObject({
+        products: [{ stock_confidence: 'low' }],
+        condition_offers: [{ availability: 'in_stock' }],
+      });
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('keeps stocked variants when a combined product offer lookup fails', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const rpc = vi.fn(async (name: string) => name === 'get_product_offers'
+      ? { data: null, error: { message: 'offers unavailable' } }
+      : { data: [{ attributes: { color: 'Red' }, price_override: null, stock_quantity: 2, condition: 'new', images: [] }], error: null });
+    try {
+      const result = await buildMcpProductDetail({
+        product: { ...product, has_condition_offers: true },
+        supabase: { rpc } as unknown as SupabaseClient,
+        formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+      });
+      expect(result.content[0].text).toContain('**Available Colors:** Red');
+      expect(result.content[0].text).toContain('Condition offers are temporarily unavailable.');
+      expect(result.structuredContent).toMatchObject({
+        products: [{ stock_confidence: 'low' }],
+        variants: [{ availability: 'in_stock' }],
+        offer_lookup_failed: true,
+      });
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('lists only stocked offers as available while retaining sold-out offers in structured output', async () => {
     const supabase = { rpc: vi.fn(async () => ({
       data: [

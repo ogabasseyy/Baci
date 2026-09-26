@@ -71,6 +71,7 @@ export async function loadMcpProductVariants({
     price_override: number | null;
     stock_quantity: number;
   }> = [];
+  let variantLookupFailed = false;
   if (product.has_variants) {
     const { data, error } = await supabase.rpc(
       'get_storefront_product_variants',
@@ -78,9 +79,13 @@ export async function loadMcpProductVariants({
     );
     if (error) {
       console.error('Failed to fetch public product variants:', error);
-      return { content: [{ type: 'text', text: 'Product variants are temporarily unavailable.' }] };
+      if (!product.has_condition_offers) {
+        return { content: [{ type: 'text', text: 'Product variants are temporarily unavailable.' }] };
+      }
+      variantLookupFailed = true;
+    } else {
+      variants = data || [];
     }
-    variants = data || [];
   }
 
   let offers: Array<{
@@ -90,21 +95,29 @@ export async function loadMcpProductVariants({
     stock_quantity: number;
     condition_notes: string | null;
   }> = [];
+  let offerLookupFailed = false;
   if (product.has_condition_offers) {
     const { data, error } = await supabase.rpc('get_product_offers', {
       p_product_id: product.id,
     });
     if (error) {
       console.error('Failed to fetch public product offers:', error);
-      return { content: [{ type: 'text', text: 'Product offers are temporarily unavailable.' }] };
+      if (!product.has_variants) {
+        return { content: [{ type: 'text', text: 'Product offers are temporarily unavailable.' }] };
+      }
+      offerLookupFailed = true;
+    } else {
+      offers = data || [];
     }
-    offers = data || [];
   }
 
   if (
     (!variants || variants.length === 0) &&
     (!offers || offers.length === 0)
   ) {
+    if (variantLookupFailed || offerLookupFailed) {
+      return { content: [{ type: 'text', text: 'Product options are temporarily unavailable.' }] };
+    }
     return {
       content: [
         {
@@ -116,6 +129,8 @@ export async function loadMcpProductVariants({
   }
 
   let text = `**Variants for ${product.name}:**\n\n`;
+  if (variantLookupFailed) text += 'Variant options are temporarily unavailable.\n';
+  if (offerLookupFailed) text += 'Condition offers are temporarily unavailable.\n';
 
   if (variants && variants.length > 0) {
     const displayVariants = product.manage_stock
@@ -186,6 +201,8 @@ export async function loadMcpProductVariants({
         stock_quantity: product.manage_stock ? offer.stock_quantity : null,
         availability: getMcpOfferAvailability(product.manage_stock, offer.stock_quantity).availability,
       })),
+      variant_lookup_failed: variantLookupFailed,
+      offer_lookup_failed: offerLookupFailed,
     },
   };
 }

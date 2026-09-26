@@ -1,34 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   getConditionPrefilterClauses,
-  inferSmartphoneCategory,
   matchesConditionFamily,
   matchesRowConditionFamily,
 } from './search-products-query-helpers';
 
 describe('search-products condition helpers', () => {
-  it('infers phones without reclassifying accessory or mixed-device searches', () => {
-    expect(inferSmartphoneCategory('Redmi phones', undefined)).toBe('Smartphones');
-    expect(inferSmartphoneCategory('phone under 300000', undefined)).toBe('Smartphones');
-    expect(inferSmartphoneCategory('Redmi phone 128GB', undefined)).toBe('Smartphones');
-    expect(inferSmartphoneCategory('iPhone 15', undefined)).toBe('Smartphones');
-    expect(inferSmartphoneCategory('iPhone 15 Pro Max 256GB', undefined)).toBe('Smartphones');
-    expect(inferSmartphoneCategory('iPhone 15 under ₦500,000', undefined)).toBe('Smartphones');
-    for (const accessoryQuery of ['iPhone 15 stand', 'iPhone 15 holder', 'iPhone 15 lens', 'iPhone 15 pouch', 'iPhone 15 wallet', 'iPhone 15 earbuds']) {
-      expect(inferSmartphoneCategory(accessoryQuery, undefined)).toBeUndefined();
-    }
-    expect(inferSmartphoneCategory('phone stand', undefined)).toBeUndefined();
-    expect(inferSmartphoneCategory('smartphone mount', undefined)).toBeUndefined();
-    expect(inferSmartphoneCategory('phones and tablets', undefined)).toBeUndefined();
-    expect(inferSmartphoneCategory('case for iPhone 15', undefined)).toBeUndefined();
-    expect(inferSmartphoneCategory('charger for phone', undefined)).toBeUndefined();
-    expect(inferSmartphoneCategory('case iPhone 15', undefined)).toBeUndefined();
-    expect(inferSmartphoneCategory('charger phone', undefined)).toBeUndefined();
-    expect(inferSmartphoneCategory('screen protector iPhone 15', undefined)).toBeUndefined();
-    expect(inferSmartphoneCategory('tablets and phones', undefined)).toBeUndefined();
-    expect(inferSmartphoneCategory('Redmi phones', 'Accessories')).toBeUndefined();
-  });
-
   it('keeps catalog condition prefilters as safe supersets', () => {
     expect(getConditionPrefilterClauses('open_box')).toEqual(
       expect.arrayContaining([

@@ -24,9 +24,12 @@ node jobs/sentry-mobile-error-remediator.mjs
 
 Autofix mode is off by default. With `BACI_REMEDIATION_AUTOFIX_ENABLED=1`, the
 worker creates an isolated worktree from the full checkout at `BACI_REPO_DIR`,
-runs Codex in an ephemeral Docker container with all Linux capabilities dropped,
-`no-new-privileges`, a tmpfs home, a read-only auth-file mount, and only the
-temporary worktree writable. The deploy script builds the pinned
+runs Codex in an ephemeral Docker container with `no-new-privileges`, a tmpfs
+home, a read-only auth-file mount, and only the temporary worktree writable.
+Implementation containers drop all Linux capabilities; read-only research adds
+only the narrowly scoped DAC and identity capabilities needed for the parent
+Codex process to read auth and drops generated shells to the worker UID. The
+deploy script builds the pinned
 `Dockerfile.codex-remediator` image and injects its immutable commit tag into
 both remediation cron entries. The worker then inspects changed files, runs
 the immutable lint, typecheck, and test gates without provider secrets in the
@@ -70,10 +73,25 @@ The read-only research phase also uses the checked-in
 seccomp/v0.2.3 profile (source:
 <https://github.com/moby/profiles/tree/seccomp/v0.2.3/seccomp>) and adds only
 `clone`, `clone3`, `mount`, `umount`, `umount2`, `unshare`, and `pivot_root`
-for Codex's nested bubblewrap sandbox;
-the outer container still drops all capabilities, enables
-`no-new-privileges`, and keeps the worktree and dependency mounts read-only.
-Do not replace this profile with `seccomp=unconfined`.
+for the namespace operations that the sandboxed toolchain may request;
+the outer container enables `no-new-privileges` and keeps the worktree and
+dependency mounts read-only; implementation containers additionally drop all
+capabilities, while research uses only the narrowly scoped capabilities needed
+to protect its auth handoff. The generated research shell is replaced with a
+wrapper that drops to the worker UID before running `/bin/sh`, and the copied
+ source auth mount remains root-only; the bootstrap copies it into the
+ worker-owned Codex tmpfs and then starts Codex through the same unprivileged
+ shell boundary. Raw shell delegates stay in a root-only image directory and
+ are copied to a worker-owned temporary directory for that invocation, so
+ generated commands cannot select the privileged delegates directly.
+The inner read-only Codex invocation forces its legacy Landlock fallback instead
+of starting bubblewrap, because this VPS does not permit unprivileged user
+namespaces. Landlock keeps the read-only command's process-level filesystem and
+network policy (including blocked generated-command egress), while the outer
+Docker boundary remains authoritative: only ephemeral container tmpfs paths
+are writable and the container is removed after each run. Implementation runs
+still use the Docker boundary directly because they need a writable worktree
+and GitHub access. Do not replace this profile with `seccomp=unconfined`.
 
 `jobs/remediation-codex-canary.mjs` is a daily, Docker-only read-only check of
 the Codex toolchain. It shares the global remediation lock and writes its own

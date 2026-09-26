@@ -30,6 +30,7 @@ function readPositiveInt(value, fallback) {
 }
 
 export function runRemediationCodexCanary({
+  containerIdentity,
   env = process.env,
   logger = console,
   runner = defaultRunner,
@@ -54,6 +55,7 @@ export function runRemediationCodexCanary({
   const { child: childEnv } = buildRemediationEnvironments(commandEnv);
   const command = buildRemediationCodexCommand({
     codexBin: env.CODEX_BIN || 'codex',
+    containerIdentity,
     env: commandEnv,
     enableSearch: false,
     prompt: CANARY_PROMPT,

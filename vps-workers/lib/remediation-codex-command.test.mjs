@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { buildRemediationCodexCommand } from './remediation-codex-command.mjs';
 
+const testContainerIdentity = { gid: 1001, uid: 1001 };
+
 describe('remediation Codex command', () => {
   it('uses the native workspace sandbox by default', () => {
     const result = buildRemediationCodexCommand({
@@ -76,7 +78,7 @@ describe('remediation Codex command', () => {
       '--rm',
       '--name',
       'baci-remediation-worktree',
-      '--cap-drop',
+      '--entrypoint',
     ]);
     assert.equal(result.args.includes('ALL'), true);
     assert.equal(result.args.includes('no-new-privileges'), true);
@@ -124,6 +126,7 @@ describe('remediation Codex command', () => {
   it('builds a read-only Docker canary command from the remediation builder', () => {
     const result = buildRemediationCodexCommand({
       codexBin: '/opt/host/codex',
+      containerIdentity: testContainerIdentity,
       env: {
         BACI_CODEX_DOCKER_IMAGE: 'baci-codex-remediator:local',
         BACI_CODEX_CONTAINER_BIN: '/opt/host/codex-native',
@@ -141,19 +144,20 @@ describe('remediation Codex command', () => {
     assert.equal(result.args.includes('--search'), false);
     assert.equal(result.args.includes('--sandbox'), true);
     assert.equal(result.args.includes('read-only'), true);
-    assert.equal(result.args.includes('workspace-write'), false);
     assert.equal(
       result.args.includes('--dangerously-bypass-approvals-and-sandbox'),
       false
     );
-    assert.equal(result.args.includes('use_legacy_landlock'), false);
+    assert.equal(result.args.includes('--enable'), true);
+    assert.equal(result.args.includes('use_legacy_landlock'), true);
+    assert.equal(result.args.includes('workspace-write'), false);
     assert.equal(
       result.args.includes('type=bind,src=/repo,dst=/repo,readonly'),
       true
     );
     assert.equal(
       result.args.includes(
-        'type=bind,src=/home/worker/.codex/auth.json,dst=/codex-auth/auth.json,readonly'
+        'type=bind,src=/home/worker/.codex/auth.json,dst=/codex-auth/source-auth.json,readonly'
       ),
       true
     );
@@ -166,6 +170,7 @@ describe('remediation Codex command', () => {
     try {
       const result = buildRemediationCodexCommand({
         codexBin: '/opt/host/codex',
+        containerIdentity: testContainerIdentity,
         env: {
           BACI_CODEX_CONTAINER_BIN: '/opt/host/codex-native',
           BACI_CODEX_DOCKER_IMAGE: 'baci-codex-remediator:local',
@@ -210,6 +215,7 @@ describe('remediation Codex command', () => {
       mkdirSync(join(resources, 'zsh', 'bin'), { recursive: true });
       const result = buildRemediationCodexCommand({
         codexBin: '/opt/host/codex',
+        containerIdentity: testContainerIdentity,
         env: {
           BACI_CODEX_CONTAINER_BIN: binary,
           BACI_CODEX_DOCKER_IMAGE: 'baci-codex-remediator:local',

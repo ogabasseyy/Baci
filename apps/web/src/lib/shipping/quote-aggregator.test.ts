@@ -111,6 +111,7 @@ describe('QuoteAggregator', () => {
     expect(response.quotes.all).toHaveLength(0);
     expect(response.warnings).toEqual(['GIG Logistics: upstream unavailable']);
     expect(warnSpy).toHaveBeenCalledWith(
+      '%s',
       '[QuoteAggregator] All providers failed; no quotes available',
       { failedProviderCount: 1, providerCount: 1 }
     );
@@ -128,12 +129,32 @@ describe('QuoteAggregator', () => {
 
     expect(response.quotes.all).toEqual([]);
     expect(warnSpy).toHaveBeenCalledWith(
+      '%s',
       '[QuoteAggregator] No providers returned quotes',
       { failedProviderCount: 0, providerCount: 1 }
     );
     expect(warnSpy).not.toHaveBeenCalledWith(
       '[QuoteAggregator] All providers failed, using fallback quote'
     );
+  });
+
+  it('uses a literal format string for the empty-quotes warning (CWE-134)', async () => {
+    // Regression: the diagnostics message must never be passed as the format
+    // string itself, otherwise injected format specifiers would forge the log
+    // line (semgrep unsafe-formatstring).
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    const registry = new ShippingProviderRegistry();
+    registry.register(createProvider());
+    const aggregator = new QuoteAggregator(registry);
+
+    await aggregator.getQuotes(quoteRequest);
+
+    expect(warnSpy).toHaveBeenCalled();
+    for (const call of warnSpy.mock.calls) {
+      expect(call[0]).toBe('%s');
+    }
   });
 
   it('counts an explicitly marked empty provider result as a failure', async () => {
@@ -158,6 +179,7 @@ describe('QuoteAggregator', () => {
     expect(response.quotes.all).toEqual([]);
     expect(response.warnings).toEqual(['GIG Logistics: upstream unavailable']);
     expect(warnSpy).toHaveBeenCalledWith(
+      '%s',
       '[QuoteAggregator] All providers failed; no quotes available',
       { failedProviderCount: 1, providerCount: 1 }
     );

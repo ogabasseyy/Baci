@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { STOREFRONT_METADATA_CACHE_BUCKET_QUERY_PARAM } from '@/config/storefront-metadata-cache-bots';
 import {
   getCachedMerchant,
   getCachedMerchantByDomain,
@@ -72,6 +73,7 @@ describe('UnlockOrdersPage', () => {
         params: Promise.resolve({ slug: 'shop.example' }),
         searchParams: Promise.resolve({
           campaign: 'summer',
+          [STOREFRONT_METADATA_CACHE_BUCKET_QUERY_PARAM]: 'metadata-blocking',
           tag: ['one', 'two'],
         }),
       })

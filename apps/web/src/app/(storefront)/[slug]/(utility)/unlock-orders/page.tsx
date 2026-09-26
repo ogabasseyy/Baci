@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { OgabasseyUnlockOrders } from '@/components/storefront/ogabassey/pages/unlock-orders';
+import { STOREFRONT_METADATA_CACHE_BUCKET_QUERY_PARAM } from '@/config/storefront-metadata-cache-bots';
 import {
   getCachedMerchant,
   getCachedMerchantByDomain,
@@ -43,6 +44,7 @@ export default async function UnlockOrdersPage({
     ) {
       const search = new URLSearchParams();
       for (const [key, value] of Object.entries(query)) {
+        if (key === STOREFRONT_METADATA_CACHE_BUCKET_QUERY_PARAM) continue;
         if (Array.isArray(value)) {
           for (const entry of value) search.append(key, entry);
         } else if (value !== undefined) {

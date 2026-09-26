@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 // Event type for OpenAI global changes
-const SET_GLOBALS_EVENT_TYPE = 'openai:setGlobals';
+const SET_GLOBALS_EVENT_TYPE = 'openai:set_globals';
 
 type SetGlobalsEvent = CustomEvent<{
   globals: Partial<OpenAiGlobals>;

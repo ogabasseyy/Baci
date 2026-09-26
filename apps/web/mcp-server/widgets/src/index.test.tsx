@@ -24,6 +24,28 @@ describe('Ogabassey cart handoff widget', () => {
     expect(requestDisplayMode).toHaveBeenCalledWith({ mode: 'fullscreen' });
   });
 
+  it('updates the catalog layout when the host enters fullscreen', () => {
+    window.openai = {
+      toolOutput: { products },
+      displayMode: 'inline',
+      requestDisplayMode: vi.fn().mockResolvedValue(undefined),
+    };
+    const { container } = render(<App />);
+
+    expect(container.querySelector('.mode-inline')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Expand catalog' })).toBeTruthy();
+
+    act(() => {
+      if (window.openai) window.openai.displayMode = 'fullscreen';
+      window.dispatchEvent(new CustomEvent('openai:set_globals', {
+        detail: { globals: { displayMode: 'fullscreen' } },
+      }));
+    });
+
+    expect(container.querySelector('.mode-fullscreen')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Expand catalog' })).toBeNull();
+  });
+
   it('keeps the latest item when an older handoff finishes late', async () => {
     const pending = new Map<string, (value: unknown) => void>();
     const openExternal = vi.fn();

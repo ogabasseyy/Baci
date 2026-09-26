@@ -2,7 +2,7 @@ const allowedPrefixWords = new Set([
   'apple', 'google', 'pixel', 'samsung', 'galaxy', 'redmi', 'xiaomi',
   'tecno', 'infinix', 'itel', 'nokia', 'motorola', 'oppo', 'vivo',
   'realme', 'oneplus', 'nothing', 'honor', 'new', 'used', 'refurbished',
-  'cheap', 'affordable', 'best', 'latest',
+  'android', 'cheap', 'affordable', 'best', 'latest',
 ]);
 
 /** Infer a handset category only when the query clearly names a phone itself. */

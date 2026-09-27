@@ -94,6 +94,18 @@ test('public decrement RPCs reject nonpositive quantities and unauthorized merch
       false
     );
     assert.equal(
+      serializedInventoryDecrementGuards.hasPositiveQuantityGuard(
+        body.replace(
+          quantityGuard[0],
+          quantityGuard[0].replace(
+            /\bRETURN\s*;/i,
+            'IF false THEN\n  RETURN;\nEND IF;'
+          )
+        )
+      ),
+      false
+    );
+    assert.equal(
       serializedInventoryDecrementGuards.hasMerchantAuthorizationGuard(
         body.replace(
           /IF\s+COALESCE\s*\(\s*\(\s*SELECT\s+auth\.role\(\)\)[\s\S]*?END\s+IF\s*;/i,
@@ -129,6 +141,18 @@ test('public decrement RPCs reject nonpositive quantities and unauthorized merch
         ),
         false,
         'variant authorization must bind the variant to its product'
+      );
+    }
+    if (targetParameter === 'product_id_param') {
+      assert.equal(
+        serializedInventoryDecrementGuards.hasMerchantAuthorizationGuard(
+          body.replace(
+            /\bid\s*=\s*product_id_param\b/i,
+            '$& OR has_merchant_access(product_id_param)'
+          )
+        ),
+        false,
+        'product authorization must bind the product conjunctively'
       );
     }
     assert.equal(

@@ -190,3 +190,58 @@ $wrapper$;`;
     true
   );
 });
+
+test('parses escape-string prefixes in dynamic privilege payloads', () => {
+  const source = `DO $wrapper$
+BEGIN
+  EXECUTE E'GRANT EXECUTE ON FUNCTION private.fixture(uuid) TO authenticated';
+END;
+$wrapper$;`;
+
+  assert.equal(
+    serializedInventoryDynamicDdl.hasDynamicPrivilegeDdl(
+      source,
+      'private.fixture(uuid)'
+    ),
+    true
+  );
+});
+
+test('detects dynamic schema-wide execution grants', () => {
+  const source = `DO $wrapper$
+BEGIN
+  EXECUTE 'GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA private TO authenticated';
+END;
+$wrapper$;`;
+
+  assert.equal(
+    serializedInventoryDynamicDdl.hasDynamicPrivilegeDdl(
+      source,
+      'private.fixture(uuid)'
+    ),
+    true
+  );
+  assert.equal(
+    serializedInventoryDynamicDdl.hasDynamicPrivilegeDdl(
+      source,
+      'public.fixture(uuid)'
+    ),
+    false
+  );
+});
+
+test('detects dynamic privilege DDL with unqualified targets', () => {
+  const source = `DO $wrapper$
+BEGIN
+  EXECUTE 'GRANT EXECUTE ON FUNCTION fixture(uuid) TO authenticated';
+END;
+$wrapper$;`;
+
+  assert.equal(
+    serializedInventoryDynamicDdl.hasDynamicPrivilegeDdl(
+      source,
+      'private.fixture(uuid)'
+    ),
+    true
+  );
+});

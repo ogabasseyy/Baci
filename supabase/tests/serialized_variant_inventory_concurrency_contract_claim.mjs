@@ -24,6 +24,10 @@ function findEffectiveReserveUpdate(source) {
   ];
   if (!selector || counters.length !== 1) return undefined;
   const [counter] = counters;
+  const overwritten = [...masked.matchAll(/v_claimed_count\s*:=/gi)].some(
+    (assignment) => assignment.index > counter.index
+  );
+  if (overwritten) return undefined;
   return [...masked.matchAll(updatePattern)].find(
     (update) =>
       /\bstatus\s*=\s*'reserved'/i.test(update[1]) &&
@@ -48,11 +52,16 @@ function findEffectiveReserveUpdate(source) {
 }
 
 function claimedIncrementCount(source) {
-  return (
-    maskSqlLiterals(source).match(
-      /\bv_claimed_count\s*:=\s*v_claimed_count\s*\+\s*1\b/gi
-    ) ?? []
-  ).length;
+  const masked = maskSqlLiterals(source);
+  const increments = [
+    ...masked.matchAll(/\bv_claimed_count\s*:=\s*v_claimed_count\s*\+\s*1\b/gi),
+  ];
+  if (increments.length !== 1) return increments.length;
+  const [increment] = increments;
+  const overwritten = [...masked.matchAll(/v_claimed_count\s*:=/gi)].some(
+    (assignment) => assignment.index > increment.index
+  );
+  return overwritten ? 0 : 1;
 }
 
 function findEffectiveExcessRelease(source) {
@@ -75,9 +84,7 @@ function findEffectiveExcessRelease(source) {
     }
     const preceding = executable.slice(excessBranch.index, update.index);
     const surplusAssignment =
-      /\bv_excess\s*:=\s*v_reserved_count\s*-\s*v_qty\s*;/i.exec(
-        preceding
-      );
+      /\bv_excess\s*:=\s*v_reserved_count\s*-\s*v_qty\s*;/i.exec(preceding);
     const selector =
       /\bFOR\s+v_unit_id\s+IN\s*[\s\S]*?\bSELECT\s+id\s+FROM\s+(?:public\s*\.\s*)?variant_inventory\b[\s\S]*?\border_item_id\s*=\s*p_order_item_id\b[\s\S]*?\bstatus\s*=\s*'reserved'[\s\S]*?\bLIMIT\s+v_excess\s+LOOP\b/i.exec(
         preceding

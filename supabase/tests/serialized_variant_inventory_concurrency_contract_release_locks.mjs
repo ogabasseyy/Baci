@@ -169,6 +169,11 @@ function hasMerchantAuthorizationGuard(source) {
     /IF\s+COALESCE\(\s*\(\s*SELECT\s+auth\.role\(\s*\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\.has_merchant_access\(\s*p_merchant_id\s*\)\s+THEN\b/i;
   const guard = guardPattern.exec(executable);
   if (!guard) return false;
+  const orderLock =
+    /FROM\s+public\s*\.\s*orders\b[\s\S]*?\bFOR\s+UPDATE\b/i.exec(executable);
+  const dispatch = /IF\s+v_target_status\s*=\s*'available'\s+THEN\b/i.exec(
+    executable
+  );
   try {
     const branches = serializedInventoryBranches.extractIfArms(
       executable,
@@ -176,7 +181,19 @@ function hasMerchantAuthorizationGuard(source) {
     );
     return (
       hasTopLevelException(branches.thenBranch) &&
-      /RAISE\s+EXCEPTION\s+['"]forbidden['"]/i.test(branches.thenBranch)
+      /RAISE\s+EXCEPTION\s+['"]forbidden['"]/i.test(branches.thenBranch) &&
+      orderLock !== null &&
+      dispatch !== null &&
+      serializedInventoryControlFlow.dominatesControlFlow(
+        executable,
+        guard.index,
+        orderLock.index
+      ) &&
+      serializedInventoryControlFlow.dominatesControlFlow(
+        executable,
+        guard.index,
+        dispatch.index
+      )
     );
   } catch {
     return false;

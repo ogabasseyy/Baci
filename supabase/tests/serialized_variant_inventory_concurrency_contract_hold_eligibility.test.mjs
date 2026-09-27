@@ -33,9 +33,9 @@ function hasConfirmedHoldEligibility(source, orderPrefix) {
     assignment && match.index + match[0].length + assignment.index;
   const laterAssignment =
     assignment &&
-    [
-      ...normalized.matchAll(/v_is_confirmed_hold\s*:=\s*(?:true|false)\s*;/gi),
-    ].some((candidate) => candidate.index > assignmentIndex);
+    [...normalized.matchAll(/v_is_confirmed_hold\s*:=\s*[^;]+;/gi)].some(
+      (candidate) => candidate.index > assignmentIndex
+    );
   return Boolean(
     /v_is_confirmed_hold\s+boolean\s*:=\s*false\s*;/i.test(normalized) &&
       assignment &&
@@ -86,6 +86,16 @@ test('claim and confirmation preserve protected wrapper modes and hold eligibili
         body.replace(
           /IF\s+(?:v_|v_order\.)payment_status\s+IN[\s\S]*?v_is_confirmed_hold\s*:=\s*true\s*;/i,
           (eligibilityBlock) => `IF false THEN\n${eligibilityBlock}\nEND IF;`
+        ),
+        prefix
+      ),
+      false
+    );
+    assert.equal(
+      hasConfirmedHoldEligibility(
+        body.replace(
+          /v_is_confirmed_hold\s*:=\s*true\s*;/i,
+          '$& v_is_confirmed_hold := (1 = 0);'
         ),
         prefix
       ),

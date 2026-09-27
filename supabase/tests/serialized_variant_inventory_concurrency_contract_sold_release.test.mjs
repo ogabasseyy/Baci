@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { serializedInventoryConfirmation } from './serialized_variant_inventory_concurrency_contract_confirmation.mjs';
 import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
+import { serializedInventoryConfirmation } from './serialized_variant_inventory_concurrency_contract_confirmation.mjs';
+
+const { soldGuardDominatesUnits, soldTransitionInLockedLoop } =
+  serializedInventoryConfirmation;
 
 test('sale transitions serialize on the parent order before reserved units', () => {
   const sold = serializedInventoryContract.latestFunctionBody(
     'private.mark_order_inventory_units_sold(uuid, uuid)'
   );
-  const orderLock = serializedInventoryConfirmation.findConfirmationLocks(sold).order;
+  const orderLock =
+    serializedInventoryConfirmation.findConfirmationLocks(sold).order;
   const unitSelector =
     /FROM\s+public\s*\.\s*variant_inventory\s+vi[\s\S]*?WHERE\s+vi\s*\.\s*order_id\s*=\s*p_order_id[\s\S]*?vi\s*\.\s*merchant_id\s*=\s*p_merchant_id[\s\S]*?vi\s*\.\s*status\s*=\s*'reserved'[\s\S]*?ORDER\s+BY\s+pv\s*\.\s*product_id\s*,\s*vi\s*\.\s*id\s+FOR\s+UPDATE\s+OF\s+vi/i.exec(
       sold
@@ -22,7 +26,8 @@ test('sale lock contract rejects an unscoped or unordered transition', () => {
   const sold = serializedInventoryContract.latestFunctionBody(
     'private.mark_order_inventory_units_sold(uuid, uuid)'
   );
-  const orderLock = serializedInventoryConfirmation.findConfirmationLocks(sold).order;
+  const orderLock =
+    serializedInventoryConfirmation.findConfirmationLocks(sold).order;
   assert.ok(orderLock);
 
   const withoutOrderLock = sold.replace(
@@ -30,7 +35,8 @@ test('sale lock contract rejects an unscoped or unordered transition', () => {
     ''
   );
   assert.equal(
-    serializedInventoryConfirmation.findConfirmationLocks(withoutOrderLock).order,
+    serializedInventoryConfirmation.findConfirmationLocks(withoutOrderLock)
+      .order,
     undefined
   );
 
@@ -38,5 +44,40 @@ test('sale lock contract rejects an unscoped or unordered transition', () => {
     /ORDER\s+BY\s+pv\s*\.\s*product_id\s*,\s*vi\s*\.\s*id\s*/i,
     ''
   );
-  assert.doesNotMatch(unordered, /ORDER\s+BY\s+pv\s*\.\s*product_id\s*,\s*vi\s*\.\s*id\s+FOR\s+UPDATE\s+OF\s+vi/i);
+  assert.doesNotMatch(
+    unordered,
+    /ORDER\s+BY\s+pv\s*\.\s*product_id\s*,\s*vi\s*\.\s*id\s+FOR\s+UPDATE\s+OF\s+vi/i
+  );
+});
+
+test('sale transitions reach sold status inside the locked-unit loop', () => {
+  const sold = serializedInventoryContract.latestFunctionBody(
+    'private.mark_order_inventory_units_sold(uuid, uuid)'
+  );
+  assert.equal(soldTransitionInLockedLoop(sold), true);
+
+  const removed = sold.replace(
+    /UPDATE\s+public\s*\.\s*variant_inventory\s+SET\s+status\s*=\s*'sold'[\s\S]*?WHERE\s+id\s*=\s*v_unit\s*\.\s*id\s+AND\s+status\s*=\s*'reserved'\s*;/i,
+    'PERFORM 1;'
+  );
+  assert.equal(soldTransitionInLockedLoop(removed), false);
+
+  const guarded = sold.replace(
+    /UPDATE\s+public\s*\.\s*variant_inventory\s+SET\s+status\s*=\s*'sold'[\s\S]*?WHERE\s+id\s*=\s*v_unit\s*\.\s*id\s+AND\s+status\s*=\s*'reserved'\s*;/i,
+    (update) => `IF false THEN\n${update}\nEND IF;`
+  );
+  assert.equal(soldTransitionInLockedLoop(guarded), false);
+});
+
+test('sale transitions require merchant authorization over the units', () => {
+  const sold = serializedInventoryContract.latestFunctionBody(
+    'private.mark_order_inventory_units_sold(uuid, uuid)'
+  );
+  assert.equal(soldGuardDominatesUnits(sold), true);
+
+  const guardless = sold.replace(
+    /IF\s+COALESCE\s*\(\s*\(\s*SELECT\s+auth\.role\(\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\.has_merchant_access\s*\(\s*p_merchant_id\s*\)\s+THEN[\s\S]*?END\s+IF\s*;/i,
+    ''
+  );
+  assert.equal(soldGuardDominatesUnits(guardless), false);
 });

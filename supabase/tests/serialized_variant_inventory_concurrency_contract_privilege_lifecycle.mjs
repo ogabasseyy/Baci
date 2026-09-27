@@ -27,10 +27,10 @@ function functionLifecycleEvents(source, signature) {
     .split(',')
     .map((type) => type.trim())
     .filter(Boolean)
-    .map(
-      (type) =>
-        `\\s*(?:(?:INOUT|IN|VARIADIC)\\s+)?(?:(?:"[^"]+"|[a-z_][a-z0-9_]*)\\s+)?${signaturePattern(type)}(?:\\s+(?:DEFAULT\\b|=)[^,)]*)?\\s*`
-    )
+    .map((type) => {
+      const unqualified = type.replace(/^pg_catalog\s*\.\s*/i, '');
+      return `\\s*(?:(?:INOUT|IN|VARIADIC)\\s+)?(?:(?:"[^"]+"|[a-z_][a-z0-9_]*)\\s+)?(?:(?:pg_catalog\\s*\\.\\s*)?${signaturePattern(unqualified)})(?:\\s+(?:DEFAULT\\b|=)[^,)]*)?\\s*`;
+    })
     .join('\\s*,\\s*');
   const outParameter = `OUT\\s+(?:(?:"[^"]+"|[a-z_][a-z0-9_]*)\\s+)?[a-z_][a-z0-9_.%]+(?:\\s+[a-z_][a-z0-9_.%]+)*(?:\\s*\\([^()]*\\))?`;
   const allParameters = parameters
@@ -77,7 +77,7 @@ function functionLifecycleEvents(source, signature) {
         sourceParts.at(-2) !== identitySchema
       );
     })
-    .map((match) => ({ index: match.index, kind: 'create', replace: false }));
+    .map((match) => ({ index: match.index, kind: 'move' }));
   const creates = [
     ...source.matchAll(
       new RegExp(
@@ -115,8 +115,8 @@ function functionLifecycleEvents(source, signature) {
   ].map((match) => ({
     index: match.index,
     kind: 'reassign',
-    from: match[1]
-      .split(',')
+    from: serializedInventorySqlParser
+      .splitTopLevelList(match[1])
       .map((role) => serializedInventoryPrivilegeRoles.normalizeRoleName(role)),
     owner: serializedInventoryPrivilegeRoles.normalizeRoleName(match[2]),
   }));

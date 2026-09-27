@@ -24,6 +24,14 @@ function normalizeRoleName(role) {
     .toLowerCase();
 }
 
+function resolveSpecialRole(reference, currentRole, sessionUser) {
+  if (reference === 'current_user' || reference === 'current_role') {
+    return currentRole;
+  }
+  if (reference === 'session_user') return sessionUser;
+  return reference;
+}
+
 function parseRoleMembership(text) {
   const leading = text.trim();
   const match = roleMembershipPattern.exec(leading);
@@ -49,6 +57,9 @@ function parseRoleChange(text) {
       leading
     );
   if (setRole) {
+    if (/^none$/i.test(setRole[1])) {
+      return { index: text.indexOf(leading), kind: 'reset-role' };
+    }
     return {
       index: text.indexOf(leading),
       kind: 'role',
@@ -149,4 +160,5 @@ export const serializedInventoryPrivilegeRoles = {
   parseRoleChange,
   parseSchemaFunctionPrivileges,
   parseRoleMembership,
+  resolveSpecialRole,
 };

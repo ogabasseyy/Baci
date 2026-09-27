@@ -81,7 +81,9 @@ function effectiveSecurityMode(sourceOrSources, signature) {
     signature,
     normalizedSources
   );
-  const createMode = /\bSECURITY\s+(DEFINER|INVOKER)\b/i.exec(body);
+  const createMode = /\bSECURITY\s+(DEFINER|INVOKER)\b/i.exec(
+    serializedInventorySqlParser.maskSqlLiterals(body)
+  );
   const definitionSourceIndex = normalizedSources.findLastIndex((source) =>
     source.includes(body)
   );

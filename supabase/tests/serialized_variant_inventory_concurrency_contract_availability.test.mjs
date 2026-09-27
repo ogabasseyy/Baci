@@ -131,6 +131,16 @@ test('rejects contradictory available lifecycle predicates', () => {
     ),
     false
   );
+  assert.equal(
+    serializedInventoryAvailability.availableUnitPredicatesMatch(
+      source.replace(
+        "AND unit.status <> 'available'",
+        'AND unit.status IS NULL'
+      ),
+      'v_variant_id'
+    ),
+    false
+  );
 });
 
 test('requires branch eligibility when the selector is order-scoped', () => {

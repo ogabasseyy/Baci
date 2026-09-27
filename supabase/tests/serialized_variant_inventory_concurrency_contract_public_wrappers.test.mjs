@@ -68,7 +68,9 @@ function publicWrapperPreservesMerchantParameter(source, delegatePattern) {
     !authorizationOpening ||
     !authorizationArms ||
     !hasTopLevelException(authorizationArms.thenBranch) ||
-    !/\bRAISE\s+EXCEPTION\s+['"]forbidden['"]/i.test(authorizationArms.thenBranch) ||
+    !/\bRAISE\s+EXCEPTION\s+['"]forbidden['"]/i.test(
+      authorizationArms.thenBranch
+    ) ||
     !delegation
   ) {
     return false;
@@ -79,7 +81,7 @@ function publicWrapperPreservesMerchantParameter(source, delegatePattern) {
   );
   return (
     !/\bp_merchant_id\s*(?::=|=)/i.test(between) &&
-    !/\bINTO\s+p_merchant_id\b/i.test(between) &&
+    !/\bINTO\s+(?:STRICT\s+)?p_merchant_id\b/i.test(between) &&
     serializedInventoryControlFlow.dominatesControlFlow(
       executable,
       authorization.index,
@@ -107,6 +109,15 @@ test('public inventory wrappers preserve the authorized merchant parameter', () 
     );
     assert.equal(
       publicWrapperPreservesMerchantParameter(reassigned, delegatePattern),
+      false
+    );
+
+    const strictInto = source.replace(
+      delegation[0],
+      `SELECT merchant_id INTO STRICT p_merchant_id FROM public.orders WHERE id = p_order_id;\n${delegation[0]}`
+    );
+    assert.equal(
+      publicWrapperPreservesMerchantParameter(strictInto, delegatePattern),
       false
     );
 

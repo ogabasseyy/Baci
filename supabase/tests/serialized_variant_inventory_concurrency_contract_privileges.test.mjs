@@ -248,3 +248,45 @@ test('detects security mode after preceding ALTER actions', () => {
     'definer'
   );
 });
+
+test('preserves grants from other grantors on qualified revokes', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = `
+    CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
+      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
+    REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;
+    GRANT EXECUTE ON FUNCTION ${signature} TO authenticated GRANTED BY inventory_owner;
+    REVOKE EXECUTE ON FUNCTION ${signature} FROM authenticated GRANTED BY postgres;
+  `;
+  assert.equal(
+    serializedInventoryPrivileges.authenticatedCanExecute(source, signature),
+    true
+  );
+});
+
+test('resolves unqualified grants against the protected signature', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = `
+    CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
+      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
+    REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;
+    SET search_path = private;
+    GRANT EXECUTE ON FUNCTION fixture(uuid) TO authenticated;
+  `;
+  assert.equal(
+    serializedInventoryPrivileges.authenticatedCanExecute(source, signature),
+    true
+  );
+});
+
+test('ignores security-mode decoys inside the function body', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = `
+    CREATE FUNCTION ${signature} RETURNS void
+      LANGUAGE plpgsql AS $$ BEGIN PERFORM 'SECURITY DEFINER'; END; $$;
+  `;
+  assert.equal(
+    serializedInventoryPrivileges.effectiveSecurityMode(source, signature),
+    undefined
+  );
+});

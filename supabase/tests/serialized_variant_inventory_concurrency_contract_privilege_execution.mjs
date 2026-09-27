@@ -4,25 +4,9 @@ import { serializedInventoryPrivilegeParser } from './serialized_variant_invento
 import { serializedInventoryPrivilegeRoles } from './serialized_variant_inventory_concurrency_contract_privilege_roles.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
-const { parseFunctionPrivilege } = serializedInventoryPrivilegeParser;
-const { escapeRegex, splitTopLevelList } = serializedInventorySqlParser;
-
-function signaturePattern(signature) {
-  return escapeRegex(signature)
-    .replaceAll('\\.', '\\s*\\.\\s*')
-    .replaceAll(',', '\\s*,\\s*')
-    .replaceAll(' ', '\\s+');
-}
-
-function identifierPattern(identifier) {
-  return identifier
-    .split('.')
-    .map((part) => {
-      const unquoted = part.replace(/^"|"$/g, '');
-      return `(?:${escapeRegex(unquoted)}|"${escapeRegex(unquoted)}")`;
-    })
-    .join('\\s*\\.\\s*');
-}
+const { parseFunctionPrivilege, privilegeTargetPattern } =
+  serializedInventoryPrivilegeParser;
+const { splitTopLevelList } = serializedInventorySqlParser;
 
 function schemaNameFromSignature(signature) {
   const match = /^(?:"([^"]+)"|([a-z_][a-z0-9_]*))\s*\./i.exec(signature);
@@ -39,26 +23,6 @@ function maskSqlStringLiterals(source) {
   );
   maskedSourceCache.set(source, masked);
   return masked;
-}
-
-function privilegeTargetPattern(signature) {
-  const parsed = /^(.*)\(([^()]*)\)$/.exec(signature);
-  if (!parsed) return signaturePattern(signature);
-  const argumentTypes = parsed[2]
-    .split(',')
-    .map((type) => type.trim())
-    .filter(Boolean)
-    .map((type) => {
-      const unqualified = type.replace(/^pg_catalog\s*\.\s*/i, '');
-      return `(?:(?:pg_catalog\\s*\\.\\s*)?${signaturePattern(unqualified)})`;
-    })
-    .join('\\s*,\\s*');
-  return (
-    identifierPattern(parsed[1].trim()) +
-    '(?:\\s*\\(\\s*' +
-    argumentTypes +
-    '\\s*\\))?'
-  );
 }
 
 function splitFunctionPrivilegeTargets(source) {
@@ -220,15 +184,22 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
       }
       state.exists = true;
     } else if (event.kind === 'owner') {
-      state.owner = event.owner;
+      state.owner = serializedInventoryPrivilegeRoles.resolveSpecialRole(
+        event.owner,
+        state.currentRole,
+        state.sessionUser
+      );
+    } else if (event.kind === 'move') {
+      state.exists = true;
+      state.owner = 'authenticated';
     } else if (event.kind === 'reassign') {
-      const references = event.from.map((reference) => {
-        if (reference === 'current_user' || reference === 'current_role') {
-          return state.currentRole;
-        }
-        if (reference === 'session_user') return state.sessionUser;
-        return reference;
-      });
+      const references = event.from.map((reference) =>
+        serializedInventoryPrivilegeRoles.resolveSpecialRole(
+          reference,
+          state.currentRole,
+          state.sessionUser
+        )
+      );
       if (state.owner !== undefined && references.includes(state.owner)) {
         state.owner = event.owner;
       }

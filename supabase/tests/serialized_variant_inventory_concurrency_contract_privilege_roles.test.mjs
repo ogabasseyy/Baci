@@ -138,4 +138,8 @@ test('parses session role changes for privilege lifecycle analysis', () => {
     ),
     { index: 0, kind: 'role', role: 'authenticated' }
   );
+  assert.deepEqual(
+    serializedInventoryPrivilegeRoles.parseRoleChange('SET ROLE NONE;'),
+    { index: 0, kind: 'reset-role' }
+  );
 });

@@ -129,6 +129,6 @@ export const EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260927120000_order_storefront_claim_loop_by_product.sql',
-    sha256: '475dd68b7df25802708c73953fbb1036b88f32034c700ffcc0462d3e0f002721',
+    sha256: '41460115912c449203fb60be94c0343bf0363e106fc8f61e353be84801382b97',
   },
 ];

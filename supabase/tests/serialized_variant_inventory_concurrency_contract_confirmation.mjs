@@ -29,16 +29,23 @@ function findConfirmationLocks(source) {
         ? query[2].slice(0, orderBy.index).trim()
         : query?.[2];
       const qualifier = query?.[1]
-        ? query[1] + '\\s*\\.\\s*'
+        ? `${query[1]}\\s*\\.\\s*`
         : '(?:(?:[a-z_][a-z0-9_]*)\\s*\\.\\s*)?';
+      const narrowedItemScope =
+        table === 'order_items' &&
+        (where ?? '')
+          .replace(
+            new RegExp(`\\b${qualifier}order_id\\s*=\\s*p_order_id\\b`, 'i'),
+            ''
+          )
+          .replace(/[\s();]/g, '')
+          .replace(/AND/gi, '') !== '';
       const contradictoryItemScope =
         table === 'order_items' &&
         [
-          new RegExp('\\b' + qualifier + 'order_id\\s+IS\\s+NULL\\b', 'i'),
+          new RegExp(`\\b${qualifier}order_id\\s+IS\\s+NULL\\b`, 'i'),
           new RegExp(
-            '\\b' +
-              qualifier +
-              'order_id\\s*(?:<>|!=|IS\\s+DISTINCT\\s+FROM)',
+            `\\b${qualifier}order_id\\s*(?:<>|!=|IS\\s+DISTINCT\\s+FROM)`,
             'i'
           ),
           new RegExp(
@@ -51,6 +58,7 @@ function findConfirmationLocks(source) {
       if (
         query &&
         !contradictoryItemScope &&
+        !narrowedItemScope &&
         !/\b(?:LIMIT|OFFSET|FETCH)\b/i.test(where) &&
         (!query[3] ||
           (query[1] && query[3].toLowerCase() === query[1].toLowerCase())) &&
@@ -204,7 +212,7 @@ function confirmationItemOrderIsDeterministic(lock) {
     ? `(?:${lock.alias}\\s*\\.\\s*)?`
     : '(?:(?:[a-z_][a-z0-9_]*)\\s*\\.\\s*)?';
   return new RegExp(
-    `^\\s*${qualifier}product_id(?:\\s+(?:ASC|DESC))?\\s*,\\s*${qualifier}id(?:\\s+(?:ASC|DESC))?\\s*$`,
+    `^\\s*${qualifier}product_id(?:\\s+ASC)?\\s*,\\s*${qualifier}id(?:\\s+ASC)?\\s*$`,
     'i'
   ).test(lock.orderBy);
 }
@@ -232,6 +240,50 @@ function reclaimCounterResetPerItem(source) {
   );
 }
 
+function soldTransitionInLockedLoop(source) {
+  const cleanSource = maskSqlLiterals(stripSqlComments(source), {
+    preserveStrings: true,
+  });
+  const loop = /FOR\s+v_unit\s+IN\b[\s\S]*?\bLOOP\b/i.exec(cleanSource);
+  if (!loop) return false;
+  const bodyStart = loop.index + loop[0].length;
+  const transition =
+    /UPDATE\s+(?:public\s*\.\s*)?variant_inventory\s+SET\s+[^;]*?\bstatus\s*=\s*'sold'[^;]*?\bWHERE\b[^;]*?\bid\s*=\s*v_unit\s*\.\s*id\b[^;]*?;/i.exec(
+      cleanSource.slice(bodyStart)
+    );
+  if (!transition) return false;
+  const transitionIndex = bodyStart + transition.index;
+  return (
+    serializedInventoryControlFlow.sharesInnermostLoop(
+      cleanSource,
+      bodyStart,
+      transitionIndex
+    ) &&
+    serializedInventoryControlFlow.isReachable(cleanSource, transitionIndex)
+  );
+}
+
+function soldGuardDominatesUnits(source) {
+  const cleanSource = maskSqlLiterals(stripSqlComments(source), {
+    preserveStrings: true,
+  });
+  const guard =
+    /IF\s+COALESCE\(\s*\(\s*SELECT\s+auth\.role\(\s*\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\.has_merchant_access\(\s*p_merchant_id\s*\)\s+THEN\b/i.exec(
+      cleanSource
+    );
+  const selector = /FOR\s+v_unit\s+IN\b/i.exec(cleanSource);
+  return Boolean(
+    guard &&
+      selector &&
+      guard.index < selector.index &&
+      serializedInventoryControlFlow.dominatesControlFlow(
+        cleanSource,
+        guard.index,
+        selector.index
+      )
+  );
+}
+
 export const serializedInventoryConfirmation = {
   confirmationItemOrderIsDeterministic,
   confirmationLocksPrecedeReclaim,
@@ -239,4 +291,6 @@ export const serializedInventoryConfirmation = {
   findReclaimReservationTransition,
   orderLockFailsClosed,
   reclaimCounterResetPerItem,
+  soldGuardDominatesUnits,
+  soldTransitionInLockedLoop,
 };

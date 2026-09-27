@@ -115,3 +115,77 @@ test('tracks REASSIGN OWNED transfers from the current function owner', () => {
     false
   );
 });
+
+test('fails closed when routines move into the protected identity', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = [
+    `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;`,
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+    `ALTER FUNCTION ${signature} RENAME TO fixture_retired;`,
+    'SET ROLE authenticated;',
+    'CREATE FUNCTION private.standby(uuid) RETURNS void SECURITY DEFINER LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;',
+    'RESET ROLE;',
+    'ALTER FUNCTION private.standby(uuid) RENAME TO fixture;',
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+  ].join('\n');
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});
+
+test('matches lifecycle declarations with catalog-qualified types', () => {
+  const signature = 'private.fixture(uuid, uuid)';
+  const source = [
+    'CREATE FUNCTION private.fixture(p_a uuid, p_b uuid) RETURNS void LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;',
+    'DROP FUNCTION private.fixture(uuid, uuid);',
+    'CREATE FUNCTION private.fixture(p_a pg_catalog.uuid, p_b pg_catalog.uuid) RETURNS void LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;',
+    'ALTER FUNCTION private.fixture(pg_catalog.uuid, pg_catalog.uuid) OWNER TO authenticated;',
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+  ].join('\n');
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});
+
+test('splits reassigned owners with quote awareness', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = [
+    `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;`,
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+    `ALTER FUNCTION ${signature} OWNER TO "inventory,owner";`,
+    'REASSIGN OWNED BY "inventory,owner" TO authenticated;',
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+  ].join('\n');
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});
+
+test('resolves special roles in ownership transfers', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = [
+    'SET ROLE authenticated;',
+    `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;`,
+    `ALTER FUNCTION ${signature} OWNER TO CURRENT_USER;`,
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+  ].join('\n');
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});

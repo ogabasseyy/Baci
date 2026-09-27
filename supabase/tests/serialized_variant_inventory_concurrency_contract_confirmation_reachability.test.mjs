@@ -1,19 +1,51 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
+import { serializedInventoryBranches } from './serialized_variant_inventory_concurrency_contract_branches.mjs';
 import { serializedInventoryConfirmation } from './serialized_variant_inventory_concurrency_contract_confirmation.mjs';
 import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
+import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const { latestFunctionBody } = serializedInventoryContract;
 const {
+  confirmationItemOrderIsDeterministic,
   findConfirmationLocks,
   findReclaimReservationTransition,
   reclaimCounterResetPerItem,
 } = serializedInventoryConfirmation;
 const { dominatesControlFlow, isReachable } = serializedInventoryControlFlow;
 
-const confirmationHoldGuard =
-  /IF\s+NOT\s+v_is_confirmed_hold\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]order_not_confirmed_for_inventory_hold['"](?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i;
+const holdGuardOpening = /IF\s+NOT\s+v_is_confirmed_hold\s+THEN\b/i;
+
+function holdRejectionRaisesAtTopLevel(source) {
+  let arms;
+  try {
+    arms = serializedInventoryBranches.extractIfArms(source, holdGuardOpening);
+  } catch {
+    return false;
+  }
+  const masked = serializedInventorySqlParser.maskSqlLiterals(arms.thenBranch);
+  let topLevelRaise = false;
+  let depth = 0;
+  let caseDepth = 0;
+  for (const token of masked.matchAll(
+    /\bEND\s+IF\b|\bEND\s+CASE\b|\bEND\b(?!\s+(?:IF|CASE|LOOP)\b)|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bCASE\b|\bRAISE\s+EXCEPTION\b/gi
+  )) {
+    if (/^END\s+IF/i.test(token[0])) depth = Math.max(0, depth - 1);
+    else if (/^END\s+CASE/i.test(token[0]))
+      caseDepth = Math.max(0, caseDepth - 1);
+    else if (/^END\b/i.test(token[0])) caseDepth = Math.max(0, caseDepth - 1);
+    else if (/^IF\b/i.test(token[0])) depth += 1;
+    else if (/^CASE$/i.test(token[0])) caseDepth += 1;
+    else if (depth === 0 && caseDepth === 0) topLevelRaise = true;
+  }
+  return (
+    topLevelRaise &&
+    /RAISE\s+EXCEPTION\s+['"]order_not_confirmed_for_inventory_hold['"]/i.test(
+      arms.thenBranch
+    )
+  );
+}
 const fullyReservedExpiryClear =
   /IF\s+v_reserved_count\s*=\s*v_item\.quantity\s+THEN[\s\S]*?WITH\s+confirmed_units\s+AS\s*\(\s*UPDATE\s+public\.variant_inventory\s+SET\s+reservation_expires_at\s*=\s*NULL[\s\S]*?WHERE\s+order_item_id\s*=\s*v_item\.id\s+AND\s+status\s*=\s*'reserved'\s+AND\s+reservation_expires_at\s+IS\s+NOT\s+NULL\s+RETURNING\s+id\s*\)\s*SELECT[\s\S]*?FROM\s+confirmed_units\s*;/i;
 const partialExpiryClear =
@@ -31,9 +63,10 @@ test('confirmation rejection remains reachable before item reconciliation', () =
   const confirm = latestFunctionBody(
     'private.confirm_order_inventory_reservations(uuid, uuid)'
   );
-  const guard = confirmationHoldGuard.exec(confirm);
+  const guard = holdGuardOpening.exec(confirm);
   const locks = findConfirmationLocks(confirm);
   assert.ok(guard);
+  assert.equal(holdRejectionRaisesAtTopLevel(confirm), true);
   assert.ok(locks.item);
   assert.equal(isReachable(confirm, guard.index), true);
   assert.equal(
@@ -41,11 +74,15 @@ test('confirmation rejection remains reachable before item reconciliation', () =
     true
   );
 
+  const guardBlock = confirm.slice(
+    guard.index,
+    confirm.indexOf('END IF;', guard.index) + 'END IF;'.length
+  );
   const unreachable = confirm.replace(
-    confirmationHoldGuard,
+    guardBlock,
     (match) => `IF false THEN\n${match}\nEND IF;`
   );
-  const unreachableGuard = confirmationHoldGuard.exec(unreachable);
+  const unreachableGuard = holdGuardOpening.exec(unreachable);
   const unreachableLocks = findConfirmationLocks(unreachable);
   assert.ok(unreachableGuard);
   assert.ok(unreachableLocks.item);
@@ -57,6 +94,12 @@ test('confirmation rejection remains reachable before item reconciliation', () =
     ),
     false
   );
+
+  const nestedRaise = confirm.replace(
+    /RAISE\s+EXCEPTION\s+['"]order_not_confirmed_for_inventory_hold['"][^;]*;/i,
+    (raise) => `IF false THEN\n${raise}\nEND IF;`
+  );
+  assert.equal(holdRejectionRaisesAtTopLevel(nestedRaise), false);
 });
 
 test('reservation expiry clears remain reachable in both reconciliation branches', () => {
@@ -104,4 +147,42 @@ test('reclaim counters stay per-item and reachable', () => {
     findReclaimReservationTransition(unreachableIncrement),
     undefined
   );
+});
+
+test('confirmation item locks require ascending product/id order', () => {
+  const ordered = `
+    SELECT oi.id FROM order_items oi
+    WHERE oi.order_id = p_order_id
+    ORDER BY oi.product_id, oi.id
+    FOR UPDATE;
+  `;
+  const descending = ordered.replace(
+    'ORDER BY oi.product_id, oi.id',
+    'ORDER BY oi.product_id DESC, oi.id DESC'
+  );
+
+  assert.equal(
+    confirmationItemOrderIsDeterministic(findConfirmationLocks(ordered).item),
+    true
+  );
+  assert.ok(findConfirmationLocks(descending).item);
+  assert.equal(
+    confirmationItemOrderIsDeterministic(
+      findConfirmationLocks(descending).item
+    ),
+    false
+  );
+});
+
+test('confirmation item locks reject narrowing predicates', () => {
+  const confirm = latestFunctionBody(
+    'private.confirm_order_inventory_reservations(uuid, uuid)'
+  );
+  assert.ok(findConfirmationLocks(confirm).item);
+
+  const narrowed = confirm.replace(
+    'WHERE oi.order_id = p_order_id',
+    'WHERE oi.order_id = p_order_id AND oi.quantity > 1'
+  );
+  assert.equal(findConfirmationLocks(narrowed).item, undefined);
 });

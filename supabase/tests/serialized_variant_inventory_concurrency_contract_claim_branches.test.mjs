@@ -38,3 +38,18 @@ test('strict shortage exceptions stay in the shortage IF arm', () => {
     false
   );
 });
+
+test('claimed-unit counters reject later resets', () => {
+  const claim = serializedInventoryContract.latestFunctionBody(
+    'private.claim_variant_inventory_units_for_order_item_internal(uuid, uuid, uuid)'
+  );
+  const reset = claim.replace(
+    'v_claimed_count := v_claimed_count + 1;',
+    'v_claimed_count := v_claimed_count + 1;\nv_claimed_count := 0;'
+  );
+  assert.equal(serializedInventoryClaim.claimedIncrementCount(reset), 0);
+  assert.equal(
+    serializedInventoryClaim.findEffectiveReserveUpdate(reset),
+    undefined
+  );
+});

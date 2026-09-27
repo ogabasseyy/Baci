@@ -2,7 +2,26 @@ import { serializedInventoryBranches } from './serialized_variant_inventory_conc
 import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
-const { escapeRegex, isRequiredConjunct } = serializedInventorySqlParser;
+const { escapeRegex, isRequiredConjunct, maskSqlLiterals } =
+  serializedInventorySqlParser;
+
+function hasTopLevelBareReturn(arm) {
+  const masked = maskSqlLiterals(arm);
+  let depth = 0;
+  let caseDepth = 0;
+  for (const token of masked.matchAll(
+    /\bEND\s+IF\b|\bEND\s+CASE\b|\bEND\b(?!\s+(?:IF|CASE|LOOP)\b)|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bCASE\b|\bRETURN\s*;|\bRAISE\s+EXCEPTION\b/gi
+  )) {
+    if (/^END\s+IF/i.test(token[0])) depth = Math.max(0, depth - 1);
+    else if (/^END\s+CASE/i.test(token[0]))
+      caseDepth = Math.max(0, caseDepth - 1);
+    else if (/^END\b/i.test(token[0])) caseDepth = Math.max(0, caseDepth - 1);
+    else if (/^IF\b/i.test(token[0])) depth += 1;
+    else if (/^CASE$/i.test(token[0])) caseDepth += 1;
+    else if (depth === 0 && caseDepth === 0) return /^RETURN/i.test(token[0]);
+  }
+  return false;
+}
 
 function hasPositiveQuantityGuard(source) {
   const executable = serializedInventorySqlParser.maskSqlLiterals(source, {
@@ -28,7 +47,7 @@ function hasPositiveQuantityGuard(source) {
   return Boolean(
     guard &&
       thenBranch &&
-      /\bRETURN\s*;/i.test(thenBranch) &&
+      hasTopLevelBareReturn(thenBranch) &&
       protectedOperations.length > 0 &&
       protectedOperations.every((operation) =>
         serializedInventoryControlFlow.dominatesControlFlow(
@@ -53,9 +72,11 @@ function targetMerchantLookup(source, beforeIndex) {
   if (!latestAssignment) return null;
   const assignment = latestAssignment[0];
   if (targetParameter === 'product_id_param') {
-    return /\bFROM\s+(?:public\s*\.\s*)?products\b[^;]*\bWHERE\s+[^;]*\bid\s*=\s*product_id_param\b[^;]*;/i.test(
-      assignment
-    )
+    const productWhere =
+      /\bFROM\s+(?:public\s*\.\s*)?products\b[^;]*\bWHERE\s+([^;]*);/i.exec(
+        assignment
+      )?.[1] ?? '';
+    return isRequiredConjunct(productWhere, /\bid\s*=\s*product_id_param\b/i)
       ? latestAssignment
       : null;
   }

@@ -29,13 +29,26 @@ function dynamicDdlPattern(functionSignature) {
 
 function dynamicPrivilegePattern(functionSignature) {
   const functionName = functionNameFromSignature(functionSignature);
+  const bareName = functionName.includes('.')
+    ? functionName.slice(functionName.lastIndexOf('.') + 1)
+    : functionName;
   const argumentTypes = functionSignature.match(/\(([^()]*)\)\s*$/)?.[1] ?? '';
   const argumentsPattern = escapeRegex(argumentTypes)
     .replaceAll(',', '\\s*,\\s*')
     .replaceAll(' ', '\\s+');
   const argumentList = `(?:\\s*\\(\\s*${argumentsPattern}\\s*\\))?`;
   return new RegExp(
-    `(?:^|[^A-Za-z0-9_])(?:GRANT|REVOKE)\\s+(?:ALL(?:\\s+PRIVILEGES)?|EXECUTE)\\s+ON\\s+(?:FUNCTION|ROUTINE)\\s+${identifierPattern(functionName)}${argumentList}(?=\\s+(?:TO|FROM)\\b)`,
+    `(?:^|[^A-Za-z0-9_])(?:GRANT|REVOKE)\\s+(?:ALL(?:\\s+PRIVILEGES)?|EXECUTE)\\s+ON\\s+(?:FUNCTION|ROUTINE)\\s+(?:${identifierPattern(functionName)}|${identifierPattern(bareName)})${argumentList}(?=\\s+(?:TO|FROM)\\b)`,
+    'i'
+  );
+}
+
+function dynamicSchemaPrivilegePattern(functionSignature) {
+  const qualified = functionSignature.trim().replace(/\([^()]*\)\s*$/, '');
+  if (!qualified.includes('.')) return null;
+  const schema = qualified.slice(0, qualified.lastIndexOf('.'));
+  return new RegExp(
+    `(?:^|[^A-Za-z0-9_])(?:GRANT|REVOKE)\\s+(?:ALL(?:\\s+PRIVILEGES)?|EXECUTE)\\s+ON\\s+ALL\\s+(?:FUNCTIONS|ROUTINES)\\s+IN\\s+SCHEMA\\s+${identifierPattern(schema)}(?![A-Za-z0-9_])`,
     'i'
   );
 }
@@ -48,6 +61,15 @@ function extractExecutePayload(source, start) {
     const char = source[index];
 
     if (char === "'") {
+      const prefix = source[index - 1];
+      if (
+        (prefix === 'E' || prefix === 'e') &&
+        index - 1 >= start &&
+        (index - 2 < start || /[^A-Za-z0-9_$]/.test(source[index - 2])) &&
+        payload.endsWith(prefix)
+      ) {
+        payload = payload.slice(0, -1);
+      }
       const literalStart = index;
       index += 1;
       while (index < source.length) {
@@ -177,34 +199,36 @@ function hasDynamicFunctionDdl(source, functionSignature) {
   return false;
 }
 
+const dynamicPrivilegeOperationPattern =
+  /\b(?:GRANT|REVOKE)\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)\s+ON\s+(?:ALL\s+(?:FUNCTIONS|ROUTINES)\s+IN\s+SCHEMA\s+\S+|(?:FUNCTION|ROUTINE))\b/i;
+
 function hasDynamicPrivilegeDdl(source, functionSignature) {
   const masked = serializedInventorySqlParser.maskSqlLiterals(source);
   const privilege = dynamicPrivilegePattern(functionSignature);
+  const schemaPrivilege = dynamicSchemaPrivilegePattern(functionSignature);
+  const matchesPrivilege = (text) =>
+    privilege.test(text) || schemaPrivilege?.test(text) === true;
   for (const execute of masked.matchAll(/\bEXECUTE\b/gi)) {
     const payload = extractExecutePayload(
       source,
       execute.index + execute[0].length
     );
     const normalized = normalizedExecutePayload(payload);
-    if (privilege.test(normalized.text)) return true;
+    if (matchesPrivilege(normalized.text)) return true;
     const assigned = assignedExecutePayload(source, execute.index, payload);
     if (assigned !== null) {
       const renderedAssigned = normalizedExecutePayload(assigned);
-      if (privilege.test(renderedAssigned.text)) return true;
+      if (matchesPrivilege(renderedAssigned.text)) return true;
       if (
         renderedAssigned.hasUnknownArguments &&
-        /\b(?:GRANT|REVOKE)\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)\s+ON\s+(?:FUNCTION|ROUTINE)\b/i.test(
-          renderedAssigned.operationText
-        )
+        dynamicPrivilegeOperationPattern.test(renderedAssigned.operationText)
       ) {
         return true;
       }
     }
     if (
       normalized.hasUnknownArguments &&
-      /\b(?:GRANT|REVOKE)\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)\s+ON\s+(?:FUNCTION|ROUTINE)\b/i.test(
-        normalized.operationText
-      )
+      dynamicPrivilegeOperationPattern.test(normalized.operationText)
     ) {
       return true;
     }

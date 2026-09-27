@@ -7,6 +7,10 @@ test('release authorization requires a null-safe auth role guard', () => {
   const nullSafeGuard = `IF COALESCE((SELECT auth.role()), '') <> 'service_role'
     AND NOT public.has_merchant_access(p_merchant_id) THEN
     RAISE EXCEPTION 'forbidden';
+  END IF;
+  PERFORM 1 FROM public.orders WHERE id = p_order_id FOR UPDATE;
+  IF v_target_status = 'available' THEN
+    PERFORM 1;
   END IF;`;
   const rawGuard = nullSafeGuard.replace(
     /COALESCE\(\(SELECT auth\.role\(\)\), ''\)/,
@@ -50,7 +54,7 @@ test('release authorization rejects an unreachable forbidden exception', () => {
   );
   const unreachable = release.replace(
     /RAISE\s+EXCEPTION\s+['"]forbidden['"][^;]*;/i,
-    (raise) => 'IF false THEN\n' + raise + '\nEND IF;'
+    (raise) => `IF false THEN\n${raise}\nEND IF;`
   );
 
   assert.equal(

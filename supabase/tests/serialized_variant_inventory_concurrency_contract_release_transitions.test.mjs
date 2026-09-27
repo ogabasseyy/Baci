@@ -162,6 +162,39 @@ test('release reconciliation recomputes missing units and deduplicates stock syn
   );
 });
 
+test('release authorization guards the order lock and dispatch', () => {
+  const release = serializedInventoryContract.latestFunctionBody(
+    'private.release_order_inventory_units(uuid, uuid, text)'
+  );
+  assert.equal(
+    serializedInventoryReleaseLocks.hasMerchantAuthorizationGuard(release),
+    true
+  );
+
+  const guardPattern =
+    /IF\s+COALESCE\(\s*\(\s*SELECT\s+auth\.role\(\s*\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\.has_merchant_access\(\s*p_merchant_id\s*\)\s+THEN[\s\S]*?END\s+IF\s*;/i;
+  const guardBlock = guardPattern.exec(release)[0];
+  const earlyReturn = release.replace(
+    guardBlock,
+    `RETURN jsonb_build_object();\n${guardBlock}`
+  );
+  assert.equal(
+    serializedInventoryReleaseLocks.hasMerchantAuthorizationGuard(earlyReturn),
+    false
+  );
+
+  const lockPattern =
+    /PERFORM\s+1\s+FROM\s+public\.orders[\s\S]*?FOR\s+UPDATE\s*;/i;
+  const lockBlock = lockPattern.exec(release)[0];
+  const swapped = release
+    .replace(guardBlock, '/* guard moved below the order lock */')
+    .replace(lockBlock, `${lockBlock}\n${guardBlock}`);
+  assert.equal(
+    serializedInventoryReleaseLocks.hasMerchantAuthorizationGuard(swapped),
+    false
+  );
+});
+
 test('release reconciliation synchronizes products in a deterministic order', () => {
   const release = serializedInventoryContract.latestFunctionBody(
     'private.release_order_inventory_units(uuid, uuid, text)'

@@ -136,3 +136,32 @@ test('treats unconditional loop exits as terminating later body statements', () 
     true
   );
 });
+
+test('recognizes every exception-form RAISE as terminating', () => {
+  for (const raise of [
+    "RAISE EXCEPTION 'boom';",
+    "RAISE SQLSTATE 'P0001';",
+    'RAISE integrity_constraint_violation;',
+    "RAISE 'boom';",
+    'RAISE;',
+  ]) {
+    const source = `${raise}\nlock_row;`;
+    assert.equal(
+      serializedInventoryControlFlow.isReachable(
+        source,
+        source.indexOf('lock_row')
+      ),
+      false
+    );
+  }
+  for (const notice of ["RAISE NOTICE 'hi';", "RAISE DEBUG 'x';"]) {
+    const source = `${notice}\nlock_row;`;
+    assert.equal(
+      serializedInventoryControlFlow.isReachable(
+        source,
+        source.indexOf('lock_row')
+      ),
+      true
+    );
+  }
+});

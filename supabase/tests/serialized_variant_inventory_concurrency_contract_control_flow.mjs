@@ -55,7 +55,7 @@ function pathAt(source, targetIndex) {
 
 function isReachable(source, index) {
   const terminator =
-    /\bRETURN\b(?!\s+(?:NEXT|QUERY)\b)|\bRAISE\s+EXCEPTION\b/gi;
+    /\bRETURN\b(?!\s+(?:NEXT|QUERY)\b)|\bRAISE\b(?!\s+(?:DEBUG|LOG|INFO|NOTICE|WARNING)\b)/gi;
   const loopExit = /\b(?:CONTINUE|EXIT)\b(?![^\n;]*\bWHEN\b)/gi;
   const statementStart = /(?:;|>>|\b(?:THEN|ELSE|LOOP|BEGIN)\b)$/i;
   const searchable = serializedInventorySqlParser.maskSqlLiterals(source);

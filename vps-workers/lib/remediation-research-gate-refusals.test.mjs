@@ -213,6 +213,25 @@ describe('remediation research gate refusals', () => {
     }
   });
 
+  it('rejects no-fix conclusions stated as not found', () => {
+    const reports = [
+      'SELECTED_FIX: No safe fix could be found from the available evidence; collect traces',
+      'SELECTED_FIX: A defensible fix cannot be found without production traces.',
+      'SELECTED_FIX: The safe fix was not found in the available evidence.',
+    ];
+
+    for (const selectedFix of reports) {
+      const result = validateCodexResearchResult(
+        jsonl(
+          validReport.replace('SELECTED_FIX: smallest code fix', selectedFix)
+        )
+      );
+
+      assert.equal(result.accepted, false);
+      assert.match(result.reasons.join('\n'), /defensible selected fix/);
+    }
+  });
+
   it('rejects standalone none refusals at the start of the selection', () => {
     const reports = [
       'SELECTED_FIX: None.',

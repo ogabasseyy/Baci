@@ -102,6 +102,17 @@ describe('remediation research gate refusal boundaries', () => {
     assert.equal(result.accepted, true);
   });
 
+  it('accepts a not-found refusal that selects a fallback instead', () => {
+    const report = validReport.replace(
+      'SELECTED_FIX: smallest code fix',
+      'SELECTED_FIX: No safe fix could be found yet, so apply the bounded workaround'
+    );
+
+    const result = validateCodexResearchResult(jsonl(report));
+
+    assert.equal(result.accepted, true);
+  });
+
   it('accepts an affirmative selection with incidental cannot-safely wording', () => {
     const report = validReport.replace(
       'SELECTED_FIX: smallest code fix',

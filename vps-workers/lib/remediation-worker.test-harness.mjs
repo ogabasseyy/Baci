@@ -17,6 +17,10 @@ const withTestRemediationLock =
   (options = {}) =>
     runWorker({
       ...options,
+      containerIdentity: options.containerIdentity ?? {
+        gid: 1001,
+        uid: 1001,
+      },
       remediationLock: options.remediationLock ?? testRemediationLock,
     });
 

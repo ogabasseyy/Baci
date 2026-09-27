@@ -19,12 +19,17 @@ function formatRelatedProductPrice(
 ) {
   if (!currencySource) return null;
 
-  // A confirmed-empty variant set (successful hydration with no purchasable
-  // variant) has no selectable SKU: skip the parent-price fallback so the
-  // card cannot advertise a price alongside "Currently unavailable".
+  // A variant-selling product has no meaningful parent price until its
+  // variants resolve: a confirmed-empty set has no selectable SKU, and an
+  // unresolved set (hydration error/skipped leaves variants unset without
+  // the purchasable flag) may have none at the parent amount. Skip the
+  // fallback in both cases, matching the inline-token path (which prints
+  // "Check current price" there). Inline-supplied variants without summary
+  // flags still price from their rows.
   if (
     product.has_variants === true &&
-    product.has_purchasable_variant === false
+    product.has_purchasable_variant !== true &&
+    (product.variants?.length ?? 0) === 0
   ) {
     return null;
   }

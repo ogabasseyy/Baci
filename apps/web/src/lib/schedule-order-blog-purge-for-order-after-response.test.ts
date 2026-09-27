@@ -4,13 +4,24 @@ const {
   mockAfter,
   mockScheduleOrderProductBlogPurge,
   mockScheduleStorefrontHostnamePurge,
+  mockRevalidateProducts,
+  mockExpireProductBlogCache,
 } = vi.hoisted(() => ({
   mockAfter: vi.fn(),
   mockScheduleOrderProductBlogPurge: vi.fn(),
   mockScheduleStorefrontHostnamePurge: vi.fn(),
+  mockRevalidateProducts: vi.fn(),
+  mockExpireProductBlogCache: vi.fn(),
 }));
 
 vi.mock('next/server', () => ({ after: mockAfter }));
+vi.mock('./cache-revalidation', () => ({
+  revalidateProducts: (...args: unknown[]) => mockRevalidateProducts(...args),
+}));
+vi.mock('./expire-product-blog-cache', () => ({
+  expireProductBlogCache: (...args: unknown[]) =>
+    mockExpireProductBlogCache(...args),
+}));
 vi.mock('./schedule-order-product-blog-purge', () => ({
   scheduleOrderProductBlogPurge: (...args: unknown[]) =>
     mockScheduleOrderProductBlogPurge(...args),
@@ -117,8 +128,21 @@ describe('scheduleOrderBlogPurgeForOrderAfterResponse', () => {
     });
     await pending;
     expect(mockScheduleOrderProductBlogPurge).not.toHaveBeenCalled();
+    // The merchant caches are hard-expired BEFORE the hostname purge: the
+    // preceding revalidation is stale-while-revalidate, so the first
+    // post-purge request could otherwise refill the edge with the
+    // pre-reclamation snapshot.
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      'merchant-1',
+      undefined,
+      { expireImmediately: true }
+    );
+    expect(mockExpireProductBlogCache).toHaveBeenCalledWith('merchant-1');
     expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
       'ogabassey'
+    );
+    expect(mockRevalidateProducts.mock.invocationCallOrder[0]).toBeLessThan(
+      mockScheduleStorefrontHostnamePurge.mock.invocationCallOrder[0]
     );
   });
 

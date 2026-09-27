@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { after } from 'next/server';
+import { revalidateProducts } from './cache-revalidation';
+import { expireProductBlogCache } from './expire-product-blog-cache';
 import { scheduleOrderProductBlogPurge } from './schedule-order-product-blog-purge';
 import { scheduleStorefrontHostnamePurge } from './storefront-product-purge-hostnames';
 
@@ -36,6 +38,12 @@ async function purgeOrderBlogProductsConservatively({
     ) {
       throw merchantError ?? new Error('merchant slug unavailable');
     }
+    // Hard-expire the merchant caches BEFORE the hostname purge: the
+    // preceding revalidation is stale-while-revalidate, so the first
+    // post-purge request could otherwise serve the pre-reclamation Next
+    // snapshot and repopulate the edge with stale availability.
+    revalidateProducts(merchantId, undefined, { expireImmediately: true });
+    expireProductBlogCache(merchantId);
     scheduleStorefrontHostnamePurge(merchantSlug.trim());
     console.warn('Purged storefront hostname after order-item lookup failed', {
       merchantId,

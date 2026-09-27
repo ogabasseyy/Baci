@@ -97,6 +97,34 @@ describe('BlogRelatedProducts', () => {
     expect(screen.getByText('Currently unavailable')).toBeInTheDocument();
   });
 
+  it('hides the parent price when variants fail to resolve', () => {
+    render(
+      <BlogRelatedProducts
+        basePath="/ogabassey"
+        currencySource={{ country: 'NG', payout_currency: 'NGN' }}
+        products={[
+          {
+            id: 'product-unresolved-variants',
+            name: 'Pixel 9',
+            price: 750000,
+            manage_stock: false,
+            has_variants: true,
+            slug: 'pixel-9',
+          },
+        ]}
+      />
+    );
+
+    // The variant RPC errored, so variants/has_purchasable_variant are
+    // undefined: there may be no selectable SKU at the parent amount.
+    // Availability stays fail-open, but no price is advertised (the
+    // inline-token path prints "Check current price" for this state).
+    expect(screen.queryByText('Currently unavailable')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /pixel 9/i })
+    ).not.toHaveTextContent('₦750,000');
+  });
+
   it('hides the parent price when variant selection is confirmed empty', () => {
     render(
       <BlogRelatedProducts

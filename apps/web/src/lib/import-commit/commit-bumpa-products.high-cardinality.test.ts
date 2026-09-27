@@ -96,6 +96,55 @@ describe('commitBumpaProducts high-cardinality purge', () => {
     expect(options.nextProductSlugs.at(-1)).toBe('imported-phone-1000');
   });
 
+  it('requests a hostname purge when 51 distinct products change without a category move', async () => {
+    const loadQuery = chainableQuery();
+    const insertQuery = {
+      insert: vi.fn().mockResolvedValue({ error: null }),
+    };
+    const merchantsQuery = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: { slug: 'ogabassey' },
+        error: null,
+      }),
+    };
+    merchantsQuery.select.mockReturnValue(merchantsQuery);
+    merchantsQuery.eq.mockReturnValue(merchantsQuery);
+
+    let productCall = 0;
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === 'merchants') return merchantsQuery;
+        productCall += 1;
+        return productCall === 1 ? loadQuery : insertQuery;
+      }),
+    } as unknown as SupabaseClient;
+
+    await commitBumpaProducts({
+      supabase,
+      merchantId: 'merchant-1',
+      importJobId: 'job-1',
+      products: Array.from({ length: 51 }, (_, index) => createProduct(index)),
+    });
+
+    // The downstream scheduler hostname-purges past 50 distinct entries,
+    // so promote here: otherwise the internal route pays for full product
+    // + paginated article enrichment that the scheduler discards.
+    expect(mockRevalidateProductsReliable).toHaveBeenCalledWith(
+      'merchant-1',
+      expect.objectContaining({
+        merchantSlug: 'ogabassey',
+        purgeWholeStorefront: true,
+      })
+    );
+    const [, options] = mockRevalidateProductsReliable.mock.calls[0] as [
+      string,
+      { nextProductSlugs: string[] },
+    ];
+    expect(options.nextProductSlugs).toHaveLength(51);
+  });
+
   it('requests a hostname purge when an existing product changes category', async () => {
     const loadQuery = chainableQuery();
     loadQuery.range = vi.fn().mockResolvedValue({

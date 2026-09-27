@@ -185,6 +185,14 @@ describe('explicit inline catalog prices', () => {
       resolveBlogCatalogPrices({ html }, { ...options, products }).html
     ).toBe('Currently unavailable');
   });
+  it('marks a zero-stock legacy base token unavailable under a null policy', () => {
+    const products = [{ ...product, manage_stock: null, stock_quantity: 0 }];
+    // Matches the PDP and related-product card, which normalize legacy
+    // null manage_stock to managed inventory.
+    expect(
+      resolveBlogCatalogPrices({ html: token }, { ...options, products }).html
+    ).toBe('Currently unavailable');
+  });
   it('replaces only TipTap text nodes, preserving attributes and code blocks', () => {
     const json = {
       type: 'doc',

@@ -3,6 +3,10 @@ import type { NormalizedImportedProduct } from '@/lib/imports/bumpa/bumpa-types'
 import { normalizeStorefrontCategoryValue } from '@/lib/normalize-storefront-category-value';
 import { revalidateProductsReliable } from '@/lib/revalidate-products-reliable';
 import { generateProductSlug } from '@/lib/seo-utils';
+import {
+  countDistinctProductPurgeEntries,
+  PURGE_WHOLE_STOREFRONT_THRESHOLD,
+} from '@/lib/storefront-product-purge-urls';
 import type { InternalRevalidateProductEntry } from '@/schemas/internal-revalidate-products-route';
 import { boundImportPurgeEntries } from './bound-import-purge-entries';
 import {
@@ -243,8 +247,20 @@ export async function commitBumpaProducts({
               .filter((slug): slug is string => Boolean(slug))
           )
         );
+        // Promote to a whole-storefront purge at the SAME distinct-entry
+        // threshold the downstream scheduler hostname-purges at: otherwise
+        // a 51–1000-product import pays for full product + paginated
+        // article enrichment here, only for the scheduler to discard that
+        // work and hostname-purge anyway (inside the worker's 5s timeout).
         const purgeWholeStorefront =
-          hasCategoryMove || purgeProducts.length < changedProducts.length;
+          hasCategoryMove ||
+          purgeProducts.length < changedProducts.length ||
+          countDistinctProductPurgeEntries(
+            purgeProducts.map((entry) => ({
+              slug: entry.slug ?? entry.id ?? '',
+              categorySegment: entry.categorySlug ?? entry.category ?? null,
+            }))
+          ) > PURGE_WHOLE_STOREFRONT_THRESHOLD;
         const revalidationOptions = {
           ...(merchantSlug && purgeProducts.length > 0
             ? {

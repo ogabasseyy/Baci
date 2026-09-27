@@ -54,7 +54,7 @@ export async function quarantineRefund({
    */
   preflight?: boolean;
   reason: string;
-  supabase: Pick<SupabaseClient, 'from'>;
+  supabase: Pick<SupabaseClient, 'from' | 'rpc'>;
   transactions: GatewayPaymentTransaction[];
 }): Promise<never> {
   const firstTransaction = transactions[0];
@@ -78,6 +78,41 @@ export async function quarantineRefund({
     });
   const duplicateReview =
     (reviewError as { code?: string } | null)?.code === '23505';
+  if (duplicateReview) {
+    // An open review already covers this order. When this quarantine carries
+    // provider-accepted refund evidence with no local row, merge it into the
+    // existing review instead of dropping the recovery metadata.
+    const providerRefundId = metadata?.provider_refund_id;
+    const paymentTransactionId = metadata?.payment_transaction_id;
+    if (
+      typeof providerRefundId === 'number' &&
+      Number.isSafeInteger(providerRefundId) &&
+      providerRefundId > 0 &&
+      typeof paymentTransactionId === 'string' &&
+      paymentTransactionId.length > 0
+    ) {
+      const { data: merged, error: mergeError } = await supabase.rpc(
+        'merge_paystack_cancellation_refund_provider_evidence_v1',
+        {
+          p_order_id: order.id,
+          p_merchant_id: order.merchant_id,
+          p_provider_refund_id: providerRefundId,
+          p_payment_transaction_id: paymentTransactionId,
+          p_reason: reason,
+        }
+      );
+      if (mergeError || merged !== true) {
+        if (preflight) {
+          throw new Error(
+            'Refund requires reconciliation, but merging its recovery evidence failed'
+          );
+        }
+        throw new DeliveryUncertainError(
+          'Refund requires reconciliation, but merging its recovery evidence failed'
+        );
+      }
+    }
+  }
   if (reviewError && !duplicateReview) {
     if (preflight) {
       throw new Error(

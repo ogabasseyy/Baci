@@ -202,6 +202,40 @@ describe('POST /api/cron/process-settlements', () => {
     expect(mocks.drainPaystackRefundNotifications).toHaveBeenCalled();
   });
 
+  it.each([
+    ['pending refunds', 'reconcilePendingPaystackCancellationRefunds'],
+    ['legacy refunds', 'reconcileCompletedPaystackCancellationRefunds'],
+    ['refund notifications', 'drainPaystackRefundNotifications'],
+  ] as const)('returns 503 when fulfilled %s report failures', async (_label, worker) => {
+    mocks[worker].mockResolvedValueOnce({
+      checked: 1,
+      claimed: 1,
+      failed: 1,
+      sent: 0,
+    });
+    const response = await POST(makeCancellationDrainRequest());
+    const payload = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(payload).toEqual({
+      error: 'Cancellation and refund background work incomplete',
+    });
+  });
+
+  it('returns 503 when the cancellation drain reports failed rows', async () => {
+    mocks.drainFailedOrderCancellationSideEffects.mockResolvedValueOnce({
+      drained: [],
+      failed: [{ orderId: 'order-1', reason: 'failed', step: 'refund' }],
+      skipped: [],
+    });
+    const response = await POST(makeCancellationDrainRequest());
+
+    expect(response.status).toBe(503);
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({ cancellationFailed: true })
+    );
+  });
+
   it('returns a 500 and skips notifications when settlement processing fails', async () => {
     mocks.rpc.mockResolvedValue({
       data: null,

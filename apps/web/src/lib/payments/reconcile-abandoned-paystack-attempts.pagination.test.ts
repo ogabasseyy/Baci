@@ -24,6 +24,7 @@ it('checks the next stale attempt before rechecking 25 held attempts on the next
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
+    is: vi.fn().mockReturnThis(),
     not: vi.fn().mockReturnThis(),
     lt: vi.fn((field: string, value: string) => {
       cutoffs.set(field, Date.parse(value));

@@ -27,6 +27,7 @@ export function createClient(
   const lookup = {
     eq: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
+    is: vi.fn().mockReturnThis(),
     neq: vi.fn().mockReturnThis(),
     not: vi.fn().mockReturnThis(),
     lt: vi.fn().mockReturnThis(),

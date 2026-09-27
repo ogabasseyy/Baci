@@ -26,6 +26,9 @@ CREATE INDEX paystack_cancellation_refund_notifications_ready_idx
 CREATE INDEX paystack_cancellation_refund_notifications_merchant_idx
   ON public.paystack_cancellation_refund_notifications (merchant_id);
 ALTER TABLE public.paystack_cancellation_refund_notifications ENABLE ROW LEVEL SECURITY;
+CREATE POLICY paystack_cancellation_refund_notifications_service_role_all
+  ON public.paystack_cancellation_refund_notifications
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
 REVOKE ALL ON public.paystack_cancellation_refund_notifications FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.paystack_cancellation_refund_notifications TO service_role;
 

@@ -54,9 +54,19 @@ test('manual mode serves deterministic quote, order-reuse, storefront-read, and 
     };
   }, order.id);
 
-  expect(results.quote.quotes).toMatchObject([
-    { id: 'fixture-door', price: 0, isStationPickup: false },
-  ]);
+  expect(results.quote.quotes).toMatchObject({
+    featured: [
+      {
+        id: 'fixture-door',
+        provider: 'GIGL',
+        serviceTier: 'Standard',
+        estimatedDays: 1,
+        price: 0,
+        isStationPickup: false,
+      },
+    ],
+    all: [{ id: 'fixture-door' }],
+  });
   expect(results.createdOrder).toMatchObject({
     amountDueToGateway: 107500,
     order: { id: order.id, shipping_fee: 0, total: 107500 },

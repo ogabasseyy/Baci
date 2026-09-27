@@ -1,19 +1,22 @@
 import { json } from '../../fixture-response';
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => ({}));
-  const pickup = body.deliveryPreference === 'pickup_station';
+  await request.json().catch(() => ({}));
+  const quote = {
+    id: 'fixture-door',
+    provider: 'GIGL',
+    serviceTier: 'Standard',
+    carrierName: 'GIG Logistics',
+    displayName: 'GIG Logistics - Standard',
+    estimatedDays: 1,
+    price: 0,
+    currency: 'NGN',
+    pickupIncluded: false,
+    insuranceIncluded: false,
+    isStationPickup: false,
+  };
   return json({
-    quotes: [
-      {
-        id: pickup ? 'fixture-pickup' : 'fixture-door',
-        provider: 'fixture',
-        service_name: pickup ? 'Store Pickup' : 'Standard Delivery',
-        price: 0,
-        currency: 'NGN',
-        estimated_days: 'Same day',
-        isStationPickup: pickup,
-        pickupLocation: pickup ? 'Ogabassey Ikeja' : undefined,
-      },
-    ],
+    quotes: { featured: [quote], all: [quote] },
+    sessionId: 'fixture-shipping-session',
+    warnings: [],
   });
 }

@@ -59,6 +59,12 @@ test('switches card rails and retries provider initialization against the same o
   const action = page.getByRole('button', { name: 'Place Order', exact: true });
   await action.click();
   await expect.poll(() => initializationAttempts).toBe(1);
+  await expect(
+    page.getByText('Checkout Failed', { exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByText('Fixture provider error', { exact: true })
+  ).toBeVisible();
   await expect(action).toBeEnabled();
   await action.click();
   await expect(page).toHaveURL(/\/payment-handoff$/);

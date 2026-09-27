@@ -13,19 +13,28 @@ export const test = base.extend<{
       const unexpected: string[] = [];
       const errors: string[] = [];
       let paymentRetryScenario = false;
-      let manualApiScenarioWasVisited = false;
       let providerErrorConsoleCount = 0;
       let provider503ConsoleCount = 0;
+      let manualApiScenarioWasVisited = false;
       let manualApi503ConsoleCount = 0;
+      let manualCheckoutFlowVisited = false;
+      let manualCheckoutProviderErrorCount = 0;
       const remainingAllowedErrors = [...allowedConsoleErrors];
       page.on('framenavigated', () => {
         const qaScenario = new URL(page.url()).searchParams.get('qa');
         if (qaScenario === 'payment-retry') paymentRetryScenario = true;
-        if (qaScenario === 'manual-api-integration')
+        if (
+          qaScenario === 'manual-api-integration' ||
+          qaScenario === 'manual-checkout-flow'
+        )
           manualApiScenarioWasVisited = true;
+        if (qaScenario === 'manual-checkout-flow')
+          manualCheckoutFlowVisited = true;
       });
       const manualApiScenario = () =>
-        new URL(page.url()).searchParams.get('qa') === 'manual-api-integration';
+        ['manual-api-integration', 'manual-checkout-flow'].includes(
+          new URL(page.url()).searchParams.get('qa') ?? ''
+        );
       page.on('pageerror', (error) => errors.push(error.message));
       page.on('console', (message) => {
         if (message.type() !== 'error') return;
@@ -51,6 +60,14 @@ export const test = base.extend<{
           /Failed to load resource:.*503/.test(message.text())
         ) {
           manualApi503ConsoleCount++;
+        } else if (
+          manualCheckoutFlowVisited &&
+          manualCheckoutProviderErrorCount === 0 &&
+          message
+            .text()
+            .startsWith('Checkout error: Error: Fixture provider error.')
+        ) {
+          manualCheckoutProviderErrorCount++;
         } else errors.push(message.text());
       });
       await context.route('**/*', (route) => {
@@ -63,6 +80,7 @@ export const test = base.extend<{
           '/api/orders/reuse': ['POST'],
           '/api/payments/initialize': ['POST'],
           '/api/payments/redvault/availability': ['GET'],
+          '/api/places/autocomplete': ['GET'],
           '/api/shipping/locations': ['GET'],
           '/api/shipping/quotes': ['POST'],
           '/api/storefront/auth/session': ['GET'],
@@ -106,6 +124,7 @@ export const test = base.extend<{
             enabled: false,
             available: false,
           },
+          '/api/places/autocomplete': { predictions: [] },
           '/api/shipping/locations': {
             states: ['Lagos'],
             locations: [{ city: 'Ikeja', state: 'Lagos' }],
@@ -136,8 +155,11 @@ export const test = base.extend<{
           1
         );
       }
-      if (manualApiScenarioWasVisited)
-        expect(manualApi503ConsoleCount, 'Manual fixture provider 503').toBe(1);
+      if (manualCheckoutFlowVisited)
+        expect(
+          manualCheckoutProviderErrorCount,
+          'Manual checkout fixture provider error'
+        ).toBe(1);
       expect(unexpected, 'Unexpected network calls').toEqual([]);
       expect(errors, 'Browser errors').toEqual([]);
     },

@@ -72,7 +72,7 @@ export const EXPECTED_INVENTORY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260830002000_serialize_sold_inventory_transition.sql',
-    sha256: '5a41f95f8f1bd4f76e1d28545cdbed63b3d2fd187ac40f04d3e996cac94d0f31',
+    sha256: 'f510e31d1ff6612ca953c986291c48bfc348ce7f87fec16d628a5b503f5ba5aa',
   },
   {
     repositoryPath:

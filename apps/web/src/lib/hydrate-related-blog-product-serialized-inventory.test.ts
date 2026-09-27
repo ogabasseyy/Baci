@@ -75,6 +75,34 @@ describe('hydrateRelatedBlogProductSerializedInventory', () => {
     expect(mockHydrate).toHaveBeenCalledWith(client, 'merchant-1', products);
   });
 
+  it('preserves parent-stock inheritance for non-serialized variants', async () => {
+    // First-pass result: a managed parent with positive stock and a
+    // null-stock ordinary variant resolves purchasable via the parent
+    // fallback. The no-summary passthrough must not overwrite that.
+    const products = [
+      {
+        id: 'product-inherited',
+        name: 'Phone',
+        slug: 'phone',
+        category_slug: 'smartphones',
+        manage_stock: true,
+        stock: 5,
+        stock_quantity: 5,
+        has_variants: true,
+        has_purchasable_variant: true,
+        variants: [{ id: 'variant-null', stock_quantity: null }],
+      },
+    ];
+    mockHydrate.mockResolvedValueOnce(products);
+
+    const result = await hydrateRelatedBlogProductSerializedInventory(
+      client,
+      'merchant-1',
+      products
+    );
+
+    expect(result[0]?.has_purchasable_variant).toBe(true);
+  });
   it('marks a serialized variant rail unavailable when canonical units are zero', async () => {
     const products = [
       {

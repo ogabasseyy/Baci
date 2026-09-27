@@ -58,13 +58,21 @@ function resolvePrice(
         (offer.status == null || offer.status === 'active') &&
         getEffectiveStock(offer) > 0
     );
+  // Exhausted offers only make the whole product unavailable when the base
+  // product is also unavailable: a stocked base remains directly purchasable
+  // (mirroring the related-product card predicate). Confirmed-empty variant
+  // sets stay sufficient on their own because the PDP rejects add-to-cart
+  // without a selectable variant.
+  const isBaseOutOfStock =
+    product.manage_stock === true && getEffectiveStock(product) <= 0;
   if (
     !hasAlternative &&
     ((product.has_variants === true &&
       product.has_purchasable_variant === false) ||
       (product.has_condition_offers === true &&
-        product.has_purchasable_condition_offer === false) ||
-      (product.manage_stock === true && getEffectiveStock(product) <= 0))
+        product.has_purchasable_condition_offer === false &&
+        isBaseOutOfStock) ||
+      isBaseOutOfStock)
   ) {
     return 'Currently unavailable';
   }

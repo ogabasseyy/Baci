@@ -95,6 +95,39 @@ describe('explicit inline catalog prices', () => {
     ).toBe('Check current price');
   });
 
+  it('keeps a stocked base price when its condition offers are depleted', () => {
+    // The base product remains directly purchasable: exhausted offers must
+    // not replace the inline token with "Currently unavailable" (the card
+    // and price range still expose the stocked parent).
+    const products = [
+      {
+        ...product,
+        manage_stock: true,
+        stock_quantity: 4,
+        has_condition_offers: true,
+        has_purchasable_condition_offer: false,
+        offers: [{ price: 260000, status: 'active', stock_quantity: 0 }],
+      },
+    ];
+    expect(
+      resolveBlogCatalogPrices({ html: token }, { ...options, products }).html
+    ).toBe('₦250,000.00');
+  });
+  it('marks a managed base unavailable when it and its offers are depleted', () => {
+    const products = [
+      {
+        ...product,
+        manage_stock: true,
+        stock_quantity: 0,
+        has_condition_offers: true,
+        has_purchasable_condition_offer: false,
+        offers: [{ price: 260000, status: 'active', stock_quantity: 0 }],
+      },
+    ];
+    expect(
+      resolveBlogCatalogPrices({ html: token }, { ...options, products }).html
+    ).toBe('Currently unavailable');
+  });
   it('replaces only TipTap text nodes, preserving attributes and code blocks', () => {
     const json = {
       type: 'doc',

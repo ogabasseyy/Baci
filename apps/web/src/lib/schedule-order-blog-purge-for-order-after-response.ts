@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { after } from 'next/server';
 import { scheduleOrderProductBlogPurge } from './schedule-order-product-blog-purge';
+import { scheduleStorefrontHostnamePurge } from './storefront-product-purge-hostnames';
 
 interface OrderItemProductRow {
   product_id?: string | null;
@@ -10,6 +11,43 @@ export interface ScheduleOrderBlogPurgeForOrderInput {
   supabase: SupabaseClient;
   merchantId: string;
   orderId: string;
+}
+
+async function purgeOrderBlogProductsConservatively({
+  supabase,
+  merchantId,
+  orderId,
+  error,
+}: ScheduleOrderBlogPurgeForOrderInput & { error: unknown }): Promise<void> {
+  // The reclamation already committed; without product IDs the targeted purge
+  // cannot run, so fall back to the bounded storefront-wide eviction rather
+  // than leaving freshly reserved units advertised on the edge.
+  try {
+    const { data: merchantRow, error: merchantError } = await supabase
+      .from('merchants')
+      .select('slug')
+      .eq('id', merchantId)
+      .maybeSingle();
+    const merchantSlug = (merchantRow as { slug?: unknown } | null)?.slug;
+    if (
+      merchantError ||
+      typeof merchantSlug !== 'string' ||
+      merchantSlug.trim().length === 0
+    ) {
+      throw merchantError ?? new Error('merchant slug unavailable');
+    }
+    scheduleStorefrontHostnamePurge(merchantSlug.trim());
+    console.warn('Purged storefront hostname after order-item lookup failed', {
+      merchantId,
+      orderId,
+      error,
+    });
+  } catch (fallbackError) {
+    console.warn(
+      'Skipped order-related blog purge because order items lookup failed',
+      { merchantId, orderId, error: fallbackError }
+    );
+  }
 }
 
 async function purgeOrderBlogProducts({
@@ -23,10 +61,12 @@ async function purgeOrderBlogProducts({
       .select('product_id')
       .eq('order_id', orderId);
     if (error) {
-      console.warn(
-        'Skipped order-related blog purge because order items lookup failed',
-        { merchantId, orderId, error }
-      );
+      await purgeOrderBlogProductsConservatively({
+        supabase,
+        merchantId,
+        orderId,
+        error,
+      });
       return;
     }
 

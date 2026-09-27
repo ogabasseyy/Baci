@@ -12,6 +12,7 @@ import { EXPECTED_PAYSTACK_PENDING_SOURCES } from './expected-paystack-pending-s
 import { AUDIT_PENDING_SOURCES } from './expected-pending-audit-sources.test-support';
 import { PAYMENT_INGRESS_AND_PROVENANCE_PENDING_SOURCES } from './expected-pending-payment-ingress-sources.test-support';
 import { EXPECTED_PENDING_TAIL_SOURCES } from './expected-pending-tail-sources.test-fixture';
+import { EXPECTED_PLAN_TIER_PENDING_SOURCES } from './expected-plan-tier-pending-sources.test-support';
 import { EXPECTED_QUIZ_LIVE_PENDING_SOURCES } from './expected-quiz-live-pending-sources.test-support';
 import { EXPECTED_REPAIR_PICKUP_PENDING_SOURCES } from './expected-repair-pickup-pending-sources.test-support';
 import { EXPECTED_SEARCH_PENDING_SOURCES } from './expected-search-pending-sources.test-support';
@@ -337,11 +338,7 @@ export const EXPECTED_PENDING_SOURCES = [
       'supabase/migrations/20260925100000_credit_direct_inventory_proof.sql',
     sha256: 'd48421f956f86ef4c18a4fcf84eb74f0f4ea9a486393fc957e5ac659d1691eea',
   },
-  {
-    repositoryPath:
-      'supabase/migrations/20260927060000_plan_tier_authoritative_snapshot_entitlement.sql',
-    sha256: '38617623446eccea3a8a426ca53e2935dfbc28091ce66a7c17543cd18936ffef',
-  },
+  ...EXPECTED_PLAN_TIER_PENDING_SOURCES,
 ]
   .sort((left, right) =>
     left.repositoryPath.localeCompare(right.repositoryPath)

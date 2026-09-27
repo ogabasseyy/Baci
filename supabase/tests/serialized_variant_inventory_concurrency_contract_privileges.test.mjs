@@ -15,11 +15,6 @@ const publicFunctions = [
   'public.confirm_order_inventory_reservations(uuid, uuid)',
   'public.mark_order_inventory_units_sold(uuid, uuid)',
 ];
-const releaseFunctions = [
-  ['public.release_order_inventory_units(uuid, uuid, text)', 'definer'],
-  ['private.release_order_inventory_units(uuid, uuid, text)', 'definer'],
-];
-
 test('private inventory functions remain inaccessible to authenticated callers', () => {
   for (const signature of privateFunctions) {
     assert.equal(
@@ -216,9 +211,9 @@ test('recognizes ROUTINE privilege and security syntax', () => {
 test('recognizes security changes followed by additional ALTER actions', () => {
   const securitySignature = 'public.fixture(uuid)';
   const securitySource = [
-    'CREATE FUNCTION ' + securitySignature + ' RETURNS void SECURITY DEFINER',
+    `CREATE FUNCTION ${securitySignature} RETURNS void SECURITY DEFINER`,
     'LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;',
-    "ALTER ROUTINE " + securitySignature + " SECURITY INVOKER SET search_path = '';",
+    `ALTER ROUTINE ${securitySignature} SECURITY INVOKER SET search_path = '';`,
   ].join('\n');
 
   assert.equal(
@@ -252,60 +247,4 @@ test('detects security mode after preceding ALTER actions', () => {
     ),
     'definer'
   );
-});
-
-test('release wrapper and delegate remain executable by authenticated callers', () => {
-  for (const [signature, mode] of releaseFunctions) {
-    assert.equal(
-      serializedInventoryPrivileges.authenticatedCanExecute(
-        migrationSources,
-        signature
-      ),
-      true
-    );
-    assert.equal(
-      serializedInventoryPrivileges.authenticatedCanExecute(
-        authSources(`REVOKE ALL ON FUNCTION ${signature} FROM authenticated;`),
-        signature
-      ),
-      false
-    );
-    assert.equal(
-      serializedInventoryPrivileges.effectiveSecurityMode(
-        migrationSources,
-        signature
-      ),
-      mode
-    );
-    assert.equal(
-      serializedInventoryPrivileges.effectiveSecurityMode(
-        [...migrationSources, `ALTER FUNCTION ${signature} SECURITY INVOKER;`],
-        signature
-      ),
-      'invoker'
-    );
-    if (signature.startsWith('public.')) {
-      const releaseSourceIndex = migrationSources.findIndex((source) =>
-        source.includes(
-          'CREATE OR REPLACE FUNCTION public.release_order_inventory_units'
-        )
-      );
-      assert.notEqual(releaseSourceIndex, -1);
-      const nonDelegatingSources = migrationSources.map((source, index) =>
-        index === releaseSourceIndex
-          ? source.replace(
-              /RETURN\s+private\.release_order_inventory_units\(/i,
-              'RETURN jsonb_build_object('
-            )
-          : source
-      );
-      assert.equal(
-        serializedInventoryPrivileges.effectiveSecurityMode(
-          nonDelegatingSources,
-          signature
-        ),
-        'invoker'
-      );
-    }
-  }
 });

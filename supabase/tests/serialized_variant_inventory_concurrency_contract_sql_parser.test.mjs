@@ -2,8 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
-const { findDollarQuoteEnd, splitSqlStatements, stripSqlComments } =
-  serializedInventorySqlParser;
+const {
+  findDollarQuoteEnd,
+  maskSqlLiterals,
+  splitSqlStatements,
+  stripSqlComments,
+} = serializedInventorySqlParser;
 
 test('preserves comment-like text in quoted and dollar-quoted SQL', () => {
   const source = [
@@ -62,4 +66,18 @@ test('treats backslashes as ordinary characters in standard SQL strings', () => 
 
   assert.equal(statements.length, 2);
   assert.ok(findDollarQuoteEnd(source, 0, '$$'));
+});
+
+test('treats language-qualified DO blocks as executable bodies', () => {
+  const masked = maskSqlLiterals(
+    'DO LANGUAGE plpgsql $body$ BEGIN EXECUTE $cmd$GRANT EXECUTE ON FUNCTION private.f() TO authenticated$cmd$; END; $body$;'
+  );
+
+  assert.match(masked, /EXECUTE/);
+
+  const quoted = maskSqlLiterals(
+    'DO LANGUAGE "plpgsql" $body$ BEGIN GRANT EXECUTE ON FUNCTION private.f() TO authenticated; END; $body$;'
+  );
+
+  assert.match(quoted, /GRANT EXECUTE ON FUNCTION/);
 });

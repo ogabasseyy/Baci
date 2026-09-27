@@ -38,6 +38,7 @@ function parseRoleMembership(text) {
     roles: serializedInventorySqlParser
       .splitTopLevelList(match[2])
       .map(normalizeRoleName),
+    settable: !/\bSET\s+FALSE\b/i.test(leading),
   };
 }
 

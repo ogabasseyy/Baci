@@ -56,14 +56,22 @@ function pathAt(source, targetIndex) {
 function isReachable(source, index) {
   const terminator =
     /\bRETURN\b(?!\s+(?:NEXT|QUERY)\b)|\bRAISE\s+EXCEPTION\b/gi;
+  const loopExit = /\b(?:CONTINUE|EXIT)\b(?![^\n;]*\bWHEN\b)/gi;
+  const statementStart = /(?:;|>>|\b(?:THEN|ELSE|LOOP|BEGIN)\b)$/i;
   const searchable = serializedInventorySqlParser.maskSqlLiterals(source);
   const target = pathAt(source, index);
   if (target.some((branch) => branch.endsWith(':true'))) return false;
+  const killsTarget = (matchIndex) => {
+    const terminatorPath = pathAt(source, matchIndex);
+    return terminatorPath.every((branch, depth) => target[depth] === branch);
+  };
   for (const match of searchable.slice(0, index).matchAll(terminator)) {
-    const terminatorPath = pathAt(source, match.index);
-    if (terminatorPath.every((branch, depth) => target[depth] === branch)) {
-      return false;
-    }
+    if (killsTarget(match.index)) return false;
+  }
+  for (const match of searchable.slice(0, index).matchAll(loopExit)) {
+    const before = searchable.slice(0, match.index).replace(/\s+$/, '');
+    if (before !== '' && !statementStart.test(before)) continue;
+    if (killsTarget(match.index)) return false;
   }
   return true;
 }

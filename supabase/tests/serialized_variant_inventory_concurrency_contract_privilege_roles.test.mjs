@@ -57,6 +57,13 @@ test('parses grantor clauses and quoted names on role memberships', () => {
     'GRANT inventory_delegate TO authenticated WITH INHERIT FALSE, SET FALSE;'
   );
   assert.equal(nonInheritable?.inheritable, false);
+  assert.equal(nonInheritable?.settable, false);
+
+  const setOnly = serializedInventoryPrivilegeRoles.parseRoleMembership(
+    'GRANT inventory_delegate TO authenticated WITH INHERIT FALSE;'
+  );
+  assert.equal(setOnly?.inheritable, false);
+  assert.equal(setOnly?.settable, true);
 });
 
 test('parses every owner in a multi-role default-privilege statement', () => {

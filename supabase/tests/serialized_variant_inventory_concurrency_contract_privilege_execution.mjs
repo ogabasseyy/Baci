@@ -249,16 +249,16 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
       }
       state.defaultGrants.set(owner, ownerDefaults);
     } else if (event.kind === 'membership') {
-      const inheritable = event.inheritable !== false;
+      const usable = event.inheritable !== false || event.settable !== false;
       for (const member of event.members) {
         const roles = state.memberships.get(member) ?? [];
         for (const role of event.roles) {
           const roleIndex = roles.indexOf(role);
-          if (event.operation === 'GRANT' && inheritable && roleIndex === -1)
+          if (event.operation === 'GRANT' && usable && roleIndex === -1)
             roles.push(role);
           if (
             (event.operation === 'REVOKE' ||
-              (event.operation === 'GRANT' && !inheritable)) &&
+              (event.operation === 'GRANT' && !usable)) &&
             roleIndex !== -1
           )
             roles.splice(roleIndex, 1);

@@ -11,7 +11,9 @@ function dollarQuoteAt(source, index) {
   );
 }
 function dollarQuoteMode(source, index) {
-  return /(?:\bAS|\bDO)\s*$/i.test(source.slice(0, index)) ? 'body' : 'literal';
+  const bodyOpener =
+    /(?:\bAS|\bDO(?:\s+LANGUAGE\s+(?:"[^"]+"|[A-Za-z_][A-Za-z0-9_]*))?)\s*$/i;
+  return bodyOpener.test(source.slice(0, index)) ? 'body' : 'literal';
 }
 function quoteMode(source, index) {
   const char = source[index];

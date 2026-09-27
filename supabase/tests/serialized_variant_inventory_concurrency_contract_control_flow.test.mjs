@@ -107,3 +107,32 @@ test('rejects prerequisites hidden in a constant-false branch', () => {
     );
   }
 });
+
+test('treats unconditional loop exits as terminating later body statements', () => {
+  for (const exit of ['CONTINUE;', 'EXIT;', 'EXIT unit_loop;']) {
+    const source = `FOR v_unit IN SELECT unit_id FROM units LOOP\n${exit}\nlock_row;\nEND LOOP;\nafter;`;
+    assert.equal(
+      serializedInventoryControlFlow.isReachable(
+        source,
+        source.indexOf('lock_row')
+      ),
+      false
+    );
+    assert.equal(
+      serializedInventoryControlFlow.isReachable(
+        source,
+        source.indexOf('after')
+      ),
+      true
+    );
+  }
+  const conditional =
+    'FOR v_unit IN SELECT unit_id FROM units LOOP\nEXIT WHEN done;\nlock_row;\nEND LOOP;';
+  assert.equal(
+    serializedInventoryControlFlow.isReachable(
+      conditional,
+      conditional.indexOf('lock_row')
+    ),
+    true
+  );
+});

@@ -280,3 +280,21 @@ test('ignores membership edges that disable inheritance', () => {
     false
   );
 });
+
+test('keeps membership edges when SET remains enabled', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = `
+    CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
+      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
+    REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;
+    GRANT EXECUTE ON FUNCTION ${signature} TO inventory_delegate;
+    GRANT inventory_delegate TO authenticated WITH INHERIT FALSE;
+  `;
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});

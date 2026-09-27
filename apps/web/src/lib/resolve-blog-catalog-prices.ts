@@ -76,10 +76,21 @@ function resolvePrice(
   ) {
     return 'Currently unavailable';
   }
-  // Never fall back to a misleading parent price when selectable inventory is missing.
+  // A hydrated-but-empty offer projection (e.g., every row filtered as
+  // same-condition) carries no offer signal: when the base is directly
+  // purchasable, fall through to its price instead of "Check current
+  // price". Confirmed-empty variant sets keep the fallback — they have no
+  // selectable SKU. Never fall back to a misleading parent price when
+  // selectable inventory is missing.
+  const offersKnownEmpty =
+    Array.isArray(product.offers) && product.offers.length === 0;
+  const variantSelectionEmpty =
+    product.has_variants === true && product.has_purchasable_variant === false;
   if (
     (product.has_variants && !product.variants?.length) ||
-    (product.has_condition_offers && !product.offers?.length)
+    (product.has_condition_offers &&
+      !product.offers?.length &&
+      !(offersKnownEmpty && !variantSelectionEmpty))
   )
     return 'Check current price';
   const range = getProductPriceRange(product);

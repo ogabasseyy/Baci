@@ -18,7 +18,10 @@ export function isPublicVariantPurchasable(
   if (variant.inventory_tracking_policy === 'serialized_then_unlimited') {
     return true;
   }
-  if (parent.manage_stock !== true) {
+  // The categorized PDP normalizes legacy null manage_stock to managed
+  // inventory (`manage_stock ?? true`) before downstream evaluation; match
+  // it so a depleted child under a null parent is unavailable everywhere.
+  if ((parent.manage_stock ?? true) !== true) {
     return true;
   }
   // Legacy nullable child quantities inherit the parent stock, matching the

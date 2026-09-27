@@ -35,6 +35,27 @@ describe('isPublicVariantPurchasable', () => {
     ).toBe(false);
   });
 
+  it('treats a null parent policy as managed for depleted children', () => {
+    expect(
+      isPublicVariantPurchasable(
+        { manage_stock: null, stock_quantity: 4 },
+        { stock_quantity: 0 }
+      )
+    ).toBe(false);
+    expect(
+      isPublicVariantPurchasable(
+        { manage_stock: null, stock_quantity: 4 },
+        { stock_quantity: 2 }
+      )
+    ).toBe(true);
+    expect(
+      isPublicVariantPurchasable(
+        { manage_stock: null, stock_quantity: 4 },
+        { stock_quantity: null }
+      )
+    ).toBe(true);
+  });
+
   it('keeps serialized units exact without parent inheritance', () => {
     expect(
       isPublicVariantPurchasable(

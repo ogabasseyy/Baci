@@ -18,6 +18,7 @@ import { resolveBlogPostHeroShell } from './blog-post-hero-shell-data';
 import BlogPostPageContent from './blog-post-page-content';
 import { BlogPostShell } from './blog-post-shell';
 import { resolveBlogPostStaticParams } from './blog-post-static-params';
+import { resolveBlogCatalogPlainText } from './blog-post-structured-data';
 
 interface PageProps {
   params: Promise<{ slug: string; postSlug: string }>;
@@ -68,7 +69,7 @@ export async function generateMetadata({
     return BLOG_POST_NOINDEX_METADATA;
   }
 
-  const { merchant, post } = data;
+  const { merchant, post, relatedProducts } = data;
   const title = post.seo_title || post.title || 'Blog Post';
   const { metadataTitle, title: metadataTitleText } =
     buildStorefrontMetadataTitle({
@@ -80,10 +81,16 @@ export async function generateMetadata({
       // of adding a literal ellipsis before the merchant suffix.
       maxLength: Number.POSITIVE_INFINITY,
     });
+  // Resolve catalog tokens the same way the article body and JSON-LD do;
+  // otherwise raw {{catalog-price:...}} syntax leaks into search results
+  // and social previews. Pure/sync, so metadata stays prerenderable.
   const description = generateMetaDescription(
-    post.seo_description ||
-      post.excerpt ||
-      getBlogPostTextPreview(post.content),
+    resolveBlogCatalogPlainText(
+      post.seo_description ||
+        post.excerpt ||
+        getBlogPostTextPreview(post.content),
+      { products: relatedProducts ?? [], currencySource: merchant }
+    ),
     160,
     {
       minLength: 110,

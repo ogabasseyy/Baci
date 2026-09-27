@@ -148,6 +148,43 @@ describe('explicit inline catalog prices', () => {
       resolveBlogCatalogPrices({ html }, { ...options, products }).html
     ).toBe('₦300,000.00');
   });
+  it('falls back to the stocked base price when offers hydrate empty', () => {
+    const products = [
+      {
+        ...product,
+        manage_stock: true,
+        stock_quantity: 5,
+        has_condition_offers: true,
+        has_purchasable_condition_offer: false,
+        offers: [],
+      },
+    ];
+    // Every offer row was filtered as same-condition: the empty projection
+    // carries no offer signal, so the directly purchasable base price wins
+    // over "Check current price" (matching the related-product card).
+    expect(
+      resolveBlogCatalogPrices({ html: token }, { ...options, products }).html
+    ).toBe('₦250,000.00');
+  });
+  it('marks an explicit variant token unavailable for a depleted child under a null parent', () => {
+    const html = `{{catalog-price:${id}:variant:${variantId}}}`;
+    const products = [
+      {
+        ...product,
+        manage_stock: null,
+        stock_quantity: 4,
+        has_variants: true,
+        variants: [
+          { id: variantId, price_override: 300000, stock_quantity: 0 },
+        ],
+      },
+    ];
+    // The PDP normalizes legacy null manage_stock to managed inventory, so
+    // the zero-stock child is unavailable even though the parent is stocked.
+    expect(
+      resolveBlogCatalogPrices({ html }, { ...options, products }).html
+    ).toBe('Currently unavailable');
+  });
   it('replaces only TipTap text nodes, preserving attributes and code blocks', () => {
     const json = {
       type: 'doc',

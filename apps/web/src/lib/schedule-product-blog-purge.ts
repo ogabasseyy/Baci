@@ -3,6 +3,7 @@ import { expireProductBlogCacheReliable } from '@/lib/expire-product-blog-cache-
 import { getPublishedBlogPostSlugsForProducts } from '@/lib/get-published-blog-post-slugs-for-products';
 import { isValidUuid } from '@/lib/sanitize-core';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
+import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
 import type { StorefrontProductPurgeEntry } from '@/lib/storefront-product-purge-urls';
 
 export interface ScheduleProductBlogPurgeInput {
@@ -192,6 +193,17 @@ export async function scheduleProductBlogPurge({
       // relationship table. Article URLs may wait for TTL, but PDP/listing
       // caches must still be evicted after the mutation commits.
       scheduleStorefrontProductPurge(merchantSlug, entries);
+    } else if (skipProductPurge && !skipWhenNoLinkedPosts) {
+      // The caller already evicted the core product URLs, so when the
+      // article lookup fails the affected URLs are unknown — evict the
+      // hostname rather than leaving articles stale until TTL. This covers
+      // the post-delete ID-resolution failure, where the cascaded
+      // relationships can no longer be queried again. Bulk import opts out
+      // via skipWhenNoLinkedPosts and stays best-effort.
+      const fallbackSlug = merchantSlug?.trim();
+      if (fallbackSlug) {
+        scheduleStorefrontHostnamePurge(fallbackSlug);
+      }
     }
   }
 }

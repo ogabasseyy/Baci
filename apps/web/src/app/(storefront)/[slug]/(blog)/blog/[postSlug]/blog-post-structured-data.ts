@@ -19,6 +19,22 @@ import {
 } from '@/lib/seo-utils';
 import { getBlogPostTextPreview } from './blog-post-content';
 
+/**
+ * Resolve catalog-price tokens in plain-text inputs (page metadata, JSON-LD
+ * descriptions). Token resolution runs through the HTML sanitizer, which
+ * escapes `&` as `&amp;`; decode back so plain-text consumers store the
+ * literal text instead of the entity.
+ */
+export function resolveBlogCatalogPlainText(
+  text: string,
+  catalogPrices?: Parameters<typeof resolveBlogCatalogPrices>[1]
+): string {
+  return decodeHTML(
+    resolveBlogCatalogPrices({ html: text }, catalogPrices ?? { products: [] })
+      .html ?? text
+  );
+}
+
 type BlogPostStructuredDataInput = {
   catalogPrices?: Parameters<typeof resolveBlogCatalogPrices>[1];
   author: {
@@ -80,16 +96,10 @@ export function buildBlogPostStructuredData({
       : buildBlogOrganizationId(baseUrl);
   const blogImageUrls = getBlogStructuredDataImageUrls(post);
   const blogImages = getBlogStructuredDataImages(post);
-  // FAQ/excerpt/SEO inputs are plain text, but token resolution runs them
-  // through the HTML sanitizer, which escapes `&` as `&amp;`. Decode back so
-  // JSON-LD stores the literal text instead of the entity.
+  // FAQ/excerpt/SEO inputs are plain text; resolve tokens then decode the
+  // sanitizer entities so JSON-LD stores literal text (shared with metadata).
   const resolvePriceText = (text: string) =>
-    decodeHTML(
-      resolveBlogCatalogPrices(
-        { html: text },
-        catalogPrices ?? { products: [] }
-      ).html ?? text
-    );
+    resolveBlogCatalogPlainText(text, catalogPrices);
   const faqSchema = generateFaqPageSchema(
     extractBlogFaqItems(content).map((item) => ({
       question: resolvePriceText(item.question),

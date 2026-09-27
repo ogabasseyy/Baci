@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockLookup = vi.fn();
 const mockSchedule = vi.fn();
+const mockHostnamePurge = vi.fn();
 const mockExpire = vi.fn().mockResolvedValue(true);
 
 vi.mock('@/lib/get-published-blog-post-slugs-for-products', () => ({
@@ -10,6 +11,10 @@ vi.mock('@/lib/get-published-blog-post-slugs-for-products', () => ({
 }));
 vi.mock('@/lib/storefront-product-purge', () => ({
   scheduleStorefrontProductPurge: (...args: unknown[]) => mockSchedule(...args),
+}));
+vi.mock('@/lib/storefront-product-purge-hostnames', () => ({
+  scheduleStorefrontHostnamePurge: (...args: unknown[]) =>
+    mockHostnamePurge(...args),
 }));
 vi.mock('@/lib/expire-product-blog-cache-reliable', () => ({
   expireProductBlogCacheReliable: (...args: unknown[]) => mockExpire(...args),
@@ -208,6 +213,27 @@ describe('scheduleProductBlogPurge', () => {
     });
 
     expect(mockSchedule).not.toHaveBeenCalled();
+  });
+
+  it('falls back to a hostname purge when post-delete ID resolution fails', async () => {
+    // Arrange: the DELETE cascaded the relationship rows, and the
+    // post-commit blog_posts read for the preserved IDs fails.
+    const { client } = makeBlogPostIdSupabase([], new Error('read failed'));
+
+    await scheduleProductBlogPurge({
+      supabase: client,
+      merchantId: 'merchant-1',
+      merchantSlug: 'store',
+      productIds: ['product-1'],
+      entries,
+      blogPostIds: ['12345678-90ab-cdef-1234-567890abcdef'],
+      skipProductPurge: true,
+    });
+
+    // Assert: the core product purge already ran, so the unknown article
+    // set is covered by the hostname fallback instead of waiting for TTL.
+    expect(mockSchedule).not.toHaveBeenCalled();
+    expect(mockHostnamePurge).toHaveBeenCalledWith('store');
   });
 
   it('retains pre-delete blog slugs when category fallback lookup fails', async () => {

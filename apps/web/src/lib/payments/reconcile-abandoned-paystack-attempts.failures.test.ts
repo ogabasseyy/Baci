@@ -17,7 +17,7 @@ describe('abandoned Paystack attempt operational failures', () => {
     'error',
     'rejection',
   ] as const)('fails the sweep when a verified retirement write returns %s', async (failure) => {
-    const { client, selectUpdated } = createClient();
+    const { client, selectUpdated, update } = createClient();
     if (failure === 'error') {
       selectUpdated.mockResolvedValue({
         data: null,
@@ -27,12 +27,16 @@ describe('abandoned Paystack attempt operational failures', () => {
       selectUpdated.mockRejectedValue(new Error('database unavailable'));
     }
 
-    await expect(
-      reconcileAbandonedPaystackAttempts({
-        supabase: client as never,
-        verify: vi.fn().mockResolvedValue(abandoned),
-      })
-    ).rejects.toThrow('abandoned_paystack_attempt_retirement_failed');
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify: vi.fn().mockResolvedValue(abandoned),
+    });
+    expect(summary.failed).toBe(true);
+    expect(summary.held).toEqual([
+      { id: 'attempt-1', reason: 'retirement_failed' },
+    ]);
+    expect(summary.retired).toEqual([]);
+    expect(update).toHaveBeenCalledWith({ updated_at: expect.any(String) });
   });
 
   it('holds a verification request that hangs until its five-second deadline', async () => {

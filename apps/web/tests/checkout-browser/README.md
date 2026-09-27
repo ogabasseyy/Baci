@@ -47,8 +47,9 @@ Real provider cancellation, webhook delivery, refunds and reconciliation remain
 separate sandbox/staging gates. The successful payment-handoff page does not
 represent a charge or paid order.
 
-For a manual local browser pass, run the built harness and open
-`/checkout?qa=manual`. The yellow fixture panel is visible only with this
+For a manual local browser pass, run the built harness, open `/catalog`, click
+**Add test phone**, then open `/checkout?qa=manual`. The checkout starts empty;
+the yellow fixture panel is visible only with this
 explicit query parameter. Its controls select successful or always-failing
 payment initialization and reset cart, checkout and pending-order browser
 state. The harness serves synthetic local responses for shipping, order

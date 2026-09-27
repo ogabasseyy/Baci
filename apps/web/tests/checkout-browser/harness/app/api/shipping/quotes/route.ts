@@ -2,7 +2,7 @@ import { json } from '../../fixture-response';
 export async function POST(request: Request) {
   await request.json().catch(() => ({}));
   const quote = {
-    id: 'fixture-door',
+    id: '55555555-5555-4555-8555-555555555555',
     provider: 'GIGL',
     serviceTier: 'Standard',
     carrierName: 'GIG Logistics',

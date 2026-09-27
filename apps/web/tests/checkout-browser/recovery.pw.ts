@@ -190,10 +190,16 @@ test('manual QA scenario controls are opt-in and reset local checkout state', as
   await expect(controls.getByLabel('Payment scenario')).toHaveValue(
     'provider-error'
   );
+  await page.evaluate(() =>
+    localStorage.setItem(
+      'storefront-checkout-idempotency',
+      'fixture-idempotency'
+    )
+  );
   await controls
     .getByRole('button', { name: 'Reset checkout fixtures' })
     .click();
-  await expect(page).toHaveURL(/\/cart$/);
+  await expect(page).toHaveURL(/\/cart\?qa=manual$/);
   await expect
     .poll(() =>
       page.evaluate(() => ({
@@ -204,9 +210,18 @@ test('manual QA scenario controls are opt-in and reset local checkout state', as
         pendingOrder: sessionStorage.getItem(
           'storefront-checkout-pending-order'
         ),
+        idempotencyKey: localStorage.getItem('storefront-checkout-idempotency'),
       }))
     )
-    .toEqual({ cartItems: 0, form: null, pendingOrder: null });
+    .toEqual({
+      cartItems: 0,
+      form: null,
+      pendingOrder: null,
+      idempotencyKey: null,
+    });
+  await expect(
+    page.getByRole('link', { name: 'Proceed to checkout' })
+  ).toHaveAttribute('href', '/checkout?qa=manual');
   expect(await page.evaluate(() => document.cookie)).toContain(
     'checkout-qa-scenario=success'
   );

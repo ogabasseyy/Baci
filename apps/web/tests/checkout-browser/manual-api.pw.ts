@@ -16,48 +16,111 @@ test('manual mode serves deterministic quote, order-reuse, storefront-read, and 
     },
   ]);
 
-  const results = await page.evaluate(async (orderId) => {
-    const quoteResponse = await fetch('/api/shipping/quotes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deliveryPreference: 'door' }),
-    });
-    const createResponse = await fetch('/api/orders', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Idempotency-Key': 'manual-qa-fixture-order-key',
-      },
-      body: JSON.stringify({}),
-    });
-    const storefrontOrderResponse = await fetch(
-      `/api/storefront/orders/${orderId}`
-    );
-    const reuseResponse = await fetch('/api/orders/reuse', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order_id: orderId }),
-    });
-    const paymentResponse = await fetch('/api/payments/initialize', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gateway: 'korapay' }),
-    });
+  const results = await page.evaluate(
+    async ({ orderId, trackingToken }) => {
+      const invalidCreateResponse = await fetch('/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': 'manual-qa-invalid-order-key',
+        },
+        body: JSON.stringify({}),
+      });
+      const quoteResponse = await fetch('/api/shipping/quotes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deliveryPreference: 'door' }),
+      });
+      const createResponse = await fetch('/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': 'manual-qa-fixture-order-key',
+        },
+        body: JSON.stringify({
+          merchant_id: '11111111-1111-4111-8111-111111111111',
+          customer_email: 'ada@example.test',
+          customer_name: 'Ada Okon',
+          customer_phone: '+2348031234567',
+          items: [
+            {
+              id: '33333333-3333-4333-8333-333333333333',
+              name: 'Checkout test phone',
+              quantity: 1,
+              price: 100000,
+            },
+          ],
+          subtotal: 100000,
+          tax_amount: 7500,
+          payment_method: 'card',
+          delivery_method: 'pickup',
+          shipping_address: {
+            address: 'Store Pickup',
+            city: 'Ikeja',
+            state: 'Lagos',
+          },
+        }),
+      });
+      const storefrontOrderResponse = await fetch(
+        `/api/storefront/orders/${orderId}?tracking_token=${trackingToken}&merchant_slug=ogabassey`
+      );
+      const invalidStorefrontOrderResponse = await fetch(
+        `/api/storefront/orders/${orderId}?tracking_token=wrong&merchant_slug=ogabassey`
+      );
+      const reuseResponse = await fetch('/api/orders/reuse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_id: orderId,
+          tracking_token: trackingToken,
+          merchant_id: '11111111-1111-4111-8111-111111111111',
+          customer_email: 'ada@example.test',
+          payment_method: 'card',
+        }),
+      });
+      const invalidReuseResponse = await fetch('/api/orders/reuse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_id: orderId }),
+      });
+      const paymentResponse = await fetch('/api/payments/initialize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gateway: 'korapay' }),
+      });
+      // biome-ignore lint/suspicious/noDocumentCookie: browser fixture switches its local payment scenario in-page
+      document.cookie = 'checkout-qa-scenario=success; Path=/; SameSite=Lax';
+      const successfulPaymentResponse = await fetch(
+        '/api/payments/initialize',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gateway: 'korapay', order_id: orderId }),
+        }
+      );
 
-    return {
-      quote: await quoteResponse.json(),
-      createdOrder: await createResponse.json(),
-      storefrontOrder: await storefrontOrderResponse.json(),
-      reusedOrder: await reuseResponse.json(),
-      paymentError: await paymentResponse.json(),
-      paymentStatus: paymentResponse.status,
-    };
-  }, order.id);
+      return {
+        quote: await quoteResponse.json(),
+        createdOrder: await createResponse.json(),
+        storefrontOrder: await storefrontOrderResponse.json(),
+        invalidStorefrontOrderStatus: invalidStorefrontOrderResponse.status,
+        reusedOrder: await reuseResponse.json(),
+        invalidReuseStatus: invalidReuseResponse.status,
+        paymentError: await paymentResponse.json(),
+        paymentStatus: paymentResponse.status,
+        successfulPayment: await successfulPaymentResponse.json(),
+        successfulPaymentStatus: successfulPaymentResponse.status,
+        invalidCreateStatus: invalidCreateResponse.status,
+        csrfCookie: document.cookie.includes('csrf-token=fixture-csrf-token'),
+      };
+    },
+    { orderId: order.id, trackingToken: order.tracking_token }
+  );
 
   expect(results.quote.quotes).toMatchObject({
     featured: [
       {
-        id: 'fixture-door',
+        id: '55555555-5555-4555-8555-555555555555',
         provider: 'GIGL',
         serviceTier: 'Standard',
         estimatedDays: 1,
@@ -65,15 +128,24 @@ test('manual mode serves deterministic quote, order-reuse, storefront-read, and 
         isStationPickup: false,
       },
     ],
-    all: [{ id: 'fixture-door' }],
+    all: [{ id: '55555555-5555-4555-8555-555555555555' }],
   });
   expect(results.createdOrder).toMatchObject({
     amountDueToGateway: 107500,
     order: { id: order.id, shipping_fee: 0, total: 107500 },
   });
   expect(results.storefrontOrder).toMatchObject({ id: order.id });
+  expect(results.invalidStorefrontOrderStatus).toBe(404);
   expect(results.reusedOrder).toMatchObject({ order: { id: order.id } });
+  expect(results.invalidReuseStatus).toBe(400);
   expect(results.paymentStatus).toBe(503);
+  expect(results.successfulPaymentStatus).toBe(200);
+  expect(results.successfulPayment).toMatchObject({
+    success: true,
+    authorization_url: '/payment-handoff',
+  });
+  expect(results.invalidCreateStatus).toBe(400);
+  expect(results.csrfCookie).toBe(true);
   expect(results.paymentError).toEqual({
     error: 'Fixture provider error. No payment was sent.',
   });

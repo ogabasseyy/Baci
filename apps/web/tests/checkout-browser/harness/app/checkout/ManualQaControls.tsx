@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 
 const scenarioCookie = 'checkout-qa-scenario';
+const idempotencyStorageKey = 'storefront-checkout-idempotency';
 
 function writeScenario(value: string) {
   // biome-ignore lint/suspicious/noDocumentCookie: isolated browser fixture selects the local route scenario
@@ -31,8 +32,9 @@ export function ManualQaControls() {
     localStorage.removeItem('baci-cart-ogabassey-guest');
     sessionStorage.removeItem('checkout-form');
     sessionStorage.removeItem('storefront-checkout-pending-order');
+    localStorage.removeItem(idempotencyStorageKey);
     writeScenario('success');
-    window.location.assign('/cart?qaReset=1');
+    window.location.assign('/cart?qaReset=1&qa=manual');
   }
 
   if (!visible) return null;

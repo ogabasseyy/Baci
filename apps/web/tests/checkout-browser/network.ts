@@ -16,7 +16,10 @@ export const test = base.extend<{
       let providerErrorConsoleCount = 0;
       let provider503ConsoleCount = 0;
       let manualApiScenarioWasVisited = false;
+      let manualApiIntegrationVisited = false;
       let manualApi503ConsoleCount = 0;
+      let manualApi400ConsoleCount = 0;
+      let manualApi404ConsoleCount = 0;
       let manualCheckoutFlowVisited = false;
       let manualCheckoutProviderErrorCount = 0;
       const remainingAllowedErrors = [...allowedConsoleErrors];
@@ -28,6 +31,8 @@ export const test = base.extend<{
           qaScenario === 'manual-checkout-flow'
         )
           manualApiScenarioWasVisited = true;
+        if (qaScenario === 'manual-api-integration')
+          manualApiIntegrationVisited = true;
         if (qaScenario === 'manual-checkout-flow')
           manualCheckoutFlowVisited = true;
       });
@@ -40,6 +45,18 @@ export const test = base.extend<{
         if (message.type() !== 'error') return;
         const expectedIndex = remainingAllowedErrors.indexOf(message.text());
         if (expectedIndex >= 0) remainingAllowedErrors.splice(expectedIndex, 1);
+        else if (
+          manualApiScenarioWasVisited &&
+          manualApi400ConsoleCount < 2 &&
+          /Failed to load resource:.*400/.test(message.text())
+        )
+          manualApi400ConsoleCount++;
+        else if (
+          manualApiScenarioWasVisited &&
+          manualApi404ConsoleCount === 0 &&
+          /Failed to load resource:.*404/.test(message.text())
+        )
+          manualApi404ConsoleCount++;
         else if (
           paymentRetryScenario &&
           providerErrorConsoleCount === 0 &&
@@ -146,6 +163,10 @@ export const test = base.extend<{
         return route.abort('blockedbyclient');
       });
       await use(undefined);
+      if (manualApiIntegrationVisited) {
+        expect(manualApi400ConsoleCount).toBe(2);
+        expect(manualApi404ConsoleCount).toBe(1);
+      }
       if (paymentRetryScenario) {
         expect(
           providerErrorConsoleCount,

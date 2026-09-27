@@ -9,6 +9,7 @@ test('switches card rails and retries provider initialization against the same o
   let reused = 0;
   let initializationAttempts = 0;
   const initializedGateways: string[] = [];
+  const initializedOrderIds: string[] = [];
   await page.route('**/api/orders', (route) => {
     created++;
     return route.fulfill({ json: { order, amountDueToGateway: 107500 } });
@@ -27,6 +28,7 @@ test('switches card rails and retries provider initialization against the same o
     initializationAttempts++;
     const body = route.request().postDataJSON();
     initializedGateways.push(body.gateway);
+    initializedOrderIds.push(body.order_id);
     expect(body.gateway).toBe('korapay');
     if (initializationAttempts === 1)
       return route.fulfill({
@@ -72,4 +74,5 @@ test('switches card rails and retries provider initialization against the same o
   expect(reused).toBe(1);
   expect(initializationAttempts).toBe(2);
   expect(initializedGateways).toEqual(['korapay', 'korapay']);
+  expect(initializedOrderIds).toEqual([order.id, order.id]);
 });

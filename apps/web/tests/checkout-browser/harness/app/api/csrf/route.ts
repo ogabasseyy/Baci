@@ -1,4 +1,10 @@
-import { json } from '../fixture-response';
+import { NextResponse } from 'next/server';
 export function GET() {
-  return json({ token: 'fixture-csrf-token' });
+  const response = NextResponse.json({ token: 'fixture-csrf-token' });
+  response.cookies.set('csrf-token', 'fixture-csrf-token', {
+    httpOnly: false,
+    path: '/',
+    sameSite: 'lax',
+  });
+  return response;
 }

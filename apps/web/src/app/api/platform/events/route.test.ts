@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // --- Mock setup ---
 
-const mockUpsert = vi.fn();
+const mockInsert = vi.fn();
 const mockSettingsSingle = vi.fn();
 const mockFrom = vi.fn((table: string) => {
   if (table === 'platform_events') {
-    return { upsert: mockUpsert };
+    return { insert: mockInsert };
   }
   if (table === 'platform_settings') {
     return {
@@ -61,11 +61,25 @@ function makeRequest(body: Record<string, unknown>): NextRequest {
 }
 
 describe('POST /api/platform/events', () => {
+  it('preserves provider retries when the event was already stored', async () => {
+    mockInsert.mockResolvedValueOnce({
+      error: {
+        code: '23505',
+        message:
+          'duplicate key value violates unique constraint "platform_events_type_event_id_uidx"',
+      },
+    });
+    const response = await POST(
+      makeRequest({ event_type: 'landing_page_view', event_id: 'retry-1' })
+    );
+    expect(response.status).toBe(200);
+    expect(mockSettingsSingle).toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.EVENT_PIPELINE_ENQUEUE_ENABLED;
     delete process.env.EVENT_PIPELINE_DISABLE_LEGACY_FANOUT;
-    mockUpsert.mockResolvedValue({ data: null, error: null });
+    mockInsert.mockResolvedValue({ data: null, error: null });
     mockSettingsSingle.mockResolvedValue({
       data: {
         google_analytics_id: 'G-TEST',
@@ -109,7 +123,7 @@ describe('POST /api/platform/events', () => {
     );
 
     expect(res.status).toBe(400);
-    expect(mockUpsert).not.toHaveBeenCalled();
+    expect(mockInsert).not.toHaveBeenCalled();
   });
 
   it('inserts the event and returns success for a valid page view', async () => {
@@ -125,12 +139,11 @@ describe('POST /api/platform/events', () => {
 
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
-    expect(mockUpsert).toHaveBeenCalledWith(
+    expect(mockInsert).toHaveBeenCalledWith(
       expect.objectContaining({
         event_id: 'platform-event-1',
         event_type: 'landing_page_view',
-      }),
-      { ignoreDuplicates: true, onConflict: 'event_type,event_id' }
+      })
     );
   });
 
@@ -145,7 +158,7 @@ describe('POST /api/platform/events', () => {
 
     expect(first.status).toBe(200);
     expect(retry.status).toBe(200);
-    expect(mockUpsert).toHaveBeenCalledTimes(2);
+    expect(mockInsert).toHaveBeenCalledTimes(2);
   });
 
   it('forwards the client-passed currency to GA4 and Facebook instead of discarding it', async () => {

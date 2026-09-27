@@ -1,4 +1,3 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { type NextRequest, NextResponse } from 'next/server';
 import { createEventIngressClient } from '@/lib/events/event-ingress-capability';
 import { resolveEventIngressContext } from '@/lib/events/event-ingress-context';
@@ -10,48 +9,11 @@ import { toClientPlatformDomainEventName } from '@/lib/events/event-route-regist
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { recordPlatformDomainEvent } from '@/lib/events/record-platform-domain-event';
 import { createClient as createServerClient } from '@/lib/supabase/server';
-import {
-  type PlatformEventRequestInput,
-  platformEventRequestSchema,
-} from '@/schemas/platform-event';
-import {
-  forwardToPlatformAnalytics,
-  type PlatformEventType,
-} from './platform-event-forwarding';
+import { platformEventRequestSchema } from '@/schemas/platform-event';
+import { persistLegacyPlatformEvent } from './persist-legacy-platform-event';
+import { forwardToPlatformAnalytics } from './platform-event-forwarding';
 
 const MAX_EVENT_BYTES = 64 * 1024;
-
-function persistLegacyPlatformEvent(
-  supabase: SupabaseClient,
-  args: {
-    eventData: PlatformEventRequestInput['event_data'];
-    eventId: string;
-    eventTimestamp: string;
-    eventType: PlatformEventType;
-    ipAddress?: string;
-    merchantId?: string;
-    pageUrl?: string;
-    referrer?: string;
-    sessionId?: string;
-    userAgent?: string;
-  }
-) {
-  return supabase.from('platform_events').upsert(
-    {
-      event_data: args.eventData || {},
-      event_id: args.eventId,
-      event_timestamp: args.eventTimestamp,
-      event_type: args.eventType,
-      ip_address: args.ipAddress,
-      merchant_id: args.merchantId || null,
-      page_url: args.pageUrl,
-      referrer: args.referrer,
-      session_id: args.sessionId,
-      user_agent: args.userAgent,
-    },
-    { ignoreDuplicates: true, onConflict: 'event_type,event_id' }
-  );
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -147,7 +109,7 @@ export async function POST(request: NextRequest) {
           trustLevel: context.trustLevel,
         });
       } catch (enqueueError) {
-        if (isLegacyAnalyticsFanoutDisabled()) {
+        if (isLegacyAnalyticsFanoutDisabled('platform')) {
           error = {
             message:
               enqueueError instanceof Error
@@ -206,7 +168,7 @@ export async function POST(request: NextRequest) {
 
     // Also forward to platform's external analytics if configured
     // This runs in background, doesn't block response
-    if (!isLegacyAnalyticsFanoutDisabled()) {
+    if (!isLegacyAnalyticsFanoutDisabled('platform')) {
       forwardToPlatformAnalytics({
         eventData: event_data,
         eventId,

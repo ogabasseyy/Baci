@@ -10,6 +10,9 @@ export const merchant: MerchantData = {
   country: 'NG',
   payout_currency: 'NGN',
   paystack_subaccount_configured: true,
+  // Enable a second card rail in the isolated harness so reviewers can exercise
+  // the real method-switching controls without a provider account.
+  feature_settings: { korapay_enabled: true },
   vat_registration_status: 'registered',
   vat_rate: 7.5,
 };
@@ -36,3 +39,5 @@ export const contact = {
   customerEmail: 'ada@example.test',
   customerPhone: '+2348031234567',
 };
+
+export const shippingQuoteId = '55555555-5555-4555-8555-555555555555';

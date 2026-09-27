@@ -1,6 +1,9 @@
 'use client';
+import { useCheckoutAddressInference } from './checkout/hooks/use-checkout-address-inference';
+import { useCheckoutShippingQuotes } from './checkout/hooks/use-checkout-shipping-quotes';
 import { dispatchCheckoutPayment } from './checkout/handlers/dispatch-checkout-payment';
 import { buildCheckoutOrderRequest } from './checkout/build-checkout-order-request';
+import { prepareCheckoutDelivery } from './checkout/handlers/prepare-checkout-delivery';
 import { useLoadResumedOrder } from './checkout/hooks/use-load-resumed-order';
 import { useOrderTotals } from './checkout/hooks/use-order-totals';
 
@@ -35,12 +38,6 @@ import {
 import { CheckoutStepSection } from './checkout/components/CheckoutStepSection';
 import { DeliveryAddressFields, type SavedCheckoutAddress as SavedAddress } from './checkout/components/DeliveryAddressFields';
 import { DeliveryOptions } from './checkout/components/DeliveryOptions';
-import { isCheckoutDeliveryAddressReady } from './checkout/is-checkout-delivery-address-ready';
-import {
-  checkoutShippingQuoteDeliveryPreference,
-  shouldDiscoverCheckoutPickupQuotes,
-  shouldFetchCheckoutShippingQuotes,
-} from './checkout/should-fetch-checkout-shipping-quotes';
 import {
   DiscountCodeInput,
   type DiscountResult,
@@ -87,8 +84,6 @@ import {
   type PlaceDetails,
 } from '@/components/address-autocomplete';
 import { asRoute } from '@/lib/routes';
-import { getCountryByCode } from '@/lib/countries';
-import type { ShippingQuote } from '@/types/shipping-quote';
 import { getSubdivisions } from '@/lib/shipping/merchant-rates/subdivisions';
 import { toast } from '@/hooks/use-toast';
 import { createClient } from '@/lib/supabase/client';
@@ -108,11 +103,10 @@ import {
 import { isNgnChargeCurrency } from './checkout/components/payment-step-availability';
 import { ContactStep } from './checkout/components/ContactStep';
 import {
-  buildPendingCheckoutFingerprint,
   CHECKOUT_PENDING_ORDER_STORAGE_KEY,
-  normalizeOrderPaymentMethod,
   type PendingCheckoutOrderSnapshot,
 } from './checkout/pending-checkout-order';
+import { prepareCheckoutOrderIdentity } from './checkout/prepare-checkout-order-identity';
 import {
   submitRedvaultPreparedOrder,
   type RedvaultPreparedOrder,
@@ -124,7 +118,7 @@ import {
   getCheckoutIdempotencyKey,
 } from './checkout/checkout-idempotency';
 import { captureCheckoutPaymentCompleted } from './checkout/capture-checkout-payment-completed';
-import { captureCheckoutPaymentFailed } from './checkout/capture-checkout-payment-failed';
+import { useCheckoutSubmissionState } from './checkout/hooks/use-checkout-submission-state';
 import { captureCheckoutPaymentStarted } from './checkout/capture-checkout-payment-started';
 import { executeResumedDirectPayment } from './checkout/handlers/direct-payment';
 import { getCheckoutOrderErrorMessage } from './checkout/checkout-order-error-message';
@@ -140,10 +134,6 @@ import { selectRejectedVoucherLines } from './checkout/select-rejected-voucher-l
 import { PaymentStep } from './checkout/components/PaymentStep';
 import type { RedvaultQuoteSummary } from './checkout/components/redvault/RedvaultPaymentOption';
 import { getRedvaultCompatibleCheckoutValues } from './checkout/redvault-compatible-checkout-values';
-import {
-  invalidatePendingQuoteRequests,
-  loadCheckoutShippingQuotes,
-} from './checkout/hooks/checkout-shipping-quote-loader';
 import { useRedvaultPaymentAvailability } from './checkout/hooks/use-redvault-payment-availability';
 import {
   calculateDeliveryCost,
@@ -152,8 +142,6 @@ import {
   getAirDeliveryQuotes,
   getDoorDeliveryQuotes,
   getForwardableSelectedQuoteId,
-  getMerchantRateId,
-  getStationPickupAddressText,
   getStationPickupQuote,
   getStationPickupQuotes,
   inferAddressLocationFromInput,
@@ -161,9 +149,7 @@ import {
   isMerchantQuote,
   isStationPickupQuote,
   isKlumpUnavailableForGatewayAmount,
-  resetDeliveryQuotesForAddressChange,
 } from './checkout/utils';
-import { resolveAirportShippingAddress } from './checkout/resolve-airport-shipping-address';
 import { useWalletFundedBankTransfer } from './checkout/hooks/use-wallet-funded-bank-transfer';
 import { useStorefrontCustomerSession } from './checkout/hooks/use-storefront-customer-session';
 import {
@@ -178,13 +164,6 @@ import {
   type CheckoutItem,
 } from './checkout/components/DesktopOrderSummary';
 
-
-interface InferredCheckoutAddressLocation {
-  city: string;
-  state: string;
-}
-
-const MANUAL_ADDRESS_LOCATION_DEBOUNCE_MS = 500;
 
 /**
  * Module-scope checkout helpers.
@@ -334,26 +313,8 @@ export const CheckoutPage: React.FC = () => {
   const setCustomerPhone = (v: string) => setCheckoutField('customerPhone', v);
   const setNewAddressState = (v: string) => setCheckoutField('newAddressState', v);
   const setNewAddressCity = (v: string) => setCheckoutField('newAddressCity', v);
-  const inferredLocationDebounceRef = useRef<number | null>(null);
-  const clearInferredLocationDebounce = () => {
-    if (inferredLocationDebounceRef.current !== null) {
-      window.clearTimeout(inferredLocationDebounceRef.current);
-      inferredLocationDebounceRef.current = null;
-    }
-  };
-  const scheduleInferredLocationUpdate = ({
-    city,
-    state,
-  }: InferredCheckoutAddressLocation) => {
-    clearInferredLocationDebounce();
-    inferredLocationDebounceRef.current = window.setTimeout(() => {
-      setCheckoutFields({
-        newAddressCity: city,
-        newAddressState: state,
-      });
-      inferredLocationDebounceRef.current = null;
-    }, MANUAL_ADDRESS_LOCATION_DEBOUNCE_MS);
-  };
+  const { clearInferredLocationDebounce, scheduleInferredLocationUpdate } =
+    useCheckoutAddressInference(setCheckoutFields);
   const [
     pendingCheckoutOrder,
     setPendingCheckoutOrder,
@@ -368,14 +329,6 @@ export const CheckoutPage: React.FC = () => {
   const [accountPassword, setAccountPassword] = useState('');
   const setNewsletterOptIn = (value: boolean) => setCheckoutField('newsletterOptIn', value);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-
-  useEffect(() => {
-    return () => {
-      if (inferredLocationDebounceRef.current !== null) {
-        window.clearTimeout(inferredLocationDebounceRef.current);
-      }
-    };
-  }, []);
 
   // Copy to clipboard helper (2025: Clipboard API with visual feedback)
   const [copiedText, setCopiedText] = useState<string | null>(null);
@@ -545,12 +498,11 @@ export const CheckoutPage: React.FC = () => {
   });
 
   const autoTriggerRef = useRef(false);
-  // Double-submit protection: prevents race conditions from rapid clicks
-  const isOrderInFlightRef = useRef(false);
-  usePaymentReturnReset(() => {
-    setIsProcessing(false);
-    isOrderInFlightRef.current = false;
-  });
+  const {
+    isProcessing, setIsProcessing, isOrderInFlightRef,
+    tryBeginSubmission, releaseSubmission, handleSubmissionError,
+  } = useCheckoutSubmissionState({ setCurrentStep, setCompletedSteps });
+  usePaymentReturnReset(releaseSubmission);
 
   // Storefront customer sign-in state. The `(commerce)` checkout route mounts
   // neither `AuthProvider` nor `CustomerAuthProvider`, so `useAuthSafe()` above
@@ -629,23 +581,41 @@ export const CheckoutPage: React.FC = () => {
   // Shipping State
   const [shippingStates, setShippingStates] = useState<string[]>([]);
   const [isLoadingLocations, setIsLoadingLocations] = useState(false);
-  const [shippingQuotes, setShippingQuotes] = useState<ShippingQuote[]>([]);
-  const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
-  const selectedQuoteId = persistedSelectedQuoteId || '';
-  const selectedProviderRateId = persistedSelectedProviderRateId || '';
-  const setSelectedQuoteId = (id: string) => {
-    setCheckoutField('selectedQuoteId', id);
-    const matched = shippingQuotes.find(
-      (quote) => String(quote.id) === String(id),
-    );
-    setCheckoutField(
-      'selectedProviderRateId',
-      matched?.providerRateId?.trim() || '',
-    );
-  };
-  const [resolvedQuoteRequestKey, setResolvedQuoteRequestKey] = useState('');
-  const quoteRequestSequence = useRef(0);
-  const quoteAbortController = useRef<AbortController | null>(null);
+  const {
+    shippingQuotes,
+    isLoadingQuotes,
+    selectedQuoteId,
+    setSelectedQuoteId,
+    resetQuotesForAddressChange,
+    fetchShippingQuotes,
+    isNewDeliveryAddressReady,
+  } = useCheckoutShippingQuotes({
+    isHydrated,
+    merchantId: merchant?.id,
+    merchantCountry,
+    checkoutCart,
+    checkoutCartCatalogSubtotal,
+    quoteItemsFingerprint,
+    deliveryCoordinates,
+    persistedSelectedQuoteId,
+    persistedSelectedProviderRateId,
+    currentStep,
+    setCurrentStep,
+    setCheckoutField,
+    setCheckoutFields,
+    setDeliveryMethod,
+    deliveryMethod,
+    newAddressStreet,
+    newAddressState,
+    newAddressCity,
+    customerPhone,
+    firstName,
+    lastName,
+    customerEmail,
+    isNewAddressMode,
+    addresses,
+    selectedAddressId,
+  });
   const stationPickupQuote = getStationPickupQuote(shippingQuotes);
   // All pickup options for this zone. A merchant can configure several pickup
   // locations, so when there is more than one we render a selectable list
@@ -677,26 +647,6 @@ export const CheckoutPage: React.FC = () => {
     setSelectedQuoteId,
     shippingQuotes,
   });
-  const resetQuotesForAddressChange = (options?: {
-    preserveDeliveryMethod?: boolean;
-  }) => {
-    invalidatePendingQuoteRequests(
-      quoteRequestSequence,
-      quoteAbortController,
-    );
-    setIsLoadingQuotes(false);
-    setResolvedQuoteRequestKey('');
-    resetDeliveryQuotesForAddressChange({
-      setDeliveryMethod,
-      setSelectedQuoteId,
-      setShippingQuotes,
-      // Drop stale autocomplete coordinates so a later saved-address selection
-      // cannot price/route with the previous place's lat/lng.
-      clearDeliveryCoordinates: () =>
-        setCheckoutFields({ deliveryCoordinates: null }),
-      preserveDeliveryMethod: options?.preserveDeliveryMethod,
-    });
-  };
   const eligibleDeliveryMethod = resolveMerchantDeliveryMethod(
     deliveryMethod,
     newAddressState,
@@ -812,182 +762,12 @@ export const CheckoutPage: React.FC = () => {
     };
   }, [merchantCountry]);
 
-  // Function to fetch quotes. The async core (with its try/finally and
-  // synchronous loading-state writes) lives in module-scope
-  // `loadShippingQuotes` so neither the compiler nor the effect below trips
-  // on it; this wrapper only forwards inputs and setters.
-  const fetchShippingQuotes = (
-    address: string,
-    state: string,
-    city: string,
-    phone: string,
-    receiverFirstName: string,
-    receiverLastName: string,
-    email: string,
-    deliveryPreference: 'door' | 'pickup_station' = 'door',
-    force = true,
-  ) =>
-    merchant?.id
-      ? loadCheckoutShippingQuotes(
-          {
-            address,
-            state,
-            city,
-            phone,
-            fName: receiverFirstName,
-            lName: receiverLastName,
-            email,
-            merchantId: merchant.id,
-            deliveryPreference,
-            latitude: deliveryCoordinates?.latitude,
-            longitude: deliveryCoordinates?.longitude,
-            // Domestic (v1): the destination country is the merchant's own
-            // country so merchant rate zones match; checkout keeps the free-text
-            // state. `getCountryByCode` accepts a code or falls back to Nigeria.
-            countryCode: merchantCountry,
-            country: getCountryByCode(merchantCountry)?.name ?? 'Nigeria',
-            // Catalog (pre-negotiation) basis so free-over / price-tier merchant
-            // rates quote at the same tier the order-time fee guard verifies.
-            cartSubtotal: checkoutCartCatalogSubtotal,
-          },
-          checkoutCart,
-          {
-            activeAbortController: quoteAbortController,
-            currentRequestKey: resolvedQuoteRequestKey,
-            force,
-            preferredSelectedQuoteId: selectedQuoteId || undefined,
-            preferredProviderRateId: selectedProviderRateId || undefined,
-            requestSequence: quoteRequestSequence,
-            setResolvedQuoteRequestKey,
-            setIsLoadingQuotes,
-            setSelectedQuoteId,
-            setSelectedProviderRateId: (providerRateId: string) =>
-              setCheckoutField('selectedProviderRateId', providerRateId),
-            setShippingQuotes,
-            onPreferredQuoteMissing: () => setCurrentStep('delivery'),
-            requirePreferredQuoteMatch: currentStep === 'payment',
-          },
-        )
-      : resetQuotesForAddressChange();
-
-  const isNewDeliveryAddressReady = isCheckoutDeliveryAddressReady({
-    address: newAddressStreet,
-    city: newAddressCity,
-    state: newAddressState,
-    country: getCountryByCode(merchantCountry)?.name ?? 'Nigeria',
-  });
-
-  // Trigger provider quotes only for a hydrated, complete delivery address.
-  useEffect(() => {
-    if (!isHydrated) return;
-    if (deliveryMethod === 'door' || deliveryMethod === 'pickup_station' || deliveryMethod === 'airport') {
-      if (!merchant?.id) {
-        resetQuotesForAddressChange();
-        return;
-      }
-
-      if (isNewAddressMode) {
-        const hasCityState = Boolean(
-          newAddressCity.trim() && newAddressState.trim(),
-        );
-        if (
-          shouldFetchCheckoutShippingQuotes({
-            deliveryMethod,
-            isStreetReady: isNewDeliveryAddressReady,
-            hasCityState,
-          }) ||
-          shouldDiscoverCheckoutPickupQuotes({
-            isStreetReady: isNewDeliveryAddressReady,
-            hasCityState,
-          })
-        ) {
-          fetchShippingQuotes(
-            newAddressStreet,
-            newAddressState,
-            newAddressCity,
-            customerPhone,
-            firstName,
-            lastName,
-            customerEmail,
-            checkoutShippingQuoteDeliveryPreference({
-              deliveryMethod,
-              isStreetReady: isNewDeliveryAddressReady,
-            }),
-            false,
-          );
-        } else {
-          // City/state alone can expose airport/store pickup; clearing unavailable
-          // door quotes must not force those methods back to door.
-          resetQuotesForAddressChange({
-            // Inside this quote effect, method is door/pickup_station/airport.
-            preserveDeliveryMethod:
-              deliveryMethod === 'airport' ||
-              deliveryMethod === 'pickup_station',
-          });
-        }
-      } else {
-        const saved = addresses.find((a) => a.id === selectedAddressId);
-        if (saved) {
-          // Attempt to extract state/city from saved address string
-          // Logic: "Address, City, State" or just "Address" (risky)
-          // Improved logic: Try to match against shippingStates if possible, or just send last parts
-          const parts = saved.address.split(',').map((s) => s.trim());
-
-          if (parts.length >= 2) {
-            const stateCandidate = parts[parts.length - 1];
-            const cityCandidate = parts[parts.length - 2];
-
-            // Basic verification: is stateCandidate in our shippingStates list? 
-            // (Might be empty if not loaded yet, so just send it)
-            if (stateCandidate && cityCandidate) {
-              fetchShippingQuotes(
-                saved.address,
-                stateCandidate,
-                cityCandidate,
-                saved.phone,
-                firstName,
-                lastName,
-                customerEmail,
-                deliveryMethod === 'pickup_station' ? 'pickup_station' : 'door',
-                false,
-              );
-            }
-          }
-        }
-      }
-    }
-  }, [
-    deliveryMethod,
-    selectedAddressId,
-    isNewAddressMode,
-    // Manual typing clears the detected location until the debounce settles.
-    isHydrated,
-    isNewDeliveryAddressReady,
-    newAddressStreet,
-    newAddressState,
-    newAddressCity,
-    // Trigger if we switch back to a saved address
-    addresses,
-    merchant?.id,
-    quoteItemsFingerprint,
-    resolvedQuoteRequestKey,
-    deliveryCoordinates?.latitude,
-    deliveryCoordinates?.longitude,
-    // Re-quote when the canonical CATALOG subtotal shifts without the item
-    // fingerprint changing — e.g. toggling assurance or changing an assurance
-    // rate. That basis is what free-over / price-tier merchant rates quote
-    // against and what `/api/orders` recomputes the fee guard from, so a stale
-    // fee here would fail-closed a legitimate cart. Derived from cart state, so
-    // it is stable between renders and never loops.
-    checkoutCartCatalogSubtotal,
-  ]);
 
 
   // Wallet state (2025: auto-apply when balance > 0)
   const [walletBalance, setWalletBalance] = useState(0);
   const [walletLoading, setWalletLoading] = useState(false);
   const [payWithWallet, setPayWithWallet] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [appliedDiscount, setAppliedDiscount] =
     useState<DiscountResult | null>(null);
 
@@ -1151,10 +931,7 @@ export const CheckoutPage: React.FC = () => {
 
   const handlePlaceOrder = async () => {
     // Double-submit protection: prevent race conditions from rapid clicks
-    if (isOrderInFlightRef.current || redvaultStatus === 'pending' || redvaultStatus === 'held') {
-      return;
-    }
-    isOrderInFlightRef.current = true;
+    if (!tryBeginSubmission(redvaultStatus === 'pending' || redvaultStatus === 'held')) return;
 
     if (!merchant?.id) {
       toast({
@@ -1257,8 +1034,7 @@ export const CheckoutPage: React.FC = () => {
       })
     ) {
       toast(KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST);
-      setIsProcessing(false);
-      isOrderInFlightRef.current = false;
+      releaseSubmission();
       return;
     }
 
@@ -1266,171 +1042,64 @@ export const CheckoutPage: React.FC = () => {
 
     const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
 
-    // Construct address string properly based on delivery method
-    let finalAddress = 'Address not provided';
-    let finalCity = '';
-    let finalState = '';
-
-    // Only require full address for door delivery
-    if (deliveryMethod === 'door') {
-      if (isNewAddressMode) {
-        if (!newAddressStreet || !newAddressCity || !newAddressState) {
-          toast({
-            title: 'Incomplete Address',
-            description: 'Please enter your full address (Street, City, State).',
-            variant: 'destructive',
-          });
-          setIsProcessing(false);
-          setCompletedSteps((prev) => ({ ...prev, delivery: false }));
-          isOrderInFlightRef.current = false;
-          setCurrentStep('delivery');
-          return;
-        }
-        finalAddress = newAddressStreet;
-        finalCity = newAddressCity;
-        finalState = newAddressState;
-      } else {
-        finalAddress = selectedAddress?.address || 'Address not provided';
-        // Try to parse city/state from saved string if possible
-        const parts = finalAddress.split(',');
-        if (parts.length >= 2) {
-          finalState = parts[parts.length - 1]?.trim() || '';
-          finalCity = parts[parts.length - 2]?.trim() || '';
-        }
-      }
-    } else if (deliveryMethod === 'pickup_station') {
-      const quote = shippingQuotes.find(
-        (q) => String(q.id) === String(selectedQuoteId),
-      );
-      finalAddress =
-        (quote && getStationPickupAddressText(quote)) ||
-        quote?.displayName ||
-        'GIGL pickup station';
-      finalCity = newAddressCity;
-      finalState = newAddressState;
-      if ((!finalCity || !finalState) && selectedAddress?.address) {
-        const parts = selectedAddress.address.split(',');
-        if (parts.length >= 2) {
-          finalCity ||= parts[parts.length - 2]?.trim() || '';
-          finalState ||= parts[parts.length - 1]?.trim() || '';
-        }
-      }
-    } else if (deliveryMethod === 'pickup') {
-      finalAddress = 'Pickup at Store';
-      finalCity = 'Lagos';
-      finalState = 'Lagos';
-    } else if (deliveryMethod === 'airport') {
-      const airportAddress = resolveAirportShippingAddress({
-        airportType,
-        manualAddress: newAddressStreet,
-        manualCity: newAddressCity,
-        manualState: newAddressState,
-        savedAddress: selectedAddress?.address,
+    const preparedDelivery = prepareCheckoutDelivery({
+      method: deliveryMethod,
+      selectedQuoteId,
+      selectedQuoteMatchesMethod: selectedQuoteMatchesDeliveryMethod,
+      airportRequiresQuote,
+      quotes: shippingQuotes,
+      selectedAddress,
+      isNewAddressMode,
+      newAddressStreet,
+      newAddressCity,
+      newAddressState,
+      airportType,
+      customerPhone,
+      merchantCountry,
+    });
+    if (preparedDelivery.issue === 'incomplete-address') {
+      toast({
+        title: 'Incomplete Address',
+        description: 'Please enter your full address (Street, City, State).',
+        variant: 'destructive',
       });
-      finalAddress = airportAddress.address;
-      finalCity = airportAddress.city;
-      finalState = airportAddress.state;
+      setIsProcessing(false);
+      setCompletedSteps((prev) => ({ ...prev, delivery: false }));
+      isOrderInFlightRef.current = false;
+      setCurrentStep('delivery');
+      return;
     }
-
-    const shippingAddressData = {
-      address: finalAddress,
-      city: finalCity,
-      state: finalState,
-      phone: customerPhone || selectedAddress?.phone || '',
-      // Persist the merchant country so stored orders and the immediate
-      // invoice/receipt carry the real country instead of the downstream `NG`
-      // fallback — a non-NG (IN/AE) order is quoted+charged for the merchant
-      // country and must be invoiced for it too. Mirrors the country the
-      // shipping quote request already sends. NG orders now carry
-      // 'Nigeria'/'NG' explicitly, which is exactly what the fallback assumed.
-      countryCode: merchantCountry,
-      country: getCountryByCode(merchantCountry)?.name ?? 'Nigeria',
-    };
-
-    // Identify selected shipping provider.
-    //
-    // B3 (plan §5 B3): only door delivery has a third-party shipping
-    // provider with an associated quote. Pickup and airport are
-    // delivery-method labels, not shipping providers — sending them
-    // would trip the RPC's `shipping_quote_required` guard (which
-    // exists to catch the legacy `|| 'GIGL'` silent-default bug).
-    // The `delivery_method` field carries the customer-visible label
-    // separately; admin order views can still show "Pickup"/"Airport".
-    let shippingProvider: string | null = null;
-    let trackingNumber = undefined;
-
-    // Merchant-configured rate selection (id `mrate_<uuid>`). When present the
-    // order takes the RPC null-provider bypass and sends `shipping_rate_id`
-    // instead; the route recomputes the fee from rate config server-side.
-    //
-    // Only the QUOTED methods (`door`/`pickup_station`) carry a merchant rate.
-    // Guard the extraction so a stale `mrate_<uuid>` left in `selectedQuoteId`
-    // after switching to legacy `pickup`/`airport` (which submit
-    // `selected_quote_id: null` + `shipping_fee: 0`) never leaks a
-    // `shipping_rate_id` into the body — that would make /api/orders treat a
-    // store-pickup/airport checkout as a merchant-rate order and reject it with
-    // `SHIPPING_FEE_MISMATCH` (paid rate) or route the wrong provider (free
-    // rate). Mirrors how `getForwardableSelectedQuoteId` restricts
-    // `selected_quote_id` to the same two methods.
-    const merchantRateId =
-      deliveryMethod === 'door' || deliveryMethod === 'pickup_station'
-        ? getMerchantRateId(selectedQuoteId)
-        : null;
-
-    // Prepare order items for API
-    const orderItems = buildCheckoutOrderItems(checkoutCart);
-
-    // B3 review fix #2 (PR #1611): door delivery without ANY quote
-    // must bail BEFORE the JSON body is built. Pre-fix this submitted
-    // `shipping_provider: null + selected_quote_id: null` (or empty
-    // string), which slips past the RPC's `provider != null AND
-    // quote_id IS NULL` guard (both null → guard doesn't fire) and
-    // persists a silent zero-shipping order. Treat empty string as no
-    // quote too — the state hook initializes selectedQuoteId to `''`.
-    if (
-      ((deliveryMethod === 'door' || deliveryMethod === 'pickup_station') && !selectedQuoteId) ||
-      (deliveryMethod === 'airport' && !isAirportDeliveryReady(airportRequiresQuote, selectedQuoteMatchesDeliveryMethod))
-    ) {
+    if (preparedDelivery.issue === 'required') {
       toast({
         title: 'Delivery option required',
         description: 'Please select a delivery option to continue.',
         variant: 'destructive',
       });
-      isOrderInFlightRef.current = false;
-      setIsProcessing(false);
+      releaseSubmission();
+      return;
+    }
+    if (preparedDelivery.issue === 'expired') {
+      toast({
+        title: 'Shipping rate expired',
+        description: 'Please select a delivery option again.',
+        variant: 'destructive',
+      });
+      releaseSubmission();
       return;
     }
 
-    if (
-      (deliveryMethod === 'door' ||
-        deliveryMethod === 'pickup_station' ||
-        (deliveryMethod === 'airport' && selectedQuoteMatchesDeliveryMethod)) &&
-      selectedQuoteId
-    ) {
-      if (selectedQuote && selectedQuoteMatchesDeliveryMethod) {
-        // Merchant rates take the null-provider path (fee recomputed from rate
-        // config); only carrier quotes stamp a bookable provider.
-        shippingProvider = merchantRateId ? null : selectedQuote.provider; // e.g. 'GIGL', 'Topship'
-      } else {
-        // B3 review fix #1: do NOT fabricate a 'Standard' provider —
-        // selectedQuoteId is dangling (stored id with no matching
-        // quote in the current rate list, usually because rates
-        // expired or were refreshed under us). Surface a validation
-        // error and bail; never submit a quote id with no resolvable
-        // provider.
-        toast({
-          title: 'Shipping rate expired',
-          description: 'Please select a delivery option again.',
-          variant: 'destructive',
-        });
-        isOrderInFlightRef.current = false;
-        setIsProcessing(false);
-        return;
-      }
-    }
+    const shippingAddressData = preparedDelivery.address;
+    const { address: finalAddress, city: finalCity, state: finalState } = shippingAddressData;
+    const merchantRateId = preparedDelivery.merchantRateId;
+    const shippingProvider = preparedDelivery.provider;
+    const trackingNumber = undefined;
 
-    const normalizedPaymentMethod = normalizeOrderPaymentMethod(paymentMethod);
-    const checkoutFingerprint = (paymentMethod === 'uba_redvault' ? 'uba_redvault:' : '') + buildPendingCheckoutFingerprint({
+    const {
+      items: orderItems,
+      normalizedPaymentMethod,
+      checkoutFingerprint,
+    } = prepareCheckoutOrderIdentity({
+      paymentMethod,
       merchantId: merchant.id,
       customerEmail,
       customerName: `${firstName} ${lastName}`.trim(),
@@ -1445,16 +1114,7 @@ export const CheckoutPage: React.FC = () => {
           ? selectedQuoteId || undefined
           : undefined,
       shippingAddress: shippingAddressData,
-      items: orderItems.map((item) => ({
-        product_id: item.product_id,
-        name: item.name,
-        quantity: item.quantity,
-        price: item.price,
-        has_assurance: item.has_assurance,
-        assurance_fee: item.assurance_fee,
-        variantId: item.variantId,
-        variantAttributes: item.variantAttributes,
-      })),
+      items: buildCheckoutOrderItems(checkoutCart),
       useWalletCredit: checkoutValues.useWalletCredit,
       walletAmountUsed,
       discountCode: checkoutValues.discountCode,
@@ -1713,8 +1373,7 @@ export const CheckoutPage: React.FC = () => {
           total: order.total ?? total,
           orderNumber: createdOrderNumber,
         });
-        setIsProcessing(false);
-        isOrderInFlightRef.current = false;
+        releaseSubmission();
         return;
       }
 
@@ -1757,8 +1416,7 @@ export const CheckoutPage: React.FC = () => {
         })
       ) {
         toast(KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST);
-        setIsProcessing(false);
-        isOrderInFlightRef.current = false;
+        releaseSubmission();
         return;
       }
 
@@ -1873,31 +1531,16 @@ export const CheckoutPage: React.FC = () => {
         },
       });
     } catch (error) {
-      console.error('Checkout error:', error);
-      if (createdOrderId && paymentStarted) {
-        captureCheckoutPaymentFailed({
+      handleSubmissionError(error, {
+        createdOrderId,
+        paymentStarted,
+        payment: {
           currency: orderChargeCurrency,
-          orderId: createdOrderId,
           orderNumber: createdOrderNumber,
           paymentMethod,
-          reason: error instanceof Error ? error.name : 'checkout_error',
           reference: initializedReference,
-        });
-      }
-      toast({
-        title: 'Checkout Failed',
-        description: error instanceof Error
-          ? error.message
-          : 'An error occurred. Please try again.',
-        variant: 'destructive',
+        },
       });
-      setIsProcessing(false);
-      // Reset double-submit protection on error so user can retry
-      isOrderInFlightRef.current = false;
-      // Keep user on payment step - don't reset their progress
-      setCurrentStep('payment');
-      // Ensure steps stay completed so user doesn't have to re-enter info
-      setCompletedSteps({ contact: true, delivery: true });
     }
   };
 

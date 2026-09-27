@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { verifyTransaction } from '@/lib/paystack';
+import { fileDuplicatePaymentCapture } from './file-duplicate-payment-capture';
 
 const DEFAULT_LIMIT = 25;
 // Give an abandoned checkout time to settle before releasing a paid order.
@@ -115,6 +116,7 @@ export async function reconcileAbandonedPaystackAttempts({
       .in('payment_status', ['paid', 'partially_paid'])
       .maybeSingle();
     if (orderError || !order) {
+      if (orderError) summary.failed = true;
       await hold('order_not_paid_or_unavailable');
       continue;
     }
@@ -128,6 +130,7 @@ export async function reconcileAbandonedPaystackAttempts({
       .neq('id', attempt.id)
       .limit(1);
     if (completedError || !completed?.length) {
+      if (completedError) summary.failed = true;
       await hold('no_completed_payment_or_unavailable');
       continue;
     }
@@ -151,78 +154,53 @@ export async function reconcileAbandonedPaystackAttempts({
         continue;
       }
     }
-    if (result.success && result.data.reference !== attempt.gateway_reference) {
-      await hold('reference_mismatch');
-      continue;
-    }
-    if (
-      result.success &&
-      (!Number.isFinite(Number(attempt.amount)) ||
+    let mismatchKind: string | null = null;
+    if (result.success) {
+      if (result.data.reference !== attempt.gateway_reference) {
+        mismatchKind = 'reference_mismatch';
+      } else if (
+        !Number.isFinite(Number(attempt.amount)) ||
         Number(attempt.amount) <= 0 ||
         result.data.amount !== Math.round(Number(attempt.amount) * 100) ||
         typeof result.data.currency !== 'string' ||
         result.data.currency.toUpperCase() !==
-          String(attempt.currency).toUpperCase())
-    ) {
-      await hold('payment_evidence_mismatch');
-      continue;
+          String(attempt.currency).toUpperCase()
+      ) {
+        mismatchKind = 'payment_evidence_mismatch';
+      }
     }
     if (result.success && result.data.status === 'success') {
       // The order is already paid by another transaction, so a verified
       // capture here is a possible duplicate charge. The wedged sweep never
       // sees paid orders, so file it for operations and retire the row;
-      // otherwise it would rotate through this batch forever.
-      const { error: reviewError } = await supabase
-        .from('reconciliation_review')
-        .insert({
-          issue_type: 'duplicate_payment_capture_requires_review',
-          order_id: attempt.order_id,
-          merchant_id: attempt.merchant_id,
-          txn_id: attempt.id,
-          paystack_ref: attempt.gateway_reference,
-          reason: `Stale Paystack attempt ${attempt.gateway_reference} verified as captured while the order is already paid; possible duplicate charge`,
-          metadata: {
-            payment_transaction_id: attempt.id,
-            provider_status: result.data.status,
-          },
-        });
-      const reviewFiled = !reviewError;
-      const duplicateReview =
-        !reviewFiled && (reviewError as { code?: string }).code === '23505';
-      let evidenceDurable = reviewFiled;
-      if (duplicateReview) {
-        // Another capture on this order already occupies the review slot;
-        // merge this attempt in so operations sees every charge.
-        const { data: merged, error: mergeError } = await supabase.rpc(
-          'merge_duplicate_payment_capture_evidence_v1',
-          {
-            p_order_id: attempt.order_id,
-            p_merchant_id: attempt.merchant_id,
-            p_transaction_id: attempt.id,
-            p_gateway_reference: attempt.gateway_reference,
-            p_reason: `Stale attempt ${attempt.gateway_reference} verified as captured`,
-          }
-        );
-        evidenceDurable = !mergeError && merged === true;
+      // otherwise it would rotate through this batch forever. A mismatched
+      // capture is still real money, so it is filed with its evidence
+      // instead of rotating as an ordinary hold.
+      const filed = await fileDuplicatePaymentCapture({
+        attempt,
+        evidence: {
+          providerAmount: result.data.amount,
+          providerCurrency: result.data.currency,
+          providerReference: result.data.reference,
+          providerStatus: result.data.status,
+          ...(mismatchKind
+            ? {
+                mismatchDetail: `provider ${result.data.reference} ${result.data.amount} ${result.data.currency}`,
+                mismatchKind,
+              }
+            : {}),
+        },
+        supabase,
+      });
+      if (filed) {
+        summary.reviewsFiled.push(attempt.id);
+        continue;
       }
-      if (evidenceDurable) {
-        const { error: stampError } = await supabase
-          .from('transactions')
-          .update({
-            metadata: {
-              ...(attempt.metadata ?? {}),
-              abandoned_sweep_resolution: 'verified_success_captured',
-              abandoned_sweep_resolved_at: new Date().toISOString(),
-            },
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', attempt.id);
-        if (!stampError) {
-          summary.reviewsFiled.push(attempt.id);
-          continue;
-        }
-      }
-      await hold('success');
+      await hold(mismatchKind ?? 'success');
+      continue;
+    }
+    if (mismatchKind) {
+      await hold(mismatchKind);
       continue;
     }
     if (

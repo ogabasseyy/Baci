@@ -75,6 +75,34 @@ describe('abandoned Paystack attempt operational failures', () => {
     expect(summary.retired).toEqual([]);
   });
 
+  it.each([
+    ['order', 'order_not_paid_or_unavailable'],
+    ['completed payment', 'no_completed_payment_or_unavailable'],
+  ])('fails the sweep when the %s lookup errors', async (_label, reason) => {
+    const { client, orderLookup, completedLookup } = createClient();
+    if (reason === 'order_not_paid_or_unavailable') {
+      orderLookup.maybeSingle.mockResolvedValue({
+        data: null,
+        error: { message: 'database unavailable' },
+      });
+    } else {
+      completedLookup.limit.mockResolvedValue({
+        data: null,
+        error: { message: 'database unavailable' },
+      });
+    }
+    const verify = vi.fn();
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify,
+    });
+
+    expect(summary.failed).toBe(true);
+    expect(summary.held).toEqual([{ id: 'attempt-1', reason }]);
+    expect(verify).not.toHaveBeenCalled();
+  });
+
   it('holds a verification request that hangs until its five-second deadline', async () => {
     const { client, update } = createClient();
     const verify = vi.fn(

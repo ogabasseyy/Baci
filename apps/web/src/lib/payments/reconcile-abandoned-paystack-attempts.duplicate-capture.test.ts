@@ -17,7 +17,7 @@ function withReviewTable(
   );
 }
 
-function verifiedSuccess() {
+function verifiedSuccess(overrides: Record<string, unknown> = {}) {
   return vi.fn().mockResolvedValue({
     success: true,
     data: {
@@ -25,6 +25,7 @@ function verifiedSuccess() {
       status: 'success',
       amount: 10000,
       currency: 'NGN',
+      ...overrides,
     },
   });
 }
@@ -114,6 +115,55 @@ describe('abandoned Paystack attempt duplicate captures', () => {
     expect(summary.reviewsFiled).toEqual([]);
     expect(summary.failed).toBe(false);
     expect(summary.held).toEqual([{ id: 'attempt-1', reason: 'success' }]);
+    expect(update).toHaveBeenCalledWith({
+      updated_at: expect.any(String),
+    });
+  });
+
+  it.each([
+    [{ amount: 9000 }, 'payment_evidence_mismatch'],
+    [{ reference: 'OTHER' }, 'reference_mismatch'],
+  ])('files a mismatched successful capture with its provider evidence', async (overrides, mismatch) => {
+    const { client, update } = createClient();
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    withReviewTable(client, reviewInsert);
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify: verifiedSuccess(overrides),
+    });
+
+    expect(summary.reviewsFiled).toEqual(['attempt-1']);
+    expect(summary.held).toEqual([]);
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'duplicate_payment_capture_requires_review',
+        metadata: expect.objectContaining({
+          evidence_mismatch: mismatch,
+          provider_status: 'success',
+        }),
+      })
+    );
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it('holds a mismatched success under its mismatch reason when filing fails', async () => {
+    const { client, update } = createClient();
+    const reviewInsert = vi
+      .fn()
+      .mockResolvedValue({ error: { code: 'XX000' } });
+    withReviewTable(client, reviewInsert);
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify: verifiedSuccess({ amount: 9000 }),
+    });
+
+    expect(summary.reviewsFiled).toEqual([]);
+    expect(summary.failed).toBe(false);
+    expect(summary.held).toEqual([
+      { id: 'attempt-1', reason: 'payment_evidence_mismatch' },
+    ]);
     expect(update).toHaveBeenCalledWith({
       updated_at: expect.any(String),
     });

@@ -39,6 +39,10 @@ not an enabled replacement or proof that all inline scripts are authorized.
 
 Follow-up CSP migration remains open:
 
+On 2026-09-27, the owner approved deferring this hardening from PR #3513
+to [issue #3519](https://github.com/ogabasseyy/Baci/issues/3519). The PR thread
+is resolved as deferred, not fixed; the migration gates below remain open.
+
 - [ ] Inventory rendered framework, analytics, advertising, and payment scripts
   on representative anonymous, authenticated, checkout, and crawler responses.
 - [ ] Validate nonce propagation on explicitly dynamic routes, including

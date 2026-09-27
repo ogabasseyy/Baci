@@ -162,4 +162,39 @@ describe('hydrateRelatedBlogProductAvailability variant paths', () => {
       warnSpy.mockRestore();
     }
   });
+
+  it('keeps a zero-stock serialized_then_unlimited variant purchasable when the serialized summary fails', async () => {
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          product_id: VARIANT_PRODUCT_ID,
+          stock_quantity: 0,
+          inventory_tracking_policy: 'serialized_then_unlimited',
+        },
+      ],
+      error: null,
+    });
+    mockSerializedHydrate.mockRejectedValueOnce(
+      new Error('summary unavailable')
+    );
+
+    try {
+      const result = await hydrateRelatedBlogProductAvailability(
+        { rpc } as never,
+        [product()],
+        { merchantId: 'merchant-1' }
+      );
+
+      expect(result[0]?.has_purchasable_variant).toBe(true);
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Related blog product serialized availability unavailable',
+        expect.objectContaining({ merchantId: 'merchant-1' })
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });

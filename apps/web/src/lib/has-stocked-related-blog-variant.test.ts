@@ -45,4 +45,34 @@ describe('hasStockedRelatedBlogVariant', () => {
       )
     ).toBe(false);
   });
+
+  it('treats a zero-stock serialized_then_unlimited variant as stocked', () => {
+    expect(
+      hasStockedRelatedBlogVariant(
+        [
+          {
+            product_id: PRODUCT_ID,
+            stock_quantity: 0,
+            inventory_tracking_policy: 'serialized_then_unlimited',
+          },
+        ],
+        product()
+      )
+    ).toBe(true);
+  });
+
+  it('keeps a zero-stock serialized_strict variant stock-gated', () => {
+    expect(
+      hasStockedRelatedBlogVariant(
+        [
+          {
+            product_id: PRODUCT_ID,
+            stock_quantity: 0,
+            inventory_tracking_policy: 'serialized_strict',
+          },
+        ],
+        product()
+      )
+    ).toBe(false);
+  });
 });

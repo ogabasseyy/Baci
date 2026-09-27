@@ -147,11 +147,18 @@ describe('scheduleProductBlogPurge', () => {
     });
   });
 
-  it('is a no-op when the public merchant slug or entries are missing', async () => {
+  it('expires without scheduling when the public merchant slug or entries are missing', async () => {
     await scheduleProductBlogPurge({
       supabase,
       merchantId: 'merchant-1',
       merchantSlug: ' ',
+      productIds: ['product-1'],
+      entries,
+    });
+    await scheduleProductBlogPurge({
+      supabase,
+      merchantId: 'merchant-1',
+      merchantSlug: undefined,
       productIds: ['product-1'],
       entries,
     });
@@ -165,7 +172,9 @@ describe('scheduleProductBlogPurge', () => {
 
     expect(mockLookup).not.toHaveBeenCalled();
     expect(mockSchedule).not.toHaveBeenCalled();
-    expect(mockExpire).not.toHaveBeenCalled();
+    expect(mockHostnamePurge).not.toHaveBeenCalled();
+    expect(mockExpire).toHaveBeenCalledTimes(3);
+    expect(mockExpire).toHaveBeenCalledWith('merchant-1');
   });
 
   it('can resolve linked posts after an immediate product purge without duplicating an empty purge', async () => {

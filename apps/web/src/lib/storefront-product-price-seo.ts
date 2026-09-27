@@ -77,7 +77,10 @@ function hasAdvertisableStock(
   product: ProductPriceSeoProduct,
   stockQuantity: number | null | undefined
 ) {
-  if (product.manage_stock === false || product.manage_stock === null) {
+  // Unlimited semantics are reserved for an explicit `false` policy. Legacy
+  // null is managed inventory (PDP parity: a depleted null-policy product is
+  // unavailable, so its price must not be advertised).
+  if (product.manage_stock === false) {
     return true;
   }
 
@@ -90,10 +93,11 @@ function hasAdvertisableChildStock(
   product: ProductPriceSeoProduct,
   stockQuantity: number | null | undefined
 ) {
-  // An unmanaged parent (including legacy null values) has unlimited stock.
-  // Its child quantities are informational and must not hide a purchasable
-  // variant or offer from the advertised price range.
-  if (product.manage_stock === false || product.manage_stock === null) {
+  // An explicitly unmanaged parent has unlimited stock: its child quantities
+  // are informational and must not hide a purchasable variant or offer from
+  // the advertised price range. Legacy null is managed inventory (PDP
+  // parity), so a depleted child under a null parent is excluded below.
+  if (product.manage_stock === false) {
     return true;
   }
 

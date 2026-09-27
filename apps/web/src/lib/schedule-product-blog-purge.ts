@@ -106,13 +106,17 @@ export async function scheduleProductBlogPurge({
   skipProductPurge = false,
 }: ScheduleProductBlogPurgeInput): Promise<void> {
   try {
+    // Invalidate the Next data before the outer CDN purge can trigger a
+    // refill. This runs before the slug gate because it needs only the
+    // merchant id: a failed post-write merchant read (the archive route queues
+    // `merchantRow?.slug`) must not leave linked articles stale until TTL.
+    // Only Cloudflare scheduling is gated on the slug below.
+    await expireProductBlogCacheReliable(merchantId);
+
     const normalizedMerchantSlug = merchantSlug?.trim();
     if (!normalizedMerchantSlug || entries.length === 0) {
       return;
     }
-
-    // Invalidate the Next data before the outer CDN purge can trigger a refill.
-    await expireProductBlogCacheReliable(merchantId);
 
     const normalizedCategorySlugs = (categorySlugs ?? []).filter(
       (categorySlug): categorySlug is string =>

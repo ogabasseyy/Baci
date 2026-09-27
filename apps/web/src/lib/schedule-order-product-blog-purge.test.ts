@@ -211,4 +211,34 @@ describe('scheduleOrderProductBlogPurge', () => {
     expect(mockEnrichProductPurgeEntries).not.toHaveBeenCalled();
     expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
   });
+
+  it('skips the edge purge when the worker hard-expiry reports failure', async () => {
+    const consoleSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      const { supabase, maybeSingle } = makeSupabase({});
+      mockExpireProductBlogCacheReliable.mockResolvedValueOnce(false);
+
+      await scheduleOrderProductBlogPurge({
+        merchantId: 'merchant-1',
+        productIds: ['product-1'],
+        supabase: supabase as never,
+      });
+
+      expect(mockRevalidateSlugs).toHaveBeenCalled();
+      expect(mockExpireProductBlogCacheReliable).toHaveBeenCalledWith(
+        'merchant-1',
+        { productSlugs: ['iphone-15'] }
+      );
+      expect(maybeSingle).not.toHaveBeenCalled();
+      expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Skipped order-related edge purge because blog-cache hard expiry failed',
+        expect.objectContaining({ merchantId: 'merchant-1' })
+      );
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
 });

@@ -2,6 +2,7 @@ import { getEffectiveStock } from '@/lib/product-stock';
 import type { RelatedBlogProduct } from '@/lib/related-blog-products';
 
 interface VariantStockRow {
+  inventory_tracking_policy?: unknown;
   product_id?: unknown;
   stock_quantity?: number | string | null;
 }
@@ -30,7 +31,13 @@ export function hasStockedRelatedBlogVariant(
       (variant) =>
         isVariantStockRow(variant) &&
         variant.product_id === product.id &&
-        getEffectiveVariantStock(variant, product) > 0
+        // `serialized_then_unlimited` stays purchasable after its serialized
+        // units are exhausted (isPublicVariantPurchasable parity): a zero
+        // numeric stock must not mark the variant unavailable when the
+        // canonical serialized summary is unreachable and this first pass is
+        // all the rail has.
+        (variant.inventory_tracking_policy === 'serialized_then_unlimited' ||
+          getEffectiveVariantStock(variant, product) > 0)
     )
   );
 }

@@ -73,7 +73,20 @@ export async function scheduleOrderProductBlogPurge({
   // slugs ride along to the worker-safe expiry so standalone workers (no
   // request context) invalidate the same tags via the internal endpoint.
   revalidateProductSlugs(merchantId, slugs, { expireImmediately: true });
-  await expireProductBlogCacheReliable(merchantId, { productSlugs: slugs });
+  const blogCacheExpired = await expireProductBlogCacheReliable(merchantId, {
+    productSlugs: slugs,
+  });
+  if (!blogCacheExpired) {
+    // The standalone worker path reports hard-expiry failure as `false`
+    // (timeout/non-2xx). Purging the edge now would let the first request
+    // refill from the unchanged Next snapshots, so skip the edge purge; the
+    // article TTL plus the next invalidation self-heal.
+    console.warn(
+      'Skipped order-related edge purge because blog-cache hard expiry failed',
+      { merchantId }
+    );
+    return;
+  }
 
   let merchantSlug = suppliedMerchantSlug?.trim() || null;
   if (!merchantSlug) {

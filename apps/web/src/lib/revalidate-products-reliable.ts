@@ -189,10 +189,17 @@ export async function revalidateProductsReliable(
           )
         : [undefined];
 
+    // Control metadata (products/merchantSlug/whole-storefront flag) rides on the
+    // first chunk that the endpoint acknowledges. If that chunk rejects or
+    // returns non-2xx, a later chunk resends it so the required Cloudflare
+    // purge is still scheduled; a duplicate schedule from a post-purge 500 is
+    // harmless because edge purges are idempotent.
+    let controlMetadataDelivered = false;
     for (const [chunkIndex, productSlugChunk] of slugChunks.entries()) {
       // A rejected/timed-out chunk must not skip the remaining chunks: the
       // database writes already committed, and the merchant-wide tag does not
       // clear per-slug PDP entries, so every chunk is submitted independently.
+      const chunkCarriesControlMetadata = !controlMetadataDelivered;
       let response: Response;
       try {
         response = await (options.fetchImpl ?? fetch)(
@@ -204,19 +211,22 @@ export async function revalidateProductsReliable(
               'Content-Type': 'application/json',
             },
             // The endpoint accepts at most 10,000 slugs. Keep products,
-            // merchantSlug, and the whole-storefront flag on the first request
-            // so follow-up chunks only perform the per-slug invalidation and do
-            // not repeat a potentially expensive edge purge.
+            // merchantSlug, and the whole-storefront flag on the first
+            // acknowledged request so follow-up chunks only perform the
+            // per-slug invalidation and do not repeat a potentially expensive
+            // edge purge.
             body: JSON.stringify({
               merchantId,
-              ...(chunkIndex === 0 && merchantSlug ? { merchantSlug } : {}),
-              ...(chunkIndex === 0 && products && products.length > 0
+              ...(chunkCarriesControlMetadata && merchantSlug
+                ? { merchantSlug }
+                : {}),
+              ...(chunkCarriesControlMetadata && products && products.length > 0
                 ? { products }
                 : {}),
               ...(productSlugChunk && productSlugChunk.length > 0
                 ? { productSlugs: productSlugChunk }
                 : {}),
-              ...(chunkIndex === 0 && purgeWholeStorefront
+              ...(chunkCarriesControlMetadata && purgeWholeStorefront
                 ? { purgeWholeStorefront: true }
                 : {}),
             }),
@@ -235,6 +245,8 @@ export async function revalidateProductsReliable(
           'Internal product revalidation endpoint returned non-2xx; relying on cacheLife self-heal',
           { merchantId, status: response.status }
         );
+      } else if (chunkCarriesControlMetadata) {
+        controlMetadataDelivered = true;
       }
     }
   } catch (error) {

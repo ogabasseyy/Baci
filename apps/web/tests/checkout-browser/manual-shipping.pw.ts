@@ -50,12 +50,19 @@ test('manual shipping fixture renders and selects the real local door quote', as
       url: page.url(),
     },
   ]);
+  const orderResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes('/api/orders') &&
+      response.request().method() === 'POST'
+  );
   const paymentResponse = page.waitForResponse(
     (response) =>
       response.url().includes('/api/payments/initialize') &&
       response.request().method() === 'POST'
   );
   await placeOrder.click();
+  const submittedOrderResponse = await orderResponse;
+  expect(submittedOrderResponse.status()).toBe(200);
   expect((await paymentResponse).status()).toBe(503);
   await expect(
     page.getByText('Checkout Failed', { exact: true })

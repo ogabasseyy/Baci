@@ -1,6 +1,9 @@
+import { QuoteRequestSchema } from '@/schemas/shipping';
 import { json } from '../../fixture-response';
 export async function POST(request: Request) {
-  await request.json().catch(() => ({}));
+  const body = await request.json().catch(() => null);
+  if (!QuoteRequestSchema.safeParse(body).success)
+    return json({ error: 'Invalid fixture shipping quote request' }, 400);
   const quote = {
     id: '55555555-5555-4555-8555-555555555555',
     provider: 'GIGL',

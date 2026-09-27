@@ -19,6 +19,7 @@ export const test = base.extend<{
       let manualApiIntegrationVisited = false;
       let manualApi503ConsoleCount = 0;
       let manualApi400ConsoleCount = 0;
+      let manualApi403ConsoleCount = 0;
       let manualApi404ConsoleCount = 0;
       let manualCheckoutFlowVisited = false;
       let manualCheckoutProviderErrorCount = 0;
@@ -46,13 +47,19 @@ export const test = base.extend<{
         const expectedIndex = remainingAllowedErrors.indexOf(message.text());
         if (expectedIndex >= 0) remainingAllowedErrors.splice(expectedIndex, 1);
         else if (
-          manualApiScenarioWasVisited &&
-          manualApi400ConsoleCount < 2 &&
+          manualApiIntegrationVisited &&
+          manualApi400ConsoleCount < 5 &&
           /Failed to load resource:.*400/.test(message.text())
         )
           manualApi400ConsoleCount++;
         else if (
-          manualApiScenarioWasVisited &&
+          manualApiIntegrationVisited &&
+          manualApi403ConsoleCount < 5 &&
+          /Failed to load resource:.*403/.test(message.text())
+        )
+          manualApi403ConsoleCount++;
+        else if (
+          manualApiIntegrationVisited &&
           manualApi404ConsoleCount === 0 &&
           /Failed to load resource:.*404/.test(message.text())
         )
@@ -164,7 +171,8 @@ export const test = base.extend<{
       });
       await use(undefined);
       if (manualApiIntegrationVisited) {
-        expect(manualApi400ConsoleCount).toBe(2);
+        expect(manualApi400ConsoleCount).toBe(5);
+        expect(manualApi403ConsoleCount).toBe(5);
         expect(manualApi404ConsoleCount).toBe(1);
       }
       if (paymentRetryScenario) {

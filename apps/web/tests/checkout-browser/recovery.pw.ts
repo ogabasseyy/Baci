@@ -196,6 +196,21 @@ test('manual QA scenario controls are opt-in and reset local checkout state', as
       'fixture-idempotency'
     )
   );
+  await page.evaluate(() =>
+    sessionStorage.setItem(
+      'storefront-checkout-pending-order',
+      JSON.stringify({
+        orderId: '44444444-4444-4444-8444-444444444444',
+        trackingToken: 'fixture-tracking-token',
+        merchantId: '11111111-1111-4111-8111-111111111111',
+        customerEmail: 'ada@example.test',
+        customerPhone: '+2348031234567',
+        checkoutFingerprint: 'fixture-fingerprint',
+        amountDueToGateway: 107500,
+        createdAt: new Date().toISOString(),
+      })
+    )
+  );
   await controls
     .getByRole('button', { name: 'Reset checkout fixtures' })
     .click();

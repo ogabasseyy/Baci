@@ -33,6 +33,7 @@
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-order-totals*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-step-state*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-shipping-quotes*",
+      "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-submission-state*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/checkout-shipping-quotes-options*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-address-inference*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/PaymentStep.tsx",

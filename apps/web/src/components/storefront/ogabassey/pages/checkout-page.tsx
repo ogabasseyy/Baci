@@ -119,7 +119,7 @@ import {
   getCheckoutIdempotencyKey,
 } from './checkout/checkout-idempotency';
 import { captureCheckoutPaymentCompleted } from './checkout/capture-checkout-payment-completed';
-import { captureCheckoutPaymentFailed } from './checkout/capture-checkout-payment-failed';
+import { useCheckoutSubmissionState } from './checkout/hooks/use-checkout-submission-state';
 import { captureCheckoutPaymentStarted } from './checkout/capture-checkout-payment-started';
 import { executeResumedDirectPayment } from './checkout/handlers/direct-payment';
 import { getCheckoutOrderErrorMessage } from './checkout/checkout-order-error-message';
@@ -502,12 +502,11 @@ export const CheckoutPage: React.FC = () => {
   });
 
   const autoTriggerRef = useRef(false);
-  // Double-submit protection: prevents race conditions from rapid clicks
-  const isOrderInFlightRef = useRef(false);
-  usePaymentReturnReset(() => {
-    setIsProcessing(false);
-    isOrderInFlightRef.current = false;
-  });
+  const {
+    isProcessing, setIsProcessing, isOrderInFlightRef,
+    tryBeginSubmission, releaseSubmission, handleSubmissionError,
+  } = useCheckoutSubmissionState({ setCurrentStep, setCompletedSteps });
+  usePaymentReturnReset(releaseSubmission);
 
   // Storefront customer sign-in state. The `(commerce)` checkout route mounts
   // neither `AuthProvider` nor `CustomerAuthProvider`, so `useAuthSafe()` above
@@ -773,7 +772,6 @@ export const CheckoutPage: React.FC = () => {
   const [walletBalance, setWalletBalance] = useState(0);
   const [walletLoading, setWalletLoading] = useState(false);
   const [payWithWallet, setPayWithWallet] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [appliedDiscount, setAppliedDiscount] =
     useState<DiscountResult | null>(null);
 
@@ -937,10 +935,7 @@ export const CheckoutPage: React.FC = () => {
 
   const handlePlaceOrder = async () => {
     // Double-submit protection: prevent race conditions from rapid clicks
-    if (isOrderInFlightRef.current || redvaultStatus === 'pending' || redvaultStatus === 'held') {
-      return;
-    }
-    isOrderInFlightRef.current = true;
+    if (!tryBeginSubmission(redvaultStatus === 'pending' || redvaultStatus === 'held')) return;
 
     if (!merchant?.id) {
       toast({
@@ -1043,8 +1038,7 @@ export const CheckoutPage: React.FC = () => {
       })
     ) {
       toast(KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST);
-      setIsProcessing(false);
-      isOrderInFlightRef.current = false;
+      releaseSubmission();
       return;
     }
 
@@ -1182,8 +1176,7 @@ export const CheckoutPage: React.FC = () => {
         description: 'Please select a delivery option to continue.',
         variant: 'destructive',
       });
-      isOrderInFlightRef.current = false;
-      setIsProcessing(false);
+      releaseSubmission();
       return;
     }
 
@@ -1209,8 +1202,7 @@ export const CheckoutPage: React.FC = () => {
           description: 'Please select a delivery option again.',
           variant: 'destructive',
         });
-        isOrderInFlightRef.current = false;
-        setIsProcessing(false);
+        releaseSubmission();
         return;
       }
     }
@@ -1499,8 +1491,7 @@ export const CheckoutPage: React.FC = () => {
           total: order.total ?? total,
           orderNumber: createdOrderNumber,
         });
-        setIsProcessing(false);
-        isOrderInFlightRef.current = false;
+        releaseSubmission();
         return;
       }
 
@@ -1543,8 +1534,7 @@ export const CheckoutPage: React.FC = () => {
         })
       ) {
         toast(KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST);
-        setIsProcessing(false);
-        isOrderInFlightRef.current = false;
+        releaseSubmission();
         return;
       }
 
@@ -1659,31 +1649,16 @@ export const CheckoutPage: React.FC = () => {
         },
       });
     } catch (error) {
-      console.error('Checkout error:', error);
-      if (createdOrderId && paymentStarted) {
-        captureCheckoutPaymentFailed({
+      handleSubmissionError(error, {
+        createdOrderId,
+        paymentStarted,
+        payment: {
           currency: orderChargeCurrency,
-          orderId: createdOrderId,
           orderNumber: createdOrderNumber,
           paymentMethod,
-          reason: error instanceof Error ? error.name : 'checkout_error',
           reference: initializedReference,
-        });
-      }
-      toast({
-        title: 'Checkout Failed',
-        description: error instanceof Error
-          ? error.message
-          : 'An error occurred. Please try again.',
-        variant: 'destructive',
+        },
       });
-      setIsProcessing(false);
-      // Reset double-submit protection on error so user can retry
-      isOrderInFlightRef.current = false;
-      // Keep user on payment step - don't reset their progress
-      setCurrentStep('payment');
-      // Ensure steps stay completed so user doesn't have to re-enter info
-      setCompletedSteps({ contact: true, delivery: true });
     }
   };
 

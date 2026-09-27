@@ -50,9 +50,9 @@ BEGIN
     RAISE EXCEPTION 'refund_evidence_mismatch';
   END IF;
 
-  IF v_refund.status = 'completed' AND v_status <> 'processed' THEN
-    RETURN 'already_completed';
-  END IF;
+  -- A locally completed row with a contradictory provider verdict falls
+  -- through: persist the provider status, notify, and rotate updated_at below
+  -- instead of re-selecting this row on every legacy recheck.
   IF v_refund.status = 'failed' AND v_status <> 'processed' THEN RETURN 'already_failed'; END IF;
   UPDATE public.transactions SET
     status = CASE WHEN v_status = 'processed' THEN 'completed'

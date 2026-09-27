@@ -39,6 +39,42 @@ describe('abandoned Paystack attempt operational failures', () => {
     expect(update).toHaveBeenCalledWith({ updated_at: expect.any(String) });
   });
 
+  it.each([
+    'error',
+    'rejection',
+  ] as const)('fails the sweep when a held-attempt rotation returns %s', async (failure) => {
+    const { client, updateBuilder } = createClient();
+    if (failure === 'error') {
+      Object.assign(updateBuilder, {
+        // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are awaited thenables.
+        then: (resolve: (result: { error: Error }) => void) =>
+          resolve({ error: new Error('rotation unavailable') }),
+      });
+    } else {
+      Object.assign(updateBuilder, {
+        // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are awaited thenables.
+        then: (
+          _resolve: (result: { error: null }) => void,
+          reject: (reason: unknown) => void
+        ) => reject(new Error('rotation unavailable')),
+      });
+    }
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify: vi.fn().mockRejectedValue(new Error('provider down')),
+    });
+    expect(summary.failed).toBe(true);
+    expect(summary.held).toEqual([
+      {
+        id: 'attempt-1',
+        reason: 'verification_unavailable',
+        rotationFailed: true,
+      },
+    ]);
+    expect(summary.retired).toEqual([]);
+  });
+
   it('holds a verification request that hangs until its five-second deadline', async () => {
     const { client, update } = createClient();
     const verify = vi.fn(

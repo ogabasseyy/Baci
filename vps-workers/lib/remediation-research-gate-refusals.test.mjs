@@ -108,6 +108,23 @@ describe('remediation research gate refusals', () => {
     }
   });
 
+  it('accepts affirmative cannot wording that still selects a fix', () => {
+    const reports = [
+      'SELECTED_FIX: Apply a bound so hostile input cannot bypass the safe parser fix',
+      'SELECTED_FIX: I cannot identify a safe fix yet, so apply the bounded workaround',
+    ];
+
+    for (const selectedFix of reports) {
+      const result = validateCodexResearchResult(
+        jsonl(
+          validReport.replace('SELECTED_FIX: smallest code fix', selectedFix)
+        )
+      );
+
+      assert.equal(result.accepted, true);
+    }
+  });
+
   it('rejects reverse-order wording that cannot establish a defensible fix', () => {
     const reports = [
       'SELECTED_FIX: I cannot establish a defensible fix without production traces.',

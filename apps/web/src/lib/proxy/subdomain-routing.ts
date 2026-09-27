@@ -129,7 +129,11 @@ export async function runSubdomainRouting(
     });
   if (matchesMainAppRoute(pathname))
     return NextResponse.redirect(new URL(pathname, `https://${ROOT_DOMAIN}`));
-  if (!isLocalhost(hostname)) {
+  if (
+    !isLocalhost(hostname) &&
+    !pathname.startsWith('/api') &&
+    (request.method === 'GET' || request.method === 'HEAD')
+  ) {
     const customDomain = await getCustomDomainForSlug(subdomain);
     const terms = buildLegacyTermsAliasRedirectResponse(
       request,
@@ -137,11 +141,7 @@ export async function runSubdomainRouting(
       customDomain ?? undefined
     );
     if (terms) return terms;
-    if (
-      customDomain &&
-      !pathname.startsWith('/api') &&
-      (request.method === 'GET' || request.method === 'HEAD')
-    ) {
+    if (customDomain) {
       return NextResponse.redirect(
         `https://${customDomain}${pathname}${request.nextUrl.search}`,
         301

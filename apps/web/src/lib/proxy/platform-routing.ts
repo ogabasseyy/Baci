@@ -32,6 +32,9 @@ import {
 } from '@/lib/proxy/routing-policy';
 import { buildProxyRequestHeaders } from './request-headers';
 
+// Lowercase ASCII without escapes cannot change under either normalizer.
+const STOREFRONT_PATH_CANONICALIZATION_CANDIDATE = /[%A-Z\u0080-\uffff]/;
+
 /** Runs the post-legacy platform-only and canonical path routing stage. */
 export async function runPlatformRoutingStage(
   request: NextRequest,
@@ -139,6 +142,8 @@ export function runPlatformCanonicalRoutingStage(
   hostname: string
 ): NextResponse | null {
   const lowerPathname = pathname.toLowerCase();
+  const hasCanonicalizationCandidate =
+    STOREFRONT_PATH_CANONICALIZATION_CANDIDATE.test(pathname);
   const isWellKnownPassthrough = lowerPathname.startsWith('/.well-known/');
   const isLlmsPassthrough =
     lowerPathname === '/llms.txt' || lowerPathname === '/llms-full.txt';
@@ -147,9 +152,9 @@ export function runPlatformCanonicalRoutingStage(
     (prefix) =>
       lowerPathname === prefix || lowerPathname.startsWith(`${prefix}/`)
   );
-  const cacheSafeStorefrontPathname = normalizeCacheSafeStorefrontPathname(
-    new URL(request.url).pathname
-  );
+  const cacheSafeStorefrontPathname = hasCanonicalizationCandidate
+    ? normalizeCacheSafeStorefrontPathname(new URL(request.url).pathname)
+    : null;
   if (
     cacheSafeStorefrontPathname &&
     !isNonStorefrontPrefix &&
@@ -165,7 +170,9 @@ export function runPlatformCanonicalRoutingStage(
       308
     );
   }
-  const normalizedStorefrontPathname = lowercaseStorefrontPathname(pathname);
+  const normalizedStorefrontPathname = hasCanonicalizationCandidate
+    ? lowercaseStorefrontPathname(pathname)
+    : pathname;
   if (
     pathname !== normalizedStorefrontPathname &&
     !isNonStorefrontPrefix &&

@@ -10,8 +10,8 @@ import { isLocalhost } from '@/lib/proxy/host';
 import {
   canUseLongDownstreamStorefrontCache,
   isCacheablePublicStorefrontDocument,
+  isCacheablePublicStorefrontDocumentRequest,
   isStorefrontPdpDocument,
-  NON_CACHEABLE_STOREFRONT_HTML_CACHE_CONTROL,
   shouldSetStorefrontDocumentCacheControl,
 } from '@/lib/proxy/public-cache-eligibility';
 import {
@@ -171,17 +171,12 @@ export function applySecurityHeaders(
   // Keep SEO listing subroutes cacheable; they share the 3-segment shape used
   // by category PDPs but do not stream PDP metadata/content slots.
   if (isStorefrontNestedListingPath(pathname, hostname, routeType)) {
-    const hasCacheableMethod =
-      request?.method === 'GET' || request?.method === 'HEAD';
-    const hasQuery = request ? request.nextUrl.search.length > 0 : true;
+    const hasCacheableDocumentRequest =
+      isCacheablePublicStorefrontDocumentRequest(request);
     const hasAuthSessionHint = hasStorefrontAuthSessionHint(request);
 
-    if (!hasCacheableMethod || hasQuery || hasAuthSessionHint) {
-      response.headers.set(
-        'Cache-Control',
-        NON_CACHEABLE_STOREFRONT_HTML_CACHE_CONTROL
-      );
-      response.headers.delete('Vercel-Cache-Tag');
+    if (!hasCacheableDocumentRequest || hasAuthSessionHint) {
+      applyStorefrontDocumentCacheHeaders(response, 'non-cacheable', null);
       if (hasAuthSessionHint) {
         appendVaryHeader(response, 'Cookie');
       }
@@ -212,21 +207,13 @@ export function applySecurityHeaders(
   // cart, wallet, receipts, and order-success MUST stay no-store so the edge
   // never caches private or non-canonical content.
   if (shouldSetStorefrontDocumentCacheControl(pathname, hostname, routeType)) {
-    // Fail safe: if the request is unavailable we cannot confirm the URL is
-    // param-free, so treat it as having a query (not cacheable).
-    const hasCacheableMethod =
-      request?.method === 'GET' || request?.method === 'HEAD';
-    const hasQuery = request ? request.nextUrl.search.length > 0 : true;
+    const hasCacheableDocumentRequest =
+      isCacheablePublicStorefrontDocumentRequest(request);
     const hasAuthSessionHint = hasStorefrontAuthSessionHint(request);
     const cacheable =
-      hasCacheableMethod &&
+      hasCacheableDocumentRequest &&
       !hasAuthSessionHint &&
-      isCacheablePublicStorefrontDocument(
-        pathname,
-        hostname,
-        routeType,
-        hasQuery
-      );
+      isCacheablePublicStorefrontDocument(pathname, hostname, routeType, false);
     const cachePolicy = getStorefrontPublicCachePolicy(pathname, hostname);
     const cacheKind = selectStorefrontDocumentCacheKind({
       cacheable: !hasAuthSessionHint && cacheable,

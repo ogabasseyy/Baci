@@ -63,3 +63,30 @@ test('rejects branch-narrowed available-unit selectors', () => {
     false
   );
 });
+
+test('rejects arbitrary availability-selector narrowing', () => {
+  const source = `
+    SELECT unit.id FROM variant_inventory unit
+    WHERE unit.merchant_id = p_merchant_id AND unit.variant_id = v_variant_id
+      AND unit.status = 'available' AND unit.order_id IS NULL
+      AND unit.order_item_id IS NULL AND unit.sold_at IS NULL
+    ORDER BY unit.id LIMIT v_needed FOR UPDATE SKIP LOCKED;
+  `;
+  assert.equal(
+    serializedInventoryAvailability.availableUnitPredicatesMatch(
+      source,
+      'v_variant_id'
+    ),
+    true
+  );
+  assert.equal(
+    serializedInventoryAvailability.availableUnitPredicatesMatch(
+      source.replace(
+        'AND unit.sold_at IS NULL',
+        'AND unit.created_at > now() AND unit.sold_at IS NULL'
+      ),
+      'v_variant_id'
+    ),
+    false
+  );
+});

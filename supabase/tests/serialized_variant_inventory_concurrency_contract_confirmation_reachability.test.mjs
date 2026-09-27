@@ -220,3 +220,20 @@ test('constant-true early exits terminate downstream control flow', () => {
   assert.ok(liveUpdate);
   assert.equal(isReachable(conditional, liveUpdate.index), true);
 });
+
+test('confirmation claim counters reject resets after the increment', () => {
+  const confirm = latestFunctionBody(
+    'private.confirm_order_inventory_reservations(uuid, uuid)'
+  );
+  assert.equal(reclaimCounterResetPerItem(confirm), true);
+
+  const increment =
+    /v_claimed_in_loop\s*:=\s*v_claimed_in_loop\s*\+\s*1\s*;/i.exec(confirm);
+  assert.ok(increment);
+  const reset = confirm.replace(
+    increment[0],
+    `${increment[0]}\n      v_claimed_in_loop := 0;`
+  );
+  assert.notEqual(reset, confirm);
+  assert.equal(reclaimCounterResetPerItem(reset), false);
+});

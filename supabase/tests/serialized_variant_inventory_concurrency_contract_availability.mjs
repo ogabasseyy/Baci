@@ -33,6 +33,25 @@ function availableUnitWhereClause(source, preserveStrings = false) {
   return null;
 }
 
+const allowedAvailabilityColumns = new Set([
+  'merchant_id',
+  'variant_id',
+  'status',
+  'order_id',
+  'order_item_id',
+  'sold_at',
+  'branch_id',
+]);
+
+function hasUnexpectedAvailabilityPredicate(where) {
+  for (const match of where.matchAll(
+    /\b([a-z_][a-z0-9_]*)\s*\.\s*([a-z_][a-z0-9_]*)\s*(?:=|<>|!=|<=?|>=?|IS\b|IN\b|LIKE\b|ILIKE\b|BETWEEN\b)/gi
+  )) {
+    if (!allowedAvailabilityColumns.has(match[2].toLowerCase())) return true;
+  }
+  return false;
+}
+
 function availableUnitPredicatePatterns(variantVariable, alias) {
   const qualifier = alias
     ? `${escapeRegex(alias)}\\s*\\.\\s*`
@@ -95,6 +114,7 @@ function availableUnitPredicatesMatch(source, variantVariable, branchVariable) {
     !contradictoryScope.test(valueQuery.where) &&
     !hasConstantFalseConjunct(valueQuery.where) &&
     !branchNarrowing.test(branchScopedWhere ?? '') &&
+    !hasUnexpectedAvailabilityPredicate(branchScopedWhere ?? '') &&
     branchFirst &&
     (!branchPattern ||
       (branchMatch !== null &&

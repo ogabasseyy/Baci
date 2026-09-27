@@ -239,12 +239,14 @@ function reclaimCounterResetPerItem(source) {
     preserveStrings: true,
   });
   const itemLoop = /FOR\s+v_item\s+IN\b/i.exec(cleanSource);
-  const reset = /v_claimed_in_loop\s*:=\s*0\s*;/i.exec(cleanSource);
+  const resets = [...cleanSource.matchAll(/v_claimed_in_loop\s*:=\s*0\s*;/gi)];
+  const [reset] = resets;
   const selector =
     serializedInventoryAvailability.availableUnitWhereClause(cleanSource);
   return Boolean(
     itemLoop &&
       reset &&
+      resets.length === 1 &&
       selector &&
       reset.index > itemLoop.index &&
       reset.index < selector.index &&

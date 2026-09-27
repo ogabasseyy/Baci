@@ -1,7 +1,10 @@
-const allowedPrefixWords = new Set([
+const handsetBrandWords = new Set([
   'apple', 'google', 'pixel', 'samsung', 'galaxy', 'redmi', 'xiaomi',
   'tecno', 'infinix', 'itel', 'nokia', 'motorola', 'oppo', 'vivo',
-  'realme', 'oneplus', 'nothing', 'honor', 'new', 'used', 'refurbished',
+  'realme', 'oneplus', 'nothing', 'honor',
+]);
+const allowedPrefixWords = new Set([
+  ...handsetBrandWords, 'new', 'used', 'refurbished',
   'android', 'cheap', 'affordable', 'best', 'latest',
 ]);
 
@@ -15,7 +18,12 @@ export function inferSmartphoneCategory(
   if (!handset) return undefined;
   const prefix = query.slice(0, handset.index)
     .replace(/^\s*(?:(?:looking|searching|shopping)\s+for|(?:show|find|search)(?:\s+me)?(?:\s+for)?|i\s+(?:want|need))\s+(?:(?:an?|some)\s+)?/i, '');
-  if (prefix.trim() && !prefix.trim().toLowerCase().split(/\s+/).every((word) => allowedPrefixWords.has(word))) {
+  const prefixWords = prefix.trim().toLowerCase().split(/\s+/);
+  let hasBrand = false;
+  if (prefix.trim() && !prefixWords.every((word) => {
+    if (handsetBrandWords.has(word)) hasBrand = true;
+    return allowedPrefixWords.has(word) || (hasBrand && /^(?:[a-z]{1,3})?\d{1,3}[a-z]?$/.test(word));
+  })) {
     return undefined;
   }
 

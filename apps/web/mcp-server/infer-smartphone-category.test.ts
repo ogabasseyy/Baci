@@ -24,6 +24,8 @@ describe('inferSmartphoneCategory', () => {
     expect(inferSmartphoneCategory('show me Android phones', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('looking for Redmi phones', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('Samsung Galaxy phone', undefined)).toBe('Smartphones');
+    expect(inferSmartphoneCategory('Samsung Galaxy S24 phone', undefined)).toBe('Smartphones');
+    expect(inferSmartphoneCategory('Google Pixel 8 phone', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('cheap Redmi phone', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('looking for Redmi phone case', undefined)).toBeUndefined();
     expect(inferSmartphoneCategory('battery iPhone 15', undefined)).toBeUndefined();
@@ -44,6 +46,8 @@ describe('inferSmartphoneCategory', () => {
     expect(inferSmartphoneCategory('I need a case for iPhone 15', undefined)).toBeUndefined();
     expect(inferSmartphoneCategory('charger for phone', undefined)).toBeUndefined();
     expect(inferSmartphoneCategory('case iPhone 15', undefined)).toBeUndefined();
+    expect(inferSmartphoneCategory('case for Samsung Galaxy S24 phone', undefined)).toBeUndefined();
+    expect(inferSmartphoneCategory('Samsung Galaxy S24 phone case', undefined)).toBeUndefined();
     expect(inferSmartphoneCategory('charger phone', undefined)).toBeUndefined();
     expect(inferSmartphoneCategory('screen protector iPhone 15', undefined)).toBeUndefined();
     expect(inferSmartphoneCategory('tablets and phones', undefined)).toBeUndefined();

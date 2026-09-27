@@ -1,10 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ManualQaControls } from './ManualQaControls';
 
-const originalLocation = window.location;
 const reload = vi.fn();
 const assign = vi.fn();
+const navigation = { reload, assign };
 
 beforeEach(() => {
   localStorage.clear();
@@ -17,24 +17,14 @@ beforeEach(() => {
   assign.mockReset();
 });
 
-afterEach(() => {
-  Object.defineProperty(window, 'location', {
-    configurable: true,
-    value: originalLocation,
-  });
-});
-
 function setLocation(search: string) {
-  Object.defineProperty(window, 'location', {
-    configurable: true,
-    value: { ...originalLocation, search, reload, assign },
-  });
+  window.history.replaceState({}, '', search || '/');
 }
 
 describe('ManualQaControls', () => {
   it('stays hidden unless manual QA mode is explicitly enabled', () => {
     setLocation('');
-    render(<ManualQaControls />);
+    render(<ManualQaControls navigation={navigation} />);
 
     expect(
       screen.queryByRole('complementary', {
@@ -45,7 +35,7 @@ describe('ManualQaControls', () => {
 
   it('persists the selected provider scenario and reloads the fixture', () => {
     setLocation('?qa=manual');
-    render(<ManualQaControls />);
+    render(<ManualQaControls navigation={navigation} />);
 
     expect(
       screen.getByRole('complementary', {
@@ -71,7 +61,7 @@ describe('ManualQaControls', () => {
       'storefront-checkout-pending-order',
       '{"orderId":"fixture-order"}'
     );
-    render(<ManualQaControls />);
+    render(<ManualQaControls navigation={navigation} />);
 
     fireEvent.click(
       screen.getByRole('button', { name: 'Reset checkout fixtures' })

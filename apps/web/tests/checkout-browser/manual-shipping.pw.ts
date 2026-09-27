@@ -54,6 +54,14 @@ test('manual shipping fixture renders and selects the real local door quote', as
       url: page.url(),
     },
   ]);
+  let orderCreationRequests = 0;
+  page.on('request', (request) => {
+    if (
+      new URL(request.url()).pathname === '/api/orders' &&
+      request.method() === 'POST'
+    )
+      orderCreationRequests += 1;
+  });
   const orderResponse = page.waitForResponse(
     (response) =>
       response.url().includes('/api/orders') &&
@@ -109,5 +117,6 @@ test('manual shipping fixture renders and selects the real local door quote', as
     order: { customer_email: reviewerEmail },
   });
   expect((await retryPaymentResponse).status()).toBe(503);
+  expect(orderCreationRequests).toBe(1);
   await expect(placeOrder).toBeEnabled();
 });

@@ -27,11 +27,14 @@ describe('fixture shipping quote route', () => {
     expect(response.status).toBe(400);
   });
 
-  it('returns a normalized local quote without contacting a carrier', async () => {
+  it.each([
+    ['door', false],
+    ['pickup_station', true],
+  ] as const)('returns a normalized local %s quote without contacting a carrier', async (deliveryPreference, isStationPickup) => {
     const response = await POST(
       new Request('http://localhost/api/shipping/quotes', {
         method: 'POST',
-        body: JSON.stringify(validQuoteRequest),
+        body: JSON.stringify({ ...validQuoteRequest, deliveryPreference }),
       })
     );
     expect(response.status).toBe(200);
@@ -43,6 +46,7 @@ describe('fixture shipping quote route', () => {
             serviceTier: 'Standard',
             price: 0,
             currency: 'NGN',
+            isStationPickup,
           },
         ],
       },

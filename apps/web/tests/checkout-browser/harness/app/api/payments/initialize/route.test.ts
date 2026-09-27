@@ -82,4 +82,16 @@ describe('fixture payment initialization route', () => {
       error: 'Fixture provider error. No payment was sent.',
     });
   });
+
+  it('matches fixture customer email without case sensitivity', async () => {
+    scenarioState.value = 'success';
+    const response = await POST(
+      paymentRequest({
+        ...validRequest,
+        customer_email: 'Reviewer@Example.Test',
+      })
+    );
+
+    expect(response.status).toBe(200);
+  });
 });

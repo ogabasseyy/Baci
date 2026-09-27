@@ -10,8 +10,10 @@ export async function POST(request: Request) {
     return json({ error: 'Invalid fixture payment request' }, 400);
   if (
     parsed.data.order_id !== order.id ||
-    parsed.data.customer_email !==
+    parsed.data.customer_email.trim().toLowerCase() !==
       (fixtureCustomerEmail(request) ?? order.customer_email)
+        .trim()
+        .toLowerCase()
   )
     return json({ error: 'Order not found' }, 404);
   if (parsed.data.merchant_id !== merchant.id)

@@ -4,13 +4,18 @@ import { useEffect, useState } from 'react';
 
 const scenarioCookie = 'checkout-qa-scenario';
 const idempotencyStorageKey = 'storefront-checkout-idempotency';
+type Navigation = Pick<Location, 'assign' | 'reload'>;
 
 function writeScenario(value: string) {
   // biome-ignore lint/suspicious/noDocumentCookie: isolated browser fixture selects the local route scenario
   document.cookie = `${scenarioCookie}=${value}; Path=/; SameSite=Lax`;
 }
 
-export function ManualQaControls() {
+export function ManualQaControls({
+  navigation,
+}: {
+  navigation?: Navigation;
+} = {}) {
   const [scenario, setScenario] = useState('success');
   const [visible, setVisible] = useState(false);
 
@@ -25,7 +30,8 @@ export function ManualQaControls() {
   function selectScenario(value: string) {
     setScenario(value);
     writeScenario(value);
-    window.location.reload();
+    if (navigation) navigation.reload();
+    else window.location.reload();
   }
 
   function reset() {
@@ -37,7 +43,8 @@ export function ManualQaControls() {
     // biome-ignore lint/suspicious/noDocumentCookie: local-only fixture identity resets with checkout state
     document.cookie =
       'checkout-qa-customer-email=; Path=/; Max-Age=0; SameSite=Lax';
-    window.location.assign('/cart?qaReset=1&qa=manual');
+    if (navigation) navigation.assign('/cart?qaReset=1&qa=manual');
+    else window.location.assign('/cart?qaReset=1&qa=manual');
   }
 
   if (!visible) return null;

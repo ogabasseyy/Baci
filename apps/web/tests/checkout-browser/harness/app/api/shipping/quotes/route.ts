@@ -3,8 +3,10 @@ import { shippingQuoteId } from '../../../../../fixtures';
 import { json } from '../../fixture-response';
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
-  if (!QuoteRequestSchema.safeParse(body).success)
+  const parsed = QuoteRequestSchema.safeParse(body);
+  if (!parsed.success)
     return json({ error: 'Invalid fixture shipping quote request' }, 400);
+  const isStationPickup = parsed.data.deliveryPreference === 'pickup_station';
   const quote = {
     id: shippingQuoteId,
     provider: 'GIGL',
@@ -16,7 +18,7 @@ export async function POST(request: Request) {
     currency: 'NGN',
     pickupIncluded: false,
     insuranceIncluded: false,
-    isStationPickup: false,
+    isStationPickup,
   };
   return json({
     quotes: { featured: [quote], all: [quote] },

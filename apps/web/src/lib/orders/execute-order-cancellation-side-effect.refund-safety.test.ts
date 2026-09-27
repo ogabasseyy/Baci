@@ -101,7 +101,11 @@ describe('cancellation refund safety', () => {
       .mockReturnValueOnce({ insert: refundInsert })
       .mockReturnValueOnce({ insert: reviewInsert });
     mocks.initiateRefund.mockResolvedValue({
-      data: { id: 42, status: 'pending' },
+      data: {
+        id: 42,
+        status: 'pending',
+        transaction: { id: 123, reference: 'paystack-ref' },
+      },
       success: true,
     });
 
@@ -130,5 +134,93 @@ describe('cancellation refund safety', () => {
         reason: expect.stringContaining('nonterminal status pending'),
       })
     );
+  });
+
+  it('keeps an accepted refund uncertain when filing its review fails', async () => {
+    const refundInsert = vi.fn().mockResolvedValue({ error: null });
+    const reviewInsert = vi
+      .fn()
+      .mockResolvedValue({ error: { message: 'db unavailable' } });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'paystack',
+            gateway_reference: 'paystack-ref',
+            id: 'payment-1',
+          },
+        ])
+      )
+      .mockReturnValueOnce(transactionQuery([]))
+      .mockReturnValueOnce({ insert: refundInsert })
+      .mockReturnValueOnce({ insert: reviewInsert });
+    mocks.initiateRefund.mockResolvedValue({
+      data: {
+        id: 43,
+        status: 'pending',
+        transaction: { id: 123, reference: 'paystack-ref' },
+      },
+      success: true,
+    });
+    await expect(
+      executeOrderCancellationSideEffect({
+        merchant,
+        order,
+        step: 'refund',
+        supabase: { from } as never,
+      })
+    ).rejects.toBeInstanceOf(DeliveryUncertainError);
+    expect(mocks.initiateRefund).toHaveBeenCalledTimes(1);
+  });
+
+  it('records an accepted refund with mismatched payment evidence before quarantining it', async () => {
+    const auditInsert = vi.fn().mockResolvedValue({ error: null });
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'paystack',
+            gateway_reference: 'paystack-ref',
+            id: 'payment-1',
+          },
+        ])
+      )
+      .mockReturnValueOnce(transactionQuery([]))
+      .mockReturnValueOnce({ insert: auditInsert })
+      .mockReturnValueOnce({ insert: reviewInsert });
+    mocks.initiateRefund.mockResolvedValue({
+      success: true,
+      data: {
+        id: 44,
+        status: 'pending',
+        transaction: { id: 456, reference: 'another-payment' },
+      },
+    });
+    await expect(
+      executeOrderCancellationSideEffect({
+        merchant,
+        order,
+        step: 'refund',
+        supabase: { from } as never,
+      })
+    ).rejects.toBeInstanceOf(DeliveryUncertainError);
+    expect(auditInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gateway_reference: '44',
+        status: 'pending',
+        metadata: expect.objectContaining({
+          provider_payment_transaction_id: 456,
+          refund_reconciliation_hold: 'provider_creation_evidence_mismatch',
+        }),
+      })
+    );
+    expect(reviewInsert).toHaveBeenCalledOnce();
   });
 });

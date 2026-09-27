@@ -18,6 +18,11 @@ const mockRunPaidOrderSideEffects = vi.hoisted(() => vi.fn());
 const mockPersistMerchantWalletAssignmentEvent = vi.hoisted(() => vi.fn());
 const mockFailMerchantWalletAssignmentEvent = vi.hoisted(() => vi.fn());
 const mockCaptureOrHoldRedvaultPayment = vi.hoisted(() => vi.fn());
+const mockReconcilePaystackRefundEvent = vi.hoisted(() => vi.fn());
+
+vi.mock('@/lib/payments/reconcile-paystack-cancellation-refunds', () => ({
+  reconcilePaystackRefundEvent: mockReconcilePaystackRefundEvent,
+}));
 
 // Mock environment variables
 vi.mock('@/env', () => ({
@@ -521,10 +526,44 @@ describe('POST /api/payments/webhook', () => {
     mockMarkAgenticPaystackDvaSessionPaid.mockResolvedValue({
       ok: true,
     });
+    mockReconcilePaystackRefundEvent.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('reconciles a signed Paystack refund event before charge handling', async () => {
+    const body = {
+      event: 'refund.processed',
+      data: { transaction_reference: 'PAYMENT-1', status: 'processed' },
+    };
+    const request = createMockRequest(body, {
+      'x-paystack-signature': createSignature(
+        JSON.stringify(body),
+        'test-paystack-secret'
+      ),
+    });
+    const response = await POST(request);
+    expect(response.status).toBe(200);
+    expect(mockReconcilePaystackRefundEvent).toHaveBeenCalledWith(
+      mockServiceClient,
+      'PAYMENT-1'
+    );
+  });
+
+  it('rejects an unsigned Paystack refund event', async () => {
+    const response = await POST(
+      createMockRequest(
+        {
+          event: 'refund.processed',
+          data: { transaction_reference: 'PAYMENT-1' },
+        },
+        { 'x-paystack-signature': 'invalid' }
+      )
+    );
+    expect(response.status).toBe(401);
+    expect(mockReconcilePaystackRefundEvent).not.toHaveBeenCalled();
   });
 
   it('records a DVA invoice underpayment before the full paid-order finalizer', async () => {

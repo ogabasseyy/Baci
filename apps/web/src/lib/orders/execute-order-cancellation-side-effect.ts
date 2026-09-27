@@ -81,7 +81,11 @@ async function quarantineRefund({
   const duplicateReview =
     (reviewError as { code?: string } | null)?.code === '23505';
   if (reviewError && !duplicateReview) {
-    throw new Error('Failed to file manual refund reconciliation review');
+    // The provider may already have accepted the refund. A failed review write
+    // must not turn this into a retryable provider call.
+    throw new DeliveryUncertainError(
+      'Refund requires reconciliation, but filing the review failed'
+    );
   }
   throw new DeliveryUncertainError(reason);
 }
@@ -242,6 +246,71 @@ export async function executeOrderCancellationSideEffect({
       .trim()
       .toLowerCase();
     const refundCompleted = providerStatus === 'processed';
+    const providerPaymentId = paystackRefund.data.transaction?.id;
+    if (
+      !Number.isSafeInteger(paystackRefund.data.id) ||
+      paystackRefund.data.id <= 0 ||
+      !Number.isSafeInteger(providerPaymentId) ||
+      providerPaymentId <= 0 ||
+      paystackRefund.data.transaction?.reference !==
+        transaction.gateway_reference
+    ) {
+      if (
+        Number.isSafeInteger(paystackRefund.data.id) &&
+        paystackRefund.data.id > 0
+      ) {
+        const { error: uncertainInsertError } = await supabase
+          .from('transactions')
+          .insert({
+            merchant_id: order.merchant_id,
+            order_id: order.id,
+            transaction_type: 'refund',
+            amount: transactionAmount,
+            currency: transaction.currency || order.currency || 'NGN',
+            status: 'pending',
+            gateway: 'paystack',
+            gateway_reference: String(paystackRefund.data.id),
+            description: `Refund for cancelled order #${order.order_number || order.id.slice(0, 8)}`,
+            metadata: {
+              cancellation_reason: reason ?? null,
+              payment_transaction_id: transaction.id,
+              provider_payment_transaction_id:
+                Number.isSafeInteger(providerPaymentId) && providerPaymentId > 0
+                  ? providerPaymentId
+                  : null,
+              provider_refund_status: providerStatus,
+              refund_reconciliation_hold: 'provider_creation_evidence_mismatch',
+            },
+          });
+        if (uncertainInsertError) {
+          await quarantineRefund({
+            metadata: {
+              provider_refund_id: paystackRefund.data.id,
+              payment_transaction_id: transaction.id,
+              audit_record_failed: true,
+            },
+            order,
+            reason:
+              'Paystack accepted refund but its uncertain audit row could not be recorded',
+            supabase,
+            transactions: [transaction],
+          });
+        }
+      }
+      // quarantineRefund throws DeliveryUncertainError. The surrounding
+      // runOrderCancellationSideEffect persists delivery_uncertain, and its
+      // claim RPC refuses a second provider call until manual reconciliation.
+      await quarantineRefund({
+        metadata: {
+          provider_refund_id: paystackRefund.data.id,
+          payment_transaction_id: transaction.id,
+        },
+        order,
+        reason: 'Paystack accepted refund without matching payment evidence',
+        supabase,
+        transactions: [transaction],
+      });
+    }
     const { error: insertTxError } = await supabase
       .from('transactions')
       .insert({
@@ -250,13 +319,15 @@ export async function executeOrderCancellationSideEffect({
         transaction_type: 'refund',
         amount: transactionAmount,
         currency: transaction.currency || order.currency || 'NGN',
-        status: refundCompleted ? 'completed' : 'pending',
+        // Fetch Refund independently verifies even an immediate processed reply.
+        status: 'pending',
         gateway: transaction.gateway,
         gateway_reference: String(paystackRefund.data.id),
         description: `Refund for cancelled order #${order.order_number || order.id.slice(0, 8)}`,
         metadata: {
           cancellation_reason: reason ?? null,
           payment_transaction_id: transaction.id,
+          provider_payment_transaction_id: providerPaymentId,
           provider_refund_status: providerStatus,
         },
       });

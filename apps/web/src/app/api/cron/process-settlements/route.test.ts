@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   drainFailedOrderCancellationSideEffects: vi.fn(),
+  drainPaystackRefundNotifications: vi.fn(),
+  reconcilePendingPaystackCancellationRefunds: vi.fn(),
   eq: vi.fn(),
   from: vi.fn(),
   in: vi.fn(),
@@ -37,6 +39,13 @@ vi.mock('@/lib/zeptomail', () => ({
 vi.mock('@/lib/orders/drain-failed-order-cancellation-side-effects', () => ({
   drainFailedOrderCancellationSideEffects:
     mocks.drainFailedOrderCancellationSideEffects,
+}));
+vi.mock('@/lib/payments/drain-paystack-refund-notifications', () => ({
+  drainPaystackRefundNotifications: mocks.drainPaystackRefundNotifications,
+}));
+vi.mock('@/lib/payments/reconcile-paystack-cancellation-refunds', () => ({
+  reconcilePendingPaystackCancellationRefunds:
+    mocks.reconcilePendingPaystackCancellationRefunds,
 }));
 
 import { POST } from './route';
@@ -116,6 +125,15 @@ describe('POST /api/cron/process-settlements', () => {
       failed: [],
       skipped: [],
     });
+    mocks.reconcilePendingPaystackCancellationRefunds.mockResolvedValue({
+      checked: 0,
+      failed: 0,
+    });
+    mocks.drainPaystackRefundNotifications.mockResolvedValue({
+      claimed: 0,
+      sent: 0,
+      failed: 0,
+    });
   });
 
   it('rejects requests without the configured cron secret before processing settlements', async () => {
@@ -128,6 +146,10 @@ describe('POST /api/cron/process-settlements', () => {
     expect(
       mocks.drainFailedOrderCancellationSideEffects
     ).not.toHaveBeenCalled();
+    expect(
+      mocks.reconcilePendingPaystackCancellationRefunds
+    ).not.toHaveBeenCalled();
+    expect(mocks.drainPaystackRefundNotifications).not.toHaveBeenCalled();
     expect(mocks.from).not.toHaveBeenCalled();
     expect(mocks.sendEmail).not.toHaveBeenCalled();
   });
@@ -140,7 +162,23 @@ describe('POST /api/cron/process-settlements', () => {
       expect.objectContaining({ sendCancellationEmail: mocks.sendEmail })
     );
     expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(
+      mocks.reconcilePendingPaystackCancellationRefunds
+    ).toHaveBeenCalled();
+    expect(mocks.drainPaystackRefundNotifications).toHaveBeenCalled();
     expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it('still reconciles refunds when cancellation side effect draining fails', async () => {
+    mocks.drainFailedOrderCancellationSideEffects.mockRejectedValueOnce(
+      new Error('temporary failure')
+    );
+    const response = await POST(makeCancellationDrainRequest());
+    expect(response.status).toBe(503);
+    expect(
+      mocks.reconcilePendingPaystackCancellationRefunds
+    ).toHaveBeenCalled();
+    expect(mocks.drainPaystackRefundNotifications).toHaveBeenCalled();
   });
 
   it('returns a 500 and skips notifications when settlement processing fails', async () => {

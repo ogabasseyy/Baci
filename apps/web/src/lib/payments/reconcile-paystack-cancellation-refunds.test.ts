@@ -214,4 +214,75 @@ describe('Paystack cancellation refund reconciliation', () => {
       expect.objectContaining({ p_refund_id: 'refund-2' })
     );
   });
+
+  it('merges duplicate mismatch evidence without replacing an existing review', async () => {
+    const paymentCandidates = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({
+        data: [
+          { id: 'payment-1', order_id: 'order-1', merchant_id: 'merchant-1' },
+        ],
+        error: null,
+      }),
+    };
+    const refundCandidates = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({ data: [refund], error: null }),
+    };
+    const paymentLookup = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          id: 'payment-1',
+          gateway_reference: 'PSK-1',
+          amount: 100,
+          currency: 'NGN',
+          status: 'completed',
+        },
+        error: null,
+      }),
+    };
+    const review = {
+      insert: vi.fn().mockResolvedValue({ error: { code: '23505' } }),
+      update: vi.fn(),
+    };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(paymentCandidates)
+      .mockReturnValueOnce(refundCandidates)
+      .mockReturnValueOnce(paymentLookup)
+      .mockReturnValueOnce(review);
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    provider.fetchRefund.mockResolvedValueOnce({
+      success: true,
+      data: {
+        id: 42,
+        transaction: 999,
+        amount: 10000,
+        currency: 'NGN',
+        status: 'processed',
+      },
+    });
+
+    await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
+
+    expect(rpc).toHaveBeenCalledWith(
+      'merge_paystack_cancellation_refund_review_v1',
+      {
+        p_order_id: 'order-1',
+        p_merchant_id: 'merchant-1',
+        p_refund_id: 'refund-1',
+        p_reason: 'paystack_refund_evidence_mismatch',
+      }
+    );
+    expect(review.update).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledWith(
+      'hold_paystack_cancellation_refund_for_review_v1',
+      { p_refund_id: 'refund-1', p_reason: 'paystack_refund_evidence_mismatch' }
+    );
+  });
 });

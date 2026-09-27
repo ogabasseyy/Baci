@@ -7,6 +7,8 @@ const DEFAULT_OLDER_THAN_MINUTES = 12 * 60;
 const VERIFY_TIMEOUT_MS = 5_000;
 
 interface PendingAttempt {
+  amount: number;
+  currency: string;
   gateway_reference: string;
   id: string;
   merchant_id: string;
@@ -42,7 +44,7 @@ export async function reconcileAbandonedPaystackAttempts({
   const { data: attempts, error: lookupError } = await supabase
     .from('transactions')
     .select(
-      'id, order_id, merchant_id, gateway_reference, status, metadata, paid_order:orders!transactions_order_id_fkey!inner(payment_status)'
+      'id, order_id, merchant_id, gateway_reference, amount, currency, status, metadata, paid_order:orders!transactions_order_id_fkey!inner(payment_status)'
     )
     .eq('transaction_type', 'payment')
     .eq('gateway', 'paystack')
@@ -139,6 +141,18 @@ export async function reconcileAbandonedPaystackAttempts({
     }
     if (result.success && result.data.reference !== attempt.gateway_reference) {
       await hold('reference_mismatch');
+      continue;
+    }
+    if (
+      result.success &&
+      (!Number.isFinite(Number(attempt.amount)) ||
+        Number(attempt.amount) <= 0 ||
+        result.data.amount !== Math.round(Number(attempt.amount) * 100) ||
+        typeof result.data.currency !== 'string' ||
+        result.data.currency.toUpperCase() !==
+          String(attempt.currency).toUpperCase())
+    ) {
+      await hold('payment_evidence_mismatch');
       continue;
     }
     if (

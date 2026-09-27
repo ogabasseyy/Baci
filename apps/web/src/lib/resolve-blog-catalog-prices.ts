@@ -64,10 +64,12 @@ function resolvePrice(
   // sets stay sufficient on their own because the PDP rejects add-to-cart
   // without a selectable variant.
   // The categorized PDP normalizes legacy null manage_stock to managed
-  // inventory (`manage_stock ?? true`); match it so a zero-stock legacy
-  // base token is unavailable instead of rendering the parent price.
+  // inventory; match it so a zero-stock legacy base token is unavailable
+  // instead of rendering the parent price. An ABSENT policy (undefined)
+  // means no inventory data was projected at all, so it stays fail-open.
   const isBaseOutOfStock =
-    (product.manage_stock ?? true) === true && getEffectiveStock(product) <= 0;
+    (product.manage_stock === true || product.manage_stock === null) &&
+    getEffectiveStock(product) <= 0;
   if (
     !hasAlternative &&
     ((product.has_variants === true &&

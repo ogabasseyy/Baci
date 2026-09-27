@@ -56,6 +56,10 @@ describe('isPublicVariantPurchasable', () => {
     ).toBe(true);
   });
 
+  it('stays fail-open when the parent policy was not projected', () => {
+    expect(isPublicVariantPurchasable({}, { stock_quantity: 0 })).toBe(true);
+  });
+
   it('keeps serialized units exact without parent inheritance', () => {
     expect(
       isPublicVariantPurchasable(

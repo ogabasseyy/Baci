@@ -19,9 +19,11 @@ export function isPublicVariantPurchasable(
     return true;
   }
   // The categorized PDP normalizes legacy null manage_stock to managed
-  // inventory (`manage_stock ?? true`) before downstream evaluation; match
-  // it so a depleted child under a null parent is unavailable everywhere.
-  if ((parent.manage_stock ?? true) !== true) {
+  // inventory before downstream evaluation; match it so a depleted child
+  // under a null parent is unavailable everywhere. An ABSENT policy
+  // (undefined) means no inventory data was projected, so it stays
+  // fail-open.
+  if (parent.manage_stock !== true && parent.manage_stock !== null) {
     return true;
   }
   // Legacy nullable child quantities inherit the parent stock, matching the

@@ -184,6 +184,35 @@ describe('remediation research gate refusals', () => {
     assert.equal(result.accepted, true);
   });
 
+  it('rejects reordered no-fix conclusions with safely established', () => {
+    const reports = [
+      'SELECTED_FIX: No fix can be safely established from the available evidence; collect production traces.',
+      'SELECTED_FIX: No fix can be established without production traces.',
+    ];
+
+    for (const selectedFix of reports) {
+      const result = validateCodexResearchResult(
+        jsonl(
+          validReport.replace('SELECTED_FIX: smallest code fix', selectedFix)
+        )
+      );
+
+      assert.equal(result.accepted, false);
+      assert.match(result.reasons.join('\n'), /defensible selected fix/);
+    }
+  });
+
+  it('accepts a reordered refusal that selects a fallback instead', () => {
+    const report = validReport.replace(
+      'SELECTED_FIX: smallest code fix',
+      'SELECTED_FIX: No fix can be safely established yet, so apply the bounded workaround'
+    );
+
+    const result = validateCodexResearchResult(jsonl(report));
+
+    assert.equal(result.accepted, true);
+  });
+
   it('rejects research unable-to conclusions at the start of the selection', () => {
     const reports = [
       'SELECTED_FIX: Unable to identify a defensible fix from the evidence.',

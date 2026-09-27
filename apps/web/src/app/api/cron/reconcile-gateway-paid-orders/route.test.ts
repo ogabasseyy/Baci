@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   drainFailedPaidOrderSideEffects: vi.fn(),
   getCronSecret: vi.fn(),
   logger: { error: vi.fn(), warn: vi.fn() },
+  reconcileAbandonedPaystackAttempts: vi.fn(),
   reconcileWedgedGatewayOrders: vi.fn(),
 }));
 
@@ -20,6 +21,9 @@ vi.mock('@/lib/supabase/service', () => ({
 }));
 vi.mock('@/lib/payments/reconcile-wedged-gateway-orders', () => ({
   reconcileWedgedGatewayOrders: mocks.reconcileWedgedGatewayOrders,
+}));
+vi.mock('@/lib/payments/reconcile-abandoned-paystack-attempts', () => ({
+  reconcileAbandonedPaystackAttempts: mocks.reconcileAbandonedPaystackAttempts,
 }));
 vi.mock('@/lib/payments/drain-failed-paid-order-side-effects', () => ({
   drainFailedPaidOrderSideEffects: mocks.drainFailedPaidOrderSideEffects,
@@ -42,6 +46,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.getCronSecret.mockReturnValue(CRON_SECRET);
   mocks.createServiceClient.mockReturnValue({});
+  mocks.reconcileAbandonedPaystackAttempts.mockResolvedValue({
+    checked: 0,
+    held: [],
+    retired: [],
+  });
   mocks.drainFailedPaidOrderSideEffects.mockResolvedValue({
     drained: [],
     failed: [],
@@ -59,6 +68,7 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
 
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ error: 'server_misconfigured' });
+    expect(mocks.reconcileAbandonedPaystackAttempts).not.toHaveBeenCalled();
     expect(mocks.reconcileWedgedGatewayOrders).not.toHaveBeenCalled();
   });
 
@@ -68,6 +78,7 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
 
     expect(missing.status).toBe(401);
     expect(wrong.status).toBe(401);
+    expect(mocks.reconcileAbandonedPaystackAttempts).not.toHaveBeenCalled();
     expect(mocks.reconcileWedgedGatewayOrders).not.toHaveBeenCalled();
   });
 
@@ -86,6 +97,14 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
 
     expect(response.status).toBe(200);
     expect(body).toMatchObject(summary);
+    expect(body.abandonedAttemptSweep).toEqual({
+      checked: 0,
+      held: [],
+      retired: [],
+    });
+    expect(mocks.reconcileAbandonedPaystackAttempts).toHaveBeenCalledWith(
+      expect.objectContaining({ supabase: expect.anything() })
+    );
     expect(body.sideEffectDrain).toEqual({
       drained: [],
       failed: [],
@@ -135,6 +154,28 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
     expect(mocks.logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ sideEffectDrain })
     );
+  });
+
+  it('keeps the existing repair passes running if the Paystack attempt sweep fails', async () => {
+    mocks.reconcileAbandonedPaystackAttempts.mockRejectedValue(
+      new Error('candidate lookup failed')
+    );
+    mocks.reconcileWedgedGatewayOrders.mockResolvedValue({
+      checked: 0,
+      detectedUnhealable: [],
+      failed: [],
+      healed: [],
+      skipped: [],
+    });
+
+    const response = await GET(buildRequest(`Bearer ${CRON_SECRET}`));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.abandonedAttemptSweepFailed).toBe(true);
+    expect(mocks.logger.error).toHaveBeenCalled();
+    expect(mocks.reconcileWedgedGatewayOrders).toHaveBeenCalled();
+    expect(mocks.drainFailedPaidOrderSideEffects).toHaveBeenCalled();
   });
 
   it('returns 500 when the sweep itself throws', async () => {

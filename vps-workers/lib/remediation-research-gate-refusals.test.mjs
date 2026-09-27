@@ -161,4 +161,33 @@ describe('remediation research gate refusals', () => {
 
     assert.equal(result.accepted, true);
   });
+
+  it('accepts an explicit selection with an incidental none clause', () => {
+    const report = validReport.replace(
+      'SELECTED_FIX: smallest code fix',
+      'SELECTED_FIX: Apply Option A; none of the public APIs change'
+    );
+
+    const result = validateCodexResearchResult(jsonl(report));
+
+    assert.equal(result.accepted, true);
+  });
+
+  it('rejects standalone none refusals at the start of the selection', () => {
+    const reports = [
+      'SELECTED_FIX: None.',
+      'SELECTED_FIX: None of the options work from the available evidence.',
+    ];
+
+    for (const selectedFix of reports) {
+      const result = validateCodexResearchResult(
+        jsonl(
+          validReport.replace('SELECTED_FIX: smallest code fix', selectedFix)
+        )
+      );
+
+      assert.equal(result.accepted, false);
+      assert.match(result.reasons.join('\n'), /defensible selected fix/);
+    }
+  });
 });

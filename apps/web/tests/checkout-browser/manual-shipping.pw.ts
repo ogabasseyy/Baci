@@ -4,7 +4,11 @@ import { seedCheckout } from './setup';
 test('manual shipping fixture renders and selects the real local door quote', async ({
   page,
 }) => {
-  await seedCheckout(page, { startAtContact: true });
+  const reviewerEmail = 'checkout-reviewer@example.test';
+  await seedCheckout(page, {
+    startAtContact: true,
+    customerEmail: reviewerEmail,
+  });
   const cartValidation = page.waitForResponse('**/api/cart/validate');
   await page.goto('/checkout?qa=manual-checkout-flow');
   await (await cartValidation).finished();
@@ -72,5 +76,38 @@ test('manual shipping fixture renders and selects the real local door quote', as
       exact: true,
     })
   ).toBeVisible();
+  await expect(placeOrder).toBeEnabled();
+
+  const lookupResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes('/api/storefront/orders/') &&
+      response.request().method() === 'GET'
+  );
+  const reuseResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes('/api/orders/reuse') &&
+      response.request().method() === 'POST'
+  );
+  const retryPaymentResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes('/api/payments/initialize') &&
+      response.request().method() === 'POST'
+  );
+  await placeOrder.click();
+
+  const lookedUpOrder = await lookupResponse;
+  expect(lookedUpOrder.status()).toBe(200);
+  expect(await lookedUpOrder.json()).toMatchObject({
+    customer_email: reviewerEmail,
+  });
+  const reusedOrder = await reuseResponse;
+  expect(reusedOrder.status()).toBe(200);
+  expect(reusedOrder.request().postDataJSON()).toMatchObject({
+    customer_email: reviewerEmail,
+  });
+  expect(await reusedOrder.json()).toMatchObject({
+    order: { customer_email: reviewerEmail },
+  });
+  expect((await retryPaymentResponse).status()).toBe(503);
   await expect(placeOrder).toBeEnabled();
 });

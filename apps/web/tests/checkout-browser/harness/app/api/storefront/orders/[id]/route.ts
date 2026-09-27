@@ -1,5 +1,5 @@
 import { order } from '../../../../../../setup';
-import { json } from '../../../fixture-response';
+import { fixtureCustomerEmail, json } from '../../../fixture-response';
 
 export async function GET(
   request: Request,
@@ -13,5 +13,8 @@ export async function GET(
     query.get('merchant_slug') !== 'ogabassey'
   )
     return json({ error: 'Fixture order lookup did not match' }, 404);
-  return json(order);
+  return json({
+    ...order,
+    customer_email: fixtureCustomerEmail(request) ?? order.customer_email,
+  });
 }

@@ -16,7 +16,19 @@ export function POST(request: Request) {
           },
           400
         );
-      return json(orderResponse());
+      const response = json(
+        orderResponse({
+          customer_name: parsed.data.customer_name,
+          customer_email: parsed.data.customer_email,
+          customer_phone: parsed.data.customer_phone,
+        })
+      );
+      response.cookies.set(
+        'checkout-qa-customer-email',
+        parsed.data.customer_email,
+        { path: '/', sameSite: 'lax' }
+      );
+      return response;
     })
     .catch(() => json({ error: 'Invalid fixture order request' }, 400));
 }

@@ -11,6 +11,8 @@ beforeEach(() => {
   sessionStorage.clear();
   // biome-ignore lint/suspicious/noDocumentCookie: reset the isolated scenario fixture between component tests
   document.cookie = 'checkout-qa-scenario=; Max-Age=0; path=/';
+  // biome-ignore lint/suspicious/noDocumentCookie: clear fixture identity between component tests
+  document.cookie = 'checkout-qa-customer-email=; Max-Age=0; path=/';
   reload.mockReset();
   assign.mockReset();
 });
@@ -58,10 +60,12 @@ describe('ManualQaControls', () => {
     expect(reload).toHaveBeenCalledOnce();
   });
 
-  it('clears the seeded cart, form, pending order, and idempotency key on reset', () => {
+  it('clears seeded checkout and synthetic customer identity on reset', () => {
     setLocation('?qa=manual');
     localStorage.setItem('baci-cart-ogabassey-guest', '[{"id":"fixture"}]');
     localStorage.setItem('storefront-checkout-idempotency', 'fixture-key');
+    // biome-ignore lint/suspicious/noDocumentCookie: seed local fixture identity for reset assertion
+    document.cookie = 'checkout-qa-customer-email=ada%40example.test; path=/';
     sessionStorage.setItem('checkout-form', '{"firstName":"Ada"}');
     sessionStorage.setItem(
       'storefront-checkout-pending-order',
@@ -80,6 +84,7 @@ describe('ManualQaControls', () => {
       sessionStorage.getItem('storefront-checkout-pending-order')
     ).toBeNull();
     expect(document.cookie).toContain('checkout-qa-scenario=success');
+    expect(document.cookie).not.toContain('checkout-qa-customer-email=');
     expect(assign).toHaveBeenCalledWith('/cart?qaReset=1&qa=manual');
   });
 });

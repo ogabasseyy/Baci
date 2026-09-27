@@ -34,6 +34,9 @@ export function ManualQaControls() {
     sessionStorage.removeItem('storefront-checkout-pending-order');
     localStorage.removeItem(idempotencyStorageKey);
     writeScenario('success');
+    // biome-ignore lint/suspicious/noDocumentCookie: local-only fixture identity resets with checkout state
+    document.cookie =
+      'checkout-qa-customer-email=; Path=/; Max-Age=0; SameSite=Lax';
     window.location.assign('/cart?qaReset=1&qa=manual');
   }
 

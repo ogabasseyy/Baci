@@ -23,6 +23,7 @@ export const test = base.extend<{
       let manualApi404ConsoleCount = 0;
       let manualCheckoutFlowVisited = false;
       let manualCheckoutProviderErrorCount = 0;
+      let manualCheckout503ConsoleCount = 0;
       const remainingAllowedErrors = [...allowedConsoleErrors];
       page.on('framenavigated', () => {
         const qaScenario = new URL(page.url()).searchParams.get('qa');
@@ -86,12 +87,18 @@ export const test = base.extend<{
           manualApi503ConsoleCount++;
         } else if (
           manualCheckoutFlowVisited &&
-          manualCheckoutProviderErrorCount === 0 &&
+          manualCheckoutProviderErrorCount < 2 &&
           message
             .text()
             .startsWith('Checkout error: Error: Fixture provider error.')
         ) {
           manualCheckoutProviderErrorCount++;
+        } else if (
+          manualCheckoutFlowVisited &&
+          manualCheckout503ConsoleCount < 2 &&
+          /Failed to load resource:.*503/.test(message.text())
+        ) {
+          manualCheckout503ConsoleCount++;
         } else errors.push(message.text());
       });
       await context.route('**/*', (route) => {
@@ -188,6 +195,11 @@ export const test = base.extend<{
         expect(
           manualCheckoutProviderErrorCount,
           'Manual checkout fixture provider error'
+        ).toBe(2);
+      if (manualCheckoutFlowVisited)
+        expect(
+          manualCheckout503ConsoleCount,
+          'Manual checkout provider 503 responses'
         ).toBe(1);
       expect(unexpected, 'Unexpected network calls').toEqual([]);
       expect(errors, 'Browser errors').toEqual([]);

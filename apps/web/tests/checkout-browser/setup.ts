@@ -5,6 +5,7 @@ export async function seedCheckout(
   page: Page,
   options: {
     authenticated?: boolean;
+    customerEmail?: string;
     emptyCart?: boolean;
     startAtContact?: boolean;
   } = {}
@@ -36,7 +37,10 @@ export async function seedCheckout(
     },
     {
       item: cartItem,
-      details: contact,
+      details: {
+        ...contact,
+        customerEmail: options.customerEmail ?? contact.customerEmail,
+      },
       emptyCart: Boolean(options.emptyCart),
       startAtContact: Boolean(options.startAtContact),
     }

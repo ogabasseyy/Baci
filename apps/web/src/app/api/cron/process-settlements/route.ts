@@ -4,6 +4,7 @@ import { constantTimeEqual } from '@/lib/constant-time-equal';
 import { logger } from '@/lib/logger';
 import { drainFailedOrderCancellationSideEffects } from '@/lib/orders/drain-failed-order-cancellation-side-effects';
 import { drainPaystackRefundNotifications } from '@/lib/payments/drain-paystack-refund-notifications';
+import { reconcileCompletedPaystackCancellationRefunds } from '@/lib/payments/reconcile-completed-paystack-cancellation-refunds';
 import { reconcilePendingPaystackCancellationRefunds } from '@/lib/payments/reconcile-paystack-cancellation-refunds';
 import { createServiceClient } from '@/lib/supabase/service';
 import { sendEmail } from '@/lib/zeptomail';
@@ -40,25 +41,29 @@ export async function POST(request: Request) {
 
     const supabase = createServiceClient();
     if (new URL(request.url).searchParams.get('cancellationsOnly') === 'true') {
-      const [cancellationResult, refundResult] = await Promise.allSettled([
-        drainFailedOrderCancellationSideEffects({
-          sendCancellationEmail: sendEmail,
-          supabase,
-        }),
-        reconcilePendingPaystackCancellationRefunds(supabase),
-      ]);
+      const [cancellationResult, refundResult, legacyRefundResult] =
+        await Promise.allSettled([
+          drainFailedOrderCancellationSideEffects({
+            sendCancellationEmail: sendEmail,
+            supabase,
+          }),
+          reconcilePendingPaystackCancellationRefunds(supabase),
+          reconcileCompletedPaystackCancellationRefunds(supabase),
+        ]);
       const notificationResult = await Promise.allSettled([
         drainPaystackRefundNotifications(supabase, sendEmail),
       ]);
       if (
         cancellationResult.status === 'rejected' ||
         refundResult.status === 'rejected' ||
+        legacyRefundResult.status === 'rejected' ||
         notificationResult[0].status === 'rejected'
       ) {
         logger.error({
           message: 'Cancellation and refund background work partially failed',
           cancellationFailed: cancellationResult.status === 'rejected',
           refundFailed: refundResult.status === 'rejected',
+          legacyRefundFailed: legacyRefundResult.status === 'rejected',
           notificationFailed: notificationResult[0].status === 'rejected',
         });
         return NextResponse.json(
@@ -70,6 +75,7 @@ export async function POST(request: Request) {
         success: true,
         cancellationSideEffectDrain: cancellationResult.value,
         paystackRefunds: refundResult.value,
+        legacyPaystackRefunds: legacyRefundResult.value,
         paystackRefundNotifications: notificationResult[0].value,
       });
     }

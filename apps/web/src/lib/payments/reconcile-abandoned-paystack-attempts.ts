@@ -4,6 +4,7 @@ import { verifyTransaction } from '@/lib/paystack';
 const DEFAULT_LIMIT = 25;
 // Give an abandoned checkout time to settle before releasing a paid order.
 const DEFAULT_OLDER_THAN_MINUTES = 12 * 60;
+const RECHECK_AFTER_MINUTES = 55;
 const VERIFY_TIMEOUT_MS = 5_000;
 
 interface PendingAttempt {
@@ -43,9 +44,9 @@ export async function reconcileAbandonedPaystackAttempts({
     retired: [],
   };
   const cutoff = new Date(Date.now() - olderThanMinutes * 60_000).toISOString();
-  // Move held candidates behind older eligible rows without making them wait
-  // another full eligibility window after a transient provider failure.
-  const rotatedAt = new Date(Date.parse(cutoff) - 1).toISOString();
+  const recheckCutoff = new Date(
+    Date.now() - RECHECK_AFTER_MINUTES * 60_000
+  ).toISOString();
   const { data: attempts, error: lookupError } = await supabase
     .from('transactions')
     .select(
@@ -57,7 +58,8 @@ export async function reconcileAbandonedPaystackAttempts({
     .in('paid_order.payment_status', ['paid', 'partially_paid'])
     .not('order_id', 'is', null)
     .not('gateway_reference', 'is', null)
-    .lt('updated_at', cutoff)
+    .lt('created_at', cutoff)
+    .lt('updated_at', recheckCutoff)
     .order('updated_at', { ascending: true })
     .limit(limit);
 
@@ -72,7 +74,7 @@ export async function reconcileAbandonedPaystackAttempts({
     const guardAttempt = () =>
       supabase
         .from('transactions')
-        .update({ updated_at: rotatedAt })
+        .update({ updated_at: new Date().toISOString() })
         .eq('id', attempt.id)
         .eq('order_id', attempt.order_id)
         .eq('merchant_id', attempt.merchant_id)

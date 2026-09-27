@@ -10,7 +10,9 @@ interface PendingAttempt {
   gateway_reference: string;
   id: string;
   merchant_id: string;
+  metadata: Record<string, unknown> | null;
   order_id: string;
+  status: 'pending' | 'processing';
 }
 
 export interface AbandonedPaystackAttemptSummary {
@@ -39,10 +41,13 @@ export async function reconcileAbandonedPaystackAttempts({
   const cutoff = new Date(Date.now() - olderThanMinutes * 60_000).toISOString();
   const { data: attempts, error: lookupError } = await supabase
     .from('transactions')
-    .select('id, order_id, merchant_id, gateway_reference')
+    .select(
+      'id, order_id, merchant_id, gateway_reference, status, metadata, paid_order:orders!transactions_order_id_fkey!inner(payment_status)'
+    )
     .eq('transaction_type', 'payment')
     .eq('gateway', 'paystack')
-    .eq('status', 'pending')
+    .in('status', ['pending', 'processing'])
+    .in('paid_order.payment_status', ['paid', 'partially_paid'])
     .not('order_id', 'is', null)
     .not('gateway_reference', 'is', null)
     .lt('updated_at', cutoff)
@@ -67,7 +72,7 @@ export async function reconcileAbandonedPaystackAttempts({
         .eq('transaction_type', 'payment')
         .eq('gateway', 'paystack')
         .eq('gateway_reference', attempt.gateway_reference)
-        .eq('status', 'pending');
+        .eq('status', attempt.status);
     const hold = async (reason: string) => {
       const entry: { id: string; reason: string; rotationFailed?: boolean } = {
         id: attempt.id,
@@ -93,7 +98,7 @@ export async function reconcileAbandonedPaystackAttempts({
       .select('id')
       .eq('id', attempt.order_id)
       .eq('merchant_id', attempt.merchant_id)
-      .eq('payment_status', 'paid')
+      .in('payment_status', ['paid', 'partially_paid'])
       .maybeSingle();
     if (orderError || !order) {
       await hold('order_not_paid_or_unavailable');
@@ -124,14 +129,23 @@ export async function reconcileAbandonedPaystackAttempts({
       continue;
     }
     if (!result.success) {
-      await hold('verification_unavailable');
-      continue;
+      if (
+        result.code !== 'HTTP_404' ||
+        attempt.metadata?.paystack_payment_type !== 'dva'
+      ) {
+        await hold('verification_unavailable');
+        continue;
+      }
     }
-    if (result.data.reference !== attempt.gateway_reference) {
+    if (result.success && result.data.reference !== attempt.gateway_reference) {
       await hold('reference_mismatch');
       continue;
     }
-    if (result.data.status !== 'abandoned' && result.data.status !== 'failed') {
+    if (
+      result.success &&
+      result.data.status !== 'abandoned' &&
+      result.data.status !== 'failed'
+    ) {
       await hold(result.data.status);
       continue;
     }
@@ -148,7 +162,7 @@ export async function reconcileAbandonedPaystackAttempts({
         .eq('transaction_type', 'payment')
         .eq('gateway', 'paystack')
         .eq('gateway_reference', attempt.gateway_reference)
-        .eq('status', 'pending')
+        .eq('status', attempt.status)
         .select('id');
       if (updateError) {
         summary.held.push({ id: attempt.id, reason: 'update_failed' });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { DvaModal } from '@/components/storefront/ogabassey/pages/checkout/components/DvaModal';
 import type { DvaData } from '@/components/storefront/ogabassey/pages/checkout/types';
 
@@ -19,10 +19,22 @@ export function DvaModalFixture() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [dismissal, setDismissal] = useState<string | null>(null);
+  const modalSession = useRef(0);
 
   const close = () => {
+    modalSession.current += 1;
     setIsOpen(false);
     setDismissal('DVA modal closed.');
+  };
+
+  const copyToClipboard = async (text: string) => {
+    const session = modalSession.current;
+    try {
+      await navigator.clipboard.writeText(text);
+      if (session === modalSession.current) setCopiedText(text);
+    } catch {
+      if (session === modalSession.current) setCopiedText(null);
+    }
   };
 
   return (
@@ -39,6 +51,7 @@ export function DvaModalFixture() {
         <button
           className="mt-5 rounded-lg bg-store-primary px-4 py-2 font-semibold text-white"
           onClick={() => {
+            modalSession.current += 1;
             setIsVerifying(false);
             setCopiedText(null);
             setDismissal(null);
@@ -62,7 +75,7 @@ export function DvaModalFixture() {
           isVerifying={isVerifying}
           onClose={close}
           onConfirmTransfer={() => setIsVerifying(true)}
-          onCopyToClipboard={(text) => setCopiedText(text)}
+          onCopyToClipboard={copyToClipboard}
         />
       )}
     </main>

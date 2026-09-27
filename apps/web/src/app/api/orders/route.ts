@@ -1186,8 +1186,7 @@ export async function POST(request: NextRequest) {
     const orderTaxAmount = serverComputedTaxAmount;
 
     const merchantCanAutoNegotiate = hasPriceNegotiationEntitlement(
-      merchant.plan_tier,
-      merchant.slug
+      merchant.plan_tier
     );
     const vatRegistered = merchant.vat_registration_status === 'registered';
     const redvaultRequested = payment_method === 'uba_redvault';

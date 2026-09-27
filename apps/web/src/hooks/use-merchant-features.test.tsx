@@ -1,11 +1,19 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const merchantState = vi.hoisted(() => ({
+  value: {
+    merchant: { id: 'm-1', slug: 'ogabassey', plan_tier: 'pro' } as {
+      id: string;
+      slug: string;
+      plan_tier?: string;
+    } | null,
+    loading: false,
+  },
+}));
 
 vi.mock('@/hooks/use-merchant-client', () => ({
-  useMerchantSafe: vi.fn(() => ({
-    merchant: { id: 'm-1', slug: 'ogabassey' },
-    loading: false,
-  })),
+  useMerchantSafe: () => merchantState.value,
 }));
 
 vi.mock('@/lib/feature-flags', () => ({
@@ -14,6 +22,10 @@ vi.mock('@/lib/feature-flags', () => ({
   ),
   getPlanFeatures: vi.fn(() => ['basic_analytics', 'reviews']),
   hasSmartCartPro: vi.fn(() => false),
+  isPlanTier: (value: unknown) =>
+    ['free', 'starter', 'pro', 'business', 'enterprise'].includes(
+      value as string
+    ),
   getUpgradeCTA: vi.fn((feature: string) => ({
     title: `Upgrade for ${feature}`,
     description: 'Get more features',
@@ -26,6 +38,14 @@ import { renderHook } from '@testing-library/react';
 // Explicit .tsx import because .ts file also exports useMerchantFeatures
 import { FeatureGate, useMerchantFeatures } from './use-merchant-features.tsx';
 
+// Reset between tests so ordering cannot leak a mutated merchant.
+beforeEach(() => {
+  merchantState.value = {
+    merchant: { id: 'm-1', slug: 'ogabassey', plan_tier: 'pro' },
+    loading: false,
+  };
+});
+
 describe('useMerchantFeatures (hook)', () => {
   it('returns plan tier and feature check', () => {
     const { result } = renderHook(() => useMerchantFeatures());
@@ -37,6 +57,35 @@ describe('useMerchantFeatures (hook)', () => {
   it('reports isPaidPlan for pro merchants', () => {
     const { result } = renderHook(() => useMerchantFeatures());
     expect(result.current.isPaidPlan).toBe(true);
+  });
+
+  it('falls back to the free tier when plan_tier is unrecognized', () => {
+    merchantState.value = {
+      merchant: { id: 'm-2', slug: 'other-store', plan_tier: 'bogus_tier' },
+      loading: false,
+    };
+
+    const { result } = renderHook(() => useMerchantFeatures());
+
+    expect(result.current.planTier).toBe('free');
+    expect(result.current.isPaidPlan).toBe(false);
+  });
+
+  describe('regression: hardcoded premium-slug allowlist', () => {
+    it('resolves the free tier for a legacy premium slug that has no plan_tier', () => {
+      // The hook used to upgrade a hardcoded list of slugs to 'pro' whenever
+      // plan_tier was missing. plan_tier is NOT NULL in the database, so the
+      // slug must carry no entitlement of its own.
+      merchantState.value = {
+        merchant: { id: 'm-1', slug: 'ogabassey' },
+        loading: false,
+      };
+
+      const { result } = renderHook(() => useMerchantFeatures());
+
+      expect(result.current.planTier).toBe('free');
+      expect(result.current.isPaidPlan).toBe(false);
+    });
   });
 });
 

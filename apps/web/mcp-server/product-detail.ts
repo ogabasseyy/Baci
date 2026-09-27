@@ -1,0 +1,225 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { getMcpOfferAvailability } from './product-offer-availability';
+import { getMcpProductStockSummary } from './product-stock-summary';
+
+interface ProductDetailSource {
+  id: string;
+  name: string;
+  slug: string | null;
+  price: number;
+  compare_at_price: number | null;
+  images: Array<string | { url?: string }> | null;
+  description: string | null;
+  stock_quantity: number | null;
+  manage_stock: boolean | null;
+  condition: string | null;
+  condition_detail: string | null;
+  brand: string | null;
+  category: string | null;
+  has_variants: boolean | null;
+  has_condition_offers: boolean | null;
+  schema_markup: { aggregateRating?: { ratingValue?: number; reviewCount?: number } } | null;
+}
+
+type ProductDetailResult = {
+  content: Array<{ type: 'text'; text: string }>;
+  structuredContent?: Record<string, unknown>;
+  _meta?: Record<string, unknown>;
+};
+
+export async function buildMcpProductDetail({
+  product,
+  supabase,
+  formatPrice,
+  getSafeCatalogImageUrl,
+}: {
+  product: ProductDetailSource;
+  supabase: SupabaseClient;
+  formatPrice: (price: number) => string;
+  getSafeCatalogImageUrl: (imageUrl: string | null | undefined) => string | undefined;
+}): Promise<ProductDetailResult> {
+  // Fetch variants if product has variants
+  let variants: Array<{
+    attributes: Record<string, string>;
+    price_override: number | null;
+    stock_quantity: number;
+    condition: string;
+    images: unknown[];
+  }> = [];
+  let variantLookupFailed = false;
+  if (product.has_variants) {
+    const { data: variantData, error: variantError } = await supabase.rpc(
+      'get_storefront_product_variants',
+      { p_product_ids: [product.id] }
+    );
+    if (variantError) {
+      console.error('Failed to fetch public product variants:', variantError);
+      variantLookupFailed = true;
+    } else {
+      variants = variantData || [];
+    }
+  }
+
+  // Fetch condition offers if available
+  let conditionOffers: Array<{
+    condition: string;
+    price: number;
+    stock_quantity: number;
+    grade: string | null;
+    condition_notes: string | null;
+  }> = [];
+  let offerLookupFailed = false;
+  if (product.has_condition_offers) {
+    const { data: offerData, error: offerError } = await supabase.rpc('get_product_offers', {
+      p_product_id: product.id,
+    });
+    if (offerError) {
+      console.error('Failed to fetch public product offers:', offerError);
+      offerLookupFailed = true;
+    } else {
+      conditionOffers = offerData || [];
+    }
+  }
+
+  // Get rating from schema_markup if available
+  const rating = product.schema_markup?.aggregateRating?.ratingValue;
+  const reviewCount = product.schema_markup?.aggregateRating?.reviewCount;
+
+  const stockSummary = getMcpProductStockSummary(
+    product,
+    product.has_variants && !variantLookupFailed ? variants : undefined,
+    product.has_condition_offers && !offerLookupFailed ? conditionOffers : undefined
+  );
+  const basePurchasable = !product.has_variants &&
+    (product.manage_stock !== true || Number(product.stock_quantity ?? 0) > 0);
+  const purchasablePrices = [
+    ...variants.filter((variant) => product.manage_stock !== true || variant.stock_quantity > 0)
+      .map((variant) => ({ price: variant.price_override ?? product.price,
+        condition: variant.condition || product.condition || 'new' })),
+    ...conditionOffers.filter((offer) => product.manage_stock !== true || offer.stock_quantity > 0)
+      .map((offer) => ({ price: offer.price, condition: offer.condition || product.condition || 'new' })),
+    ...(basePurchasable ? [{ price: product.price, condition: product.condition || 'new' }] : []),
+  ].filter((option) => Number.isFinite(option.price) && option.price >= 0);
+  const cheapestOption = purchasablePrices.reduce<typeof purchasablePrices[number] | undefined>(
+    (cheapest, option) => !cheapest || option.price < cheapest.price ? option : cheapest,
+    undefined
+  );
+  const displayPrice = cheapestOption?.price ?? product.price;
+  const displayCondition = cheapestOption?.condition ?? product.condition ?? 'new';
+  const displayConditionDetail = displayCondition === (product.condition || 'new')
+    ? product.condition_detail : null;
+  const displayCompareAtPrice = displayPrice === product.price ? product.compare_at_price : null;
+  const formatted = {
+    id: product.id,
+    name: product.name,
+    slug: product.slug,
+    price: displayPrice,
+    compare_at_price: displayCompareAtPrice,
+    image: getSafeCatalogImageUrl(typeof product.images?.[0] === 'string' ? product.images[0] : product.images?.[0]?.url) ?? null,
+    condition: displayCondition,
+    condition_detail: displayConditionDetail,
+    brand: product.brand,
+    category: product.category,
+    in_stock: stockSummary.inStock,
+    stock_confidence: stockSummary.confidence,
+    stock_level: stockSummary.level,
+    has_variants: product.has_variants,
+  };
+
+  // Build detailed text response
+  let text = `**${product.name}**\n\n`;
+  text += `**Price:** ${formatPrice(displayPrice)}`;
+  if (
+    displayCompareAtPrice &&
+    displayCompareAtPrice > displayPrice
+  ) {
+    const discount = Math.round(
+      (1 - displayPrice / displayCompareAtPrice) * 100
+    );
+    text += ` ~~${formatPrice(displayCompareAtPrice)}~~ (${discount}% off)`;
+  }
+  text += '\n';
+
+  // Condition info
+  if (displayCondition !== 'new') {
+    text += `**Condition:** ${displayCondition}${displayConditionDetail ? ` - ${displayConditionDetail}` : ''}\n`;
+  }
+
+  // Brand & Category
+  if (product.brand) text += `**Brand:** ${product.brand}\n`;
+  if (product.category) text += `**Category:** ${product.category}\n`;
+
+  // Rating
+  if (rating) {
+    text += `**Rating:** ${rating}/5${reviewCount ? ` (${reviewCount} reviews)` : ''}\n`;
+  }
+
+  // Description
+  if (product.description) {
+    text += `\n${product.description}\n`;
+  }
+  if (variantLookupFailed) text += '\nVariant options are temporarily unavailable.\n';
+  if (offerLookupFailed) text += '\nCondition offers are temporarily unavailable.\n';
+
+  // Variants summary
+  if (variants.length > 0) {
+    const availableVariants = product.manage_stock
+      ? variants.filter((variant) => Number(variant.stock_quantity ?? 0) > 0)
+      : variants;
+    const colors = [
+      ...new Set(availableVariants.map((v) => v.attributes?.color).filter(Boolean)),
+    ];
+    const storageOptions = [
+      ...new Set(
+        availableVariants.map((v) => v.attributes?.storage).filter(Boolean)
+      ),
+    ];
+    if (colors.length > 0)
+      text += `\n**Available Colors:** ${colors.join(', ')}`;
+    if (storageOptions.length > 0)
+      text += `\n**Storage Options:** ${storageOptions.join(', ')}`;
+  }
+
+  // Condition offers summary
+  const availableOffers = product.manage_stock
+    ? conditionOffers.filter((offer) => Number(offer.stock_quantity ?? 0) > 0)
+    : conditionOffers;
+  if (availableOffers.length > 0) {
+    text += '\n\n**Available Conditions:**\n';
+    for (const offer of availableOffers) {
+      text += `• ${offer.condition}${offer.grade ? ` (Grade ${offer.grade})` : ''}: ${formatPrice(offer.price)}`;
+      text += ` - ${getMcpOfferAvailability(product.manage_stock, offer.stock_quantity).label}`;
+      text += '\n';
+    }
+  }
+
+  // Stock & Link
+  text += `\n**Availability:** ${formatted.in_stock === true ? 'In Stock' : formatted.in_stock === false ? 'Out of Stock' : 'Confirm at checkout'}`;
+  const productPageUrl = `https://ogabassey.com/products/${encodeURIComponent(product.slug || product.id)}`;
+  text += `\n\n🔗 [View Product](${productPageUrl})`;
+
+  return {
+    content: [{ type: 'text', text }],
+    structuredContent: {
+      products: [formatted],
+      variants: variants.map((v) => ({
+        attributes: v.attributes,
+        price: v.price_override,
+        stock: product.manage_stock ? v.stock_quantity : null,
+        availability: getMcpOfferAvailability(product.manage_stock, v.stock_quantity).availability,
+        condition: v.condition,
+      })),
+      condition_offers: conditionOffers.map((offer) => ({
+        ...offer,
+        stock_quantity: product.manage_stock ? offer.stock_quantity : null,
+        availability: getMcpOfferAvailability(product.manage_stock, offer.stock_quantity).availability,
+      })),
+      variant_lookup_failed: variantLookupFailed,
+      offer_lookup_failed: offerLookupFailed,
+    },
+    _meta: {
+      'openai/outputTemplate': 'ui://widget/store.html',
+      'openai/widgetPrefersBorder': true,
+    },
+  };
+}

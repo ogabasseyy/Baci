@@ -23,10 +23,11 @@ export const eventPipelineFrozenRoutes = {
   // binding the final source to a content receipt instead of a PR-only commit.
   // Refreshed for malformed-JSON rejection before business data access; the
   // inherited notification/payment authority and database operations are unchanged.
-  // Re-pinned after merging main: keeps this branch's checkout blog-purge
-  // scheduling plus main's tracking-link and redvault checkout additions.
+  // Re-pinned after merging main (#3525/#3504): keeps this branch's checkout
+  // blog-purge scheduling plus main's tracking-link, redvault, and
+  // plan-tier-authoritative entitlement additions.
   'apps/web/src/app/api/orders/route.ts':
-    '61c904f72e4891133a654103cc36267de0b5474b5ac1e6be13ee530fc54932ea',
+    '09b39ce08dff5a8bf34b83a7516c92534fb5122a5bfd84641db19f3d0c789ad7',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

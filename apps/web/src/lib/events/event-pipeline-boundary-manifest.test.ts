@@ -73,7 +73,7 @@ describe('event pipeline authority manifest', () => {
       'apps/web/src/app/api/platform/events/route.ts':
         '646432088daff8e54f56fbab06453be789dc67d7b974398cc7f4b0d06842b9ca',
       'apps/web/src/app/api/orders/route.ts':
-        '61c904f72e4891133a654103cc36267de0b5474b5ac1e6be13ee530fc54932ea',
+        '09b39ce08dff5a8bf34b83a7516c92534fb5122a5bfd84641db19f3d0c789ad7',
       'apps/web/src/app/api/payments/juicyway/webhook/route.ts':
         'a8748056acf57c8fe4aea5b5dbf6a2bbcd1599e7aa57af3130cf95c277e61ef5',
     });

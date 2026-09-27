@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { getMerchantByIdentifier } from '@/lib/cached-data';
 
+vi.mock('next/headers', () => ({
+  headers: vi.fn(() => new Headers([['host', 'usebaci.com']])),
+}));
+
 vi.mock('@/lib/cached-data', () => ({
   getMerchantByIdentifier: vi.fn(),
 }));
@@ -20,7 +24,11 @@ vi.mock('@/templates/registry', () => ({
 }));
 
 vi.mock('next/link', () => ({
-  default: vi.fn(({ children }: { children: React.ReactNode }) => children),
+  default: vi.fn(
+    ({ children, href }: { children: React.ReactNode; href: string }) => (
+      <a href={href}>{children}</a>
+    )
+  ),
 }));
 
 const { generateMetadata } = await import('./page');

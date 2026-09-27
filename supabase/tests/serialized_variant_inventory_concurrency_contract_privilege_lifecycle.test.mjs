@@ -224,3 +224,22 @@ test('resolves special roles in membership grants', () => {
     true
   );
 });
+
+test('resolves special roles for default-privilege owners', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = [
+    'SET ROLE deployer;',
+    `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;`,
+    `DROP FUNCTION ${signature};`,
+    'ALTER DEFAULT PRIVILEGES FOR ROLE CURRENT_USER IN SCHEMA private GRANT EXECUTE ON FUNCTIONS TO authenticated;',
+    `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;`,
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+  ].join('\n');
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});

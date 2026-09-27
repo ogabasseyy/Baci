@@ -205,7 +205,14 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
       }
     } else if (event.kind === 'default') {
       const grant = event.operation === 'GRANT';
-      const owner = event.owner ?? state.currentRole;
+      const owner =
+        event.owner === null || event.owner === undefined
+          ? state.currentRole
+          : serializedInventoryPrivilegeRoles.resolveSpecialRole(
+              event.owner,
+              state.currentRole,
+              state.sessionUser
+            );
       const ownerDefaults = state.defaultGrants.get(owner) ?? {
         global: new Map(),
         schema: new Map(),

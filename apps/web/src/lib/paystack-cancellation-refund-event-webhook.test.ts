@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   reconcilePaystackRefundEvent: vi.fn(),
 }));
 
-vi.mock('@/lib/payments/reconcile-paystack-cancellation-refunds', () => ({
+vi.mock('@/lib/payments/reconcile-paystack-refund-event', () => ({
   reconcilePaystackRefundEvent: mocks.reconcilePaystackRefundEvent,
 }));
 

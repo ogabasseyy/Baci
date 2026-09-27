@@ -1,10 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
-import {
-  fileRefundEvidenceReview,
-  isDeterministicRefundError,
-  reconcilePaystackCancellationRefund,
-} from './reconcile-paystack-cancellation-refunds';
+import { fileRefundEvidenceReview } from './file-refund-evidence-review';
+import { isDeterministicRefundError } from './is-deterministic-paystack-refund-error';
+import { reconcilePaystackCancellationRefund } from './reconcile-paystack-cancellation-refund';
 
 /** Recheck legacy completed refund rows before finalizing a cancelled order. */
 export async function reconcileCompletedPaystackCancellationRefunds(
@@ -22,7 +20,6 @@ export async function reconcileCompletedPaystackCancellationRefunds(
     .in('cancellation_order.payment_status', ['paid', 'partially_paid'])
     .in('cancellation_order.shipping_status', ['cancelled', 'canceled'])
     .not('cancellation_order.cancelled_at', 'is', null)
-    .not('metadata->>payment_transaction_id', 'is', null)
     .order('updated_at', { ascending: true })
     .limit(limit);
   if (error) throw new Error('completed_refund_lookup_failed');

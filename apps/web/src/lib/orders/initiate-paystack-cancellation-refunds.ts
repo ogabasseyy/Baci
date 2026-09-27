@@ -1,8 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import {
-  type GatewayPaymentTransaction,
-  quarantineRefund,
-} from '@/lib/orders/order-cancellation-refund-review';
+import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
+import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
 import { DeliveryUncertainError } from '@/lib/orders/run-order-cancellation-side-effect';
 import { initiateRefund as initiatePaystackRefund } from '@/lib/paystack';
 

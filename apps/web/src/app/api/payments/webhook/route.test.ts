@@ -20,7 +20,7 @@ const mockFailMerchantWalletAssignmentEvent = vi.hoisted(() => vi.fn());
 const mockCaptureOrHoldRedvaultPayment = vi.hoisted(() => vi.fn());
 const mockReconcilePaystackRefundEvent = vi.hoisted(() => vi.fn());
 
-vi.mock('@/lib/payments/reconcile-paystack-cancellation-refunds', () => ({
+vi.mock('@/lib/payments/reconcile-paystack-refund-event', () => ({
   reconcilePaystackRefundEvent: mockReconcilePaystackRefundEvent,
 }));
 

@@ -11,7 +11,7 @@ vi.mock('./fetch-paystack-refund', () => ({
   fetchRefund: provider.fetchRefund,
 }));
 
-import { reconcilePendingPaystackCancellationRefunds } from './reconcile-paystack-cancellation-refunds';
+import { reconcilePendingPaystackCancellationRefunds } from './reconcile-pending-paystack-cancellation-refunds';
 
 describe('pending Paystack cancellation refund reconciliation', () => {
   beforeEach(() => {

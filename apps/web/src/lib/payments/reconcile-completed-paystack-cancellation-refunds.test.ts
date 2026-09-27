@@ -3,9 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const reconcile = vi.hoisted(() => vi.fn());
 const isDeterministic = vi.hoisted(() => vi.fn());
 const fileReview = vi.hoisted(() => vi.fn());
-vi.mock('./reconcile-paystack-cancellation-refunds', () => ({
+vi.mock('./reconcile-paystack-cancellation-refund', () => ({
   reconcilePaystackCancellationRefund: reconcile,
+}));
+vi.mock('./is-deterministic-paystack-refund-error', () => ({
   isDeterministicRefundError: isDeterministic,
+}));
+vi.mock('./file-refund-evidence-review', () => ({
   fileRefundEvidenceReview: fileReview,
 }));
 

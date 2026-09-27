@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   drainFailedOrderCancellationSideEffects: vi.fn(),
   drainPaystackRefundNotifications: vi.fn(),
+  reconcileCompletedPaystackCancellationRefunds: vi.fn(),
   reconcilePendingPaystackCancellationRefunds: vi.fn(),
   eq: vi.fn(),
   from: vi.fn(),
@@ -47,6 +48,13 @@ vi.mock('@/lib/payments/reconcile-paystack-cancellation-refunds', () => ({
   reconcilePendingPaystackCancellationRefunds:
     mocks.reconcilePendingPaystackCancellationRefunds,
 }));
+vi.mock(
+  '@/lib/payments/reconcile-completed-paystack-cancellation-refunds',
+  () => ({
+    reconcileCompletedPaystackCancellationRefunds:
+      mocks.reconcileCompletedPaystackCancellationRefunds,
+  })
+);
 
 import { POST } from './route';
 
@@ -129,6 +137,10 @@ describe('POST /api/cron/process-settlements', () => {
       checked: 0,
       failed: 0,
     });
+    mocks.reconcileCompletedPaystackCancellationRefunds.mockResolvedValue({
+      checked: 0,
+      failed: 0,
+    });
     mocks.drainPaystackRefundNotifications.mockResolvedValue({
       claimed: 0,
       sent: 0,
@@ -149,6 +161,9 @@ describe('POST /api/cron/process-settlements', () => {
     expect(
       mocks.reconcilePendingPaystackCancellationRefunds
     ).not.toHaveBeenCalled();
+    expect(
+      mocks.reconcileCompletedPaystackCancellationRefunds
+    ).not.toHaveBeenCalled();
     expect(mocks.drainPaystackRefundNotifications).not.toHaveBeenCalled();
     expect(mocks.from).not.toHaveBeenCalled();
     expect(mocks.sendEmail).not.toHaveBeenCalled();
@@ -164,6 +179,9 @@ describe('POST /api/cron/process-settlements', () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
     expect(
       mocks.reconcilePendingPaystackCancellationRefunds
+    ).toHaveBeenCalled();
+    expect(
+      mocks.reconcileCompletedPaystackCancellationRefunds
     ).toHaveBeenCalled();
     expect(mocks.drainPaystackRefundNotifications).toHaveBeenCalledWith(
       expect.anything(),

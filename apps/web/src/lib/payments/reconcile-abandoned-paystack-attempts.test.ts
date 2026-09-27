@@ -37,6 +37,7 @@ describe('reconcileAbandonedPaystackAttempts', () => {
       'paid',
       'partially_paid',
     ]);
+    expect(lookup.lt).toHaveBeenCalledWith('created_at', expect.any(String));
     expect(lookup.lt).toHaveBeenCalledWith('updated_at', expect.any(String));
     expect(orderLookup.in).toHaveBeenCalledWith('payment_status', [
       'paid',
@@ -168,8 +169,9 @@ describe('reconcileAbandonedPaystackAttempts', () => {
     const rotatedAt = (
       update.mock.calls as unknown as [{ updated_at: string }][]
     )[0]?.[0].updated_at;
-    const cutoff = lookup.lt.mock.calls[0]?.[1] as string;
-    expect(Date.parse(rotatedAt)).toBe(Date.parse(cutoff) - 1);
+    const retryCutoff = lookup.lt.mock.calls[1]?.[1] as string;
+    expect(Date.parse(rotatedAt)).toBeGreaterThan(Date.parse(retryCutoff));
+    expect(Date.parse(rotatedAt)).toBeLessThanOrEqual(Date.now());
   });
 
   it('fails closed when provider verification is unavailable or mismatched', async () => {

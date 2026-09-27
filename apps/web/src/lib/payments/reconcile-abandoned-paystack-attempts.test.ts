@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { reconcileAbandonedPaystackAttempts } from './reconcile-abandoned-paystack-attempts';
 
 const candidate = {
+  amount: 100,
+  currency: 'NGN',
   id: 'attempt-1',
   order_id: 'order-1',
   merchant_id: 'merchant-1',
@@ -99,7 +101,7 @@ describe('reconcileAbandonedPaystackAttempts', () => {
     } = createClient();
     const verify = vi.fn().mockResolvedValue({
       success: true,
-      data: { reference: 'BAC-OLD', status },
+      data: { reference: 'BAC-OLD', status, amount: 10000, currency: 'NGN' },
     });
 
     const summary = await reconcileAbandonedPaystackAttempts({
@@ -143,7 +145,12 @@ describe('reconcileAbandonedPaystackAttempts', () => {
     ]);
     const verify = vi.fn().mockResolvedValue({
       success: true,
-      data: { reference: 'BAC-OLD', status: 'abandoned' },
+      data: {
+        reference: 'BAC-OLD',
+        status: 'abandoned',
+        amount: 10000,
+        currency: 'NGN',
+      },
     });
 
     const summary = await reconcileAbandonedPaystackAttempts({
@@ -224,7 +231,7 @@ describe('reconcileAbandonedPaystackAttempts', () => {
     const { client, update } = createClient();
     const verify = vi.fn().mockResolvedValue({
       success: true,
-      data: { reference: 'BAC-OLD', status },
+      data: { reference: 'BAC-OLD', status, amount: 10000, currency: 'NGN' },
     });
 
     const summary = await reconcileAbandonedPaystackAttempts({
@@ -246,7 +253,12 @@ describe('reconcileAbandonedPaystackAttempts', () => {
       .mockResolvedValueOnce({ success: false, code: 'HTTP_503' })
       .mockResolvedValueOnce({
         success: true,
-        data: { reference: 'OTHER', status: 'abandoned' },
+        data: {
+          reference: 'OTHER',
+          status: 'abandoned',
+          amount: 10000,
+          currency: 'NGN',
+        },
       });
 
     const first = await reconcileAbandonedPaystackAttempts({
@@ -269,6 +281,30 @@ describe('reconcileAbandonedPaystackAttempts', () => {
     );
   });
 
+  it.each([
+    { amount: 9900, currency: 'NGN' },
+    { amount: 10000, currency: 'USD' },
+  ])('holds a verified abandoned attempt with mismatched payment evidence', async (evidence) => {
+    const { client, update } = createClient();
+    const verify = vi.fn().mockResolvedValue({
+      success: true,
+      data: { reference: 'BAC-OLD', status: 'abandoned', ...evidence },
+    });
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify,
+    });
+
+    expect(summary.retired).toEqual([]);
+    expect(summary.held).toEqual([
+      { id: 'attempt-1', reason: 'payment_evidence_mismatch' },
+    ]);
+    expect(update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'failed' })
+    );
+  });
+
   it('records a rotation failure once for the held attempt', async () => {
     const { client, updateBuilder } = createClient();
     Object.assign(updateBuilder, {
@@ -278,7 +314,12 @@ describe('reconcileAbandonedPaystackAttempts', () => {
     });
     const verify = vi.fn().mockResolvedValue({
       success: true,
-      data: { reference: 'BAC-OLD', status: 'pending' },
+      data: {
+        reference: 'BAC-OLD',
+        status: 'pending',
+        amount: 10000,
+        currency: 'NGN',
+      },
     });
 
     const summary = await reconcileAbandonedPaystackAttempts({

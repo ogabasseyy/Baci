@@ -19,8 +19,19 @@ function formatRelatedProductPrice(
 ) {
   if (!currencySource) return null;
 
-  // The PDP treats null/false manage_stock as unlimited inventory. Pass the
-  // original policy through so variant and offer prices follow that contract.
+  // A confirmed-empty variant set (successful hydration with no purchasable
+  // variant) has no selectable SKU: skip the parent-price fallback so the
+  // card cannot advertise a price alongside "Currently unavailable".
+  if (
+    product.has_variants === true &&
+    product.has_purchasable_variant === false
+  ) {
+    return null;
+  }
+
+  // The price-range helper treats null/false manage_stock as unlimited
+  // inventory. Pass the original policy through so variant and offer prices
+  // follow that contract (availability is normalized separately below).
   const range = getProductPriceRange(product);
   if (range) {
     const min = formatMerchantCurrency(range.min, currencySource);
@@ -62,8 +73,12 @@ function isRelatedProductUnavailable(product: BlogRelatedProduct) {
     product.has_purchasable_variant === false &&
     (hasTrackedInventory || (product.variants?.length ?? 0) === 0) &&
     !hasDirectPurchasableVariant;
+  // The categorized PDP normalizes legacy null manage_stock to managed
+  // inventory (`manage_stock ?? true`); match it so the card cannot
+  // advertise a zero-stock legacy row as available.
+  const manageStock = product.manage_stock ?? true;
   const hasOutOfStockManagedParent =
-    product.manage_stock === true &&
+    manageStock === true &&
     hasInventorySignal &&
     getEffectiveStock(product) === 0;
 

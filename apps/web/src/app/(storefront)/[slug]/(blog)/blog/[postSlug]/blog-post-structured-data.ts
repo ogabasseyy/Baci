@@ -1,3 +1,4 @@
+import { decodeHTML } from 'entities';
 import { getBlogAuthorSameAs } from '@/lib/blog-authors';
 import {
   extractBlogFaqItems,
@@ -79,9 +80,16 @@ export function buildBlogPostStructuredData({
       : buildBlogOrganizationId(baseUrl);
   const blogImageUrls = getBlogStructuredDataImageUrls(post);
   const blogImages = getBlogStructuredDataImages(post);
+  // FAQ/excerpt/SEO inputs are plain text, but token resolution runs them
+  // through the HTML sanitizer, which escapes `&` as `&amp;`. Decode back so
+  // JSON-LD stores the literal text instead of the entity.
   const resolvePriceText = (text: string) =>
-    resolveBlogCatalogPrices({ html: text }, catalogPrices ?? { products: [] })
-      .html ?? text;
+    decodeHTML(
+      resolveBlogCatalogPrices(
+        { html: text },
+        catalogPrices ?? { products: [] }
+      ).html ?? text
+    );
   const faqSchema = generateFaqPageSchema(
     extractBlogFaqItems(content).map((item) => ({
       question: resolvePriceText(item.question),

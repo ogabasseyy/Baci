@@ -12,6 +12,7 @@ import {
   normalizeRelatedBlogProducts,
   RELATED_BLOG_PRODUCTS_SELECT,
 } from '@/lib/related-blog-products';
+import { selectBlogCatalogProducts } from '@/lib/select-blog-catalog-products';
 import { STOREFRONT_BLOG_POST_SELECT } from '@/lib/storefront-blog-post-select';
 import { createPublicClient } from '@/lib/supabase/anon';
 
@@ -100,9 +101,16 @@ export async function getLiveBlogPost(
     );
   }
 
+  // Mirror the cached path: keep the eight display cards plus any linked
+  // product the article body references, so an inline catalog token past the
+  // eighth link still resolves instead of falling back to "Check current
+  // price" (the truncation must happen before availability hydration).
   let normalizedRelatedProducts = linkedProductsError
     ? []
-    : normalizeRelatedBlogProductLinks(linkedProducts).slice(0, 8);
+    : selectBlogCatalogProducts(
+        normalizeRelatedBlogProductLinks(linkedProducts),
+        post.content
+      );
 
   const normalizedCategorySlug = normalizeStorefrontCategoryValue(
     post.category

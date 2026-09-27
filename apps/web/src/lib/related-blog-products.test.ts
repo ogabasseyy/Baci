@@ -16,6 +16,7 @@ describe('related blog products', () => {
     );
     expect(RELATED_BLOG_PRODUCTS_SELECT).toContain('has_condition_offers');
     expect(RELATED_BLOG_PRODUCTS_SELECT).toContain('has_variants');
+    expect(RELATED_BLOG_PRODUCTS_SELECT).toMatch(/, condition,/);
     expect(RELATED_BLOG_PRODUCT_LINKS_SELECT).toContain(
       'products!blog_post_products_product_id_fkey'
     );
@@ -24,6 +25,7 @@ describe('related blog products', () => {
     );
     expect(RELATED_BLOG_PRODUCT_LINKS_SELECT).toContain('has_condition_offers');
     expect(RELATED_BLOG_PRODUCT_LINKS_SELECT).toContain('has_variants');
+    expect(RELATED_BLOG_PRODUCT_LINKS_SELECT).toMatch(/, condition,/);
     expect(RELATED_BLOG_PRODUCTS_SELECT).not.toMatch(/\bcategory_slug\b/);
   });
 

@@ -76,7 +76,7 @@ describe('BlogRelatedProducts', () => {
     expect(screen.queryByText('Currently unavailable')).not.toBeInTheDocument();
   });
 
-  it('treats nullable managed-stock values as unlimited when effective stock is zero', () => {
+  it('shows unavailable for a zero-stock legacy row with null stock management', () => {
     render(
       <BlogRelatedProducts
         basePath="/ogabassey"
@@ -92,7 +92,38 @@ describe('BlogRelatedProducts', () => {
       />
     );
 
-    expect(screen.queryByText('Currently unavailable')).not.toBeInTheDocument();
+    // Matches the categorized PDP, which normalizes legacy null
+    // manage_stock to managed inventory (`manage_stock ?? true`).
+    expect(screen.getByText('Currently unavailable')).toBeInTheDocument();
+  });
+
+  it('hides the parent price when variant selection is confirmed empty', () => {
+    render(
+      <BlogRelatedProducts
+        basePath="/ogabassey"
+        currencySource={{ country: 'NG', payout_currency: 'NGN' }}
+        products={[
+          {
+            id: 'product-confirmed-empty-variants',
+            name: 'Galaxy S25',
+            price: 850000,
+            manage_stock: true,
+            stock: 5,
+            has_variants: true,
+            has_purchasable_variant: false,
+            variants: [],
+            slug: 'galaxy-s25',
+          },
+        ]}
+      />
+    );
+
+    // Successful hydration returned no public rows: no selectable SKU, so
+    // the stocked parent price must not print next to the unavailable label.
+    expect(screen.getByText('Currently unavailable')).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /galaxy s25/i })
+    ).not.toHaveTextContent('₦850,000');
   });
 
   it('does not show unavailable when a stocked condition offer can be purchased', () => {

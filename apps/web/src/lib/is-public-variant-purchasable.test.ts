@@ -19,4 +19,31 @@ describe('isPublicVariantPurchasable', () => {
       )
     ).toBe(expected);
   });
+
+  it('inherits parent stock for a nullable child under a managed parent', () => {
+    expect(
+      isPublicVariantPurchasable(
+        { manage_stock: true, stock_quantity: 4 },
+        { stock_quantity: null }
+      )
+    ).toBe(true);
+    expect(
+      isPublicVariantPurchasable(
+        { manage_stock: true, stock_quantity: 0 },
+        { stock_quantity: null }
+      )
+    ).toBe(false);
+  });
+
+  it('keeps serialized units exact without parent inheritance', () => {
+    expect(
+      isPublicVariantPurchasable(
+        { manage_stock: true, stock_quantity: 4 },
+        {
+          inventory_tracking_policy: 'serialized_strict',
+          stock_quantity: null,
+        }
+      )
+    ).toBe(false);
+  });
 });

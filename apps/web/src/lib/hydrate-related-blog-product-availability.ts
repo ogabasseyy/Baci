@@ -1,3 +1,4 @@
+import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { hasStockedRelatedBlogVariant } from '@/lib/has-stocked-related-blog-variant';
 import { hydrateRelatedBlogProductSerializedInventory } from '@/lib/hydrate-related-blog-product-serialized-inventory';
@@ -12,6 +13,7 @@ import { isValidUuid } from '@/lib/sanitize-core';
 
 interface OfferStockRow {
   compare_at_price?: number | string | null;
+  condition?: string | null;
   price?: number | string | null;
   status?: string | null;
   stock_quantity?: number | string | null;
@@ -49,17 +51,52 @@ function toFinitePrice(value: unknown): number | null {
 function isOfferStockRow(value: unknown): value is OfferStockRow {
   return typeof value === 'object' && value !== null;
 }
-function hasStockedOffer(data: unknown): boolean {
+function normalizeOfferCondition(value: unknown): string | undefined {
   return (
-    Array.isArray(data) &&
-    data.some((offer) => isOfferStockRow(offer) && getEffectiveStock(offer) > 0)
+    (typeof value === 'string'
+      ? normalizeCanonicalProductCondition(value)
+      : '') || undefined
   );
 }
-function normalizeOfferRows(data: unknown): RelatedBlogProductOffer[] {
+
+/**
+ * Mirror the categorized PDP ("Filter offers to exclude main product
+ * condition"): an offer row carrying the parent product's own condition is
+ * not a selectable alternate, so it must not mark the rail available or
+ * advertise its price. Rows with an unknown condition are kept fail-open.
+ */
+function isSameConditionOffer(
+  offerCondition: unknown,
+  parentCondition: string | null | undefined
+): boolean {
+  const normalizedOffer = normalizeOfferCondition(offerCondition);
+  if (normalizedOffer === undefined) return false;
+  return normalizedOffer === normalizeOfferCondition(parentCondition);
+}
+
+function hasStockedOffer(
+  data: unknown,
+  parentCondition: string | null | undefined
+): boolean {
+  return (
+    Array.isArray(data) &&
+    data.some(
+      (offer) =>
+        isOfferStockRow(offer) &&
+        !isSameConditionOffer(offer.condition, parentCondition) &&
+        getEffectiveStock(offer) > 0
+    )
+  );
+}
+function normalizeOfferRows(
+  data: unknown,
+  parentCondition: string | null | undefined
+): RelatedBlogProductOffer[] {
   if (!Array.isArray(data)) return [];
 
   return data.flatMap((offer) => {
     if (!isOfferStockRow(offer)) return [];
+    if (isSameConditionOffer(offer.condition, parentCondition)) return [];
     const price = toFinitePrice(offer.price);
     const compareAtPrice = toFinitePrice(offer.compare_at_price);
     return [
@@ -67,6 +104,9 @@ function normalizeOfferRows(data: unknown): RelatedBlogProductOffer[] {
         ...(price !== null ? { price } : {}),
         ...(compareAtPrice !== null
           ? { compare_at_price: compareAtPrice }
+          : {}),
+        ...(typeof offer.condition === 'string'
+          ? { condition: offer.condition }
           : {}),
         status: offer.status ?? 'active',
         stock_quantity: toFinitePrice(offer.stock_quantity),
@@ -167,8 +207,8 @@ export async function hydrateRelatedBlogProductAvailability(
         return [
           product.id,
           {
-            available: hasStockedOffer(data),
-            offers: normalizeOfferRows(data),
+            available: hasStockedOffer(data, product.condition),
+            offers: normalizeOfferRows(data, product.condition),
           },
         ] as const;
       } catch (error) {

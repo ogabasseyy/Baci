@@ -37,6 +37,55 @@ describe('hydrateRelatedBlogProductAvailability', () => {
     });
   });
 
+  it('ignores a stocked offer that carries the parent product condition', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        { condition: 'New', price: 150000, stock_quantity: 2 },
+        { condition: 'used', price: 120000, stock_quantity: 0 },
+      ],
+      error: null,
+    });
+
+    const result = await hydrateRelatedBlogProductAvailability(
+      { rpc } as never,
+      [product({ condition: 'new' })]
+    );
+
+    // The PDP excludes same-condition rows from selectable offers, so the
+    // stocked 'New' row must neither mark the rail available nor advertise.
+    expect(result[0]?.has_purchasable_condition_offer).toBe(false);
+    expect(result[0]?.offers).toEqual([
+      {
+        condition: 'used',
+        price: 120000,
+        status: 'active',
+        stock_quantity: 0,
+      },
+    ]);
+  });
+
+  it('keeps a stocked offer with a different condition than the parent', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [{ condition: 'Used', price: 120000, stock_quantity: 2 }],
+      error: null,
+    });
+
+    const result = await hydrateRelatedBlogProductAvailability(
+      { rpc } as never,
+      [product({ condition: 'new' })]
+    );
+
+    expect(result[0]?.has_purchasable_condition_offer).toBe(true);
+    expect(result[0]?.offers).toEqual([
+      {
+        condition: 'Used',
+        price: 120000,
+        status: 'active',
+        stock_quantity: 2,
+      },
+    ]);
+  });
+
   it('marks an empty primary product unavailable when every active offer is empty', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: [{ stock_quantity: 0 }, { stock_quantity: null }],

@@ -1,8 +1,8 @@
 export const RELATED_BLOG_PRODUCTS_SELECT =
-  'id, name, slug, price, compare_at_price, min_variant_price, max_variant_price, stock, stock_quantity, manage_stock, has_condition_offers, has_variants, categories:category_id!inner(slug)' as const;
+  'id, name, slug, price, compare_at_price, min_variant_price, max_variant_price, stock, stock_quantity, manage_stock, condition, has_condition_offers, has_variants, categories:category_id!inner(slug)' as const;
 
 export const RELATED_BLOG_PRODUCT_LINKS_SELECT =
-  'relationship, product:products!blog_post_products_product_id_fkey(id, name, slug, status, price, compare_at_price, min_variant_price, max_variant_price, stock, stock_quantity, manage_stock, has_condition_offers, has_variants, categories:category_id(slug))' as const;
+  'relationship, product:products!blog_post_products_product_id_fkey(id, name, slug, status, price, compare_at_price, min_variant_price, max_variant_price, stock, stock_quantity, manage_stock, condition, has_condition_offers, has_variants, categories:category_id(slug))' as const;
 
 export interface RelatedBlogProductVariant {
   id?: string;
@@ -13,6 +13,7 @@ export interface RelatedBlogProductVariant {
 
 export interface RelatedBlogProductOffer {
   compare_at_price?: number | null;
+  condition?: string | null;
   price?: number | null;
   status?: string | null;
   stock_quantity?: number | null;
@@ -24,6 +25,7 @@ interface RelatedBlogProductCategory {
 
 interface RelatedBlogProductRow {
   compare_at_price?: number | null;
+  condition?: string | null;
   has_condition_offers?: boolean | null;
   has_variants?: boolean | null;
   id: string;
@@ -45,6 +47,7 @@ interface RelatedBlogProductLinkRow {
 
 export interface RelatedBlogProduct {
   compare_at_price?: number | null;
+  condition?: string | null;
   has_condition_offers?: boolean | null;
   has_variants?: boolean | null;
   id: string;

@@ -128,6 +128,26 @@ describe('explicit inline catalog prices', () => {
       resolveBlogCatalogPrices({ html: token }, { ...options, products }).html
     ).toBe('Currently unavailable');
   });
+  it('inherits parent stock for an explicit variant token with null child stock', () => {
+    const html = `{{catalog-price:${id}:variant:${variantId}}}`;
+    const products = [
+      {
+        ...product,
+        manage_stock: true,
+        stock_quantity: 4,
+        has_variants: true,
+        variants: [
+          { id: variantId, price_override: 300000, stock_quantity: null },
+        ],
+      },
+    ];
+    // The PDP and price-range paths inherit parent stock for this legacy
+    // representation; the exact-token path must agree instead of printing
+    // "Currently unavailable" for a purchasable variant.
+    expect(
+      resolveBlogCatalogPrices({ html }, { ...options, products }).html
+    ).toBe('₦300,000.00');
+  });
   it('replaces only TipTap text nodes, preserving attributes and code blocks', () => {
     const json = {
       type: 'doc',

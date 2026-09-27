@@ -62,10 +62,19 @@ function makeRequest() {
   });
 }
 
-function createSupabase() {
-  const linkedBlogPostRows = Array.from({ length: 1000 }, (_, index) => ({
-    blog_post_id: `post-${index}`,
-  }));
+function createSupabase(
+  options: {
+    preRead?: { data: unknown; error: unknown };
+    deleteError?: unknown;
+    linkedCount?: number;
+  } = {}
+) {
+  const linkedBlogPostRows = Array.from(
+    { length: options.linkedCount ?? 1000 },
+    (_, index) => ({
+      blog_post_id: `post-${index}`,
+    })
+  );
   const limit = vi.fn((size: number) =>
     Promise.resolve({ data: linkedBlogPostRows.slice(0, size), error: null })
   );
@@ -81,24 +90,26 @@ function createSupabase() {
         const productQuery = {
           select: vi.fn(() => productQuery),
           eq: vi.fn(() => productQuery),
-          maybeSingle: vi.fn().mockResolvedValue({
-            data: {
-              id: PRODUCT_ID,
-              slug: 'phone',
-              name: 'Phone',
-              category: 'Electronics',
-              categories: null,
-              product_categories: [],
-            },
-            error: null,
-          }),
+          maybeSingle: vi.fn().mockResolvedValue(
+            options.preRead ?? {
+              data: {
+                id: PRODUCT_ID,
+                slug: 'phone',
+                name: 'Phone',
+                category: 'Electronics',
+                categories: null,
+                product_categories: [],
+              },
+              error: null,
+            }
+          ),
         };
         let deleteEqCount = 0;
         const deleteQuery: { eq: ReturnType<typeof vi.fn> } = {
           eq: vi.fn(() => {
             deleteEqCount += 1;
             return deleteEqCount >= 2
-              ? Promise.resolve({ error: null })
+              ? Promise.resolve({ error: options.deleteError ?? null })
               : deleteQuery;
           }),
         };
@@ -166,5 +177,66 @@ describe('DELETE /api/products/[id] purge snapshot', () => {
     expect(mocks.purgeMutation).toHaveBeenCalledWith(
       expect.objectContaining({ purgeWholeStorefront: true })
     );
+  });
+
+  it('does not purge a storefront for a nonexistent product', async () => {
+    // Arrange: a successful empty pre-read is not an inventory mutation.
+    const { supabase } = createSupabase({
+      preRead: { data: null, error: null },
+    });
+    vi.mocked(
+      (await import('@/lib/supabase/server')).createClient
+    ).mockReturnValue(supabase as never);
+
+    // Act
+    const response = await DELETE(makeRequest(), {
+      params: Promise.resolve({ id: PRODUCT_ID }),
+    });
+
+    // Assert
+    expect(response.status).toBe(404);
+    expect(mocks.purgeMutation).not.toHaveBeenCalled();
+    expect(mocks.revalidateProducts).not.toHaveBeenCalled();
+  });
+
+  it('schedules a complete fallback purge when the pre-read errored but the delete succeeded', async () => {
+    // Arrange: small link set so the fallback comes purely from the
+    // failed pre-read, not from blog-snapshot overflow.
+    const consoleWarnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      const { supabase } = createSupabase({
+        preRead: { data: null, error: { message: 'read failed' } },
+        linkedCount: 2,
+      });
+      vi.mocked(
+        (await import('@/lib/supabase/server')).createClient
+      ).mockReturnValue(supabase as never);
+
+      // Act
+      const response = await DELETE(makeRequest(), {
+        params: Promise.resolve({ id: PRODUCT_ID }),
+      });
+
+      // Assert: the unknown old canonical path is covered by the
+      // whole-storefront fallback with the id-based entry.
+      expect(response.status).toBe(200);
+      expect(mocks.purgeMutation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          merchantId: 'merchant-1',
+          merchantSlug: 'test-store',
+          productIds: [PRODUCT_ID],
+          entries: [{ slug: PRODUCT_ID, categorySegment: null }],
+          purgeWholeStorefront: true,
+        })
+      );
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        'Product purge pre-read failed after delete; scheduling complete fallback purge',
+        expect.objectContaining({ id: PRODUCT_ID })
+      );
+    } finally {
+      consoleWarnSpy.mockRestore();
+    }
   });
 });

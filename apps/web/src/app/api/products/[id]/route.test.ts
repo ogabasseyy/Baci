@@ -47,11 +47,6 @@ vi.mock('@/lib/cache-revalidation', () => ({
 }));
 
 const mockScheduleStorefrontProductPurge = vi.fn();
-const mockScheduleHostnamePurge = vi.fn();
-vi.mock('@/lib/storefront-product-purge-hostnames', () => ({
-  scheduleStorefrontHostnamePurge: (...args: unknown[]) =>
-    mockScheduleHostnamePurge(...args),
-}));
 vi.mock('@/lib/storefront-product-purge', () => ({
   scheduleStorefrontProductPurge: (...args: unknown[]) =>
     mockScheduleStorefrontProductPurge(...args),
@@ -1985,52 +1980,6 @@ describe('DELETE /api/products/[id]', () => {
           arg.includes('categories:category_id(slug, is_active)')
         )
       ).toBe(true);
-    });
-
-    it('does not purge a storefront for a nonexistent product', async () => {
-      const consoleWarnSpy = vi
-        .spyOn(console, 'warn')
-        .mockImplementation(() => undefined);
-      try {
-        deleteError = null;
-        // A successful empty read is not an inventory mutation.
-        productToDelete = null;
-
-        const res = await DELETE(makeDeleteRequest(PRODUCT_ID), {
-          params: Promise.resolve({ id: PRODUCT_ID }),
-        });
-
-        expect(res.status).toBe(404);
-        expect(mockScheduleHostnamePurge).not.toHaveBeenCalled();
-        expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
-      } finally {
-        consoleWarnSpy.mockRestore();
-      }
-    });
-
-    it('schedules a complete fallback purge when the pre-read errored but the delete succeeded', async () => {
-      const consoleWarnSpy = vi
-        .spyOn(console, 'warn')
-        .mockImplementation(() => undefined);
-      try {
-        deleteError = null;
-        productToDelete = null;
-        preReadError = { message: 'read failed' };
-
-        const res = await DELETE(makeDeleteRequest(PRODUCT_ID), {
-          params: Promise.resolve({ id: PRODUCT_ID }),
-        });
-
-        expect(res.status).toBe(200);
-        // The unknown old canonical path is covered by the hostname purge.
-        expect(mockScheduleHostnamePurge).toHaveBeenCalledWith('test-store');
-        expect(consoleWarnSpy).toHaveBeenCalledWith(
-          'Product purge pre-read failed after delete; scheduling complete fallback purge',
-          expect.objectContaining({ id: PRODUCT_ID })
-        );
-      } finally {
-        consoleWarnSpy.mockRestore();
-      }
     });
 
     it('purges the junction category and reads the junction embed on the pre-delete select', async () => {

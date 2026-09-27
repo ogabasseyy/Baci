@@ -140,4 +140,6 @@ export const serializedInventoryPredicates = {
   hasConstantFalseConjunct,
   isRequiredConjunct,
   isRequiredGroupedConjunct,
+  splitTopLevel,
+  unwrapOuterParentheses,
 };

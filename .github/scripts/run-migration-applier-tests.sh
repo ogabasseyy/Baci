@@ -25,6 +25,7 @@ node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_release_scope.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_review.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_claim.test.mjs"
+node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_needed_count.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_claim_excess_release.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_claim_reachability.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_confirmation.test.mjs"

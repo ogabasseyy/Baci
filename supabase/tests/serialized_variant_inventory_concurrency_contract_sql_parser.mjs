@@ -289,6 +289,8 @@ export const serializedInventorySqlParser = {
     serializedInventoryPredicates.isRequiredGroupedConjunct,
   maskSqlLiterals,
   splitSqlStatements,
+  splitTopLevel: serializedInventoryPredicates.splitTopLevel,
   splitTopLevelList: serializedInventorySqlList.splitTopLevelList,
   stripSqlComments,
+  unwrapOuterParentheses: serializedInventoryPredicates.unwrapOuterParentheses,
 };

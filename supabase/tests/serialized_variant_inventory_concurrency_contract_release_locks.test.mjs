@@ -189,3 +189,28 @@ test('rejects unit-narrowing release selectors in both branches', () => {
     );
   }
 });
+
+test('rejects function-narrowed release selectors in both branches', () => {
+  const release = serializedInventoryContract.latestFunctionBody(
+    'private.release_order_inventory_units(uuid, uuid, text)'
+  );
+  const branches = serializedInventoryContract.extractIfBranches(
+    release,
+    /^\s*IF\s+v_target_status\s*=\s*'available'\s+THEN\b/i
+  );
+  for (const branch of [branches.thenBranch, branches.elseBranch]) {
+    assert.equal(
+      serializedInventoryReleaseLocks.releaseLockMatches(branch),
+      true
+    );
+    const narrowed = branch.replace(
+      /AND\s+vi\s*\.\s*status\s*=\s*'reserved'/i,
+      (status) => `${status} AND pg_catalog.length('') > 0`
+    );
+    assert.notEqual(narrowed, branch);
+    assert.equal(
+      serializedInventoryReleaseLocks.releaseLockMatches(narrowed),
+      false
+    );
+  }
+});

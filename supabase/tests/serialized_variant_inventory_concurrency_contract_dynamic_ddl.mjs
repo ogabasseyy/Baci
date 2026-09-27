@@ -155,41 +155,31 @@ function normalizedExecutePayload(payload) {
   };
 }
 
-function assignedExecutePayload(source, executeIndex, payload) {
+function assignedExecutePayloads(source, executeIndex, payload) {
   const variable = /^\s*([a-z_][a-z0-9_]*)\s*$/i.exec(payload);
-  if (!variable) return null;
+  if (!variable) return [];
   const before = source.slice(0, executeIndex);
-  const direct = [
-    ...before.matchAll(
-      new RegExp(
-        `\\b${escapeRegex(variable[1])}(?:\\s+[a-z_][a-z0-9_.]*(?:\\s*\\([^;]*\\))?)?\\s*:=\\s*([^;]+)`,
-        'gi'
-      )
+  const collect = (pattern, flags) =>
+    [...before.matchAll(new RegExp(pattern, flags))].map((match) => ({
+      index: match.index,
+      text: match[1],
+    }));
+  return [
+    ...collect(
+      `\\b${escapeRegex(variable[1])}(?:\\s+[a-z_][a-z0-9_.]*(?:\\s*\\([^;]*\\))?)?\\s*:=\\s*([^;]+)`,
+      'gi'
     ),
-  ].pop();
-  const into = [
-    ...before.matchAll(
-      new RegExp(
-        `\\bSELECT\\b((?:(?!\\bINTO\\b)[^;])*?)\\bINTO\\s+(?:STRICT\\s+)?[^;]*?\\b${escapeRegex(variable[1])}\\b`,
-        'gi'
-      )
+    ...collect(
+      `\\bSELECT\\b((?:(?!\\bINTO\\b)[^;])*?)\\bINTO\\s+(?:STRICT\\s+)?[^;]*?\\b${escapeRegex(variable[1])}\\b`,
+      'gi'
     ),
-  ].pop();
-  const equals = [
-    ...before.matchAll(
-      new RegExp(
-        `(?:^|[;]|\\bTHEN\\b|\\bELSE\\b|\\bLOOP\\b|\\bBEGIN\\b)\\s*${escapeRegex(variable[1])}\\s*=(?![=>])\\s*([^;]+)`,
-        'gim'
-      )
+    ...collect(
+      `(?:^|[;]|\\bTHEN\\b|\\bELSE\\b|\\bLOOP\\b|\\bBEGIN\\b)\\s*${escapeRegex(variable[1])}\\s*=(?![=>])\\s*([^;]+)`,
+      'gim'
     ),
-  ].pop();
-  const candidates = [direct, into, equals].filter(
-    (match) => match !== undefined
-  );
-  if (candidates.length === 0) return null;
-  return candidates.reduce((latest, match) =>
-    match.index > latest.index ? match : latest
-  )[1];
+  ]
+    .sort((left, right) => left.index - right.index)
+    .map(({ text }) => text);
 }
 
 function hasDynamicFunctionDdl(source, functionSignature) {
@@ -202,8 +192,11 @@ function hasDynamicFunctionDdl(source, functionSignature) {
     );
     const normalized = normalizedExecutePayload(payload);
     if (ddl.test(normalized.text)) return true;
-    const assigned = assignedExecutePayload(source, execute.index, payload);
-    if (assigned !== null) {
+    for (const assigned of assignedExecutePayloads(
+      source,
+      execute.index,
+      payload
+    )) {
       const renderedAssigned = normalizedExecutePayload(assigned);
       if (ddl.test(renderedAssigned.text)) return true;
       if (
@@ -239,8 +232,11 @@ function hasDynamicPrivilegeDdl(source, functionSignature) {
     );
     const normalized = normalizedExecutePayload(payload);
     if (matchesPrivilege(normalized.text)) return true;
-    const assigned = assignedExecutePayload(source, execute.index, payload);
-    if (assigned !== null) {
+    for (const assigned of assignedExecutePayloads(
+      source,
+      execute.index,
+      payload
+    )) {
       const renderedAssigned = normalizedExecutePayload(assigned);
       if (matchesPrivilege(renderedAssigned.text)) return true;
       if (

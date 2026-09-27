@@ -44,11 +44,16 @@ function hasPositiveQuantityGuard(source) {
       /SELECT\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?stock_quantity\s+INTO[\s\S]*?\bFOR\s+UPDATE\b|UPDATE\s+(?:public\s*\.\s*)?(?:products|product_variants)\b/gi
     ),
   ];
+  const validatedWindow = guard ? executable.slice(guard.index) : '';
+  const reassignedQuantity =
+    /(?:^|[;\n])\s*quantity_param\s*(?::=|=(?!=))/im.test(validatedWindow) ||
+    /\bINTO\b(?:(?!\bFROM\b)[^;])*?\bquantity_param\b/i.test(validatedWindow);
   return Boolean(
     guard &&
       thenBranch &&
       hasTopLevelBareReturn(thenBranch) &&
       protectedOperations.length > 0 &&
+      !reassignedQuantity &&
       protectedOperations.every((operation) =>
         serializedInventoryControlFlow.dominatesControlFlow(
           executable,
@@ -140,12 +145,34 @@ function hasMerchantAuthorizationGuard(source) {
       executable
     );
   const merchantLookup = targetMerchantLookup(executable, guard?.index ?? -1);
+  const protectedOperations = [
+    ...executable.matchAll(
+      /(?:SELECT\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?stock_quantity\s+INTO[\s\S]*?\bFOR\s+UPDATE\b|UPDATE\s+(?:public\s*\.\s*)?(?:products|product_variants)\b)/gi
+    ),
+  ];
+  const lastOperation = protectedOperations.at(-1);
+  const authorizedWindow =
+    merchantLookup && lastOperation
+      ? executable.slice(
+          merchantLookup.index,
+          lastOperation.index + lastOperation[0].length
+        )
+      : '';
+  const reassignedTarget =
+    authorizedWindow === '' ||
+    /(?:^|[;\n])\s*(?:product_id_param|variant_id_param)\s*(?::=|=(?!=))/im.test(
+      authorizedWindow
+    ) ||
+    /\bINTO\b(?:(?!\bFROM\b)[^;])*?\b(?:product_id_param|variant_id_param)\b/i.test(
+      authorizedWindow
+    );
   return Boolean(
     guard &&
       guardArms &&
       hasTopLevelReturn(guardArms.thenBranch) &&
       merchantLookup &&
       protectedOperation &&
+      !reassignedTarget &&
       serializedInventoryControlFlow.dominatesControlFlow(
         executable,
         merchantLookup.index,

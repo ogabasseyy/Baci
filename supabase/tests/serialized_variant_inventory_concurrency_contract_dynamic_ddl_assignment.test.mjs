@@ -50,3 +50,22 @@ $wrapper$;`;
     false
   );
 });
+
+test('resolves dynamic DDL hidden in a non-final branch assignment', () => {
+  const source = `DO $wrapper$
+DECLARE
+  v_sql text;
+BEGIN
+  IF TRUE THEN v_sql := 'CREATE OR REPLACE FUNCTION private.confirm_order_inventory_reservations(uuid, uuid) RETURNS void AS $body$ BEGIN NULL; END; $body$'; ELSE v_sql := 'SELECT 1'; END IF;
+  EXECUTE v_sql;
+END;
+$wrapper$;`;
+
+  assert.equal(
+    hasDynamicFunctionDdl(
+      source,
+      'private.confirm_order_inventory_reservations(uuid, uuid)'
+    ),
+    true
+  );
+});

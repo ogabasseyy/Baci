@@ -8,7 +8,9 @@ const {
   isRequiredGroupedConjunct,
   maskSqlLiterals,
   splitSqlStatements,
+  splitTopLevel,
   stripSqlComments,
+  unwrapOuterParentheses,
 } = serializedInventorySqlParser;
 const { maskNestedQueries } = serializedInventoryNestedQueries;
 
@@ -50,6 +52,19 @@ function hasUnexpectedAvailabilityPredicate(where) {
     if (!allowedAvailabilityColumns.has(match[2].toLowerCase())) return true;
   }
   return false;
+}
+
+function hasUnrecognizedAvailabilityConjunct(where, patterns) {
+  return splitTopLevel(unwrapOuterParentheses(where), 'AND').some((branch) => {
+    const unwrapped = unwrapOuterParentheses(branch);
+    if (/^\s*branch_eligible\s*=\s*true\s*$/i.test(unwrapped)) return false;
+    return !patterns.some((pattern) => {
+      pattern.lastIndex = 0;
+      const matched = pattern.test(unwrapped);
+      pattern.lastIndex = 0;
+      return matched;
+    });
+  });
 }
 
 function availableUnitPredicatePatterns(variantVariable, alias) {
@@ -115,6 +130,7 @@ function availableUnitPredicatesMatch(source, variantVariable, branchVariable) {
     !hasConstantFalseConjunct(valueQuery.where) &&
     !branchNarrowing.test(branchScopedWhere ?? '') &&
     !hasUnexpectedAvailabilityPredicate(branchScopedWhere ?? '') &&
+    !hasUnrecognizedAvailabilityConjunct(branchScopedWhere ?? '', patterns) &&
     branchFirst &&
     (!branchPattern ||
       (branchMatch !== null &&

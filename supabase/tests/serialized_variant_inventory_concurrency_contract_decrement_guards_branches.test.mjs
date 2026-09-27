@@ -49,3 +49,55 @@ test('missing-resource branches authorize without message matching', () => {
     );
   }
 });
+
+test('validated decrement quantities reject post-guard reassignment', () => {
+  for (const functionName of decrementFunctions) {
+    const body = serializedInventoryContract.latestFunctionBody(functionName);
+    assert.equal(
+      serializedInventoryDecrementGuards.hasPositiveQuantityGuard(body),
+      true
+    );
+    const guard =
+      /IF\s+quantity_param\s+IS\s+NULL\s+OR\s+quantity_param\s*<=\s*0\s+THEN[\s\S]*?END\s+IF\s*;/i.exec(
+        body
+      );
+    assert.ok(guard);
+    const reassigned = body.replace(
+      guard[0],
+      `${guard[0]}\n  quantity_param := -1;`
+    );
+    assert.equal(
+      serializedInventoryDecrementGuards.hasPositiveQuantityGuard(reassigned),
+      false
+    );
+  }
+});
+
+test('authorized decrement targets reject post-guard reassignment', () => {
+  for (const functionName of decrementFunctions) {
+    const body = serializedInventoryContract.latestFunctionBody(functionName);
+    assert.equal(
+      serializedInventoryDecrementGuards.hasMerchantAuthorizationGuard(body),
+      true
+    );
+    const guard =
+      /IF\s+COALESCE\s*\(\s*\(\s*SELECT\s+auth\s*\.\s*role\s*\(\s*\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\s*\.\s*has_merchant_access\s*\(\s*v_merchant_id\s*\)\s+THEN[\s\S]*?END\s+IF\s*;/i.exec(
+        body
+      );
+    assert.ok(guard);
+    const target = functionName.includes('variant_stock')
+      ? 'variant_id_param'
+      : 'product_id_param';
+    const reassigned = body.replace(
+      guard[0],
+      `${guard[0]}\n  ${target} := NULL;`
+    );
+    assert.notEqual(reassigned, body);
+    assert.equal(
+      serializedInventoryDecrementGuards.hasMerchantAuthorizationGuard(
+        reassigned
+      ),
+      false
+    );
+  }
+});

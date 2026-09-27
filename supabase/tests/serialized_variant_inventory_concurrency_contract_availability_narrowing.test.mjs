@@ -89,4 +89,14 @@ test('rejects arbitrary availability-selector narrowing', () => {
     ),
     false
   );
+  assert.equal(
+    serializedInventoryAvailability.availableUnitPredicatesMatch(
+      source.replace(
+        'AND unit.sold_at IS NULL',
+        "AND pg_catalog.length('') > 0 AND unit.sold_at IS NULL"
+      ),
+      'v_variant_id'
+    ),
+    false
+  );
 });

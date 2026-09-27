@@ -55,14 +55,13 @@ function releaseLockMatches(source) {
     return false;
   }
   if (
-    ![
-      /vi\s*\.\s*order_id\s*=\s*p_order_id\b/i,
-      /vi\s*\.\s*merchant_id\s*=\s*p_merchant_id\b/i,
-      /vi\s*\.\s*status\s*=\s*'reserved'/i,
-    ].every((predicate) =>
+    ![...releaseScopePatterns].every((predicate) =>
       serializedInventorySqlParser.isRequiredConjunct(query[1], predicate)
     )
   ) {
+    return false;
+  }
+  if (hasUnrecognizedReleaseConjunct(query[1])) {
     return false;
   }
   return (
@@ -70,6 +69,30 @@ function releaseLockMatches(source) {
       query[1]
     ) && !/\bpv\s*\.\s*[a-z_][a-z0-9_]*/i.test(query[1])
   );
+}
+
+const releaseScopePatterns = [
+  /vi\s*\.\s*order_id\s*=\s*p_order_id\b/i,
+  /vi\s*\.\s*merchant_id\s*=\s*p_merchant_id\b/i,
+  /vi\s*\.\s*status\s*=\s*'reserved'/i,
+];
+
+function hasUnrecognizedReleaseConjunct(where) {
+  return serializedInventorySqlParser
+    .splitTopLevel(
+      serializedInventorySqlParser.unwrapOuterParentheses(where),
+      'AND'
+    )
+    .some((branch) => {
+      const unwrapped =
+        serializedInventorySqlParser.unwrapOuterParentheses(branch);
+      return !releaseScopePatterns.some((pattern) => {
+        pattern.lastIndex = 0;
+        const matched = pattern.test(unwrapped);
+        pattern.lastIndex = 0;
+        return matched;
+      });
+    });
 }
 
 function hasTargetStatusWhitelist(source) {

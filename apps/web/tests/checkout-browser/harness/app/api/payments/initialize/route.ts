@@ -1,8 +1,8 @@
 import { cookies } from 'next/headers';
 import { merchant } from '../../../../../fixtures';
 import { order } from '../../../../../setup';
+import { paymentInitFixtureSchema } from '../../../../schemas/payment-init-fixture-schema';
 import { fixtureCustomerEmail, json, scenario } from '../../fixture-response';
-import { paymentInitFixtureSchema } from './payment-init-fixture-schema';
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const parsed = paymentInitFixtureSchema.safeParse(body);

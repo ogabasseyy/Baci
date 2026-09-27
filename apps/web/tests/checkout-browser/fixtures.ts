@@ -39,3 +39,5 @@ export const contact = {
   customerEmail: 'ada@example.test',
   customerPhone: '+2348031234567',
 };
+
+export const shippingQuoteId = '55555555-5555-4555-8555-555555555555';

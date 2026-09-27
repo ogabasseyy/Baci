@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { merchant } from '../../../../../fixtures';
+import { merchant, shippingQuoteId } from '../../../../../fixtures';
 import { order } from '../../../../../setup';
 import { POST } from './route';
 
@@ -69,6 +69,42 @@ describe('fixture order reuse route', () => {
         body: JSON.stringify(validRequest),
       })
     );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      order: { ...order, customer_email: 'reviewer@example.test' },
+    });
+  });
+
+  it('rejects a stale selected shipping quote before reusing the pending order', async () => {
+    const response = await POST(
+      new Request('http://localhost/api/orders/reuse', {
+        method: 'POST',
+        headers: reviewerHeaders,
+        body: JSON.stringify({
+          ...validRequest,
+          selected_quote_id: '66666666-6666-4666-8666-666666666666',
+        }),
+      })
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: 'Selected shipping quote is no longer available',
+    });
+  });
+
+  it('accepts the fixture quote when reusing the pending order', async () => {
+    const response = await POST(
+      new Request('http://localhost/api/orders/reuse', {
+        method: 'POST',
+        headers: reviewerHeaders,
+        body: JSON.stringify({
+          ...validRequest,
+          selected_quote_id: shippingQuoteId,
+        }),
+      })
+    );
+
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       order: { ...order, customer_email: 'reviewer@example.test' },

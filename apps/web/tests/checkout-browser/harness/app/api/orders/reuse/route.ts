@@ -1,5 +1,5 @@
 import { reuseCheckoutOrderSchema } from '@/schemas/orders';
-import { merchant } from '../../../../../fixtures';
+import { merchant, shippingQuoteId } from '../../../../../fixtures';
 import { order } from '../../../../../setup';
 import { hasValidFixtureCsrf } from '../../fixture-csrf';
 import { fixtureCustomerEmail, json } from '../../fixture-response';
@@ -12,6 +12,14 @@ export async function POST(request: Request) {
     return json({ error: 'Invalid fixture order reuse request' }, 400);
   if (parsed.data.order_id !== order.id)
     return json({ error: 'Order not found' }, 404);
+  if (
+    parsed.data.selected_quote_id != null &&
+    parsed.data.selected_quote_id !== shippingQuoteId
+  )
+    return json(
+      { error: 'Selected shipping quote is no longer available' },
+      409
+    );
   const expectedCustomerEmail =
     fixtureCustomerEmail(request) ?? order.customer_email;
   if (

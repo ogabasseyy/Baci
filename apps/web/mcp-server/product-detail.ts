@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getMcpOfferAvailability } from './product-offer-availability';
 import { getMcpProductStockSummary } from './product-stock-summary';
+import { STORE_WIDGET_URI } from './widget-resource-uri';
 
 interface ProductDetailSource {
   id: string;
@@ -218,7 +219,7 @@ export async function buildMcpProductDetail({
       offer_lookup_failed: offerLookupFailed,
     },
     _meta: {
-      'openai/outputTemplate': 'ui://widget/store.html',
+      'openai/outputTemplate': STORE_WIDGET_URI,
       'openai/widgetPrefersBorder': true,
     },
   };

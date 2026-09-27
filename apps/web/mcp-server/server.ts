@@ -57,6 +57,7 @@ import { hydrateSearchProductAvailability } from './search-product-availability'
 import { selectSearchProductsByPrice } from './select-search-products-by-price';
 import { checkProductImageRateLimit } from './product-image-rate-limit-singleton';
 import { selectRecommendedProducts } from './recommendation-products';
+import { STORE_WIDGET_URI } from './widget-resource-uri';
 
 // =============================================================================
 // CONFIGURATION
@@ -1173,12 +1174,12 @@ function createOgabasseyServer() {
   // Widget resource
   server.registerResource(
     'store-widget',
-    'ui://widget/store.html',
+    STORE_WIDGET_URI,
     { description: 'Ogabassey store widget' },
     async () => ({
       contents: [
         {
-          uri: 'ui://widget/store.html',
+          uri: STORE_WIDGET_URI,
           mimeType: 'text/html+skybridge',
           text: premiumWidgetHtml,
           _meta: {
@@ -1239,7 +1240,7 @@ function createOgabasseyServer() {
         limit: z.number().min(1).max(20).optional().default(10),
       },
       _meta: {
-        'openai/outputTemplate': 'ui://widget/store.html',
+        'openai/outputTemplate': STORE_WIDGET_URI,
         'openai/toolInvocation/invoking': 'Searching catalog...',
         'openai/toolInvocation/invoked': 'Search complete',
       },
@@ -1363,7 +1364,7 @@ function createOgabasseyServer() {
             meta: { total: count, query: sanitizedQuery },
           },
           _meta: {
-            'openai/outputTemplate': 'ui://widget/store.html',
+            'openai/outputTemplate': STORE_WIDGET_URI,
             'openai/widgetPrefersBorder': true,
           },
         };
@@ -1742,7 +1743,7 @@ function createOgabasseyServer() {
         'Get detailed information about a specific product including variants, conditions, specifications, and reviews. Use product_id when available; otherwise use the exact product_name returned by search_products.',
       inputSchema: productLookupInputSchema,
       _meta: {
-        'openai/outputTemplate': 'ui://widget/store.html',
+        'openai/outputTemplate': STORE_WIDGET_URI,
         'openai/toolInvocation/invoking': 'Loading product...',
         'openai/toolInvocation/invoked': 'Product loaded',
       },
@@ -1834,7 +1835,7 @@ function createOgabasseyServer() {
           phone: z.string().max(20).optional().describe('Phone number'),
         },
         _meta: {
-          'openai/outputTemplate': 'ui://widget/store.html',
+          'openai/outputTemplate': STORE_WIDGET_URI,
           'openai/toolInvocation/invoking': 'Looking up order...',
           'openai/toolInvocation/invoked': 'Order found',
         },
@@ -1996,7 +1997,7 @@ function createOgabasseyServer() {
           .describe('Max budget in NGN'),
       },
       _meta: {
-        'openai/outputTemplate': 'ui://widget/store.html',
+        'openai/outputTemplate': STORE_WIDGET_URI,
         'openai/toolInvocation/invoking': 'Finding recommendations...',
         'openai/toolInvocation/invoked': 'Recommendations ready',
       },
@@ -2082,7 +2083,7 @@ function createOgabasseyServer() {
         ],
         structuredContent: { products: formatted },
         _meta: {
-          'openai/outputTemplate': 'ui://widget/store.html',
+          'openai/outputTemplate': STORE_WIDGET_URI,
           'openai/widgetPrefersBorder': true,
         },
       };

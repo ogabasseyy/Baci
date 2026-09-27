@@ -1,4 +1,5 @@
 'use client';
+import { dispatchCheckoutPayment } from './checkout/handlers/dispatch-checkout-payment';
 import { buildCheckoutOrderRequest } from './checkout/build-checkout-order-request';
 import { useLoadResumedOrder } from './checkout/hooks/use-load-resumed-order';
 import { useOrderTotals } from './checkout/hooks/use-order-totals';
@@ -84,7 +85,6 @@ import { DeferredCheckoutAuthModal as CheckoutAuthModal } from './checkout/compo
 import {
   type PlaceDetails,
 } from '@/components/address-autocomplete';
-import { openCheckoutCreditDirect } from './checkout/handlers/open-checkout-credit-direct';
 import { asRoute } from '@/lib/routes';
 import { getCountryByCode } from '@/lib/countries';
 import type { ShippingQuote } from '@/types/shipping-quote';
@@ -132,16 +132,12 @@ import {
   type CheckoutPaymentOrder,
   type CheckoutWalletRedemption,
 } from './checkout/handlers/submit-checkout-order';
-import { initializeCheckoutDva } from './checkout/handlers/initialize-checkout-dva';
-import { initializeCheckoutGateway } from './checkout/handlers/initialize-checkout-gateway';
-import { openCheckoutCredpal } from './checkout/handlers/open-checkout-credpal';
 import { completeCheckoutOrder } from './checkout/handlers/complete-checkout-order';
 import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
 import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import { selectRejectedVoucherLines } from './checkout/select-rejected-voucher-lines';
 import { PaymentStep } from './checkout/components/PaymentStep';
 import type { RedvaultQuoteSummary } from './checkout/components/redvault/RedvaultPaymentOption';
-import { initializeRedvaultPayment } from './checkout/redvault-payment-response';
 import { getRedvaultCompatibleCheckoutValues } from './checkout/redvault-compatible-checkout-values';
 import {
   invalidatePendingQuoteRequests,
@@ -167,8 +163,6 @@ import {
   resetDeliveryQuotesForAddressChange,
 } from './checkout/utils';
 import { resolveAirportShippingAddress } from './checkout/resolve-airport-shipping-address';
-import { isWalletOrderAutoDebitWebEnabled } from '@/config/wallet-order-auto-debit';
-import { isEligibleForWalletFundedBankTransfer } from './checkout/wallet-funded-transfer-eligibility';
 import { useWalletFundedBankTransfer } from './checkout/hooks/use-wallet-funded-bank-transfer';
 import { useStorefrontCustomerSession } from './checkout/hooks/use-storefront-customer-session';
 import {
@@ -1813,369 +1807,69 @@ export const CheckoutPage: React.FC = () => {
         return;
       }
 
-      if (paymentMethod === 'bank_transfer') {
-        // Wallet-funded transfer FIRST for signed-in customers of an
-        // auto-debit merchant (flag-gated). `start` resolves false for every
-        // decline — guest, merchant flag off, no phone, consent denied, 5xx —
-        // and we then run the untouched legacy order-DVA path.
-        //
-        // Await the AUTHORITATIVE session value first: the storefront session
-        // fetch is async, so reading a still-`loading` state here would treat a
-        // signed-in customer who submits promptly after page load as a guest and
-        // route them to legacy DVA. `waitForResolvedAuthenticated` blocks on the
-        // in-flight fetch (fail-closed to guest on error) so the branch decision
-        // is only made once the session is known.
-        const storefrontCustomerAuthenticated =
-          await waitForResolvedStorefrontCustomerAuth();
-        const walletFundedOutcome =
-          merchant &&
-          isEligibleForWalletFundedBankTransfer({
-            isAuthenticated: storefrontCustomerAuthenticated,
-            merchantId: merchant.id,
-            orderCurrency: orderChargeCurrency,
-            paymentAmount,
-            walletOrderAutoDebitWebEnabled: isWalletOrderAutoDebitWebEnabled(),
-          })
-            ? await walletFundedTransfer.start({
-                checkoutFingerprint,
-                currency: orderChargeCurrency,
-                merchantId: merchant.id,
-                merchantSlug: merchant.slug ?? undefined,
-                orderId: order.id,
-                orderNumber: createdOrderNumber,
-                // Canonical row total for the completion revenue (the
-                // intent target is the post-savings residual).
-                orderTotal: order.total ?? total,
-                trackingToken: order.tracking_token,
-              })
-            : ('fallback' as const);
-
-        if (
-          walletFundedOutcome !== 'fallback' &&
-          walletFundedOutcome !== 'uncertain'
-        ) {
-          // Stamp the funding-intent ID: a retried order creates a second
-          // intent, and both attempts' lifecycle events must stay
-          // distinguishable (the completion stamps it likewise).
-          capturePaymentStarted(walletFundedOutcome.intentId);
-          setIsProcessing(false);
-          isOrderInFlightRef.current = false;
-          return;
-        }
-
-        if (walletFundedOutcome === 'uncertain') {
-          // Money-safety: the create-intent POST outcome is indeterminate — the
-          // server may already hold a funding intent for this order. Do NOT open
-          // the legacy order-DVA path (a second funding channel risks a double
-          // charge); prompt the customer to check their wallet and retry.
-          toast({
-            title: 'We could not confirm your transfer setup',
-            description:
-              'Please check your wallet balance before trying again. Do not start another payment for this order yet.',
-            variant: 'destructive',
-          });
-          setIsProcessing(false);
-          isOrderInFlightRef.current = false;
-          return;
-        }
-
-        await initializeCheckoutDva({
-          merchantId: merchant.id,
-          customerEmail,
-          customerName: `${firstName} ${lastName}`.trim(),
-          customerPhone,
-          checkoutFingerprint,
-          billingAddress,
-          currencyCode,
-          paymentAmount,
-          total,
-          order,
-          setDvaData,
-          setDvaCountdown,
-          setIsProcessing,
-          setIsInitializingDva,
-          releaseSubmitLock: () => {
-            isOrderInFlightRef.current = false;
-          },
-          onDvaReady: capturePaymentStarted,
-          onPaymentFailure: () => {
-            if (!paymentStarted) {
-              return;
-            }
-            captureCheckoutPaymentFailed({
-              currency: orderChargeCurrency,
-              orderId: order.id,
-              paymentMethod: 'bank_transfer',
-              reason: 'bank_transfer_error',
-              total: order.total ?? total,
-            });
-          },
-          onError: (error) => {
-            console.error('DVA initialization error:', error);
-            toast({
-              title: 'Bank Transfer Failed',
-              description:
-                error instanceof Error
-                  ? error.message
-                  : 'Failed to initialize bank transfer',
-              variant: 'destructive',
-            });
-          },
-        });
-        return;
-      }
-
-      if (paymentMethod === 'uba_redvault') {
-        setRedvaultStatus('pending');
-        const paymentResult = await initializeRedvaultPayment({
-          merchantId: merchant.id,
-          orderId: order.id,
-          currency: orderChargeCurrency,
-          customerEmail,
-          customerName: `${firstName} ${lastName}`.trim(),
-          customerPhone,
-          trackingToken: order.tracking_token,
-          billingAddress,
-        }).catch((error: unknown) => {
-          setRedvaultStatus('error');
-          throw error;
-        });
-        if (paymentResult.kind === 'pending_reconciliation') {
-          setIsProcessing(false);
-          isOrderInFlightRef.current = false;
-          return;
-        }
-        if (paymentResult.kind === 'captured_held') {
-          setRedvaultStatus('held');
-          setIsProcessing(false);
-          isOrderInFlightRef.current = false;
-          return;
-        }
-        // The REDVAULT attempt opens now: record the start with the init
-        // reference so the funnel does not jump from order_created
-        // straight to completion/failure.
-        capturePaymentStarted(paymentResult.reference);
-        if (createAccount && !user && accountPassword.length >= 6) {
-          try {
-            const supabase = createClient();
-            await supabase.auth.signUp({
-              email: customerEmail,
-              password: accountPassword,
-              options: {
-                data: {
-                  first_name: firstName,
-                  last_name: lastName,
-                  phone: customerPhone,
-                  source: 'checkout',
-                  signup_type: 'customer',
+      await dispatchCheckoutPayment({
+        merchant,
+        order,
+        paymentMethod,
+        total,
+        paymentAmount,
+        createdOrderNumber,
+        orderChargeCurrency,
+        currencyCode,
+        firstName,
+        lastName,
+        customerEmail,
+        customerPhone,
+        billingAddress,
+        checkoutFingerprint,
+        checkoutCart,
+        cart,
+        orderItems,
+        walletFundedTransfer,
+        waitForResolvedStorefrontCustomerAuth,
+        setIsProcessing,
+        isOrderInFlightRef,
+        setDvaData,
+        setDvaCountdown,
+        setIsInitializingDva,
+        setRedvaultStatus,
+        setPendingCryptoOrder,
+        setShowCryptoSelector,
+        setCryptoPaymentData,
+        capturePaymentStarted,
+        clearPendingCheckoutOrder,
+        clearCheckoutSession,
+        clearCart,
+        payForMeDetails,
+        navigate: (path) => router.push(asRoute(getHref(path))),
+        redirect: (url) => window.location.assign(url),
+        hasPaymentStarted: () => paymentStarted,
+        setInitializedReference: (reference) => {
+          initializedReference = reference;
+        },
+        completeSignup: async () => {
+          if (createAccount && !user && accountPassword.length >= 6) {
+            try {
+              const supabase = createClient();
+              await supabase.auth.signUp({
+                email: customerEmail,
+                password: accountPassword,
+                options: {
+                  data: {
+                    first_name: firstName,
+                    last_name: lastName,
+                    phone: customerPhone,
+                    source: 'checkout',
+                    signup_type: 'customer',
+                  },
                 },
-              },
-            });
-          } catch (authError) {
-            console.error('Silent signup background error:', authError);
+              });
+            } catch (authError) {
+              console.error('Silent signup background error:', authError);
+            }
           }
-        }
-        window.location.assign(paymentResult.authorizationUrl);
-        return;
-      }
-
-      if (paymentMethod === 'paystack' || paymentMethod === 'korapay' || paymentMethod === 'juicyway' || paymentMethod === 'klump') {
-        // For Juicyway crypto payments, show the selector first
-        if (paymentMethod === 'juicyway') {
-          setPendingCryptoOrder({
-            orderId: order.id,
-            trackingToken: order.tracking_token,
-            amount: paymentAmount,
-            // Canonical row total first (same rule as order_created).
-            total: order.total ?? total,
-            orderCurrency: orderChargeCurrency,
-            customerEmail,
-            customerName: `${firstName} ${lastName}`.trim(),
-            customerPhone,
-            billingAddress,
-            items: checkoutCart.map(item => ({
-              name: item.name,
-              type: 'physical' as const,
-            })),
-          });
-          setShowCryptoSelector(true);
-          setIsProcessing(false);
-          isOrderInFlightRef.current = false;
-          return;
-        }
-
-        // Initialization is isolated from the component; redirect/crypto UI
-        // state remains here because it is owned by this checkout screen.
-        const paymentResult = await initializeCheckoutGateway({
-          merchantId: merchant.id,
-          order,
-          currency: orderChargeCurrency,
-          customerEmail,
-          customerName: `${firstName} ${lastName}`.trim(),
-          customerPhone,
-          gateway: paymentMethod,
-          billingAddress,
-        });
-
-        if (paymentResult.success && paymentResult.crypto_payment) {
-          // Juicyway crypto payment - show wallet address modal
-          initializedReference = paymentResult.reference;
-          capturePaymentStarted(initializedReference);
-          setCryptoPaymentData({
-            address: paymentResult.crypto_payment.address,
-            chain: paymentResult.crypto_payment.chain,
-            currency: paymentResult.crypto_payment.currency,
-            amount: paymentResult.crypto_payment.amount / 100, // Convert from minor units
-            confirmation_time: paymentResult.crypto_payment.confirmation_time,
-            orderId: order.id,
-            trackingToken: order.tracking_token,
-            reference: paymentResult.reference,
-            sessionId: paymentResult.session_id || '',
-            paymentId: paymentResult.crypto_payment.payment_id || '', // Payment ID for verification
-          });
-          setIsProcessing(false);
-          isOrderInFlightRef.current = false;
-          return;
-        } else if (paymentResult.success && paymentResult.authorization_url) {
-          // NOTE: Don't clear cart here - it causes a flash of empty state
-          // Cart will be cleared on the payment callback page after successful payment
-          // (location.assign over `href =` — global assignment bails React Compiler)
-          // Klump navigates to the BNPL launcher, which records the start
-          // from the widget's onOpen: firing here would strand an unmatched
-          // start when the launcher lookup, SDK load, or widget fails
-          // before Klump opens.
-          if (paymentMethod !== 'klump') {
-            initializedReference = paymentResult.reference;
-            capturePaymentStarted(initializedReference);
-          }
-          window.location.assign(paymentResult.authorization_url);
-          return;
-        } else if (paymentResult.success && paymentResult.checkout_url) {
-          // Juicyway uses checkout_url
-          initializedReference = paymentResult.reference;
-          capturePaymentStarted(initializedReference);
-          window.location.assign(paymentResult.checkout_url);
-          return;
-        } else {
-          raiseCheckoutError('Payment initialization failed: No auth URL returned');
-        }
-      } else if (paymentMethod === 'credit_direct') {
-        await openCheckoutCreditDirect({
-          merchantSlug: merchant.slug || '',
-          order,
-          amount: paymentAmount,
-          currency: orderChargeCurrency,
-          orderNumber: createdOrderNumber,
-          total,
-          customer: {
-            email: customerEmail,
-            phone: customerPhone,
-            name: `${firstName} ${lastName}`.trim(),
-          },
-          items: orderItems,
-          onPaymentStarted: (reference) => {
-            initializedReference = reference;
-            capturePaymentStarted(reference);
-          },
-          onIdle: () => {
-            setIsProcessing(false);
-            isOrderInFlightRef.current = false;
-          },
-          navigate: (path) => router.push(asRoute(getHref(path))),
-        });
-        return;
-      } else if (paymentMethod === 'credpal') {
-        await openCheckoutCredpal({
-          key: process.env.NEXT_PUBLIC_CREDPAL_KEY,
-          amount: paymentAmount,
-          product: cart.map((item) => item.name).join(', '),
-          customerEmail,
-          customerName: `${firstName} ${lastName}`.trim(),
-          customerPhone,
-          order,
-          checkoutFingerprint,
-          onPaymentStarted: () => capturePaymentStarted(),
-          paymentStarted: () => paymentStarted,
-          onPaymentCompleted: (reference) => {
-            captureCheckoutPaymentCompleted({
-              currency: orderChargeCurrency,
-              orderId: order.id,
-              orderNumber: createdOrderNumber,
-              paymentMethod,
-              reference,
-              total: order.total ?? paymentAmount,
-            });
-          },
-          onPaymentFailed: () => {
-            captureCheckoutPaymentFailed({
-              currency: orderChargeCurrency,
-              orderId: order.id,
-              orderNumber: createdOrderNumber,
-              paymentMethod,
-              reason: 'credpal_error',
-              total: order.total ?? total,
-            });
-          },
-          clearPendingCheckoutOrder,
-          clearCheckoutIdempotencyKey,
-          clearCheckoutSession,
-          clearCart,
-          navigate: (path) => router.push(asRoute(getHref(path))),
-          onUnavailable: () => {
-            toast({
-              title: 'CredPal Unavailable',
-              description:
-                'CredPal payment is not available at this time. Please select a different payment method.',
-              variant: 'destructive',
-            });
-            setIsProcessing(false);
-          },
-          onError: (error) => {
-            console.error('CredPal error:', error);
-            toast({
-              title: 'CredPal Failed',
-              description: error.message || 'CredPal checkout failed. Please try again.',
-              variant: 'destructive',
-            });
-            setIsProcessing(false);
-          },
-          releaseSubmitLock: () => {
-            setIsProcessing(false);
-            isOrderInFlightRef.current = false;
-          },
-        });
-        return;
-      } else if (paymentMethod === 'invoice') {
-        await completeCheckoutOrder({
-          order,
-          checkoutFingerprint,
-          completion: { kind: 'invoice' },
-          clearPendingCheckoutOrder,
-          clearCheckoutSession,
-          clearCart,
-          pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
-        });
-      } else if (paymentMethod === 'payforme') {
-        await completeCheckoutOrder({
-          order,
-          checkoutFingerprint,
-          completion: { kind: 'payforme', payerName: payForMeDetails.name },
-          clearPendingCheckoutOrder,
-          clearCheckoutSession,
-          clearCart,
-          pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
-        });
-      } else {
-        await completeCheckoutOrder({
-          order,
-          checkoutFingerprint,
-          completion: { kind: 'standard' },
-          clearPendingCheckoutOrder,
-          clearCheckoutSession,
-          clearCart,
-          pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
-        });
-      }
+        },
+      });
     } catch (error) {
       console.error('Checkout error:', error);
       if (createdOrderId && paymentStarted) {

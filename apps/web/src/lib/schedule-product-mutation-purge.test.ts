@@ -61,10 +61,11 @@ describe('scheduleProductMutationPurge', () => {
       blogPostSlugs: ['old-article'],
     });
 
-    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith('merchant-1', [
-      'new-phone',
-      'old-phone',
-    ]);
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      ['new-phone', 'old-phone'],
+      { expireImmediately: true }
+    );
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'test-store',
       entries

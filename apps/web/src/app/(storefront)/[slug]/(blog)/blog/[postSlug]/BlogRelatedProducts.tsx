@@ -34,9 +34,10 @@ function formatRelatedProductPrice(
     return null;
   }
 
-  // The price-range helper treats null/false manage_stock as unlimited
-  // inventory. Pass the original policy through so variant and offer prices
-  // follow that contract (availability is normalized separately below).
+  // The price-range helper reserves unlimited semantics for explicit
+  // `manage_stock: false`; legacy null is managed inventory (PDP parity).
+  // Pass the original policy through so variant and offer prices follow
+  // that contract (availability is normalized separately below).
   const range = getProductPriceRange(product);
   if (range) {
     const min = formatMerchantCurrency(range.min, currencySource);
@@ -73,15 +74,19 @@ function isRelatedProductUnavailable(product: BlogRelatedProduct) {
       inventory_tracking_policy: variant.inventory_tracking_policy,
     }))
   );
+  // The categorized PDP normalizes legacy null manage_stock to managed
+  // inventory (`manage_stock ?? true`); match it so the card cannot
+  // advertise a zero-stock legacy row as available. The normalized policy
+  // also governs the variant gate: a null-policy product with no
+  // purchasable variant is unavailable even when the parent holds stock.
+  const manageStock = product.manage_stock ?? true;
   const hasConfirmedUnavailableVariant =
     product.has_variants === true &&
     product.has_purchasable_variant === false &&
-    (hasTrackedInventory || (product.variants?.length ?? 0) === 0) &&
+    (hasTrackedInventory ||
+      manageStock === true ||
+      (product.variants?.length ?? 0) === 0) &&
     !hasDirectPurchasableVariant;
-  // The categorized PDP normalizes legacy null manage_stock to managed
-  // inventory (`manage_stock ?? true`); match it so the card cannot
-  // advertise a zero-stock legacy row as available.
-  const manageStock = product.manage_stock ?? true;
   const hasOutOfStockManagedParent =
     manageStock === true &&
     hasInventorySignal &&

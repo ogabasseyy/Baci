@@ -139,7 +139,7 @@ describe('revalidateProductsReliable purge scope', () => {
     );
   });
 
-  it('chunks oversized slug sets without repeating edge-purge inputs', async () => {
+  it('holds edge-purge inputs until the last slug chunk succeeds', async () => {
     mockRevalidateProducts.mockImplementation(() => {
       throw new Error('no store');
     });
@@ -165,16 +165,19 @@ describe('revalidateProductsReliable purge scope', () => {
     const secondBody = JSON.parse(
       (fetchImpl.mock.calls[1]?.[1] as RequestInit).body as string
     ) as Record<string, unknown>;
-    expect(firstBody).toMatchObject({
+    // The edge purge must not precede the remaining invalidations: early
+    // chunks carry slugs only, and the purge inputs ride the last chunk.
+    expect(firstBody).toEqual({
+      merchantId: 'merchant-1',
+      productSlugs: expect.any(Array),
+    });
+    expect(firstBody.productSlugs).toHaveLength(10_000);
+    expect(secondBody).toMatchObject({
       merchantId: 'merchant-1',
       merchantSlug: 'ogabassey',
       products,
       purgeWholeStorefront: true,
     });
-    expect(firstBody.productSlugs).toHaveLength(10_000);
-    expect(secondBody).toEqual({
-      merchantId: 'merchant-1',
-      productSlugs: ['phone-10000'],
-    });
+    expect(secondBody.productSlugs).toEqual(['phone-10000']);
   });
 });

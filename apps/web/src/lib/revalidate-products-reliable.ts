@@ -189,17 +189,21 @@ export async function revalidateProductsReliable(
           )
         : [undefined];
 
-    // Control metadata (products/merchantSlug/whole-storefront flag) rides on the
-    // first chunk that the endpoint acknowledges. If that chunk rejects or
-    // returns non-2xx, a later chunk resends it so the required Cloudflare
-    // purge is still scheduled; a duplicate schedule from a post-purge 500 is
-    // harmless because edge purges are idempotent.
-    let controlMetadataDelivered = false;
+    // Control metadata (products/merchantSlug/whole-storefront flag) rides on
+    // the LAST chunk, and only when every chunk so far succeeded: the
+    // endpoint schedules the edge purge as soon as it sees the flag, so
+    // sending it on an early chunk would let the purge precede the remaining
+    // slug invalidations and refill the edge from not-yet-busted Next
+    // entries. When any chunk fails the purge is suppressed (loud error
+    // below) rather than scheduled over partial invalidation state.
+    let priorChunkFailed = false;
+    const lastChunkIndex = slugChunks.length - 1;
     for (const [chunkIndex, productSlugChunk] of slugChunks.entries()) {
       // A rejected/timed-out chunk must not skip the remaining chunks: the
       // database writes already committed, and the merchant-wide tag does not
       // clear per-slug PDP entries, so every chunk is submitted independently.
-      const chunkCarriesControlMetadata = !controlMetadataDelivered;
+      const chunkCarriesControlMetadata =
+        chunkIndex === lastChunkIndex && !priorChunkFailed;
       let response: Response;
       try {
         response = await (options.fetchImpl ?? fetch)(
@@ -211,10 +215,9 @@ export async function revalidateProductsReliable(
               'Content-Type': 'application/json',
             },
             // The endpoint accepts at most 10,000 slugs. Keep products,
-            // merchantSlug, and the whole-storefront flag on the first
-            // acknowledged request so follow-up chunks only perform the
-            // per-slug invalidation and do not repeat a potentially expensive
-            // edge purge.
+            // merchantSlug, and the whole-storefront flag on the last
+            // request (all-success path) so earlier chunks only perform
+            // per-slug invalidation and the edge purge cannot precede them.
             body: JSON.stringify({
               merchantId,
               ...(chunkCarriesControlMetadata && merchantSlug
@@ -234,6 +237,7 @@ export async function revalidateProductsReliable(
           }
         );
       } catch (error) {
+        priorChunkFailed = true;
         console.error(
           'Internal product revalidation chunk failed; continuing with remaining chunks',
           { merchantId, chunkIndex, error }
@@ -241,13 +245,26 @@ export async function revalidateProductsReliable(
         continue;
       }
       if (!response.ok) {
+        priorChunkFailed = true;
         console.error(
           'Internal product revalidation endpoint returned non-2xx; relying on cacheLife self-heal',
           { merchantId, status: response.status }
         );
-      } else if (chunkCarriesControlMetadata) {
-        controlMetadataDelivered = true;
       }
+    }
+    if (
+      priorChunkFailed &&
+      (merchantSlug ||
+        (products && products.length > 0) ||
+        purgeWholeStorefront)
+    ) {
+      // The edge purge was deliberately withheld: scheduling it now would
+      // refill Cloudflare from the un-invalidated chunks' stale tags.
+      // Operators re-run the import to converge; TTL bounds the staleness.
+      console.error(
+        'Internal product revalidation completed with failed chunks; edge purge suppressed to avoid refilling from un-invalidated tags',
+        { merchantId }
+      );
     }
   } catch (error) {
     console.error(

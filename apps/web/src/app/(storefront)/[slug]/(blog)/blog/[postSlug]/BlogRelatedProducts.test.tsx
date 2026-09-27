@@ -221,4 +221,29 @@ describe('BlogRelatedProducts', () => {
 
     expect(screen.getByText('Currently unavailable')).toBeInTheDocument();
   });
+
+  it('shows unavailable for a stocked null-policy parent with only depleted variants', () => {
+    render(
+      <BlogRelatedProducts
+        basePath="/ogabassey"
+        products={[
+          {
+            id: 'product-null-policy-depleted-variants',
+            name: 'Legacy Galaxy S25',
+            manage_stock: null,
+            stock: 5,
+            stock_quantity: 5,
+            has_variants: true,
+            has_purchasable_variant: false,
+            variants: [{ stock_quantity: 0 }],
+            slug: 'legacy-galaxy-s25',
+          },
+        ]}
+      />
+    );
+
+    // The PDP normalizes null to managed, which requires a selectable
+    // stocked variant; the stocked parent alone must not read as available.
+    expect(screen.getByText('Currently unavailable')).toBeInTheDocument();
+  });
 });

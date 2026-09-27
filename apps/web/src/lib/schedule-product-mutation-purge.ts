@@ -32,9 +32,16 @@ export function scheduleProductMutationPurge({
   blogPostIds,
   purgeWholeStorefront,
 }: ScheduleProductMutationPurgeInput): void {
+  // Hard-expire the per-slug PDP snapshots before the edge purge below:
+  // stale-while-revalidate would serve the pre-mutation snapshot to the
+  // first post-purge request and re-seed Cloudflare with the old price,
+  // stock, or deleted product.
   revalidateProductSlugs(
     merchantId,
-    entries.map((entry) => entry.slug)
+    entries.map((entry) => entry.slug),
+    {
+      expireImmediately: true,
+    }
   );
   expireProductBlogCache(merchantId);
   if (purgeWholeStorefront) {

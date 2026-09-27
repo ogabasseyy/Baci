@@ -25,7 +25,7 @@ vi.mock('@/env', () => ({
 
 import { revalidateProductsReliable } from '@/lib/revalidate-products-reliable';
 
-describe('revalidateProductsReliable control metadata retry', () => {
+describe('revalidateProductsReliable control metadata ordering', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.BACI_WEB_BASE_URL;
@@ -38,11 +38,18 @@ describe('revalidateProductsReliable control metadata retry', () => {
     vi.restoreAllMocks();
   });
 
-  it('resends purge metadata on a later chunk when the first chunk fails', async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockRejectedValueOnce(new Error('timeout'))
-      .mockResolvedValueOnce({ ok: true } as Response);
+  function bodiesOf(fetchImpl: ReturnType<typeof vi.fn>) {
+    return fetchImpl.mock.calls.map(
+      ([, init]) =>
+        JSON.parse((init as RequestInit).body as string) as Record<
+          string,
+          unknown
+        >
+    );
+  }
+
+  it('sends purge metadata only on the last chunk when every chunk succeeds', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true } as Response);
     const nextProductSlugs = Array.from(
       { length: 10_001 },
       (_, index) => `slug-${index}`
@@ -58,21 +65,22 @@ describe('revalidateProductsReliable control metadata retry', () => {
     });
 
     expect(fetchImpl).toHaveBeenCalledTimes(2);
-    const bodies = fetchImpl.mock.calls.map(([, init]) =>
-      JSON.parse((init as RequestInit).body as string)
-    );
-    // The failed first chunk attempted the metadata; the successful second
-    // chunk resends it so the edge purge is still scheduled.
+    const bodies = bodiesOf(fetchImpl);
+    expect(bodies[0]).not.toHaveProperty('merchantSlug');
+    expect(bodies[0]).not.toHaveProperty('products');
+    expect(bodies[0]).not.toHaveProperty('purgeWholeStorefront');
     expect(bodies[1]).toMatchObject({
       merchantSlug: 'ogabassey',
       products,
       purgeWholeStorefront: true,
     });
-    expect(bodies[1].productSlugs).toHaveLength(1);
   });
 
-  it('sends purge metadata exactly once when the first chunk succeeds', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue({ ok: true } as Response);
+  it('suppresses the edge purge when an earlier chunk fails', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockResolvedValueOnce({ ok: true } as Response);
     const nextProductSlugs = Array.from(
       { length: 10_001 },
       (_, index) => `slug-${index}`
@@ -83,14 +91,23 @@ describe('revalidateProductsReliable control metadata retry', () => {
       nextProductSlugs,
       merchantSlug: 'ogabassey',
       products: [{ id: 'product-1' }],
+      purgeWholeStorefront: true,
     });
 
+    // Both chunks are still submitted for their slug invalidations, but the
+    // successful last chunk withholds the purge inputs: scheduling the
+    // purge now would refill the edge from the failed chunk's stale tags.
     expect(fetchImpl).toHaveBeenCalledTimes(2);
-    const bodies = fetchImpl.mock.calls.map(([, init]) =>
-      JSON.parse((init as RequestInit).body as string)
+    const bodies = bodiesOf(fetchImpl);
+    for (const body of bodies) {
+      expect(body).not.toHaveProperty('merchantSlug');
+      expect(body).not.toHaveProperty('products');
+      expect(body).not.toHaveProperty('purgeWholeStorefront');
+    }
+    expect(bodies[1].productSlugs).toHaveLength(1);
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('edge purge suppressed'),
+      expect.objectContaining({ merchantId: 'merchant-1' })
     );
-    expect(bodies[0].merchantSlug).toBe('ogabassey');
-    expect(bodies[1].merchantSlug).toBeUndefined();
-    expect(bodies[1].products).toBeUndefined();
   });
 });

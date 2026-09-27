@@ -54,4 +54,67 @@ describe('getPublishedBlogPostSlugsForProducts partial page failure', () => {
       errorSpy.mockRestore();
     }
   });
+
+  it('throws when the category lookup fails with no rows preserved', async () => {
+    const categoryError = { message: 'category unavailable' };
+    const { supabase } = makeSupabase(
+      { data: [], error: null },
+      { data: null, error: categoryError }
+    );
+    const errorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    try {
+      await expect(
+        getPublishedBlogPostSlugsForProducts(
+          supabase as never,
+          'merchant-1',
+          [],
+          ['smartphones']
+        )
+      ).rejects.toThrow(/no rows to preserve/);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('category-fallback'),
+        expect.objectContaining({
+          merchantId: 'merchant-1',
+          error: categoryError,
+        })
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('resolves linked slugs and warns when only the category lookup fails', async () => {
+    const { supabase } = makeSupabase(
+      { data: [publishedRow('linked-guide')], error: null },
+      { data: null, error: { message: 'category unavailable' } }
+    );
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    const errorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    try {
+      const result = await getPublishedBlogPostSlugsForProducts(
+        supabase as never,
+        'merchant-1',
+        ['123e4567-e89b-12d3-a456-426614174000'],
+        ['smartphones']
+      );
+
+      expect(result).toEqual(['linked-guide']);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('partial category-fallback'),
+        expect.objectContaining({ merchantId: 'merchant-1' })
+      );
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
 });

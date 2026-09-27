@@ -3,6 +3,7 @@ import { scheduleOrderProductBlogPurge } from '@/lib/schedule-order-product-blog
 import type { Database } from '@/types/supabase';
 
 const QUIZ_CACHE_TARGET_BATCH_LIMIT = 1000;
+const QUIZ_EVENT_ID_CHUNK_SIZE = 100;
 
 type QuizClient = SupabaseClient<Database>;
 
@@ -54,6 +55,42 @@ function addProductId(
   targets.set(merchantId, productIds);
 }
 
+interface QuizCacheTargetPage<T> {
+  data: T[] | null;
+  error: unknown;
+}
+
+/**
+ * Drain a bounded target sweep across pages. The next worker iteration uses
+ * a new `changedAfter` timestamp, so rows truncated by a single limited
+ * query would never be revisited; pagination keeps every changed row
+ * covered. A mid-sweep failure keeps the pages already collected.
+ */
+async function collectQuizCacheTargetRows<T>(
+  fetchPage: (from: number, to: number) => PromiseLike<QuizCacheTargetPage<T>>
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let page = 0; ; page += 1) {
+    let result: QuizCacheTargetPage<T>;
+    try {
+      result = await fetchPage(
+        page * QUIZ_CACHE_TARGET_BATCH_LIMIT,
+        (page + 1) * QUIZ_CACHE_TARGET_BATCH_LIMIT - 1
+      );
+    } catch {
+      return rows;
+    }
+    if (result.error) {
+      return rows;
+    }
+    const pageRows = result.data ?? [];
+    rows.push(...pageRows);
+    if (pageRows.length < QUIZ_CACHE_TARGET_BATCH_LIMIT) {
+      return rows;
+    }
+  }
+}
+
 /**
  * Expire product/blog cache tags for quiz prize mutations observed by the
  * worker. Quiz RPCs mutate reservation rows inside the database, so this
@@ -70,43 +107,46 @@ export async function invalidateQuizProductCaches(
   const eventMerchantIds = new Map<string, string>();
 
   try {
-    const eventResult = await client
-      .from('quiz_events')
-      .select('id, merchant_id, settings')
-      .gte('updated_at', changedAfter)
-      .limit(QUIZ_CACHE_TARGET_BATCH_LIMIT);
-    if (!eventResult.error) {
-      for (const row of (eventResult.data ?? []) as QuizEventCacheRow[]) {
-        if (
-          typeof row.id === 'string' &&
-          row.id.trim().length > 0 &&
-          typeof row.merchant_id === 'string' &&
-          row.merchant_id.trim().length > 0
-        ) {
-          eventMerchantIds.set(row.id.trim(), row.merchant_id.trim());
-        }
-        addProductId(
-          productIdsByMerchant,
-          row.merchant_id,
-          getProductPrizeId(row.settings)
-        );
+    const eventRows = await collectQuizCacheTargetRows<QuizEventCacheRow>(
+      (from, to) =>
+        client
+          .from('quiz_events')
+          .select('id, merchant_id, settings')
+          .gte('updated_at', changedAfter)
+          .order('updated_at', { ascending: true })
+          .range(from, to)
+    );
+    for (const row of eventRows) {
+      if (
+        typeof row.id === 'string' &&
+        row.id.trim().length > 0 &&
+        typeof row.merchant_id === 'string' &&
+        row.merchant_id.trim().length > 0
+      ) {
+        eventMerchantIds.set(row.id.trim(), row.merchant_id.trim());
       }
+      addProductId(
+        productIdsByMerchant,
+        row.merchant_id,
+        getProductPrizeId(row.settings)
+      );
     }
   } catch {
     // The quiz RPC already completed; cache expiry remains best effort.
   }
 
   try {
-    const reservationResult = await client
-      .from('quiz_prize_reservations')
-      .select('merchant_id, product_id')
-      .gte('updated_at', changedAfter)
-      .limit(QUIZ_CACHE_TARGET_BATCH_LIMIT);
-    if (!reservationResult.error) {
-      for (const row of (reservationResult.data ??
-        []) as QuizReservationCacheRow[]) {
-        addProductId(productIdsByMerchant, row.merchant_id, row.product_id);
-      }
+    const reservationRows =
+      await collectQuizCacheTargetRows<QuizReservationCacheRow>((from, to) =>
+        client
+          .from('quiz_prize_reservations')
+          .select('merchant_id, product_id')
+          .gte('updated_at', changedAfter)
+          .order('updated_at', { ascending: true })
+          .range(from, to)
+      );
+    for (const row of reservationRows) {
+      addProductId(productIdsByMerchant, row.merchant_id, row.product_id);
     }
   } catch {
     // The quiz RPC already completed; cache expiry remains best effort.
@@ -114,15 +154,16 @@ export async function invalidateQuizProductCaches(
 
   let awardRows: QuizAwardCacheRow[] = [];
   try {
-    const awardResult = await client
-      .from('quiz_awards')
-      .select('event_id, product_id')
-      .not('expired_at', 'is', null)
-      .gte('expired_at', changedAfter)
-      .limit(QUIZ_CACHE_TARGET_BATCH_LIMIT);
-    if (!awardResult.error) {
-      awardRows = (awardResult.data ?? []) as QuizAwardCacheRow[];
-    }
+    awardRows = await collectQuizCacheTargetRows<QuizAwardCacheRow>(
+      (from, to) =>
+        client
+          .from('quiz_awards')
+          .select('event_id, product_id')
+          .not('expired_at', 'is', null)
+          .gte('expired_at', changedAfter)
+          .order('expired_at', { ascending: true })
+          .range(from, to)
+    );
   } catch {
     // The quiz RPC already completed; cache expiry remains best effort.
   }
@@ -134,26 +175,37 @@ export async function invalidateQuizProductCaches(
     )
   );
   if (expiredEventIds.length > 0) {
-    try {
-      const expiredEventResult = await client
-        .from('quiz_events')
-        .select('id, merchant_id')
-        .in('id', expiredEventIds);
-      if (!expiredEventResult.error) {
-        for (const row of (expiredEventResult.data ??
-          []) as QuizEventCacheRow[]) {
-          if (
-            typeof row.id === 'string' &&
-            row.id.trim().length > 0 &&
-            typeof row.merchant_id === 'string' &&
-            row.merchant_id.trim().length > 0
-          ) {
-            eventMerchantIds.set(row.id.trim(), row.merchant_id.trim());
+    // The paginated award sweep can now exceed one batch; keep the
+    // PostgREST `.in(...)` URL bounded with id chunks.
+    for (
+      let start = 0;
+      start < expiredEventIds.length;
+      start += QUIZ_EVENT_ID_CHUNK_SIZE
+    ) {
+      try {
+        const expiredEventResult = await client
+          .from('quiz_events')
+          .select('id, merchant_id')
+          .in(
+            'id',
+            expiredEventIds.slice(start, start + QUIZ_EVENT_ID_CHUNK_SIZE)
+          );
+        if (!expiredEventResult.error) {
+          for (const row of (expiredEventResult.data ??
+            []) as QuizEventCacheRow[]) {
+            if (
+              typeof row.id === 'string' &&
+              row.id.trim().length > 0 &&
+              typeof row.merchant_id === 'string' &&
+              row.merchant_id.trim().length > 0
+            ) {
+              eventMerchantIds.set(row.id.trim(), row.merchant_id.trim());
+            }
           }
         }
+      } catch {
+        // The quiz RPC already completed; cache expiry remains best effort.
       }
-    } catch {
-      // The quiz RPC already completed; cache expiry remains best effort.
     }
   }
 

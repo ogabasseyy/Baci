@@ -35,12 +35,25 @@ function createClient(reservationRows: unknown[] = []) {
             : table === 'quiz_prize_reservations'
               ? reservationRows
               : [];
-      const builder = {
+      const builder: {
+        data: unknown[];
+        error: null;
+        select: ReturnType<typeof vi.fn>;
+        gte: ReturnType<typeof vi.fn>;
+        order: ReturnType<typeof vi.fn>;
+        range: ReturnType<typeof vi.fn>;
+        not: ReturnType<typeof vi.fn>;
+        in: ReturnType<typeof vi.fn>;
+      } = {
         data: rows,
         error: null,
         select: vi.fn(() => builder),
         gte: vi.fn(() => builder),
-        limit: vi.fn(() => builder),
+        order: vi.fn(() => builder),
+        range: vi.fn((from: number, to: number) => {
+          builder.data = rows.slice(from, to + 1);
+          return builder;
+        }),
         not: vi.fn(() => builder),
         in: vi.fn(() => {
           builder.data = table === 'quiz_events' ? expiredEventRows : rows;
@@ -100,7 +113,10 @@ describe('invalidateQuizProductCaches', () => {
       gte: vi.fn(function (this: unknown) {
         return this;
       }),
-      limit: vi.fn(function (this: unknown) {
+      order: vi.fn(function (this: unknown) {
+        return this;
+      }),
+      range: vi.fn(function (this: unknown) {
         return this;
       }),
       not: vi.fn(function (this: unknown) {
@@ -114,5 +130,25 @@ describe('invalidateQuizProductCaches', () => {
     await invalidateQuizProductCaches(client as never, '2026-09-01T00:00:00Z');
 
     expect(mockScheduleOrderProductBlogPurge).not.toHaveBeenCalled();
+  });
+
+  it('paginates target sweeps beyond a single batch', async () => {
+    const reservationRows = Array.from({ length: 1001 }, (_, index) => ({
+      merchant_id: 'merchant-3',
+      product_id: `product-${index}`,
+    }));
+    const client = createClient(reservationRows);
+
+    await invalidateQuizProductCaches(client as never, '2026-09-01T00:00:00Z');
+
+    const merchantCall = mockScheduleOrderProductBlogPurge.mock.calls.find(
+      ([input]) =>
+        (input as { merchantId?: string }).merchantId === 'merchant-3'
+    );
+    const productIds = (merchantCall?.[0] as { productIds?: string[] })
+      ?.productIds;
+    expect(productIds).toHaveLength(1001);
+    expect(productIds?.[0]).toBe('product-0');
+    expect(productIds?.[1000]).toBe('product-1000');
   });
 });

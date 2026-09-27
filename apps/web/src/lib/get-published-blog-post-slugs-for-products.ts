@@ -187,6 +187,7 @@ export async function getPublishedBlogPostSlugsForProducts(
   }
 
   if (categoryCandidates.length > 0) {
+    let categoryError: unknown = null;
     try {
       const { rows: exactRows, error: exactError } =
         await fetchCategoryFallbackRows(
@@ -196,13 +197,7 @@ export async function getPublishedBlogPostSlugsForProducts(
           [],
           'exact'
         );
-
-      if (exactError) {
-        console.error(
-          'Failed to resolve category-fallback blog posts for product purge (continuing with rows already fetched):',
-          { merchantId: normalizedMerchantId, error: exactError }
-        );
-      }
+      categoryError ??= exactError;
       const exactRowsWithoutActiveLinks =
         await filterCategoryBlogPostRowsWithoutActiveLinks(
           supabase,
@@ -223,13 +218,7 @@ export async function getPublishedBlogPostSlugsForProducts(
             canonicalCategoryFilters,
             'canonical'
           );
-
-        if (canonicalError) {
-          console.error(
-            'Failed to resolve canonical category-fallback blog posts for product purge (continuing with rows already fetched):',
-            { merchantId: normalizedMerchantId, error: canonicalError }
-          );
-        }
+        categoryError ??= canonicalError;
         const canonicalRowsWithoutActiveLinks =
           await filterCategoryBlogPostRowsWithoutActiveLinks(
             supabase,
@@ -245,6 +234,26 @@ export async function getPublishedBlogPostSlugsForProducts(
       console.error(
         'Failed to resolve category-fallback blog posts for product purge (continuing without category article purge):',
         { merchantId: normalizedMerchantId, error }
+      );
+    }
+    if (categoryError && slugs.size === 0) {
+      // Total category lookup failure with nothing preserved: returning []
+      // would read as "no linked articles" and suppress the article purge
+      // (skipProductPurge callers get no fallback). Throw so the scheduler
+      // escalates to its conservative hostname purge instead.
+      console.error(
+        'Failed to resolve category-fallback blog posts for product purge (no rows preserved):',
+        { merchantId: normalizedMerchantId, error: categoryError }
+      );
+      throw new Error(
+        'Failed to resolve category-fallback blog posts for product purge with no rows to preserve',
+        { cause: categoryError }
+      );
+    }
+    if (categoryError) {
+      console.warn(
+        'Resolved a partial category-fallback blog-post set for product purge (continuing with rows already fetched):',
+        { merchantId: normalizedMerchantId, error: categoryError }
       );
     }
   }

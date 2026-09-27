@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   legacyFanoutDisabled: true,
   record: vi.fn(),
   resolveContext: vi.fn(),
-  upsert: vi.fn(),
+  insert: vi.fn(),
 }));
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({ from: mocks.from }),
@@ -41,7 +41,7 @@ describe('POST /api/platform/events durable pipeline', () => {
       verified: true,
     });
     mocks.from.mockImplementation((table: string) => {
-      if (table === 'platform_events') return { upsert: mocks.upsert };
+      if (table === 'platform_events') return { insert: mocks.insert };
       if (table === 'platform_settings') {
         return {
           select: vi.fn().mockReturnThis(),
@@ -55,7 +55,7 @@ describe('POST /api/platform/events durable pipeline', () => {
   it('falls back to legacy persistence when durable enqueue fails during shadow mode', async () => {
     mocks.legacyFanoutDisabled = false;
     mocks.record.mockRejectedValueOnce(new Error('queue unavailable'));
-    mocks.upsert.mockResolvedValueOnce({ error: null });
+    mocks.insert.mockResolvedValueOnce({ error: null });
 
     const response = await POST(
       new NextRequest('https://usebaci.com/api/platform/events', {
@@ -68,12 +68,11 @@ describe('POST /api/platform/events durable pipeline', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(mocks.upsert).toHaveBeenCalledWith(
+    expect(mocks.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         event_id: 'platform-event-1',
         event_type: 'landing_page_view',
-      }),
-      { ignoreDuplicates: true, onConflict: 'event_type,event_id' }
+      })
     );
   });
 
@@ -99,7 +98,7 @@ describe('POST /api/platform/events durable pipeline', () => {
         trustLevel: 'anonymous_client',
       })
     );
-    expect(mocks.upsert).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
   });
 
   it('does not forward client conversion claims after the legacy fanout cutover', async () => {

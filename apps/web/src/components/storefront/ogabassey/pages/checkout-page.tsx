@@ -103,11 +103,10 @@ import {
 import { isNgnChargeCurrency } from './checkout/components/payment-step-availability';
 import { ContactStep } from './checkout/components/ContactStep';
 import {
-  buildPendingCheckoutFingerprint,
   CHECKOUT_PENDING_ORDER_STORAGE_KEY,
-  normalizeOrderPaymentMethod,
   type PendingCheckoutOrderSnapshot,
 } from './checkout/pending-checkout-order';
+import { prepareCheckoutOrderIdentity } from './checkout/prepare-checkout-order-identity';
 import {
   submitRedvaultPreparedOrder,
   type RedvaultPreparedOrder,
@@ -1095,11 +1094,12 @@ export const CheckoutPage: React.FC = () => {
     const shippingProvider = preparedDelivery.provider;
     const trackingNumber = undefined;
 
-    // Prepare order items for API
-    const orderItems = buildCheckoutOrderItems(checkoutCart);
-
-    const normalizedPaymentMethod = normalizeOrderPaymentMethod(paymentMethod);
-    const checkoutFingerprint = (paymentMethod === 'uba_redvault' ? 'uba_redvault:' : '') + buildPendingCheckoutFingerprint({
+    const {
+      items: orderItems,
+      normalizedPaymentMethod,
+      checkoutFingerprint,
+    } = prepareCheckoutOrderIdentity({
+      paymentMethod,
       merchantId: merchant.id,
       customerEmail,
       customerName: `${firstName} ${lastName}`.trim(),
@@ -1114,16 +1114,7 @@ export const CheckoutPage: React.FC = () => {
           ? selectedQuoteId || undefined
           : undefined,
       shippingAddress: shippingAddressData,
-      items: orderItems.map((item) => ({
-        product_id: item.product_id,
-        name: item.name,
-        quantity: item.quantity,
-        price: item.price,
-        has_assurance: item.has_assurance,
-        assurance_fee: item.assurance_fee,
-        variantId: item.variantId,
-        variantAttributes: item.variantAttributes,
-      })),
+      items: buildCheckoutOrderItems(checkoutCart),
       useWalletCredit: checkoutValues.useWalletCredit,
       walletAmountUsed,
       discountCode: checkoutValues.discountCode,

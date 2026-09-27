@@ -181,7 +181,7 @@ function hasUnlimitedStockReturn(source) {
   return Boolean(
     guard &&
       guardArms &&
-      /\bRETURN\s*;/i.test(guardArms.thenBranch) &&
+      hasTopLevelBareReturn(guardArms.thenBranch) &&
       protectedOperation &&
       serializedInventoryControlFlow.dominatesControlFlow(
         executable,
@@ -207,6 +207,23 @@ function failureReturnsUseNullSentinel(source) {
   return !/RETURN\s+QUERY\s+SELECT\s+FALSE\s*,\s*0\s*,/i.test(executable);
 }
 
+function notFoundArmEnd(executable, armIndex) {
+  const opening =
+    /\bIF\s+NOT\s+FOUND\s+THEN\b/i.exec(executable.slice(armIndex))?.[0] ?? '';
+  let depth = 0;
+  for (const token of executable
+    .slice(armIndex + opening.length)
+    .matchAll(/\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bEND\s+IF\b/gi)) {
+    if (/^END/i.test(token[0])) {
+      if (depth === 0) return armIndex + opening.length + token.index;
+      depth -= 1;
+    } else {
+      depth += 1;
+    }
+  }
+  return -1;
+}
+
 function missingResourceResponsesRequireServiceRole(source) {
   const executable = serializedInventorySqlParser.maskSqlLiterals(source, {
     preserveStrings: true,
@@ -219,17 +236,15 @@ function missingResourceResponsesRequireServiceRole(source) {
   const notFoundArms = [
     ...executable.matchAll(/\bIF\s+NOT\s+FOUND\s+THEN\b/gi),
   ].map((match) => match.index);
-  for (const literal of executable.matchAll(/'(?:''|[^'])*'/g)) {
-    if (!/not found/i.test(literal[0])) continue;
-    if (guardIndex >= 0 && literal.index > guardIndex) continue;
-    const enclosingArm = notFoundArms
-      .filter((arm) => arm < literal.index)
-      .at(-1);
-    if (enclosingArm === undefined) return false;
-    if (
-      !/\bservice_role\b/i.test(executable.slice(enclosingArm, literal.index))
-    ) {
-      return false;
+  for (const armIndex of notFoundArms) {
+    if (guardIndex >= 0 && armIndex > guardIndex) continue;
+    const armEnd = notFoundArmEnd(executable, armIndex);
+    if (armEnd < 0) return false;
+    const armText = executable.slice(armIndex, armEnd);
+    for (const statement of armText.matchAll(/\bRETURN\b/gi)) {
+      if (!/\bservice_role\b/i.test(armText.slice(0, statement.index))) {
+        return false;
+      }
     }
   }
   return true;

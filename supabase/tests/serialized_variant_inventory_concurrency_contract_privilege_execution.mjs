@@ -242,7 +242,11 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
       const grantees = event.grantees ?? event.match[1];
       for (const grantee of splitFunctionPrivilegeTargets(grantees)) {
         state.grants.set(
-          serializedInventoryPrivilegeRoles.normalizeRoleName(grantee),
+          serializedInventoryPrivilegeRoles.resolveSpecialRole(
+            serializedInventoryPrivilegeRoles.normalizeRoleName(grantee),
+            state.currentRole,
+            state.sessionUser
+          ),
           grant
         );
       }

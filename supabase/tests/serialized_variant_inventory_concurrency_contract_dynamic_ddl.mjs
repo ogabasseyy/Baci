@@ -158,14 +158,27 @@ function normalizedExecutePayload(payload) {
 function assignedExecutePayload(source, executeIndex, payload) {
   const variable = /^\s*([a-z_][a-z0-9_]*)\s*$/i.exec(payload);
   if (!variable) return null;
-  const assignmentPattern = new RegExp(
-    `\\b${escapeRegex(variable[1])}(?:\\s+[a-z_][a-z0-9_.]*(?:\\s*\\([^;]*\\))?)?\\s*:=\\s*([^;]+)`,
-    'gi'
-  );
-  return (
-    [...source.slice(0, executeIndex).matchAll(assignmentPattern)].pop()?.[1] ??
-    null
-  );
+  const before = source.slice(0, executeIndex);
+  const direct = [
+    ...before.matchAll(
+      new RegExp(
+        `\\b${escapeRegex(variable[1])}(?:\\s+[a-z_][a-z0-9_.]*(?:\\s*\\([^;]*\\))?)?\\s*:=\\s*([^;]+)`,
+        'gi'
+      )
+    ),
+  ].pop();
+  const into = [
+    ...before.matchAll(
+      new RegExp(
+        `\\bSELECT\\b((?:(?!\\bINTO\\b)[^;])*?)\\bINTO\\s+(?:STRICT\\s+)?[^;]*?\\b${escapeRegex(variable[1])}\\b`,
+        'gi'
+      )
+    ),
+  ].pop();
+  if (!direct && !into) return null;
+  if (!into) return direct[1];
+  if (!direct) return into[1];
+  return direct.index > into.index ? direct[1] : into[1];
 }
 
 function hasDynamicFunctionDdl(source, functionSignature) {

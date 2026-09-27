@@ -189,3 +189,20 @@ test('resolves special roles in ownership transfers', () => {
     true
   );
 });
+
+test('resolves special roles in privilege grantees', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = [
+    `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;`,
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+    'SET ROLE authenticated;',
+    `GRANT EXECUTE ON FUNCTION ${signature} TO CURRENT_USER;`,
+  ].join('\n');
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});

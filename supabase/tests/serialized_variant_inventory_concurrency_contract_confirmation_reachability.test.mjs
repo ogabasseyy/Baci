@@ -186,3 +186,17 @@ test('confirmation item locks reject narrowing predicates', () => {
   );
   assert.equal(findConfirmationLocks(narrowed).item, undefined);
 });
+
+test('confirmation order locks reject narrowing predicates', () => {
+  const confirm = latestFunctionBody(
+    'private.confirm_order_inventory_reservations(uuid, uuid)'
+  );
+  assert.ok(findConfirmationLocks(confirm).order);
+
+  const narrowed = confirm.replace(
+    /FROM\s+public\.orders\s+WHERE\s+id\s*=\s*p_order_id\s+AND\s+merchant_id\s*=\s*p_merchant_id/i,
+    (lock) => `${lock} AND payment_status = 'paid'`
+  );
+  assert.notEqual(narrowed, confirm);
+  assert.equal(findConfirmationLocks(narrowed).order, undefined);
+});

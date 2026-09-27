@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
 import { serializedInventoryConfirmation } from './serialized_variant_inventory_concurrency_contract_confirmation.mjs';
+import { serializedInventorySoldTransition } from './serialized_variant_inventory_concurrency_contract_sold_transition.mjs';
 
 const { soldGuardDominatesUnits, soldTransitionInLockedLoop } =
-  serializedInventoryConfirmation;
+  serializedInventorySoldTransition;
 
 test('sale transitions serialize on the parent order before reserved units', () => {
   const sold = serializedInventoryContract.latestFunctionBody(

@@ -245,3 +245,22 @@ $wrapper$;`;
     true
   );
 });
+
+test('traces SELECT INTO dynamic DDL assignments', () => {
+  const source = `DO $wrapper$
+DECLARE
+  v_sql text;
+BEGIN
+  SELECT format('GRANT EXECUTE ON FUNCTION private.fixture(uuid) TO authenticated') INTO v_sql;
+  EXECUTE v_sql;
+END;
+$wrapper$;`;
+
+  assert.equal(
+    serializedInventoryDynamicDdl.hasDynamicPrivilegeDdl(
+      source,
+      'private.fixture(uuid)'
+    ),
+    true
+  );
+});

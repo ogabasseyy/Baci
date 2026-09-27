@@ -65,8 +65,10 @@ function releaseLockMatches(source) {
   ) {
     return false;
   }
-  return !/\b(?:vi|variant_inventory)\s*\.\s*(?!order_id\b|merchant_id\b|status\b)[a-z_][a-z0-9_]*\s*(?:=|<>|!=|<=?|>=?|IS\b|IN\b|LIKE\b|ILIKE\b|BETWEEN\b)/i.test(
-    query[1]
+  return (
+    !/\b(?:vi|variant_inventory)\s*\.\s*(?!order_id\b|merchant_id\b|status\b)[a-z_][a-z0-9_]*\s*(?:=|<>|!=|<=?|>=?|IS\b|IN\b|LIKE\b|ILIKE\b|BETWEEN\b)/i.test(
+      query[1]
+    ) && !/\bpv\s*\.\s*[a-z_][a-z0-9_]*/i.test(query[1])
   );
 }
 

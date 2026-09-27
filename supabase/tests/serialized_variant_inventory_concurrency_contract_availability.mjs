@@ -79,6 +79,10 @@ function availableUnitPredicatesMatch(source, variantVariable, branchVariable) {
     `(?:${branchQualifier}status\\s*=\\s*'(?!available')[^']+'|${branchQualifier}status\\s*(?:<>|!=|IS\\s+DISTINCT\\s+FROM)\\s*'available'|${branchQualifier}status\\s+NOT\\s+IN\\s*\\([^)]*'available'|${branchQualifier}status\\s+IN\\s*\\((?![^)]*'available')[^)]*\\)|${branchQualifier}status\\s*=\\s*ANY\\s*\\(\\s*(?:ARRAY\\s*)?\\[(?![^\\]]*'available')[^\\]]*\\]\\s*\\)|NOT\\s*\\(\\s*${branchQualifier}status\\s*=\\s*'available'\\s*\\)|\\(\\s*${branchQualifier}status\\s*=\\s*'available'\\s*\\)\\s+IS\\s+FALSE|${branchQualifier}status\\s+(?:IS\\s+NULL|ISNULL)\\b)`,
     'i'
   );
+  const contradictoryScope = new RegExp(
+    `(?:${branchQualifier}(?:merchant_id\\s*(?:<>|!=|IS\\s+DISTINCT\\s+FROM)\\s*p_merchant_id|merchant_id\\s+(?:IS\\s+NULL|ISNULL)\\b|merchant_id\\s*=(?!\\s*p_merchant_id\\b)|variant_id\\s*(?:<>|!=|IS\\s+DISTINCT\\s+FROM)\\s*${escapeRegex(variantVariable)}\\b|variant_id\\s+(?:IS\\s+NULL|ISNULL)\\b|variant_id\\s*=(?!\\s*${escapeRegex(variantVariable)}\\b)|order_id\\s+(?:IS\\s+NOT\\s+NULL|NOTNULL)\\b|order_id\\s*=|order_item_id\\s+(?:IS\\s+NOT\\s+NULL|NOTNULL)\\b|order_item_id\\s*=|sold_at\\s+(?:IS\\s+NOT\\s+NULL|NOTNULL)\\b|sold_at\\s*=))`,
+    'i'
+  );
   return (
     query !== null &&
     valueQuery !== null &&
@@ -86,6 +90,7 @@ function availableUnitPredicatesMatch(source, variantVariable, branchVariable) {
       isRequiredConjunct(index === 2 ? valueQuery.where : query.where, pattern)
     ) &&
     !contradictoryStatus.test(valueQuery.where) &&
+    !contradictoryScope.test(valueQuery.where) &&
     branchFirst &&
     (!branchPattern ||
       (branchMatch !== null &&

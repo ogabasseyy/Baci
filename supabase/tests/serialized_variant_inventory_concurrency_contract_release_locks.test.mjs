@@ -63,6 +63,25 @@ test('release authorization rejects an unreachable forbidden exception', () => {
   );
 });
 
+test('rejects release selectors narrowed on joined product rows', () => {
+  const release = serializedInventoryContract.latestFunctionBody(
+    'private.release_order_inventory_units(uuid, uuid, text)'
+  );
+  assert.equal(
+    serializedInventoryReleaseLocks.releaseLockMatches(release),
+    true
+  );
+  const narrowed = release.replace(
+    "AND vi.status = 'reserved'",
+    "AND vi.status = 'reserved' AND pv.product_id IS NULL"
+  );
+  assert.notEqual(narrowed, release);
+  assert.equal(
+    serializedInventoryReleaseLocks.releaseLockMatches(narrowed),
+    false
+  );
+});
+
 test('rejects unsatisfiable reserved-unit release selectors', () => {
   assert.equal(
     serializedInventoryReleaseLocks.releaseLockMatches(

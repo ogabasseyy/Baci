@@ -141,3 +141,28 @@ test('requires deterministic product and unit ordering for both release selector
     false
   );
 });
+
+test('rejects unit-narrowing release selectors in both branches', () => {
+  const release = serializedInventoryContract.latestFunctionBody(
+    'private.release_order_inventory_units(uuid, uuid, text)'
+  );
+  const branches = serializedInventoryContract.extractIfBranches(
+    release,
+    /^\s*IF\s+v_target_status\s*=\s*'available'\s+THEN\b/i
+  );
+  for (const branch of [branches.thenBranch, branches.elseBranch]) {
+    assert.equal(
+      serializedInventoryReleaseLocks.releaseLockMatches(branch),
+      true
+    );
+    assert.equal(
+      serializedInventoryReleaseLocks.releaseLockMatches(
+        branch.replace(
+          /AND\s+vi\s*\.\s*status\s*=\s*'reserved'/i,
+          "AND vi.status = 'reserved' AND vi.id = p_only_unit"
+        )
+      ),
+      false
+    );
+  }
+});

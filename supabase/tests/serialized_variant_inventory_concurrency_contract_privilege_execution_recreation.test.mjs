@@ -82,6 +82,53 @@ test('tracks the active role as owner during function recreation', () => {
   );
 });
 
+test('preserves global default grants across schema-scoped revokes', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = [
+    `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER`,
+    'LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;',
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+    'ALTER DEFAULT PRIVILEGES FOR ROLE postgres GRANT EXECUTE ON FUNCTIONS TO authenticated;',
+    'ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA private REVOKE EXECUTE ON FUNCTIONS FROM authenticated;',
+    `DROP FUNCTION ${signature};`,
+    `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER`,
+    'LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;',
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+  ].join('\n');
+
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});
+
+test('applies multi-owner default privileges on recreation', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = [
+    `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER`,
+    'LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;',
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+    'ALTER DEFAULT PRIVILEGES FOR ROLE postgres, inventory_owner IN SCHEMA private GRANT EXECUTE ON FUNCTIONS TO authenticated;',
+    `DROP FUNCTION ${signature};`,
+    'SET ROLE inventory_owner;',
+    `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER`,
+    'LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;',
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+    'RESET ROLE;',
+  ].join('\n');
+
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});
+
 test('tracks session authorization as owner during function recreation', () => {
   const signature = 'private.fixture(uuid)';
   const source = [

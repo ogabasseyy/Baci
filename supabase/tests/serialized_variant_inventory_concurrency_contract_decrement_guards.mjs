@@ -179,9 +179,46 @@ function decrementsRequestedQuantity(source) {
   );
 }
 
+function failureReturnsUseNullSentinel(source) {
+  const executable = serializedInventorySqlParser.maskSqlLiterals(source, {
+    preserveStrings: true,
+  });
+  return !/RETURN\s+QUERY\s+SELECT\s+FALSE\s*,\s*0\s*,/i.test(executable);
+}
+
+function missingResourceResponsesRequireServiceRole(source) {
+  const executable = serializedInventorySqlParser.maskSqlLiterals(source, {
+    preserveStrings: true,
+  });
+  const guard =
+    /IF\s+COALESCE\s*\(\s*\(\s*SELECT\s+auth\s*\.\s*role\s*\(\s*\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\s*\.\s*has_merchant_access\s*\(\s*v_merchant_id\s*\)\s+THEN\b/i.exec(
+      executable
+    );
+  const guardIndex = guard ? guard.index : -1;
+  const notFoundArms = [
+    ...executable.matchAll(/\bIF\s+NOT\s+FOUND\s+THEN\b/gi),
+  ].map((match) => match.index);
+  for (const literal of executable.matchAll(/'(?:''|[^'])*'/g)) {
+    if (!/not found/i.test(literal[0])) continue;
+    if (guardIndex >= 0 && literal.index > guardIndex) continue;
+    const enclosingArm = notFoundArms
+      .filter((arm) => arm < literal.index)
+      .at(-1);
+    if (enclosingArm === undefined) return false;
+    if (
+      !/\bservice_role\b/i.test(executable.slice(enclosingArm, literal.index))
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export const serializedInventoryDecrementGuards = {
   decrementsRequestedQuantity,
+  failureReturnsUseNullSentinel,
   hasMerchantAuthorizationGuard,
   hasPositiveQuantityGuard,
   hasUnlimitedStockReturn,
+  missingResourceResponsesRequireServiceRole,
 };

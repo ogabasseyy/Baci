@@ -7,7 +7,7 @@ export const EXPECTED_INVENTORY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260825123500_fail_closed_missing_stock_rows.sql',
-    sha256: '754d41bb57151cd31b21937d5bc6b00397de43c6ff1070dd3725c37982866448',
+    sha256: 'c7242febac0dd3f6cdfc3842770bcb95a15421e995468746c895a7988b632223',
   },
   {
     repositoryPath:
@@ -52,7 +52,7 @@ export const EXPECTED_INVENTORY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260828009000_harden_decrement_quantity_guards.sql',
-    sha256: 'df90953c0193ac034ecac2a21e522acbfaf03f89d8b2c678f64fd471555db316',
+    sha256: '37d85756175faf7993b98dcf564d104b96b3fa9aaec3127bb5b7cb7598620eb7',
   },
   {
     repositoryPath:
@@ -87,6 +87,6 @@ export const EXPECTED_INVENTORY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260828103000_fail_closed_null_stock_decrements.sql',
-    sha256: '19695cf3098e07a02938a207d29845ff274fad37368302f91a83fe7b7406b2bb',
+    sha256: '0020c4aa7ae3acffcc62045e87e9209a6fdb22bf31b3a8d599baf96a808e0090',
   },
 ] as const;

@@ -34,6 +34,46 @@ function functionLifecycleEvents(source, signature) {
     .join('\\s*,\\s*');
   const name = identifierPattern(parsed[1].trim());
   const functionReference = `${name}\\s*\\(${parameters}\\)`;
+  const identityParts = [
+    ...parsed[1].trim().matchAll(/"[^"]+"|[a-z_][a-z0-9_]*/gi),
+  ].map((part) => part[0].replace(/^"|"$/g, '').toLowerCase());
+  const identitySchema = identityParts.at(-2);
+  const identityName = identityParts.at(-1);
+  const argumentListPattern = new RegExp(`^(?:${parameters})$`, 'i');
+  const inboundMoves = [
+    ...source.matchAll(
+      /ALTER\s+(?:FUNCTION|ROUTINE)\s+((?:"[^"]+"|[a-z_][a-z0-9_]*)(?:\s*\.\s*(?:"[^"]+"|[a-z_][a-z0-9_]*))?)\s*\(([^()]*)\)\s+(RENAME\s+TO\s+(?:"[^"]+"|[a-z_][a-z0-9_]*)|SET\s+SCHEMA\s+(?:"[^"]+"|[a-z_][a-z0-9_]*))\s*;/gi
+    ),
+  ]
+    .filter((match) => {
+      const sourceParts = [
+        ...match[1].matchAll(/"[^"]+"|[a-z_][a-z0-9_]*/gi),
+      ].map((part) => part[0].replace(/^"|"$/g, '').toLowerCase());
+      if (!argumentListPattern.test(match[2])) return false;
+      if (/^RENAME/i.test(match[3])) {
+        const targetName = /RENAME\s+TO\s+(?:"[^"]+"|[a-z_][a-z0-9_]*)/i
+          .exec(match[3])[0]
+          .replace(/^RENAME\s+TO\s+/i, '')
+          .replace(/^"|"$/g, '')
+          .toLowerCase();
+        return (
+          sourceParts.at(-2) === identitySchema &&
+          targetName === identityName &&
+          sourceParts.at(-1) !== identityName
+        );
+      }
+      const targetSchema = /SET\s+SCHEMA\s+(?:"[^"]+"|[a-z_][a-z0-9_]*)/i
+        .exec(match[3])[0]
+        .replace(/^SET\s+SCHEMA\s+/i, '')
+        .replace(/^"|"$/g, '')
+        .toLowerCase();
+      return (
+        sourceParts.at(-1) === identityName &&
+        targetSchema === identitySchema &&
+        sourceParts.at(-2) !== identitySchema
+      );
+    })
+    .map((match) => ({ index: match.index, kind: 'create', replace: false }));
   const creates = [
     ...source.matchAll(
       new RegExp(
@@ -76,7 +116,7 @@ function functionLifecycleEvents(source, signature) {
       .map((role) => serializedInventoryPrivilegeRoles.normalizeRoleName(role)),
     owner: serializedInventoryPrivilegeRoles.normalizeRoleName(match[2]),
   }));
-  return [...creates, ...drops, ...reassigns].sort(
+  return [...creates, ...inboundMoves, ...drops, ...reassigns].sort(
     (left, right) => left.index - right.index
   );
 }

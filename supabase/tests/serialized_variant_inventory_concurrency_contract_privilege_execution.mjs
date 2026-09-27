@@ -5,7 +5,7 @@ import { serializedInventoryPrivilegeRoles } from './serialized_variant_inventor
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const { parseFunctionPrivilege } = serializedInventoryPrivilegeParser;
-const { escapeRegex } = serializedInventorySqlParser;
+const { escapeRegex, splitTopLevelList } = serializedInventorySqlParser;
 
 function signaturePattern(signature) {
   return escapeRegex(signature)
@@ -63,25 +63,7 @@ function privilegeTargetPattern(signature) {
 }
 
 function splitFunctionPrivilegeTargets(source) {
-  const targets = [];
-  let start = 0;
-  let depth = 0;
-  let quote;
-  for (let index = 0; index < source.length; index += 1) {
-    const char = source[index];
-    if (quote) {
-      if (char === quote && source[index + 1] === quote) index += 1;
-      else if (char === quote) quote = undefined;
-    } else if (char === "'" || char === '"') quote = char;
-    else if (char === '(') depth += 1;
-    else if (char === ')') depth = Math.max(0, depth - 1);
-    else if (char === ',' && depth === 0) {
-      targets.push(source.slice(start, index).trim());
-      start = index + 1;
-    }
-  }
-  targets.push(source.slice(start).trim());
-  return targets;
+  return splitTopLevelList(source);
 }
 
 const authenticatedExecutionCache = new Map();
@@ -215,9 +197,19 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
         state.grants.clear();
         state.grants.set('public', true);
         state.owner ??= state.currentRole;
-        const ownerDefaults = state.defaultGrants.get(state.owner) ?? new Map();
-        for (const [role, grant] of ownerDefaults) {
-          state.grants.set(role, grant);
+        const ownerDefaults = state.defaultGrants.get(state.owner);
+        if (ownerDefaults) {
+          const defaultedRoles = new Set([
+            ...ownerDefaults.global.keys(),
+            ...ownerDefaults.schema.keys(),
+          ]);
+          for (const role of defaultedRoles) {
+            state.grants.set(
+              role,
+              ownerDefaults.global.get(role) === true ||
+                ownerDefaults.schema.get(role) === true
+            );
+          }
         }
       }
       state.exists = true;
@@ -229,21 +221,32 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
       }
     } else if (event.kind === 'default') {
       const grant = event.operation === 'GRANT';
-      const ownerDefaults = state.defaultGrants.get(event.owner) ?? new Map();
+      const ownerDefaults = state.defaultGrants.get(event.owner) ?? {
+        global: new Map(),
+        schema: new Map(),
+      };
+      const scope =
+        event.scope === 'schema' ? ownerDefaults.schema : ownerDefaults.global;
       for (const grantee of splitFunctionPrivilegeTargets(event.grantees)) {
-        ownerDefaults.set(
+        scope.set(
           serializedInventoryPrivilegeRoles.normalizeRoleName(grantee),
           grant
         );
       }
       state.defaultGrants.set(event.owner, ownerDefaults);
     } else if (event.kind === 'membership') {
+      const inheritable = event.inheritable !== false;
       for (const member of event.members) {
         const roles = state.memberships.get(member) ?? [];
         for (const role of event.roles) {
           const roleIndex = roles.indexOf(role);
-          if (event.operation === 'GRANT' && roleIndex === -1) roles.push(role);
-          if (event.operation === 'REVOKE' && roleIndex !== -1)
+          if (event.operation === 'GRANT' && inheritable && roleIndex === -1)
+            roles.push(role);
+          if (
+            (event.operation === 'REVOKE' ||
+              (event.operation === 'GRANT' && !inheritable)) &&
+            roleIndex !== -1
+          )
             roles.splice(roleIndex, 1);
         }
         if (roles.length > 0) state.memberships.set(member, roles);

@@ -54,12 +54,19 @@ function releaseLockMatches(source) {
   ) {
     return false;
   }
-  return [
-    /vi\s*\.\s*order_id\s*=\s*p_order_id\b/i,
-    /vi\s*\.\s*merchant_id\s*=\s*p_merchant_id\b/i,
-    /vi\s*\.\s*status\s*=\s*'reserved'/i,
-  ].every((predicate) =>
-    serializedInventorySqlParser.isRequiredConjunct(query[1], predicate)
+  if (
+    ![
+      /vi\s*\.\s*order_id\s*=\s*p_order_id\b/i,
+      /vi\s*\.\s*merchant_id\s*=\s*p_merchant_id\b/i,
+      /vi\s*\.\s*status\s*=\s*'reserved'/i,
+    ].every((predicate) =>
+      serializedInventorySqlParser.isRequiredConjunct(query[1], predicate)
+    )
+  ) {
+    return false;
+  }
+  return !/\b(?:vi|variant_inventory)\s*\.\s*(?!order_id\b|merchant_id\b|status\b)[a-z_][a-z0-9_]*\s*(?:=|<>|!=|<=?|>=?|IS\b|IN\b|LIKE\b|ILIKE\b|BETWEEN\b)/i.test(
+    query[1]
   );
 }
 
@@ -120,7 +127,7 @@ function hasTargetStatusWhitelist(source) {
         )
       : true;
   return Boolean(
-      defaultStatus &&
+    defaultStatus &&
       guard &&
       guardBranches &&
       hasTopLevelException(guardBranches.thenBranch) &&

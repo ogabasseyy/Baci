@@ -8,6 +8,7 @@ test('resolves inherited function privileges through role membership', () => {
   );
   assert.deepEqual(membership?.roles, ['inventory_delegate']);
   assert.deepEqual(membership?.members, ['authenticated']);
+  assert.equal(membership?.inheritable, true);
   const memberships = new Map([['authenticated', ['inventory_delegate']]]);
   const grants = new Map([['inventory_delegate', true]]);
   assert.equal(
@@ -34,8 +35,54 @@ test('parses default function privileges for every schema in a comma-separated l
       kind: 'default',
       operation: 'GRANT',
       owner: 'postgres',
+      scope: 'schema',
     },
   ]);
+});
+
+test('parses grantor clauses and quoted names on role memberships', () => {
+  const grantedBy = serializedInventoryPrivilegeRoles.parseRoleMembership(
+    'GRANT inventory_delegate TO authenticated GRANTED BY postgres;'
+  );
+  assert.deepEqual(grantedBy?.roles, ['inventory_delegate']);
+  assert.deepEqual(grantedBy?.members, ['authenticated']);
+  assert.equal(grantedBy?.operation, 'GRANT');
+
+  const quoted = serializedInventoryPrivilegeRoles.parseRoleMembership(
+    'GRANT "inventory,delegate" TO authenticated;'
+  );
+  assert.deepEqual(quoted?.roles, ['inventory,delegate']);
+
+  const nonInheritable = serializedInventoryPrivilegeRoles.parseRoleMembership(
+    'GRANT inventory_delegate TO authenticated WITH INHERIT FALSE, SET FALSE;'
+  );
+  assert.equal(nonInheritable?.inheritable, false);
+});
+
+test('parses every owner in a multi-role default-privilege statement', () => {
+  const privileges =
+    serializedInventoryPrivilegeRoles.parseDefaultFunctionPrivileges(
+      'ALTER DEFAULT PRIVILEGES FOR ROLE postgres, inventory_owner IN SCHEMA private GRANT EXECUTE ON FUNCTIONS TO authenticated;',
+      'private'
+    );
+
+  assert.deepEqual(
+    privileges.map(({ owner, scope }) => ({ owner, scope })),
+    [
+      { owner: 'postgres', scope: 'schema' },
+      { owner: 'inventory_owner', scope: 'schema' },
+    ]
+  );
+
+  const global =
+    serializedInventoryPrivilegeRoles.parseDefaultFunctionPrivileges(
+      'ALTER DEFAULT PRIVILEGES FOR ROLE postgres GRANT EXECUTE ON FUNCTIONS TO authenticated;',
+      'private'
+    );
+  assert.deepEqual(
+    global.map(({ owner, scope }) => ({ owner, scope })),
+    [{ owner: 'postgres', scope: 'global' }]
+  );
 });
 
 test('parses session role changes for privilege lifecycle analysis', () => {

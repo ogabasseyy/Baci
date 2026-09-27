@@ -126,4 +126,9 @@ export const EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES = [
       'supabase/migrations/20260911200000_probe_storefront_order_idempotency_hash.sql',
     sha256: '2e7f253690d3f5b6671934792f502c734e8bb14a914bff74cfcfec86adcba7b2',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260927120000_order_storefront_claim_loop_by_product.sql',
+    sha256: '475dd68b7df25802708c73953fbb1036b88f32034c700ffcc0462d3e0f002721',
+  },
 ];

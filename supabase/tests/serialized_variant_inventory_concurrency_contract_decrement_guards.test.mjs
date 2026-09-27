@@ -213,3 +213,37 @@ test('public decrement RPCs reject nonpositive quantities and unauthorized merch
     );
   }
 });
+
+test('public decrement RPCs use null sentinels and hide missing resources', () => {
+  for (const functionName of [
+    'public.decrement_product_stock(uuid, integer)',
+    'public.decrement_variant_stock(uuid, integer)',
+  ]) {
+    const body = serializedInventoryContract.latestFunctionBody(functionName);
+    assert.equal(
+      serializedInventoryDecrementGuards.failureReturnsUseNullSentinel(body),
+      true
+    );
+    assert.equal(
+      serializedInventoryDecrementGuards.failureReturnsUseNullSentinel(
+        body.replace(/SELECT\s+FALSE\s*,\s*NULL::integer,/i, 'SELECT FALSE, 0,')
+      ),
+      false
+    );
+    assert.equal(
+      serializedInventoryDecrementGuards.missingResourceResponsesRequireServiceRole(
+        body
+      ),
+      true
+    );
+    assert.equal(
+      serializedInventoryDecrementGuards.missingResourceResponsesRequireServiceRole(
+        body.replace(
+          /IF\s+NOT\s+FOUND\s+THEN\s+IF\s*\(\s*SELECT\s+auth\.role\(\)\s*\)\s+IS\s+DISTINCT\s+FROM\s+'service_role'\s+THEN[\s\S]*?END\s+IF;\s+/i,
+          'IF NOT FOUND THEN\n    '
+        )
+      ),
+      false
+    );
+  }
+});

@@ -16,11 +16,11 @@ DECLARE
   v_merchant_id uuid;
 BEGIN
   IF product_id_param IS NULL THEN
-    RETURN QUERY SELECT FALSE, 0, 'Product ID cannot be null'::text;
+    RETURN QUERY SELECT FALSE, NULL::integer, 'Product ID cannot be null'::text;
     RETURN;
   END IF;
   IF quantity_param IS NULL OR quantity_param <= 0 THEN
-    RETURN QUERY SELECT FALSE, 0, 'Quantity must be positive'::text;
+    RETURN QUERY SELECT FALSE, NULL::integer, 'Quantity must be positive'::text;
     RETURN;
   END IF;
 
@@ -28,7 +28,11 @@ BEGIN
   FROM public.products AS p
   WHERE p.id = product_id_param;
   IF NOT FOUND THEN
-    RETURN QUERY SELECT FALSE, 0, 'Product not found'::text;
+    IF (SELECT auth.role()) IS DISTINCT FROM 'service_role' THEN
+      RETURN QUERY SELECT FALSE, NULL::integer, 'Not authorized'::text;
+      RETURN;
+    END IF;
+    RETURN QUERY SELECT FALSE, NULL::integer, 'Product not found'::text;
     RETURN;
   END IF;
   IF COALESCE((SELECT auth.role()), '') <> 'service_role'
@@ -46,7 +50,7 @@ BEGIN
   WHERE p.id = product_id_param
   FOR UPDATE;
   IF NOT FOUND THEN
-    RETURN QUERY SELECT FALSE, 0, 'Product not found'::text;
+    RETURN QUERY SELECT FALSE, NULL::integer, 'Product not found'::text;
     RETURN;
   END IF;
   IF current_stock IS NULL THEN
@@ -82,11 +86,11 @@ DECLARE
   v_merchant_id uuid;
 BEGIN
   IF variant_id_param IS NULL THEN
-    RETURN QUERY SELECT FALSE, 0, 'Variant ID cannot be null'::text;
+    RETURN QUERY SELECT FALSE, NULL::integer, 'Variant ID cannot be null'::text;
     RETURN;
   END IF;
   IF quantity_param IS NULL OR quantity_param <= 0 THEN
-    RETURN QUERY SELECT FALSE, 0, 'Quantity must be positive'::text;
+    RETURN QUERY SELECT FALSE, NULL::integer, 'Quantity must be positive'::text;
     RETURN;
   END IF;
 
@@ -95,7 +99,11 @@ BEGIN
   JOIN public.product_variants AS pv ON pv.product_id = p.id
   WHERE pv.id = variant_id_param;
   IF NOT FOUND THEN
-    RETURN QUERY SELECT FALSE, 0, 'Variant not found'::text;
+    IF (SELECT auth.role()) IS DISTINCT FROM 'service_role' THEN
+      RETURN QUERY SELECT FALSE, NULL::integer, 'Not authorized'::text;
+      RETURN;
+    END IF;
+    RETURN QUERY SELECT FALSE, NULL::integer, 'Variant not found'::text;
     RETURN;
   END IF;
   IF COALESCE((SELECT auth.role()), '') <> 'service_role'
@@ -113,7 +121,7 @@ BEGIN
   WHERE pv.id = variant_id_param
   FOR UPDATE;
   IF NOT FOUND THEN
-    RETURN QUERY SELECT FALSE, 0, 'Variant not found'::text;
+    RETURN QUERY SELECT FALSE, NULL::integer, 'Variant not found'::text;
     RETURN;
   END IF;
   IF current_stock IS NULL THEN

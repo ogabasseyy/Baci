@@ -244,3 +244,107 @@ test('applies default function privileges when a private function is recreated',
     true
   );
 });
+
+test('inherits execution through membership grants with a grantor clause', () => {
+  const signature = 'private.confirm_order_inventory_reservations(uuid, uuid)';
+  const source = `
+    CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
+      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
+    REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;
+    GRANT EXECUTE ON FUNCTION ${signature} TO inventory_delegate;
+    GRANT inventory_delegate TO authenticated GRANTED BY postgres;
+  `;
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});
+
+test('ignores membership edges that disable inheritance', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = `
+    CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
+      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
+    REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;
+    GRANT EXECUTE ON FUNCTION ${signature} TO inventory_delegate;
+    GRANT inventory_delegate TO authenticated WITH INHERIT FALSE, SET FALSE;
+  `;
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    false
+  );
+});
+
+test('inherits execution through quoted roles containing commas', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = `
+    CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER
+      LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;
+    REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;
+    GRANT EXECUTE ON FUNCTION ${signature} TO "inventory,delegate";
+    GRANT "inventory,delegate" TO authenticated;
+  `;
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});
+
+test('tracks routines renamed into the protected identity', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = [
+    `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;`,
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+    `ALTER FUNCTION ${signature} RENAME TO fixture_retired;`,
+    'CREATE FUNCTION private.standby(uuid) RETURNS void SECURITY DEFINER LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;',
+    'GRANT EXECUTE ON FUNCTION private.standby(uuid) TO authenticated;',
+    'ALTER FUNCTION private.standby(uuid) RENAME TO fixture;',
+  ].join('\n');
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+
+  const mismatched = source.replace(
+    'ALTER FUNCTION private.standby(uuid) RENAME TO fixture;',
+    'ALTER FUNCTION private.standby(text) RENAME TO fixture;'
+  );
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      mismatched,
+      signature
+    ),
+    false
+  );
+});
+
+test('tracks routines moved into the protected schema', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = [
+    `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;`,
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+    `ALTER FUNCTION ${signature} SET SCHEMA public;`,
+    'CREATE FUNCTION staging.fixture(uuid) RETURNS void SECURITY DEFINER LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;',
+    'GRANT EXECUTE ON FUNCTION staging.fixture(uuid) TO authenticated;',
+    'ALTER FUNCTION staging.fixture(uuid) SET SCHEMA private;',
+  ].join('\n');
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});

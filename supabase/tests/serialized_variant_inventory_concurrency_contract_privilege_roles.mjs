@@ -1,10 +1,13 @@
+import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
+
 const roleIdentifier = '(?:"[^"]+"|[a-z_][a-z0-9_]*)';
+const grantorIdentifier = `(?:${roleIdentifier}|CURRENT_ROLE|CURRENT_USER|SESSION_USER)`;
 const roleMembershipPattern = new RegExp(
-  `^(GRANT|REVOKE)\\s+(${roleIdentifier}(?:\\s*,\\s*${roleIdentifier})*)\\s+(?:TO|FROM)\\s+(${roleIdentifier}(?:\\s*,\\s*${roleIdentifier})*)(?:\\s+WITH\\s+(?:ADMIN|INHERIT|SET)\\s+(?:OPTION|TRUE|FALSE)(?:\\s*,\\s*(?:ADMIN|INHERIT|SET)\\s+(?:OPTION|TRUE|FALSE))*)?\\s*;?$`,
+  `^(GRANT|REVOKE)\\s+(${roleIdentifier}(?:\\s*,\\s*${roleIdentifier})*)\\s+(?:TO|FROM)\\s+(${roleIdentifier}(?:\\s*,\\s*${roleIdentifier})*)(?:\\s+WITH\\s+(?:ADMIN|INHERIT|SET)\\s+(?:OPTION|TRUE|FALSE)(?:\\s*,\\s*(?:ADMIN|INHERIT|SET)\\s+(?:OPTION|TRUE|FALSE))*)?(?:\\s+GRANTED\\s+BY\\s+${grantorIdentifier}(?:\\s*,\\s*${grantorIdentifier})*)?\\s*;?$`,
   'i'
 );
 const defaultFunctionPrivilegePattern =
-  /ALTER\s+DEFAULT\s+PRIVILEGES(?:\s+FOR\s+(?:ROLE|USER)\s+((?:"[^"]+"|[a-z_][a-z0-9_]*)))?(?:\s+IN\s+SCHEMA\s+((?:"[^"]+"|[a-z_][a-z0-9_]*)(?:\s*,\s*(?:"[^"]+"|[a-z_][a-z0-9_]*))*))?\s+(GRANT|REVOKE)\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)\s+ON\s+(?:ALL\s+)?(?:FUNCTIONS|ROUTINES)\s+(?:TO|FROM)\s+([^;]+);/gi;
+  /ALTER\s+DEFAULT\s+PRIVILEGES(?:\s+FOR\s+(?:ROLE|USER)\s+((?:"[^"]+"|[a-z_][a-z0-9_]*)(?:\s*,\s*(?:"[^"]+"|[a-z_][a-z0-9_]*))*))?(?:\s+IN\s+SCHEMA\s+((?:"[^"]+"|[a-z_][a-z0-9_]*)(?:\s*,\s*(?:"[^"]+"|[a-z_][a-z0-9_]*))*))?\s+(GRANT|REVOKE)\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)\s+ON\s+(?:ALL\s+)?(?:FUNCTIONS|ROUTINES)\s+(?:TO|FROM)\s+([^;]+);/gi;
 const schemaFunctionPrivilegePattern =
   /(?:GRANT\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)|REVOKE\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE))\s+ON\s+ALL\s+(?:FUNCTIONS|ROUTINES)\s+IN\s+SCHEMA\s+([^;]+?)\s+(TO|FROM)\s+([^;]+);/gi;
 
@@ -27,9 +30,14 @@ function parseRoleMembership(text) {
   if (!match) return null;
   return {
     index: text.indexOf(leading),
-    members: match[3].split(',').map(normalizeRoleName),
+    inheritable: !/\bINHERIT\s+FALSE\b/i.test(leading),
+    members: serializedInventorySqlParser
+      .splitTopLevelList(match[3])
+      .map(normalizeRoleName),
     operation: match[1].toUpperCase(),
-    roles: match[2].split(',').map(normalizeRoleName),
+    roles: serializedInventorySqlParser
+      .splitTopLevelList(match[2])
+      .map(normalizeRoleName),
   };
 }
 
@@ -79,18 +87,24 @@ function parseDefaultFunctionPrivileges(text, targetSchema) {
   return [...text.matchAll(defaultFunctionPrivilegePattern)]
     .filter(
       (match) =>
-        (match[2] ?? targetSchema)
+        match[2] === undefined ||
+        match[2]
           .split(',')
           .map((schema) => schema.trim().replace(/^"|"$/g, '').toLowerCase())
           .includes(targetSchema.toLowerCase())
     )
-    .map((match) => ({
-      index: match.index,
-      kind: 'default',
-      owner: normalizeRoleName(match[1] ?? 'postgres'),
-      operation: match[3],
-      grantees: match[4],
-    }));
+    .flatMap((match) =>
+      serializedInventorySqlParser
+        .splitTopLevelList(match[1] ?? 'postgres')
+        .map((owner) => ({
+          index: match.index,
+          kind: 'default',
+          owner: normalizeRoleName(owner),
+          operation: match[3],
+          grantees: match[4],
+          scope: match[2] === undefined ? 'global' : 'schema',
+        }))
+    );
 }
 
 function parseSchemaFunctionPrivileges(text, targetSchema) {

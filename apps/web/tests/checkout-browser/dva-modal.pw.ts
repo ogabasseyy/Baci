@@ -32,6 +32,7 @@ test('renders the themed DVA modal and retains amount, verify, and close actions
   expect(modalLayout).toEqual({ display: 'flex', position: 'fixed' });
 
   await page.getByRole('button', { name: 'Confirm Transfer Sent' }).click();
+  await expect(page.getByRole('status')).toHaveText('Verifying transfer…');
   await expect(
     page.getByRole('button', { name: 'Verifying transfer…' })
   ).toBeDisabled();

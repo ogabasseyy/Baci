@@ -25,14 +25,15 @@ describe('DvaModal', () => {
 
   const renderDvaModal = (
     data: DvaData = mockDvaData,
-    copiedText: string | null = null
+    copiedText: string | null = null,
+    isVerifying = false
   ) =>
     render(
       <DvaModal
         copiedText={copiedText}
         data={data}
         formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
-        isVerifying={false}
+        isVerifying={isVerifying}
         onClose={mockOnClose}
         onConfirmTransfer={mockOnConfirmTransfer}
         onCopyToClipboard={mockOnCopyToClipboard}
@@ -89,7 +90,17 @@ describe('DvaModal', () => {
     it('renders waiting for transfer status', () => {
       renderDvaModal(mockDvaData, null);
 
-      expect(screen.getByText('Waiting for transfer…')).toBeInTheDocument();
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Waiting for transfer…'
+      );
+    });
+
+    it('announces verification progress in the status region', () => {
+      renderDvaModal(mockDvaData, null, true);
+
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Verifying transfer…'
+      );
     });
 
     it('renders reference number', () => {
@@ -113,17 +124,7 @@ describe('DvaModal', () => {
     });
 
     it('shows check icon when account number is copied', () => {
-      render(
-        <DvaModal
-          data={mockDvaData}
-          copiedText="1234567890"
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
-          isVerifying={false}
-          onConfirmTransfer={mockOnConfirmTransfer}
-        />
-      );
+      renderDvaModal(mockDvaData, '1234567890');
 
       // Find the button with check icon
       const buttons = screen.getAllByRole('button');
@@ -152,17 +153,7 @@ describe('DvaModal', () => {
     });
 
     it('does not show check icon when a different text is copied', () => {
-      render(
-        <DvaModal
-          data={mockDvaData}
-          copiedText="different-text"
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
-          isVerifying={false}
-          onConfirmTransfer={mockOnConfirmTransfer}
-        />
-      );
+      renderDvaModal(mockDvaData, 'different-text');
 
       // Should show copy icon, not check
       const buttons = screen.getAllByRole('button');

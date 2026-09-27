@@ -133,8 +133,8 @@ export function DvaModal({
                 <div className="size-1.5 bg-store-primary rounded-full animate-bounce [animation-delay:-0.15s]" />
                 <div className="size-1.5 bg-store-primary rounded-full animate-bounce" />
               </div>
-              <span className="text-sm font-bold">
-                Waiting for transfer…
+              <span className="text-sm font-bold" role="status">
+                {isVerifying ? 'Verifying transfer…' : 'Waiting for transfer…'}
               </span>
             </div>
             <p className="text-[10px] text-gray-400 text-center">

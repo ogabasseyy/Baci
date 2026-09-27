@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { CryptoPaymentModalFixture } from './CryptoPaymentModalFixture';
 
@@ -108,4 +108,44 @@ it('copies the synthetic recipient address through the browser clipboard API', a
 
   expect(writeText).toHaveBeenCalledWith('T7WHdR7vj4i3L4575w8V5hV8tKf9w2Q3xY');
   expect(await screen.findByTitle('Copied!')).toBeVisible();
+});
+
+it('keeps the fixture usable when the browser clipboard rejects a copy', async () => {
+  let rejectWrite: (reason?: unknown) => void = () => undefined;
+  const writeText = vi.fn(
+    () =>
+      new Promise<void>((_resolve, reject) => {
+        rejectWrite = reject;
+      })
+  );
+  clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+  clipboardWasOverridden = true;
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText },
+  });
+  render(<CryptoPaymentModalFixture />);
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Open crypto payment modal' })
+  );
+  fireEvent.click(screen.getByTitle('Copy Address'));
+
+  expect(writeText).toHaveBeenCalledWith('T7WHdR7vj4i3L4575w8V5hV8tKf9w2Q3xY');
+  await act(async () => {
+    rejectWrite(new Error('Clipboard permission denied'));
+  });
+  expect(screen.queryByTitle('Copied!')).not.toBeInTheDocument();
+
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Close crypto payment modal' })
+  );
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Modal closed from header.'
+  );
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Open crypto payment modal' })
+  );
+  expect(
+    screen.getByRole('heading', { name: 'Pay with Crypto' })
+  ).toBeVisible();
 });

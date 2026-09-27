@@ -67,6 +67,8 @@ checkout amounts or stand in for server-side amount authority.
 For an isolated crypto modal browser pass, open
 `/crypto-payment-modal`. This harness-only page mounts the real
 `CryptoPaymentModal` with a synthetic address and an inline data-URI image.
+It loads the storefront styles and checkout theme provider with a synthetic
+merchant color so browser checks exercise the styled modal.
 Choose an idle, checking, pending, confirmed, or failed verification state
 before opening the modal. The header close button dismisses immediately; the
 footer close button uses the browser confirmation dialog. Clipboard interaction

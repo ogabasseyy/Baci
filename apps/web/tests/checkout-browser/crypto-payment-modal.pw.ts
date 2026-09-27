@@ -41,6 +41,50 @@ test('shows each verification state in the real modal with a local QR image', as
   }
 });
 
+test('renders the modal with storefront layout styles and fixture merchant theme', async ({
+  page,
+}) => {
+  await page.goto('/crypto-payment-modal');
+  await page.getByRole('button', { name: 'Open crypto payment modal' }).click();
+
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        document.documentElement.style.getPropertyValue('--store-primary')
+      )
+    )
+    .toBe('#6941c6');
+
+  const modalLayout = await page
+    .locator('.fixed.inset-0')
+    .evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { display: style.display, position: style.position };
+    });
+  expect(modalLayout).toEqual({ display: 'flex', position: 'fixed' });
+
+  const cardBackground = await page
+    .locator('.fixed.inset-0 > div')
+    .evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        maxWidth: style.maxWidth,
+        backgroundColor: style.backgroundColor,
+      };
+    });
+  expect(cardBackground).toEqual({
+    maxWidth: '448px',
+    backgroundColor: 'rgb(255, 255, 255)',
+  });
+
+  const themedCurrencyColor = await page
+    .locator('p')
+    .filter({ hasText: '1,250 USDT' })
+    .locator('span')
+    .evaluate((element) => getComputedStyle(element).color);
+  expect(themedCurrencyColor).toBe('rgb(105, 65, 198)');
+});
+
 test('header close dismisses immediately without a browser confirmation', async ({
   page,
 }) => {

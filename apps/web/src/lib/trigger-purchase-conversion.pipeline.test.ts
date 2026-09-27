@@ -57,6 +57,8 @@ let originalPipelineEnvironment: Record<string, string | undefined> = {};
 describe('triggerPurchaseConversion pipeline migration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-15T12:00:00.000Z'));
     originalPipelineEnvironment = Object.fromEntries(
       pipelineEnvironmentKeys.map((key) => [key, process.env[key]])
     );
@@ -75,6 +77,7 @@ describe('triggerPurchaseConversion pipeline migration', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     for (const key of pipelineEnvironmentKeys) {
       const originalValue = originalPipelineEnvironment[key];
       if (originalValue === undefined) {
@@ -116,11 +119,20 @@ describe('triggerPurchaseConversion pipeline migration', () => {
     );
   });
 
-  it('retains legacy delivery after enqueue until full cutover is explicit', async () => {
+  it('retains legacy delivery after enqueue before authority expiry', async () => {
     await triggerPurchaseConversion(testClient(), 'merchant-1', order);
 
     expect(mocks.enqueue).toHaveBeenCalledTimes(1);
     expect(mocks.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the durable handoff but stops legacy delivery after merchant authority expires', async () => {
+    vi.setSystemTime(new Date('2026-09-27T12:00:00.000Z'));
+
+    await triggerPurchaseConversion(testClient(), 'merchant-1', order);
+
+    expect(mocks.enqueue).toHaveBeenCalledTimes(1);
+    expect(mocks.send).not.toHaveBeenCalled();
   });
 
   it('fails closed when the durable handoff fails', async () => {

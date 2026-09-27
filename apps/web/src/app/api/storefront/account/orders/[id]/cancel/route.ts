@@ -91,7 +91,7 @@ export async function POST(
   // cancellation into the generic RPC and 500.
   const { data: orderRow, error: orderLookupError } = await auth.supabase
     .from('orders')
-    .select('payment_method')
+    .select('payment_method, merchant_id, order_items(product_id, variant_id)')
     .eq('id', id)
     .maybeSingle();
   if (orderLookupError) {
@@ -108,9 +108,24 @@ export async function POST(
       { status: 503 }
     );
   }
+  const preCancelOrder = orderRow as {
+    payment_method?: string;
+    merchant_id?: string | null;
+    order_items?: unknown;
+  } | null;
+  // Snapshot the merchant + items BEFORE the RPC commits: if the
+  // post-cancellation reread below fails, this snapshot still identifies the
+  // caches to evict (neither value can change across the cancel RPC).
+  const preCancelSnapshot = preCancelOrder?.merchant_id?.trim()
+    ? {
+        merchant_id: preCancelOrder.merchant_id.trim(),
+        order_items: Array.isArray(preCancelOrder.order_items)
+          ? preCancelOrder.order_items
+          : [],
+      }
+    : null;
   const cancelRpc =
-    (orderRow as { payment_method?: string } | null)?.payment_method ===
-    'uba_redvault'
+    preCancelOrder?.payment_method === 'uba_redvault'
       ? 'cancel_uba_redvault_order_as_customer'
       : 'cancel_order_as_customer';
   const { data, error } = await auth.supabase.rpc(cancelRpc, {
@@ -162,11 +177,22 @@ export async function POST(
           .select('merchant_id, order_items(product_id, variant_id)')
           .eq('id', id)
           .maybeSingle();
-      if (cancelledOrderError || !cancelledOrder) {
+      // The restock already committed: fall back to the pre-cancellation
+      // snapshot when the reread fails so the purge still runs.
+      const effectiveOrder = cancelledOrder ?? preCancelSnapshot;
+      if (!effectiveOrder) {
         throw cancelledOrderError ?? new Error('Cancelled order not found');
       }
+      if (!cancelledOrder) {
+        logger.warn({
+          message:
+            'Cancelled order reread failed; purging from pre-cancellation snapshot',
+          orderId: id,
+          error: cancelledOrderError,
+        });
+      }
 
-      const typedOrder = cancelledOrder as unknown as {
+      const typedOrder = effectiveOrder as unknown as {
         merchant_id?: string | null;
         order_items?: unknown;
       };

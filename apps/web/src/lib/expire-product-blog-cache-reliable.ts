@@ -13,6 +13,13 @@ interface ReliableBlogCacheExpiryOptions {
   secret?: string;
   /** Bound the fallback request so cache expiry never blocks a mutation. */
   timeoutMs?: number;
+  /**
+   * Per-slug PDP tags to invalidate alongside the merchant enrichment tag.
+   * In a request context the caller invalidates these locally and this is
+   * ignored; the standalone-worker fallback forwards them to the internal
+   * route, where they are expired in a real request context.
+   */
+  productSlugs?: readonly (string | null | undefined)[];
 }
 
 /**
@@ -43,6 +50,14 @@ export async function expireProductBlogCacheReliable(
   }
   if (!secret || !baseUrl) return false;
 
+  const forwardedSlugs = Array.from(
+    new Set(
+      (options.productSlugs ?? [])
+        .map((slug) => slug?.trim())
+        .filter((slug): slug is string => Boolean(slug))
+    )
+  );
+
   try {
     const response = await (options.fetchImpl ?? fetch)(
       new URL('/api/internal/revalidate-products', baseUrl),
@@ -55,6 +70,9 @@ export async function expireProductBlogCacheReliable(
         body: JSON.stringify({
           merchantId: normalizedMerchantId,
           expireProductBlogCache: true,
+          ...(forwardedSlugs.length > 0
+            ? { productSlugs: forwardedSlugs }
+            : {}),
         }),
         signal: AbortSignal.timeout(
           options.timeoutMs ?? DEFAULT_REMOTE_EXPIRY_TIMEOUT_MS

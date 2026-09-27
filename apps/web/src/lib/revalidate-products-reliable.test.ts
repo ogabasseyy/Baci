@@ -236,6 +236,36 @@ describe('revalidateProductsReliable', () => {
     );
   });
 
+  it('continues submitting later slug chunks when a middle chunk rejects', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    mockRevalidateProducts.mockImplementation(() => {
+      throw new Error('no store');
+    });
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true } as Response)
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockResolvedValueOnce({ ok: true } as Response);
+    const nextProductSlugs = Array.from(
+      { length: 20_001 },
+      (_, index) => `slug-${index}`
+    );
+
+    await revalidateProductsReliable('merchant-1', {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      nextProductSlugs,
+    });
+
+    // All three chunks are submitted: the rejected middle chunk must not
+    // skip the final chunk's per-slug PDP invalidation.
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    const bodies = fetchImpl.mock.calls.map(([, init]) =>
+      JSON.parse((init as RequestInit).body as string)
+    );
+    expect(bodies[0].productSlugs).toHaveLength(10_000);
+    expect(bodies[2].productSlugs).toHaveLength(1);
+  });
+
   it('does not fetch (no secret leak) when the revalidation target is unavailable', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     mockRevalidateProducts.mockImplementation(() => {

@@ -66,6 +66,34 @@ describe('expireProductBlogCacheReliable', () => {
     });
   });
 
+  it('forwards product slugs to the internal route outside a request context', async () => {
+    // Arrange: standalone workers have no Next request store, so the local
+    // per-slug revalidation is a no-op and the slugs must ride along.
+    mockRevalidateTag.mockImplementationOnce(() => {
+      throw new Error('missing Next request context');
+    });
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 204 }));
+
+    // Act
+    const result = await expireProductBlogCacheReliable('merchant-1', {
+      fetchImpl,
+      baseUrl: 'https://app.usebaci.com',
+      secret: 'internal-secret',
+      productSlugs: ['iphone-15', '  ', null, 'iphone-15'],
+    });
+
+    // Assert
+    expect(result).toBe(true);
+    const [, request] = fetchImpl.mock.calls[0] ?? [];
+    expect(JSON.parse(request?.body as string)).toEqual({
+      merchantId: 'merchant-1',
+      expireProductBlogCache: true,
+      productSlugs: ['iphone-15'],
+    });
+  });
+
   it('fails open when the internal route is unavailable', async () => {
     // Arrange
     mockRevalidateTag.mockImplementationOnce(() => {

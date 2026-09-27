@@ -190,34 +190,46 @@ export async function revalidateProductsReliable(
         : [undefined];
 
     for (const [chunkIndex, productSlugChunk] of slugChunks.entries()) {
-      const response = await (options.fetchImpl ?? fetch)(
-        new URL('/api/internal/revalidate-products', baseUrl),
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${secret}`,
-            'Content-Type': 'application/json',
-          },
-          // The endpoint accepts at most 10,000 slugs. Keep products,
-          // merchantSlug, and the whole-storefront flag on the first request
-          // so follow-up chunks only perform the per-slug invalidation and do
-          // not repeat a potentially expensive edge purge.
-          body: JSON.stringify({
-            merchantId,
-            ...(chunkIndex === 0 && merchantSlug ? { merchantSlug } : {}),
-            ...(chunkIndex === 0 && products && products.length > 0
-              ? { products }
-              : {}),
-            ...(productSlugChunk && productSlugChunk.length > 0
-              ? { productSlugs: productSlugChunk }
-              : {}),
-            ...(chunkIndex === 0 && purgeWholeStorefront
-              ? { purgeWholeStorefront: true }
-              : {}),
-          }),
-          signal: AbortSignal.timeout(options.timeoutMs ?? 5000),
-        }
-      );
+      // A rejected/timed-out chunk must not skip the remaining chunks: the
+      // database writes already committed, and the merchant-wide tag does not
+      // clear per-slug PDP entries, so every chunk is submitted independently.
+      let response: Response;
+      try {
+        response = await (options.fetchImpl ?? fetch)(
+          new URL('/api/internal/revalidate-products', baseUrl),
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${secret}`,
+              'Content-Type': 'application/json',
+            },
+            // The endpoint accepts at most 10,000 slugs. Keep products,
+            // merchantSlug, and the whole-storefront flag on the first request
+            // so follow-up chunks only perform the per-slug invalidation and do
+            // not repeat a potentially expensive edge purge.
+            body: JSON.stringify({
+              merchantId,
+              ...(chunkIndex === 0 && merchantSlug ? { merchantSlug } : {}),
+              ...(chunkIndex === 0 && products && products.length > 0
+                ? { products }
+                : {}),
+              ...(productSlugChunk && productSlugChunk.length > 0
+                ? { productSlugs: productSlugChunk }
+                : {}),
+              ...(chunkIndex === 0 && purgeWholeStorefront
+                ? { purgeWholeStorefront: true }
+                : {}),
+            }),
+            signal: AbortSignal.timeout(options.timeoutMs ?? 5000),
+          }
+        );
+      } catch (error) {
+        console.error(
+          'Internal product revalidation chunk failed; continuing with remaining chunks',
+          { merchantId, chunkIndex, error }
+        );
+        continue;
+      }
       if (!response.ok) {
         console.error(
           'Internal product revalidation endpoint returned non-2xx; relying on cacheLife self-heal',

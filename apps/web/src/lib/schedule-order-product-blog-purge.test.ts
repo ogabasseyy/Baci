@@ -68,9 +68,11 @@ describe('scheduleOrderProductBlogPurge', () => {
       'merchant-1',
       [{ id: 'product-1' }]
     );
-    expect(mockRevalidateSlugs).toHaveBeenCalledWith('merchant-1', [
-      'iphone-15',
-    ]);
+    expect(mockRevalidateSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      ['iphone-15'],
+      { expireImmediately: true }
+    );
     expect(mockRevalidateSlugs.mock.invocationCallOrder[0]).toBeLessThan(
       mockScheduleStorefrontProductPurge.mock.invocationCallOrder[0]
     );
@@ -80,7 +82,8 @@ describe('scheduleOrderProductBlogPurge', () => {
       { blogPostSlugs: ['iphone-guide'] }
     );
     expect(mockExpireProductBlogCacheReliable).toHaveBeenCalledWith(
-      'merchant-1'
+      'merchant-1',
+      { productSlugs: ['iphone-15'] }
     );
   });
 
@@ -118,7 +121,8 @@ describe('scheduleOrderProductBlogPurge', () => {
     });
 
     expect(mockExpireProductBlogCacheReliable).toHaveBeenCalledWith(
-      'merchant-1'
+      'merchant-1',
+      { productSlugs: ['iphone-15'] }
     );
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'ogabassey',
@@ -126,7 +130,7 @@ describe('scheduleOrderProductBlogPurge', () => {
     );
   });
 
-  it('fails open when merchant slug resolution fails', async () => {
+  it('continues local invalidation when merchant slug resolution fails', async () => {
     const consoleSpy = vi
       .spyOn(console, 'warn')
       .mockImplementation(() => undefined);
@@ -141,9 +145,24 @@ describe('scheduleOrderProductBlogPurge', () => {
         supabase: supabase as never,
       });
 
-      expect(mockEnrichProductPurgeEntries).not.toHaveBeenCalled();
+      // The inventory mutation already committed: enrichment, per-slug
+      // revalidation, and blog-cache expiry need only the merchant id, so
+      // a transient slug lookup failure gates only the edge purge.
+      expect(mockEnrichProductPurgeEntries).toHaveBeenCalled();
+      expect(mockRevalidateSlugs).toHaveBeenCalledWith(
+        'merchant-1',
+        ['iphone-15'],
+        { expireImmediately: true }
+      );
+      expect(mockExpireProductBlogCacheReliable).toHaveBeenCalledWith(
+        'merchant-1',
+        { productSlugs: ['iphone-15'] }
+      );
       expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
-      expect(consoleSpy).toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Skipped order-related edge purge because merchant slug lookup failed',
+        expect.objectContaining({ merchantId: 'merchant-1' })
+      );
     } finally {
       consoleSpy.mockRestore();
     }

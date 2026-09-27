@@ -3,13 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockExpireProductBlogCache = vi.fn();
 const mockRevalidateProducts = vi.fn();
+const mockRevalidateProductSlugs = vi.fn();
 
 vi.mock('@/env', () => ({
   getInternalApiSecret: () => 'internal-secret',
 }));
 vi.mock('@/lib/cache-revalidation', () => ({
   revalidateProducts: (...args: unknown[]) => mockRevalidateProducts(...args),
-  revalidateProductSlugs: vi.fn(),
+  revalidateProductSlugs: (...args: unknown[]) =>
+    mockRevalidateProductSlugs(...args),
 }));
 vi.mock('@/lib/expire-product-blog-cache', () => ({
   expireProductBlogCache: (...args: unknown[]) =>
@@ -65,5 +67,29 @@ describe('internal product revalidation blog expiry', () => {
     expect(response.status).toBe(200);
     expect(mockExpireProductBlogCache).toHaveBeenCalledWith(merchantId);
     expect(mockRevalidateProducts).not.toHaveBeenCalled();
+  });
+
+  it('hard-expires forwarded product slugs before the caller evicts the edge', async () => {
+    // Arrange: standalone workers forward the resolved slugs because their
+    // local per-slug revalidation is a no-op. The worker schedules the edge
+    // purge right after this returns, so SWR would re-seed the edge.
+    const merchantId = 'merchant-1';
+
+    // Act
+    const response = await POST(
+      request({
+        merchantId,
+        expireProductBlogCache: true,
+        productSlugs: ['iphone-15'],
+      })
+    );
+
+    // Assert
+    expect(response.status).toBe(200);
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      merchantId,
+      ['iphone-15'],
+      { expireImmediately: true }
+    );
   });
 });

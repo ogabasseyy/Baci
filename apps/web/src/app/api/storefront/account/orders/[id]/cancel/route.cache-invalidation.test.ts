@@ -151,6 +151,67 @@ describe('customer cancellation cache invalidation', () => {
     ).toHaveBeenCalledOnce();
   });
 
+  it('purges from the pre-cancellation snapshot when the order reread fails', async () => {
+    // Arrange: the cancel RPC commits the restock, then the post-commit
+    // order reread errors. The pre-RPC read already captured merchant/items.
+    const maybeSingle = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: {
+          payment_method: 'card',
+          merchant_id: 'merchant-1',
+          order_items: [{ product_id: 'product-1' }],
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: null,
+        error: new Error('reread failed'),
+      });
+    const productIn = vi.fn().mockResolvedValue({
+      data: [{ id: 'product-1', slug: 'phone-one', manage_stock: true }],
+      error: null,
+    });
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === 'orders') {
+          return {
+            select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle })) })),
+          };
+        }
+        if (table === 'products') {
+          return {
+            select: vi.fn(() => ({ eq: vi.fn(() => ({ in: productIn })) })),
+          };
+        }
+        throw new Error(`Unexpected table ${table}`);
+      }),
+      rpc: mockRpc,
+    };
+    mockAuthenticateApiRequest.mockResolvedValue({
+      user: { id: 'customer-1' },
+      error: null,
+      supabase,
+    });
+    mockRpc.mockResolvedValue({ data: true, error: null });
+
+    // Act
+    const response = await POST(makeRequest(), { params });
+
+    // Assert
+    expect(response.status).toBe(200);
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith('merchant-1', [
+      'phone-one',
+    ]);
+    expect(mockScheduleOrderProductBlogPurgeAfterResponse).toHaveBeenCalledWith(
+      {
+        merchantId: 'merchant-1',
+        productIds: ['product-1'],
+        supabase,
+      }
+    );
+  });
+
   it('skips cache and article purges for an unlimited-stock cancellation', async () => {
     const supabase = createSupabase();
     const productIn = vi.fn().mockResolvedValue({

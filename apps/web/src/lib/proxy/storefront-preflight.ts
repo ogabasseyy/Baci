@@ -8,6 +8,7 @@ import {
   resolveStorefrontPdpCanonicalRedirect,
   resolveStorefrontPdpHardNotFound,
 } from '@/lib/proxy/pdp-preflight';
+import { isStorefrontDocumentNavigation } from '@/lib/storefront-document-navigation';
 
 type StorefrontPreflightParams = {
   request: NextRequest;
@@ -30,6 +31,12 @@ export async function runStorefrontPreflight({
   merchantIdentifier,
   homePathPrefix,
 }: StorefrontPreflightParams): Promise<NextResponse | null> {
+  // Every verdict below requires a document navigation. Reject router data,
+  // prefetches and mutations before scheduling the five async helpers.
+  if (!isStorefrontDocumentNavigation(request.method, request.headers)) {
+    return null;
+  }
+
   const blogPostHardStatus = await resolveStorefrontBlogPostHardStatus(
     request,
     pathname,

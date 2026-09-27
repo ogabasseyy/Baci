@@ -173,6 +173,35 @@ describe('remediation research gate refusals', () => {
     assert.equal(result.accepted, true);
   });
 
+  it('rejects deferred-fix conclusions that require more investigation', () => {
+    const reports = [
+      'SELECTED_FIX: Further investigation is required before a safe fix can be selected.',
+      'SELECTED_FIX: More production traces are needed before a defensible fix can be established.',
+    ];
+
+    for (const selectedFix of reports) {
+      const result = validateCodexResearchResult(
+        jsonl(
+          validReport.replace('SELECTED_FIX: smallest code fix', selectedFix)
+        )
+      );
+
+      assert.equal(result.accepted, false);
+      assert.match(result.reasons.join('\n'), /defensible selected fix/);
+    }
+  });
+
+  it('accepts a deferred conclusion that still selects a fallback', () => {
+    const report = validReport.replace(
+      'SELECTED_FIX: smallest code fix',
+      'SELECTED_FIX: Further investigation is required before a safe fix can be selected, so apply the bounded workaround'
+    );
+
+    const result = validateCodexResearchResult(jsonl(report));
+
+    assert.equal(result.accepted, true);
+  });
+
   it('accepts a selection with third-party unable-to wording', () => {
     const report = validReport.replace(
       'SELECTED_FIX: smallest code fix',

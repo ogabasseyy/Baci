@@ -1759,7 +1759,9 @@ export async function POST(request: NextRequest) {
               juicywayCrypto.currency,
             juicyway_fx_rate: juicywayCrypto.conversion_rate ?? null,
           }
-        : {};
+        : gateway === 'paystack' && data.payment_type === 'dva'
+          ? { paystack_payment_type: 'dva' }
+          : {};
 
     // Create transaction record (via RPC) and update order status
     const { error: transactionError } = await paymentDataClient.rpc(

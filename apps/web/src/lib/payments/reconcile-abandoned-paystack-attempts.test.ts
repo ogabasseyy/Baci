@@ -6,11 +6,13 @@ const candidate = {
   order_id: 'order-1',
   merchant_id: 'merchant-1',
   gateway_reference: 'BAC-OLD',
+  metadata: {},
+  status: 'pending',
 };
 
 function createClient(
   rows = [candidate],
-  { paid = true, completed = true } = {}
+  { paid = true, completed = true, dvaSibling = false } = {}
 ) {
   const selectUpdated = vi.fn().mockResolvedValue({
     data: [{ id: 'attempt-1' }],
@@ -23,6 +25,7 @@ function createClient(
   const update = vi.fn(() => updateBuilder);
   const lookup = {
     eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
     neq: vi.fn().mockReturnThis(),
     not: vi.fn().mockReturnThis(),
     lt: vi.fn().mockReturnThis(),
@@ -31,6 +34,7 @@ function createClient(
   };
   const orderLookup = {
     eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockResolvedValue({
       data: paid ? { id: 'order-1' } : null,
       error: null,
@@ -40,7 +44,19 @@ function createClient(
     eq: vi.fn().mockReturnThis(),
     neq: vi.fn().mockReturnThis(),
     limit: vi.fn().mockResolvedValue({
-      data: completed ? [{ id: 'paid-attempt' }] : [],
+      data: completed
+        ? [
+            { id: 'paid-attempt', metadata: {} },
+            ...(dvaSibling
+              ? [
+                  {
+                    id: 'dva-paid-attempt',
+                    metadata: { dva_lookup_path: 'order_payment_accounts' },
+                  },
+                ]
+              : []),
+          ]
+        : [],
       error: null,
     }),
   };
@@ -93,9 +109,16 @@ describe('reconcileAbandonedPaystackAttempts', () => {
 
     expect(summary.retired).toEqual(['attempt-1']);
     expect(lookup.eq).toHaveBeenCalledWith('gateway', 'paystack');
-    expect(lookup.eq).toHaveBeenCalledWith('status', 'pending');
+    expect(lookup.in).toHaveBeenCalledWith('status', ['pending', 'processing']);
+    expect(lookup.in).toHaveBeenCalledWith('paid_order.payment_status', [
+      'paid',
+      'partially_paid',
+    ]);
     expect(lookup.lt).toHaveBeenCalledWith('updated_at', expect.any(String));
-    expect(orderLookup.eq).toHaveBeenCalledWith('payment_status', 'paid');
+    expect(orderLookup.in).toHaveBeenCalledWith('payment_status', [
+      'paid',
+      'partially_paid',
+    ]);
     expect(completedLookup.eq).toHaveBeenCalledWith('status', 'completed');
     expect(completedLookup.neq).toHaveBeenCalledWith('id', 'attempt-1');
     expect(lookup.order).toHaveBeenCalledWith('updated_at', {
@@ -112,6 +135,86 @@ describe('reconcileAbandonedPaystackAttempts', () => {
       'BAC-OLD'
     );
     expect(updateBuilder.eq).toHaveBeenCalledWith('status', 'pending');
+  });
+
+  it('retires a provider-confirmed processing attempt on a funded order', async () => {
+    const { client, updateBuilder } = createClient([
+      { ...candidate, status: 'processing' },
+    ]);
+    const verify = vi.fn().mockResolvedValue({
+      success: true,
+      data: { reference: 'BAC-OLD', status: 'abandoned' },
+    });
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify,
+    });
+
+    expect(summary.retired).toEqual(['attempt-1']);
+    expect(updateBuilder.eq).toHaveBeenCalledWith('status', 'processing');
+  });
+
+  it('retires an old DVA placeholder only when Paystack confirms its reference is missing', async () => {
+    const { client, update } = createClient([
+      { ...candidate, metadata: { paystack_payment_type: 'dva' } },
+    ]);
+    const verify = vi.fn().mockResolvedValue({
+      success: false,
+      code: 'HTTP_404',
+    });
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify,
+    });
+
+    expect(summary.retired).toEqual(['attempt-1']);
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'failed' })
+    );
+  });
+
+  it('holds an unmarked card attempt even when another DVA payment completed', async () => {
+    const { client, update } = createClient([candidate], { dvaSibling: true });
+    const verify = vi.fn().mockResolvedValue({
+      success: false,
+      code: 'HTTP_404',
+    });
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify,
+    });
+
+    expect(summary.retired).toEqual([]);
+    expect(summary.held).toEqual([
+      { id: 'attempt-1', reason: 'verification_unavailable' },
+    ]);
+    expect(update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'failed' })
+    );
+  });
+
+  it('holds an unmarked 404 when no completed DVA payment proves a placeholder', async () => {
+    const { client, update } = createClient();
+    const verify = vi.fn().mockResolvedValue({
+      success: false,
+      code: 'HTTP_404',
+    });
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify,
+    });
+
+    expect(summary.retired).toEqual([]);
+    expect(summary.held).toEqual([
+      { id: 'attempt-1', reason: 'verification_unavailable' },
+    ]);
+    expect(update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'failed' })
+    );
   });
 
   it.each([

@@ -28,5 +28,7 @@ describe('selectSearchProductsByPrice', () => {
       .toEqual(['parent-expensive-option-cheap', 'simple']);
     expect(selectSearchProductsByPrice(rows, { sort: 'price_desc' }, 20).map(({ id }) => id))
       .toEqual(['parent-cheap-option-expensive', 'simple', 'parent-expensive-option-cheap']);
+    expect(selectSearchProductsByPrice(rows, {}, 20).map(({ id }) => id))
+      .toEqual(['parent-cheap-option-expensive', 'parent-expensive-option-cheap', 'simple']);
   });
 });

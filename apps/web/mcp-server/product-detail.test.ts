@@ -89,9 +89,10 @@ describe('buildMcpProductDetail', () => {
     });
 
     expect(result.structuredContent).toMatchObject({
-      products: [{ price: 80000, compare_at_price: null, in_stock: true }],
+      products: [{ price: 80000, compare_at_price: null, in_stock: true, condition: 'used' }],
     });
     expect(result.content[0].text).toContain('**Price:** 80000');
+    expect(result.content[0].text).toContain('**Condition:** used');
     expect(result.content[0].text).not.toContain('120000');
   });
 

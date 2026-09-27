@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import { hydrateSearchProductAvailability } from './search-product-availability';
+import { selectSearchProductsByPrice } from './select-search-products-by-price';
 
 describe('hydrateSearchProductAvailability', () => {
   it('uses the purchasable price for the requested condition', async () => {
@@ -109,10 +110,34 @@ describe('hydrateSearchProductAvailability', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const result = await hydrateSearchProductAvailability([
-        { id: 'variant-phone', manage_stock: true, has_variants: true, stock_quantity: 0 },
+        { id: 'variant-phone', price: 80000, manage_stock: true, has_variants: true, stock_quantity: 0 },
       ], supabase, 'merchant-1');
       expect(result[0].stockSummary).toMatchObject({ confidence: 'unconfirmed', inStock: null });
       expect(result[0].availableVariants).toEqual([]);
+      expect(result[0].displayPrice).toBeNull();
+      expect(selectSearchProductsByPrice(result, { max_price: 100000 }, 20)).toEqual([]);
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it('does not substitute the parent price when an offer-only lookup fails', async () => {
+    const offerQuery = {
+      select: vi.fn(), eq: vi.fn(), in: vi.fn(),
+      then: (resolve: (value: { data: null; error: { message: string } }) => unknown) =>
+        Promise.resolve({ data: null, error: { message: 'unavailable' } }).then(resolve),
+    };
+    offerQuery.select.mockReturnValue(offerQuery);
+    offerQuery.eq.mockReturnValue(offerQuery);
+    offerQuery.in.mockReturnValue(offerQuery);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await hydrateSearchProductAvailability([
+        { id: 'offer-phone', condition: 'new', price: 80000, manage_stock: true,
+          has_condition_offers: true, stock_quantity: 0 },
+      ], { from: vi.fn(() => offerQuery) } as unknown as SupabaseClient, 'merchant-1');
+      expect(result[0].displayPrice).toBeNull();
+      expect(selectSearchProductsByPrice(result, { max_price: 100000 }, 20)).toEqual([]);
     } finally {
       error.mockRestore();
     }

@@ -92,14 +92,22 @@ export async function buildMcpProductDetail({
   );
   const basePurchasable = !product.has_variants &&
     (product.manage_stock !== true || Number(product.stock_quantity ?? 0) > 0);
-  const optionPrices = [
+  const purchasablePrices = [
     ...variants.filter((variant) => product.manage_stock !== true || variant.stock_quantity > 0)
-      .map((variant) => variant.price_override ?? product.price),
+      .map((variant) => ({ price: variant.price_override ?? product.price,
+        condition: variant.condition || product.condition || 'new' })),
     ...conditionOffers.filter((offer) => product.manage_stock !== true || offer.stock_quantity > 0)
-      .map((offer) => offer.price),
-    ...(basePurchasable ? [product.price] : []),
-  ].filter((price) => Number.isFinite(price) && price >= 0);
-  const displayPrice = optionPrices.length > 0 ? Math.min(...optionPrices) : product.price;
+      .map((offer) => ({ price: offer.price, condition: offer.condition || product.condition || 'new' })),
+    ...(basePurchasable ? [{ price: product.price, condition: product.condition || 'new' }] : []),
+  ].filter((option) => Number.isFinite(option.price) && option.price >= 0);
+  const cheapestOption = purchasablePrices.reduce<typeof purchasablePrices[number] | undefined>(
+    (cheapest, option) => !cheapest || option.price < cheapest.price ? option : cheapest,
+    undefined
+  );
+  const displayPrice = cheapestOption?.price ?? product.price;
+  const displayCondition = cheapestOption?.condition ?? product.condition ?? 'new';
+  const displayConditionDetail = displayCondition === (product.condition || 'new')
+    ? product.condition_detail : null;
   const displayCompareAtPrice = displayPrice === product.price ? product.compare_at_price : null;
   const formatted = {
     id: product.id,
@@ -108,8 +116,8 @@ export async function buildMcpProductDetail({
     price: displayPrice,
     compare_at_price: displayCompareAtPrice,
     image: getSafeCatalogImageUrl(typeof product.images?.[0] === 'string' ? product.images[0] : product.images?.[0]?.url) ?? null,
-    condition: product.condition || 'new',
-    condition_detail: product.condition_detail,
+    condition: displayCondition,
+    condition_detail: displayConditionDetail,
     brand: product.brand,
     category: product.category,
     in_stock: stockSummary.inStock,
@@ -133,8 +141,8 @@ export async function buildMcpProductDetail({
   text += '\n';
 
   // Condition info
-  if (product.condition && product.condition !== 'new') {
-    text += `**Condition:** ${product.condition}${product.condition_detail ? ` - ${product.condition_detail}` : ''}\n`;
+  if (displayCondition !== 'new') {
+    text += `**Condition:** ${displayCondition}${displayConditionDetail ? ` - ${displayConditionDetail}` : ''}\n`;
   }
 
   // Brand & Category

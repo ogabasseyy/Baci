@@ -52,15 +52,19 @@ export async function loadMcpBrowseFacetValues({
     )),
   ]);
   if (variantResult.error) console.error('Failed to load public variant facet stock:', variantResult.error);
-  const offerError = offerResults.find((result) => result.error)?.error;
-  if (offerError) console.error('Failed to load public offer facet stock:', offerError);
 
   const variantStock = new Map<string, Array<{ stock_quantity: number | null }>>();
   const offerStock = new Map<string, Array<{ stock_quantity: number | null }>>();
+  const failedOfferIds = new Set<string>();
   for (const row of variantResult.data ?? []) {
     variantStock.set(row.product_id, [...(variantStock.get(row.product_id) ?? []), row]);
   }
-  for (const result of offerResults) {
+  for (const [index, result] of offerResults.entries()) {
+    if (result.error) {
+      console.error('Failed to load public offer facet stock:', result.error);
+      for (const id of offerBatches[index] ?? []) failedOfferIds.add(id);
+      continue;
+    }
     for (const row of result.data ?? []) {
       offerStock.set(row.product_id, [...(offerStock.get(row.product_id) ?? []), row]);
     }
@@ -69,7 +73,9 @@ export async function loadMcpBrowseFacetValues({
     getMcpProductStockSummary(
       product,
       product.has_variants && !variantResult.error ? variantStock.get(product.id) ?? [] : undefined,
-      product.has_condition_offers && !offerError ? offerStock.get(product.id) ?? [] : undefined
+      product.has_condition_offers && !failedOfferIds.has(product.id)
+        ? offerStock.get(product.id) ?? []
+        : undefined
     ).inStock === false
   ).map((product) => product.id));
   return [...new Set(products

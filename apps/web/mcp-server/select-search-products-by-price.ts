@@ -6,9 +6,9 @@ export function selectSearchProductsByPrice<T extends PricedSearchProduct>(
   limit: number
 ): T[] {
   const selected = products.filter(({ displayPrice }) => {
+    if (typeof displayPrice !== 'number' || !Number.isFinite(displayPrice)) return false;
     if (args.min_price === undefined && args.max_price === undefined &&
       args.sort !== 'price_asc' && args.sort !== 'price_desc') return true;
-    if (typeof displayPrice !== 'number' || !Number.isFinite(displayPrice)) return false;
     return (args.min_price === undefined || displayPrice >= args.min_price) &&
       (args.max_price === undefined || displayPrice <= args.max_price);
   });

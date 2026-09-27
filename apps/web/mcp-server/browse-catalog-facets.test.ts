@@ -74,4 +74,59 @@ describe('loadMcpBrowseFacetValues', () => {
       .toEqual(['Redmi', 'Anker', 'Samsung']);
     expect(offerQuery.in).toHaveBeenCalledWith('product_id', ['used-phone']);
   });
+
+  it('keeps successful offer-batch stock when another batch lookup fails', async () => {
+    const rows = Array.from({ length: 101 }, (_, index) => ({
+      id: `offer-${index}`,
+      category: 'Used Phones',
+      brand: index === 100 ? 'Sold Out Batch' : 'Unknown Batch',
+      manage_stock: true,
+      stock_quantity: 0,
+      has_variants: false,
+      has_condition_offers: true,
+    }));
+    const productQuery = {
+      select: vi.fn(), eq: vi.fn(), or: vi.fn(), ilike: vi.fn(),
+      then: (resolve: (value: { data: typeof rows; error: null }) => unknown) =>
+        Promise.resolve({ data: rows, error: null }).then(resolve),
+    };
+    productQuery.select.mockReturnValue(productQuery);
+    productQuery.eq.mockReturnValue(productQuery);
+    productQuery.or.mockReturnValue(productQuery);
+    productQuery.ilike.mockReturnValue(productQuery);
+
+    const batchIds: string[][] = [];
+    const createOfferQuery = () => {
+      let requestedIds: string[] = [];
+      const query = {
+        select: vi.fn(), eq: vi.fn(),
+        in: vi.fn((_column: string, ids: string[]) => {
+          requestedIds = ids;
+          batchIds.push(ids);
+          return query;
+        }),
+        then: (resolve: (value: {
+          data: Array<{ product_id: string; stock_quantity: number }> | null;
+          error: Error | null;
+        }) => unknown) => Promise.resolve(
+          requestedIds.includes('offer-100')
+            ? { data: [{ product_id: 'offer-100', stock_quantity: 0 }], error: null }
+            : { data: null, error: new Error('first batch unavailable') }
+        ).then(resolve),
+      };
+      query.select.mockReturnValue(query);
+      query.eq.mockReturnValue(query);
+      return query;
+    };
+    const supabase = {
+      from: vi.fn((table: string) => table === 'product_offers' ? createOfferQuery() : productQuery),
+      rpc: vi.fn(),
+    } as unknown as SupabaseClient;
+
+    expect(await loadMcpBrowseFacetValues({ supabase, merchantId: 'merchant-1', facet: 'brand' }))
+      .toEqual(['Unknown Batch']);
+    expect(batchIds).toHaveLength(2);
+    expect(batchIds[0]).toHaveLength(100);
+    expect(batchIds[1]).toEqual(['offer-100']);
+  });
 });

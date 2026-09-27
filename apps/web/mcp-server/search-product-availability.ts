@@ -84,7 +84,12 @@ export async function hydrateSearchProductAvailability(
         .map((offer) => offer.price),
       ...(basePurchasable ? [product.price] : []),
     ].filter((price): price is number => typeof price === 'number' && Number.isFinite(price) && price >= 0);
-    const displayPrice = prices.length > 0 ? Math.min(...prices) : product.price;
+    const optionPriceLookupFailed =
+      (product.has_variants && !variantLookupSucceeded) ||
+      (product.has_condition_offers && !offersMap.has(product.id));
+    const displayPrice = prices.length > 0
+      ? Math.min(...prices)
+      : optionPriceLookupFailed && !basePurchasable ? null : product.price;
     return {
       product,
       displayPrice,

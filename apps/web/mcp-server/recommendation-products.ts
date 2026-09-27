@@ -74,6 +74,12 @@ export async function selectRecommendedProducts<T extends RecommendationCandidat
     for (const product of candidates) {
       const productVariants = variantsByProduct.get(product.id) ?? [];
       const productOffers = offersByProduct.get(product.id) ?? [];
+      if (
+        (product.has_variants && variants === null) ||
+        (product.has_condition_offers && offers === null)
+      ) {
+        continue;
+      }
       const stock = getMcpProductStockSummary(
         product,
         product.has_variants && variants !== null ? productVariants : undefined,

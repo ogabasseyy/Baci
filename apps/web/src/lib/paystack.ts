@@ -513,7 +513,8 @@ export async function initializeTransaction(
  * Verify a Paystack transaction
  */
 export async function verifyTransaction(
-  reference: string
+  reference: string,
+  signal?: AbortSignal
 ): Promise<PaystackResult<PaymentVerificationResponse>> {
   // Validate reference format to prevent SSRF attacks
   // Paystack references are typically alphanumeric with some special chars
@@ -526,7 +527,8 @@ export async function verifyTransaction(
   }
 
   const result = await paystackRequest<PaymentVerificationResponse>(
-    `/transaction/verify/${encodeURIComponent(reference)}`
+    `/transaction/verify/${encodeURIComponent(reference)}`,
+    { signal }
   );
 
   if (!result.success) {

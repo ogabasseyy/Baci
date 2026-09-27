@@ -101,7 +101,7 @@ describe('reconcileAbandonedPaystackAttempts', () => {
     expect(lookup.order).toHaveBeenCalledWith('updated_at', {
       ascending: true,
     });
-    expect(verify).toHaveBeenCalledWith('BAC-OLD');
+    expect(verify).toHaveBeenCalledWith('BAC-OLD', expect.any(AbortSignal));
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'failed' })
     );
@@ -164,6 +164,28 @@ describe('reconcileAbandonedPaystackAttempts', () => {
     expect(update).not.toHaveBeenCalledWith(
       expect.objectContaining({ status: 'failed' })
     );
+  });
+
+  it('records a rotation failure once for the held attempt', async () => {
+    const { client, updateBuilder } = createClient();
+    Object.assign(updateBuilder, {
+      // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are awaited thenables.
+      then: (resolve: (result: { error: Error }) => void) =>
+        resolve({ error: new Error('rotation unavailable') }),
+    });
+    const verify = vi.fn().mockResolvedValue({
+      success: true,
+      data: { reference: 'BAC-OLD', status: 'pending' },
+    });
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify,
+    });
+
+    expect(summary.held).toEqual([
+      { id: 'attempt-1', reason: 'pending', rotationFailed: true },
+    ]);
   });
 
   it.each([

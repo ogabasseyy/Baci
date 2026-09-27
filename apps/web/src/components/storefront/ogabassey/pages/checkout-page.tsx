@@ -51,6 +51,7 @@ import type React from 'react';
 import { resolveMerchantDeliveryMethod } from './checkout/resolve-merchant-delivery-method';
 import { buildCheckoutBillingAddress } from './checkout/build-checkout-billing-address';
 import { useCheckoutFormState } from './checkout/hooks/use-checkout-form-state';
+import { useCheckoutStepState } from './checkout/hooks/use-checkout-step-state';
 import {
   useJuicywayPayment,
   type JuicywayPendingOrder,
@@ -311,11 +312,20 @@ export const CheckoutPage: React.FC = () => {
     completedSteps: rawCompletedSteps,
   } = checkoutForm;
 
-  // Hydration safety: Force default state during server/first render to match server HTML
-  const currentStep = isHydrated ? rawCurrentStep : 'contact';
-  const completedSteps = isHydrated ? rawCompletedSteps : { contact: false, delivery: false };
-
-  const [focusActiveStep, setFocusActiveStep] = useState(false);
+  const {
+    currentStep,
+    completedSteps,
+    focusActiveStep,
+    setCurrentStep,
+    setCompletedSteps,
+    completeContact,
+  } = useCheckoutStepState({
+    isHydrated,
+    currentStep: rawCurrentStep,
+    completedSteps: rawCompletedSteps,
+    setField: setCheckoutField,
+    setFields: setCheckoutFields,
+  });
 
   // Convenient setters that update the persisted form
   const setFirstName = (v: string) => setCheckoutField('firstName', v);
@@ -324,14 +334,6 @@ export const CheckoutPage: React.FC = () => {
   const setCustomerPhone = (v: string) => setCheckoutField('customerPhone', v);
   const setNewAddressState = (v: string) => setCheckoutField('newAddressState', v);
   const setNewAddressCity = (v: string) => setCheckoutField('newAddressCity', v);
-  const setCurrentStep = (v: 'contact' | 'delivery' | 'payment') => { setFocusActiveStep(true); setCheckoutField('currentStep', v); };
-  const setCompletedSteps = (v: { contact: boolean; delivery: boolean } | ((prev: { contact: boolean; delivery: boolean }) => { contact: boolean; delivery: boolean })) => {
-    if (typeof v === 'function') {
-      setCheckoutField('completedSteps', v(completedSteps));
-    } else {
-      setCheckoutField('completedSteps', v);
-    }
-  };
   const inferredLocationDebounceRef = useRef<number | null>(null);
   const clearInferredLocationDebounce = () => {
     if (inferredLocationDebounceRef.current !== null) {
@@ -2453,7 +2455,7 @@ export const CheckoutPage: React.FC = () => {
               }}
               signedIn={Boolean(user)}
               onOpen={() => setCurrentStep('contact')}
-              onComplete={() => { setFocusActiveStep(true); setCheckoutFields({ currentStep: 'delivery', completedSteps: { ...completedSteps, contact: true } }); }}
+              onComplete={completeContact}
             />
 
             <CheckoutStepSection focusOnActivate={focusActiveStep} id="checkout-delivery" title="Delivery Method" number={2}

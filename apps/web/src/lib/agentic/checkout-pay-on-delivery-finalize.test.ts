@@ -455,7 +455,15 @@ describe('finalizeAgenticPayOnDeliveryCheckout', () => {
       undefined,
       { feedScope: 'merchant' }
     );
-    expect(mocks.revalidateProductSlugs).not.toHaveBeenCalled();
+    // The agentic layer skips its own per-slug invalidation when the product
+    // read fails, but the order-purge helper still runs its fail-open local
+    // invalidation (hard-expire) for the committed order.
+    expect(mocks.revalidateProductSlugs).toHaveBeenCalledTimes(1);
+    expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      expect.any(Array),
+      { expireImmediately: true }
+    );
   });
 
   it('does not churn product or feed caches for unlimited inventory', async () => {

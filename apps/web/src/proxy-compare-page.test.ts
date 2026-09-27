@@ -28,9 +28,12 @@ vi.mock('@/lib/slug-alias-cache', () => ({
 }));
 
 vi.mock('@/env', () => ({
-  getInternalApiSecret: () => 'test-internal-secret',
   getSupabaseAnonKey: () => 'anon-key',
   getSupabaseUrl: () => 'https://example.supabase.co',
+}));
+
+vi.mock('@/lib/internal-api-secret', () => ({
+  getInternalApiSecret: () => 'test-internal-secret',
 }));
 
 vi.mock('@/lib/storefront-product-slug-membership', () => ({

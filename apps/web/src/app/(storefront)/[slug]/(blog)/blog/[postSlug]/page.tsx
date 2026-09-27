@@ -9,6 +9,7 @@ import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
 import { evaluateStorefrontSlugSafety } from '@/lib/storefront-slug-safety';
 import { BlogPostBodyFallback } from './BlogPostBodyFallback';
 import { BlogPostPageFallback } from './BlogPostPageFallback';
+import { resolveBlogCatalogPlainText } from './blog-catalog-plain-text';
 import {
   buildCanonicalBlogPostUrl,
   getBlogPostTextPreview,
@@ -18,7 +19,6 @@ import { resolveBlogPostHeroShell } from './blog-post-hero-shell-data';
 import BlogPostPageContent from './blog-post-page-content';
 import { BlogPostShell } from './blog-post-shell';
 import { resolveBlogPostStaticParams } from './blog-post-static-params';
-import { resolveBlogCatalogPlainText } from './blog-post-structured-data';
 
 interface PageProps {
   params: Promise<{ slug: string; postSlug: string }>;

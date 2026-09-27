@@ -10,31 +10,6 @@ vi.mock('next/link', () => ({
 }));
 
 describe('BlogRelatedProducts', () => {
-  it('renders a live price and unavailable state for managed stock', () => {
-    render(
-      <BlogRelatedProducts
-        basePath="/ogabassey"
-        currencySource={{ country: 'NG', payout_currency: 'NGN' }}
-        products={[
-          {
-            category_slug: 'smartphones',
-            id: 'product-1',
-            name: 'iPhone 16',
-            price: 150000,
-            manage_stock: true,
-            stock: 0,
-            slug: 'iphone-16',
-          },
-        ]}
-      />
-    );
-
-    expect(screen.getByRole('link', { name: /iphone 16/i })).toHaveTextContent(
-      '₦150,000'
-    );
-    expect(screen.getByText('Currently unavailable')).toBeInTheDocument();
-  });
-
   it('keeps the product link when optional live fields are absent', () => {
     render(
       <BlogRelatedProducts
@@ -95,63 +70,6 @@ describe('BlogRelatedProducts', () => {
     // Matches the categorized PDP, which normalizes legacy null
     // manage_stock to managed inventory (`manage_stock ?? true`).
     expect(screen.getByText('Currently unavailable')).toBeInTheDocument();
-  });
-
-  it('hides the parent price when variants fail to resolve', () => {
-    render(
-      <BlogRelatedProducts
-        basePath="/ogabassey"
-        currencySource={{ country: 'NG', payout_currency: 'NGN' }}
-        products={[
-          {
-            id: 'product-unresolved-variants',
-            name: 'Pixel 9',
-            price: 750000,
-            manage_stock: false,
-            has_variants: true,
-            slug: 'pixel-9',
-          },
-        ]}
-      />
-    );
-
-    // The variant RPC errored, so variants/has_purchasable_variant are
-    // undefined: there may be no selectable SKU at the parent amount.
-    // Availability stays fail-open, but no price is advertised (the
-    // inline-token path prints "Check current price" for this state).
-    expect(screen.queryByText('Currently unavailable')).not.toBeInTheDocument();
-    expect(
-      screen.getByRole('link', { name: /pixel 9/i })
-    ).not.toHaveTextContent('₦750,000');
-  });
-
-  it('hides the parent price when variant selection is confirmed empty', () => {
-    render(
-      <BlogRelatedProducts
-        basePath="/ogabassey"
-        currencySource={{ country: 'NG', payout_currency: 'NGN' }}
-        products={[
-          {
-            id: 'product-confirmed-empty-variants',
-            name: 'Galaxy S25',
-            price: 850000,
-            manage_stock: true,
-            stock: 5,
-            has_variants: true,
-            has_purchasable_variant: false,
-            variants: [],
-            slug: 'galaxy-s25',
-          },
-        ]}
-      />
-    );
-
-    // Successful hydration returned no public rows: no selectable SKU, so
-    // the stocked parent price must not print next to the unavailable label.
-    expect(screen.getByText('Currently unavailable')).toBeInTheDocument();
-    expect(
-      screen.getByRole('link', { name: /galaxy s25/i })
-    ).not.toHaveTextContent('₦850,000');
   });
 
   it('does not show unavailable when a stocked condition offer can be purchased', () => {

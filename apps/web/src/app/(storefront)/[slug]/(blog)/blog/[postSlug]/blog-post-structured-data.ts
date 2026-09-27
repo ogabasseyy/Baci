@@ -1,4 +1,3 @@
-import { decodeHTML } from 'entities';
 import { getBlogAuthorSameAs } from '@/lib/blog-authors';
 import {
   extractBlogFaqItems,
@@ -12,28 +11,13 @@ import {
   getBlogStructuredDataImageUrls,
 } from '@/lib/blog-structured-data-images';
 import { buildBlogVideoMetadata } from '@/lib/blog-video-metadata';
-import { resolveBlogCatalogPrices } from '@/lib/resolve-blog-catalog-prices';
+import type { resolveBlogCatalogPrices } from '@/lib/resolve-blog-catalog-prices';
 import {
   generateBlogPostSchema,
   generateBreadcrumbSchema,
 } from '@/lib/seo-utils';
+import { resolveBlogCatalogPlainText } from './blog-catalog-plain-text';
 import { getBlogPostTextPreview } from './blog-post-content';
-
-/**
- * Resolve catalog-price tokens in plain-text inputs (page metadata, JSON-LD
- * descriptions). Token resolution runs through the HTML sanitizer, which
- * escapes `&` as `&amp;`; decode back so plain-text consumers store the
- * literal text instead of the entity.
- */
-export function resolveBlogCatalogPlainText(
-  text: string,
-  catalogPrices?: Parameters<typeof resolveBlogCatalogPrices>[1]
-): string {
-  return decodeHTML(
-    resolveBlogCatalogPrices({ html: text }, catalogPrices ?? { products: [] })
-      .html ?? text
-  );
-}
 
 type BlogPostStructuredDataInput = {
   catalogPrices?: Parameters<typeof resolveBlogCatalogPrices>[1];

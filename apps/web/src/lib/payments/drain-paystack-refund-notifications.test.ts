@@ -15,7 +15,7 @@ function database(
       amount: number;
       currency: string;
       gateway: string;
-      metadata: { payment_transaction_id: string };
+      metadata: { payment_transaction_id?: string };
     }>;
   } = {}
 ) {
@@ -144,6 +144,50 @@ describe('Paystack refund notifications', () => {
     expect(mocks.sendEmail).not.toHaveBeenCalled();
     expect(db.finish.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'delivery_uncertain' })
+    );
+  });
+
+  it('emails after an unlinked legacy refund matches the sole payment leg', async () => {
+    const db = database('processed_customer_email', 'refunded', {
+      payments: [{ amount: 60, gateway: 'paystack', id: 'payment-1' }],
+      refunds: [
+        { amount: 60, currency: 'NGN', gateway: 'paystack', metadata: {} },
+      ],
+    });
+    await expect(
+      drainPaystackRefundNotifications(db as never, mocks.sendEmail)
+    ).resolves.toEqual({ claimed: 1, sent: 1, failed: 0 });
+    expect(mocks.sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'buyer@example.com' })
+    );
+    expect(db.finish.update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'sent' })
+    );
+  });
+
+  it('holds an unlinked legacy refund when several payment legs exist', async () => {
+    const db = database('processed_customer_email', 'refunded', {
+      payments: [
+        { amount: 60, gateway: 'paystack', id: 'payment-1' },
+        { amount: 40, gateway: 'paystack', id: 'payment-2' },
+      ],
+      refunds: [
+        { amount: 60, currency: 'NGN', gateway: 'paystack', metadata: {} },
+        {
+          amount: 40,
+          currency: 'NGN',
+          gateway: 'paystack',
+          metadata: { payment_transaction_id: 'payment-2' },
+        },
+      ],
+    });
+    await drainPaystackRefundNotifications(db as never, mocks.sendEmail);
+    expect(mocks.sendEmail).not.toHaveBeenCalled();
+    expect(db.finish.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        last_error: 'refund_notification_ledger_mismatch',
+        status: 'failed',
+      })
     );
   });
 

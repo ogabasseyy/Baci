@@ -1,4 +1,5 @@
-import { type PaystackResult, paystackRequest } from '@/lib/paystack';
+import type { PaystackResult } from '@/lib/paystack';
+import { paystackRequest } from '@/lib/paystack-request';
 
 /** Read back the current provider state before changing a local refund. */
 export function fetchRefund(

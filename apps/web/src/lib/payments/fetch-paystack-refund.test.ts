@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   paystackRequest: vi.fn(),
 }));
 
-vi.mock('@/lib/paystack', () => ({
+vi.mock('@/lib/paystack-request', () => ({
   paystackRequest: mocks.paystackRequest,
 }));
 

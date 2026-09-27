@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ initiateRefund: vi.fn() }));
 
-vi.mock('@/lib/paystack', () => ({ initiateRefund: mocks.initiateRefund }));
+vi.mock('@/lib/initiate-paystack-refund', () => ({
+  initiateRefund: mocks.initiateRefund,
+}));
 vi.mock('@/lib/orders/build-order-cancellation-email-message', () => ({
   buildOrderCancellationEmailMessage: vi.fn(),
 }));

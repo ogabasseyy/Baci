@@ -5,7 +5,9 @@ const mocks = vi.hoisted(() => ({
   sendEmail: vi.fn(),
 }));
 
-vi.mock('@/lib/paystack', () => ({ initiateRefund: mocks.initiateRefund }));
+vi.mock('@/lib/initiate-paystack-refund', () => ({
+  initiateRefund: mocks.initiateRefund,
+}));
 vi.mock('@/lib/zeptomail', () => ({ sendEmail: mocks.sendEmail }));
 vi.mock('@/lib/orders/build-order-cancellation-email-message', () => ({
   buildOrderCancellationEmailMessage: vi.fn(() => ({

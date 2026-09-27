@@ -4,7 +4,7 @@ const provider = vi.hoisted(() => ({
   fetchRefund: vi.fn(),
   verifyTransaction: vi.fn(),
 }));
-vi.mock('@/lib/paystack', () => ({
+vi.mock('@/lib/verify-paystack-transaction', () => ({
   verifyTransaction: provider.verifyTransaction,
 }));
 vi.mock('./fetch-paystack-refund', () => ({

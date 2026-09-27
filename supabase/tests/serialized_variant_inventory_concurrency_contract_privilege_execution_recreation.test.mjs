@@ -129,6 +129,56 @@ test('applies multi-owner default privileges on recreation', () => {
   );
 });
 
+test('tracks scoped role changes as owner during function recreation', () => {
+  const signature = 'private.fixture(uuid)';
+  for (const setRole of [
+    'SET LOCAL ROLE authenticated;',
+    'SET SESSION ROLE authenticated;',
+  ]) {
+    const source = [
+      `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER`,
+      'LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;',
+      `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+      `DROP FUNCTION ${signature};`,
+      'GRANT USAGE, CREATE ON SCHEMA private TO authenticated;',
+      setRole,
+      `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER`,
+      'LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;',
+      `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+      'RESET ROLE;',
+    ].join('\n');
+
+    assert.equal(
+      serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+        source,
+        signature
+      ),
+      true
+    );
+  }
+});
+
+test('binds ownerless default privileges to the active role', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = [
+    'SET ROLE inventory_owner;',
+    'ALTER DEFAULT PRIVILEGES IN SCHEMA private GRANT EXECUTE ON FUNCTIONS TO authenticated;',
+    `DROP FUNCTION ${signature};`,
+    `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER`,
+    'LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;',
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+    'RESET ROLE;',
+  ].join('\n');
+
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});
+
 test('tracks session authorization as owner during function recreation', () => {
   const signature = 'private.fixture(uuid)';
   const source = [

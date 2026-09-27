@@ -43,9 +43,10 @@ function parseRoleMembership(text) {
 
 function parseRoleChange(text) {
   const leading = text.trim();
-  const setRole = /^SET\s+ROLE\s+("[^"]+"|[a-z_][a-z0-9_]*)\s*;?$/i.exec(
-    leading
-  );
+  const setRole =
+    /^SET\s+(?:LOCAL\s+|SESSION\s+)?ROLE\s+("[^"]+"|[a-z_][a-z0-9_]*)\s*;?$/i.exec(
+      leading
+    );
   if (setRole) {
     return {
       index: text.indexOf(leading),
@@ -94,16 +95,17 @@ function parseDefaultFunctionPrivileges(text, targetSchema) {
           .includes(targetSchema.toLowerCase())
     )
     .flatMap((match) =>
-      serializedInventorySqlParser
-        .splitTopLevelList(match[1] ?? 'postgres')
-        .map((owner) => ({
-          index: match.index,
-          kind: 'default',
-          owner: normalizeRoleName(owner),
-          operation: match[3],
-          grantees: match[4],
-          scope: match[2] === undefined ? 'global' : 'schema',
-        }))
+      (match[1] === undefined
+        ? [null]
+        : serializedInventorySqlParser.splitTopLevelList(match[1])
+      ).map((owner) => ({
+        index: match.index,
+        kind: 'default',
+        owner: owner === null ? null : normalizeRoleName(owner),
+        operation: match[3],
+        grantees: match[4],
+        scope: match[2] === undefined ? 'global' : 'schema',
+      }))
     );
 }
 

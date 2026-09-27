@@ -160,7 +160,7 @@ function hasUnlimitedStockReturn(source) {
   return Boolean(
     guard &&
       guardArms &&
-      /\bRETURN\b/i.test(guardArms.thenBranch) &&
+      /\bRETURN\s*;/i.test(guardArms.thenBranch) &&
       protectedOperation &&
       serializedInventoryControlFlow.dominatesControlFlow(
         executable,

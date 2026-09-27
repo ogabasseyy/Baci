@@ -34,9 +34,8 @@ const maskedSourceCache = new Map();
 function maskSqlStringLiterals(source) {
   const cached = maskedSourceCache.get(source);
   if (cached !== undefined) return cached;
-  const commentFree = serializedInventorySqlParser.stripSqlComments(source);
-  const masked = commentFree.replace(/'(?:''|\\[\s\S]|[^'])*'/g, (literal) =>
-    literal.replace(/[^\r\n]/g, ' ')
+  const masked = serializedInventorySqlParser.maskSqlLiterals(
+    serializedInventorySqlParser.stripSqlComments(source)
   );
   maskedSourceCache.set(source, masked);
   return masked;
@@ -221,7 +220,8 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
       }
     } else if (event.kind === 'default') {
       const grant = event.operation === 'GRANT';
-      const ownerDefaults = state.defaultGrants.get(event.owner) ?? {
+      const owner = event.owner ?? state.currentRole;
+      const ownerDefaults = state.defaultGrants.get(owner) ?? {
         global: new Map(),
         schema: new Map(),
       };
@@ -233,7 +233,7 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
           grant
         );
       }
-      state.defaultGrants.set(event.owner, ownerDefaults);
+      state.defaultGrants.set(owner, ownerDefaults);
     } else if (event.kind === 'membership') {
       const inheritable = event.inheritable !== false;
       for (const member of event.members) {

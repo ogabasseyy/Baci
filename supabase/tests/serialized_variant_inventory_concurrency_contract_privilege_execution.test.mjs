@@ -330,6 +330,25 @@ test('tracks routines renamed into the protected identity', () => {
   );
 });
 
+test('ignores lifecycle decoys inside dollar-quoted literals', () => {
+  const signature = 'private.confirm_order_inventory_reservations(uuid, uuid)';
+  const source = [
+    `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;`,
+    `GRANT EXECUTE ON FUNCTION ${signature} TO authenticated;`,
+    'CREATE FUNCTION private.helper() RETURNS text LANGUAGE plpgsql AS $func$ BEGIN',
+    `  RETURN $ddl$DROP FUNCTION ${signature};$ddl$;`,
+    'END; $func$;',
+    `SELECT $ddl$DROP FUNCTION ${signature};$ddl$;`,
+  ].join('\n');
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});
+
 test('tracks routines moved into the protected schema', () => {
   const signature = 'private.fixture(uuid)';
   const source = [

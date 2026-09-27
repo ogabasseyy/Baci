@@ -117,6 +117,36 @@ $wrapper$;`;
   );
 });
 
+test('detects privilege DDL assigned through a format expression', () => {
+  const source = `DO $wrapper$
+DECLARE
+  ddl text := format('GRANT EXECUTE ON FUNCTION %I.%I(uuid, uuid) TO authenticated', 'private', 'confirm_order_inventory_reservations');
+BEGIN
+  EXECUTE ddl;
+END;
+$wrapper$;`;
+
+  assert.equal(
+    serializedInventoryDynamicDdl.hasDynamicPrivilegeDdl(
+      source,
+      'private.confirm_order_inventory_reservations(uuid, uuid)'
+    ),
+    true
+  );
+});
+
+test('detects function DDL assigned through a format expression', () => {
+  const source = `DO $wrapper$
+DECLARE
+  ddl text := format('ALTER FUNCTION %s SET search_path = %L', 'private.fixture(integer)', '');
+BEGIN
+  EXECUTE ddl;
+END;
+$wrapper$;`;
+
+  assert.equal(hasDynamicFunctionDdl(source, 'private.fixture(integer)'), true);
+});
+
 test('detects protected privilege DDL assigned to an execute variable', () => {
   const source = `DO $wrapper$
 DECLARE

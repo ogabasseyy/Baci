@@ -214,6 +214,29 @@ test('public decrement RPCs reject nonpositive quantities and unauthorized merch
   }
 });
 
+test('unlimited-stock branches require a bare return after the result', () => {
+  for (const functionName of [
+    'public.decrement_product_stock(uuid, integer)',
+    'public.decrement_variant_stock(uuid, integer)',
+  ]) {
+    const body = serializedInventoryContract.latestFunctionBody(functionName);
+    assert.equal(
+      serializedInventoryDecrementGuards.hasUnlimitedStockReturn(body),
+      true
+    );
+    const arm =
+      /IF\s+NOT\s+COALESCE\s*\(\s*v_manage_stock[\s\S]*?END\s+IF\s*;/i.exec(
+        body
+      )[0];
+    assert.equal(
+      serializedInventoryDecrementGuards.hasUnlimitedStockReturn(
+        body.replace(arm, arm.replace(/\bRETURN\s*;/i, 'NULL;'))
+      ),
+      false
+    );
+  }
+});
+
 test('public decrement RPCs use null sentinels and hide missing resources', () => {
   for (const functionName of [
     'public.decrement_product_stock(uuid, integer)',

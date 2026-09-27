@@ -251,8 +251,15 @@ function hasDynamicFunctionDdl(source, functionSignature) {
     const normalized = normalizedExecutePayload(payload);
     if (ddl.test(normalized.text)) return true;
     const assigned = assignedExecutePayload(source, execute.index, payload);
-    if (assigned !== null && ddl.test(normalizeExecuteExpression(assigned))) {
-      return true;
+    if (assigned !== null) {
+      const renderedAssigned = normalizedExecutePayload(assigned);
+      if (ddl.test(renderedAssigned.text)) return true;
+      if (
+        renderedAssigned.hasUnknownArguments &&
+        dynamicDdlOperationPattern.test(renderedAssigned.text)
+      ) {
+        return true;
+      }
     }
     if (
       normalized.hasUnknownArguments &&
@@ -275,11 +282,17 @@ function hasDynamicPrivilegeDdl(source, functionSignature) {
     const normalized = normalizedExecutePayload(payload);
     if (privilege.test(normalized.text)) return true;
     const assigned = assignedExecutePayload(source, execute.index, payload);
-    if (
-      assigned !== null &&
-      privilege.test(normalizeExecuteExpression(assigned))
-    ) {
-      return true;
+    if (assigned !== null) {
+      const renderedAssigned = normalizedExecutePayload(assigned);
+      if (privilege.test(renderedAssigned.text)) return true;
+      if (
+        renderedAssigned.hasUnknownArguments &&
+        /\b(?:GRANT|REVOKE)\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)\s+ON\s+(?:FUNCTION|ROUTINE)\b/i.test(
+          renderedAssigned.text
+        )
+      ) {
+        return true;
+      }
     }
     if (
       normalized.hasUnknownArguments &&

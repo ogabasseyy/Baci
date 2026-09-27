@@ -37,6 +37,7 @@ interface UseCheckoutDeliveryOptionsInput {
     type: ComponentProps<typeof AirportDeliveryOptions>['airportType']
   ) => void;
   setDeliveryMethod: (method: DeliveryMethod) => void;
+  selectDeliveryMethod: (method: DeliveryMethod) => void;
   setSelectedQuoteId: (id: string) => void;
   stationPickupQuote: ComponentProps<
     typeof DeliveryMethodTabs
@@ -67,6 +68,7 @@ export function useCheckoutDeliveryOptions({
   setAirportRequiresQuote,
   setAirportType,
   setDeliveryMethod,
+  selectDeliveryMethod,
   setSelectedQuoteId,
   stationPickupQuote,
   stationPickupQuotes,
@@ -90,7 +92,7 @@ export function useCheckoutDeliveryOptions({
       merchantSlug,
       stationPickupQuote,
       hasMerchantPickupQuote,
-      onSelect: setDeliveryMethod,
+      onSelect: selectDeliveryMethod,
     },
     station: {
       isLoadingQuotes,

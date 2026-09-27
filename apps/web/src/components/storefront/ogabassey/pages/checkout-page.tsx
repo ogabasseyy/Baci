@@ -687,7 +687,8 @@ export const CheckoutPage: React.FC = () => {
     setAirportRequiresQuote: (required) =>
       setCheckoutField('airportRequiresQuote', required),
     setAirportType,
-    setDeliveryMethod: selectDeliveryMethod,
+    setDeliveryMethod,
+    selectDeliveryMethod,
     setSelectedQuoteId,
     stationPickupQuote,
     stationPickupQuotes,

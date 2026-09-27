@@ -1,19 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { hasStockedOffer } from '@/lib/has-stocked-offer';
 import { hasStockedRelatedBlogVariant } from '@/lib/has-stocked-related-blog-variant';
 import { hydrateRelatedBlogProductSerializedInventory } from '@/lib/hydrate-related-blog-product-serialized-inventory';
 import { mergeRelatedBlogProductSerializedInventory } from '@/lib/merge-related-blog-product-serialized-inventory';
+import { normalizeOfferRows } from '@/lib/normalize-offer-rows';
 import { getEffectiveStock } from '@/lib/product-stock';
-import {
-  hasStockedOffer,
-  normalizeOfferRows,
-  toFinitePrice,
-} from '@/lib/related-blog-product-offer-rows';
 import type {
   RelatedBlogProduct,
   RelatedBlogProductOffer,
   RelatedBlogProductVariant,
 } from '@/lib/related-blog-products';
 import { isValidUuid } from '@/lib/sanitize-core';
+import { toFinitePrice } from '@/lib/to-finite-price';
 
 interface VariantStockRow {
   id?: string | null;

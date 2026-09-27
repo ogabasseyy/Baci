@@ -63,12 +63,14 @@ function parseRoleChange(text) {
       return {
         index: text.indexOf(leading),
         kind: 'reset-role',
+        sessionAuthorization: true,
       };
     }
     return {
       index: text.indexOf(leading),
       kind: 'role',
       role: normalizeRoleName(setSessionAuthorization[1]),
+      sessionAuthorization: true,
     };
   }
   if (
@@ -78,6 +80,7 @@ function parseRoleChange(text) {
     return {
       index: text.indexOf(leading),
       kind: 'reset-role',
+      ...(/SESSION/i.test(leading) ? { sessionAuthorization: true } : {}),
     };
   }
   return null;

@@ -1,7 +1,8 @@
 import { serializedInventoryDynamicRender } from './serialized_variant_inventory_concurrency_contract_dynamic_render.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
-const { dollarQuoteAt, escapeRegex } = serializedInventorySqlParser;
+const { dollarQuoteAt, escapeRegex, maskSqlLiterals } =
+  serializedInventorySqlParser;
 const { renderFormatInvocation } = serializedInventoryDynamicRender;
 
 function identifierPattern(identifier) {
@@ -101,15 +102,32 @@ function normalizeExecuteExpression(payload) {
 const dynamicDdlOperationPattern =
   /\b(?:CREATE\s+(?:OR\s+REPLACE\s+)?|DROP\s+|ALTER\s+)(?:FUNCTION|ROUTINE)\b/i;
 
+function hasUnresolvedExpressionComponents(payload) {
+  const executable = maskSqlLiterals(payload);
+  return /\|\||\b(?:quote_ident|quote_literal|quote_nullable|concat|concat_ws)\s*\(/i.test(
+    executable
+  );
+}
+
+function expressionOperationText(payload) {
+  return payload
+    .replace(/'((?:''|\\.|[^'])*)'/gs, (_, value) =>
+      value.replaceAll("''", "'")
+    )
+    .replace(/\s*\|\|\s*/g, ' ');
+}
+
 function normalizedExecutePayload(payload) {
   const rendered = renderFormatInvocation(payload);
   if (!rendered) {
     return {
+      operationText: expressionOperationText(payload),
       text: normalizeExecuteExpression(payload),
-      hasUnknownArguments: false,
+      hasUnknownArguments: hasUnresolvedExpressionComponents(payload),
     };
   }
   return {
+    operationText: expressionOperationText(rendered.text),
     text: normalizeExecuteExpression(rendered.text),
     hasUnknownArguments: rendered.hasUnknownArguments,
   };
@@ -144,14 +162,14 @@ function hasDynamicFunctionDdl(source, functionSignature) {
       if (ddl.test(renderedAssigned.text)) return true;
       if (
         renderedAssigned.hasUnknownArguments &&
-        dynamicDdlOperationPattern.test(renderedAssigned.text)
+        dynamicDdlOperationPattern.test(renderedAssigned.operationText)
       ) {
         return true;
       }
     }
     if (
       normalized.hasUnknownArguments &&
-      dynamicDdlOperationPattern.test(normalized.text)
+      dynamicDdlOperationPattern.test(normalized.operationText)
     ) {
       return true;
     }
@@ -176,7 +194,7 @@ function hasDynamicPrivilegeDdl(source, functionSignature) {
       if (
         renderedAssigned.hasUnknownArguments &&
         /\b(?:GRANT|REVOKE)\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)\s+ON\s+(?:FUNCTION|ROUTINE)\b/i.test(
-          renderedAssigned.text
+          renderedAssigned.operationText
         )
       ) {
         return true;
@@ -185,7 +203,7 @@ function hasDynamicPrivilegeDdl(source, functionSignature) {
     if (
       normalized.hasUnknownArguments &&
       /\b(?:GRANT|REVOKE)\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)\s+ON\s+(?:FUNCTION|ROUTINE)\b/i.test(
-        normalized.text
+        normalized.operationText
       )
     ) {
       return true;

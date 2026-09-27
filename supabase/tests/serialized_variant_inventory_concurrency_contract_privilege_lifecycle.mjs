@@ -32,14 +32,18 @@ function functionLifecycleEvents(source, signature) {
         `\\s*(?:(?:INOUT|IN|VARIADIC)\\s+)?(?:(?:"[^"]+"|[a-z_][a-z0-9_]*)\\s+)?${signaturePattern(type)}(?:\\s+(?:DEFAULT\\b|=)[^,)]*)?\\s*`
     )
     .join('\\s*,\\s*');
+  const outParameter = `OUT\\s+(?:(?:"[^"]+"|[a-z_][a-z0-9_]*)\\s+)?[a-z_][a-z0-9_.%]+(?:\\s+[a-z_][a-z0-9_.%]+)*(?:\\s*\\([^()]*\\))?`;
+  const allParameters = parameters
+    ? `${parameters}(?:\\s*,\\s*${outParameter})*`
+    : `(?:\\s*${outParameter}(?:\\s*,\\s*${outParameter})*)?`;
   const name = identifierPattern(parsed[1].trim());
-  const functionReference = `${name}\\s*\\(${parameters}\\)`;
+  const functionReference = `${name}\\s*\\(${allParameters}\\)`;
   const identityParts = [
     ...parsed[1].trim().matchAll(/"[^"]+"|[a-z_][a-z0-9_]*/gi),
   ].map((part) => part[0].replace(/^"|"$/g, '').toLowerCase());
   const identitySchema = identityParts.at(-2);
   const identityName = identityParts.at(-1);
-  const argumentListPattern = new RegExp(`^(?:${parameters})$`, 'i');
+  const argumentListPattern = new RegExp(`^(?:${allParameters})$`, 'i');
   const inboundMoves = [
     ...source.matchAll(
       /ALTER\s+(?:FUNCTION|ROUTINE)\s+((?:"[^"]+"|[a-z_][a-z0-9_]*)(?:\s*\.\s*(?:"[^"]+"|[a-z_][a-z0-9_]*))?)\s*\(([^()]*)\)\s+(RENAME\s+TO\s+(?:"[^"]+"|[a-z_][a-z0-9_]*)|SET\s+SCHEMA\s+(?:"[^"]+"|[a-z_][a-z0-9_]*))\s*;/gi

@@ -91,6 +91,7 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
     defaultGrants: new Map(),
     memberships: new Map(),
     currentRole: 'postgres',
+    sessionUser: 'postgres',
     owner: undefined,
   };
   const executableSources = (
@@ -185,8 +186,14 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
   for (const event of events) {
     if (event.kind === 'role') {
       state.currentRole = event.role;
+      if (event.sessionAuthorization) state.sessionUser = event.role;
     } else if (event.kind === 'reset-role') {
-      state.currentRole = 'postgres';
+      if (event.sessionAuthorization) {
+        state.currentRole = 'postgres';
+        state.sessionUser = 'postgres';
+      } else {
+        state.currentRole = state.sessionUser;
+      }
     } else if (event.kind === 'drop' || event.kind === 'invalidate') {
       state.exists = false;
       state.grants.clear();
@@ -215,7 +222,14 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
     } else if (event.kind === 'owner') {
       state.owner = event.owner;
     } else if (event.kind === 'reassign') {
-      if (state.owner !== undefined && event.from.includes(state.owner)) {
+      const references = event.from.map((reference) => {
+        if (reference === 'current_user' || reference === 'current_role') {
+          return state.currentRole;
+        }
+        if (reference === 'session_user') return state.sessionUser;
+        return reference;
+      });
+      if (state.owner !== undefined && references.includes(state.owner)) {
         state.owner = event.owner;
       }
     } else if (event.kind === 'default') {

@@ -129,6 +129,28 @@ test('applies multi-owner default privileges on recreation', () => {
   );
 });
 
+test('tracks recreation that adds OUT parameters to the delegate', () => {
+  const signature = 'private.confirm_order_inventory_reservations(uuid, uuid)';
+  const source = [
+    `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;`,
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+    `DROP FUNCTION ${signature};`,
+    'GRANT USAGE, CREATE ON SCHEMA private TO authenticated;',
+    'SET ROLE authenticated;',
+    'CREATE FUNCTION private.confirm_order_inventory_reservations(uuid, uuid, OUT result jsonb) RETURNS jsonb SECURITY DEFINER LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;',
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+    'RESET ROLE;',
+  ].join('\n');
+
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});
+
 test('tracks scoped role changes as owner during function recreation', () => {
   const signature = 'private.fixture(uuid)';
   for (const setRole of [

@@ -135,6 +135,32 @@ $wrapper$;`;
   );
 });
 
+test('fails closed on expression-built privilege payloads', () => {
+  const source = `DO $wrapper$
+BEGIN
+  EXECUTE 'GRANT EXECUTE ON FUNCTION ' || quote_ident('private') || '.' || quote_ident('confirm_order_inventory_reservations') || '(uuid, uuid) TO authenticated';
+END;
+$wrapper$;`;
+
+  assert.equal(
+    serializedInventoryDynamicDdl.hasDynamicPrivilegeDdl(
+      source,
+      'private.confirm_order_inventory_reservations(uuid, uuid)'
+    ),
+    true
+  );
+});
+
+test('fails closed on expression-built function DDL payloads', () => {
+  const source = `DO $wrapper$
+BEGIN
+  EXECUTE 'ALTER FUNCTION ' || quote_ident('private.fixture') || '(integer) SET search_path = ' || quote_literal('');
+END;
+$wrapper$;`;
+
+  assert.equal(hasDynamicFunctionDdl(source, 'private.fixture(integer)'), true);
+});
+
 test('detects function DDL assigned through a format expression', () => {
   const source = `DO $wrapper$
 DECLARE

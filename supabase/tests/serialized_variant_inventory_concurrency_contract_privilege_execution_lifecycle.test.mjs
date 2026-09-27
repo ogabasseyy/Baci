@@ -2,6 +2,22 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { serializedInventoryPrivilegeExecution } from './serialized_variant_inventory_concurrency_contract_privilege_execution.mjs';
 
+test('resolves special roles in ownership transfers', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = [
+    `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;`,
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+    'REASSIGN OWNED BY CURRENT_USER TO authenticated;',
+  ].join('\n');
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});
+
 test('sees schema-wide grants carrying a grantor clause', () => {
   const signature = 'private.fixture(uuid)';
   const source = [

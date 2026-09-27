@@ -192,9 +192,9 @@ describe('MCP catalog claims', () => {
         id: 112, method: 'tools/call',
         params: { name: 'get_recommendations', arguments: { use_case: 'variant' } },
       }));
-      expect(variants.structuredContent).toMatchObject({ products: [
+      expect(variants.structuredContent).toMatchObject({ products: expect.arrayContaining([
         expect.objectContaining({ id: 'variant-available-product' }),
-      ] });
+      ]) });
       expect(JSON.stringify(variants)).not.toContain('variant-sold-out-product');
       expect(JSON.stringify(variants)).not.toContain('variant-empty-product');
 
@@ -205,6 +205,21 @@ describe('MCP catalog claims', () => {
       expect(offers.structuredContent).toMatchObject({ products: [
         expect.objectContaining({ id: 'condition-offer-product' }),
       ] });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('recommends a stocked variant below budget when its parent price is above budget', async () => {
+    const server = await startMcpServerWithPostgrest({});
+    try {
+      const result = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+        id: 114, method: 'tools/call',
+        params: { name: 'get_recommendations', arguments: { use_case: 'variant', budget: 100000 } },
+      }));
+      expect(result.structuredContent).toMatchObject({ products: expect.arrayContaining([
+        expect.objectContaining({ id: 'variant-cheaper-than-parent', price: 90000 }),
+      ]) });
     } finally {
       await server.close();
     }

@@ -36,6 +36,7 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
           { id: 'transformed-image-product', name: 'Transformed Image Phone', slug: 'transformed-image-phone', price: 140000, images: ['https://cdn.ogabassey.com/image/width=750/core-assets/products/phone.avif?v=2'], manage_stock: false, stock_quantity: 0, has_variants: false },
           { id: 'condition-offer-product', name: 'Used Offer Phone', slug: 'used-offer-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: false, has_condition_offers: true },
           { id: 'variant-available-product', name: 'Variant Available Phone', slug: 'variant-available-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
+          { id: 'variant-cheaper-than-parent', name: 'Affordable Variant Phone', slug: 'affordable-variant-phone', price: 200000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
           { id: 'variant-sold-out-product', name: 'Variant Sold Out Phone', slug: 'variant-sold-out-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
           { id: 'variant-empty-product', name: 'Variant Empty Phone', slug: 'variant-empty-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
         ];
@@ -58,7 +59,11 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
           : rows;
         const offset = Number(url.searchParams.get('offset') ?? 0);
         const limit = Number(url.searchParams.get('limit') ?? candidates.length);
-        response.end(JSON.stringify(candidates.slice(offset, offset + limit)));
+        const parentPriceLimit = url.searchParams.get('price');
+        const filteredCandidates = parentPriceLimit?.startsWith('lte.')
+          ? candidates.filter((product) => product.price <= Number(parentPriceLimit.slice(4)))
+          : candidates;
+        response.end(JSON.stringify(filteredCandidates.slice(offset, offset + limit)));
       } else {
         response.statusCode = 406;
         response.end(JSON.stringify({ code: 'PGRST116', message: 'No rows' }));
@@ -74,6 +79,7 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
         { product_id: 'available-product', attributes: { storage: '128GB' }, price_override: 100000, stock_quantity: 0, condition: 'new', sku: 'TEST-128' },
         { product_id: 'variant-sold-out-product', attributes: { storage: '128GB' }, stock_quantity: 0 },
         { product_id: 'variant-available-product', attributes: { storage: '256GB' }, stock_quantity: 2 },
+        { product_id: 'variant-cheaper-than-parent', attributes: { storage: '128GB' }, price_override: 90000, stock_quantity: 2 },
         { product_id: 'combined-options-product', attributes: { storage: '256GB' }, stock_quantity: 2 },
         { product_id: 'slugless-variant-product', attributes: { storage: '256GB' }, stock_quantity: 2 },
         { product_id: 'untracked-variant-product', attributes: { storage: '128GB' }, stock_quantity: 0 },

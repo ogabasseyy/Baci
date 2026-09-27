@@ -1998,6 +1998,7 @@ function createOgabasseyServer() {
       };
 
       const kws = keywords[sanitizedUseCase] || [sanitizedUseCase];
+      const availabilityFilter = 'manage_stock.is.false,manage_stock.is.null,stock_quantity.gt.0,has_variants.is.true,has_condition_offers.is.true';
 
       let query = supabase
         .from('products')
@@ -2006,7 +2007,6 @@ function createOgabasseyServer() {
         )
         .eq('merchant_id', merchantId)
         .eq('status', 'active')
-        .or('manage_stock.is.false,manage_stock.is.null,stock_quantity.gt.0,has_variants.is.true,has_condition_offers.is.true')
         .order('created_at', { ascending: false })
         .order('id', { ascending: false });
 
@@ -2014,7 +2014,11 @@ function createOgabasseyServer() {
         ? undefined
         : sanitizePrice(args.budget) ?? 1000000000;
       if (budget !== undefined) {
-        query = query.lte('price', budget);
+        query = query.or(
+          `and(or(${availabilityFilter}),or(price.lte.${budget},has_variants.is.true,has_condition_offers.is.true))`
+        );
+      } else {
+        query = query.or(availabilityFilter);
       }
 
       const final = await selectRecommendedProducts({

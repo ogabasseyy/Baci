@@ -1,5 +1,9 @@
 import { getMcpProductStockSummary } from './product-stock-summary';
 
+const RECOMMENDATION_PAGE_SIZE = 32;
+const DEFAULT_RECOMMENDATION_PAGE_BUDGET = 4;
+const BUDGETED_RECOMMENDATION_PAGE_BUDGET = 8;
+
 interface RecommendationCandidate {
   id: string;
   name: string;
@@ -20,7 +24,7 @@ interface OptionStock {
 
 type RecommendedProduct<T> = T & { recommendationPrice?: number };
 
-/** Scans a bounded catalog window while checking stock on selected options. */
+/** Scans a bounded catalog window, with a larger finite window for option-priced budget searches. */
 export async function selectRecommendedProducts<T extends RecommendationCandidate>({
   keywords,
   budget,
@@ -41,8 +45,12 @@ export async function selectRecommendedProducts<T extends RecommendationCandidat
     product.description?.toLowerCase().includes(keyword)
   );
 
+  const maxPages = budget === undefined
+    ? DEFAULT_RECOMMENDATION_PAGE_BUDGET
+    : BUDGETED_RECOMMENDATION_PAGE_BUDGET;
   let offset = 0;
-  let products = await fetchPage(offset, 32) ?? [];
+  let pagesFetched = 1;
+  let products = await fetchPage(offset, RECOMMENDATION_PAGE_SIZE) ?? [];
   while (products.length > 0 && matched.length < 4) {
     const candidates = fallback.length < 4 ? products : products.filter(matchesUseCase);
     const trackedOptions = candidates.filter((product) =>
@@ -74,23 +82,27 @@ export async function selectRecommendedProducts<T extends RecommendationCandidat
       if (stock.inStock === false) continue;
 
       let recommendationPrice: number | undefined;
-      if (budget !== undefined && product.manage_stock === true &&
-        (product.has_variants || product.has_condition_offers)) {
-        const affordableVariantPrices = product.has_variants && variants !== null
+      if (product.manage_stock === true && (product.has_variants || product.has_condition_offers)) {
+        const stockedVariantPrices = product.has_variants && variants !== null
           ? productVariants
             .filter((variant) => Number(variant.stock_quantity ?? 0) > 0)
             .map((variant) => Number(variant.price_override ?? product.price))
-            .filter((price) => Number.isFinite(price) && price <= budget)
+            .filter(Number.isFinite)
           : [];
-        const affordableOfferPrices = product.has_condition_offers && offers !== null
+        const stockedOfferPrices = product.has_condition_offers && offers !== null
           ? productOffers
-            .filter((offer) => Number(offer.stock_quantity ?? 0) > 0)
+            .filter((offer) => Number(offer.stock_quantity ?? 0) > 0 && offer.price != null)
             .map((offer) => Number(offer.price))
-            .filter((price) => Number.isFinite(price) && price <= budget)
+            .filter(Number.isFinite)
           : [];
-        const affordablePrices = [...affordableVariantPrices, ...affordableOfferPrices];
-        if (affordablePrices.length === 0) continue;
-        recommendationPrice = affordablePrices.reduce((lowest, price) => Math.min(lowest, price));
+        const stockedOptionPrices = [...stockedVariantPrices, ...stockedOfferPrices];
+        const recommendationPrices = budget === undefined
+          ? stockedOptionPrices
+          : stockedOptionPrices.filter((price) => price <= budget);
+        if (budget !== undefined && recommendationPrices.length === 0) continue;
+        if (recommendationPrices.length > 0) {
+          recommendationPrice = recommendationPrices.reduce((lowest, price) => Math.min(lowest, price));
+        }
       } else if (budget !== undefined && Number(product.price) > budget) {
         continue;
       }
@@ -101,9 +113,10 @@ export async function selectRecommendedProducts<T extends RecommendationCandidat
       if (fallback.length < 4) fallback.push(recommendation);
       if (matchesUseCase(product) && matched.length < 4) matched.push(recommendation);
     }
-    if (products.length < 32 || offset >= 96) break;
-    offset += 32;
-    products = await fetchPage(offset, 32) ?? [];
+    if (products.length < RECOMMENDATION_PAGE_SIZE || pagesFetched >= maxPages) break;
+    offset += RECOMMENDATION_PAGE_SIZE;
+    pagesFetched += 1;
+    products = await fetchPage(offset, RECOMMENDATION_PAGE_SIZE) ?? [];
   }
 
   return matched.length > 0 ? matched : fallback;

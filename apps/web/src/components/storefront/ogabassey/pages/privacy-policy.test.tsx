@@ -45,8 +45,36 @@ describe('OgabasseyV2PrivacyPolicy', () => {
   });
 
   describe('default content (no merchant pages.privacy)', () => {
+    it('states Ogabassey retention periods, ChatGPT handling, and privacy controls', () => {
+      render(
+        <OgabasseyV2PrivacyPolicy
+          merchant={{ slug: 'ogabassey', email: 'privacy@ogabassey.com' }}
+        />,
+      );
+
+      expect(screen.getByRole('heading', { name: 'How Long We Keep Your Information' })).toBeInTheDocument();
+      expect(screen.getByText(/generally limits storage to six calendar months/)).toBeInTheDocument();
+      expect(screen.getByText(/reviewing our retention controls/)).toBeInTheDocument();
+      expect(screen.queryByText(/we delete or de-identify personal data no later than/)).not.toBeInTheDocument();
+      expect(screen.getByText(/at least six years after the year of assessment/)).toBeInTheDocument();
+      expect(screen.getByText(/do not create a saved Ogabassey account search history/)).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Your Privacy Choices' })).toBeInTheDocument();
+      expect(screen.getByText(/If you cannot use that address, email us/)).toBeInTheDocument();
+      expect(
+        screen.getAllByRole('link', { name: 'privacy@ogabassey.com' }),
+      ).toHaveLength(2);
+    });
+
+    it('does not assign Ogabassey-specific retention promises to another merchant', () => {
+      render(<OgabasseyV2PrivacyPolicy merchant={{ slug: 'another-shop' }} />);
+
+      expect(screen.queryByRole('heading', { name: 'How Long We Keep Your Information' })).not.toBeInTheDocument();
+    });
+
     it('renders without crashing when no merchant prop is provided', () => {
       render(<OgabasseyV2PrivacyPolicy />);
+
+      expect(screen.getByRole('heading', { name: 'How Long We Keep Your Information' })).toBeInTheDocument();
 
       expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
     });
@@ -86,9 +114,9 @@ describe('OgabasseyV2PrivacyPolicy', () => {
     it('renders the default email in the contact section', () => {
       render(<OgabasseyV2PrivacyPolicy />);
 
-      expect(
-        screen.getByRole('link', { name: 'support@ogabassey.com' }),
-      ).toHaveAttribute('href', 'mailto:support@ogabassey.com');
+      for (const link of screen.getAllByRole('link', { name: 'support@ogabassey.com' })) {
+        expect(link).toHaveAttribute('href', 'mailto:support@ogabassey.com');
+      }
     });
 
     it('renders the default business_address in the contact section', () => {

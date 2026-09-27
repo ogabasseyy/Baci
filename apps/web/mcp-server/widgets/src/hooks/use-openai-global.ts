@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 // Event type for OpenAI global changes
-const SET_GLOBALS_EVENT_TYPE = 'openai:setGlobals';
+const SET_GLOBALS_EVENT_TYPE = 'openai:set_globals';
 
 type SetGlobalsEvent = CustomEvent<{
   globals: Partial<OpenAiGlobals>;
@@ -15,7 +15,7 @@ interface OpenAiGlobals {
   theme: string;
   displayMode: string;
   maxHeight: number;
-  safeArea: { top: number; bottom: number; left: number; right: number };
+  safeArea: { insets: { top: number; bottom: number; left: number; right: number } };
   locale: string;
 }
 
@@ -29,7 +29,7 @@ declare global {
       theme?: string;
       displayMode?: string;
       maxHeight?: number;
-      safeArea?: { top: number; bottom: number; left: number; right: number };
+      safeArea?: { insets: { top: number; bottom: number; left: number; right: number } };
       locale?: string;
       setWidgetState?: (state: unknown) => void;
       callTool?: (
@@ -37,8 +37,10 @@ declare global {
         args: Record<string, unknown>
       ) => Promise<unknown>;
       openExternal?: (options: { href: string }) => void;
+      setOpenInAppUrl?: (options: { href: string }) => void;
       requestModal?: (options: unknown) => void;
-      sendFollowUpMessage?: (message: string) => void;
+      requestDisplayMode?: (options: { mode: 'inline' | 'fullscreen' | 'pip' }) => Promise<unknown>;
+      sendFollowUpMessage?: (message: { prompt: string; scrollToBottom?: boolean }) => void;
     };
   }
 }

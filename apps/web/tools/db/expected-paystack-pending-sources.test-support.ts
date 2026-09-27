@@ -292,6 +292,6 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260927151000_backfill_paystack_dva_placeholder_marker.sql',
-    sha256: '47fdbe6b7acdb3953fa58a795410880034347bc57a7d9e467ebd172a3a612114',
+    sha256: 'b3b5f3eb7403e0820b250fe334fbecf4341c6bfc87336436a7d9770e9553593c',
   },
 ];

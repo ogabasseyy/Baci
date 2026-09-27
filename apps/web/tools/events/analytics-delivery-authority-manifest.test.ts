@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import { eventPipelineFrozenRoutes } from '../../src/lib/events/event-pipeline-frozen-authority-sources';
 import { analyticsDeliveryAuthorityManifest as manifest } from './analytics-delivery-authority-manifest';
 
 describe('analytics delivery authority manifest', () => {
+  it('keeps both independently frozen platform route receipts aligned', () => {
+    expect(manifest.platformRouteHash.sha256).toBe(
+      eventPipelineFrozenRoutes[manifest.platformRouteHash.path]
+    );
+  });
+
   it('records the temporary authority expiry', () => {
     expect(manifest.temporaryAuthorityExpiresAt).toBe(
       '2026-09-30T00:00:00.000Z'
@@ -48,7 +55,7 @@ describe('analytics delivery authority manifest', () => {
     expect(manifest.platformRouteHash).toEqual({
       path: 'apps/web/src/app/api/platform/events/route.ts',
       sha256:
-        'bb3b5ea163f7029bd8a90523ac7944c9e126b2aebc0ce673f82c4e0c48d00161',
+        '646432088daff8e54f56fbab06453be789dc67d7b974398cc7f4b0d06842b9ca',
     });
   });
 

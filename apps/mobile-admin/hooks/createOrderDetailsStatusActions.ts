@@ -1,5 +1,6 @@
 import { Alert } from 'react-native';
 import type { OrderDetailsRecord } from '@/components/orders/order-details.types';
+import { OrderStatusUpdateError } from '@/hooks/orders/order-status-update-error';
 import type { ShippingStatus } from '@/hooks/useOrders';
 
 const IS_DEV_RUNTIME = typeof __DEV__ !== 'undefined' && __DEV__;
@@ -82,7 +83,9 @@ export function createOrderDetailsStatusActions({
         newStatus === 'delivered'
           ? 'The customer notification has been queued and will not block fulfillment.'
           : newStatus === 'cancelled'
-            ? `The customer has been notified via email that their order has been ${newStatus}.`
+            ? order.payment_status === 'paid' || order.amount_paid > 0
+              ? 'The customer notification has been queued. Check the refund status before telling the customer it is complete.'
+              : 'The customer notification has been queued.'
             : '';
 
       setSuccessModal({
@@ -113,7 +116,16 @@ export function createOrderDetailsStatusActions({
         return;
       }
 
-      Alert.alert('Error', 'Failed to update status');
+      const cancellationNeedsReconciliation =
+        newStatus === 'cancelled' &&
+        nextError instanceof OrderStatusUpdateError &&
+        nextError.code === 'PAYMENT_RECONCILIATION_REQUIRED';
+      Alert.alert(
+        'Error',
+        cancellationNeedsReconciliation
+          ? nextError.message
+          : 'Failed to update status'
+      );
       if (IS_DEV_RUNTIME) {
         console.error('Order details status update failed', {
           currentStatus: order.shipping_status,
@@ -136,7 +148,7 @@ export function createOrderDetailsStatusActions({
     Alert.alert(
       isPaid ? 'Cancel paid order?' : 'Cancel order?',
       isPaid
-        ? 'This records who cancelled the order and starts the refund workflow. This cannot be undone.'
+        ? 'Cancelling this paid order starts the customer refund process. Completion may take time or require review. Submit once; if the result is unclear, check the order status instead of cancelling again.'
         : 'This records who cancelled the order and restores tracked inventory. This cannot be undone.',
       [
         { text: 'Keep Order', style: 'cancel' },

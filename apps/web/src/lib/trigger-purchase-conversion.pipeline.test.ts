@@ -28,6 +28,7 @@ vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
 }));
 
+import { fetchAnalyticsPlatformConfig } from '@/lib/analytics/analytics-platform-config';
 import { triggerPurchaseConversion } from '@/lib/trigger-purchase-conversion';
 
 const order = {
@@ -57,6 +58,8 @@ let originalPipelineEnvironment: Record<string, string | undefined> = {};
 describe('triggerPurchaseConversion pipeline migration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-15T12:00:00.000Z'));
     originalPipelineEnvironment = Object.fromEntries(
       pipelineEnvironmentKeys.map((key) => [key, process.env[key]])
     );
@@ -75,6 +78,7 @@ describe('triggerPurchaseConversion pipeline migration', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     for (const key of pipelineEnvironmentKeys) {
       const originalValue = originalPipelineEnvironment[key];
       if (originalValue === undefined) {
@@ -116,11 +120,20 @@ describe('triggerPurchaseConversion pipeline migration', () => {
     );
   });
 
-  it('retains legacy delivery after enqueue until full cutover is explicit', async () => {
+  it('retains legacy delivery after enqueue before authority expiry', async () => {
     await triggerPurchaseConversion(testClient(), 'merchant-1', order);
 
     expect(mocks.enqueue).toHaveBeenCalledTimes(1);
     expect(mocks.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the durable handoff but stops legacy delivery after merchant authority expires', async () => {
+    vi.setSystemTime(new Date('2026-09-27T12:00:00.000Z'));
+
+    await triggerPurchaseConversion(testClient(), 'merchant-1', order);
+
+    expect(mocks.enqueue).toHaveBeenCalledTimes(1);
+    expect(mocks.send).not.toHaveBeenCalled();
   });
 
   it('fails closed when the durable handoff fails', async () => {
@@ -129,6 +142,22 @@ describe('triggerPurchaseConversion pipeline migration', () => {
     await expect(
       triggerPurchaseConversion(testClient(), 'merchant-1', order)
     ).rejects.toThrow('queue unavailable');
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'automatic',
+    'legacy_only',
+  ] as const)('blocks expired %s fanout before credential reads when enqueue is disabled', async (deliveryMode) => {
+    delete process.env.EVENT_PIPELINE_ENQUEUE_ENABLED;
+    vi.setSystemTime(new Date('2026-09-27T12:00:00.000Z'));
+
+    await triggerPurchaseConversion(testClient(), 'merchant-1', order, {
+      deliveryMode,
+    });
+
+    expect(fetchAnalyticsPlatformConfig).not.toHaveBeenCalled();
+    expect(mocks.enqueue).not.toHaveBeenCalled();
     expect(mocks.send).not.toHaveBeenCalled();
   });
 });

@@ -232,6 +232,7 @@ const PENDING_SOURCES = [
   '9cde352bd23a1204adaf98493089587f00ce13f46a674604552df5d22232b2a5 20260927150800_duplicate_payment_capture_review_type.sql',
   '061154e1c62cb8de328ba6c9211abbdef206fe2d57612bf52ef0020cdf17adc4 20260927150900_merge_duplicate_payment_capture_evidence.sql',
   '47fdbe6b7acdb3953fa58a795410880034347bc57a7d9e467ebd172a3a612114 20260927151000_backfill_paystack_dva_placeholder_marker.sql',
+  'b3b5f3eb7403e0820b250fe334fbecf4341c6bfc87336436a7d9770e9553593c 20260927151000_backfill_paystack_dva_placeholder_marker.sql',
   PENDING_SOURCES_HEAD,
   STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_CLUSTER_GUIDE_PENDING_SOURCES,

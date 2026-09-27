@@ -21,13 +21,13 @@ const DETERMINISTIC_REFUND_ERRORS = new Set([
   'refund_transition_evidence_mismatch',
 ]);
 
-function isDeterministicRefundError(error: unknown): error is Error {
+export function isDeterministicRefundError(error: unknown): error is Error {
   return (
     error instanceof Error && DETERMINISTIC_REFUND_ERRORS.has(error.message)
   );
 }
 
-async function fileRefundEvidenceReview(
+export async function fileRefundEvidenceReview(
   supabase: SupabaseClient,
   refund: RefundRow,
   reason: string

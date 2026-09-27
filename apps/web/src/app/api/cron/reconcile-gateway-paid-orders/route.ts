@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
       failed: false,
       held: [],
       retired: [],
+      reviewsFiled: [],
     };
     let abandonedAttemptSweepFailed = false;
     try {

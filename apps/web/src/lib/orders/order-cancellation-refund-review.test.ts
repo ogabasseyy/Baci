@@ -34,7 +34,7 @@ describe('order cancellation refund review', () => {
     const insert = vi.fn().mockResolvedValue({ error: { code: 'XX000' } });
     const supabase = {
       from: vi.fn().mockReturnValue({ insert }),
-    } as unknown as Pick<SupabaseClient, 'from'>;
+    } as unknown as Pick<SupabaseClient, 'from' | 'rpc'>;
 
     const error = await quarantineRefund({
       order,
@@ -53,7 +53,7 @@ describe('order cancellation refund review', () => {
     const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
     const supabase = {
       from: vi.fn().mockReturnValue({ insert }),
-    } as unknown as Pick<SupabaseClient, 'from'>;
+    } as unknown as Pick<SupabaseClient, 'from' | 'rpc'>;
 
     await expect(
       quarantineRefund({
@@ -66,11 +66,85 @@ describe('order cancellation refund review', () => {
     ).rejects.toBeInstanceOf(DeliveryUncertainError);
   });
 
+  it('merges provider evidence into an existing review on conflict', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    const supabase = {
+      from: vi.fn().mockReturnValue({ insert }),
+      rpc,
+    } as unknown as Pick<SupabaseClient, 'from' | 'rpc'>;
+
+    await expect(
+      quarantineRefund({
+        metadata: {
+          audit_record_failed: true,
+          payment_transaction_id: 'payment-id',
+          provider_refund_id: 123,
+        },
+        order,
+        reason: 'Paystack accepted refund but its local audit record failed',
+        supabase,
+        transactions: [transaction],
+      })
+    ).rejects.toBeInstanceOf(DeliveryUncertainError);
+    expect(rpc).toHaveBeenCalledWith(
+      'merge_paystack_cancellation_refund_provider_evidence_v1',
+      expect.objectContaining({
+        p_merchant_id: 'merchant-id',
+        p_order_id: 'order-id',
+        p_payment_transaction_id: 'payment-id',
+        p_provider_refund_id: 123,
+      })
+    );
+  });
+
+  it('keeps an accepted refund uncertain when merging its evidence fails', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
+    const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
+    const supabase = {
+      from: vi.fn().mockReturnValue({ insert }),
+      rpc,
+    } as unknown as Pick<SupabaseClient, 'from' | 'rpc'>;
+
+    const error = await quarantineRefund({
+      metadata: {
+        payment_transaction_id: 'payment-id',
+        provider_refund_id: 123,
+      },
+      order,
+      reason: 'Paystack accepted refund but its local audit record failed',
+      supabase,
+      transactions: [transaction],
+    }).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(DeliveryUncertainError);
+    expect((error as Error).message).toMatch('merging its recovery evidence');
+  });
+
+  it('skips the merge on conflict without provider evidence', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
+    const rpc = vi.fn();
+    const supabase = {
+      from: vi.fn().mockReturnValue({ insert }),
+      rpc,
+    } as unknown as Pick<SupabaseClient, 'from' | 'rpc'>;
+
+    await expect(
+      quarantineRefund({
+        order,
+        reason: 'unsupported gateway',
+        supabase,
+        transactions: [transaction],
+      })
+    ).rejects.toBeInstanceOf(DeliveryUncertainError);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it('keeps an accepted refund uncertain when review persistence fails', async () => {
     const insert = vi.fn().mockResolvedValue({ error: { code: '42501' } });
     const supabase = {
       from: vi.fn().mockReturnValue({ insert }),
-    } as unknown as Pick<SupabaseClient, 'from'>;
+    } as unknown as Pick<SupabaseClient, 'from' | 'rpc'>;
 
     await expect(
       quarantineRefund({

@@ -1,6 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
-import { reconcilePaystackCancellationRefund } from './reconcile-paystack-cancellation-refunds';
+import {
+  fileRefundEvidenceReview,
+  isDeterministicRefundError,
+  reconcilePaystackCancellationRefund,
+} from './reconcile-paystack-cancellation-refunds';
 
 /** Recheck legacy completed refund rows before finalizing a cancelled order. */
 export async function reconcileCompletedPaystackCancellationRefunds(
@@ -34,6 +38,22 @@ export async function reconcileCompletedPaystackCancellationRefunds(
         refundId: refund.id,
         reason: reason instanceof Error ? reason.message : 'unknown',
       });
+      if (isDeterministicRefundError(reason)) {
+        // Evidence that can never verify: demote so the pending worker
+        // re-tracks the row, and file the mismatch for operations instead
+        // of retrying this completed row forever.
+        const { error: demoteError } = await supabase
+          .from('transactions')
+          .update({
+            status: 'refund_pending',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', refund.id)
+          .eq('status', 'completed');
+        if (demoteError) throw new Error('completed_refund_demote_failed');
+        await fileRefundEvidenceReview(supabase, refund, reason.message);
+        continue;
+      }
       const { error: rotationError } = await supabase
         .from('transactions')
         .update({ updated_at: new Date().toISOString() })

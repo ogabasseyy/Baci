@@ -5,6 +5,33 @@ import {
   createClient,
 } from './reconcile-abandoned-paystack-attempts.test-support';
 
+function withReviewTable(
+  client: { from: unknown },
+  reviewInsert: ReturnType<typeof vi.fn>
+) {
+  const fromMock = client.from as ReturnType<typeof vi.fn>;
+  const baseFrom = fromMock.getMockImplementation() as (
+    table: string
+  ) => unknown;
+  fromMock.mockImplementation((table: string) =>
+    table === 'reconciliation_review'
+      ? { insert: reviewInsert }
+      : baseFrom(table)
+  );
+}
+
+function verifiedSuccess() {
+  return vi.fn().mockResolvedValue({
+    success: true,
+    data: {
+      reference: 'BAC-OLD',
+      status: 'success',
+      amount: 10000,
+      currency: 'NGN',
+    },
+  });
+}
+
 describe('reconcileAbandonedPaystackAttempts', () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -148,7 +175,6 @@ describe('reconcileAbandonedPaystackAttempts', () => {
 
   it.each([
     'pending',
-    'success',
   ])('preserves an attempt when Paystack reports %s', async (status) => {
     const { client, lookup, update } = createClient();
     const verify = vi.fn().mockResolvedValue({
@@ -278,5 +304,102 @@ describe('reconcileAbandonedPaystackAttempts', () => {
     expect(update).not.toHaveBeenCalledWith(
       expect.objectContaining({ status: 'failed' })
     );
+  });
+
+  it('files a duplicate-capture review and retires a verified successful attempt', async () => {
+    const { client, lookup, update } = createClient();
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    withReviewTable(client, reviewInsert);
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify: verifiedSuccess(),
+    });
+
+    expect(summary.reviewsFiled).toEqual(['attempt-1']);
+    expect(summary.held).toEqual([]);
+    expect(summary.retired).toEqual([]);
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'duplicate_payment_capture_requires_review',
+        order_id: 'order-1',
+        merchant_id: 'merchant-1',
+        txn_id: 'attempt-1',
+        paystack_ref: 'BAC-OLD',
+      })
+    );
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          abandoned_sweep_resolution: 'verified_success_captured',
+        }),
+        updated_at: expect.any(String),
+      })
+    );
+    expect(lookup.is).toHaveBeenCalledWith(
+      'metadata->abandoned_sweep_resolution',
+      null
+    );
+  });
+
+  it('treats an already-filed duplicate-capture review as filed', async () => {
+    const { client, update } = createClient();
+    const reviewInsert = vi
+      .fn()
+      .mockResolvedValue({ error: { code: '23505' } });
+    withReviewTable(client, reviewInsert);
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify: verifiedSuccess(),
+    });
+
+    expect(summary.reviewsFiled).toEqual(['attempt-1']);
+    expect(summary.held).toEqual([]);
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it('holds a verified success when its review cannot be filed', async () => {
+    const { client, update } = createClient();
+    const reviewInsert = vi
+      .fn()
+      .mockResolvedValue({ error: { code: 'XX000' } });
+    withReviewTable(client, reviewInsert);
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify: verifiedSuccess(),
+    });
+
+    expect(summary.reviewsFiled).toEqual([]);
+    expect(summary.failed).toBe(false);
+    expect(summary.held).toEqual([{ id: 'attempt-1', reason: 'success' }]);
+    expect(update).toHaveBeenCalledWith({
+      updated_at: expect.any(String),
+    });
+  });
+
+  it('holds a verified success when its resolution stamp fails', async () => {
+    const { client, update } = createClient();
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    withReviewTable(client, reviewInsert);
+    const stampChain = { eq: vi.fn(), select: vi.fn() };
+    stampChain.eq.mockReturnValue(stampChain);
+    Object.assign(stampChain, {
+      // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are awaited thenables.
+      then: (resolve: (result: { error: Error }) => void) =>
+        resolve({ error: new Error('stamp unavailable') }),
+    });
+    update.mockReturnValueOnce(stampChain);
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify: verifiedSuccess(),
+    });
+
+    expect(summary.reviewsFiled).toEqual([]);
+    expect(summary.failed).toBe(false);
+    expect(summary.held).toEqual([{ id: 'attempt-1', reason: 'success' }]);
   });
 });

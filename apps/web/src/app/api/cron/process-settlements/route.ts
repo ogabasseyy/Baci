@@ -53,18 +53,45 @@ export async function POST(request: Request) {
       const notificationResult = await Promise.allSettled([
         drainPaystackRefundNotifications(supabase, sendEmail),
       ]);
+      // The workers fulfill with per-row failure counts instead of throwing,
+      // so a rejection-only check would report persistent outages as success.
+      const cancellationFailures =
+        cancellationResult.status === 'fulfilled'
+          ? cancellationResult.value.failed.length
+          : 0;
+      const refundFailures =
+        refundResult.status === 'fulfilled' ? refundResult.value.failed : 0;
+      const legacyRefundFailures =
+        legacyRefundResult.status === 'fulfilled'
+          ? legacyRefundResult.value.failed
+          : 0;
+      const notificationFailures =
+        notificationResult[0].status === 'fulfilled'
+          ? notificationResult[0].value.failed
+          : 0;
       if (
         cancellationResult.status === 'rejected' ||
         refundResult.status === 'rejected' ||
         legacyRefundResult.status === 'rejected' ||
-        notificationResult[0].status === 'rejected'
+        notificationResult[0].status === 'rejected' ||
+        cancellationFailures > 0 ||
+        refundFailures > 0 ||
+        legacyRefundFailures > 0 ||
+        notificationFailures > 0
       ) {
         logger.error({
           message: 'Cancellation and refund background work partially failed',
-          cancellationFailed: cancellationResult.status === 'rejected',
-          refundFailed: refundResult.status === 'rejected',
-          legacyRefundFailed: legacyRefundResult.status === 'rejected',
-          notificationFailed: notificationResult[0].status === 'rejected',
+          cancellationFailed:
+            cancellationResult.status === 'rejected' ||
+            cancellationFailures > 0,
+          refundFailed:
+            refundResult.status === 'rejected' || refundFailures > 0,
+          legacyRefundFailed:
+            legacyRefundResult.status === 'rejected' ||
+            legacyRefundFailures > 0,
+          notificationFailed:
+            notificationResult[0].status === 'rejected' ||
+            notificationFailures > 0,
         });
         return NextResponse.json(
           { error: 'Cancellation and refund background work incomplete' },

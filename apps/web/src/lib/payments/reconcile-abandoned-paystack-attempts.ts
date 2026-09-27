@@ -23,6 +23,7 @@ export interface AbandonedPaystackAttemptSummary {
   failed: boolean;
   held: Array<{ id: string; reason: string; rotationFailed?: boolean }>;
   retired: string[];
+  reviewsFiled: string[];
 }
 
 /** Clear old, superseded attempts only after checking their current Paystack status. */
@@ -42,6 +43,7 @@ export async function reconcileAbandonedPaystackAttempts({
     failed: false,
     held: [],
     retired: [],
+    reviewsFiled: [],
   };
   const cutoff = new Date(Date.now() - olderThanMinutes * 60_000).toISOString();
   const recheckCutoff = new Date(
@@ -58,6 +60,7 @@ export async function reconcileAbandonedPaystackAttempts({
     .in('paid_order.payment_status', ['paid', 'partially_paid'])
     .not('order_id', 'is', null)
     .not('gateway_reference', 'is', null)
+    .is('metadata->abandoned_sweep_resolution', null)
     .lt('created_at', cutoff)
     .lt('updated_at', recheckCutoff)
     .order('updated_at', { ascending: true })
@@ -162,6 +165,47 @@ export async function reconcileAbandonedPaystackAttempts({
           String(attempt.currency).toUpperCase())
     ) {
       await hold('payment_evidence_mismatch');
+      continue;
+    }
+    if (result.success && result.data.status === 'success') {
+      // The order is already paid by another transaction, so a verified
+      // capture here is a possible duplicate charge. The wedged sweep never
+      // sees paid orders, so file it for operations and retire the row;
+      // otherwise it would rotate through this batch forever.
+      const { error: reviewError } = await supabase
+        .from('reconciliation_review')
+        .insert({
+          issue_type: 'duplicate_payment_capture_requires_review',
+          order_id: attempt.order_id,
+          merchant_id: attempt.merchant_id,
+          txn_id: attempt.id,
+          paystack_ref: attempt.gateway_reference,
+          reason: `Stale Paystack attempt ${attempt.gateway_reference} verified as captured while the order is already paid; possible duplicate charge`,
+          metadata: {
+            payment_transaction_id: attempt.id,
+            provider_status: result.data.status,
+          },
+        });
+      const reviewFiled =
+        !reviewError || (reviewError as { code?: string }).code === '23505';
+      if (reviewFiled) {
+        const { error: stampError } = await supabase
+          .from('transactions')
+          .update({
+            metadata: {
+              ...(attempt.metadata ?? {}),
+              abandoned_sweep_resolution: 'verified_success_captured',
+              abandoned_sweep_resolved_at: new Date().toISOString(),
+            },
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', attempt.id);
+        if (!stampError) {
+          summary.reviewsFiled.push(attempt.id);
+          continue;
+        }
+      }
+      await hold('success');
       continue;
     }
     if (

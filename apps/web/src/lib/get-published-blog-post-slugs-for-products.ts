@@ -1,30 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { normalizeStorefrontCategoryValue } from '@/lib/normalize-storefront-category-value';
 import { isValidUuid } from '@/lib/sanitize-core';
+import {
+  fetchLinkedBlogPostRows,
+  type LinkedBlogPostRow,
+} from './fetch-linked-blog-post-rows';
 import { filterCategoryBlogPostRowsWithoutActiveLinks } from './filter-category-blog-post-rows';
 import { getBlogCategoryLookup } from './get-blog-category-lookup';
 
 const CATEGORY_FALLBACK_PAGE_SIZE = 256;
-const LINKED_POST_PAGE_SIZE = 256;
-// Keep the PostgREST `.in(...)` URL bounded; relationship reads still paginate.
-const LINKED_PRODUCT_ID_CHUNK_SIZE = 100;
 
-interface LinkedBlogPostRow {
-  blog_post_id?: string | null;
-  id?: string | null;
-  blog_posts?:
-    | {
-        published_at?: string | null;
-        slug?: string | null;
-        status?: string | null;
-      }
-    | Array<{
-        published_at?: string | null;
-        slug?: string | null;
-        status?: string | null;
-      }>
-    | null;
-}
 interface BlogPostFields {
   category?: string | null;
   published_at?: string | null;
@@ -116,57 +101,6 @@ async function fetchCategoryFallbackRows(
   }
 
   return { error: null, rows };
-}
-
-async function fetchLinkedBlogPostRows(
-  supabase: SupabaseClient,
-  merchantId: string,
-  productIds: readonly string[]
-) {
-  const rows: LinkedBlogPostRow[] = [];
-  let lastError: unknown = null;
-
-  for (
-    let chunkStart = 0;
-    chunkStart < productIds.length;
-    chunkStart += LINKED_PRODUCT_ID_CHUNK_SIZE
-  ) {
-    const productIdChunk = productIds.slice(
-      chunkStart,
-      chunkStart + LINKED_PRODUCT_ID_CHUNK_SIZE
-    );
-    for (let page = 0; ; page += 1) {
-      const { data, error } = await supabase
-        .from('blog_post_products')
-        .select(
-          'id, blog_post_id, blog_posts!inner(slug, status, published_at)'
-        )
-        .eq('merchant_id', merchantId)
-        .eq('blog_posts.status', 'published')
-        .not('blog_posts.published_at', 'is', null)
-        .in('product_id', productIdChunk)
-        .order('blog_post_id', { ascending: true })
-        .order('id', { ascending: true })
-        .range(
-          page * LINKED_POST_PAGE_SIZE,
-          (page + 1) * LINKED_POST_PAGE_SIZE - 1
-        );
-
-      if (error) {
-        lastError = error;
-        break;
-      }
-
-      const pageRows = (data as unknown as LinkedBlogPostRow[]) ?? [];
-      rows.push(...pageRows);
-
-      if (pageRows.length < LINKED_POST_PAGE_SIZE) {
-        break;
-      }
-    }
-  }
-
-  return { lastError, rows };
 }
 
 /**

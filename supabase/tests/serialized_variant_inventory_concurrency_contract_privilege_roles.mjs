@@ -9,7 +9,7 @@ const roleMembershipPattern = new RegExp(
 const defaultFunctionPrivilegePattern =
   /ALTER\s+DEFAULT\s+PRIVILEGES(?:\s+FOR\s+(?:ROLE|USER)\s+((?:"[^"]+"|[a-z_][a-z0-9_]*)(?:\s*,\s*(?:"[^"]+"|[a-z_][a-z0-9_]*))*))?(?:\s+IN\s+SCHEMA\s+((?:"[^"]+"|[a-z_][a-z0-9_]*)(?:\s*,\s*(?:"[^"]+"|[a-z_][a-z0-9_]*))*))?\s+(GRANT|REVOKE)\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)\s+ON\s+(?:ALL\s+)?(?:FUNCTIONS|ROUTINES)\s+(?:TO|FROM)\s+([^;]+);/gi;
 const schemaFunctionPrivilegePattern =
-  /(?:GRANT\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)|REVOKE\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE))\s+ON\s+ALL\s+(?:FUNCTIONS|ROUTINES)\s+IN\s+SCHEMA\s+([^;]+?)\s+(TO|FROM)\s+([^;]+);/gi;
+  /(?:GRANT\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE)|REVOKE\s+(?:ALL(?:\s+PRIVILEGES)?|EXECUTE))\s+ON\s+ALL\s+(?:FUNCTIONS|ROUTINES)\s+IN\s+SCHEMA\s+([^;]+?)\s+(TO|FROM)\s+([^;]+?)(?:\s+GRANTED\s+BY\s+[^;]+)?\s*;/gi;
 
 function normalizeRoleName(role) {
   return role

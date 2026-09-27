@@ -230,6 +230,30 @@ test('recognizes security changes followed by additional ALTER actions', () => {
   );
 });
 
+test('detects security mode after preceding ALTER actions', () => {
+  const signature = 'public.mark_order_inventory_units_sold(uuid, uuid)';
+  assert.equal(
+    serializedInventoryPrivileges.effectiveSecurityMode(
+      [
+        ...serializedInventoryContract.migrationSources,
+        `ALTER FUNCTION ${signature} STABLE SECURITY INVOKER;`,
+      ],
+      signature
+    ),
+    'invoker'
+  );
+  assert.equal(
+    serializedInventoryPrivileges.effectiveSecurityMode(
+      [
+        ...serializedInventoryContract.migrationSources,
+        `ALTER FUNCTION ${signature} STABLE SECURITY DEFINER;`,
+      ],
+      signature
+    ),
+    'definer'
+  );
+});
+
 test('release wrapper and delegate remain executable by authenticated callers', () => {
   for (const [signature, mode] of releaseFunctions) {
     assert.equal(

@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { isFixtureAssetRequest } from './request-allowlist';
 
 const request = {
@@ -6,6 +6,7 @@ const request = {
   method: 'GET',
   resourceType: 'document',
 };
+afterEach(() => vi.unstubAllEnvs());
 it('permits fixture navigation and Next RSC navigation', () => {
   expect(isFixtureAssetRequest(request)).toBe(true);
   expect(
@@ -52,4 +53,14 @@ it('permits generated styles and local images/fonts', () => {
         url: `http://127.0.0.1:3217${path}`,
       })
     ).toBe(true);
+});
+it('uses the configured harness port', () => {
+  vi.stubEnv('CHECKOUT_BROWSER_PORT', '4321');
+  expect(
+    isFixtureAssetRequest({
+      ...request,
+      url: 'http://127.0.0.1:4321/checkout',
+    })
+  ).toBe(true);
+  expect(isFixtureAssetRequest(request)).toBe(false);
 });

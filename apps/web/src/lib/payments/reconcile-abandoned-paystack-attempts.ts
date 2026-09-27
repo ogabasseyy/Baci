@@ -4,6 +4,7 @@ import { verifyTransaction } from '@/lib/paystack';
 const DEFAULT_LIMIT = 25;
 // Give an abandoned checkout time to settle before releasing a paid order.
 const DEFAULT_OLDER_THAN_MINUTES = 12 * 60;
+const VERIFY_TIMEOUT_MS = 5_000;
 
 interface PendingAttempt {
   gateway_reference: string;
@@ -14,7 +15,7 @@ interface PendingAttempt {
 
 export interface AbandonedPaystackAttemptSummary {
   checked: number;
-  held: Array<{ id: string; reason: string }>;
+  held: Array<{ id: string; reason: string; rotationFailed?: boolean }>;
   retired: string[];
 }
 
@@ -68,16 +69,20 @@ export async function reconcileAbandonedPaystackAttempts({
         .eq('gateway_reference', attempt.gateway_reference)
         .eq('status', 'pending');
     const hold = async (reason: string) => {
-      summary.held.push({ id: attempt.id, reason });
+      const entry: { id: string; reason: string; rotationFailed?: boolean } = {
+        id: attempt.id,
+        reason,
+      };
+      summary.held.push(entry);
       // Move unresolved attempts to the back of the next sweep instead of
       // allowing old pending attempts to starve newer candidates.
       try {
         const { error } = await guardAttempt();
         if (error) {
-          summary.held.push({ id: attempt.id, reason: 'rotation_failed' });
+          entry.rotationFailed = true;
         }
       } catch {
-        summary.held.push({ id: attempt.id, reason: 'rotation_failed' });
+        entry.rotationFailed = true;
       }
     };
 
@@ -110,7 +115,10 @@ export async function reconcileAbandonedPaystackAttempts({
 
     let result: Awaited<ReturnType<typeof verifyTransaction>>;
     try {
-      result = await verify(attempt.gateway_reference);
+      result = await verify(
+        attempt.gateway_reference,
+        AbortSignal.timeout(VERIFY_TIMEOUT_MS)
+      );
     } catch {
       await hold('verification_unavailable');
       continue;

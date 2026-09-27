@@ -171,7 +171,7 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
     const response = await GET(buildRequest(`Bearer ${CRON_SECRET}`));
     const body = await response.json();
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(503);
     expect(body.abandonedAttemptSweepFailed).toBe(true);
     expect(mocks.logger.error).toHaveBeenCalled();
     expect(mocks.reconcileWedgedGatewayOrders).toHaveBeenCalled();

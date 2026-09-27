@@ -86,13 +86,16 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({
-      checked_at: new Date().toISOString(),
-      abandonedAttemptSweep,
-      abandonedAttemptSweepFailed,
-      ...summary,
-      sideEffectDrain,
-    });
+    return NextResponse.json(
+      {
+        checked_at: new Date().toISOString(),
+        abandonedAttemptSweep,
+        abandonedAttemptSweepFailed,
+        ...summary,
+        sideEffectDrain,
+      },
+      { status: abandonedAttemptSweepFailed ? 503 : 200 }
+    );
   } catch (error) {
     logger.error({
       error,

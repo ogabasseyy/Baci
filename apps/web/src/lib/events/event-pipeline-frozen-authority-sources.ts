@@ -21,10 +21,12 @@ export const eventPipelineFrozenRoutes = {
   // Orders is an inherited event-pipeline entrypoint whose notification
   // dispatch changed in this feature. Keep its reviewed bytes squash-safe by
   // binding the final source to a content receipt instead of a PR-only commit.
-  // Refreshed for malformed-JSON rejection before business data access; the
-  // inherited notification/payment authority and database operations are unchanged.
+  // Refreshed for malformed-JSON rejection before business data access, then
+  // for the plan-tier-authoritative entitlement call (slug fallback removed);
+  // the inherited notification/payment authority and database operations are
+  // unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    'b772d23ef6f99f375ff26d9eddd55fb92fc0fa1e3b0bc2a317c760f5f39fec5e',
+    '434c5975bc54f4afb4b2b4c4a5f6839cfe973ce28800f7051f87a20df05ae585',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

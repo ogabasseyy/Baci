@@ -6869,7 +6869,7 @@ export type Database = {
           phone: string | null;
           plan_expires_at: string | null;
           plan_started_at: string | null;
-          plan_tier: string | null;
+          plan_tier: string;
           premium_features: Json | null;
           published_at: string | null;
           published_config: Json | null;
@@ -6966,7 +6966,7 @@ export type Database = {
           phone?: string | null;
           plan_expires_at?: string | null;
           plan_started_at?: string | null;
-          plan_tier?: string | null;
+          plan_tier?: string;
           premium_features?: Json | null;
           published_at?: string | null;
           published_config?: Json | null;
@@ -7063,7 +7063,7 @@ export type Database = {
           phone?: string | null;
           plan_expires_at?: string | null;
           plan_started_at?: string | null;
-          plan_tier?: string | null;
+          plan_tier?: string;
           premium_features?: Json | null;
           published_at?: string | null;
           published_config?: Json | null;

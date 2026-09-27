@@ -48,6 +48,7 @@ beforeEach(() => {
   mocks.createServiceClient.mockReturnValue({});
   mocks.reconcileAbandonedPaystackAttempts.mockResolvedValue({
     checked: 0,
+    failed: false,
     held: [],
     retired: [],
   });
@@ -99,6 +100,7 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
     expect(body).toMatchObject(summary);
     expect(body.abandonedAttemptSweep).toEqual({
       checked: 0,
+      failed: false,
       held: [],
       retired: [],
     });
@@ -176,6 +178,34 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
     expect(mocks.logger.error).toHaveBeenCalled();
     expect(mocks.reconcileWedgedGatewayOrders).toHaveBeenCalled();
     expect(mocks.drainFailedPaidOrderSideEffects).toHaveBeenCalled();
+  });
+
+  it('returns 503 with the partial sweep summary after a retirement write fails', async () => {
+    mocks.reconcileAbandonedPaystackAttempts.mockResolvedValue({
+      checked: 2,
+      failed: true,
+      held: [{ id: 'attempt-1', reason: 'retirement_failed' }],
+      retired: ['attempt-2'],
+    });
+    mocks.reconcileWedgedGatewayOrders.mockResolvedValue({
+      checked: 0,
+      detectedUnhealable: [],
+      failed: [],
+      healed: [],
+      skipped: [],
+    });
+
+    const response = await GET(buildRequest(`Bearer ${CRON_SECRET}`));
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.abandonedAttemptSweepFailed).toBe(true);
+    expect(body.abandonedAttemptSweep).toMatchObject({
+      checked: 2,
+      failed: true,
+      retired: ['attempt-2'],
+    });
+    expect(mocks.reconcileWedgedGatewayOrders).toHaveBeenCalled();
   });
 
   it('returns 500 when the sweep itself throws', async () => {

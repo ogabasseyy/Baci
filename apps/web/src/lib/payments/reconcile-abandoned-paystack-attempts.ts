@@ -19,6 +19,7 @@ interface PendingAttempt {
 
 export interface AbandonedPaystackAttemptSummary {
   checked: number;
+  failed: boolean;
   held: Array<{ id: string; reason: string; rotationFailed?: boolean }>;
   retired: string[];
 }
@@ -37,6 +38,7 @@ export async function reconcileAbandonedPaystackAttempts({
 }): Promise<AbandonedPaystackAttemptSummary> {
   const summary: AbandonedPaystackAttemptSummary = {
     checked: 0,
+    failed: false,
     held: [],
     retired: [],
   };
@@ -181,11 +183,11 @@ export async function reconcileAbandonedPaystackAttempts({
         .eq('gateway_reference', attempt.gateway_reference)
         .eq('status', attempt.status)
         .select('id');
-    const retirement = await retire().catch(() => {
-      throw new Error('abandoned_paystack_attempt_retirement_failed');
-    });
-    if (retirement.error) {
-      throw new Error('abandoned_paystack_attempt_retirement_failed');
+    const retirement = await retire().catch(() => null);
+    if (!retirement || retirement.error) {
+      summary.failed = true;
+      await hold('retirement_failed');
+      continue;
     }
     if (retirement.data?.length === 1) {
       summary.retired.push(attempt.id);

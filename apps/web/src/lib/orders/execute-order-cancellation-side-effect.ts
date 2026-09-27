@@ -1,6 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { buildOrderCancellationEmailMessage } from '@/lib/orders/build-order-cancellation-email-message';
 import {
+  type GatewayPaymentTransaction,
+  isExternalPaymentGateway,
+  quarantineRefund,
+  unsupportedRefundReasons,
+} from '@/lib/orders/order-cancellation-refund-review';
+import {
   DeliveryUncertainError,
   type OrderCancellationSideEffectStep,
 } from '@/lib/orders/run-order-cancellation-side-effect';
@@ -28,67 +34,6 @@ type CancellationEmailResult = {
 export type CancellationEmailSender = (
   message: CancellationEmailMessage
 ) => Promise<CancellationEmailResult>;
-
-interface GatewayPaymentTransaction {
-  amount: number;
-  currency: string | null;
-  gateway: string | null;
-  gateway_reference: string | null;
-  id: string;
-}
-
-const INTERNAL_PAYMENT_GATEWAYS = new Set([
-  'wallet',
-  'savings',
-  'store_credit',
-  'cash',
-  'manual',
-  'pay_on_delivery',
-]);
-
-async function quarantineRefund({
-  metadata,
-  order,
-  reason,
-  supabase,
-  transactions,
-}: {
-  metadata?: Record<string, unknown>;
-  order: CancellationOrder;
-  reason: string;
-  supabase: Pick<SupabaseClient, 'from'>;
-  transactions: GatewayPaymentTransaction[];
-}): Promise<never> {
-  const firstTransaction = transactions[0];
-  const { error: reviewError } = await supabase
-    .from('reconciliation_review')
-    .insert({
-      candidates: transactions.map((transaction) => ({
-        amount: Number(transaction.amount),
-        currency: transaction.currency ?? order.currency ?? 'NGN',
-        gateway: transaction.gateway,
-        gatewayReference: transaction.gateway_reference,
-        paymentTransactionId: transaction.id,
-      })),
-      issue_type: 'order_cancellation_refund_requires_review',
-      merchant_id: order.merchant_id,
-      metadata: metadata ?? {},
-      order_id: order.id,
-      paystack_ref: firstTransaction?.gateway_reference ?? null,
-      reason,
-      txn_id: firstTransaction?.id ?? null,
-    });
-  const duplicateReview =
-    (reviewError as { code?: string } | null)?.code === '23505';
-  if (reviewError && !duplicateReview) {
-    // The provider may already have accepted the refund. A failed review write
-    // must not turn this into a retryable provider call.
-    throw new DeliveryUncertainError(
-      'Refund requires reconciliation, but filing the review failed'
-    );
-  }
-  throw new DeliveryUncertainError(reason);
-}
 
 export async function executeOrderCancellationSideEffect({
   merchant,
@@ -137,9 +82,7 @@ export async function executeOrderCancellationSideEffect({
     throw new Error('No completed payment transaction found');
   }
   const transactions = (transactionRows as GatewayPaymentTransaction[]).filter(
-    (transaction) =>
-      !transaction.gateway ||
-      !INTERNAL_PAYMENT_GATEWAYS.has(transaction.gateway)
+    (transaction) => isExternalPaymentGateway(transaction.gateway)
   );
   if (!transactions.length) {
     throw new Error('No completed gateway payment transaction found');
@@ -149,17 +92,7 @@ export async function executeOrderCancellationSideEffect({
       transaction.gateway !== 'paystack' || !transaction.gateway_reference
   );
   if (unsupportedLegs.length > 0) {
-    const unsupportedReasons = [
-      ...new Set(
-        unsupportedLegs.map((transaction) => {
-          if (!transaction.gateway) return 'missing gateway';
-          if (!transaction.gateway_reference) {
-            return `${transaction.gateway} missing reference`;
-          }
-          return transaction.gateway;
-        })
-      ),
-    ];
+    const unsupportedReasons = unsupportedRefundReasons(unsupportedLegs);
     await quarantineRefund({
       order,
       reason: `Automatic cancellation refund requires review: ${unsupportedReasons.join(', ')}`,

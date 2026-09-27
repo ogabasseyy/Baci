@@ -1,3 +1,4 @@
+import type { NextRequest } from 'next/server';
 import { storefrontRouteSegments } from '@/config/storefront-route-segments';
 import { isValidSubdomain, RESERVED_SUBDOMAINS } from '@/lib/proxy/host';
 import {
@@ -14,9 +15,21 @@ import {
   isSlugPrefixedStorefrontRequest,
   isStorefrontProductPagePath,
 } from '@/lib/proxy/routing-policy';
+import { isStorefrontDocumentNavigation } from '@/lib/storefront-document-navigation';
 
 export const NON_CACHEABLE_STOREFRONT_HTML_CACHE_CONTROL =
   'private, no-store, max-age=0, must-revalidate';
+
+/** Only full-document GET/HEAD requests may receive public HTML cache headers. */
+export function isCacheablePublicStorefrontDocumentRequest(
+  request: NextRequest | undefined
+): boolean {
+  return (
+    request !== undefined &&
+    request.nextUrl.search.length === 0 &&
+    isStorefrontDocumentNavigation(request.method, request.headers)
+  );
+}
 
 export function isStorefrontHomeDocument(
   pathname: string,

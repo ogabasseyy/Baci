@@ -45,7 +45,27 @@ function parseRoleChange(text) {
       role: normalizeRoleName(setRole[1]),
     };
   }
-  if (/^RESET\s+ROLE\s*;?$/i.test(leading)) {
+  const setSessionAuthorization =
+    /^SET\s+SESSION\s+AUTHORIZATION\s+("[^"]+"|[a-z_][a-z0-9_]*)\s*;?$/i.exec(
+      leading
+    );
+  if (setSessionAuthorization) {
+    if (/^default$/i.test(setSessionAuthorization[1])) {
+      return {
+        index: text.indexOf(leading),
+        kind: 'reset-role',
+      };
+    }
+    return {
+      index: text.indexOf(leading),
+      kind: 'role',
+      role: normalizeRoleName(setSessionAuthorization[1]),
+    };
+  }
+  if (
+    /^RESET\s+ROLE\s*;?$/i.test(leading) ||
+    /^RESET\s+SESSION\s+AUTHORIZATION\s*;?$/i.test(leading)
+  ) {
     return {
       index: text.indexOf(leading),
       kind: 'reset-role',

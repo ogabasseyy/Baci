@@ -50,4 +50,20 @@ test('requires an unconditional exception in the immediate zero-row handler', ()
   `);
   assert.equal(inverted.length, 1);
   assert.equal(legacyDecrementHasZeroRowHandling(inverted[0]), false);
+
+  const caseExpression = legacyDecrementMatches(`
+    UPDATE products
+    SET stock_quantity = stock_quantity - stock_rec.total_quantity
+    WHERE stock_quantity >= stock_rec.total_quantity;
+    IF NOT FOUND THEN
+      v_label := CASE WHEN stock_rec.total_quantity > 0 THEN 'short' ELSE 'empty' END;
+      RAISE EXCEPTION 'insufficient_stock';
+    END IF;
+  `);
+  assert.equal(caseExpression.length, 1);
+  assert.equal(
+    legacyDecrementHasZeroRowHandling(caseExpression[0]),
+    true,
+    'a closed CASE expression must not blind the handler scan'
+  );
 });

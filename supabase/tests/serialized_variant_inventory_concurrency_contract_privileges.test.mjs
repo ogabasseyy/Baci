@@ -13,6 +13,7 @@ const privateFunctions = [
 const publicFunctions = [
   'public.claim_variant_inventory_units_for_order_item(uuid, uuid, uuid)',
   'public.confirm_order_inventory_reservations(uuid, uuid)',
+  'public.mark_order_inventory_units_sold(uuid, uuid)',
 ];
 const releaseFunctions = [
   ['public.release_order_inventory_units(uuid, uuid, text)', 'definer'],

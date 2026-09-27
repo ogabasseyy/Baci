@@ -1,5 +1,8 @@
 import { serializedInventoryPredicates } from './serialized_variant_inventory_concurrency_contract_predicates.mjs';
 
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 function dollarQuoteAt(source, index) {
   if (source[index] !== '$') return null;
   return (
@@ -273,6 +276,7 @@ function maskSqlLiterals(source, { preserveStrings = false } = {}) {
 }
 
 export const serializedInventorySqlParser = {
+  escapeRegex,
   findDollarQuoteEnd,
   isRequiredConjunct: serializedInventoryPredicates.isRequiredConjunct,
   isRequiredGroupedConjunct:

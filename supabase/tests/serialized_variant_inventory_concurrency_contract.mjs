@@ -19,12 +19,13 @@ function migrationFileNames() {
 const migrationSources = migrationFileNames().map((fileName) =>
   fs.readFileSync(path.join(migrationsDir, fileName), 'utf8')
 );
-const { findDollarQuoteEnd, splitSqlStatements, stripSqlComments } =
-  serializedInventorySqlParser;
+const {
+  escapeRegex,
+  findDollarQuoteEnd,
+  splitSqlStatements,
+  stripSqlComments,
+} = serializedInventorySqlParser;
 const { extractIfBranches } = serializedInventoryBranches;
-function escapeRegex(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 function identifierPattern(identifier) {
   return identifier
     .split('.')
@@ -190,8 +191,11 @@ function functionDropPattern(functionName, flags = 'i') {
 }
 function functionMovePattern(functionName, flags = 'i') {
   const { name, argumentTypes } = parseFunctionSignature(functionName);
+  const argumentList = argumentTypes.length
+    ? `(?:\\s*\\(${parameterListPattern(argumentTypes)}\\))?`
+    : '(?:\\s*\\([^;]*\\))?';
   return new RegExp(
-    `ALTER\\s+(?:FUNCTION|ROUTINE)\\s+${identifierPattern(name)}\\s*\\(${parameterListPattern(argumentTypes)}\\)\\s+(?:RENAME\\s+TO\\s+(?:[a-z_][a-z0-9_]*|"[^"]+")|SET\\s+SCHEMA\\s+(?:[a-z_][a-z0-9_]*|"[^"]+"))\\s*;`,
+    `ALTER\\s+(?:FUNCTION|ROUTINE)\\s+${identifierPattern(name)}${argumentList}\\s+(?:RENAME\\s+TO\\s+(?:[a-z_][a-z0-9_]*|"[^"]+")|SET\\s+SCHEMA\\s+(?:[a-z_][a-z0-9_]*|"[^"]+"))\\s*;`,
     flags
   );
 }

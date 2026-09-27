@@ -9,6 +9,7 @@ const {
   tryExtractIfArms,
 } = serializedInventoryNullStock;
 const {
+  escapeRegex,
   isRequiredConjunct,
   maskSqlLiterals,
   splitSqlStatements,
@@ -30,9 +31,6 @@ const stockDecrement = new RegExp(
   'i'
 );
 
-function escapeRegex(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 function normalizedIdentifier(value) {
   return value.replace(/^"|"$/g, '').toLowerCase();
 }

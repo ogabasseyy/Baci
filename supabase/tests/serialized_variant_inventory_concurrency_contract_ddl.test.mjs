@@ -62,6 +62,23 @@ test('numeric signatures are invalidated through decimal aliases', () => {
   }
 });
 
+test('name-only ALTER FUNCTION invalidates the effective function body', () => {
+  const definition =
+    'CREATE FUNCTION private.fixture(integer) RETURNS void AS $$ BEGIN NULL; END; $$;';
+  for (const invalidator of [
+    'ALTER FUNCTION private.fixture RENAME TO fixture_old;',
+    'ALTER FUNCTION private.fixture SET SCHEMA public;',
+  ]) {
+    assert.throws(
+      () =>
+        latestFunctionBody('private.fixture(integer)', [
+          `${definition}\n${invalidator}`,
+        ]),
+      /missing private\.fixture/
+    );
+  }
+});
+
 test('schema-qualified built-in types replace the effective function body', () => {
   const body = latestFunctionBody('private.fixture(uuid)', [
     "CREATE FUNCTION private.fixture(uuid) RETURNS text AS $$ BEGIN RETURN 'old'; END; $$;",

@@ -2,6 +2,7 @@ import { serializedInventoryNestedQueries } from './serialized_variant_inventory
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const {
+  escapeRegex,
   isRequiredConjunct,
   isRequiredGroupedConjunct,
   maskSqlLiterals,
@@ -9,10 +10,6 @@ const {
   stripSqlComments,
 } = serializedInventorySqlParser;
 const { maskNestedQueries } = serializedInventoryNestedQueries;
-
-function escapeRegex(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 function availableUnitWhereClause(source, preserveStrings = false) {
   const cleanSource = maskNestedQueries(

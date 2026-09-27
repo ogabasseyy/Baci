@@ -7,9 +7,7 @@ function dollarQuoteAt(source, index) {
   );
 }
 
-function escapeRegex(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+const { escapeRegex } = serializedInventorySqlParser;
 
 function identifierPattern(identifier) {
   return identifier
@@ -39,8 +37,9 @@ function dynamicPrivilegePattern(functionSignature) {
   const argumentsPattern = escapeRegex(argumentTypes)
     .replaceAll(',', '\\s*,\\s*')
     .replaceAll(' ', '\\s+');
+  const argumentList = `(?:\\s*\\(\\s*${argumentsPattern}\\s*\\))?`;
   return new RegExp(
-    `(?:^|[^A-Za-z0-9_])(?:GRANT|REVOKE)\\s+(?:ALL(?:\\s+PRIVILEGES)?|EXECUTE)\\s+ON\\s+(?:FUNCTION|ROUTINE)\\s+${identifierPattern(functionName)}\\s*\\(\\s*${argumentsPattern}\\s*\\)(?=\\s+(?:TO|FROM)\\b)`,
+    `(?:^|[^A-Za-z0-9_])(?:GRANT|REVOKE)\\s+(?:ALL(?:\\s+PRIVILEGES)?|EXECUTE)\\s+ON\\s+(?:FUNCTION|ROUTINE)\\s+${identifierPattern(functionName)}${argumentList}(?=\\s+(?:TO|FROM)\\b)`,
     'i'
   );
 }

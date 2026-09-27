@@ -28,11 +28,12 @@ function hasTopLevelException(source) {
   let depth = 0;
   let caseDepth = 0;
   for (const token of masked.matchAll(
-    /\bEND\s+IF\b|\bEND\s+CASE\b|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bCASE\b|\bRAISE\s+EXCEPTION\b/gi
+    /\bEND\s+IF\b|\bEND\s+CASE\b|\bEND\b|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bCASE\b|\bRAISE\s+EXCEPTION\b/gi
   )) {
     if (/^END\s+IF/i.test(token[0])) depth = Math.max(0, depth - 1);
     else if (/^END\s+CASE/i.test(token[0]))
       caseDepth = Math.max(0, caseDepth - 1);
+    else if (/^END$/i.test(token[0])) caseDepth = Math.max(0, caseDepth - 1);
     else if (/^IF\b/i.test(token[0])) depth += 1;
     else if (/^CASE$/i.test(token[0])) caseDepth += 1;
     else if (depth === 0 && caseDepth === 0) return true;

@@ -101,6 +101,22 @@ $wrapper$;`;
   );
 });
 
+test('detects signature-less dynamic privilege DDL for protected functions', () => {
+  const source = `DO $wrapper$
+BEGIN
+  EXECUTE 'GRANT EXECUTE ON FUNCTION private.confirm_order_inventory_reservations TO authenticated';
+END;
+$wrapper$;`;
+
+  assert.equal(
+    serializedInventoryDynamicDdl.hasDynamicPrivilegeDdl(
+      source,
+      'private.confirm_order_inventory_reservations(uuid, uuid)'
+    ),
+    true
+  );
+});
+
 test('detects protected privilege DDL assigned to an execute variable', () => {
   const source = `DO $wrapper$
 DECLARE

@@ -3,15 +3,12 @@ import { serializedInventoryControlFlow } from './serialized_variant_inventory_c
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const {
+  escapeRegex,
   isRequiredConjunct,
   maskSqlLiterals,
   splitSqlStatements,
   stripSqlComments,
 } = serializedInventorySqlParser;
-
-function escapeRegex(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 function normalizeAlias(alias) {
   return alias &&

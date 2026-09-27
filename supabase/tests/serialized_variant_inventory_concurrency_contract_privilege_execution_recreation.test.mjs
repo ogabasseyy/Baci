@@ -81,3 +81,27 @@ test('tracks the active role as owner during function recreation', () => {
     true
   );
 });
+
+test('tracks session authorization as owner during function recreation', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = [
+    `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER`,
+    'LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;',
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+    `DROP FUNCTION ${signature};`,
+    'GRANT USAGE, CREATE ON SCHEMA private TO authenticated;',
+    'SET SESSION AUTHORIZATION authenticated;',
+    `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER`,
+    'LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;',
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+    'RESET SESSION AUTHORIZATION;',
+  ].join('\n');
+
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});

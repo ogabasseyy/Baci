@@ -61,7 +61,8 @@ CREATE OR REPLACE FUNCTION public.mark_order_inventory_units_sold(
   p_order_id uuid
 ) RETURNS jsonb
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
+SET search_path = ''
 AS $$
 BEGIN
   RETURN private.mark_order_inventory_units_sold(

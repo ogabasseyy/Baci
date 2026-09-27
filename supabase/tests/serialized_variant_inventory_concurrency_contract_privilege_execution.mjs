@@ -5,10 +5,7 @@ import { serializedInventoryPrivilegeRoles } from './serialized_variant_inventor
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const { parseFunctionPrivilege } = serializedInventoryPrivilegeParser;
-
-function escapeRegex(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+const { escapeRegex } = serializedInventorySqlParser;
 
 function signaturePattern(signature) {
   return escapeRegex(signature)

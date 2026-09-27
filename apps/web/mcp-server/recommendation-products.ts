@@ -54,8 +54,7 @@ export async function selectRecommendedProducts<T extends RecommendationCandidat
   while (products.length > 0 && matched.length < 4) {
     const candidates = fallback.length < 4 ? products : products.filter(matchesUseCase);
     const optionsNeedingHydration = candidates.filter((product) =>
-      (product.manage_stock === true || budget !== undefined) &&
-      (product.has_variants || product.has_condition_offers)
+      product.has_variants || product.has_condition_offers
     );
     const variantIds = optionsNeedingHydration.filter((product) => product.has_variants).map((product) => product.id);
     const offerIds = optionsNeedingHydration.filter((product) => product.has_condition_offers).map((product) => product.id);
@@ -83,8 +82,7 @@ export async function selectRecommendedProducts<T extends RecommendationCandidat
       if (stock.inStock === false) continue;
 
       let recommendationPrice: number | undefined;
-      if ((product.manage_stock === true || budget !== undefined) &&
-        (product.has_variants || product.has_condition_offers)) {
+      if (product.has_variants || product.has_condition_offers) {
         const variantPrices = product.has_variants && variants !== null
           ? productVariants
             .filter((variant) => product.manage_stock !== true || Number(variant.stock_quantity ?? 0) > 0)

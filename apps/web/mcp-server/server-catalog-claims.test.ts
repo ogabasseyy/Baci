@@ -54,10 +54,14 @@ describe('MCP catalog claims', () => {
       }));
       expect(search.structuredContent).toMatchObject({
         products: expect.arrayContaining([
-          expect.objectContaining({ id: 'condition-offer-product', in_stock: true }),
+          expect.objectContaining({ id: 'condition-offer-product', in_stock: true, price: 80000 }),
+          expect.objectContaining({ id: 'variant-cheaper-than-parent', in_stock: true, price: 90000 }),
           expect.objectContaining({ id: 'variant-empty-product', in_stock: false }),
         ]),
       });
+      expect(search.content).toEqual(expect.arrayContaining([
+        expect.objectContaining({ text: expect.stringContaining('Used Offer Phone — ₦80,000') }),
+      ]));
       const detail = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
         id: 103,
         method: 'tools/call',

@@ -219,6 +219,28 @@ describe('selectRecommendedProducts', () => {
     }))).toEqual([{ id: 'untracked-phone', price: 90 }]);
   });
 
+  it('derives the no-budget price from untracked option prices', async () => {
+    const fetchVariants = vi.fn(async () => [
+      { product_id: 'untracked-phone-without-budget', price_override: 90, stock_quantity: null },
+    ]);
+    const result = await selectRecommendedProducts({
+      keywords: ['phone'],
+      fetchPage: async (offset) => offset === 0
+        ? [candidate('untracked-phone-without-budget', {
+            name: 'Phone', price: 180, manage_stock: false, has_variants: true,
+          })]
+        : [],
+      fetchVariants,
+      fetchOffers: async () => [],
+    });
+
+    expect(fetchVariants).toHaveBeenCalledWith(['untracked-phone-without-budget']);
+    expect(result.map((product) => ({
+      id: product.id,
+      price: product.recommendationPrice,
+    }))).toEqual([{ id: 'untracked-phone-without-budget', price: 90 }]);
+  });
+
   it('does not advertise an untracked parent price when every variant exceeds budget', async () => {
     const result = await selectRecommendedProducts({
       keywords: ['phone'],

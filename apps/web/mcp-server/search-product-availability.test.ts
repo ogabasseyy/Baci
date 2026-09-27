@@ -3,6 +3,28 @@ import { describe, expect, it, vi } from 'vitest';
 import { hydrateSearchProductAvailability } from './search-product-availability';
 
 describe('hydrateSearchProductAvailability', () => {
+  it('uses the purchasable price for the requested condition', async () => {
+    const offerQuery = {
+      select: vi.fn(), eq: vi.fn(), in: vi.fn(),
+      then: (resolve: (value: { data: Array<{ product_id: string; condition: string; price: number; stock_quantity: number }>; error: null }) => unknown) =>
+        Promise.resolve({ data: [
+          { product_id: 'priced-phone', condition: 'used', price: 80000, stock_quantity: 2 },
+        ], error: null }).then(resolve),
+    };
+    offerQuery.select.mockReturnValue(offerQuery);
+    offerQuery.eq.mockReturnValue(offerQuery);
+    offerQuery.in.mockReturnValue(offerQuery);
+    const supabase = { from: vi.fn(() => offerQuery) } as unknown as SupabaseClient;
+    const product = { id: 'priced-phone', condition: 'new', price: 100000,
+      manage_stock: true, has_condition_offers: true, stock_quantity: 3 };
+
+    const [base] = await hydrateSearchProductAvailability([product], supabase, 'merchant-1', 'new');
+    const [used] = await hydrateSearchProductAvailability([product], supabase, 'merchant-1', 'used');
+
+    expect(base).toMatchObject({ displayPrice: 100000, stockSummary: { inStock: true } });
+    expect(used).toMatchObject({ displayPrice: 80000, stockSummary: { inStock: true } });
+  });
+
   it('keeps base stock for its own condition but not alternate offers', async () => {
     const offerQuery = {
       select: vi.fn(), eq: vi.fn(), in: vi.fn(),
@@ -50,7 +72,7 @@ describe('hydrateSearchProductAvailability', () => {
 
     expect(used.stockSummary).toMatchObject({ inStock: false, level: 'Out of Stock' });
     expect(used.availableVariants).toEqual([]);
-    expect(offerQuery.select).toHaveBeenCalledWith('product_id, condition, stock_quantity');
+    expect(offerQuery.select).toHaveBeenCalledWith('product_id, condition, price, stock_quantity');
   });
 
   it('uses stocked child variants and offers instead of zero parent stock', async () => {

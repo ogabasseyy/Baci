@@ -1276,9 +1276,10 @@ function createOgabasseyServer() {
         }
 
         const hydratedProducts = await hydrateSearchProductAvailability(products, supabase, merchantId, args.condition);
-        const formatted = hydratedProducts.map(({ product: p, stockSummary, availableVariants: variants }) => {
+        const formatted = hydratedProducts.map(({ product: p, displayPrice, displayCompareAtPrice, stockSummary, availableVariants: variants }) => {
           // A compare-at price indicates a listed discount, not a price trend.
-          const isDiscounted = p.compare_at_price && p.compare_at_price > p.price;
+          const isDiscounted = typeof displayPrice === 'number' &&
+            displayCompareAtPrice && displayCompareAtPrice > displayPrice;
 
           // Variant Summary (e.g., "Available in: Black, White")
           const variantOptions: Record<string, Set<string>> = {};
@@ -1296,8 +1297,8 @@ function createOgabasseyServer() {
             id: p.id,
             name: p.name,
             slug: p.slug,
-            price: p.price,
-            compare_at_price: p.compare_at_price,
+            price: displayPrice,
+            compare_at_price: displayCompareAtPrice,
             image: getSafeCatalogImageUrl(p.images?.[0]?.url || p.images?.[0]),
             condition: resolveMcpSearchProductCondition(p, args.condition),
             brand: p.brand,

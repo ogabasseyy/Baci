@@ -107,7 +107,7 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
     }
     if (url.pathname.endsWith('/rest/v1/product_offers')) {
       response.end(JSON.stringify(url.searchParams.get('product_id')?.includes('condition-offer-product')
-        ? [{ product_id: 'condition-offer-product', stock_quantity: 2 }]
+        ? [{ product_id: 'condition-offer-product', condition: 'used', price: 80000, stock_quantity: 2 }]
         : url.searchParams.get('product_id')?.includes('condition-offer-sold-out-product')
           ? [{ product_id: 'condition-offer-sold-out-product', stock_quantity: 0 }]
         : url.searchParams.get('product_id')?.includes('combined-options-product')

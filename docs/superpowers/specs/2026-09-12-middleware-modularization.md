@@ -6,6 +6,53 @@ Turn the oversized web proxy into a readable routing coordinator while preservin
 
 ## Behavior contract
 
+### Explicit coordinator approval
+
+On 2026-09-27, the owner explicitly answered “Yes, approve the existing
+proxy.ts refactor” for PR #3513, reviewed head
+`9415d87846f7449d0b0579055b0f6b8c2e86d071`. This covers the existing
+`apps/web/src/proxy.ts` coordinator refactor with auth, CSRF, rate limiting,
+and domain-routing behavior preserved. It does not authorize merging,
+deployment, or subsequent security-policy changes.
+
+### Storefront CSP exception and migration tracking
+
+The storefront `script-src` in `apps/web/src/lib/proxy/csp.ts` retains
+`'unsafe-inline'` as an existing compatibility exception, not a claim that
+inline scripts are safe. Admin/auth routes keep their per-request nonces.
+This refactor must not expand the exception or its external source allowlist.
+
+The primary dependency is Next.js framework/Flight inline scripts in cached
+storefront HTML with `cacheComponents: true` in `apps/web/next.config.ts`.
+Per-request nonce authorization cannot simply be added to that shared HTML:
+the response policy and rendered scripts must agree, and a nonce must not be
+reused as a cache key workaround. Next.js documents that nonce-based CSP
+requires dynamic rendering, disables ISR, and is incompatible with PPR:
+[Next.js CSP rendering guidance](https://nextjs.org/docs/app/guides/content-security-policy#static-vs-dynamic-rendering-with-csp).
+
+Additional inline-script migration candidates include
+`apps/web/src/components/analytics/tiktok-pixel.tsx` and
+`apps/web/src/components/analytics/google-customer-reviews.tsx`. These are
+source-inventory candidates, not proof that either executes on every storefront.
+The SRI option is currently commented out in `apps/web/next.config.ts`; it is
+not an enabled replacement or proof that all inline scripts are authorized.
+
+Follow-up CSP migration remains open:
+
+- [ ] Inventory rendered framework, analytics, advertising, and payment scripts
+  on representative anonymous, authenticated, checkout, and crawler responses.
+- [ ] Validate nonce propagation on explicitly dynamic routes, including
+  framework/Flight scripts, application scripts, and third-party loaders.
+- [ ] Evaluate a supported hash-based policy for cached/PPR routes; otherwise
+  obtain explicit approval for the rendering/cache and compute-cost tradeoff
+  before migrating those routes to dynamic nonce-based authorization.
+- [ ] Exercise the candidate policy in report-only mode in an approved test
+  environment, then verify hydration, payments, attribution, and cache isolation.
+- [ ] Remove `'unsafe-inline'` only after those gates pass. Do not cache or reuse
+  a request nonce, silently disable PPR/ISR, or treat this record as risk closure.
+
+### Preserved behavior
+
 - Preserve the exported `proxy(request)` and statically analyzable `config.matcher` in `apps/web/src/proxy.ts`.
 - Preserve exact routing precedence, status codes, query handling, request-body forwarding, trusted merchant headers, bot metadata partitioning, and public/private cache isolation across custom domains, merchant subdomains, and root-domain slug paths.
 - Rate-limit alias-shaped API requests before any alias lookup. Keep origin/mutation protections, webhook/bearer exceptions, session handling, strict CSP nonces, and PostHog credential stripping unchanged.

@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 const MIGRATION_SOURCE = readFileSync(
   join(
     dirname(fileURLToPath(import.meta.url)),
-    '../../../../supabase/migrations/20260725120000_plan_tier_authoritative_snapshot_entitlement.sql'
+    '../../../../supabase/migrations/20260927060000_plan_tier_authoritative_snapshot_entitlement.sql'
   ),
   'utf8'
 );

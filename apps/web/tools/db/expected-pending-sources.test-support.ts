@@ -80,11 +80,6 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20260725120000_plan_tier_authoritative_snapshot_entitlement.sql',
-    sha256: '38617623446eccea3a8a426ca53e2935dfbc28091ce66a7c17543cd18936ffef',
-  },
-  {
-    repositoryPath:
       'supabase/migrations/20260725164445_restore_merchant_owner_row_select_branch.sql',
     sha256: '9823a697f756bb2865a5de62d2a202d2bf348b284ead1d5cee9c6838a477ca27',
   },
@@ -341,6 +336,11 @@ export const EXPECTED_PENDING_SOURCES = [
     repositoryPath:
       'supabase/migrations/20260925100000_credit_direct_inventory_proof.sql',
     sha256: 'd48421f956f86ef4c18a4fcf84eb74f0f4ea9a486393fc957e5ac659d1691eea',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260927060000_plan_tier_authoritative_snapshot_entitlement.sql',
+    sha256: '38617623446eccea3a8a426ca53e2935dfbc28091ce66a7c17543cd18936ffef',
   },
 ]
   .sort((left, right) =>

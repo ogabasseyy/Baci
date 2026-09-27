@@ -40,6 +40,8 @@
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/checkout-shipping-quotes-options*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-address-inference*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/PaymentStep.tsx",
+      "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CryptoPaymentModal.tsx",
+      "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CryptoPaymentModal.test.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/PaymentStepAccessibility.test.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CheckoutAccountFields.test.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CheckoutAccountFields.tsx",

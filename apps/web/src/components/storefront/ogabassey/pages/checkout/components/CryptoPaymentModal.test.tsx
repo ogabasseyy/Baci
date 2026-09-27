@@ -80,7 +80,7 @@ describe('CryptoPaymentModal', () => {
     it('renders reference', () => {
       render(<CryptoPaymentModal {...defaultProps} />);
       expect(
-        screen.getByText(`Reference: ${mockData.reference}`),
+        screen.getByText(`Reference: ${mockData.reference}`)
       ).toBeInTheDocument();
     });
 
@@ -95,7 +95,7 @@ describe('CryptoPaymentModal', () => {
       render(<CryptoPaymentModal {...defaultProps} />);
       const buttons = screen.getAllByRole('button');
       const closeButton = buttons.find((button) =>
-        button.querySelector('svg')?.classList.contains('lucide-x'),
+        button.querySelector('svg')?.classList.contains('lucide-x')
       );
       if (closeButton) fireEvent.click(closeButton);
       expect(defaultProps.onClose).toHaveBeenCalledTimes(1);
@@ -106,17 +106,17 @@ describe('CryptoPaymentModal', () => {
       const copyButton = screen.getByTitle('Copy Address');
       fireEvent.click(copyButton);
       expect(defaultProps.onCopyToClipboard).toHaveBeenCalledWith(
-        mockData.address,
+        mockData.address
       );
     });
 
     it('shows check icon when address is copied', () => {
       render(
-        <CryptoPaymentModal {...defaultProps} copiedText={mockData.address} />,
+        <CryptoPaymentModal {...defaultProps} copiedText={mockData.address} />
       );
       const buttons = screen.getAllByRole('button');
       const checkButton = buttons.find((button) =>
-        button.querySelector('svg')?.classList.contains('lucide-check'),
+        button.querySelector('svg')?.classList.contains('lucide-check')
       );
       expect(checkButton).toBeDefined();
     });
@@ -155,10 +155,10 @@ describe('CryptoPaymentModal', () => {
           {...defaultProps}
           isVerifying={true}
           verificationStatus="checking"
-        />,
+        />
       );
       expect(
-        screen.getByText('Checking payment status…'),
+        screen.getByText('Checking payment status...')
       ).toBeInTheDocument();
     });
 
@@ -168,32 +168,30 @@ describe('CryptoPaymentModal', () => {
           {...defaultProps}
           isVerifying={true}
           verificationStatus="pending"
-        />,
+        />
       );
       expect(
-        screen.getByText('Waiting for blockchain confirmation…'),
+        screen.getByText('Waiting for blockchain confirmation...')
       ).toBeInTheDocument();
     });
 
     it('shows confirmed status message', () => {
       render(
-        <CryptoPaymentModal {...defaultProps} verificationStatus="confirmed" />,
+        <CryptoPaymentModal {...defaultProps} verificationStatus="confirmed" />
       );
       expect(
         screen.getByText(
-          'Payment confirmed! Redirecting to order confirmation…',
-        ),
+          'Payment confirmed! Redirecting to order confirmation…'
+        )
       ).toBeInTheDocument();
     });
 
     it('shows failed status message', () => {
       render(
-        <CryptoPaymentModal {...defaultProps} verificationStatus="failed" />,
+        <CryptoPaymentModal {...defaultProps} verificationStatus="failed" />
       );
       expect(
-        screen.getByText(
-          'Payment verification failed. Please contact support.',
-        ),
+        screen.getByText('Payment verification failed. Please contact support.')
       ).toBeInTheDocument();
     });
 
@@ -202,7 +200,7 @@ describe('CryptoPaymentModal', () => {
       expect(
         screen.queryByRole('button', {
           name: /close and check order status later/i,
-        }),
+        })
       ).not.toBeInTheDocument();
     });
   });
@@ -230,17 +228,21 @@ describe('CryptoPaymentModal', () => {
     it('does not render back button when onBack prop is not provided', () => {
       render(<CryptoPaymentModal {...defaultProps} />);
       expect(
-        screen.queryByRole('button', { name: 'Change network or coin' }),
+        screen.queryByRole('button', { name: 'Change network or coin' })
       ).not.toBeInTheDocument();
     });
 
     it('does not render back button when isVerifying is true', () => {
       const onBack = vi.fn();
       render(
-        <CryptoPaymentModal {...defaultProps} onBack={onBack} isVerifying={true} />,
+        <CryptoPaymentModal
+          {...defaultProps}
+          onBack={onBack}
+          isVerifying={true}
+        />
       );
       expect(
-        screen.queryByRole('button', { name: 'Change network or coin' }),
+        screen.queryByRole('button', { name: 'Change network or coin' })
       ).not.toBeInTheDocument();
     });
 
@@ -255,9 +257,7 @@ describe('CryptoPaymentModal', () => {
 
   describe('Accessibility', () => {
     it('renders modal with proper backdrop', () => {
-      const { container } = render(
-        <CryptoPaymentModal {...defaultProps} />,
-      );
+      const { container } = render(<CryptoPaymentModal {...defaultProps} />);
       const backdrop = container.querySelector('.bg-black\\/50');
       expect(backdrop).toBeInTheDocument();
     });

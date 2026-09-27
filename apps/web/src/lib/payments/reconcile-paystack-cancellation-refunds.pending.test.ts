@@ -4,7 +4,12 @@ const provider = vi.hoisted(() => ({
   fetchRefund: vi.fn(),
   verifyTransaction: vi.fn(),
 }));
-vi.mock('@/lib/paystack', () => provider);
+vi.mock('@/lib/paystack', () => ({
+  verifyTransaction: provider.verifyTransaction,
+}));
+vi.mock('./fetch-paystack-refund', () => ({
+  fetchRefund: provider.fetchRefund,
+}));
 
 import { reconcilePendingPaystackCancellationRefunds } from './reconcile-paystack-cancellation-refunds';
 

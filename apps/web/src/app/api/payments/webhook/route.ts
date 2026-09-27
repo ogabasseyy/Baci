@@ -46,13 +46,13 @@ import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gatew
 import { isMerchantInvoicePartialBalanceReview } from '@/lib/payments/is-merchant-invoice-partial-balance-review';
 import { processMerchantInvoicePartialPayment } from '@/lib/payments/process-merchant-invoice-partial-payment';
 import { processWalletFundedOrderPayment } from '@/lib/payments/process-wallet-funded-order-payment';
-import { reconcilePaystackRefundEvent } from '@/lib/payments/reconcile-paystack-cancellation-refunds';
 import { recordOrderUpdateFailureSettlement } from '@/lib/payments/record-order-update-failure-settlement';
 import { scheduleWalletTopUpCreditNotification } from '@/lib/payments/schedule-wallet-top-up-credit-notification';
 import {
   calculatePlatformFee,
   verifyTransaction as verifyPaystackPayment,
 } from '@/lib/paystack';
+import { handlePaystackCancellationRefundEvent } from '@/lib/paystack-cancellation-refund-event-webhook';
 import { handlePaystackMerchantWalletAssignmentFailure } from '@/lib/paystack-merchant-wallet-assignment-failure-webhook';
 import { handlePaystackMerchantWalletAssignmentSuccess } from '@/lib/paystack-merchant-wallet-assignment-success-webhook';
 import { dispatchRepairPickupPayment } from '@/lib/repairs/dispatch-repair-pickup-payment';
@@ -661,25 +661,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (gateway === 'paystack' && body.event?.startsWith('refund.')) {
-      const transactionReference = body.data?.transaction_reference;
-      if (typeof transactionReference === 'string') {
-        try {
-          await reconcilePaystackRefundEvent(
-            createServiceClient(),
-            transactionReference
-          );
-        } catch (error) {
-          logger.error({
-            message: 'Paystack refund reconciliation failed',
-            error,
-          });
-          return NextResponse.json(
-            { error: 'Refund reconciliation unavailable' },
-            { status: 503 }
-          );
-        }
-      }
-      return NextResponse.json({ message: 'Refund event reconciled' });
+      return handlePaystackCancellationRefundEvent(
+        createServiceClient(),
+        body as unknown as Record<string, unknown>
+      );
     }
 
     // Extract reference and check event type based on gateway

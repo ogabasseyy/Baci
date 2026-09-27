@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
-import { fetchRefund, verifyTransaction } from '@/lib/paystack';
+import { verifyTransaction } from '@/lib/paystack';
+import { fetchRefund } from './fetch-paystack-refund';
 
 interface RefundRow {
   id: string;

@@ -247,56 +247,6 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20260927150000_paystack_cancellation_refund_completion.sql',
-    sha256: 'b9d2efd63746bdf617e855d749a0ae477b7ac620e180acd364cace8fa52658c4',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260927150100_paystack_pending_cancellation_refunds_idx.sql',
-    sha256: '158f33f1024d26273151405d67bff4f30837baeb0c8e6a6ed3b235e929c966ae',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260927150200_merge_paystack_cancellation_refund_review_evidence.sql',
-    sha256: 'b07c07a9d96e11fe067bd84b3904d19213cc384d8f56a566f9e35d2e689644fb',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260927150300_paystack_abandoned_attempt_candidates_idx.sql',
-    sha256: '0cd541085b710ecadb72bd3376b042f76bdd77ddc6097a503c736c301a43785d',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260927150400_paystack_cancellation_refund_pending_status.sql',
-    sha256: 'd9ef1be090addca546a2081274c66d314fb6d9a5101851dc37d379c6e88099cf',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260927150500_complete_legacy_paystack_cancellation_refunds.sql',
-    sha256: '84ed20d3cca910ece555aac23c3922345bd7ad2070b62465e57de8716ea28a54',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260927150600_paystack_completed_cancellation_refund_recheck_idx.sql',
-    sha256: '727937d3f496b418991eccac0f8b47edbe36766803fe881c56e430aa4e3a658a',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260927150700_merge_paystack_cancellation_refund_provider_evidence.sql',
-    sha256: '9621eb971a8d7f2821b3a53ae7b9e5f35867cf8f4ea9eae9c8ed4ca50b570a13',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260927150800_duplicate_payment_capture_review_type.sql',
-    sha256: '9cde352bd23a1204adaf98493089587f00ce13f46a674604552df5d22232b2a5',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260927150900_merge_duplicate_payment_capture_evidence.sql',
-    sha256: '061154e1c62cb8de328ba6c9211abbdef206fe2d57612bf52ef0020cdf17adc4',
-  },
-  {
-    repositoryPath:
       'supabase/migrations/20260928080000_product_discovery_embeddings.sql',
     sha256: '2d3dc25857186965c6bdafc8874b57d0ea64452b2ecba5fa14e13bc802272add',
   },

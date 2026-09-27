@@ -105,8 +105,9 @@ export async function drainPaystackRefundNotifications(
         if (paymentLegError || !paymentLegs?.length) {
           throw new Error('refund_notification_ledger_lookup_failed');
         }
-        const externalLegs = paymentLegs.filter((leg) =>
-          isExternalPaymentGateway(leg.gateway)
+        const externalLegs = paymentLegs.filter(
+          (leg) =>
+            Number(leg.amount) > 0 && isExternalPaymentGateway(leg.gateway)
         );
         const { data: refundLegs, error: refundLegError } = await supabase
           .from('transactions')
@@ -120,15 +121,22 @@ export async function drainPaystackRefundNotifications(
         }
         // Mirror the completion RPC: every external payment leg links one
         // same-gateway, same-amount completed refund, including legs that
-        // operations refunded outside Paystack.
+        // operations refunded outside Paystack. Unlinked legacy refunds
+        // match when the order holds exactly one external payment leg.
         const linkedRefunds = externalLegs.map((leg) =>
-          refundLegs.find(
-            (refund) =>
-              refund.gateway === leg.gateway &&
-              Number(refund.amount) === Number(leg.amount) &&
-              (refund.metadata as { payment_transaction_id?: unknown } | null)
-                ?.payment_transaction_id === leg.id
-          )
+          refundLegs.find((refund) => {
+            if (
+              refund.gateway !== leg.gateway ||
+              Number(refund.amount) !== Number(leg.amount)
+            )
+              return false;
+            const link = (
+              refund.metadata as { payment_transaction_id?: unknown } | null
+            )?.payment_transaction_id;
+            return (
+              link === leg.id || (link == null && externalLegs.length === 1)
+            );
+          })
         );
         if (
           externalLegs.length === 0 ||

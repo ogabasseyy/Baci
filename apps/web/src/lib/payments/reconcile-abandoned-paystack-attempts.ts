@@ -27,6 +27,12 @@ export interface AbandonedPaystackAttemptSummary {
   reviewsFiled: string[];
 }
 
+function isVerificationUnavailable(code: string | undefined): boolean {
+  if (code === 'NETWORK_ERROR' || code === 'CONFIG_ERROR') return true;
+  const status = Number(/^HTTP_(\d{3})$/.exec(code ?? '')?.[1]);
+  return status === 401 || status === 403 || status === 429 || status >= 500;
+}
+
 /** Clear old, superseded attempts only after checking their current Paystack status. */
 export async function reconcileAbandonedPaystackAttempts({
   supabase,
@@ -142,10 +148,12 @@ export async function reconcileAbandonedPaystackAttempts({
         AbortSignal.timeout(VERIFY_TIMEOUT_MS)
       );
     } catch {
+      summary.failed = true;
       await hold('verification_unavailable');
       continue;
     }
     if (!result.success) {
+      if (isVerificationUnavailable(result.code)) summary.failed = true;
       if (
         result.code !== 'HTTP_404' ||
         attempt.metadata?.paystack_payment_type !== 'dva'

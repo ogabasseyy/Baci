@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { verifyTransaction } from '@/lib/paystack';
+import { verifyTransaction } from '@/lib/verify-paystack-transaction';
 import { fetchRefund } from './fetch-paystack-refund';
 import type { RefundRow } from './paystack-cancellation-refund-row';
 

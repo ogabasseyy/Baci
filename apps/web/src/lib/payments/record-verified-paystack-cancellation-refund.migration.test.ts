@@ -52,4 +52,13 @@ describe('verified paystack cancellation refund migration', () => {
       "r.metadata->>'payment_transaction_id' IS NULL"
     );
   });
+
+  it('requires matching currencies for every refunded payment leg', () => {
+    expect(existsSync(migrationPath)).toBe(true);
+    if (!existsSync(migrationPath)) return;
+
+    const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
+
+    expect(migrationSql).toContain('AND upper(r.currency) = upper(p.currency)');
+  });
 });

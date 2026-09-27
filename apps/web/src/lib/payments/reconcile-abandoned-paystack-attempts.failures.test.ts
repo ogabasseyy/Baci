@@ -103,6 +103,61 @@ describe('abandoned Paystack attempt operational failures', () => {
     expect(verify).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'NETWORK_ERROR',
+    'CONFIG_ERROR',
+    'HTTP_401',
+    'HTTP_403',
+    'HTTP_429',
+    'HTTP_500',
+    'HTTP_503',
+  ])('fails the sweep when verification is unavailable (%s)', async (code) => {
+    const { client } = createClient();
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify: vi.fn().mockResolvedValue({ success: false, code }),
+    });
+
+    expect(summary.failed).toBe(true);
+    expect(summary.held).toEqual([
+      { id: 'attempt-1', reason: 'verification_unavailable' },
+    ]);
+    expect(summary.retired).toEqual([]);
+  });
+
+  it.each([
+    'HTTP_404',
+    'HTTP_400',
+    'VALIDATION_ERROR',
+  ])('holds without failing on a genuine provider verdict (%s)', async (code) => {
+    const { client } = createClient();
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify: vi.fn().mockResolvedValue({ success: false, code }),
+    });
+
+    expect(summary.failed).toBe(false);
+    expect(summary.held).toEqual([
+      { id: 'attempt-1', reason: 'verification_unavailable' },
+    ]);
+  });
+
+  it('fails the sweep when verification throws', async () => {
+    const { client } = createClient();
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify: vi.fn().mockRejectedValue(new Error('provider down')),
+    });
+
+    expect(summary.failed).toBe(true);
+    expect(summary.held).toEqual([
+      { id: 'attempt-1', reason: 'verification_unavailable' },
+    ]);
+  });
+
   it('holds a verification request that hangs until its five-second deadline', async () => {
     const { client, update } = createClient();
     const verify = vi.fn(

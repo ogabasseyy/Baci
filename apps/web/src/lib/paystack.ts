@@ -12,13 +12,11 @@
 
 import z from 'zod';
 import { logger } from './logger';
+import { paystackRequest } from './paystack-request';
 
 // =============================================================================
 // Configuration
 // =============================================================================
-
-const PAYSTACK_BASE_URL = 'https://api.paystack.co';
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
 
 // Platform fee percentage (2%) capped at ₦2,050
 const PLATFORM_FEE_PERCENTAGE = 2;
@@ -111,7 +109,7 @@ const AuthorizationSchema = z.object({
   account_name: z.string().nullable().optional(),
 });
 
-const PaymentVerificationSchema = z.object({
+export const PaymentVerificationSchema = z.object({
   id: z.number(),
   status: z.enum(PAYMENT_STATUSES),
   reference: z.string(),
@@ -248,70 +246,6 @@ export interface WalletDedicatedAccountInput {
 export type PaystackResult<T> =
   | { success: true; data: T }
   | { success: false; error: string; code?: string };
-
-// =============================================================================
-// API Client
-// =============================================================================
-
-interface PaystackApiResponse<T> {
-  status: boolean;
-  message: string;
-  data: T;
-}
-
-export async function paystackRequest<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<PaystackResult<T>> {
-  const url = `${PAYSTACK_BASE_URL}${endpoint}`;
-
-  if (!PAYSTACK_SECRET_KEY) {
-    return {
-      success: false,
-      error: 'PAYSTACK_SECRET_KEY is not configured',
-      code: 'CONFIG_ERROR',
-    };
-  }
-
-  try {
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-        ...options.headers,
-      },
-    });
-
-    const data: PaystackApiResponse<T> = await response.json();
-
-    logger.info({
-      message: 'Paystack API Response',
-      endpoint,
-      status: response.status,
-      success: data.status,
-    });
-
-    if (!response.ok || !data.status) {
-      logger.error({
-        message: 'Paystack API Error',
-        status: response.status,
-        error: data.message,
-      });
-      return {
-        success: false,
-        error: data.message || `API request failed: ${response.status}`,
-        code: `HTTP_${response.status}`,
-      };
-    }
-
-    return { success: true, data: data.data };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Network error';
-    logger.error({ message: 'Paystack request failed', error: message });
-    return { success: false, error: message, code: 'NETWORK_ERROR' };
-  }
-}
 
 // =============================================================================
 // Bank Functions
@@ -509,43 +443,7 @@ export async function initializeTransaction(
   return result.data;
 }
 
-/**
- * Verify a Paystack transaction
- */
-export async function verifyTransaction(
-  reference: string,
-  signal?: AbortSignal
-): Promise<PaystackResult<PaymentVerificationResponse>> {
-  // Validate reference format to prevent SSRF attacks
-  // Paystack references are typically alphanumeric with some special chars
-  if (!reference || !/^[A-Za-z0-9_-]{1,100}$/.test(reference)) {
-    return {
-      success: false,
-      error: 'Invalid transaction reference format',
-      code: 'VALIDATION_ERROR',
-    };
-  }
-
-  const result = await paystackRequest<PaymentVerificationResponse>(
-    `/transaction/verify/${encodeURIComponent(reference)}`,
-    { signal }
-  );
-
-  if (!result.success) {
-    return result;
-  }
-
-  // Validate response
-  const parsed = PaymentVerificationSchema.safeParse(result.data);
-  if (!parsed.success) {
-    logger.warn({
-      message: 'Payment verification response validation warning',
-      issues: parsed.error.issues,
-    });
-  }
-
-  return { success: true, data: result.data };
-}
+export { verifyTransaction } from './verify-paystack-transaction';
 
 export async function chargeAuthorization(
   payload: ChargeAuthorizationData
@@ -579,67 +477,6 @@ export async function chargeAuthorization(
   }
 
   return { success: true, data: result.data };
-}
-
-/**
- * Initiate a refund for a Paystack transaction
- * @param transaction - Transaction reference or ID
- * @param amount - Amount to refund in kobo (optional, defaults to full amount)
- * @param reason - Reason for refund (optional)
- */
-export async function initiateRefund(
-  transaction: string,
-  amount?: number,
-  reason?: string
-): Promise<
-  PaystackResult<{
-    id: number;
-    status: string;
-    transaction: number | { id: number; reference: string };
-  }>
-> {
-  // Validate transaction reference format
-  if (!transaction || !/^[A-Za-z0-9_-]{1,100}$/.test(transaction)) {
-    return {
-      success: false,
-      error: 'Invalid transaction reference format',
-      code: 'VALIDATION_ERROR',
-    };
-  }
-
-  const payload: Record<string, unknown> = { transaction };
-  if (amount !== undefined && amount > 0) {
-    payload.amount = amount;
-  }
-  if (reason) {
-    payload.customer_note = reason;
-  }
-
-  const result = await paystackRequest<{
-    id: number;
-    status: string;
-    transaction: number | { id: number; reference: string };
-  }>('/refund', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-
-  if (!result.success) {
-    logger.error({
-      message: 'Paystack refund failed',
-      transaction,
-      error: result.error,
-    });
-  } else {
-    logger.info({
-      message: 'Paystack refund initiated',
-      transaction,
-      refundId: result.data?.id,
-      status: result.data?.status,
-    });
-  }
-
-  return result;
 }
 
 // =============================================================================
@@ -1275,7 +1112,7 @@ export function getPublicKey(): string {
  * Check if Paystack is properly configured
  */
 export function isPaystackConfigured(): boolean {
-  return Boolean(PAYSTACK_SECRET_KEY);
+  return Boolean(process.env.PAYSTACK_SECRET_KEY || '');
 }
 
 /**

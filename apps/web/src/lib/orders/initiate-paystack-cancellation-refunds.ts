@@ -1,8 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { initiateRefund as initiatePaystackRefund } from '@/lib/initiate-paystack-refund';
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
 import { DeliveryUncertainError } from '@/lib/orders/run-order-cancellation-side-effect';
-import { initiateRefund as initiatePaystackRefund } from '@/lib/paystack';
 
 /**
  * Initiate a Paystack refund for every gateway leg that has no recorded

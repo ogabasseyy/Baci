@@ -103,6 +103,7 @@ BEGIN
           AND r.transaction_type = 'refund' AND r.gateway = p.gateway
           AND r.status = 'completed'
           AND r.amount = p.amount
+          AND upper(r.currency) = upper(p.currency)
           AND (
             r.metadata->>'payment_transaction_id' = p.id::text
             OR (

@@ -1,0 +1,64 @@
+import { logger } from './logger';
+import type { PaystackResult } from './paystack';
+import { paystackRequest } from './paystack-request';
+
+/**
+ * Initiate a refund for a Paystack transaction
+ * @param transaction - Transaction reference or ID
+ * @param amount - Amount to refund in kobo (optional, defaults to full amount)
+ * @param reason - Reason for refund (optional)
+ */
+export async function initiateRefund(
+  transaction: string,
+  amount?: number,
+  reason?: string
+): Promise<
+  PaystackResult<{
+    id: number;
+    status: string;
+    transaction: number | { id: number; reference: string };
+  }>
+> {
+  // Validate transaction reference format
+  if (!transaction || !/^[A-Za-z0-9_-]{1,100}$/.test(transaction)) {
+    return {
+      success: false,
+      error: 'Invalid transaction reference format',
+      code: 'VALIDATION_ERROR',
+    };
+  }
+
+  const payload: Record<string, unknown> = { transaction };
+  if (amount !== undefined && amount > 0) {
+    payload.amount = amount;
+  }
+  if (reason) {
+    payload.customer_note = reason;
+  }
+
+  const result = await paystackRequest<{
+    id: number;
+    status: string;
+    transaction: number | { id: number; reference: string };
+  }>('/refund', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  if (!result.success) {
+    logger.error({
+      message: 'Paystack refund failed',
+      transaction,
+      error: result.error,
+    });
+  } else {
+    logger.info({
+      message: 'Paystack refund initiated',
+      transaction,
+      refundId: result.data?.id,
+      status: result.data?.status,
+    });
+  }
+
+  return result;
+}

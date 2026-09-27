@@ -120,6 +120,24 @@ describe('remediation research gate', () => {
     }
   });
 
+  it('rejects passive wording with qualifiers between not and established', () => {
+    const reports = [
+      'SELECTED_FIX: A defensible fix has not yet been established.',
+      'SELECTED_FIX: The safe code change has not yet been determined from evidence.',
+    ];
+
+    for (const selectedFix of reports) {
+      const result = validateCodexResearchResult(
+        jsonl(
+          validReport.replace('SELECTED_FIX: smallest code fix', selectedFix)
+        )
+      );
+
+      assert.equal(result.accepted, false);
+      assert.match(result.reasons.join('\n'), /defensible selected fix/);
+    }
+  });
+
   it('rejects reverse-order wording that cannot establish a defensible fix', () => {
     const reports = [
       'SELECTED_FIX: I cannot establish a defensible fix without production traces.',

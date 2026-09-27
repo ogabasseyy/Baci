@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 import { buildCodexDockerRuntime } from './remediation-codex-docker-runtime.mjs';
 
 describe('buildCodexDockerRuntime', () => {
-  it('builds a read-only bootstrap that hands Codex to the worker identity', () => {
+  it('builds a read-only bootstrap that keeps Codex on the bootstrap identity', () => {
     const runtime = buildCodexDockerRuntime({
       codexHome: '/home/worker/.codex',
       gid: 1001,
@@ -41,7 +41,11 @@ describe('buildCodexDockerRuntime', () => {
     assert.match(runtime.launchScript, /BACI_CODEX_RAW_DASH_PATH/);
     assert.match(
       runtime.launchScript,
-      /exec \/usr\/local\/libexec\/baci-real-dash -c/
+      /exec \/opt\/codex\/bin\/codex "\$@"/
+    );
+    assert.doesNotMatch(
+      runtime.launchScript,
+      /baci-real-dash -c/
     );
     assert.deepEqual(
       runtime.authArgs.filter((value) => value.startsWith('--mount')),
@@ -84,6 +88,30 @@ describe('buildCodexDockerRuntime', () => {
     }
     assert.ok(runtime.authArgs.includes('BACI_CODEX_SHELL_BOOTSTRAP=1'));
     assert.match(runtime.launchScript, /unset BACI_CODEX_SHELL_BOOTSTRAP/);
+  });
+
+  it('keeps research auth outside the generated-shell identity', () => {
+    const runtime = buildCodexDockerRuntime({
+      codexHome: '/home/worker/.codex',
+      gid: 1001,
+      readOnly: true,
+      uid: 1001,
+    });
+
+    // Regression: generated tool shells run as BACI_CODEX_SHELL_UID, so the
+    // bootstrap must never hand that UID ownership of auth.json; a dropped
+    // `cat "$CODEX_HOME/auth.json"` must fail against the root-only file.
+    assert.doesNotMatch(runtime.launchScript, /chown[^;]*auth\.json/);
+    assert.match(runtime.launchScript, /chmod 400 "\$CODEX_HOME\/auth\.json"/);
+    // The parent keeps the bootstrap root identity to read root-only auth...
+    assert.match(runtime.launchScript, /exec \/opt\/codex\/bin\/codex/);
+    assert.doesNotMatch(runtime.launchScript, /baci-real-dash -c/);
+    // ...while generated shells still drop to the worker UID.
+    assert.match(runtime.launchScript, /unset BACI_CODEX_SHELL_BOOTSTRAP/);
+    assert.match(
+      runtime.launchScript,
+      /chown "\$BACI_CODEX_SHELL_UID:\$BACI_CODEX_SHELL_GID" "\$shell_dir"/
+    );
   });
 
   it('builds a writable runtime with the supplied worker identity', () => {

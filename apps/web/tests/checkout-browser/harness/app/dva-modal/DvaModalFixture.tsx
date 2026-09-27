@@ -52,8 +52,6 @@ export function DvaModalFixture() {
           className="mt-5 rounded-lg bg-store-primary px-4 py-2 font-semibold text-white"
           onClick={() => {
             modalSession.current += 1;
-            setIsVerifying(false);
-            setCopiedText(null);
             setDismissal(null);
             setIsOpen(true);
           }}

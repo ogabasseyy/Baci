@@ -32,7 +32,7 @@ afterEach(() => {
   }
 });
 
-it('uses synthetic DVA details and resets verification and copy state after footer close', async () => {
+it('retains active verification and copied feedback across footer close and reopen', async () => {
   const writeText = vi.fn().mockResolvedValue(undefined);
   stubClipboard(writeText);
   render(<DvaModalFixture />);
@@ -63,11 +63,11 @@ it('uses synthetic DVA details and resets verification and copy state after foot
 
   fireEvent.click(screen.getByRole('button', { name: 'Open DVA modal' }));
   expect(
-    screen.getByRole('button', { name: 'Confirm Transfer Sent' })
-  ).toBeEnabled();
+    screen.getByRole('button', { name: 'Verifying transfer…' })
+  ).toBeDisabled();
   expect(
     screen.getByRole('button', { name: 'Copy account number' })
-  ).not.toHaveClass('border-green-300');
+  ).toHaveClass('border-green-300');
 });
 
 it('keeps the modal open without copied feedback when clipboard access rejects', async () => {

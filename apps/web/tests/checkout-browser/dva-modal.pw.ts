@@ -54,11 +54,11 @@ test('renders the themed DVA modal and retains amount, copy, verify, and close a
   await expect(page.getByRole('status')).toHaveText('DVA modal closed.');
   await page.getByRole('button', { name: 'Open DVA modal' }).click();
   await expect(
-    page.getByRole('button', { name: 'Confirm Transfer Sent' })
-  ).toBeEnabled();
+    page.getByRole('button', { name: 'Verifying transfer…' })
+  ).toBeDisabled();
   await expect(
     page.getByRole('button', { name: 'Copy account number' })
-  ).not.toHaveClass(/border-green-300/);
+  ).toHaveClass(/border-green-300/);
   await page.getByRole('button', { name: 'Close bank transfer modal' }).click();
   await expect(page.getByRole('status')).toHaveText('DVA modal closed.');
 });

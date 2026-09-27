@@ -24,6 +24,24 @@ describe('useCartHandoff', () => {
     expect(result.current.cartError).toContain('Could not open the cart');
   });
 
+  it('does not persist a cart when external navigation throws', async () => {
+    const setWidgetState = vi.fn();
+    window.openai = {
+      callTool: vi.fn().mockResolvedValue({ structuredContent: {
+        success: true, cart_url: 'https://ogabassey.com/cart?item_id=phone-1',
+      } }),
+      setWidgetState,
+      openExternal: vi.fn(() => { throw new Error('navigation unavailable'); }),
+    };
+    const { result } = renderHook(() => useCartHandoff());
+
+    await act(async () => { await result.current.handleAddToCart(product); });
+
+    expect(result.current.cart).toEqual([]);
+    expect(result.current.cartError).toContain('Could not open the cart');
+    expect(setWidgetState).not.toHaveBeenCalled();
+  });
+
   it('removes a prepared link when the shopper removes its product', async () => {
     const openExternal = vi.fn();
     window.openai = {

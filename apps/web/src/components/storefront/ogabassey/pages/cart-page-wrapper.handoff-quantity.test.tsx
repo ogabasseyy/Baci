@@ -221,17 +221,25 @@ describe('CartPageWrapper', () => {
       vi.mocked(useSearchParams).mockReturnValue(
         new URLSearchParams('item_id=55555555-5555-4555-8555-555555555555&qty=1') as ReturnType<typeof useSearchParams>
       );
+      window.history.pushState({}, '', '/ogabassey/cart?item_id=55555555-5555-4555-8555-555555555555&qty=1');
       const addToCart = mockUseCart({ cart: [{ id: '55555555-5555-4555-8555-555555555555', variantId: 'variant-1', quantity: 1 }] });
       setupProductsQuery({ data: [{
         id: '55555555-5555-4555-8555-555555555555', name: 'Option Phone',
         status: 'active', images: [], manage_stock: true, stock_quantity: 3,
         [optionFlag]: true,
       }], error: null });
-      render(<CartPageWrapper merchantId="merchant-1" />);
+      const { unmount } = render(<CartPageWrapper merchantId="merchant-1" />);
       await waitFor(() => expect(mockToast).toHaveBeenCalledWith(
         expect.objectContaining({ title: 'Choose product options', variant: 'destructive' })
       ));
       expect(addToCart).not.toHaveBeenCalled();
+      await waitFor(() => expect(window.location.search).toBe(''));
+      unmount();
+      vi.mocked(useSearchParams).mockReturnValue(
+        new URLSearchParams(window.location.search) as ReturnType<typeof useSearchParams>
+      );
+      render(<CartPageWrapper merchantId="merchant-1" />);
+      expect(mockToast).toHaveBeenCalledTimes(1);
     }
   );
 

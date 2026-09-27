@@ -120,7 +120,6 @@ async function fetchAndAddCartItems({
         cart.some(item => item.quizAwardId === quizAwardId);
       if (!alreadyClaimedPrize) {
         if (!hasQuizPrizeVoucher && (product.has_variants || product.has_condition_offers)) {
-          rejectedIds.push(product.id);
           toast({
             title: 'Choose product options',
             description: `Choose the variant or condition for ${product.name} on its product page before adding it to your cart.`,
@@ -173,7 +172,7 @@ async function fetchAndAddCartItems({
       });
     }
 
-    // Keep rejected IDs in the handoff URL so a corrected cart can retry.
+    // Keep only retryable stock failures in the handoff URL.
     const url = new URL(window.location.href);
     if (rejectedIds.length > 0) {
       url.searchParams.set('item_id', rejectedIds.join(','));

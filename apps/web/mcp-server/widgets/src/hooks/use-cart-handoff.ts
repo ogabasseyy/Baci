@@ -45,8 +45,8 @@ export function useCartHandoff() {
 
       const variantSelectionUrl = getVariantSelectionUrl(result, product.id, product.slug || product.id);
       if (variantSelectionUrl) {
-        setWidgetState((previous) => ({ ...previous!, cart: [], cartUrl: undefined }));
         openOgabasseyUrl(variantSelectionUrl, pendingTab);
+        setWidgetState((previous) => ({ ...previous!, cart: [], cartUrl: undefined }));
         return;
       }
 
@@ -56,13 +56,13 @@ export function useCartHandoff() {
         setCartError('This item cannot be added right now. Please choose another product.');
         return;
       }
+      openOgabasseyUrl(cartUrl, pendingTab);
       // The MCP handoff supports one product at a time.
       setWidgetState((previous) => ({
         ...previous!,
         cart: [{ product, quantity: 1 }],
         cartUrl: 'https://ogabassey.com/cart',
       }));
-      openOgabasseyUrl(cartUrl, pendingTab);
     } catch {
       pendingTab?.close();
       if (requestId !== handoffRequestId.current) return;

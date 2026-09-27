@@ -41,12 +41,18 @@ export function unsupportedRefundReasons(
 export async function quarantineRefund({
   metadata,
   order,
+  preflight = false,
   reason,
   supabase,
   transactions,
 }: {
   metadata?: Record<string, unknown>;
   order: { currency: string | null; id: string; merchant_id: string };
+  /**
+   * Set when no provider refund was initiated in this run, so a transient
+   * review-write failure stays retryable instead of quarantining the step.
+   */
+  preflight?: boolean;
   reason: string;
   supabase: Pick<SupabaseClient, 'from'>;
   transactions: GatewayPaymentTransaction[];
@@ -73,6 +79,11 @@ export async function quarantineRefund({
   const duplicateReview =
     (reviewError as { code?: string } | null)?.code === '23505';
   if (reviewError && !duplicateReview) {
+    if (preflight) {
+      throw new Error(
+        'Refund requires reconciliation, but filing the review failed'
+      );
+    }
     // A provider refund may already exist; never make review-write failure retryable.
     throw new DeliveryUncertainError(
       'Refund requires reconciliation, but filing the review failed'

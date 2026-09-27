@@ -30,6 +30,42 @@ describe('order cancellation refund review', () => {
     ).toEqual(['missing gateway', 'korapay missing reference']);
   });
 
+  it('keeps a preflight review-write failure retryable', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: { code: 'XX000' } });
+    const supabase = {
+      from: vi.fn().mockReturnValue({ insert }),
+    } as unknown as Pick<SupabaseClient, 'from'>;
+
+    const error = await quarantineRefund({
+      order,
+      preflight: true,
+      reason: 'unsupported gateway',
+      supabase,
+      transactions: [transaction],
+    }).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(DeliveryUncertainError);
+    expect((error as Error).message).toMatch('filing the review failed');
+  });
+
+  it('keeps a duplicate preflight review quarantined', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
+    const supabase = {
+      from: vi.fn().mockReturnValue({ insert }),
+    } as unknown as Pick<SupabaseClient, 'from'>;
+
+    await expect(
+      quarantineRefund({
+        order,
+        preflight: true,
+        reason: 'unsupported gateway',
+        supabase,
+        transactions: [transaction],
+      })
+    ).rejects.toBeInstanceOf(DeliveryUncertainError);
+  });
+
   it('keeps an accepted refund uncertain when review persistence fails', async () => {
     const insert = vi.fn().mockResolvedValue({ error: { code: '42501' } });
     const supabase = {

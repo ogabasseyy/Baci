@@ -1,8 +1,23 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { notifyMerchant } from '@/lib/expo-push';
 import { logger } from '@/lib/logger';
 import { escapeHtmlText } from '@/lib/sanitize';
-import { sendEmail } from '@/lib/zeptomail';
+
+type RefundEmailSender = (message: {
+  to: string;
+  toName?: string;
+  subject: string;
+  htmlContent: string;
+  textContent: string;
+  replyTo?: string;
+  emailType: 'orders' | 'notifications';
+  fromName?: string;
+  auditContext: {
+    merchantId: string;
+    orderId: string;
+    customerId?: string | null;
+    metadata: Record<string, string>;
+  };
+}) => Promise<{ success: boolean }>;
 
 interface NotificationRow {
   id: string;
@@ -24,6 +39,7 @@ function formatAmount(amount: number, currency: string): string {
 
 export async function drainPaystackRefundNotifications(
   supabase: SupabaseClient,
+  sendEmail: RefundEmailSender,
   limit = 20
 ): Promise<{ claimed: number; sent: number; failed: number }> {
   const { data, error } = await supabase.rpc(
@@ -133,44 +149,28 @@ export async function drainPaystackRefundNotifications(
             ? `Paystack processed ${amount} for cancelled order #${orderNumber}.`
             : `Paystack could not complete the refund for order #${orderNumber}. Check the refund in Paystack.`;
           outcome = 'delivery_uncertain';
-          const push = await notifyMerchant(
-            row.merchant_id,
-            title,
-            body,
-            {
-              type: completed ? 'refund_processed' : 'refund_needs_attention',
-              order_id: order.id,
-              order_number: orderNumber,
-            },
-            'payments'
-          );
-          if (push.sent > 0) {
-            outcome = 'sent';
-          } else {
-            // No active device or all push tickets rejected: use email.
-            if (!merchant.email) {
-              outcome = 'failed';
-              throw new Error('refund_merchant_contact_missing');
-            }
-            const result = await sendEmail({
-              to: merchant.email,
-              subject: `${title}: order #${orderNumber}`,
-              textContent: body,
-              htmlContent: `<p>${escapeHtmlText(body)}</p>`,
-              emailType: 'orders',
-              auditContext: {
-                merchantId: merchant.id,
-                orderId: order.id,
-                metadata: {
-                  trigger: completed
-                    ? 'paystack_refund_processed_merchant'
-                    : 'paystack_refund_attention_merchant',
-                },
-              },
-            });
-            outcome = result.success ? 'sent' : 'failed';
-            if (!result.success) lastError = 'refund_merchant_email_rejected';
+          if (!merchant.email) {
+            outcome = 'failed';
+            throw new Error('refund_merchant_contact_missing');
           }
+          const result = await sendEmail({
+            to: merchant.email,
+            subject: `${title}: order #${orderNumber}`,
+            textContent: body,
+            htmlContent: `<p>${escapeHtmlText(body)}</p>`,
+            emailType: 'notifications',
+            auditContext: {
+              merchantId: merchant.id,
+              orderId: order.id,
+              metadata: {
+                trigger: completed
+                  ? 'paystack_refund_processed_merchant'
+                  : 'paystack_refund_attention_merchant',
+              },
+            },
+          });
+          outcome = result.success ? 'sent' : 'failed';
+          if (!result.success) lastError = 'refund_merchant_email_rejected';
         }
       }
     } catch (error) {

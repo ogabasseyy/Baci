@@ -48,7 +48,7 @@ export async function POST(request: Request) {
         reconcilePendingPaystackCancellationRefunds(supabase),
       ]);
       const notificationResult = await Promise.allSettled([
-        drainPaystackRefundNotifications(supabase),
+        drainPaystackRefundNotifications(supabase, sendEmail),
       ]);
       if (
         cancellationResult.status === 'rejected' ||

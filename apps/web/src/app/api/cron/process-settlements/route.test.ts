@@ -165,7 +165,10 @@ describe('POST /api/cron/process-settlements', () => {
     expect(
       mocks.reconcilePendingPaystackCancellationRefunds
     ).toHaveBeenCalled();
-    expect(mocks.drainPaystackRefundNotifications).toHaveBeenCalled();
+    expect(mocks.drainPaystackRefundNotifications).toHaveBeenCalledWith(
+      expect.anything(),
+      mocks.sendEmail
+    );
     expect(mocks.from).not.toHaveBeenCalled();
   });
 

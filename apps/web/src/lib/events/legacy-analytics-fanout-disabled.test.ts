@@ -25,10 +25,18 @@ describe('isLegacyAnalyticsFanoutDisabled', () => {
     delete process.env.EVENT_PIPELINE_ENQUEUE_ENABLED;
     delete process.env.EVENT_PIPELINE_DELIVERY_ENABLED;
     delete process.env.EVENT_PIPELINE_ROUTING_MODE;
-    vi.setSystemTime(new Date('2026-09-29T23:59:59.999Z'));
+    vi.setSystemTime(new Date('2026-09-15T23:59:59.999Z'));
     expect(isLegacyAnalyticsFanoutDisabled()).toBe(false);
-    vi.setSystemTime(new Date('2026-09-30T00:00:00.000Z'));
+    vi.setSystemTime(new Date('2026-09-16T00:00:00.000Z'));
     expect(isLegacyAnalyticsFanoutDisabled()).toBe(true);
+  });
+
+  it('does not extend merchant authority with the platform-only renewal', () => {
+    vi.setSystemTime(new Date('2026-09-27T12:00:00.000Z'));
+    expect(isLegacyAnalyticsFanoutDisabled()).toBe(true);
+    expect(isLegacyAnalyticsFanoutDisabled('platform')).toBe(false);
+    vi.setSystemTime(new Date('2026-09-30T00:00:00.000Z'));
+    expect(isLegacyAnalyticsFanoutDisabled('platform')).toBe(true);
   });
 
   it('revokes authority when queue-only delivery is active', () => {
@@ -42,6 +50,7 @@ describe('isLegacyAnalyticsFanoutDisabled', () => {
     delete process.env.EVENT_PIPELINE_DELIVERY_ENABLED;
     delete process.env.EVENT_PIPELINE_ROUTING_MODE;
     expect(isLegacyAnalyticsFanoutDisabled()).toBe(true);
+    expect(isLegacyAnalyticsFanoutDisabled('platform')).toBe(true);
   });
 
   it('keeps legacy fan-out unless the complete durable path is active', () => {

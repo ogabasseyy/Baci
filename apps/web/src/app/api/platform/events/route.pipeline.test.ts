@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   legacyFanoutDisabled: true,
+  legacyGate: vi.fn(),
   record: vi.fn(),
   resolveContext: vi.fn(),
   insert: vi.fn(),
@@ -19,7 +20,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 vi.mock('@/lib/events/event-pipeline-config', () => ({
   isEventPipelineEnqueueEnabled: () => true,
-  isLegacyAnalyticsFanoutDisabled: () => mocks.legacyFanoutDisabled,
+  isLegacyAnalyticsFanoutDisabled: mocks.legacyGate,
 }));
 vi.mock('@/lib/events/event-ingress-context', () => ({
   resolveEventIngressContext: mocks.resolveContext,
@@ -34,6 +35,7 @@ describe('POST /api/platform/events durable pipeline', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.legacyFanoutDisabled = true;
+    mocks.legacyGate.mockImplementation(() => mocks.legacyFanoutDisabled);
     mocks.resolveContext.mockResolvedValue({
       merchantId: '019bbd89-8f5f-7f8c-a4fd-42b5d7e7a235',
       ok: true,
@@ -68,6 +70,7 @@ describe('POST /api/platform/events durable pipeline', () => {
     );
 
     expect(response.status).toBe(200);
+    expect(mocks.legacyGate).toHaveBeenCalledWith('platform');
     expect(mocks.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         event_id: 'platform-event-1',

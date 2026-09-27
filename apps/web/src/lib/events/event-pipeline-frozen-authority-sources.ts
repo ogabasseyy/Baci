@@ -17,7 +17,7 @@ export const eventPipelineFrozenRoutes = {
   'apps/web/src/app/api/analytics/tiktok/route.ts':
     '4d59510f6a72ae25dd45c8cc8ea6762a709bf745286140a7a9e1aa4b64ee942e',
   'apps/web/src/app/api/platform/events/route.ts':
-    '989fcb8fc5afef132f42774d961723b7b44a3c354cca8ed11713dae55c38a437',
+    '646432088daff8e54f56fbab06453be789dc67d7b974398cc7f4b0d06842b9ca',
   // Orders is an inherited event-pipeline entrypoint whose notification
   // dispatch changed in this feature. Keep its reviewed bytes squash-safe by
   // binding the final source to a content receipt instead of a PR-only commit.

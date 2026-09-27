@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
           trustLevel: context.trustLevel,
         });
       } catch (enqueueError) {
-        if (isLegacyAnalyticsFanoutDisabled()) {
+        if (isLegacyAnalyticsFanoutDisabled('platform')) {
           error = {
             message:
               enqueueError instanceof Error
@@ -168,7 +168,7 @@ export async function POST(request: NextRequest) {
 
     // Also forward to platform's external analytics if configured
     // This runs in background, doesn't block response
-    if (!isLegacyAnalyticsFanoutDisabled()) {
+    if (!isLegacyAnalyticsFanoutDisabled('platform')) {
       forwardToPlatformAnalytics({
         eventData: event_data,
         eventId,

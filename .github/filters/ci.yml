@@ -129,6 +129,7 @@ cwv_runner:
   - '.github/workflows/deploy.yml'
   - '.github/actionlint.yaml'
 deploy_scripts:
+  - '.dockerignore'
   - 'scripts/**'
   - '.github/filters/ci.yml'
   - '.github/filters/deploy.yml'

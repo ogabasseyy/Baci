@@ -91,6 +91,22 @@ test('footer close can be canceled or accepted by the browser confirmation', asy
   );
 });
 
+test('payment verification action enters checking state and disables repeat actions', async ({
+  page,
+}) => {
+  await page.goto('/crypto-payment-modal');
+  await page.getByRole('button', { name: 'Open crypto payment modal' }).click();
+  await page.getByRole('button', { name: "I've Sent the Payment" }).click();
+
+  await expect(page.getByText('Checking payment status...')).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: /Verifying Payment/ })
+  ).toBeDisabled();
+  await expect(
+    page.getByRole('button', { name: 'Close and check order status later' })
+  ).toBeHidden();
+});
+
 test('copies the synthetic recipient address with the browser clipboard', async ({
   page,
   browserName,

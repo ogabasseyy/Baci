@@ -2,9 +2,19 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { CryptoPaymentModalFixture } from './CryptoPaymentModalFixture';
 
+let clipboardDescriptor: PropertyDescriptor | undefined;
+let clipboardWasOverridden = false;
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  if (clipboardWasOverridden) {
+    if (clipboardDescriptor)
+      Object.defineProperty(navigator, 'clipboard', clipboardDescriptor);
+    else Reflect.deleteProperty(navigator, 'clipboard');
+    clipboardDescriptor = undefined;
+    clipboardWasOverridden = false;
+  }
 });
 
 it('opens the real modal in each deterministic verification state', () => {
@@ -84,6 +94,8 @@ it('keeps the modal open when footer confirmation is canceled and closes when ac
 
 it('copies the synthetic recipient address through the browser clipboard API', async () => {
   const writeText = vi.fn().mockResolvedValue(undefined);
+  clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+  clipboardWasOverridden = true;
   Object.defineProperty(navigator, 'clipboard', {
     configurable: true,
     value: { writeText },

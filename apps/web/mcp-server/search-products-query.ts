@@ -37,6 +37,7 @@ type LoadMcpSearchProductsInput = {
 
 export type LoadMcpSearchProductsResult = {
   limit: number;
+  priceScanComplete: boolean;
   products: McpSearchProductRow[];
   sanitizedQuery: string | undefined;
   sawRankedRows: boolean;
@@ -49,6 +50,7 @@ async function loadRankedMcpProducts({
   args,
   hasPostHydrationFilters,
   limit,
+  priceSensitive,
   merchantId,
   sanitizedBrand,
   sanitizedCategory,
@@ -59,6 +61,7 @@ async function loadRankedMcpProducts({
   args: SearchProductsArgs;
   hasPostHydrationFilters: boolean;
   limit: number;
+  priceSensitive: boolean;
   merchantId: string;
   sanitizedBrand: string | undefined;
   sanitizedCategory: string | undefined;
@@ -67,15 +70,20 @@ async function loadRankedMcpProducts({
   supabase: SupabaseClient;
 }) {
   const products: McpSearchProductRow[] = [];
+  const candidateLimit = priceSensitive
+    ? MAX_POST_FILTER_RESULT_PAGES * POST_FILTER_RESULT_PAGE_SIZE
+    : limit;
+  const needsCandidateScan = hasPostHydrationFilters || priceSensitive;
   let pageOffset = 0;
   let totalRankedMatches = Number.POSITIVE_INFINITY;
   let sawRankedRows = false;
   let pagesRead = 0;
+  let scanExhausted = false;
 
   while (
     pagesRead < MAX_POST_FILTER_RESULT_PAGES &&
     pageOffset < totalRankedMatches &&
-    (!hasPostHydrationFilters || products.length < limit)
+    (!needsCandidateScan || products.length < candidateLimit)
   ) {
     const ranked = await supabase.rpc(
       'search_products_v2',
@@ -84,10 +92,13 @@ async function loadRankedMcpProducts({
           brand: sanitizedBrand,
           category: sanitizedCategory,
           condition: sanitizedCondition,
-          max_price: args.max_price,
-          min_price: args.min_price,
-          sort: args.sort,
+          max_price: priceSensitive ? undefined : args.max_price,
+          min_price: priceSensitive ? undefined : args.min_price,
+          sort: priceSensitive && (args.sort === 'price_asc' || args.sort === 'price_desc')
+            ? 'relevance'
+            : args.sort,
         },
+        forcePostFilterBuffer: priceSensitive,
         limit,
         merchantId,
         offset: pageOffset,
@@ -102,6 +113,7 @@ async function loadRankedMcpProducts({
     const rankedProductIds = extractRankedProductIds(rankedRows);
 
     if (rankedProductIds.length === 0) {
+      scanExhausted = true;
       break;
     }
 
@@ -109,6 +121,9 @@ async function loadRankedMcpProducts({
     const reportedTotal = getRankedProductTotal(rankedRows);
     totalRankedMatches =
       reportedTotal > 0 ? reportedTotal : pageOffset + rankedProductIds.length;
+    if (pageOffset + rankedProductIds.length >= totalRankedMatches) {
+      scanExhausted = true;
+    }
 
     const { data: productRows, error } = await supabase
       .from('products')
@@ -136,19 +151,24 @@ async function loadRankedMcpProducts({
 
     products.push(...pageProducts);
 
-    if (!hasPostHydrationFilters) {
+    if (!needsCandidateScan) {
       break;
     }
 
     pageOffset += POST_FILTER_RESULT_PAGE_SIZE;
   }
 
-  return { products: products.slice(0, limit), sawRankedRows };
+  return {
+    products: products.slice(0, candidateLimit),
+    priceScanComplete: !priceSensitive || scanExhausted || pagesRead < MAX_POST_FILTER_RESULT_PAGES,
+    sawRankedRows,
+  };
 }
 
 async function loadCatalogMcpProducts({
   args,
   limit,
+  priceSensitive,
   merchantId,
   sanitizedBrand,
   sanitizedCategory,
@@ -157,13 +177,17 @@ async function loadCatalogMcpProducts({
 }: {
   args: SearchProductsArgs;
   limit: number;
+  priceSensitive: boolean;
   merchantId: string;
   sanitizedBrand: string | undefined;
   sanitizedCategory: string | undefined;
   sanitizedCondition: string | undefined;
   supabase: SupabaseClient;
 }) {
-  const buildCatalogQuery = (pageOffset?: number) => {
+  const buildCatalogQuery = (
+    pageOffset?: number,
+    pageSize = POST_FILTER_RESULT_PAGE_SIZE
+  ) => {
     let query = supabase
       .from('products')
       .select(productSelect)
@@ -182,46 +206,51 @@ async function loadCatalogMcpProducts({
     if (sanitizedBrand) {
       query = query.ilike('brand', `%${sanitizedBrand}%`);
     }
-    if (args.min_price !== undefined) {
+    if (!priceSensitive && args.min_price !== undefined) {
       query = query.gte('price', args.min_price);
     }
-    if (args.max_price !== undefined) {
+    if (!priceSensitive && args.max_price !== undefined) {
       query = query.lte('price', args.max_price);
     }
 
-    if (args.sort === 'price_asc') {
+    if (!priceSensitive && args.sort === 'price_asc') {
       query = query.order('price', { ascending: true });
-    } else if (args.sort === 'price_desc') {
+    } else if (!priceSensitive && args.sort === 'price_desc') {
       query = query.order('price', { ascending: false });
     } else if (args.sort === 'newest') {
       query = query.order('created_at', { ascending: false });
     } else {
       query = query.order('stock_quantity', { ascending: false });
     }
+    query = query.order('id', { ascending: true });
 
     if (pageOffset !== undefined) {
       return query.range(
         pageOffset,
-        pageOffset + POST_FILTER_RESULT_PAGE_SIZE - 1
+        pageOffset + pageSize - 1
       );
     }
 
     return query.limit(limit);
   };
 
-  if (!sanitizedCondition) {
+  if (!sanitizedCondition && !priceSensitive) {
     const { data: productRows, error } = await buildCatalogQuery();
     if (error) throw error;
-    return toMcpSearchProductRows(productRows);
+    return { products: toMcpSearchProductRows(productRows), priceScanComplete: true };
   }
 
   let pageOffset = 0;
   const products: McpSearchProductRow[] = [];
+  const candidateLimit = priceSensitive
+    ? MAX_POST_FILTER_RESULT_PAGES * POST_FILTER_RESULT_PAGE_SIZE
+    : limit;
   let pagesRead = 0;
+  let scanExhausted = false;
 
   while (
     pagesRead < MAX_POST_FILTER_RESULT_PAGES &&
-    products.length < limit
+    products.length < candidateLimit
   ) {
     const { data: productRows, error } = await buildCatalogQuery(pageOffset);
     if (error) throw error;
@@ -229,6 +258,7 @@ async function loadCatalogMcpProducts({
 
     const pageRows = productRows || [];
     if (pageRows.length === 0) {
+      scanExhausted = true;
       break;
     }
 
@@ -239,13 +269,27 @@ async function loadCatalogMcpProducts({
     );
 
     if (pageRows.length < POST_FILTER_RESULT_PAGE_SIZE) {
+      scanExhausted = true;
       break;
     }
 
     pageOffset += POST_FILTER_RESULT_PAGE_SIZE;
   }
 
-  return products.slice(0, limit);
+  if (
+    priceSensitive &&
+    !scanExhausted &&
+    pagesRead >= MAX_POST_FILTER_RESULT_PAGES
+  ) {
+    const { data: nextPage, error } = await buildCatalogQuery(pageOffset, 1);
+    if (error) throw error;
+    scanExhausted = !nextPage || nextPage.length === 0;
+  }
+
+  return {
+    products: products.slice(0, candidateLimit),
+    priceScanComplete: !priceSensitive || scanExhausted || pagesRead < MAX_POST_FILTER_RESULT_PAGES,
+  };
 }
 
 export async function loadMcpSearchProducts({
@@ -266,12 +310,17 @@ export async function loadMcpSearchProducts({
   const hasPostHydrationFilters = Boolean(
     sanitizedBrand || sanitizedCategory || sanitizedCondition
   );
+  const priceSensitive = args.min_price !== undefined ||
+    args.max_price !== undefined ||
+    args.sort === 'price_asc' ||
+    args.sort === 'price_desc';
 
   if (sanitizedQuery) {
     const ranked = await loadRankedMcpProducts({
       args,
       hasPostHydrationFilters,
       limit,
+      priceSensitive,
       merchantId,
       sanitizedBrand,
       sanitizedCategory,
@@ -285,16 +334,17 @@ export async function loadMcpSearchProducts({
 
   return {
     limit,
-    products: await loadCatalogMcpProducts({
+    ...(await loadCatalogMcpProducts({
       args,
       limit,
+      priceSensitive,
       merchantId,
       sanitizedBrand,
       sanitizedCategory,
       sanitizedCondition,
       supabase,
-    }),
-    sanitizedQuery,
+    })),
     sawRankedRows: false,
+    sanitizedQuery,
   };
 }

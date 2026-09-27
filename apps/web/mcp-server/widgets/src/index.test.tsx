@@ -12,6 +12,17 @@ afterEach(() => {
 });
 
 describe('Ogabassey cart handoff widget', () => {
+  it('shows an incomplete price search instead of an empty catalog prompt', () => {
+    window.openai = { toolOutput: {
+      products: [], status: 'incomplete',
+      message: 'Add a category or brand to check prices accurately.',
+    } };
+    render(<App />);
+
+    expect(screen.getByText('Add a category or brand to check prices accurately.')).toBeTruthy();
+    expect(screen.queryByText('Ask me to search for products!')).toBeNull();
+  });
+
   it('shows the Ogabassey logo and offers fullscreen browsing for a catalog', () => {
     const requestDisplayMode = vi.fn().mockResolvedValue(undefined);
     const setOpenInAppUrl = vi.fn();

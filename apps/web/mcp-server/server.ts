@@ -54,6 +54,7 @@ import { buildMcpProductDetail } from './product-detail';
 import { loadMcpProductVariants } from './product-variants';
 import { serveProductImage } from './product-image-proxy';
 import { hydrateSearchProductAvailability } from './search-product-availability';
+import { selectSearchProductsByPrice } from './select-search-products-by-price';
 import { checkProductImageRateLimit } from './product-image-rate-limit-singleton';
 import { selectRecommendedProducts } from './recommendation-products';
 
@@ -1107,14 +1108,20 @@ const widgetHtml = `<!DOCTYPE html>
       document.getElementById('support-btn')?.addEventListener('click', () => openLink('https://ogabassey.com/pages/faq'));
     };
 
+    const renderIncomplete = (message) => {
+      contentEl.textContent = message || 'Narrow your search to check prices accurately.';
+    };
+
     window.addEventListener('openai:set_globals', (e) => {
       const out = e.detail?.globals?.toolOutput;
-      if (out?.products) renderProducts(out.products);
+      if (out?.status === 'incomplete') renderIncomplete(out.message);
+      else if (out?.products) renderProducts(out.products);
       else if (out?.order) renderOrder(out.order);
     }, { passive: true });
     if (window.openai?.toolOutput) {
       const out = window.openai.toolOutput;
-      if (out.products) renderProducts(out.products);
+      if (out.status === 'incomplete') renderIncomplete(out.message);
+      else if (out.products) renderProducts(out.products);
       else if (out.order) renderOrder(out.order);
     }
   </script>
@@ -1242,13 +1249,21 @@ function createOgabasseyServer() {
         const merchantId = await getMerchantId();
         if (!merchantId) throw new Error('Merchant ID unavailable');
 
-        const { products, sanitizedQuery, sawRankedRows } =
+        const { products, limit, priceScanComplete, sanitizedQuery, sawRankedRows } =
           await loadMcpSearchProducts({
             args,
             merchantId,
             sanitizeString,
             supabase,
           });
+
+        if (!priceScanComplete) {
+          const message = 'This price search has too many matching products to check accurately. Add a category, brand, or more specific product name and try again.';
+          return {
+            content: [{ type: 'text', text: message }],
+            structuredContent: { products: [], status: 'incomplete', message },
+          };
+        }
 
         if (sanitizedQuery && !sawRankedRows) {
           return {
@@ -1275,8 +1290,14 @@ function createOgabasseyServer() {
           };
         }
 
-        const hydratedProducts = await hydrateSearchProductAvailability(products, supabase, merchantId, args.condition);
-        const formatted = hydratedProducts.map(({ product: p, displayPrice, displayCompareAtPrice, stockSummary, availableVariants: variants }) => {
+        const hydratedProducts: Awaited<ReturnType<typeof hydrateSearchProductAvailability>> = [];
+        for (let offset = 0; offset < products.length; offset += 100) {
+          hydratedProducts.push(...await hydrateSearchProductAvailability(
+            products.slice(offset, offset + 100), supabase, merchantId, args.condition
+          ));
+        }
+        const selectedProducts = selectSearchProductsByPrice(hydratedProducts, args, limit);
+        const formatted = selectedProducts.map(({ product: p, displayPrice, displayCompareAtPrice, stockSummary, availableVariants: variants }) => {
           // A compare-at price indicates a listed discount, not a price trend.
           const isDiscounted = typeof displayPrice === 'number' &&
             displayCompareAtPrice && displayCompareAtPrice > displayPrice;

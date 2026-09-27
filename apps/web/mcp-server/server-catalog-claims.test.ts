@@ -73,6 +73,27 @@ describe('MCP catalog claims', () => {
     }
   });
 
+  it('filters and sorts search cards by purchasable option price', async () => {
+    const server = await startMcpServerWithPostgrest({});
+    try {
+      const result = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+        id: 116,
+        method: 'tools/call',
+        params: { name: 'search_products', arguments: {
+          max_price: 100000, sort: 'price_asc', limit: 2,
+        } },
+      }));
+      const products = (result.structuredContent as { products: Array<{ id: string; price: number }> }).products;
+      expect(products.map(({ id, price }) => ({ id, price }))).toEqual([
+        { id: 'condition-offer-product', price: 80000 },
+        { id: 'variant-cheaper-than-parent', price: 90000 },
+      ]);
+      expect(products.map(({ id }) => id)).not.toContain('variant-pricier-than-parent');
+    } finally {
+      await server.close();
+    }
+  });
+
   it('does not invent price trends or warranty terms from catalog prices', async () => {
     const server = await startMcpServerWithPostgrest({});
     try {

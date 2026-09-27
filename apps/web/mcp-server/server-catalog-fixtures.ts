@@ -37,6 +37,7 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
           { id: 'condition-offer-product', name: 'Used Offer Phone', slug: 'used-offer-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: false, has_condition_offers: true },
           { id: 'variant-available-product', name: 'Variant Available Phone', slug: 'variant-available-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
           { id: 'variant-cheaper-than-parent', name: 'Affordable Variant Phone', slug: 'affordable-variant-phone', price: 200000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
+          { id: 'variant-pricier-than-parent', name: 'Pricier Variant Phone', slug: 'pricier-variant-phone', price: 80000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
           { id: 'variant-sold-out-product', name: 'Variant Sold Out Phone', slug: 'variant-sold-out-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
           { id: 'variant-empty-product', name: 'Variant Empty Phone', slug: 'variant-empty-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
         ];
@@ -80,6 +81,7 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
         { product_id: 'variant-sold-out-product', attributes: { storage: '128GB' }, stock_quantity: 0 },
         { product_id: 'variant-available-product', attributes: { storage: '256GB' }, stock_quantity: 2 },
         { product_id: 'variant-cheaper-than-parent', attributes: { storage: '128GB' }, price_override: 90000, stock_quantity: 2 },
+        { product_id: 'variant-pricier-than-parent', attributes: { storage: '128GB' }, price_override: 120000, stock_quantity: 2 },
         { product_id: 'combined-options-product', attributes: { storage: '256GB' }, stock_quantity: 2 },
         { product_id: 'slugless-variant-product', attributes: { storage: '256GB' }, stock_quantity: 2 },
         { product_id: 'untracked-variant-product', attributes: { storage: '128GB' }, stock_quantity: 0 },

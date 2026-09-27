@@ -46,14 +46,17 @@ function createRankedSearchSupabase(category?: string) {
   };
 }
 
-function createCatalogSearchSupabase() {
-  const rows = Array.from({ length: POST_FILTER_RESULT_PAGE_SIZE }, (_, index) => ({
+function createCatalogSearchSupabase(rowCount = POST_FILTER_RESULT_PAGE_SIZE) {
+  const rows = Array.from({ length: rowCount }, (_, index) => ({
     condition: 'new',
     has_condition_offers: false,
     id: `catalog-${index}`,
     name: `Catalog ${index}`,
   }));
-  const range = vi.fn(async () => ({ data: rows, error: null }));
+  const range = vi.fn(async (start: number, end: number) => ({
+    data: rows.slice(start, end + 1),
+    error: null,
+  }));
   const query = {
     eq: vi.fn(() => query),
     gte: vi.fn(() => query),
@@ -66,6 +69,9 @@ function createCatalogSearchSupabase() {
   const select = vi.fn(() => query);
 
   return {
+    gte: query.gte,
+    lte: query.lte,
+    order: query.order,
     range,
     select,
     supabase: {
@@ -75,6 +81,53 @@ function createCatalogSearchSupabase() {
 }
 
 describe('loadMcpSearchProducts', () => {
+  it('loads a bounded ranked candidate pool without parent-price filters or ordering', async () => {
+    const { rpc, supabase } = createRankedSearchSupabase('Smartphones');
+    const result = await loadMcpSearchProducts({
+      args: { limit: 2, max_price: 100, min_price: 50, query: 'phone', sort: 'price_asc' },
+      merchantId: 'merchant-1',
+      sanitizeString: (input) => input,
+      supabase,
+    });
+
+    expect(result.limit).toBe(2);
+    expect(result.products).toHaveLength(MAX_POST_FILTER_RESULT_PAGES * POST_FILTER_RESULT_PAGE_SIZE);
+    expect(result.priceScanComplete).toBe(false);
+    expect(rpc).toHaveBeenCalledTimes(MAX_POST_FILTER_RESULT_PAGES);
+    expect(rpc.mock.calls.map(([, args]) => args)).toEqual(
+      Array.from({ length: MAX_POST_FILTER_RESULT_PAGES }, (_, index) => expect.objectContaining({
+        max_price_filter: null,
+        min_price_filter: null,
+        result_limit: POST_FILTER_RESULT_PAGE_SIZE,
+        result_offset: index * POST_FILTER_RESULT_PAGE_SIZE,
+        sort_by: 'relevance',
+      }))
+    );
+  });
+
+  it('loads a bounded catalog candidate pool without parent-price filters or ordering', async () => {
+    const { gte, lte, order, range, supabase } = createCatalogSearchSupabase(600);
+    const result = await loadMcpSearchProducts({
+      args: { limit: 2, max_price: 100, min_price: 50, sort: 'price_desc' },
+      merchantId: 'merchant-1',
+      sanitizeString: (input) => input,
+      supabase,
+    });
+
+    expect(result.limit).toBe(2);
+    expect(result.products).toHaveLength(MAX_POST_FILTER_RESULT_PAGES * POST_FILTER_RESULT_PAGE_SIZE);
+    expect(result.priceScanComplete).toBe(false);
+    expect(gte).not.toHaveBeenCalled();
+    expect(lte).not.toHaveBeenCalled();
+    expect(order.mock.calls.some(([column]) => column === 'price')).toBe(false);
+    expect(order.mock.calls.at(-1)).toEqual(['id', { ascending: true }]);
+    expect(range).toHaveBeenCalledTimes(MAX_POST_FILTER_RESULT_PAGES + 1);
+    expect(range.mock.calls.at(-1)).toEqual([
+      MAX_POST_FILTER_RESULT_PAGES * POST_FILTER_RESULT_PAGE_SIZE,
+      MAX_POST_FILTER_RESULT_PAGES * POST_FILTER_RESULT_PAGE_SIZE,
+    ]);
+  });
+
   it('keeps tablet matches out of an explicit phone search', async () => {
     const { supabase } = createRankedSearchSupabase('Tablets');
     const result = await loadMcpSearchProducts({
@@ -85,6 +138,7 @@ describe('loadMcpSearchProducts', () => {
     });
 
     expect(result.products).toEqual([]);
+    expect(result.priceScanComplete).toBe(true);
   });
 
   it.each([
@@ -165,7 +219,9 @@ describe('loadMcpSearchProducts', () => {
   });
 
   it('caps catalog condition-family pagination when pages keep failing hydration filters', async () => {
-    const { range, select, supabase } = createCatalogSearchSupabase();
+    const { range, select, supabase } = createCatalogSearchSupabase(
+      MAX_POST_FILTER_RESULT_PAGES * POST_FILTER_RESULT_PAGE_SIZE
+    );
 
     const result = await loadMcpSearchProducts({
       args: { condition: 'used', limit: 20 },

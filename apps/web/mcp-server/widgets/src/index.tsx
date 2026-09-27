@@ -11,6 +11,8 @@ import type { Product } from './widget-types';
 export function App() {
   const toolOutput = useOpenAiGlobal('toolOutput') as {
     products?: Product[];
+    status?: string;
+    message?: string;
   } | null;
   const theme = useOpenAiGlobal('theme') || 'dark';
   const displayMode = useOpenAiGlobal('displayMode') || 'inline';
@@ -99,7 +101,9 @@ export function App() {
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.35-4.35" />
           </svg>
-          <p>Ask me to search for products!</p>
+          <p>{toolOutput?.status === 'incomplete'
+            ? toolOutput.message || 'Narrow your search to check prices accurately.'
+            : 'Ask me to search for products!'}</p>
         </div>
       )}
 

@@ -168,6 +168,19 @@ export async function executeOrderCancellationSideEffect({
       reason || 'Order cancelled'
     );
     if (!paystackRefund.success) {
+      if (refundIds.length > 0) {
+        await quarantineRefund({
+          metadata: {
+            accepted_refund_ids: refundIds,
+            failed_payment_transaction_id: transaction.id,
+          },
+          order,
+          reason:
+            'Some payment legs were accepted for refund, but a later leg failed',
+          supabase,
+          transactions: [transaction],
+        });
+      }
       const isAmbiguousFailure =
         paystackRefund.code === 'NETWORK_ERROR' ||
         paystackRefund.code?.startsWith('HTTP_5');
@@ -178,7 +191,6 @@ export async function executeOrderCancellationSideEffect({
     const providerStatus = String(paystackRefund.data.status ?? '')
       .trim()
       .toLowerCase();
-    const refundCompleted = providerStatus === 'processed';
     const providerPaymentId = paystackRefund.data.transaction?.id;
     if (
       !Number.isSafeInteger(paystackRefund.data.id) ||
@@ -268,19 +280,6 @@ export async function executeOrderCancellationSideEffect({
       throw new DeliveryUncertainError(
         'Refund succeeded but its local audit record failed'
       );
-    }
-    if (!refundCompleted) {
-      await quarantineRefund({
-        metadata: {
-          payment_transaction_id: transaction.id,
-          provider_refund_id: paystackRefund.data.id,
-          provider_refund_status: providerStatus,
-        },
-        order,
-        reason: `Paystack accepted refund ${paystackRefund.data.id} with nonterminal status ${providerStatus || 'missing'}`,
-        supabase,
-        transactions: [transaction],
-      });
     }
     refundIds.push(paystackRefund.data.id);
   }

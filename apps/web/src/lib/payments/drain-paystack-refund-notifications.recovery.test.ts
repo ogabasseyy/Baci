@@ -107,107 +107,108 @@ function database(
   };
 }
 
-describe('Paystack refund notifications', () => {
+describe('Paystack refund notification recovery', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.sendEmail.mockResolvedValue({ success: true, messageId: 'mail-1' });
   });
 
-  it('emails the customer after the whole order is refunded', async () => {
-    const db = database('processed_customer_email');
-    await expect(
-      drainPaystackRefundNotifications(db as never, mocks.sendEmail)
-    ).resolves.toEqual({
-      claimed: 1,
-      sent: 1,
-      failed: 0,
+  it('totals every completed gateway leg in the customer email', async () => {
+    const db = database('processed_customer_email', 'refunded', {
+      payments: [
+        { amount: 60, gateway: 'paystack', id: 'payment-1' },
+        { amount: 45, gateway: 'korapay', id: 'payment-2' },
+      ],
+      refunds: [
+        {
+          amount: 60,
+          currency: 'NGN',
+          gateway: 'paystack',
+          metadata: { payment_transaction_id: 'payment-1' },
+        },
+        {
+          amount: 45,
+          currency: 'NGN',
+          gateway: 'korapay',
+          metadata: { payment_transaction_id: 'payment-2' },
+        },
+      ],
     });
-    expect(mocks.sendEmail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: 'buyer@example.com',
-        subject: 'Refund processed for order #ORD-1',
-        textContent: expect.stringContaining('10 business days'),
-      })
+    await drainPaystackRefundNotifications(db as never, mocks.sendEmail);
+    expect(mocks.sendEmail.mock.calls[0][0].textContent).toContain('105');
+    expect(mocks.sendEmail.mock.calls[0][0].textContent).not.toContain(
+      'Paystack'
     );
-    expect(mocks.sendEmail.mock.calls[0][0].htmlContent).not.toContain(
-      '<Buyer>'
-    );
-    expect(mocks.sendEmail.mock.calls[0][0].textContent).toContain('60');
     expect(db.finish.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'sent' })
     );
   });
 
-  it('does not email before every payment leg is refunded', async () => {
-    const db = database('processed_customer_email', 'paid');
+  it('fails the notification when a gateway leg has no linked refund', async () => {
+    const db = database('processed_customer_email', 'refunded', {
+      payments: [
+        { amount: 60, gateway: 'paystack', id: 'payment-1' },
+        { amount: 45, gateway: 'korapay', id: 'payment-2' },
+      ],
+      refunds: [
+        {
+          amount: 60,
+          currency: 'NGN',
+          gateway: 'paystack',
+          metadata: { payment_transaction_id: 'payment-1' },
+        },
+      ],
+    });
     await drainPaystackRefundNotifications(db as never, mocks.sendEmail);
     expect(mocks.sendEmail).not.toHaveBeenCalled();
     expect(db.finish.update).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'delivery_uncertain' })
-    );
-  });
-
-  it('notifies the merchant on refund completion', async () => {
-    const db = database('processed_merchant_push');
-    await drainPaystackRefundNotifications(db as never, mocks.sendEmail);
-    expect(mocks.sendEmail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: 'merchant@example.com',
-        subject: 'Refund processed: order #ORD-1',
-      })
-    );
-  });
-
-  it('records merchant delivery after an accepted email', async () => {
-    const db = database('processed_merchant_push');
-    await drainPaystackRefundNotifications(db as never, mocks.sendEmail);
-    expect(mocks.sendEmail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: 'merchant@example.com',
-        subject: 'Refund processed: order #ORD-1',
-      })
-    );
-    expect(db.finish.update).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'sent' })
-    );
-  });
-
-  it('keeps a rejected merchant email available for retry', async () => {
-    const db = database('processed_merchant_push');
-    mocks.sendEmail.mockResolvedValueOnce({ success: false });
-    await drainPaystackRefundNotifications(db as never, mocks.sendEmail);
-    expect(mocks.sendEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ to: 'merchant@example.com' })
-    );
-    expect(db.finish.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'failed' })
     );
   });
 
-  it('alerts the merchant when a refund fails before any leg completes', async () => {
-    const db = database('failed_merchant_push', 'paid');
-    await drainPaystackRefundNotifications(db as never, mocks.sendEmail);
-    expect(db.from).not.toHaveBeenCalledWith('transactions');
-    expect(mocks.sendEmail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: 'merchant@example.com',
-        subject: 'Refund needs attention: order #ORD-1',
-      })
+  it('claims the next row only after finishing the previous one', async () => {
+    const db = database('processed_customer_email');
+    db.rpc.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'notification-1',
+          order_id: 'order-1',
+          merchant_id: 'merchant-1',
+          event_type: 'processed_customer_email',
+          claim_token: 'claim-2',
+        },
+      ],
+      error: null,
+    });
+    await expect(
+      drainPaystackRefundNotifications(db as never, mocks.sendEmail)
+    ).resolves.toEqual({ claimed: 2, sent: 2, failed: 0 });
+    expect(db.rpc).toHaveBeenCalledWith(
+      'claim_paystack_cancellation_refund_notifications_v1',
+      { p_limit: 1 }
     );
-    expect(db.finish.update).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'sent' })
-    );
+    const secondClaimOrder = db.rpc.mock.invocationCallOrder[1] as number;
+    const firstFinishOrder = db.finish.update.mock
+      .invocationCallOrder[0] as number;
+    expect(firstFinishOrder).toBeLessThan(secondClaimOrder);
   });
 
-  it('keeps a rejected email available for retry', async () => {
-    const db = database('processed_customer_email');
+  it.each([
+    ['processed_customer_email', 'refund_customer_email_unknown'],
+    ['processed_merchant_push', 'refund_merchant_email_unknown'],
+  ])('preserves an unknown %s delivery outcome instead of retrying it', async (eventType, lastError) => {
+    const db = database(eventType);
     mocks.sendEmail.mockResolvedValueOnce({
       success: false,
-      error: 'rejected',
+      deliveryOutcome: 'unknown',
     });
     await drainPaystackRefundNotifications(db as never, mocks.sendEmail);
+    expect(mocks.sendEmail).toHaveBeenCalledTimes(1);
     expect(db.finish.update).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'failed' })
+      expect.objectContaining({
+        status: 'delivery_uncertain',
+        last_error: lastError,
+      })
     );
   });
 });

@@ -196,6 +196,13 @@ BEGIN
   RETURN QUERY WITH candidates AS (
     SELECT id FROM public.paystack_cancellation_refund_notifications
     WHERE status IN ('pending', 'failed') AND attempts < 5
+      -- Failed rows back off between attempts so a single request cannot
+      -- burn all five tries during a short outage; pending rows, which
+      -- have never been claimed, stay immediately eligible.
+      AND (
+        claimed_at IS NULL
+        OR claimed_at < now() - make_interval(mins => greatest(least(attempts, 4), 1) * 2)
+      )
     ORDER BY created_at LIMIT greatest(1, least(coalesce(p_limit, 20), 50))
     FOR UPDATE SKIP LOCKED
   ) UPDATE public.paystack_cancellation_refund_notifications n

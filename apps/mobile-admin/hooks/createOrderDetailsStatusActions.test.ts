@@ -1,7 +1,7 @@
 import { Alert } from 'react-native';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createOrderDetailsStatusActions } from './createOrderDetailsStatusActions';
-import { OrderStatusUpdateError } from './orders/order-status-update-error';
+import { createPaidOrderStatusActions } from './createOrderDetailsStatusActions.test-support';
 
 const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
@@ -203,33 +203,8 @@ describe('createOrderDetailsStatusActions', () => {
   });
 
   it('requires explicit confirmation before cancelling a paid order', async () => {
-    const updateStatus = vi.fn().mockResolvedValue(undefined);
-    const setSuccessModal = vi.fn();
-    const actions = createOrderDetailsStatusActions({
-      openShipmentFlow: vi.fn(),
-      order: {
-        id: 'order-paid',
-        amount_paid: 5000,
-        balance: 0,
-        created_at: '',
-        customer_email: 'customer@example.com',
-        customer_name: 'Ada',
-        customer_phone: null,
-        discount_amount: 0,
-        is_credit_order: false,
-        order_number: 'ORD-PAID',
-        payment_status: 'paid',
-        shipping_address: null,
-        shipping_status: 'processing',
-        total: 5000,
-        updated_at: '',
-      },
-      setShowCreditModal: vi.fn(),
-      setShowPaymentOptionModal: vi.fn(),
-      setShowStatusModal: vi.fn(),
-      setSuccessModal,
-      updateStatus,
-    });
+    const { actions, setSuccessModal, updateStatus } =
+      createPaidOrderStatusActions();
 
     await actions.handleStatusUpdate('cancelled');
 
@@ -253,55 +228,6 @@ describe('createOrderDetailsStatusActions', () => {
           subMessage: expect.stringContaining('Check the refund status'),
         })
       );
-    });
-  });
-
-  it('shows the actionable cancellation error after confirmation', async () => {
-    const message =
-      'A payment attempt needs to be checked before this order can be cancelled. Please contact support.';
-    const updateStatus = vi
-      .fn()
-      .mockRejectedValue(
-        new OrderStatusUpdateError(message, 'PAYMENT_RECONCILIATION_REQUIRED')
-      );
-    const actions = createOrderDetailsStatusActions({
-      openShipmentFlow: vi.fn(),
-      order: {
-        id: 'order-paid',
-        amount_paid: 5000,
-        balance: 0,
-        created_at: '',
-        customer_email: 'customer@example.com',
-        customer_name: 'Ada',
-        customer_phone: null,
-        discount_amount: 0,
-        is_credit_order: false,
-        order_number: 'ORD-PAID',
-        payment_status: 'paid',
-        shipping_address: null,
-        shipping_status: 'processing',
-        total: 5000,
-        updated_at: '',
-      },
-      setShowCreditModal: vi.fn(),
-      setShowPaymentOptionModal: vi.fn(),
-      setShowStatusModal: vi.fn(),
-      setSuccessModal: vi.fn(),
-      updateStatus,
-    });
-
-    await actions.handleStatusUpdate('cancelled');
-    const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
-    const cancelOrder = confirmation?.find(
-      (button) => button.text === 'Cancel Order'
-    );
-    cancelOrder?.onPress?.();
-    await vi.waitFor(() => {
-      expect(Alert.alert).toHaveBeenCalledWith('Error', message);
-    });
-    expect(updateStatus).toHaveBeenCalledWith({
-      orderId: 'order-paid',
-      status: 'cancelled',
     });
   });
 

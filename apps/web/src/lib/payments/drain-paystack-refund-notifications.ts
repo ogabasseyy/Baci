@@ -18,7 +18,7 @@ type RefundEmailSender = (message: {
     customerId?: string | null;
     metadata: Record<string, string>;
   };
-}) => Promise<{ success: boolean }>;
+}) => Promise<{ deliveryOutcome?: 'unknown'; success: boolean }>;
 
 interface NotificationRow {
   id: string;
@@ -173,8 +173,15 @@ export async function drainPaystackRefundNotifications(
             metadata: { trigger: 'paystack_refund_processed' },
           },
         });
-        outcome = result.success ? 'sent' : 'failed';
-        if (!result.success) lastError = 'refund_customer_email_rejected';
+        if (result.success) {
+          outcome = 'sent';
+        } else if (result.deliveryOutcome === 'unknown') {
+          outcome = 'delivery_uncertain';
+          lastError = 'refund_customer_email_unknown';
+        } else {
+          outcome = 'failed';
+          lastError = 'refund_customer_email_rejected';
+        }
       } else {
         const completed = row.event_type === 'processed_merchant_push';
         if (!completed && order.payment_status === 'refunded') {
@@ -207,8 +214,15 @@ export async function drainPaystackRefundNotifications(
               },
             },
           });
-          outcome = result.success ? 'sent' : 'failed';
-          if (!result.success) lastError = 'refund_merchant_email_rejected';
+          if (result.success) {
+            outcome = 'sent';
+          } else if (result.deliveryOutcome === 'unknown') {
+            outcome = 'delivery_uncertain';
+            lastError = 'refund_merchant_email_unknown';
+          } else {
+            outcome = 'failed';
+            lastError = 'refund_merchant_email_rejected';
+          }
         }
       }
     } catch (error) {

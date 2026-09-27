@@ -1,5 +1,7 @@
 'use client';
 import { useCheckoutAddressInference } from './checkout/hooks/use-checkout-address-inference';
+import { useCheckoutDeliveryAddressHandlers } from './checkout/hooks/use-checkout-delivery-address-handlers';
+import { useCheckoutDeliveryOptions } from './checkout/hooks/use-checkout-delivery-options';
 import { useCheckoutShippingQuotes } from './checkout/hooks/use-checkout-shipping-quotes';
 import { dispatchCheckoutPayment } from './checkout/handlers/dispatch-checkout-payment';
 import { buildCheckoutOrderRequest } from './checkout/build-checkout-order-request';
@@ -13,7 +15,6 @@ import {
   type DvaModalData,
 } from './checkout/hooks/use-dva-confirm-transfer';
 import { isAirportDeliveryReady } from './checkout/is-airport-delivery-ready';
-import { canShowDeliveryMethods } from './checkout/can-show-delivery-methods';
 
 import { DeferredCryptoSelectorModal as CryptoSelectorModal } from './checkout/components/DeferredCryptoSelectorModal';
 import {
@@ -29,11 +30,10 @@ import {
   ShieldCheck,
   User,
 } from 'lucide-react';
-import { CheckoutStepSection } from './checkout/components/CheckoutStepSection';
 import { DvaModal } from './checkout/components/DvaModal';
 import { CryptoPaymentModal } from './checkout/components/CryptoPaymentModal';
-import { DeliveryAddressFields, type SavedCheckoutAddress as SavedAddress } from './checkout/components/DeliveryAddressFields';
-import { DeliveryOptions } from './checkout/components/DeliveryOptions';
+import { CheckoutDeliveryStep } from './checkout/components/CheckoutDeliveryStep';
+import type { SavedCheckoutAddress as SavedAddress } from './checkout/components/DeliveryAddressFields';
 import {
   DiscountCodeInput,
   type DiscountResult,
@@ -612,6 +612,18 @@ export const CheckoutPage: React.FC = () => {
     addresses,
     selectedAddressId,
   });
+  const deliveryAddressHandlers = useCheckoutDeliveryAddressHandlers({
+    clearInferredLocationDebounce,
+    merchantCountry,
+    resetQuotesForAddressChange,
+    scheduleInferredLocationUpdate,
+    setFields: setCheckoutFields,
+    setIsNewAddressMode,
+    setNewAddressCity,
+    setNewAddressState,
+    setSelectedAddressId,
+    shippingStates,
+  });
   const stationPickupQuote = getStationPickupQuote(shippingQuotes);
   // All pickup options for this zone. A merchant can configure several pickup
   // locations, so when there is more than one we render a selectable list
@@ -642,6 +654,44 @@ export const CheckoutPage: React.FC = () => {
     setDeliveryMethod,
     setSelectedQuoteId,
     shippingQuotes,
+  });
+  const deliveryOptions = useCheckoutDeliveryOptions({
+    airportRequiresQuote,
+    airportType,
+    airDeliveryQuotes,
+    city: newAddressCity,
+    deliveryMethod,
+    doorDeliveryQuotes,
+    fetchShippingQuotes: () => {
+      if (isNewDeliveryAddressReady) {
+        fetchShippingQuotes(
+          newAddressStreet,
+          newAddressState,
+          newAddressCity,
+          customerPhone,
+          firstName,
+          lastName,
+          customerEmail
+        );
+      }
+    },
+    hasMerchantPickupQuote,
+    isHydrated,
+    isLoadingQuotes,
+    isNewAddressMode,
+    merchantSlug: merchant?.slug,
+    newAddressState,
+    selectedAddressId,
+    selectedQuoteId,
+    selectedQuoteMatchesDeliveryMethod,
+    setAirportRequiresQuote: (required) =>
+      setCheckoutField('airportRequiresQuote', required),
+    setAirportType,
+    setDeliveryMethod,
+    selectDeliveryMethod,
+    setSelectedQuoteId,
+    stationPickupQuote,
+    stationPickupQuotes,
   });
   const eligibleDeliveryMethod = resolveMerchantDeliveryMethod(
     deliveryMethod,
@@ -1814,114 +1864,52 @@ export const CheckoutPage: React.FC = () => {
               onComplete={completeContact}
             />
 
-            <CheckoutStepSection focusOnActivate={focusActiveStep} id="checkout-delivery" title="Delivery Method" number={2}
-              active={currentStep === 'delivery'} completed={completedSteps.delivery} disabled={!completedSteps.contact}
-              summary={deliveryMethod === 'door' ? `By Road${newAddressCity ? ` · ${newAddressCity}` : ''}` : deliveryMethod === 'pickup_station' ? 'Pickup Station' : deliveryMethod === 'pickup' ? 'Store Pickup' : 'By Air'}
-              onOpen={() => setCurrentStep('delivery')}>
-              <DeliveryAddressFields signedIn={Boolean(user)} addresses={addresses} isNewAddressMode={isNewAddressMode}
-                selectedAddressId={selectedAddressId} newAddressStreet={newAddressStreet} newAddressCity={newAddressCity} newAddressState={newAddressState}
-                merchantCountry={merchantCountry} addressReady={isHydrated && isNewDeliveryAddressReady}
-                onToggleAddressMode={() => setIsNewAddressMode(!isNewAddressMode)}
-                                onSelectAddress={(addr) => {
-                                  setSelectedAddressId(addr.id);
-                                  setIsNewAddressMode(false);
-                                  clearInferredLocationDebounce();
-                                  resetQuotesForAddressChange();
-                                  // Extract state from saved address for eligibility checks
-                                  const parts = addr.address.split(',').map(s => s.trim());
-                                  if (parts.length >= 2) {
-                                    setNewAddressState(parts[parts.length - 1] || '');
-                                    setNewAddressCity(parts[parts.length - 2] || '');
-                                  }
-                                }}
-                            onStreetChange={(newVal) => {
-                              setCheckoutFields({
-                                newAddressStreet: newVal,
-                                newAddressCity: '',
-                                newAddressState: '',
-                                deliveryCoordinates: null,
-                              });
-
-                              // Reset state/city if address is cleared or changed significantly
-                              if (!newVal || newVal.length < 10) {
-                                clearInferredLocationDebounce();
-                                setNewAddressState('');
-                                setNewAddressCity('');
-                                resetQuotesForAddressChange();
-                                return;
-                              }
-
-                              // Fallback inference for manual address entry when autocomplete
-                              // does not emit a structured onSelect payload.
-                              const inferred = inferAddressLocationFromInput(
-                                newVal,
-                                shippingStates,
-                                merchantCountry,
-                              );
-                              if (inferred) {
-                                resetQuotesForAddressChange();
-                                scheduleInferredLocationUpdate(inferred);
-                              } else {
-                                clearInferredLocationDebounce();
-                                setCheckoutFields({
-                                  newAddressCity: '',
-                                  newAddressState: '',
-                                });
-                                resetQuotesForAddressChange();
-                              }
-                            }}
-                            onSelectPlace={(place: PlaceDetails) => {
-                              clearInferredLocationDebounce();
-                              resetQuotesForAddressChange();
-                              setCheckoutFields({
-                                newAddressStreet: place.formattedAddress,
-                                newAddressState: place.state || '',
-                                newAddressCity: place.city || '',
-                                deliveryCoordinates:
-                                  Number.isFinite(place.location?.latitude) &&
-                                  Number.isFinite(place.location?.longitude)
-                                    ? {
-                                        latitude: place.location?.latitude ?? 0,
-                                        longitude: place.location?.longitude ?? 0,
-                                      }
-                                    : null,
-                              });
-                            }}
-
-              />
-              {canShowDeliveryMethods({ isHydrated, isNewAddressMode, selectedAddressId, city: newAddressCity, state: newAddressState }) && <DeliveryOptions
-                tabs={{ deliveryMethod, newAddressState, merchantSlug: merchant?.slug, stationPickupQuote, hasMerchantPickupQuote, onSelect: selectDeliveryMethod }}
-                station={{ isLoadingQuotes, stationPickupQuote, stationPickupQuotes, selectedQuoteId, setSelectedQuoteId }}
-                airport={{ airportType, requiresProviderQuote: airportRequiresQuote, city: newAddressCity, state: newAddressState,
-                  selectedQuoteId, selectedQuoteMatchesDeliveryMethod, airDeliveryQuotes,
-                  onSelectAirportType: type => { setAirportType(type); setCheckoutField('airportRequiresQuote', false); setSelectedQuoteId(''); },
-                  onSelectQuote: id => { setCheckoutField('airportRequiresQuote', true); setSelectedQuoteId(id); }
-                }}
-                door={{ isLoadingQuotes, doorDeliveryQuotes, stationPickupQuote, selectedQuoteId, onSelectQuote: setSelectedQuoteId,
-                  onSelectStationPickup: quoteId => { setSelectedQuoteId(quoteId); setDeliveryMethod('pickup_station'); },
-                  onRefreshRates: () => { if (isNewDeliveryAddressReady) fetchShippingQuotes(newAddressStreet, newAddressState, newAddressCity, customerPhone, firstName, lastName, customerEmail); }
-                }}
-              />}
-              <div className="pt-2">
-                <button type="button" disabled={!isDeliveryValid}
-                        onClick={() => {
-                          captureClientEvent(
-                            CHECKOUT_FUNNEL_EVENTS.checkoutStepCompleted,
-                            buildCheckoutFunnelProperties({
-                              channel: 'web',
-                              checkoutStep: 'shipping_info',
-                              source: 'web_checkout',
-                            })
-                          );
-                          setCompletedSteps(prev => ({ ...prev, delivery: true }));
-                          setCurrentStep('payment');
-                        }}
-
-                  className="w-full md:w-auto px-6 py-3 bg-store-primary text-white font-bold rounded-xl hover:bg-store-primary/90 transition-colors flex items-center justify-center gap-2 shadow-lg hover:shadow-store-primary/20 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed disabled:shadow-none">
-                  Continue to Payment <ChevronRight size={18} />
-                </button>
-              </div>
-            </CheckoutStepSection>
+            <CheckoutDeliveryStep
+              active={currentStep === 'delivery'}
+              addressFields={{
+                signedIn: Boolean(user),
+                addresses,
+                isNewAddressMode,
+                selectedAddressId,
+                newAddressStreet,
+                newAddressCity,
+                newAddressState,
+                merchantCountry,
+                addressReady: isHydrated && isNewDeliveryAddressReady,
+                onToggleAddressMode: () =>
+                  setIsNewAddressMode(!isNewAddressMode),
+                onSelectAddress: deliveryAddressHandlers.onSelectAddress,
+                onStreetChange: deliveryAddressHandlers.onStreetChange,
+                onSelectPlace: deliveryAddressHandlers.onSelectPlace,
+              }}
+              completed={completedSteps.delivery}
+              deliveryOptions={deliveryOptions}
+              disabled={!completedSteps.contact}
+              focusOnActivate={focusActiveStep}
+              isDeliveryValid={isDeliveryValid}
+              onContinue={() => {
+                captureClientEvent(
+                  CHECKOUT_FUNNEL_EVENTS.checkoutStepCompleted,
+                  buildCheckoutFunnelProperties({
+                    channel: 'web',
+                    checkoutStep: 'shipping_info',
+                    source: 'web_checkout',
+                  })
+                );
+                setCompletedSteps((prev) => ({ ...prev, delivery: true }));
+                setCurrentStep('payment');
+              }}
+              onOpen={() => setCurrentStep('delivery')}
+              summary={
+                deliveryMethod === 'door'
+                  ? `By Road${newAddressCity ? ` · ${newAddressCity}` : ''}`
+                  : deliveryMethod === 'pickup_station'
+                    ? 'Pickup Station'
+                    : deliveryMethod === 'pickup'
+                      ? 'Store Pickup'
+                      : 'By Air'
+              }
+            />
 
             {/* Step 3: Payment Method */}
             <PaymentStep

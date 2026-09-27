@@ -43,7 +43,7 @@ export function useCartHandoff() {
         return;
       }
 
-      const variantSelectionUrl = getVariantSelectionUrl(result, product.id, product.slug || product.id);
+      const variantSelectionUrl = getVariantSelectionUrl(result, product.id);
       if (variantSelectionUrl) {
         openOgabasseyUrl(variantSelectionUrl, pendingTab);
         setWidgetState((previous) => ({ ...previous!, cart: [], cartUrl: undefined }));

@@ -28,7 +28,8 @@ export async function prepareCartHandoff({
 
   let unavailable = Boolean(productError || !product);
   if (product?.manage_stock === true) {
-    let optionAvailable = product.has_condition_offers === true && Number(product.stock_quantity ?? 0) >= quantity;
+    let optionAvailable = product.has_condition_offers === true && product.has_variants !== true &&
+      Number(product.stock_quantity ?? 0) >= quantity;
     if (product.has_condition_offers === true) {
       const { data: offers, error: offersError } = await supabase
         .from('product_offers')

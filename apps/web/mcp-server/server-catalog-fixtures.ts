@@ -23,7 +23,7 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
       } else if (url.searchParams.get('id') === 'eq.condition-offer-sold-out-product') {
         response.end(JSON.stringify({ id: 'condition-offer-sold-out-product', name: 'Sold Out Offer Phone', slug: 'sold-out-offer-phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: false, has_condition_offers: true }));
       } else if (url.searchParams.get('id') === 'eq.combined-options-product') {
-        response.end(JSON.stringify({ id: 'combined-options-product', name: 'Combined Options Phone', slug: 'combined-options-phone', price: 100000, manage_stock: true, stock_quantity: 0, has_variants: true, has_condition_offers: true }));
+        response.end(JSON.stringify({ id: 'combined-options-product', name: 'Combined Options Phone', slug: 'combined-options-phone', price: 100000, manage_stock: true, stock_quantity: 3, has_variants: true, has_condition_offers: true }));
       } else if (url.searchParams.get('id') === 'eq.condition-offer-parent-stock-product') {
         response.end(JSON.stringify({ id: 'condition-offer-parent-stock-product', name: 'Parent Stock Offer Phone', slug: 'parent-stock-offer-phone', price: 100000, manage_stock: true, stock_quantity: 2, has_variants: false, has_condition_offers: true }));
       } else if (url.searchParams.get('id') === 'eq.untracked-variant-product') {
@@ -110,6 +110,8 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
         ? [{ product_id: 'condition-offer-product', stock_quantity: 2 }]
         : url.searchParams.get('product_id')?.includes('condition-offer-sold-out-product')
           ? [{ product_id: 'condition-offer-sold-out-product', stock_quantity: 0 }]
+        : url.searchParams.get('product_id')?.includes('combined-options-product')
+          ? [{ product_id: 'combined-options-product', stock_quantity: 2 }]
         : []));
       return true;
     }

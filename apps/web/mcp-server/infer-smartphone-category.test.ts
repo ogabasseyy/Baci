@@ -17,6 +17,7 @@ describe('inferSmartphoneCategory', () => {
     expect(inferSmartphoneCategory('iPhone 15 4G', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('looking for iPhone 15', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('show me an iPhone 15', undefined)).toBe('Smartphones');
+    expect(inferSmartphoneCategory('show me the iPhone 15', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('show me some phones', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('find me a phone', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('I want an iPhone', undefined)).toBe('Smartphones');

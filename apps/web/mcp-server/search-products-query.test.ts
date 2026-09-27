@@ -89,6 +89,7 @@ describe('loadMcpSearchProducts', () => {
 
   it.each([
     'show me some phones',
+    'show me the iPhone 15',
     'I need a phone',
     'Android phones',
     'show me Android phones',

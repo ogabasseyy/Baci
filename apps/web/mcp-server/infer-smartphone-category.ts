@@ -19,7 +19,7 @@ export function inferSmartphoneCategory(
   const handset = /\b(?:iphones?|smartphones?|mobile phones?|phones?)\b/i.exec(query);
   if (!handset) return undefined;
   const prefix = query.slice(0, handset.index)
-    .replace(/^\s*(?:(?:looking|searching|shopping)\s+for|(?:show|find|search)(?:\s+me)?(?:\s+for)?|i\s+(?:want|need))\s+(?:(?:an?|some)\s+)?/i, '');
+    .replace(/^\s*(?:(?:looking|searching|shopping)\s+for|(?:show|find|search)(?:\s+me)?(?:\s+for)?|i\s+(?:want|need))\s+(?:(?:an?|the|some)\s+)?/i, '');
   const prefixWords = prefix.trim().toLowerCase().split(/\s+/);
   let hasBrand = false;
   let hasModel = false;

@@ -7,6 +7,7 @@ const allowedPrefixWords = new Set([
   ...handsetBrandWords, 'new', 'used', 'refurbished',
   'android', 'cheap', 'affordable', 'best', 'latest',
 ]);
+const modelModifiers = new Set(['pro', 'max', 'plus', 'mini', 'ultra']);
 
 /** Infer a handset category only when the query clearly names a phone itself. */
 export function inferSmartphoneCategory(
@@ -20,9 +21,14 @@ export function inferSmartphoneCategory(
     .replace(/^\s*(?:(?:looking|searching|shopping)\s+for|(?:show|find|search)(?:\s+me)?(?:\s+for)?|i\s+(?:want|need))\s+(?:(?:an?|some)\s+)?/i, '');
   const prefixWords = prefix.trim().toLowerCase().split(/\s+/);
   let hasBrand = false;
+  let hasModel = false;
   if (prefix.trim() && !prefixWords.every((word) => {
     if (handsetBrandWords.has(word)) hasBrand = true;
-    return allowedPrefixWords.has(word) || (hasBrand && /^(?:[a-z]{1,3})?\d{1,3}[a-z]?$/.test(word));
+    if (hasBrand && /^(?:[a-z]{1,3})?\d{1,3}[a-z]?$/.test(word)) {
+      hasModel = true;
+      return true;
+    }
+    return allowedPrefixWords.has(word) || (hasModel && modelModifiers.has(word));
   })) {
     return undefined;
   }

@@ -7,6 +7,7 @@ function candidate(id: string, overrides: Record<string, unknown> = {}) {
     name: id,
     description: null,
     manage_stock: false,
+    price: 100,
     stock_quantity: 0,
     has_variants: false,
     has_condition_offers: false,
@@ -51,5 +52,44 @@ describe('selectRecommendedProducts', () => {
     });
 
     expect(result.map((product) => product.id)).toEqual(['phone-with-unavailable-stock-data']);
+  });
+
+  it('excludes a product when only its sold-out variant fits the budget', async () => {
+    const result = await selectRecommendedProducts({
+      keywords: ['phone'],
+      budget: 100,
+      fetchPage: async (offset) => offset === 0
+        ? [candidate('phone-with-expensive-stocked-variant', {
+            name: 'Phone', price: 80, manage_stock: true, has_variants: true,
+          })]
+        : [],
+      fetchVariants: async () => [
+        { product_id: 'phone-with-expensive-stocked-variant', price_override: 60, stock_quantity: 0 },
+        { product_id: 'phone-with-expensive-stocked-variant', price_override: 120, stock_quantity: 2 },
+      ],
+      fetchOffers: async () => [],
+    });
+
+    expect(result).toEqual([]);
+  });
+
+  it('recommends the lowest priced stocked option within the budget', async () => {
+    const result = await selectRecommendedProducts({
+      keywords: ['phone'],
+      budget: 100,
+      fetchPage: async (offset) => offset === 0
+        ? [candidate('phone-with-affordable-offer', {
+            name: 'Phone', price: 80, manage_stock: true, has_condition_offers: true,
+          })]
+        : [],
+      fetchVariants: async () => [],
+      fetchOffers: async () => [
+        { product_id: 'phone-with-affordable-offer', price: 90, stock_quantity: 2 },
+        { product_id: 'phone-with-affordable-offer', price: 70, stock_quantity: 1 },
+        { product_id: 'phone-with-affordable-offer', price: 50, stock_quantity: 0 },
+      ],
+    });
+
+    expect(result.map((product) => product.recommendationPrice)).toEqual([70]);
   });
 });

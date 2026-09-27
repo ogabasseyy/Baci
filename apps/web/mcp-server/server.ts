@@ -2010,12 +2010,16 @@ function createOgabasseyServer() {
         .order('created_at', { ascending: false })
         .order('id', { ascending: false });
 
-      if (args.budget) {
-        query = query.lte('price', sanitizePrice(args.budget) ?? 1000000000);
+      const budget = args.budget === undefined
+        ? undefined
+        : sanitizePrice(args.budget) ?? 1000000000;
+      if (budget !== undefined) {
+        query = query.lte('price', budget);
       }
 
       const final = await selectRecommendedProducts({
         keywords: kws,
+        budget,
         fetchPage: async (offset, limit) => {
           const { data, error } = await query.range(offset, offset + limit - 1);
           return error ? null : data;
@@ -2026,7 +2030,7 @@ function createOgabasseyServer() {
         },
         fetchOffers: async (ids) => {
           const { data, error } = await supabase.from('product_offers')
-            .select('product_id, stock_quantity')
+            .select('product_id, price, stock_quantity')
             .eq('merchant_id', merchantId)
             .eq('status', 'active')
             .in('product_id', ids);
@@ -2038,7 +2042,7 @@ function createOgabasseyServer() {
         id: p.id,
         name: p.name,
         slug: p.slug,
-        price: p.price,
+        price: p.recommendationPrice ?? p.price,
         image: getSafeCatalogImageUrl(p.images?.[0]?.url || p.images?.[0]),
       }));
 

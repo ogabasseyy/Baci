@@ -1,6 +1,6 @@
 # Middleware modularization — local evidence
 
-Updated: 2026-09-26. Branch: `codex/middleware-modularization-20260912`.
+Updated: 2026-09-27. Branch: `codex/middleware-modularization-20260912`.
 Local implementation and review evidence only; no deployment or measured bill reduction.
 
 ## Implemented scope
@@ -69,9 +69,28 @@ therefore not a current squash-merge blocker. Keep this existing design:
 repository snapshots compare committed source content, while operational evidence
 requires its independently supplied exact source SHA and qualified tooling.
 
-Regenerate the snapshot after committing final routing inputs, then update the
-repository snapshot digest assertion. No authority guard or provider qualification
-is weakened by this refactor. Final regenerated digest/checks are recorded below.
+The snapshot was regenerated from committed source
+`7db065d8daf8b5b7d9f8ce0fd2c01b02d118e125`: digest
+`58a94d11ed03ceffb11aebd53b579e9fc87a40910ac36bb27dea36699a6091d4`,
+557 unchanged route decisions. Only source identity, routing-input digest and
+inventory digest changed. The repository digest assertion was updated.
+No authority guard or provider qualification was weakened.
+
+Final snapshot, operational, squash-history and input-list checks passed: 30 tests
+across five files. Log: `/tmp/baci-middleware-final-snapshot-20260926.log`.
+Final monorepo typecheck passed all six tasks (five cache hits):
+`/tmp/baci-middleware-final-monorepo-types-20260926.log`.
+
+The source-input correction received a zero-finding CodeRabbit review before its
+commit. The subsequent review attempt for the generated snapshot and digest
+assertion was rate-limited with a 48-minute retry window:
+`/tmp/baci-middleware-final-snapshot-review-20260926.log`.
+On 2026-09-27 the retry completed with zero findings across the generated artifact,
+digest assertion and evidence document. Log:
+`/tmp/baci-middleware-final-review-20260927.log`. The 30 tests across five inventory
+files passed again: `/tmp/baci-middleware-snapshot-20260927.log`.
+No paid-credit review was requested. This completes the local review gate, not
+GitHub CI, remote migration verification or deployment approval.
 
 ## SQL validation and release gates
 

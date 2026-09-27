@@ -265,7 +265,7 @@ describe('executeOrderCancellationSideEffect', () => {
     );
   });
 
-  it('does not retry when the manual-refund review cannot be persisted', async () => {
+  it('retries when the preflight manual-refund review cannot be persisted', async () => {
     const reviewInsert = vi.fn().mockResolvedValue({
       error: { code: 'XX000', message: 'database unavailable' },
     });
@@ -283,14 +283,16 @@ describe('executeOrderCancellationSideEffect', () => {
       .mockReturnValueOnce(paymentQuery)
       .mockReturnValueOnce({ insert: reviewInsert });
 
-    await expect(
-      executeOrderCancellationSideEffect({
-        merchant,
-        order,
-        step: 'refund',
-        supabase: { from } as never,
-      })
-    ).rejects.toBeInstanceOf(DeliveryUncertainError);
+    const error = await executeOrderCancellationSideEffect({
+      merchant,
+      order,
+      step: 'refund',
+      supabase: { from } as never,
+    }).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(DeliveryUncertainError);
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
   });
 
   it('quarantines ambiguous Paystack failures', async () => {

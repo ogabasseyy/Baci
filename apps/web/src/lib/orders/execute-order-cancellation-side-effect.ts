@@ -95,6 +95,7 @@ export async function executeOrderCancellationSideEffect({
     const unsupportedReasons = unsupportedRefundReasons(unsupportedLegs);
     await quarantineRefund({
       order,
+      preflight: true,
       reason: `Automatic cancellation refund requires review: ${unsupportedReasons.join(', ')}`,
       supabase,
       transactions,
@@ -152,6 +153,7 @@ export async function executeOrderCancellationSideEffect({
   if (pendingTransactions.length > 0) {
     await quarantineRefund({
       order,
+      preflight: true,
       reason: 'A previously accepted cancellation refund is not terminal',
       supabase,
       transactions: pendingTransactions,
@@ -281,9 +283,20 @@ export async function executeOrderCancellationSideEffect({
         },
       });
     if (insertTxError) {
-      throw new DeliveryUncertainError(
-        'Refund succeeded but its local audit record failed'
-      );
+      // The provider accepted this refund but no local row exists, so the
+      // webhook and polling reconcilers cannot discover it. Persist the
+      // provider ID in the review before quarantining.
+      await quarantineRefund({
+        metadata: {
+          provider_refund_id: paystackRefund.data.id,
+          payment_transaction_id: transaction.id,
+          audit_record_failed: true,
+        },
+        order,
+        reason: 'Paystack accepted refund but its local audit record failed',
+        supabase,
+        transactions: [transaction],
+      });
     }
     refundIds.push(paystackRefund.data.id);
   }

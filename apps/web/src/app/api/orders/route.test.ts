@@ -5347,7 +5347,7 @@ describe('POST /api/orders — B3.5 VAT RPC error mapping', () => {
     );
   });
 
-  it('preserves legacy negotiation entitlement fallback when plan_tier is missing', async () => {
+  it('derives no discount for a legacy premium slug when plan_tier is missing', async () => {
     const rpcSpy = vi.fn().mockResolvedValue({
       data: [
         {
@@ -5467,11 +5467,13 @@ describe('POST /api/orders — B3.5 VAT RPC error mapping', () => {
     });
     await POST(request);
 
-    // Per-line: catalog 1000, client 980 → reduction 20 (= 2% cap),
-    // + 7.5% VAT on the reduction = 1.5 → discount 21.5.
+    // Regression: the route used to grant negotiation to a hardcoded premium
+    // slug allowlist whenever plan_tier was null, so this merchant received a
+    // 21.5 auto-discount. plan_tier is now NOT NULL and authoritative, so an
+    // absent tier fails closed and the slug confers nothing.
     expect(rpcSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        p_discount_amount: 21.5,
+        p_discount_amount: 0,
         p_expected_total: 1053.5,
         p_tax_amount: 75,
       })
@@ -5601,7 +5603,7 @@ describe('POST /api/orders — B3.5 VAT RPC error mapping', () => {
     );
   });
 
-  it('does not apply legacy negotiation fallback when plan_tier is malformed', async () => {
+  it('derives no discount when plan_tier is malformed', async () => {
     const rpcSpy = vi.fn().mockResolvedValue({
       data: null,
       error: {

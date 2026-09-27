@@ -8,6 +8,7 @@ import { runRemediationAutofix } from './remediation-git-workflow.mjs';
 import { remediationGitWorkflowTestFixtures } from './remediation-git-workflow.test-helpers.mjs';
 
 const { candidate, makeRunner } = remediationGitWorkflowTestFixtures;
+const testContainerIdentity = { gid: 1001, uid: 1001 };
 const dockerEnvironment = {
   BACI_CODEX_DOCKER_IMAGE: 'baci-codex-remediator:local',
   BACI_CODEX_CONTAINER_BIN: '/opt/host/codex-native',
@@ -37,6 +38,7 @@ describe('remediation Docker workflow', () => {
       () =>
         runRemediationAutofix({
           candidate,
+          containerIdentity: testContainerIdentity,
           env: dockerEnvironment,
           runner,
         }),
@@ -66,6 +68,7 @@ describe('remediation Docker workflow', () => {
       () =>
         runRemediationAutofix({
           candidate,
+          containerIdentity: testContainerIdentity,
           env: {
             ...dockerEnvironment,
             BACI_REMEDIATION_RUN_ID: 'image-race-run',
@@ -84,6 +87,7 @@ describe('remediation Docker workflow', () => {
     const { calls, runner } = makeRunner({ statusOutput: '' });
     const result = runRemediationAutofix({
       candidate,
+      containerIdentity: testContainerIdentity,
       env: {
         ...dockerEnvironment,
         BACI_REMEDIATION_OUTPUT_DIR: mkdtempSync(
@@ -109,10 +113,7 @@ describe('remediation Docker workflow', () => {
     assert.equal(
       calls.some(
         ([command, ...args]) =>
-          command === 'docker' &&
-          args.includes('--sandbox') &&
-          args.includes('read-only') &&
-          args.includes('--read-only')
+          command === 'docker' && args.includes('--read-only')
       ),
       true
     );
@@ -137,6 +138,7 @@ describe('remediation Docker workflow', () => {
     mkdirSync(join(dependencyRoot, 'node_modules'));
     const result = runRemediationAutofix({
       candidate,
+      containerIdentity: testContainerIdentity,
       env: {
         ...dockerEnvironment,
         BACI_REMEDIATION_WORKTREE_ROOT: worktreeRoot,
@@ -204,6 +206,7 @@ describe('remediation Docker workflow', () => {
       () =>
         runRemediationAutofix({
           candidate,
+          containerIdentity: testContainerIdentity,
           env: {
             ...dockerEnvironment,
             BACI_REMEDIATION_RUN_ID: 'timeout-run',

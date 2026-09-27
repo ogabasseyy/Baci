@@ -20,9 +20,10 @@ const defaultImplementationResult = {
 };
 
 const isResearchInvocation = (command, args) =>
-  (command === 'codex' || command === 'docker') &&
-  args.includes('--sandbox') &&
-  args.includes('read-only');
+  (command === 'codex' &&
+    args.includes('--sandbox') &&
+    args.includes('read-only')) ||
+  (command === 'docker' && args.includes('--read-only'));
 
 function makeRunner({
   changedFiles,
@@ -107,10 +108,10 @@ function makeRunner({
         if (args[0] === 'rm') {
           return cleanupResult ?? { status: 0, stdout: '', stderr: '' };
         }
+        if (args.includes('--read-only'))
+          return researchResult ?? defaultResearchResult;
         if (args.includes('--dangerously-bypass-approvals-and-sandbox'))
           return implementationResult ?? defaultImplementationResult;
-        if (args.includes('--sandbox') && args.includes('read-only'))
-          return researchResult ?? defaultResearchResult;
         return verificationResult ?? { status: 0, stdout: '', stderr: '' };
       }
       return { status: 0, stdout: '', stderr: '' };

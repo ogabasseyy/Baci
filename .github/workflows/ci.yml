@@ -392,6 +392,7 @@ jobs:
           pnpm --dir vps-workers test &&
           node --test
           .github/scripts/current-main-deploy-guard.test.mjs
+          .github/scripts/deploy-mcp-server.test.mjs
           .github/scripts/deploy-vps-readiness-checkout.test.mjs
           .github/scripts/deploy-with-retry-current-main.test.mjs
           .github/scripts/deploy-with-retry.test.mjs

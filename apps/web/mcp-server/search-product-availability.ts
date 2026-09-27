@@ -69,7 +69,10 @@ export async function hydrateSearchProductAvailability(
     return {
       product,
       stockSummary: getMcpProductStockSummary(
-        condition && product.has_condition_offers ? { ...product, stock_quantity: 0 } : product,
+        condition && product.has_condition_offers &&
+          normalizeCanonicalProductCondition(product.condition) !== condition
+          ? { ...product, stock_quantity: 0 }
+          : product,
         product.has_variants && variantLookupSucceeded ? variants : undefined,
         product.has_condition_offers ? offersMap.get(product.id) : undefined
       ),

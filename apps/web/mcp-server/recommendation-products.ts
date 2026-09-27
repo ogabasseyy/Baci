@@ -95,7 +95,13 @@ export async function selectRecommendedProducts<T extends RecommendationCandidat
             .map((offer) => Number(offer.price))
             .filter(Number.isFinite)
           : [];
-        const stockedOptionPrices = [...stockedVariantPrices, ...stockedOfferPrices];
+        const stockedBaseOfferPrice = !product.has_variants &&
+          product.has_condition_offers &&
+          Number(product.stock_quantity ?? 0) > 0 &&
+          Number.isFinite(Number(product.price))
+          ? [Number(product.price)]
+          : [];
+        const stockedOptionPrices = [...stockedVariantPrices, ...stockedOfferPrices, ...stockedBaseOfferPrice];
         const recommendationPrices = budget === undefined
           ? stockedOptionPrices
           : stockedOptionPrices.filter((price) => price <= budget);

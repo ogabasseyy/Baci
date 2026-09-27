@@ -93,6 +93,29 @@ describe('selectRecommendedProducts', () => {
     expect(result.map((product) => product.recommendationPrice)).toEqual([70]);
   });
 
+  it('uses stocked base price for an offer-only product when alternate offers exceed budget', async () => {
+    const result = await selectRecommendedProducts({
+      keywords: ['phone'],
+      budget: 100,
+      fetchPage: async (offset) => offset === 0
+        ? [candidate('phone-with-stocked-base-offer', {
+            name: 'Phone', price: 80, stock_quantity: 3, manage_stock: true,
+            has_condition_offers: true,
+          })]
+        : [],
+      fetchVariants: async () => [],
+      fetchOffers: async () => [
+        { product_id: 'phone-with-stocked-base-offer', price: 120, stock_quantity: 2 },
+        { product_id: 'phone-with-stocked-base-offer', price: 60, stock_quantity: 0 },
+      ],
+    });
+
+    expect(result.map((product) => ({
+      id: product.id,
+      price: product.recommendationPrice,
+    }))).toEqual([{ id: 'phone-with-stocked-base-offer', price: 80 }]);
+  });
+
   it('derives the displayed price from the lowest stocked option without a budget', async () => {
     const result = await selectRecommendedProducts({
       keywords: ['phone'],

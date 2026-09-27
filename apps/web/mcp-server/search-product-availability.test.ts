@@ -3,6 +3,28 @@ import { describe, expect, it, vi } from 'vitest';
 import { hydrateSearchProductAvailability } from './search-product-availability';
 
 describe('hydrateSearchProductAvailability', () => {
+  it('keeps base stock for its own condition but not alternate offers', async () => {
+    const offerQuery = {
+      select: vi.fn(), eq: vi.fn(), in: vi.fn(),
+      then: (resolve: (value: { data: Array<{ product_id: string; condition: string; stock_quantity: number }>; error: null }) => unknown) =>
+        Promise.resolve({ data: [
+          { product_id: 'base-phone', condition: 'used', stock_quantity: 0 },
+        ], error: null }).then(resolve),
+    };
+    offerQuery.select.mockReturnValue(offerQuery);
+    offerQuery.eq.mockReturnValue(offerQuery);
+    offerQuery.in.mockReturnValue(offerQuery);
+    const supabase = { from: vi.fn(() => offerQuery) } as unknown as SupabaseClient;
+    const products = [{ id: 'base-phone', condition: 'new', manage_stock: true,
+      has_condition_offers: true, stock_quantity: 3 }];
+
+    const [base] = await hydrateSearchProductAvailability(products, supabase, 'merchant-1', 'new');
+    const [alternate] = await hydrateSearchProductAvailability(products, supabase, 'merchant-1', 'used');
+
+    expect(base.stockSummary).toMatchObject({ inStock: true, level: 'Last Units' });
+    expect(alternate.stockSummary).toMatchObject({ inStock: false, level: 'Out of Stock' });
+  });
+
   it('does not claim new-option stock for a sold-out used-condition search', async () => {
     const rpc = vi.fn(async () => ({ data: [
       { product_id: 'mixed-phone', condition: 'new', attributes: { storage: '128GB' }, stock_quantity: 2 },

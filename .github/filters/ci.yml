@@ -135,6 +135,8 @@ deploy_scripts:
   - '.github/workflows/ci.yml'
   - '.github/actions/postdeploy-migrations/**'
   - 'vps-workers/**'
+  - '.github/scripts/deploy-mcp-server.sh'
+  - '.github/scripts/deploy-mcp-server.test.mjs'
   - '.github/scripts/deploy-with-retry.sh'
   - '.github/scripts/deploy-with-retry-current-main.test.mjs'
   - '.github/scripts/deploy-with-retry.test.mjs'

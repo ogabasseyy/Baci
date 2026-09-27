@@ -246,5 +246,34 @@ describe('executeOrderCancellationSideEffect', () => {
         supabase: supabase as never,
       })
     ).rejects.toBeInstanceOf(DeliveryUncertainError);
+    expect(supabase.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'order_cancellation_refund_requires_review',
+        metadata: expect.objectContaining({
+          failed_payment_transaction_id: 'payment-1',
+        }),
+        txn_id: 'payment-1',
+      })
+    );
+  });
+
+  it('retries a first-leg decline without filing a review', async () => {
+    const supabase = refundClient();
+    mocks.initiateRefund.mockResolvedValue({
+      error: 'declined',
+      success: false,
+    });
+
+    const error = await executeOrderCancellationSideEffect({
+      merchant,
+      order,
+      step: 'refund',
+      supabase: supabase as never,
+    }).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(DeliveryUncertainError);
+    expect(supabase.insert).not.toHaveBeenCalled();
+    expect(supabase.from).toHaveBeenCalledTimes(2);
   });
 });

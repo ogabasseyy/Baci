@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
+import { isExternalPaymentGateway } from '@/lib/orders/order-cancellation-refund-review';
 import { escapeHtmlText } from '@/lib/sanitize';
 
 type RefundEmailSender = (message: {
@@ -86,26 +87,55 @@ export async function drainPaystackRefundNotifications(
         order.order_number || order.id.slice(0, 8).toUpperCase();
       let amount = '';
       if (row.event_type.startsWith('processed_')) {
+        const { data: paymentLegs, error: paymentLegError } = await supabase
+          .from('transactions')
+          .select('id, gateway, amount')
+          .eq('order_id', order.id)
+          .eq('merchant_id', row.merchant_id)
+          .eq('transaction_type', 'payment')
+          .eq('status', 'completed');
+        if (paymentLegError || !paymentLegs?.length) {
+          throw new Error('refund_notification_ledger_lookup_failed');
+        }
+        const externalLegs = paymentLegs.filter((leg) =>
+          isExternalPaymentGateway(leg.gateway)
+        );
         const { data: refundLegs, error: refundLegError } = await supabase
           .from('transactions')
-          .select('amount, currency')
+          .select('amount, currency, gateway, metadata')
           .eq('order_id', order.id)
           .eq('merchant_id', row.merchant_id)
           .eq('transaction_type', 'refund')
-          .eq('gateway', 'paystack')
           .eq('status', 'completed');
         if (refundLegError || !refundLegs?.length) {
           throw new Error('refund_notification_ledger_lookup_failed');
         }
-        const refundAmount = refundLegs.reduce(
-          (sum, leg) => sum + Number(leg.amount),
-          0
+        // Mirror the completion RPC: every external payment leg links one
+        // same-gateway, same-amount completed refund, including legs that
+        // operations refunded outside Paystack.
+        const linkedRefunds = externalLegs.map((leg) =>
+          refundLegs.find(
+            (refund) =>
+              refund.gateway === leg.gateway &&
+              Number(refund.amount) === Number(leg.amount) &&
+              (refund.metadata as { payment_transaction_id?: unknown } | null)
+                ?.payment_transaction_id === leg.id
+          )
         );
         if (
+          externalLegs.length === 0 ||
+          linkedRefunds.some((refund) => refund === undefined)
+        ) {
+          throw new Error('refund_notification_ledger_mismatch');
+        }
+        const refundAmount = (
+          linkedRefunds as Array<{ amount: number }>
+        ).reduce((sum, leg) => sum + Number(leg.amount), 0);
+        if (
           refundAmount <= 0 ||
-          refundLegs.some(
+          linkedRefunds.some(
             (leg) =>
-              leg.currency.toUpperCase() !==
+              (leg as { currency: string }).currency.toUpperCase() !==
               (order.currency || 'NGN').toUpperCase()
           )
         ) {

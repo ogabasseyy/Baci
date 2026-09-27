@@ -87,7 +87,7 @@ describe('loadMcpSearchProducts', () => {
     expect(result.products).toEqual([]);
   });
 
-  it.each(['show me some phones', 'I need a phone', 'Android phones', 'show me Android phones'])(
+  it.each(['show me some phones', 'I need a phone', 'Android phones', 'show me Android phones', 'phones under 500k', 'iPhone 15 under ₦500k'])(
     'keeps non-phone matches out of the handset request %s',
     async (query) => {
       const { supabase } = createRankedSearchSupabase('Accessories');

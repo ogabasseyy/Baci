@@ -24,7 +24,7 @@ export function inferSmartphoneCategory(
   while (/^(?:[45]G|\d+(?:GB|TB))(?=\s|$)/i.test(remainder)) {
     remainder = remainder.replace(/^(?:[45]G|\d+(?:GB|TB))(?=\s|$)/i, '').trim();
   }
-  const priceOnly = /^(?:under|below|from|at)\s+[₦$]?\d[\d,.]*(?:\s*(?:ngn|naira))?$/i.test(remainder) ||
-    /^between\s+[₦$]?\d[\d,.]*\s+and\s+[₦$]?\d[\d,.]*$/i.test(remainder);
+  const priceOnly = /^(?:under|below|from|at)\s+[₦$]?\d[\d,.]*[km]?(?:\s*(?:ngn|naira))?$/i.test(remainder) ||
+    /^between\s+[₦$]?\d[\d,.]*[km]?\s+and\s+[₦$]?\d[\d,.]*[km]?$/i.test(remainder);
   return !remainder || priceOnly ? 'Smartphones' : undefined;
 }

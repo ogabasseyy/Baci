@@ -64,6 +64,18 @@ the deterministic single-item order's zero shipping fee and fixed ₦107,500
 total (₦100,000 subtotal plus ₦7,500 VAT). It does not calculate dynamic
 checkout amounts or stand in for server-side amount authority.
 
+For an isolated crypto modal browser pass, open
+`/crypto-payment-modal`. This harness-only page mounts the real
+`CryptoPaymentModal` with a synthetic address and an inline data-URI image.
+It loads the storefront styles and checkout theme provider with a synthetic
+merchant color so browser checks exercise the styled modal.
+Choose an idle, checking, pending, confirmed, or failed verification state
+before opening the modal. The header close button dismisses immediately; the
+footer close button uses the browser confirmation dialog. Clipboard interaction
+uses the local browser clipboard permission. The fixture does not call a
+payment provider or the crypto initialization and verification APIs, so it
+checks the modal UI only, not checkout hook integration.
+
 The panel is covered by Playwright. The browser suite also switches the real
 payment controls between Paystack and Korapay, injects a provider
 initialization error, then retries against the same order using the reuse API.

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ensurePaidOrderInventoryConfirmed,
   isSerializedInventoryUnavailableError,
+  rollbackOrderStatusAfterInventoryConfirmationFailure,
 } from '@/lib/payments/ensure-paid-order-inventory-confirmed';
 
 const mockRevalidateProducts = vi.fn();
@@ -13,8 +14,47 @@ interface MockSupabaseRpcClient {
   rpc: ReturnType<typeof vi.fn>;
 }
 
+interface MockOrderRollbackClient {
+  from: ReturnType<typeof vi.fn>;
+}
+
 function asSupabaseClient<T extends object>(client: T) {
   return client as Parameters<typeof ensurePaidOrderInventoryConfirmed>[0];
+}
+
+function createRollbackBuilder(error: { message: string } | null) {
+  const builder: {
+    eq: ReturnType<typeof vi.fn>;
+    select: ReturnType<typeof vi.fn>;
+    single: ReturnType<typeof vi.fn>;
+  } = {
+    eq: vi.fn(() => builder),
+    select: vi.fn(() => builder),
+    single: vi.fn(() => Promise.resolve({ data: { id: 'order-123' }, error })),
+  };
+
+  return builder;
+}
+
+function createRollbackMissingRowBuilder() {
+  const builder: {
+    eq: ReturnType<typeof vi.fn>;
+    select: ReturnType<typeof vi.fn>;
+    single: ReturnType<typeof vi.fn>;
+  } = {
+    eq: vi.fn(() => builder),
+    select: vi.fn(() => builder),
+    single: vi.fn(() =>
+      Promise.resolve({
+        data: null,
+        error: {
+          message: 'JSON object requested, multiple (or no) rows returned',
+        },
+      })
+    ),
+  };
+
+  return builder;
 }
 
 describe('ensurePaidOrderInventoryConfirmed', () => {

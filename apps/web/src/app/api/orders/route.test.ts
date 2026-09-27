@@ -7046,6 +7046,14 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
   });
 
   it('dispatches a payment request email with transfer details for payforme orders', async () => {
+    // DVA-focused: stub the unrelated checkout blog-purge scheduler so the
+    // after() ordering assertions below observe only the DVA flow.
+    const blogPurgeMod = await import(
+      '@/lib/checkout/schedule-checkout-product-blog-purge'
+    );
+    const blogPurgeStub = vi
+      .spyOn(blogPurgeMod, 'scheduleCheckoutProductBlogPurge')
+      .mockResolvedValue(undefined);
     const supabase = buildMockSupabase();
     const { accountUpsert, backgroundSupabase } = createBackgroundSupabaseMock({
       orderItemsResponses: [
@@ -7143,6 +7151,7 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     });
 
     const response = await POST(request);
+    blogPurgeStub.mockRestore();
     expect(response.status).toBe(201);
 
     await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {
@@ -7192,6 +7201,14 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
   });
 
   it('retries Pay for Me DVA provisioning post-response after a handled provider failure', async () => {
+    // DVA-focused: stub the unrelated checkout blog-purge scheduler so the
+    // after() ordering assertions below observe only the DVA flow.
+    const retryBlogPurgeMod = await import(
+      '@/lib/checkout/schedule-checkout-product-blog-purge'
+    );
+    const retryBlogPurgeStub = vi
+      .spyOn(retryBlogPurgeMod, 'scheduleCheckoutProductBlogPurge')
+      .mockResolvedValue(undefined);
     // paystackRequest converts HTTP errors and fetch rejections into
     // { success: false }: the pre-response attempt must report retryable
     // (not suppress the fallback), so the committed request email still
@@ -7295,6 +7312,7 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     });
 
     const response = await POST(request);
+    retryBlogPurgeStub.mockRestore();
     expect(response.status).toBe(201);
 
     await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {

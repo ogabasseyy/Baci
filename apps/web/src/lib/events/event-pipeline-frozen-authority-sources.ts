@@ -26,7 +26,7 @@ export const eventPipelineFrozenRoutes = {
   // Re-pinned after merging main: keeps this branch's checkout blog-purge
   // scheduling plus main's tracking-link and redvault checkout additions.
   'apps/web/src/app/api/orders/route.ts':
-    'a2d6dc17999d345ec2eb0754164827b95c737f39c1c7e04cb1ae947eeef93943',
+    '61c904f72e4891133a654103cc36267de0b5474b5ac1e6be13ee530fc54932ea',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

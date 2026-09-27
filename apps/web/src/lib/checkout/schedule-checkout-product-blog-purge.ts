@@ -34,7 +34,7 @@ export async function scheduleCheckoutProductBlogPurge({
 }: {
   merchantId: string;
   merchantSlug: string;
-  orderId: string;
+  orderId: string | null;
   orderItems: readonly CheckoutOrderItem[];
   supabase: SupabaseClient;
 }): Promise<void> {

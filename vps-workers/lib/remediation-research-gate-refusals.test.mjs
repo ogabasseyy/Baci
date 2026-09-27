@@ -278,6 +278,35 @@ describe('remediation research gate refusals', () => {
     }
   });
 
+  it('accepts an affirmative selection with incidental cannot-safely wording', () => {
+    const report = validReport.replace(
+      'SELECTED_FIX: smallest code fix',
+      'SELECTED_FIX: Reject payloads that cannot safely be parsed before they reach the transformer'
+    );
+
+    const result = validateCodexResearchResult(jsonl(report));
+
+    assert.equal(result.accepted, true);
+  });
+
+  it('rejects cannot-safely conclusions that decline a fix', () => {
+    const reports = [
+      'SELECTED_FIX: I cannot safely identify a defensible fix from the available evidence.',
+      'SELECTED_FIX: No safe fix can be safely established from the available evidence; collect production traces.',
+    ];
+
+    for (const selectedFix of reports) {
+      const result = validateCodexResearchResult(
+        jsonl(
+          validReport.replace('SELECTED_FIX: smallest code fix', selectedFix)
+        )
+      );
+
+      assert.equal(result.accepted, false);
+      assert.match(result.reasons.join('\n'), /defensible selected fix/);
+    }
+  });
+
   it('rejects standalone none refusals at the start of the selection', () => {
     const reports = [
       'SELECTED_FIX: None.',

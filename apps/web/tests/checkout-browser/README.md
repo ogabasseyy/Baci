@@ -46,3 +46,24 @@ full tenant/proxy route test, database RLS test, or provider settlement proof.
 Real provider cancellation, webhook delivery, refunds and reconciliation remain
 separate sandbox/staging gates. The successful payment-handoff page does not
 represent a charge or paid order.
+
+For a manual local browser pass, run the built harness, open `/catalog`, click
+**Add test phone**, then open `/checkout?qa=manual`. The checkout starts empty;
+the yellow fixture panel is visible only with this
+explicit query parameter. Its controls select successful or always-failing
+payment initialization and reset cart, checkout and pending-order browser
+state. The harness serves synthetic local responses for shipping, order
+creation/reuse and payment initialization; payment handoffs stay on
+`/payment-handoff`, and no provider or real order is contacted. The saved-address
+selector is unavailable in the current checkout implementation, which
+initializes its saved-address list empty; use the real new-address form and
+both delivery choices for manual QA.
+
+The local shipping quote fixture prices both door and pickup at zero, matching
+the deterministic single-item order's zero shipping fee and fixed ₦107,500
+total (₦100,000 subtotal plus ₦7,500 VAT). It does not calculate dynamic
+checkout amounts or stand in for server-side amount authority.
+
+The panel is covered by Playwright. The browser suite also switches the real
+payment controls between Paystack and Korapay, injects a provider
+initialization error, then retries against the same order using the reuse API.

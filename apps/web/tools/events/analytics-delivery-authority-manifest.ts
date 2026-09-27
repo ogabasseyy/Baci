@@ -48,7 +48,7 @@ export const analyticsDeliveryAuthorityManifest = {
   },
   platformRouteHash: {
     path: 'apps/web/src/app/api/platform/events/route.ts',
-    sha256: 'bb3b5ea163f7029bd8a90523ac7944c9e126b2aebc0ce673f82c4e0c48d00161',
+    sha256: '646432088daff8e54f56fbab06453be789dc67d7b974398cc7f4b0d06842b9ca',
   },
   pureFanoutRoots: [
     'apps/web/src/lib/analytics/send-configured-ad-platforms.ts',

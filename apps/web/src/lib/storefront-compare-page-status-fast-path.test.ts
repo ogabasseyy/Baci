@@ -70,6 +70,7 @@ describe('storefront compare hard-status fast path', () => {
       resolve(buildOptions(`storefront-${index}`, rpcImpl))
     );
 
+    await Promise.resolve();
     expect(rpcImpl).toHaveBeenCalledTimes(8);
     expect(resolveRpcs).toHaveLength(8);
     expect(console.warn).toHaveBeenCalledWith(

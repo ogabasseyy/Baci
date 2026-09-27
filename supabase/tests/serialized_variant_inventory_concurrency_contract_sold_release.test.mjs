@@ -117,4 +117,17 @@ test('sale transitions require merchant authorization over the units', () => {
     ''
   );
   assert.equal(soldGuardDominatesUnits(guardless), false);
+
+  const neutered = sold.replace(
+    /RAISE\s+EXCEPTION\s+'forbidden'[^;]*;/i,
+    'NULL;'
+  );
+  assert.notEqual(neutered, sold);
+  assert.equal(soldGuardDominatesUnits(neutered), false);
+
+  const caught = sold.replace(
+    /RAISE\s+EXCEPTION\s+'forbidden'[^;]*;/i,
+    "BEGIN RAISE EXCEPTION 'forbidden'; EXCEPTION WHEN OTHERS THEN NULL; END;"
+  );
+  assert.equal(soldGuardDominatesUnits(caught), false);
 });

@@ -134,6 +134,11 @@ export const EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260927130000_order_chat_claim_loop_by_product.sql',
-    sha256: 'b1ae2e8bb4219827895979c00b66baf1ceef9e57bd157e92230e356ea9d90a1e',
+    sha256: 'cd46796a9b9b186a7bc66e319c19b441e08dcb80b577ff98b94d02718ffb72e6',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260927140000_order_claim_loops_by_product_variant.sql',
+    sha256: 'd61fc4879a6352fc8fe636b1dd3c7b72c45f2d6683d5bcee589ba89fa26f2734',
   },
 ];

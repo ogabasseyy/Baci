@@ -5,7 +5,10 @@
 -- pending-order reuse flow iterate order items before claiming, so both
 -- loops are checked, and the claim call must sit inside the ordered loop.
 -- The paid chat conversion iterates chat items in input order through the
--- same claim delegate, so its loop is ordered by product as well.
+-- same claim delegate, so its loop is ordered by product as well. Product
+-- ties break by variant everywhere so multi-variant orders of one product
+-- lock in a common order across claim, confirmation, and release paths;
+-- the confirmation and release item loops are checked too.
 --
 -- Usage:
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
@@ -18,6 +21,8 @@ DECLARE
   v_create_loop text;
   v_reuse_loop text;
   v_chat_loop text;
+  v_confirm_loop text;
+  v_release_loop text;
 BEGIN
   SELECT pg_catalog.pg_get_functiondef(function_definition.oid)
   INTO v_create_loop
@@ -32,7 +37,7 @@ BEGIN
     RAISE EXCEPTION 'private.create_storefront_order_unchecked is missing';
   END IF;
 
-  IF v_create_loop !~ 'FOR\s+v_item\s+IN\s+SELECT\s+oi\.id\s*,\s*oi\.product_id[^;]*?ORDER\s+BY\s+oi\.product_id\s*,\s*oi\.id\s+LOOP(?:(?!END\s+LOOP).)*claim_variant_inventory_units_for_order_item_internal' THEN
+  IF v_create_loop !~ 'FOR\s+v_item\s+IN\s+SELECT\s+oi\.id\s*,\s*oi\.product_id[^;]*?ORDER\s+BY\s+oi\.product_id\s*,\s*oi\.variant_id\s*,\s*oi\.id\s+LOOP(?:(?!END\s+LOOP).)*claim_variant_inventory_units_for_order_item_internal' THEN
     RAISE EXCEPTION 'storefront claim loop must order items by product/unit';
   END IF;
 
@@ -49,7 +54,7 @@ BEGIN
     RAISE EXCEPTION 'private.prepare_storefront_order_for_checkout is missing';
   END IF;
 
-  IF v_reuse_loop !~ 'FOR\s+v_item\s+IN\s+SELECT\s+oi\.id\s*,\s*oi\.product_id[^;]*?ORDER\s+BY\s+oi\.product_id\s*,\s*oi\.id\s+FOR\s+UPDATE\s+LOOP(?:(?!END\s+LOOP).)*claim_variant_inventory_units_for_order_item_internal' THEN
+  IF v_reuse_loop !~ 'FOR\s+v_item\s+IN\s+SELECT\s+oi\.id\s*,\s*oi\.product_id[^;]*?ORDER\s+BY\s+oi\.product_id\s*,\s*oi\.variant_id\s*,\s*oi\.id\s+FOR\s+UPDATE\s+LOOP(?:(?!END\s+LOOP).)*claim_variant_inventory_units_for_order_item_internal' THEN
     RAISE EXCEPTION 'storefront reuse claim loop must order items by product/unit';
   END IF;
 
@@ -66,8 +71,42 @@ BEGIN
     RAISE EXCEPTION 'private.convert_chat_order_to_paid_order_with_inventory is missing';
   END IF;
 
-  IF v_chat_loop !~ 'FOR\s+v_item\s+IN\s+SELECT\s+\*\s+FROM\s+jsonb_to_recordset\(v_chat_order\.items\)[^;]*?ORDER\s+BY\s+product_id\s+LOOP(?:(?!END\s+LOOP).)*claim_variant_inventory_units_for_order_item_internal' THEN
+  IF v_chat_loop !~ 'FOR\s+v_item\s+IN\s+SELECT\s+\*\s+FROM\s+jsonb_to_recordset\(v_chat_order\.items\)[^;]*?ORDER\s+BY\s+product_id\s*,\s*variant_id\s+LOOP(?:(?!END\s+LOOP).)*claim_variant_inventory_units_for_order_item_internal' THEN
     RAISE EXCEPTION 'chat claim loop must order items by product';
+  END IF;
+
+  SELECT pg_catalog.pg_get_functiondef(function_definition.oid)
+  INTO v_confirm_loop
+  FROM pg_catalog.pg_proc AS function_definition
+  JOIN pg_catalog.pg_namespace AS function_schema
+    ON function_schema.oid = function_definition.pronamespace
+  WHERE function_schema.nspname = 'private'
+    AND function_definition.proname = 'confirm_order_inventory_reservations'
+    AND function_definition.pronargs = 2;
+
+  IF v_confirm_loop IS NULL THEN
+    RAISE EXCEPTION 'private.confirm_order_inventory_reservations is missing';
+  END IF;
+
+  IF v_confirm_loop !~ 'FOR\s+v_item\s+IN\s+SELECT\s+oi\.id\s*,\s*oi\.product_id[^;]*?ORDER\s+BY\s+oi\.product_id\s*,\s*oi\.variant_id\s*,\s*oi\.id\s+FOR\s+UPDATE\s+LOOP' THEN
+    RAISE EXCEPTION 'confirmation item loop must order by product/variant/unit';
+  END IF;
+
+  SELECT pg_catalog.pg_get_functiondef(function_definition.oid)
+  INTO v_release_loop
+  FROM pg_catalog.pg_proc AS function_definition
+  JOIN pg_catalog.pg_namespace AS function_schema
+    ON function_schema.oid = function_definition.pronamespace
+  WHERE function_schema.nspname = 'private'
+    AND function_definition.proname = 'release_order_inventory_units'
+    AND function_definition.pronargs = 3;
+
+  IF v_release_loop IS NULL THEN
+    RAISE EXCEPTION 'private.release_order_inventory_units is missing';
+  END IF;
+
+  IF v_release_loop !~ 'FOR\s+v_item\s+IN\s+SELECT\s+oi\.id\s*,\s*oi\.product_id[^;]*?ORDER\s+BY\s+oi\.product_id\s*,\s*oi\.variant_id\s*,\s*oi\.id\s+FOR\s+UPDATE\s+LOOP' THEN
+    RAISE EXCEPTION 'release item loop must order by product/variant/unit';
   END IF;
 END
 $$;

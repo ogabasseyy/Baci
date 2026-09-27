@@ -1,8 +1,10 @@
--- Order the chat-order inventory claim loop by product so the paid chat
--- conversion acquires product locks in the same order as the serialized
--- release path. Without this, a chat order listing products B then A can
--- deadlock against a release locking A then B through the stock-sync
--- trigger, aborting the webhook transaction.
+-- Order the chat-order inventory claim loop by product and variant so the
+-- paid chat conversion acquires product locks in the same order as the
+-- serialized release path. Without this, a chat order listing products B
+-- then A can deadlock against a release locking A then B through the
+-- stock-sync trigger, aborting the webhook transaction; the variant
+-- tie-breaker keeps multi-variant orders of one product deterministic
+-- across concurrent conversions.
 DO $migration$
 DECLARE
   v_function_oid oid;
@@ -25,7 +27,7 @@ BEGIN
   SELECT pg_catalog.pg_get_functiondef(v_function_oid)
   INTO v_definition;
 
-  IF pg_catalog.strpos(v_definition, 'ORDER BY product_id') > 0 THEN
+  IF pg_catalog.strpos(v_definition, 'ORDER BY product_id, variant_id') > 0 THEN
     RETURN;
   END IF;
 
@@ -48,7 +50,7 @@ BEGIN
       quantity integer,
       price numeric
     )
-    ORDER BY product_id
+    ORDER BY product_id, variant_id
   LOOP$$
   );
   IF v_updated = v_definition THEN

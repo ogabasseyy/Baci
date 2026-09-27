@@ -28,7 +28,8 @@ function resolveShippingProviders(
   settings: { shipping_providers?: unknown } | null
 ): unknown {
   // Missing settings rows and nullable shipping_providers inherit the
-  // canonical merchant default (gigl + topship). Explicit [] stays disabled.
+  // canonical merchant default (currently empty: carriers are opt-in).
+  // Explicit [] stays disabled.
   if (!settings || settings.shipping_providers == null) {
     return DEFAULT_SHIPPING_PROVIDERS;
   }

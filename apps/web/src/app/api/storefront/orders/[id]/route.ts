@@ -4,7 +4,6 @@ import {
 } from '@baci/shared';
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { sanitizePublicOrder } from '@/lib/public-fulfillment-sanitizer';
 import { isValidUuid, sanitizeForLog } from '@/lib/sanitize-core';
 import { toOrderPaymentAccount } from '@/lib/storefront-customer-payment-account-adapter';
@@ -12,10 +11,15 @@ import { loadStorefrontCustomerPaymentAccounts } from '@/lib/storefront-customer
 import { loadStorefrontCustomerTransactions } from '@/lib/storefront-customer-transactions';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { createClient } from '@/lib/supabase/server';
+import { buildGuestOrderResponse } from './build-guest-order-response';
+import { fetchAuthenticatedDeliveryFlag } from './fetch-authenticated-delivery-flag';
+import { fetchOrderInventoryProof } from './fetch-inventory-proof';
 import { fetchProductRouteDetails } from './fetch-product-route-details';
 import { mapOrderItemsWithRoutes } from './map-order-items-with-routes';
+import { mapTrackingPaymentAccounts } from './map-tracking-payment-accounts';
 import { orderDetailSelect } from './order-detail-select';
 import type { OrderItem } from './order-item-types';
+import { parseOrderDetailQuery } from './parse-order-detail-query';
 import { resolveMerchantIdBySlug } from './resolve-merchant-id-by-slug';
 
 export async function GET(
@@ -24,33 +28,11 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const { searchParams } = new URL(request.url);
-
-    const token =
-      searchParams.get('token') ||
-      searchParams.get('tracking_token') ||
-      undefined;
-    const email = searchParams.get('email') || undefined;
-    const merchantSlug =
-      searchParams.get('merchant_slug') ||
-      searchParams.get('slug') ||
-      undefined;
-
-    const parsed = z
-      .object({
-        token: z.string().min(1).optional(),
-        email: z.email().optional(),
-        merchant_slug: z.string().min(1).optional(),
-      })
-      .safeParse({ token, email, merchant_slug: merchantSlug });
-
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Invalid request', details: z.flattenError(parsed.error) },
-        { status: 400 }
-      );
+    const queryResult = parseOrderDetailQuery(request);
+    if (!queryResult.ok) {
+      return queryResult.response;
     }
-
+    const { token, email, merchantSlug } = queryResult.query;
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const {
@@ -171,9 +153,16 @@ export async function GET(
         } as typeof order & { order_payment_accounts?: unknown };
         delete orderForResponse.order_payment_accounts;
 
+        // biome-ignore format: compact call preserves the 300-line route gate.
+        const notificationDelivered = await fetchAuthenticatedDeliveryFlag(supabase, order.id);
+        // biome-ignore format: compact call preserves the 300-line route gate.
+        const inventoryConfirmed = await fetchOrderInventoryProof(supabase, order.id, token ?? null, email ?? null);
+
         return NextResponse.json(
           sanitizePublicOrder({
             ...orderForResponse,
+            notification_delivered: notificationDelivered,
+            inventory_confirmed: inventoryConfirmed,
             shipping_cost: order.shipping_fee,
             short_id: order.order_number,
             items: mapOrderItemsWithRoutes(items || []),
@@ -230,6 +219,17 @@ export async function GET(
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
 
+    // Token lookups resolve by token (p_order_id: null), so a URL whose
+    // path names order A but whose token belongs to order B returns B —
+    // including B's active transfer account below. Reject the mismatch
+    // before selecting or returning the account, as the checkout-success
+    // lookup does: a stale or mismatched deep link must never display
+    // and copy payment instructions for the wrong order under A's URL.
+    // Uniform 404 (no existence oracle).
+    if (token && !preferEmailLookup && order.id !== id) {
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+    }
+
     const rawItems: OrderItem[] = Array.isArray(order.items) ? order.items : [];
     const productRouteDetails = await fetchProductRouteDetails(
       rawItems,
@@ -249,28 +249,26 @@ export async function GET(
           .in('id', productIds)
     );
     const items = mapOrderItemsWithRoutes(rawItems, productRouteDetails);
+    // Guest Pay for Me checkouts render payer instructions from this
+    // lookup: include the active provisioned account (strict selection —
+    // expired aliases are never payable, unlike the paid-document
+    // historical allowance in the signed-in branch).
+    const guestVirtualAccount =
+      selectPreferredOrderPaymentAccount(
+        mapTrackingPaymentAccounts(order.payment_accounts),
+        new Date()
+      ) || null;
+
+    // biome-ignore format: compact call preserves the 300-line route gate.
+    const inventoryConfirmed = await fetchOrderInventoryProof(anon, order.id, token || null, email || null);
 
     return NextResponse.json(
-      sanitizePublicOrder({
-        id: order.id,
-        order_number: order.order_number,
-        short_id: order.order_number,
-        subtotal: order.subtotal,
-        tax_amount: order.tax_amount ?? 0,
-        discount_amount: order.discount_amount ?? 0,
-        gift_wrapping_fee: order.gift_wrapping_fee ?? 0,
-        shipping_cost: order.shipping_cost ?? order.shipping_fee ?? 0,
-        total: order.total,
-        customer_name: order.customer_name,
-        customer_email: order.customer_email,
-        customer_phone: order.customer_phone,
-        shipping_address: order.shipping_address,
-        payment_status: order.payment_status,
-        shipping_status: order.shipping_status,
-        payment_method: order.payment_method,
-        merchant_id: order.merchant_id,
-        tracking_token: token || null,
+      buildGuestOrderResponse({
+        order,
+        token: token || null,
         items,
+        virtualAccount: guestVirtualAccount,
+        inventoryConfirmed,
       })
     );
   } catch (error) {

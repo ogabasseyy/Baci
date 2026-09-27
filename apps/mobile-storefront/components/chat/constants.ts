@@ -41,6 +41,8 @@ export const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } =
 // API base URL - uses the web app's API
 export const API_BASE_URL = resolveApiBaseUrl(process.env.EXPO_PUBLIC_API_URL);
 export const CHAT_REQUEST_TIMEOUT_MS = 120_000;
+export const SANTA_MERCHANT_SLUG_HEADER = 'x-baci-santa-merchant-slug';
+export const STOREFRONT_MERCHANT_SLUG_HEADER = 'x-baci-storefront-slug';
 const DEFAULT_CHAT_POWERED_BY_LABEL = 'Powered by Ogabassey AI';
 export const CHAT_POWERED_BY_LABEL =
   process.env.EXPO_PUBLIC_CHAT_POWERED_BY_LABEL?.trim() ||

@@ -3,6 +3,9 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { QuizRulesModal } from './QuizRulesModal';
 
 jest.mock('@react-native-vector-icons/ionicons', () => 'Ionicons');
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 59 }),
+}));
 
 describe('QuizRulesModal', () => {
   it('requires one explicit rules and terms acknowledgment before play', () => {
@@ -29,6 +32,55 @@ describe('QuizRulesModal', () => {
     );
     fireEvent.press(play);
     expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('places the banner below the top safe-area inset', () => {
+    // Regression: a fixed offset hides the creative under the status bar
+    // or cutout on tall-inset devices, producing obscured impressions.
+    render(
+      <QuizRulesModal
+        eventTitle="Tonight quiz"
+        onClose={jest.fn()}
+        onConfirm={jest.fn()}
+        requiresAcceptance={false}
+        timePerQuestionSeconds={15}
+        visible
+      />
+    );
+
+    // Mocked top inset is 59, so the reserved slot starts at 75. (Prop
+    // query: testID queries do not traverse the Modal host in this setup.)
+    const banner = screen.UNSAFE_getByProps({
+      testID: 'quiz-rules-modal-banner',
+    }) as unknown as {
+      props: { style: Record<string, unknown> };
+    };
+    expect(banner.props.style).toEqual(expect.objectContaining({ top: 75 }));
+  });
+
+  it('caps the sheet so it cannot cover the banner on compact screens', () => {
+    // Regression: the bottom-anchored sheet grows unbounded, so on short
+    // screens it paints over the top banner zone and hides the creative.
+    render(
+      <QuizRulesModal
+        eventTitle="Tonight quiz"
+        onClose={jest.fn()}
+        onConfirm={jest.fn()}
+        requiresAcceptance={false}
+        timePerQuestionSeconds={15}
+        visible
+      />
+    );
+
+    const sheet = screen.UNSAFE_getByProps({
+      accessibilityViewIsModal: true,
+    }) as unknown as {
+      props: { style: Record<string, unknown>[] };
+    };
+    expect(sheet.props.style).toEqual(
+      expect.arrayContaining([expect.objectContaining({ maxHeight: '75%' })])
+    );
+    expect(screen.getByTestId('quiz-rules-list')).toBeTruthy();
   });
 
   it('shows rules without an acknowledgment when opened for reference', () => {

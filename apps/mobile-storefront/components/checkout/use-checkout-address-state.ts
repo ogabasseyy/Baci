@@ -26,6 +26,44 @@ interface UseCheckoutAddressStateParams {
   user: User | null;
 }
 
+/**
+ * Subscriber-line key: trailing 10 digits. Stored identity and display
+ * input routinely carry different prefixes/spacing for the same line
+ * (+2349169449282 vs +234 9169449282 vs 09169449282), and the settle
+ * comparison must treat those as identical. Empty on either side never
+ * matches, so a genuinely missing phone still blocks.
+ */
+function contactPhoneKey(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) return '';
+  return digits.length >= 10 ? digits.slice(-10) : digits;
+}
+
+/**
+ * Settle comparison must ignore display formatting (phone spacing/prefix,
+ * email case/whitespace). Otherwise prefilled-but-valid contact never matches
+ * the settled signature until the user edits a field and blurs, and Continue
+ * stays stuck with nothing left to do.
+ */
+function contactSignature({
+  email,
+  firstName,
+  lastName,
+  phone,
+}: {
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+}): string {
+  return [
+    email.trim().toLowerCase(),
+    firstName.trim(),
+    lastName.trim(),
+    contactPhoneKey(phone),
+  ].join('\0');
+}
+
 export function useCheckoutAddressState({
   analyticsEnabled = true,
   customer,
@@ -43,12 +81,12 @@ export function useCheckoutAddressState({
   const checkoutFirstName = checkoutIdentity.firstName;
   const checkoutLastName = checkoutIdentity.lastName;
   const checkoutPhone = checkoutIdentity.phone;
-  const initialContactSignature = [
-    checkoutEmail,
-    checkoutFirstName,
-    checkoutLastName,
-    checkoutPhone,
-  ].join('\0');
+  const initialContactSignature = contactSignature({
+    email: checkoutEmail,
+    firstName: checkoutFirstName,
+    lastName: checkoutLastName,
+    phone: checkoutPhone,
+  });
   const [settledContactSignature, setSettledContactSignature] = useState(
     initialContactSignature
   );
@@ -104,12 +142,12 @@ export function useCheckoutAddressState({
   const hasInitialContactIdentity = Boolean(
     checkoutEmail && checkoutFirstName && checkoutLastName && checkoutPhone
   );
-  const currentContactSignature = [
-    watchedEmail,
-    watchedFirstName,
-    watchedLastName,
-    watchedPhone,
-  ].join('\0');
+  const currentContactSignature = contactSignature({
+    email: watchedEmail,
+    firstName: watchedFirstName,
+    lastName: watchedLastName,
+    phone: watchedPhone,
+  });
   const isContactSettled =
     currentContactSignature === settledContactSignature ||
     (hasInitialContactIdentity &&
@@ -129,6 +167,16 @@ export function useCheckoutAddressState({
     merchantId: CHECKOUT_MERCHANT_ID,
     setCommittedAddress: shipping.setCommittedAddress,
     setValue,
+    settleContactTo: ({ firstName, lastName, phone }) => {
+      setSettledContactSignature(
+        contactSignature({
+          email: getValues('email'),
+          firstName,
+          lastName,
+          phone,
+        })
+      );
+    },
   });
 
   useEffect(() => {
@@ -203,12 +251,12 @@ export function useCheckoutAddressState({
   };
   const settleContactEmail = () => {
     setSettledContactSignature(
-      [
-        getValues('email'),
-        getValues('firstName'),
-        getValues('lastName'),
-        getValues('phone'),
-      ].join('\0')
+      contactSignature({
+        email: getValues('email'),
+        firstName: getValues('firstName'),
+        lastName: getValues('lastName'),
+        phone: getValues('phone'),
+      })
     );
   };
 

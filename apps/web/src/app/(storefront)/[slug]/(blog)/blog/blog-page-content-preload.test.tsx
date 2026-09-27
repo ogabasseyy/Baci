@@ -4,7 +4,7 @@ import {
   buildListingResult,
   merchant,
   mockGetCachedBlogListing,
-  mockGetTemplate,
+  mockOgabasseyV2Blog,
   mockPreloadBlogListingFeaturedImage,
   mockTemplateBlogRenderer,
   postsPayload,
@@ -88,11 +88,9 @@ describe('BlogPageContent featured-image preload', () => {
         posts: [firstPost, secondPost],
       })
     );
-    mockGetTemplate.mockReturnValueOnce({
-      getComponents: async () => ({
-        Blog: () => <div>OgaBassey blog component</div>,
-      }),
-    });
+    mockOgabasseyV2Blog.mockImplementationOnce(() => (
+      <div>OgaBassey blog component</div>
+    ));
 
     render(
       await BlogPageContent({
@@ -124,12 +122,6 @@ describe('BlogPageContent featured-image preload', () => {
         },
       })
     );
-    mockGetTemplate.mockReturnValueOnce({
-      getComponents: async () => ({
-        Blog: () => <div>Custom blog component</div>,
-      }),
-    });
-
     render(
       await BlogPageContent({
         params: Promise.resolve({ slug: 'test-store' }),
@@ -137,7 +129,8 @@ describe('BlogPageContent featured-image preload', () => {
       })
     );
 
-    expect(screen.getByText('Template blog')).toBeInTheDocument();
+    expect(screen.getByText('Ogabassey blog')).toBeInTheDocument();
+    expect(mockTemplateBlogRenderer).not.toHaveBeenCalled();
     expect(mockPreloadBlogListingFeaturedImage).not.toHaveBeenCalled();
   });
 

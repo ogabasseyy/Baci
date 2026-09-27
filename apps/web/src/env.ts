@@ -392,6 +392,14 @@ const serverSchema = z
     JUMIA_ENVIRONMENT: z.enum(['staging', 'production']).default('staging'),
     JUMIA_CLIENT_ID: z.string().optional(),
     JUMIA_CLIENT_SECRET: z.string().optional(),
+    JUMIA_AUTHORIZATION_ENCRYPTION_KEY: optionalTrimmedStringSchema.refine(
+      (value) =>
+        value === undefined || Buffer.from(value, 'base64').length === 32,
+      {
+        message:
+          'JUMIA_AUTHORIZATION_ENCRYPTION_KEY must be Base64-encoded 32 bytes',
+      }
+    ),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -721,6 +729,8 @@ const getEnv = () => {
         JUMIA_ENVIRONMENT: process.env.JUMIA_ENVIRONMENT,
         JUMIA_CLIENT_ID: process.env.JUMIA_CLIENT_ID,
         JUMIA_CLIENT_SECRET: process.env.JUMIA_CLIENT_SECRET,
+        JUMIA_AUTHORIZATION_ENCRYPTION_KEY:
+          process.env.JUMIA_AUTHORIZATION_ENCRYPTION_KEY,
         INTERNAL_API_SECRET: process.env.INTERNAL_API_SECRET,
         CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN,
         CLOUDFLARE_ZONE_ID: process.env.CLOUDFLARE_ZONE_ID,
@@ -1091,6 +1101,15 @@ export const getImeiIdentifierEncryptionKey = () => {
   const key = trimSecret(
     process.env.IMEI_IDENTIFIER_ENCRYPTION_KEY ??
       env?.IMEI_IDENTIFIER_ENCRYPTION_KEY
+  );
+  return key || undefined;
+};
+
+export const getJumiaAuthorizationEncryptionKey = () => {
+  if (isBrowserRuntime()) return undefined;
+  const key = trimSecret(
+    process.env.JUMIA_AUTHORIZATION_ENCRYPTION_KEY ??
+      env?.JUMIA_AUTHORIZATION_ENCRYPTION_KEY
   );
   return key || undefined;
 };

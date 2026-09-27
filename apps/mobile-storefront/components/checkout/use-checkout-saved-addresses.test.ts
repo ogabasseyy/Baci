@@ -103,6 +103,27 @@ describe('useCheckoutSavedAddresses', () => {
     expect(result.current.isLoadingSavedAddresses).toBe(false);
   });
 
+  it('settles contact to the hydrated recipient so prefill does not stall', async () => {
+    const defaultAddress = createSavedAddress({
+      full_name: 'Bassey John',
+      phone: '09169449282',
+    });
+    mockFetchCheckoutSavedAddresses.mockResolvedValue([defaultAddress]);
+    const settleContactTo = jest.fn();
+
+    const { result } = renderSavedAddresses({ settleContactTo });
+
+    await waitFor(() =>
+      expect(result.current.selectedSavedAddressId).toBe('addr-1')
+    );
+
+    expect(settleContactTo).toHaveBeenCalledWith({
+      firstName: 'Bassey',
+      lastName: 'John',
+      phone: '+2349169449282',
+    });
+  });
+
   it('keeps manual entry available when no saved addresses load (fail-open)', async () => {
     mockFetchCheckoutSavedAddresses.mockResolvedValue([]);
 

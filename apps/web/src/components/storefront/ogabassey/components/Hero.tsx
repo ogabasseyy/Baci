@@ -2,7 +2,8 @@ import type React from 'react';
 import { GadgetPattern } from './GadgetPattern';
 import { HeroDesktopGrid } from './hero-desktop-grid';
 import { HeroMobileCarousel } from './hero-mobile-carousel';
-import { HeroUtilityPanel } from './hero-utility-panel';
+import { HeroUtilityPanelGate } from './hero-utility-panel-gate';
+import { HeroUtilityPanelStatic } from './hero-utility-panel-static';
 import type { LaunchProductSlide } from './LaunchCarousel';
 import { OgabasseyEmptyMobileHero } from './ogabassey-empty-mobile-hero';
 
@@ -58,7 +59,7 @@ export const Hero: React.FC<HeroProps> = ({
     prioritizeMobileHeroImage ?? !omitDocumentHeading;
 
   return (
-    <div className="w-full bg-store-background relative">
+    <div className="w-full bg-store-background relative" data-ogabassey-hero="true">
       {omitDocumentHeading ? null : (
         <h1 className="sr-only">
           OgaBassey - Buy Phones, Laptops, Gaming Consoles & More. Pay Later in
@@ -93,7 +94,7 @@ export const Hero: React.FC<HeroProps> = ({
         )}
       </section>
 
-      <HeroUtilityPanel />
+      <HeroUtilityPanelGate fallback={<HeroUtilityPanelStatic />} />
     </div>
   );
 };

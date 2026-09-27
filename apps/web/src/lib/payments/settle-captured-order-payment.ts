@@ -14,7 +14,10 @@ import { toPaidOrder } from '@/lib/payments/run-paid-order-side-effects';
 export async function settleCapturedOrderPayment(
   args: RunPaidOrderSideEffectsArgs
 ): Promise<void> {
-  const executor = buildSettlementExecutor(args);
+  const executor = buildSettlementExecutor({
+    ...args,
+    orderPaymentMethod: args.order.payment_method ?? null,
+  });
   const order = toPaidOrder(args.order);
   await executor({
     consistency: financialConsistency(order),

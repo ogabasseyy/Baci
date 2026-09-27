@@ -258,6 +258,48 @@ describe('ReceiptsPage', () => {
     );
   });
 
+  it('labels unresolved 325 orders as proforma in the archive', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      createJsonResponse({
+        orders: [
+          {
+            id: 'order-proforma',
+            order_number: 'INV-42',
+            created_at: '2026-03-25T10:00:00.000Z',
+            total: 50000,
+            currency: 'NGN',
+            shipping_status: 'processing',
+            current_document_kind: 'invoice',
+            invoice_type_code: '325',
+            receipt_eligible: false,
+            payment_method: 'invoice',
+            items: [
+              {
+                id: 'item-1',
+                name: 'Proforma Item',
+                quantity: 1,
+                price: 50000,
+              },
+            ],
+          },
+        ],
+      })
+    );
+
+    render(<ReceiptsPage />);
+
+    expect(await screen.findByText('#INV-42')).toBeInTheDocument();
+    expect(screen.getByText('proforma')).toBeInTheDocument();
+    // Same document the invoice route downloads as a proforma file; the
+    // href keeps the invoice route segment.
+    expect(
+      screen.getByRole('link', { name: /download proforma invoice/i })
+    ).toHaveAttribute(
+      'href',
+      '/api/storefront/account/orders/order-proforma/invoice?merchantSlug=default'
+    );
+  });
+
   it('shows an error state when the archive fetch fails', async () => {
     vi.mocked(fetch).mockResolvedValue(
       createErrorResponse({ error: 'Failed to load archive' })

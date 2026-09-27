@@ -66,6 +66,7 @@ describe('useQuizPrizeClaim', () => {
       // Prize is free: the voucher line must be priced 0 (the orders API trusts
       // the submitted price for voucher-verified lines).
       price: 0,
+      catalog_price: 500_000,
       compare_at_price: 500_000,
       quantity: 1,
       // Raw enum, not the 'New' display label — must match the value signed
@@ -77,6 +78,43 @@ describe('useQuizPrizeClaim', () => {
     // The human-readable label is still available for the cart UI.
     expect(items[0].variant_attributes).toMatchObject({ condition: 'New' });
     expect(mockPush).toHaveBeenCalledWith('/checkout');
+  });
+
+  it('retains the selected variant override for voucher shipping tiers', () => {
+    mockUseProduct.mockReturnValue({
+      product: {
+        ...product,
+        variants: [
+          {
+            id: 'variant-1',
+            name: '256 GB',
+            price: 500_000,
+            price_override: 550_000,
+          },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+    const { result } = renderHook(() => useQuizPrizeClaim(prizeClaim));
+    act(() => result.current.claimPrize());
+    expect(useCartStore.getState().items[0].catalog_price).toBe(550_000);
+  });
+
+  it('uses the product price when a variant has no server price override', () => {
+    mockUseProduct.mockReturnValue({
+      product: {
+        ...product,
+        variants: [{ id: 'variant-1', name: '256 GB', price: 550_000 }],
+      },
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+    const { result } = renderHook(() => useQuizPrizeClaim(prizeClaim));
+    act(() => result.current.claimPrize());
+    expect(useCartStore.getState().items[0].catalog_price).toBe(500_000);
   });
 
   it('reports preparing and does not touch the cart while the product loads', () => {

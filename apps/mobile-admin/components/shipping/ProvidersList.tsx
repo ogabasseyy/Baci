@@ -41,8 +41,8 @@ export function ProvidersList({
       <Text
         style={[styles.sectionDescription, { color: colors.textSecondary }]}
       >
-        Enable providers to offer customers real-time shipping rates at
-        checkout.
+        Turn on the carriers you want to offer at checkout. With none active,
+        customers can still use your own delivery rates and pickup options.
       </Text>
 
       <View style={[styles.divider, { backgroundColor: colors.border }]} />

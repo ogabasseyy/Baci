@@ -169,6 +169,18 @@ describe('loadComparePage', () => {
     vi.unstubAllEnvs();
   });
 
+  it('rejects a decoded self-comparison before loading the cached compare model', async () => {
+    const result = await loadComparePage({
+      merchantSlug: 'ogabassey',
+      categorySlug: 'smartphones',
+      comparisonSlug: 'iphone-17-pro-max-vs-iphone-17-pro-max',
+    });
+
+    expect(result).toBeNull();
+    expect(mockGetCachedCompareCategoryInventory).not.toHaveBeenCalled();
+    expect(mockGetCachedProductWithDetails).not.toHaveBeenCalled();
+  });
+
   it('returns a canonical product-vs-product page model for eligible products', async () => {
     mockGetCachedProductWithDetails.mockResolvedValueOnce({
       ...categoryPageData.products[0],

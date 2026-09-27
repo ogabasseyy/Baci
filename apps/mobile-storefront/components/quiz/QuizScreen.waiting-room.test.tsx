@@ -107,7 +107,7 @@ describe('QuizScreen waiting room and sign-in gate', () => {
     fireEvent.press(
       screen.getByRole('button', { name: 'Accept and play quiz' })
     );
-    expect(screen.getByText('SuperQuiz waiting room')).toBeTruthy();
+    expect(screen.getByText('Waiting room')).toBeTruthy();
     expect(startQuizAttempt).not.toHaveBeenCalled();
   });
 

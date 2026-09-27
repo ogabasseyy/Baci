@@ -42,6 +42,20 @@ function formatArchiveDate(value: string) {
   return ARCHIVE_DATE_FORMATTER.format(date);
 }
 
+/**
+ * Customer-facing document label for an archived order. The invoice route
+ * downloads a 325 proforma for unpaid invoice-method orders, so the badge,
+ * download CTA, and type search must say proforma — not invoice — for the
+ * same document. Download hrefs still use `current_document_kind`.
+ */
+function resolveArchiveDocumentKind(order: StorefrontOrder) {
+  const kind = order.current_document_kind || 'invoice';
+  if (kind === 'receipt') {
+    return kind;
+  }
+  return order.invoice_type_code === '325' ? 'proforma' : kind;
+}
+
 export default function ReceiptsPage() {
   const router = useRouter();
   const { merchant, loading: merchantLoading, basePath } = useMerchant();
@@ -180,7 +194,7 @@ function StandardReceiptsPage({
         const matchesItems = order.items.some((item) =>
           (item.product_name || item.name).toLowerCase().includes(query)
         );
-        const matchesType = (order.current_document_kind || 'invoice')
+        const matchesType = resolveArchiveDocumentKind(order)
           .toLowerCase()
           .includes(query);
 
@@ -270,7 +284,14 @@ function StandardReceiptsPage({
           <div className="space-y-4">
             {filteredOrders.map((order) => {
               const documentKind = order.current_document_kind || 'invoice';
+              const archiveKind = resolveArchiveDocumentKind(order);
               const downloadHref = `/api/storefront/account/orders/${order.id}/${documentKind}?merchantSlug=${encodeURIComponent(merchantSlug)}`;
+              const downloadLabel =
+                archiveKind === 'receipt'
+                  ? 'Receipt'
+                  : archiveKind === 'proforma'
+                    ? 'Proforma Invoice'
+                    : 'Invoice';
 
               return (
                 <Card key={order.id}>
@@ -288,7 +309,7 @@ function StandardReceiptsPage({
                     </div>
                     <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium capitalize">
                       <FileText className="size-3.5" />
-                      {documentKind}
+                      {archiveKind}
                     </div>
                   </CardHeader>
                   <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -315,8 +336,7 @@ function StandardReceiptsPage({
                       <Button asChild>
                         <a href={downloadHref}>
                           <Download className="mr-2 size-4" />
-                          Download{' '}
-                          {documentKind === 'receipt' ? 'Receipt' : 'Invoice'}
+                          Download {downloadLabel}
                         </a>
                       </Button>
                     </div>

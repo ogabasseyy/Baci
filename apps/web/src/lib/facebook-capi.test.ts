@@ -57,11 +57,30 @@ describe('sendFacebookCAPIEvent', () => {
       true
     );
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    await facebookCAPI.purchase(
+      'pixel-1',
+      'token-1',
+      {},
+      'order',
+      100,
+      'NGN',
+      [{ id: 'phone', name: 'Phone', quantity: 1, price: 100 }],
+      undefined,
+      'purchase-event',
+      true
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     for (const [, request] of fetchMock.mock.calls) {
       const body = JSON.parse((request as RequestInit).body as string);
       expect(body).toMatchObject({
-        data: [expect.objectContaining({ opt_out: true })],
+        data: [
+          expect.objectContaining({
+            opt_out: true,
+            custom_data: expect.objectContaining({
+              content_type: 'product_group',
+            }),
+          }),
+        ],
         data_processing_options: ['LDU'],
         data_processing_options_country: 1,
         data_processing_options_state: 1000,

@@ -14,6 +14,7 @@ const ENV_PATH = 'apps/web/src/env.ts';
 // deliberately absent, so any import that also pulls one still fails closed.
 const SAFE_ENV_BINDINGS = new Set([
   'getAppUrl',
+  'getJumiaEnvironment',
   'getSupabaseAnonKey',
   'getSupabaseUrl',
 ]);

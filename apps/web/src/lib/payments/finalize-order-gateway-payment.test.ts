@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   ensurePaidOrderInventoryConfirmed: vi.fn(),
   fileInventoryConfirmationFailureReview: vi.fn(),
   handlePaymentForCancelledOrder: vi.fn(),
+  captureOrHoldRedvaultPayment: vi.fn(),
   notifyNewOrder: vi.fn(),
   notifyPaymentReceived: vi.fn(),
   persistPaidOrderSideEffectRetry: vi.fn(),
@@ -45,6 +46,9 @@ vi.mock('@/lib/payments/file-inventory-confirmation-review', () => ({
   fileInventoryConfirmationFailureReview:
     mocks.fileInventoryConfirmationFailureReview,
 }));
+vi.mock('@/lib/payments/redvault-capture-hold', () => ({
+  captureOrHoldRedvaultPayment: mocks.captureOrHoldRedvaultPayment,
+}));
 vi.mock('@/lib/payments/handle-payment-for-cancelled-order', () => ({
   handlePaymentForCancelledOrder: mocks.handlePaymentForCancelledOrder,
 }));
@@ -69,6 +73,9 @@ vi.mock('@/lib/payments/settle-captured-order-payment', () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.clearPaymentSideEffectSeed.mockResolvedValue(undefined);
+  mocks.captureOrHoldRedvaultPayment.mockResolvedValue({
+    kind: 'not_redvault',
+  });
   // Reviews file durably by default; a false return means the ops row could
   // not be written, which callers must treat as a retryable failure.
   mocks.handlePaymentForCancelledOrder.mockResolvedValue(true);
@@ -81,6 +88,46 @@ beforeEach(() => {
 });
 
 describe('finalizeOrderGatewayPayment', () => {
+  it('holds a REDVAULT capture before every paid-order branch', async () => {
+    mocks.captureOrHoldRedvaultPayment.mockResolvedValue({
+      duplicate: false,
+      kind: 'captured_held',
+      reason: 'provider_eligibility_evidence_unavailable',
+    });
+
+    const outcome = await finalizeOrderGatewayPayment(
+      baseArgs(buildSupabase({ data: richOrderRow }), {
+        wonTransactionFlip: true,
+      })
+    );
+
+    expect(outcome).toEqual({
+      duplicate: false,
+      kind: 'captured_held',
+      reason: 'provider_eligibility_evidence_unavailable',
+    });
+    expect(mocks.completeOrderGatewayPayment).not.toHaveBeenCalled();
+    expect(mocks.ensurePaidOrderInventoryConfirmed).not.toHaveBeenCalled();
+    expect(mocks.runPaidOrderSideEffects).not.toHaveBeenCalled();
+    expect(mocks.settleCapturedOrderPayment).not.toHaveBeenCalled();
+  });
+
+  it('fails closed before the already-paid settlement-only fallback when REDVAULT holding fails', async () => {
+    mocks.captureOrHoldRedvaultPayment.mockRejectedValue(
+      new Error('redvault capture RPC unavailable')
+    );
+
+    const outcome = await finalizeOrderGatewayPayment(
+      baseArgs(buildSupabase({ data: richOrderRow }), {
+        wonTransactionFlip: false,
+      })
+    );
+
+    expect(outcome.kind).toBe('capture_hold_failed');
+    expect(mocks.completeOrderGatewayPayment).not.toHaveBeenCalled();
+    expect(mocks.settleCapturedOrderPayment).not.toHaveBeenCalled();
+  });
+
   it('returns completion_failed when the atomic RPC fails', async () => {
     mocks.completeOrderGatewayPayment.mockResolvedValue({
       error: new Error('boom'),

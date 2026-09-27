@@ -142,8 +142,13 @@ cd "$WEB_DIR" || {
 }
 TSX_BIN="$WEB_DIR/node_modules/.bin/tsx"
 if [ ! -x "$TSX_BIN" ]; then
-  echo "[$LABEL] Missing executable tsx in $WEB_DIR. Run pnpm install --frozen-lockfile for the Baci checkout; do not use a production-only install until the worker entrypoints are compiled." >&2
-  exit 1
+  WORKSPACE_TSX_BIN="$REPO_DIR/node_modules/.bin/tsx"
+  if [ -x "$WORKSPACE_TSX_BIN" ]; then
+    TSX_BIN="$WORKSPACE_TSX_BIN"
+  else
+    echo "[$LABEL] Missing executable tsx in both $WEB_DIR and the workspace root. Run pnpm install --frozen-lockfile for the Baci checkout; do not use a production-only install until the worker entrypoints are compiled." >&2
+    exit 1
+  fi
 fi
 if ! tsx_output=$("$TSX_BIN" --version 2>&1); then
   echo "[$LABEL] tsx check output: $tsx_output" >&2

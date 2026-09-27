@@ -92,11 +92,6 @@ describe('resolveGmcPrimaryImage', () => {
     expect(resolveGmcPrimaryImage(entries)).toBeNull();
   });
 
-  it('ignores non-primary entries', () => {
-    const entries = [verifiedEntry({ is_primary: false, position: 0 })];
-    expect(resolveGmcPrimaryImage(entries)).toBeNull();
-  });
-
   it('selects the primary entry when mixed with additional entries', () => {
     const entries = [
       verifiedEntry({

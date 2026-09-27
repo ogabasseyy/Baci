@@ -31,42 +31,6 @@ function parseLine(line: string | undefined): CurrentOpenAIFeedItem {
 }
 
 describe('generateCurrentOpenAIProductFeed', () => {
-  it('uses verified feed manifest images as ordered media', () => {
-    const [line] = generateCurrentOpenAIProductFeed(
-      [
-        product({
-          images: ['https://cdn.example.com/stale-product-image.jpg'],
-        }),
-      ],
-      merchant,
-      'https://ogabassey.com',
-      {
-        'product-1': [
-          {
-            verified_url: 'https://cdn.example.com/manifest-front.jpg',
-            verified_format: 'jpeg',
-            status: 'verified',
-            is_primary: true,
-            position: 0,
-          },
-          {
-            verified_url: 'https://cdn.example.com/manifest-side.jpg',
-            verified_format: 'jpeg',
-            status: 'verified',
-            is_primary: false,
-            position: 1,
-          },
-        ],
-      }
-    );
-    const parsed = parseLine(line);
-
-    expect(parsed.media).toEqual([
-      { type: 'image', url: 'https://cdn.example.com/manifest-front.jpg' },
-      { type: 'image', url: 'https://cdn.example.com/manifest-side.jpg' },
-    ]);
-  });
-
   it('builds current feed items with untracked availability', () => {
     const [line] = generateCurrentOpenAIProductFeed(
       [product({ manage_stock: false, stock: 0 })],
@@ -237,5 +201,37 @@ describe('generateCurrentOpenAIProductFeed', () => {
       amount: 50_000,
       currency: 'GHS',
     });
+  });
+
+  it('restricts product media to product-level entries', () => {
+    const [line] = generateCurrentOpenAIProductFeed(
+      [product()],
+      merchant,
+      'https://ogabassey.com',
+      {
+        'product-1': [
+          {
+            variant_id: 'variant-1',
+            verified_url: 'https://cdn.example.com/variant-1.jpg',
+            verified_format: 'jpeg',
+            status: 'verified',
+            is_primary: true,
+            position: 0,
+          },
+          {
+            verified_url: 'https://cdn.example.com/product-1.jpg',
+            verified_format: 'jpeg',
+            status: 'verified',
+            is_primary: false,
+            position: 1,
+          },
+        ],
+      }
+    );
+    const parsed = parseLine(line);
+
+    expect(parsed.media).toEqual([
+      { type: 'image', url: 'https://cdn.example.com/product-1.jpg' },
+    ]);
   });
 });

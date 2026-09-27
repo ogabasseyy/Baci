@@ -5,7 +5,10 @@ import { signScopedSupabaseJwt } from '@/lib/supabase/scoped-jwt';
 
 const REPAIR_PICKUP_RECEIVER_TTL_SECONDS = 60;
 
-export type RepairPickupReceiverContext = 'server-quote' | 'server-fulfillment';
+export type RepairPickupReceiverContext =
+  | 'server-quote'
+  | 'server-fulfillment'
+  | 'server-payment-start';
 
 export function createRepairPickupReceiverClient(
   merchantId: string,

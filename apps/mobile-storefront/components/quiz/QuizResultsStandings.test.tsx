@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react-native';
 import type { QuizLeaderboard } from '@/services/quiz-types';
 import { QuizResultsStandings } from './QuizResultsStandings';
-import { createQuizStyles, type QuizThemeColors } from './QuizScreen.styles';
+import { createQuizStyles } from './QuizScreen.styles';
+import type { QuizThemeColors } from './quiz-theme';
 
 const colors: QuizThemeColors = {
   background: '#000',

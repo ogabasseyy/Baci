@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { InvoiceData } from '@/lib/invoice-generator';
-import { generateInvoicePDF } from '@/lib/invoice-generator';
+import * as invoiceGenerator from '@/lib/invoice-generator';
 
 function createInvoiceData(overrides: Partial<InvoiceData> = {}): InvoiceData {
   return {
@@ -76,13 +76,25 @@ function createInvoiceData(overrides: Partial<InvoiceData> = {}): InvoiceData {
   };
 }
 
-describe('generateInvoicePDF', () => {
-  it('creates a server-side PDF with the package jsPDF import', () => {
-    const doc = generateInvoicePDF(createInvoiceData());
-    const output = doc.output('arraybuffer');
+describe('invoice-generator single-template guard', () => {
+  it('exposes no PDF renderer — the branded receipt renderer is the only invoice PDF path', () => {
+    expect(
+      (invoiceGenerator as Record<string, unknown>).generateInvoicePDF
+    ).toBeUndefined();
+    expect(
+      (invoiceGenerator as Record<string, unknown>).generateInvoicePdf
+    ).toBeUndefined();
+  });
 
-    expect(doc.getNumberOfPages()).toBeGreaterThanOrEqual(1);
-    expect(output).toBeInstanceOf(ArrayBuffer);
-    expect(output.byteLength).toBeGreaterThan(1000);
+  it('keeps the shared invoice data model intact for Peppol/FIRS builders', () => {
+    const data = createInvoiceData({
+      firs_irn: 'IRN-123',
+      firs_csid: 'CSID-456',
+    });
+
+    expect(data.invoice_number).toBe('INV-2026-001');
+    expect(data.tax_subtotals).toHaveLength(1);
+    expect(data.firs_irn).toBe('IRN-123');
+    expect(data.firs_csid).toBe('CSID-456');
   });
 });

@@ -8,6 +8,7 @@ vi.hoisted(() => {
   process.env.GIGL_QUOTE_TIMEOUT_MS = '100';
 });
 
+import { quoteProviderFailure } from '../quote-provider-failure';
 import { GiglApiClient } from './gigl.auth';
 import { getGiglQuotes } from './gigl.quotes';
 import { GiglStationsService } from './gigl.stations';
@@ -85,6 +86,58 @@ describe('GIGL quote cancellation telemetry', () => {
       'warn',
       'GIGL quote option timed out',
       expect.anything()
+    );
+  });
+
+  it('marks an empty aborted selection run as a timeout instead of no-coverage', async () => {
+    // Phase 1 warms the token cache so phase 2 reaches the selection flow.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.endsWith('/login')) return jsonResponse(loginResponse);
+        if (url.endsWith('/localstations/get')) {
+          return jsonResponse(stationsResponse);
+        }
+        return jsonResponse(priceResponse);
+      })
+    );
+    const harness = buildHarness();
+    await harness.getQuotes();
+
+    // Phase 2: the deadline is already aborted, but every selection resolves
+    // empty without throwing — the run must still be marked a timeout.
+    const RealAbortSignal = globalThis.AbortSignal;
+    vi.stubGlobal(
+      'AbortSignal',
+      class extends RealAbortSignal {
+        static timeout(): AbortSignal {
+          return RealAbortSignal.abort();
+        }
+      }
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.endsWith('/login')) return jsonResponse(loginResponse);
+        if (url.endsWith('/localstations/get')) {
+          return jsonResponse(stationsResponse);
+        }
+        return Promise.reject(
+          new DOMException('The operation was aborted.', 'AbortError')
+        );
+      })
+    );
+
+    const quotes = await harness.getQuotes();
+
+    expect(quotes).toEqual([]);
+    expect(quoteProviderFailure.get(quotes)?.message).toBe(
+      'GIGL quote request timed out'
+    );
+    expect(harness.log).toHaveBeenCalledWith(
+      'warn',
+      'GIGL quote selection timed out',
+      expect.objectContaining({ timeoutMs: 100 })
     );
   });
 

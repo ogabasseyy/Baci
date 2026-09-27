@@ -1,7 +1,5 @@
 export const FULL_FAILURE_SYNC_CONFIG_KEY = 'jumia_full_failure';
 
-export const MAX_FULL_FAILURES_BEFORE_ADVANCE = 3;
-
 function cloneSyncConfig(syncConfig: unknown): Record<string, unknown> {
   if (
     !syncConfig ||

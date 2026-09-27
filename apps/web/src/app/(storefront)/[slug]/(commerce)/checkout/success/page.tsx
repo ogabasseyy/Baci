@@ -18,14 +18,14 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense } from 'react';
 import { AdUnit } from '@/components/storefront/ogabassey/components/AdUnit';
-import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from '@/components/storefront/ogabassey/pages/checkout/pending-checkout-order';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
-import { fetchWithCsrf } from '@/lib/api-client';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
 import { asRoute } from '@/lib/routes';
+import { CheckoutReconciliationView } from './checkout-reconciliation-view';
+import { useCheckoutSuccessVerification } from './use-checkout-success-verification';
 
 /**
  * 2025 Best Practice: Order Confirmation Page
@@ -36,159 +36,12 @@ import { asRoute } from '@/lib/routes';
  * - Micro-animations for engagement
  */
 
-type VerificationResponse = {
-  orderNumber?: string;
-  status?: 'success' | 'pending' | 'failed' | 'cancelled';
-  success?: boolean;
-};
-
-function isVerificationResponse(value: unknown): value is VerificationResponse {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return false;
-  }
-
-  const candidate = value as Record<string, unknown>;
-  const hasValidStatus =
-    candidate.status === undefined ||
-    candidate.status === 'success' ||
-    candidate.status === 'pending' ||
-    candidate.status === 'failed' ||
-    candidate.status === 'cancelled';
-  const hasValidOrderNumber =
-    candidate.orderNumber === undefined ||
-    typeof candidate.orderNumber === 'string';
-  const hasValidSuccess =
-    candidate.success === undefined || typeof candidate.success === 'boolean';
-
-  return hasValidStatus && hasValidOrderNumber && hasValidSuccess;
-}
-
 const orderSteps = [
   { id: 'received', label: 'Order Received', icon: CheckCircle2 },
   { id: 'processing', label: 'Processing', icon: Package },
   { id: 'shipped', label: 'Shipped', icon: Truck },
   { id: 'delivered', label: 'Delivered', icon: MapPin },
 ];
-
-type CheckoutVerificationStatus = 'success' | 'pending' | 'failed';
-
-interface VerifyCheckoutPaymentParams {
-  merchantSlug: string | undefined;
-  orderId: string | null;
-  reference: string | null;
-  trackingToken: string | null;
-}
-
-interface VerifyCheckoutPaymentHandlers {
-  clearCart: () => void;
-  redirectToCheckout: () => void;
-  scheduleFailedRedirect: () => void;
-  setIsVerifying: (isVerifying: boolean) => void;
-  setOrderNumber: (orderNumber: string | null) => void;
-  setPaymentMethod: (paymentMethod: string | null) => void;
-  setStatus: (status: CheckoutVerificationStatus) => void;
-}
-
-/**
- * Runs payment/order verification and maps every outcome onto the page state
- * via the supplied handlers. Module-scope so the try/finally blocks stay
- * outside the component body (React Compiler cannot lower try/finally yet).
- */
-async function verifyCheckoutPayment(
-  {
-    merchantSlug,
-    orderId,
-    reference,
-    trackingToken,
-  }: VerifyCheckoutPaymentParams,
-  {
-    clearCart,
-    redirectToCheckout,
-    scheduleFailedRedirect,
-    setIsVerifying,
-    setOrderNumber,
-    setPaymentMethod,
-    setStatus,
-  }: VerifyCheckoutPaymentHandlers
-): Promise<void> {
-  if (!reference) {
-    if (orderId) {
-      setIsVerifying(true);
-      try {
-        const query = new URLSearchParams();
-        if (merchantSlug) query.set('merchant_slug', merchantSlug);
-        if (trackingToken) query.set('tracking_token', trackingToken);
-        const queryString = query.toString();
-        const url = `/api/storefront/orders/${encodeURIComponent(orderId)}${
-          queryString ? `?${queryString}` : ''
-        }`;
-        const response = await fetch(url);
-        const data = response.ok ? await response.json() : null;
-        if (data && (data.order_number || data.short_id)) {
-          clearCart();
-          setStatus('success');
-          setOrderNumber(data.order_number || data.short_id);
-          if (data.payment_method) {
-            setPaymentMethod(data.payment_method);
-          }
-        } else {
-          // Fallback if API lookup fails
-          clearCart();
-          setStatus('success');
-          setOrderNumber(orderId.slice(0, 8).toUpperCase());
-        }
-      } catch (error) {
-        console.error('Failed to fetch order details on success page:', error);
-        clearCart();
-        setStatus('success');
-        setOrderNumber(orderId.slice(0, 8).toUpperCase());
-      } finally {
-        setIsVerifying(false);
-      }
-      return;
-    }
-
-    redirectToCheckout();
-    return;
-  }
-
-  setIsVerifying(true);
-
-  try {
-    const response = await fetchWithCsrf('/api/payments/verify', {
-      body: JSON.stringify({ reference }),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-    });
-    const raw: unknown = await response.json();
-    const data = isVerificationResponse(raw) ? raw : {};
-
-    if (data.status === 'pending') {
-      setStatus('pending');
-      setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
-    } else if (!response.ok) {
-      console.error('Payment verification failed:', data);
-      setStatus('failed');
-      scheduleFailedRedirect();
-    } else if (data.success && data.status === 'success') {
-      clearCart();
-      setStatus('success');
-      setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
-    } else if (data.status === 'failed' || data.status === 'cancelled') {
-      setStatus('failed');
-      scheduleFailedRedirect();
-    } else {
-      setStatus('pending');
-      setOrderNumber(reference.slice(0, 8).toUpperCase());
-    }
-  } catch (error) {
-    console.error('Failed to verify payment:', error);
-    setStatus('pending');
-    setOrderNumber(reference.slice(0, 8).toUpperCase());
-  } finally {
-    setIsVerifying(false);
-  }
-}
 
 export default function CheckoutSuccessPage() {
   return (
@@ -214,6 +67,7 @@ function CheckoutSuccessContent() {
   const router = useRouter();
   const reference = searchParams.get('reference');
   const orderId = searchParams.get('orderId');
+  const paymentMethodParam = searchParams.get('paymentMethod');
   const trackingToken = searchParams.get('trackingToken');
   const { clearCart } = useCart();
   const merchantContext = useMerchantSafe();
@@ -223,65 +77,17 @@ function CheckoutSuccessContent() {
   const getHref = (path: string) =>
     path.startsWith('http') ? path : `${basePath}${path}`;
 
-  const [status, setStatus] = useState<CheckoutVerificationStatus>('pending');
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [orderNumber, setOrderNumber] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<string | null>(null);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: React Compiler handles memoization
-  useEffect(() => {
-    // Track the failed-redirect timer so navigating away from this page
-    // cancels it — without the cleanup, a user who leaves within the 4s
-    // window gets yanked back to /checkout.
-    const timerHandle: { current: ReturnType<typeof setTimeout> | null } = {
-      current: null,
-    };
-    const redirectToCheckout = () => {
-      router.push(asRoute(getHref('/checkout')));
-    };
-
-    verifyCheckoutPayment(
-      {
-        merchantSlug: merchantContext?.merchant?.slug,
-        orderId,
-        reference,
-        trackingToken,
-      },
-      {
-        clearCart,
-        redirectToCheckout,
-        scheduleFailedRedirect: () => {
-          timerHandle.current = setTimeout(redirectToCheckout, 4000);
-        },
-        setIsVerifying,
-        setOrderNumber,
-        setPaymentMethod,
-        setStatus,
-      }
-    );
-
-    return () => {
-      if (timerHandle.current !== null) {
-        clearTimeout(timerHandle.current);
-      }
-    };
-  }, [
-    reference,
-    orderId,
-    trackingToken,
-    merchantContext,
-    clearCart,
-    router,
-    basePath,
-  ]);
-
-  useEffect(() => {
-    if (status !== 'success' || typeof window === 'undefined') {
-      return;
-    }
-
-    sessionStorage.removeItem(CHECKOUT_PENDING_ORDER_STORAGE_KEY);
-  }, [status]);
+  const { status, isVerifying, orderNumber, paymentMethod } =
+    useCheckoutSuccessVerification({
+      merchantSlug: merchantContext?.merchant?.slug,
+      orderId,
+      paymentMethodParam,
+      reference,
+      trackingToken,
+      clearCart,
+      router,
+      basePath,
+    });
 
   // Failed State
   if (status === 'failed') {
@@ -327,6 +133,13 @@ function CheckoutSuccessContent() {
     );
   }
 
+  // Captured-but-cancelled/refunded: reconciliation state, never success.
+  if (status === 'reconciling') {
+    return (
+      <CheckoutReconciliationView orderNumber={orderNumber} getHref={getHref} />
+    );
+  }
+
   // Success & Pending States (main redesigned page)
   const isConfirmed = status === 'success';
   const isInvoice =
@@ -363,7 +176,7 @@ function CheckoutSuccessContent() {
           >
             {isConfirmed
               ? isInvoice
-                ? 'Invoice Generated!'
+                ? 'Proforma Invoice Ready!'
                 : 'Order Received!'
               : 'Order Being Processed'}
           </motion.h1>
@@ -497,7 +310,7 @@ function CheckoutSuccessContent() {
                   </h3>
                   <p className="text-sm text-gray-600">
                     {isInvoice
-                      ? "We've generated a compliant e-invoice and sent it to your email with payment instructions."
+                      ? "We've prepared your proforma invoice and sent it to your email. Share it with your company or procurement team."
                       : "You'll receive an email with your order details and tracking information once your order is confirmed."}
                   </p>
                 </div>
@@ -552,7 +365,7 @@ function CheckoutSuccessContent() {
                 </h3>
                 <p className="text-gray-300 text-sm mb-4">
                   {isInvoice
-                    ? 'Your e-invoice is generated and ready to download. You can settle the invoice at any time to activate your order processing.'
+                    ? 'Your proforma invoice is ready to download and share with your company or procurement team.'
                     : 'Your invoice is available from your order details in your account. Your receipt will appear there and in the documents archive once the order has shipped.'}
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3">
@@ -564,7 +377,7 @@ function CheckoutSuccessContent() {
                   >
                     <Download className="size-4" />
                     {isInvoice
-                      ? 'Download Invoice PDF'
+                      ? 'Download Proforma Invoice PDF'
                       : 'View Order Documents'}
                   </Link>
                 </div>

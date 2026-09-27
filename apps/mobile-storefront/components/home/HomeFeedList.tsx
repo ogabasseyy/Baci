@@ -18,10 +18,10 @@ import {
   type ViewStyle,
 } from 'react-native';
 import Animated, { type ScrollHandlerProcessed } from 'react-native-reanimated';
+import { AdSlot } from '@/components/ads/AdSlot';
 import { BlockRenderer } from '@/components/storefront/BlockRenderer';
 import { FilterBar } from '@/components/storefront/FilterBar';
 import { HomeServiceCards } from '@/components/storefront/HomeServiceCards';
-import { ProductCard } from '@/components/storefront/ProductCard';
 import { styles as gridStyles } from '@/components/storefront/ProductGrid.styles';
 import { ProductGridSkeleton } from '@/components/ui/Skeleton';
 import { palette } from '@/constants/Colors';
@@ -32,10 +32,11 @@ import { getTemplateConfig } from '@/lib/templates';
 import type { Block, ProductGridBlock } from '@/types/blocks';
 import type { Product } from '@/types/product';
 import { HomeFeedEmptyState } from './HomeFeedEmptyState';
-import { homeFeedStyles } from './home-feed.styles';
+import { HomeFeedListItemView } from './HomeFeedListItemView';
+import { getHomeFeedSlices } from './home-feed-ad-owners';
 import { useHomeProductFeed } from './use-home-product-feed';
 
-type HomeFeedListItem =
+export type HomeFeedListItem =
   | { kind: 'product'; product: Product }
   | { kind: 'product-list-end'; id: string };
 
@@ -110,12 +111,16 @@ export function HomeFeedList({
   }, [feedResetKey]);
 
   const numColumns = currentVariant === 'grid' ? 2 : 1;
-  const headerBlocks = hasPrimaryGrid
-    ? blocks.slice(0, primaryProductGridIndex)
-    : blocks;
-  const footerBlocks = hasPrimaryGrid
-    ? blocks.slice(primaryProductGridIndex + 1)
-    : [];
+  // HOME_STRIP and PRODUCT_GRID_MPU are each one logical slot for the
+  // whole page: slice page-unique blocks and elect the owners across both
+  // slices (see home-feed-ad-owners) so repeated blocks cannot each claim
+  // one slot.
+  const {
+    footerBlocks,
+    headerBlocks,
+    heroAdOwnerBlockId,
+    launchAdOwnerBlockId,
+  } = getHomeFeedSlices({ blocks, hasPrimaryGrid, primaryProductGridIndex });
   const renderAfterCategoryRail = (block: Block) =>
     block.type === 'CategoryRail' ? (
       <HomeServiceCards placement="belowUtility" />
@@ -136,39 +141,15 @@ export function HomeFeedList({
     item: HomeFeedListItem;
     index: number;
     target?: string;
-  }) => {
-    if (item.kind === 'product-list-end') {
-      return (
-        <View
-          testID="home-feed-product-end-sentinel"
-          style={homeFeedStyles.productEndSentinel}
-          onLayout={target === 'Cell' ? handleProductDataEndReached : undefined}
-        />
-      );
-    }
-
-    const productIndex = index;
-    if (currentVariant === 'grid') {
-      return (
-        <View
-          style={[
-            homeFeedStyles.productWrapper,
-            productIndex % 2 === 0
-              ? homeFeedStyles.productLeft
-              : homeFeedStyles.productRight,
-          ]}
-        >
-          <ProductCard product={item.product} variant="grid" />
-        </View>
-      );
-    }
-
-    return (
-      <View style={homeFeedStyles.fullWidthCell}>
-        <ProductCard product={item.product} variant={currentVariant} />
-      </View>
-    );
-  };
+  }) => (
+    <HomeFeedListItemView
+      item={item}
+      index={index}
+      target={target}
+      currentVariant={currentVariant}
+      onProductDataEndReached={handleProductDataEndReached}
+    />
+  );
 
   const handleEndReached = () => {
     // Backup trigger for layouts without post-grid blocks; the sentinel handles
@@ -200,6 +181,11 @@ export function HomeFeedList({
         onCategorySelect={onCategorySelect}
         blockWrapperStyle={blockWrapperStyle}
         renderAfterBlock={renderAfterCategoryRail}
+        // Search covers the feed with a full-screen scrim; withhold the
+        // home ad placements so no obscured delivery is requested.
+        suppressAds={isSearchOpen}
+        heroAdOwnerBlockId={heroAdOwnerBlockId}
+        launchAdOwnerBlockId={launchAdOwnerBlockId}
       />
       {hasPrimaryGrid ? (
         <>
@@ -237,7 +223,21 @@ export function HomeFeedList({
         onCategorySelect={onCategorySelect}
         blockWrapperStyle={blockWrapperStyle}
         renderAfterBlock={renderAfterCategoryRail}
+        suppressAds={isSearchOpen}
+        heroAdOwnerBlockId={heroAdOwnerBlockId}
+        launchAdOwnerBlockId={launchAdOwnerBlockId}
       />
+      {/* The footer renders alongside the empty state: while the feed is
+          initially loading, fatally errored, empty, or configured without
+          a product grid at all, the slot would request a product-grid
+          placement with no resolved product feed. */}
+      {isSearchOpen ||
+      shouldShowInitialLoading ||
+      shouldShowFatalError ||
+      !hasPrimaryGrid ||
+      feedProducts.length === 0 ? null : (
+        <AdSlot placement="PRODUCT_GRID_IN_FEED" />
+      )}
     </View>
   );
 

@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "incremental": false },
+  "include": [
+    "playwright.config.ts",
+    "tests/checkout-browser/**/*.ts",
+    "tests/checkout-browser/**/*.tsx"
+  ],
+  "exclude": ["node_modules", "tests/checkout-browser/harness/.next"]
+}

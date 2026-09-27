@@ -1,9 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { shippingService } from '@/lib/shipping';
+import { assertCurrentOrderPaymentShippable } from '@/lib/shipping/assert-current-shippable-order-payment';
 import {
+  assertShippableBookingItems,
   isShippingProviderCode,
+  type OrderItemRecord,
   OrderShipmentBookingError,
   parseStoredQuoteRequest,
+  toDomesticBookingItems,
 } from '@/lib/shipping/order-shipment-booking-utils';
 import type { OrderShipmentQuoteRecord } from '@/lib/shipping/refresh-order-shipment-quote';
 import { resolveBookingMerchantSender } from '@/lib/shipping/resolve-booking-merchant-sender';
@@ -186,6 +190,34 @@ export async function executeDirectBookingAttempt(params: {
     assertDomesticQuoteMatchesPayload(receiver, items, quotePayload);
   }
 
+  // Re-read the authoritative order rows after the claim: the loaded
+  // snapshot predates it, and a partial refund that settled (processed +
+  // released) in between is deliberately allowed by the claim while
+  // still leaving stale pre-refund fulfillment quantities behind.
+  // The claim's lock token blocks any newer refund from reserving, so
+  // the rows read here are stable through provider submission.
+  const { data: currentOrderItems, error: currentOrderItemsError } =
+    await supabase
+      .from('order_items')
+      .select('name, quantity, price, fulfillment_data')
+      .eq('order_id', orderId);
+  if (currentOrderItemsError || !currentOrderItems) {
+    throw new OrderShipmentBookingError(
+      'Could not verify the current shippable quantities for this order.',
+      500,
+      'SHIPMENT_BOOKING_STATE_CHECK_FAILED'
+    );
+  }
+  // Rebuild the provider items from the authoritative order rows: partial
+  // refunds write the surviving per-line quantity into
+  // order_items.fulfillment_data, and quoting predates the refund, so the
+  // stored/client items above would otherwise ship refunded units.
+  const shippableItems = toDomesticBookingItems(
+    currentOrderItems as OrderItemRecord[],
+    items
+  );
+  assertShippableBookingItems(shippableItems);
+
   const bookingRequest: BookingRequest = {
     orderId,
     quoteId: bookingQuote.id,
@@ -193,15 +225,19 @@ export async function executeDirectBookingAttempt(params: {
     quoteMetadata: bookingQuote.provider_metadata,
     sender: senderInfo,
     receiver,
-    items,
+    items: shippableItems,
     instructions,
   };
 
+  // Fresh payment-state check serialized against refund finalization:
+  // the loaded order snapshot predates quote resolution, so a full refund
+  // could have landed since.
+  await assertCurrentOrderPaymentShippable(supabase, merchantId, orderId);
   onProviderAttempt?.();
   const result = await shippingService.bookShipment(
     quote.provider,
     bookingRequest
   );
 
-  return { bookingQuote, items, receiver, result, senderInfo };
+  return { bookingQuote, items: shippableItems, receiver, result, senderInfo };
 }

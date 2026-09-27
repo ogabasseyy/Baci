@@ -140,4 +140,15 @@ describe('template registry', () => {
       })
     );
   });
+
+  it('keeps optional info pages out of the registry bundle', async () => {
+    // The info pages are imported directly, each only by the route that
+    // renders it. If they ever return to getComponents, they rejoin every
+    // route's initial JS — including the homepage.
+    const template = getTemplate('ogabassey');
+    expect(template).toBeDefined();
+    const components = await template!.getComponents();
+
+    expect(Object.keys(components).sort()).toEqual(['Home']);
+  });
 });

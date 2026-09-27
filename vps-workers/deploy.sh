@@ -122,6 +122,7 @@ $CRON_BLOCK_START
 */5 *  * * * flock -n $REMOTE_DIR/locks/reconcile-vtu-processing.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/reconcile-vtu-processing' >> $REMOTE_DIR/logs/reconcile-vtu-processing.log 2>&1
 */5 *  * * * flock -n $REMOTE_DIR/locks/merchant-signup-health.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/merchant-signup-health' >> $REMOTE_DIR/logs/merchant-signup-health.log 2>&1
 20 *   * * * flock -n $REMOTE_DIR/locks/reconcile-gateway-paid-orders.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/reconcile-gateway-paid-orders' >> $REMOTE_DIR/logs/reconcile-gateway-paid-orders.log 2>&1
+# process-redvault-refunds stays unscheduled (manual CRON_SECRET route only) until restricted-role recovery approval.
 * *    * * * flock -n $REMOTE_DIR/locks/petrock-reconcile.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=petrock-reconciliation && cd $REMOTE_DIR && timeout --signal=TERM --kill-after=30s 5m $REMOTE_DIR/bin/process-petrock-reconciliation.sh' >> $REMOTE_DIR/logs/petrock-reconcile.log 2>&1
 */5 * * * * flock -n $REMOTE_DIR/locks/order-notifications.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/order-notifications?batchSize=5' >> $REMOTE_DIR/logs/order-notifications.log 2>&1
 */2 * * * * flock -n $REMOTE_DIR/locks/cache-invalidations.lock bash -lc 'export CACHE_INVALIDATION_STATE_FILE=$REMOTE_DIR/state/cache-invalidations.json && cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-cache-invalidation-cron.mjs' >> $REMOTE_DIR/logs/cache-invalidations.log 2>&1
@@ -237,12 +238,12 @@ crontab "$tmp_file"
 rm -f "$fragment_path"
 REMOTE_SH
 
-echo ""
 echo "==> Done."
 echo "    Reminder: create $REMOTE_DIR/.env if not already present:"
 echo "         NEXT_PUBLIC_SUPABASE_URL=..."
 echo "         NEXT_PUBLIC_SUPABASE_ANON_KEY=..."
 echo "         SUPABASE_SERVICE_ROLE_KEY=..."
+echo "         SUPABASE_JUMIA_CREDENTIAL_KEY=..."
 echo "         IMEI_IDENTIFIER_ENCRYPTION_KEY=..."
 echo "         PETROCK_API_TOKEN=..."
 echo "         PETROCK_API_BASE_URL=https://api.petrock.biz/api/reseller/v1"
@@ -259,6 +260,7 @@ echo "         GIGL_EMAIL=..."
 echo "         GIGL_PASSWORD=..."
 echo "         EXPO_ACCESS_TOKEN=..."
 echo "         JUMIA_CLIENT_ID=..."
+echo "         JUMIA_AUTHORIZATION_ENCRYPTION_KEY=..."
 echo "         BACI_WEB_BASE_URL=..."
 echo "         CRON_SECRET=..."
 echo "         VERCEL_ERROR_LOG_PATH=$REMOTE_DIR/logs/vercel-drain.jsonl"
@@ -291,7 +293,6 @@ echo "         EVENT_PIPELINE_DELIVERY_CONCURRENCY=5"
 echo "         EVENT_PIPELINE_INGRESS_MAX_READS=5"
 echo "         EVENT_DELIVERY_ATTEMPT_RETENTION=\"30 days\""
 echo "         EVENT_QUEUE_ARCHIVE_RETENTION=\"30 days\""
-echo ""
 echo "    Note: the storefront-update-nudge cron reads its config from the WEB"
 echo "          (Vercel) env, NOT this worker .env: MOBILE_STOREFRONT_UPDATES_ENABLED,"
 echo "          MOBILE_STOREFRONT_{ANDROID,IOS}_LATEST_BUILD and _STORE_URL, plus"

@@ -44,6 +44,11 @@ export function OgabasseyStorefrontLayout({
   const basePath = getOgabasseyBasePath(merchant?.slug, routingMode);
   const shouldEnableGoogleStoreWidget =
     shouldEnableOgabasseyGoogleStoreWidget(merchant);
+  const headerLoadingFallback = hideNavigation ? null : (
+    <div className="ogabassey-header-chrome-loading">
+      <ShellChromeLoading />
+    </div>
+  );
 
   return (
     <>
@@ -74,7 +79,7 @@ export function OgabasseyStorefrontLayout({
           </Suspense>
         }
         headerChrome={
-          <Suspense fallback={<ShellChromeLoading />}>
+          <Suspense fallback={headerLoadingFallback}>
             <StorefrontChromeRuntime
               basePath={basePath}
               hideNavigation={hideNavigation}

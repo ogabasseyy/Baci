@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchantSafe: () => ({ basePath: '' }),
 }));
-vi.mock('@/lib/seo-utils', () => ({
+vi.mock('@/lib/product-url', () => ({
   getProductUrl: (product: { slug?: string }) => `/p/${product.slug}`,
 }));
 vi.mock('next/image', () => ({

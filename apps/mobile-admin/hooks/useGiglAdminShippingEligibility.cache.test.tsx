@@ -64,4 +64,47 @@ describe('bugfix: GIGL eligibility and shipping screen cache isolation', () => {
 
     await waitFor(() => expect(result.current.isEligible).toBe(true));
   });
+
+  it.each([
+    { name: 'a missing settings row', row: null },
+    {
+      name: 'a null carrier allowlist',
+      row: {
+        merchant_id: 'merchant-1',
+        shipping_providers: null,
+        free_shipping_threshold: null,
+      },
+    },
+  ])('denies GIGL on $name', async ({ row }) => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const query = {
+      eq: vi.fn(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: row, error: null }),
+    };
+    query.eq.mockReturnValue(query);
+    from.mockReturnValue({ select: vi.fn(() => query) });
+
+    function Wrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      );
+    }
+
+    const { result } = renderHook(
+      () =>
+        useGiglAdminShippingEligibility({
+          id: 'merchant-1',
+          country: 'NG',
+          payout_currency: 'NGN',
+        }),
+      { wrapper: Wrapper }
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.isEligible).toBe(false);
+  });
 });

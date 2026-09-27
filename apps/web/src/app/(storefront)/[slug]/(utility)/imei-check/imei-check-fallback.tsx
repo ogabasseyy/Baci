@@ -15,7 +15,7 @@ export function ImeiCheckFallback({
       className={
         hideHero
           ? undefined
-          : 'flex min-h-screen flex-col bg-linear-to-b from-gray-50 to-white pb-24 pt-4 md:pb-12 md:pt-8'
+          : 'flex min-h-screen flex-col bg-[var(--store-background,#ffffff)] text-[var(--store-background-text,#111827)] pb-24 pt-4 md:pb-12 md:pt-8'
       }
     >
       {hideHero ? null : (

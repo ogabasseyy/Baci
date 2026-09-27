@@ -4,9 +4,24 @@ import { describe, expect, it, vi } from 'vitest';
 import { QuizPrizeProductResult } from './quiz-prize-product-result';
 
 vi.mock('@/components/optimized-image', () => ({
-  ThumbnailImage: ({ alt, src }: { alt: string; src: string }) => (
+  ThumbnailImage: ({
+    alt,
+    fallbackSrc,
+    src,
+    unoptimized,
+  }: {
+    alt: string;
+    fallbackSrc?: string;
+    src: string;
+    unoptimized?: boolean;
+  }) => (
     // biome-ignore lint/performance/noImgElement: deterministic image stub
-    <img alt={alt} src={src} />
+    <img
+      alt={alt}
+      data-fallback-src={fallbackSrc}
+      data-unoptimized={unoptimized ? 'true' : undefined}
+      src={src}
+    />
   ),
 }));
 
@@ -47,6 +62,11 @@ describe('QuizPrizeProductResult', () => {
       'src',
       'https://cdn.example.com/galaxy.png'
     );
+    expect(screen.getByRole('img')).toHaveAttribute(
+      'data-fallback-src',
+      '/placeholder.png'
+    );
+    expect(screen.getByRole('img')).toHaveAttribute('data-unoptimized', 'true');
   });
 
   it('selects available exact variants but blocks parent placeholders', async () => {

@@ -38,6 +38,7 @@ type DirectBookingOrder = {
     name: string;
     quantity: number;
     price: number;
+    fulfillment_data?: unknown;
     product_id?: string | null;
     product?: unknown;
   }> | null;
@@ -65,7 +66,7 @@ export async function loadDirectBookingContext(
   const { data: order, error: orderError } = await supabase
     .from('orders')
     .select(
-      'id, merchant_id, selected_quote_id, shipping_funding_source, shipping_provider, shipping_status, shipping_fee, payment_method, payment_status, shipping_address, order_items(name, quantity, price, product_id, product:products!order_items_product_id_fkey(weight_value, weight_unit, dimensions, commodity_code))'
+      'id, merchant_id, selected_quote_id, shipping_funding_source, shipping_provider, shipping_status, shipping_fee, payment_method, payment_status, shipping_address, order_items(name, quantity, price, fulfillment_data, product_id, product:products!order_items_product_id_fkey(weight_value, weight_unit, dimensions, commodity_code))'
     )
     .eq('id', data.orderId)
     .eq('merchant_id', merchantId)
@@ -100,6 +101,24 @@ export async function loadDirectBookingContext(
       ok: false,
       response: NextResponse.json(
         { error: 'Order has already been shipped or is being processed' },
+        { status: 400 }
+      ),
+    };
+  }
+
+  // Cancellation restocks inventory back to sale, so a cancelled order must
+  // never reach provider booking. Guest/authenticated cancels set the
+  // payment status while legacy merchant/customer cancels set the shipping
+  // status; reject both spellings either side can carry.
+  if (
+    ['cancelled', 'canceled'].includes(order.shipping_status) ||
+    (order.payment_status !== null &&
+      ['cancelled', 'canceled'].includes(order.payment_status))
+  ) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: 'Order has been cancelled', code: 'ORDER_CANCELLED' },
         { status: 400 }
       ),
     };

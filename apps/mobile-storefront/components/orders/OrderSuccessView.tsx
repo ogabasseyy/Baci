@@ -2,10 +2,12 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { Stack } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AdSlot } from '@/components/ads/AdSlot';
 import { GoogleLogo } from '@/components/icons/GoogleLogo';
 import { SuccessIcon } from '@/components/icons/SuccessIcon';
 import { PermissionModal } from '@/components/ui/PermissionModal';
 import Colors, { BRAND } from '@/constants/Colors';
+import { OrderSuccessNextSteps } from './OrderSuccessNextSteps';
 import type { OrderSuccessViewProps } from './OrderSuccessView.types';
 import { orderSuccessStyles as styles } from './order-success.styles';
 import {
@@ -27,12 +29,21 @@ export function OrderSuccessView({
   orderNumber,
   paymentMethod,
   reference,
+  isCommercialDocument = false,
   isDocumentLoading = false,
+  isPaid = false,
+  isPermissionFlowActive = false,
+  isReceiptPreviewActive = false,
+  isFullscreenAdActive = false,
   showPermissionModal,
 }: OrderSuccessViewProps) {
   const resolvedDeliveryEstimate =
     resolveOrderSuccessDeliveryEstimate(deliveryEstimate);
-  const successTone = getOrderSuccessTone(paymentMethod);
+  const successTone = getOrderSuccessTone(
+    paymentMethod,
+    isPaid,
+    isCommercialDocument
+  );
 
   return (
     <>
@@ -129,66 +140,11 @@ export function OrderSuccessView({
                 </>
               ) : null}
             </View>
-            <View style={styles.nextSteps}>
-              <Text style={[styles.nextTitle, { color: colors.text }]}>
-                What happens next
-              </Text>
-              <View
-                style={[
-                  styles.nextStepCard,
-                  { backgroundColor: colors.card, borderColor: colors.border },
-                ]}
-              >
-                <View style={styles.stepIconWrap}>
-                  <Ionicons
-                    name="receipt-outline"
-                    size={18}
-                    color={BRAND.primary}
-                  />
-                </View>
-                <View style={styles.nextStepBody}>
-                  <Text style={[styles.nextStepTitle, { color: colors.text }]}>
-                    {successTone.nextDocumentTitle}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.nextStepText,
-                      { color: colors.textSecondary },
-                    ]}
-                  >
-                    {successTone.nextDocumentText}
-                  </Text>
-                </View>
-              </View>
-              <View
-                style={[
-                  styles.nextStepCard,
-                  { backgroundColor: colors.card, borderColor: colors.border },
-                ]}
-              >
-                <View style={styles.stepIconWrap}>
-                  <Ionicons
-                    name="cube-outline"
-                    size={18}
-                    color={BRAND.primary}
-                  />
-                </View>
-                <View style={styles.nextStepBody}>
-                  <Text style={[styles.nextStepTitle, { color: colors.text }]}>
-                    Processing & delivery
-                  </Text>
-                  <Text
-                    style={[
-                      styles.nextStepText,
-                      { color: colors.textSecondary },
-                    ]}
-                  >
-                    Your order will be prepared and you can track it in real
-                    time.
-                  </Text>
-                </View>
-              </View>
-            </View>
+            <OrderSuccessNextSteps
+              colors={colors}
+              nextDocumentTitle={successTone.nextDocumentTitle}
+              nextDocumentText={successTone.nextDocumentText}
+            />
             <View style={styles.actions}>
               {onViewDocument ? (
                 <Pressable
@@ -271,6 +227,17 @@ export function OrderSuccessView({
                   </Text>
                 </Pressable>
               </View>
+              {/* The permission modal, the native system prompt behind it,
+                  the receipt preview, and a presented post-order
+                  interstitial each cover this screen; unmount the slot
+                  while any of them is active so no obscured delivery is
+                  requested or attributed. */}
+              {showPermissionModal ||
+              isPermissionFlowActive ||
+              isReceiptPreviewActive ||
+              isFullscreenAdActive ? null : (
+                <AdSlot placement="ORDER_SUCCESS_BANNER" />
+              )}
             </View>
           </View>
         </ScrollView>

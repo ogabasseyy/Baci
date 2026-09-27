@@ -6,8 +6,8 @@ import {
   merchant,
   mockDefaultBlogUi,
   mockGetCachedBlogListing,
-  mockGetTemplate,
   mockNotFound,
+  mockOgabasseyV2Blog,
   mockTemplateBlogRenderer,
   resetBlogPageContentMocks,
 } from './blog-page-content.test-utils';
@@ -169,11 +169,14 @@ describe('BlogPageContent', () => {
         },
       })
     );
-    mockGetTemplate.mockReturnValueOnce({
-      getComponents: async () => ({
-        Blog: TemplateLinkProbe,
-      }),
-    });
+    mockOgabasseyV2Blog.mockImplementationOnce(
+      (props: {
+        posts?: Array<{ slug: string; title: string }>;
+        storeSlug?: string;
+      }) => (
+        <TemplateLinkProbe posts={props.posts} storeSlug={props.storeSlug} />
+      )
+    );
     renderTemplateRendererProbe();
 
     render(
@@ -198,11 +201,14 @@ describe('BlogPageContent', () => {
         },
       })
     );
-    mockGetTemplate.mockReturnValueOnce({
-      getComponents: async () => ({
-        Blog: TemplateLinkProbe,
-      }),
-    });
+    mockOgabasseyV2Blog.mockImplementationOnce(
+      (props: {
+        posts?: Array<{ slug: string; title: string }>;
+        storeSlug?: string;
+      }) => (
+        <TemplateLinkProbe posts={props.posts} storeSlug={props.storeSlug} />
+      )
+    );
     renderTemplateRendererProbe();
 
     render(
@@ -232,11 +238,14 @@ describe('BlogPageContent', () => {
         totalPosts: 6,
       })
     );
-    mockGetTemplate.mockReturnValueOnce({
-      getComponents: async () => ({
-        Blog: TemplateLinkProbe,
-      }),
-    });
+    mockOgabasseyV2Blog.mockImplementationOnce(
+      (props: {
+        posts?: Array<{ slug: string; title: string }>;
+        storeSlug?: string;
+      }) => (
+        <TemplateLinkProbe posts={props.posts} storeSlug={props.storeSlug} />
+      )
+    );
     renderTemplateRendererProbe();
 
     render(

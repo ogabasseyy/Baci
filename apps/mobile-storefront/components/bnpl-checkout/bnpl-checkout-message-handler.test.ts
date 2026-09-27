@@ -78,6 +78,72 @@ describe('createBNPLWebViewMessageHandler', () => {
     expect(onCloseMessage).toHaveBeenCalledTimes(1);
   });
 
+  it('delegates provider-opened messages to the controller', () => {
+    const onProviderOpenedMessage = jest.fn();
+    const handler = createBNPLWebViewMessageHandler({
+      onProviderOpenedMessage,
+    });
+
+    handler({
+      nativeEvent: {
+        data: JSON.stringify({
+          type: 'bnpl_provider_opened',
+          gateway: 'credpal',
+          orderId: 'order-1',
+        }),
+      },
+    });
+
+    expect(onProviderOpenedMessage).toHaveBeenCalledTimes(1);
+    expect(onProviderOpenedMessage).toHaveBeenCalledWith({
+      gateway: 'credpal',
+      orderId: 'order-1',
+    });
+  });
+
+  it('forwards the routed reference on provider lifecycle messages', () => {
+    const onProviderOpenedMessage = jest.fn();
+    const onProviderErrorMessage = jest.fn();
+    const handler = createBNPLWebViewMessageHandler({
+      onProviderOpenedMessage,
+      onProviderErrorMessage,
+    });
+
+    handler({
+      nativeEvent: {
+        data: JSON.stringify({
+          type: 'bnpl_provider_opened',
+          gateway: 'klump',
+          orderId: 'order-1',
+          reference: 'BAC-1',
+        }),
+      },
+    });
+    handler({
+      nativeEvent: {
+        data: JSON.stringify({
+          type: 'bnpl_provider_error',
+          gateway: 'klump',
+          orderId: 'order-1',
+          message: 'declined',
+          reference: 'BAC-1',
+        }),
+      },
+    });
+
+    expect(onProviderOpenedMessage).toHaveBeenCalledWith({
+      gateway: 'klump',
+      orderId: 'order-1',
+      reference: 'BAC-1',
+    });
+    expect(onProviderErrorMessage).toHaveBeenCalledWith({
+      gateway: 'klump',
+      orderId: 'order-1',
+      message: 'declined',
+      reference: 'BAC-1',
+    });
+  });
+
   it('logs navigation messages and delegates URL handling to the controller', () => {
     process.env.NODE_ENV = 'development';
     (globalThis as typeof globalThis & { __DEV__?: boolean }).__DEV__ = true;

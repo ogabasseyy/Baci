@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { STOREFRONT_LCP_COPY_CSS } from './storefront-lcp-copy-css';
 
 describe('STOREFRONT_LCP_COPY_CSS', () => {
+  it('does not reserve an empty viewport below the IMEI heading', () => {
+    expect(STOREFRONT_LCP_COPY_CSS).toMatch(
+      /\[data-imei-lcp-hero\] \[data-cwv-lcp-fold\]\s*\{\s*min-height: 0;/
+    );
+  });
   it('locks fallback fonts and first-paint sr-only clipping', () => {
     expect(STOREFRONT_LCP_COPY_CSS).toContain('Inter Fallback');
     expect(STOREFRONT_LCP_COPY_CSS).toContain('h1.sr-only');

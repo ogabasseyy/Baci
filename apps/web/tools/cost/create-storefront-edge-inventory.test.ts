@@ -138,12 +138,11 @@ describe('createStorefrontEdgeInventory', () => {
       ['-C', repoRoot, 'rev-parse', 'HEAD'],
       { encoding: 'utf8' }
     );
-    if (currentSha.trim() !== task1aInventory.originMainSha) return;
 
     // Act
     const inventory = await createStorefrontEdgeInventory({
       repoRoot,
-      originMainSha: task1aInventory.originMainSha,
+      originMainSha: currentSha.trim(),
       pilotCandidateHostnames: task1aInventory.pilotCandidateHostnames,
     });
     const entrypoints = inventory.rows.filter(

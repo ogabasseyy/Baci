@@ -40,7 +40,7 @@ describe('fetchGiglQuote', () => {
     });
   });
 
-  it('returns no quote for a non-successful provider response', async () => {
+  it('throws for a non-successful provider response so failures surface', async () => {
     const log = vi.fn();
     const apiClient = {
       baseUrl: 'https://gigl.example',
@@ -75,11 +75,18 @@ describe('fetchGiglQuote', () => {
         1,
         new AbortController().signal
       )
-    ).resolves.toBeNull();
+    ).rejects.toThrow('GIGL quote request failed (503)');
     expect(log).toHaveBeenCalledWith(
       'warn',
       'GIGL quote request failed',
       expect.objectContaining({ status: 503 })
+    );
+    expect(log).toHaveBeenCalledWith(
+      'error',
+      'Error fetching GIGL quote',
+      expect.objectContaining({
+        error: expect.stringContaining('GIGL quote request failed (503)'),
+      })
     );
   });
 });

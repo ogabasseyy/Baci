@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { use } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 const {
@@ -56,5 +57,31 @@ describe('OgabasseyStaticHomePage', () => {
     expect(
       screen.getByText('OgaBassey static home /ogabassey')
     ).toBeInTheDocument();
+  });
+
+  it('reserves hero geometry while the async content suspends', () => {
+    // The content awaits the hero-shell lookup before it returns its own
+    // inner Suspense; without this outer boundary the route's
+    // fallback={null} would reserve nothing on a cold/slow lookup and the
+    // streamed hero would shift layout.
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false }))
+    );
+    mockOgabasseyStaticHomePageContent.mockImplementationOnce(() => {
+      // Suspend on every render attempt (a one-time thrown promise lets
+      // React's render retry commit the default instead of the fallback).
+      use(new Promise<never>(() => {}));
+      // Unreachable: the hook above suspends on every render attempt.
+      return <div />;
+    });
+    render(<OgabasseyStaticHomePage pathPrefix="/ogabassey" />);
+
+    expect(
+      document.querySelector(
+        '[data-ogabassey-home-hero-reserve-fallback="true"]'
+      )
+    ).toBeInTheDocument();
+    vi.unstubAllGlobals();
   });
 });

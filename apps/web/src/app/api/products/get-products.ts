@@ -31,10 +31,15 @@ export async function getProducts(request: NextRequest) {
     const search = searchRaw ? sanitizeSearchQuery(searchRaw) : '';
     const offset = (page - 1) * limit;
     const shouldPaginateInDatabase = !ids && stock === 'All';
+    const productSelect = search.trim()
+      ? `${PRODUCT_WITH_VARIANTS_QUERY}, variant_search:product_variants!product_variants_product_id_fkey()`
+      : PRODUCT_WITH_VARIANTS_QUERY;
 
     let query = supabase
       .from('products')
-      .select(PRODUCT_WITH_VARIANTS_QUERY, { count: 'exact' })
+      .select(productSelect as typeof PRODUCT_WITH_VARIANTS_QUERY, {
+        count: 'exact',
+      })
       .eq('merchant_id', merchantId)
       .order('created_at', { ascending: false });
     if (ids) {
@@ -50,9 +55,14 @@ export async function getProducts(request: NextRequest) {
       }
       if (search.trim()) {
         const sanitizedPattern = sanitizeLikePattern(search);
-        query = query.or(
-          `name.ilike.%${sanitizedPattern}%,sku.ilike.%${sanitizedPattern}%`
-        );
+        const searchFilters = [
+          `name.ilike.%${sanitizedPattern}%`,
+          `sku.ilike.%${sanitizedPattern}%`,
+          'variant_search.not.is.null',
+        ];
+        query = query
+          .ilike('variant_search.sku', `%${sanitizedPattern}%`)
+          .or(searchFilters.join(','));
       }
       if (shouldPaginateInDatabase)
         query = query.range(offset, offset + limit - 1);
@@ -116,6 +126,9 @@ export async function getProducts(request: NextRequest) {
               sku: variant.sku as string | undefined,
               primary_image: variant.primary_image as string | undefined,
               images: variant.images as string[] | undefined,
+              is_inventory_anchor: variant.is_inventory_anchor as
+                | boolean
+                | undefined,
             })) || [],
           category: product.category || 'General',
           color: product.color,

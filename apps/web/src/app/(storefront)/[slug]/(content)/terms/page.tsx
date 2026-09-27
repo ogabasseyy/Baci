@@ -4,6 +4,8 @@ import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { ContentRouteLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
 import { JsonLd } from '@/components/seo/json-ld';
+import { OgabasseyV2LegalDispute } from '@/components/storefront/ogabassey/pages/legal-dispute';
+import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { buildStorefrontContentPageSchema } from '@/lib/build-storefront-content-page-schema';
 import { getMerchantByIdentifier } from '@/lib/cached-data';
 import { toTemplateMerchantData } from '@/lib/merchant-template-data';
@@ -12,7 +14,6 @@ import {
   getIndexableRobotsMetadata,
 } from '@/lib/seo-utils';
 import { buildRequestScopedStoreUrl, buildStoreUrl } from '@/lib/store-url';
-import { getTemplate, type TemplateComponents } from '@/templates/registry';
 import { TermsPageClient } from '../pages/terms/terms-page-client';
 
 interface PageProps {
@@ -93,36 +94,21 @@ async function TermsPageContent({ params }: PageProps) {
   const jsonLdScript = <JsonLd data={termsSchema} />;
 
   // Resolve template component server-side for SEO (H1 in SSR HTML).
-  // The try/catch only guards loading the component module — JSX is
-  // constructed outside it (try/catch cannot catch render errors anyway).
+  // Only the Ogabassey template defines a Terms page; import it directly so
+  // this route's chunk carries exactly this page. JSX is constructed outside
+  // any guard (try/catch cannot catch render errors anyway).
   if (templateHasTermsPage) {
-    const template = getTemplate(merchant.template_id);
-    if (template) {
-      let components: TemplateComponents | null = null;
-      try {
-        components = await template.getComponents();
-      } catch (error) {
-        console.error(
-          'Failed to load Terms component for template',
-          merchant.template_id,
-          ':',
-          error
-        );
-      }
-
-      const TermsComponent = components?.Terms;
-      if (TermsComponent) {
-        return (
-          <>
-            {jsonLdScript}
-            <TermsComponent
-              merchant={toTemplateMerchantData(merchant)}
-              storeSlug={merchant.slug}
-              isPreview={false}
-            />
-          </>
-        );
-      }
+    const TemplateTerms =
+      merchant.template_id === OGABASSEY_TEMPLATE_ID
+        ? OgabasseyV2LegalDispute
+        : null;
+    if (TemplateTerms) {
+      return (
+        <>
+          {jsonLdScript}
+          <TemplateTerms merchant={toTemplateMerchantData(merchant)} />
+        </>
+      );
     }
   }
 

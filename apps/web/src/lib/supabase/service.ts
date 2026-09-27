@@ -8,11 +8,17 @@ const serviceRoleClientBrand: unique symbol = Symbol(
 const adsCredentialsClientBrand: unique symbol = Symbol(
   'baci.ads-credentials.service-role-client'
 );
+const jumiaCredentialsClientBrand: unique symbol = Symbol(
+  'baci.jumia-credentials.service-role-client'
+);
 const walletFundingRecoveryClientBrand: unique symbol = Symbol(
   'baci.wallet-funding-recovery.service-role-client'
 );
 const shippingQuoteBookingEconomicsClientBrand: unique symbol = Symbol(
   'baci.shipping-quote-booking-economics.service-role-client'
+);
+const immediateNotificationCompletionClientBrand: unique symbol = Symbol(
+  'baci.immediate-notification-completion.service-role-client'
 );
 const serviceRoleBrandValue: true = true;
 
@@ -30,6 +36,17 @@ export type ServiceRoleClient = SupabaseClient<Database> & {
  */
 export type AdsCredentialServiceClient = SupabaseClient<Database> & {
   readonly [adsCredentialsClientBrand]: true;
+};
+
+/**
+ * A service-role client reserved for the server-only Jumia credential RPC.
+ *
+ * Keep this type distinct from the other privileged clients so Jumia
+ * ciphertext reads cannot accidentally flow through an unrelated worker or
+ * admin boundary.
+ */
+export type JumiaCredentialServiceClient = SupabaseClient<Database> & {
+  readonly [jumiaCredentialsClientBrand]: true;
 };
 
 /**
@@ -56,6 +73,19 @@ export type ShippingQuoteBookingEconomicsServiceClient =
   };
 
 /**
+ * A service-role client reserved for immediate-notification completion
+ * HMAC provisioning.
+ *
+ * Keep this type distinct from `ServiceRoleClient` so the cron helper cannot be
+ * passed into event-pipeline helpers. Callers must authenticate with
+ * `CRON_SECRET` before constructing it.
+ */
+export type ImmediateNotificationCompletionServiceClient =
+  SupabaseClient<Database> & {
+    readonly [immediateNotificationCompletionClientBrand]: true;
+  };
+
+/**
  * Creates a Supabase client with service role key for admin operations.
  * This client bypasses RLS policies and should only be used in:
  * - Webhook handlers (no user context)
@@ -71,18 +101,26 @@ export function createServiceClient(
   sentinel: 'ads-credentials'
 ): AdsCredentialServiceClient;
 export function createServiceClient(
+  sentinel: 'jumia-credentials'
+): JumiaCredentialServiceClient;
+export function createServiceClient(
   sentinel: 'wallet-funding-recovery'
 ): WalletFundingRecoveryServiceClient;
 export function createServiceClient(
   sentinel: 'shipping-quote-booking-economics'
 ): ShippingQuoteBookingEconomicsServiceClient;
+export function createServiceClient(
+  sentinel: 'immediate-notification-completion'
+): ImmediateNotificationCompletionServiceClient;
 export function createServiceClient(): SupabaseClient;
 export function createServiceClient(
   sentinel?:
     | 'event-pipeline'
     | 'ads-credentials'
+    | 'jumia-credentials'
     | 'wallet-funding-recovery'
     | 'shipping-quote-booking-economics'
+    | 'immediate-notification-completion'
 ) {
   const url = getSupabaseUrl();
   // `SUPABASE_ADS_CREDENTIAL_KEY` is the preferred deployment secret for the
@@ -93,7 +131,9 @@ export function createServiceClient(
     sentinel === 'ads-credentials'
       ? process.env.SUPABASE_ADS_CREDENTIAL_KEY ||
         process.env.SUPABASE_SERVICE_ROLE_KEY
-      : process.env.SUPABASE_SERVICE_ROLE_KEY;
+      : sentinel === 'jumia-credentials'
+        ? process.env.SUPABASE_JUMIA_CREDENTIAL_KEY
+        : process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url) {
     throw new Error(
@@ -105,7 +145,9 @@ export function createServiceClient(
     throw new Error(
       sentinel === 'ads-credentials'
         ? 'SUPABASE_ADS_CREDENTIAL_KEY or SUPABASE_SERVICE_ROLE_KEY is missing. This is required for Ads credential handlers.'
-        : 'SUPABASE_SERVICE_ROLE_KEY is missing. This is required for webhook handlers.'
+        : sentinel === 'jumia-credentials'
+          ? 'SUPABASE_JUMIA_CREDENTIAL_KEY is missing. This is required for Jumia credential handlers.'
+          : 'SUPABASE_SERVICE_ROLE_KEY is missing. This is required for webhook handlers.'
     );
   }
 
@@ -124,6 +166,11 @@ export function createServiceClient(
   if (sentinel === 'ads-credentials') {
     return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
       [adsCredentialsClientBrand]: serviceRoleBrandValue,
+    });
+  }
+  if (sentinel === 'jumia-credentials') {
+    return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
+      [jumiaCredentialsClientBrand]: serviceRoleBrandValue,
     });
   }
   if (sentinel === 'wallet-funding-recovery') {

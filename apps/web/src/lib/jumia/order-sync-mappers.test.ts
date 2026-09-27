@@ -5,10 +5,12 @@ import {
   buildJumiaCacheRow,
   buildJumiaOrderNumber,
   buildOrderItems,
+  formatJumiaOrderTimestamp,
   getJumiaSyncLowerBound,
   type MarketplaceIntegrationRow,
   mapJumiaShippingStatus,
   readOrderSyncEnabled,
+  readStockSyncEnabled,
 } from './order-sync-mappers';
 
 const integration: MarketplaceIntegrationRow = {
@@ -16,6 +18,7 @@ const integration: MarketplaceIntegrationRow = {
   merchant_id: 'merchant-1',
   shop_id: 'shop-1',
   last_sync_at: null,
+  marketplace_key: 'NG-main',
   sync_config: { orders: true },
 };
 
@@ -93,15 +96,31 @@ describe('Jumia order sync mappers', () => {
     expect(readOrderSyncEnabled({ orders: false })).toBe(false);
   });
 
+  it('treats stock sync as opt-in', () => {
+    expect(readStockSyncEnabled(null)).toBe(false);
+    expect(readStockSyncEnabled({})).toBe(false);
+    expect(readStockSyncEnabled({ stock: true })).toBe(true);
+    expect(readStockSyncEnabled({ stock: false })).toBe(false);
+  });
+
   it('uses a fallback lookback and overlap for sync cursors', () => {
     const now = new Date('2026-04-25T12:00:00.000Z').getTime();
 
-    expect(getJumiaSyncLowerBound(null, now)).toBe('2026-04-18T12:00:00.000Z');
+    expect(getJumiaSyncLowerBound(null, now)).toBe('2026-04-18T12:00:00Z');
     expect(getJumiaSyncLowerBound('not-a-date', now)).toBe(
-      '2026-04-18T12:00:00.000Z'
+      '2026-04-18T12:00:00Z'
     );
     expect(getJumiaSyncLowerBound('2026-04-25T11:30:00.000Z', now)).toBe(
-      '2026-04-25T11:20:00.000Z'
+      '2026-04-25T11:20:00Z'
+    );
+  });
+
+  it('formats provider order timestamps without milliseconds', () => {
+    expect(
+      formatJumiaOrderTimestamp(new Date('2026-08-12T07:37:12.423Z'))
+    ).toBe('2026-08-12T07:37:12Z');
+    expect(() => formatJumiaOrderTimestamp(Number.NaN)).toThrow(
+      'Cannot format an invalid Jumia order timestamp'
     );
   });
 
@@ -132,6 +151,22 @@ describe('Jumia order sync mappers', () => {
       discount_amount: 5000,
       original_total: 255000,
       imported_at: '2026-04-25T08:03:00.000Z',
+    });
+  });
+
+  it('carries the marketplace key in canonical import metadata', () => {
+    const payload = buildCanonicalJumiaOrderPayload(
+      integration,
+      order,
+      'tracking-token',
+      [item]
+    );
+
+    expect(payload.import_metadata).toMatchObject({
+      platform: 'jumia',
+      shopId: 'shop-1',
+      marketplaceKey: 'NG-main',
+      jumiaOrderId: 'JUMIA/ORDER 1',
     });
   });
 
@@ -193,6 +228,7 @@ describe('Jumia order sync mappers', () => {
 
     expect(cacheRow.notification_sent).toBe(true);
     expect(cacheRow.baci_order_id).toBe('baci-order-id');
+    expect(cacheRow.marketplace_key).toBe('NG-main');
     expect(cacheRow.items).toHaveLength(1);
     expect(orderItems[0]).toMatchObject({
       order_id: 'baci-order-id',
@@ -201,6 +237,18 @@ describe('Jumia order sync mappers', () => {
       quantity: 1,
       sellers_item_id: 'SKU-1',
     });
+  });
+
+  it('stores shared provider-scope orders under a neutral marketplace key', () => {
+    const cacheRow = buildJumiaCacheRow(
+      { ...integration, orderSyncScope: 'shared' },
+      order,
+      null,
+      undefined,
+      'baci-order-id'
+    );
+
+    expect(cacheRow.marketplace_key).toBe('default');
   });
 
   it('preserves zero paid prices for fully discounted Jumia items', () => {

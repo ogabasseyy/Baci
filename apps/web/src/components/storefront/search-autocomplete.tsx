@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { useCurrencyWithCountry } from '@/hooks/use-currency';
 import { useDebounce } from '@/hooks/use-debounce';
 import { trackEvent } from '@/lib/event-tracking';
-import { getProductUrl } from '@/lib/seo-utils';
+import { getProductUrl } from '@/lib/product-url';
 import { cn } from '@/lib/utils';
 
 interface Product {

@@ -1,0 +1,12 @@
+@layer components {
+  /* Keep main anchored while header Suspense fallback becomes live chrome. */
+  .ogabassey-header-chrome-loading {
+    min-height: 132px;
+  }
+
+  @media (min-width: 768px) {
+    .ogabassey-header-chrome-loading {
+      min-height: 128px;
+    }
+  }
+}

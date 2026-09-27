@@ -12,14 +12,16 @@ describe('QuizRewardedBadgeOffer', () => {
         available
         dismiss={dismiss}
         isWatching={false}
+        justEarned={false}
         roomBlocked={false}
         watchAd={watchAd}
+        watchFailed={false}
       />
     );
 
-    expect(screen.getByText('Unlock a SuperQuiz profile badge')).toBeTruthy();
+    expect(screen.getByText('Earn a badge')).toBeTruthy();
     expect(
-      screen.getByText('Watch a short ad to unlock today’s quiz badge')
+      screen.getByText('Watch a short ad to earn today’s quiz badge')
     ).toBeTruthy();
     fireEvent.press(screen.getByRole('button', { name: 'Watch ad' }));
     fireEvent.press(screen.getByRole('button', { name: 'Not now' }));
@@ -33,12 +35,14 @@ describe('QuizRewardedBadgeOffer', () => {
         available={false}
         dismiss={jest.fn()}
         isWatching={false}
+        justEarned={false}
         roomBlocked={false}
         watchAd={jest.fn()}
+        watchFailed={false}
       />
     );
 
-    expect(screen.queryByText('Unlock a SuperQuiz profile badge')).toBeNull();
+    expect(screen.queryByText('Earn a badge')).toBeNull();
   });
 
   it('marks Watch ad disabled while the ad is loading', () => {
@@ -47,8 +51,10 @@ describe('QuizRewardedBadgeOffer', () => {
         available
         dismiss={jest.fn()}
         isWatching
+        justEarned={false}
         roomBlocked={false}
         watchAd={jest.fn()}
+        watchFailed={false}
       />
     );
 
@@ -57,5 +63,42 @@ describe('QuizRewardedBadgeOffer', () => {
     ).toHaveAccessibilityState({
       disabled: true,
     });
+  });
+
+  it('shows retry guidance when the ad fails to load', () => {
+    render(
+      <QuizRewardedBadgeOffer
+        available
+        dismiss={jest.fn()}
+        isWatching={false}
+        justEarned={false}
+        roomBlocked={false}
+        watchAd={jest.fn()}
+        watchFailed
+      />
+    );
+
+    expect(screen.getByText('Couldn’t load the ad. Try again.')).toBeTruthy();
+  });
+
+  it('confirms the earned badge with a dismiss action', () => {
+    const dismiss = jest.fn();
+    render(
+      <QuizRewardedBadgeOffer
+        available
+        dismiss={dismiss}
+        isWatching={false}
+        justEarned
+        roomBlocked={false}
+        watchAd={jest.fn()}
+        watchFailed={false}
+      />
+    );
+
+    expect(screen.getByText('Badge earned!')).toBeTruthy();
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Close badge confirmation' })
+    );
+    expect(dismiss).toHaveBeenCalledTimes(1);
   });
 });

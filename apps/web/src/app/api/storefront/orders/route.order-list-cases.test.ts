@@ -70,6 +70,78 @@ describe('GET /api/storefront/orders order-list cases', () => {
     });
   });
 
+  it('files a backdated invoice by its issue date, not its transaction date', async () => {
+    vi.mocked(authenticateApiRequest).mockResolvedValue(
+      createAuthenticatedAuthResult(
+        createSupabaseMock({
+          orders: {
+            data: [
+              {
+                id: 'order-april',
+                order_number: 'ORD-3002',
+                created_at: '2026-04-02T10:00:00.000Z',
+                transaction_date: '2026-04-02T10:00:00.000Z',
+                invoice_issue_date: null,
+                total: 95000,
+                subtotal: 95000,
+                shipping_fee: 0,
+                tax_amount: 0,
+                discount_amount: 0,
+                amount_paid: 95000,
+                currency: 'NGN',
+                payment_status: 'paid',
+                shipping_status: 'Delivered',
+                shipping_address: null,
+                tracking_number: null,
+                shipping_provider: null,
+                payment_method: 'card',
+                order_items: [],
+              },
+              {
+                id: 'order-backdated',
+                order_number: 'ORD-3001',
+                created_at: '2026-03-05T10:00:00.000Z',
+                transaction_date: '2026-03-05T10:00:00.000Z',
+                invoice_issue_date: '2026-09-12',
+                total: 150000,
+                subtotal: 150000,
+                shipping_fee: 0,
+                tax_amount: 0,
+                discount_amount: 0,
+                amount_paid: 150000,
+                currency: 'NGN',
+                payment_status: 'paid',
+                shipping_status: 'Delivered',
+                shipping_address: null,
+                tracking_number: null,
+                shipping_provider: null,
+                payment_method: 'card',
+                order_items: [],
+              },
+            ],
+            error: null,
+          },
+        })
+      )
+    );
+
+    const response = await GET(
+      new NextRequest(
+        'http://localhost/api/storefront/orders?merchantSlug=ogabassey'
+      )
+    );
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    // The receipt list renders the September issue date first, so the invoice
+    // issued in September must file above the April receipt even though its
+    // transaction is older.
+    expect(payload.orders.map((order: { id: string }) => order.id)).toEqual([
+      'order-backdated',
+      'order-april',
+    ]);
+  });
+
   it('falls back to joined product images when imported order items have no snapshot image', async () => {
     vi.mocked(authenticateApiRequest).mockResolvedValue(
       createAuthenticatedAuthResult(

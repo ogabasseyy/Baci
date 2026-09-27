@@ -1,4 +1,5 @@
 @import "./storefront-ogabassey-dark-mode.css";
+@import "./storefront-header-loading.css";
 /* Deferred with this sheet so first-paint CSS has no woff2 url() for Lantern. */
 @import "../inter-naira-font.css";
 

@@ -75,6 +75,10 @@ interface MockSupabaseQuery extends Promise<QueryResult> {
   order: ReturnType<
     typeof vi.fn<(_column: string, _options?: unknown) => MockSupabaseQuery>
   >;
+  in: ReturnType<
+    typeof vi.fn<(_column: string, _values: unknown[]) => MockSupabaseQuery>
+  >;
+  maybeSingle: ReturnType<typeof vi.fn<() => Promise<QueryResult>>>;
 }
 
 function createQuery(result: QueryResult): MockSupabaseQuery {
@@ -85,6 +89,8 @@ function createQuery(result: QueryResult): MockSupabaseQuery {
     is: vi.fn((_column: string, _value: unknown) => query),
     or: vi.fn((_filter: string) => query),
     order: vi.fn((_column: string, _options?: unknown) => query),
+    in: vi.fn((_column: string, _values: unknown[]) => query),
+    maybeSingle: vi.fn(() => Promise.resolve(result)),
   });
   return query;
 }
@@ -155,6 +161,65 @@ describe('Jumia dashboard order data', () => {
 
     expect(mocks.from).toHaveBeenCalledWith('orders');
     expect(mocks.from).toHaveBeenCalledWith('jumia_orders');
+  });
+
+  it('scopes Jumia link views to the requested integration', async () => {
+    mocks.getMerchantForApiRequest.mockResolvedValueOnce({
+      merchantId: MERCHANT_ID,
+      staffAccess: { isOwner: true },
+    });
+    const integrationQuery = createQuery({
+      data: { shop_id: 'shop-1', marketplace_key: 'NG-main' },
+      error: null,
+    });
+    const ordersQuery = createQuery({ data: [], error: null });
+    const jumiaQuery = createQuery({ data: [], error: null });
+    mocks.from.mockImplementation((table: string) => {
+      if (table === 'marketplace_integrations') return integrationQuery;
+      if (table === 'orders') return ordersQuery;
+      if (table === 'jumia_orders') return jumiaQuery;
+      throw new Error(`Unexpected table: ${table}`);
+    });
+
+    await expect(
+      getOrders(MERCHANT_ID, {
+        source: 'jumia',
+        jumiaIntegrationId: 'integration-1',
+      })
+    ).resolves.toEqual([]);
+
+    expect(ordersQuery.eq).toHaveBeenCalledWith('source', 'jumia');
+    expect(ordersQuery.eq).toHaveBeenCalledWith(
+      'import_metadata->>shopId',
+      'shop-1'
+    );
+    expect(ordersQuery.in).toHaveBeenCalledWith(
+      'import_metadata->>marketplaceKey',
+      ['NG-main', 'default']
+    );
+    expect(jumiaQuery.eq).toHaveBeenCalledWith('jumia_shop_id', 'shop-1');
+    expect(jumiaQuery.in).toHaveBeenCalledWith('marketplace_key', [
+      'NG-main',
+      'default',
+    ]);
+  });
+
+  it('returns nothing when the requested Jumia integration is foreign', async () => {
+    mocks.getMerchantForApiRequest.mockResolvedValueOnce({
+      merchantId: MERCHANT_ID,
+      staffAccess: { isOwner: true },
+    });
+    const integrationQuery = createQuery({ data: null, error: null });
+    mocks.from.mockImplementation((table: string) => {
+      if (table === 'marketplace_integrations') return integrationQuery;
+      throw new Error(`Unexpected table: ${table}`);
+    });
+
+    await expect(
+      getOrders(MERCHANT_ID, { jumiaIntegrationId: 'integration-unknown' })
+    ).resolves.toEqual([]);
+
+    expect(mocks.from).toHaveBeenCalledTimes(1);
   });
 
   it('returns an empty order list when filters fail validation', async () => {
@@ -314,6 +379,48 @@ describe('Jumia dashboard order data', () => {
     expect(mocks.from).not.toHaveBeenCalledWith('jumia_orders');
     expect(ordersQuery.eq).toHaveBeenCalledWith('payment_status', 'paid');
     expect(ordersQuery.or).not.toHaveBeenCalled();
+  });
+
+  it('applies status filters to scoped legacy Jumia rows', async () => {
+    const ordersQuery = createQuery({ data: [], error: null });
+    const jumiaQuery = createQuery({
+      data: [
+        {
+          jumia_order_id: 'legacy-refunded',
+          jumia_order_number: 'JUMIA-REFUNDED',
+          customer_name: 'Refunded Customer',
+          total_amount: '12000',
+          status: 'canceled',
+          created_at_jumia: '2026-04-25T09:00:00.000Z',
+          items: [],
+        },
+        {
+          jumia_order_id: 'legacy-pending',
+          jumia_order_number: 'JUMIA-PENDING',
+          customer_name: 'Pending Customer',
+          total_amount: '8000',
+          status: 'pending',
+          created_at_jumia: '2026-04-25T10:00:00.000Z',
+          items: [],
+        },
+      ],
+      error: null,
+    });
+    mocks.from.mockImplementation((table: string) => {
+      if (table === 'orders') return ordersQuery;
+      if (table === 'jumia_orders') return jumiaQuery;
+      throw new Error(`Unexpected table: ${table}`);
+    });
+
+    const orders = await getOrders(MERCHANT_ID, {
+      source: 'jumia',
+      paymentStatus: 'Refunded',
+    });
+
+    expect(mocks.from).toHaveBeenCalledWith('jumia_orders');
+    expect(orders.map((order) => order.orderNumber)).toEqual([
+      'JUMIA-REFUNDED',
+    ]);
   });
 
   it('scopes source=agentic to persisted agentic order rows', async () => {

@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   mockDynamicContentShouldSuspend,
@@ -136,8 +136,19 @@ const SHELL_SLIDE = {
 };
 
 describe('OgabasseyHomePageContent committed hero', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    // The cold-miss Suspense fallback renders the utility panel for
+    // geometry; its engagement effect needs matchMedia like the panel's
+    // own tests provide.
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false }))
+    );
     mockHeaders.mockResolvedValue(new Headers());
     mockDynamicContentShouldSuspend.mockReturnValue(false);
     vi.mocked(getRequestScopedMerchant).mockResolvedValue(

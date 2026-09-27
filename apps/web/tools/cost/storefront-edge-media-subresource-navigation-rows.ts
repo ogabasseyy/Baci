@@ -97,11 +97,6 @@ export const STOREFRONT_EDGE_MEDIA_SUBRESOURCE_NAVIGATION_ROWS: readonly Invento
       'apps/web/src/app/(storefront)/[slug]/(customer)/account/orders/[orderId]/insurance/insurance-policy-footer-actions.tsx'
     ),
     mediaSubresource(
-      'post-purchase-google-review-order-success',
-      'configured_google_maps_origin',
-      'apps/web/src/components/storefront/ogabassey/pages/order-success-page.tsx'
-    ),
-    mediaSubresource(
       'post-purchase-google-review-checkout-success',
       'configured_google_maps_origin',
       'apps/web/src/app/(storefront)/[slug]/(commerce)/checkout/success/page.tsx'

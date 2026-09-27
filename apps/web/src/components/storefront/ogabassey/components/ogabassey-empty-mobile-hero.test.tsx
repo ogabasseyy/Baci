@@ -60,4 +60,14 @@ describe('OgabasseyEmptyMobileHero', () => {
     expect(panel?.className).toContain('rounded-2xl');
     expect(panel?.className).toContain('overflow-hidden');
   });
+
+  it('keeps an invisible controls slot (reserve-fallback parity)', () => {
+    const { container } = render(<OgabasseyEmptyMobileHero />);
+
+    const slot = container.querySelector(
+      '[data-ogabassey-mobile-controls-skeleton="reserved"]'
+    );
+    expect(slot).not.toBeNull();
+    expect(slot).toHaveClass('invisible');
+  });
 });

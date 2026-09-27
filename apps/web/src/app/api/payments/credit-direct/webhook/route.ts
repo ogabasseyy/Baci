@@ -23,6 +23,7 @@ import { buildInventoryConfirmationFailurePayload } from '@/lib/payments/invento
 import { resolveCreditDirectConfirmationReview } from '@/lib/payments/resolve-credit-direct-confirmation-review';
 import { escapeHtmlText } from '@/lib/sanitize';
 import { createServiceClient } from '@/lib/supabase/service';
+import { respondCustomerInventoryFailure } from './customer-inventory-failure';
 
 function readNoteString(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -499,21 +500,18 @@ export async function POST(request: NextRequest) {
             order.id
           );
         } catch (inventoryError) {
-          logger.error({
-            message:
-              'Credit-direct webhook customer branch failed to confirm inventory',
+          // Roll the bnpl_approved flip back (fenced): without this
+          // the order keeps a confirming status with unconfirmed
+          // inventory, and the status poll treats it as confirmed.
+          return respondCustomerInventoryFailure({
+            supabase,
+            merchantId: order.merchant_id,
             orderId: order.id,
-            error: inventoryError,
+            previousPaymentStatus: order.payment_status ?? null,
+            previousShippingStatus: order.shipping_status ?? null,
+            gatewayReference: payload.checkoutTransactionId ?? null,
+            inventoryError,
           });
-          return NextResponse.json(
-            {
-              error:
-                inventoryError instanceof Error
-                  ? inventoryError.message
-                  : 'Inventory confirmation failed',
-            },
-            { status: 409 }
-          );
         }
 
         logger.info({

@@ -43,7 +43,7 @@ export const MobileCheckoutActions: React.FC<MobileCheckoutActionsProps> = ({
         buttonText = 'Continue to Payment';
         isDisabled = !completedSteps.contact; // Can't skip to delivery if contact not done
     } else if (currentStep === 'payment') {
-        if (paymentMethod === 'invoice') buttonText = 'Generate Invoice';
+        if (paymentMethod === 'invoice') buttonText = 'Get a Proforma Invoice';
         else if (paymentMethod === 'payforme') buttonText = 'Send Payment Link';
         else buttonText = 'Place Order';
 

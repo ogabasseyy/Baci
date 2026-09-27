@@ -44,6 +44,10 @@ export interface DvaData {
   bank_code: string;
   amount: number;
   reference: string;
+  /** Created order id, for the server-confirmed completion on "Confirm Transfer Sent". */
+  orderId?: string;
+  orderNumber?: string;
+  trackingToken?: string | null;
 }
 
 export interface PendingCryptoOrder {
@@ -67,6 +71,8 @@ export interface ResumedOrder {
   tax_amount?: number;
   discount_amount?: number;
   gift_wrapping_fee?: number;
+  /** Stamped orders.currency: the currency the order was priced in. */
+  currency?: string;
   id: string;
   short_id: string;
   subtotal: number;
@@ -99,6 +105,7 @@ export type CryptoVerificationStatus = 'idle' | 'checking' | 'confirmed' | 'pend
 export type DeliveryMethod = 'pickup' | 'door' | 'airport' | 'pickup_station';
 export type CheckoutStep = 'contact' | 'delivery' | 'payment';
 export type PaymentMethod =
+  | 'uba_redvault'
   | 'paystack'
   | 'korapay'
   | 'juicyway'
@@ -111,4 +118,4 @@ export type PaymentMethod =
   | 'bank_transfer'
   | 'paypal'
   | '';
-export type PaymentTab = 'full' | 'installments';
+export type PaymentTab = 'full' | 'installments' | 'invoice';

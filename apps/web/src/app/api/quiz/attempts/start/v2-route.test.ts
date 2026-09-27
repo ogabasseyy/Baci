@@ -5,8 +5,14 @@ import {
   requireQuizCsrf,
   requireQuizUser,
 } from '@/app/api/quiz/_shared/route-helpers';
+import { QuizAgeGateError } from '@/app/api/quiz/_shared/route-helpers-guards';
 import { resolveQuizDevice } from '@/lib/quiz/quiz-device-hash';
 import { postQuizStartV2 } from './v2-route';
+import { enforceQuizStartGuards } from './v2-start-guards';
+
+vi.mock('./v2-start-guards', () => ({
+  enforceQuizStartGuards: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock('@/app/api/quiz/_shared/route-helpers', async () => {
   const actual = await vi.importActual<
@@ -99,6 +105,47 @@ beforeEach(() => {
 });
 
 describe('v2 quiz start route', () => {
+  it('returns the age restriction without issuing a start RPC', async () => {
+    const rpc = authenticated();
+    vi.mocked(enforceQuizStartGuards).mockRejectedValueOnce(
+      new QuizAgeGateError('Age restricted')
+    );
+    const response = await postQuizStartV2(request({}));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      code: 'quiz_age_restricted',
+    });
+    expect(rpc).not.toHaveBeenCalledWith(
+      expect.stringMatching(/^start_quiz_attempt/),
+      expect.anything()
+    );
+  });
+  it('fails closed with a stable JSON error when guard lookup fails', async () => {
+    const rpc = authenticated();
+    vi.mocked(enforceQuizStartGuards).mockRejectedValueOnce(
+      new Error('Quiz start eligibility could not be verified')
+    );
+    const response = await postQuizStartV2(request({}));
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: 'Quiz request failed' });
+    expect(rpc).not.toHaveBeenCalledWith(
+      expect.stringMatching(/^start_quiz_attempt/),
+      expect.anything()
+    );
+  });
+  it('rejects a malformed fingerprint before guard or runtime lookups', async () => {
+    const rpc = authenticated();
+    const response = await postQuizStartV2(
+      request({}, { 'X-Baci-Quiz-Device-Fingerprint': 'not-a-fingerprint' })
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      details: { deviceFingerprint: ['Invalid header'] },
+      error: 'Invalid input',
+    });
+    expect(enforceQuizStartGuards).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
   it('authenticates before CSRF, validation, or RPC work', async () => {
     vi.mocked(requireQuizUser).mockResolvedValue({
       response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),

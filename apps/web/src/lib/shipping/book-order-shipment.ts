@@ -1,11 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { shippingService } from '@/lib/shipping';
 import { resolveAdminGiglBookingContext } from '@/lib/shipping/admin-gigl-booking-context';
+import { assertCurrentOrderPaymentShippable } from '@/lib/shipping/assert-current-shippable-order-payment';
 import {
   assertGiglCustomerCheckoutPrepaid,
   isPayOnDeliveryPaymentMethod,
 } from '@/lib/shipping/assert-gigl-customer-checkout-prepaid';
 import { assertQuotePriceMatchesOrderFee } from '@/lib/shipping/assert-quote-price-matches-order-fee';
+import { assertShippableOrderState } from '@/lib/shipping/assert-shippable-order-state';
 import { attachBookingQuoteMetadata } from '@/lib/shipping/attach-booking-quote-metadata';
 import type { BookOrderRecord } from '@/lib/shipping/book-order-shipment-types';
 import { buildOrderShipmentBookingRequest } from '@/lib/shipping/build-order-shipment-booking-request';
@@ -18,12 +20,11 @@ import {
   assertInternationalQuoteMatchesOrder,
   assertQuoteReceiverMatchesOrder,
 } from '@/lib/shipping/international-quote-order-guard';
-import { toInternationalShipmentItemsFromOrder } from '@/lib/shipping/international-shipment-items';
 import {
+  assertShippableBookingItems,
   isShippingProviderCode,
   OrderShipmentBookingError,
   parseStoredQuoteRequest,
-  toDomesticBookingItems,
   toQuoteComparableOrderItems,
 } from '@/lib/shipping/order-shipment-booking-utils';
 import { persistBookedOrderShipment } from '@/lib/shipping/persist-booked-order-shipment';
@@ -33,6 +34,7 @@ import {
   refreshOrderShipmentQuote,
 } from '@/lib/shipping/refresh-order-shipment-quote';
 import { resolveBookingMerchantSender } from '@/lib/shipping/resolve-booking-merchant-sender';
+import { resolveOrderShipmentParties } from '@/lib/shipping/resolve-order-shipment-parties';
 import {
   applyShippingQuoteBookingEconomicsToOrder,
   applyShippingQuoteBookingEconomicsToQuote,
@@ -51,7 +53,7 @@ export async function bookOrderShipment(
   const { data: order, error: orderError } = await supabase
     .from('orders')
     .select(
-      'id, customer_name, customer_email, customer_phone, shipping_fee, selected_quote_id, shipping_provider, shipping_funding_source, payment_method, payment_status, shipping_address, order_items(name, quantity, price, product_id, product:products!order_items_product_id_fkey(weight_value, weight_unit, dimensions, commodity_code))'
+      'id, customer_name, customer_email, customer_phone, shipping_fee, selected_quote_id, shipping_provider, shipping_funding_source, payment_method, payment_status, shipping_address, order_items(name, quantity, price, fulfillment_data, product_id, product:products!order_items_product_id_fkey(weight_value, weight_unit, dimensions, commodity_code))'
     )
     .eq('id', orderId)
     .eq('merchant_id', merchantId)
@@ -106,13 +108,10 @@ export async function bookOrderShipment(
     });
   }
   const orderItems = typedOrder.order_items ?? [];
-  if (orderItems.length === 0) {
-    throw new OrderShipmentBookingError(
-      'Cannot book a shipment for an order with no items.',
-      400,
-      'MISSING_ORDER_ITEMS'
-    );
-  }
+  assertShippableOrderState({
+    items: orderItems,
+    paymentStatus: typedOrder.payment_status,
+  });
   const { data: storedQuote, error: quoteError } = await supabase
     .from('shipping_quotes')
     .select(
@@ -129,7 +128,6 @@ export async function bookOrderShipment(
       'QUOTE_NOT_FOUND'
     );
   }
-
   const bookingEconomics = await getShippingQuoteBookingEconomics(
     supabase,
     merchantId,
@@ -238,19 +236,13 @@ export async function bookOrderShipment(
       })
     );
   }
-  const receiver =
-    isInternationalQuote && effectiveQuoteRequest
-      ? {
-          ...effectiveQuoteRequest.receiver,
-          name: bookingContext.receiver.name,
-          email: bookingContext.receiver.email,
-          phone: bookingContext.receiver.phone,
-        }
-      : bookingContext.receiver;
-  const sender =
-    isInternationalQuote && effectiveQuoteRequest?.sender
-      ? effectiveQuoteRequest.sender
-      : merchantSender;
+  const { receiver, sender, items } = resolveOrderShipmentParties({
+    bookingContext,
+    effectiveQuoteRequest,
+    isInternationalQuote,
+    merchantSender,
+    orderItems,
+  });
   if (!sender) {
     throw new OrderShipmentBookingError(
       'The saved international shipping quote is missing its sender. Please get a new quote before shipping.',
@@ -258,13 +250,11 @@ export async function bookOrderShipment(
       'INTERNATIONAL_QUOTE_SENDER_MISSING'
     );
   }
-  const items =
-    isInternationalQuote && effectiveQuoteRequest
-      ? toInternationalShipmentItemsFromOrder(
-          orderItems,
-          effectiveQuoteRequest.items
-        )
-      : toDomesticBookingItems(orderItems, effectiveQuoteRequest?.items);
+  assertShippableBookingItems(items);
+  // Fresh payment-state check serialized against refund finalization: the
+  // order snapshot above predates quote refresh and sender resolution, so
+  // a full refund could have landed since.
+  await assertCurrentOrderPaymentShippable(supabase, merchantId, orderId);
   const result = await shippingService.bookShipment(
     shippingProvider,
     buildOrderShipmentBookingRequest({

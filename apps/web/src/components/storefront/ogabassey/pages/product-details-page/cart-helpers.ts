@@ -249,9 +249,26 @@ export function buildCartProduct(
   selectedImage: number,
   selectedCondition: ConditionType,
   selectedAttributes: Record<string, string>,
-  selectedColorName?: string
+  selectedColorName?: string,
+  options?: { hasVariantPricing?: boolean }
 ): CartProduct {
   const baseProduct = toRelatedProductsProduct(productData);
+  // A non-variant condition offer prices the line below catalog, but the
+  // server verifies merchant-rate tiers against products.price. Retain the
+  // base catalog unit price so quote subtotals use the canonical basis.
+  // Variant-priced lines already match the server (price_override), so they
+  // carry no override.
+  const isConditionOffer =
+    selectedCondition.toLowerCase() !==
+    (productData.condition || 'new').toLowerCase();
+  const catalogPrice =
+    isConditionOffer &&
+    !options?.hasVariantPricing &&
+    typeof baseProduct.price === 'number' &&
+    Number.isFinite(baseProduct.price) &&
+    baseProduct.price >= 0
+      ? baseProduct.price
+      : undefined;
 
   // Color is carried into the cart by the image: prefer the selected color's
   // own image so the cart always depicts the chosen color, even when the
@@ -267,6 +284,7 @@ export function buildCartProduct(
     ...baseProduct,
     ...selectedAttributes,
     price: currentOffer.rawPrice,
+    ...(catalogPrice === undefined ? {} : { catalogPrice }),
     image,
     imageLarge: image,
     description: productData.description,

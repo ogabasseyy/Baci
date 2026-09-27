@@ -15,6 +15,7 @@ jest.mock('./use-checkout-submit', () => ({
   useCheckoutSubmit: () => mockCheckoutSubmit,
 }));
 jest.mock('@/services/analytics', () => ({
+  trackCheckoutPaymentMethodSelected: jest.fn(),
   trackCheckoutStep: (...args: unknown[]) => mockTrackCheckoutStep(...args),
 }));
 jest.mock('@/services/tiktok-checkout-route-tracking', () => ({

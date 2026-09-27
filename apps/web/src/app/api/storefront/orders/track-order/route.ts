@@ -54,7 +54,12 @@ interface TrackedOrder {
   subtotal: number;
   shipping_cost: number;
   discount_amount: number | null;
+  tax_amount?: number | null;
+  gift_wrapping_fee?: number | null;
   total: number;
+  // Prior-payment evidence for wallet/savings-credited invoices.
+  // Optional: older RPC projections omit it.
+  amount_paid?: number | string | null;
   currency?: string | null;
   created_at: string;
   updated_at: string;
@@ -75,6 +80,11 @@ interface TrackedOrder {
   merchant_phone?: string | null;
   items?: OrderItemRow[] | null;
   shipping_state?: string;
+  // Terminal after() delivery flag. Optional: older RPC projections
+  // omit it.
+  notification_delivered?: boolean | null;
+  // Stored payment method. Optional: older RPC projections omit it.
+  payment_method?: string | null;
 }
 
 function getCustomerOrderStatusKey(status: string): string {
@@ -85,6 +95,7 @@ function getCustomerOrderStatusKey(status: string): string {
     case 'delivered':
       return 'delivered';
     case 'cancelled':
+    case 'canceled':
     case 'refunded':
       return 'cancelled';
     case 'returned':
@@ -252,15 +263,36 @@ export async function GET(request: NextRequest) {
       order: {
         id: order.id,
         order_number: order.order_number,
-        status: order.shipping_status,
+        // Outward key, not the raw row: legacy `canceled` rows must read
+        // as `cancelled` here (the timeline already normalizes), or
+        // tracking consumers treat the order as placed/nonterminal.
+        status: getCustomerOrderStatusKey(order.shipping_status),
         payment_status: order.payment_status,
         created_at: order.created_at,
         updated_at: order.updated_at,
         subtotal: order.subtotal,
         shipping_cost: order.shipping_cost,
         discount_amount: order.discount_amount,
+        tax_amount: order.tax_amount ?? null,
+        gift_wrapping_fee: order.gift_wrapping_fee ?? null,
         total: order.total,
+        // Prior-payment evidence for credited (partially wallet/savings
+        // covered) invoices: the RPC projects amount_paid, but this
+        // response must forward it for guest classification.
+        amount_paid: order.amount_paid ?? 0,
         currency: order.currency || 'NGN',
+        // Terminal after() delivery (invoice artifacts built and proforma
+        // emailed): mobile success screens gate invoice_generated on this
+        // instead of claiming it at order creation. Absent on older RPC
+        // projections, which read as not delivered.
+        notification_delivered: order.notification_delivered ?? false,
+        // Authoritative method + raw shipping status for the mobile
+        // invoice_generated gate: the tracked path must prove the row
+        // is an invoice order (not Pay-for-Me/POD opened with a
+        // caller-controlled method) and see shipping cancellation,
+        // exactly like the storefront lookup branch.
+        payment_method: order.payment_method ?? null,
+        shipping_status: order.shipping_status,
       },
       customer: {
         name: order.customer_name,
@@ -443,7 +475,13 @@ function calculateEstimatedDelivery(order: {
   created_at: string;
   shipping_state?: string;
 }): { min: string; max: string } | null {
-  if (['delivered', 'cancelled'].includes(order.shipping_status)) {
+  // Normalized: a legacy `canceled` row is still a cancellation, never a
+  // shippable order with a delivery estimate.
+  if (
+    ['delivered', 'cancelled'].includes(
+      getCustomerOrderStatusKey(order.shipping_status)
+    )
+  ) {
     return null;
   }
 

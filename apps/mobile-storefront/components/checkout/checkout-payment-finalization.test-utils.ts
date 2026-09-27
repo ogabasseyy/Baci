@@ -10,7 +10,7 @@ export const mockFetch =
 export const mockRouterPush = jest.fn();
 export const mockRouterReplace = jest.fn();
 export const mockStartWalletFundedBankTransferCheckout =
-  jest.fn<(params: unknown) => Promise<boolean>>();
+  jest.fn<(params: unknown) => Promise<string | null>>();
 
 jest.mock('expo-router', () => ({
   router: {

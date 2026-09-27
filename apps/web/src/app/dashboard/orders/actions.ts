@@ -5,7 +5,6 @@ import {
   AGENTIC_ORDER_SOURCE_FILTER,
   type AgenticOrderSourceFilter,
 } from '@/app/dashboard/orders/agentic-order-source';
-import type { OrderFinancialFields } from '@/app/dashboard/orders/order-financials';
 import { loadOrderItemImageMap } from '@/app/dashboard/orders/order-item-images';
 import type {
   PaymentStatus,
@@ -22,7 +21,6 @@ import { logger } from '@/lib/logger';
 import { ensurePermission } from '@/lib/merchant-server';
 import { ORDER_WITH_ITEMS_QUERY } from '@/lib/order-queries';
 import { sanitizeLikePattern, sanitizeSearchQuery } from '@/lib/sanitize-core';
-import type { MerchantPickupAddress } from '@/lib/shipping/merchant-rates/types';
 import { createClient } from '@/lib/supabase/server';
 import { sendEmail } from '@/lib/zeptomail';
 import {
@@ -31,79 +29,30 @@ import {
   GetOrdersInputSchema,
   ResendOrderConfirmationInputSchema,
 } from '@/schemas/dashboard-order-actions';
+import type { Order } from './dashboard-order';
+import type { Transaction } from './dashboard-transaction';
+import { resolveJumiaDashboardOrderScope } from './jumia-dashboard-order-scope';
+import type { JumiaOrder } from './map-jumia-dashboard-order';
+import { mapJumiaDashboardOrder } from './map-jumia-dashboard-order';
 import {
   type DashboardOrderRecord,
   mapDashboardOrderRecord,
 } from './order-record-mapper';
+import type { OrderStats } from './order-stats';
 
+export type { Order } from './dashboard-order';
+export type { Transaction } from './dashboard-transaction';
+export type { OrderStats } from './order-stats';
 export type { PaymentStatus, ShippingStatus } from './order-statuses';
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
-
-export interface Transaction {
-  id: string;
-  reference?: string;
-  gateway_reference?: string;
-  status: string;
-  amount: number;
-  currency: string;
-  gateway: string;
-  created_at: string;
-}
-
-export interface Order extends OrderFinancialFields {
-  id: string;
-  orderNumber: string;
-  customerName: string;
-  total: number;
-  currency: string;
-  shippingStatus: ShippingStatus;
-  paymentStatus: PaymentStatus;
-  paymentMethod: string | null;
-  date: string;
-  createdAt: number;
-  source: string;
-  tracking_number?: string;
-  shipping_provider?: string;
-  delivery_method?: string | null;
-  airport_type?: string | null;
-  shipping_rate_id?: string;
-  shipping_rate_name?: string;
-  /**
-   * Durable snapshot of a merchant PICKUP rate's collection point captured at
-   * purchase. Present only for merchant-pickup orders (provider
-   * `MERCHANT_PICKUP`); null otherwise. Lets the merchant still see the pickup
-   * point even after the rate is edited or deleted.
-   */
-  shipping_pickup_details?: MerchantPickupAddress | null;
-  payment_reference?: string;
-  customer_email?: string;
-  customer_phone?: string;
-  notes?: string;
-  items: Array<{
-    id: string;
-    name: string;
-    quantity: number;
-    price: number;
-    image?: string;
-    variant?: string;
-    hasAssurance?: boolean;
-  }>;
-  transactions?: Transaction[];
-}
-
-export interface OrderStats {
-  totalOrders: number;
-  completedOrders: number;
-  unpaidOrders: number;
-  urgentOrders: number;
-}
 
 interface OrderFilters {
   paymentStatus?: PaymentStatus | 'All';
   shippingStatus?: ShippingStatus | 'All';
   search?: string;
-  source?: AgenticOrderSourceFilter;
+  source?: AgenticOrderSourceFilter | 'jumia';
+  jumiaIntegrationId?: string;
 }
 
 interface OrderConfirmationRecord {
@@ -130,22 +79,10 @@ interface OrderConfirmationRecord {
   }>;
 }
 
-export interface JumiaOrderItem {
-  id?: string;
-  name?: string;
-  price?: string | number;
-  image_url?: string;
-}
-
-export interface JumiaOrder {
-  jumia_order_id: string;
-  jumia_order_number: string;
-  customer_name: string | null;
-  total_amount: string;
-  status: string;
-  created_at_jumia: string;
-  items?: JumiaOrderItem[];
-}
+export type {
+  JumiaOrder,
+  JumiaOrderItem,
+} from './map-jumia-dashboard-order';
 
 const ORDER_CONFIRMATION_SELECT = [
   'id',
@@ -167,7 +104,7 @@ const ORDER_CONFIRMATION_SELECT = [
 // shared ORDER_WITH_ITEMS_QUERY (which also feeds carrier/email/invoice reads);
 // append them only here so fulfillment can name the pickup location / zone /
 // tier instead of the bare `MERCHANT` provider label.
-const ORDER_DETAILS_QUERY = `${ORDER_WITH_ITEMS_QUERY}, shipping_rate_id, shipping_rate_name, shipping_pickup_details`;
+const ORDER_DETAILS_QUERY = `${ORDER_WITH_ITEMS_QUERY}, shipping_rate_id, shipping_rate_name, shipping_pickup_details, import_metadata`;
 
 function getZeroOrderStats(): OrderStats {
   return {
@@ -218,6 +155,25 @@ function isActiveFilter<T extends string>(
   return Boolean(value && value !== 'All');
 }
 
+/**
+ * Applies the dashboard status filters to a mapped unlinked Jumia cache
+ * row. Canonical orders are filtered natively by the database query, but
+ * cache rows loaded under a Jumia scope bypass it; without this, views
+ * like Jumia + Refunded would include unrelated pending orders.
+ */
+function matchesJumiaCacheStatusFilters(
+  mapped: { paymentStatus: string; shippingStatus: string },
+  filters: { paymentStatus?: string; shippingStatus?: string }
+): boolean {
+  if (isActiveFilter(filters.paymentStatus)) {
+    if (mapped.paymentStatus !== filters.paymentStatus) return false;
+  }
+  if (isActiveFilter(filters.shippingStatus)) {
+    if (mapped.shippingStatus !== filters.shippingStatus) return false;
+  }
+  return true;
+}
+
 export async function getOrders(
   merchantId: string,
   filters: OrderFilters = {}
@@ -256,6 +212,17 @@ export async function getOrders(
   const hasShippingFilter = isActiveFilter(shippingStatusFilter);
   const hasAgenticSourceFilter =
     validatedFilters.source === AGENTIC_ORDER_SOURCE_FILTER;
+  const hasJumiaSourceFilter = validatedFilters.source === 'jumia';
+  const jumiaScope = await resolveJumiaDashboardOrderScope(
+    supabase,
+    authorizedMerchantId,
+    validatedFilters.jumiaIntegrationId
+  );
+  if (validatedFilters.jumiaIntegrationId && !jumiaScope) return [];
+  // A Jumia source or integration scope restricts both the canonical list
+  // and the unlinked Jumia cache rows; per-integration links must not leak
+  // sibling-shop orders.
+  const scopeJumiaOrders = hasJumiaSourceFilter || Boolean(jumiaScope);
   const searchTerm = validatedFilters.search?.trim();
   const sanitizedSearch = searchTerm
     ? sanitizeLikePattern(sanitizeSearchQuery(searchTerm))
@@ -263,7 +230,7 @@ export async function getOrders(
 
   let query = supabase
     .from('orders')
-    .select(ORDER_WITH_ITEMS_QUERY)
+    .select(`${ORDER_WITH_ITEMS_QUERY}, import_metadata`)
     .eq('merchant_id', authorizedMerchantId)
     .order('created_at', { ascending: false });
 
@@ -281,6 +248,15 @@ export async function getOrders(
 
   if (hasAgenticSourceFilter) {
     query = query.eq('source', AGENTIC_ORDER_SOURCE);
+  }
+
+  if (scopeJumiaOrders) {
+    query = query.eq('source', 'jumia');
+  }
+  if (jumiaScope) {
+    query = query
+      .eq('import_metadata->>shopId', jumiaScope.shopId)
+      .in('import_metadata->>marketplaceKey', jumiaScope.marketplaceKeys);
   }
 
   // Search by customer name or order number
@@ -307,14 +283,22 @@ export async function getOrders(
   // Jumia orders don't have standard payment/shipping statuses in the same way,
   // but we map them.
   let jumiaOrders: JumiaOrder[] = [];
-  if (!hasPaymentFilter && !hasShippingFilter && !hasAgenticSourceFilter) {
+  if (
+    (!hasPaymentFilter && !hasShippingFilter && !hasAgenticSourceFilter) ||
+    scopeJumiaOrders
+  ) {
     let jumiaQuery = supabase
       .from('jumia_orders')
       .select(
-        'status, jumia_order_id, jumia_order_number, customer_name, total_amount, created_at_jumia, items'
+        'status, jumia_order_id, jumia_order_number, jumia_shop_id, marketplace_key, customer_name, total_amount, currency, created_at_jumia, items'
       )
       .eq('merchant_id', authorizedMerchantId)
       .is('baci_order_id', null);
+    if (jumiaScope) {
+      jumiaQuery = jumiaQuery
+        .eq('jumia_shop_id', jumiaScope.shopId)
+        .in('marketplace_key', jumiaScope.marketplaceKeys);
+    }
     if (sanitizedSearch) {
       jumiaQuery = jumiaQuery.or(
         `customer_name.ilike.%${sanitizedSearch}%,jumia_order_number.ilike.%${sanitizedSearch}%`
@@ -350,50 +334,14 @@ export async function getOrders(
   );
 
   // Normalize Jumia Orders
-  const normalizedJumiaOrders = jumiaOrders.map((jOrder) => {
-    // Basic mapping of Jumia Status to Internal Status
-    // Jumia: pending, shipped, delivered, canceled, failed
-    let shippingStatus: ShippingStatus = 'Pending';
-    let paymentStatus: PaymentStatus = 'Paid'; // Assumed paid to Jumia
-
-    const startStatus = jOrder.status.toLowerCase();
-    if (startStatus.includes('shipped')) shippingStatus = 'Shipped';
-    if (startStatus.includes('delivered')) shippingStatus = 'Delivered';
-    if (startStatus.includes('cancel')) {
-      shippingStatus = 'Canceled';
-      paymentStatus = 'Refunded';
-    }
-    if (startStatus.includes('fail')) shippingStatus = 'Canceled';
-
-    return {
-      id: jOrder.jumia_order_id, // Use Jumia ID as ID
-      orderNumber: jOrder.jumia_order_number,
-      customerName: formatPersonName(jOrder.customer_name || 'Jumia Customer'),
-      total: Number.parseFloat(jOrder.total_amount),
-      currency: 'NGN',
-      shippingStatus,
-      paymentStatus,
-      paymentMethod: 'Jumia Payout',
-      date: new Date(jOrder.created_at_jumia).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      }),
-      createdAt: new Date(jOrder.created_at_jumia).getTime(),
-      source: 'jumia',
-      tracking_number: undefined,
-      shipping_provider: 'Jumia Services',
-      items: (jOrder.items || []).map((item: JumiaOrderItem, idx: number) => ({
-        id: item.id || `jumia-item-${idx}`,
-        name: item.name || 'Jumia Item',
-        quantity: 1, // Usually Jumia lines are qty 1 per object in older APIs, check actual data structure.
-        // For now assuming 1 if not specified.
-        price: Number(item.price || 0),
-        image: item.image_url,
-        variant: undefined,
-      })),
-    } as Order;
-  });
+  const normalizedJumiaOrders = jumiaOrders
+    .map((jOrder) => mapJumiaDashboardOrder(jOrder) as Order)
+    .filter((mapped) =>
+      matchesJumiaCacheStatusFilters(mapped, {
+        paymentStatus: paymentStatusFilter,
+        shippingStatus: shippingStatusFilter,
+      })
+    );
 
   // Merge and Sort
   const allOrders = [...realOrders, ...normalizedJumiaOrders].sort(

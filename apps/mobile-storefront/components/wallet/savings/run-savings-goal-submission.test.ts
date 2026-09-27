@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { Alert } from 'react-native';
+import type { UseStartSavingsSubmitInput } from './run-savings-goal-submission';
 import { runSavingsGoalSubmission } from './run-savings-goal-submission';
-import type { UseStartSavingsSubmitInput } from './use-start-savings-submit';
 
 const mockCreateSavingsGoal =
   jest.fn<

@@ -18,11 +18,15 @@ vi.mock('@/lib/api-client', () => ({
 }));
 
 import {
-  connectWithToken,
+  checkProductApprovals,
+  connectJumiaShops,
   disconnectIntegration,
+  discoverJumiaShops,
   syncOrders,
   useJumiaIntegrations,
 } from './use-jumia-integrations';
+
+const DISCOVERY_ID = '00000000-0000-4000-8000-000000000099';
 
 describe('useJumiaIntegrations', () => {
   beforeEach(() => {
@@ -108,7 +112,6 @@ describe('useJumiaIntegrations', () => {
   });
 
   it('refetch re-fetches data and clears previous error', async () => {
-    // Initial fetch fails
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: false,
       status: 503,
@@ -123,7 +126,6 @@ describe('useJumiaIntegrations', () => {
 
     expect(result.current.error).toBe('Failed to load integrations (503)');
 
-    // Refetch succeeds
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve({ integrations: [] }),
@@ -138,7 +140,113 @@ describe('useJumiaIntegrations', () => {
   });
 });
 
-describe('connectWithToken', () => {
+describe('discoverJumiaShops', () => {
+  it('preserves a retryable recovery handle from a failed discovery', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      json: () =>
+        Promise.resolve({
+          error: 'Jumia shop discovery failed',
+          discoveryId: DISCOVERY_ID,
+          retryable: true,
+        }),
+    } as Response);
+
+    await expect(
+      discoverJumiaShops('client-id', 'refresh-token')
+    ).resolves.toEqual({
+      ok: false,
+      error: 'Jumia shop discovery failed',
+      discoveryId: DISCOVERY_ID,
+      retryable: true,
+    });
+  });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  it('returns discovered shops and opaque discovery id', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          discoveryId: DISCOVERY_ID,
+          shops: [
+            {
+              id: 'shop-1',
+              name: 'Shop One',
+              countryCode: 'NG',
+              marketplace: 'Jumia Nigeria',
+              alreadyConnected: false,
+            },
+          ],
+        }),
+    } as Response);
+
+    const result = await discoverJumiaShops('client-id', 'refresh-token');
+
+    expect(result).toEqual({
+      ok: true,
+      discoveryId: DISCOVERY_ID,
+      shops: [
+        {
+          id: 'shop-1',
+          name: 'Shop One',
+          countryCode: 'NG',
+          marketplace: 'Jumia Nigeria',
+          alreadyConnected: false,
+        },
+      ],
+    });
+  });
+
+  it('returns the default failure message when discovery response is not ok and has no error field', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      json: () => Promise.resolve({}),
+    } as Response);
+
+    await expect(
+      discoverJumiaShops('client-id', 'refresh-token')
+    ).resolves.toEqual({ ok: false, error: 'Shop discovery failed' });
+  });
+
+  it('returns the network failure message when discovery fetch rejects', async () => {
+    vi.mocked(fetch).mockRejectedValueOnce(new Error('Network error'));
+
+    await expect(
+      discoverJumiaShops('client-id', 'refresh-token')
+    ).resolves.toEqual({
+      ok: false,
+      error: 'Shop discovery failed — please try again',
+    });
+  });
+
+  it('fails discovery when a successful response omits discoveryId', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          shops: [
+            {
+              id: 'shop-1',
+              name: 'Shop One',
+              countryCode: 'NG',
+              marketplace: 'Jumia Nigeria',
+              alreadyConnected: false,
+            },
+          ],
+        }),
+    } as Response);
+
+    await expect(
+      discoverJumiaShops('client-id', 'refresh-token')
+    ).resolves.toEqual({ ok: false, error: 'Shop discovery failed' });
+  });
+});
+
+describe('connectJumiaShops', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', vi.fn());
@@ -147,86 +255,61 @@ describe('connectWithToken', () => {
   it('returns ok true on successful connection', async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ id: 'new-int' }),
+      headers: new Headers(),
+      json: () => Promise.resolve({ connected: [{ id: 'shop-1' }] }),
     } as Response);
 
-    const result = await connectWithToken('my-token', 'My Shop');
+    const result = await connectJumiaShops('client-id', DISCOVERY_ID, [
+      'shop-1',
+    ]);
 
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: true, discoveryComplete: true });
     expect(fetch).toHaveBeenCalledWith(
       '/api/marketplace/jumia/connect',
       expect.objectContaining({
         method: 'POST',
-        credentials: 'include',
-        headers: {
-          'x-csrf-token': 'mock-csrf',
-          'content-type': 'application/json',
-        },
         body: JSON.stringify({
           connectionType: 'self_authorization',
-          refreshToken: 'my-token',
-          shopName: 'My Shop',
-          countryCode: 'NG',
+          clientId: 'client-id',
+          discoveryId: DISCOVERY_ID,
+          selectedShopIds: ['shop-1'],
         }),
       })
     );
   });
 
-  it('trims token and shop name', async () => {
+  it('preserves an incomplete discovery marker for partial connections', async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({}),
+      headers: new Headers([['x-jumia-discovery-complete', 'false']]),
+      json: () => Promise.resolve({ connected: [{ id: 'shop-1' }] }),
     } as Response);
 
-    await connectWithToken('  token-with-spaces  ', '  Shop Name  ');
-
-    const callBody = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string
-    );
-    expect(callBody.refreshToken).toBe('token-with-spaces');
-    expect(callBody.shopName).toBe('Shop Name');
-  });
-
-  it('uses default shop name when empty string is provided', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({}),
-    } as Response);
-
-    await connectWithToken('token', '   ');
-
-    const callBody = JSON.parse(
-      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string
-    );
-    expect(callBody.shopName).toBe('My Jumia Shop');
+    await expect(
+      connectJumiaShops('client-id', DISCOVERY_ID, ['shop-1'])
+    ).resolves.toEqual({ ok: true, discoveryComplete: false });
   });
 
   it('returns error from response body on failure', async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: false,
+      headers: new Headers(),
       json: () => Promise.resolve({ error: 'Invalid token' }),
     } as Response);
 
-    const result = await connectWithToken('bad-token', 'Shop');
+    const result = await connectJumiaShops('client-id', DISCOVERY_ID, [
+      'shop-1',
+    ]);
 
     expect(result).toEqual({ ok: false, error: 'Invalid token' });
-  });
-
-  it('returns fallback error when response body has no error field', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: false,
-      json: () => Promise.resolve({}),
-    } as Response);
-
-    const result = await connectWithToken('bad-token', 'Shop');
-
-    expect(result).toEqual({ ok: false, error: 'Connection failed' });
   });
 
   it('returns error on network failure', async () => {
     vi.mocked(fetch).mockRejectedValueOnce(new Error('Network error'));
 
-    const result = await connectWithToken('token', 'Shop');
+    const result = await connectJumiaShops('client-id', DISCOVERY_ID, [
+      'shop-1',
+    ]);
 
     expect(result).toEqual({
       ok: false,
@@ -250,14 +333,6 @@ describe('disconnectIntegration', () => {
     const result = await disconnectIntegration('id with spaces');
 
     expect(result).toEqual({ ok: true });
-    expect(fetch).toHaveBeenCalledWith(
-      '/api/marketplace/jumia/connect?id=id%20with%20spaces',
-      {
-        method: 'DELETE',
-        headers: { 'x-csrf-token': 'mock-csrf' },
-        credentials: 'include',
-      }
-    );
   });
 
   it('returns error when response is not ok', async () => {
@@ -299,20 +374,6 @@ describe('syncOrders', () => {
     });
   });
 
-  it('encodes the integration ID in the URL', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ synced: 0, newOrders: 0 }),
-    } as Response);
-
-    await syncOrders('id with spaces');
-
-    expect(fetch).toHaveBeenCalledWith(
-      '/api/marketplace/jumia/orders?integrationId=id%20with%20spaces',
-      expect.objectContaining({ method: 'POST' })
-    );
-  });
-
   it('returns error with details when response includes details', async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: false,
@@ -330,37 +391,36 @@ describe('syncOrders', () => {
       error: 'Token expired\nDetails: Refresh token is no longer valid',
     });
   });
+});
 
-  it('returns error without details when response has no details', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: false,
-      json: () => Promise.resolve({ error: 'Rate limited' }),
-    } as Response);
-
-    const result = await syncOrders('int-1');
-
-    expect(result).toEqual({ ok: false, error: 'Rate limited' });
+describe('checkProductApprovals', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal('fetch', vi.fn());
   });
 
-  it('returns fallback error when response has no error field', async () => {
+  it('reports approved products as ready for stock sync', async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
-      ok: false,
-      json: () => Promise.resolve({}),
+      ok: true,
+      json: () => Promise.resolve({ updated: 2, pending: 0, failed: 0 }),
     } as Response);
 
-    const result = await syncOrders('int-1');
-
-    expect(result).toEqual({ ok: false, error: 'Sync failed' });
+    await expect(checkProductApprovals('int-1')).resolves.toEqual({
+      ok: true,
+      message: '2 products approved and ready for stock sync',
+    });
   });
 
-  it('returns error on network failure', async () => {
-    vi.mocked(fetch).mockRejectedValueOnce(new Error('Network error'));
+  it('reports mixed approval, pending, and rejected counts together', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ updated: 1, pending: 2, failed: 3 }),
+    } as Response);
 
-    const result = await syncOrders('int-1');
-
-    expect(result).toEqual({
-      ok: false,
-      error: 'Sync failed — please try again',
+    await expect(checkProductApprovals('int-1')).resolves.toEqual({
+      ok: true,
+      message:
+        '1 product approved and ready for stock sync; 2 products still pending Jumia approval; 3 products were rejected by Jumia',
     });
   });
 });

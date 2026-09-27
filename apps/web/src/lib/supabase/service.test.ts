@@ -27,6 +27,7 @@ vi.mock('@/env', () => ({
 import {
   type AdsCredentialServiceClient,
   createServiceClient,
+  type JumiaCredentialServiceClient,
   type ServiceRoleClient,
 } from './service';
 
@@ -42,6 +43,9 @@ function compileServiceFactoryTypes() {
   const adsCredentials: AdsCredentialServiceClient =
     createServiceClient('ads-credentials');
   const adsTyped: SupabaseClient<Database> = adsCredentials;
+  const jumiaCredentials: JumiaCredentialServiceClient =
+    createServiceClient('jumia-credentials');
+  const jumiaTyped: SupabaseClient<Database> = jumiaCredentials;
   const ordinary = {} as SupabaseClient<Database>;
   // @ts-expect-error An ordinary typed client cannot acquire service authority.
   const forbidden: ServiceRoleClient = ordinary;
@@ -52,6 +56,7 @@ function compileServiceFactoryTypes() {
     legacy,
     typed,
     adsTyped,
+    jumiaTyped,
     forbidden,
     forbiddenAdsAsEventPipeline,
   ];
@@ -62,6 +67,7 @@ describe('service Supabase client factory', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.SUPABASE_ADS_CREDENTIAL_KEY;
+    delete process.env.SUPABASE_JUMIA_CREDENTIAL_KEY;
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key';
   });
 
@@ -123,6 +129,33 @@ describe('service Supabase client factory', () => {
 
     expect(() => createServiceClient('ads-credentials')).toThrow(
       'SUPABASE_ADS_CREDENTIAL_KEY or SUPABASE_SERVICE_ROLE_KEY is missing'
+    );
+  });
+
+  it('prefers the dedicated Jumia credential key and brands that authority separately', () => {
+    process.env.SUPABASE_JUMIA_CREDENTIAL_KEY = 'jumia-credential-key';
+
+    const client = createServiceClient('jumia-credentials');
+
+    expect(Reflect.ownKeys(client)).toContainEqual(expect.any(Symbol));
+    expect(mockCreateClient).toHaveBeenCalledWith(
+      'https://example.supabase.co',
+      'jumia-credential-key',
+      expect.any(Object)
+    );
+  });
+
+  it('does not fall back to the generic service-role key for Jumia credentials', () => {
+    expect(() => createServiceClient('jumia-credentials')).toThrow(
+      'SUPABASE_JUMIA_CREDENTIAL_KEY is missing'
+    );
+  });
+
+  it('fails closed when the dedicated Jumia credential key is missing', () => {
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    expect(() => createServiceClient('jumia-credentials')).toThrow(
+      'SUPABASE_JUMIA_CREDENTIAL_KEY is missing'
     );
   });
 });

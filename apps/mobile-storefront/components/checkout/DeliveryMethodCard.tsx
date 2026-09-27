@@ -1,4 +1,8 @@
-import { isAirportDeliveryEligible, isPickupEligible } from '@baci/shared';
+import {
+  isAirportDeliveryEligible,
+  isPickupEligible,
+  isStoreOriginDelivery,
+} from '@baci/shared';
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import {
@@ -68,7 +72,14 @@ export function DeliveryMethodCard({
       isProviderPickup: false,
     },
   ];
-  if (isAirportDeliveryEligible(deliveryState) || hasGiglGoFasterQuote) {
+  // Same-city (Lagos origin) delivery never offers By Air — air-cargo
+  // within one city is not offered — even when the state alone is
+  // airport-eligible (e.g. a stale saved address with city Lagos and state
+  // Oyo) or a provider GoFaster quote exists for the route.
+  if (
+    !isStoreOriginDelivery(deliveryCity, deliveryState) &&
+    (isAirportDeliveryEligible(deliveryState) || hasGiglGoFasterQuote)
+  ) {
     options.push({
       id: 'airport',
       title: 'By Air',

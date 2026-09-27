@@ -7,11 +7,11 @@ const mockGetMerchantFeatureAccess = vi.fn();
 const mockGetPlatformAdminAuth = vi.fn();
 const mockGetJumiaAuthUrl = vi.fn();
 const mockLoggerInfo = vi.fn();
-const mockCreateAdminClient = vi.fn();
 const mockCreateClient = vi.fn();
 
 vi.mock('@/env', () => ({
   getConfiguredAppUrl: vi.fn(() => 'https://usebaci.com'),
+  getJumiaAuthorizationEncryptionKey: vi.fn(() => 'a'.repeat(44)),
   getJumiaClientId: vi.fn(() => 'web-client-id'),
 }));
 
@@ -57,9 +57,6 @@ vi.mock('@/lib/platform-admin-auth', () => ({
     mockGetPlatformAdminAuth(...args),
 }));
 
-vi.mock('@/lib/supabase/admin', () => ({
-  createAdminClient: (...args: unknown[]) => mockCreateAdminClient(...args),
-}));
 vi.mock('@/lib/csrf', () => ({
   checkCsrfProtection: vi.fn(async () => ({ valid: true })),
 }));
@@ -233,7 +230,6 @@ describe('Jumia OAuth connect diagnostic', () => {
     );
 
     expect(response.status).toBe(400);
-    expect(mockCreateAdminClient).not.toHaveBeenCalled();
     expect(mockAuthenticateApiRequest).not.toHaveBeenCalled();
     expect(mockGetJumiaAuthUrl).not.toHaveBeenCalled();
   });

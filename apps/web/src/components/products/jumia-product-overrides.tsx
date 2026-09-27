@@ -16,23 +16,17 @@ import {
 } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { fetchWithCsrf } from '@/lib/api-client';
 import type { JumiaMapping } from '@/lib/jumia/types';
+import { getJumiaSaveErrorMessage } from './get-jumia-save-error-message';
+import {
+  type JumiaOverridesState,
+  saveJumiaOverrides,
+} from './save-jumia-overrides';
 
 interface JumiaProductOverridesProps {
   productId: string;
   basePrice: number;
   integrationId: string;
-}
-
-interface JumiaOverridesState {
-  price: string;
-  salePrice: string;
-  saleStart: string;
-  saleEnd: string;
-  isActive: boolean;
-  syncInventory: boolean;
-  syncPrice: boolean;
 }
 
 const DEFAULT_JUMIA_OVERRIDES: JumiaOverridesState = {
@@ -79,43 +73,6 @@ function mappingToOverrides(mapping: JumiaMapping): JumiaOverridesState {
     syncInventory: mapping.sync_inventory ?? true,
     syncPrice: mapping.sync_price ?? false,
   };
-}
-
-// Module-scope helper owns the throw-on-failure path so the component handler
-// does not contain a throw inside try/catch (a React Compiler bailout).
-async function saveJumiaOverrides(
-  productId: string,
-  integrationId: string,
-  overrides: JumiaOverridesState
-): Promise<void> {
-  const response = await fetchWithCsrf(
-    '/api/marketplace/jumia/products/update',
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        productId,
-        integrationId,
-        overrides: {
-          jumia_price: overrides.price
-            ? Number.parseFloat(overrides.price)
-            : null,
-          jumia_sale_price: overrides.salePrice
-            ? Number.parseFloat(overrides.salePrice)
-            : null,
-          jumia_sale_start: overrides.saleStart || null,
-          jumia_sale_end: overrides.saleEnd || null,
-          is_active: overrides.isActive,
-          sync_inventory: overrides.syncInventory,
-          sync_price: overrides.syncPrice,
-        },
-      }),
-    }
-  );
-
-  if (!response.ok) {
-    const errData = await response.json();
-    throw new Error(errData.error || 'Failed to update overrides');
-  }
 }
 
 export function JumiaProductOverrides({
@@ -181,7 +138,7 @@ export function JumiaProductOverrides({
       .catch((error) => {
         toast({
           title: 'Update Failed',
-          description: error instanceof Error ? error.message : 'Unknown error',
+          description: getJumiaSaveErrorMessage(error),
           variant: 'destructive',
         });
       })

@@ -1,14 +1,11 @@
+import type { CurrencyConfig } from '@/lib/currency';
 import { createOllamaAgenticChatResponse } from '@/lib/ollama-agentic-chat';
 import type { OllamaToolCall } from '@/lib/ollama-chat';
 import { createChatPresentationEventCollector } from './create-chat-presentation-event-collector';
 import { negotiateChatAgentUiResponse } from './negotiate-chat-agent-ui-response';
-import { ollamaAgenticChatTools } from './ollama-chat-tools';
+import { getOllamaAgenticChatTools } from './ollama-chat-tools';
 import { recoverOllamaChatResponse } from './recover-ollama-chat-response';
-import {
-  bufferTextResponse,
-  buildChatMessages,
-  CUSTOMER_CHAT_TIMEOUT_MS,
-} from './route-helpers';
+import { bufferTextResponse, buildChatMessages } from './route-helpers';
 
 const SIDE_EFFECTING_OLLAMA_TOOL_NAMES = new Set([
   'createVirtualAccount',
@@ -68,9 +65,13 @@ export async function runOllamaChat(
   req: Request,
   messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
   options: {
+    agenticCheckoutEnabled: boolean;
     baseUrl: string;
     model: string;
     basicAuth?: string;
+    currency: CurrencyConfig;
+    merchantName: string;
+    timeoutMs: number;
     executeToolCall: (call: OllamaToolCall) => Promise<string>;
   }
 ): Promise<Response | null> {
@@ -83,9 +84,12 @@ export async function runOllamaChat(
       model: options.model,
       basicAuth: options.basicAuth,
       messages: buildChatMessages(messages, options.model, {
+        checkoutEnabled: options.agenticCheckoutEnabled,
+        currency: options.currency,
+        merchantName: options.merchantName,
         toolsEnabled: true,
       }),
-      tools: ollamaAgenticChatTools,
+      tools: getOllamaAgenticChatTools(options.agenticCheckoutEnabled),
       executeToolCall: async (call) => {
         const toolName = call.function.name;
         if (
@@ -116,7 +120,7 @@ export async function runOllamaChat(
         }
       },
       signal: req.signal,
-      timeoutMs: CUSTOMER_CHAT_TIMEOUT_MS,
+      timeoutMs: options.timeoutMs,
     });
     const bufferedResponse = await bufferTextResponse(ollamaResponse);
     return await negotiateChatAgentUiResponse(

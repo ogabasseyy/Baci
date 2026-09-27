@@ -86,7 +86,7 @@ describe('createWalletFundedBankTransferIntent', () => {
         orderId: 'order-1',
         requestConsent: jest.fn<() => Promise<boolean>>(),
       })
-    ).resolves.toBe(true);
+    ).resolves.toBe(response);
 
     expect(onSuccess).toHaveBeenCalledWith(response);
     expect(mockCreateWalletFundingAccount).not.toHaveBeenCalled();
@@ -112,7 +112,7 @@ describe('createWalletFundedBankTransferIntent', () => {
         orderId: 'order-1',
         requestConsent: jest.fn(() => Promise.resolve(true)),
       })
-    ).resolves.toBe(true);
+    ).resolves.toBe(response);
 
     expect(mockCreateWalletFundingAccount).toHaveBeenCalledWith({
       merchantId: 'merchant-1',
@@ -145,7 +145,7 @@ describe('createWalletFundedBankTransferIntent', () => {
         orderId: 'order-1',
         requestConsent: jest.fn(() => Promise.resolve(true)),
       })
-    ).resolves.toBe(false);
+    ).resolves.toBeNull();
 
     expect(mockCreateWalletFundingAccount).toHaveBeenCalledWith({
       merchantId: 'merchant-1',
@@ -178,7 +178,7 @@ describe('createWalletFundedBankTransferIntent', () => {
         orderId: 'order-1',
         requestConsent: jest.fn(() => Promise.resolve(false)),
       })
-    ).resolves.toBe(false);
+    ).resolves.toBeNull();
 
     expect(mockCreateWalletFundingAccount).not.toHaveBeenCalled();
     expect(onFallback).toHaveBeenCalledWith({
@@ -208,7 +208,7 @@ describe('createWalletFundedBankTransferIntent', () => {
         orderId: 'order-1',
         requestConsent: jest.fn(() => Promise.reject(promptError)),
       })
-    ).resolves.toBe(false);
+    ).resolves.toBeNull();
 
     expect(mockCreateWalletFundingAccount).not.toHaveBeenCalled();
     expect(onFallback).toHaveBeenCalledWith({

@@ -35,5 +35,5 @@ export async function hasExistingMerchantRateOrder({
     return false;
   }
 
-  return existingOrder !== null;
+  return typeof existingOrder?.id === 'string' && existingOrder.id.length > 0;
 }

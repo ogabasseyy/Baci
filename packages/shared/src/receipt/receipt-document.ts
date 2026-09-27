@@ -16,6 +16,7 @@ export interface ReceiptDocumentParams {
   dateStr: string;
   docTitle: string;
   isPaid: boolean;
+  isProforma: boolean;
   itemRows: string;
   logoHtml: string;
   paymentHistoryHtml: string;
@@ -41,6 +42,7 @@ export function renderReceiptDocument(params: ReceiptDocumentParams): string {
     dateStr,
     docTitle,
     isPaid,
+    isProforma,
     itemRows,
     logoHtml,
     paymentHistoryHtml,
@@ -90,7 +92,7 @@ export function renderReceiptDocument(params: ReceiptDocumentParams): string {
       <div class="doc-meta">
         <div class="doc-title">${docTitle}</div>
         <div class="doc-number">#${escapeHtml(order.order_number)}</div>
-        <div class="doc-date">${dateStr} &middot; ${timeStr}</div>
+        <div class="doc-date">${timeStr ? `${dateStr} &middot; ${timeStr}` : dateStr}</div>
         <div class="status-badge">${statusConfig.label}</div>
       </div>
     </div>
@@ -106,7 +108,7 @@ export function renderReceiptDocument(params: ReceiptDocumentParams): string {
         </div>
       </div>
       <div class="info-col info-col-right">
-        <div class="info-label">${isPaid ? 'Payment' : 'Invoice Info'}</div>
+        <div class="info-label">${isPaid ? 'Payment' : isProforma ? 'Proforma Info' : 'Invoice Info'}</div>
         <div class="info-name">${escapeHtml(paymentMethodLabel)}</div>
         <div class="info-detail">
           <div>${docTitle} #${escapeHtml(order.order_number)}</div>

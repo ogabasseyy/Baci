@@ -1,0 +1,15 @@
+@import "tailwindcss" source(none);
+@import "./storefront-foundation.css";
+@config "../../../tailwind.storefront-blog.config.mjs";
+
+/* Essential utility-route styles must exist before the first interaction. */
+@source "./[slug]/(utility)";
+@source "../../components/storefront/ogabassey/pages";
+@source "../../components/storefront/ogabassey/layout";
+@source "../../components/storefront/blocks/ogabassey-nav.tsx";
+@source "../../components/storefront/search-autocomplete.tsx";
+@source "../../components/ui";
+@source "../../components/themed";
+@source "../../components/repairs";
+@source not "../../**/*.test.ts";
+@source not "../../**/*.test.tsx";

@@ -14,6 +14,7 @@ interface CategoryPageMobileFilterDrawerProps {
   onClearFilters: () => void;
   onClose: () => void;
   paginationProductCount: number;
+  showPriceFilter: boolean;
 }
 
 /**
@@ -28,6 +29,7 @@ export function CategoryPageMobileFilterDrawer({
   onClearFilters,
   onClose,
   paginationProductCount,
+  showPriceFilter,
 }: CategoryPageMobileFilterDrawerProps) {
   return (
     <div className="fixed inset-0 z-60 flex justify-end">
@@ -66,6 +68,7 @@ export function CategoryPageMobileFilterDrawer({
             onFilterChange={onFilterChange}
             onClearFilters={onClearFilters}
             className="border-none shadow-none p-0"
+            showPriceFilter={showPriceFilter}
           />
         </div>
         <div className="absolute bottom-0 left-0 right-0 p-4 bg-store-background border-t border-store-background-text/10">

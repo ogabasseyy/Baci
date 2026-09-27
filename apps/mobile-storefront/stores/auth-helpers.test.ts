@@ -55,6 +55,7 @@ jest.mock('../lib/logger', () => ({
   }),
 }));
 
+import { hydrateCustomer } from './auth-customer-hydration';
 import {
   CUSTOMER_SELECT_COLUMNS,
   LEGACY_CUSTOMER_SELECT_COLUMNS,
@@ -62,7 +63,6 @@ import {
 // Import after mocks
 import {
   getErrorMessage,
-  hydrateCustomer,
   INIT_QUERY_TIMEOUT_MS,
   initTimeout,
   isInitTimeoutError,

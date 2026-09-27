@@ -15,6 +15,9 @@ export interface QueryMock {
   eq: Mock<
     (_column?: string, _value?: unknown) => QueryMock | Promise<unknown>
   >;
+  neq: Mock<
+    (_column?: string, _value?: unknown) => QueryMock | Promise<unknown>
+  >;
   in: Mock<
     (_column?: string, _values?: unknown[]) => QueryMock | Promise<unknown>
   >;
@@ -56,6 +59,7 @@ export function createQuery(
       ? Promise.resolve(response)
       : query;
   });
+  query.neq = vi.fn((_column?: string, _value?: unknown) => query);
   query.in = vi.fn((_column?: string, _values?: unknown[]) =>
     options.terminalIn ? Promise.resolve(response) : query
   );

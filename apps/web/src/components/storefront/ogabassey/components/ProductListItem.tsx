@@ -16,7 +16,7 @@ import { useState } from 'react';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import { PLACEHOLDER_IMAGE } from '@/lib/image-utils';
 import { asRoute } from '@/lib/routes';
-import { getProductUrl } from '@/lib/seo-utils';
+import { getProductUrl } from '@/lib/product-url';
 import { requiresOgabasseyProductSelection } from '../product-selection';
 import type { Product } from '../types';
 import { resolveProductImageSource } from './product-image-source';

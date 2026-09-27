@@ -161,6 +161,40 @@ describe('loadDirectBookingContext', () => {
     ).rejects.toBeInstanceOf(OrderShipmentBookingError);
   });
 
+  it.each([
+    {
+      name: 'cancelled payment',
+      overrides: { payment_status: 'cancelled', shipping_status: 'pending' },
+    },
+    {
+      name: 'cancelled shipping',
+      overrides: { shipping_status: 'cancelled' },
+    },
+    {
+      name: 'us-spelled cancellation',
+      overrides: { shipping_status: 'canceled' },
+    },
+  ])('rejects orders with $name', async ({ overrides }) => {
+    const { loadDirectBookingContext } = await import(
+      './load-direct-booking-context'
+    );
+    const supabase = buildSupabaseMock(overrides);
+
+    const result = await loadDirectBookingContext(
+      supabase,
+      merchantId,
+      bookingRequest
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.response.status).toBe(400);
+      await expect(result.response.json()).resolves.toMatchObject({
+        code: 'ORDER_CANCELLED',
+      });
+    }
+  });
+
   it('loads prepaid GIGL customer checkout orders', async () => {
     const { loadDirectBookingContext } = await import(
       './load-direct-booking-context'

@@ -41,9 +41,18 @@ export const FulfillmentErrorItemSchema = z.object({
 });
 
 export const FulfillmentPackageSchema = z.object({
-  /** Comma-separated list of order item IDs (e.g. "123,456,789") */
-  orderItems: z.string().min(1, 'orderItems must not be empty'),
+  orderItems: z.array(z.string().min(1)).min(1),
+  trackingCode: z.string().min(1),
+  countryCode: z
+    .string()
+    .regex(/^[A-Z]{2}$/)
+    .optional(),
+});
+
+export const ReadyToShipPackageSchema = z.object({
+  orderItems: z.array(z.string().min(1)).min(1),
   trackingNumber: z.string().min(1),
+  countryCode: z.string().regex(/^[A-Z]{2}$/),
 });
 
 // ── Inferred types ──
@@ -53,3 +62,4 @@ export type CountryInfo = z.infer<typeof CountryInfoSchema>;
 export type ShippingAddress = z.infer<typeof ShippingAddressSchema>;
 export type FulfillmentErrorItem = z.infer<typeof FulfillmentErrorItemSchema>;
 export type FulfillmentPackage = z.infer<typeof FulfillmentPackageSchema>;
+export type ReadyToShipPackage = z.infer<typeof ReadyToShipPackageSchema>;

@@ -3,7 +3,7 @@ import type {
   RepairQuoteSummary,
 } from '@baci/shared/repairs';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { useState } from 'react';
+import { type RefObject, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -11,6 +11,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { RepairPickupCheckout } from '@/components/repairs/RepairPickupCheckout';
 import { RepairTextField } from '@/components/repairs/RepairTextField';
 import { repairBookingStyles as booking } from '@/components/repairs/repair-booking.styles';
 import {
@@ -35,6 +36,7 @@ interface RepairBookingFormProps {
   /** Field-level errors returned by the server (keyed by request field). */
   fieldErrors: Record<string, string[]> | null;
   onSubmit: (payload: RepairBookingRequest) => void;
+  navigationBackRef?: RefObject<(() => void) | null>;
 }
 
 const INITIAL_STATE: RepairBookingFormState = {
@@ -61,6 +63,7 @@ export function RepairBookingForm({
   serverError,
   fieldErrors,
   onSubmit,
+  navigationBackRef,
 }: RepairBookingFormProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
@@ -69,6 +72,7 @@ export function RepairBookingForm({
     deviceModel: device?.model ?? '',
   });
   const [errors, setErrors] = useState<RepairBookingFieldErrors>({});
+  const [pickup, setPickup] = useState<RepairBookingRequest | null>(null);
 
   const update = <K extends keyof RepairBookingFormState>(
     key: K,
@@ -86,18 +90,27 @@ export function RepairBookingForm({
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) return;
 
-    onSubmit(
-      buildBookingPayload(
-        state,
-        device?.deviceType ?? 'Other',
-        device?.id ?? null,
-        quote?.id ?? null
-      )
+    const payload = buildBookingPayload(
+      state,
+      device?.deviceType ?? 'Other',
+      device?.id ?? null,
+      quote?.id ?? null
     );
+    if (payload.serviceType === 'pickup') setPickup(payload);
+    else onSubmit(payload);
   };
 
   const errorFor = (key: keyof RepairBookingFormState, serverKey: string) =>
     errors[key] ?? serverFieldError(fieldErrors, serverKey);
+
+  if (pickup)
+    return (
+      <RepairPickupCheckout
+        data={pickup}
+        onBack={() => setPickup(null)}
+        navigationBackRef={navigationBackRef}
+      />
+    );
 
   return (
     <ScrollView
@@ -176,30 +189,41 @@ export function RepairBookingForm({
         How would you like to proceed?
       </Text>
       <View style={booking.methodRow}>
-        <Pressable
-          style={[
-            booking.methodOption,
-            {
-              borderColor: BRAND.primary,
-              backgroundColor: BRAND.primaryAlpha06,
-            },
-          ]}
-          accessibilityRole="radio"
-          accessibilityState={{ checked: true }}
-          accessibilityLabel="Drop-off"
-        >
-          <Text style={[booking.methodOptionText, { color: BRAND.primary }]}>
-            Drop-off
-          </Text>
-        </Pressable>
+        {(['dropoff', 'pickup'] as const).map((method) => (
+          <Pressable
+            key={method}
+            onPress={() => update('serviceType', method)}
+            style={[
+              booking.methodOption,
+              {
+                borderColor:
+                  state.serviceType === method ? BRAND.primary : colors.border,
+                backgroundColor:
+                  state.serviceType === method
+                    ? BRAND.primaryAlpha06
+                    : colors.card,
+              },
+            ]}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: state.serviceType === method }}
+            accessibilityLabel={method === 'pickup' ? 'Pickup' : 'Drop-off'}
+          >
+            <Text style={[booking.methodOptionText, { color: BRAND.primary }]}>
+              {method === 'pickup' ? 'Pickup' : 'Drop-off'}
+            </Text>
+          </Pressable>
+        ))}
       </View>
-      <Text
-        style={[booking.pickupUnavailableNote, { color: colors.textSecondary }]}
-        accessibilityRole="text"
-      >
-        Courier pickup will be available in a future update. Please drop off
-        your device at the repair center for now.
-      </Text>
+      {state.serviceType === 'pickup' && (
+        <RepairTextField
+          label="Pickup address"
+          placeholder="Street, area, city, state"
+          value={state.pickupAddress}
+          onChangeText={(value) => update('pickupAddress', value)}
+          error={errorFor('pickupAddress', 'pickupAddress')}
+          multiline
+        />
+      )}
 
       {serverError ? (
         <Text
@@ -224,7 +248,11 @@ export function RepairBookingForm({
           <ActivityIndicator color="#FFF" />
         ) : (
           <>
-            <Text style={styles.primaryButtonText}>Request repair</Text>
+            <Text style={styles.primaryButtonText}>
+              {state.serviceType === 'pickup'
+                ? 'Review pickup'
+                : 'Request repair'}
+            </Text>
             <Ionicons name="arrow-forward" size={18} color="#FFF" />
           </>
         )}

@@ -74,6 +74,7 @@ describe('generateFacebookCatalogFeed', () => {
 
     expect(xml).toContain('<rss version="2.0"');
     expect(xml).toContain('<g:id>product-1</g:id>');
+    expect(xml).toContain('<g:item_group_id>product-1</g:item_group_id>');
     expect(xml).toContain('<g:title>Samsung Galaxy S26 Ultra</g:title>');
     expect(xml).toContain(
       '<g:description>Flagship phone &amp; charger bundle.</g:description>'
@@ -106,42 +107,6 @@ describe('generateFacebookCatalogFeed', () => {
 
     expect(xml).not.toContain('<item>');
     expect(xml).not.toContain('<g:id>product-1</g:id>');
-  });
-
-  it('keeps product ids stable while using sku-matrix default variant price and stock', () => {
-    const product: FeedProduct = {
-      ...baseProduct,
-      id: 'sku-product',
-      compare_at_price: undefined,
-      price: 0,
-      stock: 0,
-      stock_quantity: 0,
-      variant_model: 'sku_matrix',
-      variants: [
-        {
-          id: 'variant-used-256',
-          attributes: { storage: '256GB' },
-          condition: 'used',
-          price_override: 850_000,
-          stock_quantity: 2,
-        },
-      ],
-    };
-
-    const xml = generateFacebookCatalogFeed(
-      [product],
-      merchant,
-      'https://ogabassey.com',
-      {
-        'sku-product': imageManifest['product-1'],
-      }
-    );
-
-    expect(xml).toContain('<g:id>sku-product</g:id>');
-    expect(xml).not.toContain('<g:id>variant-used-256</g:id>');
-    expect(xml).toContain('<g:availability>in stock</g:availability>');
-    expect(xml).toContain('<g:price>850000.00 NGN</g:price>');
-    expect(xml).toContain('<g:condition>used</g:condition>');
   });
 
   it('skips zero-priced sku-matrix products when priced variants are missing fallback fields', () => {

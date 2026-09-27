@@ -1,80 +1,10 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import submitVersionGuardValidator from './validate-fastfile-submit-version-guard.cjs';
+import { submitVersionGuardFixtures } from './validate-fastfile-submit-version-guard.fixtures';
 
 const { validateFastfileSubmitVersionGuard } = submitVersionGuardValidator;
+const { VALID_FASTFILE, VALID_SLOT, readFastlaneFile } =
+  submitVersionGuardFixtures;
 
-const VALID_SLOT = `def review_cancellation_allowed?
-  %w[1 true yes].include?(ENV["IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT"].to_s.strip.downcase)
-end
-
-def ensure_replacement_build_exists!(app, platform, app_version:, build_number:)
-  build = Spaceship::ConnectAPI::Build.all(
-    app_id: app.id,
-    version: requested_version,
-    build_number: requested_build,
-    platform: platform,
-    processing_states: SUBMITTABLE_BUILD_PROCESSING_STATE
-  ).reject(&:expired).first
-
-  return build if build
-
-  UI.user_error!("no replacement build")
-end
-
-def wait_for_editable_app_store_version(app, platform)
-  EDITABLE_VERSION_POLL_ATTEMPTS.times do
-    version = app.get_edit_app_store_version(platform: platform)
-    return version if version
-
-    sleep(EDITABLE_VERSION_POLL_INTERVAL_SECONDS)
-  end
-
-  nil
-end
-
-def app_store_version_slot_ready?(app_version:, build_number:)
-  app = Spaceship::ConnectAPI::App.find(BUNDLE_ID)
-  platform = Spaceship::ConnectAPI::Platform::IOS
-  return true if app.get_edit_app_store_version(platform: platform)
-
-  submission = app.get_in_progress_review_submission(platform: platform)
-  return false if submission.nil?
-
-  unless review_cancellation_allowed?
-    return false
-  end
-
-  ensure_replacement_build_exists!(
-    app,
-    platform,
-    app_version: app_version,
-    build_number: build_number
-  )
-
-  submission.cancel_submission
-
-  return true if wait_for_editable_app_store_version(app, platform)
-
-  UI.user_error!("cancelled but no editable version appeared")
-end`;
-
-const VALID_FASTFILE = `import("asc_version_slot.rb")
-
-lane :submit do
-  api_key = asc_api_key
-
-  unless app_store_version_slot_ready?(app_version: app_version, build_number: build_number)
-    next
-  end
-
-  set_changelog(changelog_opts)
-  update_app_review_notes!(review_notes_text, app_version: app_version)
-  deliver(deliver_opts)
-end`;
-
-const readFastlaneFile = (name: string) =>
-  readFileSync(join(__dirname, '..', 'fastlane', name), 'utf8');
 
 describe('validateFastfileSubmitVersionGuard', () => {
   it('accepts a submit lane that frees the version slot before set_changelog', () => {
@@ -265,6 +195,77 @@ describe('bugfix: cancelling review could strand the app with nothing under revi
 
     expect(validateFastfileSubmitVersionGuard(VALID_FASTFILE, unscoped)).toContain(
       'asc_version_slot.rb: ensure_replacement_build_exists! must scope the lookup to the requested app version'
+    );
+  });
+});
+
+describe('bugfix: reject_if_possible silently withdrew a live App Review', () => {
+  it('rejects a submit lane whose deliver passes reject_if_possible', () => {
+    // deliver's own reject_if_possible cancels whatever is in App Review,
+    // bypassing the opt-in guard — it withdrew build 2.1.527 when 2.1.528 shipped.
+    const withRejectIfPossible = VALID_FASTFILE.replace(
+      '    reject_if_possible: false,',
+      '    reject_if_possible: true,'
+    );
+
+    expect(
+      validateFastfileSubmitVersionGuard(withRejectIfPossible, VALID_SLOT)
+    ).toContain(
+      'Fastfile: submit lane must not pass reject_if_possible: true — cancellation is owned solely by app_store_version_slot_ready? (opt-in via IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT); deliver reject_if_possible is an unguarded second path that withdraws live App Reviews'
+    );
+  });
+
+  it('rejects a submit lane that omits the reject_if_possible pin', () => {
+    // Omission is not a pin: deliver reads DELIVER_REJECT_IF_POSSIBLE when
+    // the option is omitted, silently re-enabling the unguarded path.
+    const omitsPin = VALID_FASTFILE.replace(
+      '    reject_if_possible: false,\n',
+      ''
+    );
+
+    expect(
+      validateFastfileSubmitVersionGuard(omitsPin, VALID_SLOT)
+    ).toContain(
+      'Fastfile: the options hash passed to deliver must pin reject_if_possible: false explicitly — deliver reads DELIVER_REJECT_IF_POSSIBLE when the option is omitted, which would silently re-enable its unguarded cancellation path'
+    );
+  });
+
+  it('rejects a pin that is not in the options hash passed to deliver', () => {
+    // A false pin in an unrelated hash must not satisfy the check while
+    // deliver receives an unpinned hash (env could re-enable cancellation).
+    const unusedPin = VALID_FASTFILE.replace(
+      `  deliver_opts = {
+    reject_if_possible: false,
+    submit_for_review: true
+  }`,
+      `  audit_opts = {
+    reject_if_possible: false
+  }
+
+  deliver_opts = {
+    submit_for_review: true
+  }`
+    );
+
+    expect(
+      validateFastfileSubmitVersionGuard(unusedPin, VALID_SLOT)
+    ).toContain(
+      'Fastfile: the options hash passed to deliver must pin reject_if_possible: false explicitly — deliver reads DELIVER_REJECT_IF_POSSIBLE when the option is omitted, which would silently re-enable its unguarded cancellation path'
+    );
+  });
+});
+
+describe('bugfix: editable shortcut skipped the opt-in during a live review', () => {
+  it('rejects trusting the editable version before consulting the live review', () => {
+    const editableFastPathFirst = VALID_SLOT.replace(
+      `  submission = app.get_in_progress_review_submission(platform: platform)\n  if submission.nil?\n    if winding_down_review_submission?(app, platform)\n      return false\n    end\n    return true if app.get_edit_app_store_version(platform: platform)\n    return false\n  end\n`,
+      `  return true if app.get_edit_app_store_version(platform: platform)\n\n  submission = app.get_in_progress_review_submission(platform: platform)\n  if submission.nil?\n    if winding_down_review_submission?(app, platform)\n      return false\n    end\n    return false\n  end\n`
+    );
+
+    expect(
+      validateFastfileSubmitVersionGuard(VALID_FASTFILE, editableFastPathFirst)
+    ).toContain(
+      'asc_version_slot.rb: app_store_version_slot_ready? must query get_in_progress_review_submission before the get_edit_app_store_version shortcut'
     );
   });
 });

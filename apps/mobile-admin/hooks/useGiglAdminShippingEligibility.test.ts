@@ -46,6 +46,28 @@ describe('useGiglAdminShippingEligibility', () => {
     expect(result.current.isEligible).toBe(true);
   });
 
+  it('denies GIGL when the merchant has no stored carrier opt-in', () => {
+    queryState.current = {
+      data: {
+        merchant_id: 'merchant-1',
+        shipping_providers: [],
+        free_shipping_threshold: null,
+      },
+      isError: false,
+      isLoading: false,
+    };
+
+    const { result } = renderHook(() =>
+      useGiglAdminShippingEligibility({
+        id: 'merchant-1',
+        country: 'NG',
+        payout_currency: 'NGN',
+      })
+    );
+
+    expect(result.current.isEligible).toBe(false);
+  });
+
   it('fails closed while shipping settings are loading or errored', () => {
     queryState.current = {
       data: undefined,

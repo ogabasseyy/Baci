@@ -3,6 +3,7 @@ import * as Crypto from 'expo-crypto';
 import { useRef } from 'react';
 import { z } from 'zod';
 import { useShallow } from 'zustand/react/shallow';
+import { calculateCommerce } from '@/lib/commerce-brain';
 import { CONFIG } from '@/lib/config';
 import {
   clearPendingLoyaltyRedemptionId,
@@ -10,7 +11,7 @@ import {
   getPendingLoyaltyRedemptionStorageKey,
   getReusablePendingLoyaltyRedemptionId,
 } from '@/lib/loyalty-redemption-idempotency';
-import { calculateCommerce, supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 import {
   getRedeemPointValidationError,

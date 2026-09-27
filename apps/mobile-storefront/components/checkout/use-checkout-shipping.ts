@@ -1,4 +1,3 @@
-import { isAirportDeliveryEligible } from '@baci/shared';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { fetchShippingQuotes } from '@/components/checkout/checkout-shipping.helpers';
 import {
@@ -10,7 +9,6 @@ import {
   getDeliveryMethodFee,
   getShippingProviderForMethod as getProvider,
   getQuotePreference,
-  isGiglGoFasterQuote,
   requiresQuote,
 } from '@/components/checkout/checkout-step-helpers';
 import { buildShippingQuoteContextKey } from '@/lib/shipping-quotes';
@@ -19,6 +17,7 @@ import { createCheckoutShippingHandlers } from './checkout-shipping-handlers';
 import { loadShippingStates } from './checkout-shipping-loaders';
 import { getCheckoutLocationPickerVisibility } from './get-checkout-location-picker-visibility';
 import type { DeliveryMethod, ShippingQuote } from './types';
+import { useApplyDeliveryFallback } from './use-apply-delivery-fallback';
 import type {
   SavedDoorAddress,
   UseCheckoutShippingParams,
@@ -86,17 +85,17 @@ export function useCheckoutShipping({
     shippingQuotes,
     state: watchedState,
   });
-  if (
-    (deliveryMethod !== 'door' && !hasResolvedDeliveryLocation) ||
-    (deliveryMethod === 'airport' &&
-      !isAirportDeliveryEligible(watchedState) &&
-      !isGiglGoFasterQuote(
-        findSelectedQuote(shippingQuotes, selectedQuoteId)
-      )) ||
-    (deliveryMethod === 'pickup_station' && !canUsePickupStation)
-  ) {
-    setDeliveryMethod('door');
-  }
+  useApplyDeliveryFallback({
+    canUsePickupStation,
+    deliveryMethod,
+    hasResolvedDeliveryLocation,
+    selectedQuoteId,
+    setDeliveryMethod,
+    setSelectedQuoteId,
+    shippingQuotes,
+    watchedCity,
+    watchedState,
+  });
   const resetQuotes = () => {
     setShippingQuotes([]);
     setSelectedQuoteId('');

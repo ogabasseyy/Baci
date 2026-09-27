@@ -8,8 +8,12 @@ vi.mock('@/lib/ollama-agentic-chat', () => ({
 import { runOllamaChat } from './run-ollama-chat';
 
 const options = {
+  agenticCheckoutEnabled: true,
   baseUrl: 'https://ollama.example.com',
   model: 'test-model',
+  currency: { code: 'NGN', locale: 'en-NG', symbol: '₦' },
+  merchantName: 'Demo Store',
+  timeoutMs: 60_000,
   executeToolCall: mocks.execute,
 };
 
@@ -54,4 +58,16 @@ it('uses the route-owned tool executor without resolving credentials itself', as
   );
   expect(await response?.text()).toBe('catalog result');
   expect(mocks.execute).toHaveBeenCalledWith(call);
+});
+
+it('passes the remaining route budget to the ollama backend', async () => {
+  mocks.generate.mockResolvedValue(new Response('Hello'));
+  await runOllamaChat(new Request('https://example.com'), [], {
+    ...options,
+    timeoutMs: 12_345,
+  });
+
+  expect(mocks.generate).toHaveBeenCalledWith(
+    expect.objectContaining({ timeoutMs: 12_345 })
+  );
 });

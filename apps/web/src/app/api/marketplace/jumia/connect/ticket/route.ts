@@ -3,13 +3,13 @@ import { getConfiguredAppUrl } from '@/env';
 import {
   authenticateApiRequest,
   getUserAccess,
+  hasBearerAuthScheme,
   hasPermission,
 } from '@/lib/api-auth';
 import {
   getMerchantFeatureAccess,
   merchantFeatureUpgradeResponse,
 } from '@/lib/merchant-feature-gates';
-import { createAdminClient } from '@/lib/supabase/admin';
 
 /**
  * POST: Create a short-lived OAuth handoff ticket for mobile Jumia connection.
@@ -24,6 +24,9 @@ export async function POST(request: NextRequest) {
     // not cookie-based auth. CSRF attacks only exploit automatic cookie inclusion.
     const auth = await authenticateApiRequest(request);
     if (auth.error || !auth.user || !auth.supabase) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (!hasBearerAuthScheme(request)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -66,18 +69,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const adminClient = createAdminClient();
     const expiresAt = new Date(Date.now() + 60_000).toISOString();
 
-    const { data: ticket, error: insertError } = await adminClient
-      .from('oauth_handoff_tickets')
-      .insert({
-        merchant_id: access.merchantId,
-        user_id: auth.user.id,
-        expires_at: expiresAt,
-      })
-      .select('id, expires_at')
-      .single();
+    const { data: ticketRows, error: insertError } = await auth.supabase.rpc(
+      'create_jumia_oauth_handoff_ticket',
+      {
+        p_merchant_id: access.merchantId,
+        p_expires_at: expiresAt,
+      }
+    );
+    const ticket = Array.isArray(ticketRows) ? ticketRows[0] : ticketRows;
 
     if (insertError || !ticket) {
       console.error('[Jumia Ticket] Insert failed:', insertError);

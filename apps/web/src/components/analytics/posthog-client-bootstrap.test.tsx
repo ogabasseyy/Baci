@@ -1,5 +1,6 @@
 import { render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { IdleBootReason } from '@/lib/posthog/schedule-idle-boot';
 
 let pathname = '/';
 
@@ -7,7 +8,10 @@ const mocks = vi.hoisted(() => ({
   hasPostHogBrowserInitialized: vi.fn(() => false),
   initializePostHogBrowser: vi.fn(),
   initializePostHogInstrumentationIfAllowed: vi.fn(),
-  scheduleIdleBoot: vi.fn((_callback: () => void) => () => undefined),
+  scheduleIdleBoot: vi.fn(
+    (_callback: (reason?: IdleBootReason) => void) => () => undefined
+  ),
+  waitForLcpWindowEnd: vi.fn(async () => undefined),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -35,15 +39,26 @@ vi.mock('@/lib/posthog/schedule-idle-boot', () => ({
   scheduleIdleBoot: mocks.scheduleIdleBoot,
 }));
 
+// The LCP gate (PerformanceObserver / timeout) is covered in
+// wait-for-lcp.test.ts. Here it resolves immediately so boot timing stays
+// deterministic under jsdom, which never emits LCP entries. Hoisted into
+// `mocks` so tests can assert whether the boot waited for LCP at all.
+vi.mock('@/lib/posthog/wait-for-lcp', () => ({
+  waitForLcpWindowEnd: mocks.waitForLcpWindowEnd,
+}));
+
 function importPostHogClientBootstrap() {
   return import('./posthog-client-bootstrap');
 }
 
-/** Runs the callback the component handed to the (mocked) idle-boot scheduler. */
-function fireDeferredBoot() {
+/**
+ * Runs the callback the component handed to the (mocked) idle-boot
+ * scheduler, simulating the given idle-boot trigger reason.
+ */
+function fireDeferredBoot(reason?: IdleBootReason) {
   const calls = mocks.scheduleIdleBoot.mock.calls;
   const scheduledBoot = calls[calls.length - 1]?.[0];
-  scheduledBoot?.();
+  scheduledBoot?.(reason);
 }
 
 afterEach(() => {
@@ -148,86 +163,5 @@ describe('PostHogClientBootstrap', () => {
     expect(
       mocks.initializePostHogInstrumentationIfAllowed
     ).not.toHaveBeenCalled();
-  });
-
-  it('schedules the idle boot once and never reschedules across client navigations', async () => {
-    pathname = '/ogabassey/laptops/macbook-pro';
-    vi.stubGlobal('location', {
-      pathname,
-      href: 'https://usebaci.com/ogabassey/laptops/macbook-pro',
-      hostname: 'usebaci.com',
-    });
-    const { PostHogClientBootstrap } = await importPostHogClientBootstrap();
-
-    const { rerender } = render(<PostHogClientBootstrap />);
-
-    expect(mocks.scheduleIdleBoot).toHaveBeenCalledOnce();
-
-    for (const nextPath of [
-      '/ogabassey/phones/pixel',
-      '/ogabassey/tablets/ipad',
-    ]) {
-      pathname = nextPath;
-      vi.stubGlobal('location', {
-        pathname,
-        href: `https://usebaci.com${nextPath}`,
-        hostname: 'usebaci.com',
-      });
-      rerender(<PostHogClientBootstrap />);
-    }
-
-    // A client navigation no longer cancels + reschedules the idle listeners:
-    // the boot is armed exactly once at mount.
-    expect(mocks.scheduleIdleBoot).toHaveBeenCalledOnce();
-  });
-
-  it('initializes PostHog after a client navigation from blog to a non-blog page', async () => {
-    pathname = '/ogabassey/blog/phone-guide';
-    vi.stubGlobal('location', {
-      pathname,
-      href: 'https://usebaci.com/ogabassey/blog/phone-guide',
-      hostname: 'usebaci.com',
-    });
-    const { PostHogClientBootstrap } = await importPostHogClientBootstrap();
-
-    const { rerender } = render(<PostHogClientBootstrap />);
-
-    // Mount-once: the idle boot is scheduled at mount even on a blog path.
-    expect(mocks.scheduleIdleBoot).toHaveBeenCalledOnce();
-
-    // Firing the idle boot while still on the blog path stays off the full
-    // client (the blog gate suppresses it).
-    fireDeferredBoot();
-    expect(mocks.initializePostHogBrowser).not.toHaveBeenCalled();
-
-    pathname = '/ogabassey/laptops/macbook-pro';
-    vi.stubGlobal('location', {
-      pathname,
-      href: 'https://usebaci.com/ogabassey/laptops/macbook-pro',
-      hostname: 'usebaci.com',
-    });
-    rerender(<PostHogClientBootstrap />);
-
-    // No reschedule on navigation — still exactly one scheduleIdleBoot call —
-    // but the pathname-keyed effect boots immediately now that idle has elapsed.
-    expect(mocks.scheduleIdleBoot).toHaveBeenCalledOnce();
-
-    await vi.waitFor(() => {
-      expect(mocks.initializePostHogBrowser).toHaveBeenCalledOnce();
-    });
-    expect(mocks.initializePostHogBrowser).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        NODE_ENV: expect.any(String),
-      }),
-      console,
-      {
-        lightweight: false,
-        pathname: '/ogabassey/laptops/macbook-pro',
-        hostname: 'usebaci.com',
-      }
-    );
-    expect(
-      mocks.initializePostHogInstrumentationIfAllowed
-    ).toHaveBeenCalledWith('/ogabassey/laptops/macbook-pro');
   });
 });

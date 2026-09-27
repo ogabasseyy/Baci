@@ -35,7 +35,7 @@ describe('finalizeCheckoutPayment async cart', () => {
   });
   it('uses the wallet-funded bank transfer flow when it can start', async () => {
     const runPostOrderSideEffects = jest.fn();
-    mockStartWalletFundedBankTransferCheckout.mockResolvedValue(true);
+    mockStartWalletFundedBankTransferCheckout.mockResolvedValue('intent-1');
 
     await finalizeCheckoutPayment({
       clearCart: jest.fn<() => void | Promise<void>>(),

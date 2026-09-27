@@ -7,18 +7,11 @@ vi.mock('next/link', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-vi.mock('@/templates/registry', () => ({
-  getTemplate: vi.fn((templateId: string) => {
-    if (templateId !== 'ogabassey') {
-      return undefined;
-    }
-
-    return {
-      getComponents: async () => ({
-        Blog: () => <div>Template blog</div>,
-      }),
-    };
-  }),
+// The Blog page is imported directly by the route; the template gate lives
+// in production code (non-ogabassey template IDs return null), so the stub
+// only stands in for the heavy page module.
+vi.mock('@/components/storefront/ogabassey/pages/blog', () => ({
+  OgabasseyV2Blog: () => <div>Template blog</div>,
 }));
 
 vi.mock('./template-blog-renderer', () => ({

@@ -9,34 +9,53 @@ import { useWalletFundingPolling } from './use-wallet-funding-polling';
 export interface WalletFundedTransferSession {
   account: WalletFundingAccountResponse;
   checkoutFingerprint: string;
+  currency: string;
   intent: WalletOrderFundingIntent;
   orderId: string;
+  orderNumber?: string;
+  /** Canonical order total for revenue reporting: the intent's target
+   * is the residual after savings, but the completion is the whole
+   * order. Optional: older callers omit it and keep the intent amount. */
+  orderTotal?: number;
   trackingToken?: string;
 }
 
 export interface WalletFundedOrderPaidPayload {
   checkoutFingerprint: string;
+  currency: string;
+  // Funding-intent ID: a retried order creates a second intent, so both
+  // attempts' lifecycle events stamp it to stay distinguishable (same
+  // pattern as the mobile wallet-funded path).
+  intentId: string;
   orderId: string;
+  orderNumber?: string;
+  // Server-confirmed canonical order total from the completed intent.
+  total: number;
   trackingToken?: string;
 }
 
 /**
- * - `started`   — the wallet-funded transfer session is live; the modal is up.
+ * - `{ started }` — the wallet-funded transfer session is live; the modal
+ *   is up. Carries the funding-intent ID so the caller can stamp its
+ *   start event (retries create distinct intents per order).
  * - `fallback`  — a definite decline; the caller runs the legacy order-DVA path.
  * - `uncertain` — the create-intent POST outcome was indeterminate; the caller
  *   MUST NOT run the legacy path (double-charge risk) and instead prompts the
  *   customer to check their wallet / retry.
  */
 export type WalletFundedTransferStartOutcome =
-  | 'started'
+  | { status: 'started'; intentId: string }
   | 'fallback'
   | 'uncertain';
 
 interface StartArgs {
   checkoutFingerprint: string;
+  currency: string;
   merchantId: string;
   merchantSlug?: string;
   orderId: string;
+  orderNumber?: string;
+  orderTotal?: number;
   trackingToken?: string;
 }
 
@@ -78,9 +97,18 @@ export function useWalletFundedBankTransfer({
       if (!current) {
         return;
       }
+      // The polling hook fires this at most once, only when the intent
+      // reaches server-confirmed `completed`: the order is paid.
+      // Revenue is the canonical order total, not the intent's target
+      // (the residual after savings) — older sessions without a total
+      // keep the intent amount.
       onOrderPaid({
         checkoutFingerprint: current.checkoutFingerprint,
+        currency: current.intent.currency,
+        intentId: current.intent.id,
         orderId: current.orderId,
+        orderNumber: current.orderNumber,
+        total: current.orderTotal ?? current.intent.targetOrderAmount,
         trackingToken: current.trackingToken,
       });
     },
@@ -95,9 +123,12 @@ export function useWalletFundedBankTransfer({
 
   const start = async ({
     checkoutFingerprint,
+    currency,
     merchantId: startMerchantId,
     merchantSlug: startMerchantSlug,
     orderId,
+    orderNumber,
+    orderTotal,
     trackingToken,
   }: StartArgs): Promise<WalletFundedTransferStartOutcome> => {
     const result = await startWalletFundedBankTransfer({
@@ -121,11 +152,14 @@ export function useWalletFundedBankTransfer({
     setSession({
       account: result.account,
       checkoutFingerprint,
+      currency,
       intent: result.intent,
       orderId,
+      orderNumber,
+      orderTotal,
       trackingToken,
     });
-    return 'started';
+    return { status: 'started', intentId: result.intent.id };
   };
 
   return {

@@ -187,6 +187,8 @@ describe('submitNewOrder', () => {
           tax_amount: 0,
           total: 12000,
           transaction_date: params.orderDate.toISOString(),
+          invoice_issue_date: '2024-02-03',
+          tax_point_date: '2024-02-03',
         }),
       })
     );
@@ -296,6 +298,43 @@ describe('submitNewOrder', () => {
         }),
       })
     );
+  });
+
+  it('marks picker document dates explicit so triggers preserve the local day', async () => {
+    const previousTimeZone = process.env.TZ;
+    process.env.TZ = 'Pacific/Auckland';
+    try {
+      // Device wall time just past local midnight in Auckland (UTC+13 in
+      // March): the UTC instant already falls on March 4, but the selected
+      // calendar day stays authoritative and must not be recomputed.
+      const selectedOrderDate = new Date(2026, 2, 5, 0, 30);
+      expect(selectedOrderDate.toISOString().slice(0, 10)).toBe('2026-03-04');
+
+      await submitNewOrder(
+        createSubmitParams({
+          orderDate: selectedOrderDate,
+        })
+      );
+
+      expect(mocks.createManualOrderWithItems).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({
+          order: expect.objectContaining({
+            transaction_date: selectedOrderDate.toISOString(),
+            invoice_issue_date: '2026-03-05',
+            tax_point_date: '2026-03-05',
+            invoice_issue_date_generated: false,
+            tax_point_date_generated: false,
+          }),
+        })
+      );
+    } finally {
+      if (previousTimeZone === undefined) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = previousTimeZone;
+      }
+    }
   });
 
   it('preserves custom match status and selected variant attributes', async () => {

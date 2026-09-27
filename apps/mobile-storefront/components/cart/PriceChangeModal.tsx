@@ -11,6 +11,7 @@ interface PriceChangeModalProps {
   visible: boolean;
   changes: CartPriceChange[];
   onClose: () => void;
+  onDismissed?: () => void;
   colors: (typeof Colors)['light'];
 }
 
@@ -18,6 +19,7 @@ export default function PriceChangeModal({
   visible,
   changes,
   onClose,
+  onDismissed,
   colors,
 }: PriceChangeModalProps): React.JSX.Element {
   return (
@@ -26,6 +28,7 @@ export default function PriceChangeModal({
       transparent
       animationType="fade"
       accessibilityViewIsModal
+      onDismiss={onDismissed}
       onRequestClose={onClose}
     >
       <View style={styles.warningOverlay}>

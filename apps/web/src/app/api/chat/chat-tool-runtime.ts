@@ -11,6 +11,8 @@ import {
   type AddToCartParams,
   addToCartSchema,
   type CancelOrderParams,
+  CHECKOUT_TOOL_NAMES,
+  type CheckoutToolName,
   type CheckPaymentStatusParams,
   type CreateVirtualAccountParams,
   cancelOrderSchema,
@@ -63,17 +65,84 @@ function didAiSdkToolCreateSideEffect(
   }
 }
 
+export interface CreateAiSdkAgenticChatToolsOptions {
+  agenticCheckoutEnabled?: boolean;
+  onSideEffect?: (toolName: string) => void;
+  onToolResult?: (
+    toolName: string,
+    result: unknown,
+    context?: { quantity?: number }
+  ) => void;
+}
+
+// A `type` (not an `interface`) so the map keeps an implicit index
+// signature and stays assignable to the AI SDK `ToolSet`.
+export type AgenticChatToolMap = {
+  searchProducts: {
+    description: string;
+    inputSchema: typeof searchProductsSchema;
+    execute: (params: SearchProductsParams) => Promise<string>;
+  };
+  getProductDetails: {
+    description: string;
+    inputSchema: typeof getProductDetailsSchema;
+    execute: (params: GetProductDetailsParams) => Promise<string>;
+  };
+  createVirtualAccount: {
+    description: string;
+    inputSchema: typeof createVirtualAccountSchema;
+    execute: (params: CreateVirtualAccountParams) => Promise<string>;
+  };
+  checkPaymentStatus: {
+    description: string;
+    inputSchema: typeof checkPaymentStatusSchema;
+    execute: (params: CheckPaymentStatusParams) => Promise<string>;
+  };
+  cancelOrder: {
+    description: string;
+    inputSchema: typeof cancelOrderSchema;
+    execute: (params: CancelOrderParams) => Promise<string>;
+  };
+  getRecommendations: {
+    description: string;
+    inputSchema: typeof getRecommendationsSchema;
+    execute: (params: GetRecommendationsParams) => Promise<string>;
+  };
+  addToCart: {
+    description: string;
+    inputSchema: typeof addToCartSchema;
+    execute: (params: AddToCartParams) => Promise<string>;
+  };
+};
+
+export type ReadOnlyAgenticChatToolMap = Omit<
+  AgenticChatToolMap,
+  CheckoutToolName
+>;
+
+// The overloads keep the return type honest about the checkout gate: callers
+// that statically disable checkout cannot type-check a checkout tool call,
+// while enabled callers (and the default) keep the full map.
 export function createAiSdkAgenticChatTools(
   sessionId: string,
-  options: {
-    onSideEffect?: (toolName: string) => void;
-    onToolResult?: (
-      toolName: string,
-      result: unknown,
-      context?: { quantity?: number }
-    ) => void;
-  } = {}
-) {
+  options?: CreateAiSdkAgenticChatToolsOptions & {
+    agenticCheckoutEnabled?: true;
+  }
+): AgenticChatToolMap;
+export function createAiSdkAgenticChatTools(
+  sessionId: string,
+  options: CreateAiSdkAgenticChatToolsOptions & {
+    agenticCheckoutEnabled: false;
+  }
+): ReadOnlyAgenticChatToolMap;
+export function createAiSdkAgenticChatTools(
+  sessionId: string,
+  options?: CreateAiSdkAgenticChatToolsOptions
+): AgenticChatToolMap | ReadOnlyAgenticChatToolMap;
+export function createAiSdkAgenticChatTools(
+  sessionId: string,
+  options: CreateAiSdkAgenticChatToolsOptions = {}
+): AgenticChatToolMap | ReadOnlyAgenticChatToolMap {
   // The AI SDK executes a single step's tool calls concurrently (Promise.all).
   // A model that emits the SAME side-effecting call twice in one step (a common
   // uncertainty pattern) would otherwise run each independently — inserting a
@@ -104,7 +173,7 @@ export function createAiSdkAgenticChatTools(
     return pending;
   };
 
-  return {
+  const tools: AgenticChatToolMap = {
     searchProducts: {
       description: TOOL_DESCRIPTIONS.searchProducts,
       inputSchema: searchProductsSchema,
@@ -192,4 +261,22 @@ export function createAiSdkAgenticChatTools(
       },
     },
   };
+
+  // When the tenant disables agentic checkout, the model must not even see
+  // the commerce tools — execution-time fail-closed alone still lets it
+  // promise payments and cancellations it cannot fulfil. Payment-status
+  // checks go too: the handler is guaranteed to report not_found without a
+  // checkout-capable tenant, which would mislead customers about real
+  // payments. The Omit return type keeps the type honest about the removed
+  // keys so no caller can type-check a checkout tool call that would
+  // throw at runtime.
+  if (options.agenticCheckoutEnabled === false) {
+    const readOnlyTools: Partial<AgenticChatToolMap> = { ...tools };
+    for (const name of CHECKOUT_TOOL_NAMES) {
+      delete readOnlyTools[name];
+    }
+    return readOnlyTools as ReadOnlyAgenticChatToolMap;
+  }
+
+  return tools;
 }

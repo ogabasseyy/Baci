@@ -21,6 +21,39 @@ function getTimeZoneOffsetMilliseconds(timeZone: string, instant: Date) {
   }
 }
 
+/**
+ * Formats an instant as a datetime-local wall clock in the launch policy
+ * zone (minute precision, matching datetime-local inputs). Reverse of
+ * quizDatetimeLocalToIso.
+ */
+export function quizInstantToDatetimeLocal(
+  instant: Date | number | string,
+  timeZone: string
+): string | null {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      day: '2-digit',
+      hour: '2-digit',
+      hour12: false,
+      minute: '2-digit',
+      month: '2-digit',
+      timeZone,
+      year: 'numeric',
+    })
+      .formatToParts(new Date(instant))
+      .reduce<Record<string, string>>((acc, part) => {
+        acc[part.type] = part.value;
+        return acc;
+      }, {});
+    if (!parts.year || !parts.month || !parts.day) return null;
+    // Some ICU builds render midnight as "24" with hour12: false.
+    const hour = String(Number(parts.hour) % 24).padStart(2, '0');
+    return `${parts.year}-${parts.month}-${parts.day}T${hour}:${parts.minute}`;
+  } catch {
+    return null;
+  }
+}
+
 /** Converts a datetime-local wall clock in the launch policy zone to UTC. */
 export function quizDatetimeLocalToIso(
   value: string,

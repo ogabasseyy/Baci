@@ -16,6 +16,9 @@ const mockPersistStorageSetItem = jest.fn<
 >(() => Promise.resolve());
 const mockGetOrderWalletFundingIntent =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockTrackCheckoutPaymentCompletedOnce = jest.fn<
+  (...args: unknown[]) => Promise<unknown>
+>(() => Promise.resolve('emitted'));
 const mockCartState = {
   clearCart: mockClearCart,
   items: [],
@@ -63,6 +66,12 @@ jest.mock('@/lib/clipboard', () => ({
 jest.mock('@/lib/order-wallet-funding-intent', () => ({
   getOrderWalletFundingIntent: (...args: unknown[]) =>
     mockGetOrderWalletFundingIntent(...args),
+}));
+
+jest.mock('@/services/analytics', () => ({
+  ...(jest.requireActual('@/services/analytics') as Record<string, unknown>),
+  trackCheckoutPaymentCompletedOnce: (...args: unknown[]) =>
+    mockTrackCheckoutPaymentCompletedOnce(...args),
 }));
 
 jest.mock('@/stores/cart-store', () => ({
@@ -139,6 +148,7 @@ describe('BankTransferScreen', () => {
           orderId: 'order-123',
           orderNumber: 'ORD-123',
           paymentMethod: 'bank_transfer',
+          reference: 'dva-ref-123',
           trackingToken: 'track-token-123',
         },
       });
@@ -170,6 +180,7 @@ describe('BankTransferScreen', () => {
           orderId: 'order-123',
           orderNumber: 'ORD-123',
           paymentMethod: 'bank_transfer',
+          reference: 'dva-ref-123',
         },
       });
     });
@@ -196,6 +207,7 @@ describe('BankTransferScreen', () => {
           orderId: 'order-123',
           orderNumber: 'ORD-123',
           paymentMethod: 'bank_transfer',
+          reference: 'dva-ref-123',
           trackingToken: 'track-token-123',
         },
       });
@@ -259,16 +271,54 @@ describe('BankTransferScreen', () => {
         merchantSlug: 'ogabassey',
       });
       expect(mockClearCart).toHaveBeenCalledTimes(1);
+      // The forwarded reference is the finalized transaction's gateway
+      // reference (resolvable by the success screen's settlement proof),
+      // not the funding-intent UUID.
       expect(router.replace).toHaveBeenCalledWith({
         pathname: '/order-success',
         params: {
           orderId: 'order-123',
           orderNumber: 'ORD-123',
           paymentMethod: 'bank_transfer',
-          reference: 'intent-123',
+          reference: 'WALLET-DVA-ORDER-order-123',
           trackingToken: 'track-token-123',
         },
       });
+    });
+  });
+
+  it('forwards the routed order currency to the wallet-funded completion', async () => {
+    mockSearchParams = {
+      accountName: 'Ogabassey Jane',
+      accountNumber: '9971002551',
+      amount: '250000',
+      bankName: 'Paystack-Titan',
+      currency: 'USD',
+      customerEmail: 'guest@example.com',
+      intentId: 'intent-123',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-123',
+      orderNumber: 'ORD-123',
+      subtotal: '240000',
+      shipping: '5000',
+      tax: '5000',
+      walletFunded: 'true',
+    };
+
+    render(<BankTransferScreen />);
+
+    await waitFor(() => {
+      expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderId: 'order-123',
+          paymentMethod: 'bank_transfer',
+          currency: 'USD',
+          customerEmail: 'guest@example.com',
+          subtotal: 240000,
+          shipping: 5000,
+          tax: 5000,
+        })
+      );
     });
   });
 

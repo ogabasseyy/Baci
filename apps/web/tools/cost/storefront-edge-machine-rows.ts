@@ -100,30 +100,6 @@ export const STOREFRONT_EDGE_MACHINE_ROWS: readonly InventoryRow[] = [
   ]),
   ...FEED_ROWS,
   machineFamily('machine:next-image', '/_next/image', ['ANY'], 'edge_terminal'),
-  machineFamily(
-    'machine:vercel-insights-script',
-    '/_vercel/insights/script.js',
-    ['GET', 'HEAD'],
-    'origin_dynamic'
-  ),
-  machineFamily(
-    'machine:vercel-insights-view',
-    '/_vercel/insights/view',
-    ['POST'],
-    'origin_dynamic'
-  ),
-  machineFamily(
-    'machine:vercel-speed-insights-script',
-    '/_vercel/speed-insights/script.js',
-    ['GET', 'HEAD'],
-    'origin_dynamic'
-  ),
-  machineFamily(
-    'machine:vercel-speed-insights-vitals',
-    '/_vercel/speed-insights/vitals',
-    ['POST'],
-    'origin_dynamic'
-  ),
   {
     ...machineFamily('machine:next-static', '/_next/static/{*asset}', [
       'GET',

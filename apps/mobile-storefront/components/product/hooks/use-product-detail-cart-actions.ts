@@ -3,6 +3,7 @@ import type { GestureResponderEvent } from 'react-native';
 import { Alert, Dimensions } from 'react-native';
 import { useHaptics } from '@/hooks/use-haptics';
 import { resolveCartItemImageUrl } from '@/lib/cart-display';
+import { findMatchingConditionOffer } from '@/lib/product-condition-offers';
 import { trackProductRouteAddToCart } from '@/services/tiktok-product-route-tracking';
 import type { useProductDetailCartState } from './use-product-detail-cart-state';
 import type { useProductDetailPurchaseState } from './use-product-detail-purchase-state';
@@ -132,6 +133,12 @@ export function useProductDetailCartActions(
           Boolean
         )
       : undefined;
+    // Non-variant condition offers price the line below catalog, but the
+    // server verifies against products.price. Retain the catalog basis so
+    // quote subtotals match the canonical subtotal.
+    const conditionOffer = !product.has_variants
+      ? findMatchingConditionOffer(product.offers, routeData.offerConditionKey)
+      : null;
     cartState.addItem({
       product_id: product.id,
       slug: product.slug,
@@ -141,6 +148,13 @@ export function useProductDetailCartActions(
       name: product.name,
       brand: product.brand,
       price: purchaseState.effectivePrice,
+      catalog_price:
+        conditionOffer != null &&
+        typeof product.price === 'number' &&
+        Number.isFinite(product.price) &&
+        product.price >= 0
+          ? product.price
+          : undefined,
       compare_at_price: purchaseState.effectiveComparePrice,
       quantity: 1,
       image_url: resolveCartItemImageUrl({

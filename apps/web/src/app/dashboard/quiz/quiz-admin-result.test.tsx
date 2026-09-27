@@ -5,6 +5,7 @@ import { QuizAdminResult } from './quiz-admin-result';
 
 const configuration = {
   difficulty: 'standard' as const,
+  endTouched: false,
   liveWindowMinutes: 5,
   mode: 'test' as const,
   prizeProduct: {
@@ -182,5 +183,37 @@ describe('QuizAdminResult', () => {
     );
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('blocks launch when the generated count outgrows the window', async () => {
+    // Regression: activation validates the window against the generated
+    // questions, so an immediate window (or untouched-by-resync edited end)
+    // sized for the requested count must not reach the launch action.
+    const user = userEvent.setup();
+    const draft = draftResult();
+    const manyQuestions = Array.from({ length: 20 }, (_, index) => ({
+      ...draft.questions[0],
+      prompt: `Question ${index + 1}`,
+    }));
+    render(
+      <QuizAdminResult
+        configuration={{
+          ...configuration,
+          liveWindowMinutes: 1,
+          mode: 'live',
+          timingKind: 'immediate',
+        }}
+        onActivate={vi.fn()}
+        result={{ ...draft, questions: manyQuestions }}
+      />
+    );
+
+    expect(
+      screen.getByText(/generated questions do not fit/i)
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole('checkbox', { name: /reviewed every correct answer/i })
+    );
+    expect(screen.getByRole('button', { name: /launch quiz/i })).toBeDisabled();
   });
 });

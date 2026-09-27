@@ -3,272 +3,50 @@ import { JumiaClient } from '@/lib/jumia/client';
 import type { JumiaOrderSyncResult } from '@/lib/jumia/order-sync-result';
 import { getAllOrders, getOrderItems } from '@/lib/jumia/orders';
 import { logger } from '@/lib/logger';
+import type { JumiaCredentialServiceClient } from '@/lib/supabase/service';
 import {
-  getJumiaSyncLowerBound,
   JUMIA_EXTERNAL_SOURCE,
   type MarketplaceIntegrationRow,
-  readOrderSyncEnabled,
+  readStockSyncEnabled,
 } from './order-sync-mappers';
 import {
-  getJumiaNotificationAttemptKey,
-  markJumiaNotificationSent,
-} from './order-sync-notifications';
-import {
+  buildExistingJumiaCacheEntry,
   buildSyncedJumiaCacheRow,
-  buildExistingJumiaCacheEntry as cacheEntry,
   loadExistingCanonicalOrders,
   loadExistingJumiaOrders,
   notifySyncedJumiaOrder,
   upsertCanonicalOrder,
 } from './order-sync-operations';
+import { selectJumiaOrderSyncIntegrations } from './select-jumia-order-sync-integrations';
+import { getJumiaShopNonDefaultMarketplaceKeys } from './shop-marketplace-scope';
 import {
-  clearFullFailureState,
-  MAX_FULL_FAILURES_BEFORE_ADVANCE,
-  readFullFailureState,
-  withFullFailureState,
-} from './order-sync-state';
+  JumiaSyncCursorUpdateError,
+  type SyncJumiaOrderIntegrationDependencies,
+  syncJumiaOrderIntegration,
+} from './sync-jumia-order-integration';
+import { syncJumiaStockForIntegration } from './sync-jumia-stock-integration';
 
 const JUMIA_ORDER_SYNC_ROUTE = 'jumia/order-sync';
-const INITIAL_SYNC_CURSOR = 'initial-sync';
 
-type SyncUpdatePayload = Partial<{ last_sync_at: string }> & {
-  sync_config: Record<string, unknown>;
-  sync_error: string | null;
-};
-
-class JumiaSyncCursorUpdateError extends Error {
-  constructor(
-    message: string,
-    readonly syncUpdate: SyncUpdatePayload
-  ) {
-    super(message);
-    this.name = 'JumiaSyncCursorUpdateError';
-    Object.setPrototypeOf(this, JumiaSyncCursorUpdateError.prototype);
-  }
-}
-
-async function syncIntegration(
-  supabase: SupabaseClient,
-  integration: MarketplaceIntegrationRow,
-  result: JumiaOrderSyncResult
-) {
-  if (!readOrderSyncEnabled(integration.sync_config)) return;
-
-  const client = await JumiaClient.forIntegration(
-    supabase,
-    integration.merchant_id,
-    integration.id
-  );
-  const orderErrorsBefore = result.orderErrors;
-  let syncedAnyOrder = false;
-  let earliestFailedSyncAt: string | null = null;
-  let earliestFailedSyncMs: number | null = null;
-  const attemptedNotificationKeys = new Set<string>();
-  const syncStartedAt = new Date().toISOString();
-  const orders = await getAllOrders(client, {
-    updatedAfter: getJumiaSyncLowerBound(integration.last_sync_at),
-    updatedBefore: syncStartedAt,
-    size: 100,
-  });
-
-  const existingJumiaOrders = await loadExistingJumiaOrders(
-    supabase,
-    integration.merchant_id,
-    orders.map((order) => order.id)
-  );
-  const canonicalOrders = await loadExistingCanonicalOrders(
-    supabase,
-    integration.merchant_id,
-    orders.map((order) => order.id)
-  );
-
-  for (const order of orders) {
-    try {
-      const existingJumia = existingJumiaOrders.get(order.id);
-      const existingCanonical = canonicalOrders.get(order.id);
-      const notificationKey = getJumiaNotificationAttemptKey(
-        integration.merchant_id,
-        order.id
-      );
-      const shouldNotify =
-        // Legacy cache rows without a durable sent marker are intentionally
-        // retried. The per-run key and in-memory marker prevent duplicated
-        // Jumia API pages from sending duplicate pushes in the same run.
-        existingJumia?.notification_sent !== true &&
-        !attemptedNotificationKeys.has(notificationKey);
-      const items = (await getOrderItems(client, order.id)).items;
-
-      const canonicalOrder = await upsertCanonicalOrder(
-        supabase,
-        integration,
-        order,
-        items,
-        existingCanonical
-      );
-      canonicalOrders.set(order.id, canonicalOrder);
-
-      const cacheRow = buildSyncedJumiaCacheRow(
-        integration,
-        order,
-        items,
-        existingJumia,
-        canonicalOrder.id
-      );
-      const { error: cacheError } = await supabase
-        .from('jumia_orders')
-        .upsert(cacheRow, { onConflict: 'jumia_order_id' });
-      if (cacheError) {
-        throw new Error(`Failed to cache Jumia order: ${cacheError.message}`);
-      }
-      existingJumiaOrders.set(
-        order.id,
-        cacheEntry(order.id, cacheRow.notification_sent, canonicalOrder.id)
-      );
-
-      if (existingCanonical) result.canonicalUpdated += 1;
-      else result.canonicalCreated += 1;
-
-      if (shouldNotify) {
-        attemptedNotificationKeys.add(notificationKey);
-        const rawNotificationResult = await notifySyncedJumiaOrder(
-          integration.merchant_id,
-          order,
-          canonicalOrder.id
-        );
-        if (!rawNotificationResult) {
-          logger.warn({
-            message: 'Jumia order notification returned no delivery result',
-            merchantId: integration.merchant_id,
-            integrationId: integration.id,
-            jumiaOrderId: order.id,
-            baciOrderId: canonicalOrder.id,
-          });
-        }
-        const notificationResult = rawNotificationResult ?? {
-          sent: 0,
-          failed: 0,
-          errors: [],
-        };
-        if (notificationResult.sent > 0) {
-          result.notified += 1;
-          // The push provider accepted the notification. Keep duplicated Jumia
-          // pages in this run from rebuilding a stale cache row as unnotified.
-          existingJumiaOrders.set(
-            order.id,
-            cacheEntry(order.id, true, canonicalOrder.id)
-          );
-          const notificationUpdateError = await markJumiaNotificationSent(
-            supabase,
-            integration.merchant_id,
-            order.id
-          );
-          if (notificationUpdateError) {
-            const markerErrorMessage = `Failed to mark Jumia notification as sent: ${notificationUpdateError.message}`;
-            logger.error({
-              message: 'Failed to mark Jumia order notification as sent',
-              merchantId: integration.merchant_id,
-              integrationId: integration.id,
-              jumiaOrderId: order.id,
-              error: notificationUpdateError,
-            });
-            throw new Error(markerErrorMessage);
-          }
-        }
-        if (
-          notificationResult.failed > 0 ||
-          notificationResult.errors.length > 0
-        ) {
-          const failureDetails = [
-            ...notificationResult.errors,
-            notificationResult.failed > 0 &&
-              `${notificationResult.failed} push notification(s) failed`,
-          ].filter(Boolean);
-          throw new Error(
-            `Failed to notify merchant for Jumia order: ${failureDetails.join('; ')}`
-          );
-        }
-      }
-
-      result.synced += 1;
-      syncedAnyOrder = true;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      const parsedFailedUpdatedAt = Date.parse(order.updatedAt);
-      const failedSyncMs = Number.isFinite(parsedFailedUpdatedAt)
-        ? parsedFailedUpdatedAt
-        : Date.parse(syncStartedAt);
-      const failedSyncAt = new Date(failedSyncMs).toISOString();
-      if (
-        earliestFailedSyncMs === null ||
-        failedSyncMs < earliestFailedSyncMs
-      ) {
-        earliestFailedSyncAt = failedSyncAt;
-        earliestFailedSyncMs = failedSyncMs;
-      }
-      result.orderErrors += 1;
-      result.errors.push(`${integration.merchant_id}/${order.id}: ${message}`);
-      logger.error({
-        message: 'Failed to process Jumia order during sync',
-        merchantId: integration.merchant_id,
-        integrationId: integration.id,
-        jumiaOrderId: order.id,
-        error,
-      });
-    }
-  }
-
-  const integrationOrderErrors = result.orderErrors - orderErrorsBefore;
-  let syncUpdate: SyncUpdatePayload;
-  if (integrationOrderErrors === 0) {
-    syncUpdate = {
-      last_sync_at: syncStartedAt,
-      sync_error: null,
-      sync_config: clearFullFailureState(integration.sync_config),
-    };
-  } else if (syncedAnyOrder) {
-    syncUpdate = {
-      last_sync_at: earliestFailedSyncAt ?? syncStartedAt,
-      sync_error: `Processed with ${integrationOrderErrors} Jumia order error(s); cursor parked at earliest failed order ${earliestFailedSyncAt ?? syncStartedAt} so failed orders remain retryable`,
-      sync_config: clearFullFailureState(integration.sync_config),
-    };
-  } else {
-    const failureCursor = integration.last_sync_at ?? INITIAL_SYNC_CURSOR;
-    const previousFailureState = readFullFailureState(integration.sync_config);
-    const fullFailureCount =
-      previousFailureState?.cursor === failureCursor
-        ? previousFailureState.count + 1
-        : 1;
-    syncUpdate =
-      fullFailureCount >= MAX_FULL_FAILURES_BEFORE_ADVANCE
-        ? {
-            last_sync_at: syncStartedAt,
-            sync_error: `All ${integrationOrderErrors} Jumia order(s) failed ${fullFailureCount} consecutive time(s); cursor advanced to ${syncStartedAt} and operators should inspect the logged order errors`,
-            sync_config: clearFullFailureState(integration.sync_config),
-          }
-        : {
-            sync_error: `All ${integrationOrderErrors} Jumia order(s) failed; cursor not advanced before retry ${fullFailureCount}/${MAX_FULL_FAILURES_BEFORE_ADVANCE}`,
-            sync_config: withFullFailureState(
-              integration.sync_config,
-              failureCursor,
-              fullFailureCount
-            ),
-          };
-  }
-
-  const { error: syncError } = await supabase
-    .from('marketplace_integrations')
-    .update(syncUpdate)
-    .eq('id', integration.id);
-  if (syncError) {
-    throw new JumiaSyncCursorUpdateError(
-      `Failed to update Jumia sync cursor: ${syncError.message}`,
-      syncUpdate
-    );
-  }
-}
+const syncJumiaOrderIntegrationDependencies = {
+  createClient: (
+    supabase: SupabaseClient,
+    merchantId: string,
+    integrationId: string
+  ) => JumiaClient.forIntegration(supabase, merchantId, integrationId),
+  getAllOrders,
+  getOrderItems,
+  buildExistingJumiaCacheEntry,
+  buildSyncedJumiaCacheRow,
+  loadExistingCanonicalOrders,
+  loadExistingJumiaOrders,
+  notifySyncedJumiaOrder,
+  upsertCanonicalOrder,
+} satisfies SyncJumiaOrderIntegrationDependencies;
 
 export async function syncJumiaOrdersForActiveIntegrations(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  options?: { credentialClient?: JumiaCredentialServiceClient }
 ): Promise<JumiaOrderSyncResult> {
   const result: JumiaOrderSyncResult = {
     integrations: 0,
@@ -276,13 +54,35 @@ export async function syncJumiaOrdersForActiveIntegrations(
     canonicalCreated: 0,
     canonicalUpdated: 0,
     notified: 0,
+    stockUpdated: 0,
     orderErrors: 0,
     errors: [],
   };
+  // Ciphertext grant reads must travel on the restricted credential client,
+  // never the generic worker database client.
+  const credentialClient = options?.credentialClient;
+  const dependencies = credentialClient
+    ? {
+        ...syncJumiaOrderIntegrationDependencies,
+        createClient: (
+          clientSupabase: SupabaseClient,
+          merchantId: string,
+          integrationId: string
+        ) =>
+          JumiaClient.forIntegration(
+            clientSupabase,
+            merchantId,
+            integrationId,
+            { credentialClient }
+          ),
+      }
+    : syncJumiaOrderIntegrationDependencies;
 
   const { data, error } = await supabase
     .from('marketplace_integrations')
-    .select('id, merchant_id, shop_id, last_sync_at, sync_config')
+    .select(
+      'id, merchant_id, shop_id, country_code, marketplace_key, connection_method, jumia_authorization_id, last_sync_at, sync_config'
+    )
     .eq('platform', JUMIA_EXTERNAL_SOURCE)
     .eq('is_active', true);
 
@@ -292,9 +92,14 @@ export async function syncJumiaOrdersForActiveIntegrations(
   const integrations = (data || []) as MarketplaceIntegrationRow[];
   result.integrations = integrations.length;
 
-  for (const integration of integrations) {
+  for (const integration of selectJumiaOrderSyncIntegrations(integrations)) {
     try {
-      await syncIntegration(supabase, integration, result);
+      await syncJumiaOrderIntegration(
+        supabase,
+        integration,
+        result,
+        dependencies
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       result.errors.push(`${integration.merchant_id}: ${message}`);
@@ -326,6 +131,90 @@ export async function syncJumiaOrdersForActiveIntegrations(
           sync_error_update_error: syncErrorUpdateError.message,
         });
       }
+    }
+  }
+
+  // OAuth integrations keep automatic stock sync in the legacy edge
+  // worker. Self-authorized integrations are excluded there, so the VPS
+  // loop pushes their stock here. Multi-marketplace shops fail closed:
+  // the stock feed has no business-client selector.
+  for (const integration of integrations) {
+    if (integration.connection_method !== 'self_authorization') continue;
+    if (!readStockSyncEnabled(integration.sync_config)) continue;
+    if (!integration.shop_id) continue;
+    try {
+      const shopKeys = await getJumiaShopNonDefaultMarketplaceKeys(
+        supabase,
+        integration.merchant_id,
+        integration.shop_id
+      );
+      if (!(shopKeys instanceof Set)) {
+        const message = `Failed to resolve Jumia stock scope for ${integration.merchant_id}: ${shopKeys.message}`;
+        result.errors.push(message);
+        logger.error({
+          message: 'Failed to resolve Jumia stock scope',
+          error: shopKeys.message,
+          integrationId: integration.id,
+          merchant_id: integration.merchant_id,
+          route: JUMIA_ORDER_SYNC_ROUTE,
+        });
+        continue;
+      }
+      if (shopKeys.size > 1) {
+        logger.info({
+          message: 'Skipping Jumia stock sync for ambiguous shop scope',
+          integrationId: integration.id,
+          merchant_id: integration.merchant_id,
+          route: JUMIA_ORDER_SYNC_ROUTE,
+        });
+        continue;
+      }
+      const stock = await syncJumiaStockForIntegration({
+        supabase,
+        merchantId: integration.merchant_id,
+        integrationId: integration.id,
+        ...(credentialClient ? { credentialClient } : {}),
+      });
+      result.stockUpdated += stock.updated;
+      if (stock.trackingFailures > 0) {
+        // The feed was accepted but per-mapping tracking did not advance,
+        // so the same feed would resubmit on the next run. Surface it as a
+        // sync error instead of reporting a clean run.
+        const message = `${integration.merchant_id}/stock: ${stock.trackingFailures} mapping(s) failed to record the stock sync`;
+        result.errors.push(message);
+        logger.error({
+          message: 'Jumia stock tracking update failed',
+          error: message,
+          integrationId: integration.id,
+          merchant_id: integration.merchant_id,
+          route: JUMIA_ORDER_SYNC_ROUTE,
+        });
+      }
+      if (stock.reconciliationFailures > 0) {
+        // A rejected feed's cursor was not reset, so delta detection keeps
+        // skipping the stale stock. Surface it as a sync error instead of
+        // reporting a clean run while Jumia retains stale inventory.
+        const message = `${integration.merchant_id}/stock: ${stock.reconciliationFailures} mapping(s) failed to reconcile stock feeds`;
+        result.errors.push(message);
+        logger.error({
+          message: 'Jumia stock feed reconciliation failed',
+          error: message,
+          integrationId: integration.id,
+          merchant_id: integration.merchant_id,
+          route: JUMIA_ORDER_SYNC_ROUTE,
+        });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      result.errors.push(`${integration.merchant_id}/stock: ${message}`);
+      logger.error({
+        message: 'Jumia stock sync failed',
+        error,
+        integrationId: integration.id,
+        merchant_id: integration.merchant_id,
+        route: JUMIA_ORDER_SYNC_ROUTE,
+        sync_error: message,
+      });
     }
   }
 

@@ -9,7 +9,8 @@ import {
   resolveStorefrontSitemapContextResult,
 } from '../../sitemap-data';
 
-export const preferredRegion = 'dub1';
+// Region pinning lives in vercel.json `regions` (dub1) — `preferredRegion`
+// is deprecated and removed.
 
 export async function GET(
   request: Request,

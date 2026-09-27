@@ -1,5 +1,8 @@
 import { describe, expect, it } from '@jest/globals';
-import { CreateOrderRequestSchema } from './orders.schemas';
+import {
+  CreateOrderRequestSchema,
+  OrderResponseSchema,
+} from './orders.schemas';
 
 const baseOrder = {
   customer_email: 'ada@example.com',
@@ -85,5 +88,78 @@ describe('CreateOrderRequestSchema delivery metadata', () => {
     });
 
     expect(result.success).toBe(true);
+  });
+});
+
+describe('CreateOrderRequestSchema REDVAULT credits', () => {
+  it.each([
+    { discount_amount: 1 },
+    { wallet_amount: 1 },
+    { savings_amount: 1 },
+  ])('rejects serialized ordinary credit %o for REDVAULT', (credit) => {
+    const result = CreateOrderRequestSchema.safeParse({
+      ...baseOrder,
+      ...credit,
+      payment_method: 'uba_redvault',
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: ['payment_method'],
+            message:
+              'UBA payment cannot be combined with other discounts or store credit',
+          }),
+        ])
+      );
+    }
+  });
+
+  it('accepts explicit zero-value ordinary credit fields for REDVAULT', () => {
+    const result = CreateOrderRequestSchema.safeParse({
+      ...baseOrder,
+      payment_method: 'uba_redvault',
+      discount_amount: 0,
+      wallet_amount: 0,
+    });
+
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('OrderResponseSchema currency', () => {
+  const baseResponse = {
+    order: {
+      id: 'order-1',
+      order_number: 'ORD-1',
+      total: 5750,
+      payment_status: 'pending',
+      shipping_status: 'pending',
+    },
+    wallet: null,
+    amountDueToGateway: 5750,
+  };
+
+  it('preserves the stamped order currency instead of stripping it', () => {
+    const result = OrderResponseSchema.safeParse({
+      ...baseResponse,
+      order: { ...baseResponse.order, currency: 'KES' },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.order.currency).toBe('KES');
+    }
+  });
+
+  it('leaves currency undefined for older responses that omit it', () => {
+    const result = OrderResponseSchema.safeParse(baseResponse);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.order.currency).toBeUndefined();
+    }
   });
 });

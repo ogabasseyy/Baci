@@ -33,8 +33,20 @@ export interface TrackOrderData {
     subtotal: number;
     shipping_cost: number;
     discount_amount: number;
+    tax_amount?: number | null;
+    gift_wrapping_fee?: number | null;
     total: number;
+    // Prior-payment evidence for wallet/savings-credited invoices.
+    // Optional: older responses omit it and classify status-only.
+    amount_paid?: number | null;
     currency: string;
+    // Terminal immediate-order after() delivery (invoice artifacts built
+    // and proforma emailed). Optional: older responses omit it.
+    notification_delivered?: boolean | null;
+    // Stored payment method + raw shipping status for the
+    // invoice_generated gate. Optional: older responses omit them.
+    payment_method?: string | null;
+    shipping_status?: string | null;
   };
   customer: {
     name: string;

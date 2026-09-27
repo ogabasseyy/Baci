@@ -1,4 +1,3 @@
-import { DeferredPlatformInsights } from '@/components/analytics/deferred-platform-insights';
 import { PostHogClientBootstrap } from '@/components/analytics/posthog-client-bootstrap';
 import { PostHogPageviewTracker } from '@/components/analytics/posthog-pageview-tracker';
 import { WebVitalsReporter } from '@/components/analytics/web-vitals-reporter';
@@ -11,7 +10,6 @@ export function RootDynamicBody() {
       <PostHogClientBootstrap />
       <PostHogPageviewTracker />
       <WebVitalsReporter />
-      <DeferredPlatformInsights />
     </>
   );
 }

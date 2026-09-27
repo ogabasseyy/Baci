@@ -47,6 +47,48 @@ it('settles a guest email and reopens contact when it is edited', () => {
   expect(result.current.hasContactIdentity).toBe(false);
 });
 
+it('treats prefilled contact with display formatting as settled', () => {
+  const user = {
+    id: 'user-2',
+    email: 'bassey@example.com',
+    user_metadata: {
+      first_name: 'Bassey',
+      last_name: 'John',
+      phone: '+2349169449282',
+    },
+  } as never;
+  const { result } = renderHook(() =>
+    useCheckoutAddressState({ ...baseProps, isAuthenticated: true, user })
+  );
+
+  act(() => {
+    result.current.form.setValue('phone', '+234 9169449282');
+  });
+
+  expect(result.current.hasContactIdentity).toBe(true);
+});
+
+it('treats the same subscriber line with different prefixes as settled', () => {
+  const user = {
+    id: 'user-3',
+    email: 'bassey@example.com',
+    user_metadata: {
+      first_name: 'Bassey',
+      last_name: 'John',
+      phone: '09169449282',
+    },
+  } as never;
+  const { result } = renderHook(() =>
+    useCheckoutAddressState({ ...baseProps, isAuthenticated: true, user })
+  );
+
+  act(() => {
+    result.current.form.setValue('phone', '+234 9169449282');
+  });
+
+  expect(result.current.hasContactIdentity).toBe(true);
+});
+
 it('hydrates authenticated initial identity into the form', () => {
   const user = {
     id: 'user-1',

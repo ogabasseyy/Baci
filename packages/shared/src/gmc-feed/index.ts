@@ -52,7 +52,9 @@ export function extractImageCandidates(
 
   for (const img of images) {
     const url = typeof img === 'string' ? img : img?.url;
-    if (!url || !url.trim()) continue;
+    // Malformed JSONB rows (numeric or object URLs) must be skipped, not
+    // throw: one bad offer image must not abort the merchant backfill.
+    if (typeof url !== 'string' || !url.trim()) continue;
 
     candidates.push({
       product_id: productId,

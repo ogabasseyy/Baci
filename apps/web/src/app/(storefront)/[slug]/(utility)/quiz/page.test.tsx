@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { getCachedMerchant } from '@/lib/cached-data';
-import { safeJsonLdStringify } from '@/lib/sanitize-json-ld';
+import { safeJsonLdStringify } from '@/lib/json-ld-script-escape';
 import { isValidMerchantIdentifier } from '@/lib/validation';
 
 vi.mock('@/components/storefront/ogabassey/pages/quiz', () => ({
@@ -15,7 +15,7 @@ vi.mock('@/lib/cached-data', () => ({
   getCachedMerchantByDomain: vi.fn(async () => null),
 }));
 
-vi.mock('@/lib/sanitize-json-ld', () => ({
+vi.mock('@/lib/json-ld-script-escape', () => ({
   safeJsonLdStringify: vi.fn((value: unknown) => JSON.stringify(value)),
 }));
 

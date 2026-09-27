@@ -1,4 +1,5 @@
 import '@testing-library/jest-native/extend-expect';
+import './jest.setup.safe-area';
 
 import { configure as configureReactNativeTestingLibrary } from '@testing-library/react-native';
 import React, { type ReactNode } from 'react';

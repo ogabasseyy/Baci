@@ -1,5 +1,7 @@
 export {
+  type BuildOrderIdempotencyPayloadOptions,
   buildOrderIdempotencyPayload,
+  type OrderIdempotencyItemSort,
   type OrderIdempotencyPayloadInput,
 } from './build-order-idempotency-payload';
 export { calculateStorefrontDeliveryDailyEvidenceSha256 } from './delivery-evidence';
@@ -11,6 +13,7 @@ export {
   AIRPORT_DELIVERY_STATES,
   isAirportDeliveryEligible,
   isPickupEligible,
+  isStoreOriginDelivery,
   isWebStorefrontDeliveryMethodEligible,
   resolveEligibleWebStorefrontDeliveryMethod,
   type WebStorefrontDeliveryMethod,

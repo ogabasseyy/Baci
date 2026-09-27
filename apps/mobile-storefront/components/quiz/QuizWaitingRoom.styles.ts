@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import type { QuizThemeColors } from './QuizScreen.styles';
+import type { QuizThemeColors } from './quiz-theme';
 
 export function createQuizWaitingRoomStyles(colors: QuizThemeColors) {
   return StyleSheet.create({
@@ -46,6 +46,19 @@ export function createQuizWaitingRoomStyles(colors: QuizThemeColors) {
     },
     metaText: { color: colors.textSecondary, fontSize: 14, fontWeight: '700' },
     error: { color: colors.warning, fontSize: 13, textAlign: 'center' },
+    primaryButton: {
+      alignItems: 'center',
+      backgroundColor: colors.primary,
+      borderRadius: 12,
+      justifyContent: 'center',
+      minHeight: 44,
+      paddingHorizontal: 16,
+    },
+    primaryButtonText: {
+      color: colors.primaryForeground,
+      fontSize: 15,
+      fontWeight: '800',
+    },
     secondaryButton: {
       alignItems: 'center',
       minHeight: 44,

@@ -19,6 +19,8 @@ const runtimeRouteManifest = [
   '(catalog)/(listing)/[category]/compare/[comparisonSlug]/loading.tsx',
   '(catalog)/(listing)/[category]/best-under/[priceBandSlug]/page.tsx',
   '(catalog)/(listing)/[category]/best-under/[priceBandSlug]/loading.tsx',
+  '(catalog)/(listing)/[category]/graphics/[graphicsSlug]/page.tsx',
+  '(catalog)/(listing)/[category]/graphics/[graphicsSlug]/loading.tsx',
   '(catalog)/(pdp)/products/[productSlug]/page.tsx',
   '(catalog)/(pdp)/products/[productSlug]/loading.tsx',
   '(catalog)/(pdp)/product/[productSlug]/page.tsx',

@@ -28,6 +28,7 @@ interface JumiaCategoryItem {
 
 interface CategorySelectorProps {
   merchantId: string;
+  integrationId?: string;
   value?: number;
   onSelect: (code: number, name: string) => void;
 }
@@ -36,6 +37,7 @@ const CATEGORY_LISTBOX_ID = 'jumia-category-selector-listbox';
 
 export function JumiaCategorySelector({
   merchantId,
+  integrationId,
   value,
   onSelect,
 }: CategorySelectorProps) {
@@ -83,7 +85,7 @@ export function JumiaCategorySelector({
       controller.abort();
     }, 10_000);
     fetch(
-      `/api/marketplace/jumia/categories?merchantId=${encodeURIComponent(merchantId)}`,
+      `/api/marketplace/jumia/categories?merchantId=${encodeURIComponent(merchantId)}${integrationId ? `&integrationId=${encodeURIComponent(integrationId)}` : ''}`,
       { signal: controller.signal }
     )
       .then((res) => {

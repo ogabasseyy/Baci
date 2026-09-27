@@ -54,7 +54,7 @@ export function CheckoutBottomAction({
   const reviewLabel = prizeSimulation
     ? 'Complete test checkout'
     : selectedPayment === 'invoice'
-      ? 'Generate Invoice'
+      ? 'Get a Proforma Invoice'
       : selectedPayment === 'payforme'
         ? 'Pay for Me'
         : 'Place Order';
@@ -92,7 +92,7 @@ export function CheckoutBottomAction({
             isReview
               ? prizeSimulation
                 ? 'Complete test prize checkout'
-                : `${selectedPayment === 'invoice' ? 'Generate invoice' : selectedPayment === 'payforme' ? 'Prepare pay for me order' : 'Place order'} for ${formatPrice(total)}`
+                : `${selectedPayment === 'invoice' ? 'Get a proforma invoice' : selectedPayment === 'payforme' ? 'Prepare pay for me order' : 'Place order'} for ${formatPrice(total)}`
               : `Continue to ${step === 'address' ? 'payment' : 'review'}`
           }
           accessibilityState={{

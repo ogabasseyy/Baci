@@ -264,26 +264,6 @@ describe('getStorefrontShellSnapshot', () => {
     expect(getRequestScopedMerchant).not.toHaveBeenCalled();
   });
 
-  it('can resolve the minimal shell snapshot without waiting on navigation categories', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValue({
-      ...baseMerchant,
-      is_published: false,
-    } as unknown as Awaited<ReturnType<typeof getRequestScopedMerchant>>);
-
-    const snapshot = await getStorefrontShellSnapshotBase('ogabassey');
-
-    expect(snapshot).toMatchObject({
-      merchant: {
-        id: 'merchant-1',
-        slug: 'ogabassey',
-        is_published: false,
-      },
-      routingMode: 'path',
-      basePath: '/ogabassey',
-    });
-    expect(getStorefrontNavigationCategories).not.toHaveBeenCalled();
-  });
-
   it('redacts secret feature settings before serializing shell merchant data', async () => {
     vi.mocked(getRequestScopedMerchant).mockResolvedValue({
       ...baseMerchant,

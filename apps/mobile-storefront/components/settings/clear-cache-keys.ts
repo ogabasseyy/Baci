@@ -1,7 +1,10 @@
 import {
+  CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY,
   CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
   CHECKOUT_GENERATION_STORAGE_KEY,
+  CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY,
   CHECKOUT_INSTALLATION_STORAGE_KEY,
+  CHECKOUT_PENDING_REDVAULT_ORDER_STORAGE_KEY,
 } from '@/config/checkout-storage';
 import { QUERY_CACHE_STORAGE_KEY } from '@/lib/query-client';
 
@@ -9,6 +12,7 @@ const CLEAR_CACHE_PRESERVED_KEYS = new Set([
   CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
   CHECKOUT_GENERATION_STORAGE_KEY,
   CHECKOUT_INSTALLATION_STORAGE_KEY,
+  CHECKOUT_PENDING_REDVAULT_ORDER_STORAGE_KEY,
   'app-settings-storage',
   'app-theme-storage',
   'auth-storage',
@@ -25,6 +29,8 @@ const CLEAR_CACHE_PRESERVED_PREFIXES = [
   'supabase',
   'baci:savings-reminder-',
   '@baci_storefront_push_opt_out_',
+  `${CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY}:`,
+  `${CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY}:`,
 ] as const;
 
 function isClearableCacheStorageKey(key: string): boolean {

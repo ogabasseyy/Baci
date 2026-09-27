@@ -1,5 +1,5 @@
-import { launchCtaLabel } from '@baci/shared/storefront';
-import { getProductUrl } from '@/lib/seo-utils';
+import { launchCtaLabel } from '@baci/shared/storefront/launch-carousel';
+import { getProductUrl } from '@/lib/product-url';
 import type { Product as OgabasseyProduct } from '../types';
 import type { LaunchProductSlide } from './LaunchCarousel';
 

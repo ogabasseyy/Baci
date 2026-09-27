@@ -269,4 +269,24 @@ describe('storefront order RPC context migration contract', () => {
       '20260828190000_restore_storefront_order_delivery_metadata_enforcement'
     );
   });
+
+  it('exposes a boolean probe for a stored checkout request hash', () => {
+    const probeMigration = readFileSync(
+      resolve(
+        process.cwd(),
+        '../../supabase/migrations/20260911200000_probe_storefront_order_idempotency_hash.sql'
+      ),
+      'utf8'
+    );
+
+    expect(probeMigration).toContain(
+      'CREATE OR REPLACE FUNCTION public.is_storefront_order_idempotency_hash('
+    );
+    expect(probeMigration).toContain('o.checkout_request_hash = trim(');
+    expect(probeMigration).toContain(
+      'GRANT EXECUTE ON FUNCTION public.is_storefront_order_idempotency_hash(uuid, text, text)'
+    );
+    expect(probeMigration).toContain('TO anon, authenticated');
+    expect(probeMigration).not.toContain('SELECT o.id');
+  });
 });

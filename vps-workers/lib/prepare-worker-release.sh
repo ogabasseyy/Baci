@@ -92,6 +92,11 @@ do
 done
 
 tsx_bin="$repo_dir/apps/web/node_modules/.bin/tsx"
+if [ ! -x "$tsx_bin" ]; then
+  # Mirror run-web-script.sh: a workspace-root install also satisfies the
+  # worker entrypoints, so validate the same fallback before failing.
+  tsx_bin="$repo_dir/node_modules/.bin/tsx"
+fi
 if [ ! -x "$tsx_bin" ] || ! "$tsx_bin" --version >/dev/null; then
   echo "Direct-worker checkout is missing the reviewed web toolchain." >&2
   exit 1

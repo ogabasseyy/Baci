@@ -310,7 +310,7 @@ export function AddressAutocomplete({
           'pr-10 transition-all duration-200',
           className
         )}
-        autoComplete="new-password"
+        autoComplete={props.autoComplete ?? 'new-password'}
         data-lpignore="true"
       />
 

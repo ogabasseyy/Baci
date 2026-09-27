@@ -200,6 +200,7 @@ describe('GET /api/storefront/orders', () => {
           virtual_account: null,
           balance: 0,
           current_document_kind: 'receipt',
+          invoice_type_code: '380',
           receipt_eligible: true,
           items: [
             {

@@ -3,7 +3,12 @@ import { parseShippingSettings } from '@/components/shipping/shipping-types';
 import { isGiglAdminShippingEligible } from '@/lib/order-gigl-eligibility';
 import { supabase } from '@/lib/supabase';
 
-const DEFAULT_SHIPPING_PROVIDERS = ['gigl', 'topship'] as const;
+/**
+ * Canonical carrier opt-in default for missing settings rows or a null
+ * allowlist: without a stored opt-in no carrier is eligible, matching the
+ * web admin-quote eligibility resolver.
+ */
+const DEFAULT_SHIPPING_PROVIDERS: readonly string[] = [];
 
 interface MerchantEligibilityInput {
   country?: string | null;

@@ -15,6 +15,7 @@ vi.mock('next/link', () => ({
 }));
 vi.mock('next/image', () => ({
   default: ({ src, alt }: { src: string; alt: string }) => (
+    // biome-ignore lint/performance/noImgElement: this mock stands in for next/image itself
     <img src={src} alt={alt} />
   ),
   getImageProps: ({ src, alt }: { src: string; alt: string }) => ({

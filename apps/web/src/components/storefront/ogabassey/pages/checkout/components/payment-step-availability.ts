@@ -133,6 +133,7 @@ export function isPaymentMethodAvailable({
   paystackCheckoutAvailable,
   korapayCheckoutAvailable,
   bankTransferCheckoutAvailable,
+  redvaultAvailable = false,
   featureSettings,
   currency,
   orderAmount,
@@ -142,6 +143,7 @@ export function isPaymentMethodAvailable({
   paystackCheckoutAvailable: boolean;
   korapayCheckoutAvailable: boolean;
   bankTransferCheckoutAvailable: boolean;
+  redvaultAvailable?: boolean;
   featureSettings?: FeatureSettings | null;
   currency?: string | null;
   orderAmount: number;
@@ -150,6 +152,8 @@ export function isPaymentMethodAvailable({
   switch (paymentMethod) {
     case 'paystack':
       return paystackCheckoutAvailable;
+    case 'uba_redvault':
+      return redvaultAvailable;
     case 'bank_transfer':
       return bankTransferCheckoutAvailable;
     case 'korapay':

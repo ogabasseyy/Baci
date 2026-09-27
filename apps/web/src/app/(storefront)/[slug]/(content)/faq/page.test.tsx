@@ -44,6 +44,12 @@ vi.mock('@/templates/registry', () => ({
   getTemplate: vi.fn(() => null),
 }));
 
+// The Help page is imported directly by the route; stub it to keep the
+// heavy page module out of this test's module graph.
+vi.mock('@/components/storefront/ogabassey/pages/help-support', () => ({
+  OgabasseyV2HelpSupport: vi.fn(() => null),
+}));
+
 vi.mock('@/types/faq', () => ({
   parseLegacyFAQ: vi.fn(() => []),
 }));

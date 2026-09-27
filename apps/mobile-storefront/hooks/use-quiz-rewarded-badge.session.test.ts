@@ -15,6 +15,13 @@ jest.mock('@/config/quiz-mobile-ads', () => ({
 jest.mock('@/hooks/use-quiz-mobile-ads', () => ({
   useQuizMobileAds: (input: unknown) => mockUseQuizMobileAds(input),
 }));
+jest.mock('@/config/mobile-ad-placements', () => ({
+  getMobileAdUnitId: () => ({
+    enabled: true,
+    format: 'rewarded',
+    unitId: 'test-rewarded-unit',
+  }),
+}));
 jest.mock('@/stores/auth-store', () => ({
   useAuthStore: (selector: (state: unknown) => unknown) =>
     selector({ customer: mockAuthCustomer }),

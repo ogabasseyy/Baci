@@ -51,31 +51,67 @@ export function generatePaymentReminderEmail(
     )
     .join('');
 
-  const bankTransferHtml = data.virtualAccount
-    ? `
+  // Paystack DVAs settle in NGN only (same gate as the proforma email):
+  // a foreign-currency reminder must not print a naira account beside a
+  // foreign-currency balance.
+  const dvaCurrencyCompatible = data.currency.trim().toUpperCase() === 'NGN';
+  const reminderVirtualAccount = dvaCurrencyCompatible
+    ? data.virtualAccount
+    : undefined;
+  const supportContactEmail =
+    data.supportEmail ||
+    `support@${data.merchantUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '')}`;
+  // A zero balance (e.g. a fully discounted unpaid order) has nothing to
+  // transfer: same omission as the confirmation email — no ₦0.00
+  // instruction, just no-payment guidance.
+  const hasBalanceDue = data.balanceDue > 0;
+
+  const bankTransferHtml =
+    reminderVirtualAccount && hasBalanceDue
+      ? `
     <div style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border-radius: 12px; padding: 20px; margin-top: 24px; border: 1px solid #e2e8f0;">
       <div style="font-size: 14px; font-weight: 600; color: #475569; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
         💳 Bank Transfer Option
+      </div>
+      <div style="font-size: 14px; color: #475569; margin-bottom: 12px;">
+        Transfer <strong>${formatEmailMoney(data.balanceDue, data.currency)}</strong> to the dedicated account below. Your order is confirmed automatically once payment is received.
       </div>
       <div style="background: #fff; border-radius: 8px; padding: 16px;">
         <table style="width: 100%; font-size: 14px;">
           <tr>
             <td style="color: #6b7280; padding: 4px 0;">Bank:</td>
-            <td style="color: #1a1a2e; font-weight: 600; text-align: right;">${escapeHtmlText(data.virtualAccount.bankName)}</td>
+            <td style="color: #1a1a2e; font-weight: 600; text-align: right;">${escapeHtmlText(reminderVirtualAccount.bankName)}</td>
           </tr>
           <tr>
             <td style="color: #6b7280; padding: 4px 0;">Account Number:</td>
-            <td style="color: #1a1a2e; font-weight: 700; text-align: right; font-size: 16px;">${escapeHtmlText(data.virtualAccount.accountNumber)}</td>
+            <td style="color: #1a1a2e; font-weight: 700; text-align: right; font-size: 16px;">${escapeHtmlText(reminderVirtualAccount.accountNumber)}</td>
           </tr>
           <tr>
             <td style="color: #6b7280; padding: 4px 0;">Account Name:</td>
-            <td style="color: #1a1a2e; font-weight: 600; text-align: right;">${escapeHtmlText(data.virtualAccount.accountName)}</td>
+            <td style="color: #1a1a2e; font-weight: 600; text-align: right;">${escapeHtmlText(reminderVirtualAccount.accountName)}</td>
           </tr>
         </table>
       </div>
     </div>
   `
-    : '';
+      : !hasBalanceDue
+        ? `
+    <div style="background: #f0fdf4; border-radius: 12px; padding: 20px; margin-top: 24px; border: 1px solid #bbf7d0;">
+      <div style="font-size: 14px; color: #166534;">
+        No payment is due on this order — please contact ${escapeHtmlText(data.merchantName)} if you have any questions.
+      </div>
+    </div>
+  `
+        : `
+    <div style="background: #fffbeb; border-radius: 12px; padding: 20px; margin-top: 24px; border: 1px solid #fde68a;">
+      <div style="font-size: 14px; font-weight: 600; color: #92400e; margin-bottom: 8px;">
+        💬 How to pay
+      </div>
+      <div style="font-size: 14px; color: #78350f;">
+        No payment account is assigned to this order yet. Please contact ${escapeHtmlText(data.merchantName)} at <a href="mailto:${escapeHtmlAttribute(supportContactEmail)}" style="color: #764ba2;">${escapeHtmlText(data.supportEmail || data.merchantName)}</a> to arrange payment of ${formatEmailMoney(data.balanceDue, data.currency)}.
+      </div>
+    </div>
+  `;
 
   return `
 <!DOCTYPE html>
@@ -106,7 +142,7 @@ export function generatePaymentReminderEmail(
 
       <p style="color: #6b7280; font-size: 15px; margin: 0 0 24px 0;">
         We noticed your order <strong>#${escapeHtmlText(data.orderNumber)}</strong> is awaiting payment.
-        Don't miss out on your items—complete your purchase with just one click!
+        ${!hasBalanceDue ? 'No payment is due on this order.' : reminderVirtualAccount ? `Complete your bank transfer of ${formatEmailMoney(data.balanceDue, data.currency)} using the details below — your order is confirmed automatically once payment is received.` : `Please contact ${escapeHtmlText(data.merchantName)} to arrange payment.`}
       </p>
 
       <!-- Order Summary Card -->
@@ -141,10 +177,12 @@ export function generatePaymentReminderEmail(
         </div>
       </div>
 
-      <!-- CTA Button -->
+      <!-- CTA Button: the link opens order tracking (status only — it
+        cannot take payment), so label it honestly; payment travels by
+        bank transfer (details below) or through the merchant. -->
       <div style="text-align: center; margin: 32px 0;">
         <a href="${escapeHtmlAttribute(sanitizeUrl(data.paymentLink))}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; padding: 16px 48px; border-radius: 50px; font-size: 16px; font-weight: 700; box-shadow: 0 4px 14px rgba(102, 126, 234, 0.4);">
-          Complete Payment →
+          Track Your Order →
         </a>
       </div>
 
@@ -155,7 +193,7 @@ export function generatePaymentReminderEmail(
       <div style="margin-top: 32px; padding: 20px; background: #fffbeb; border-radius: 8px; border-left: 4px solid #f59e0b;">
         <p style="margin: 0; font-size: 14px; color: #92400e;">
           <strong>Need help?</strong><br>
-          Reply to this email or contact us at <a href="mailto:${escapeHtmlAttribute(data.supportEmail || `support@${data.merchantUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '')}`)}" style="color: #764ba2;">${escapeHtmlText(data.supportEmail || data.merchantName)}</a>
+          Reply to this email or contact us at <a href="mailto:${escapeHtmlAttribute(supportContactEmail)}" style="color: #764ba2;">${escapeHtmlText(data.supportEmail || data.merchantName)}</a>
         </p>
       </div>
     </div>
@@ -194,16 +232,27 @@ export function generatePaymentReminderText(data: PaymentReminderData): string {
     )
     .join('\n');
 
-  const bankDetails = data.virtualAccount
-    ? `\n\nBank Transfer Option:\nBank: ${data.virtualAccount.bankName}\nAccount Number: ${data.virtualAccount.accountNumber}\nAccount Name: ${data.virtualAccount.accountName}`
-    : '';
+  // Same NGN-only gate as the HTML body.
+  const reminderVirtualAccount =
+    data.currency.trim().toUpperCase() === 'NGN'
+      ? data.virtualAccount
+      : undefined;
+  // Same zero-balance omission as the HTML body.
+  const hasBalanceDue = data.balanceDue > 0;
+
+  const bankDetails =
+    reminderVirtualAccount && hasBalanceDue
+      ? `\n\nBank Transfer Option:\nTransfer ${formatEmailMoney(data.balanceDue, data.currency)} to the dedicated account below. Your order is confirmed automatically once payment is received.\nBank: ${reminderVirtualAccount.bankName}\nAccount Number: ${reminderVirtualAccount.accountNumber}\nAccount Name: ${reminderVirtualAccount.accountName}`
+      : !hasBalanceDue
+        ? `\n\nNo payment is due on this order — please contact ${data.merchantName} if you have any questions.`
+        : `\n\nHow to pay:\nNo payment account is assigned to this order yet. Please contact ${data.merchantName}${data.supportEmail ? ` at ${data.supportEmail}` : ''} to arrange payment of ${formatEmailMoney(data.balanceDue, data.currency)}.`;
 
   return `
 Payment Reminder — Order #${data.orderNumber}
 
 Hi ${data.customerName},
 
-We noticed your order is awaiting payment. Don't miss out on your items!
+${!hasBalanceDue ? 'We noticed your order is awaiting payment. No payment is due on this order.' : reminderVirtualAccount ? `We noticed your order is awaiting payment. Complete your bank transfer of ${formatEmailMoney(data.balanceDue, data.currency)} using the details below — your order is confirmed automatically once payment is received.` : `We noticed your order is awaiting payment. Please contact ${data.merchantName} to arrange payment.`}
 
 Order Details:
 ${itemsText}
@@ -211,7 +260,7 @@ ${itemsText}
 Order Total: ${formatEmailMoney(data.totalAmount, data.currency)}
 ${data.amountPaid > 0 ? `Amount Paid: ${formatEmailMoney(data.amountPaid, data.currency)}\n` : ''}Balance Due: ${formatEmailMoney(data.balanceDue, data.currency)}
 
-Complete your payment here: ${data.paymentLink}
+Track your order here: ${data.paymentLink}
 ${bankDetails}
 
 Thank you for shopping with ${data.merchantName}!

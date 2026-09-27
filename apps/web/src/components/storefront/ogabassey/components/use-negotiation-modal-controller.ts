@@ -6,9 +6,18 @@ import {
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import type { CartItem } from '@/hooks/cart';
-import { createClient } from '@/lib/supabase/client';
+import type { createClient } from '@/lib/supabase/client';
 import { computeCounterOffer } from './negotiation-modal-pricing';
+
+// Module scope: React Compiler cannot lower dynamic import() inside the hook.
+// Lazy so the negotiation modal (reached via footer-chrome -> cart sidebar)
+// never pulls @supabase/ssr into the initial bundle.
+async function loadSupabaseClient(): Promise<ReturnType<typeof createClient>> {
+  const { createClient } = await import('@/lib/supabase/client');
+  return createClient();
+}
 import { submitNegotiationUpload } from './negotiation-modal-upload';
+import { getUploadFormValidationError } from './negotiation-upload-validation';
 
 export type NegotiationStatus =
   | 'input'
@@ -72,7 +81,18 @@ export function useNegotiationModalController({
   const [uploadLink, setUploadLink] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [supabase] = useState(() => createClient());
+  // Lazily resolved: eager createClient() at hook init pulled @supabase/ssr
+  // toward the homepage bundle via footer-chrome -> cart sidebar. The client
+  // is only needed inside submit handlers (user action), where a dynamic
+  // import is invisible. Promise cache so the import stays in module scope.
+  const supabasePromiseRef =
+    useRef<Promise<ReturnType<typeof createClient>> | null>(null);
+  const getSupabaseClient = () => {
+    if (!supabasePromiseRef.current) {
+      supabasePromiseRef.current = loadSupabaseClient();
+    }
+    return supabasePromiseRef.current;
+  };
   const submitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(false);
   const isOpenRef = useRef(isOpen);
@@ -181,6 +201,36 @@ export function useNegotiationModalController({
 
   const handleUploadSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    // Validate before downloading the lazily-loaded Supabase client: an
+    // immediately rejectable form (conflicting/missing evidence, bad link,
+    // bad offer) must surface feedback instantly instead of stalling on the
+    // client chunk — and a chunk-load failure must not swallow validation.
+    const formError = getUploadFormValidationError({
+      currentPrice,
+      merchantId,
+      offer,
+      uploadFile,
+      uploadLink,
+    });
+    if (formError) {
+      alert(formError);
+      return;
+    }
+    let supabase: Awaited<ReturnType<typeof getSupabaseClient>>;
+    try {
+      supabase = await getSupabaseClient();
+    } catch (error) {
+      // The client chunk (or its factory) can reject on stale-chunk and
+      // offline transitions — before any of submitNegotiationUpload's guarded
+      // paths run. Surface feedback, drop the poisoned cached promise so a
+      // retry re-imports, and leave the form in its actionable upload state.
+      console.error('Failed to load Supabase client:', error);
+      supabasePromiseRef.current = null;
+      alert(
+        'Unable to load the submission service. Check your connection and try again.'
+      );
+      return;
+    }
     await submitNegotiationUpload({
       canApplyAsyncResult,
       cart,

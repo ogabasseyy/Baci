@@ -16,10 +16,10 @@ import { useShallow } from 'zustand/react/shallow';
 import {
   BranchSwitcher,
   InsightCard,
-  ProgressCard,
   QuickActionButton,
   RevenueChart,
   StatCard,
+  StoreSetupStatusCard,
   WelcomeHeader,
 } from '@/components/dashboard';
 import { RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
@@ -251,17 +251,10 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        {/* Setup Checklist - Shown when store is not ready */}
-        {!isReadinessLoading && readiness && !readiness.isReady && (
-          <View style={styles.section}>
-            <ProgressCard
-              title="Finish Setup"
-              subtitle="Complete your store setup to start selling"
-              progress={readiness.overallProgress}
-              onPress={() => router.push('/(admin)/setup-checklist')}
-            />
-          </View>
-        )}
+        <StoreSetupStatusCard
+          isLoading={isReadinessLoading}
+          readiness={readiness}
+        />
 
         {/* Insight Card - Shown when store IS ready (or if setup is ignored) */}
         {showInsight && stats && (readiness?.isReady || false) && (

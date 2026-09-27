@@ -27,14 +27,14 @@ async function readWebFilter() {
   return { webFilter, webFilterIndex, workflow };
 }
 
-test('the Quality Gate reaches the tools and worker TypeScript project', async () => {
+test('the Quality Gate generates route types and reaches the tools and worker TypeScript project', async () => {
   const pkg = JSON.parse(await readFile('apps/web/package.json', 'utf8'));
   const toolsTsconfig = JSON.parse(await readFile('apps/web/tsconfig.tools-workers.json', 'utf8'));
   const configTest = await readFile('.github/scripts/resolve-ci-test-plan-config.test.mjs', 'utf8');
   const { webFilter, webFilterIndex, workflow } = await readWebFilter();
 
   assert.notEqual(webFilterIndex, -1);
-  assert.equal(pkg.scripts.typecheck, 'tsc --noEmit && pnpm typecheck:tools-workers');
+  assert.equal(pkg.scripts.typecheck, 'next typegen && tsc --noEmit && pnpm typecheck:tools-workers');
   assert.equal(pkg.scripts['typecheck:tools-workers'], 'tsc --noEmit -p tsconfig.tools-workers.json');
   assert.deepEqual(toolsTsconfig.compilerOptions.types, [
     'node', 'vitest/globals', '@testing-library/jest-dom', 'google.maps',

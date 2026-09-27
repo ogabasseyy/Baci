@@ -34,7 +34,9 @@ export function encryptGoogleAdsSecret(
   encryptionKey: string
 ): string {
   const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', keyBytes(encryptionKey), iv);
+  const cipher = createCipheriv('aes-256-gcm', keyBytes(encryptionKey), iv, {
+    authTagLength: 16,
+  });
   const ciphertext = Buffer.concat([
     cipher.update(secret, 'utf8'),
     cipher.final(),
@@ -53,7 +55,8 @@ export function decryptGoogleAdsSecret(
   const decipher = createDecipheriv(
     'aes-256-gcm',
     keyBytes(encryptionKey),
-    decode(ivPart)
+    decode(ivPart),
+    { authTagLength: 16 }
   );
   decipher.setAuthTag(decode(tagPart));
   return Buffer.concat([

@@ -1,34 +1,39 @@
 'use client';
+import { buildCheckoutOrderRequest } from './checkout/build-checkout-order-request';
+import { useLoadResumedOrder } from './checkout/hooks/use-load-resumed-order';
+import { useOrderTotals } from './checkout/hooks/use-order-totals';
 
 import { useAirportQuoteRecovery } from './checkout/hooks/use-airport-quote-recovery';
+import {
+  useDvaConfirmTransfer,
+  type DvaModalData,
+} from './checkout/hooks/use-dva-confirm-transfer';
 import { isAirportDeliveryReady } from './checkout/is-airport-delivery-ready';
 import { canShowDeliveryMethods } from './checkout/can-show-delivery-methods';
 
 import { DeferredCryptoSelectorModal as CryptoSelectorModal } from './checkout/components/DeferredCryptoSelectorModal';
 import {
-  isAirportDeliveryEligible,
-  isPickupEligible,
-} from '@baci/shared';
+  CHECKOUT_FUNNEL_EVENTS,
+  buildCheckoutFunnelProperties,
+  getCheckoutPaymentIntent,
+  resolveFinalizedCheckoutPaymentMethod,
+} from '@baci/shared/contracts';
 import {
   AlertCircle,
   Building2,
   ChevronRight,
   CreditCard,
   Loader2,
-  Plane,
   ShieldCheck,
-  ShoppingBag,
-  Truck,
   Check,
   Copy,
   Clock,
   User,
   X,
-  Eye,
-  EyeOff,
 } from 'lucide-react';
-import { SmartQuoteLoader } from '../components/SmartQuoteLoader';
-import { DoorDeliveryQuoteOptions } from './checkout/components/DoorDeliveryQuoteOptions';
+import { CheckoutStepSection } from './checkout/components/CheckoutStepSection';
+import { DeliveryAddressFields, type SavedCheckoutAddress as SavedAddress } from './checkout/components/DeliveryAddressFields';
+import { DeliveryOptions } from './checkout/components/DeliveryOptions';
 import { isCheckoutDeliveryAddressReady } from './checkout/is-checkout-delivery-address-ready';
 import {
   checkoutShippingQuoteDeliveryPreference,
@@ -44,8 +49,11 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
 import { resolveMerchantDeliveryMethod } from './checkout/resolve-merchant-delivery-method';
 import { buildCheckoutBillingAddress } from './checkout/build-checkout-billing-address';
-import { useCryptoPaymentInitializer } from './checkout/use-crypto-payment-initializer';
 import { useCheckoutFormState } from './checkout/hooks/use-checkout-form-state';
+import {
+  useJuicywayPayment,
+  type JuicywayPendingOrder,
+} from './checkout/hooks/use-juicyway-payment';
 import { persistPendingCheckoutOrder } from './checkout/persist-pending-checkout-order';
 import { usePaymentReturnReset } from './checkout/use-payment-return-reset';
 import { useEffect, useState, useRef } from 'react';
@@ -57,44 +65,38 @@ import type {
   CryptoChain,
   CryptoCurrency,
   DeliveryMethod,
-  CryptoPaymentData,
   DvaData,
   PaymentMethod,
   PendingCryptoOrder,
+  PaymentTab,
   ResumedOrder,
 } from './checkout/types';
 import { mapApiOrderToResumedOrder } from './checkout/map-api-order-to-resumed-order';
 import {
+  loadShippingStates,
+  loadWalletBalance,
+} from './checkout/checkout-page-data-loaders';
+import {
   usePersistedState,
 } from '@/hooks/use-persisted-state';
 import { useAuthSafe } from '@/contexts/auth-context';
-import { PhoneInput } from '@/components/ui/phone-input';
 import { DeferredCheckoutAuthModal as CheckoutAuthModal } from './checkout/components/DeferredCheckoutAuthModal';
-import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import {
-  AddressAutocomplete,
   type PlaceDetails,
 } from '@/components/address-autocomplete';
-import { getCredPalKey, openCredPalCheckout } from '@/lib/credpal';
-import { openCreditDirectCheckout } from '@/lib/credit-direct-client';
+import { openCheckoutCreditDirect } from './checkout/handlers/open-checkout-credit-direct';
 import { asRoute } from '@/lib/routes';
-import { AUTO_FRACTION_OPTIONS } from '@/lib/currency';
 import { getCountryByCode } from '@/lib/countries';
-import { formatAmountInCurrency } from '@/lib/resolve-merchant-currency';
 import type { ShippingQuote } from '@/types/shipping-quote';
 import { getSubdivisions } from '@/lib/shipping/merchant-rates/subdivisions';
 import { toast } from '@/hooks/use-toast';
 import { createClient } from '@/lib/supabase/client';
-import { calculateCommerce } from '@/lib/supabase/client';
 import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
-import { toCreditDirectItems } from '@/lib/checkout/credit-direct-items';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import {
   calculateCartCatalogSubtotal,
   calculateCartItemSubtotal,
   calculateCartTotal,
-  getCartItemCheckoutUnitPrice,
-  isQuizVoucherCartItem,
   sanitizeCartItems,
 } from '@/lib/checkout/cart-entitlement-sanitizer';
 import {
@@ -103,32 +105,49 @@ import {
   isPaystackCheckoutAvailable,
 } from '@/lib/checkout/payment-gateway-availability';
 import { isNgnChargeCurrency } from './checkout/components/payment-step-availability';
-import { isValidPhoneNumber } from 'react-phone-number-input';
+import { ContactStep } from './checkout/components/ContactStep';
 import {
   buildPendingCheckoutFingerprint,
   CHECKOUT_PENDING_ORDER_STORAGE_KEY,
   normalizeOrderPaymentMethod,
-  resolvePendingCheckoutOrder,
   type PendingCheckoutOrderSnapshot,
 } from './checkout/pending-checkout-order';
+import {
+  submitRedvaultPreparedOrder,
+  type RedvaultPreparedOrder,
+  type RedvaultStatus,
+} from './checkout/handlers/redvault-prepared-order-submit';
+import { recoverPendingCheckoutOrder } from './checkout/handlers/recover-pending-checkout-order';
 import {
   clearCheckoutIdempotencyKey,
   getCheckoutIdempotencyKey,
 } from './checkout/checkout-idempotency';
-import { captureCreditDirectClientCompletion } from './checkout/credit-direct-client-completion';
-import {
-  type CreditDirectPopupMarker,
-  writeCreditDirectPopupMarker,
-} from './checkout/credit-direct-popup-return';
-import { persistCreditDirectPopupReference } from './checkout/persist-credit-direct-popup-reference';
+import { captureCheckoutPaymentCompleted } from './checkout/capture-checkout-payment-completed';
+import { captureCheckoutPaymentFailed } from './checkout/capture-checkout-payment-failed';
+import { captureCheckoutPaymentStarted } from './checkout/capture-checkout-payment-started';
+import { executeResumedDirectPayment } from './checkout/handlers/direct-payment';
 import { getCheckoutOrderErrorMessage } from './checkout/checkout-order-error-message';
+import {
+  submitCheckoutOrder,
+  type CheckoutPaymentOrder,
+  type CheckoutWalletRedemption,
+} from './checkout/handlers/submit-checkout-order';
+import { initializeCheckoutDva } from './checkout/handlers/initialize-checkout-dva';
+import { initializeCheckoutGateway } from './checkout/handlers/initialize-checkout-gateway';
+import { openCheckoutCredpal } from './checkout/handlers/open-checkout-credpal';
+import { completeCheckoutOrder } from './checkout/handlers/complete-checkout-order';
+import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
+import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import { selectRejectedVoucherLines } from './checkout/select-rejected-voucher-lines';
 import { PaymentStep } from './checkout/components/PaymentStep';
-import { AirportDeliveryOptions } from './checkout/components/AirportDeliveryOptions';
+import type { RedvaultQuoteSummary } from './checkout/components/redvault/RedvaultPaymentOption';
+import { initializeRedvaultPayment } from './checkout/redvault-payment-response';
+import { getRedvaultCompatibleCheckoutValues } from './checkout/redvault-compatible-checkout-values';
 import {
   invalidatePendingQuoteRequests,
   loadCheckoutShippingQuotes,
 } from './checkout/hooks/checkout-shipping-quote-loader';
+import { useRedvaultPaymentAvailability } from './checkout/hooks/use-redvault-payment-availability';
 import {
   calculateDeliveryCost,
   KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST,
@@ -137,7 +156,6 @@ import {
   getDoorDeliveryQuotes,
   getForwardableSelectedQuoteId,
   getMerchantRateId,
-  getPickupStationCopy,
   getStationPickupAddressText,
   getStationPickupQuote,
   getStationPickupQuotes,
@@ -153,31 +171,18 @@ import { isWalletOrderAutoDebitWebEnabled } from '@/config/wallet-order-auto-deb
 import { isEligibleForWalletFundedBankTransfer } from './checkout/wallet-funded-transfer-eligibility';
 import { useWalletFundedBankTransfer } from './checkout/hooks/use-wallet-funded-bank-transfer';
 import { useStorefrontCustomerSession } from './checkout/hooks/use-storefront-customer-session';
+import {
+  resolveCheckoutStartValues,
+  useResumedCheckoutStartFunnel,
+} from './checkout/hooks/use-resumed-checkout-start-funnel';
+import { readCheckoutAttemptGeneration, rotateCheckoutAttemptGeneration } from './checkout/checkout-attempt-generation';
 import { DeferredWalletFundedTransferModal as WalletFundedTransferModal } from './checkout/components/DeferredWalletFundedTransferModal';
 import { DeferredWalletTransferConsentDialog as WalletTransferConsentDialog } from './checkout/components/DeferredWalletTransferConsentDialog';
+import {
+  DesktopOrderSummary,
+  type CheckoutItem,
+} from './checkout/components/DesktopOrderSummary';
 
-/**
- * Discriminated union for checkout item rendering. The `kind` tag is set at
- * construction time when we unify the cart and resumed-order item arrays into
- * a single `displayItems` list, so consumers narrow with `item.kind === 'cart'`
- * instead of the fragile `'cartItemId' in item` shape check.
- */
-type CheckoutItem =
-  | ({ kind: 'cart' } & CartItem)
-  | ({ kind: 'resumed' } & ResumedOrder['items'][number]);
-
-interface SavedAddress {
-  id: number;
-  label: string;
-  address: string;
-  phone: string;
-  isDefault: boolean;
-}
-
-interface ShippingLocation {
-  city: string;
-  state: string;
-}
 
 interface InferredCheckoutAddressLocation {
   city: string;
@@ -185,34 +190,6 @@ interface InferredCheckoutAddressLocation {
 }
 
 const MANUAL_ADDRESS_LOCATION_DEBOUNCE_MS = 500;
-
-interface CreditDirectVerificationHandoff {
-  orderId: string;
-  merchantSlug: string;
-  completionMarker?: CreditDirectPopupMarker | null;
-  trackingToken?: string | null;
-  customerEmail?: string | null;
-}
-
-function buildCreditDirectVerificationPath({
-  orderId,
-  merchantSlug,
-  completionMarker,
-  trackingToken,
-  customerEmail,
-}: CreditDirectVerificationHandoff): string {
-  const query = new URLSearchParams({
-    orderId,
-    gateway: 'credit_direct',
-    merchant_slug: merchantSlug,
-  });
-  if (completionMarker) {
-    query.set('creditDirectCompletion', completionMarker.transactionId);
-  }
-  if (trackingToken) query.set('trackingToken', trackingToken);
-  if (customerEmail) query.set('email', customerEmail);
-  return `/checkout/bnpl?${query.toString()}`;
-}
 
 /**
  * Module-scope checkout helpers.
@@ -233,279 +210,20 @@ function raiseCheckoutError(message: string): never {
   throw new Error(message);
 }
 
-/**
- * /api/orders rejection codes raised by the merchant-shipping-rate money guard.
- * They all mean "the fee the client quoted no longer matches the merchant's
- * rate config for this destination/subtotal" — surface a single re-quote hint.
- */
-const SHIPPING_RATE_REJECTION_CODES = new Set([
-  'SHIPPING_FEE_MISMATCH',
-  'SHIPPING_RATE_INVALID',
-  'SHIPPING_RATE_ZONE_MISMATCH',
-  'SHIPPING_RATE_CONDITION_UNMET',
-]);
-
-interface ResumedOrderFormFields {
-  firstName: string;
-  lastName: string;
-  customerEmail: string;
-  customerPhone: string;
-  newAddressStreet: string;
-  newAddressState: string;
-  newAddressCity: string;
-  currentStep: 'contact' | 'delivery' | 'payment';
-  completedSteps: { contact: boolean; delivery: boolean };
-}
-
-interface LoadResumedCheckoutOrderParams {
-  resumeOrderId: string;
-  resumeMerchantSlug: string;
-  resumeTrackingToken: string | null;
-  resumeLookupEmail: string | null;
-  preferredGateway: 'credpal' | 'credit_direct' | null;
-  setIsLoadingResumedOrder: (isLoading: boolean) => void;
-  setResumedOrder: (order: ResumedOrder) => void;
-  setCheckoutFields: (fields: ResumedOrderFormFields) => void;
-  setPaymentTab: (tab: 'full' | 'installments') => void;
-  setPaymentMethod: (method: PaymentMethod) => void;
-  setResumeOrderError: (error: string | null) => void;
-}
-
-async function loadResumedCheckoutOrder({
-  resumeOrderId,
-  resumeMerchantSlug,
-  resumeTrackingToken,
-  resumeLookupEmail,
-  preferredGateway,
-  setIsLoadingResumedOrder,
-  setResumedOrder,
-  setCheckoutFields,
-  setPaymentTab,
-  setPaymentMethod,
-  setResumeOrderError,
-}: LoadResumedCheckoutOrderParams): Promise<void> {
-  setIsLoadingResumedOrder(true);
-  try {
-    const query = new URLSearchParams();
-    query.set('merchant_slug', resumeMerchantSlug);
-    if (resumeTrackingToken) {
-      query.set('token', resumeTrackingToken);
-    }
-    if (resumeLookupEmail) {
-      query.set('email', resumeLookupEmail);
-    }
-
-    const res = await fetch(
-      query.toString()
-        ? `/api/storefront/orders/${resumeOrderId}?${query.toString()}`
-        : `/api/storefront/orders/${resumeOrderId}`
-    );
-    if (res.ok) {
-      const orderData = await res.json();
-      const resumed = mapApiOrderToResumedOrder(orderData);
-      setResumedOrder(resumed);
-
-      // Pre-fill form with order data
-      const [first, ...rest] = (resumed.customer_name || '').split(' ');
-      setCheckoutFields({
-        firstName: first || '',
-        lastName: rest.join(' ') || '',
-        customerEmail: resumed.customer_email || '',
-        customerPhone: resumed.customer_phone || '',
-        newAddressStreet: resumed.shipping_address?.address || '',
-        newAddressState: resumed.shipping_address?.state || '',
-        newAddressCity: resumed.shipping_address?.city || '',
-        // Skip directly to payment step for resumed orders
-        currentStep: 'payment',
-        completedSteps: { contact: true, delivery: true },
-      });
-
-      // 2025 FIX: Sync paymentTab with preferredGateway to prevent UI crash
-      // If a BNPL gateway is selected, we MUST switch to the 'installments' tab
-      if (preferredGateway === 'credit_direct' || preferredGateway === 'credpal') {
-        setPaymentTab('installments');
-        setPaymentMethod(preferredGateway);
-      } else if (preferredGateway) {
-        setPaymentTab('full');
-        setPaymentMethod(preferredGateway);
-      }
-    } else {
-      console.error('Failed to fetch resumed order');
-      setResumeOrderError('Order not found. It may have been completed or expired.');
-    }
-  } catch (error) {
-    console.error('Error fetching resumed order:', error);
-    setResumeOrderError('Failed to load order details. Please try again.');
-  } finally {
-    setIsLoadingResumedOrder(false);
-  }
-}
-
-interface LoadShippingStatesParams {
-  /** Merchant country (ISO-2, upper-case) the address form is keyed to. */
-  merchantCountry: string;
-  /**
-   * Aborted by the effect cleanup when `merchantCountry` changes so a stale NG
-   * `/api/shipping/locations` response can't clobber a fresher subdivision list.
-   */
-  signal: AbortSignal;
-  setIsLoadingLocations: (isLoading: boolean) => void;
-  setShippingStates: (states: string[]) => void;
-}
-
-async function loadShippingStates({
-  merchantCountry,
-  signal,
-  setIsLoadingLocations,
-  setShippingStates,
-}: LoadShippingStatesParams): Promise<void> {
-  // Non-NG markets derive their state list from the merchant-country
-  // subdivision vocabulary (IN/AE ship real states; unsupported countries
-  // yield [] — a graceful, no-worse-than-today fallback). NG keeps the rich
-  // /api/shipping/locations dataset AND its state->city sub-fetch untouched.
-  if (merchantCountry !== 'NG') {
-    setShippingStates(
-      getSubdivisions(merchantCountry).map((subdivision) => subdivision.name)
-    );
-    return;
-  }
-
-  setIsLoadingLocations(true);
-  try {
-    const res = await fetch('/api/shipping/locations', { signal });
-    // A newer merchantCountry (e.g. NG→IN once an async merchant resolves)
-    // aborts this request via the effect cleanup. Bail before overwriting the
-    // fresh non-NG subdivisions with the stale NG payload. Checking
-    // `signal.aborted` (not just relying on the fetch to reject) also covers
-    // mocked/instant fetches that resolve regardless of the abort.
-    if (signal.aborted) {
-      return;
-    }
-    if (res.ok) {
-      const data = await res.json();
-      if (signal.aborted) {
-        return;
-      }
-      setShippingStates(data.states || []);
-    }
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      return;
-    }
-    console.error('Failed to fetch states', error);
-  } finally {
-    if (!signal.aborted) {
-      setIsLoadingLocations(false);
-    }
-  }
-}
-
-interface LoadWalletBalanceParams {
-  merchantSlug: string;
-  signal: AbortSignal;
-  setWalletLoading: (isLoading: boolean) => void;
-  setWalletBalance: (balance: number) => void;
-  setPayWithWallet: (payWithWallet: boolean) => void;
-}
-
-async function loadWalletBalance({
-  merchantSlug,
-  signal,
-  setWalletLoading,
-  setWalletBalance,
-  setPayWithWallet,
-}: LoadWalletBalanceParams): Promise<void> {
-  setWalletLoading(true);
-  try {
-    const response = await fetch(
-      `/api/storefront/customer/wallet?merchant=${merchantSlug}`,
-      { signal }
-    );
-    if (response.ok) {
-      const data = await response.json();
-      const balance = Number(data.balance) || 0;
-      setWalletBalance(balance);
-      // Auto-apply wallet credit if balance > 0 (Shopify 2025 pattern)
-      if (balance > 0) {
-        setPayWithWallet(true);
-      }
-    }
-  } catch (error) {
-    // Ignore abort errors (component unmounted)
-    if (error instanceof Error && error.name !== 'AbortError') {
-      console.error('Failed to fetch wallet balance:', error);
-    }
-  } finally {
-    if (!signal.aborted) {
-      setWalletLoading(false);
-    }
-  }
-}
 
 
-interface RequestDvaInitializationParams {
-  merchantId: string;
-  orderId: string;
-  customerEmail: string;
-  customerName: string;
-  customerPhone: string;
-  billingAddress: DvaBillingAddress;
-  /** Merchant-resolved fiat order currency (server derives from order). */
-  orderCurrency: string;
-}
-
-interface DvaBillingAddress {
-  line1: string;
-  city: string;
-  state?: string;
-  country: string;
-  zip_code?: string;
-}
-
-async function requestDvaInitialization({
-  merchantId,
-  orderId,
-  customerEmail,
-  customerName,
-  customerPhone,
-  billingAddress,
-  orderCurrency,
-}: RequestDvaInitializationParams): Promise<{
-  dva: Omit<DvaData, 'amount' | 'reference'>;
-  reference: string;
-}> {
-  const response = await fetch('/api/payments/initialize', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      merchant_id: merchantId,
-      order_id: orderId,
-      currency: orderCurrency,
-      customer_email: customerEmail,
-      customer_name: customerName,
-      customer_phone: customerPhone,
-      gateway: 'paystack',
-      payment_type: 'dva', // Dedicated Virtual Account
-      billing_address: billingAddress,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(errorData?.error || 'Failed to initialize bank transfer');
-  }
-
-  const result = await response.json();
-  if (result.success && result.dva) {
-    return { dva: result.dva, reference: result.reference };
-  }
-  throw new Error('DVA not returned by the gateway');
-}
-
+// Module-scope helper: probes DVA settlement server-side so "Confirm
+// Transfer Sent" only records a conversion for a detected transfer.
+// Prefers the token-scoped order status: the settlement webhook marks the
+// ORDER paid after matching the transfer to the dedicated account, while
+// the DVA reference is a locally generated BAC-* value that was never
+// registered as a Paystack transaction (probing /transaction/verify with it
+// can only error for real DVA transfers).
 export const CheckoutPage: React.FC = () => {
   const { cart, clearCart, isHydrated, removeFromCart } = useCart();
   const merchantContext = useMerchantSafe();
   const merchant = merchantContext?.merchant;
+  const redvaultAvailability = useRedvaultPaymentAvailability(merchant?.id);
 
   // Address-form country: the merchant's own market (ISO-2, upper-case), NG as
   // the pilot default when unset. Drives the state list source, the Places
@@ -603,6 +321,8 @@ export const CheckoutPage: React.FC = () => {
   const currentStep = isHydrated ? rawCurrentStep : 'contact';
   const completedSteps = isHydrated ? rawCompletedSteps : { contact: false, delivery: false };
 
+  const [focusActiveStep, setFocusActiveStep] = useState(false);
+
   // Convenient setters that update the persisted form
   const setFirstName = (v: string) => setCheckoutField('firstName', v);
   const setLastName = (v: string) => setCheckoutField('lastName', v);
@@ -610,7 +330,7 @@ export const CheckoutPage: React.FC = () => {
   const setCustomerPhone = (v: string) => setCheckoutField('customerPhone', v);
   const setNewAddressState = (v: string) => setCheckoutField('newAddressState', v);
   const setNewAddressCity = (v: string) => setCheckoutField('newAddressCity', v);
-  const setCurrentStep = (v: 'contact' | 'delivery' | 'payment') => setCheckoutField('currentStep', v);
+  const setCurrentStep = (v: 'contact' | 'delivery' | 'payment') => { setFocusActiveStep(true); setCheckoutField('currentStep', v); };
   const setCompletedSteps = (v: { contact: boolean; delivery: boolean } | ((prev: { contact: boolean; delivery: boolean }) => { contact: boolean; delivery: boolean })) => {
     if (typeof v === 'function') {
       setCheckoutField('completedSteps', v(completedSteps));
@@ -651,10 +371,7 @@ export const CheckoutPage: React.FC = () => {
   const [createAccount, setCreateAccount] = useState(false);
   const [accountPassword, setAccountPassword] = useState('');
   const setNewsletterOptIn = (value: boolean) => setCheckoutField('newsletterOptIn', value);
-  const [showPasswordInput, setShowPasswordInput] = useState(false);
-  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [contactValidationAttempted, setContactValidationAttempted] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -678,69 +395,59 @@ export const CheckoutPage: React.FC = () => {
     }
   };
 
-  // Validation States (hydration-safe: default to false during SSR to match disabled="" on server)
-  const rawIsContactValid = (() => {
-    const hasRequiredFields = firstName.trim() && lastName.trim() && customerEmail.trim() && customerPhone;
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const isPhoneValid = customerPhone && isValidPhoneNumber(customerPhone);
-    return !!(hasRequiredFields && emailRegex.test(customerEmail.trim()) && isPhoneValid);
-  })();
-  const isContactValid = isHydrated ? rawIsContactValid : false;
-
-
-  // Crypto payment modal state
-  const [cryptoPaymentData, setCryptoPaymentData] = useState<{
-    address: string;
-    chain: string;
-    currency: string;
-    amount: number;
-    confirmation_time: string;
-    orderId: string;
-    trackingToken?: string;
-    reference: string;
-    sessionId: string; // Payment session ID (from initialization)
-    paymentId: string; // Payment ID (from capture) - used for verification via GET /payments/{id}
-    qrcode?: string;
-  } | null>(null);
-
   // Dedicated Virtual Account (DVA) state
-  const [dvaData, setDvaData] = useState<{
-    account_number: string;
-    account_name: string;
-    bank_name: string;
-    bank_code: string;
-    amount: number;
-    reference: string;
-  } | null>(null);
+  const [dvaData, setDvaData] = useState<DvaModalData | null>(null);
   const [isInitializingDva, setIsInitializingDva] = useState(false);
   const [dvaCountdown, setDvaCountdown] = useState(3600); // 1 hour in seconds
-
-  // Crypto payment verification state
-  const [isVerifyingCrypto, setIsVerifyingCrypto] = useState(false);
-  const [cryptoVerificationStatus, setCryptoVerificationStatus] = useState<'idle' | 'checking' | 'confirmed' | 'pending' | 'failed'>('idle');
+  // "Confirm Transfer Sent" lifecycle (server verification, conversion,
+  // routing, delayed cart clear) tied to the modal attempt that started
+  // it — see useDvaConfirmTransfer.
+  const { closeDvaModal, handleDvaConfirmTransfer, isVerifyingDva } =
+    useDvaConfirmTransfer({
+      checkoutCart,
+      clearCart,
+      clearCheckoutSession,
+      clearPendingCheckoutOrder,
+      currencyCode,
+      dvaData,
+      getHref,
+      merchantSlug: merchant?.slug ?? undefined,
+      setDvaData,
+    });
 
   // Crypto selection state (before payment is initialized)
   const [showCryptoSelector, setShowCryptoSelector] = useState(false);
-  const [selectedCryptoChain, setSelectedCryptoChain] = useState<'TRX' | 'ETH' | 'MATIC' | 'AVAXC'>('TRX');
-  const [selectedCryptoCurrency, setSelectedCryptoCurrency] = useState<'USDT' | 'USDC'>('USDT');
-  const [pendingCryptoOrder, setPendingCryptoOrder] = useState<{
-    orderId: string;
-    trackingToken?: string;
-    amount: number;
-    /** Stamped order currency (authoritative for payment initialization). */
-    orderCurrency: string;
-    customerEmail: string;
-    customerName: string;
-    customerPhone: string;
-    billingAddress: {
-      line1: string;
-      city: string;
-      state: string;
-      country: string;
-      zip_code?: string;
-    };
-    items: Array<{ name: string; type: 'physical' | 'digital' }>;
-  } | null>(null);
+  const [selectedCryptoChain, setSelectedCryptoChain] = useState<CryptoChain>('TRX');
+  const [selectedCryptoCurrency, setSelectedCryptoCurrency] = useState<CryptoCurrency>('USDT');
+  const [pendingCryptoOrder, setPendingCryptoOrder] =
+    useState<JuicywayPendingOrder | null>(null);
+
+  // Juicyway deposit lifecycle (initialization, verification polling,
+  // completion/failure analytics, cleanup, navigation).
+  const {
+    cryptoPaymentData,
+    setCryptoPaymentData,
+    isVerifyingCrypto,
+    cryptoVerificationStatus,
+    isInitializingCrypto,
+    initializeCryptoPayment,
+    verifyCryptoPayment,
+    dismissCryptoModal,
+    cancelCryptoInitialization,
+  } = useJuicywayPayment({
+    merchantId: merchant?.id,
+    pendingCryptoOrder,
+    selectedCryptoChain,
+    selectedCryptoCurrency,
+    setShowCryptoSelector,
+    clearCheckoutSession,
+    clearPendingCheckoutOrder,
+    clearCart,
+    routerPush: (url: string) => {
+      router.push(asRoute(url));
+    },
+    getHref,
+  });
 
   // Mobile app order resume state
   // When opening from mobile app with ?orderId=xxx&gateway=credpal, we resume that order
@@ -807,9 +514,39 @@ export const CheckoutPage: React.FC = () => {
   const effectiveItemSubtotal = hasCheckoutCartItems
     ? itemSubtotal
     : resumedOrder?.subtotal || 0;
-  const effectiveCheckoutCartTotal = hasCheckoutCartItems
-    ? checkoutCartTotal
-    : resumedOrder?.subtotal || checkoutCartTotal;
+  // Displayed totals share the funnel's stamped derivation (single
+  // source in the focused hook module): a resumed render shows the
+  // canonical order total, never the subtotal-only variant.
+  const { total: effectiveCheckoutCartTotal } = resolveCheckoutStartValues({
+    checkoutCartTotal,
+    currencyCode,
+    hasCheckoutCartItems,
+    resumedOrder,
+  });
+
+  // Set once an order is created for this attempt: post-creation rerenders
+  // (pending-order persist, widget state) must not re-emit checkout_started
+  // for the same attempt just because the generation already rotated.
+  // Declared before the funnel hook below, which reads it.
+  const [checkoutOrderCreated, setCheckoutOrderCreated] = useState(false);
+  // Session-persisted checkout attempt: rotates after every created order so
+  // a repeat purchase of the same cart emits a fresh start, while a reload
+  // mid-attempt keeps the same generation (unlike React useId, which is
+  // deterministic per rendered tree and collides after reload).
+  // Start instrumentation (including the resumed-order stamped
+  // total/currency derivation) lives in the focused hook below so edits
+  // here leave this page smaller, not larger.
+  useResumedCheckoutStartFunnel({
+    attemptId: `gen-${readCheckoutAttemptGeneration()}`,
+    checkoutCartTotal,
+    currencyCode,
+    displayItems,
+    effectiveItemSubtotal,
+    hasCheckoutCartItems,
+    isHydrated: isHydrated && !checkoutOrderCreated,
+    merchantId: merchant?.id,
+    resumedOrder,
+  });
 
   const autoTriggerRef = useRef(false);
   // Double-submit protection: prevents race conditions from rapid clicks
@@ -834,7 +571,20 @@ export const CheckoutPage: React.FC = () => {
   const walletFundedTransfer = useWalletFundedBankTransfer({
     merchantId: merchant?.id,
     merchantSlug: merchant?.slug ?? undefined,
-    onOrderPaid: ({ checkoutFingerprint, orderId, trackingToken }) => {
+    onOrderPaid: ({ checkoutFingerprint, currency, intentId, orderId, orderNumber, total, trackingToken }) => {
+      // The intent reached server-confirmed `completed`: record the paid
+      // conversion before redirecting, or the funnel stalls at the start
+      // stage for every auto-debited transfer.
+      captureCheckoutPaymentCompleted({
+        currency,
+        orderId,
+        // Preserve the omit-when-empty contract: the compactor drops
+        // undefined but keeps '', so only forward a real order number.
+        ...(orderNumber ? { orderNumber } : {}),
+        paymentMethod,
+        reference: intentId,
+        total,
+      });
       clearPendingCheckoutOrder();
       void clearCheckoutIdempotencyKey(checkoutFingerprint);
       clearCheckoutSession();
@@ -864,175 +614,6 @@ export const CheckoutPage: React.FC = () => {
     }
   };
 
-  const cryptoInitializer = useCryptoPaymentInitializer({
-    onReady: (payment) => {
-      setShowCryptoSelector(false);
-      setCryptoPaymentData(payment);
-    },
-    onError: (error) => toast({
-      title: 'Crypto Payment Failed',
-      description: error instanceof Error ? error.message : 'Failed to initialize crypto payment',
-      variant: 'destructive',
-    }),
-  });
-  const initializeCryptoPayment = async () => {
-    if (!pendingCryptoOrder || !merchant) return;
-    await cryptoInitializer.initialize({
-      merchantId: merchant.id,
-      pendingOrder: pendingCryptoOrder,
-      chain: selectedCryptoChain,
-      currency: selectedCryptoCurrency,
-      orderCurrency: pendingCryptoOrder.orderCurrency,
-    }).catch(() => undefined);
-  };
-
-  // Verify crypto payment status by polling the API
-  // Uses a ref to track polling state to avoid stale closure issues
-  const pollingRef = useRef<{ intervalId: NodeJS.Timeout | null; attempts: number }>({
-    intervalId: null,
-    attempts: 0,
-  });
-
-  const verifyCryptoPayment = async () => {
-    // Use paymentId for verification (from the capture response)
-    // Fall back to sessionId if paymentId is not available
-    const verificationId = cryptoPaymentData?.paymentId || cryptoPaymentData?.sessionId;
-
-    if (!verificationId) {
-      console.error('No payment ID or session ID available for verification');
-      setCryptoVerificationStatus('failed');
-      return;
-    }
-
-    setIsVerifyingCrypto(true);
-    setCryptoVerificationStatus('checking');
-    pollingRef.current.attempts = 0;
-
-    const checkPaymentStatus = async (): Promise<'confirmed' | 'failed' | 'pending'> => {
-      try {
-        // Use payment_id parameter for GET /payments/{id} endpoint
-        const response = await fetch(
-          `/api/payments/status?gateway=juicyway&payment_id=${verificationId}`
-        );
-
-        if (!response.ok) {
-          // Try to parse error, but handle JSON parse failures gracefully
-          let errorData = {};
-          try {
-            errorData = await response.json();
-          } catch {
-            errorData = { message: `HTTP ${response.status}: ${response.statusText}` };
-          }
-          console.error('Payment status check failed:', {
-            status: response.status,
-            statusText: response.statusText,
-            paymentId: verificationId,
-            error: errorData,
-          });
-          return 'pending'; // Treat API errors as pending, not failed
-        }
-
-        const result = await response.json();
-
-        if (result.is_confirmed) {
-          return 'confirmed';
-        }
-
-        if (result.is_failed) {
-          return 'failed';
-        }
-
-        return 'pending';
-      } catch (error) {
-        console.error('Payment verification error:', error);
-        return 'pending';
-      }
-    };
-
-    // Initial check
-    const initialStatus = await checkPaymentStatus();
-
-    if (initialStatus === 'confirmed') {
-      setIsVerifyingCrypto(false);
-      setCryptoVerificationStatus('confirmed');
-      clearPendingCheckoutOrder();
-      clearCheckoutSession();
-      clearCart();
-      const successQuery = new URLSearchParams({
-        type: 'crypto',
-        orderId: cryptoPaymentData.orderId,
-        reference: cryptoPaymentData.reference,
-      });
-      if (cryptoPaymentData.trackingToken) {
-        successQuery.set('trackingToken', cryptoPaymentData.trackingToken);
-      }
-      router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
-      return;
-    }
-
-    if (initialStatus === 'failed') {
-      setIsVerifyingCrypto(false);
-      setCryptoVerificationStatus('failed');
-      return;
-    }
-
-    // Start polling
-    setCryptoVerificationStatus('pending');
-
-    pollingRef.current.intervalId = setInterval(async () => {
-      pollingRef.current.attempts++;
-      const maxAttempts = 30; // 5 minutes (30 * 10 seconds)
-
-      if (pollingRef.current.attempts >= maxAttempts) {
-        if (pollingRef.current.intervalId) {
-          clearInterval(pollingRef.current.intervalId);
-          pollingRef.current.intervalId = null;
-        }
-        setIsVerifyingCrypto(false);
-        setCryptoVerificationStatus('pending');
-        return;
-      }
-
-      const status = await checkPaymentStatus();
-
-      if (status === 'confirmed') {
-        if (pollingRef.current.intervalId) {
-          clearInterval(pollingRef.current.intervalId);
-          pollingRef.current.intervalId = null;
-        }
-        setIsVerifyingCrypto(false);
-        setCryptoVerificationStatus('confirmed');
-        clearPendingCheckoutOrder();
-        clearCheckoutSession();
-        clearCart();
-        const successQuery = new URLSearchParams({
-          type: 'crypto',
-          orderId: cryptoPaymentData.orderId,
-          reference: cryptoPaymentData.reference,
-        });
-        if (cryptoPaymentData.trackingToken) {
-          successQuery.set('trackingToken', cryptoPaymentData.trackingToken);
-        }
-        router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
-      } else if (status === 'failed') {
-        if (pollingRef.current.intervalId) {
-          clearInterval(pollingRef.current.intervalId);
-          pollingRef.current.intervalId = null;
-        }
-        setIsVerifyingCrypto(false);
-        setCryptoVerificationStatus('failed');
-      }
-    }, 10000); // Poll every 10 seconds
-  };
-
-  // Cleanup polling on unmount
-  useEffect(() => {
-    return () => {
-      if (pollingRef.current.intervalId) {
-        clearInterval(pollingRef.current.intervalId);
-      }
-    };
-  }, []);
 
   // Prefer the persisted fee on resume (deep-link URLs omit giftWrappingCost).
   const giftWrappingCost =
@@ -1051,7 +632,6 @@ export const CheckoutPage: React.FC = () => {
 
   // Shipping State
   const [shippingStates, setShippingStates] = useState<string[]>([]);
-  const [shippingCities, setShippingCities] = useState<string[]>([]);
   const [isLoadingLocations, setIsLoadingLocations] = useState(false);
   const [shippingQuotes, setShippingQuotes] = useState<ShippingQuote[]>([]);
   const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
@@ -1185,36 +765,39 @@ export const CheckoutPage: React.FC = () => {
   // Payment State (declared before the resumed-order effect below, which
   // pre-selects the tab/method for BNPL deep links — React Compiler requires
   // declaration before first access)
-  const [paymentTab, setPaymentTab] = useState<'full' | 'installments'>('full');
+  const [paymentTab, setPaymentTab] = useState<PaymentTab>('full');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('');
+  const [redvaultSummary, setRedvaultSummary] =
+    useState<RedvaultQuoteSummary | null>(null);
+  const [redvaultStatus, setRedvaultStatus] =
+    useState<RedvaultStatus>('idle');
+  const [redvaultOrderReady, setRedvaultOrderReady] =
+    useState<RedvaultPreparedOrder | null>(null);
+  const selectPaymentMethod = (nextMethod: PaymentMethod) => {
+    if (isOrderInFlightRef.current || redvaultStatus === 'pending' || redvaultStatus === 'held') return;
+    if (
+      nextMethod !== paymentMethod &&
+      (nextMethod === 'uba_redvault' || paymentMethod === 'uba_redvault')
+    ) {
+      // Retain a stored REDVAULT fence: after an indeterminate init the
+      // order may be persisted and capturing, so only the submit-time
+      // resolver (which validates server state and blocks a second order
+      // while unresolved) may clear it — never the method switch itself.
+      if (pendingCheckoutOrder?.paymentMethod !== 'uba_redvault') {
+        clearPendingCheckoutOrder();
+      }
+      setRedvaultSummary(null);
+      setRedvaultStatus('idle');
+      setRedvaultOrderReady(null);
+    }
+    setPaymentMethod(nextMethod);
+  };
 
-  // Fetch resumed order from mobile app when orderId is in URL.
-  // The async try/catch/finally flow lives in module-scope
-  // `loadResumedCheckoutOrder` so the compiler can memoize this component.
-  useEffect(() => {
-    if (!resumeOrderId || !resumeMerchantSlug) return;
-
-    loadResumedCheckoutOrder({
-      resumeOrderId,
-      resumeMerchantSlug,
-      resumeTrackingToken,
-      resumeLookupEmail,
-      preferredGateway,
-      setIsLoadingResumedOrder,
-      setResumedOrder,
-      setCheckoutFields,
-      setPaymentTab,
-      setPaymentMethod,
-      setResumeOrderError,
-    });
-  }, [
-    preferredGateway,
-    resumeOrderId,
-    resumeLookupEmail,
-    resumeMerchantSlug,
-    resumeTrackingToken,
-    setCheckoutFields,
-  ]);
+  useLoadResumedOrder({
+    resumeOrderId, resumeMerchantSlug, resumeTrackingToken, resumeLookupEmail,
+    preferredGateway, setIsLoadingResumedOrder, setResumedOrder, setCheckoutFields,
+    setPaymentTab, setPaymentMethod: selectPaymentMethod, setResumeOrderError,
+  });
 
   // Load the address state list. NG hits /api/shipping/locations (rich data);
   // non-NG markets derive their states from the subdivision vocabulary. Keyed
@@ -1232,45 +815,6 @@ export const CheckoutPage: React.FC = () => {
       controller.abort();
     };
   }, [merchantCountry]);
-
-  // Clear stale city options inline during render when the selected state is
-  // reset (react.dev "adjusting state when a prop changes" pattern — avoids a
-  // synchronous setState-in-effect and the extra commit it forces).
-  const [prevCityFetchState, setPrevCityFetchState] = useState(newAddressState);
-  if (newAddressState !== prevCityFetchState) {
-    setPrevCityFetchState(newAddressState);
-    if (!newAddressState) {
-      setShippingCities([]);
-    }
-  }
-
-  // Fetch Cities when State changes. NG-only: the /api/shipping/locations city
-  // dataset is Nigerian. Non-NG cities come from the typed address via
-  // inferAddressLocationFromInput's rawCity (no list lookup needed), so a NG
-  // city fetch must never fire for a non-NG address.
-  useEffect(() => {
-    if (merchantCountry !== 'NG' || !newAddressState) {
-      return;
-    }
-    const fetchCities = async () => {
-      try {
-        const res = await fetch(
-          `/api/shipping/locations?state=${encodeURIComponent(newAddressState)}`
-        );
-        if (res.ok) {
-          const data = await res.json();
-          // Extract unique cities from the locations
-          const cities = [
-            ...new Set((data.locations as ShippingLocation[]).map((l) => l.city)),
-          ].sort();
-          setShippingCities(cities);
-        }
-      } catch (error) {
-        console.error('Failed to fetch cities', error);
-      }
-    };
-    fetchCities();
-  }, [merchantCountry, newAddressState]);
 
   // Function to fetch quotes. The async core (with its try/finally and
   // synchronous loading-state writes) lives in module-scope
@@ -1448,7 +992,6 @@ export const CheckoutPage: React.FC = () => {
   const [walletLoading, setWalletLoading] = useState(false);
   const [payWithWallet, setPayWithWallet] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [orderTotals, setOrderTotals] = useState<{ total: number; taxAmount: number } | null>(null);
   const [appliedDiscount, setAppliedDiscount] =
     useState<DiscountResult | null>(null);
 
@@ -1532,6 +1075,15 @@ export const CheckoutPage: React.FC = () => {
     airportType,
   );
 
+  const taxRate = merchant?.vat_registration_status === 'registered'
+    ? (merchant.vat_rate ?? 7.5) / 100
+    : 0;
+  const orderTotals = useOrderTotals({
+    cartTotal: effectiveItemSubtotal,
+    deliveryCost,
+    taxRate,
+  });
+
   // Server-computed discount amount (the route re-validates against the
   // canonical subtotal); fall back to a local estimate only if it's missing.
   const discountAmount = appliedDiscount
@@ -1542,187 +1094,45 @@ export const CheckoutPage: React.FC = () => {
           )
         : Math.min(appliedDiscount.discount_value, effectiveCheckoutCartTotal)))
     : 0;
-  // `total` is NET of the discount so wallet credit, remaining-amount gating,
-  // the displayed total, and the order payload all agree.
-  const total = Math.max(
-    0,
-    effectiveCheckoutCartTotal +
-      deliveryCost +
-      giftWrappingCost +
-      (orderTotals?.taxAmount ?? 0) -
-      discountAmount
-  );
-
   // Wallet credit calculation (2025: can't redeem more than order total).
   // The customer wallet is an NGN-denominated ledger, so redemption is only
   // offered on NGN orders — mirrors the server-side guard in /api/orders.
   const walletCurrencySupported = currencyCode === 'NGN';
-  const walletAmountUsed =
-    payWithWallet && walletCurrencySupported
-      ? Math.min(walletBalance, total)
-      : 0;
+  const checkoutValues = getRedvaultCompatibleCheckoutValues({
+    baseTotal:
+      effectiveCheckoutCartTotal +
+      deliveryCost +
+      giftWrappingCost +
+      (orderTotals?.taxAmount ?? 0),
+    discountAmount,
+    discountCode: appliedDiscount?.code,
+    paymentMethod,
+    payWithWallet,
+    walletBalance,
+    walletCurrencySupported,
+  });
+  const total = checkoutValues.total;
+  const walletAmountUsed = checkoutValues.walletAmountUsed;
   const remainingAmount = total - walletAmountUsed;
 
 
-  const taxRate = merchant?.vat_registration_status === 'registered'
-    ? (merchant.vat_rate ?? 7.5) / 100
-    : 0;
-
-  useEffect(() => {
-    const fetchTotals = async () => {
-      try {
-        const result = await calculateCommerce('calculate_order', {
-          subtotal: effectiveItemSubtotal,
-          shippingFee: deliveryCost,
-          taxRate,
-        });
-        setOrderTotals(result);
-      } catch (err) {
-        console.error("Failed to fetch totals from brain", err);
-      }
-    };
-    fetchTotals();
-  }, [effectiveItemSubtotal, deliveryCost, taxRate]);
-
-  // Handler for direct payment execution (CredPal/Credit Direct)
+  // Thin caller: the resumed BNPL flow lives in the direct-payment
+  // handler (Boy Scout extraction); this just binds component state.
   const executeDirectPayment = async () => {
-    if (!resumedOrder || !preferredGateway) return;
-
-    setIsProcessing(true);
-    try {
-      const paymentAmount = resumedOrder.total;
-
-      // For CredPal, use the inline checkout widget (statically imported —
-      // dynamic `import()` expressions bail React Compiler)
-      if (preferredGateway === 'credpal') {
-        const productNames = resumedOrder.items.map(item => item.product_name).join(', ') || 'Purchase';
-
-        await openCredPalCheckout({
-          key: getCredPalKey(),
-          amount: paymentAmount,
-          product: productNames,
-          customerEmail: resumedOrder.customer_email,
-          customerName: resumedOrder.customer_name,
-          customerPhone: resumedOrder.customer_phone,
-          onSuccess: async (data) => {
-            // Update order with payment reference
-            await fetch(`/api/orders/update-payment-ref`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                orderId: resumedOrder.id,
-                paymentRef: data.order_no,
-                gateway: 'credpal',
-              }),
-            });
-            clearCheckoutSession();
-            const successQuery = new URLSearchParams({
-              orderId: resumedOrder.id,
-              type: 'credpal',
-            });
-            if (resumedOrder.tracking_token) {
-              successQuery.set('trackingToken', resumedOrder.tracking_token);
-            }
-            router.push(
-              asRoute(getHref(`/order-success?${successQuery.toString()}`))
-            );
-          },
-          onError: (error) => {
-            toast({
-              title: 'Payment Failed',
-              description: error.message || 'CredPal payment failed',
-              variant: 'destructive',
-            });
-            setIsProcessing(false);
-          },
-          onClose: () => {
-            setIsProcessing(false);
-          },
-        });
-        return;
-      }
-
-      // For Credit Direct, use their checkout widget (statically imported —
-      // dynamic `import()` expressions bail React Compiler)
-      if (preferredGateway === 'credit_direct') {
-        await openCreditDirectCheckout({
-          merchantSlug: merchant?.slug || 'ogabassey',
-          orderId: resumedOrder.id,
-          trackingToken: resumedOrder.tracking_token ?? '',
-          amount: paymentAmount,
-          customerEmail: resumedOrder.customer_email,
-          customerPhone: resumedOrder.customer_phone,
-          customerName: resumedOrder.customer_name,
-          items: resumedOrder.items.map(item => ({
-            id: item.product_id,
-            name: item.product_name,
-            price: item.price,
-            quantity: item.quantity,
-          })),
-          onSuccess: ({ checkoutTransactionId, sessionId }) => {
-            const trackingToken =
-              resumedOrder.tracking_token || resumeTrackingToken;
-            const merchantSlug =
-              merchant?.slug || resumeMerchantSlug || 'ogabassey';
-            const completionMarker = captureCreditDirectClientCompletion({
-              orderId: resumedOrder.id,
-              checkoutTransactionId,
-              customerEmail: resumedOrder.customer_email,
-              sessionId,
-              trackingToken,
-            });
-            router.push(
-              asRoute(
-                getHref(
-                  buildCreditDirectVerificationPath({
-                    orderId: resumedOrder.id,
-                    merchantSlug,
-                    completionMarker,
-                    trackingToken,
-                    customerEmail: resumedOrder.customer_email,
-                  })
-                )
-              )
-            );
-          },
-          onError: (error) => {
-            toast({
-              title: 'Payment Failed',
-              description: error || 'Credit Direct payment failed',
-              variant: 'destructive',
-            });
-            setIsProcessing(false);
-          },
-          onClose: () => {
-            setIsProcessing(false);
-          },
-          onPopup: async ({ checkoutTransactionId, sessionId }) => {
-            writeCreditDirectPopupMarker(
-              resumedOrder.id,
-              checkoutTransactionId || sessionId
-            );
-            if (!checkoutTransactionId) {
-              return;
-            }
-            try {
-              await persistCreditDirectPopupReference(
-                resumedOrder,
-                checkoutTransactionId
-              );
-            } catch (error) {
-              console.error(
-                'Failed to persist Credit Direct popup reference:',
-                error instanceof Error ? error.message : error
-              );
-            }
-          },
-        });
-        return;
-      }
-    } catch (error) {
-      console.error('Payment execution error:', error);
-      setIsProcessing(false);
-    }
+    await executeResumedDirectPayment({
+      resumedOrder,
+      preferredGateway,
+      merchantSlug: merchant?.slug,
+      merchantChargeCurrency: currencyCode,
+      resumeTrackingToken,
+      resumeMerchantSlug,
+      setIsProcessing,
+      clearCheckoutSession,
+      routerPush: (url: string) => {
+        router.push(asRoute(url));
+      },
+      getHref,
+    });
   };
 
   // Auto-trigger payment for resumed orders
@@ -1745,7 +1155,7 @@ export const CheckoutPage: React.FC = () => {
 
   const handlePlaceOrder = async () => {
     // Double-submit protection: prevent race conditions from rapid clicks
-    if (isOrderInFlightRef.current) {
+    if (isOrderInFlightRef.current || redvaultStatus === 'pending' || redvaultStatus === 'held') {
       return;
     }
     isOrderInFlightRef.current = true;
@@ -1827,6 +1237,16 @@ export const CheckoutPage: React.FC = () => {
         title: 'Payment Unavailable',
         description:
           'Korapay is not available for this store yet. Please choose a different payment method.',
+        variant: 'destructive',
+      });
+      isOrderInFlightRef.current = false;
+      return;
+    }
+
+    if (paymentMethod === 'uba_redvault' && !redvaultAvailability.available) {
+      toast({
+        title: 'Payment Unavailable',
+        description: 'Pay with UBA is not available right now. Please choose a different payment method.',
         variant: 'destructive',
       });
       isOrderInFlightRef.current = false;
@@ -1969,9 +1389,8 @@ export const CheckoutPage: React.FC = () => {
     // `shipping_provider: null + selected_quote_id: null` (or empty
     // string), which slips past the RPC's `provider != null AND
     // quote_id IS NULL` guard (both null → guard doesn't fire) and
-    // persists a silent zero-shipping order. Mirrors the pre-submit
-    // block in `place-order.ts`. Treat empty string as no quote too —
-    // the state hook initializes selectedQuoteId to `''` (line ~573).
+    // persists a silent zero-shipping order. Treat empty string as no
+    // quote too — the state hook initializes selectedQuoteId to `''`.
     if (
       ((deliveryMethod === 'door' || deliveryMethod === 'pickup_station') && !selectedQuoteId) ||
       (deliveryMethod === 'airport' && !isAirportDeliveryReady(airportRequiresQuote, selectedQuoteMatchesDeliveryMethod))
@@ -2015,7 +1434,7 @@ export const CheckoutPage: React.FC = () => {
     }
 
     const normalizedPaymentMethod = normalizeOrderPaymentMethod(paymentMethod);
-    const checkoutFingerprint = buildPendingCheckoutFingerprint({
+    const checkoutFingerprint = (paymentMethod === 'uba_redvault' ? 'uba_redvault:' : '') + buildPendingCheckoutFingerprint({
       merchantId: merchant.id,
       customerEmail,
       customerName: `${firstName} ${lastName}`.trim(),
@@ -2040,27 +1459,68 @@ export const CheckoutPage: React.FC = () => {
         variantId: item.variantId,
         variantAttributes: item.variantAttributes,
       })),
-      useWalletCredit: payWithWallet && walletAmountUsed > 0,
+      useWalletCredit: checkoutValues.useWalletCredit,
       walletAmountUsed,
-      discountCode: appliedDiscount?.code ?? null,
+      discountCode: checkoutValues.discountCode,
       giftWrappingCost,
     });
 
+    let createdOrderId: string | undefined;
+    let createdOrderNumber = '';
+    let orderChargeCurrency = currencyCode;
+    // Set only when a provider flow actually opens. Pre-payment browser
+    // failures (blocked session storage, invoice/POD branches that never
+    // start a payment) must not be attributed as payment_failed.
+    let paymentStarted = false;
+    // Initialized provider reference for this submit, mirrored wherever a
+    // start is stamped so post-start failures reconcile to the same attempt.
+    let initializedReference: string | undefined;
+    // A REDVAULT order prepared by an earlier click initializes through
+    // the extracted submit handler (stale-fingerprint cancel, guest
+    // signup/attach, initialization, and redirect/hold handling).
+    if (
+      await submitRedvaultPreparedOrder({
+        paymentMethod,
+        redvaultOrderReady,
+        checkoutFingerprint,
+        waitForResolvedStorefrontCustomerAuth,
+        isOrderInFlightRef,
+        setIsProcessing,
+        setRedvaultStatus,
+        setRedvaultOrderReady,
+        clearPendingCheckoutOrder,
+        createAccount,
+        user,
+        accountPassword,
+        firstName,
+        lastName,
+        merchantId: merchant?.id ?? '',
+        // The prepared order initializes through the extracted handler:
+        // record its start here so the funnel does not jump from
+        // order_created straight to completion/failure.
+        onPaymentStarted: ({ orderId, currency, reference, total, orderNumber }) => {
+          paymentStarted = true;
+          initializedReference = reference;
+          captureCheckoutPaymentStarted({
+            currency,
+            orderId,
+            orderNumber,
+            paymentMethod: 'uba_redvault',
+            reference,
+            total,
+          });
+        },
+      })
+    ) {
+      return;
+    }
+
     try {
-      let order: {
-        id: string;
-        order_number?: string;
-        tracking_token?: string;
-        /** Stamped orders.currency (returned by /api/orders and /api/orders/reuse). */
-        currency?: string | null;
-      };
-      let walletResult: {
-        amountUsed: number;
-        newBalance: number;
-      } | null = null;
+      let order: CheckoutPaymentOrder;
+      let walletResult: CheckoutWalletRedemption | null = null;
       let amountDueToGateway = total;
 
-      const reusablePendingOrder = await resolvePendingCheckoutOrder({
+      const reuse = {
         pendingOrder: pendingCheckoutOrder,
         merchantId: merchant.id,
         merchantSlug: merchant.slug,
@@ -2068,189 +1528,143 @@ export const CheckoutPage: React.FC = () => {
         checkoutFingerprint,
         paymentMethod: normalizedPaymentMethod,
         shippingProvider,
-        // Airport (GIGL GoFaster) forwards its real carrier quote id only when
-        // the current selection matches the airport method. Door/pickup use
-        // `getForwardableSelectedQuoteId`, which additionally omits a merchant
-        // rate's synthetic `mrate_<uuid>` id — the reuse route validates
-        // `selected_quote_id` as a UUID and would 400 (clearing the stored
-        // pending order). Reuse reopens an already-fee-verified order and does
-        // not re-verify shipping, so omitting the id is safe.
+        // Airport forwards its real carrier quote only when it still matches
+        // the selected method. Merchant-rate synthetic ids stay omitted.
         selectedQuoteId:
           deliveryMethod === 'airport'
             ? selectedQuoteMatchesDeliveryMethod
               ? selectedQuoteId || undefined
               : undefined
             : getForwardableSelectedQuoteId(deliveryMethod, selectedQuoteId),
-        // R14-3: forward the BARE merchant rate id so the reuse route can
-        // re-stamp fulfillment metadata if the original stamp failed. This is
-        // the null-provider path's identity (selected_quote_id stays omitted
-        // above — the `mrate_` id is not a uuid the reuse schema accepts).
         shippingRateId: merchantRateId ?? undefined,
+      };
+      const recovery = await recoverPendingCheckoutOrder({
+        reuse,
+        context: {
+          firstName,
+          lastName,
+          customerPhone,
+          finalAddress,
+          finalCity,
+          finalState,
+          merchantCountry,
+          waitForResolvedStorefrontCustomerAuth,
+          isOrderInFlightRef,
+          setIsProcessing,
+          setRedvaultStatus,
+          clearPendingCheckoutOrder,
+          clearCheckoutSession,
+          clearCart,
+          pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
+        },
       });
+      if (recovery.kind === 'handled') return;
 
-      if (reusablePendingOrder.clearStoredOrder) {
-        clearPendingCheckoutOrder();
-      }
-
-      if (reusablePendingOrder.reusableOrder) {
-        order = reusablePendingOrder.reusableOrder.order;
-        amountDueToGateway = reusablePendingOrder.reusableOrder.amountDueToGateway;
-      } else {
-        const checkoutIdempotencyKey =
-          await getCheckoutIdempotencyKey(checkoutFingerprint);
-
-        // 1. Create order in database via API (with wallet redemption if applicable)
-        const orderResponse = await fetch('/api/orders', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Idempotency-Key': checkoutIdempotencyKey,
+      const submittedOrder = await submitCheckoutOrder({
+        resolvedPendingOrder: recovery.pendingOrder,
+        getIdempotencyKey: () => getCheckoutIdempotencyKey(checkoutFingerprint),
+        orderRequest: buildCheckoutOrderRequest({
+          merchantId: merchant.id,
+          items: orderItems,
+          paymentMethod: normalizedPaymentMethod,
+          acceptsMarketing: newsletterOptIn,
+          customer: {
+            name: `${firstName} ${lastName}`.trim(),
+            email: customerEmail,
+            phone: customerPhone,
+            userId: user?.id,
           },
-          body: JSON.stringify({
-            merchant_id: merchant.id,
-            customer_email: customerEmail,
-            customer_name: `${firstName} ${lastName}`.trim(),
-            customer_phone: customerPhone,
-            items: orderItems,
+          money: {
             subtotal: checkoutCartTotal,
-            shipping_fee: deliveryCost,
-            // B3.5 (Δ-31, Δ-34, Δ-39): pass the calculate-commerce
-            // VAT figure AND the gift-wrapping fee AND the client's
-            // expected total straight through to the API. No hidden
-            // fallback math — pre-B3.5 this body omitted `tax_amount`
-            // entirely so the RPC defaulted it to 0, the trigger
-            // later overwrote `orders.tax_amount` from order_items
-            // VAT, and `orders.total` was left stale: customer saw
-            // ₦X (with VAT) but the row recorded ₦X-without-VAT.
-            // The RPC enforces VAT itself (Δ-42) so any drift here
-            // surfaces as `tax_amount_mismatch` 4xx, not silent.
-            tax_amount: orderTotals?.taxAmount ?? 0,
-            tax_basis: 'exclusive',
-            gift_wrapping_fee: giftWrappingCost,
-            // Client-side total snapshot for the API's parity check
-            // (Δ-39). Must match the RPC formula:
-            //   subtotal + shipping + gift + tax - discount.
-            // The local `total` variable (line ~953) is
-            // `orderTotals?.total || (cartTotal + deliveryCost +
-            // giftWrappingCost)` — `orderTotals.total` from
-            // `calculate_order` is `subtotal + shipping + tax` and
-            // OMITS gift wrapping (the action's input is just
-            // {subtotal, shippingFee, taxRate}, no gift param).
-            // Sending `total` directly when orderTotals is present
-            // would always trip ORDER_TOTAL_MISMATCH whenever
-            // `giftWrappingCost > 1`. Compose the snapshot from the
-            // explicit components instead so it always matches the
-            // server side (Codex P1 on PR #1622).
-            // Net of the applied discount so the RPC parity formula
-            // (subtotal + shipping + gift + tax - discount) matches; the route
-            // recomputes + validates the discount from the canonical subtotal.
-            expected_total: Math.max(
-              0,
-              checkoutCartTotal +
-                deliveryCost +
-                giftWrappingCost +
-                (orderTotals?.taxAmount ?? 0) -
-                discountAmount
-            ),
-            client_total: Math.max(
-              0,
-              checkoutCartTotal +
-                deliveryCost +
-                giftWrappingCost +
-                (orderTotals?.taxAmount ?? 0) -
-                discountAmount
-            ),
-            ...(appliedDiscount?.code
-              ? { discount_code: appliedDiscount.code }
-              : {}),
-            payment_method: normalizedPaymentMethod,
-            payment_status: 'unpaid',
-            shipping_status: 'pending',
-            shipping_address: shippingAddressData,
-            source: 'online_store',
-            delivery_method: deliveryMethod,
-            ...(deliveryMethod === 'airport' &&
-            !selectedQuoteMatchesDeliveryMethod
-              ? { airport_type: airportType }
-              : {}),
-            shipping_provider: shippingProvider,
-            // Merchant-rate orders: send the bare rate id and force the null
-            // shipping_provider/selected_quote_id path (there is no persisted
-            // quote row to book). The route recomputes + verifies the fee.
-            ...(merchantRateId ? { shipping_rate_id: merchantRateId } : {}),
-            // B3 review fix (PR #1611): explicit null on the wire. The RPC
-            // schema is `.nullable().optional()` so null is canonical. Merchant
-            // rates always resolve to null here (they carry shipping_rate_id);
-            // pickup/airport and an empty/dangling selection also resolve to
-            // null. Shared with the reuse path so the two can't drift.
-            selected_quote_id:
-              deliveryMethod === 'airport'
-                ? selectedQuoteMatchesDeliveryMethod
-                  ? selectedQuoteId || null
-                  : null
-                : (getForwardableSelectedQuoteId(
-                    deliveryMethod,
-                    selectedQuoteId,
-                  ) ?? null),
-            // Wallet redemption (2025: auto-apply at checkout)
-            use_wallet_credit: payWithWallet && walletAmountUsed > 0,
-            wallet_amount: walletAmountUsed,
-            // Link customer to auth user (2025: unified customer identity)
-            user_id: user?.id,
-            // Marketing Consent
-            accepts_marketing: newsletterOptIn,
-          }),
-        });
-
-        if (!orderResponse.ok) {
-          const errorData = await orderResponse.json();
-          const errorCode =
-            typeof errorData.code === 'string' ? errorData.code : '';
-          if (
-            errorCode === 'CHECKOUT_ORDER_NOT_REUSABLE' ||
-            errorCode === 'CHECKOUT_IDEMPOTENCY_CONFLICT'
-          ) {
-            clearPendingCheckoutOrder();
-            await clearCheckoutIdempotencyKey(checkoutFingerprint);
-          }
-          // A quiz voucher rejected server-side (used / not-approved / expired)
-          // would otherwise stick in the cart at ₦0 and re-fail every future
-          // checkout. Prune ONLY the unredeemable line(s) so the shopper can
-          // proceed — never a still-valid prize from a multi-voucher cart. A
-          // sign-in-required rejection is excluded (voucher valid once signed
-          // in); see selectRejectedVoucherLines for the full policy.
+            shipping: deliveryCost,
+            tax: orderTotals?.taxAmount ?? 0,
+            giftWrapping: giftWrappingCost,
+            discountAmount: checkoutValues.discountAmount,
+            discountCode: checkoutValues.discountCode,
+            useWalletCredit: checkoutValues.useWalletCredit,
+            walletAmount: walletAmountUsed,
+          },
+          delivery: {
+            method: deliveryMethod,
+            airportType,
+            quoteMatchesMethod: selectedQuoteMatchesDeliveryMethod,
+            selectedQuoteId,
+            merchantRateId,
+            provider: shippingProvider,
+            address: shippingAddressData,
+          },
+        }),
+        paymentMethod,
+        total,
+        onVoucherRejected: (errorData) => {
           for (const line of selectRejectedVoucherLines(cart, errorData)) {
-            // removeFromCart matches a cartItemId directly, but its product-id
-            // branch compares against item.id — so passing both a cartItemId
-            // and a variantId never matches. Prefer the cartItemId alone; fall
-            // back to (productId, variantId).
             if (line.cartItemId) {
               removeFromCart(line.cartItemId);
             } else {
               removeFromCart(line.id, line.variantId);
             }
           }
-          console.error('Order creation failed:', {
-            status: orderResponse.status,
-            error: errorData.error,
-            details: errorData.details,
-            fullResponse: errorData
-          });
-          if (SHIPPING_RATE_REJECTION_CODES.has(errorCode)) {
-            // The merchant re-priced / re-zoned their rate under us; ask the
-            // customer to refresh so a fresh quote (and fee) is fetched.
-            raiseCheckoutError(
-              'Shipping cost changed — please refresh and try again.'
-            );
-          }
-          raiseCheckoutError(getCheckoutOrderErrorMessage(errorData));
-        }
-
-        const orderData = await orderResponse.json();
-        order = orderData.order;
-        walletResult = orderData.wallet;
-        amountDueToGateway = orderData.amountDueToGateway ?? total;
+        },
+        onPendingOrderInvalidated: async () => {
+          clearPendingCheckoutOrder();
+          await clearCheckoutIdempotencyKey(checkoutFingerprint);
+        },
+        onShippingRateRejected: () => {
+          raiseCheckoutError('Shipping cost changed — please refresh and try again.');
+        },
+        getOrderErrorMessage: getCheckoutOrderErrorMessage,
+      });
+      order = submittedOrder.order;
+      walletResult = submittedOrder.wallet;
+      amountDueToGateway = submittedOrder.amountDueToGateway;
+      if (submittedOrder.redvaultSummary) {
+        setRedvaultSummary(submittedOrder.redvaultSummary);
       }
+
+      createdOrderId = order.id;
+      createdOrderNumber =
+        order.order_number || order.id.slice(0, 8).toUpperCase();
+      // A created order completes this checkout attempt: rotate the session
+      // generation so a repeat purchase emits a fresh checkout_started, and
+      // suppress further starts for this attempt (post-creation rerenders
+      // must not re-emit just because the generation already rotated).
+      rotateCheckoutAttemptGeneration();
+      setCheckoutOrderCreated(true);
+      orderChargeCurrency =
+        typeof order.currency === 'string' && order.currency.trim()
+          ? order.currency.trim().toUpperCase()
+          : currencyCode;
+      // The server is authoritative only when it actually finalized
+      // coverage (see resolveFinalizedCheckoutPaymentMethod): attribute
+      // creation to the finalized method so creation and completion share
+      // one funnel. Any other server value keeps the UI gateway.
+      const serverPaymentMethod =
+        typeof order.payment_method === 'string'
+          ? order.payment_method
+          : undefined;
+      const finalizedPaymentMethod = resolveFinalizedCheckoutPaymentMethod(
+        serverPaymentMethod,
+        paymentMethod
+      );
+      captureCheckoutFunnelEventOnce(
+        CHECKOUT_FUNNEL_EVENTS.orderCreated,
+        order.id,
+        buildCheckoutFunnelProperties({
+          channel: 'web',
+          currency: orderChargeCurrency,
+          itemCount: orderItems.reduce((count, item) => count + item.quantity, 0),
+          orderId: order.id,
+          orderNumber: createdOrderNumber,
+          paymentIntent: getCheckoutPaymentIntent(finalizedPaymentMethod),
+          paymentMethod: finalizedPaymentMethod,
+          paymentStatus: order.payment_status || 'unpaid',
+          shipping: deliveryCost,
+          source: 'web_checkout',
+          subtotal: effectiveItemSubtotal,
+          tax: orderTotals?.taxAmount ?? 0,
+          total: order.total ?? total,
+        })
+      );
 
       // The ORDER row's stamped currency is authoritative for payment
       // initialization: a reused/idempotent order keeps its original currency
@@ -2258,13 +1672,63 @@ export const CheckoutPage: React.FC = () => {
       // and the initialize API rejects an explicit client/order mismatch.
       // Both order sources return it (/api/orders and /api/orders/reuse);
       // fall back to the merchant-resolved code only if it is ever absent.
-      const orderChargeCurrency =
-        typeof order.currency === 'string' && order.currency.trim()
-          ? order.currency.trim().toUpperCase()
-          : currencyCode;
+      // orderChargeCurrency was already resolved from the created ORDER
+      // row above; reuse it (do not redeclare: the assignment above and
+      // this block share one scope).
+      const billingAddress = buildCheckoutBillingAddress(
+        finalAddress,
+        finalCity,
+        finalState,
+        merchantCountry
+      );
+
+      // Persist the fence before any early return: the REDVAULT review
+      // branch below returns before payment, so a reload mid-review would
+      // otherwise lose the snapshot and let a method switch open a second
+      // order while this one still reserves inventory.
+      const pendingSnapshot: PendingCheckoutOrderSnapshot = {
+        orderId: order.id,
+        orderNumber: order.order_number,
+        trackingToken: order.tracking_token,
+        merchantId: merchant.id,
+        customerEmail,
+        customerPhone,
+        checkoutFingerprint,
+        paymentMethod: normalizedPaymentMethod,
+        amountDueToGateway,
+        createdAt: new Date().toISOString(),
+      };
+      persistPendingCheckoutOrder(pendingSnapshot);
+      setPendingCheckoutOrder(pendingSnapshot);
+
+      if (paymentMethod === 'uba_redvault' && !redvaultOrderReady) {
+        setRedvaultOrderReady({
+          billingAddress,
+          customerEmail,
+          customerName: `${firstName} ${lastName}`.trim(),
+          customerPhone,
+          currency: orderChargeCurrency,
+          orderId: order.id,
+          checkoutFingerprint,
+          trackingToken: order.tracking_token,
+          // Stamped for the prepared start: the full revenue value and
+          // number, matching the fresh-path start event — never the
+          // residual gateway due.
+          total: order.total ?? total,
+          orderNumber: createdOrderNumber,
+        });
+        setIsProcessing(false);
+        isOrderInFlightRef.current = false;
+        return;
+      }
 
       // 1b. Create account if requested (Awaited to ensure session is set before moving to next page)
-      if (createAccount && !user && accountPassword.length >= 6) {
+      if (
+        paymentMethod !== 'uba_redvault' &&
+        createAccount &&
+        !user &&
+        accountPassword.length >= 6
+      ) {
         try {
           const supabase = createClient();
           await supabase.auth.signUp({
@@ -2287,20 +1751,6 @@ export const CheckoutPage: React.FC = () => {
         }
       }
 
-      const pendingSnapshot: PendingCheckoutOrderSnapshot = {
-        orderId: order.id,
-        orderNumber: order.order_number,
-        trackingToken: order.tracking_token,
-        merchantId: merchant.id,
-        customerEmail,
-        customerPhone,
-        checkoutFingerprint,
-        amountDueToGateway,
-        createdAt: new Date().toISOString(),
-      };
-      persistPendingCheckoutOrder(pendingSnapshot);
-      setPendingCheckoutOrder(pendingSnapshot);
-
       const paymentAmount = amountDueToGateway ?? total;
 
       if (
@@ -2316,30 +1766,50 @@ export const CheckoutPage: React.FC = () => {
         return;
       }
 
+      // Marks the per-attempt started flag and delegates the event shape
+      // to the focused helper: initialization failures before a provider
+      // flow opens keep the error UI but must not emit an unmatched start.
+      const capturePaymentStarted = (reference?: string) => {
+        paymentStarted = true;
+        captureCheckoutPaymentStarted({
+          currency: orderChargeCurrency,
+          orderId: order.id,
+          orderNumber: createdOrderNumber,
+          paymentMethod,
+          reference,
+          // Revenue is the canonical order total, not the residual due
+          // at the provider after wallet/savings credit — matching
+          // order_created above and the eventual completion.
+          // paymentAmount stays on the provider initialization, which
+          // charges only the residual.
+          total: order.total ?? total,
+        });
+      };
+
       // Update local wallet balance if redemption occurred
       if (walletResult?.amountUsed) {
         setWalletBalance(walletResult.newBalance);
       }
 
-      const billingAddress = buildCheckoutBillingAddress(finalAddress, finalCity, finalState, merchantCountry);
-
       // 2. Handle payment based on method
       // Special case: If wallet fully covers the order, no payment gateway needed
       // Order API already marks it as paid, just redirect to success
-      if (paymentAmount <= 0) {
-        clearPendingCheckoutOrder();
-        await clearCheckoutIdempotencyKey(checkoutFingerprint);
-        clearCheckoutSession();
-        // Defer clearCart to avoid flashing empty state before redirect
-        const successQuery = new URLSearchParams({
-          orderId: order.id,
-          wallet: 'true',
+      if (paymentMethod !== 'uba_redvault' && paymentAmount <= 0) {
+        await completeCheckoutOrder({
+          order,
+          checkoutFingerprint,
+          completion: {
+            kind: 'zero_due',
+            paymentMethod,
+            currency: orderChargeCurrency,
+            orderNumber: createdOrderNumber,
+            total,
+          },
+          clearPendingCheckoutOrder,
+          clearCheckoutSession,
+          clearCart,
+          pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
         });
-        if (order.tracking_token) {
-          successQuery.set('trackingToken', order.tracking_token);
-        }
-        router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
-        setTimeout(clearCart, 500);
         return;
       }
 
@@ -2368,14 +1838,26 @@ export const CheckoutPage: React.FC = () => {
           })
             ? await walletFundedTransfer.start({
                 checkoutFingerprint,
+                currency: orderChargeCurrency,
                 merchantId: merchant.id,
                 merchantSlug: merchant.slug ?? undefined,
                 orderId: order.id,
+                orderNumber: createdOrderNumber,
+                // Canonical row total for the completion revenue (the
+                // intent target is the post-savings residual).
+                orderTotal: order.total ?? total,
                 trackingToken: order.tracking_token,
               })
             : ('fallback' as const);
 
-        if (walletFundedOutcome === 'started') {
+        if (
+          walletFundedOutcome !== 'fallback' &&
+          walletFundedOutcome !== 'uncertain'
+        ) {
+          // Stamp the funding-intent ID: a retried order creates a second
+          // intent, and both attempts' lifecycle events must stay
+          // distinguishable (the completion stamps it likewise).
+          capturePaymentStarted(walletFundedOutcome.intentId);
           setIsProcessing(false);
           isOrderInFlightRef.current = false;
           return;
@@ -2397,7 +1879,103 @@ export const CheckoutPage: React.FC = () => {
           return;
         }
 
-        await handleBankTransfer(order, paymentAmount, billingAddress);
+        await initializeCheckoutDva({
+          merchantId: merchant.id,
+          customerEmail,
+          customerName: `${firstName} ${lastName}`.trim(),
+          customerPhone,
+          checkoutFingerprint,
+          billingAddress,
+          currencyCode,
+          paymentAmount,
+          total,
+          order,
+          setDvaData,
+          setDvaCountdown,
+          setIsProcessing,
+          setIsInitializingDva,
+          releaseSubmitLock: () => {
+            isOrderInFlightRef.current = false;
+          },
+          onDvaReady: capturePaymentStarted,
+          onPaymentFailure: () => {
+            if (!paymentStarted) {
+              return;
+            }
+            captureCheckoutPaymentFailed({
+              currency: orderChargeCurrency,
+              orderId: order.id,
+              paymentMethod: 'bank_transfer',
+              reason: 'bank_transfer_error',
+              total: order.total ?? total,
+            });
+          },
+          onError: (error) => {
+            console.error('DVA initialization error:', error);
+            toast({
+              title: 'Bank Transfer Failed',
+              description:
+                error instanceof Error
+                  ? error.message
+                  : 'Failed to initialize bank transfer',
+              variant: 'destructive',
+            });
+          },
+        });
+        return;
+      }
+
+      if (paymentMethod === 'uba_redvault') {
+        setRedvaultStatus('pending');
+        const paymentResult = await initializeRedvaultPayment({
+          merchantId: merchant.id,
+          orderId: order.id,
+          currency: orderChargeCurrency,
+          customerEmail,
+          customerName: `${firstName} ${lastName}`.trim(),
+          customerPhone,
+          trackingToken: order.tracking_token,
+          billingAddress,
+        }).catch((error: unknown) => {
+          setRedvaultStatus('error');
+          throw error;
+        });
+        if (paymentResult.kind === 'pending_reconciliation') {
+          setIsProcessing(false);
+          isOrderInFlightRef.current = false;
+          return;
+        }
+        if (paymentResult.kind === 'captured_held') {
+          setRedvaultStatus('held');
+          setIsProcessing(false);
+          isOrderInFlightRef.current = false;
+          return;
+        }
+        // The REDVAULT attempt opens now: record the start with the init
+        // reference so the funnel does not jump from order_created
+        // straight to completion/failure.
+        capturePaymentStarted(paymentResult.reference);
+        if (createAccount && !user && accountPassword.length >= 6) {
+          try {
+            const supabase = createClient();
+            await supabase.auth.signUp({
+              email: customerEmail,
+              password: accountPassword,
+              options: {
+                data: {
+                  first_name: firstName,
+                  last_name: lastName,
+                  phone: customerPhone,
+                  source: 'checkout',
+                  signup_type: 'customer',
+                },
+              },
+            });
+          } catch (authError) {
+            console.error('Silent signup background error:', authError);
+          }
+        }
+        window.location.assign(paymentResult.authorizationUrl);
         return;
       }
 
@@ -2408,6 +1986,8 @@ export const CheckoutPage: React.FC = () => {
             orderId: order.id,
             trackingToken: order.tracking_token,
             amount: paymentAmount,
+            // Canonical row total first (same rule as order_created).
+            total: order.total ?? total,
             orderCurrency: orderChargeCurrency,
             customerEmail,
             customerName: `${firstName} ${lastName}`.trim(),
@@ -2424,32 +2004,23 @@ export const CheckoutPage: React.FC = () => {
           return;
         }
 
-        // Initialize payment via API - supports Paystack and Korapay
-        // Amount is adjusted for wallet credit (if used)
-        const paymentResponse = await fetch('/api/payments/initialize', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            merchant_id: merchant.id,
-            order_id: order.id,
-            currency: orderChargeCurrency,
-            customer_email: customerEmail,
-            customer_name: `${firstName} ${lastName}`.trim(),
-            customer_phone: customerPhone,
-            gateway: paymentMethod,
-            billing_address: billingAddress,
-          }),
+        // Initialization is isolated from the component; redirect/crypto UI
+        // state remains here because it is owned by this checkout screen.
+        const paymentResult = await initializeCheckoutGateway({
+          merchantId: merchant.id,
+          order,
+          currency: orderChargeCurrency,
+          customerEmail,
+          customerName: `${firstName} ${lastName}`.trim(),
+          customerPhone,
+          gateway: paymentMethod,
+          billingAddress,
         });
-
-        if (!paymentResponse.ok) {
-          const errorData = await paymentResponse.json();
-          raiseCheckoutError(errorData.error || 'Payment initialization failed');
-        }
-
-        const paymentResult = await paymentResponse.json();
 
         if (paymentResult.success && paymentResult.crypto_payment) {
           // Juicyway crypto payment - show wallet address modal
+          initializedReference = paymentResult.reference;
+          capturePaymentStarted(initializedReference);
           setCryptoPaymentData({
             address: paymentResult.crypto_payment.address,
             chain: paymentResult.crypto_payment.chain,
@@ -2469,132 +2040,95 @@ export const CheckoutPage: React.FC = () => {
           // NOTE: Don't clear cart here - it causes a flash of empty state
           // Cart will be cleared on the payment callback page after successful payment
           // (location.assign over `href =` — global assignment bails React Compiler)
+          // Klump navigates to the BNPL launcher, which records the start
+          // from the widget's onOpen: firing here would strand an unmatched
+          // start when the launcher lookup, SDK load, or widget fails
+          // before Klump opens.
+          if (paymentMethod !== 'klump') {
+            initializedReference = paymentResult.reference;
+            capturePaymentStarted(initializedReference);
+          }
           window.location.assign(paymentResult.authorization_url);
           return;
         } else if (paymentResult.success && paymentResult.checkout_url) {
           // Juicyway uses checkout_url
+          initializedReference = paymentResult.reference;
+          capturePaymentStarted(initializedReference);
           window.location.assign(paymentResult.checkout_url);
           return;
         } else {
           raiseCheckoutError('Payment initialization failed: No auth URL returned');
         }
       } else if (paymentMethod === 'credit_direct') {
-        // Credit Direct BNPL - Client-side popup checkout
-        // Note: BNPL typically uses full total (wallet credits may not apply)
-        await openCreditDirectCheckout({
+        await openCheckoutCreditDirect({
           merchantSlug: merchant.slug || '',
-          orderId: order.id,
-          trackingToken: order.tracking_token ?? '',
+          order,
           amount: paymentAmount,
-          customerEmail,
-          customerPhone,
-          customerName: `${firstName} ${lastName}`.trim(),
-
-          // Weight the Credit Direct allocation by the CANONICAL order-item
-          // prices (negotiated applied, quiz vouchers 0) — not displayItems,
-          // whose price is the raw cart price. Using display prices would
-          // finance a voucher-covered item and under-allocate a paid one.
-          items: toCreditDirectItems(orderItems),
-          onSuccess: ({ checkoutTransactionId, sessionId }) => {
-            const completionMarker = captureCreditDirectClientCompletion({
-              orderId: order.id,
-              checkoutTransactionId,
-              customerEmail,
-              sessionId,
-              trackingToken: order.tracking_token,
-            });
-            router.push(
-              asRoute(
-                getHref(
-                  buildCreditDirectVerificationPath({
-                    orderId: order.id,
-                    merchantSlug: merchant.slug || '',
-                    completionMarker,
-                    trackingToken: order.tracking_token,
-                    customerEmail,
-                  })
-                )
-              )
-            );
+          currency: orderChargeCurrency,
+          orderNumber: createdOrderNumber,
+          total,
+          customer: {
+            email: customerEmail,
+            phone: customerPhone,
+            name: `${firstName} ${lastName}`.trim(),
           },
-          onError: (error) => {
-            console.error('Credit Direct error:', error);
+          items: orderItems,
+          onPaymentStarted: (reference) => {
+            initializedReference = reference;
+            capturePaymentStarted(reference);
+          },
+          onIdle: () => {
+            setIsProcessing(false);
+            isOrderInFlightRef.current = false;
+          },
+          navigate: (path) => router.push(asRoute(getHref(path))),
+        });
+        return;
+      } else if (paymentMethod === 'credpal') {
+        await openCheckoutCredpal({
+          key: process.env.NEXT_PUBLIC_CREDPAL_KEY,
+          amount: paymentAmount,
+          product: cart.map((item) => item.name).join(', '),
+          customerEmail,
+          customerName: `${firstName} ${lastName}`.trim(),
+          customerPhone,
+          order,
+          checkoutFingerprint,
+          onPaymentStarted: () => capturePaymentStarted(),
+          paymentStarted: () => paymentStarted,
+          onPaymentCompleted: (reference) => {
+            captureCheckoutPaymentCompleted({
+              currency: orderChargeCurrency,
+              orderId: order.id,
+              orderNumber: createdOrderNumber,
+              paymentMethod,
+              reference,
+              total: order.total ?? paymentAmount,
+            });
+          },
+          onPaymentFailed: () => {
+            captureCheckoutPaymentFailed({
+              currency: orderChargeCurrency,
+              orderId: order.id,
+              orderNumber: createdOrderNumber,
+              paymentMethod,
+              reason: 'credpal_error',
+              total: order.total ?? total,
+            });
+          },
+          clearPendingCheckoutOrder,
+          clearCheckoutIdempotencyKey,
+          clearCheckoutSession,
+          clearCart,
+          navigate: (path) => router.push(asRoute(getHref(path))),
+          onUnavailable: () => {
             toast({
-              title: 'Credit Direct Failed',
-              description: error || 'Credit Direct checkout failed. Please try again.',
+              title: 'CredPal Unavailable',
+              description:
+                'CredPal payment is not available at this time. Please select a different payment method.',
               variant: 'destructive',
             });
             setIsProcessing(false);
-            isOrderInFlightRef.current = false;
-          },
-          onClose: () => {
-            setIsProcessing(false);
-            isOrderInFlightRef.current = false;
-          },
-          onPopup: async ({ checkoutTransactionId, sessionId }) => {
-            writeCreditDirectPopupMarker(
-              order.id,
-              checkoutTransactionId || sessionId
-            );
-            if (!checkoutTransactionId) {
-              return;
-            }
-            try {
-              await persistCreditDirectPopupReference(
-                order,
-                checkoutTransactionId
-              );
-            } catch (error) {
-              console.error(
-                'Failed to persist Credit Direct popup reference:',
-                error instanceof Error ? error.message : error
-              );
-            }
-          },
-        });
-        // Don't proceed further - callbacks handle the flow
-        return;
-      } else if (paymentMethod === 'credpal') {
-        // CredPal BNPL - Client-side popup checkout
-        const credpalKey = process.env.NEXT_PUBLIC_CREDPAL_KEY;
-
-        if (!credpalKey) {
-          // CredPal not configured - show error, don't proceed to success
-          toast({
-            title: 'CredPal Unavailable',
-            description: 'CredPal payment is not available at this time. Please select a different payment method.',
-            variant: 'destructive',
-          });
-          setIsProcessing(false);
-          isOrderInFlightRef.current = false;
-          return;
-        }
-
-        // Open CredPal popup
-        await openCredPalCheckout({
-          key: credpalKey,
-          amount: paymentAmount,
-          product: cart.map(item => item.name).join(', '),
-          customerEmail,
-          customerName: `${firstName} ${lastName}`.trim(),
-          customerPhone,
-          onSuccess: async (data) => {
-            console.log('CredPal success:', data);
-            clearPendingCheckoutOrder();
-            await clearCheckoutIdempotencyKey(checkoutFingerprint);
-            clearCheckoutSession();
-            clearCart();
-            const successQuery = new URLSearchParams({
-              type: 'credpal',
-              orderId: order.id,
-              credpalRef: data.order_no,
-            });
-            if (order.tracking_token) {
-              successQuery.set('trackingToken', order.tracking_token);
-            }
-            router.push(
-              asRoute(getHref(`/order-success?${successQuery.toString()}`))
-            );
           },
           onError: (error) => {
             console.error('CredPal error:', error);
@@ -2604,61 +2138,56 @@ export const CheckoutPage: React.FC = () => {
               variant: 'destructive',
             });
             setIsProcessing(false);
-            isOrderInFlightRef.current = false;
           },
-          onClose: () => {
+          releaseSubmitLock: () => {
             setIsProcessing(false);
             isOrderInFlightRef.current = false;
           },
         });
-        // Don't proceed further - callbacks handle the flow
         return;
       } else if (paymentMethod === 'invoice') {
-        // Invoice/Pay Later - order created, redirect to success
-        clearPendingCheckoutOrder();
-        await clearCheckoutIdempotencyKey(checkoutFingerprint);
-        clearCheckoutSession();
-        const successQuery = new URLSearchParams({
-          type: 'invoice',
-          orderId: order.id,
+        await completeCheckoutOrder({
+          order,
+          checkoutFingerprint,
+          completion: { kind: 'invoice' },
+          clearPendingCheckoutOrder,
+          clearCheckoutSession,
+          clearCart,
+          pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
         });
-        if (order.tracking_token) {
-          successQuery.set('trackingToken', order.tracking_token);
-        }
-        router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
-        setTimeout(clearCart, 500);
       } else if (paymentMethod === 'payforme') {
-        // Pay For Me - TODO: send payment link
-        clearPendingCheckoutOrder();
-        await clearCheckoutIdempotencyKey(checkoutFingerprint);
-        clearCheckoutSession();
-        const successQuery = new URLSearchParams({
-          type: 'payforme',
-          orderId: order.id,
-          payerName: payForMeDetails.name,
+        await completeCheckoutOrder({
+          order,
+          checkoutFingerprint,
+          completion: { kind: 'payforme', payerName: payForMeDetails.name },
+          clearPendingCheckoutOrder,
+          clearCheckoutSession,
+          clearCart,
+          pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
         });
-        if (order.tracking_token) {
-          successQuery.set('trackingToken', order.tracking_token);
-        }
-        router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
-        setTimeout(clearCart, 500);
       } else {
-        // Default: POD or other
-        clearPendingCheckoutOrder();
-        await clearCheckoutIdempotencyKey(checkoutFingerprint);
-        clearCheckoutSession();
-        const successQuery = new URLSearchParams({
-          type: 'standard',
-          orderId: order.id,
+        await completeCheckoutOrder({
+          order,
+          checkoutFingerprint,
+          completion: { kind: 'standard' },
+          clearPendingCheckoutOrder,
+          clearCheckoutSession,
+          clearCart,
+          pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
         });
-        if (order.tracking_token) {
-          successQuery.set('trackingToken', order.tracking_token);
-        }
-        router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
-        setTimeout(clearCart, 500);
       }
     } catch (error) {
       console.error('Checkout error:', error);
+      if (createdOrderId && paymentStarted) {
+        captureCheckoutPaymentFailed({
+          currency: orderChargeCurrency,
+          orderId: createdOrderId,
+          orderNumber: createdOrderNumber,
+          paymentMethod,
+          reason: error instanceof Error ? error.name : 'checkout_error',
+          reference: initializedReference,
+        });
+      }
       toast({
         title: 'Checkout Failed',
         description: error instanceof Error
@@ -2673,90 +2202,6 @@ export const CheckoutPage: React.FC = () => {
       setCurrentStep('payment');
       // Ensure steps stay completed so user doesn't have to re-enter info
       setCompletedSteps({ contact: true, delivery: true });
-    }
-  };
-
-  // Dedicated Virtual Account (DVA) Handler. The fetch + throw flow lives in
-  // module-scope `requestDvaInitialization`; the promise chain replaces
-  // try/catch/finally, which would bail React Compiler.
-  const handleBankTransfer = async (
-    order: { id: string; currency?: string | null },
-    paymentAmount: number,
-    billingAddress: DvaBillingAddress
-  ) => {
-    if (!merchant) {
-      isOrderInFlightRef.current = false;
-      return;
-    }
-
-    setIsInitializingDva(true);
-    await requestDvaInitialization({
-      merchantId: merchant.id,
-      orderId: order.id,
-      customerEmail,
-      customerName: `${firstName} ${lastName}`.trim(),
-      customerPhone,
-      billingAddress,
-      // Stamped order currency is authoritative; fall back to the
-      // merchant-resolved code only if the row value is ever absent.
-      orderCurrency:
-        typeof order.currency === 'string' && order.currency.trim()
-          ? order.currency.trim().toUpperCase()
-          : currencyCode,
-    })
-      .then((result) => {
-        setDvaData({
-          ...result.dva,
-          amount: paymentAmount,
-          reference: result.reference,
-        });
-        setDvaCountdown(3600);
-        isOrderInFlightRef.current = false;
-      })
-      .catch((error: unknown) => {
-        console.error('DVA initialization error:', error);
-        toast({
-          title: 'Bank Transfer Failed',
-          description:
-            error instanceof Error ? error.message : 'Failed to initialize bank transfer',
-          variant: 'destructive',
-        });
-        isOrderInFlightRef.current = false;
-      })
-      .finally(() => {
-        setIsProcessing(false);
-        setIsInitializingDva(false);
-      });
-  };
-
-  // Unified Next Step Handler for Mobile Action Bar
-  const handleNextStep = () => {
-    if (currentStep === 'contact') {
-      // Validation Logic (Same as desktop button)
-      setContactValidationAttempted(true);
-
-      const trimmedFirstName = firstName.trim();
-      const trimmedLastName = lastName.trim();
-      const trimmedEmail = customerEmail.trim();
-
-      // Validate all required fields
-      const hasErrors = !trimmedFirstName || !trimmedLastName || !trimmedEmail || !customerPhone || !isValidPhoneNumber(customerPhone);
-
-      if (hasErrors) return; // Inline errors will show
-
-      // Basic email validation
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(trimmedEmail)) return;
-
-      setCompletedSteps(prev => ({ ...prev, contact: true }));
-      setCurrentStep('delivery');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else if (currentStep === 'delivery') {
-      setCompletedSteps(prev => ({ ...prev, delivery: true }));
-      setCurrentStep('payment');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else if (currentStep === 'payment') {
-      handlePlaceOrder();
     }
   };
 
@@ -2857,7 +2302,7 @@ export const CheckoutPage: React.FC = () => {
             <div className="size-8 rounded-full bg-gray-100 flex items-center justify-center group-hover:bg-store-primary/5 transition-colors">
               <ChevronRight className="size-4 rotate-180 group-hover:text-store-primary transition-colors" />
             </div>
-            <span className="hidden sm:inline">Return to Cart</span>
+            <span className="max-sm:hidden sm:inline">Return to Cart</span>
           </button>
 
           <div className="flex flex-col items-center">
@@ -2868,7 +2313,7 @@ export const CheckoutPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 text-xs font-medium rounded-full border border-green-100">
+            <div className="max-sm:hidden sm:flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 text-xs font-medium rounded-full border border-green-100">
               <div className="size-1.5 rounded-full bg-green-500 animate-pulse" />
               Encrypted
             </div>
@@ -2887,12 +2332,12 @@ export const CheckoutPage: React.FC = () => {
           selectedCryptoCurrency={selectedCryptoCurrency}
           selectedCryptoChain={selectedCryptoChain}
           supportedChains={cryptoChainSupport[selectedCryptoCurrency]}
-          isInitializingCrypto={cryptoInitializer.isInitializing}
-          onCurrencyChange={(currency) => { cryptoInitializer.cancel(); handleCryptoCurrencyChange(currency); }}
-          onChainChange={(chain) => { cryptoInitializer.cancel(); setSelectedCryptoChain(chain); }}
+          isInitializingCrypto={isInitializingCrypto}
+          onCurrencyChange={(currency) => { cancelCryptoInitialization(); handleCryptoCurrencyChange(currency); }}
+          onChainChange={(chain) => { cancelCryptoInitialization(); setSelectedCryptoChain(chain); }}
           onInitialize={initializeCryptoPayment}
           onClose={() => {
-            cryptoInitializer.cancel();
+            cancelCryptoInitialization();
             setShowCryptoSelector(false);
             setPendingCryptoOrder(null);
             isOrderInFlightRef.current = false;
@@ -2917,9 +2362,7 @@ export const CheckoutPage: React.FC = () => {
                 onClick={() => {
                   // Just close the modal - don't clear cart or redirect
                   // User can retry or choose a different payment method
-                  setCryptoPaymentData(null);
-                  setCryptoVerificationStatus('idle');
-                  setIsVerifyingCrypto(false);
+                  dismissCryptoModal();
                 }}
                 className="size-8 rounded-lg bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-colors"
               >
@@ -3069,8 +2512,7 @@ export const CheckoutPage: React.FC = () => {
                       'Are you sure you want to close? If you\'ve already sent payment, your order will still be processed once the payment is detected.'
                     );
                     if (confirmed) {
-                      setCryptoPaymentData(null);
-                      setCryptoVerificationStatus('idle');
+                      dismissCryptoModal();
                     }
                   }}
                   className="w-full py-2.5 text-gray-500 text-sm font-medium hover:text-gray-700 transition-colors"
@@ -3125,7 +2567,7 @@ export const CheckoutPage: React.FC = () => {
               </div>
               <button
                 type="button"
-                onClick={() => setDvaData(null)}
+                onClick={closeDvaModal}
                 className="size-8 rounded-lg bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-colors"
               >
                 <X size={16} />
@@ -3209,14 +2651,15 @@ export const CheckoutPage: React.FC = () => {
               <div className="space-y-3">
                 <button
                   type="button"
-                  onClick={() => window.location.reload()}
-                  className="w-full py-4 bg-store-primary text-white font-bold rounded-xl hover:bg-store-primary/90 transition-colors shadow-lg shadow-store-primary/20"
+                  onClick={handleDvaConfirmTransfer}
+                  disabled={isVerifyingDva}
+                  className="w-full py-4 bg-store-primary text-white font-bold rounded-xl hover:bg-store-primary/90 transition-colors shadow-lg shadow-store-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Confirm Transfer Sent
+                  {isVerifyingDva ? 'Verifying transfer…' : 'Confirm Transfer Sent'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setDvaData(null)}
+                  onClick={closeDvaModal}
                   className="w-full py-2.5 text-gray-500 text-sm font-medium hover:text-gray-700 transition-colors"
                 >
                   Close and check later
@@ -3244,19 +2687,19 @@ export const CheckoutPage: React.FC = () => {
 
         {/* MOBILE ORDER SUMMARY (Collapsible) */}
         {/* MOBILE ORDER SUMMARY (Collapsible) */}
-        <MobileOrderSummary
+        {paymentMethod !== 'uba_redvault' && <MobileOrderSummary
           cart={mobileSummaryCart}
           cartTotal={effectiveCheckoutCartTotal}
           deliveryCost={resumedOrder ? resumedOrder.shipping_cost : deliveryCost}
           taxAmount={resumedOrder?.tax_amount ?? orderTotals?.taxAmount ?? 0}
-          discountAmount={resumedOrder?.discount_amount ?? discountAmount}
+          discountAmount={resumedOrder?.discount_amount ?? checkoutValues.discountAmount}
           deliveryMethod={resumedOrder ? null : deliveryMethod}
           giftWrappingCost={giftWrappingCost}
           walletBalance={walletBalance}
-          payWithWallet={payWithWallet}
+          payWithWallet={checkoutValues.payWithWallet}
           walletAmountUsed={walletAmountUsed}
           remainingAmount={resumedOrder?.total ?? remainingAmount}
-        />
+        />}
 
         {/* Hidden in the resumed-order flow: that path charges the persisted
             resumedOrder.total and skips order creation, so a discount applied
@@ -3303,277 +2746,31 @@ export const CheckoutPage: React.FC = () => {
               </div>
             )}
 
-            {/* Accordion Step 1: Contact Information */}
-            <div className={`bg-white rounded-2xl shadow-sm border ${currentStep === 'contact' ? 'border-store-primary ring-1 ring-store-primary/20' : 'border-gray-100'} overflow-hidden transition-all duration-300`}>
-              <button
-                type="button"
-                onClick={() => setCurrentStep('contact')}
-                className="w-full px-6 py-4 flex items-center justify-between gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-store-primary focus-visible:ring-inset"
-              >
-                <div className="min-w-0">
-                  <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                    <div className={`size-6 rounded-full flex items-center justify-center text-xs transition-colors ${completedSteps.contact ? 'bg-green-100 text-green-600' : currentStep === 'contact' ? 'bg-store-primary/10 text-store-primary' : 'bg-gray-100 text-gray-500'
-                      }`}>
-                      {completedSteps.contact ? <Check size={14} /> : '1'}
-                    </div>
-                    Contact Information
-                  </h2>
-                  {completedSteps.contact && currentStep !== 'contact' && (firstName || customerPhone) && (
-                    <p className="mt-1 pl-8 text-xs font-normal text-gray-500 truncate">
-                      {[firstName, lastName].filter(Boolean).join(' ')}
-                      {customerPhone ? ` · ${customerPhone}` : ''}
-                    </p>
-                  )}
-                </div>
-                {completedSteps.contact && currentStep !== 'contact' && (
-                  <span className="text-sm font-semibold text-store-primary underline-offset-4 hover:underline shrink-0">Edit</span>
-                )}
-              </button>
+            <ContactStep
+              focusOnActivate={focusActiveStep}
+              active={currentStep === 'contact'}
+              completed={completedSteps.contact}
+              values={{ firstName, lastName, customerEmail, customerPhone }}
+              onChange={setCheckoutField}
+              account={{ createAccount, password: accountPassword }}
+              onAccountChange={({ createAccount: nextCreateAccount, password }) => {
+                setCreateAccount(nextCreateAccount);
+                setAccountPassword(password);
+              }}
+              signedIn={Boolean(user)}
+              onOpen={() => setCurrentStep('contact')}
+              onComplete={() => { setFocusActiveStep(true); setCheckoutFields({ currentStep: 'delivery', completedSteps: { ...completedSteps, contact: true } }); }}
+            />
 
-              {/* Collapsible Content */}
-              <div className={`grid transition-all duration-300 ease-in-out ${currentStep === 'contact' ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
-                <div className="overflow-hidden">
-                  <div className="p-6 pt-0 space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
-                          First Name *
-                        </label>
-                        <input
-                          type="text"
-                          value={firstName}
-                          onChange={(e) => setFirstName(e.target.value)}
-                          placeholder="John"
-                          className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:outline-hidden text-sm text-gray-900 placeholder:text-gray-400 ${contactValidationAttempted && !firstName.trim()
-                            ? 'border-red-500 focus:border-red-500 bg-store-primary/5'
-                            : firstName.trim()
-                              ? 'border-store-primary/40 focus:border-store-primary focus:ring-1 focus:ring-store-primary/20'
-                              : 'border-gray-200 focus:border-store-primary focus:ring-1 focus:ring-store-primary/20'
-                            }`}
-                          required
-                        />
-                        {contactValidationAttempted && !firstName.trim() && (
-                          <p className="text-red-500 text-xs mt-1">First name is required</p>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
-                          Last Name *
-                        </label>
-                        <input
-                          type="text"
-                          value={lastName}
-                          onChange={(e) => setLastName(e.target.value)}
-                          placeholder="Doe"
-                          className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:outline-hidden text-sm text-gray-900 placeholder:text-gray-400 ${contactValidationAttempted && !lastName.trim()
-                            ? 'border-red-500 focus:border-red-500 bg-store-primary/5'
-                            : lastName.trim()
-                              ? 'border-store-primary/40 focus:border-store-primary focus:ring-1 focus:ring-store-primary/20'
-                              : 'border-gray-200 focus:border-store-primary focus:ring-1 focus:ring-store-primary/20'
-                            }`}
-                          required
-                        />
-                        {contactValidationAttempted && !lastName.trim() && (
-                          <p className="text-red-500 text-xs mt-1">Last name is required</p>
-                        )}
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
-                          Email Address *
-                        </label>
-                        <input
-                          type="email"
-                          value={customerEmail}
-                          onChange={(e) => setCustomerEmail(e.target.value)}
-                          placeholder="john@example.com"
-                          className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:outline-hidden text-sm text-gray-900 placeholder:text-gray-400 ${contactValidationAttempted && (!customerEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim()))
-                            ? 'border-red-500 focus:border-red-500 bg-store-primary/5'
-                            : /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim())
-                              ? 'border-store-primary/40 focus:border-store-primary focus:ring-1 focus:ring-store-primary/20'
-                              : 'border-gray-200 focus:border-store-primary focus:ring-1 focus:ring-store-primary/20'
-                            }`}
-                          required
-                        />
-                        {contactValidationAttempted && !customerEmail.trim() && (
-                          <p className="text-red-500 text-xs mt-1">Email address is required</p>
-                        )}
-                        {contactValidationAttempted && customerEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim()) && (
-                          <p className="text-red-500 text-xs mt-1">Please enter a valid email address</p>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
-                        Phone Number *
-                      </label>
-                      <div className={contactValidationAttempted && (!customerPhone || !isValidPhoneNumber(customerPhone)) ? "rounded-lg border border-red-500" : ""}>
-                        <PhoneInput
-                          value={customerPhone}
-                          onChange={(value) => setCustomerPhone(value || '')}
-                          placeholder="+234 800 000 0000"
-                          defaultCountry="NG"
-                          className="w-full text-sm"
-                        />
-                      </div>
-                      {contactValidationAttempted && !customerPhone && (
-                        <p className="text-red-500 text-xs mt-1">Phone number is required</p>
-                      )}
-                      {contactValidationAttempted && customerPhone && !isValidPhoneNumber(customerPhone) && (
-                        <p className="text-red-500 text-xs mt-1">Please enter a valid phone number</p>
-                      )}
-                    </div>
-
-                    {/* Guest Account Creation & Newsletter (2026 Conversion Pattern) */}
-                    {!user && (
-                      <div className="md:col-span-2 space-y-4 pt-4">
-
-                        {/* 2. Account Creation Checkbox (Retention) */}
-                        <div className={`bg-gray-50 rounded-xl p-4 border transition-all duration-300 ${createAccount ? 'border-store-primary/30 bg-store-primary/5' : 'border-gray-100 hover:border-store-primary/20'}`}>
-                          <label className="flex items-start gap-3 cursor-pointer group mb-2">
-                            <div className="relative flex items-center pt-0.5">
-                              <input
-                                type="checkbox"
-                                checked={createAccount}
-                                onChange={(e) => {
-                                  setCreateAccount(e.target.checked);
-                                  setShowPasswordInput(e.target.checked);
-                                }}
-                                className="peer size-5 rounded border-gray-300 text-store-primary focus:ring-store-primary"
-                              />
-                            </div>
-                            <div>
-                              <span className="block text-sm font-bold text-gray-900 group-hover:text-store-primary transition-colors">
-                                Save my information for a faster checkout next time
-                              </span>
-                              <span className="text-xs text-gray-500 mt-0.5 block">
-                                Securely save your address details for future orders.
-                              </span>
-                            </div>
-                          </label>
-
-                          {/* 3. Sliding Password Input */}
-                          <div className={`overflow-hidden transition-all duration-300 ease-in-out ${showPasswordInput ? 'max-h-24 opacity-100 mt-3 pl-8' : 'max-h-0 opacity-0'}`}>
-                            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
-                              Create a Password
-                            </label>
-                            <div className="relative">
-                              <input
-                                type={isPasswordVisible ? "text" : "password"}
-                                value={accountPassword}
-                                onChange={(e) => setAccountPassword(e.target.value)}
-                                placeholder="Min. 6 characters"
-                                className={`w-full px-4 py-3 bg-white border rounded-xl focus:outline-hidden text-sm text-gray-900 placeholder:text-gray-400 pr-12 ${contactValidationAttempted && createAccount && accountPassword.length < 6
-                                  ? 'border-red-500 focus:border-red-500'
-                                  : 'border-gray-200 focus:border-store-primary'
-                                  }`}
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setIsPasswordVisible(!isPasswordVisible)}
-                                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                                aria-label="Show password"
-                                aria-pressed={isPasswordVisible}
-                              >
-                                {isPasswordVisible ? (
-                                  <EyeOff aria-hidden="true" size={18} />
-                                ) : (
-                                  <Eye aria-hidden="true" size={18} />
-                                )}
-                              </button>
-                            </div>
-                            {contactValidationAttempted && createAccount && accountPassword.length < 6 && (
-                              <p className="text-red-500 text-xs mt-1">Password must be at least 6 characters</p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="pt-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCompletedSteps(prev => ({ ...prev, contact: true }));
-                          setCurrentStep('delivery');
-                        }}
-                        disabled={!isContactValid || (createAccount && accountPassword.length < 6)}
-                        className="px-6 py-3 bg-store-primary text-white font-bold rounded-xl hover:bg-store-primary/90 transition-colors w-full md:w-auto disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed shadow-lg disabled:shadow-none"
-                      >
-                        Continue to Delivery
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Step 2: Delivery Method */}
-            <div className={`bg-white rounded-2xl shadow-sm border ${currentStep === 'delivery' ? 'border-store-primary ring-1 ring-store-primary/20' : 'border-gray-100'} transition-all duration-300`}>
-              <button
-                type="button"
-                onClick={() => completedSteps.contact && setCurrentStep('delivery')}
-                disabled={!completedSteps.contact}
-                className="w-full px-6 py-4 flex items-center justify-between gap-3 text-left disabled:opacity-50 disabled:cursor-not-allowed hidden-disabled focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-store-primary focus-visible:ring-inset"
-              >
-                <div className="min-w-0">
-                  <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                    <div className={`size-6 rounded-full flex items-center justify-center text-xs transition-colors ${completedSteps.delivery ? 'bg-green-100 text-green-600' : currentStep === 'delivery' ? 'bg-store-primary/10 text-store-primary' : 'bg-gray-100 text-gray-500'
-                      }`}>
-                      {completedSteps.delivery ? <Check size={14} /> : '2'}
-                    </div>
-                    Delivery Method
-                  </h2>
-                  {completedSteps.delivery && currentStep !== 'delivery' && (
-                    <p className="mt-1 pl-8 text-xs font-normal text-gray-500 truncate">
-                      {deliveryMethod === 'door'
-                        ? 'By Road'
-                        : deliveryMethod === 'pickup_station'
-                          ? 'Pickup Station'
-                        : deliveryMethod === 'pickup'
-                          ? 'Store Pickup'
-                            : 'By Air'}
-                      {deliveryMethod === 'door' && newAddressCity ? ` · ${newAddressCity}` : ''}
-                    </p>
-                  )}
-                </div>
-                {completedSteps.delivery && currentStep !== 'delivery' && (
-                  <span className="text-sm font-semibold text-store-primary underline-offset-4 hover:underline shrink-0">Edit</span>
-                )}
-              </button>
-
-              <div className={`grid transition-all duration-300 ease-in-out ${currentStep === 'delivery' ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
-                <div className={currentStep === 'delivery' ? 'overflow-visible' : 'overflow-hidden'}>
-                  <div className="p-6 pt-0 space-y-4">
-                    {/* STEP 1: Address Input FIRST */}
-                    <div className="space-y-4">
-                      {/* Saved Addresses (for logged in users) */}
-                      {user && addresses.length > 0 && (
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <label className="text-xs font-bold text-gray-700 uppercase tracking-wide">
-                              Where should we deliver?
-                            </label>
-                            <button
-                              type="button"
-                              onClick={() => setIsNewAddressMode(!isNewAddressMode)}
-                              className="text-xs font-bold text-store-primary hover:underline"
-                            >
-                              {isNewAddressMode ? 'Select Saved Address' : '+ New Address'}
-                            </button>
-                          </div>
-                          {!isNewAddressMode && addresses.map((addr) => (
-                            <label
-                              key={addr.id}
-                              className={`flex items-start p-4 rounded-xl border cursor-pointer transition-all focus-within:ring-2 focus-within:ring-store-primary focus-within:ring-offset-2 ${selectedAddressId === addr.id
-                                ? 'border-store-primary bg-store-primary/5'
-                                : 'border-gray-200 hover:border-gray-300'
-                                }`}
-                            >
-                              <input
-                                type="radio"
-                                name="address"
-                                checked={selectedAddressId === addr.id}
-                                onChange={() => {
+            <CheckoutStepSection focusOnActivate={focusActiveStep} id="checkout-delivery" title="Delivery Method" number={2}
+              active={currentStep === 'delivery'} completed={completedSteps.delivery} disabled={!completedSteps.contact}
+              summary={deliveryMethod === 'door' ? `By Road${newAddressCity ? ` · ${newAddressCity}` : ''}` : deliveryMethod === 'pickup_station' ? 'Pickup Station' : deliveryMethod === 'pickup' ? 'Store Pickup' : 'By Air'}
+              onOpen={() => setCurrentStep('delivery')}>
+              <DeliveryAddressFields signedIn={Boolean(user)} addresses={addresses} isNewAddressMode={isNewAddressMode}
+                selectedAddressId={selectedAddressId} newAddressStreet={newAddressStreet} newAddressCity={newAddressCity} newAddressState={newAddressState}
+                merchantCountry={merchantCountry} addressReady={isHydrated && isNewDeliveryAddressReady}
+                onToggleAddressMode={() => setIsNewAddressMode(!isNewAddressMode)}
+                                onSelectAddress={(addr) => {
                                   setSelectedAddressId(addr.id);
                                   setIsNewAddressMode(false);
                                   clearInferredLocationDebounce();
@@ -3585,35 +2782,7 @@ export const CheckoutPage: React.FC = () => {
                                     setNewAddressCity(parts[parts.length - 2] || '');
                                   }
                                 }}
-                                className="mt-1 size-4 text-store-primary focus:ring-store-primary border-gray-300"
-                              />
-                              <div className="ml-3">
-                                <p className="font-bold text-gray-900 text-sm">
-                                  {addr.label || 'Saved Address'}
-                                </p>
-                                <p className="text-gray-600 text-sm mt-0.5">
-                                  {addr.address}
-                                </p>
-                                <p className="text-gray-500 text-xs mt-1">
-                                  {addr.phone}
-                                </p>
-                              </div>
-                            </label>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* New Address Form */}
-                      {(isNewAddressMode || !user || addresses.length === 0) && (
-                        <div className="space-y-4" style={{ overflow: 'visible' }}>
-                          <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide">
-                            {user && addresses.length > 0 ? 'Enter New Address' : 'Delivery Address'}
-                          </label>
-                          <AddressAutocomplete
-                            value={newAddressStreet}
-                            useThemedInput={true}
-                            onChange={(val) => {
-                              const newVal = typeof val === 'string' ? val : val.target.value;
+                            onStreetChange={(newVal) => {
                               setCheckoutFields({
                                 newAddressStreet: newVal,
                                 newAddressCity: '',
@@ -3649,7 +2818,7 @@ export const CheckoutPage: React.FC = () => {
                                 resetQuotesForAddressChange();
                               }
                             }}
-                            onSelect={(place: PlaceDetails) => {
+                            onSelectPlace={(place: PlaceDetails) => {
                               clearInferredLocationDebounce();
                               resetQuotesForAddressChange();
                               setCheckoutFields({
@@ -3666,260 +2835,51 @@ export const CheckoutPage: React.FC = () => {
                                     : null,
                               });
                             }}
-                            placeholder="Start typing your address..."
-                            country={merchantCountry}
-                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus-visible:ring-0 focus:border-store-primary text-sm text-gray-900 placeholder:text-gray-400"
-                          />
-                          {isHydrated && isNewDeliveryAddressReady && (
-                            <p className="text-xs text-green-600 flex items-center gap-1">
-                              <Check size={12} /> Detected: {newAddressCity}, {newAddressState}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
 
-                    {/* STEP 2: Delivery Method Cards - ONLY show AFTER address is detected */}
-                    {canShowDeliveryMethods({ isHydrated, isNewAddressMode, selectedAddressId, city: newAddressCity, state: newAddressState }) && (
-                      <>
-                        <div className="mt-6 pt-4 border-t border-gray-100">
-                          <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-3">
-                            How would you like to receive your order?
-                          </label>
-                          <div className="flex gap-3 overflow-x-auto pb-1">
-                            {(['door', 'airport', 'pickup_station', 'pickup'] as const).map((method) => {
-                              // Store ships from Lagos: the legacy in-store
-                              // pickup is Lagos-only and airport is for non-Lagos
-                              // states with an airport. Shared with the mobile
-                              // storefront so they can't drift. Exception: a
-                              // merchant/GIGL station quote reveals the
-                              // provider-aware pickup_station tab even in Lagos,
-                              // so merchant-configured pickup rates aren't hidden.
-                              if (
-                                method === 'pickup_station' &&
-                                isPickupEligible(newAddressState) &&
-                                !stationPickupQuote &&
-                                !hasMerchantPickupQuote
-                              ) {
-                                return null;
-                              }
-                              if (
-                                method === 'pickup' &&
-                                (merchant?.slug !== 'ogabassey' ||
-                                  !isPickupEligible(newAddressState) ||
-                                  hasMerchantPickupQuote)
-                              ) {
-                                // Hide the hardcoded in-store pickup once the
-                                // merchant configures its own pickup rate — the
-                                // pickup_station tab renders it (avoids a
-                                // duplicate "Store Pickup" affordance).
-                                return null;
-                              }
-                              if (
-                                method === 'airport' &&
-                                !isAirportDeliveryEligible(newAddressState)
-                              ) {
-                                return null;
-                              }
-
-                              // Merchant `pickup` rates reuse the station-pickup
-                              // tab with neutral (non-GIGL) copy.
-                              const pickupStationCopy =
-                                getPickupStationCopy(stationPickupQuote);
-                              const Icon = method === 'door' ? Truck : method === 'airport' ? Plane : Building2;
-                              const label =
-                                method === 'door'
-                                  ? 'By Road'
-                                  : method === 'pickup_station'
-                                    ? pickupStationCopy.methodLabel
-                                    : method === 'pickup'
-                                      ? 'Store Pickup'
-                                      : 'By Air';
-                              const subtitle =
-                                method === 'door'
-                                  ? 'To your address'
-                                  : method === 'pickup_station'
-                                    ? pickupStationCopy.methodSubtitle
-                                    : method === 'pickup'
-                                      ? 'Collect at store'
-                                      : 'Via air cargo';
-
-                              return (
-                                <button type="button"
-                                  key={method}
-                                  onClick={() => selectDeliveryMethod(method)}
-                                  className={`flex-1 flex flex-col items-center justify-center p-3 sm:p-4 rounded-xl border-2 transition-all gap-1 min-w-[100px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-store-primary focus-visible:ring-offset-2 ${deliveryMethod === method
-                                    ? 'border-store-primary bg-store-primary/5 text-store-primary'
-                                    : 'border-gray-100 bg-white text-gray-500 hover:border-gray-200 hover:bg-gray-50'
-                                    }`}
-                                >
-                                  <Icon className={`size-6 ${deliveryMethod === method ? 'text-store-primary' : 'text-gray-400'}`} />
-                                  <span className="text-xs sm:text-sm font-bold">{label}</span>
-                                  <span className="text-[10px] text-gray-400">{subtitle}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* STEP 3: Delivery Method Details */}
-                        {/* Pickup Info */}
-                        {deliveryMethod === 'pickup' && (
-                          <div className="mt-4 bg-gray-50 p-4 rounded-xl border border-gray-100 flex items-start gap-4 animate-in fade-in">
-                            <div className="bg-white p-2 rounded-lg border border-gray-200">
-                              <Building2 size={24} className="text-gray-600" />
-                            </div>
-                            <div>
-                              <h4 className="font-bold text-gray-900 text-sm">Main Office Pickup</h4>
-                              <p className="text-sm text-gray-600 mt-1">
-                                Available for pickup at our Ikeja Store. Usually ready within 2 hours.
-                              </p>
-                              <div className="mt-2 text-xs font-mono bg-white inline-block px-2 py-1 rounded border border-gray-200 text-gray-500">
-                                Pickup closes at 6 PM
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {deliveryMethod === 'pickup_station' &&
-                          (isLoadingQuotes ? (
-                            <SmartQuoteLoader />
-                          ) : stationPickupQuotes.length > 0 ? (
-                            // A merchant/GIGL zone can expose several pickup
-                            // locations: render every one as an individually
-                            // selectable option instead of collapsing to the
-                            // first. Copy is provider-aware (GIGL vs merchant
-                            // "Store Pickup") via getPickupStationCopy.
-                            <fieldset className="m-0 mt-4 min-w-0 border-0 p-0 animate-in fade-in">
-                              <legend className="mb-3 text-xs font-bold uppercase tracking-wide text-store-background-text/70">
-                                {getPickupStationCopy(stationPickupQuote).detailHeading}
-                              </legend>
-                              <div className="space-y-3">
-                                {stationPickupQuotes.map((quote) => (
-                                  <label
-                                    key={quote.id}
-                                    className={`flex items-start justify-between gap-3 p-4 rounded-xl border cursor-pointer hover:border-store-primary/60 transition-all focus-within:ring-2 focus-within:ring-store-primary focus-within:ring-offset-2 ${selectedQuoteId === quote.id
-                                      ? 'border-store-primary bg-store-primary/5 ring-1 ring-store-primary'
-                                      : 'border-store-background-text/10 bg-store-background'
-                                      }`}
-                                  >
-                                    <div className="flex min-w-0 items-start gap-3">
-                                      <input
-                                        type="radio"
-                                        name="station_pickup_quote"
-                                        checked={selectedQuoteId === quote.id}
-                                        onChange={() => setSelectedQuoteId(quote.id)}
-                                        className="mt-0.5 size-4 border-store-background-text/25 text-store-primary focus:ring-store-primary"
-                                      />
-                                      <div className="min-w-0">
-                                        <span className="text-sm font-bold text-store-background-text">
-                                          {quote.displayName}
-                                        </span>
-                                        <p className="mt-0.5 text-xs text-store-background-text/65">
-                                          {quote.stationAddress ||
-                                            getPickupStationCopy(quote).detailFallback}
-                                        </p>
-                                        {quote.stationInstructions && (
-                                          <p className="mt-1 text-xs text-store-background-text/55">
-                                            {quote.stationInstructions}
-                                          </p>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <span className="shrink-0 text-sm font-bold text-store-background-text">
-                                      {formatAmountInCurrency(quote.price, quote.currency, AUTO_FRACTION_OPTIONS)}
-                                    </span>
-                                  </label>
-                                ))}
-                              </div>
-                            </fieldset>
-                          ) : (
-                            <div className="mt-4 rounded-xl border border-store-background-text/10 bg-store-background p-4 text-sm text-store-background-text/65">
-                              No nearby GIG Logistics pickup station is available for this address yet.
-                            </div>
-                          ))}
-
-                        {/* Airport Options */}
-                        {deliveryMethod === 'airport' && (
-                          <AirportDeliveryOptions
-                            airportType={airportType}
-                            requiresProviderQuote={airportRequiresQuote}
-                            city={newAddressCity}
-                            state={newAddressState}
-                            selectedQuoteId={selectedQuoteId}
-                            selectedQuoteMatchesDeliveryMethod={
-                              selectedQuoteMatchesDeliveryMethod
-                            }
-                            airDeliveryQuotes={airDeliveryQuotes}
-                            onSelectAirportType={(type) => {
-                              setAirportType(type);
-                              setCheckoutField('airportRequiresQuote', false);
-                              setSelectedQuoteId('');
-                            }}
-                            onSelectQuote={(id) => {
-                              setCheckoutField('airportRequiresQuote', true);
-                              setSelectedQuoteId(id);
-                            }}
-                          />
-                        )}
-
-                        {/* Door Delivery - Quote Selector */}
-                        {deliveryMethod === 'door' && (
-                          <DoorDeliveryQuoteOptions
-                            isLoadingQuotes={isLoadingQuotes}
-                            doorDeliveryQuotes={doorDeliveryQuotes}
-                            stationPickupQuote={stationPickupQuote}
-                            selectedQuoteId={selectedQuoteId}
-                            onSelectQuote={setSelectedQuoteId}
-                            onSelectStationPickup={(quoteId) => {
-                              setSelectedQuoteId(quoteId);
-                              setDeliveryMethod('pickup_station');
-                            }}
-                            onRefreshRates={() => {
-                              if (isNewDeliveryAddressReady) {
-                                fetchShippingQuotes(
-                                  newAddressStreet,
-                                  newAddressState,
-                                  newAddressCity,
-                                  customerPhone,
-                                  firstName,
-                                  lastName,
-                                  customerEmail,
-                                );
-                              }
-                            }}
-                          />
-                        )}
-                      </>
-                    )}
-
-                    <div className="pt-2">
-                      <button
-                        type="button"
+              />
+              {canShowDeliveryMethods({ isHydrated, isNewAddressMode, selectedAddressId, city: newAddressCity, state: newAddressState }) && <DeliveryOptions
+                tabs={{ deliveryMethod, newAddressState, merchantSlug: merchant?.slug, stationPickupQuote, hasMerchantPickupQuote, onSelect: selectDeliveryMethod }}
+                station={{ isLoadingQuotes, stationPickupQuote, stationPickupQuotes, selectedQuoteId, setSelectedQuoteId }}
+                airport={{ airportType, requiresProviderQuote: airportRequiresQuote, city: newAddressCity, state: newAddressState,
+                  selectedQuoteId, selectedQuoteMatchesDeliveryMethod, airDeliveryQuotes,
+                  onSelectAirportType: type => { setAirportType(type); setCheckoutField('airportRequiresQuote', false); setSelectedQuoteId(''); },
+                  onSelectQuote: id => { setCheckoutField('airportRequiresQuote', true); setSelectedQuoteId(id); }
+                }}
+                door={{ isLoadingQuotes, doorDeliveryQuotes, stationPickupQuote, selectedQuoteId, onSelectQuote: setSelectedQuoteId,
+                  onSelectStationPickup: quoteId => { setSelectedQuoteId(quoteId); setDeliveryMethod('pickup_station'); },
+                  onRefreshRates: () => { if (isNewDeliveryAddressReady) fetchShippingQuotes(newAddressStreet, newAddressState, newAddressCity, customerPhone, firstName, lastName, customerEmail); }
+                }}
+              />}
+              <div className="pt-2">
+                <button type="button" disabled={!isDeliveryValid}
                         onClick={() => {
+                          captureClientEvent(
+                            CHECKOUT_FUNNEL_EVENTS.checkoutStepCompleted,
+                            buildCheckoutFunnelProperties({
+                              channel: 'web',
+                              checkoutStep: 'shipping_info',
+                              source: 'web_checkout',
+                            })
+                          );
                           setCompletedSteps(prev => ({ ...prev, delivery: true }));
                           setCurrentStep('payment');
                         }}
-                        className="w-full md:w-auto px-6 py-3 bg-store-primary text-white font-bold rounded-xl hover:bg-store-primary/90 transition-colors flex items-center justify-center gap-2 shadow-lg hover:shadow-store-primary/20 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed disabled:shadow-none"
-                        disabled={!isDeliveryValid}
-                      >
-                        Continue to Payment
-                        <ChevronRight size={18} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
+
+                  className="w-full md:w-auto px-6 py-3 bg-store-primary text-white font-bold rounded-xl hover:bg-store-primary/90 transition-colors flex items-center justify-center gap-2 shadow-lg hover:shadow-store-primary/20 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed disabled:shadow-none">
+                  Continue to Payment <ChevronRight size={18} />
+                </button>
               </div>
-            </div>
+            </CheckoutStepSection>
 
             {/* Step 3: Payment Method */}
             <PaymentStep
+              focusOnActivate={focusActiveStep}
               currentStep={currentStep}
               completedSteps={completedSteps}
               paymentTab={paymentTab}
               setPaymentTab={setPaymentTab}
               paymentMethod={paymentMethod}
-              setPaymentMethod={setPaymentMethod}
+              setPaymentMethod={selectPaymentMethod}
               isProcessing={isProcessing}
               isPayForMeValid={isPayForMeValid}
               isDeliveryValid={isDeliveryValid}
@@ -3935,206 +2895,41 @@ export const CheckoutPage: React.FC = () => {
               remainingAmount={remainingAmount}
               orderAmount={total}
               currency={currencyCode}
+              redvaultAvailable={redvaultAvailability.available}
+              redvaultStatus={redvaultStatus}
+              redvaultSummary={redvaultSummary}
+              redvaultOrderReady={Boolean(redvaultOrderReady)}
             />
 
           </div>
 
-          {/* RIGHT COLUMN: Order Summary */}
-          <div className="hidden lg:block lg:col-span-4 lg:sticky lg:top-24 space-y-6">
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <span aria-hidden="true" className="flex size-6 items-center justify-center rounded-full bg-store-primary/10 text-store-primary">
-                  <ShoppingBag size={13} />
-                </span>
-                Order Summary
-              </h2>
-
-              {/* Items List (Collapsed View). Keep the full scroll region
-                  reserved so hydration of a multi-item persisted cart cannot
-                  grow the summary and shift the payment controls. */}
-              <div className="mb-6 h-[200px] space-y-4 overflow-y-auto pr-1">
-                {displayItems.map((item) => {
-                  // Legacy persisted carts can lack `cartItemId` until the
-                  // provider's upgrade path (storefront-cart-provider.tsx
-                  // `!item.cartItemId` branch) backfills it. Fall back to
-                  // `item.id` so React keys never collapse to `undefined`.
-                  const itemKey =
-                    item.kind === 'cart'
-                      ? item.cartItemId || item.id
-                      : item.id;
-                  const itemName = item.kind === 'cart' ? item.name : item.product_name;
-                  const itemImage =
-                    (item.kind === 'cart' ? item.image : item.image_url) || '/placeholder.png';
-                  const isQuizGift =
-                    item.kind === 'cart' && isQuizVoucherCartItem(item);
-                  const itemPrice =
-                    item.kind === 'cart'
-                      ? getCartItemCheckoutUnitPrice(item)
-                      : item.price;
-                  return (
-                    <div key={itemKey} className="flex gap-3">
-                      <div className="ogabassey-product-card-image-surface relative size-12 bg-gray-50 rounded-lg border border-gray-100 p-1 shrink-0">
-                        <CdnFormatImage
-                          src={itemImage}
-                          alt={itemName}
-                          fill
-                          sizes="48px"
-                          className="object-contain mix-blend-multiply"
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-gray-900 line-clamp-1">
-                          {itemName}
-                        </p>
-                        <div className="flex justify-between items-center text-xs text-gray-500 mt-0.5">
-                          <span>Qty: {item.quantity}</span>
-                          <span>
-                            {isQuizGift
-                              ? 'Free gift'
-                              : formatCurrencyAuto(itemPrice)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="border-t border-dashed border-gray-200 my-4" />
-
-              <div className="space-y-3 mb-6">
-                <div className="flex justify-between text-gray-600 text-sm">
-                  <span>Subtotal</span>
-                  <span>{formatCurrencyAuto(effectiveCheckoutCartTotal)}</span>
-                </div>
-                {orderTotals && (
-                  <div className="flex justify-between text-gray-600 text-sm">
-                    <span>VAT (7.5%)</span>
-                    <span>{formatCurrencyAuto(orderTotals.taxAmount)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-gray-600 text-sm">
-                  <span>Delivery</span>
-                  <span
-                    className={
-                      deliveryCost === 0
-                        ? 'text-green-600 font-bold'
-                        : 'text-gray-900'
-                    }
-                  >
-                    {deliveryMethod === 'door' && !selectedQuoteId && deliveryCost === 0
-                      ? <span className="text-gray-500 font-normal italic">Calculated…</span>
-                      : deliveryCost === 0 ? 'Free' : formatCurrencyAuto(deliveryCost)}
-                  </span>
-                </div>
-                {giftWrappingCost > 0 && (
-                  <div className="flex justify-between text-gray-600 text-sm">
-                    <span>Gift Wrapping</span>
-                    <span>{formatCurrencyAuto(giftWrappingCost)}</span>
-                  </div>
-                )}
-
-                {/* Wallet Credit Section (2025: progressive disclosure - only show if balance > 0 or loading). NGN-ledger: hidden on non-NGN orders. */}
-                {walletCurrencySupported && (walletLoading || walletBalance > 0) && user && (
-                  <div className="py-2 animate-in fade-in">
-                    {walletLoading ? (
-                      <div className="flex items-center gap-2 text-gray-500">
-                        <Loader2 className="size-4 animate-spin" />
-                        <span className="text-sm">Checking wallet balance…</span>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="size-6 rounded-full bg-green-100 flex items-center justify-center">
-                              <span className="text-green-600 text-xs font-bold">{currencySymbol}</span>
-                            </div>
-                            <div>
-                              <span className="text-sm font-medium text-gray-700">Wallet Credit</span>
-                              <span className="text-xs text-gray-500 ml-1">({formatCurrencyAuto(walletBalance)} available)</span>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setPayWithWallet(!payWithWallet)}
-                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${payWithWallet ? 'bg-green-600' : 'bg-gray-300'
-                              }`}
-                          >
-                            <span
-                              className={`inline-block size-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${payWithWallet ? 'translate-x-4' : 'translate-x-0'
-                                }`}
-                            />
-                          </button>
-                        </div>
-                        {payWithWallet && walletAmountUsed > 0 && (
-                          <div className="flex justify-between text-green-700 text-sm font-medium mt-2 pl-8">
-                            <span>Applied Credit</span>
-                            <span>-{formatCurrencyAuto(walletAmountUsed)}</span>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                )}
-
-                <div className="border-t border-dashed border-gray-200 my-2" />
-
-                {/* Total or Amount Due */}
-                <div className="flex justify-between text-gray-900 font-bold text-lg">
-                  <span>
-                    {remainingAmount > 0 && payWithWallet
-                      ? 'Amount Due'
-                      : 'Total'}
-                  </span>
-                  <span>{formatCurrencyAuto(remainingAmount)}</span>
-                </div>
-              </div>
-
-              {/* Newsletter Opt-in (Moved to Summary Card) */}
-              {!user && (
-                <label className="flex items-start gap-3 cursor-pointer group mb-4 px-1">
-                  <div className="relative flex items-center pt-0.5">
-                    <input
-                      id="newsletter-summary-opt-in"
-                      type="checkbox"
-                      checked={newsletterOptIn}
-                      onChange={(e) => setNewsletterOptIn(e.target.checked)}
-                      className="peer size-4 rounded border-gray-300 text-store-primary focus:ring-store-primary"
-                    />
-                  </div>
-                  <span className="text-xs text-gray-600 group-hover:text-gray-900 transition-colors">
-                    Email me with exclusive offers and new product drops.
-                  </span>
-                </label>
-              )}
-
-              <button
-                type="button"
-                onClick={handlePlaceOrder}
-                disabled={
-                  isProcessing ||
-                  (remainingAmount > 0 && !paymentMethod) ||
-                  (paymentMethod === 'payforme' && !isPayForMeValid)
-                }
-                className="hidden lg:flex w-full bg-store-primary hover:bg-store-primary/90 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold py-3.5 px-4 rounded-xl items-center justify-center gap-2 transition-all shadow-lg hover:shadow-store-primary/20 active:scale-[0.98]"
-              >
-                {isProcessing ? (
-                  <Loader2 className="animate-spin" />
-                ) : paymentMethod === 'invoice' ? (
-                  'Generate Invoice'
-                ) : paymentMethod === 'payforme' ? (
-                  'Send Payment Link'
-                ) : (
-                  'Place Order'
-                )}
-                {!isProcessing && <ChevronRight size={20} />}
-              </button>
-
-              <div className="mt-4 flex items-center justify-center gap-2 text-xs text-green-600 font-medium">
-                <ShieldCheck size={14} /> Secure Encrypted Payment
-              </div>
-            </div>
-          </div>
+          <DesktopOrderSummary
+            displayItems={displayItems}
+            formatCurrencyAuto={formatCurrencyAuto}
+            effectiveCheckoutCartTotal={effectiveCheckoutCartTotal}
+            orderTotals={orderTotals}
+            deliveryCost={deliveryCost}
+            deliveryMethod={deliveryMethod}
+            selectedQuoteId={selectedQuoteId}
+            giftWrappingCost={giftWrappingCost}
+            paymentMethod={paymentMethod}
+            walletCurrencySupported={walletCurrencySupported}
+            walletLoading={walletLoading}
+            walletBalance={walletBalance}
+            hasUser={Boolean(user)}
+            currencySymbol={currencySymbol}
+            payWithWallet={payWithWallet}
+            setPayWithWallet={setPayWithWallet}
+            walletAmountUsed={walletAmountUsed}
+            remainingAmount={remainingAmount}
+            checkoutPayWithWallet={checkoutValues.payWithWallet}
+            redvaultSummary={redvaultSummary}
+            newsletterOptIn={newsletterOptIn}
+            setNewsletterOptIn={setNewsletterOptIn}
+            handlePlaceOrder={handlePlaceOrder}
+            isProcessing={isProcessing}
+            isPayForMeValid={isPayForMeValid}
+          />
         </div>
       </div>
 

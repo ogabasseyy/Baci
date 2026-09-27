@@ -147,6 +147,7 @@ export function CheckoutStepContent({
         onSelectPaymentTab={paymentController.handleSelectPaymentTab}
         onWalletToggle={paymentController.setWalletSelection}
         paymentTab={paymentController.paymentTab}
+        redvaultAvailable={paymentController.redvaultAvailable}
         savingsSelection={paymentController.savings.savingsSelection}
         selectedPayment={paymentController.selectedPayment}
         total={paymentController.total}

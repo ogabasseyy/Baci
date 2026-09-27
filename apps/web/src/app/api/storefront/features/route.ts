@@ -1,3 +1,4 @@
+import { normalizeCarrierProviderIds } from '@baci/shared/constants';
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import {
@@ -100,12 +101,6 @@ function asNullableNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-function asStringArray(value: unknown, fallback: string[]): string[] {
-  return Array.isArray(value)
-    ? value.filter((entry): entry is string => typeof entry === 'string')
-    : fallback;
-}
-
 function asNumberArray(value: unknown, fallback: number[]): number[] {
   if (
     !Array.isArray(value) ||
@@ -189,9 +184,11 @@ export async function GET(request: NextRequest) {
     }
     const resolvedMerchantId = merchant.id;
 
-    // Read the public-safe feature projection via the service role so anonymous
-    // and signed-in customers see real values (the anon-key table read only
-    // returns rows to the owner/staff under the merchant_feature_settings RLS).
+    // Read the public-safe feature projection via the SECURITY DEFINER
+    // snapshot RPC (see getCachedFeatureSettings) so anonymous and signed-in
+    // customers see real values. Neither the anon-key base-table read (denied
+    // by the merchant_feature_settings RLS/revoke) nor the service-role
+    // client (banned for user-facing paths by AGENTS.md) may be used here.
     const settings = (await getCachedFeatureSettings(resolvedMerchantId)) ?? {};
 
     // Derive Paystack subaccount presence via the cached, published-scoped
@@ -255,10 +252,9 @@ export async function GET(request: NextRequest) {
         asGateway(settings.preferred_international_gateway, 'korapay'),
         paystackEnabled
       ),
-      shippingProviders: asStringArray(settings.shipping_providers, [
-        'gigl',
-        'topship',
-      ]),
+      shippingProviders: normalizeCarrierProviderIds(
+        settings.shipping_providers
+      ),
       freeShippingThreshold: asNullableNumber(settings.free_shipping_threshold),
       collectPhone: asBoolean(settings.checkout_collect_phone, true),
       requireAccount: asBoolean(settings.checkout_require_account, false),

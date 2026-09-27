@@ -104,7 +104,7 @@ describe('deploy crontab', () => {
       releaseHelper,
       /tsx_bin="\$repo_dir\/apps\/web\/node_modules\/\.bin\/tsx"/
     );
-    assert.doesNotMatch(
+    assert.match(
       releaseHelper,
       /tsx_bin="\$repo_dir\/node_modules\/\.bin\/tsx"/
     );

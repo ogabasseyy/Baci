@@ -176,7 +176,7 @@ describe('klump checkout helpers', () => {
         trackingToken: 'track-token-123',
       })
     ).toEqual({
-      amount: '120000',
+      amount: '120000.00',
       authorizationUrl:
         'https://ogabassey.usebaci.com/checkout/bnpl?gateway=klump',
       customerEmail: 'customer@example.com',

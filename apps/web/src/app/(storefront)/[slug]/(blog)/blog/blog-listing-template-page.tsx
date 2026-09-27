@@ -1,10 +1,11 @@
 import type { ComponentType, ReactNode } from 'react';
+import { OgabasseyV2Blog } from '@/components/storefront/ogabassey/pages/blog';
 import { InformationalClusterIndex } from '@/components/storefront/ogabassey/seo/informational-cluster-index';
+import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import type { JsonLdScriptData } from '@/lib/json-ld-types';
 import { generateSlug } from '@/lib/seo-utils';
 import type { BlogClusterCollection } from '@/lib/storefront-content/content-cluster-types';
 import type { BlogPostData, TemplateBlogPageProps } from '@/templates/registry';
-import { getTemplate } from '@/templates/registry';
 import { BlogDiscoverySection } from './blog-discovery-section';
 import { BlogListingPagination } from './blog-listing-pagination';
 import { TemplateBlogRenderer } from './template-blog-renderer';
@@ -21,6 +22,7 @@ type TemplateListingPost = {
   title: string;
 };
 
+// biome-ignore lint/suspicious/useAwait: async contract awaited by blog-page-content and tests; no sync work needed inside yet.
 export async function BlogListingTemplatePage({
   authorLinks,
   basePath,
@@ -66,54 +68,38 @@ export async function BlogListingTemplatePage({
   templateId: string;
   totalPages: number;
 }): Promise<ReactNode | null> {
-  if (templateId === 'default' || templateId === 'puck') {
+  // Only the Ogabassey template defines a Blog page; import it directly so
+  // this route's chunk carries exactly this page. Unknown/default/puck
+  // template IDs fall through to null exactly as before (only Ogabassey ever
+  // provided Blog).
+  const BlogComponent =
+    templateId === OGABASSEY_TEMPLATE_ID ? OgabasseyV2Blog : null;
+  if (!BlogComponent) {
     return null;
   }
 
-  const template = getTemplate(templateId);
-  if (!template) {
-    return null;
-  }
-
-  let templateBlogUi: {
+  const templateBlogUi: {
     BlogComponent: ComponentType<TemplateBlogPageProps>;
     categories: { name: string; slug: string }[];
     posts: BlogPostData[];
-  } | null = null;
-  try {
-    const components = await template.getComponents();
-    if (components.Blog) {
-      templateBlogUi = {
-        BlogComponent: components.Blog,
-        categories: publicCategories.map((cat) => ({
-          name: cat,
-          slug: generateSlug(cat),
-        })),
-        posts: posts.map((post) => ({
-          id: post.id,
-          title: post.title,
-          slug: post.slug,
-          excerpt: post.excerpt || '',
-          category: post.category || '',
-          author_name: post.author_name || merchantName,
-          published_at: post.published_at,
-          featured_image_url: post.featured_image_url || '',
-          reading_time_minutes: post.reading_time_minutes || 3,
-        })),
-      };
-    }
-  } catch (error) {
-    console.error(
-      'Failed to load Blog component for template',
-      templateId,
-      ':',
-      error
-    );
-  }
-
-  if (!templateBlogUi) {
-    return null;
-  }
+  } = {
+    BlogComponent,
+    categories: publicCategories.map((cat) => ({
+      name: cat,
+      slug: generateSlug(cat),
+    })),
+    posts: posts.map((post) => ({
+      id: post.id,
+      title: post.title,
+      slug: post.slug,
+      excerpt: post.excerpt || '',
+      category: post.category || '',
+      author_name: post.author_name || merchantName,
+      published_at: post.published_at,
+      featured_image_url: post.featured_image_url || '',
+      reading_time_minutes: post.reading_time_minutes || 3,
+    })),
+  };
 
   return (
     <>

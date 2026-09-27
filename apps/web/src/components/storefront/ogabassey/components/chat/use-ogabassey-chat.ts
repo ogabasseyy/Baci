@@ -1,7 +1,11 @@
 'use client';
 
+import { isSantaGrantedPriceWithinCeiling } from '@baci/shared/lib';
 import { useEffect, useRef, useState } from 'react';
 import { useCart } from '@/hooks/cart';
+import { findMergingCartLineIndex } from '@/hooks/cart/find-merging-cart-line';
+import { getMerchantCartState } from '@/hooks/cart/merchant-cart-storage';
+import { SANTA_MERCHANT_SLUG_HEADER } from '@/lib/agentic/santa-merchant-slug-header';
 import {
   parseSantaActions,
   stripSantaActions,
@@ -9,6 +13,7 @@ import {
 import type { ChatMessage, SantaCartAction } from './types';
 import { PROACTIVE_MESSAGES } from './types';
 import { requestOgabasseyChatReply } from './request-ogabassey-chat-reply';
+import { santaProductLookupResponseSchema } from '@/schemas/santa-product-lookup';
 
 interface UseOgabasseyChat {
   isOpen: boolean;
@@ -25,8 +30,15 @@ interface UseOgabasseyChat {
   handleAddSantaWishToCart: (messageIndex: number, actionIndex?: number) => void;
 }
 
-export function useOgabasseyChat({ isSanta }: { isSanta: boolean }): UseOgabasseyChat {
-  const { addToCart, setIsCartOpen } = useCart();
+export function useOgabasseyChat({
+  isSanta,
+  storefrontSlug,
+}: {
+  isSanta: boolean;
+  storefrontSlug?: string;
+}): UseOgabasseyChat {
+  const { addToCart, applyNegotiatedPrice, setIsCartOpen, setMerchantSlug } =
+    useCart();
 
   const [isOpen, setIsOpenState] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -34,6 +46,7 @@ export function useOgabasseyChat({ isSanta }: { isSanta: boolean }): UseOgabasse
   const [isLoading, setIsLoading] = useState(false);
   const [proactiveMsg, setProactiveMsg] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const pendingSantaActions = useRef(new Set<string>());
 
   // Proactive Nudge Logic
   useEffect(() => {
@@ -91,7 +104,8 @@ export function useOgabasseyChat({ isSanta }: { isSanta: boolean }): UseOgabasse
       const aiReply = await requestOgabasseyChatReply(
         isSanta,
         history,
-        messageText
+        messageText,
+        storefrontSlug
       );
 
       // Check if Santa granted wishes (parse every ACTION directive).
@@ -117,6 +131,9 @@ export function useOgabasseyChat({ isSanta }: { isSanta: boolean }): UseOgabasse
           text: displayText,
           santaActions,
           ...(aiReply.events.length > 0 ? { uiEvents: aiReply.events } : {}),
+          ...(aiReply.merchantSlug
+            ? { merchantSlug: aiReply.merchantSlug }
+            : {}),
         },
       ]);
     } catch (error) {
@@ -139,53 +156,112 @@ export function useOgabasseyChat({ isSanta }: { isSanta: boolean }): UseOgabasse
     handleSend(input);
   };
 
-  const handleAddSantaWishToCart = (messageIndex: number, actionIndex = 0) => {
+  const handleAddSantaWishToCart = async (
+    messageIndex: number,
+    actionIndex = 0
+  ) => {
     const message = messages[messageIndex];
     const santaAction = Array.isArray(message?.santaActions)
       ? message.santaActions[actionIndex]
       : message?.santaAction;
-    if (!santaAction || santaAction.added) return;
+    const expectedMerchantSlug = storefrontSlug?.trim();
+    const actionKey = `${messageIndex}:${actionIndex}`;
+    if (
+      !santaAction ||
+      santaAction.added ||
+      !expectedMerchantSlug ||
+      pendingSantaActions.current.has(actionKey)
+    ) return;
+    // The wish is only fulfillable against the tenant that attested the
+    // reply it came from — never a silent cross-storefront add.
+    const replyMerchantSlug = message.merchantSlug;
+    if (!replyMerchantSlug) {
+      console.error('[Santa Cart] Missing resolved merchant slug');
+      return;
+    }
+    if (replyMerchantSlug !== expectedMerchantSlug) {
+      console.error('[Santa Cart] Resolved tenant differs from storefront', {
+        expectedMerchantSlug,
+        replyMerchantSlug,
+      });
+      return;
+    }
+    setMerchantSlug(replyMerchantSlug);
+    pendingSantaActions.current.add(actionKey);
 
-    const santaProduct = {
-      id: `santa-wish-${Date.now()}`,
-      merchant_id: 'ogabassey',
-      name: santaAction.productName,
-      description: `Santa's special Christmas wish - ${santaAction.productName}`,
-      status: 'active' as const,
-      price: santaAction.price,
-      manage_stock: false,
-      stock: 999,
-      image: '/african-santa-head.svg',
-      imageLarge: '/african-santa-head.svg',
-      imageHint: 'Santa wish product',
-      brand: 'Ogabassey',
-      gtin: '',
-      mpn: '',
-      slug: 'santa-wish',
-      images: [{ url: '/african-santa-head.svg', alt: 'Santa wish', order: 0 }],
-    };
+    try {
+      const response = await fetch('/api/chat/santa/product', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-baci-storefront-slug': expectedMerchantSlug,
+        },
+        body: JSON.stringify({ name: santaAction.productName }),
+      });
+      if (
+        !response.ok ||
+        response.headers.get(SANTA_MERCHANT_SLUG_HEADER) !== expectedMerchantSlug
+      ) {
+        return;
+      }
+      const parsedPayload = santaProductLookupResponseSchema.safeParse(
+        await response.json()
+      );
+      if (!parsedPayload.success) return;
+      const product = parsedPayload.data.product;
+      if (!product) return;
+      // Mirror the cart's out-of-stock guard so the action is not marked
+      // added when addToCart silently refuses the line.
+      if (product.manage_stock && (product.stock ?? 0) <= 0) return;
 
-    addToCart(santaProduct, 1);
-
-    setMessages((prev) =>
-      prev.map((msg, idx) =>
-        idx === messageIndex
-          ? {
-              ...msg,
-              // TODO(santa-actions): remove the legacy singular update once
-              // all Ogabassey chat consumers read only `santaActions`.
-              santaAction: !msg.santaActions && msg.santaAction
-                ? { ...msg.santaAction, added: true }
-                : msg.santaAction,
-              santaActions: msg.santaActions?.map((action, index) =>
-                index === actionIndex ? { ...action, added: true } : action
-              ),
-            }
-          : msg
-      )
-    );
-
-    setIsCartOpen(true);
+      // addToCart merges into an existing line for the same product, and the
+      // negotiated unit price would then reprice previously added units too.
+      // Only negotiate fresh lines so the grant covers exactly the added unit.
+      // Existence uses the shared merge matcher against the adopted
+      // merchant's saved cart — the exact cart setMerchantSlug loaded above
+      // and addToCart merges into — never the hook's `cart` snapshot, which
+      // still holds the pre-switch cart.
+      const lineAlreadyExists =
+        findMergingCartLineIndex(
+          getMerchantCartState(expectedMerchantSlug).cart,
+          product
+        ) >= 0;
+      addToCart(product, 1);
+      // The model price is untrusted: only honor it inside the
+      // server-computed per-product ceiling, otherwise keep catalog price.
+      if (
+        !lineAlreadyExists &&
+        santaAction.price < product.price &&
+        isSantaGrantedPriceWithinCeiling(
+          product.price,
+          santaAction.price,
+          product.max_discount_percentage
+        )
+      ) {
+        applyNegotiatedPrice?.(product.id, santaAction.price);
+      }
+      setMessages((previous) =>
+        previous.map((candidate, index) =>
+          index === messageIndex
+            ? {
+                ...candidate,
+                santaAction:
+                  !candidate.santaActions && candidate.santaAction
+                    ? { ...candidate.santaAction, added: true }
+                    : candidate.santaAction,
+                santaActions: candidate.santaActions?.map((action, index) =>
+                  index === actionIndex ? { ...action, added: true } : action
+                ),
+              }
+            : candidate
+        )
+      );
+      setIsCartOpen(true);
+    } catch (error) {
+      console.error('Santa cart lookup failed:', error);
+    } finally {
+      pendingSantaActions.current.delete(actionKey);
+    }
   };
 
   return {

@@ -15,12 +15,27 @@ const JUMIA_ORDER_NUMBER_PREFIX = 'JUMIA-';
 const DEFAULT_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
 const SYNC_OVERLAP_MS = 10 * 60 * 1000;
 
+/** Jumia order filters accept UTC timestamps at second precision only. */
+export function formatJumiaOrderTimestamp(value: Date | number): string {
+  const date = typeof value === 'number' ? new Date(value) : value;
+  if (!Number.isFinite(date.getTime())) {
+    throw new Error('Cannot format an invalid Jumia order timestamp');
+  }
+  return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
 export interface MarketplaceIntegrationRow {
   id: string;
   merchant_id: string;
   shop_id: string | null;
   last_sync_at: string | null;
   sync_config: unknown;
+  country_code?: string | null;
+  marketplace_key?: string | null;
+  connection_method?: string | null;
+  jumia_authorization_id?: string | null;
+  /** The selected row is the cursor owner for a shared provider scope. */
+  orderSyncScope?: 'shared';
 }
 
 export interface ExistingJumiaOrderRow {
@@ -52,18 +67,25 @@ export function readOrderSyncEnabled(syncConfig: unknown): boolean {
   return orders !== false;
 }
 
+export function readStockSyncEnabled(syncConfig: unknown): boolean {
+  if (!syncConfig || typeof syncConfig !== 'object') return false;
+  return (syncConfig as { stock?: unknown }).stock === true;
+}
+
 export function getJumiaSyncLowerBound(
   lastSyncAt: string | null,
   nowMs = Date.now()
 ): string {
-  if (!lastSyncAt) return new Date(nowMs - DEFAULT_LOOKBACK_MS).toISOString();
+  if (!lastSyncAt) {
+    return formatJumiaOrderTimestamp(nowMs - DEFAULT_LOOKBACK_MS);
+  }
 
   const parsed = new Date(lastSyncAt).getTime();
   if (!Number.isFinite(parsed)) {
-    return new Date(nowMs - DEFAULT_LOOKBACK_MS).toISOString();
+    return formatJumiaOrderTimestamp(nowMs - DEFAULT_LOOKBACK_MS);
   }
 
-  return new Date(Math.max(0, parsed - SYNC_OVERLAP_MS)).toISOString();
+  return formatJumiaOrderTimestamp(Math.max(0, parsed - SYNC_OVERLAP_MS));
 }
 
 export function getCustomerName(order: JumiaOrder): string {
@@ -135,6 +157,14 @@ function sanitizeHttpsUrl(value: string): string | null {
   }
 }
 
+export function resolveJumiaOrderMarketplaceKey(
+  integration: MarketplaceIntegrationRow
+): string {
+  return integration.orderSyncScope === 'shared'
+    ? 'default'
+    : integration.marketplace_key?.trim() || 'default';
+}
+
 export function buildJumiaCacheRow(
   integration: MarketplaceIntegrationRow,
   order: JumiaOrder,
@@ -147,6 +177,7 @@ export function buildJumiaCacheRow(
     jumia_order_id: order.id,
     jumia_order_number: sanitizeText(order.number, 120),
     jumia_shop_id: integration.shop_id || JUMIA_DEFAULT_SHOP_ID,
+    marketplace_key: resolveJumiaOrderMarketplaceKey(integration),
     status: sanitizeText(order.status, 80),
     customer_name: getCustomerName(order),
     customer_phone: '',
@@ -231,6 +262,7 @@ export function buildCanonicalJumiaOrderPayload(
     import_metadata: {
       platform: JUMIA_EXTERNAL_SOURCE,
       shopId: integration.shop_id || JUMIA_DEFAULT_SHOP_ID,
+      marketplaceKey: resolveJumiaOrderMarketplaceKey(integration),
       jumiaOrderId: order.id,
       jumiaOrderNumber: orderNumber,
       jumiaStatus,

@@ -175,11 +175,30 @@ export function isRoadDeliveryQuote(
 
 export function findSelectedQuote(
   shippingQuotes: ShippingQuote[],
-  selectedQuoteId: string
+  selectedQuoteId: string | undefined
 ): ShippingQuote | undefined {
   return shippingQuotes.find(
     (quote) => String(quote.id) === String(selectedQuoteId)
   );
+}
+
+/**
+ * Resolve the quote selection for door delivery: keep the current selection
+ * when it is a road quote, otherwise fall back to the first road quote (or
+ * clear the selection when none exists so quotes re-resolve). A stale air
+ * (GoFaster) or station quote must never survive a fallback to door — door
+ * pricing treats it as zero while the order builder could still send its ID.
+ */
+export function resolveDoorDeliveryQuoteId(
+  shippingQuotes: ShippingQuote[],
+  selectedQuoteId: string | undefined
+): string {
+  const selectedQuote = findSelectedQuote(shippingQuotes, selectedQuoteId);
+  if (selectedQuote && isRoadDeliveryQuote(selectedQuote)) {
+    return String(selectedQuote.id);
+  }
+  const roadQuote = shippingQuotes.find(isRoadDeliveryQuote);
+  return roadQuote ? String(roadQuote.id) : '';
 }
 
 export function requiresQuote(

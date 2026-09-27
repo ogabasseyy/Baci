@@ -446,6 +446,50 @@ describe('createOrderDetailsReceiptActions', () => {
     expect(mocks.shareAsync).toHaveBeenCalledTimes(1);
   });
 
+  it('renders the manual issue date instead of the creation date', async () => {
+    const setReceiptHtml = vi.fn();
+
+    const actions = createOrderDetailsReceiptActions({
+      isGeneratingReceipt: false,
+      merchant: {
+        business_name: 'Baci',
+        email: 'merchant@example.com',
+        id: 'merchant-1',
+      },
+      order: {
+        amount_paid: 15000,
+        balance: 0,
+        created_at: '2024-03-05T10:00:00.000Z',
+        transaction_date: '2024-02-03T10:00:00.000Z',
+        invoice_issue_date: '2024-02-03',
+        customer_email: 'customer@example.com',
+        customer_name: 'Ada',
+        customer_phone: '08030000000',
+        discount_amount: 0,
+        id: 'order-1',
+        items: [],
+        order_number: 'ORD-1',
+        payment_status: 'paid',
+        shipping_address: null,
+        shipping_status: 'pending',
+        total: 15000,
+        updated_at: '2024-03-05T10:00:00.000Z',
+      },
+      receiptHtml: '',
+      setIsGeneratingReceipt: vi.fn(),
+      setReceiptHtml,
+      setShowReceiptPreview: vi.fn(),
+    });
+
+    await actions.handleSendReceipt();
+
+    // Backdated manual order: the receipt shows the February issue date
+    // without a transaction time, not the March recording date.
+    expect(setReceiptHtml).toHaveBeenCalledWith(
+      expect.stringContaining('<div class="doc-date">3 Feb 2024</div>')
+    );
+  });
+
   it('uses the order creation date in the shared receipt filename', async () => {
     const actions = createOrderDetailsReceiptActions({
       isGeneratingReceipt: false,
@@ -481,6 +525,49 @@ describe('createOrderDetailsReceiptActions', () => {
 
     expect(mocks.shareAsync).toHaveBeenCalledWith(
       expect.stringContaining('Baci_Receipt_Ada-Customer_01-Jan-2024.pdf'),
+      expect.any(Object)
+    );
+  });
+
+  it('uses the manual issue date in the shared receipt filename', async () => {
+    const actions = createOrderDetailsReceiptActions({
+      isGeneratingReceipt: false,
+      merchant: {
+        business_name: 'Baci',
+        email: 'merchant@example.com',
+        id: 'merchant-1',
+      },
+      order: {
+        amount_paid: 15000,
+        balance: 0,
+        created_at: '2024-03-05T10:00:00.000Z',
+        transaction_date: '2024-02-03T10:00:00.000Z',
+        invoice_issue_date: '2024-02-03',
+        customer_email: 'customer@example.com',
+        customer_name: 'Ada Customer',
+        customer_phone: '08030000000',
+        discount_amount: 0,
+        id: 'order-1',
+        items: [],
+        order_number: 'ORD-1',
+        payment_status: 'paid',
+        shipping_address: null,
+        shipping_status: 'pending',
+        total: 15000,
+        updated_at: '2024-03-05T10:00:00.000Z',
+      },
+      receiptHtml: '<html><body>receipt</body></html>',
+      setIsGeneratingReceipt: vi.fn(),
+      setReceiptHtml: vi.fn(),
+      setShowReceiptPreview: vi.fn(),
+    });
+
+    await actions.handleShareReceiptPdf();
+
+    // Date-only issue dates render in UTC so the filename keeps the exact
+    // selected calendar day in every timezone.
+    expect(mocks.shareAsync).toHaveBeenCalledWith(
+      expect.stringContaining('Baci_Receipt_Ada-Customer_03-Feb-2024.pdf'),
       expect.any(Object)
     );
   });

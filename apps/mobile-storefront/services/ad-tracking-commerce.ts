@@ -47,7 +47,7 @@ export async function trackProductViewed(
     currency,
     {
       fb_content_id: product.id,
-      fb_content_type: 'product',
+      fb_content_type: 'product_group',
       fb_currency: currency,
     },
     tikTokParams
@@ -103,7 +103,7 @@ export async function trackAddToCart(
     currency,
     {
       fb_content_id: product.id,
-      fb_content_type: 'product',
+      fb_content_type: 'product_group',
       fb_currency: currency,
       fb_num_items: product.quantity,
     },

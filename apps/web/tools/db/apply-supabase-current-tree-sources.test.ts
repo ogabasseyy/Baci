@@ -131,6 +131,39 @@ describe('applySupabaseCurrentTreeSources', () => {
     );
   });
 
+  it('applies the shipping repair before stale-quote clearing and never reapplies it', async () => {
+    const shipping = REPAIR_CASES.find(
+      ({ label }) => label === 'Shipping provider policy audit'
+    );
+    if (!shipping) throw new Error('Missing shipping repair fixture');
+    const staleQuotePath =
+      'supabase/migrations/20260923123000_allow_stale_shipping_quote_clear.sql';
+    const apply = vi.fn(async (_sqlPath: string) => undefined);
+    await applySupabaseCurrentTreeSources({
+      apply,
+      materializeSource: async (_root, _workdir, source) =>
+        source.repositoryPath,
+      readSource: async (_root, sourcePath) =>
+        readFile(path.resolve(import.meta.dirname, '../../../../', sourcePath)),
+      pendingSources: [
+        {
+          repositoryPath: shipping.historicalPath,
+          sha256: shipping.historicalSha256,
+        },
+        { repositoryPath: staleQuotePath, sha256: 'c'.repeat(64) },
+        { repositoryPath: shipping.repairPath, sha256: 'b'.repeat(64) },
+      ],
+      postReplaySources: [],
+      repositoryRoot: '/repository',
+      startingOrdinal: 129,
+      workdir: '/owned',
+    });
+    expect(apply.mock.calls.map(([sqlPath]) => sqlPath)).toEqual([
+      shipping.repairPath,
+      staleQuotePath,
+    ]);
+  });
+
   it('rejects a drifted historical source before applying its repair', async () => {
     const materializeSource = vi.fn(async () => '/owned/sql/129-repair.sql');
     const apply = vi.fn(async () => undefined);

@@ -7,6 +7,7 @@ vi.hoisted(() => {
   process.env.GIGL_PASSWORD = 'test-password';
 });
 
+import { quoteProviderFailure } from '../quote-provider-failure';
 import { GiglApiClient } from './gigl.auth';
 import { getGiglQuotes } from './gigl.quotes';
 import { GiglStationsService } from './gigl.stations';
@@ -259,5 +260,15 @@ describe('GiglProvider quote requests', () => {
     const provider = buildQuoteHarness();
 
     await expect(provider.getQuotes(quoteRequest)).resolves.toEqual([]);
+  });
+
+  it('marks a domestic GIGL request failure for aggregate diagnostics', async () => {
+    mockGiglFetchSequence(() => Promise.reject(new Error('login unavailable')));
+
+    const provider = buildQuoteHarness();
+    const result = await provider.getQuotes(quoteRequest);
+
+    expect(result).toEqual([]);
+    expect(quoteProviderFailure.get(result)?.message).toBe('login unavailable');
   });
 });

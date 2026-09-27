@@ -1,5 +1,6 @@
 import { OrderShipmentBookingError } from './order-shipment-booking-utils';
 import { productWeightToKg } from './product-weight-to-kg';
+import { survivingShipmentQuantity } from './surviving-shipment-quantity';
 import type { ShipmentItem } from './types';
 
 export type ProductShippingMetadata = {
@@ -13,6 +14,7 @@ export type InternationalShipmentOrderItem = {
   name: string | null;
   quantity: number | null;
   price: number | string | null;
+  fulfillment_data?: unknown;
   product?: ProductShippingMetadata | ProductShippingMetadata[] | null;
   products?: ProductShippingMetadata | ProductShippingMetadata[] | null;
 };
@@ -246,33 +248,33 @@ export function toInternationalShipmentItemsFromOrder(
   quoteItems: ShipmentItem[] = []
 ): ShipmentItem[] {
   const unmatchedQuoteItems = [...quoteItems];
-
-  return orderItems.map((item) => {
-    const metadata = deriveItemMetadata(item);
-    const { name, quantity } = metadata;
-    const quoteItemIndex = findMatchingQuoteItemIndex(
-      metadata,
-      unmatchedQuoteItems
-    );
-    const quoteItem =
-      quoteItemIndex === -1
-        ? undefined
-        : unmatchedQuoteItems.splice(quoteItemIndex, 1)[0];
-    validateQuotedPhysicalMetadata(metadata, quoteItem);
-    const bookingMetadata = resolveBookingMetadata(metadata, quoteItem);
-
-    return {
-      name,
-      description: name,
-      quantity,
-      weight: bookingMetadata.weight,
-      value:
-        readOptionalNonNegativeNumber(quoteItem?.value) ??
-        readNonNegativeNumber(item.price, name),
-      ...(bookingMetadata.hsCode ? { hsCode: bookingMetadata.hsCode } : {}),
-      ...(bookingMetadata.dimensions ?? {}),
-    };
-  });
+  return orderItems
+    .map((item) => {
+      const metadata = deriveItemMetadata(item);
+      const { name } = metadata;
+      const quoteItemIndex = findMatchingQuoteItemIndex(
+        metadata,
+        unmatchedQuoteItems
+      );
+      const quoteItem =
+        quoteItemIndex === -1
+          ? undefined
+          : unmatchedQuoteItems.splice(quoteItemIndex, 1)[0];
+      validateQuotedPhysicalMetadata(metadata, quoteItem);
+      const bookingMetadata = resolveBookingMetadata(metadata, quoteItem);
+      return {
+        name,
+        description: name,
+        quantity: survivingShipmentQuantity(item),
+        weight: bookingMetadata.weight,
+        value:
+          readOptionalNonNegativeNumber(quoteItem?.value) ??
+          readNonNegativeNumber(item.price, name),
+        ...(bookingMetadata.hsCode ? { hsCode: bookingMetadata.hsCode } : {}),
+        ...(bookingMetadata.dimensions ?? {}),
+      };
+    })
+    .filter((item) => item.quantity > 0);
 }
 
 export function toInternationalQuoteValidationItemsFromOrder(

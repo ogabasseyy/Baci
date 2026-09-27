@@ -2,8 +2,13 @@ import { useState } from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import { PaymentStep } from './PaymentStep';
 import type { PaymentMethod, PaymentTab } from '../types';
+
+vi.mock('@/lib/posthog/capture-client-event', () => ({
+  captureClientEvent: vi.fn(),
+}));
 
 // Mock PaymentLogos module
 vi.mock('../../../components/PaymentLogos', () => ({
@@ -57,11 +62,91 @@ describe('PaymentStep', () => {
     user: null,
     remainingAmount: 10000,
     orderAmount: 10000,
+    redvaultAvailable: false,
+    redvaultStatus: 'idle' as const,
+    redvaultSummary: null,
+    redvaultOrderReady: false,
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
+
+  it('preserves an available REDVAULT selection and clears it when availability is revoked', async () => {
+    const setPaymentMethod = vi.fn();
+    const { rerender } = render(<PaymentStep {...defaultProps} paymentMethod="uba_redvault" redvaultAvailable={true} setPaymentMethod={setPaymentMethod} />);
+    expect(screen.getByRole('radio', { name: /pay with uba/i })).toBeChecked();
+    expect(setPaymentMethod).not.toHaveBeenCalled();
+    rerender(<PaymentStep {...defaultProps} paymentMethod="uba_redvault" redvaultAvailable={false} setPaymentMethod={setPaymentMethod} />);
+    await waitFor(() => expect(setPaymentMethod).toHaveBeenCalledWith(''));
+    expect(screen.queryByRole('radio', { name: /pay with uba/i })).not.toBeInTheDocument();
+  });
+
+  it('does not offer REDVAULT or retain its selection on a non-NGN checkout', async () => {
+    const setPaymentMethod = vi.fn();
+
+    render(
+      <PaymentStep
+        {...defaultProps}
+        currency="GHS"
+        paymentMethod="uba_redvault"
+        redvaultAvailable={true}
+        setPaymentMethod={setPaymentMethod}
+      />
+    );
+
+    expect(screen.queryByRole('radio', { name: /pay with uba/i })).not.toBeInTheDocument();
+    await waitFor(() => expect(setPaymentMethod).toHaveBeenCalledWith(''));
+  });
+
+  it('clears a REDVAULT selection when its frozen quote has no eligible items', async () => {
+    const setPaymentMethod = vi.fn();
+
+    render(
+      <PaymentStep
+        {...defaultProps}
+        paymentMethod="uba_redvault"
+        redvaultAvailable={true}
+        redvaultSummary={{
+          productSubtotalKobo: 10000,
+          eligibleSubtotalKobo: 0,
+          ineligibleSubtotalKobo: 10000,
+          discountKobo: 0,
+          assuranceFeeKobo: 0,
+          taxKobo: 0,
+          shippingKobo: 0,
+          giftWrappingKobo: 0,
+          payableKobo: 10000,
+          mixedBasket: true,
+        }}
+        setPaymentMethod={setPaymentMethod}
+      />
+    );
+
+    await waitFor(() => expect(setPaymentMethod).toHaveBeenCalledWith(''));
+  });
+
+  it.each(['pending', 'held'] as const)(
+    'disables placement while REDVAULT is %s',
+    (redvaultStatus) => {
+      const handlePlaceOrder = vi.fn();
+
+      render(
+        <PaymentStep
+          {...defaultProps}
+          handlePlaceOrder={handlePlaceOrder}
+          paymentMethod="uba_redvault"
+          redvaultAvailable={true}
+          redvaultStatus={redvaultStatus}
+        />
+      );
+
+      const placeOrder = screen.getByRole('button', { name: /place order/i });
+      expect(placeOrder).toBeDisabled();
+      fireEvent.click(placeOrder);
+      expect(handlePlaceOrder).not.toHaveBeenCalled();
+    }
+  );
 
   describe('Rendering', () => {
     it('renders payment step when currentStep is payment', () => {
@@ -84,14 +169,10 @@ describe('PaymentStep', () => {
       expect(stepContainer).toBeInTheDocument();
     });
 
-    it('hides payment options visually when currentStep is not payment', () => {
-      // Arrange & Act
-      const { container } = render(<PaymentStep {...defaultProps} currentStep="contact" />);
-
-      // Assert - the content is rendered but visually hidden via CSS grid-rows-[0fr] opacity-0
-      const gridContainer = container.querySelector('.grid-rows-\\[0fr\\]');
-      expect(gridContainer).toBeInTheDocument();
-      expect(gridContainer?.className).toContain('opacity-0');
+    it('hides collapsed payment controls from assistive technology', () => {
+      render(<PaymentStep {...defaultProps} currentStep="contact" />);
+      expect(screen.queryByRole('radio', { name: /paystack/i })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Payment Method' })).toHaveAttribute('aria-expanded', 'false');
     });
 
     it('shows step number when no payment method is selected', () => {
@@ -336,6 +417,26 @@ describe('PaymentStep', () => {
       if (korapayLabel) fireEvent.click(korapayLabel);
 
       expect(setPaymentMethod).toHaveBeenCalledWith('korapay');
+    });
+
+    it('stamps method-selection events with the checkout currency', () => {
+      render(
+        <PaymentStep
+          {...defaultProps}
+          currency="GHS"
+          merchant={{
+            feature_settings: { korapay_enabled: true } as FeatureSettings,
+          }}
+        />
+      );
+
+      const korapayLabel = screen.getByText('Korapay').closest('label');
+      if (korapayLabel) fireEvent.click(korapayLabel);
+
+      expect(vi.mocked(captureClientEvent)).toHaveBeenCalledWith(
+        expect.stringContaining('method_selected'),
+        expect.objectContaining({ currency: 'GHS' })
+      );
     });
 
     it('clears a stale Paystack selection when Paystack is unavailable', () => {
@@ -878,12 +979,14 @@ describe('PaymentStep', () => {
       expect(screen.getByRole('button', { name: /place order/i })).toBeInTheDocument();
     });
 
-    it('shows Generate Invoice button text when payment method is invoice', () => {
+    it('shows proforma invoice button text when payment method is invoice', () => {
       // Arrange & Act
       render(<PaymentStep {...defaultProps} paymentMethod="invoice" />);
 
       // Assert
-      expect(screen.getByRole('button', { name: /generate invoice/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /get a proforma invoice for mobile/i })
+      ).toBeInTheDocument();
     });
 
     it('shows Send Payment Link button text when payment method is payforme', () => {

@@ -42,9 +42,7 @@ vi.mock('./quiz-admin-client', () => ({
   QuizAdminClient: () => <div>Quiz admin client</div>,
 }));
 
-const { default: QuizDashboardPage, loadPrizeProducts } = await import(
-  './page'
-);
+const { default: QuizDashboardPage } = await import('./page');
 
 describe('QuizDashboardPage', () => {
   beforeEach(() => {
@@ -55,6 +53,7 @@ describe('QuizDashboardPage', () => {
           default_variant_id: null,
           id: '55555555-5555-4555-8555-555555555555',
           images: [{ url: 'https://cdn.example.com/iphone.png' }],
+          merchant_id: 'merchant-1',
           name: 'iPhone 15 Pro Max',
           price: 2100000,
         },
@@ -80,7 +79,7 @@ describe('QuizDashboardPage', () => {
     expect(mockEnsurePermission).toHaveBeenCalledWith('marketing', 'edit');
     expect(mockSupabase.from).toHaveBeenCalledWith('products');
     expect(mockProductsQuery.select).toHaveBeenCalledWith(
-      'id, name, price, images, condition, default_variant_id, has_variants, manage_stock, stock, stock_quantity',
+      'id, merchant_id, name, price, images, condition, default_variant_id, has_variants, manage_stock, stock, stock_quantity',
       { count: 'exact' }
     );
     expect(
@@ -134,56 +133,5 @@ describe('QuizDashboardPage', () => {
     await expect(QuizDashboardPage()).rejects.toThrow('Database unavailable');
     expect(mockIsMerchantPermissionRedirectError).toHaveBeenCalledOnce();
     expect(mockRedirect).not.toHaveBeenCalled();
-  });
-
-  it('filters malformed inventory rows and safely normalizes stock', async () => {
-    mockProductsQuery.limit.mockResolvedValueOnce({
-      count: 3,
-      data: [
-        {
-          id: '55555555-5555-4555-8555-555555555555',
-          manage_stock: true,
-          name: 'Safe stock product',
-          price: 100,
-          stock: 'not-a-number',
-          stock_quantity: '-4',
-        },
-        { id: 'not-a-uuid', name: 'Malformed product', price: 100 },
-        { id: '55555555-5555-4555-8555-555555555555', name: 10 },
-      ],
-      error: null,
-    });
-
-    await expect(loadPrizeProducts('merchant-1')).resolves.toMatchObject({
-      error: null,
-      nextCursor: null,
-      products: [
-        expect.objectContaining({
-          available: false,
-          effectiveStock: 0,
-          name: 'Safe stock product',
-        }),
-      ],
-      total: 3,
-    });
-  });
-
-  it('returns the exact inventory total and a continuation cursor after a capped load', async () => {
-    const rows = Array.from({ length: 100 }, (_, index) => ({
-      id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
-      name: `Product ${index}`,
-      price: 100,
-    }));
-    mockProductsQuery.limit.mockResolvedValueOnce({
-      count: 101,
-      data: rows,
-      error: null,
-    });
-
-    await expect(loadPrizeProducts('merchant-1')).resolves.toMatchObject({
-      error: null,
-      nextCursor: '5050',
-      total: 101,
-    });
   });
 });

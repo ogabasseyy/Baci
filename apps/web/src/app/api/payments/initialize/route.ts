@@ -12,6 +12,9 @@
 import { customAlphabet } from 'nanoid';
 import { type NextRequest, NextResponse } from 'next/server';
 import z from 'zod';
+import { authenticateApiRequest } from '@/lib/api-auth';
+import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
+import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import {
   capturePaymentWithCrypto,
   convertNgnKoboToUsdtCents,
@@ -34,6 +37,7 @@ import {
   initializePayment as initializeKorapayPayment,
 } from '@/lib/korapay';
 import { merchantFeatureSettingsDefaults } from '@/lib/merchant-feature-settings-defaults';
+import { initializeRedvaultPaystackCheckout } from '@/lib/payments/initialize-redvault-paystack-checkout';
 import { persistPaystackDvaAssignment } from '@/lib/payments/persist-paystack-dva-assignment';
 import { redactPaymentLogValue } from '@/lib/payments/redact-payment-log-value';
 import { resolveChargeCurrency } from '@/lib/payments/resolve-charge-currency';
@@ -134,6 +138,9 @@ const PaymentInitRequestSchema = z.object({
   // Crypto payment options (only for juicyway gateway)
   crypto_chain: z.enum(['TRX', 'ETH', 'MATIC', 'AVAXC']).optional(),
   crypto_currency: z.enum(['USDT', 'USDC']).optional(),
+  payment_method: z.literal('uba_redvault').optional(),
+  // Order-bound proof for guest REDVAULT initialization (below).
+  tracking_token: z.string().min(1).max(128).optional(),
 });
 
 type PaymentInitRequest = z.infer<typeof PaymentInitRequestSchema>;
@@ -1026,6 +1033,34 @@ export async function POST(request: NextRequest) {
     }
 
     const data = parseResult.data;
+    const redvaultRequested = data.payment_method === 'uba_redvault';
+    const redvaultCustomerAuth = redvaultRequested
+      ? await authenticateApiRequest(request)
+      : null;
+    if (redvaultRequested) {
+      if (data.gateway && data.gateway !== 'paystack') {
+        return createErrorResponse(
+          'REDVAULT requires Paystack hosted card checkout',
+          'REDVAULT_GATEWAY_UNSUPPORTED',
+          400
+        );
+      }
+      if (data.payment_type) {
+        return createErrorResponse(
+          'REDVAULT does not support bank-transfer payment types',
+          'REDVAULT_PAYMENT_TYPE_UNSUPPORTED',
+          400
+        );
+      }
+      const availability = getRedvaultPaymentAvailability();
+      if (!availability.available) {
+        return createErrorResponse(
+          'REDVAULT payment is not available',
+          'REDVAULT_UNAVAILABLE',
+          409
+        );
+      }
+    }
 
     // The client never dictates the charge currency (see resolveChargeCurrency).
     // Capture whether the request EXPLICITLY carried a currency: the Zod schema
@@ -1042,11 +1077,19 @@ export async function POST(request: NextRequest) {
     // order, merchant, and gateway-setting reads. The proof-bound DVA
     // reservation below deliberately uses the request-scoped server client so
     // the reservation itself never crosses a service-role boundary.
-    const adminSupabase = createAdminClient();
+    const paymentDataClient = redvaultRequested
+      ? createStorefrontOrderRpcClient({
+          fallbackClient: await createServerSupabaseClient(),
+          hasCanonicalDeliveryMetadata: false,
+          merchantId: data.merchant_id,
+          redvaultCustomerEmail: data.customer_email,
+          userId: redvaultCustomerAuth?.user?.id ?? null,
+        })
+      : createAdminClient();
 
     // Validate order context (order + email) before initiating payment
     const { data: snapshotRows, error: snapshotError } =
-      await adminSupabase.rpc('get_order_payment_snapshot', {
+      await paymentDataClient.rpc('get_order_payment_snapshot', {
         p_order_id: data.order_id,
         p_email: data.customer_email,
       });
@@ -1066,6 +1109,49 @@ export async function POST(request: NextRequest) {
         'Merchant mismatch for this order',
         'MERCHANT_MISMATCH',
         403
+      );
+    }
+
+    const orderRequiresRedvault =
+      orderSnapshot.payment_method === 'uba_redvault';
+    if (orderRequiresRedvault && !redvaultRequested) {
+      return createErrorResponse(
+        'This order requires REDVAULT payment initialization',
+        'REDVAULT_PAYMENT_METHOD_REQUIRED',
+        409
+      );
+    }
+    // Guest REDVAULT lane: the scoped context above binds guest applications
+    // by email alone, so anyone with the order UUID and checkout email could
+    // initialize someone else's hosted checkout and permanently fence its
+    // inventory. Require the persisted tracking token — the same
+    // order-bound proof the cancellation and attachment paths demand —
+    // before the minted context is used for any REDVAULT write (only the
+    // email-gated snapshot read ran so far, which reveals nothing new).
+    // The snapshot no longer returns the token (it is UUID+email
+    // accessible), so verification runs inside a boolean proof RPC.
+    // Authenticated callers are already bound by user id downstream, so
+    // only the guest lane gates here. Missing and mismatched share one
+    // code to avoid a token oracle.
+    if (orderRequiresRedvault && !redvaultCustomerAuth?.user) {
+      const { data: tokenValid, error: tokenError } =
+        await paymentDataClient.rpc('verify_order_tracking_token', {
+          p_order_id: data.order_id,
+          p_tracking_token: data.tracking_token ?? '',
+        });
+      if (tokenError || tokenValid !== true) {
+        return createErrorResponse(
+          'Order ownership proof is required to initialize UBA payment',
+          'REDVAULT_TRACKING_TOKEN_INVALID',
+          403
+        );
+      }
+    }
+    if (redvaultRequested && !orderRequiresRedvault) {
+      return createErrorResponse(
+        'REDVAULT payment requires a REDVAULT order',
+        'REDVAULT_ORDER_REQUIRED',
+        409
       );
     }
 
@@ -1105,32 +1191,48 @@ export async function POST(request: NextRequest) {
         ? orderSnapshot.currency.trim().toUpperCase()
         : 'NGN';
 
-    const { data: orderPaymentRow, error: orderPaymentError } =
-      await adminSupabase
-        .from('orders')
-        .select('wallet_amount_used')
-        .eq('id', data.order_id)
-        .eq('merchant_id', merchantId)
-        .single();
+    // REDVAULT requests run through the scoped storefront client
+    // (authenticated role with no sub for guests), which has no grant on
+    // public.orders. Read the wallet amount from the bounded SECURITY DEFINER
+    // snapshot instead of a direct table lookup that RLS would hide.
+    let walletAmountUsed: number;
+    if (redvaultRequested) {
+      walletAmountUsed = Math.max(
+        numberOrDefault(
+          (orderSnapshot as { wallet_amount_used?: unknown })
+            .wallet_amount_used,
+          0
+        ),
+        0
+      );
+    } else {
+      const { data: orderPaymentRow, error: orderPaymentError } =
+        await paymentDataClient
+          .from('orders')
+          .select('wallet_amount_used')
+          .eq('id', data.order_id)
+          .eq('merchant_id', merchantId)
+          .single();
 
-    if (orderPaymentError || !orderPaymentRow) {
-      return createErrorResponse(
-        'Unable to verify order payment amount',
-        'ORDER_AMOUNT_LOOKUP_FAILED',
-        500
+      if (orderPaymentError || !orderPaymentRow) {
+        return createErrorResponse(
+          'Unable to verify order payment amount',
+          'ORDER_AMOUNT_LOOKUP_FAILED',
+          500
+        );
+      }
+
+      walletAmountUsed = Math.max(
+        numberOrDefault(
+          (orderPaymentRow as { wallet_amount_used?: unknown })
+            .wallet_amount_used,
+          0
+        ),
+        0
       );
     }
 
-    const walletAmountUsed = Math.max(
-      numberOrDefault(
-        (orderPaymentRow as { wallet_amount_used?: unknown })
-          .wallet_amount_used,
-        0
-      ),
-      0
-    );
-
-    const { data: savingsRows, error: savingsError } = await adminSupabase
+    const { data: savingsRows, error: savingsError } = await paymentDataClient
       .from('customer_savings_redemptions')
       .select('amount')
       .eq('order_id', data.order_id)
@@ -1155,13 +1257,36 @@ export async function POST(request: NextRequest) {
       : 0;
 
     // Fetch merchant
-    const { data: merchant, error: merchantError } = await adminSupabase
-      .from('merchants')
-      .select('id, business_name, slug, paystack_subaccount_code')
-      .eq('id', merchantId)
-      .single();
+    const merchantResult = redvaultRequested
+      ? await paymentDataClient
+          .from('merchants')
+          .select('id, business_name, slug')
+          .eq('id', merchantId)
+          .single()
+      : await paymentDataClient
+          .from('merchants')
+          .select('id, business_name, slug, paystack_subaccount_code')
+          .eq('id', merchantId)
+          .single();
 
-    if (merchantError || !merchant) {
+    const { data: merchant, error: merchantError } = merchantResult;
+
+    const { data: paystackSubaccount, error: paystackSubaccountError } =
+      redvaultRequested
+        ? await paymentDataClient.rpc(
+            'get_storefront_redvault_paystack_subaccount',
+            { p_merchant_id: merchantId }
+          )
+        : {
+            data:
+              merchant && typeof merchant === 'object'
+                ? (merchant as { paystack_subaccount_code?: unknown })
+                    .paystack_subaccount_code
+                : null,
+            error: null,
+          };
+
+    if (merchantError || paystackSubaccountError || !merchant) {
       return createErrorResponse(
         'Merchant not found',
         'MERCHANT_NOT_FOUND',
@@ -1169,13 +1294,58 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const trackingToken =
-      typeof orderSnapshot.tracking_token === 'string'
-        ? orderSnapshot.tracking_token
-        : undefined;
+    const merchantWithPaystack = {
+      id: merchant.id,
+      business_name: merchant.business_name,
+      slug: merchant.slug,
+      paystack_subaccount_code:
+        typeof paystackSubaccount === 'string' ? paystackSubaccount : null,
+    };
+
+    const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
+    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+
+    if (orderRequiresRedvault) {
+      if (!merchantWithPaystack.paystack_subaccount_code) {
+        return createErrorResponse(
+          'Paystack is not configured for this merchant',
+          'GATEWAY_NOT_CONFIGURED',
+          400
+        );
+      }
+
+      const fallbackClient = await createServerSupabaseClient();
+      const checkout = await initializeRedvaultPaystackCheckout({
+        customerEmail: data.customer_email,
+        fallbackClient,
+        merchantId,
+        orderId: data.order_id,
+        redirectUrl: `${protocol}://${merchantWithPaystack.slug}.${rootDomain}/checkout/success`,
+        userId: redvaultCustomerAuth?.user?.id ?? null,
+      });
+
+      if (checkout.status === 'pending_reconciliation') {
+        return NextResponse.json(
+          {
+            code: 'REDVAULT_RECONCILIATION_REQUIRED',
+            error: 'REDVAULT checkout needs reconciliation before retrying',
+          },
+          { status: 202 }
+        );
+      }
+
+      return NextResponse.json({
+        authorization_url: checkout.authorizationUrl,
+        checkout_url: checkout.authorizationUrl,
+        gateway: 'paystack',
+        payment_method: 'uba_redvault',
+        reference: checkout.reference,
+        success: true,
+      });
+    }
 
     // Fetch gateway settings
-    const { data: featureSettings } = await adminSupabase
+    const { data: featureSettings } = await paymentDataClient
       .from('merchant_feature_settings')
       .select(
         'paystack_enabled, korapay_enabled, wallet_paystack_dva_enabled, klump_enabled, klump_min_amount, klump_max_amount, preferred_local_gateway, preferred_international_gateway'
@@ -1207,12 +1377,11 @@ export async function POST(request: NextRequest) {
         }
       : DEFAULT_GATEWAY_SETTINGS;
 
-    const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
-    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
     const notificationUrl = `${protocol}://${rootDomain}/api/payments/webhook`;
 
     // Select gateway
-    const hasPaystackSubaccount = !!merchant.paystack_subaccount_code;
+    const hasPaystackSubaccount =
+      !!merchantWithPaystack.paystack_subaccount_code;
     const gateway: PaymentGateway =
       data.payment_type === 'dva'
         ? 'paystack'
@@ -1334,6 +1503,40 @@ export async function POST(request: NextRequest) {
         : `BAC-${nanoidUppercase()}`;
     const redirectUrl = `${protocol}://${merchant.slug}.${rootDomain}/checkout/success?reference=${reference}`;
 
+    // BNPL launcher URLs carry the order tracking token for post-payment
+    // tracking. The payment snapshot no longer returns it (an
+    // anon-accessible snapshot must not disclose the ownership proof), so
+    // read it lazily with the privileged client. This runs after the
+    // REDVAULT early return, where the client is always privileged.
+    let cachedTrackingToken: string | undefined | null = null;
+    async function readTrackingToken(): Promise<string | undefined> {
+      if (cachedTrackingToken !== null) return cachedTrackingToken;
+      const { data: trackingTokenRow, error: trackingTokenError } =
+        await paymentDataClient
+          .from('orders')
+          .select('tracking_token')
+          .eq('id', data.order_id)
+          .single();
+      // Fail closed on lookup errors: caching undefined here would still
+      // return a launcher URL without the guest tracking capability
+      // (Klump rejects a missing token outright), turning a transient
+      // database failure into a broken checkout instead of a retryable
+      // initialization error. A genuinely tokenless order (null column,
+      // no error) still resolves to undefined below.
+      if (trackingTokenError) {
+        console.error(
+          'Order tracking token lookup failed:',
+          trackingTokenError
+        );
+        throw new Error('Unable to load the order tracking token');
+      }
+      cachedTrackingToken =
+        trackingTokenRow && typeof trackingTokenRow.tracking_token === 'string'
+          ? trackingTokenRow.tracking_token || undefined
+          : undefined;
+      return cachedTrackingToken;
+    }
+
     // Initialize payment based on gateway
     let paymentResult: PaymentResult;
 
@@ -1358,7 +1561,7 @@ export async function POST(request: NextRequest) {
           break;
 
         case 'paystack':
-          if (!merchant.paystack_subaccount_code) {
+          if (!merchantWithPaystack.paystack_subaccount_code) {
             return createErrorResponse(
               'Paystack is not configured for this merchant',
               'GATEWAY_NOT_CONFIGURED',
@@ -1403,7 +1606,7 @@ export async function POST(request: NextRequest) {
                 last_name: lastName,
                 phone: paymentData.customer_phone || '',
               },
-              { subaccount: merchant.paystack_subaccount_code }
+              { subaccount: merchantWithPaystack.paystack_subaccount_code }
             );
 
             const fees = calculatePaystackFee(
@@ -1450,7 +1653,7 @@ export async function POST(request: NextRequest) {
           } else {
             paymentResult = await initializePaystack(
               paymentData,
-              merchant,
+              merchantWithPaystack,
               gatewaySettings,
               redirectUrl,
               reference,
@@ -1466,6 +1669,7 @@ export async function POST(request: NextRequest) {
             orderId: paymentData.order_id,
             gateway,
           });
+          const trackingToken = await readTrackingToken();
           if (trackingToken) {
             bnplQuery.set('trackingToken', trackingToken);
           }
@@ -1493,6 +1697,7 @@ export async function POST(request: NextRequest) {
             orderId: paymentData.order_id,
             reference,
           });
+          const trackingToken = await readTrackingToken();
           if (trackingToken) {
             bnplQuery.set('trackingToken', trackingToken);
           }
@@ -1557,7 +1762,7 @@ export async function POST(request: NextRequest) {
         : {};
 
     // Create transaction record (via RPC) and update order status
-    const { error: transactionError } = await adminSupabase.rpc(
+    const { error: transactionError } = await paymentDataClient.rpc(
       'create_payment_transaction',
       {
         p_merchant_id: merchantId,

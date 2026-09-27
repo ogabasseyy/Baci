@@ -9,6 +9,7 @@ const OPENAI_FEED_IMAGE_MANIFEST_MAX_CONCURRENT_BATCHES = 4;
 type FeedImageManifestRow = {
   product_id: string;
   variant_id?: string | null;
+  source_url?: string | null;
   verified_url: string | null;
   verified_format: string | null;
   status: string;
@@ -26,6 +27,7 @@ function buildImageManifest(rows: FeedImageManifestRow[]): ImageManifestMap {
 
     imageManifest[row.product_id].push({
       variant_id: row.variant_id ?? null,
+      source_url: row.source_url ?? null,
       verified_url: row.verified_url,
       verified_format: row.verified_format,
       status: 'verified',
@@ -67,7 +69,7 @@ async function fetchVerifiedImageManifestRows(
           const { data, error } = await supabase
             .from('product_feed_images')
             .select(
-              'product_id, variant_id, verified_url, verified_format, status, is_primary, position'
+              'product_id, variant_id, source_url, verified_url, verified_format, status, is_primary, position'
             )
             .eq('merchant_id', merchantId)
             .eq('status', 'verified')

@@ -8,6 +8,8 @@ import type {
 } from '@/app/api/feed/google-merchant/feed-builder';
 import { getCachedGoogleMerchantFeedData } from '@/app/api/feed/google-merchant/feed-data';
 import { buildMerchantBaseUrl } from '@/app/api/feed/google-merchant/route-utils';
+import { collectOfferClaimedImageUrls } from '@/lib/collect-offer-claimed-image-urls';
+import { getEligibleConditionOffers } from '@/lib/eligible-condition-offers';
 import {
   MerchantNotFoundError,
   resolveFeedMerchant,
@@ -52,17 +54,23 @@ function escapeXml(unsafe: string): string {
 }
 
 function resolveTikTokImages(
-  manifestEntries: ImageManifestMap[string] | undefined
+  manifestEntries: ImageManifestMap[string] | undefined,
+  excludeUrls: ReadonlySet<string> = new Set()
 ): ResolvedTikTokImages | null {
-  const entries = manifestEntries || [];
-  const primaryImageUrl = resolveGmcPrimaryImage(entries);
+  // Base rows use product-level imagery only: variant-scoped rows belong
+  // to another SKU and must not leak into the parent product row.
+  const entries = (manifestEntries || []).filter((entry) => !entry.variant_id);
+  const primaryImageUrl = resolveGmcPrimaryImage(entries, excludeUrls);
   if (!primaryImageUrl) {
     return null;
   }
 
   return {
     primaryImageUrl,
-    additionalImageUrls: resolveGmcAdditionalImages(entries),
+    additionalImageUrls: resolveGmcAdditionalImages(
+      entries,
+      excludeUrls
+    ).filter((url) => url !== primaryImageUrl),
   };
 }
 
@@ -158,7 +166,12 @@ function generateTikTokFeed(
       (product) => product.id && product.name?.trim() && product.price > 0
     )
     .map((product) => {
-      const images = resolveTikTokImages(imageManifest[product.id]);
+      const images = resolveTikTokImages(
+        imageManifest[product.id],
+        collectOfferClaimedImageUrls(
+          getEligibleConditionOffers(product.offers, product.condition)
+        )
+      );
       if (!images) {
         return null;
       }

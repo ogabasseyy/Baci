@@ -2,10 +2,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   createAgenticScopedSupabaseClient: vi.fn(),
+  createPublicClient: vi.fn(),
+  resolveAgenticChatTenant: vi.fn(),
 }));
 
 vi.mock('@/lib/agentic/scoped-supabase', () => ({
   createAgenticScopedSupabaseClient: mocks.createAgenticScopedSupabaseClient,
+}));
+vi.mock('@/lib/supabase/public', () => ({
+  createPublicClient: mocks.createPublicClient,
+}));
+vi.mock('@/lib/agentic/agentic-chat-tenant', () => ({
+  resolveAgenticChatTenant: mocks.resolveAgenticChatTenant,
 }));
 
 import { handleCancelOrder } from './chat-order-cancellation';
@@ -74,8 +82,38 @@ function mockLookupThenUpdate(
 
 describe('handleCancelOrder', () => {
   beforeEach(() => {
+    mocks.resolveAgenticChatTenant.mockResolvedValue({
+      agenticCheckoutEnabled: true,
+      businessName: 'Ogabassey',
+      currencyCode: 'NGN',
+      merchantId: OGABASSEY_MERCHANT_ID,
+      merchantSlug: 'ogabassey',
+      priceNegotiationEnabled: true,
+    });
+    mocks.createPublicClient.mockImplementation(() =>
+      mocks.createAgenticScopedSupabaseClient()
+    );
     vi.restoreAllMocks();
     vi.clearAllMocks();
+  });
+
+  it('does not mint a scoped client when the configured tenant disables checkout', async () => {
+    mocks.resolveAgenticChatTenant.mockResolvedValueOnce({
+      agenticCheckoutEnabled: false,
+      businessName: 'Ogabassey',
+      currencyCode: 'NGN',
+      merchantId: OGABASSEY_MERCHANT_ID,
+      merchantSlug: 'ogabassey',
+      priceNegotiationEnabled: true,
+    });
+
+    await expect(
+      handleCancelOrder({
+        orderNumber: '00001234',
+        customerEmail: 'buyer@example.com',
+      })
+    ).resolves.toMatchObject({ success: false, status: 'not_found' });
+    expect(mocks.createAgenticScopedSupabaseClient).not.toHaveBeenCalled();
   });
 
   it('cancels only a matching Ogabassey order that is unpaid and pending', async () => {

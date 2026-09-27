@@ -13,7 +13,8 @@ import {
   getBlogCategorySlug,
 } from './blog-category-routing';
 
-export const preferredRegion = 'dub1';
+// Region pinning lives in vercel.json `regions` (dub1) — `preferredRegion`
+// is deprecated and removed.
 
 const MIN_CATEGORY_HUB_POSTS = 3;
 

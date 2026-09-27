@@ -1,8 +1,11 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { ComponentProps } from 'react';
+import { Modal } from 'react-native';
 import Colors from '@/constants/Colors';
+import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
 import type { CartItem } from '@/stores/cart-store';
+import { useUIStore } from '@/stores/ui-store';
 import CartLoadedView from './CartLoadedView';
 
 jest.mock('@/components/ui/SafeImage', () => ({
@@ -24,6 +27,16 @@ jest.mock('@/components/checkout/checkout-identity', () => ({
     return null;
   },
 }));
+
+jest.mock('@/components/ads/AdSlot', () => {
+  const React = jest.requireActual<typeof import('react')>('react');
+  const { View } =
+    jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    AdSlot: ({ placement }: { placement: string }) =>
+      React.createElement(View, { testID: `ad-slot-${placement}` }),
+  };
+});
 
 jest.mock('react-native-reanimated', () => {
   const { View } =
@@ -85,6 +98,7 @@ function renderView(
     hasNonNegotiableCartItem: false,
     insetsTop: 16,
     isIdentityModalOpen: false,
+    isPriceChangeModalOpen: false,
     itemCount: 1,
     items: [item],
     onBulkNegotiate: jest.fn(),
@@ -168,5 +182,89 @@ describe('CartLoadedView', () => {
 
     expect(onBulkNegotiate).toHaveBeenCalledTimes(1);
     expect(onNegotiateTotal).not.toHaveBeenCalled();
+  });
+
+  it('renders the footer ad only when no modal covers the cart', () => {
+    // Regression: an obscured CART_MPU must not load behind the identity,
+    // price-change, or negotiation-warning modals.
+    const { rerender, props } = renderView();
+
+    expect(screen.getByTestId('ad-slot-CART_MPU')).toBeTruthy();
+
+    rerender(<CartLoadedView {...props} isIdentityModalOpen />);
+    expect(screen.queryByTestId('ad-slot-CART_MPU')).toBeNull();
+
+    rerender(
+      <CartLoadedView
+        {...props}
+        isIdentityModalOpen={false}
+        isPriceChangeModalOpen
+      />
+    );
+    expect(screen.queryByTestId('ad-slot-CART_MPU')).toBeNull();
+
+    rerender(
+      <CartLoadedView
+        {...props}
+        isIdentityModalOpen={false}
+        isPriceChangeModalOpen={false}
+        showNegotiateWarning
+      />
+    );
+    expect(screen.queryByTestId('ad-slot-CART_MPU')).toBeNull();
+  });
+
+  it('withholds the cart ad until the negotiation dismissal completes', () => {
+    // Regression: the close handler clears the flag synchronously while the
+    // iOS fade dismissal still covers the cart — CART_MPU must stay
+    // unmounted until onDismiss fires.
+    const { rerender, props, UNSAFE_getByType } = renderView({
+      showNegotiateWarning: true,
+    });
+    expect(screen.queryByTestId('ad-slot-CART_MPU')).toBeNull();
+
+    rerender(<CartLoadedView {...props} showNegotiateWarning={false} />);
+    expect(screen.queryByTestId('ad-slot-CART_MPU')).toBeNull();
+
+    act(() => {
+      UNSAFE_getByType(Modal).props.onDismiss();
+    });
+    expect(screen.getByTestId('ad-slot-CART_MPU')).toBeTruthy();
+  });
+
+  it('withholds the cart ad while the negotiation modal is open', () => {
+    // Regression: direct negotiation bypasses the warning modal, and
+    // warning-confirmed negotiation outlives the warning's dismissal
+    // gate — CART_MPU must stay suppressed for the actual flow and
+    // through its fade.
+    jest.useFakeTimers();
+    try {
+      useUIStore.getState().closeNegotiation();
+      const { unmount } = renderView();
+      expect(screen.getByTestId('ad-slot-CART_MPU')).toBeTruthy();
+
+      act(() => {
+        useUIStore.getState().openNegotiation({
+          type: 'single',
+          productName: 'iPhone 13 Pro',
+          currentPrice: 500000,
+        });
+      });
+      expect(screen.queryByTestId('ad-slot-CART_MPU')).toBeNull();
+
+      act(() => {
+        useUIStore.getState().closeNegotiation();
+      });
+      expect(screen.queryByTestId('ad-slot-CART_MPU')).toBeNull();
+
+      act(() => {
+        jest.advanceTimersByTime(MODAL_DISMISS_FALLBACK_MS);
+      });
+      expect(screen.getByTestId('ad-slot-CART_MPU')).toBeTruthy();
+      unmount();
+    } finally {
+      useUIStore.getState().closeNegotiation();
+      jest.useRealTimers();
+    }
   });
 });

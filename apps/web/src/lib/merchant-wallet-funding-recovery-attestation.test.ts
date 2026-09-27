@@ -1,6 +1,12 @@
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMerchantWalletFundingRecoveryAttestation } from './merchant-wallet-funding-recovery-attestation';
+
+// Derived deterministically at runtime: stable across runs (no random test
+// data) yet never a hardcoded secret literal.
+const TEST_HMAC_SECRET = createHash('sha256')
+  .update('merchant-wallet-funding-recovery-attestation-test')
+  .digest('hex');
 
 describe('createMerchantWalletFundingRecoveryAttestation', () => {
   afterEach(() => {
@@ -10,7 +16,7 @@ describe('createMerchantWalletFundingRecoveryAttestation', () => {
   it('HMACs the recovery payload with the configured funding-recovery secret', () => {
     vi.stubEnv(
       'MERCHANT_WALLET_FUNDING_RECOVERY_HMAC_SECRET',
-      'test-secret-at-least-32-characters!!'
+      TEST_HMAC_SECRET
     );
     const attestedAtIso = '2026-09-03T20:00:00.000Z';
     const attestation = createMerchantWalletFundingRecoveryAttestation({
@@ -26,7 +32,7 @@ describe('createMerchantWalletFundingRecoveryAttestation', () => {
     });
 
     expect(attestation).toBe(
-      createHmac('sha256', 'test-secret-at-least-32-characters!!')
+      createHmac('sha256', TEST_HMAC_SECRET)
         .update(
           [
             'r1',

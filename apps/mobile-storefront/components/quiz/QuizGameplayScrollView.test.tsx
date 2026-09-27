@@ -2,7 +2,8 @@ import { describe, expect, it } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import { View } from 'react-native';
 import { QuizGameplayScrollView } from './QuizGameplayScrollView';
-import { createQuizStyles, type QuizThemeColors } from './QuizScreen.styles';
+import { createQuizStyles } from './QuizScreen.styles';
+import type { QuizThemeColors } from './quiz-theme';
 
 const colors: QuizThemeColors = {
   background: '#000',

@@ -48,12 +48,12 @@ describe('OgabasseyHomeStyleLoader', () => {
     vi.restoreAllMocks();
   });
 
-  it('does not load homepage CSS on a mobile viewport until the first input', () => {
+  it('loads homepage CSS on mobile without requiring any user input', () => {
     stubMatchMedia(false);
     render(<OgabasseyHomeStyleLoader />);
 
-    expect(mockLoadOgabasseyHomeStyles).not.toHaveBeenCalled();
-    expect(mockLoadStylesheetAfterFirstInput).toHaveBeenCalledOnce();
+    expect(mockLoadOgabasseyHomeStyles).toHaveBeenCalledOnce();
+    expect(mockLoadStylesheetAfterFirstInput).not.toHaveBeenCalled();
   });
 
   it('starts homepage CSS on desktop during effect instead of waiting for window load', async () => {
@@ -66,8 +66,11 @@ describe('OgabasseyHomeStyleLoader', () => {
     expect(mockLoadStylesheetAfterFirstInput).not.toHaveBeenCalled();
   });
 
-  it('re-arms desktop homepage CSS after a failed immediate import', async () => {
-    stubMatchMedia(true);
+  it.each([
+    false,
+    true,
+  ])('retries failed CSS on pageshow (desktop: %s)', async (desktop) => {
+    stubMatchMedia(desktop);
     mockLoadOgabasseyHomeStyles
       .mockRejectedValueOnce(new Error('chunk missing'))
       .mockResolvedValueOnce({});
@@ -82,10 +85,28 @@ describe('OgabasseyHomeStyleLoader', () => {
     });
     expect(mockLoadOgabasseyHomeStyles).toHaveBeenCalledOnce();
 
-    window.dispatchEvent(new Event('pointerdown'));
+    window.dispatchEvent(new Event('pageshow'));
     await waitFor(() => {
       expect(mockLoadOgabasseyHomeStyles).toHaveBeenCalledTimes(2);
     });
     expect(mockLoadStylesheetAfterFirstInput).not.toHaveBeenCalled();
+  });
+
+  it('does not arm retries when an import fails after unmount', async () => {
+    let rejectImport: (error: Error) => void = () => undefined;
+    mockLoadOgabasseyHomeStyles.mockReturnValueOnce(
+      new Promise((_, reject) => {
+        rejectImport = reject;
+      })
+    );
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const { unmount } = render(<OgabasseyHomeStyleLoader />);
+    unmount();
+    rejectImport(new Error('chunk missing'));
+    await waitFor(() => expect(consoleError).toHaveBeenCalledOnce());
+    window.dispatchEvent(new Event('pageshow'));
+    expect(mockLoadOgabasseyHomeStyles).toHaveBeenCalledOnce();
   });
 });

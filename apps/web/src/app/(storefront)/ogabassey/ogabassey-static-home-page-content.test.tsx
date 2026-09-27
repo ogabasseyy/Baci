@@ -1,9 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  OGABASSEY_DESCRIPTION,
-  OGABASSEY_HOME_LCP_SUPPORT,
-} from '@/config/ogabassey';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/components/seo/json-ld', () => ({
   JsonLd: () => <script type="application/ld+json" />,
@@ -93,8 +89,19 @@ const SHELL_SLIDE = {
 };
 
 describe('OgabasseyStaticHomePageContent', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    // The streaming Suspense fallback renders the utility panel for
+    // geometry; its engagement effect needs matchMedia like the panel's
+    // own tests provide.
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false }))
+    );
     mockDynamicContentSuspends.value = false;
     mockResolveHeroShell.mockResolvedValue({
       status: 'published',
@@ -128,8 +135,8 @@ describe('OgabasseyStaticHomePageContent', () => {
       document.querySelector(
         '[data-ogabassey-publication-safe-hero-fallback="true"]'
       )
-    ).toBeInTheDocument();
-    expect(mockPreloadHeroResources).not.toHaveBeenCalled();
+    ).not.toBeInTheDocument();
+    expect(mockPreloadHeroResources).toHaveBeenCalledWith(SHELL_SLIDE.imageUrl);
     expect(mockCriticalHero).not.toHaveBeenCalled();
     expect(mockResolveHeroShell).toHaveBeenCalledWith();
   });
@@ -154,6 +161,9 @@ describe('OgabasseyStaticHomePageContent', () => {
       screen.getByRole('region', { name: /dynamic home content/i })
     ).toHaveAttribute('data-omit-document-heading', 'false');
     expect(mockPreloadHeroResources).not.toHaveBeenCalled();
+    expect(
+      document.querySelector('link[data-ogabassey-home-hero-preload="true"]')
+    ).not.toBeInTheDocument();
   });
 
   it('passes the apex-domain root prefix through to the dynamic home content', async () => {
@@ -162,12 +172,6 @@ describe('OgabasseyStaticHomePageContent', () => {
     expect(
       screen.getByRole('region', { name: /dynamic home content/i })
     ).toHaveAttribute('data-prefix', '');
-  });
-
-  it('does not preload the slide-0 hero image because committed LCP is text', async () => {
-    render(await OgabasseyStaticHomePageContent({ pathPrefix: '' }));
-
-    expect(mockPreloadHeroResources).not.toHaveBeenCalled();
   });
 
   it('shows only publication-safe geometry while the publication owner suspends', async () => {
@@ -182,21 +186,13 @@ describe('OgabasseyStaticHomePageContent', () => {
       document.querySelector(
         '[data-ogabassey-publication-safe-hero-fallback="true"]'
       )
-    ).toBeInTheDocument();
-    expect(document.querySelector('a, button')).not.toBeInTheDocument();
-    expect(document.querySelector('img, picture')).not.toBeInTheDocument();
+    ).not.toBeInTheDocument();
+    for (const role of ['link', 'button', 'img']) {
+      expect(screen.queryByRole(role)).not.toBeInTheDocument();
+    }
     expect(
-      document.querySelector(
-        '[data-ogabassey-publication-safe-hero-fallback="true"]'
-      )?.textContent
-    ).toContain('OgaBassey');
-    expect(
-      document.querySelector('[data-ogabassey-committed-lcp-copy="true"]')
-        ?.textContent
-    ).toBe(OGABASSEY_HOME_LCP_SUPPORT);
-    expect(
-      document.querySelector('.ogabassey-home-unique-copy')?.textContent
-    ).toBe(OGABASSEY_DESCRIPTION);
+      screen.getByRole('heading', { level: 1, name: /OgaBassey/ })
+    ).toHaveClass('sr-only');
     expect(
       document.querySelector(
         '[data-ogabassey-publication-safe-utility-fallback="true"]'

@@ -1,3 +1,4 @@
+import type { ProductSpecSection } from './spec-data';
 import { buildProductSpecData } from './spec-data';
 import type { ComparableProductKeySpecs } from './spec-taxonomy';
 import type { VariantAttributeSource } from './variant-attributes';
@@ -43,8 +44,27 @@ export interface ProductComparisonMatrix {
   differentiatingRowCount: number;
 }
 
-function uniqueOrdered(values: string[]) {
-  return Array.from(new Set(values));
+function indexDetailedSpecs(input: ProductSpecSection[]) {
+  const categoryItems = new Map<string, Map<string, string>>();
+
+  for (const section of input) {
+    // Match the former Array.find behavior: only the first section with a
+    // category contributes values when legacy input repeats that category.
+    if (categoryItems.has(section.category)) {
+      continue;
+    }
+
+    const items = new Map<string, string>();
+    for (const item of section.items) {
+      // Match the former item Array.find behavior for duplicate labels.
+      if (!items.has(item.label)) {
+        items.set(item.label, item.value);
+      }
+    }
+    categoryItems.set(section.category, items);
+  }
+
+  return categoryItems;
 }
 
 export function buildProductComparisonMatrix(input: {
@@ -53,30 +73,44 @@ export function buildProductComparisonMatrix(input: {
   const specData = input.products.map((product) =>
     buildProductSpecData(product)
   );
-  const categoryNames = uniqueOrdered(
-    specData.flatMap((entry) =>
-      entry.detailedSpecs.map((section) => section.category)
-    )
-  );
+  const categoryNames: string[] = [];
+  const categoryLabels = new Map<string, string[]>();
+  const categoryLabelSets = new Map<string, Set<string>>();
+  const indexedSpecData = specData.map((entry) => {
+    const categoryItems = indexDetailedSpecs(entry.detailedSpecs);
+
+    for (const [category, items] of categoryItems) {
+      if (!categoryLabels.has(category)) {
+        categoryNames.push(category);
+        categoryLabels.set(category, []);
+        categoryLabelSets.set(category, new Set());
+      }
+
+      const labels = categoryLabels.get(category);
+      const seenLabels = categoryLabelSets.get(category);
+      if (!labels || !seenLabels) {
+        continue;
+      }
+
+      for (const label of items.keys()) {
+        if (!seenLabels.has(label)) {
+          seenLabels.add(label);
+          labels.push(label);
+        }
+      }
+    }
+
+    return categoryItems;
+  });
 
   const groups = categoryNames
     .map((category) => {
-      const labels = uniqueOrdered(
-        specData.flatMap(
-          (entry) =>
-            entry.detailedSpecs
-              .find((section) => section.category === category)
-              ?.items.map((item) => item.label) ?? []
-        )
-      );
+      const labels = categoryLabels.get(category) ?? [];
 
       const rows = labels.map((label) => {
-        const values = specData.map((entry) => {
-          const value = entry.detailedSpecs
-            .find((section) => section.category === category)
-            ?.items.find((item) => item.label === label)?.value;
-          return value || '—';
-        });
+        const values = indexedSpecData.map(
+          (categoryItems) => categoryItems.get(category)?.get(label) || '—'
+        );
         const presentValues = values.filter((value) => value !== '—');
         const uniquePresentValues = new Set(presentValues);
 

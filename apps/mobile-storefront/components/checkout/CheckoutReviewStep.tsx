@@ -17,15 +17,16 @@ import type { PaymentMethodType } from './PaymentMethodSelector';
 import type { DeliveryMethod, ShippingQuote } from './types';
 
 const PAYMENT_METHOD_LABELS: Record<PaymentMethodType, string> = {
+  uba_redvault: 'Pay with UBA — review final price before payment',
   paystack: 'Card Payment (Paystack)',
   korapay: 'Card Payment (Korapay)',
   bank_transfer: 'Bank Transfer',
   pay_on_delivery: 'Pay on Delivery',
-  credpal: 'CredPal (Buy Now Pay Later)',
+  credpal: 'CredPal (Installments)',
   credit_direct: 'Credit Direct (Installments)',
-  klump: 'Klump (Buy Now Pay Later)',
+  klump: 'Klump (Installments)',
   juicyway: 'Crypto (Juicyway)',
-  invoice: 'Generate Invoice',
+  invoice: 'Proforma Invoice',
   payforme: 'Pay for Me',
 };
 

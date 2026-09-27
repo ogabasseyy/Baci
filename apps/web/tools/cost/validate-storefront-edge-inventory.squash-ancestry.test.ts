@@ -109,7 +109,7 @@ describe('bugfix: squash tip drops originMainSha ancestry', () => {
     expect(result).toEqual({
       inventorySha256: artifact.inventorySha256,
       rowCount: artifact.rows.length,
-      storefrontEntrypointCount: 76,
+      storefrontEntrypointCount: 77,
     });
   });
 });

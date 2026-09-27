@@ -127,7 +127,7 @@ export async function getShipmentProviders(
     if (!trimmedId) {
       throw new Error('Each orderItemId must be a non-empty string');
     }
-    query.append('orderItemIds', trimmedId);
+    query.append('orderItemId', trimmedId);
   }
   return await client.request(
     'GET',

@@ -10,7 +10,7 @@ export function readGitIndexSources(
   const records = execFileSync(
     'git',
     ['--literal-pathspecs', 'ls-files', '--stage', '-z', '--', ...paths],
-    { cwd: root, encoding: 'utf8' }
+    { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }
   )
     .split('\0')
     .filter(Boolean);
@@ -27,6 +27,7 @@ export function readGitIndexSources(
     const source = execFileSync('git', ['cat-file', 'blob', objectId], {
       cwd: root,
       encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
     });
     sources.set(path, source);
   }

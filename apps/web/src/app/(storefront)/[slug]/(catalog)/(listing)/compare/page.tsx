@@ -208,7 +208,7 @@ export async function CompareIndexRuntime(props: CompareIndexPageProps) {
   }
 
   return (
-    <div className="bg-[color-mix(in_srgb,var(--store-background)_94%,var(--store-background-text)_6%)] pb-20">
+    <div className="bg-[color-mix(in_srgb,var(--store-background,#ffffff)_94%,var(--store-background-text,#111827)_6%)] pb-20">
       <div className="mx-auto max-w-[1400px] px-4 md:px-6">
         <ComparePageContent omitIntro {...props} />
       </div>
@@ -217,7 +217,7 @@ export async function CompareIndexRuntime(props: CompareIndexPageProps) {
 }
 
 const COMPARE_HUB_SHELL_CLASS =
-  'min-h-screen bg-[color-mix(in_srgb,var(--store-background)_94%,var(--store-background-text)_6%)] pb-20 pt-6';
+  'min-h-screen bg-[color-mix(in_srgb,var(--store-background,#ffffff)_94%,var(--store-background-text,#111827)_6%)] pb-20 pt-6';
 
 async function CompareHubResolvedIntro({
   params,

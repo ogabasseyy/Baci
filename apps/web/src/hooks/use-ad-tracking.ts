@@ -188,7 +188,7 @@ export function useAdTracking() {
         value,
         currency,
         content_ids: contentIds,
-        content_type: 'product',
+        content_type: 'product_group',
       },
       { eventID: eventId }
     );
@@ -239,7 +239,7 @@ export function useAdTracking() {
         value,
         currency,
         content_ids: contentIds,
-        content_type: 'product',
+        content_type: 'product_group',
       },
       { eventID: eventId }
     );

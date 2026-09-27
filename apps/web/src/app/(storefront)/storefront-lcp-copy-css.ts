@@ -32,6 +32,11 @@ html:has([data-storefront-shell]) *::after {
   min-height: 100svh;
 }
 
+/* Keep the checker visible beneath its heading, not a viewport of blank space. */
+[data-imei-lcp-hero] [data-cwv-lcp-fold] {
+  min-height: 0;
+}
+
 [data-cwv-lcp-copy] {
   font-family: "Inter Fallback", Arial, Helvetica, sans-serif !important;
   letter-spacing: normal !important;

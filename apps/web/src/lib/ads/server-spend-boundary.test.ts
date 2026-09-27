@@ -10,6 +10,35 @@ const authorizedImporters = [
   'app/api/integrations/ads/tiktok/sync/route.ts',
 ];
 
+function isRpcWhitespace(value: string | undefined): boolean {
+  return value !== undefined && /\s/.test(value);
+}
+
+function rpcCallTargets(source: string, rpcName: string): boolean {
+  const callMarker = 'spendSupabase.rpc(';
+  let searchFrom = 0;
+  for (;;) {
+    const callIndex = source.indexOf(callMarker, searchFrom);
+    if (callIndex === -1) {
+      return false;
+    }
+    let nameStart = callIndex + callMarker.length;
+    while (isRpcWhitespace(source[nameStart])) {
+      nameStart += 1;
+    }
+    const quote = source[nameStart];
+    if (
+      (quote === "'" || quote === '"') &&
+      source.startsWith(rpcName, nameStart + 1) &&
+      (source[nameStart + 1 + rpcName.length] === "'" ||
+        source[nameStart + 1 + rpcName.length] === '"')
+    ) {
+      return true;
+    }
+    searchFrom = callIndex + 1;
+  }
+}
+
 function productionTypeScriptFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
@@ -42,8 +71,24 @@ describe('Ads spend service-role boundary', () => {
     const source = readFileSync(resolve(sourceRoot, `lib/${path}`), 'utf8');
 
     expect(source.match(/spendSupabase\.rpc/g)).toHaveLength(1);
-    expect(source).toMatch(
-      new RegExp(`spendSupabase\\.rpc\\(\\s*['"]${rpcName}['"]`)
-    );
+    expect(rpcCallTargets(source, rpcName)).toBe(true);
+  });
+
+  it('returns false when no spendSupabase.rpc call is present', () => {
+    expect(
+      rpcCallTargets(
+        "const rows = await input.spendSupabase.from('spend').select('*');",
+        'replace_google_ads_spend_daily'
+      )
+    ).toBe(false);
+  });
+
+  it('skips an invalid candidate before a valid matching call', () => {
+    expect(
+      rpcCallTargets(
+        "await input.spendSupabase.rpc(\n    'replace_something_else',\n    {}\n  );\n  await input.spendSupabase.rpc('replace_google_ads_spend_daily', {});",
+        'replace_google_ads_spend_daily'
+      )
+    ).toBe(true);
   });
 });

@@ -5,6 +5,7 @@ import { fetchVerifiedOpenAIImageManifest } from './feed-image-manifest';
 type ManifestFixture = {
   product_id: string;
   variant_id?: string | null;
+  source_url?: string | null;
   verified_url: string | null;
   verified_format: string | null;
   status: string;
@@ -97,7 +98,7 @@ describe('fetchVerifiedOpenAIImageManifest', () => {
 
     expect(calls.from).toHaveBeenCalledWith('product_feed_images');
     expect(calls.select).toHaveBeenCalledWith(
-      'product_id, variant_id, verified_url, verified_format, status, is_primary, position'
+      'product_id, variant_id, source_url, verified_url, verified_format, status, is_primary, position'
     );
     expect(calls.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
     expect(calls.eq).toHaveBeenCalledWith('status', 'verified');
@@ -112,6 +113,7 @@ describe('fetchVerifiedOpenAIImageManifest', () => {
       'prod-1': [
         {
           variant_id: null,
+          source_url: null,
           verified_url: 'https://cdn.example.com/front.jpg',
           verified_format: 'jpeg',
           status: 'verified',
@@ -120,6 +122,7 @@ describe('fetchVerifiedOpenAIImageManifest', () => {
         },
         {
           variant_id: 'var-red',
+          source_url: null,
           verified_url: 'https://cdn.example.com/red.jpg',
           verified_format: 'webp',
           status: 'verified',
@@ -127,6 +130,36 @@ describe('fetchVerifiedOpenAIImageManifest', () => {
           position: 1,
         },
       ],
+    });
+  });
+
+  it('carries source URLs so offer-claim exclusions can match them', async () => {
+    const { supabase } = createManifestSupabaseMock([
+      {
+        data: [
+          {
+            product_id: 'prod-1',
+            source_url: 'https://merchant.example/offer-used.avif',
+            verified_url: 'https://cdn.example.com/offer-used.jpg',
+            verified_format: 'jpeg',
+            status: 'verified',
+            is_primary: false,
+            position: 3,
+          },
+        ],
+        error: null,
+      },
+    ]);
+
+    const result = await fetchVerifiedOpenAIImageManifest(
+      supabase,
+      'merchant-1',
+      ['prod-1']
+    );
+
+    expect(result?.['prod-1']?.[0]).toMatchObject({
+      source_url: 'https://merchant.example/offer-used.avif',
+      verified_url: 'https://cdn.example.com/offer-used.jpg',
     });
   });
 

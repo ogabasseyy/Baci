@@ -1,5 +1,15 @@
 # CLAUDE.md - Baci Codebase Guide
 
+## Storefront visual/performance verification
+
+Before changing storefront layout, CSS delivery, hero loading or resource hints,
+read `docs/perf/storefront-visual-regression.md` from the repository root.
+It defines the sitespeed.io/Browsertime video, Lighthouse and console/network
+checks, route coverage, local CDN pitfalls and evidence needed for a performance
+claim. A high score with broken images is not a valid pass. Use
+`pnpm --filter @baci/web perf:storefront:validate <report.json>` for the report
+validity subset; video review remains separate.
+
 ## Project Overview
 
 **Baci** is an AI-native e-commerce builder platform ("Your business, live in 3 minutes"). It enables merchants to create complete e-commerce stores rapidly using Google Gemini for logo analysis, product description generation, and store auto-configuration.

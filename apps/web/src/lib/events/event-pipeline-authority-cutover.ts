@@ -4,5 +4,5 @@
  */
 export const eventPipelineAuthorityCutover = {
   queueOnlyDeliveryActivated: false,
-  temporaryAuthorityExpiresAt: '2026-09-16T00:00:00.000Z',
+  temporaryAuthorityExpiresAt: '2026-09-30T00:00:00.000Z',
 } as const;

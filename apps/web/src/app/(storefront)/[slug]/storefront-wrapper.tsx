@@ -9,11 +9,7 @@ import { Button } from '@/components/ui/button';
 import { StorefrontPageSkeleton } from '@/components/ui/skeletons';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import type { Product } from '@/lib/products';
-import {
-  getTemplate,
-  getTemplateIdByBusinessType,
-  type TemplatePageProps,
-} from '@/templates/registry';
+import type { TemplatePageProps } from '@/templates/registry';
 
 const DynamicPuckStorefront = dynamic(
   () =>
@@ -59,41 +55,65 @@ export function StorefrontWrapper({
     const loadTemplate = async () => {
       if (loading) return;
 
-      let templateId = merchant?.template_id;
-
-      // If no template_id or it's 'default', use business_type fallback
-      if (!templateId || templateId === 'default') {
-        const fallbackId = getTemplateIdByBusinessType(merchant?.business_type);
-        console.log(
-          `No template_id set for "${merchant?.business_name}", using business_type fallback: ${fallbackId}`
-        );
-        templateId = fallbackId;
-      }
-
-      // If it's explicitly 'puck', use Puck storefront
-      if (templateId === 'puck') {
-        setTemplateHome(null);
-        setTemplateLoading(false);
-        return;
-      }
-
-      // Try to load the template from registry
-      const template = getTemplate(templateId);
-      if (!template) {
-        console.warn(
-          `Template "${templateId}" not found in registry, falling back to Puck`
-        );
-        setTemplateHome(null);
-        setTemplateLoading(false);
-        return;
-      }
-
       try {
-        const components = await template.getComponents();
-        setTemplateHome(() => components.Home);
-        setTemplateLoading(false);
+        let templateId = merchant?.template_id;
+
+        // Explicit Puck stores (including onboarding-upsert merchants) skip
+        // the registry chunk entirely: it is only needed to resolve
+        // business-type fallbacks and named registry templates. Without
+        // this, every Puck homepage pays a registry round-trip behind the
+        // skeleton before even starting the Puck component load.
+        if (templateId === 'puck') {
+          setTemplateHome(null);
+          setTemplateLoading(false);
+          return;
+        }
+
+        // The template registry (all storefront templates and their page
+        // components) loads on demand so it never joins the initial bundle of
+        // routes that only sometimes render a registry template (e.g. the
+        // statically-rendered Ogabassey homepage). The skeleton stays up until
+        // this resolves, so loading UX is unchanged.
+        const { getTemplate, getTemplateIdByBusinessType } = await import(
+          '@/templates/registry'
+        );
+
+        // If no template_id or it's 'default', use business_type fallback
+        if (!templateId || templateId === 'default') {
+          const fallbackId = getTemplateIdByBusinessType(
+            merchant?.business_type
+          );
+          console.log(
+            `No template_id set for "${merchant?.business_name}", using business_type fallback: ${fallbackId}`
+          );
+          templateId = fallbackId;
+        }
+
+        // Try to load the template from registry
+        const template = getTemplate(templateId);
+        if (!template) {
+          console.warn(
+            `Template "${templateId}" not found in registry, falling back to Puck`
+          );
+          setTemplateHome(null);
+          setTemplateLoading(false);
+          return;
+        }
+
+        try {
+          const components = await template.getComponents();
+          setTemplateHome(() => components.Home);
+          setTemplateLoading(false);
+        } catch (error) {
+          console.error('Failed to load template:', templateId, error);
+          setTemplateHome(null);
+          setTemplateLoading(false);
+        }
       } catch (error) {
-        console.error('Failed to load template:', templateId, error);
+        // A rejected registry chunk (offline/stale deployment) must fall
+        // back to Puck like any other template failure — never strand the
+        // page on the skeleton with an unsettled loading state.
+        console.error('Failed to load template registry:', error);
         setTemplateHome(null);
         setTemplateLoading(false);
       }

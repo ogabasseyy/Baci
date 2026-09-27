@@ -218,6 +218,30 @@ describe('normalizeCategoryPageProducts', () => {
     expect(result.price).toContain('₦');
     expect(result.price).not.toContain('$');
   });
+
+  it('surfaces the GPU spec as the category graphics filter value', () => {
+    const [result] = normalizeCategoryPageProducts(
+      [
+        {
+          id: 'prod-7',
+          name: 'Gaming Laptop',
+          slug: 'gaming-laptop',
+          description: 'RTX laptop',
+          price: 1750000,
+          condition: 'used',
+          stock: 0,
+          images: ['https://cdn.example.com/gaming-laptop.png'],
+          categories: [{ name: 'Gaming Laptops', slug: 'gaming-laptops' }],
+          product_key_specs: {
+            gpu: 'NVIDIA RTX 4070',
+          },
+        },
+      ],
+      'gaming-laptops'
+    );
+
+    expect(result.graphics).toBe('NVIDIA RTX 4070');
+  });
 });
 
 describe('buildCategoryPageHubModel', () => {

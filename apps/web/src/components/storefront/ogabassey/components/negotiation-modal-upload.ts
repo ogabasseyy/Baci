@@ -4,10 +4,9 @@ import { uploadNegotiationEvidenceFile } from './negotiation-evidence';
 import { resolveNegotiationCustomer } from './negotiation-modal-customer';
 import { insertNegotiationRequest } from './negotiation-modal-request';
 import type { NegotiationStatus } from './use-negotiation-modal-controller';
-import {
-  NegotiationValidationError,
-  getContactValidationError,
-} from './negotiation-modal-validation';
+import { getContactValidationError } from './negotiation-contact-validation';
+import { getUploadFormValidationError } from './negotiation-upload-validation';
+import { NegotiationValidationError } from './negotiation-validation-error';
 
 interface SubmitNegotiationUploadOptions {
   canApplyAsyncResult: () => boolean;
@@ -38,15 +37,6 @@ const uploadedEvidenceByFile = new WeakMap<
   { evidencePath: string; merchantId: string }
 >();
 
-function isValidEvidenceLink(value: string): boolean {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
-
 export async function submitNegotiationUpload({
   canApplyAsyncResult,
   cart,
@@ -70,28 +60,21 @@ export async function submitNegotiationUpload({
   variantId,
   variantName,
 }: SubmitNegotiationUploadOptions): Promise<void> {
+  // Client-independent checks first (shared with the submit handler, which
+  // runs them before the Supabase client chunk even downloads).
+  const formError = getUploadFormValidationError({
+    currentPrice,
+    merchantId,
+    offer,
+    uploadFile,
+    uploadLink,
+  });
+  if (formError) {
+    alert(formError);
+    return;
+  }
   const trimmedLink = uploadLink.trim();
-  if (trimmedLink && uploadFile) {
-    alert('Use either a proof upload or a link, not both.');
-    return;
-  }
-  if (!trimmedLink && !uploadFile) {
-    alert('Upload proof or paste a link before sending your request.');
-    return;
-  }
-  if (trimmedLink && !isValidEvidenceLink(trimmedLink)) {
-    alert('Enter a valid http or https URL.');
-    return;
-  }
   const offeredPrice = Number(offer.trim());
-  if (
-    !Number.isFinite(offeredPrice) ||
-    offeredPrice <= 0 ||
-    offeredPrice > currentPrice
-  ) {
-    alert('Enter a valid offer amount before sending your request.');
-    return;
-  }
 
   let customer: Awaited<ReturnType<typeof resolveNegotiationCustomer>>;
   try {
@@ -110,10 +93,6 @@ export async function submitNegotiationUpload({
   });
   if (contactError) {
     alert(contactError);
-    return;
-  }
-  if (!merchantId) {
-    alert('Unable to submit request — merchant context unavailable.');
     return;
   }
   const customerEmail = email.trim().toLowerCase() || customer.customerEmail;

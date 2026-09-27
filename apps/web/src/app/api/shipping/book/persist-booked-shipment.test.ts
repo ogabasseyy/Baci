@@ -1,5 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { OrderShipmentBookingError } from '@/lib/shipping/order-shipment-booking-utils';
 import { persistBookedShipment } from './persist-booked-shipment';
+
+const mocks = vi.hoisted(() => ({ confirm: vi.fn() }));
+
+vi.mock('@/lib/shipping/confirm-booked-order-payment-persist', () => ({
+  confirmBookedOrderPaymentPersist: mocks.confirm,
+}));
+
+const mockConfirm = mocks.confirm;
 
 const baseParams = {
   orderId: 'order-1',
@@ -61,6 +70,36 @@ function createUpdateChain(resolved: { error: unknown }) {
 }
 
 describe('persistBookedShipment', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockConfirm.mockResolvedValue(undefined);
+  });
+
+  it('returns a 409 payload when a refund finalized after the provider submit', async () => {
+    mockConfirm.mockRejectedValue(
+      new OrderShipmentBookingError(
+        'This order was refunded after the provider booking was submitted.',
+        409,
+        'ORDER_REFUNDED_AFTER_BOOKING'
+      )
+    );
+    const insert = vi.fn();
+    const supabase = { from: vi.fn(() => ({ insert })) };
+
+    const result = await persistBookedShipment({
+      ...baseParams,
+      supabase: supabase as never,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      status: 409,
+      trackingNumber: 'waybill-1',
+      error: expect.stringContaining('waybill-1'),
+    });
+    expect(insert).not.toHaveBeenCalled();
+  });
+
   it('returns a 500 payload when the shipment insert fails', async () => {
     const supabase = {
       from: vi.fn().mockReturnValue({

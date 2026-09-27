@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { confirmBookedOrderPaymentPersist } from '@/lib/shipping/confirm-booked-order-payment-persist';
 import type { ReusableOrderShipmentResult } from '@/lib/shipping/find-reusable-order-shipment';
+import { OrderShipmentBookingError } from '@/lib/shipping/order-shipment-booking-utils';
 import type { OrderShipmentQuoteRecord } from '@/lib/shipping/refresh-order-shipment-quote';
 import type {
   ShipmentBookingResult,
@@ -22,7 +24,7 @@ export async function persistBookedShipment(params: {
   clearBookingLock?: boolean;
 }): Promise<
   | { ok: true; shipmentId: string }
-  | { ok: false; error: string; trackingNumber: string; status: 500 }
+  | { ok: false; error: string; trackingNumber: string; status: 500 | 409 }
 > {
   const {
     supabase,
@@ -42,6 +44,35 @@ export async function persistBookedShipment(params: {
   if (!shipmentId) {
     if (!senderInfo || !receiver || !items) {
       throw new Error('Fresh shipment persistence requires shipment details.');
+    }
+
+    // A full refund may have finalized while the provider call was in
+    // flight: refuse the persist (the confirm files the ops review)
+    // rather than recording a shipment for refunded money.
+    try {
+      await confirmBookedOrderPaymentPersist({
+        merchantId,
+        orderId,
+        provider: result.provider,
+        providerShipmentId: result.providerShipmentId,
+        supabase,
+        trackingNumber: result.trackingNumber,
+      });
+    } catch (error) {
+      if (
+        error instanceof OrderShipmentBookingError &&
+        error.code === 'ORDER_REFUNDED_AFTER_BOOKING'
+      ) {
+        return {
+          ok: false,
+          status: 409,
+          trackingNumber: result.trackingNumber,
+          error:
+            'This order was refunded after the provider booking was submitted. The shipment was recorded for operations review and was not saved. Contact support with tracking number: ' +
+            result.trackingNumber,
+        };
+      }
+      throw error;
     }
 
     const { data: shipment, error: shipmentError } = await supabase

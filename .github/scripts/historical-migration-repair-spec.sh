@@ -38,6 +38,9 @@ historical_migration_repair_spec() {
     20260815103000:capture_private_expense_receipt_cleanup)
       printf '%s\t%s\t%s\n' '20260815220000' 'repair_capture_private_expense_receipt_cleanup' '64530e9b7d94d9e2f832a8464593af977cb0af18c727a1a1b54c62310550997b'
       ;;
+    20260921100200:enforce_merchant_shipping_provider_policy)
+      printf '%s\t%s\t%s\n' '20260926130000' 'repair_shipping_provider_policy_audit' 'c89fb79e44148fe68caf65d99aed81de7a1ffd0d42b6ff85fbd41d9d98eceda3'
+      ;;
     *) return 1 ;;
   esac
 }

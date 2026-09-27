@@ -1,11 +1,11 @@
-import './negotiations-test-setup';
+import '../../test/mocks/negotiations-test-setup';
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Alert } from 'react-native';
 import { describe, expect, it, vi } from 'vitest';
 import { apiClient } from '@/lib/api-client';
+import { mocks } from '../../test/mocks/negotiations-test-setup';
 import NegotiationsScreen from './negotiations';
-import { mocks } from './negotiations-test-setup';
 
 describe('NegotiationsScreen', () => {
   it('executes the production query with its merchant scope and explicit columns', async () => {

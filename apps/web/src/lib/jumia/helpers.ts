@@ -6,7 +6,8 @@
  */
 
 import { ZodError } from 'zod';
-import { env as validatedEnv } from '@/env';
+import { getJumiaEnvironment as readJumiaEnvironment } from '@/env';
+import { JumiaApiError } from '@/lib/jumia/jumia-api-error';
 import type { JumiaTokenResponse } from '@/schemas/jumia';
 import { JumiaTokenResponseSchema } from '@/schemas/jumia';
 
@@ -20,7 +21,7 @@ const BASE_URLS: Record<JumiaEnvironment, string> = {
 };
 
 export function getJumiaEnvironment(): JumiaEnvironment {
-  return validatedEnv.JUMIA_ENVIRONMENT;
+  return readJumiaEnvironment() ?? 'staging';
 }
 
 export function getJumiaBaseUrl(env?: JumiaEnvironment): string {
@@ -106,16 +107,7 @@ export function getJumiaRedirectUri(appUrl: string): string {
 
 // ── OAuth: Code exchange ──
 
-export class JumiaApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-    public details?: unknown
-  ) {
-    super(`Jumia API Error (${status}): ${message}`);
-    this.name = 'JumiaApiError';
-  }
-}
+export { JumiaApiError } from '@/lib/jumia/jumia-api-error';
 
 function redactJumiaErrorDetails(raw: string): string {
   return raw

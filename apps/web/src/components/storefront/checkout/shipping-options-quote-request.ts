@@ -15,6 +15,8 @@ interface ShippingOptionsQuoteRequest {
   receiverPhone: string;
   receiverName: string;
   quoteItems: ShippingQuoteItem[];
+  /** Canonical checkout subtotal, including assurance fees when selected. */
+  cartSubtotal: number;
 }
 
 export function requestShippingOptions({
@@ -25,6 +27,7 @@ export function requestShippingOptions({
   receiverPhone,
   receiverName,
   quoteItems,
+  cartSubtotal,
 }: ShippingOptionsQuoteRequest): Promise<unknown> {
   return apiPost<unknown>(
     '/api/shipping/quotes',
@@ -42,11 +45,12 @@ export function requestShippingOptions({
       },
       items: quoteItems,
       shipmentType: 'domestic',
-      // Lets free-over / price-tier merchant rates quote at their real price.
-      cart_subtotal: quoteItems.reduce(
-        (sum, item) => sum + item.value * item.quantity,
-        0
-      ),
+      // Lets free-over / price-tier merchant rates quote against the same
+      // canonical subtotal that order-time validation uses.
+      cart_subtotal: cartSubtotal,
+      // This checkout threads selected merchant rates back to /api/orders as
+      // a bare shipping_rate_id, so they are safe to offer alongside carriers.
+      supports_merchant_rates: true,
     },
     {
       headers: { 'x-baci-client': 'web-storefront' },

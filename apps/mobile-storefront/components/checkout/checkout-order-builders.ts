@@ -1,3 +1,4 @@
+import { parseMerchantRateQuoteId } from '@baci/shared/lib';
 import {
   getPickupStationAddressText,
   isProviderStationPickupQuote,
@@ -38,6 +39,16 @@ interface BuildOrderRequestParams {
 type CheckoutOrderRequest = Omit<CreateOrderRequest, 'items'> & {
   items: MobileCheckoutOrderItemPayload[];
 };
+
+function getMerchantRateId(
+  selectedQuote: ShippingQuote | undefined
+): string | undefined {
+  if (selectedQuote?.provider !== 'MERCHANT') {
+    return undefined;
+  }
+
+  return parseMerchantRateQuoteId(selectedQuote.id);
+}
 
 export function createCheckoutSnapshot(
   itemsSnapshot: CartItem[],
@@ -143,6 +154,22 @@ export function buildCheckoutOrderRequest({
   shippingProvider,
   snapshot,
 }: BuildOrderRequestParams): CheckoutOrderRequest {
+  const isMerchantRateQuote = selectedQuote?.provider === 'MERCHANT';
+  const merchantRateId = getMerchantRateId(selectedQuote);
+  if (isMerchantRateQuote && !merchantRateId) {
+    throw new Error(
+      'The selected merchant delivery option is invalid. Please refresh shipping options.'
+    );
+  }
+  const canUseCarrierQuote =
+    !isMerchantRateQuote &&
+    selectedQuote?.id != null &&
+    ((deliveryMethod === 'door' &&
+      !isProviderStationPickupQuote(selectedQuote)) ||
+      (deliveryMethod === 'airport' && isGiglGoFasterQuote(selectedQuote)) ||
+      (deliveryMethod === 'pickup_station' &&
+        isProviderStationPickupQuote(selectedQuote)));
+
   return {
     customer_email: customerEmail,
     customer_name: customerName,
@@ -156,15 +183,11 @@ export function buildCheckoutOrderRequest({
       ? { airport_type: 'delivery' as const }
       : {}),
     selected_quote_id:
-      selectedQuote?.id != null &&
-      ((deliveryMethod === 'door' &&
-        !isProviderStationPickupQuote(selectedQuote)) ||
-        (deliveryMethod === 'airport' && isGiglGoFasterQuote(selectedQuote)) ||
-        (deliveryMethod === 'pickup_station' &&
-          isProviderStationPickupQuote(selectedQuote)))
+      selectedQuote && canUseCarrierQuote
         ? String(selectedQuote.id)
         : undefined,
-    shipping_provider: shippingProvider,
+    ...(merchantRateId ? { shipping_rate_id: merchantRateId } : {}),
+    shipping_provider: isMerchantRateQuote ? undefined : shippingProvider,
     payment_method: paymentMethodForOrder,
     shipping_address: buildOrderShippingAddress(
       address,

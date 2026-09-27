@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { type ComponentType, Suspense } from 'react';
+import { Suspense } from 'react';
 import { ContentRouteLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
 import { JsonLd } from '@/components/seo/json-ld';
+import { OgabasseyV2HelpSupport } from '@/components/storefront/ogabassey/pages/help-support';
+import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import {
   getMerchantByIdentifier,
   getRequestScopedMerchant,
@@ -10,7 +12,6 @@ import {
 import { toTemplateMerchantData } from '@/lib/merchant-template-data';
 import { generateFAQSchema, getIndexableRobotsMetadata } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
-import { getTemplate, type TemplatePageProps } from '@/templates/registry';
 import { type FAQItem, parseLegacyFAQ } from '@/types/faq';
 import { ContentPageCrawlSummary } from '../content-page-crawl-summary';
 import { FAQPageClient } from '../pages/faq/faq-page-client';
@@ -108,52 +109,27 @@ async function FAQContent({ params }: PageProps) {
 
   const faqItems = extractFaqItems(merchant);
 
-  // Resolve template component server-side for SEO (H1 in SSR HTML)
-  const templateId = merchant.template_id;
-  if (templateId && templateId !== 'default' && templateId !== 'puck') {
-    const template = getTemplate(templateId);
-    if (template) {
-      // Resolve the template data inside try/catch, but construct JSX outside
-      // of it: try/catch cannot catch React rendering errors, and JSX inside
-      // a try block prevents React Compiler optimization.
-      let templateHelpUi: {
-        HelpComponent: ComponentType<TemplatePageProps>;
-        merchantData: ReturnType<typeof toTemplateMerchantData>;
-      } | null = null;
-      try {
-        const components = await template.getComponents();
-        if (components.Help) {
-          templateHelpUi = {
-            HelpComponent: components.Help,
-            merchantData: toTemplateMerchantData(merchant),
-          };
-        }
-      } catch (error) {
-        console.error(
-          'Failed to load Help component for template',
-          templateId,
-          ':',
-          error
-        );
-      }
-      if (templateHelpUi) {
-        const { HelpComponent } = templateHelpUi;
-        return (
-          <>
-            <HelpComponent
-              merchant={templateHelpUi.merchantData}
-              storeSlug={merchant.slug}
-              isPreview={false}
-            />
-            <ContentPageCrawlSummary
-              kind="faq"
-              merchantName={merchant.business_name}
-              businessType={merchant.business_type}
-            />
-          </>
-        );
-      }
-    }
+  // Resolve template component server-side for SEO (H1 in SSR HTML).
+  // Only the Ogabassey template defines a Help page; import it directly so
+  // this route's chunk carries exactly this page. Construct JSX outside any
+  // guard (try/catch cannot catch React rendering errors, and JSX inside a
+  // try block prevents React Compiler optimization).
+  const TemplateHelp =
+    merchant.template_id === OGABASSEY_TEMPLATE_ID
+      ? OgabasseyV2HelpSupport
+      : null;
+  if (TemplateHelp) {
+    const merchantData = toTemplateMerchantData(merchant);
+    return (
+      <>
+        <TemplateHelp merchant={merchantData} />
+        <ContentPageCrawlSummary
+          kind="faq"
+          merchantName={merchant.business_name}
+          businessType={merchant.business_type}
+        />
+      </>
+    );
   }
 
   // Fallback to default FAQ page

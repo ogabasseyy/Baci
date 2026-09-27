@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ComponentProps } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { PaymentTab } from '../types';
 import { PaymentOptionsPanel } from './PaymentOptionsPanel';
@@ -6,7 +7,8 @@ import { PaymentOptionsPanel } from './PaymentOptionsPanel';
 function renderPanel(
   paymentTab: PaymentTab = 'full',
   gatewayAvailable = true,
-  hasInstallmentOptions = true
+  hasInstallmentOptions = true,
+  redvault: Partial<ComponentProps<typeof PaymentOptionsPanel>> = {}
 ) {
   const setPaymentTab = vi.fn();
   const setPaymentMethod = vi.fn();
@@ -22,20 +24,86 @@ function renderPanel(
       klumpEligible={false}
       hasInstallmentOptions={hasInstallmentOptions}
       currency="NGN"
+      redvaultAvailable={false}
+      redvaultStatus="idle"
+      redvaultSummary={null}
+      {...redvault}
     />
   );
   return { setPaymentTab, setPaymentMethod };
 }
 
 describe('payment schedule selection', () => {
+  it('hides unavailable REDVAULT and allows selecting it when available', () => {
+    const hidden = renderPanel();
+    expect(
+      screen.queryByRole('radio', { name: /pay with uba/i })
+    ).not.toBeInTheDocument();
+    expect(hidden.setPaymentMethod).not.toHaveBeenCalled();
+  });
+  it('forwards the REDVAULT selection from the actual panel', () => {
+    const { setPaymentMethod } = renderPanel('full', true, false, {
+      redvaultAvailable: true,
+    });
+    fireEvent.click(screen.getByRole('radio', { name: /pay with uba/i }));
+    expect(setPaymentMethod).toHaveBeenCalledWith('uba_redvault');
+  });
+  it.each([
+    'error',
+    'held',
+  ] as const)('displays the %s state through the panel', (redvaultStatus) => {
+    renderPanel('full', true, false, {
+      paymentMethod: 'uba_redvault',
+      redvaultAvailable: true,
+      redvaultStatus,
+      redvaultSummary: {
+        productSubtotalKobo: 11000,
+        eligibleSubtotalKobo: 10000,
+        ineligibleSubtotalKobo: 1000,
+        discountKobo: 500,
+        assuranceFeeKobo: 0,
+        taxKobo: 750,
+        shippingKobo: 500,
+        giftWrappingKobo: 0,
+        payableKobo: 11750,
+        mixedBasket: true,
+      },
+    });
+    expect(screen.getByRole('radio', { name: /pay with uba/i })).toBeChecked();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      redvaultStatus === 'held' ? /Payment received/ : /could not prepare/
+    );
+    if (redvaultStatus === 'held')
+      expect(
+        screen.getByRole('radio', { name: /pay with uba/i })
+      ).toBeDisabled();
+    expect(screen.getByText('₦117.50')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['pending', 'status', /awaiting reconciliation/i],
+    ['held', 'alert', /Payment received/i],
+    ['error', 'alert', /could not prepare/i],
+  ] as const)(
+    'shows the selected REDVAULT %s state before a quote is available',
+    (redvaultStatus, role, message) => {
+      renderPanel('full', true, false, {
+        paymentMethod: 'uba_redvault',
+        redvaultAvailable: true,
+        redvaultStatus,
+      });
+
+      expect(screen.getByRole(role)).toHaveTextContent(message);
+      expect(screen.queryByText(/Total due/)).not.toBeInTheDocument();
+    }
+  );
+
   it('hides unavailable installments and restores full payment choices', async () => {
     renderPanel('installments', true, false);
     expect(
       screen.queryByRole('button', { name: 'Pay in Installments' })
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole('radio', { name: /generate invoice/i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Get a Proforma Invoice' })).toBeInTheDocument();
   });
 
   describe('bugfix: stale installments tab after wallet makes installments ineligible', () => {
@@ -50,15 +118,26 @@ describe('payment schedule selection', () => {
         expect(setPaymentTab).toHaveBeenCalledWith('full');
       });
       expect(setPaymentMethod).not.toHaveBeenCalled();
-      expect(
-        screen.getByRole('radio', { name: /generate invoice/i })
-      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Get a Proforma Invoice' })).toBeInTheDocument();
     });
   });
-  it('offers invoice creation without requiring an online payment gateway', () => {
-    const { setPaymentMethod } = renderPanel('full', false);
+  it('offers the invoice option exactly once, on its own tab', () => {
+    renderPanel('full');
 
-    fireEvent.click(screen.getByRole('radio', { name: /generate invoice/i }));
+    // The "Get a Proforma Invoice" tab owns invoice selection: no
+    // duplicate invoice card may appear under Pay in Full.
+    expect(
+      screen.getByRole('button', { name: 'Get a Proforma Invoice' })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('radio', { name: /invoice/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it('offers a proforma invoice without requiring an online payment gateway', () => {
+    const { setPaymentMethod } = renderPanel('invoice', false);
+
+    fireEvent.click(screen.getByRole('radio', { name: /get a proforma invoice/i }));
 
     expect(setPaymentMethod).toHaveBeenCalledWith('invoice');
   });
@@ -67,13 +146,14 @@ describe('payment schedule selection', () => {
     renderPanel('installments');
 
     expect(
-      screen.queryByRole('radio', { name: /generate invoice/i })
+      screen.queryByRole('radio', { name: /get a proforma invoice/i })
     ).not.toBeInTheDocument();
   });
 
   it.each([
     ['full', 'Pay in Full', 'Pay in Installments'],
     ['installments', 'Pay in Installments', 'Pay in Full'],
+    ['invoice', 'Get a Proforma Invoice', 'Pay in Full'],
   ] as const)('keeps the %s selection distinct when dark mode flattens neutral surfaces', (value, selected, inactive) => {
     renderPanel(value);
 
@@ -100,6 +180,7 @@ describe('payment schedule selection', () => {
   it.each([
     ['full', 'Pay in Installments', 'installments'],
     ['installments', 'Pay in Full', 'full'],
+    ['invoice', 'Pay in Full', 'full'],
   ] as const)('switches away from %s and clears the old gateway', (value, label, next) => {
     const { setPaymentTab, setPaymentMethod } = renderPanel(value);
 

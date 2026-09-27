@@ -4,49 +4,16 @@ import { showAppAlert } from '@/components/ui/show-app-alert';
 import { setClipboardString } from '@/lib/clipboard';
 import { initializeSavingsAuthorization } from '@/lib/customer-savings';
 import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
-import { runSavingsGoalSubmission } from './run-savings-goal-submission';
 import {
-  formatDateInput,
-  type SavingsFrequency,
-} from './start-savings.helpers';
-import type {
-  SavingsProductChoice,
-  SavingsSourceMode,
-} from './start-savings.types';
+  runSavingsGoalSubmission,
+  type UseStartSavingsSubmitInput,
+} from './run-savings-goal-submission';
+import { formatDateInput } from './start-savings.helpers';
+import type { SavingsProductChoice } from './start-savings.types';
 import { getErrorMessage } from './start-savings-controller.utils';
-
-type FundingAccount = {
-  account_number: string;
-} | null;
 
 // Standard authorization amount used for card verification.
 const CARD_AUTHORIZATION_AMOUNT = 100;
-
-export type UseStartSavingsSubmitInput = {
-  activeMerchantId?: string;
-  activeMerchantSlug?: string;
-  contributionValue: number;
-  effectiveInitialContribution: number;
-  frequency: SavingsFrequency;
-  fundingAccount: FundingAccount;
-  initialContributionIdempotencyKey: string | null;
-  maturityDate: string;
-  normalizedVariantId?: string;
-  preferredDebitTime: string;
-  refetch: () => Promise<unknown>;
-  requiredTopUpAmount: number;
-  selectedPaymentMethodId: string | null;
-  selectedProduct: SavingsProductChoice | null;
-  setFormError: (value: string | null) => void;
-  setInitialContributionIdempotencyKey: (value: string | null) => void;
-  setShowFundingModal: (value: boolean) => void;
-  setShowPreviewModal: (value: boolean) => void;
-  setShowSuccessModal: (value: boolean) => void;
-  setShowTransferModal: (value: boolean) => void;
-  sourceMode: SavingsSourceMode;
-  startDate: string;
-  targetValue: number;
-};
 
 type SavingsInputValidation =
   | {

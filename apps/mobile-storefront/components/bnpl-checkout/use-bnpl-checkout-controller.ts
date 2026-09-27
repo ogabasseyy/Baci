@@ -1,40 +1,42 @@
 import { useEffect, useRef, useState } from 'react';
-import type { WebView, WebViewNavigation } from 'react-native-webview';
+import type { WebView } from 'react-native-webview';
 import { useCartStore } from '@/stores/cart-store';
-import type {
-  BNPLShouldStartLoadRequest,
-  BNPLWebViewHttpErrorEvent,
-  BNPLWebViewLoadError,
-} from './BNPLCheckoutWebView';
 import {
-  BNPL_UNTRUSTED_POPUP_MESSAGE,
   buildBNPLCheckoutUrl,
   getBNPLGatewayName,
   parseBNPLParams,
-  resolveBNPLDocumentNavigation,
 } from './bnpl-checkout.helpers';
 import { createBNPLCheckoutAppNavigation } from './bnpl-checkout-app-navigation';
-import {
-  resolveBNPLNavigationUrlEffect,
-  shouldHandleBNPLNavigationMessage,
-} from './bnpl-checkout-controller-actions';
+import { shouldHandleBNPLNavigationMessage } from './bnpl-checkout-controller-actions';
 import {
   type BNPLWebViewMessageEvent,
   createBNPLWebViewMessageHandler,
-  logBNPLCheckoutDebug,
 } from './bnpl-checkout-message-handler';
+import { createBNPLNavigationHandlers } from './bnpl-checkout-navigation-handlers';
+import { createBNPLProviderBridgeHandlers } from './bnpl-checkout-provider-bridge';
 import { createBNPLLoadTimers } from './bnpl-checkout-timers';
+import { createBNPLWebViewErrorHandlers } from './bnpl-checkout-webview-error-handlers';
+import { createBNPLLoadHandlers } from './bnpl-load-handlers';
 import { createBNPLOpenWindowHandler } from './bnpl-open-window-handler';
+import { useBNPLFailureRecorder } from './use-bnpl-failure-recorder';
+import { useIsMountedRef } from './use-is-mounted-ref';
 
 type BNPLCheckoutParams = Parameters<typeof parseBNPLParams>[0];
 export type BNPLCheckoutStatus = 'loading' | 'ready' | 'success' | 'error';
-
+export type BNPLSetCheckoutStatus = (
+  nextStatus:
+    | BNPLCheckoutStatus
+    | ((currentStatus: BNPLCheckoutStatus) => BNPLCheckoutStatus)
+) => void;
+export type BNPLRecordCheckoutFailure = (
+  reason: 'bnpl_provider_error' | 'bnpl_load_error',
+  reference?: string
+) => void;
 type BNPLCheckoutControllerInput = {
   apiBaseUrl: string;
   merchantDomain?: string;
   params: BNPLCheckoutParams;
 };
-
 export function useBNPLCheckoutController({
   apiBaseUrl,
   merchantDomain,
@@ -46,41 +48,60 @@ export function useBNPLCheckoutController({
   const appNavigationRef = useRef<ReturnType<
     typeof createBNPLCheckoutAppNavigation
   > | null>(null);
-
   const getAppNavigation = () => {
     if (appNavigationRef.current === null) {
       appNavigationRef.current = createBNPLCheckoutAppNavigation();
     }
     return appNavigationRef.current;
   };
-
   const validatedParams = parseBNPLParams(params);
-  const { orderId, gateway, amount, trackingToken, merchantSlug } =
-    validatedParams.data || {};
+  const {
+    orderId,
+    gateway,
+    amount,
+    orderTotal,
+    trackingToken,
+    merchantSlug,
+    customerEmail,
+    customerPhone,
+    subtotal,
+    shipping,
+    tax,
+  } = validatedParams.data || {};
   const bnplUrl = buildBNPLCheckoutUrl({
     apiBaseUrl,
     params: validatedParams,
   });
-
   const [status, setStatusState] = useState<BNPLCheckoutStatus>('loading');
   const [currentUrl, setCurrentUrl] = useState(bnplUrl);
   const [prevBnplUrl, setPrevBnplUrl] = useState(bnplUrl);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const hasReturnedToAppRef = useRef(false);
+  // Attempt-scoped failure recorder (single payment_failed per attempt;
+  // reset only by Retry): the focused hook below owns the guard.
+  const { recordCheckoutFailure, resetCheckoutFailure } =
+    useBNPLFailureRecorder({ orderId, gateway, orderTotal });
   const statusRef = useRef<BNPLCheckoutStatus>('loading');
-
+  const isMountedRef = useIsMountedRef();
+  const documentUrlRef = useRef(bnplUrl);
+  const trackDocumentUrl = (url: unknown) => {
+    if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+      return;
+    }
+    documentUrlRef.current = url;
+  };
+  // The start is recorded only once the launcher confirms the provider
+  // flow opened: initialization failures before that point (order lookup,
+  // SDK load, popup creation) must not count as a start. A ref (not state)
+  // so duplicate opened signals cannot double-emit.
+  const paymentStartRecordedRef = useRef(false);
   if (bnplUrl !== prevBnplUrl) {
     setPrevBnplUrl(bnplUrl);
     if (bnplUrl) {
       setCurrentUrl(bnplUrl);
     }
   }
-
-  const setCheckoutStatus = (
-    nextStatus:
-      | BNPLCheckoutStatus
-      | ((currentStatus: BNPLCheckoutStatus) => BNPLCheckoutStatus)
-  ) => {
+  const setCheckoutStatus: BNPLSetCheckoutStatus = (nextStatus) => {
     const resolvedStatus =
       typeof nextStatus === 'function'
         ? nextStatus(statusRef.current)
@@ -88,7 +109,6 @@ export function useBNPLCheckoutController({
     statusRef.current = resolvedStatus;
     setStatusState(resolvedStatus);
   };
-
   const getLoadTimers = () =>
     createBNPLLoadTimers({
       loadTimeoutRef,
@@ -99,7 +119,6 @@ export function useBNPLCheckoutController({
   const clearPendingLoadTimeout = () =>
     getLoadTimers().clearPendingLoadTimeout();
   const scheduleLoadTimeout = () => getLoadTimers().scheduleLoadTimeout();
-
   useEffect(
     () => () => {
       if (loadTimeoutRef.current) {
@@ -110,7 +129,6 @@ export function useBNPLCheckoutController({
     },
     []
   );
-
   const returnToAppFromProviderExit = () => {
     if (hasReturnedToAppRef.current || statusRef.current === 'success') {
       return;
@@ -122,45 +140,56 @@ export function useBNPLCheckoutController({
     getAppNavigation().returnToApp();
   };
 
-  const handleNavigationUrl = async (url: string) => {
-    const effect = resolveBNPLNavigationUrlEffect(url, {
+  const { handleNavigationChange, handleNavigationUrl } =
+    createBNPLNavigationHandlers({
+      amount,
       apiBaseUrl,
+      clearCart,
+      clearPendingLoadTimeout,
+      customerEmail,
+      customerPhone,
+      gateway,
+      isMountedRef,
       merchantDomain,
       merchantSlug,
+      orderId,
+      orderTotal,
+      recordCheckoutFailure,
+      returnToAppFromProviderExit,
+      scheduleOrderSuccess: (scheduleParams) =>
+        getAppNavigation().scheduleOrderSuccess(scheduleParams),
+      setCheckoutStatus,
+      setErrorMessage,
+      shipping,
+      statusRef,
+      subtotal,
+      tax,
+      trackDocumentUrl,
+      trackingToken,
     });
-    if (!effect) {
-      return;
-    }
-
-    clearPendingLoadTimeout();
-    if (effect.status === 'return-to-app') {
-      returnToAppFromProviderExit();
-      return;
-    }
-
-    setCheckoutStatus(effect.status);
-    if (effect.status === 'success') {
-      await clearCart();
-      getAppNavigation().scheduleOrderSuccess({
-        gateway,
-        orderId,
-        reference: effect.reference,
-        trackingToken,
-      });
-      return;
-    }
-    setErrorMessage(effect.errorMessage);
-  };
-
-  const handleNavigationChange = (navState: WebViewNavigation) =>
-    handleNavigationUrl(navState.url);
 
   const handleClose = () =>
     getAppNavigation().showCancelAlert(returnToAppFromProviderExit);
 
+  const { handleProviderErrorMessage, handleProviderOpenedMessage } =
+    createBNPLProviderBridgeHandlers({
+      amount,
+      clearPendingLoadTimeout,
+      gateway,
+      orderId,
+      orderTotal,
+      paymentStartRecordedRef,
+      recordCheckoutFailure,
+      setCheckoutStatus,
+      setErrorMessage,
+      statusRef,
+    });
+
   const handleWebViewMessage = (event: BNPLWebViewMessageEvent) =>
     createBNPLWebViewMessageHandler({
       onCloseMessage: returnToAppFromProviderExit,
+      onProviderErrorMessage: handleProviderErrorMessage,
+      onProviderOpenedMessage: handleProviderOpenedMessage,
       onNavigationMessage: (url) => {
         if (
           !shouldHandleBNPLNavigationMessage({
@@ -179,6 +208,11 @@ export function useBNPLCheckoutController({
 
   const handleRetry = () => {
     clearPendingLoadTimeout();
+    resetCheckoutFailure();
+    // A new attempt must emit its own payment_started: without this reset
+    // a retried provider flow that opens and fails again produces an
+    // unmatched payment_failed and corrupts retry funnel measurements.
+    paymentStartRecordedRef.current = false;
     setCheckoutStatus('loading');
     setErrorMessage(null);
     setCurrentUrl(bnplUrl);
@@ -189,25 +223,14 @@ export function useBNPLCheckoutController({
     }
   };
 
-  const handleLoadStart = () => {
-    if (statusRef.current === 'error' || statusRef.current === 'success') {
-      return;
-    }
-    setErrorMessage(null);
-    scheduleLoadTimeout();
-    setCheckoutStatus('loading');
-  };
+  const { handleLoadEnd, handleLoadStart } = createBNPLLoadHandlers({
+    clearPendingLoadTimeout,
+    scheduleLoadTimeout,
+    setCheckoutStatus,
+    setErrorMessage,
+    statusRef,
+  });
 
-  const handleLoadEnd = () => {
-    clearPendingLoadTimeout();
-    setCheckoutStatus((currentStatus) =>
-      currentStatus === 'error' || currentStatus === 'success'
-        ? currentStatus
-        : 'ready'
-    );
-  };
-
-  // Pure factory returning the event handler — no render side effects.
   const handleOpenWindow = createBNPLOpenWindowHandler({
     apiBaseUrl,
     merchantDomain,
@@ -219,62 +242,28 @@ export function useBNPLCheckoutController({
     setErrorMessage,
   });
 
-  const handleShouldStartLoadWithRequest = (
-    request: BNPLShouldStartLoadRequest
-  ) => {
-    const currentDocumentUrl = currentUrl || bnplUrl;
-    const decision = resolveBNPLDocumentNavigation({
-      apiBaseUrl,
-      currentDocumentUrl,
-      isTopFrame: request.isTopFrame,
-      requestUrl: request.url,
-      merchantDomain,
-      merchantSlug,
-    });
-    logBNPLCheckoutDebug('document navigation decision', {
-      currentDocumentUrl,
-      decision,
-      isTopFrame: request.isTopFrame,
-      mainDocumentURL: request.mainDocumentURL,
-      merchantDomain,
-      merchantSlug,
-      navigationType: request.navigationType,
-      requestUrl: request.url,
-    });
-    if (decision.shouldStart) {
-      return true;
-    }
-
-    if (decision.reason === 'untrusted') {
-      clearPendingLoadTimeout();
-      setCheckoutStatus('error');
-      setErrorMessage(BNPL_UNTRUSTED_POPUP_MESSAGE);
-      return false;
-    }
-
-    if (decision.reason === 'return-to-app') {
-      returnToAppFromProviderExit();
-      return false;
-    }
-
-    setErrorMessage(null);
-    scheduleLoadTimeout();
-    setCheckoutStatus('loading');
-    setCurrentUrl(decision.nextUrl);
-    return false;
-  };
-
-  const handleWebViewError = (error: BNPLWebViewLoadError) => {
-    logBNPLCheckoutDebug('native load error', error);
-    clearPendingLoadTimeout();
-    setCheckoutStatus('error');
-    setErrorMessage(error.description || 'Failed to load payment page');
-  };
-
-  const handleWebViewHttpError = (event: BNPLWebViewHttpErrorEvent) => {
-    const { description, statusCode, url } = event.nativeEvent;
-    logBNPLCheckoutDebug('http error', { description, statusCode, url });
-  };
+  const {
+    handleShouldStartLoadWithRequest,
+    handleWebViewError,
+    handleWebViewHttpError,
+  } = createBNPLWebViewErrorHandlers({
+    apiBaseUrl,
+    bnplUrl,
+    clearPendingLoadTimeout,
+    currentUrl,
+    documentUrlRef,
+    merchantDomain,
+    merchantSlug,
+    paymentStartRecordedRef,
+    recordCheckoutFailure,
+    returnToAppFromProviderExit,
+    scheduleLoadTimeout,
+    setCheckoutStatus,
+    setCurrentUrl,
+    setErrorMessage,
+    statusRef,
+    trackDocumentUrl,
+  });
 
   return {
     amount,

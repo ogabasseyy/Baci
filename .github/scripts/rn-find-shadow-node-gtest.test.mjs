@@ -121,7 +121,7 @@ test('workflow pins immutable checkout SHA without persisted credentials', () =>
   const body = readFileSync(workflow, 'utf8');
   assert.match(
     body,
-    /actions\/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0/,
+    /actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/,
   );
   assert.match(body, /persist-credentials:\s*false/);
   assert.doesNotMatch(body, /actions\/checkout@v4\b/);

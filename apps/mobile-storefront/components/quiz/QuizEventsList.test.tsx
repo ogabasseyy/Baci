@@ -2,7 +2,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { QuizEventsList } from './QuizEventsList';
 import { createQuizLobbyStyles } from './QuizLobby.styles';
-import type { QuizThemeColors } from './QuizScreen.styles';
+import type { QuizThemeColors } from './quiz-theme';
 
 jest.mock('expo-image', () => ({ Image: 'Image' }));
 jest.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
@@ -181,7 +181,7 @@ describe('QuizEventsList', () => {
     fireEvent.press(
       screen.getByRole('button', { name: 'Accept and play quiz' })
     );
-    expect(screen.getByText('SuperQuiz waiting room')).toBeTruthy();
+    expect(screen.getByText('Waiting room')).toBeTruthy();
     expect(onStart).not.toHaveBeenCalled();
   });
 

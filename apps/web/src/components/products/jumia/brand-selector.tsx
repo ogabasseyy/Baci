@@ -30,12 +30,14 @@ const BRAND_LISTBOX_ID = 'jumia-brand-selector-listbox';
 
 interface BrandSelectorProps {
   merchantId: string;
+  integrationId?: string;
   value?: JumiaBrandItem | null;
   onSelect: (brand: JumiaBrandItem) => void;
 }
 
 export function JumiaBrandSelector({
   merchantId,
+  integrationId,
   value,
   onSelect,
 }: BrandSelectorProps) {
@@ -68,7 +70,7 @@ export function JumiaBrandSelector({
     setFetchStatus('loading');
     setErrorMessage(null);
     fetch(
-      `/api/marketplace/jumia/brands?merchantId=${encodeURIComponent(currentMerchantId)}`,
+      `/api/marketplace/jumia/brands?merchantId=${encodeURIComponent(currentMerchantId)}${integrationId ? `&integrationId=${encodeURIComponent(integrationId)}` : ''}`,
       { signal: controller.signal }
     )
       .then((res) => {

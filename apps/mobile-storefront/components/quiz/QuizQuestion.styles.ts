@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import type { QuizThemeColors } from './QuizScreen.styles';
+import type { QuizThemeColors } from './quiz-theme';
 
 export function createQuizQuestionStyles(colors: QuizThemeColors) {
   return StyleSheet.create({

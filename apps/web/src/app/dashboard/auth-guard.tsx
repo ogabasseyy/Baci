@@ -1,6 +1,7 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { getConfiguredAgenticMerchantSlug } from '@/lib/agentic/agentic-merchant-slug';
 import { getMerchantForUser } from '@/lib/merchant-server';
 import { DashboardProviders } from './providers';
 
@@ -62,6 +63,7 @@ export async function DashboardAuthGuard({
       initialUser={user}
       initialMerchant={merchant}
       initialStaffAccess={staffAccess}
+      agenticMerchantSlug={getConfiguredAgenticMerchantSlug() ?? null}
       nonce={nonce}
     >
       {children}

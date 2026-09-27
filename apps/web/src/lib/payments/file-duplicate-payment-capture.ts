@@ -1,0 +1,85 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+export interface DuplicateCaptureEvidence {
+  mismatchDetail?: string;
+  mismatchKind?: string;
+  providerAmount: number;
+  providerCurrency: string;
+  providerReference: string;
+  providerStatus: string;
+}
+
+/**
+ * Files a duplicate-capture review for a stale attempt Paystack verified as
+ * captured, merging into the open review on conflict, then stamps the row so
+ * the sweep never reselects it. Returns true when the evidence is durable.
+ */
+export async function fileDuplicatePaymentCapture({
+  attempt,
+  evidence,
+  supabase,
+}: {
+  attempt: {
+    gateway_reference: string;
+    id: string;
+    merchant_id: string;
+    metadata: Record<string, unknown> | null;
+    order_id: string;
+  };
+  evidence: DuplicateCaptureEvidence;
+  supabase: SupabaseClient;
+}): Promise<boolean> {
+  const detail = evidence.mismatchKind
+    ? ` with ${evidence.mismatchKind} (${evidence.mismatchDetail ?? 'provider evidence differs'})`
+    : '';
+  const { error: reviewError } = await supabase
+    .from('reconciliation_review')
+    .insert({
+      issue_type: 'duplicate_payment_capture_requires_review',
+      order_id: attempt.order_id,
+      merchant_id: attempt.merchant_id,
+      txn_id: attempt.id,
+      paystack_ref: attempt.gateway_reference,
+      reason: `Stale Paystack attempt ${attempt.gateway_reference} verified as captured while the order is already paid; possible duplicate charge${detail}`,
+      metadata: {
+        payment_transaction_id: attempt.id,
+        provider_status: evidence.providerStatus,
+        provider_reference: evidence.providerReference,
+        provider_amount: evidence.providerAmount,
+        provider_currency: evidence.providerCurrency,
+        ...(evidence.mismatchKind
+          ? { evidence_mismatch: evidence.mismatchKind }
+          : {}),
+      },
+    });
+  if (reviewError && (reviewError as { code?: string }).code !== '23505') {
+    return false;
+  }
+  if (reviewError) {
+    // Another capture on this order already occupies the review slot;
+    // merge this attempt in so operations sees every charge.
+    const { data: merged, error: mergeError } = await supabase.rpc(
+      'merge_duplicate_payment_capture_evidence_v1',
+      {
+        p_order_id: attempt.order_id,
+        p_merchant_id: attempt.merchant_id,
+        p_transaction_id: attempt.id,
+        p_gateway_reference: attempt.gateway_reference,
+        p_reason: `Stale attempt ${attempt.gateway_reference} verified as captured${detail}`,
+      }
+    );
+    if (mergeError || merged !== true) return false;
+  }
+  const { error: stampError } = await supabase
+    .from('transactions')
+    .update({
+      metadata: {
+        ...(attempt.metadata ?? {}),
+        abandoned_sweep_resolution: 'verified_success_captured',
+        abandoned_sweep_resolved_at: new Date().toISOString(),
+      },
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', attempt.id);
+  return !stampError;
+}

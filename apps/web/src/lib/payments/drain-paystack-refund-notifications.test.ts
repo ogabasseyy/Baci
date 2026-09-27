@@ -99,7 +99,10 @@ function database(
       if (table === 'transactions') return ledgerQuery();
       return finish;
     }),
-    rpc: vi.fn().mockResolvedValue({ data: [row], error: null }),
+    rpc: vi
+      .fn()
+      .mockResolvedValue({ data: [], error: null })
+      .mockResolvedValueOnce({ data: [row], error: null }),
     finish,
   };
 }
@@ -219,6 +222,9 @@ describe('Paystack refund notifications', () => {
     });
     await drainPaystackRefundNotifications(db as never, mocks.sendEmail);
     expect(mocks.sendEmail.mock.calls[0][0].textContent).toContain('105');
+    expect(mocks.sendEmail.mock.calls[0][0].textContent).not.toContain(
+      'Paystack'
+    );
     expect(db.finish.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'sent' })
     );
@@ -244,6 +250,33 @@ describe('Paystack refund notifications', () => {
     expect(db.finish.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'failed' })
     );
+  });
+
+  it('claims the next row only after finishing the previous one', async () => {
+    const db = database('processed_customer_email');
+    db.rpc.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'notification-1',
+          order_id: 'order-1',
+          merchant_id: 'merchant-1',
+          event_type: 'processed_customer_email',
+          claim_token: 'claim-2',
+        },
+      ],
+      error: null,
+    });
+    await expect(
+      drainPaystackRefundNotifications(db as never, mocks.sendEmail)
+    ).resolves.toEqual({ claimed: 2, sent: 2, failed: 0 });
+    expect(db.rpc).toHaveBeenCalledWith(
+      'claim_paystack_cancellation_refund_notifications_v1',
+      { p_limit: 1 }
+    );
+    const secondClaimOrder = db.rpc.mock.invocationCallOrder[1] as number;
+    const firstFinishOrder = db.finish.update.mock
+      .invocationCallOrder[0] as number;
+    expect(firstFinishOrder).toBeLessThan(secondClaimOrder);
   });
 
   it('keeps a rejected email available for retry', async () => {

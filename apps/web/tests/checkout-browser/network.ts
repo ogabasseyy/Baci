@@ -12,13 +12,34 @@ export const test = base.extend<{
     async ({ context, page, allowedConsoleErrors }, use) => {
       const unexpected: string[] = [];
       const errors: string[] = [];
+      let paymentRetryScenario = false;
+      let providerErrorConsoleCount = 0;
+      let provider503ConsoleCount = 0;
       const remainingAllowedErrors = [...allowedConsoleErrors];
+      page.on('framenavigated', () => {
+        if (new URL(page.url()).searchParams.get('qa') === 'payment-retry')
+          paymentRetryScenario = true;
+      });
       page.on('pageerror', (error) => errors.push(error.message));
       page.on('console', (message) => {
         if (message.type() !== 'error') return;
         const expectedIndex = remainingAllowedErrors.indexOf(message.text());
         if (expectedIndex >= 0) remainingAllowedErrors.splice(expectedIndex, 1);
-        else errors.push(message.text());
+        else if (
+          paymentRetryScenario &&
+          providerErrorConsoleCount === 0 &&
+          message
+            .text()
+            .startsWith('Checkout error: Error: Fixture provider error')
+        ) {
+          providerErrorConsoleCount++;
+        } else if (
+          paymentRetryScenario &&
+          provider503ConsoleCount === 0 &&
+          /Failed to load resource:.*503/.test(message.text())
+        ) {
+          provider503ConsoleCount++;
+        } else errors.push(message.text());
       });
       await context.route('**/*', (route) => {
         const request = route.request();
@@ -72,6 +93,15 @@ export const test = base.extend<{
         return route.abort('blockedbyclient');
       });
       await use(undefined);
+      if (paymentRetryScenario) {
+        expect(
+          providerErrorConsoleCount,
+          'Injected checkout provider error'
+        ).toBe(1);
+        expect(provider503ConsoleCount, 'Injected provider 503 response').toBe(
+          1
+        );
+      }
       expect(unexpected, 'Unexpected network calls').toEqual([]);
       expect(errors, 'Browser errors').toEqual([]);
     },

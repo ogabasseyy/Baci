@@ -10,6 +10,9 @@ export const merchant: MerchantData = {
   country: 'NG',
   payout_currency: 'NGN',
   paystack_subaccount_configured: true,
+  // Enable a second card rail in the isolated harness so reviewers can exercise
+  // the real method-switching controls without a provider account.
+  feature_settings: { korapay_enabled: true },
   vat_registration_status: 'registered',
   vat_rate: 7.5,
 };

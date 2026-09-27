@@ -7,6 +7,8 @@ export async function seedCheckout(
 ) {
   await page.addInitScript(
     ({ item, details, emptyCart }) => {
+      if (sessionStorage.getItem('checkout-browser-fixture-seeded')) return;
+      sessionStorage.setItem('checkout-browser-fixture-seeded', '1');
       if (!localStorage.getItem('baci-cart-ogabassey-guest')) {
         localStorage.setItem(
           'baci-cart-ogabassey-guest',

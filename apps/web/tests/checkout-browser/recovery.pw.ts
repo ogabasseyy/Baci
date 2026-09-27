@@ -171,3 +171,41 @@ test('resumed order shows server totals and contact details with an empty cart',
   await page.getByRole('button', { name: 'Continue to Delivery' }).click();
   expect(lookups).toBe(1);
 });
+
+test('manual QA scenario controls are opt-in and reset local checkout state', async ({
+  page,
+}) => {
+  await seedCheckout(page);
+  await page.goto('/checkout');
+  await expect(
+    page.getByRole('complementary', { name: 'Manual checkout QA fixtures' })
+  ).toHaveCount(0);
+
+  await page.goto('/checkout?qa=manual');
+  const controls = page.getByRole('complementary', {
+    name: 'Manual checkout QA fixtures',
+  });
+  await expect(controls).toBeVisible();
+  await controls.getByLabel('Payment scenario').selectOption('provider-error');
+  await expect(controls.getByLabel('Payment scenario')).toHaveValue(
+    'provider-error'
+  );
+  await controls
+    .getByRole('button', { name: 'Reset checkout fixtures' })
+    .click();
+  await expect(page).toHaveURL(/\/cart$/);
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        cart: localStorage.getItem('baci-cart-ogabassey-guest'),
+        form: sessionStorage.getItem('checkout-form'),
+        pendingOrder: sessionStorage.getItem(
+          'storefront-checkout-pending-order'
+        ),
+      }))
+    )
+    .toEqual({ cart: null, form: null, pendingOrder: null });
+  expect(await page.evaluate(() => document.cookie)).toContain(
+    'checkout-qa-scenario=success'
+  );
+});

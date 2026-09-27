@@ -24,6 +24,8 @@
       "!apps/mobile-storefront/global.css",
       "!**/src/components/storefront/new-template",
       "!**/src/components/storefront/ogabassey/**/*.*",
+      "apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/prepare-checkout-delivery.ts",
+      "apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/prepare-checkout-delivery.test.ts",
       "apps/web/src/components/storefront/ogabassey/pages/checkout-page*.test.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout-page*test-support.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout-page.test-fixtures.tsx",

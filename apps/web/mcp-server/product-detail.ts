@@ -54,9 +54,6 @@ export async function buildMcpProductDetail({
     );
     if (variantError) {
       console.error('Failed to fetch public product variants:', variantError);
-      if (!product.has_condition_offers) {
-        return { content: [{ type: 'text', text: 'Product variants are temporarily unavailable.' }] };
-      }
       variantLookupFailed = true;
     } else {
       variants = variantData || [];
@@ -78,9 +75,6 @@ export async function buildMcpProductDetail({
     });
     if (offerError) {
       console.error('Failed to fetch public product offers:', offerError);
-      if (!product.has_variants) {
-        return { content: [{ type: 'text', text: 'Product offers are temporarily unavailable.' }] };
-      }
       offerLookupFailed = true;
     } else {
       conditionOffers = offerData || [];
@@ -96,12 +90,23 @@ export async function buildMcpProductDetail({
     product.has_variants && !variantLookupFailed ? variants : undefined,
     product.has_condition_offers && !offerLookupFailed ? conditionOffers : undefined
   );
+  const basePurchasable = !product.has_variants &&
+    (product.manage_stock !== true || Number(product.stock_quantity ?? 0) > 0);
+  const optionPrices = [
+    ...variants.filter((variant) => product.manage_stock !== true || variant.stock_quantity > 0)
+      .map((variant) => variant.price_override ?? product.price),
+    ...conditionOffers.filter((offer) => product.manage_stock !== true || offer.stock_quantity > 0)
+      .map((offer) => offer.price),
+    ...(basePurchasable ? [product.price] : []),
+  ].filter((price) => Number.isFinite(price) && price >= 0);
+  const displayPrice = optionPrices.length > 0 ? Math.min(...optionPrices) : product.price;
+  const displayCompareAtPrice = displayPrice === product.price ? product.compare_at_price : null;
   const formatted = {
     id: product.id,
     name: product.name,
     slug: product.slug,
-    price: product.price,
-    compare_at_price: product.compare_at_price,
+    price: displayPrice,
+    compare_at_price: displayCompareAtPrice,
     image: getSafeCatalogImageUrl(typeof product.images?.[0] === 'string' ? product.images[0] : product.images?.[0]?.url) ?? null,
     condition: product.condition || 'new',
     condition_detail: product.condition_detail,
@@ -115,15 +120,15 @@ export async function buildMcpProductDetail({
 
   // Build detailed text response
   let text = `**${product.name}**\n\n`;
-  text += `**Price:** ${formatPrice(product.price)}`;
+  text += `**Price:** ${formatPrice(displayPrice)}`;
   if (
-    product.compare_at_price &&
-    product.compare_at_price > product.price
+    displayCompareAtPrice &&
+    displayCompareAtPrice > displayPrice
   ) {
     const discount = Math.round(
-      (1 - product.price / product.compare_at_price) * 100
+      (1 - displayPrice / displayCompareAtPrice) * 100
     );
-    text += ` ~~${formatPrice(product.compare_at_price)}~~ (${discount}% off)`;
+    text += ` ~~${formatPrice(displayCompareAtPrice)}~~ (${discount}% off)`;
   }
   text += '\n';
 

@@ -79,6 +79,34 @@ describe('buildMcpProductDetail', () => {
     });
   });
 
+  it('shows the stocked offer price when base inventory is unavailable', async () => {
+    const supabase = { rpc: vi.fn(async () => ({ data: [
+      { condition: 'used', price: 80000, stock_quantity: 2, grade: null, condition_notes: null },
+    ], error: null })) } as unknown as SupabaseClient;
+    const result = await buildMcpProductDetail({
+      product: { ...product, has_variants: false, has_condition_offers: true, compare_at_price: 120000 },
+      supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+    });
+
+    expect(result.structuredContent).toMatchObject({
+      products: [{ price: 80000, compare_at_price: null, in_stock: true }],
+    });
+    expect(result.content[0].text).toContain('**Price:** 80000');
+    expect(result.content[0].text).not.toContain('120000');
+  });
+
+  it('shows a stocked variant price instead of an unavailable parent price', async () => {
+    const supabase = { rpc: vi.fn(async () => ({ data: [
+      { attributes: { storage: '128GB' }, price_override: 90000, stock_quantity: 2, condition: 'new', images: [] },
+    ], error: null })) } as unknown as SupabaseClient;
+    const result = await buildMcpProductDetail({
+      product, supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+    });
+
+    expect(result.structuredContent).toMatchObject({ products: [{ price: 90000, in_stock: true }] });
+    expect(result.content[0].text).toContain('**Price:** 90000');
+  });
+
   it('keeps sold-out-only colors out of the available-option summary', async () => {
     const supabase = { rpc: vi.fn(async () => ({
       data: [
@@ -107,10 +135,36 @@ describe('buildMcpProductDetail', () => {
     const supabase = { rpc: vi.fn(async () => ({ data: null, error: { message: 'unavailable' } })) } as unknown as SupabaseClient;
     try {
       const result = await buildMcpProductDetail({
-        product, supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+        product: { ...product, description: 'Useful phone', images: ['https://cdn.example/phone.jpg'] },
+        supabase, formatPrice: String, getSafeCatalogImageUrl: () => 'https://cdn.example/phone.jpg',
       });
-      expect(result.content[0].text).toBe('Product variants are temporarily unavailable.');
-      expect(result.structuredContent).toBeUndefined();
+      expect(result.content[0].text).toContain('Useful phone');
+      expect(result.content[0].text).toContain('Variant options are temporarily unavailable.');
+      expect(result.structuredContent).toMatchObject({
+        products: [{ name: 'Option Phone', price: 100000, image: 'https://cdn.example/phone.jpg',
+          in_stock: null, stock_confidence: 'unconfirmed' }],
+        variant_lookup_failed: true,
+      });
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it('keeps product details with unconfirmed availability when its only offer lookup fails', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const supabase = { rpc: vi.fn(async () => ({ data: null, error: { message: 'unavailable' } })) } as unknown as SupabaseClient;
+    try {
+      const result = await buildMcpProductDetail({
+        product: { ...product, description: 'Useful phone', has_variants: false, has_condition_offers: true },
+        supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+      });
+      expect(result.content[0].text).toContain('Useful phone');
+      expect(result.content[0].text).toContain('Condition offers are temporarily unavailable.');
+      expect(result.structuredContent).toMatchObject({
+        products: [{ name: 'Option Phone', price: 100000, in_stock: null,
+          stock_confidence: 'unconfirmed' }],
+        offer_lookup_failed: true,
+      });
     } finally {
       error.mockRestore();
     }

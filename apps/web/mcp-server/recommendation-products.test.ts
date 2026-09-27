@@ -116,6 +116,27 @@ describe('selectRecommendedProducts', () => {
     }))).toEqual([{ id: 'phone-with-stocked-base-offer', price: 80 }]);
   });
 
+  it('keeps an untracked offer-only base price eligible when alternate offers exceed budget', async () => {
+    const result = await selectRecommendedProducts({
+      keywords: ['phone'],
+      budget: 100,
+      fetchPage: async (offset) => offset === 0
+        ? [candidate('untracked-phone-with-base-offer', {
+            name: 'Phone', price: 80, manage_stock: false, has_condition_offers: true,
+          })]
+        : [],
+      fetchVariants: async () => [],
+      fetchOffers: async () => [
+        { product_id: 'untracked-phone-with-base-offer', price: 120, stock_quantity: null },
+      ],
+    });
+
+    expect(result.map((product) => ({
+      id: product.id,
+      price: product.recommendationPrice,
+    }))).toEqual([{ id: 'untracked-phone-with-base-offer', price: 80 }]);
+  });
+
   it('derives the displayed price from the lowest stocked option without a budget', async () => {
     const result = await selectRecommendedProducts({
       keywords: ['phone'],
@@ -173,6 +194,47 @@ describe('selectRecommendedProducts', () => {
       id: product.id,
       price: product.recommendationPrice,
     }))).toEqual([{ id: 'phone-with-cheaper-variant', price: 90 }]);
+  });
+
+  it('hydrates untracked variants to recommend a cheaper option within budget', async () => {
+    const fetchVariants = vi.fn(async () => [
+      { product_id: 'untracked-phone', price_override: 90, stock_quantity: null },
+    ]);
+    const result = await selectRecommendedProducts({
+      keywords: ['phone'],
+      budget: 100,
+      fetchPage: async (offset) => offset === 0
+        ? [candidate('untracked-phone', {
+            name: 'Phone', price: 180, manage_stock: false, has_variants: true,
+          })]
+        : [],
+      fetchVariants,
+      fetchOffers: async () => [],
+    });
+
+    expect(fetchVariants).toHaveBeenCalledWith(['untracked-phone']);
+    expect(result.map((product) => ({
+      id: product.id,
+      price: product.recommendationPrice,
+    }))).toEqual([{ id: 'untracked-phone', price: 90 }]);
+  });
+
+  it('does not advertise an untracked parent price when every variant exceeds budget', async () => {
+    const result = await selectRecommendedProducts({
+      keywords: ['phone'],
+      budget: 100,
+      fetchPage: async (offset) => offset === 0
+        ? [candidate('untracked-expensive-phone', {
+            name: 'Phone', price: 80, manage_stock: false, has_variants: true,
+          })]
+        : [],
+      fetchVariants: async () => [
+        { product_id: 'untracked-expensive-phone', price_override: 120, stock_quantity: null },
+      ],
+      fetchOffers: async () => [],
+    });
+
+    expect(result).toEqual([]);
   });
 
   it('continues past four pages of over-budget options to find an eligible product', async () => {

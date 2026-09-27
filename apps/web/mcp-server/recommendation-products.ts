@@ -53,11 +53,12 @@ export async function selectRecommendedProducts<T extends RecommendationCandidat
   let products = await fetchPage(offset, RECOMMENDATION_PAGE_SIZE) ?? [];
   while (products.length > 0 && matched.length < 4) {
     const candidates = fallback.length < 4 ? products : products.filter(matchesUseCase);
-    const trackedOptions = candidates.filter((product) =>
-      product.manage_stock === true && (product.has_variants || product.has_condition_offers)
+    const optionsNeedingHydration = candidates.filter((product) =>
+      (product.manage_stock === true || budget !== undefined) &&
+      (product.has_variants || product.has_condition_offers)
     );
-    const variantIds = trackedOptions.filter((product) => product.has_variants).map((product) => product.id);
-    const offerIds = trackedOptions.filter((product) => product.has_condition_offers).map((product) => product.id);
+    const variantIds = optionsNeedingHydration.filter((product) => product.has_variants).map((product) => product.id);
+    const offerIds = optionsNeedingHydration.filter((product) => product.has_condition_offers).map((product) => product.id);
     const [variants, offers] = await Promise.all([
       variantIds.length > 0 ? fetchVariants(variantIds) : [],
       offerIds.length > 0 ? fetchOffers(offerIds) : [],
@@ -82,29 +83,30 @@ export async function selectRecommendedProducts<T extends RecommendationCandidat
       if (stock.inStock === false) continue;
 
       let recommendationPrice: number | undefined;
-      if (product.manage_stock === true && (product.has_variants || product.has_condition_offers)) {
-        const stockedVariantPrices = product.has_variants && variants !== null
+      if ((product.manage_stock === true || budget !== undefined) &&
+        (product.has_variants || product.has_condition_offers)) {
+        const variantPrices = product.has_variants && variants !== null
           ? productVariants
-            .filter((variant) => Number(variant.stock_quantity ?? 0) > 0)
+            .filter((variant) => product.manage_stock !== true || Number(variant.stock_quantity ?? 0) > 0)
             .map((variant) => Number(variant.price_override ?? product.price))
             .filter(Number.isFinite)
           : [];
-        const stockedOfferPrices = product.has_condition_offers && offers !== null
+        const offerPrices = product.has_condition_offers && offers !== null
           ? productOffers
-            .filter((offer) => Number(offer.stock_quantity ?? 0) > 0 && offer.price != null)
+            .filter((offer) => (product.manage_stock !== true || Number(offer.stock_quantity ?? 0) > 0) && offer.price != null)
             .map((offer) => Number(offer.price))
             .filter(Number.isFinite)
           : [];
-        const stockedBaseOfferPrice = !product.has_variants &&
+        const baseOfferPrices = !product.has_variants &&
           product.has_condition_offers &&
-          Number(product.stock_quantity ?? 0) > 0 &&
+          (product.manage_stock !== true || Number(product.stock_quantity ?? 0) > 0) &&
           Number.isFinite(Number(product.price))
           ? [Number(product.price)]
           : [];
-        const stockedOptionPrices = [...stockedVariantPrices, ...stockedOfferPrices, ...stockedBaseOfferPrice];
+        const optionPrices = [...variantPrices, ...offerPrices, ...baseOfferPrices];
         const recommendationPrices = budget === undefined
-          ? stockedOptionPrices
-          : stockedOptionPrices.filter((price) => price <= budget);
+          ? optionPrices
+          : optionPrices.filter((price) => price <= budget);
         if (budget !== undefined && recommendationPrices.length === 0) continue;
         if (recommendationPrices.length > 0) {
           recommendationPrice = recommendationPrices.reduce((lowest, price) => Math.min(lowest, price));

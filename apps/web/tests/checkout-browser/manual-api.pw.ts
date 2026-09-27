@@ -1,3 +1,4 @@
+import { merchant } from './fixtures';
 import { expect, test } from './network';
 import { order, seedCheckout } from './setup';
 
@@ -17,7 +18,7 @@ test('manual mode serves deterministic quote, order-reuse, storefront-read, and 
   ]);
 
   const results = await page.evaluate(
-    async ({ orderId, trackingToken }) => {
+    async ({ merchantId, orderId, trackingToken }) => {
       const csrfToken = document.cookie.match(
         /(?:^|;\s*)(?:__Host-)?csrf-token=([^;]+)/
       )?.[1];
@@ -117,16 +118,17 @@ test('manual mode serves deterministic quote, order-reuse, storefront-read, and 
       const invalidStorefrontOrderResponse = await fetch(
         `/api/storefront/orders/${orderId}?tracking_token=wrong&merchant_slug=ogabassey`
       );
+      const reuseRequest = {
+        order_id: orderId,
+        tracking_token: trackingToken,
+        merchant_id: merchantId,
+        customer_email: 'ada@example.test',
+        payment_method: 'card',
+      };
       const reuseResponse = await fetch('/api/orders/reuse', {
         method: 'POST',
         headers: csrfHeaders,
-        body: JSON.stringify({
-          order_id: orderId,
-          tracking_token: trackingToken,
-          merchant_id: '11111111-1111-4111-8111-111111111111',
-          customer_email: 'ada@example.test',
-          payment_method: 'card',
-        }),
+        body: JSON.stringify(reuseRequest),
       });
       const invalidReuseResponse = await fetch('/api/orders/reuse', {
         method: 'POST',
@@ -137,6 +139,38 @@ test('manual mode serves deterministic quote, order-reuse, storefront-read, and 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ order_id: orderId }),
+      });
+      const unknownReuseOrderResponse = await fetch('/api/orders/reuse', {
+        method: 'POST',
+        headers: csrfHeaders,
+        body: JSON.stringify({
+          ...reuseRequest,
+          order_id: '66666666-6666-4666-8666-666666666666',
+        }),
+      });
+      const wrongReuseTokenResponse = await fetch('/api/orders/reuse', {
+        method: 'POST',
+        headers: csrfHeaders,
+        body: JSON.stringify({
+          ...reuseRequest,
+          tracking_token: 'stale-token',
+        }),
+      });
+      const wrongReuseMerchantResponse = await fetch('/api/orders/reuse', {
+        method: 'POST',
+        headers: csrfHeaders,
+        body: JSON.stringify({
+          ...reuseRequest,
+          merchant_id: '77777777-7777-4777-8777-777777777777',
+        }),
+      });
+      const wrongReuseEmailResponse = await fetch('/api/orders/reuse', {
+        method: 'POST',
+        headers: csrfHeaders,
+        body: JSON.stringify({
+          ...reuseRequest,
+          customer_email: 'someone-else@example.test',
+        }),
       });
       const paymentRequest = {
         merchant_id: '11111111-1111-4111-8111-111111111111',
@@ -179,6 +213,10 @@ test('manual mode serves deterministic quote, order-reuse, storefront-read, and 
         invalidStorefrontOrderStatus: invalidStorefrontOrderResponse.status,
         reusedOrder: await reuseResponse.json(),
         invalidReuseStatus: invalidReuseResponse.status,
+        unknownReuseOrderStatus: unknownReuseOrderResponse.status,
+        wrongReuseTokenStatus: wrongReuseTokenResponse.status,
+        wrongReuseMerchantStatus: wrongReuseMerchantResponse.status,
+        wrongReuseEmailStatus: wrongReuseEmailResponse.status,
         paymentError: await paymentResponse.json(),
         paymentStatus: paymentResponse.status,
         successfulPayment: await successfulPaymentResponse.json(),
@@ -193,7 +231,11 @@ test('manual mode serves deterministic quote, order-reuse, storefront-read, and 
         csrfCookie: document.cookie.includes('csrf-token=fixture-csrf-token'),
       };
     },
-    { orderId: order.id, trackingToken: order.tracking_token }
+    {
+      merchantId: merchant.id,
+      orderId: order.id,
+      trackingToken: order.tracking_token,
+    }
   );
 
   expect(results.quote.quotes).toMatchObject({
@@ -217,6 +259,10 @@ test('manual mode serves deterministic quote, order-reuse, storefront-read, and 
   expect(results.invalidStorefrontOrderStatus).toBe(404);
   expect(results.reusedOrder).toMatchObject({ order: { id: order.id } });
   expect(results.invalidReuseStatus).toBe(400);
+  expect(results.unknownReuseOrderStatus).toBe(404);
+  expect(results.wrongReuseTokenStatus).toBe(403);
+  expect(results.wrongReuseMerchantStatus).toBe(403);
+  expect(results.wrongReuseEmailStatus).toBe(403);
   expect(results.paymentStatus).toBe(503);
   expect(results.missingCsrfStatus).toBe(403);
   expect(results.mismatchedCsrfStatus).toBe(403);

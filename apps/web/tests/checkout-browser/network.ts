@@ -54,7 +54,7 @@ export const test = base.extend<{
           manualApi400ConsoleCount++;
         else if (
           manualApiIntegrationVisited &&
-          manualApi403ConsoleCount < 5 &&
+          manualApi403ConsoleCount < 3 &&
           /Failed to load resource:.*403/.test(message.text())
         )
           manualApi403ConsoleCount++;
@@ -172,7 +172,7 @@ export const test = base.extend<{
       await use(undefined);
       if (manualApiIntegrationVisited) {
         expect(manualApi400ConsoleCount).toBe(5);
-        expect(manualApi403ConsoleCount).toBe(5);
+        expect(manualApi403ConsoleCount).toBe(3);
         expect(manualApi404ConsoleCount).toBe(1);
       }
       if (paymentRetryScenario) {

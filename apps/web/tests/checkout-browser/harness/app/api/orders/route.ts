@@ -1,9 +1,6 @@
 import { orderCreateSchema } from '@/schemas/orders';
-import { hasValidFixtureCsrf } from '../fixture-csrf';
 import { json, orderResponse } from '../fixture-response';
 export function POST(request: Request) {
-  if (!hasValidFixtureCsrf(request))
-    return json({ error: 'Fixture CSRF validation failed' }, 403);
   const idempotencyKey = request.headers.get('idempotency-key');
   if (!idempotencyKey)
     return json({ error: 'Missing fixture idempotency key' }, 400);

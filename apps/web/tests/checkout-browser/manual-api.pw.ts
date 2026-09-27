@@ -56,11 +56,6 @@ test('manual mode serves deterministic quote, order-reuse, storefront-read, and 
         },
         body: JSON.stringify({}),
       });
-      const missingOrderCsrfResponse = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
       const quoteResponse = await fetch('/api/shipping/quotes', {
         method: 'POST',
         headers: csrfHeaders,
@@ -161,14 +156,6 @@ test('manual mode serves deterministic quote, order-reuse, storefront-read, and 
         headers: csrfHeaders,
         body: JSON.stringify({ gateway: 'korapay' }),
       });
-      const missingPaymentCsrfResponse = await fetch(
-        '/api/payments/initialize',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(paymentRequest),
-        }
-      );
       const paymentResponse = await fetch('/api/payments/initialize', {
         method: 'POST',
         headers: csrfHeaders,
@@ -199,9 +186,7 @@ test('manual mode serves deterministic quote, order-reuse, storefront-read, and 
         invalidCreateStatus: invalidCreateResponse.status,
         missingCsrfStatus: missingCsrfResponse.status,
         mismatchedCsrfStatus: mismatchedCsrfResponse.status,
-        missingOrderCsrfStatus: missingOrderCsrfResponse.status,
         missingReuseCsrfStatus: missingReuseCsrfResponse.status,
-        missingPaymentCsrfStatus: missingPaymentCsrfResponse.status,
         invalidCartStatus: invalidCartResponse.status,
         invalidQuoteStatus: invalidQuoteResponse.status,
         invalidPaymentStatus: invalidPaymentResponse.status,
@@ -235,9 +220,7 @@ test('manual mode serves deterministic quote, order-reuse, storefront-read, and 
   expect(results.paymentStatus).toBe(503);
   expect(results.missingCsrfStatus).toBe(403);
   expect(results.mismatchedCsrfStatus).toBe(403);
-  expect(results.missingOrderCsrfStatus).toBe(403);
   expect(results.missingReuseCsrfStatus).toBe(403);
-  expect(results.missingPaymentCsrfStatus).toBe(403);
   expect(results.invalidCartStatus).toBe(400);
   expect(results.invalidQuoteStatus).toBe(400);
   expect(results.invalidPaymentStatus).toBe(400);

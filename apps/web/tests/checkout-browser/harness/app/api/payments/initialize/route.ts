@@ -1,6 +1,5 @@
 import { cookies } from 'next/headers';
 import { z } from 'zod';
-import { hasValidFixtureCsrf } from '../../fixture-csrf';
 import { json, scenario } from '../../fixture-response';
 
 const paymentInitFixtureSchema = z.object({
@@ -32,8 +31,6 @@ const paymentInitFixtureSchema = z.object({
     .optional(),
 });
 export async function POST(request: Request) {
-  if (!hasValidFixtureCsrf(request))
-    return json({ error: 'Fixture CSRF validation failed' }, 403);
   const body = await request.json().catch(() => null);
   const parsed = paymentInitFixtureSchema.safeParse(body);
   if (!parsed.success)

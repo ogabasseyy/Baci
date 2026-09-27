@@ -69,7 +69,7 @@ describe('getPublishedBlogPostSlugsForProducts', () => {
     expect(supabase.from).not.toHaveBeenCalled();
   });
 
-  it('fails open when the relationship lookup errors', async () => {
+  it('throws when the relationship lookup fails with no rows to preserve', async () => {
     const error = { message: 'timeout' };
     const { supabase } = makeSupabase({ data: null, error });
     const consoleSpy = vi
@@ -81,8 +81,11 @@ describe('getPublishedBlogPostSlugsForProducts', () => {
         getPublishedBlogPostSlugsForProducts(supabase as never, 'merchant-1', [
           '123e4567-e89b-12d3-a456-426614174000',
         ])
-      ).resolves.toEqual([]);
-      expect(consoleSpy).toHaveBeenCalled();
+      ).rejects.toThrow(/no rows to preserve/);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('no rows preserved'),
+        expect.objectContaining({ merchantId: 'merchant-1', error })
+      );
     } finally {
       consoleSpy.mockRestore();
     }

@@ -141,17 +141,26 @@ export async function enrichProductPurgeEntries(
     ),
   ];
 
-  const blogPostSlugs =
-    idsToResolve.length > 0 || entries.length > 0
-      ? await getPublishedBlogPostSlugsForProducts(
-          supabase,
-          merchantId,
-          idsToResolve,
-          entries
-            .map((entry) => entry.categorySegment)
-            .filter((segment): segment is string => Boolean(segment))
-        )
-      : [];
+  let blogPostSlugs: string[] = [];
+  if (idsToResolve.length > 0 || entries.length > 0) {
+    try {
+      blogPostSlugs = await getPublishedBlogPostSlugsForProducts(
+        supabase,
+        merchantId,
+        idsToResolve,
+        entries
+          .map((entry) => entry.categorySegment)
+          .filter((segment): segment is string => Boolean(segment))
+      );
+    } catch (error) {
+      // Fail-open: the lookup throws only when it preserved zero rows. Article
+      // URLs wait for TTL, but the core product purge below still fires.
+      console.warn(
+        'Failed to resolve published blog posts for Cloudflare product purge (continuing without article purge):',
+        { merchantId, error }
+      );
+    }
+  }
 
   return {
     entries,

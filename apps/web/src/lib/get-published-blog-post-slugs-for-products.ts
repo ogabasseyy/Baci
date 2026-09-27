@@ -124,7 +124,7 @@ async function fetchLinkedBlogPostRows(
   productIds: readonly string[]
 ) {
   const rows: LinkedBlogPostRow[] = [];
-  let firstError: unknown = null;
+  let lastError: unknown = null;
 
   for (
     let chunkStart = 0;
@@ -153,7 +153,7 @@ async function fetchLinkedBlogPostRows(
         );
 
       if (error) {
-        firstError ??= error;
+        lastError = error;
         break;
       }
 
@@ -166,7 +166,7 @@ async function fetchLinkedBlogPostRows(
     }
   }
 
-  return { error: firstError, rows };
+  return { lastError, rows };
 }
 
 /**
@@ -174,9 +174,12 @@ async function fetchLinkedBlogPostRows(
  * affected by the changed products. Explicit product relationships are joined
  * with a paginated category fallback for legacy posts that derive their rail
  * from the product category instead of `blog_post_products`. Results are
- * deduplicated before callers evict their edge-cached article URLs. Any read
- * failure is fail-open because cache expiry remains safe and a product
- * mutation must not fail on best-effort CDN invalidation.
+ * deduplicated before callers evict their edge-cached article URLs. A lookup
+ * that fails with zero rows preserved throws (an empty result would read as
+ * "no linked articles" and suppress the article purge); callers catch that and
+ * fall back to their slug-independent purge so a product mutation never fails
+ * on best-effort CDN invalidation. Partial page failures resolve with the rows
+ * already fetched, and client exceptions stay fail-open.
  */
 export async function getPublishedBlogPostSlugsForProducts(
   supabase: SupabaseClient,
@@ -208,28 +211,44 @@ export async function getPublishedBlogPostSlugsForProducts(
   const slugs = new Set<string>();
 
   if (normalizedProductIds.length > 0) {
+    let linked: Awaited<ReturnType<typeof fetchLinkedBlogPostRows>> | undefined;
     try {
-      const { rows, error } = await fetchLinkedBlogPostRows(
+      linked = await fetchLinkedBlogPostRows(
         supabase,
         normalizedMerchantId,
         normalizedProductIds
       );
-
-      if (error) {
+    } catch (error) {
+      console.error(
+        'Failed to resolve published blog posts for product purge (continuing without article purge):',
+        { merchantId: normalizedMerchantId, error }
+      );
+    }
+    if (linked) {
+      const { rows, lastError } = linked;
+      if (lastError && rows.length === 0) {
+        // Total lookup failure: returning [] here would read as "no linked
+        // articles" and suppress the article purge. Throw so callers fall back
+        // to their slug-independent purge instead of skipping it silently.
         console.error(
-          'Failed to resolve published blog posts for product purge (continuing without article purge):',
-          { merchantId: normalizedMerchantId, error }
+          'Failed to resolve published blog posts for product purge (no rows preserved):',
+          { merchantId: normalizedMerchantId, error: lastError }
+        );
+        throw new Error(
+          'Failed to resolve published blog posts for product purge with no rows to preserve',
+          { cause: lastError }
+        );
+      }
+      if (lastError) {
+        console.warn(
+          'Resolved a partial published-blog-post set for product purge (continuing with rows already fetched):',
+          { merchantId: normalizedMerchantId, error: lastError }
         );
       }
       for (const row of rows) {
         const slug = getPublishedBlogPostSlug(getBlogPostRow(row.blog_posts));
         if (slug) slugs.add(slug);
       }
-    } catch (error) {
-      console.error(
-        'Failed to resolve published blog posts for product purge (continuing without article purge):',
-        { merchantId: normalizedMerchantId, error }
-      );
     }
   }
 

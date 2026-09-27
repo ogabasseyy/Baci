@@ -255,6 +255,7 @@ describe('reconcileAbandonedPaystackAttempts', () => {
       verify,
     });
 
+    expect(summary.failed).toBe(true);
     expect(summary.held).toEqual([
       { id: 'attempt-1', reason: 'pending', rotationFailed: true },
     ]);

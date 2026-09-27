@@ -94,9 +94,11 @@ export async function reconcileAbandonedPaystackAttempts({
         const { error } = await guardAttempt();
         if (error) {
           entry.rotationFailed = true;
+          summary.failed = true;
         }
       } catch {
         entry.rotationFailed = true;
+        summary.failed = true;
       }
     };
 

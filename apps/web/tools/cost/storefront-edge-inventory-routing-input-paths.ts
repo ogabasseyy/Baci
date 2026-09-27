@@ -157,6 +157,7 @@ export const STOREFRONT_EDGE_INVENTORY_ROUTING_INPUT_PATHS = [
   'apps/web/src/config/cdn.ts',
   'apps/web/src/lib/domain-cache-simple.ts',
   'apps/web/src/lib/domain-cache-database.ts',
+  'apps/web/src/lib/domain-cache-resolution.ts',
   'apps/web/src/lib/internal-api-secret.ts',
   'apps/web/src/lib/credit-direct-client.ts',
   'apps/web/src/lib/credpal.ts',

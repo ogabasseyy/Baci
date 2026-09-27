@@ -57,7 +57,9 @@ export function buildFinalProxyResponse(
     );
   }
   return applySecurityHeaders(
-    NextResponse.next(),
+    NextResponse.next({
+      request: { headers: buildProxyRequestHeaders(request) },
+    }),
     pathname,
     userAgent,
     routeType,

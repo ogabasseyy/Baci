@@ -35,6 +35,35 @@ function createSupabaseResponseWithCookie(
 }
 
 describe('session routing', () => {
+  it('removes forged merchant context before session handling while retaining nonce and cookies', async () => {
+    vi.mocked(updateSession).mockImplementation(
+      async (request, initialResponse) => {
+        expect(request.headers.get('x-merchant-slug')).toBeNull();
+        expect(request.headers.get('x-custom-domain')).toBeNull();
+        expect(request.headers.get('x-merchant-domain')).toBeNull();
+        expect(request.headers.get('cookie')).toBe('session=fixture');
+        expect(request.headers.get('x-nonce')).toBeTruthy();
+        return {
+          supabaseResponse: initialResponse ?? NextResponse.next(),
+          user: AUTHENTICATED_USER,
+        };
+      }
+    );
+    await runSessionRoutingStage(
+      new NextRequest('https://usebaci.com/dashboard', {
+        headers: {
+          'x-merchant-slug': 'forged',
+          'x-custom-domain': 'forged.example',
+          'x-merchant-domain': 'forged.example',
+          cookie: 'session=fixture',
+        },
+      }),
+      '/dashboard',
+      'usebaci.com',
+      'Mozilla'
+    );
+  });
+
   it('recognizes only auth and protected dashboard routes', () => {
     expect(isSessionRoutingEligible('/dashboard/orders')).toBe(true);
     expect(isSessionRoutingEligible('/products/iphone')).toBe(false);

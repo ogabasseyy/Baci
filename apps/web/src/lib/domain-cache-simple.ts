@@ -1,13 +1,7 @@
 /**
- * Custom domain lookup for edge middleware
- *
- * Strategy:
- * 1. Read from Vercel Edge Config (global, low-latency mapping)
- * 2. Fall back to an anonymous scalar resolver with a warm in-memory cache
- *
- * Edge Config is synced by the domain webhook through /api/edge-config/sync.
- * Domain mappings are public routing data. The resolver is read-only and uses
- * the anonymous public client because middleware has no authenticated session.
+ * Public domain routing: positive warm Edge Config mappings take precedence
+ * over the anonymous scalar resolver and its warm fallback cache.
+ * /api/edge-config/sync updates Edge Config; no authenticated session is used.
  */
 
 import {
@@ -15,11 +9,8 @@ import {
   getEdgeConfigSlugKey,
 } from '@/lib/edge-config-keys';
 import { createWarmPositiveCache } from './create-warm-positive-cache';
-import {
-  fetchCustomDomain,
-  fetchSlugForDomain,
-  type PublicDomainResolution,
-} from './domain-cache-database';
+import { fetchCustomDomain, fetchSlugForDomain } from './domain-cache-database';
+import { cacheableDomainResolution } from './domain-cache-resolution';
 import { SingleFlight } from './single-flight';
 
 interface CacheEntry {
@@ -49,14 +40,6 @@ const edgeReverseGenerations = new Map<string, number>();
 let generationSequence = 0;
 let reverseInvalidationEpoch = 0;
 const reverseSlugInvalidationEpochs = new Map<string, number>();
-
-function cacheableDomainResolution(
-  result: PublicDomainResolution
-): string | null | undefined {
-  if (result.outcome === 'resolved') return result.value;
-  if (result.outcome === 'not-found') return null;
-  return undefined;
-}
 
 function bumpGeneration(map: Map<string, number>, key: string): void {
   if (!map.has(key) && map.size >= MAX_CACHE_SIZE) {

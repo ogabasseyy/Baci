@@ -832,11 +832,17 @@ describe('Middleware Proxy', () => {
       const req = new NextRequest(`https://${ROOT_DOMAIN}/api/products`);
       req.headers.set('host', ROOT_DOMAIN);
       req.headers.set('user-agent', 'Reserved Relay Test Agent');
+      req.headers.set('authorization', 'Bearer fixture');
 
       const res = await proxyWithReservedRelayPath(req);
 
       expect(res.status).toBe(200);
-      expect(res.headers.get('x-middleware-request-user-agent')).toBeNull();
+      expect(res.headers.get('x-middleware-request-user-agent')).toBe(
+        'Reserved Relay Test Agent'
+      );
+      expect(res.headers.get('x-middleware-request-authorization')).toBe(
+        'Bearer fixture'
+      );
     } finally {
       if (originalRelayPath === undefined) {
         delete process.env.NEXT_PUBLIC_POSTHOG_PROXY_PATH;

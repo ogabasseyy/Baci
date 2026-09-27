@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateCSP, generateCspNonce } from '@/lib/proxy/csp';
 import { isLocalhost } from '@/lib/proxy/host';
 import { sanitizeProxyRedirectPath } from '@/lib/proxy/request-classification';
+import { buildProxyRequestHeaders } from '@/lib/proxy/request-headers';
 import { applySecurityHeaders } from '@/lib/proxy/response-headers';
 import { getRouteType } from '@/lib/proxy/routing-policy';
 import { updateSession } from '@/lib/supabase/middleware';
@@ -43,7 +44,7 @@ export async function runSessionRoutingStage(
   const isLocal = isLocalhost(hostname);
   const nonce = generateCspNonce();
   const csp = generateCSP(routeType, isLocal, nonce);
-  const requestHeaders = new Headers(request.headers);
+  const requestHeaders = buildProxyRequestHeaders(request);
   requestHeaders.set('x-nonce', nonce);
   requestHeaders.set('Content-Security-Policy', csp);
   const modifiedRequest = new NextRequest(request, { headers: requestHeaders });

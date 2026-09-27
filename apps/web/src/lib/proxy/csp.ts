@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { buildProxyRequestHeaders } from './request-headers';
 
 export function generateCSP(
   routeType: 'admin' | 'auth' | 'storefront' | 'api',
@@ -85,7 +86,7 @@ export function buildStrictCspResponse(
 ): { nonce: string; response: NextResponse } {
   const nonce = generateCspNonce();
   const csp = generateCSP(routeType, isLocal, nonce);
-  const requestHeaders = new Headers(request.headers);
+  const requestHeaders = buildProxyRequestHeaders(request);
   requestHeaders.set('x-nonce', nonce);
   requestHeaders.set('Content-Security-Policy', csp);
 

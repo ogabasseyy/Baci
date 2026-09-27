@@ -30,6 +30,7 @@ import {
   isPublicMachineReadablePath,
   matchesMainAppRoute,
 } from '@/lib/proxy/routing-policy';
+import { buildProxyRequestHeaders } from './request-headers';
 
 /** Runs the post-legacy platform-only and canonical path routing stage. */
 export async function runPlatformRoutingStage(
@@ -42,7 +43,9 @@ export async function runPlatformRoutingStage(
     pathname.startsWith('/.well-known/') &&
     !isPublicMachineReadablePath(pathname)
   ) {
-    return NextResponse.next();
+    return NextResponse.next({
+      request: { headers: buildProxyRequestHeaders(request) },
+    });
   }
   if (isPlatformHost(hostname) && isPublicMachineReadablePath(pathname)) {
     return buildMerchantFeedPassThroughResponse({
@@ -68,13 +71,17 @@ export async function runPlatformRoutingStage(
         if (aliasRedirect) return NextResponse.redirect(aliasRedirect, 302);
       }
     }
-    return NextResponse.next();
+    return NextResponse.next({
+      request: { headers: buildProxyRequestHeaders(request) },
+    });
   }
   if (
     pathname === INDEXNOW_KEY_PATH &&
     (isRootDomain(hostname, ROOT_DOMAIN) || isVercelPreview(hostname))
   )
-    return NextResponse.next();
+    return NextResponse.next({
+      request: { headers: buildProxyRequestHeaders(request) },
+    });
 
   if (
     isPlatformHost(hostname) &&
@@ -101,7 +108,9 @@ export async function runPlatformRoutingStage(
       }
       const mdUrl = request.nextUrl.clone();
       mdUrl.pathname = toLlmApiPath(rest, slug);
-      return NextResponse.rewrite(mdUrl);
+      return NextResponse.rewrite(mdUrl, {
+        request: { headers: buildProxyRequestHeaders(request) },
+      });
     }
   }
 

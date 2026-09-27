@@ -94,6 +94,7 @@ describe('storefront edge inventory routing input paths', () => {
       expect.arrayContaining([
         'apps/web/src/lib/domain-cache-simple.ts',
         'apps/web/src/lib/domain-cache-database.ts',
+        'apps/web/src/lib/domain-cache-resolution.ts',
         'apps/web/src/lib/internal-api-secret.ts',
         'supabase/migrations/20260926120000_public_storefront_domain_resolution.sql',
       ])

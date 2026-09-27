@@ -41,6 +41,9 @@ export async function initiatePaystackCancellationRefunds({
       reason || 'Order cancelled'
     );
     if (!paystackRefund.success) {
+      const isAmbiguousFailure =
+        paystackRefund.code === 'NETWORK_ERROR' ||
+        paystackRefund.code?.startsWith('HTTP_5');
       if (refundIds.length > 0) {
         await quarantineRefund({
           metadata: {
@@ -53,10 +56,21 @@ export async function initiatePaystackCancellationRefunds({
           supabase,
           transactions: [transaction],
         });
+      } else if (isAmbiguousFailure) {
+        // No local refund row exists and the provider may still have accepted
+        // this first attempt, so file the affected leg for operations before
+        // quarantining; otherwise no reconciler could ever discover it.
+        await quarantineRefund({
+          metadata: {
+            failed_payment_transaction_id: transaction.id,
+          },
+          order,
+          reason:
+            'Paystack refund initiation failed ambiguously and may already exist for this payment leg',
+          supabase,
+          transactions: [transaction],
+        });
       }
-      const isAmbiguousFailure =
-        paystackRefund.code === 'NETWORK_ERROR' ||
-        paystackRefund.code?.startsWith('HTTP_5');
       const RefundError = isAmbiguousFailure ? DeliveryUncertainError : Error;
       throw new RefundError(paystackRefund.error);
     }

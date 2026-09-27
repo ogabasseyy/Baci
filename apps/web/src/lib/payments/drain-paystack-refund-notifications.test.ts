@@ -6,7 +6,19 @@ const mocks = vi.hoisted(() => ({
 
 import { drainPaystackRefundNotifications } from './drain-paystack-refund-notifications';
 
-function database(eventType: string, paymentStatus = 'refunded') {
+function database(
+  eventType: string,
+  paymentStatus = 'refunded',
+  ledger: {
+    payments?: Array<{ amount: number; gateway: string; id: string }>;
+    refunds?: Array<{
+      amount: number;
+      currency: string;
+      gateway: string;
+      metadata: { payment_transaction_id: string };
+    }>;
+  } = {}
+) {
   const order = {
     id: 'order-1',
     merchant_id: 'merchant-1',
@@ -51,21 +63,40 @@ function database(eventType: string, paymentStatus = 'refunded') {
     eq: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue({ data: merchant, error: null }),
   };
-  const refundQuery = { select: vi.fn(), eq: vi.fn() };
-  refundQuery.select.mockReturnValue(refundQuery);
-  refundQuery.eq.mockImplementation((column: string) =>
-    column === 'status'
-      ? Promise.resolve({
-          data: [{ amount: 60, currency: 'NGN' }],
-          error: null,
-        })
-      : refundQuery
-  );
+  const payments = ledger.payments ?? [
+    { amount: 60, gateway: 'paystack', id: 'payment-1' },
+  ];
+  const refunds = ledger.refunds ?? [
+    {
+      amount: 60,
+      currency: 'NGN',
+      gateway: 'paystack',
+      metadata: { payment_transaction_id: 'payment-1' },
+    },
+  ];
+  const ledgerQuery = () => {
+    let mode: 'payments' | 'refunds' = 'refunds';
+    const query = {
+      eq: vi.fn((column: string) =>
+        column === 'status'
+          ? Promise.resolve({
+              data: mode === 'payments' ? payments : refunds,
+              error: null,
+            })
+          : query
+      ),
+      select: vi.fn((columns: string) => {
+        mode = columns.includes('metadata') ? 'refunds' : 'payments';
+        return query;
+      }),
+    };
+    return query;
+  };
   return {
     from: vi.fn((table: string) => {
       if (table === 'orders') return orderQuery;
       if (table === 'merchants') return merchantQuery;
-      if (table === 'transactions') return refundQuery;
+      if (table === 'transactions') return ledgerQuery();
       return finish;
     }),
     rpc: vi.fn().mockResolvedValue({ data: [row], error: null }),
@@ -162,6 +193,56 @@ describe('Paystack refund notifications', () => {
     );
     expect(db.finish.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'sent' })
+    );
+  });
+
+  it('totals every completed gateway leg in the customer email', async () => {
+    const db = database('processed_customer_email', 'refunded', {
+      payments: [
+        { amount: 60, gateway: 'paystack', id: 'payment-1' },
+        { amount: 45, gateway: 'korapay', id: 'payment-2' },
+      ],
+      refunds: [
+        {
+          amount: 60,
+          currency: 'NGN',
+          gateway: 'paystack',
+          metadata: { payment_transaction_id: 'payment-1' },
+        },
+        {
+          amount: 45,
+          currency: 'NGN',
+          gateway: 'korapay',
+          metadata: { payment_transaction_id: 'payment-2' },
+        },
+      ],
+    });
+    await drainPaystackRefundNotifications(db as never, mocks.sendEmail);
+    expect(mocks.sendEmail.mock.calls[0][0].textContent).toContain('105');
+    expect(db.finish.update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'sent' })
+    );
+  });
+
+  it('fails the notification when a gateway leg has no linked refund', async () => {
+    const db = database('processed_customer_email', 'refunded', {
+      payments: [
+        { amount: 60, gateway: 'paystack', id: 'payment-1' },
+        { amount: 45, gateway: 'korapay', id: 'payment-2' },
+      ],
+      refunds: [
+        {
+          amount: 60,
+          currency: 'NGN',
+          gateway: 'paystack',
+          metadata: { payment_transaction_id: 'payment-1' },
+        },
+      ],
+    });
+    await drainPaystackRefundNotifications(db as never, mocks.sendEmail);
+    expect(mocks.sendEmail).not.toHaveBeenCalled();
+    expect(db.finish.update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'failed' })
     );
   });
 

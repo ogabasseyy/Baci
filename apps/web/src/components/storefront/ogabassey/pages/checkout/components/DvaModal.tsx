@@ -8,6 +8,9 @@ interface DvaModalProps {
   copiedText: string | null;
   onCopyToClipboard: (text: string) => void;
   onClose: () => void;
+  formatCurrency: (amount: number) => string;
+  isVerifying: boolean;
+  onConfirmTransfer: () => void;
 }
 
 export function DvaModal({
@@ -15,6 +18,9 @@ export function DvaModal({
   copiedText,
   onCopyToClipboard,
   onClose,
+  formatCurrency,
+  isVerifying,
+  onConfirmTransfer,
 }: DvaModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
@@ -36,6 +42,7 @@ export function DvaModal({
           </div>
           <button
             type="button"
+            aria-label="Close bank transfer modal"
             onClick={onClose}
             className="size-8 rounded-lg bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-colors"
           >
@@ -51,7 +58,7 @@ export function DvaModal({
               Send Exactly
             </p>
             <p className="text-3xl font-black text-gray-900">
-              ₦{data.amount.toLocaleString()}
+              {formatCurrency(data.amount)}
             </p>
           </div>
 
@@ -67,6 +74,7 @@ export function DvaModal({
                 </div>
                 <button
                   type="button"
+                  aria-label="Copy account number"
                   onClick={() => onCopyToClipboard(data.account_number)}
                   className={`absolute right-2 top-2 bottom-2 px-4 bg-white border rounded-lg shadow-sm transition-all flex items-center justify-center group-hover:shadow-md ${
                     copiedText === data.account_number
@@ -125,8 +133,8 @@ export function DvaModal({
                 <div className="size-1.5 bg-store-primary rounded-full animate-bounce [animation-delay:-0.15s]" />
                 <div className="size-1.5 bg-store-primary rounded-full animate-bounce" />
               </div>
-              <span className="text-sm font-bold">
-                Waiting for transfer…
+              <span className="text-sm font-bold" role="status">
+                {isVerifying ? 'Verifying transfer…' : 'Waiting for transfer…'}
               </span>
             </div>
             <p className="text-[10px] text-gray-400 text-center">
@@ -138,10 +146,11 @@ export function DvaModal({
           <div className="space-y-3">
             <button
               type="button"
-              onClick={() => window.location.reload()}
-              className="w-full py-4 bg-store-primary text-white font-bold rounded-xl hover:bg-store-primary/90 transition-colors shadow-lg shadow-store-primary/20"
+              onClick={onConfirmTransfer}
+              disabled={isVerifying}
+              className="w-full py-4 bg-store-primary text-white font-bold rounded-xl hover:bg-store-primary/90 transition-colors shadow-lg shadow-store-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Confirm Transfer Sent
+              {isVerifying ? 'Verifying transfer…' : 'Confirm Transfer Sent'}
             </button>
             <button
               type="button"

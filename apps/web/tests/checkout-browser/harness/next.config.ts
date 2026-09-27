@@ -5,6 +5,7 @@ import type { NextConfig } from 'next';
 const config: NextConfig = {
   reactCompiler: true,
   turbopack: { root: path.resolve(__dirname, '../../../../..') },
+  distDir: process.env.CHECKOUT_BROWSER_DIST_DIR || '.next',
   env: {
     NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54329',
     NEXT_PUBLIC_SUPABASE_ANON_KEY: 'checkout-browser-fixture',

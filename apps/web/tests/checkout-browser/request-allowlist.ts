@@ -18,6 +18,7 @@ export function isFixtureAssetRequest(request: FixtureRequest): boolean {
     '/cart',
     '/checkout',
     '/crypto-payment-modal',
+    '/dva-modal',
     '/payment-handoff',
     '/unlock-orders',
   ].includes(url.pathname);

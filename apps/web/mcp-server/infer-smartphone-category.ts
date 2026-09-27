@@ -8,6 +8,7 @@ const allowedPrefixWords = new Set([
   'android', '4g', '5g', 'cheap', 'affordable', 'best', 'latest',
 ]);
 const modelModifiers = new Set(['pro', 'max', 'plus', 'mini', 'ultra']);
+const brandedModelFamilyWords = new Set(['z', 'fold', 'flip']);
 
 /** Infer a handset category only when the query clearly names a phone itself. */
 export function inferSmartphoneCategory(
@@ -28,7 +29,9 @@ export function inferSmartphoneCategory(
       hasModel = true;
       return true;
     }
-    return allowedPrefixWords.has(word) || (hasModel && modelModifiers.has(word));
+    return allowedPrefixWords.has(word) ||
+      (hasModel && modelModifiers.has(word)) ||
+      (hasBrand && brandedModelFamilyWords.has(word));
   })) {
     return undefined;
   }

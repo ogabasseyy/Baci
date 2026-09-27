@@ -1,9 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
 import type { McpSearchProductRow } from './search-products-query-helpers';
 import { getMcpProductStockSummary } from './product-stock-summary';
 
 interface ProductVariant {
   attributes: Record<string, unknown> | null;
+  condition?: string | null;
   product_id: string;
   stock_quantity?: number | null;
 }
@@ -11,8 +13,10 @@ interface ProductVariant {
 export async function hydrateSearchProductAvailability(
   products: McpSearchProductRow[],
   supabase: SupabaseClient,
-  merchantId: string
+  merchantId: string,
+  requestedCondition?: string
 ) {
+  const condition = normalizeCanonicalProductCondition(requestedCondition);
   const productIds = products.filter((product) => product.has_variants).map((product) => product.id);
   const variantsMap = new Map<string, ProductVariant[]>();
   let variantLookupSucceeded = productIds.length === 0;
@@ -35,11 +39,11 @@ export async function hydrateSearchProductAvailability(
     }
   }
 
-  const offersMap = new Map<string, Array<{ stock_quantity: number | null }>>();
+  const offersMap = new Map<string, Array<{ condition: string | null; stock_quantity: number | null }>>();
   const offerIds = products.filter((product) => product.has_condition_offers).map((product) => product.id);
   if (offerIds.length > 0) {
     const { data, error } = await supabase.from('product_offers')
-      .select('product_id, stock_quantity')
+      .select('product_id, condition, stock_quantity')
       .eq('merchant_id', merchantId)
       .eq('status', 'active')
       .in('product_id', offerIds);
@@ -47,21 +51,31 @@ export async function hydrateSearchProductAvailability(
       console.error('Failed to fetch product offers for search:', error);
     } else {
       for (const offer of data ?? []) {
+        if (condition && normalizeCanonicalProductCondition(offer.condition) !== condition) continue;
         offersMap.set(offer.product_id, [...(offersMap.get(offer.product_id) ?? []), offer]);
       }
       for (const id of offerIds) offersMap.set(id, offersMap.get(id) ?? []);
     }
   }
 
-  return products.map((product) => ({
-    product,
-    stockSummary: getMcpProductStockSummary(
+  return products.map((product) => {
+    const variants = (variantsMap.get(product.id) ?? []).filter((variant) => {
+      if (!condition) return true;
+      const variantCondition = normalizeCanonicalProductCondition(
+        variant.condition ?? (typeof variant.attributes?.condition === 'string' ? variant.attributes.condition : null)
+      ) || normalizeCanonicalProductCondition(product.condition);
+      return variantCondition === condition;
+    });
+    return {
       product,
-      product.has_variants && variantLookupSucceeded ? variantsMap.get(product.id) ?? [] : undefined,
-      product.has_condition_offers ? offersMap.get(product.id) : undefined
-    ),
-    availableVariants: (variantsMap.get(product.id) ?? []).filter((variant) =>
-      product.manage_stock !== true || Number(variant.stock_quantity ?? 0) > 0
-    ),
-  }));
+      stockSummary: getMcpProductStockSummary(
+        condition && product.has_condition_offers ? { ...product, stock_quantity: 0 } : product,
+        product.has_variants && variantLookupSucceeded ? variants : undefined,
+        product.has_condition_offers ? offersMap.get(product.id) : undefined
+      ),
+      availableVariants: variants.filter((variant) =>
+        product.manage_stock !== true || Number(variant.stock_quantity ?? 0) > 0
+      ),
+    };
+  });
 }

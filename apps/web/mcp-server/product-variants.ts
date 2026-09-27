@@ -161,7 +161,7 @@ export async function loadMcpProductVariants({
       const attrs = Object.entries(v.attributes || {})
         .map(([k, val]) => `${k}: ${val}`)
         .join(', ');
-      const price = v.price_override
+      const price = v.price_override != null
         ? formatPrice(v.price_override)
         : 'Base price';
       const stock = !product.manage_stock

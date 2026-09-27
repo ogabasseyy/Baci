@@ -28,6 +28,8 @@ describe('inferSmartphoneCategory', () => {
     expect(inferSmartphoneCategory('looking for Redmi phones', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('Samsung Galaxy phone', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('Samsung Galaxy S24 phone', undefined)).toBe('Smartphones');
+    expect(inferSmartphoneCategory('Samsung Galaxy Z Fold 7 phone', undefined)).toBe('Smartphones');
+    expect(inferSmartphoneCategory('Google Pixel Fold phone', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('Google Pixel 8 phone', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('Samsung Galaxy S24 Ultra phone', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('Google Pixel 9 Pro phone', undefined)).toBe('Smartphones');
@@ -52,6 +54,8 @@ describe('inferSmartphoneCategory', () => {
     expect(inferSmartphoneCategory('charger for phone', undefined)).toBeUndefined();
     expect(inferSmartphoneCategory('case iPhone 15', undefined)).toBeUndefined();
     expect(inferSmartphoneCategory('case for Samsung Galaxy S24 phone', undefined)).toBeUndefined();
+    expect(inferSmartphoneCategory('case for Samsung Galaxy Z Fold 7 phone', undefined)).toBeUndefined();
+    expect(inferSmartphoneCategory('case for Google Pixel Fold phone', undefined)).toBeUndefined();
     expect(inferSmartphoneCategory('Samsung Galaxy S24 phone case', undefined)).toBeUndefined();
     expect(inferSmartphoneCategory('Samsung Galaxy S24 Ultra phone case', undefined)).toBeUndefined();
     expect(inferSmartphoneCategory('charger phone', undefined)).toBeUndefined();

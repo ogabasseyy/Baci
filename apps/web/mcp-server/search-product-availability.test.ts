@@ -3,6 +3,34 @@ import { describe, expect, it, vi } from 'vitest';
 import { hydrateSearchProductAvailability } from './search-product-availability';
 
 describe('hydrateSearchProductAvailability', () => {
+  it('does not claim new-option stock for a sold-out used-condition search', async () => {
+    const rpc = vi.fn(async () => ({ data: [
+      { product_id: 'mixed-phone', condition: 'new', attributes: { storage: '128GB' }, stock_quantity: 2 },
+      { product_id: 'mixed-phone', condition: 'uk_used', attributes: { storage: '64GB' }, stock_quantity: 0 },
+    ], error: null }));
+    const offerQuery = {
+      select: vi.fn(), eq: vi.fn(), in: vi.fn(),
+      then: (resolve: (value: { data: Array<{ product_id: string; condition: string; stock_quantity: number }>; error: null }) => unknown) =>
+        Promise.resolve({ data: [
+          { product_id: 'mixed-phone', condition: 'new', stock_quantity: 3 },
+          { product_id: 'mixed-phone', condition: 'used', stock_quantity: 0 },
+        ], error: null }).then(resolve),
+    };
+    offerQuery.select.mockReturnValue(offerQuery);
+    offerQuery.eq.mockReturnValue(offerQuery);
+    offerQuery.in.mockReturnValue(offerQuery);
+    const supabase = { rpc, from: vi.fn(() => offerQuery) } as unknown as SupabaseClient;
+
+    const [used] = await hydrateSearchProductAvailability([
+      { id: 'mixed-phone', condition: 'new', manage_stock: true, has_variants: true,
+        has_condition_offers: true, stock_quantity: 5 },
+    ], supabase, 'merchant-1', 'UK Used');
+
+    expect(used.stockSummary).toMatchObject({ inStock: false, level: 'Out of Stock' });
+    expect(used.availableVariants).toEqual([]);
+    expect(offerQuery.select).toHaveBeenCalledWith('product_id, condition, stock_quantity');
+  });
+
   it('uses stocked child variants and offers instead of zero parent stock', async () => {
     const rpc = vi.fn(async () => ({ data: [
           { product_id: 'variant-phone', attributes: { storage: '64GB' }, stock_quantity: 0 },

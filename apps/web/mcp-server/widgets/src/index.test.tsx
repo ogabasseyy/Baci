@@ -28,11 +28,13 @@ describe('Ogabassey cart handoff widget', () => {
     window.openai = {
       toolOutput: { products },
       displayMode: 'inline',
+      safeArea: { insets: { top: 12, right: 14, bottom: 16, left: 18 } },
       requestDisplayMode: vi.fn().mockResolvedValue(undefined),
     };
     const { container } = render(<App />);
 
     expect(container.querySelector('.mode-inline')).toBeTruthy();
+    expect((container.querySelector('.mode-inline') as HTMLElement).style.paddingTop).toBe('');
     expect(screen.getByRole('button', { name: 'Expand catalog' })).toBeTruthy();
 
     act(() => {
@@ -44,6 +46,20 @@ describe('Ogabassey cart handoff widget', () => {
 
     expect(container.querySelector('.mode-fullscreen')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Expand catalog' })).toBeNull();
+    const fullscreen = container.querySelector('.mode-fullscreen') as HTMLElement;
+    expect([fullscreen.style.paddingTop, fullscreen.style.paddingRight,
+      fullscreen.style.paddingBottom, fullscreen.style.paddingLeft]).toEqual([
+      '12px', '14px', '16px', '18px',
+    ]);
+
+    act(() => {
+      if (window.openai) window.openai.safeArea = { insets: { top: 24, right: 20, bottom: 28, left: 22 } };
+      window.dispatchEvent(new CustomEvent('openai:set_globals', {
+        detail: { globals: { safeArea: window.openai?.safeArea } },
+      }));
+    });
+    expect(fullscreen.style.paddingTop).toBe('24px');
+    expect(fullscreen.style.paddingBottom).toBe('28px');
   });
 
   it('keeps the latest item when an older handoff finishes late', async () => {

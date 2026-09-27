@@ -99,6 +99,7 @@ describe('loadMcpSearchProducts', () => {
     'Samsung Galaxy S24 phone',
     'Samsung Galaxy S24 Ultra phone',
     'Google Pixel 9 Pro phone',
+    'Apple iPhone 15 Pro Max 256GB mobile phone',
   ])(
     'keeps non-phone matches out of the handset request %s',
     async (query) => {

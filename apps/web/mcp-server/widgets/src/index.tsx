@@ -14,6 +14,7 @@ export function App() {
   } | null;
   const theme = useOpenAiGlobal('theme') || 'dark';
   const displayMode = useOpenAiGlobal('displayMode') || 'inline';
+  const safeArea = useOpenAiGlobal('safeArea');
   const products = toolOutput?.products || [];
   const {
     cart,
@@ -28,7 +29,15 @@ export function App() {
   }, []);
 
   return (
-    <div className={`ogabassey-widget theme-${theme} ${displayMode === 'fullscreen' ? 'mode-fullscreen' : 'mode-inline'}`}>
+    <div
+      className={`ogabassey-widget theme-${theme} ${displayMode === 'fullscreen' ? 'mode-fullscreen' : 'mode-inline'}`}
+      style={displayMode === 'fullscreen' && safeArea ? {
+        paddingTop: Math.max(0, safeArea.insets.top),
+        paddingBottom: Math.max(0, safeArea.insets.bottom),
+        paddingLeft: Math.max(0, safeArea.insets.left),
+        paddingRight: Math.max(0, safeArea.insets.right),
+      } : undefined}
+    >
       <header className="widget-header">
         <div className="brand">
           <div className="brand-logo"><BrandLogo /></div>

@@ -8,6 +8,7 @@ describe('inferSmartphoneCategory', () => {
     expect(inferSmartphoneCategory('Redmi phone 128GB', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('iPhone 15', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('iPhone 15 Pro Max 256GB', undefined)).toBe('Smartphones');
+    expect(inferSmartphoneCategory('Apple iPhone 15 Pro Max 256GB mobile phone', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('iPhone 15 under ₦500,000', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('phones under 500k', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('iPhone 15 under ₦500k', undefined)).toBe('Smartphones');

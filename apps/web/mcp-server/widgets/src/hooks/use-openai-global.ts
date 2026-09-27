@@ -15,7 +15,7 @@ interface OpenAiGlobals {
   theme: string;
   displayMode: string;
   maxHeight: number;
-  safeArea: { top: number; bottom: number; left: number; right: number };
+  safeArea: { insets: { top: number; bottom: number; left: number; right: number } };
   locale: string;
 }
 
@@ -29,7 +29,7 @@ declare global {
       theme?: string;
       displayMode?: string;
       maxHeight?: number;
-      safeArea?: { top: number; bottom: number; left: number; right: number };
+      safeArea?: { insets: { top: number; bottom: number; left: number; right: number } };
       locale?: string;
       setWidgetState?: (state: unknown) => void;
       callTool?: (

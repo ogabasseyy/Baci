@@ -1,4 +1,5 @@
 import { orderCreateSchema } from '@/schemas/orders';
+import { shippingQuoteId } from '../../../../fixtures';
 import { json, orderResponse } from '../fixture-response';
 export function POST(request: Request) {
   const idempotencyKey = request.headers.get('idempotency-key');
@@ -15,6 +16,14 @@ export function POST(request: Request) {
             issues: parsed.error.issues.map((issue) => issue.path.join('.')),
           },
           400
+        );
+      if (
+        parsed.data.selected_quote_id != null &&
+        parsed.data.selected_quote_id !== shippingQuoteId
+      )
+        return json(
+          { error: 'Selected shipping quote is no longer available' },
+          409
         );
       const response = json(
         orderResponse({

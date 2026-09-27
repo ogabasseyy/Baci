@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { shippingQuoteId } from '../../../../fixtures';
 import { POST } from './route';
 
 const validOrder = {
@@ -59,5 +60,38 @@ describe('fixture order creation route', () => {
     expect(response.headers.get('set-cookie')).toContain(
       'checkout-qa-customer-email=reviewer%40example.test'
     );
+  });
+
+  it('rejects an order request with a stale selected shipping quote', async () => {
+    const response = await POST(
+      new Request('http://localhost/api/orders', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': 'fixture-key' },
+        body: JSON.stringify({
+          ...validOrder,
+          selected_quote_id: '66666666-6666-4666-8666-666666666666',
+        }),
+      })
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: 'Selected shipping quote is no longer available',
+    });
+  });
+
+  it('accepts the shipping quote issued by the fixture route', async () => {
+    const response = await POST(
+      new Request('http://localhost/api/orders', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': 'fixture-key' },
+        body: JSON.stringify({
+          ...validOrder,
+          selected_quote_id: shippingQuoteId,
+        }),
+      })
+    );
+
+    expect(response.status).toBe(200);
   });
 });

@@ -30,6 +30,8 @@
       "apps/web/src/components/storefront/ogabassey/pages/checkout-page*test-support.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout-page.test-fixtures.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/load-resumed-checkout-order.ts",
+      "apps/web/src/components/storefront/ogabassey/pages/checkout/resolve-checkout-resume-context.ts",
+      "apps/web/src/components/storefront/ogabassey/pages/checkout/resolve-checkout-resume-context.test.ts",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/build-checkout-order-request*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/prepare-checkout-order-identity*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-load-resumed-order*",

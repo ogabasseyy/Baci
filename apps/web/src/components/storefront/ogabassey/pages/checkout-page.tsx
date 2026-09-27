@@ -8,6 +8,7 @@ import { buildCheckoutOrderRequest } from './checkout/build-checkout-order-reque
 import { prepareCheckoutDelivery } from './checkout/handlers/prepare-checkout-delivery';
 import { useLoadResumedOrder } from './checkout/hooks/use-load-resumed-order';
 import { useOrderTotals } from './checkout/hooks/use-order-totals';
+import { resolveCheckoutResumeContext } from './checkout/resolve-checkout-resume-context';
 
 import { useAirportQuoteRecovery } from './checkout/hooks/use-airport-quote-recovery';
 import {
@@ -396,29 +397,18 @@ export const CheckoutPage: React.FC = () => {
 
   // Mobile app order resume state
   // When opening from mobile app with ?orderId=xxx&gateway=credpal, we resume that order
-  const resumeOrderId = searchParams.get('orderId');
-  const resumeTrackingToken =
-    searchParams.get('trackingToken') ||
-    searchParams.get('tracking_token') ||
-    searchParams.get('token');
-  const resumeLookupEmail =
-    searchParams.get('email')?.trim() ||
-    (pendingCheckoutOrder?.orderId === resumeOrderId &&
-    pendingCheckoutOrder.customerEmail &&
-    (!merchant?.id || pendingCheckoutOrder.merchantId === merchant.id)
-      ? pendingCheckoutOrder.customerEmail.trim()
-      : '') ||
-    null;
-  const resumeMerchantSlug =
-    searchParams.get('merchant_slug') ||
-    searchParams.get('slug') ||
-    merchant?.slug ||
-    null;
-  const gatewayParam = searchParams.get('gateway')?.toLowerCase();
-  const preferredGateway =
-    gatewayParam === 'credpal' || gatewayParam === 'credit_direct'
-      ? gatewayParam
-      : null;
+  const {
+    resumeOrderId,
+    resumeTrackingToken,
+    resumeLookupEmail,
+    resumeMerchantSlug,
+    preferredGateway,
+  } = resolveCheckoutResumeContext({
+    searchParams,
+    pendingCheckoutOrder,
+    merchantId: merchant?.id,
+    merchantSlug: merchant?.slug,
+  });
   const [resumedOrder, setResumedOrder] = useState<ResumedOrder | null>(null);
   const [isLoadingResumedOrder, setIsLoadingResumedOrder] = useState(!!resumeOrderId);
   const [resumeOrderError, setResumeOrderError] = useState<string | null>(null);

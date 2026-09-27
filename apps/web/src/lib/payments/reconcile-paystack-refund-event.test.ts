@@ -11,7 +11,7 @@ vi.mock('./fetch-paystack-refund', () => ({
   fetchRefund: provider.fetchRefund,
 }));
 
-import { reconcilePaystackRefundEvent } from './reconcile-paystack-cancellation-refunds';
+import { reconcilePaystackRefundEvent } from './reconcile-paystack-refund-event';
 
 const refund = {
   id: 'refund-1',

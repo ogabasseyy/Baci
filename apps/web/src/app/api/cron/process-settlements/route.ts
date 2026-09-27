@@ -5,7 +5,7 @@ import { logger } from '@/lib/logger';
 import { drainFailedOrderCancellationSideEffects } from '@/lib/orders/drain-failed-order-cancellation-side-effects';
 import { drainPaystackRefundNotifications } from '@/lib/payments/drain-paystack-refund-notifications';
 import { reconcileCompletedPaystackCancellationRefunds } from '@/lib/payments/reconcile-completed-paystack-cancellation-refunds';
-import { reconcilePendingPaystackCancellationRefunds } from '@/lib/payments/reconcile-paystack-cancellation-refunds';
+import { reconcilePendingPaystackCancellationRefunds } from '@/lib/payments/reconcile-pending-paystack-cancellation-refunds';
 import { createServiceClient } from '@/lib/supabase/service';
 import { sendEmail } from '@/lib/zeptomail';
 

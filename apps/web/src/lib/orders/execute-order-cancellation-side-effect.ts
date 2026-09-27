@@ -1,13 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { buildOrderCancellationEmailMessage } from '@/lib/orders/build-order-cancellation-email-message';
+import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
 import { initiatePaystackCancellationRefunds } from '@/lib/orders/initiate-paystack-cancellation-refunds';
-import {
-  type GatewayPaymentTransaction,
-  isExternalPaymentGateway,
-  quarantineRefund,
-  unsupportedRefundReasons,
-} from '@/lib/orders/order-cancellation-refund-review';
+import { isExternalPaymentGateway } from '@/lib/orders/is-external-payment-gateway';
+import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
 import type { OrderCancellationSideEffectStep } from '@/lib/orders/run-order-cancellation-side-effect';
+import { unsupportedRefundReasons } from '@/lib/orders/unsupported-refund-reasons';
 
 type CancellationOrder = Parameters<
   typeof buildOrderCancellationEmailMessage

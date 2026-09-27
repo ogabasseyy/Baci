@@ -44,10 +44,13 @@ vi.mock('@/lib/orders/drain-failed-order-cancellation-side-effects', () => ({
 vi.mock('@/lib/payments/drain-paystack-refund-notifications', () => ({
   drainPaystackRefundNotifications: mocks.drainPaystackRefundNotifications,
 }));
-vi.mock('@/lib/payments/reconcile-paystack-cancellation-refunds', () => ({
-  reconcilePendingPaystackCancellationRefunds:
-    mocks.reconcilePendingPaystackCancellationRefunds,
-}));
+vi.mock(
+  '@/lib/payments/reconcile-pending-paystack-cancellation-refunds',
+  () => ({
+    reconcilePendingPaystackCancellationRefunds:
+      mocks.reconcilePendingPaystackCancellationRefunds,
+  })
+);
 vi.mock(
   '@/lib/payments/reconcile-completed-paystack-cancellation-refunds',
   () => ({

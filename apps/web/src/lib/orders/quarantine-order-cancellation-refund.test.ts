@@ -1,10 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  isExternalPaymentGateway,
-  quarantineRefund,
-  unsupportedRefundReasons,
-} from './order-cancellation-refund-review';
+import { quarantineRefund } from './quarantine-order-cancellation-refund';
 import { DeliveryUncertainError } from './run-order-cancellation-side-effect';
 
 const transaction = {
@@ -16,20 +12,7 @@ const transaction = {
 };
 const order = { currency: 'NGN', id: 'order-id', merchant_id: 'merchant-id' };
 
-describe('order cancellation refund review', () => {
-  it('distinguishes external payment legs and summarizes unsupported reasons', () => {
-    expect(isExternalPaymentGateway('wallet')).toBe(false);
-    expect(isExternalPaymentGateway('paystack')).toBe(true);
-    expect(isExternalPaymentGateway(null)).toBe(true);
-    expect(
-      unsupportedRefundReasons([
-        { ...transaction, gateway: null },
-        { ...transaction, gateway: 'korapay', gateway_reference: null },
-        { ...transaction, gateway: 'korapay', gateway_reference: null },
-      ])
-    ).toEqual(['missing gateway', 'korapay missing reference']);
-  });
-
+describe('quarantineRefund', () => {
   it('keeps a preflight review-write failure retryable', async () => {
     const insert = vi.fn().mockResolvedValue({ error: { code: 'XX000' } });
     const supabase = {

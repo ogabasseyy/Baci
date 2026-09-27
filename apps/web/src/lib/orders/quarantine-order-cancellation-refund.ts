@@ -1,42 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { DeliveryUncertainError } from '@/lib/orders/run-order-cancellation-side-effect';
-
-export interface GatewayPaymentTransaction {
-  amount: number;
-  currency: string | null;
-  gateway: string | null;
-  gateway_reference: string | null;
-  id: string;
-}
-
-const INTERNAL_PAYMENT_GATEWAYS = new Set([
-  'wallet',
-  'savings',
-  'store_credit',
-  'cash',
-  'manual',
-  'pay_on_delivery',
-]);
-
-export function isExternalPaymentGateway(gateway: string | null): boolean {
-  return !gateway || !INTERNAL_PAYMENT_GATEWAYS.has(gateway);
-}
-
-export function unsupportedRefundReasons(
-  transactions: GatewayPaymentTransaction[]
-): string[] {
-  return [
-    ...new Set(
-      transactions.map((transaction) => {
-        if (!transaction.gateway) return 'missing gateway';
-        if (!transaction.gateway_reference) {
-          return `${transaction.gateway} missing reference`;
-        }
-        return transaction.gateway;
-      })
-    ),
-  ];
-}
+import type { GatewayPaymentTransaction } from './gateway-payment-transaction';
 
 export async function quarantineRefund({
   metadata,

@@ -12,6 +12,7 @@ DECLARE
   v_refund public.transactions%ROWTYPE;
   v_payment public.transactions%ROWTYPE;
   v_order public.orders%ROWTYPE;
+  v_external_payments integer;
   v_status text := lower(btrim(coalesce(p_provider_status, '')));
 BEGIN
   IF (SELECT auth.role()) IS DISTINCT FROM 'service_role' THEN
@@ -37,6 +38,24 @@ BEGIN
       AND order_id = v_order.id AND merchant_id = v_order.merchant_id
       AND transaction_type = 'payment' AND gateway = 'paystack'
       AND status = 'completed';
+  IF NOT FOUND AND v_refund.metadata->>'payment_transaction_id' IS NULL THEN
+    -- Legacy refunds carry no payment link. Mirror the cancellation claim
+    -- rule: accept the order's sole completed external payment when it
+    -- shares the refund's gateway and amount.
+    SELECT count(*) INTO v_external_payments FROM public.transactions
+      WHERE order_id = v_order.id AND merchant_id = v_order.merchant_id
+        AND transaction_type = 'payment' AND status = 'completed'
+        AND amount > 0
+        AND coalesce(gateway, '') NOT IN
+          ('wallet', 'savings', 'store_credit', 'cash', 'manual', 'pay_on_delivery');
+    IF v_external_payments = 1 THEN
+      SELECT * INTO v_payment FROM public.transactions
+        WHERE order_id = v_order.id AND merchant_id = v_order.merchant_id
+          AND transaction_type = 'payment' AND status = 'completed'
+          AND amount > 0 AND gateway = v_refund.gateway
+          AND amount = v_refund.amount;
+    END IF;
+  END IF;
   IF NOT FOUND OR v_payment.gateway_reference IS NULL
     OR v_payment.amount <> v_refund.amount
     OR upper(v_refund.currency) <> upper(p_currency)
@@ -57,9 +76,7 @@ BEGIN
   UPDATE public.transactions SET
     status = CASE WHEN v_status = 'processed' THEN 'completed'
                   WHEN v_status = 'failed' THEN 'failed' ELSE 'refund_pending' END,
-    metadata = (coalesce(metadata, '{}'::jsonb) -
-      CASE WHEN v_status IN ('processed', 'failed')
-        THEN 'refund_reconciliation_hold' ELSE '' END) ||
+    metadata = (coalesce(metadata, '{}'::jsonb) - 'refund_reconciliation_hold') ||
       jsonb_build_object('provider_refund_status', v_status),
     updated_at = now()
   WHERE id = v_refund.id;
@@ -85,8 +102,25 @@ BEGIN
         WHERE r.order_id = v_order.id AND r.merchant_id = v_order.merchant_id
           AND r.transaction_type = 'refund' AND r.gateway = p.gateway
           AND r.status = 'completed'
-          AND r.metadata->>'payment_transaction_id' = p.id::text
           AND r.amount = p.amount
+          AND (
+            r.metadata->>'payment_transaction_id' = p.id::text
+            OR (
+              r.metadata->>'payment_transaction_id' IS NULL
+              AND 1 = (
+                SELECT count(*) FROM public.transactions only_payment
+                 WHERE only_payment.order_id = v_order.id
+                   AND only_payment.merchant_id = v_order.merchant_id
+                   AND only_payment.transaction_type = 'payment'
+                   AND only_payment.status = 'completed'
+                   AND only_payment.amount > 0
+                   AND coalesce(only_payment.gateway, '') NOT IN (
+                     'wallet', 'savings', 'store_credit', 'cash', 'manual',
+                     'pay_on_delivery'
+                   )
+              )
+            )
+          )
       )
   ) AND v_order.payment_status IN ('paid', 'partially_paid', 'refunded') THEN
     UPDATE public.orders SET payment_status = 'refunded', updated_at = now()

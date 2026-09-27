@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
-import { reconcilePaystackRefundEvent } from '@/lib/payments/reconcile-paystack-cancellation-refunds';
+import { reconcilePaystackRefundEvent } from '@/lib/payments/reconcile-paystack-refund-event';
 
 export async function handlePaystackCancellationRefundEvent(
   supabase: SupabaseClient,

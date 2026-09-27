@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
-import { isExternalPaymentGateway } from '@/lib/orders/order-cancellation-refund-review';
+import { isExternalPaymentGateway } from '@/lib/orders/is-external-payment-gateway';
 import { escapeHtmlText } from '@/lib/sanitize';
 
 type RefundEmailSender = (message: {

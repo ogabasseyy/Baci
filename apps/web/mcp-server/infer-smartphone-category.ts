@@ -5,7 +5,7 @@ const handsetBrandWords = new Set([
 ]);
 const allowedPrefixWords = new Set([
   ...handsetBrandWords, 'new', 'used', 'refurbished',
-  'android', 'cheap', 'affordable', 'best', 'latest',
+  'android', '4g', '5g', 'cheap', 'affordable', 'best', 'latest',
 ]);
 const modelModifiers = new Set(['pro', 'max', 'plus', 'mini', 'ultra']);
 

@@ -22,6 +22,8 @@ describe('inferSmartphoneCategory', () => {
     expect(inferSmartphoneCategory('I need a phone', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('Android phones', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('show me Android phones', undefined)).toBe('Smartphones');
+    expect(inferSmartphoneCategory('5G phones', undefined)).toBe('Smartphones');
+    expect(inferSmartphoneCategory('show me 5G phones', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('looking for Redmi phones', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('Samsung Galaxy phone', undefined)).toBe('Smartphones');
     expect(inferSmartphoneCategory('Samsung Galaxy S24 phone', undefined)).toBe('Smartphones');

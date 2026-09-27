@@ -3,6 +3,7 @@ import { useCheckoutAddressInference } from './checkout/hooks/use-checkout-addre
 import { useCheckoutShippingQuotes } from './checkout/hooks/use-checkout-shipping-quotes';
 import { dispatchCheckoutPayment } from './checkout/handlers/dispatch-checkout-payment';
 import { buildCheckoutOrderRequest } from './checkout/build-checkout-order-request';
+import { prepareCheckoutDelivery } from './checkout/handlers/prepare-checkout-delivery';
 import { useLoadResumedOrder } from './checkout/hooks/use-load-resumed-order';
 import { useOrderTotals } from './checkout/hooks/use-order-totals';
 
@@ -83,7 +84,6 @@ import {
   type PlaceDetails,
 } from '@/components/address-autocomplete';
 import { asRoute } from '@/lib/routes';
-import { getCountryByCode } from '@/lib/countries';
 import { getSubdivisions } from '@/lib/shipping/merchant-rates/subdivisions';
 import { toast } from '@/hooks/use-toast';
 import { createClient } from '@/lib/supabase/client';
@@ -143,8 +143,6 @@ import {
   getAirDeliveryQuotes,
   getDoorDeliveryQuotes,
   getForwardableSelectedQuoteId,
-  getMerchantRateId,
-  getStationPickupAddressText,
   getStationPickupQuote,
   getStationPickupQuotes,
   inferAddressLocationFromInput,
@@ -153,7 +151,6 @@ import {
   isStationPickupQuote,
   isKlumpUnavailableForGatewayAmount,
 } from './checkout/utils';
-import { resolveAirportShippingAddress } from './checkout/resolve-airport-shipping-address';
 import { useWalletFundedBankTransfer } from './checkout/hooks/use-wallet-funded-bank-transfer';
 import { useStorefrontCustomerSession } from './checkout/hooks/use-storefront-customer-session';
 import {
@@ -1046,131 +1043,34 @@ export const CheckoutPage: React.FC = () => {
 
     const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
 
-    // Construct address string properly based on delivery method
-    let finalAddress = 'Address not provided';
-    let finalCity = '';
-    let finalState = '';
-
-    // Only require full address for door delivery
-    if (deliveryMethod === 'door') {
-      if (isNewAddressMode) {
-        if (!newAddressStreet || !newAddressCity || !newAddressState) {
-          toast({
-            title: 'Incomplete Address',
-            description: 'Please enter your full address (Street, City, State).',
-            variant: 'destructive',
-          });
-          setIsProcessing(false);
-          setCompletedSteps((prev) => ({ ...prev, delivery: false }));
-          isOrderInFlightRef.current = false;
-          setCurrentStep('delivery');
-          return;
-        }
-        finalAddress = newAddressStreet;
-        finalCity = newAddressCity;
-        finalState = newAddressState;
-      } else {
-        finalAddress = selectedAddress?.address || 'Address not provided';
-        // Try to parse city/state from saved string if possible
-        const parts = finalAddress.split(',');
-        if (parts.length >= 2) {
-          finalState = parts[parts.length - 1]?.trim() || '';
-          finalCity = parts[parts.length - 2]?.trim() || '';
-        }
-      }
-    } else if (deliveryMethod === 'pickup_station') {
-      const quote = shippingQuotes.find(
-        (q) => String(q.id) === String(selectedQuoteId),
-      );
-      finalAddress =
-        (quote && getStationPickupAddressText(quote)) ||
-        quote?.displayName ||
-        'GIGL pickup station';
-      finalCity = newAddressCity;
-      finalState = newAddressState;
-      if ((!finalCity || !finalState) && selectedAddress?.address) {
-        const parts = selectedAddress.address.split(',');
-        if (parts.length >= 2) {
-          finalCity ||= parts[parts.length - 2]?.trim() || '';
-          finalState ||= parts[parts.length - 1]?.trim() || '';
-        }
-      }
-    } else if (deliveryMethod === 'pickup') {
-      finalAddress = 'Pickup at Store';
-      finalCity = 'Lagos';
-      finalState = 'Lagos';
-    } else if (deliveryMethod === 'airport') {
-      const airportAddress = resolveAirportShippingAddress({
-        airportType,
-        manualAddress: newAddressStreet,
-        manualCity: newAddressCity,
-        manualState: newAddressState,
-        savedAddress: selectedAddress?.address,
+    const preparedDelivery = prepareCheckoutDelivery({
+      method: deliveryMethod,
+      selectedQuoteId,
+      selectedQuoteMatchesMethod: selectedQuoteMatchesDeliveryMethod,
+      airportRequiresQuote,
+      quotes: shippingQuotes,
+      selectedAddress,
+      isNewAddressMode,
+      newAddressStreet,
+      newAddressCity,
+      newAddressState,
+      airportType,
+      customerPhone,
+      merchantCountry,
+    });
+    if (preparedDelivery.issue === 'incomplete-address') {
+      toast({
+        title: 'Incomplete Address',
+        description: 'Please enter your full address (Street, City, State).',
+        variant: 'destructive',
       });
-      finalAddress = airportAddress.address;
-      finalCity = airportAddress.city;
-      finalState = airportAddress.state;
+      setIsProcessing(false);
+      setCompletedSteps((prev) => ({ ...prev, delivery: false }));
+      isOrderInFlightRef.current = false;
+      setCurrentStep('delivery');
+      return;
     }
-
-    const shippingAddressData = {
-      address: finalAddress,
-      city: finalCity,
-      state: finalState,
-      phone: customerPhone || selectedAddress?.phone || '',
-      // Persist the merchant country so stored orders and the immediate
-      // invoice/receipt carry the real country instead of the downstream `NG`
-      // fallback — a non-NG (IN/AE) order is quoted+charged for the merchant
-      // country and must be invoiced for it too. Mirrors the country the
-      // shipping quote request already sends. NG orders now carry
-      // 'Nigeria'/'NG' explicitly, which is exactly what the fallback assumed.
-      countryCode: merchantCountry,
-      country: getCountryByCode(merchantCountry)?.name ?? 'Nigeria',
-    };
-
-    // Identify selected shipping provider.
-    //
-    // B3 (plan §5 B3): only door delivery has a third-party shipping
-    // provider with an associated quote. Pickup and airport are
-    // delivery-method labels, not shipping providers — sending them
-    // would trip the RPC's `shipping_quote_required` guard (which
-    // exists to catch the legacy `|| 'GIGL'` silent-default bug).
-    // The `delivery_method` field carries the customer-visible label
-    // separately; admin order views can still show "Pickup"/"Airport".
-    let shippingProvider: string | null = null;
-    let trackingNumber = undefined;
-
-    // Merchant-configured rate selection (id `mrate_<uuid>`). When present the
-    // order takes the RPC null-provider bypass and sends `shipping_rate_id`
-    // instead; the route recomputes the fee from rate config server-side.
-    //
-    // Only the QUOTED methods (`door`/`pickup_station`) carry a merchant rate.
-    // Guard the extraction so a stale `mrate_<uuid>` left in `selectedQuoteId`
-    // after switching to legacy `pickup`/`airport` (which submit
-    // `selected_quote_id: null` + `shipping_fee: 0`) never leaks a
-    // `shipping_rate_id` into the body — that would make /api/orders treat a
-    // store-pickup/airport checkout as a merchant-rate order and reject it with
-    // `SHIPPING_FEE_MISMATCH` (paid rate) or route the wrong provider (free
-    // rate). Mirrors how `getForwardableSelectedQuoteId` restricts
-    // `selected_quote_id` to the same two methods.
-    const merchantRateId =
-      deliveryMethod === 'door' || deliveryMethod === 'pickup_station'
-        ? getMerchantRateId(selectedQuoteId)
-        : null;
-
-    // Prepare order items for API
-    const orderItems = buildCheckoutOrderItems(checkoutCart);
-
-    // B3 review fix #2 (PR #1611): door delivery without ANY quote
-    // must bail BEFORE the JSON body is built. Pre-fix this submitted
-    // `shipping_provider: null + selected_quote_id: null` (or empty
-    // string), which slips past the RPC's `provider != null AND
-    // quote_id IS NULL` guard (both null → guard doesn't fire) and
-    // persists a silent zero-shipping order. Treat empty string as no
-    // quote too — the state hook initializes selectedQuoteId to `''`.
-    if (
-      ((deliveryMethod === 'door' || deliveryMethod === 'pickup_station') && !selectedQuoteId) ||
-      (deliveryMethod === 'airport' && !isAirportDeliveryReady(airportRequiresQuote, selectedQuoteMatchesDeliveryMethod))
-    ) {
+    if (preparedDelivery.issue === 'required') {
       toast({
         title: 'Delivery option required',
         description: 'Please select a delivery option to continue.',
@@ -1179,33 +1079,24 @@ export const CheckoutPage: React.FC = () => {
       releaseSubmission();
       return;
     }
-
-    if (
-      (deliveryMethod === 'door' ||
-        deliveryMethod === 'pickup_station' ||
-        (deliveryMethod === 'airport' && selectedQuoteMatchesDeliveryMethod)) &&
-      selectedQuoteId
-    ) {
-      if (selectedQuote && selectedQuoteMatchesDeliveryMethod) {
-        // Merchant rates take the null-provider path (fee recomputed from rate
-        // config); only carrier quotes stamp a bookable provider.
-        shippingProvider = merchantRateId ? null : selectedQuote.provider; // e.g. 'GIGL', 'Topship'
-      } else {
-        // B3 review fix #1: do NOT fabricate a 'Standard' provider —
-        // selectedQuoteId is dangling (stored id with no matching
-        // quote in the current rate list, usually because rates
-        // expired or were refreshed under us). Surface a validation
-        // error and bail; never submit a quote id with no resolvable
-        // provider.
-        toast({
-          title: 'Shipping rate expired',
-          description: 'Please select a delivery option again.',
-          variant: 'destructive',
-        });
-        releaseSubmission();
-        return;
-      }
+    if (preparedDelivery.issue === 'expired') {
+      toast({
+        title: 'Shipping rate expired',
+        description: 'Please select a delivery option again.',
+        variant: 'destructive',
+      });
+      releaseSubmission();
+      return;
     }
+
+    const shippingAddressData = preparedDelivery.address;
+    const { address: finalAddress, city: finalCity, state: finalState } = shippingAddressData;
+    const merchantRateId = preparedDelivery.merchantRateId;
+    const shippingProvider = preparedDelivery.provider;
+    const trackingNumber = undefined;
+
+    // Prepare order items for API
+    const orderItems = buildCheckoutOrderItems(checkoutCart);
 
     const normalizedPaymentMethod = normalizeOrderPaymentMethod(paymentMethod);
     const checkoutFingerprint = (paymentMethod === 'uba_redvault' ? 'uba_redvault:' : '') + buildPendingCheckoutFingerprint({

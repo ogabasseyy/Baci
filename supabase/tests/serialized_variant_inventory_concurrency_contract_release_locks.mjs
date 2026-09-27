@@ -116,6 +116,12 @@ function hasTargetStatusWhitelist(source) {
     executable
   );
   const guardEnd = guard ? guard.index + guard[0].length : -1;
+  const authGuard =
+    /IF\s+COALESCE\(\s*\(\s*SELECT\s+auth\.role\(\s*\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\.has_merchant_access\(\s*p_merchant_id\s*\)\s+THEN\b/i.exec(
+      executable
+    );
+  const scopeStart =
+    authGuard && guardEnd > authGuard.index ? authGuard.index : guardEnd;
   const statusReassignment =
     guard && dispatch && guardEnd < dispatch.index
       ? /(?:^|[;\n])\s*v_target_status\s*(?::=|=(?!=))/i.test(
@@ -125,7 +131,7 @@ function hasTargetStatusWhitelist(source) {
   const scopeReassignment =
     guard && dispatch && guardEnd < dispatch.index
       ? /(?:^|[;\n])\s*p_(?:merchant_id|order_id)\s*(?::=|=(?!=))/i.test(
-          executable.slice(guardEnd, dispatch.index)
+          executable.slice(scopeStart, dispatch.index)
         )
       : true;
   return Boolean(

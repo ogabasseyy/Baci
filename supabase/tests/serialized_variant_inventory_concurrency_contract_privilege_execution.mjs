@@ -222,11 +222,23 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
     } else if (event.kind === 'membership') {
       const usable = event.inheritable !== false || event.settable !== false;
       for (const member of event.members) {
-        const roles = state.memberships.get(member) ?? [];
+        const resolvedMember =
+          serializedInventoryPrivilegeRoles.resolveSpecialRole(
+            member,
+            state.currentRole,
+            state.sessionUser
+          );
+        const roles = state.memberships.get(resolvedMember) ?? [];
         for (const role of event.roles) {
-          const roleIndex = roles.indexOf(role);
+          const resolvedRole =
+            serializedInventoryPrivilegeRoles.resolveSpecialRole(
+              role,
+              state.currentRole,
+              state.sessionUser
+            );
+          const roleIndex = roles.indexOf(resolvedRole);
           if (event.operation === 'GRANT' && usable && roleIndex === -1)
-            roles.push(role);
+            roles.push(resolvedRole);
           if (
             (event.operation === 'REVOKE' ||
               (event.operation === 'GRANT' && !usable)) &&
@@ -234,8 +246,8 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
           )
             roles.splice(roleIndex, 1);
         }
-        if (roles.length > 0) state.memberships.set(member, roles);
-        else state.memberships.delete(member);
+        if (roles.length > 0) state.memberships.set(resolvedMember, roles);
+        else state.memberships.delete(resolvedMember);
       }
     } else {
       const grant = /^GRANT/i.test(event.match[0]);

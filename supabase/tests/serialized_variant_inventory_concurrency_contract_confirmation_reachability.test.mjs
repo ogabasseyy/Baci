@@ -200,3 +200,23 @@ test('confirmation order locks reject narrowing predicates', () => {
   assert.notEqual(narrowed, confirm);
   assert.equal(findConfirmationLocks(narrowed).order, undefined);
 });
+
+test('constant-true early exits terminate downstream control flow', () => {
+  const source = `
+    PERFORM 1 FROM public.orders WHERE id = p_order_id FOR UPDATE;
+    IF true THEN RETURN '{}'::jsonb; END IF;
+    UPDATE public.variant_inventory SET status = 'reserved' WHERE id = v_unit.id;
+  `;
+  const lock = /FOR\s+UPDATE/i.exec(source);
+  const update = /UPDATE\s+public\.variant_inventory/i.exec(source);
+  assert.ok(lock);
+  assert.ok(update);
+  assert.equal(isReachable(source, lock.index), true);
+  assert.equal(isReachable(source, update.index), false);
+  assert.equal(dominatesControlFlow(source, lock.index, update.index), false);
+
+  const conditional = source.replace('IF true THEN', 'IF v_skip THEN');
+  const liveUpdate = /UPDATE\s+public\.variant_inventory/i.exec(conditional);
+  assert.ok(liveUpdate);
+  assert.equal(isReachable(conditional, liveUpdate.index), true);
+});

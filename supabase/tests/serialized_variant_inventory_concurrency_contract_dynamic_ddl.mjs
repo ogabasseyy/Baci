@@ -175,10 +175,21 @@ function assignedExecutePayload(source, executeIndex, payload) {
       )
     ),
   ].pop();
-  if (!direct && !into) return null;
-  if (!into) return direct[1];
-  if (!direct) return into[1];
-  return direct.index > into.index ? direct[1] : into[1];
+  const equals = [
+    ...before.matchAll(
+      new RegExp(
+        `(?:^|[;]|\\bTHEN\\b|\\bELSE\\b|\\bLOOP\\b|\\bBEGIN\\b)\\s*${escapeRegex(variable[1])}\\s*=(?![=>])\\s*([^;]+)`,
+        'gim'
+      )
+    ),
+  ].pop();
+  const candidates = [direct, into, equals].filter(
+    (match) => match !== undefined
+  );
+  if (candidates.length === 0) return null;
+  return candidates.reduce((latest, match) =>
+    match.index > latest.index ? match : latest
+  )[1];
 }
 
 function hasDynamicFunctionDdl(source, functionSignature) {

@@ -3,6 +3,7 @@ import { serializedInventorySqlParser } from './serialized_variant_inventory_con
 
 const {
   escapeRegex,
+  hasConstantFalseConjunct,
   isRequiredConjunct,
   isRequiredGroupedConjunct,
   maskSqlLiterals,
@@ -83,6 +84,7 @@ function availableUnitPredicatesMatch(source, variantVariable, branchVariable) {
     `(?:${branchQualifier}(?:merchant_id\\s*(?:<>|!=|IS\\s+DISTINCT\\s+FROM)\\s*p_merchant_id|merchant_id\\s+(?:IS\\s+NULL|ISNULL)\\b|merchant_id\\s*=(?!\\s*p_merchant_id\\b)|variant_id\\s*(?:<>|!=|IS\\s+DISTINCT\\s+FROM)\\s*${escapeRegex(variantVariable)}\\b|variant_id\\s+(?:IS\\s+NULL|ISNULL)\\b|variant_id\\s*=(?!\\s*${escapeRegex(variantVariable)}\\b)|order_id\\s+(?:IS\\s+NOT\\s+NULL|NOTNULL)\\b|order_id\\s*=|order_item_id\\s+(?:IS\\s+NOT\\s+NULL|NOTNULL)\\b|order_item_id\\s*=|sold_at\\s+(?:IS\\s+NOT\\s+NULL|NOTNULL)\\b|sold_at\\s*=))`,
     'i'
   );
+  const branchNarrowing = new RegExp(`${branchQualifier}branch_id\\s*=`, 'i');
   return (
     query !== null &&
     valueQuery !== null &&
@@ -91,6 +93,8 @@ function availableUnitPredicatesMatch(source, variantVariable, branchVariable) {
     ) &&
     !contradictoryStatus.test(valueQuery.where) &&
     !contradictoryScope.test(valueQuery.where) &&
+    !hasConstantFalseConjunct(valueQuery.where) &&
+    !branchNarrowing.test(branchScopedWhere ?? '') &&
     branchFirst &&
     (!branchPattern ||
       (branchMatch !== null &&

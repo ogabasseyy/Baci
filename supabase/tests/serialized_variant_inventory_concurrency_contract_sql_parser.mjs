@@ -282,6 +282,8 @@ export const serializedInventorySqlParser = {
   dollarQuoteAt,
   escapeRegex,
   findDollarQuoteEnd,
+  hasConstantFalseConjunct:
+    serializedInventoryPredicates.hasConstantFalseConjunct,
   isRequiredConjunct: serializedInventoryPredicates.isRequiredConjunct,
   isRequiredGroupedConjunct:
     serializedInventoryPredicates.isRequiredGroupedConjunct,

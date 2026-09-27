@@ -100,6 +100,31 @@ function isRequiredConjunct(source, pattern) {
   );
 }
 
+function isConstantFalseExpression(expression) {
+  const unwrapped = unwrapOuterParentheses(expression);
+  const orBranches = splitTopLevel(unwrapped, 'OR');
+  if (orBranches.length > 1) {
+    return orBranches.every(isConstantFalseExpression);
+  }
+  const andBranches = splitTopLevel(unwrapped, 'AND');
+  if (andBranches.length > 1) {
+    return andBranches.some(isConstantFalseExpression);
+  }
+  if (new RegExp(`^${falseValue}$`, 'i').test(unwrapped)) return true;
+  if (new RegExp(`^NOT\\s+${trueValue}$`, 'i').test(unwrapped)) return true;
+  const numeric = /^(-?\d+(?:\.\d+)?)\s*=\s*(-?\d+(?:\.\d+)?)$/.exec(unwrapped);
+  if (numeric && Number(numeric[1]) !== Number(numeric[2])) return true;
+  const strings = /^'((?:''|[^'])*)'\s*=\s*'((?:''|[^'])*)'$/.exec(unwrapped);
+  if (strings && strings[1] !== strings[2]) return true;
+  return /^(?:TRUE\s*=\s*FALSE|FALSE\s*=\s*TRUE)$/i.test(unwrapped);
+}
+
+function hasConstantFalseConjunct(source) {
+  return splitTopLevel(unwrapOuterParentheses(source), 'AND').some(
+    isConstantFalseExpression
+  );
+}
+
 function isRequiredGroupedConjunct(source, pattern) {
   const expression = unwrapOuterParentheses(source);
   if (splitTopLevel(expression, 'OR').length > 1) return false;
@@ -112,6 +137,7 @@ function isRequiredGroupedConjunct(source, pattern) {
 }
 
 export const serializedInventoryPredicates = {
+  hasConstantFalseConjunct,
   isRequiredConjunct,
   isRequiredGroupedConjunct,
 };

@@ -53,6 +53,25 @@ function pathAt(source, targetIndex) {
   );
 }
 
+const ifTokenAtPattern = /\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b/iy;
+const constTrueIfPattern =
+  /^IF\s+(?:\(\s*)*(?:true(?:\s*::\s*(?:pg_catalog\s*\.\s*)?boolean)?|NOT\s+false)(?:\s*\))*\s*THEN$/i;
+
+function ifConditionAt(searchable, id) {
+  ifTokenAtPattern.lastIndex = id;
+  const token = ifTokenAtPattern.exec(searchable);
+  ifTokenAtPattern.lastIndex = 0;
+  return token?.[0] ?? null;
+}
+
+function isConstantTrueIf(searchable, id) {
+  const token = ifConditionAt(searchable, id);
+  if (!token) return false;
+  return constTrueIfPattern.test(
+    serializedInventorySqlParser.stripSqlComments(token).trim()
+  );
+}
+
 function isReachable(source, index) {
   const terminator =
     /\bRETURN\b(?!\s+(?:NEXT|QUERY)\b)|\bRAISE\b(?!\s+(?:DEBUG|LOG|INFO|NOTICE|WARNING)\b)/gi;
@@ -63,7 +82,21 @@ function isReachable(source, index) {
   if (target.some((branch) => branch.endsWith(':true'))) return false;
   const killsTarget = (matchIndex) => {
     const terminatorPath = pathAt(source, matchIndex);
-    return terminatorPath.every((branch, depth) => target[depth] === branch);
+    const effective = [];
+    for (const branch of terminatorPath) {
+      const separator = branch.indexOf(':');
+      const kind = branch.slice(0, separator);
+      const [id, arm] = branch.slice(separator + 1).split(':');
+      if (kind !== 'if' || id !== arm) {
+        if (kind === 'if' && isConstantTrueIf(searchable, Number(id))) {
+          return false;
+        }
+        effective.push(branch);
+        continue;
+      }
+      if (!isConstantTrueIf(searchable, Number(id))) effective.push(branch);
+    }
+    return effective.every((branch, depth) => target[depth] === branch);
   };
   for (const match of searchable.slice(0, index).matchAll(terminator)) {
     if (killsTarget(match.index)) return false;

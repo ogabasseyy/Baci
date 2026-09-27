@@ -161,6 +161,53 @@ $wrapper$;`;
   assert.equal(hasDynamicFunctionDdl(source, 'private.fixture(integer)'), true);
 });
 
+test('detects function DDL assigned with equals-form operators', () => {
+  const source = `DO $wrapper$
+DECLARE
+  v_sql text;
+BEGIN
+  v_sql = 'CREATE OR REPLACE FUNCTION private.confirm_order_inventory_reservations(uuid, uuid) RETURNS void AS $body$ BEGIN NULL; END; $body$';
+  EXECUTE v_sql;
+END;
+$wrapper$;`;
+
+  assert.equal(
+    hasDynamicFunctionDdl(
+      source,
+      'private.confirm_order_inventory_reservations(uuid, uuid)'
+    ),
+    true
+  );
+
+  const benign = source.replace(
+    `'CREATE OR REPLACE FUNCTION private.confirm_order_inventory_reservations(uuid, uuid) RETURNS void AS $body$ BEGIN NULL; END; $body$'`,
+    `'SELECT 1'`
+  );
+  assert.equal(
+    hasDynamicFunctionDdl(
+      benign,
+      'private.confirm_order_inventory_reservations(uuid, uuid)'
+    ),
+    false
+  );
+
+  const comparison = `DO $wrapper$
+DECLARE
+  v_sql text;
+BEGIN
+  IF v_sql = 'CREATE OR REPLACE FUNCTION private.confirm_order_inventory_reservations(uuid, uuid)' THEN NULL; END IF;
+  EXECUTE v_sql;
+END;
+$wrapper$;`;
+  assert.equal(
+    hasDynamicFunctionDdl(
+      comparison,
+      'private.confirm_order_inventory_reservations(uuid, uuid)'
+    ),
+    false
+  );
+});
+
 test('detects function DDL assigned through a format expression', () => {
   const source = `DO $wrapper$
 DECLARE

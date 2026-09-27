@@ -108,6 +108,34 @@ function matchesPredicates(query, patterns) {
   );
 }
 
+function qualifiedComparisons(text) {
+  return [
+    ...text.matchAll(
+      /\b([a-z_][a-z0-9_]*)\s*\.\s*([a-z_][a-z0-9_]*)\s*(?:=|<>|!=|<=?|>=?|IS\b|IN\b|LIKE\b|ILIKE\b|BETWEEN\b)/gi
+    ),
+  ].map((match) => [match[1].toLowerCase(), match[2].toLowerCase()]);
+}
+
+function hasUnexpectedLockPredicate(query) {
+  const alias = (query.alias ?? '').toLowerCase();
+  const joinAlias = (query.joinAlias ?? '').toLowerCase();
+  const allowedWhere = (qualifier, column) =>
+    (qualifier === alias && column === 'id') ||
+    (qualifier === joinAlias && (column === 'id' || column === 'merchant_id'));
+  const allowedJoin = (qualifier, column) =>
+    (qualifier === alias && column === 'order_id') ||
+    (qualifier === joinAlias && column === 'id');
+  return (
+    qualifiedComparisons(query.where).some(
+      ([qualifier, column]) => !allowedWhere(qualifier, column)
+    ) ||
+    (query.joinOn !== undefined &&
+      qualifiedComparisons(query.joinOn).some(
+        ([qualifier, column]) => !allowedJoin(qualifier, column)
+      ))
+  );
+}
+
 function findClaimLocks(source) {
   const queries = lockQueries(source);
   const order = queries.find(
@@ -135,7 +163,8 @@ function findClaimLocks(source) {
         columnEquals('id', 'p_order_item_id', query.alias ?? null),
         columnEquals('id', 'p_order_id', query.joinAlias ?? null),
         columnEquals('merchant_id', 'p_merchant_id', query.joinAlias ?? null),
-      ])
+      ]) &&
+      !hasUnexpectedLockPredicate(query)
   );
 
   return { item, order };

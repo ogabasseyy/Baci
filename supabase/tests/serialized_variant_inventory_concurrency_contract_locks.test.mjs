@@ -92,6 +92,25 @@ test('matches reordered lock predicates and targets the order-item alias', () =>
     serializedInventoryLocks.findClaimLocks(nestedLockDecoy).order,
     undefined
   );
+
+  const narrowedItem = source.replace(
+    'AND o.id = p_order_id\n    FOR UPDATE OF oi',
+    'AND o.id = p_order_id AND oi.quantity > 1\n    FOR UPDATE OF oi'
+  );
+  assert.notEqual(narrowedItem, source);
+  assert.equal(
+    serializedInventoryLocks.findClaimLocks(narrowedItem).item,
+    undefined
+  );
+
+  const narrowedJoin = source.replace(
+    'ON o.id = oi.order_id',
+    'ON o.id = oi.order_id AND oi.quantity > 1'
+  );
+  assert.equal(
+    serializedInventoryLocks.findClaimLocks(narrowedJoin).item,
+    undefined
+  );
 });
 
 test('claim locks must dominate the available-unit selector', () => {

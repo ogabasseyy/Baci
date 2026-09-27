@@ -595,7 +595,7 @@ export async function initiateRefund(
   PaystackResult<{
     id: number;
     status: string;
-    transaction: { reference: string };
+    transaction: { id: number; reference: string };
   }>
 > {
   // Validate transaction reference format
@@ -618,7 +618,7 @@ export async function initiateRefund(
   const result = await paystackRequest<{
     id: number;
     status: string;
-    transaction: { reference: string };
+    transaction: { id: number; reference: string };
   }>('/refund', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -640,6 +640,29 @@ export async function initiateRefund(
   }
 
   return result;
+}
+
+/** Read back the current provider state before changing a local refund. */
+export function fetchRefund(
+  id: number,
+  signal?: AbortSignal
+): Promise<
+  PaystackResult<{
+    id: number;
+    transaction: number;
+    amount: number;
+    currency: string;
+    status: string;
+  }>
+> {
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    return Promise.resolve({
+      success: false,
+      error: 'Invalid refund ID',
+      code: 'VALIDATION_ERROR',
+    });
+  }
+  return paystackRequest(`/refund/${id}`, { signal });
 }
 
 // =============================================================================

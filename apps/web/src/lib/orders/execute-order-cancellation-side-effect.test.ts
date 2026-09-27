@@ -98,7 +98,11 @@ describe('executeOrderCancellationSideEffect', () => {
   it('records a successful Paystack refund', async () => {
     const supabase = refundClient();
     mocks.initiateRefund.mockResolvedValue({
-      data: { id: 42, status: 'processed' },
+      data: {
+        id: 42,
+        status: 'processed',
+        transaction: { id: 123, reference: 'ref-1' },
+      },
       success: true,
     });
 
@@ -114,8 +118,10 @@ describe('executeOrderCancellationSideEffect', () => {
     expect(supabase.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         amount: 100,
+        status: 'pending',
         metadata: expect.objectContaining({
           payment_transaction_id: 'payment-1',
+          provider_payment_transaction_id: 123,
         }),
         transaction_type: 'refund',
       })
@@ -131,7 +137,11 @@ describe('executeOrderCancellationSideEffect', () => {
       payments: [{ ...paystackPayment, amount: 60 }],
     });
     mocks.initiateRefund.mockResolvedValue({
-      data: { id: 43, status: 'processed' },
+      data: {
+        id: 43,
+        status: 'processed',
+        transaction: { id: 123, reference: 'ref-1' },
+      },
       success: true,
     });
 
@@ -171,7 +181,11 @@ describe('executeOrderCancellationSideEffect', () => {
       ],
     });
     mocks.initiateRefund.mockResolvedValue({
-      data: { id: 44, status: 'processed' },
+      data: {
+        id: 44,
+        status: 'processed',
+        transaction: { id: 124, reference: 'ref-2' },
+      },
       success: true,
     });
 
@@ -251,7 +265,7 @@ describe('executeOrderCancellationSideEffect', () => {
     );
   });
 
-  it('retries when the manual-refund review cannot be persisted', async () => {
+  it('does not retry when the manual-refund review cannot be persisted', async () => {
     const reviewInsert = vi.fn().mockResolvedValue({
       error: { code: 'XX000', message: 'database unavailable' },
     });
@@ -276,7 +290,7 @@ describe('executeOrderCancellationSideEffect', () => {
         step: 'refund',
         supabase: { from } as never,
       })
-    ).rejects.toThrow('Failed to file manual refund reconciliation review');
+    ).rejects.toBeInstanceOf(DeliveryUncertainError);
   });
 
   it('quarantines ambiguous Paystack failures', async () => {

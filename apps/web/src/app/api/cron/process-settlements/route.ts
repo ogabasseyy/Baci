@@ -3,6 +3,8 @@ import { buildSettlementNotificationEmail } from '@/lib/build-settlement-notific
 import { constantTimeEqual } from '@/lib/constant-time-equal';
 import { logger } from '@/lib/logger';
 import { drainFailedOrderCancellationSideEffects } from '@/lib/orders/drain-failed-order-cancellation-side-effects';
+import { drainPaystackRefundNotifications } from '@/lib/payments/drain-paystack-refund-notifications';
+import { reconcilePendingPaystackCancellationRefunds } from '@/lib/payments/reconcile-paystack-cancellation-refunds';
 import { createServiceClient } from '@/lib/supabase/service';
 import { sendEmail } from '@/lib/zeptomail';
 
@@ -38,14 +40,37 @@ export async function POST(request: Request) {
 
     const supabase = createServiceClient();
     if (new URL(request.url).searchParams.get('cancellationsOnly') === 'true') {
-      const cancellationSideEffectDrain =
-        await drainFailedOrderCancellationSideEffects({
+      const [cancellationResult, refundResult] = await Promise.allSettled([
+        drainFailedOrderCancellationSideEffects({
           sendCancellationEmail: sendEmail,
           supabase,
+        }),
+        reconcilePendingPaystackCancellationRefunds(supabase),
+      ]);
+      const notificationResult = await Promise.allSettled([
+        drainPaystackRefundNotifications(supabase),
+      ]);
+      if (
+        cancellationResult.status === 'rejected' ||
+        refundResult.status === 'rejected' ||
+        notificationResult[0].status === 'rejected'
+      ) {
+        logger.error({
+          message: 'Cancellation and refund background work partially failed',
+          cancellationFailed: cancellationResult.status === 'rejected',
+          refundFailed: refundResult.status === 'rejected',
+          notificationFailed: notificationResult[0].status === 'rejected',
         });
+        return NextResponse.json(
+          { error: 'Cancellation and refund background work incomplete' },
+          { status: 503 }
+        );
+      }
       return NextResponse.json({
         success: true,
-        cancellationSideEffectDrain,
+        cancellationSideEffectDrain: cancellationResult.value,
+        paystackRefunds: refundResult.value,
+        paystackRefundNotifications: notificationResult[0].value,
       });
     }
 

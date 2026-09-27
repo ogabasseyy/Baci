@@ -50,6 +50,12 @@ function soldGuardDominatesUnits(source) {
   });
   const guard = soldGuardPattern.exec(cleanSource);
   const selector = /FOR\s+v_unit\s+IN\b/i.exec(cleanSource);
+  const scopeReassignment =
+    guard && selector && guard.index < selector.index
+      ? /(?:^|[;\n])\s*p_(?:merchant_id|order_id)\s*(?::=|=(?!=))/im.test(
+          cleanSource.slice(guard.index, selector.index)
+        )
+      : true;
   let arms;
   try {
     arms = serializedInventoryBranches.extractIfArms(
@@ -64,6 +70,7 @@ function soldGuardDominatesUnits(source) {
       selector &&
       guard.index < selector.index &&
       unauthorizedArmAborts(arms.thenBranch) &&
+      !scopeReassignment &&
       serializedInventoryControlFlow.dominatesControlFlow(
         cleanSource,
         guard.index,

@@ -20,6 +20,24 @@ function soldUnitWhereClause(sold) {
   );
 }
 
+function hasUnrecognizedSoldScope(where) {
+  return serializedInventorySqlParser
+    .splitTopLevel(
+      serializedInventorySqlParser.unwrapOuterParentheses(where),
+      'AND'
+    )
+    .some((branch) => {
+      const unwrapped =
+        serializedInventorySqlParser.unwrapOuterParentheses(branch);
+      return !soldUnitScopes.some((scope) => {
+        scope.lastIndex = 0;
+        const matched = scope.test(unwrapped);
+        scope.lastIndex = 0;
+        return matched;
+      });
+    });
+}
+
 test('sale transitions serialize on the parent order before reserved units', () => {
   const sold = serializedInventoryContract.latestFunctionBody(
     'private.mark_order_inventory_units_sold(uuid, uuid)'
@@ -37,6 +55,11 @@ test('sale transitions serialize on the parent order before reserved units', () 
       'sale must conjunctively scope reserved units'
     );
   }
+  assert.equal(
+    hasUnrecognizedSoldScope(unitSelector[1]),
+    false,
+    'sale must not narrow the reserved-unit selector'
+  );
   assert.ok(orderLock.index < unitSelector.index);
 });
 
@@ -55,6 +78,39 @@ test('sale unit selectors reject disjunctive scope bypasses', () => {
     soldUnitScopes.every((scope) =>
       serializedInventorySqlParser.isRequiredConjunct(unitSelector[1], scope)
     ),
+    false
+  );
+});
+
+test('sale unit selectors reject narrowing predicates', () => {
+  const sold = serializedInventoryContract.latestFunctionBody(
+    'private.mark_order_inventory_units_sold(uuid, uuid)'
+  );
+  const narrowed = sold.replace(
+    "AND vi.status = 'reserved'",
+    "AND vi.status = 'reserved' AND vi.created_at > now()"
+  );
+  assert.notEqual(narrowed, sold);
+  const unitSelector = soldUnitWhereClause(narrowed);
+  assert.ok(unitSelector, 'the selector is still extracted when narrowed');
+  assert.equal(hasUnrecognizedSoldScope(unitSelector[1]), true);
+});
+
+test('sale scope stays fixed after merchant authorization', () => {
+  const sold = serializedInventoryContract.latestFunctionBody(
+    'private.mark_order_inventory_units_sold(uuid, uuid)'
+  );
+  assert.equal(
+    serializedInventorySoldTransition.soldGuardDominatesUnits(sold),
+    true
+  );
+  const reassigned = sold.replace(
+    /(RAISE\s+EXCEPTION\s+'forbidden'[^;]*;\s*END\s+IF\s*;)/i,
+    `$1\n\n  p_merchant_id := (SELECT merchant_id FROM public.orders WHERE id = p_order_id);`
+  );
+  assert.notEqual(reassigned, sold);
+  assert.equal(
+    serializedInventorySoldTransition.soldGuardDominatesUnits(reassigned),
     false
   );
 });

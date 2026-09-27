@@ -27,6 +27,14 @@ function dynamicDdlPattern(functionSignature) {
   );
 }
 
+function dynamicSignaturePattern(functionSignature) {
+  const functionName = functionNameFromSignature(functionSignature);
+  return new RegExp(
+    `(?:FUNCTION|ROUTINE)\\s+${identifierPattern(functionName)}(?![A-Za-z0-9_])`,
+    'i'
+  );
+}
+
 function dynamicPrivilegePattern(functionSignature) {
   const functionName = functionNameFromSignature(functionSignature);
   const bareName = functionName.includes('.')
@@ -185,6 +193,7 @@ function assignedExecutePayloads(source, executeIndex, payload) {
 function hasDynamicFunctionDdl(source, functionSignature) {
   const masked = serializedInventorySqlParser.maskSqlLiterals(source);
   const ddl = dynamicDdlPattern(functionSignature);
+  const signature = dynamicSignaturePattern(functionSignature);
   for (const execute of masked.matchAll(/\bEXECUTE\b/gi)) {
     const payload = extractExecutePayload(
       source,
@@ -192,6 +201,9 @@ function hasDynamicFunctionDdl(source, functionSignature) {
     );
     const normalized = normalizedExecutePayload(payload);
     if (ddl.test(normalized.text)) return true;
+    if (normalized.hasUnknownArguments && signature.test(normalized.text)) {
+      return true;
+    }
     for (const assigned of assignedExecutePayloads(
       source,
       execute.index,
@@ -201,7 +213,8 @@ function hasDynamicFunctionDdl(source, functionSignature) {
       if (ddl.test(renderedAssigned.text)) return true;
       if (
         renderedAssigned.hasUnknownArguments &&
-        dynamicDdlOperationPattern.test(renderedAssigned.operationText)
+        (dynamicDdlOperationPattern.test(renderedAssigned.operationText) ||
+          signature.test(renderedAssigned.text))
       ) {
         return true;
       }

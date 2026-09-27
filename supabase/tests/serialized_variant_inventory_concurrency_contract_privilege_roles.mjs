@@ -127,11 +127,13 @@ function parseDefaultFunctionPrivileges(text, targetSchema) {
 function parseSchemaFunctionPrivileges(text, targetSchema) {
   schemaFunctionPrivilegePattern.lastIndex = 0;
   return [...text.matchAll(schemaFunctionPrivilegePattern)]
-    .filter((match) =>
-      match[1]
-        .split(',')
-        .map((schema) => schema.trim().replace(/^"|"$/g, '').toLowerCase())
-        .includes(targetSchema)
+    .filter(
+      (match) =>
+        match[1]
+          .split(',')
+          .map((schema) => schema.trim().replace(/^"|"$/g, '').toLowerCase())
+          .includes(targetSchema) &&
+        !(/^REVOKE/i.test(match[0]) && /\bGRANTED\s+BY\b/i.test(match[0]))
     )
     .map((match) => ({
       index: match.index,

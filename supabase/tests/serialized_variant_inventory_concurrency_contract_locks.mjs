@@ -136,6 +136,15 @@ function hasUnexpectedLockPredicate(query) {
   );
 }
 
+function hasUnexpectedOrderLockPredicate(query) {
+  const alias = (query.alias ?? '').toLowerCase();
+  return qualifiedComparisons(query.where).some(
+    ([qualifier, column]) =>
+      (column !== 'id' && column !== 'merchant_id') ||
+      (qualifier !== alias && qualifier !== 'orders')
+  );
+}
+
 function findClaimLocks(source) {
   const queries = lockQueries(source);
   const order = queries.find(
@@ -145,7 +154,8 @@ function findClaimLocks(source) {
       matchesPredicates(query, [
         columnEquals('id', 'p_order_id', query.alias ?? null),
         columnEquals('merchant_id', 'p_merchant_id', query.alias ?? null),
-      ])
+      ]) &&
+      !hasUnexpectedOrderLockPredicate(query)
   );
   const item = queries.find(
     (query) =>

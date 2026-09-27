@@ -111,6 +111,16 @@ test('matches reordered lock predicates and targets the order-item alias', () =>
     serializedInventoryLocks.findClaimLocks(narrowedJoin).item,
     undefined
   );
+
+  const narrowedOrder = source.replace(
+    'AND o.id = p_order_id\n    FOR UPDATE;',
+    "AND o.id = p_order_id AND o.payment_status = 'paid'\n    FOR UPDATE;"
+  );
+  assert.notEqual(narrowedOrder, source);
+  assert.equal(
+    serializedInventoryLocks.findClaimLocks(narrowedOrder).order,
+    undefined
+  );
 });
 
 test('claim locks must dominate the available-unit selector', () => {

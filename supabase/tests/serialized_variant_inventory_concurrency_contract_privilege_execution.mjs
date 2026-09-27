@@ -29,6 +29,14 @@ function splitFunctionPrivilegeTargets(source) {
   return splitTopLevelList(source);
 }
 
+function resolveActiveRole(reference, state) {
+  return serializedInventoryPrivilegeRoles.resolveSpecialRole(
+    reference,
+    state.currentRole,
+    state.sessionUser
+  );
+}
+
 const authenticatedExecutionCache = new Map();
 
 function authenticatedCanExecute(source, signature) {
@@ -184,35 +192,23 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
       }
       state.exists = true;
     } else if (event.kind === 'owner') {
-      state.owner = serializedInventoryPrivilegeRoles.resolveSpecialRole(
-        event.owner,
-        state.currentRole,
-        state.sessionUser
-      );
+      state.owner = resolveActiveRole(event.owner, state);
     } else if (event.kind === 'move') {
       state.exists = true;
       state.owner = 'authenticated';
     } else if (event.kind === 'reassign') {
       const references = event.from.map((reference) =>
-        serializedInventoryPrivilegeRoles.resolveSpecialRole(
-          reference,
-          state.currentRole,
-          state.sessionUser
-        )
+        resolveActiveRole(reference, state)
       );
       if (state.owner !== undefined && references.includes(state.owner)) {
-        state.owner = event.owner;
+        state.owner = resolveActiveRole(event.owner, state);
       }
     } else if (event.kind === 'default') {
       const grant = event.operation === 'GRANT';
       const owner =
         event.owner === null || event.owner === undefined
           ? state.currentRole
-          : serializedInventoryPrivilegeRoles.resolveSpecialRole(
-              event.owner,
-              state.currentRole,
-              state.sessionUser
-            );
+          : resolveActiveRole(event.owner, state);
       const ownerDefaults = state.defaultGrants.get(owner) ?? {
         global: new Map(),
         schema: new Map(),
@@ -221,7 +217,10 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
         event.scope === 'schema' ? ownerDefaults.schema : ownerDefaults.global;
       for (const grantee of splitFunctionPrivilegeTargets(event.grantees)) {
         scope.set(
-          serializedInventoryPrivilegeRoles.normalizeRoleName(grantee),
+          resolveActiveRole(
+            serializedInventoryPrivilegeRoles.normalizeRoleName(grantee),
+            state
+          ),
           grant
         );
       }
@@ -229,20 +228,10 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
     } else if (event.kind === 'membership') {
       const usable = event.inheritable !== false || event.settable !== false;
       for (const member of event.members) {
-        const resolvedMember =
-          serializedInventoryPrivilegeRoles.resolveSpecialRole(
-            member,
-            state.currentRole,
-            state.sessionUser
-          );
+        const resolvedMember = resolveActiveRole(member, state);
         const roles = state.memberships.get(resolvedMember) ?? [];
         for (const role of event.roles) {
-          const resolvedRole =
-            serializedInventoryPrivilegeRoles.resolveSpecialRole(
-              role,
-              state.currentRole,
-              state.sessionUser
-            );
+          const resolvedRole = resolveActiveRole(role, state);
           const roleIndex = roles.indexOf(resolvedRole);
           if (event.operation === 'GRANT' && usable && roleIndex === -1)
             roles.push(resolvedRole);

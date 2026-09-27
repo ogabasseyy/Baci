@@ -69,3 +69,21 @@ $wrapper$;`;
     true
   );
 });
+
+test('treats unresolved format commands on protected functions as DDL', () => {
+  const source = `DO $wrapper$
+DECLARE
+  v_command text := 'CREATE OR REPLACE';
+BEGIN
+  EXECUTE format('%s FUNCTION private.confirm_order_inventory_reservations(uuid, uuid) RETURNS void AS $body$ BEGIN NULL; END; $body$', v_command);
+END;
+$wrapper$;`;
+
+  assert.equal(
+    hasDynamicFunctionDdl(
+      source,
+      'private.confirm_order_inventory_reservations(uuid, uuid)'
+    ),
+    true
+  );
+});

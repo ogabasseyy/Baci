@@ -209,4 +209,15 @@ test('release reconciliation synchronizes products in a deterministic order', ()
     ),
     false
   );
+  const narrowed = release.replace(
+    /WHERE\s+oi\s*\.\s*order_id\s*=\s*p_order_id\s+ORDER\s+BY/i,
+    'WHERE oi.order_id = p_order_id AND oi.quantity > 1 ORDER BY'
+  );
+  assert.notEqual(narrowed, release);
+  assert.equal(
+    serializedInventoryReleaseTransitions.releaseReconciliationMatches(
+      narrowed
+    ),
+    false
+  );
 });

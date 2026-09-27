@@ -3,12 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DvaModal } from './DvaModal';
 import type { DvaData } from '../types';
 
-// Mock window.location.reload
-const mockReload = vi.fn();
-Object.defineProperty(window, 'location', {
-  value: { reload: mockReload },
-  writable: true,
-});
 
 describe('DvaModal', () => {
   const mockDvaData: DvaData = {
@@ -22,11 +16,12 @@ describe('DvaModal', () => {
 
   const mockOnCopyToClipboard = vi.fn();
   const mockOnClose = vi.fn();
+  const mockOnConfirmTransfer = vi.fn();
 
   beforeEach(() => {
     mockOnCopyToClipboard.mockReset();
     mockOnClose.mockReset();
-    mockReload.mockReset();
+    mockOnConfirmTransfer.mockReset();
   });
 
   describe('Rendering', () => {
@@ -37,6 +32,9 @@ describe('DvaModal', () => {
           copiedText={null}
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 
@@ -51,6 +49,9 @@ describe('DvaModal', () => {
           copiedText={null}
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 
@@ -65,6 +66,9 @@ describe('DvaModal', () => {
           copiedText={null}
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 
@@ -79,6 +83,9 @@ describe('DvaModal', () => {
           copiedText={null}
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 
@@ -93,6 +100,9 @@ describe('DvaModal', () => {
           copiedText={null}
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 
@@ -107,6 +117,9 @@ describe('DvaModal', () => {
           copiedText={null}
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 
@@ -125,6 +138,9 @@ describe('DvaModal', () => {
           copiedText={null}
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 
@@ -138,6 +154,9 @@ describe('DvaModal', () => {
           copiedText={null}
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 
@@ -153,6 +172,9 @@ describe('DvaModal', () => {
           copiedText={null}
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 
@@ -172,6 +194,9 @@ describe('DvaModal', () => {
           copiedText="1234567890"
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 
@@ -191,6 +216,9 @@ describe('DvaModal', () => {
           copiedText={null}
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 
@@ -215,6 +243,9 @@ describe('DvaModal', () => {
           copiedText="different-text"
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 
@@ -240,6 +271,9 @@ describe('DvaModal', () => {
           copiedText={null}
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 
@@ -263,6 +297,9 @@ describe('DvaModal', () => {
           copiedText={null}
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 
@@ -284,6 +321,9 @@ describe('DvaModal', () => {
           copiedText={null}
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 
@@ -292,13 +332,16 @@ describe('DvaModal', () => {
       ).toBeInTheDocument();
     });
 
-    it('reloads the page when "Confirm Transfer Sent" is clicked', () => {
+    it('runs transfer verification when "Confirm Transfer Sent" is clicked', () => {
       render(
         <DvaModal
           data={mockDvaData}
           copiedText={null}
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 
@@ -308,7 +351,7 @@ describe('DvaModal', () => {
 
       fireEvent.click(confirmButton);
 
-      expect(mockReload).toHaveBeenCalledTimes(1);
+      expect(mockOnConfirmTransfer).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -325,6 +368,9 @@ describe('DvaModal', () => {
           copiedText={null}
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 
@@ -343,6 +389,9 @@ describe('DvaModal', () => {
           copiedText={null}
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 
@@ -361,6 +410,9 @@ describe('DvaModal', () => {
           copiedText={null}
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 
@@ -381,6 +433,9 @@ describe('DvaModal', () => {
           copiedText={null}
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 
@@ -398,6 +453,9 @@ describe('DvaModal', () => {
           copiedText={null}
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 
@@ -412,6 +470,9 @@ describe('DvaModal', () => {
           copiedText={null}
           onCopyToClipboard={mockOnCopyToClipboard}
           onClose={mockOnClose}
+          formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+          isVerifying={false}
+          onConfirmTransfer={mockOnConfirmTransfer}
         />
       );
 

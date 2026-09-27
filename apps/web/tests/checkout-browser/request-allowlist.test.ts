@@ -12,6 +12,12 @@ it('permits fixture navigation and Next RSC navigation', () => {
   expect(
     isFixtureAssetRequest({
       ...request,
+      url: 'http://127.0.0.1:3217/crypto-payment-modal',
+    })
+  ).toBe(true);
+  expect(
+    isFixtureAssetRequest({
+      ...request,
       resourceType: 'fetch',
       url: `${request.url}?_rsc=fixture`,
       rsc: '1',

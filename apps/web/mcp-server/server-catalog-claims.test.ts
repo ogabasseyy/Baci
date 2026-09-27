@@ -54,7 +54,7 @@ describe('MCP catalog claims', () => {
       }));
       expect(search.structuredContent).toMatchObject({
         products: expect.arrayContaining([
-          expect.objectContaining({ id: 'condition-offer-product', in_stock: true, price: 80000 }),
+          expect.objectContaining({ id: 'condition-offer-product', in_stock: true, price: 80000, condition: 'used' }),
           expect.objectContaining({ id: 'variant-cheaper-than-parent', in_stock: true, price: 90000 }),
           expect.objectContaining({ id: 'variant-empty-product', in_stock: false }),
         ]),
@@ -228,7 +228,7 @@ describe('MCP catalog claims', () => {
         params: { name: 'get_recommendations', arguments: { use_case: 'used offer' } },
       }));
       expect(offers.structuredContent).toMatchObject({ products: [
-        expect.objectContaining({ id: 'condition-offer-product' }),
+        expect.objectContaining({ id: 'condition-offer-product', price: 80000, condition: 'used' }),
       ] });
     } finally {
       await server.close();

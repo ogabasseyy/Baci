@@ -61,13 +61,14 @@ describe('selectRecommendedProducts', () => {
         : [],
       fetchVariants: async () => [],
       fetchOffers: async () => [
-        { product_id: 'phone-with-affordable-offer', price: 90, stock_quantity: 2 },
-        { product_id: 'phone-with-affordable-offer', price: 70, stock_quantity: 1 },
+        { product_id: 'phone-with-affordable-offer', condition: 'new', price: 90, stock_quantity: 2 },
+        { product_id: 'phone-with-affordable-offer', condition: 'used', price: 70, stock_quantity: 1 },
         { product_id: 'phone-with-affordable-offer', price: 50, stock_quantity: 0 },
       ],
     });
 
     expect(result.map((product) => product.recommendationPrice)).toEqual([70]);
+    expect(result.map((product) => product.recommendationCondition)).toEqual(['used']);
   });
 
   it('uses stocked base price for an offer-only product when alternate offers exceed budget', async () => {

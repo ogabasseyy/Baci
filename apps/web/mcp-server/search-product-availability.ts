@@ -77,22 +77,35 @@ export async function hydrateSearchProductAvailability(
     const basePurchasable = !product.has_variants &&
       (!condition || normalizeCanonicalProductCondition(product.condition) === condition) &&
       (product.manage_stock !== true || Number(product.stock_quantity ?? 0) > 0);
-    const prices = [
+    const baseCondition = normalizeCanonicalProductCondition(product.condition) || 'new';
+    const pricedOptions = [
       ...variants.filter((variant) => product.manage_stock !== true || Number(variant.stock_quantity ?? 0) > 0)
-        .map((variant) => variant.price_override ?? product.price),
+        .map((variant) => ({
+          price: variant.price_override ?? product.price,
+          condition: normalizeCanonicalProductCondition(
+            variant.condition ?? (typeof variant.attributes?.condition === 'string' ? variant.attributes.condition : null)
+          ) || baseCondition,
+        })),
       ...offers.filter((offer) => product.manage_stock !== true || Number(offer.stock_quantity ?? 0) > 0)
-        .map((offer) => offer.price),
-      ...(basePurchasable ? [product.price] : []),
-    ].filter((price): price is number => typeof price === 'number' && Number.isFinite(price) && price >= 0);
+        .map((offer) => ({ price: offer.price,
+          condition: normalizeCanonicalProductCondition(offer.condition) || baseCondition })),
+      ...(basePurchasable ? [{ price: product.price, condition: baseCondition }] : []),
+    ].filter((option): option is { price: number; condition: string } =>
+      typeof option.price === 'number' && Number.isFinite(option.price) && option.price >= 0);
+    const cheapestOption = pricedOptions.reduce<(typeof pricedOptions)[number] | undefined>(
+      (cheapest, option) => !cheapest || option.price < cheapest.price ? option : cheapest,
+      undefined
+    );
     const optionPriceLookupFailed =
       (product.has_variants && !variantLookupSucceeded) ||
       (product.has_condition_offers && !offersMap.has(product.id));
-    const displayPrice = prices.length > 0
-      ? Math.min(...prices)
+    const displayPrice = cheapestOption
+      ? cheapestOption.price
       : optionPriceLookupFailed && !basePurchasable ? null : product.price;
     return {
       product,
       displayPrice,
+      displayCondition: cheapestOption?.condition ?? baseCondition,
       displayCompareAtPrice: displayPrice === product.price ? product.compare_at_price : null,
       stockSummary: getMcpProductStockSummary(
         condition && product.has_condition_offers &&

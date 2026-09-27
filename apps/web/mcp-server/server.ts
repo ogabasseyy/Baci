@@ -1297,7 +1297,7 @@ function createOgabasseyServer() {
           ));
         }
         const selectedProducts = selectSearchProductsByPrice(hydratedProducts, args, limit);
-        const formatted = selectedProducts.map(({ product: p, displayPrice, displayCompareAtPrice, stockSummary, availableVariants: variants }) => {
+        const formatted = selectedProducts.map(({ product: p, displayPrice, displayCondition, displayCompareAtPrice, stockSummary, availableVariants: variants }) => {
           // A compare-at price indicates a listed discount, not a price trend.
           const isDiscounted = typeof displayPrice === 'number' &&
             displayCompareAtPrice && displayCompareAtPrice > displayPrice;
@@ -1321,7 +1321,7 @@ function createOgabasseyServer() {
             price: displayPrice,
             compare_at_price: displayCompareAtPrice,
             image: getSafeCatalogImageUrl(p.images?.[0]?.url || p.images?.[0]),
-            condition: resolveMcpSearchProductCondition(p, args.condition),
+            condition: displayCondition || resolveMcpSearchProductCondition(p, args.condition),
             brand: p.brand,
             category: p.category,
             in_stock: stockSummary.inStock,
@@ -2056,7 +2056,7 @@ function createOgabasseyServer() {
         },
         fetchOffers: async (ids) => {
           const { data, error } = await supabase.from('product_offers')
-            .select('product_id, price, stock_quantity')
+            .select('product_id, condition, price, stock_quantity')
             .eq('merchant_id', merchantId)
             .eq('status', 'active')
             .in('product_id', ids);
@@ -2069,6 +2069,7 @@ function createOgabasseyServer() {
         name: p.name,
         slug: p.slug,
         price: p.recommendationPrice ?? p.price,
+        condition: p.recommendationCondition ?? p.condition ?? 'new',
         image: getSafeCatalogImageUrl(p.images?.[0]?.url || p.images?.[0]),
       }));
 

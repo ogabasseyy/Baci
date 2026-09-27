@@ -10,6 +10,7 @@ interface RecommendationCandidate {
   description: string | null;
   manage_stock: boolean | null;
   price: number;
+  condition?: string | null;
   stock_quantity: number | null;
   has_variants: boolean | null;
   has_condition_offers: boolean | null;
@@ -20,9 +21,10 @@ interface OptionStock {
   stock_quantity: number | null;
   price?: number | null;
   price_override?: number | null;
+  condition?: string | null;
 }
 
-type RecommendedProduct<T> = T & { recommendationPrice?: number };
+type RecommendedProduct<T> = T & { recommendationPrice?: number; recommendationCondition?: string };
 
 /** Scans a bounded catalog window, with a larger finite window for option-priced budget searches. */
 export async function selectRecommendedProducts<T extends RecommendationCandidate>({
@@ -88,32 +90,37 @@ export async function selectRecommendedProducts<T extends RecommendationCandidat
       if (stock.inStock === false) continue;
 
       let recommendationPrice: number | undefined;
+      let recommendationCondition: string | undefined;
       if (product.has_variants || product.has_condition_offers) {
         const variantPrices = product.has_variants && variants !== null
           ? productVariants
             .filter((variant) => product.manage_stock !== true || Number(variant.stock_quantity ?? 0) > 0)
-            .map((variant) => Number(variant.price_override ?? product.price))
-            .filter(Number.isFinite)
+            .map((variant) => ({ price: Number(variant.price_override ?? product.price),
+              condition: variant.condition || product.condition || 'new' }))
           : [];
         const offerPrices = product.has_condition_offers && offers !== null
           ? productOffers
             .filter((offer) => (product.manage_stock !== true || Number(offer.stock_quantity ?? 0) > 0) && offer.price != null)
-            .map((offer) => Number(offer.price))
-            .filter(Number.isFinite)
+            .map((offer) => ({ price: Number(offer.price),
+              condition: offer.condition || product.condition || 'new' }))
           : [];
         const baseOfferPrices = !product.has_variants &&
           product.has_condition_offers &&
           (product.manage_stock !== true || Number(product.stock_quantity ?? 0) > 0) &&
           Number.isFinite(Number(product.price))
-          ? [Number(product.price)]
+          ? [{ price: Number(product.price), condition: product.condition || 'new' }]
           : [];
-        const optionPrices = [...variantPrices, ...offerPrices, ...baseOfferPrices];
+        const optionPrices = [...variantPrices, ...offerPrices, ...baseOfferPrices]
+          .filter((option) => Number.isFinite(option.price) && option.price >= 0);
         const recommendationPrices = budget === undefined
           ? optionPrices
-          : optionPrices.filter((price) => price <= budget);
+          : optionPrices.filter((option) => option.price <= budget);
         if (budget !== undefined && recommendationPrices.length === 0) continue;
         if (recommendationPrices.length > 0) {
-          recommendationPrice = recommendationPrices.reduce((lowest, price) => Math.min(lowest, price));
+          const cheapest = recommendationPrices.reduce((lowest, option) =>
+            option.price < lowest.price ? option : lowest);
+          recommendationPrice = cheapest.price;
+          recommendationCondition = cheapest.condition;
         }
       } else if (budget !== undefined && Number(product.price) > budget) {
         continue;
@@ -121,7 +128,7 @@ export async function selectRecommendedProducts<T extends RecommendationCandidat
 
       const recommendation = recommendationPrice === undefined
         ? product
-        : { ...product, recommendationPrice };
+        : { ...product, recommendationPrice, recommendationCondition };
       if (fallback.length < 4) fallback.push(recommendation);
       if (matchesUseCase(product) && matched.length < 4) matched.push(recommendation);
     }

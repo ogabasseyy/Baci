@@ -21,9 +21,11 @@ describe('hydrateSearchProductAvailability', () => {
 
     const [base] = await hydrateSearchProductAvailability([product], supabase, 'merchant-1', 'new');
     const [used] = await hydrateSearchProductAvailability([product], supabase, 'merchant-1', 'used');
+    const [unfiltered] = await hydrateSearchProductAvailability([product], supabase, 'merchant-1');
 
     expect(base).toMatchObject({ displayPrice: 100000, stockSummary: { inStock: true } });
     expect(used).toMatchObject({ displayPrice: 80000, stockSummary: { inStock: true } });
+    expect(unfiltered).toMatchObject({ displayPrice: 80000, displayCondition: 'used' });
   });
 
   it('keeps base stock for its own condition but not alternate offers', async () => {

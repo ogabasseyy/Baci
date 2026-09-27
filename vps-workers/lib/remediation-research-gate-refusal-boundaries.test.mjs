@@ -113,6 +113,17 @@ describe('remediation research gate refusal boundaries', () => {
     assert.equal(result.accepted, true);
   });
 
+  it('accepts an insufficient-evidence refusal that selects a fallback instead', () => {
+    const report = validReport.replace(
+      'SELECTED_FIX: smallest code fix',
+      'SELECTED_FIX: Insufficient evidence exists to select a safe fix yet, so apply the bounded workaround'
+    );
+
+    const result = validateCodexResearchResult(jsonl(report));
+
+    assert.equal(result.accepted, true);
+  });
+
   it('accepts an affirmative selection with incidental cannot-safely wording', () => {
     const report = validReport.replace(
       'SELECTED_FIX: smallest code fix',

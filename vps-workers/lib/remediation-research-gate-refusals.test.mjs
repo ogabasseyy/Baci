@@ -232,6 +232,24 @@ describe('remediation research gate refusals', () => {
     }
   });
 
+  it('rejects insufficient-evidence no-fix conclusions', () => {
+    const reports = [
+      'SELECTED_FIX: Insufficient evidence exists to select a safe fix; collect production traces',
+      'SELECTED_FIX: There is insufficient evidence to identify a defensible fix.',
+    ];
+
+    for (const selectedFix of reports) {
+      const result = validateCodexResearchResult(
+        jsonl(
+          validReport.replace('SELECTED_FIX: smallest code fix', selectedFix)
+        )
+      );
+
+      assert.equal(result.accepted, false);
+      assert.match(result.reasons.join('\n'), /defensible selected fix/);
+    }
+  });
+
   it('rejects standalone none refusals at the start of the selection', () => {
     const reports = [
       'SELECTED_FIX: None.',

@@ -26,7 +26,6 @@ import {
   AlertCircle,
   Building2,
   ChevronRight,
-  CreditCard,
   Loader2,
   ShieldCheck,
   Check,
@@ -36,6 +35,7 @@ import {
   X,
 } from 'lucide-react';
 import { CheckoutStepSection } from './checkout/components/CheckoutStepSection';
+import { CryptoPaymentModal } from './checkout/components/CryptoPaymentModal';
 import { DeliveryAddressFields, type SavedCheckoutAddress as SavedAddress } from './checkout/components/DeliveryAddressFields';
 import { DeliveryOptions } from './checkout/components/DeliveryOptions';
 import {
@@ -1614,21 +1614,6 @@ export const CheckoutPage: React.FC = () => {
 
 
 
-  // Chain display names and explorer URLs
-  const chainDisplayNames: Record<string, string> = {
-    TRX: 'Tron (TRC-20)',
-    ETH: 'Ethereum (ERC-20)',
-    MATIC: 'Polygon',
-    AVAXC: 'Avalanche C-Chain',
-  };
-
-  const chainExplorerUrls: Record<string, string> = {
-    TRX: 'https://tronscan.org/#/address/',
-    ETH: 'https://etherscan.io/address/',
-    MATIC: 'https://polygonscan.com/address/',
-    AVAXC: 'https://snowtrace.io/address/',
-  };
-
   return (
     <div className="ogabassey-checkout-page min-h-screen bg-gray-50/50 pb-20 flex flex-col">
       {/* Checkout Navbar */}
@@ -1686,182 +1671,21 @@ export const CheckoutPage: React.FC = () => {
 
       {/* Crypto Payment Modal */}
       {cryptoPaymentData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
-            {/* Header */}
-            <div className="sticky top-0 bg-linear-to-r from-store-primary to-store-primary/80 p-4 flex items-center justify-between rounded-t-2xl">
-              <div className="flex items-center gap-2">
-                <div className="size-8 bg-white/20 rounded-lg flex items-center justify-center">
-                  <CreditCard size={16} className="text-white" />
-                </div>
-                <h2 className="font-bold text-white">Pay with Crypto</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  // Just close the modal - don't clear cart or redirect
-                  // User can retry or choose a different payment method
-                  dismissCryptoModal();
-                }}
-                className="size-8 rounded-lg bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-colors"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="p-5 space-y-4">
-              {/* Top Row: QR & Amount */}
-              <div className="flex gap-4 items-center">
-                {/* QR Code (Compact) */}
-                <div className="bg-white p-2 rounded-xl shadow-sm border border-gray-200">
-                  <img
-                    src={cryptoPaymentData.qrcode || `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${cryptoPaymentData.address}&margin=10`}
-                    alt="Scan"
-                    className="size-24"
-                    loading="lazy"
-                  />
-                </div>
-
-                {/* Payment Details */}
-                <div className="flex-1 space-y-2">
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Send Exactly</p>
-                    <p className="text-2xl font-black text-gray-900 leading-tight">
-                      {cryptoPaymentData.amount.toLocaleString()} <span className="text-store-primary">{cryptoPaymentData.currency}</span>
-                    </p>
-                  </div>
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 border border-gray-200">
-                    <span className="size-1.5 rounded-full bg-green-500 animate-pulse" />
-                    <p className="text-xs font-semibold text-gray-700">
-                      Network: {chainDisplayNames[cryptoPaymentData.chain] || cryptoPaymentData.chain}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Wallet Address (Merged Copy) */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1">
-                  Recipient Address
-                </label>
-                <div className="relative group">
-                  <div className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 pl-3 pr-12 font-mono text-xs text-gray-600 break-all">
-                    {cryptoPaymentData.address}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard(cryptoPaymentData.address)}
-                    className={`absolute right-1 top-1 bottom-1 px-3 bg-white border rounded-lg shadow-sm transition-all flex items-center justify-center group-hover:shadow-md ${copiedText === cryptoPaymentData.address
-                      ? 'border-green-300 text-green-600'
-                      : 'border-gray-200 hover:border-store-primary/40 hover:text-store-primary'
-                      }`}
-                    title={copiedText === cryptoPaymentData.address ? 'Copied!' : 'Copy Address'}
-                  >
-                    {copiedText === cryptoPaymentData.address ? <Check size={16} /> : <Copy size={16} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Warning (Compact) */}
-              <div className="bg-amber-50 border border-amber-100 rounded-lg p-3">
-                <p className="text-[11px] leading-relaxed text-amber-800">
-                  <strong className="font-bold">Warning:</strong> Only send <span className="font-bold">{cryptoPaymentData.currency}</span> on the <span className="font-bold">{chainDisplayNames[cryptoPaymentData.chain] || cryptoPaymentData.chain}</span> network. Using the wrong network will result in permanent loss.
-                </p>
-              </div>
-
-              {/* Confirmation Time */}
-              <div className="flex items-center gap-3 bg-store-primary/5 rounded-xl p-4 border border-store-primary/20">
-                <div className="size-10 bg-store-primary/10 rounded-full flex items-center justify-center shrink-0">
-                  <Clock size={20} className="text-store-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Expected confirmation</p>
-                  <p className="text-xs text-gray-500">{cryptoPaymentData.confirmation_time}</p>
-                </div>
-              </div>
-
-              {/* Reference */}
-              <div className="text-center text-xs text-gray-400">
-                Reference: {cryptoPaymentData.reference}
-              </div>
-
-              {/* Verification Status */}
-              {isVerifyingCrypto && (
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    <Loader2 size={18} className="animate-spin text-blue-600" />
-                    <span className="text-sm font-medium text-blue-800">
-                      {cryptoVerificationStatus === 'checking' && 'Checking payment status...'}
-                      {cryptoVerificationStatus === 'pending' && 'Waiting for blockchain confirmation...'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-blue-600">
-                    This may take a few minutes. Do not close this window.
-                  </p>
-                </div>
-              )}
-
-              {cryptoVerificationStatus === 'confirmed' && (
-                <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
-                  <p className="text-sm font-medium text-green-800">
-                    Payment confirmed! Redirecting to order confirmation…
-                  </p>
-                </div>
-              )}
-
-              {cryptoVerificationStatus === 'failed' && (
-                <div className="bg-store-primary/5 border border-store-primary/30 rounded-xl p-4 text-center">
-                  <p className="text-sm font-medium text-red-800">
-                    Payment verification failed. Please contact support.
-                  </p>
-                </div>
-              )}
-
-              {/* Verify Payment Button */}
-              <button
-                type="button"
-                onClick={verifyCryptoPayment}
-                disabled={isVerifyingCrypto}
-                className={`w-full py-3.5 font-bold rounded-xl transition-colors shadow-lg ${isVerifyingCrypto
-                  ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                  : 'bg-store-primary text-white hover:bg-store-primary/90 shadow-store-primary/20'
-                  }`}
-              >
-                {isVerifyingCrypto ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <Loader2 size={18} className="animate-spin" />
-                    Verifying Payment…
-                  </span>
-                ) : (
-                  "I've Sent the Payment"
-                )}
-              </button>
-
-              <p className="text-center text-xs text-gray-400">
-                Click the button above after sending. We'll verify the payment on the blockchain.
-              </p>
-
-              {/* Close without verifying */}
-              {!isVerifyingCrypto && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const confirmed = confirm(
-                      'Are you sure you want to close? If you\'ve already sent payment, your order will still be processed once the payment is detected.'
-                    );
-                    if (confirmed) {
-                      dismissCryptoModal();
-                    }
-                  }}
-                  className="w-full py-2.5 text-gray-500 text-sm font-medium hover:text-gray-700 transition-colors"
-                >
-                  Close and check order status later
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+        <CryptoPaymentModal
+          data={cryptoPaymentData}
+          verificationStatus={cryptoVerificationStatus}
+          isVerifying={isVerifyingCrypto}
+          copiedText={copiedText}
+          onVerify={verifyCryptoPayment}
+          onCopyToClipboard={copyToClipboard}
+          onClose={dismissCryptoModal}
+          onCloseConfirm={() => {
+            const confirmed = confirm(
+              'Are you sure you want to close? If you\'ve already sent payment, your order will still be processed once the payment is detected.'
+            );
+            if (confirmed) dismissCryptoModal();
+          }}
+        />
       )}
 
       {/* Wallet-funded bank transfer (P4a): consent, then the customer's own

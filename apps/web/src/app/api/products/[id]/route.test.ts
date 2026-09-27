@@ -838,7 +838,8 @@ describe('PUT /api/products/[id]', () => {
 
       expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
         MERCHANT_ID,
-        expect.arrayContaining(['updated-product', 'old-name'])
+        expect.arrayContaining(['updated-product', 'old-name']),
+        { expireImmediately: true }
       );
       expect(
         mockRevalidateProductSlugs.mock.invocationCallOrder[0]
@@ -1946,9 +1947,11 @@ describe('DELETE /api/products/[id]', () => {
       );
       // The deleted slug's Next cache tag is busted BEFORE the edge purge so a
       // post-purge MISS cannot refill a stale "product exists" page.
-      expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(MERCHANT_ID, [
-        'iphone-15',
-      ]);
+      expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+        MERCHANT_ID,
+        ['iphone-15'],
+        { expireImmediately: true }
+      );
       expect(
         mockRevalidateProductSlugs.mock.invocationCallOrder[0]
       ).toBeLessThan(

@@ -173,6 +173,36 @@ describe('remediation research gate refusals', () => {
     assert.equal(result.accepted, true);
   });
 
+  it('accepts a selection with third-party unable-to wording', () => {
+    const report = validReport.replace(
+      'SELECTED_FIX: smallest code fix',
+      'SELECTED_FIX: Add the bounded fallback when the provider is unable to return the optional field'
+    );
+
+    const result = validateCodexResearchResult(jsonl(report));
+
+    assert.equal(result.accepted, true);
+  });
+
+  it('rejects research unable-to conclusions at the start of the selection', () => {
+    const reports = [
+      'SELECTED_FIX: Unable to identify a defensible fix from the evidence.',
+      'SELECTED_FIX: I am unable to determine a safe fix from the evidence.',
+      "SELECTED_FIX: I'm unable to justify a safe change from the evidence.",
+    ];
+
+    for (const selectedFix of reports) {
+      const result = validateCodexResearchResult(
+        jsonl(
+          validReport.replace('SELECTED_FIX: smallest code fix', selectedFix)
+        )
+      );
+
+      assert.equal(result.accepted, false);
+      assert.match(result.reasons.join('\n'), /defensible selected fix/);
+    }
+  });
+
   it('rejects standalone none refusals at the start of the selection', () => {
     const reports = [
       'SELECTED_FIX: None.',

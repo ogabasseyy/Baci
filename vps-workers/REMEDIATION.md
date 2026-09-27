@@ -25,7 +25,9 @@ node jobs/sentry-mobile-error-remediator.mjs
 Autofix mode is off by default. With `BACI_REMEDIATION_AUTOFIX_ENABLED=1`, the
 worker creates an isolated worktree from the full checkout at `BACI_REPO_DIR`,
 runs Codex in an ephemeral Docker container with `no-new-privileges`, a tmpfs
-home, a read-only auth-file mount, and only the temporary worktree writable.
+home, a read-only auth-file mount, and, in implementation mode, the temporary
+worktree as the only writable repository bind mount. `/tmp` and `/codex-home`
+remain writable ephemeral tmpfs paths.
 Implementation containers drop all Linux capabilities; read-only research adds
 only the narrowly scoped DAC and identity capabilities needed for the parent
 Codex process to read auth and drops generated shells to the worker UID. The

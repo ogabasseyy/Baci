@@ -19,6 +19,7 @@ export function runRemediationVerification({
     repoDir,
     worktreeDir,
   });
+  let verificationSucceeded = false;
   try {
     runChecked(verificationCommand.command, verificationCommand.args, {
       ...worktreeCommandOptions,
@@ -27,7 +28,9 @@ export function runRemediationVerification({
         30 * 60 * 1_000
       ),
     });
+    verificationSucceeded = true;
   } finally {
+    const cleanupErrors = [];
     if (verificationCommand.cleanup) {
       runner(
         verificationCommand.cleanup.command,
@@ -37,11 +40,18 @@ export function runRemediationVerification({
     }
     for (const relativePath of verificationCommand.dependencyCopyPaths ||
       []) {
-      runChecked('rm', ['-rf', '--', join(worktreeDir, relativePath)], {
-        cwd: worktreeDir,
-        env: childEnv,
-        runner,
-      });
+      try {
+        runChecked('rm', ['-rf', '--', join(worktreeDir, relativePath)], {
+          cwd: worktreeDir,
+          env: childEnv,
+          runner,
+        });
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
+    }
+    if (verificationSucceeded && cleanupErrors.length > 0) {
+      throw cleanupErrors[0];
     }
   }
 }

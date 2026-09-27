@@ -107,4 +107,30 @@ describe('runRemediationVerification', () => {
       ].map((relativePath) => `-rf -- <worktree>/${relativePath}`)
     );
   });
+
+  it('preserves the verification error when dependency cleanup fails', () => {
+    const { options, runCheckedCalls } = setup({ docker: true });
+    const verifyError = new Error('verify failed');
+    let removals = 0;
+    options.runChecked = (command, args, runOptions) => {
+      runCheckedCalls.push([command, args, runOptions]);
+      if (command === 'docker') throw verifyError;
+      removals += 1;
+      if (removals === 1) throw new Error('first rm failed');
+      return '';
+    };
+
+    assert.throws(() => runRemediationVerification(options), /verify failed/);
+    assert.equal(removals, 4);
+  });
+
+  it('reports cleanup failures when verification succeeds', () => {
+    const { options } = setup({ docker: true });
+    options.runChecked = (command) => {
+      if (command === 'docker') return '';
+      throw new Error('rm failed');
+    };
+
+    assert.throws(() => runRemediationVerification(options), /rm failed/);
+  });
 });

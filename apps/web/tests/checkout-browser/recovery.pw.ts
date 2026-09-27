@@ -197,14 +197,16 @@ test('manual QA scenario controls are opt-in and reset local checkout state', as
   await expect
     .poll(() =>
       page.evaluate(() => ({
-        cart: localStorage.getItem('baci-cart-ogabassey-guest'),
+        cartItems: JSON.parse(
+          localStorage.getItem('baci-cart-ogabassey-guest') || '[]'
+        ).length,
         form: sessionStorage.getItem('checkout-form'),
         pendingOrder: sessionStorage.getItem(
           'storefront-checkout-pending-order'
         ),
       }))
     )
-    .toEqual({ cart: null, form: null, pendingOrder: null });
+    .toEqual({ cartItems: 0, form: null, pendingOrder: null });
   expect(await page.evaluate(() => document.cookie)).toContain(
     'checkout-qa-scenario=success'
   );

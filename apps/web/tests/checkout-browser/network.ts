@@ -13,13 +13,19 @@ export const test = base.extend<{
       const unexpected: string[] = [];
       const errors: string[] = [];
       let paymentRetryScenario = false;
+      let manualApiScenarioWasVisited = false;
       let providerErrorConsoleCount = 0;
       let provider503ConsoleCount = 0;
+      let manualApi503ConsoleCount = 0;
       const remainingAllowedErrors = [...allowedConsoleErrors];
       page.on('framenavigated', () => {
-        if (new URL(page.url()).searchParams.get('qa') === 'payment-retry')
-          paymentRetryScenario = true;
+        const qaScenario = new URL(page.url()).searchParams.get('qa');
+        if (qaScenario === 'payment-retry') paymentRetryScenario = true;
+        if (qaScenario === 'manual-api-integration')
+          manualApiScenarioWasVisited = true;
       });
+      const manualApiScenario = () =>
+        new URL(page.url()).searchParams.get('qa') === 'manual-api-integration';
       page.on('pageerror', (error) => errors.push(error.message));
       page.on('console', (message) => {
         if (message.type() !== 'error') return;
@@ -39,11 +45,39 @@ export const test = base.extend<{
           /Failed to load resource:.*503/.test(message.text())
         ) {
           provider503ConsoleCount++;
+        } else if (
+          manualApiScenarioWasVisited &&
+          manualApi503ConsoleCount === 0 &&
+          /Failed to load resource:.*503/.test(message.text())
+        ) {
+          manualApi503ConsoleCount++;
         } else errors.push(message.text());
       });
       await context.route('**/*', (route) => {
         const request = route.request();
         const url = new URL(request.url());
+        const manualApiMethods: Record<string, string[]> = {
+          '/api/cart/validate': ['POST'],
+          '/api/csrf': ['GET'],
+          '/api/orders': ['POST'],
+          '/api/orders/reuse': ['POST'],
+          '/api/payments/initialize': ['POST'],
+          '/api/payments/redvault/availability': ['GET'],
+          '/api/shipping/locations': ['GET'],
+          '/api/shipping/quotes': ['POST'],
+          '/api/storefront/auth/session': ['GET'],
+          '/api/storefront/imei-remediation/orders': ['GET'],
+        };
+        const isManualStorefrontOrderRead =
+          /^\/api\/storefront\/orders\/[^/]+$/.test(url.pathname) &&
+          request.method() === 'GET';
+        if (
+          manualApiScenario() &&
+          url.origin === new URL(page.url()).origin &&
+          (manualApiMethods[url.pathname]?.includes(request.method()) ||
+            isManualStorefrontOrderRead)
+        )
+          return route.continue();
         const responses: Record<string, unknown> = {
           '/api/cart/validate': { invalidProductIds: [], priceChanges: [] },
           '/api/csrf': { token: 'fixture-csrf-token' },
@@ -102,6 +136,8 @@ export const test = base.extend<{
           1
         );
       }
+      if (manualApiScenarioWasVisited)
+        expect(manualApi503ConsoleCount, 'Manual fixture provider 503').toBe(1);
       expect(unexpected, 'Unexpected network calls').toEqual([]);
       expect(errors, 'Browser errors').toEqual([]);
     },

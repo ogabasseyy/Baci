@@ -10,9 +10,13 @@ export default function Cart() {
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('qaReset') !== '1')
       return;
-    localStorage.removeItem('baci-cart-ogabassey-guest');
-    sessionStorage.removeItem('checkout-form');
-    sessionStorage.removeItem('storefront-checkout-pending-order');
+    const clearFixtureStorage = () => {
+      localStorage.removeItem('baci-cart-ogabassey-guest');
+      sessionStorage.removeItem('checkout-form');
+      sessionStorage.removeItem('storefront-checkout-pending-order');
+    };
+    clearFixtureStorage();
+    window.setTimeout(clearFixtureStorage, 0);
     window.history.replaceState(null, '', '/cart');
   }, []);
   return (

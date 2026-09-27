@@ -58,6 +58,11 @@ selector is unavailable in the current checkout implementation, which
 initializes its saved-address list empty; use the real new-address form and
 both delivery choices for manual QA.
 
+The local shipping quote fixture prices both door and pickup at zero, matching
+the deterministic single-item order's zero shipping fee and fixed ₦107,500
+total (₦100,000 subtotal plus ₦7,500 VAT). It does not calculate dynamic
+checkout amounts or stand in for server-side amount authority.
+
 The panel is covered by Playwright. The browser suite also switches the real
 payment controls between Paystack and Korapay, injects a provider
 initialization error, then retries against the same order using the reuse API.

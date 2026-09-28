@@ -1,10 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { ORDER_WITH_ITEMS_QUERY } from '@/lib/order-queries';
-import {
-  type CancellationEmailSender,
-  executeOrderCancellationSideEffect,
-} from '@/lib/orders/execute-order-cancellation-side-effect';
+import { executeOrderCancellationSideEffect } from '@/lib/orders/execute-order-cancellation-side-effect';
+import type { CancellationEmailSender } from '@/lib/orders/order-cancellation-side-effect-types';
 import {
   type OrderCancellationSideEffectStep,
   runOrderCancellationSideEffect,

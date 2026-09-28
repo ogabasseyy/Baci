@@ -132,7 +132,7 @@ export async function verifyGatewayCharge(
     };
   }
   if (gateway === 'korapay') {
-    const result = await verifyKorapayPayment(reference);
+    const result = await verifyKorapayPayment(reference, signal);
     if (!result.success) {
       return classifyFailure(result.code, 'korapay');
     }
@@ -178,7 +178,7 @@ export async function verifyGatewayCharge(
       };
     }
 
-    const result = await getJuicywayPaymentSession(sessionId);
+    const result = await getJuicywayPaymentSession(sessionId, signal);
     if (!result.success) {
       return classifyFailure(result.code, 'juicyway');
     }

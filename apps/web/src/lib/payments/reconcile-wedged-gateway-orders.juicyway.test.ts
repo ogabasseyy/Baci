@@ -87,7 +87,10 @@ describe('reconcileWedgedGatewayOrders Juicyway', () => {
       supabase,
     });
 
-    expect(mocks.getJuicywaySession).toHaveBeenCalledWith('session-1');
+    expect(mocks.getJuicywaySession).toHaveBeenCalledWith(
+      'session-1',
+      undefined
+    );
     expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledWith(
       expect.objectContaining({
         gateway: 'juicyway',
@@ -160,7 +163,10 @@ describe('reconcileWedgedGatewayOrders Juicyway', () => {
       supabase,
     });
 
-    expect(mocks.getJuicywaySession).toHaveBeenCalledWith('legacy-session');
+    expect(mocks.getJuicywaySession).toHaveBeenCalledWith(
+      'legacy-session',
+      undefined
+    );
     expect(summary.healed).toEqual([
       { orderId: 'order-1', orderNumber: 'ORD-JUICY-LEGACY' },
     ]);

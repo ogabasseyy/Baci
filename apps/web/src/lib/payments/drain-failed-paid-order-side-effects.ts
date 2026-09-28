@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
+import { assertRefundNotificationSendTime } from '@/lib/payments/assert-refund-notification-send-time';
+import { awaitRefundNotificationDeadline } from '@/lib/payments/await-refund-notification-deadline';
 import type { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
 import {
   PAID_ORDER_SIDE_EFFECT_ATTEMPT_CAP,
@@ -250,24 +252,42 @@ export async function drainFailedPaidOrderSideEffects({
         gatewayResponse = verification.response;
       }
 
-      const outcome = await finalizePayment({
-        actor: 'cron:reconcile-gateway-paid-orders:drain',
-        gateway,
-        gatewayResponse,
-        orderId,
-        reference: txn.gateway_reference,
-        scheduleAfter,
-        supabase,
-        transaction: {
-          amount: txn.amount,
-          gateway_reference: txn.gateway_reference,
-          id: txn.id,
-          merchant_id: txn.merchant_id,
-          order_id: txn.order_id,
-          platform_fee: txn.platform_fee,
-        },
-        wonTransactionFlip: false,
-      });
+      // Reserve budget before starting finalize: its side effects (email
+      // retries, settlement writes) cannot finish inside a sliver of
+      // remaining pass time. The loop must stop (not advance to the next
+      // row) because later rows have even less budget left; rows we never
+      // start stay failed for the next drain.
+      try {
+        assertRefundNotificationSendTime(deadlineMs);
+      } catch {
+        logger.info({
+          message:
+            'Stopping paid side-effect drain before finalize budget runs out',
+          orderId,
+        });
+        break;
+      }
+      const outcome = await awaitRefundNotificationDeadline(
+        finalizePayment({
+          actor: 'cron:reconcile-gateway-paid-orders:drain',
+          gateway,
+          gatewayResponse,
+          orderId,
+          reference: txn.gateway_reference,
+          scheduleAfter,
+          supabase,
+          transaction: {
+            amount: txn.amount,
+            gateway_reference: txn.gateway_reference,
+            id: txn.id,
+            merchant_id: txn.merchant_id,
+            order_id: txn.order_id,
+            platform_fee: txn.platform_fee,
+          },
+          wonTransactionFlip: false,
+        }),
+        deadlineMs
+      );
 
       if (outcome.kind === 'completed') {
         logger.warn({
@@ -280,6 +300,22 @@ export async function drainFailedPaidOrderSideEffects({
         summary.failed.push({ orderId, reason: outcome.kind });
       }
     } catch (drainError) {
+      // The finalize deadline race fired: the finalize may still be running,
+      // so stop the loop instead of overlapping another finalize on an
+      // exhausted budget. finalizePayment never throws this message itself —
+      // it is pinned by the deadline helper's own suite.
+      if (
+        drainError instanceof Error &&
+        drainError.message === 'refund_notification_delivery_deadline'
+      ) {
+        logger.info({
+          message:
+            'Stopping paid side-effect drain: finalize overran its deadline',
+          orderId,
+        });
+        summary.failed.push({ orderId, reason: 'finalize_deadline_exceeded' });
+        break;
+      }
       logger.error({
         error: drainError,
         message: 'Failed-side-effect drain errored for order',

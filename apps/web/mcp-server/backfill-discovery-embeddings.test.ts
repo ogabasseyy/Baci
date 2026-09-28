@@ -38,8 +38,7 @@ describe('merchant-authenticated discovery backfill', () => {
       }], error: null })),
     };
     const embeddingQuery = {
-      eq: vi.fn(() => embeddingQuery),
-      maybeSingle: vi.fn(async () => ({ data: null, error: null })),
+      in: vi.fn(async () => ({ data: [], error: null })),
     };
     const upsert = vi.fn(async () => ({ error: null }));
     mocks.createClient.mockReturnValue({ from: vi.fn((table: string) => ({
@@ -91,9 +90,8 @@ describe('merchant-authenticated discovery backfill', () => {
       }], error: null })),
     };
     const embeddingQuery = {
-      eq: vi.fn(() => embeddingQuery),
-      maybeSingle: vi.fn(async () => ({
-        data: { source_hash: '0'.repeat(64) }, error: null,
+      in: vi.fn(async () => ({
+        data: [{ product_id: '22222222-2222-4222-8222-222222222222', source_hash: '0'.repeat(64) }], error: null,
       })),
     };
     const upsert = vi.fn(async () => ({ error: null }));
@@ -121,9 +119,8 @@ describe('merchant-authenticated discovery backfill', () => {
       }], error: null })),
     };
     const embeddingQuery = {
-      eq: vi.fn(() => embeddingQuery),
-      maybeSingle: vi.fn(async () => ({
-        data: { source_hash: 'b12810a0873bab52fa5a576cebb391ee403f73744674aaa914aeda20dfcecf57' }, error: null,
+      in: vi.fn(async () => ({
+        data: [{ product_id: '22222222-2222-4222-8222-222222222222', source_hash: 'b12810a0873bab52fa5a576cebb391ee403f73744674aaa914aeda20dfcecf57' }], error: null,
       })),
     };
     const upsert = vi.fn(async () => ({ error: null }));
@@ -135,5 +132,34 @@ describe('merchant-authenticated discovery backfill', () => {
 
     expect(mocks.embedDiscoveryText).not.toHaveBeenCalled();
     expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('loads prior hashes once for a page containing current and stale products', async () => {
+    for (const [name, value] of Object.entries(environment)) vi.stubEnv(name, value);
+    const currentId = '22222222-2222-4222-8222-222222222222';
+    const staleId = '44444444-4444-4444-8444-444444444444';
+    const productQuery = {
+      eq: vi.fn(() => productQuery), order: vi.fn(() => productQuery),
+      range: vi.fn(async () => ({ data: [currentId, staleId].map((id) => ({
+        id, merchant_id: environment.MERCHANT_ID, name: 'Redmi 15',
+        brand: 'Xiaomi', category: 'Smartphones', description: 'A phone',
+      })), error: null })),
+    };
+    const embeddingQuery = {
+      in: vi.fn(async () => ({ data: [
+        { product_id: currentId, source_hash: 'efaa6bb39d16832e5ef7a42fd212e182b9bdb183a1c25c2bc976bc266bf4ad9a' },
+        { product_id: staleId, source_hash: '0'.repeat(64) },
+      ], error: null })),
+    };
+    const upsert = vi.fn(async () => ({ error: null }));
+    mocks.createClient.mockReturnValue({ from: vi.fn((table: string) => ({
+      select: vi.fn(() => table === 'products' ? productQuery : embeddingQuery), upsert,
+    })) });
+
+    await backfillDiscoveryEmbeddings();
+
+    expect(embeddingQuery.in).toHaveBeenCalledExactlyOnceWith('product_id', [currentId, staleId]);
+    expect(mocks.embedDiscoveryText).toHaveBeenCalledOnce();
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ product_id: staleId }));
   });
 });

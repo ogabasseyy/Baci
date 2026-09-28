@@ -60,17 +60,17 @@ export async function backfillDiscoveryEmbeddings() {
     if (error) throw new Error(`Catalog read failed: ${error.code}`);
     const products = (data ?? []) as ProductRow[];
     if (products.length === 0) break;
+    const { data: priorRows, error: priorError } = await client
+      .from('product_discovery_embeddings')
+      .select('product_id, source_hash')
+      .in('product_id', products.map((product) => product.id));
+    if (priorError) throw new Error(`Embedding state read failed: ${priorError.code}`);
+    const priorHashes = new Map((priorRows ?? []).map((row) => [row.product_id, row.source_hash]));
     for (const product of products) {
-      const { data: prior, error: priorError } = await client
-        .from('product_discovery_embeddings')
-        .select('source_hash')
-        .eq('product_id', product.id)
-        .maybeSingle();
-      if (priorError) throw new Error(`Embedding state read failed: ${priorError.code}`);
       const sourceHash = createHash('sha256').update(JSON.stringify([
         product.name, product.brand, product.category, product.description,
       ])).digest('hex');
-      if (prior?.source_hash === sourceHash) continue;
+      if (priorHashes.get(product.id) === sourceHash) continue;
       const text = [product.brand, product.category, product.description]
         .filter((part): part is string => typeof part === 'string')
         .join('. ').replace(/<[^>]{0,2000}>/g, ' ').replace(/\s+/g, ' ').slice(0, 6000);

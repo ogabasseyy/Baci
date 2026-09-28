@@ -5,6 +5,21 @@ import {
   createClient,
 } from './reconcile-abandoned-paystack-attempts.test-support';
 
+function withReviewTable(
+  client: { from: unknown },
+  reviewInsert: ReturnType<typeof vi.fn>
+) {
+  const fromMock = client.from as ReturnType<typeof vi.fn>;
+  const baseFrom = fromMock.getMockImplementation() as (
+    table: string
+  ) => unknown;
+  fromMock.mockImplementation((table: string) =>
+    table === 'reconciliation_review'
+      ? { insert: reviewInsert }
+      : baseFrom(table)
+  );
+}
+
 describe('reconcileAbandonedPaystackAttempts', () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -182,7 +197,7 @@ describe('reconcileAbandonedPaystackAttempts', () => {
         success: true,
         data: {
           reference: 'OTHER',
-          status: 'abandoned',
+          status: 'pending',
           amount: 10000,
           currency: 'NGN',
         },
@@ -211,8 +226,10 @@ describe('reconcileAbandonedPaystackAttempts', () => {
   it.each([
     { amount: 9900, currency: 'NGN' },
     { amount: 10000, currency: 'USD' },
-  ])('holds a verified abandoned attempt with mismatched payment evidence', async (evidence) => {
+  ])('files a terminal mismatch review for a verified abandoned attempt with mismatched payment evidence', async (evidence) => {
     const { client, update } = createClient();
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    withReviewTable(client, reviewInsert);
     const verify = vi.fn().mockResolvedValue({
       success: true,
       data: { reference: 'BAC-OLD', status: 'abandoned', ...evidence },
@@ -223,13 +240,52 @@ describe('reconcileAbandonedPaystackAttempts', () => {
       verify,
     });
 
+    expect(summary.reviewsFiled).toEqual(['attempt-1']);
+    expect(summary.held).toEqual([]);
     expect(summary.retired).toEqual([]);
-    expect(summary.held).toEqual([
-      { id: 'attempt-1', reason: 'payment_evidence_mismatch' },
-    ]);
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'abandoned_attempt_evidence_mismatch',
+        txn_id: 'attempt-1',
+      })
+    );
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          abandoned_sweep_resolution: 'terminal_evidence_mismatch',
+        }),
+      })
+    );
     expect(update).not.toHaveBeenCalledWith(
       expect.objectContaining({ status: 'failed' })
     );
+  });
+
+  it('holds a terminal mismatch when its review slot is occupied', async () => {
+    const { client } = createClient();
+    const reviewInsert = vi
+      .fn()
+      .mockResolvedValue({ error: { code: '23505' } });
+    withReviewTable(client, reviewInsert);
+    const verify = vi.fn().mockResolvedValue({
+      success: true,
+      data: {
+        reference: 'BAC-OLD',
+        status: 'failed',
+        amount: 9900,
+        currency: 'NGN',
+      },
+    });
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify,
+    });
+
+    expect(summary.reviewsFiled).toEqual([]);
+    expect(summary.held).toEqual([
+      { id: 'attempt-1', reason: 'payment_evidence_mismatch' },
+    ]);
   });
 
   it('records a rotation failure once for the held attempt', async () => {

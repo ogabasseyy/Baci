@@ -20,7 +20,7 @@ export async function handlePaystackCancellationRefundEvent(
     const { data: refund, error: lookupError } = await supabase
       .from('transactions')
       .select(
-        'id, order_id, merchant_id, gateway_reference, amount, currency, metadata, status'
+        'id, order_id, merchant_id, gateway_reference, amount, currency, metadata, status, cancel_order:orders!transactions_order_id_fkey(cancelled_at,shipping_status)'
       )
       .eq('transaction_type', 'refund')
       .eq('gateway', 'paystack')
@@ -37,6 +37,29 @@ export async function handlePaystackCancellationRefundEvent(
       );
     }
     if (refund) {
+      // Mirror the record RPC's cancellation gate: a refund row from any
+      // non-cancellation workflow would be rejected downstream, 503ing this
+      // unrelated event into an endless redelivery loop. Acknowledge it
+      // without invoking the cancellation reconciler.
+      const cancelOrder = (
+        refund as {
+          cancel_order?: {
+            cancelled_at?: string | null;
+            shipping_status?: string | null;
+          } | null;
+        }
+      ).cancel_order;
+      if (
+        cancelOrder?.cancelled_at == null ||
+        (cancelOrder.shipping_status !== 'cancelled' &&
+          cancelOrder.shipping_status !== 'canceled')
+      ) {
+        logger.info({
+          message: 'Paystack refund event is not for a cancelled order',
+          refundId,
+        });
+        return NextResponse.json({ message: 'Refund event acknowledged' });
+      }
       try {
         await reconcilePaystackCancellationRefund(supabase, refund);
       } catch (error) {

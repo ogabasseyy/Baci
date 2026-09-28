@@ -34,7 +34,13 @@ describe('handlePaystackCancellationRefundEvent', () => {
   });
 
   it('reconciles the refund row matching the provider refund ID', async () => {
-    const refund = { id: 'refund-1' };
+    const refund = {
+      cancel_order: {
+        cancelled_at: '2026-09-27T00:00:00Z',
+        shipping_status: 'cancelled',
+      },
+      id: 'refund-1',
+    };
     const db = database(refund);
 
     const response = await handlePaystackCancellationRefundEvent(db, {
@@ -74,7 +80,13 @@ describe('handlePaystackCancellationRefundEvent', () => {
   });
 
   it('fails retryably when the refund-ID reconciliation throws', async () => {
-    const db = database({ id: 'refund-1' });
+    const db = database({
+      cancel_order: {
+        cancelled_at: '2026-09-27T00:00:00Z',
+        shipping_status: 'cancelled',
+      },
+      id: 'refund-1',
+    });
     mocks.reconcilePaystackCancellationRefund.mockRejectedValue(
       new Error('down')
     );
@@ -87,6 +99,41 @@ describe('handlePaystackCancellationRefundEvent', () => {
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual({
       error: 'Refund reconciliation unavailable',
+    });
+  });
+
+  it.each([
+    ['missing order', { id: 'refund-1' }],
+    [
+      'uncancelled order',
+      {
+        cancel_order: { cancelled_at: null, shipping_status: 'cancelled' },
+        id: 'refund-1',
+      },
+    ],
+    [
+      'unshipped cancellation',
+      {
+        cancel_order: {
+          cancelled_at: '2026-09-27T00:00:00Z',
+          shipping_status: 'pending',
+        },
+        id: 'refund-1',
+      },
+    ],
+  ])('acknowledges a non-cancellation refund row (%s) without reconciling', async (_label, refund) => {
+    const db = database(refund);
+
+    const response = await handlePaystackCancellationRefundEvent(db, {
+      data: { id: 42 },
+      event: 'refund.processed',
+    });
+
+    expect(mocks.reconcilePaystackCancellationRefund).not.toHaveBeenCalled();
+    expect(mocks.reconcilePaystackRefundEvent).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      message: 'Refund event acknowledged',
     });
   });
 

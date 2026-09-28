@@ -50,7 +50,12 @@ describe('drainFailedPaidOrderSideEffects', () => {
     const supabase = buildSupabase({ error: { message: 'db down' } });
 
     await expect(
-      drainFailedPaidOrderSideEffects({ scheduleAfter, supabase })
+      drainFailedPaidOrderSideEffects({
+        finalizePayment: mocks.finalizeOrderGatewayPayment,
+        fileWedgeReview: vi.fn(),
+        scheduleAfter,
+        supabase,
+      })
     ).rejects.toThrow('failed_side_effect_lookup_failed');
   });
 
@@ -58,6 +63,8 @@ describe('drainFailedPaidOrderSideEffects', () => {
     const supabase = buildSupabase({ data: [] });
 
     const summary = await drainFailedPaidOrderSideEffects({
+      finalizePayment: mocks.finalizeOrderGatewayPayment,
+      fileWedgeReview: vi.fn(),
       scheduleAfter,
       supabase,
     });
@@ -86,6 +93,8 @@ describe('drainFailedPaidOrderSideEffects', () => {
     });
 
     const summary = await drainFailedPaidOrderSideEffects({
+      finalizePayment: mocks.finalizeOrderGatewayPayment,
+      fileWedgeReview: vi.fn(),
       scheduleAfter,
       supabase,
     });
@@ -124,6 +133,8 @@ describe('drainFailedPaidOrderSideEffects', () => {
     });
 
     const summary = await drainFailedPaidOrderSideEffects({
+      finalizePayment: mocks.finalizeOrderGatewayPayment,
+      fileWedgeReview: vi.fn(),
       scheduleAfter,
       supabase,
     });
@@ -157,6 +168,8 @@ describe('drainFailedPaidOrderSideEffects', () => {
     const supabase = buildSupabase({ data: [klumpRow] });
 
     const summary = await drainFailedPaidOrderSideEffects({
+      finalizePayment: mocks.finalizeOrderGatewayPayment,
+      fileWedgeReview: vi.fn(),
       scheduleAfter,
       supabase,
     });
@@ -180,6 +193,8 @@ describe('drainFailedPaidOrderSideEffects', () => {
     mocks.retireTerminalSideEffectDrain.mockResolvedValue(true);
 
     const summary = await drainFailedPaidOrderSideEffects({
+      finalizePayment: mocks.finalizeOrderGatewayPayment,
+      fileWedgeReview: vi.fn(),
       scheduleAfter,
       supabase,
     });
@@ -220,6 +235,8 @@ describe('drainFailedPaidOrderSideEffects', () => {
     });
 
     const summary = await drainFailedPaidOrderSideEffects({
+      finalizePayment: mocks.finalizeOrderGatewayPayment,
+      fileWedgeReview: vi.fn(),
       scheduleAfter,
       supabase,
     });
@@ -236,6 +253,8 @@ describe('drainFailedPaidOrderSideEffects', () => {
     });
 
     const summary = await drainFailedPaidOrderSideEffects({
+      finalizePayment: mocks.finalizeOrderGatewayPayment,
+      fileWedgeReview: vi.fn(),
       scheduleAfter,
       supabase,
     });
@@ -251,6 +270,8 @@ describe('drainFailedPaidOrderSideEffects', () => {
 
     try {
       const summary = await drainFailedPaidOrderSideEffects({
+        finalizePayment: mocks.finalizeOrderGatewayPayment,
+        fileWedgeReview: vi.fn(),
         deadlineMs: 1_270_000,
         scheduleAfter,
         supabase,

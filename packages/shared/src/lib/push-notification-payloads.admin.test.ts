@@ -43,6 +43,14 @@ describe('repair notification navigation', () => {
 });
 
 describe('admin notification navigation edge cases', () => {
+  it.each([
+    'paystack_refund_processed',
+    'paystack_refund_needs_attention',
+  ])('opens the affected order for %s', (type) => {
+    expect(
+      getAdminNotificationNavigationTarget({ type, order_id: 'order-1' })
+    ).toEqual({ screen: 'order', params: { id: 'order-1' } });
+  });
   it('returns null for null or undefined payload', () => {
     expect(getAdminNotificationNavigationTarget(null)).toBeNull();
     expect(getAdminNotificationNavigationTarget(undefined)).toBeNull();

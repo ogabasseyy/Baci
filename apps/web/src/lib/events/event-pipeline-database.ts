@@ -7,9 +7,14 @@ import {
   frozenEventPipelineAuthoritySources,
 } from '@/lib/events/event-pipeline-frozen-authority-sources';
 import { EVENT_PIPELINE_FUNCTION_NAMES } from '@/lib/events/event-pipeline-function-names';
+import {
+  eventPipelineGatewayCronAdminPaths,
+  eventPipelineGatewayCronCredentialPaths,
+} from '@/lib/events/event-pipeline-gateway-cron-credential-paths';
 import { eventPipelineImmediateOrderCredentialPaths } from '@/lib/events/event-pipeline-immediate-order-credential-paths';
 import { eventPipelineJumiaCredentialPaths } from '@/lib/events/event-pipeline-jumia-credential-paths';
 import { eventPipelineLegacySdkImporters } from '@/lib/events/event-pipeline-legacy-sdk-importers';
+import { eventPipelinePaystackRefundCredentialPaths } from '@/lib/events/event-pipeline-paystack-refund-credential-paths';
 import { eventPipelineRedvaultCredentialPaths } from '@/lib/events/event-pipeline-redvault-credential-paths';
 import { eventPipelineRepairPickupCredentialPaths } from '@/lib/events/event-pipeline-repair-pickup-credential-paths';
 import { eventPipelineShippingCredentialPaths } from '@/lib/events/event-pipeline-shipping-credential-paths';
@@ -127,6 +132,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
   ],
   authority: {
     adminImporters: eventPipelineAdminImporters,
+    adminPaths: eventPipelineGatewayCronAdminPaths,
     bareClientImporters: [
       ...Object.keys(eventPipelineFrozenRoutes),
       'apps/web/src/app/api/analytics/conversion/route.ts',
@@ -142,6 +148,8 @@ export const EVENT_PIPELINE_BOUNDARY = {
       ...eventPipelineRedvaultCredentialPaths,
       ...eventPipelineShippingCredentialPaths,
       ...eventPipelineChatCredentialPaths,
+      ...eventPipelinePaystackRefundCredentialPaths,
+      ...eventPipelineGatewayCronCredentialPaths,
     ],
     factoryModules: [
       'apps/web/src/lib/supabase/admin.ts',

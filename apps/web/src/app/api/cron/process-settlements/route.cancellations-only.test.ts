@@ -5,7 +5,12 @@ const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   processCancellationDrain: vi.fn(),
   rpc: vi.fn(),
+  sendEmail: vi.fn(),
+  notifyMerchant: vi.fn(),
 }));
+
+vi.mock('@/lib/zeptomail', () => ({ sendEmail: mocks.sendEmail }));
+vi.mock('@/lib/expo-push', () => ({ notifyMerchant: mocks.notifyMerchant }));
 
 vi.mock('@/lib/supabase/service', () => ({
   createServiceClient: () => ({
@@ -45,7 +50,9 @@ describe('POST /api/cron/process-settlements?cancellationsOnly=true', () => {
     const response = await POST(makeCancellationDrainRequest());
 
     expect(mocks.processCancellationDrain).toHaveBeenCalledWith(
-      expect.objectContaining({ from: mocks.from, rpc: mocks.rpc })
+      expect.objectContaining({ from: mocks.from, rpc: mocks.rpc }),
+      mocks.sendEmail,
+      mocks.notifyMerchant
     );
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ success: true });

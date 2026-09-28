@@ -69,6 +69,8 @@ export interface NotificationSendResult {
   sent: number;
   failed: number;
   errors: string[];
+  /** The provider call or ticket processing may have delivered a push. */
+  deliveryOutcome?: 'unknown';
   /** Tokens whose ticket was accepted, for retrying only the failed subset. */
   succeededTokens?: string[];
 }
@@ -226,6 +228,7 @@ export async function notifyMerchant(
     result = {
       sent: 0,
       failed: tokens.length,
+      deliveryOutcome: 'unknown',
       errors: [
         error instanceof Error ? error.message : 'Unknown push send error',
       ],
@@ -522,6 +525,12 @@ export async function processTickets(
   supabase: ReturnType<typeof createAdminClient>,
   context?: TicketContext
 ): Promise<NotificationSendResult> {
+  // ExpoError tickets are synthesized after a provider request failed without
+  // a definitive response; delivery may still have happened.
+  const deliveryUnknown = tickets.some(
+    (ticket) =>
+      ticket.status === 'error' && ticket.details?.error === 'ExpoError'
+  );
   let sent = 0;
   let failed = 0;
   const succeededTokens: string[] = [];
@@ -665,6 +674,7 @@ export async function processTickets(
     sent,
     failed,
     errors,
+    ...(deliveryUnknown ? { deliveryOutcome: 'unknown' as const } : {}),
     ...(succeededTokens.length > 0 ? { succeededTokens } : {}),
   };
 }

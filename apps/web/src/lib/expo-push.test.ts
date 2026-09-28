@@ -340,6 +340,24 @@ describe('notifyMerchant', () => {
     expect(mockSendPushNotificationsAsync).not.toHaveBeenCalled();
   });
 
+  it('marks a rejected provider request as an unknown delivery', async () => {
+    const mockChain = createChainableMock([{ token: 'ExponentPushToken[m1]' }]);
+    vi.mocked(createAdminClient).mockReturnValue({
+      from: vi.fn().mockReturnValue(mockChain),
+    } as never);
+    mockSendPushNotificationsAsync.mockRejectedValueOnce(
+      new Error('network timeout')
+    );
+
+    const result = await notifyMerchant('merchant-123', 'Test', 'Body');
+
+    expect(result).toMatchObject({
+      sent: 0,
+      failed: 1,
+      deliveryOutcome: 'unknown',
+    });
+  });
+
   it('deactivates DeviceNotRegistered tokens', async () => {
     const updateChain = createChainableMock();
     const ticketInsertChain = createChainableMock();
@@ -657,6 +675,7 @@ describe('notifyMerchant', () => {
       sent: 0,
       failed: 2,
       errors: ['Chunking failed'],
+      deliveryOutcome: 'unknown',
     });
     expect(attemptInsertChain.insert).toHaveBeenCalledWith(
       expect.objectContaining({

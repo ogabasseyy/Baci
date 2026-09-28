@@ -70,6 +70,8 @@ describe('drainFailedPaidOrderSideEffects verification', () => {
     });
 
     const summary = await drainFailedPaidOrderSideEffects({
+      finalizePayment: mocks.finalizeOrderGatewayPayment,
+      fileWedgeReview: vi.fn(),
       scheduleAfter,
       supabase,
     });
@@ -111,6 +113,8 @@ describe('drainFailedPaidOrderSideEffects verification', () => {
     });
 
     const summary = await drainFailedPaidOrderSideEffects({
+      finalizePayment: mocks.finalizeOrderGatewayPayment,
+      fileWedgeReview: vi.fn(),
       scheduleAfter,
       supabase,
     });
@@ -150,6 +154,8 @@ describe('drainFailedPaidOrderSideEffects verification', () => {
 
     try {
       const summary = await drainFailedPaidOrderSideEffects({
+        finalizePayment: mocks.finalizeOrderGatewayPayment,
+        fileWedgeReview: vi.fn(),
         deadlineMs: 1_270_000,
         scheduleAfter,
         supabase,
@@ -179,6 +185,8 @@ describe('drainFailedPaidOrderSideEffects verification', () => {
     });
 
     const summary = await drainFailedPaidOrderSideEffects({
+      finalizePayment: mocks.finalizeOrderGatewayPayment,
+      fileWedgeReview: vi.fn(),
       scheduleAfter,
       supabase,
     });
@@ -207,6 +215,8 @@ describe('drainFailedPaidOrderSideEffects verification', () => {
     mocks.retireTerminalSideEffectDrain.mockResolvedValue(true);
 
     const summary = await drainFailedPaidOrderSideEffects({
+      finalizePayment: mocks.finalizeOrderGatewayPayment,
+      fileWedgeReview: vi.fn(),
       scheduleAfter,
       supabase,
     });
@@ -245,6 +255,8 @@ describe('drainFailedPaidOrderSideEffects verification', () => {
     mocks.retireTerminalSideEffectDrain.mockResolvedValue(true);
 
     const summary = await drainFailedPaidOrderSideEffects({
+      finalizePayment: mocks.finalizeOrderGatewayPayment,
+      fileWedgeReview: vi.fn(),
       scheduleAfter,
       supabase,
     });

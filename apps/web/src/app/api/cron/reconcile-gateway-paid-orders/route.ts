@@ -3,12 +3,14 @@ import { getCronSecret } from '@/env';
 import { hasValidCronSecret } from '@/lib/cron-secret-auth';
 import { logger } from '@/lib/logger';
 import { drainFailedPaidOrderSideEffects } from '@/lib/payments/drain-failed-paid-order-side-effects';
+import type { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
 import {
   type AbandonedPaystackAttemptSummary,
   reconcileAbandonedPaystackAttempts,
 } from '@/lib/payments/reconcile-abandoned-paystack-attempts';
 import { reconcileGatewayPassDeadlineMs } from '@/lib/payments/reconcile-gateway-paid-orders-budget';
 import { reconcileWedgedGatewayOrders } from '@/lib/payments/reconcile-wedged-gateway-orders';
+import type { retireWedgeWithReview } from '@/lib/payments/retire-wedge-with-review';
 import { createServiceClient } from '@/lib/supabase/service';
 
 // Manual fallback only — DO NOT re-enable Vercel Cron for this route.
@@ -55,27 +57,41 @@ export async function GET(request: NextRequest) {
       reviewsFiled: [],
     };
     let abandonedAttemptSweepFailed = false;
-    try {
-      abandonedAttemptSweep = await reconcileAbandonedPaystackAttempts({
-        deadlineMs: reconcileGatewayPassDeadlineMs(invocationStartedAt, 0),
-        scheduleAfter,
-        supabase,
-      });
-      abandonedAttemptSweepFailed = abandonedAttemptSweep.failed;
-    } catch (error) {
-      abandonedAttemptSweepFailed = true;
-      logger.error({
-        error,
-        message: 'reconcile-gateway-paid-orders Paystack attempt sweep failed',
-      });
-    }
+    let authorities:
+      | {
+          finalizePayment: typeof finalizeOrderGatewayPayment;
+          fileWedgeReview: typeof retireWedgeWithReview;
+        }
+      | undefined;
     const summary = await reconcileWedgedGatewayOrders({
+      beforeSweep: async (available) => {
+        authorities = available;
+        try {
+          abandonedAttemptSweep = await reconcileAbandonedPaystackAttempts({
+            deadlineMs: reconcileGatewayPassDeadlineMs(invocationStartedAt, 0),
+            finalizePayment: available.finalizePayment,
+            scheduleAfter,
+            supabase,
+          });
+          abandonedAttemptSweepFailed = abandonedAttemptSweep.failed;
+        } catch (error) {
+          abandonedAttemptSweepFailed = true;
+          logger.error({
+            error,
+            message:
+              'reconcile-gateway-paid-orders Paystack attempt sweep failed',
+          });
+        }
+      },
       deadlineMs: reconcileGatewayPassDeadlineMs(invocationStartedAt, 1),
       scheduleAfter,
       supabase,
     });
+    if (!authorities) throw new Error('gateway_authority_unavailable');
     const sideEffectDrain = await drainFailedPaidOrderSideEffects({
       deadlineMs: reconcileGatewayPassDeadlineMs(invocationStartedAt, 2),
+      finalizePayment: authorities.finalizePayment,
+      fileWedgeReview: authorities.fileWedgeReview,
       scheduleAfter,
       supabase,
     });

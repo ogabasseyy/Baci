@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   loggerError: vi.fn(),
   loggerWarn: vi.fn(),
   sendEmail: vi.fn(),
+  notifyMerchant: vi.fn(),
 }));
 
 vi.mock('@/lib/logger', () => ({
@@ -73,7 +74,17 @@ describe('processCancellationDrain', () => {
   });
 
   it('runs every cancellation worker and reports their results', async () => {
-    const response = await processCancellationDrain(supabase);
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    let response: Awaited<ReturnType<typeof processCancellationDrain>>;
+    try {
+      response = await processCancellationDrain(
+        supabase,
+        mocks.sendEmail,
+        mocks.notifyMerchant
+      );
+    } finally {
+      now.mockRestore();
+    }
 
     expect(response.status).toBe(200);
     expect(mocks.drainFailedOrderCancellationSideEffects).toHaveBeenCalledWith(
@@ -92,7 +103,8 @@ describe('processCancellationDrain', () => {
     expect(mocks.drainPaystackRefundNotifications).toHaveBeenCalledWith(
       supabase,
       mocks.sendEmail,
-      9
+      9,
+      mocks.notifyMerchant
     );
     await expect(response.json()).resolves.toEqual(
       expect.objectContaining({ success: true })
@@ -106,13 +118,18 @@ describe('processCancellationDrain', () => {
       .mockReturnValueOnce(1_290_000)
       .mockReturnValue(1_290_000);
     try {
-      const response = await processCancellationDrain(supabase);
+      const response = await processCancellationDrain(
+        supabase,
+        mocks.sendEmail,
+        mocks.notifyMerchant
+      );
 
       expect(response.status).toBe(200);
       expect(mocks.drainPaystackRefundNotifications).toHaveBeenCalledWith(
         supabase,
         mocks.sendEmail,
-        0
+        0,
+        mocks.notifyMerchant
       );
       expect(mocks.loggerWarn).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -131,7 +148,11 @@ describe('processCancellationDrain', () => {
       .mockReturnValueOnce(1_290_000)
       .mockReturnValue(1_290_000);
     try {
-      const response = await processCancellationDrain(supabase);
+      const response = await processCancellationDrain(
+        supabase,
+        mocks.sendEmail,
+        mocks.notifyMerchant
+      );
 
       expect(response.status).toBe(200);
       expect(
@@ -162,7 +183,11 @@ describe('processCancellationDrain', () => {
       refundsGate.then(() => ({ checked: 0, failed: 0 }))
     );
 
-    const drainPromise = processCancellationDrain(supabase);
+    const drainPromise = processCancellationDrain(
+      supabase,
+      mocks.sendEmail,
+      mocks.notifyMerchant
+    );
     await Promise.resolve();
     await Promise.resolve();
 
@@ -178,7 +203,11 @@ describe('processCancellationDrain', () => {
     mocks.drainFailedOrderCancellationSideEffects.mockRejectedValueOnce(
       new Error('temporary failure')
     );
-    const response = await processCancellationDrain(supabase);
+    const response = await processCancellationDrain(
+      supabase,
+      mocks.sendEmail,
+      mocks.notifyMerchant
+    );
     expect(response.status).toBe(503);
     expect(
       mocks.reconcilePendingPaystackCancellationRefunds
@@ -197,7 +226,11 @@ describe('processCancellationDrain', () => {
       failed: 1,
       sent: 0,
     });
-    const response = await processCancellationDrain(supabase);
+    const response = await processCancellationDrain(
+      supabase,
+      mocks.sendEmail,
+      mocks.notifyMerchant
+    );
     const payload = await response.json();
 
     expect(response.status).toBe(503);
@@ -212,7 +245,11 @@ describe('processCancellationDrain', () => {
       failed: [{ orderId: 'order-1', reason: 'failed', step: 'refund' }],
       skipped: [],
     });
-    const response = await processCancellationDrain(supabase);
+    const response = await processCancellationDrain(
+      supabase,
+      mocks.sendEmail,
+      mocks.notifyMerchant
+    );
 
     expect(response.status).toBe(503);
     expect(mocks.loggerError).toHaveBeenCalledWith(

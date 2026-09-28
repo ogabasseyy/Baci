@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { verifyTransaction } from '@/lib/paystack';
 import { fileInvalidAttemptReference } from './file-invalid-attempt-reference';
+import type { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
 import { resolveAbandonedAttemptMismatch } from './resolve-abandoned-attempt-mismatch';
 import { resolveVerifiedAbandonedAttemptCapture } from './resolve-verified-abandoned-attempt-capture';
 
@@ -51,6 +52,7 @@ function isVerificationUnavailable(code: string | undefined): boolean {
 /** Clear old, superseded attempts only after checking their current Paystack status. */
 export async function reconcileAbandonedPaystackAttempts({
   supabase,
+  finalizePayment,
   verify = verifyTransaction,
   limit = DEFAULT_LIMIT,
   olderThanMinutes = DEFAULT_OLDER_THAN_MINUTES,
@@ -60,6 +62,7 @@ export async function reconcileAbandonedPaystackAttempts({
   },
 }: {
   supabase: SupabaseClient;
+  finalizePayment?: typeof finalizeOrderGatewayPayment;
   verify?: typeof verifyTransaction;
   limit?: number;
   olderThanMinutes?: number;
@@ -229,6 +232,7 @@ export async function reconcileAbandonedPaystackAttempts({
     if (result.success && result.data.status === 'success') {
       await resolveVerifiedAbandonedAttemptCapture({
         attempt,
+        finalizePayment,
         hold,
         mismatchKind,
         paidOrderStatus: paidOrderStatus(attempt.paid_order),

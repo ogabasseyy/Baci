@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
   select: vi.fn(),
   sendEmail: vi.fn(),
+  notifyMerchant: vi.fn(),
   update: vi.fn(),
 }));
 
@@ -37,6 +38,7 @@ vi.mock('@/lib/supabase/service', () => ({
 vi.mock('@/lib/zeptomail', () => ({
   sendEmail: mocks.sendEmail,
 }));
+vi.mock('@/lib/expo-push', () => ({ notifyMerchant: mocks.notifyMerchant }));
 vi.mock('@/lib/orders/drain-failed-order-cancellation-side-effects', () => ({
   drainFailedOrderCancellationSideEffects:
     mocks.drainFailedOrderCancellationSideEffects,

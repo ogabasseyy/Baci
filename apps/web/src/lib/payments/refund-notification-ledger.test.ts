@@ -39,9 +39,16 @@ describe('refundNotificationLedgerAmount', () => {
   it('totals every linked leg including refund-pending ones', async () => {
     const { supabase } = database({
       payments: [
-        { amount: 60, gateway: 'paystack', id: 'pay-1', status: 'completed' },
+        {
+          amount: 60,
+          currency: 'NGN',
+          gateway: 'paystack',
+          id: 'pay-1',
+          status: 'completed',
+        },
         {
           amount: 40,
+          currency: 'NGN',
           gateway: 'paystack',
           id: 'pay-2',
           status: 'refund_pending',
@@ -102,11 +109,125 @@ describe('refundNotificationLedgerAmount', () => {
     expect(amount).toContain('40');
   });
 
+  it('sums partial refunds to cover a leg', async () => {
+    const { supabase } = database({
+      payments: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'paystack',
+          id: 'pay-1',
+          status: 'completed',
+        },
+      ],
+      refunds: [
+        {
+          amount: 40,
+          currency: 'NGN',
+          gateway: 'paystack',
+          metadata: { payment_transaction_id: 'pay-1' },
+        },
+        {
+          amount: 60,
+          currency: 'NGN',
+          gateway: 'paystack',
+          metadata: { payment_transaction_id: 'pay-1' },
+        },
+      ],
+    });
+
+    const amount = await refundNotificationLedgerAmount({
+      merchantId: 'merchant-1',
+      order,
+      supabase,
+    });
+
+    expect(amount).toContain('100');
+  });
+
+  it('throws when partial refunds fall short of the leg', async () => {
+    const { supabase } = database({
+      payments: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'paystack',
+          id: 'pay-1',
+          status: 'completed',
+        },
+      ],
+      refunds: [
+        {
+          amount: 40,
+          currency: 'NGN',
+          gateway: 'paystack',
+          metadata: { payment_transaction_id: 'pay-1' },
+        },
+      ],
+    });
+
+    await expect(
+      refundNotificationLedgerAmount({
+        merchantId: 'merchant-1',
+        order,
+        supabase,
+      })
+    ).rejects.toThrow('refund_notification_ledger_mismatch');
+  });
+
+  it('ignores foreign-currency partials when summing a leg', async () => {
+    const { supabase } = database({
+      payments: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'paystack',
+          id: 'pay-1',
+          status: 'completed',
+        },
+      ],
+      refunds: [
+        {
+          amount: 40,
+          currency: 'NGN',
+          gateway: 'paystack',
+          metadata: { payment_transaction_id: 'pay-1' },
+        },
+        {
+          amount: 60,
+          currency: 'USD',
+          gateway: 'paystack',
+          metadata: { payment_transaction_id: 'pay-1' },
+        },
+      ],
+    });
+
+    await expect(
+      refundNotificationLedgerAmount({
+        merchantId: 'merchant-1',
+        order,
+        supabase,
+      })
+    ).rejects.toThrow('refund_notification_ledger_mismatch');
+  });
+
   it('throws when a leg has no linked refund', async () => {
     const { supabase } = database({
       payments: [
-        { amount: 60, gateway: 'paystack', id: 'pay-1', status: 'completed' },
-        { amount: 40, gateway: 'paystack', id: 'pay-2', status: 'completed' },
+        {
+          amount: 60,
+          currency: 'NGN',
+          gateway: 'paystack',
+          id: 'pay-1',
+          status: 'completed',
+        },
+        {
+          amount: 40,
+          currency: 'NGN',
+          gateway: 'paystack',
+          id: 'pay-2',
+          status: 'completed',
+        },
       ],
       refunds: [
         {

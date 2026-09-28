@@ -53,7 +53,7 @@ vi.mock('@/lib/go54', () => ({
   registerDomain: vi.fn(),
 }));
 
-let mockServiceClient: any;
+let mockServiceClient: ReturnType<typeof createMockSupabaseClient>;
 vi.mock('@/lib/supabase/service', () => ({
   createServiceClient: vi.fn(() => mockServiceClient),
 }));

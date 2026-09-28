@@ -1,13 +1,10 @@
 'use client';
 import { useCheckoutAddressInference } from './checkout/hooks/use-checkout-address-inference';
-import { useCheckoutDeliveryAddressHandlers } from './checkout/hooks/use-checkout-delivery-address-handlers';
-import { useCheckoutDeliveryOptions } from './checkout/hooks/use-checkout-delivery-options';
-import { useCheckoutShippingQuotes } from './checkout/hooks/use-checkout-shipping-quotes';
 import { useCheckoutPaymentSession } from './checkout/hooks/use-checkout-payment-session';
 import { useOrderTotals } from './checkout/hooks/use-order-totals';
 import { resolveCheckoutResumeContext } from './checkout/resolve-checkout-resume-context';
 
-import { useAirportQuoteRecovery } from './checkout/hooks/use-airport-quote-recovery';
+import { useCheckoutDeliverySession } from './checkout/hooks/use-checkout-delivery-session';
 import {
   useDvaConfirmTransfer,
   type DvaModalData,
@@ -29,15 +26,12 @@ import {
 import { DvaModal } from './checkout/components/DvaModal';
 import { CryptoPaymentModal } from './checkout/components/CryptoPaymentModal';
 import { CheckoutDeliveryStep } from './checkout/components/CheckoutDeliveryStep';
-import type { SavedCheckoutAddress as SavedAddress } from './checkout/components/DeliveryAddressFields';
 import {
   DiscountCodeInput,
 } from '@/components/storefront/checkout/discount-code-input';
 import { MobileOrderSummary } from '../components/MobileCheckoutComponents';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
-import { resolveMerchantDeliveryMethod } from './checkout/resolve-merchant-delivery-method';
-import { isAirportDeliveryReady } from './checkout/is-airport-delivery-ready';
 import { useCheckoutFormState } from './checkout/hooks/use-checkout-form-state';
 import { useCheckoutStepState } from './checkout/hooks/use-checkout-step-state';
 import {
@@ -53,7 +47,6 @@ import { useCurrency } from '@/hooks/use-currency';
 import type {
   CryptoChain,
   CryptoCurrency,
-  DeliveryMethod,
   DvaData,
   PendingCryptoOrder,
   ResumedOrder,
@@ -106,17 +99,8 @@ import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import { PaymentStep } from './checkout/components/PaymentStep';
 import { useRedvaultPaymentAvailability } from './checkout/hooks/use-redvault-payment-availability';
 import {
-  calculateDeliveryCost,
   KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST,
-  createSelectDeliveryMethod,
-  getAirDeliveryQuotes,
-  getDoorDeliveryQuotes,
-  getStationPickupQuote,
-  getStationPickupQuotes,
   inferAddressLocationFromInput,
-  isGiglGoFasterQuote,
-  isMerchantQuote,
-  isStationPickupQuote,
 } from './checkout/utils';
 import { useWalletFundedBankTransfer } from './checkout/hooks/use-wallet-funded-bank-transfer';
 import { useStorefrontCustomerSession } from './checkout/hooks/use-storefront-customer-session';
@@ -279,10 +263,7 @@ export const CheckoutPage: React.FC = () => {
   const setLastName = (v: string) => setCheckoutField('lastName', v);
   const setCustomerEmail = (v: string) => setCheckoutField('customerEmail', v);
   const setCustomerPhone = (v: string) => setCheckoutField('customerPhone', v);
-  const setNewAddressState = (v: string) => setCheckoutField('newAddressState', v);
-  const setNewAddressCity = (v: string) => setCheckoutField('newAddressCity', v);
-  const { clearInferredLocationDebounce, scheduleInferredLocationUpdate } =
-    useCheckoutAddressInference(setCheckoutFields);
+  const inferredLocation = useCheckoutAddressInference(setCheckoutFields);
   const [
     pendingCheckoutOrder,
     setPendingCheckoutOrder,
@@ -525,31 +506,15 @@ export const CheckoutPage: React.FC = () => {
     resumedOrder?.gift_wrapping_fee ??
     (Number(searchParams.get('giftWrappingCost')) || 0);
 
-  // Saved Addresses (Future integration: Fetch from API)
-  const [addresses, _setAddresses] = useState<SavedAddress[]>([]); // Empty for now, forcing new address
-
-
-  const [selectedAddressId, setSelectedAddressId] = useState<number>(0);
-  const [isNewAddressMode, setIsNewAddressMode] = useState(true);
-  const setDeliveryMethod = (value: DeliveryMethod) => setCheckoutField('deliveryMethod', value);
-  const setAirportType = (value: 'delivery' | 'pickup') =>
-    setCheckoutField('airportType', value);
-
-  // Shipping State
-  const [shippingStates, setShippingStates] = useState<string[]>([]);
-  const [isLoadingLocations, setIsLoadingLocations] = useState(false);
-  const {
-    shippingQuotes,
-    isLoadingQuotes,
-    selectedQuoteId,
-    setSelectedQuoteId,
-    resetQuotesForAddressChange,
-    fetchShippingQuotes,
-    isNewDeliveryAddressReady,
-  } = useCheckoutShippingQuotes({
+  const delivery = useCheckoutDeliverySession({
+    airportRequiresQuote,
+    airportType,
+    completedSteps,
+    inferredLocation,
     isHydrated,
     merchantId: merchant?.id,
     merchantCountry,
+    merchantSlug: merchant?.slug,
     checkoutCart,
     checkoutCartCatalogSubtotal,
     quoteItemsFingerprint,
@@ -560,7 +525,6 @@ export const CheckoutPage: React.FC = () => {
     setCurrentStep,
     setCheckoutField,
     setCheckoutFields,
-    setDeliveryMethod,
     deliveryMethod,
     newAddressStreet,
     newAddressState,
@@ -569,148 +533,24 @@ export const CheckoutPage: React.FC = () => {
     firstName,
     lastName,
     customerEmail,
-    isNewAddressMode,
-    addresses,
-    selectedAddressId,
   });
-  const deliveryAddressHandlers = useCheckoutDeliveryAddressHandlers({
-    clearInferredLocationDebounce,
-    merchantCountry,
-    resetQuotesForAddressChange,
-    scheduleInferredLocationUpdate,
-    setFields: setCheckoutFields,
-    setIsNewAddressMode,
-    setNewAddressCity,
-    setNewAddressState,
-    setSelectedAddressId,
-    shippingStates,
-  });
-  const stationPickupQuote = getStationPickupQuote(shippingQuotes);
-  // All pickup options for this zone. A merchant can configure several pickup
-  // locations, so when there is more than one we render a selectable list
-  // instead of collapsing to the first quote.
-  const stationPickupQuotes = getStationPickupQuotes(shippingQuotes);
-  // True when the merchant configured at least one PICKUP rate for this zone.
-  // `stationPickupQuote` is only the FIRST station-pickup quote, which can be a
-  // GIGL station when both a GIGL station and a merchant pickup are returned —
-  // so delivery-tab visibility must key off ALL station-pickup quotes, not the
-  // first, otherwise the free hardcoded legacy pickup tab would leak through and
-  // let a Lagos shopper bypass the merchant's configured pickup fee.
-  const hasMerchantPickupQuote = stationPickupQuotes.some(isMerchantQuote);
-  const doorDeliveryQuotes = getDoorDeliveryQuotes(shippingQuotes);
-  const airDeliveryQuotes = getAirDeliveryQuotes(shippingQuotes);
-  const selectedQuote = shippingQuotes.find(
-    (quote) => String(quote.id) === String(selectedQuoteId),
-  );
-  const selectedQuoteMatchesDeliveryMethod = Boolean(
-    selectedQuote &&
-      ((deliveryMethod === 'door' && !isStationPickupQuote(selectedQuote)) ||
-        (deliveryMethod === 'airport' &&
-          isGiglGoFasterQuote(selectedQuote)) ||
-        (deliveryMethod === 'pickup_station' &&
-          isStationPickupQuote(selectedQuote))),
-  );
-  const selectDeliveryMethod = createSelectDeliveryMethod({
-    selectedQuoteId,
-    setDeliveryMethod,
-    setSelectedQuoteId,
-    shippingQuotes,
-  });
-  const deliveryOptions = useCheckoutDeliveryOptions({
-    airportRequiresQuote,
-    airportType,
-    airDeliveryQuotes,
-    city: newAddressCity,
-    deliveryMethod,
-    doorDeliveryQuotes,
-    fetchShippingQuotes: () => {
-      if (isNewDeliveryAddressReady) {
-        fetchShippingQuotes(
-          newAddressStreet,
-          newAddressState,
-          newAddressCity,
-          customerPhone,
-          firstName,
-          lastName,
-          customerEmail
-        );
-      }
-    },
-    hasMerchantPickupQuote,
-    isHydrated,
-    isLoadingQuotes,
-    isNewAddressMode,
-    merchantSlug: merchant?.slug,
-    newAddressState,
-    selectedAddressId,
-    selectedQuoteId,
-    selectedQuoteMatchesDeliveryMethod,
-    setAirportRequiresQuote: (required) =>
-      setCheckoutField('airportRequiresQuote', required),
-    setAirportType,
-    setDeliveryMethod,
-    selectDeliveryMethod,
-    setSelectedQuoteId,
-    stationPickupQuote,
-    stationPickupQuotes,
-  });
-  const eligibleDeliveryMethod = resolveMerchantDeliveryMethod(
-    deliveryMethod,
-    newAddressState,
-    merchant?.slug,
-  );
-  if (eligibleDeliveryMethod !== deliveryMethod) {
-    setDeliveryMethod(eligibleDeliveryMethod);
-  }
-
-  // R16-2: when the merchant exposes pickup rates for this zone, the legacy
-  // hardcoded `pickup` tab is HIDDEN (see the tab list). But a shopper who had
-  // already selected legacy `pickup` while the quotes were still loading would
-  // otherwise keep `deliveryMethod === 'pickup'` — the card is merely hidden,
-  // `rawIsDeliveryValid` still treats pickup as valid, and the order submits
-  // `shipping_fee: 0` with no `shipping_rate_id`, bypassing the merchant pickup
-  // fee. Force the selection onto the merchant pickup rate so the fee is
-  // applied. react.dev "adjust state during render when a derived value
-  // changes" pattern (NOT a manual memo). Guarded on legacy `pickup` still
-  // being the ELIGIBLE method so it can never override the eligibility redirect
-  // above; only fires when a merchant pickup quote exists, leaving NG /
-  // non-merchant pickup-less flows untouched.
-  const firstMerchantPickupQuoteId = hasMerchantPickupQuote
-    ? (stationPickupQuotes.find(isMerchantQuote)?.id ?? '')
-    : '';
-  if (
-    hasMerchantPickupQuote &&
-    deliveryMethod === 'pickup' &&
-    eligibleDeliveryMethod === 'pickup'
-  ) {
-    setDeliveryMethod('pickup_station');
-    if (firstMerchantPickupQuoteId) {
-      setSelectedQuoteId(firstMerchantPickupQuoteId);
-    }
-  }
-
-  // Delivery step validation (hydration-safe)
-  const rawIsDeliveryValid = (() => {
-    if (!deliveryMethod) return false;
-    if (eligibleDeliveryMethod !== deliveryMethod) return false;
-    // For door delivery, a shipping quote MUST be selected
-    if (deliveryMethod === 'door') {
-      return Boolean(selectedQuoteId && selectedQuoteMatchesDeliveryMethod);
-    }
-    if (deliveryMethod === 'pickup_station') {
-      return Boolean(selectedQuoteId && selectedQuoteMatchesDeliveryMethod);
-    }
-    // For airport, a type (pickup/delivery) must be selected
-    if (deliveryMethod === 'airport') return isAirportDeliveryReady(airportRequiresQuote, selectedQuoteMatchesDeliveryMethod);
-    // Pickup is valid as long as the current state is eligible.
-    return true;
-  })();
-  const isDeliveryValid = isHydrated ? rawIsDeliveryValid : false;
-  useAirportQuoteRecovery(
-    isHydrated && deliveryMethod === 'airport' && airportRequiresQuote && !selectedQuoteMatchesDeliveryMethod,
-    currentStep,
-    () => setCheckoutFields({ currentStep: 'delivery', completedSteps: { ...completedSteps, delivery: false } }),
-  );
+  const {
+    address: deliveryAddress,
+    method: deliverySelection,
+    quotes: deliveryQuotes,
+    options: deliveryOptions,
+    validation: { isValid: isDeliveryValid },
+    cost: deliveryCost,
+  } = delivery;
+  const { addresses, selectedId: selectedAddressId, isNewMode: isNewAddressMode } = deliveryAddress;
+  const { setIsLoadingLocations, setShippingStates } = deliveryAddress;
+  const {
+    items: shippingQuotes,
+    selectedId: selectedQuoteId,
+    matchesSelectedMethod: selectedQuoteMatchesDeliveryMethod,
+  } = deliveryQuotes;
+  const { isNewDeliveryAddressReady } = deliveryAddress;
+  const deliveryAddressHandlers = deliveryAddress.handlers;
 
   // Note: newAddressState, newAddressCity, newAddressStreet are now part of checkoutForm (persisted)
 
@@ -718,12 +558,6 @@ export const CheckoutPage: React.FC = () => {
   // Payment State (declared before the resumed-order effect below, which
   // pre-selects the tab/method for BNPL deep links — React Compiler requires
   // declaration before first access)
-  const deliveryCost = calculateDeliveryCost(
-    deliveryMethod,
-    selectedQuoteId,
-    shippingQuotes,
-    airportType,
-  );
   const taxRate = merchant?.vat_registration_status === 'registered'
     ? (merchant.vat_rate ?? 7.5) / 100
     : 0;
@@ -1484,7 +1318,7 @@ export const CheckoutPage: React.FC = () => {
                 merchantCountry,
                 addressReady: isHydrated && isNewDeliveryAddressReady,
                 onToggleAddressMode: () =>
-                  setIsNewAddressMode(!isNewAddressMode),
+                  deliveryAddress.setIsNewMode(!isNewAddressMode),
                 onSelectAddress: deliveryAddressHandlers.onSelectAddress,
                 onStreetChange: deliveryAddressHandlers.onStreetChange,
                 onSelectPlace: deliveryAddressHandlers.onSelectPlace,

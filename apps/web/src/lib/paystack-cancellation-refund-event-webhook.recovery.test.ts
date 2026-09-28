@@ -54,6 +54,22 @@ describe('handlePaystackCancellationRefundEvent unknown-refund recovery', () => 
     expect(response.status).toBe(200);
   });
 
+  it('recovers an ID-only refund event with a numeric transaction', async () => {
+    const db = database(null);
+
+    const response = await handlePaystackCancellationRefundEvent(db, {
+      data: { id: 202, transaction: 555 },
+      event: 'refund.processed',
+    });
+
+    expect(mocks.recoverUnknownPaystackRefund).toHaveBeenCalledWith(
+      db,
+      202,
+      undefined
+    );
+    expect(response.status).toBe(200);
+  });
+
   it('fails retryably when unknown-refund recovery throws', async () => {
     const db = database(null);
     mocks.recoverUnknownPaystackRefund.mockRejectedValue(new Error('down'));

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { verifyTransaction } from '@/lib/verify-paystack-transaction';
+import { fetchPaystackPaymentById } from './fetch-paystack-payment-by-id';
 import { fetchRefund } from './fetch-paystack-refund';
 import { fileRefundEvidenceReview } from './file-refund-evidence-review';
 import { holdPaystackRefundForReview } from './hold-paystack-refund-for-review';
@@ -54,38 +55,65 @@ async function reconcileRecoveredRow(
  * refund. A signed event is only a wake-up hint: the refund and its payment
  * are re-verified with Paystack, the payment must be the order's single
  * completed leg on a cancelled order, and only then is a local audit row
- * recorded and reconciled through the standard transition. Anything else
- * is acknowledged without touching existing rows; transient provider or
- * database failures throw so the webhook redelivers.
+ * recorded and reconciled through the standard transition. Events that
+ * cannot be verified throw so Paystack can redeliver; unrelated verified
+ * payments are acknowledged without touching existing rows.
  */
 export async function recoverUnknownPaystackRefund(
   supabase: SupabaseClient,
   refundId: number,
-  paymentReference: string
+  paymentReference?: string
 ): Promise<void> {
-  if (!/^[A-Za-z0-9_-]{1,100}$/.test(paymentReference)) {
-    logger.info({
-      message: 'Unknown Paystack refund event has no usable payment reference',
-      refundId,
-    });
-    return;
-  }
-  const [providerRefund, providerPayment] = await Promise.all([
+  const [providerRefund, referencedPayment] = await Promise.all([
     fetchRefund(refundId, AbortSignal.timeout(PROVIDER_READ_TIMEOUT_MS)),
-    verifyTransaction(
-      paymentReference,
-      AbortSignal.timeout(PROVIDER_READ_TIMEOUT_MS)
-    ),
+    paymentReference === undefined
+      ? Promise.resolve(null)
+      : verifyTransaction(
+          paymentReference,
+          AbortSignal.timeout(PROVIDER_READ_TIMEOUT_MS)
+        ),
   ]);
-  if (!providerRefund.success || !providerPayment.success) {
+  if (!providerRefund.success) {
     throw new Error('paystack_refund_verification_unavailable');
   }
   const current = providerRefund.data;
+  if (!Number.isSafeInteger(current.transaction) || current.transaction <= 0) {
+    throw new Error('paystack_refund_transaction_invalid');
+  }
+  let resolvedPaymentReference = paymentReference;
+  if (resolvedPaymentReference === undefined) {
+    const fetchedPayment = await fetchPaystackPaymentById(
+      current.transaction,
+      AbortSignal.timeout(PROVIDER_READ_TIMEOUT_MS)
+    );
+    if (!fetchedPayment.success) {
+      throw new Error('paystack_refund_payment_lookup_unavailable');
+    }
+    resolvedPaymentReference = fetchedPayment.data.reference;
+    if (fetchedPayment.data.id !== current.transaction) {
+      throw new Error('paystack_refund_payment_lookup_mismatch');
+    }
+  }
+  if (
+    typeof resolvedPaymentReference !== 'string' ||
+    !/^[A-Za-z0-9_-]{1,100}$/.test(resolvedPaymentReference)
+  ) {
+    throw new Error('paystack_refund_payment_reference_invalid');
+  }
+  const providerPayment =
+    referencedPayment ??
+    (await verifyTransaction(
+      resolvedPaymentReference,
+      AbortSignal.timeout(PROVIDER_READ_TIMEOUT_MS)
+    ));
+  if (!providerPayment.success) {
+    throw new Error('paystack_refund_verification_unavailable');
+  }
   const original = providerPayment.data;
   if (
     current.id !== refundId ||
     current.transaction !== original.id ||
-    original.reference !== paymentReference ||
+    original.reference !== resolvedPaymentReference ||
     !Number.isSafeInteger(current.amount) ||
     current.amount <= 0 ||
     typeof current.currency !== 'string' ||
@@ -101,7 +129,7 @@ export async function recoverUnknownPaystackRefund(
     .from('transactions')
     .select('id, order_id, merchant_id, gateway_reference, amount')
     .eq('gateway', 'paystack')
-    .eq('gateway_reference', paymentReference)
+    .eq('gateway_reference', resolvedPaymentReference)
     .eq('transaction_type', 'payment')
     .eq('status', 'completed')
     .limit(2);

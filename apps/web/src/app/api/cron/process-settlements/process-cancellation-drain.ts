@@ -7,7 +7,10 @@ import {
 import { drainFailedOrderCancellationSideEffects } from '@/lib/orders/drain-failed-order-cancellation-side-effects';
 import type { MerchantRefundPushSender } from '@/lib/payments/drain-paystack-refund-notifications';
 import { drainPaystackRefundNotifications } from '@/lib/payments/drain-paystack-refund-notifications';
-import { notificationDrainLimit } from '@/lib/payments/notification-drain-limit';
+import {
+  notificationDrainDeadlineMs,
+  notificationDrainLimit,
+} from '@/lib/payments/notification-drain-limit';
 import { reconcileCompletedPaystackCancellationRefunds } from '@/lib/payments/reconcile-completed-paystack-cancellation-refunds';
 import { reconcilePendingPaystackCancellationRefunds } from '@/lib/payments/reconcile-pending-paystack-cancellation-refunds';
 import type { createServiceClient } from '@/lib/supabase/service';
@@ -74,7 +77,8 @@ export async function processCancellationDrain(
       supabase,
       sendCancellationEmail,
       drainLimit,
-      sendMerchantPush
+      sendMerchantPush,
+      notificationDrainDeadlineMs(workersStartedAt)
     ),
   ]);
   // The workers fulfill with per-row failure counts instead of throwing,

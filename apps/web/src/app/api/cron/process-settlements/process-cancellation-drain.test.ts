@@ -103,8 +103,9 @@ describe('processCancellationDrain', () => {
     expect(mocks.drainPaystackRefundNotifications).toHaveBeenCalledWith(
       supabase,
       mocks.sendEmail,
-      9,
-      mocks.notifyMerchant
+      1,
+      mocks.notifyMerchant,
+      1_270_000
     );
     await expect(response.json()).resolves.toEqual(
       expect.objectContaining({ success: true })
@@ -129,7 +130,8 @@ describe('processCancellationDrain', () => {
         supabase,
         mocks.sendEmail,
         0,
-        mocks.notifyMerchant
+        mocks.notifyMerchant,
+        1_270_000
       );
       expect(mocks.loggerWarn).toHaveBeenCalledWith(
         expect.objectContaining({

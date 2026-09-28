@@ -1,6 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { escapeHtmlText } from '@/lib/sanitize';
+import {
+  assertRefundNotificationSendTime,
+  awaitRefundNotificationDeadline,
+} from './await-refund-notification-deadline';
 import { refundNotificationLedgerAmount } from './refund-notification-ledger';
 
 type RefundEmailSender = (message: {
@@ -12,6 +16,7 @@ type RefundEmailSender = (message: {
   replyTo?: string;
   emailType: 'orders' | 'notifications';
   fromName?: string;
+  signal?: AbortSignal;
   auditContext: {
     merchantId: string;
     orderId: string;
@@ -48,7 +53,8 @@ export async function drainPaystackRefundNotifications(
   supabase: SupabaseClient,
   sendEmail: RefundEmailSender,
   limit = 20,
-  sendMerchantPush?: MerchantRefundPushSender
+  sendMerchantPush?: MerchantRefundPushSender,
+  deadlineMs?: number
 ): Promise<{
   claimed: number;
   sent: number;
@@ -83,12 +89,10 @@ export async function drainPaystackRefundNotifications(
       });
     }
   }
-  // Claim one row at a time: serial sends can each take tens of seconds
-  // against a fixed route deadline, and unfinished processing rows are
-  // deliberately never retried. A batch claimed up front could strand
-  // unattempted rows past the request timeout; this way only the row
-  // actually in flight can be left behind.
+  // Claim serially so a route timeout cannot strand an unsent batch.
   for (let remaining = limit; remaining > 0; remaining -= 1) {
+    // Reserve time for the provider call and outcome write.
+    if (deadlineMs !== undefined && deadlineMs - Date.now() < 45_000) break;
     const { data, error } = await supabase.rpc(
       'claim_paystack_cancellation_refund_notifications_v1',
       { p_limit: 1 }
@@ -142,24 +146,33 @@ export async function drainPaystackRefundNotifications(
         if (!order.customer_email)
           throw new Error('refund_customer_email_missing');
         const text = `Hello ${order.customer_name || 'there'}, we have processed the refund of ${amount} for cancelled order #${orderNumber}. Your bank or card provider may take up to 10 business days to show the funds. If they do not arrive, contact ${merchant.support_email || merchant.email}.`;
+        assertRefundNotificationSendTime(deadlineMs);
         // A thrown mail call has unknown delivery outcome; do not auto-retry it.
         outcome = 'delivery_uncertain';
-        const result = await sendEmail({
-          to: order.customer_email,
-          toName: order.customer_name ?? undefined,
-          subject: `Refund processed for order #${orderNumber}`,
-          textContent: text,
-          htmlContent: `<p>Hello ${escapeHtmlText(order.customer_name || 'there')},</p><p>We have processed the refund of <strong>${escapeHtmlText(amount)}</strong> for cancelled order #${escapeHtmlText(orderNumber)}.</p><p>Your bank or card provider may take up to 10 business days to show the funds. If they do not arrive, contact ${escapeHtmlText(merchant.support_email || merchant.email)}.</p>`,
-          replyTo: merchant.support_email || merchant.email,
-          fromName: merchant.email_sender_name || merchant.business_name,
-          emailType: 'orders',
-          auditContext: {
-            merchantId: merchant.id,
-            orderId: order.id,
-            customerId: order.customer_id,
-            metadata: { trigger: 'paystack_refund_processed' },
-          },
-        });
+        const result = await awaitRefundNotificationDeadline(
+          sendEmail({
+            ...(deadlineMs !== undefined && {
+              signal: AbortSignal.timeout(
+                Math.max(1, deadlineMs - Date.now() - 10_000)
+              ),
+            }),
+            to: order.customer_email,
+            toName: order.customer_name ?? undefined,
+            subject: `Refund processed for order #${orderNumber}`,
+            textContent: text,
+            htmlContent: `<p>Hello ${escapeHtmlText(order.customer_name || 'there')},</p><p>We have processed the refund of <strong>${escapeHtmlText(amount)}</strong> for cancelled order #${escapeHtmlText(orderNumber)}.</p><p>Your bank or card provider may take up to 10 business days to show the funds. If they do not arrive, contact ${escapeHtmlText(merchant.support_email || merchant.email)}.</p>`,
+            replyTo: merchant.support_email || merchant.email,
+            fromName: merchant.email_sender_name || merchant.business_name,
+            emailType: 'orders',
+            auditContext: {
+              merchantId: merchant.id,
+              orderId: order.id,
+              customerId: order.customer_id,
+              metadata: { trigger: 'paystack_refund_processed' },
+            },
+          }),
+          deadlineMs
+        );
         if (result.success) {
           outcome = 'sent';
         } else if (result.deliveryOutcome === 'unknown') {
@@ -180,9 +193,10 @@ export async function drainPaystackRefundNotifications(
           const body = completed
             ? `Refunds totaling ${amount} have been processed for cancelled order #${orderNumber}.`
             : `Paystack could not complete the refund for order #${orderNumber}. Check the refund in Paystack.`;
+          assertRefundNotificationSendTime(deadlineMs);
           outcome = 'delivery_uncertain';
           if (sendMerchantPush) {
-            const pushed = await sendMerchantPush(
+            const pushPromise = sendMerchantPush(
               merchant.id,
               title,
               body,
@@ -194,6 +208,10 @@ export async function drainPaystackRefundNotifications(
                 order_number: orderNumber,
               },
               'payments'
+            );
+            const pushed = await awaitRefundNotificationDeadline(
+              pushPromise,
+              deadlineMs
             );
             if (
               pushed.deliveryOutcome === 'unknown' ||
@@ -210,22 +228,33 @@ export async function drainPaystackRefundNotifications(
             throw new Error('refund_merchant_contact_missing');
           }
           if (outcome !== 'sent') {
-            const result = await sendEmail({
-              to: merchant.email,
-              subject: `${title}: order #${orderNumber}`,
-              textContent: body,
-              htmlContent: `<p>${escapeHtmlText(body)}</p>`,
-              emailType: 'notifications',
-              auditContext: {
-                merchantId: merchant.id,
-                orderId: order.id,
-                metadata: {
-                  trigger: completed
-                    ? 'paystack_refund_processed_merchant'
-                    : 'paystack_refund_attention_merchant',
+            outcome = 'failed';
+            assertRefundNotificationSendTime(deadlineMs);
+            outcome = 'delivery_uncertain';
+            const result = await awaitRefundNotificationDeadline(
+              sendEmail({
+                ...(deadlineMs !== undefined && {
+                  signal: AbortSignal.timeout(
+                    Math.max(1, deadlineMs - Date.now() - 10_000)
+                  ),
+                }),
+                to: merchant.email,
+                subject: `${title}: order #${orderNumber}`,
+                textContent: body,
+                htmlContent: `<p>${escapeHtmlText(body)}</p>`,
+                emailType: 'notifications',
+                auditContext: {
+                  merchantId: merchant.id,
+                  orderId: order.id,
+                  metadata: {
+                    trigger: completed
+                      ? 'paystack_refund_processed_merchant'
+                      : 'paystack_refund_attention_merchant',
+                  },
                 },
-              },
-            });
+              }),
+              deadlineMs
+            );
             if (result.success) {
               outcome = 'sent';
             } else if (result.deliveryOutcome === 'unknown') {

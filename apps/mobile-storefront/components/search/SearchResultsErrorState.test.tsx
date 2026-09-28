@@ -9,6 +9,7 @@ function renderErrorState(
   const props: ComponentProps<typeof SearchResultsErrorState> = {
     colors: Colors.light,
     committedQuery: '',
+    isRetrying: false,
     onRetry: jest.fn(),
     ...overrides,
   };
@@ -27,5 +28,17 @@ describe('SearchResultsErrorState', () => {
 
     fireEvent.press(screen.getByRole('button', { name: 'Retry search' }));
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables the retry and shows progress while the retry is in flight', () => {
+    const onRetry = jest.fn();
+
+    renderErrorState({ committedQuery: 'iphone', isRetrying: true, onRetry });
+
+    expect(screen.getByText('Retrying…')).toBeTruthy();
+    expect(screen.getByTestId('retry-activity-indicator')).toBeTruthy();
+
+    fireEvent.press(screen.getByRole('button', { name: 'Retry search' }));
+    expect(onRetry).not.toHaveBeenCalled();
   });
 });

@@ -36,6 +36,8 @@ interface SearchScreenViewProps {
   /** True when the current error came from a next-page fetch (not a refetch). */
   isNextPageError: boolean;
   isOnline: boolean;
+  /** True while an initial-search retry request is in flight. */
+  isRetrying: boolean;
   maxPrice: number;
   minPrice: number;
   minRating: number;
@@ -80,6 +82,7 @@ export default function SearchScreenView({
   isLoadingMore,
   isNextPageError,
   isOnline,
+  isRetrying,
   maxPrice,
   minPrice,
   minRating,
@@ -147,6 +150,7 @@ export default function SearchScreenView({
         <SearchResultsErrorState
           colors={colors}
           committedQuery={committedQuery}
+          isRetrying={isRetrying}
           onRetry={onRetry}
         />
       );

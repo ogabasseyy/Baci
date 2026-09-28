@@ -15,6 +15,10 @@ export function SearchPageForm({ action, defaultQuery }: SearchPageFormProps) {
         Search products
       </label>
       <input
+        // Remount per route query: client-side navigation (did-you-mean
+        // links, the persistent navbar) reuses this uncontrolled input,
+        // and defaultValue alone would keep showing the previous query.
+        key={defaultQuery}
         id="search-page-input"
         name="q"
         type="search"

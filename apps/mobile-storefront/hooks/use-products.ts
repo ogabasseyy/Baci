@@ -24,35 +24,7 @@ import {
   type UseProductsOptions,
 } from '@/hooks/product-utils';
 import { useMerchant } from '@/hooks/use-merchant';
-
-/**
- * Starts a next-page fetch unless one is already in flight for the active
- * query. State flags (isFetchingNextPage, isLoadingMore) update only after
- * a rerender, so two end-reached signals arriving synchronously would both
- * pass the state guards and start duplicate fetches. Each acquisition and
- * release carries the query key: a new query resets a stale lock, and an
- * obsolete request settling late (query A resolving after the shopper
- * moved to B) cannot unlock the current query's in-flight fetch.
- */
-function fetchLockedNextPage(
-  lockRef: { current: { key: string; inFlight: boolean } },
-  key: string,
-  fetchNextPage: () => Promise<unknown>
-) {
-  if (lockRef.current.key !== key) {
-    lockRef.current = { key, inFlight: false };
-  }
-  if (lockRef.current.inFlight) {
-    return;
-  }
-  lockRef.current.inFlight = true;
-  const release = () => {
-    if (lockRef.current.key === key) {
-      lockRef.current.inFlight = false;
-    }
-  };
-  void fetchNextPage().then(release, release);
-}
+import { fetchLockedNextPage } from './product-next-page-lock';
 
 export function useProducts(options: UseProductsOptions = {}) {
   const { data: merchant } = useMerchant();
@@ -86,13 +58,14 @@ export function useProducts(options: UseProductsOptions = {}) {
   });
 
   const pendingLoadMoreRef = useRef(false);
-  const nextPageLockRef = useRef({ key: '', inFlight: false });
+  const nextPageLocksRef = useRef(new Map<string, boolean>());
   const pendingLoadMoreKeyRef = useRef<string | null>(null);
 
   // The queued bottom-reached signal is query-scoped: a signal queued for
   // query A must not fire a next-page fetch after the shopper moves to B.
-  // (The in-flight lock keys itself inside fetchLockedNextPage.) Adjusted
-  // inline during render so the reset lands before the drain effect runs.
+  // (In-flight locks are keyed per query inside fetchLockedNextPage.)
+  // Adjusted inline during render so the reset lands before the drain
+  // effect runs.
   const nextPageQueryKey = JSON.stringify(['products', merchantId, options]);
   if (pendingLoadMoreKeyRef.current !== nextPageQueryKey) {
     pendingLoadMoreKeyRef.current = nextPageQueryKey;
@@ -107,7 +80,11 @@ export function useProducts(options: UseProductsOptions = {}) {
 
     if (pendingLoadMoreRef.current && !isFetching && !isFetchingNextPage) {
       pendingLoadMoreRef.current = false;
-      fetchLockedNextPage(nextPageLockRef, nextPageQueryKey, fetchNextPage);
+      fetchLockedNextPage(
+        nextPageLocksRef.current,
+        nextPageQueryKey,
+        fetchNextPage
+      );
     }
   }, [
     fetchNextPage,
@@ -152,7 +129,11 @@ export function useProducts(options: UseProductsOptions = {}) {
         return;
       }
 
-      fetchLockedNextPage(nextPageLockRef, nextPageQueryKey, fetchNextPage);
+      fetchLockedNextPage(
+        nextPageLocksRef.current,
+        nextPageQueryKey,
+        fetchNextPage
+      );
     },
     isLoadingMore: isFetchingNextPage,
   };

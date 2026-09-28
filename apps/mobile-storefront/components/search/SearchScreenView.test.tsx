@@ -48,6 +48,7 @@ function renderView(
     isLoadingMore: false,
     isNextPageError: false,
     isOnline: true,
+    isRetrying: false,
     maxPrice: 0,
     minPrice: 0,
     minRating: 0,

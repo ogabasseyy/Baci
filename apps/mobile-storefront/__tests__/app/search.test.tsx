@@ -236,6 +236,16 @@ describe('SearchScreen route', () => {
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 
+  it('forwards the fetching flag so the error state shows a pending retry', () => {
+    mockUseLocalSearchParams.mockReturnValue({ q: 'iphone' });
+    mockUseProducts.mockReturnValue(
+      mockProductState({ error: 'Search failed', isFetching: true })
+    );
+
+    render(<SearchScreen />);
+    expect(mockViewProps.current).toMatchObject({ isRetrying: true });
+  });
+
   it('forwards the next-page error flag so the footer routes its retry', () => {
     mockUseLocalSearchParams.mockReturnValue({ q: 'iphone' });
     mockUseProducts.mockReturnValue(

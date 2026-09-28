@@ -1,17 +1,20 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import styles from './search-screen.styles';
 
 interface SearchResultsErrorStateProps {
   colors: (typeof Colors)['light'];
   committedQuery: string;
+  /** True while a retry request is in flight. */
+  isRetrying: boolean;
   onRetry: () => void;
 }
 
 export default function SearchResultsErrorState({
   colors,
   committedQuery,
+  isRetrying,
   onRetry,
 }: SearchResultsErrorStateProps) {
   return (
@@ -31,14 +34,22 @@ export default function SearchResultsErrorState({
       </Text>
       <Pressable
         onPress={onRetry}
+        disabled={isRetrying}
         style={[styles.retryButton, { backgroundColor: colors.primary }]}
         accessibilityRole="button"
         accessibilityLabel="Retry search"
       >
+        {isRetrying ? (
+          <ActivityIndicator
+            size="small"
+            color={colors.primaryForeground}
+            testID="retry-activity-indicator"
+          />
+        ) : null}
         <Text
           style={[styles.retryButtonText, { color: colors.primaryForeground }]}
         >
-          Try again
+          {isRetrying ? 'Retrying…' : 'Try again'}
         </Text>
       </Pressable>
     </View>

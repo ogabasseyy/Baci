@@ -127,6 +127,7 @@ export default function SearchScreen() {
   const {
     error: productsError,
     hasMore,
+    isFetching: productsFetching,
     isLoading,
     isLoadingMore,
     isNextPageError: productsNextPageError,
@@ -210,6 +211,10 @@ export default function SearchScreen() {
         isLoadingMore={isLoadingMore}
         isNextPageError={hasSearchQuery && productsNextPageError}
         isOnline={isOnline}
+        // A retry keeps the error status while fetching, so isLoading stays
+        // false: forward the fetching flag so the error state can present
+        // a pending retry instead of a stale enabled button.
+        isRetrying={hasSearchQuery && productsFetching}
         maxPrice={maxPrice}
         minPrice={minPrice}
         minRating={minRating}

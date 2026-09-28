@@ -88,11 +88,13 @@ export function buildEmailExecutor({
   merchantDetails,
   merchantFetchError,
   order,
+  signal,
 }: {
   actor: string;
   merchantDetails: MerchantDetails | null;
   merchantFetchError: { code?: string; message?: string } | null;
   order: RichPaidOrder;
+  signal?: AbortSignal;
 }): StepExecutor {
   return async () => {
     if (
@@ -156,6 +158,7 @@ export function buildEmailExecutor({
         merchantDetails: validatedMerchantDetails,
         rootDomain,
       }),
+      signal,
       subject: `Order Confirmation - #${emailData.orderNumber}`,
       textContent: generateOrderConfirmationText(emailData),
       to: validatedOrder.customer_email,

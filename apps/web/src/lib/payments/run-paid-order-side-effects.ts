@@ -116,6 +116,7 @@ export async function runPaidOrderSideEffects(
         merchantDetails: merchant.data,
         merchantFetchError: merchant.error,
         order: args.order,
+        signal: args.signal,
       }),
     },
     gatewayResponse: args.gatewayResponse,

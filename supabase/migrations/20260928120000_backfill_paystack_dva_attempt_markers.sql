@@ -1,11 +1,22 @@
 -- Mark legacy Paystack DVA payment attempts so the abandoned-attempt sweep
 -- treats Paystack's expected 404 for their placeholder references as
--- terminal. Only assignment-correlated rows qualify: the initialize route
--- persists the DVA assignment and inserts the attempt in the same request,
--- so a DVA attempt lands within minutes after its account row. A bare
--- same-order match would also stamp a later card attempt for the order,
--- and the sweep would then retire it on a 404 that is nonterminal for
--- ordinary captures. Rows already carrying a payment-type marker are
+-- terminal. Correlate by the account's LIVE WINDOW, not its creation
+-- time: the reservation RPC's `existing` path extends `expires_at` on a
+-- retry without touching `created_at`/`assigned_at`
+-- (20260827060000_repair_paystack_dva_reservation.sql), so a retry more
+-- than five minutes after the original assignment creates a genuine DVA
+-- attempt no creation-time window can see. Every successful DVA attempt
+-- (original or retry) is created while its account is live — a retry
+-- only succeeds through the `existing` path, which requires an
+-- unexpired account — so the live window is exactly the region a legacy
+-- DVA attempt can fall in. The window uses the same live-account
+-- COALESCE the reservation RPC and the DVA matcher use.
+-- Residual risk: a same-order card attempt created while the DVA account
+-- is live is also stamped. The stamp only matters on a Paystack 404, and
+-- card references are provider-real (Paystack created them at
+-- initialize), so in practice the sweep never consults it for those
+-- rows; a transient provider 404 during Paystack inconsistency would
+-- retire instead of hold. Rows already carrying a payment-type marker are
 -- untouched, and the update is idempotent so a re-run matches nothing.
 UPDATE public.transactions t
 SET metadata = coalesce(t.metadata, '{}'::jsonb) || '{"paystack_payment_type": "dva"}'::jsonb,
@@ -19,5 +30,9 @@ WHERE t.transaction_type = 'payment'
     WHERE a.order_id = t.order_id
       AND a.provider = 'paystack'
       AND t.created_at >= a.created_at
-      AND t.created_at < a.created_at + interval '5 minutes'
+      AND t.created_at < coalesce(
+        a.expires_at,
+        a.assigned_at + interval '90 minutes',
+        a.created_at + interval '90 minutes'
+      )
   );

@@ -69,6 +69,9 @@ export interface RunPaidOrderSideEffectsArgs {
   order: RichPaidOrder;
   scheduleAfter: ScheduleAfter;
   settlementGateway: 'juicyway' | 'korapay' | 'paystack';
+  // Aborts the paid-email send when the caller runs under a pass
+  // deadline; the DB-local executors ignore it.
+  signal?: AbortSignal;
   supabase: ServiceRoleClient;
   transaction: PaidOrderSideEffectTransaction;
 }

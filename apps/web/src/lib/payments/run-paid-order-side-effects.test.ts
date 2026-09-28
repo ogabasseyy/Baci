@@ -105,6 +105,27 @@ describe('runPaidOrderSideEffects', () => {
     );
   });
 
+  it('forwards the abort signal to the paid-email send', async () => {
+    const supabase = createSupabase();
+    const signal = AbortSignal.timeout(1000);
+
+    await runPaidOrderSideEffects({
+      actor: 'cron:reconcile-gateway-paid-orders:drain',
+      externalGatewayReference: 'PSK_REF_1',
+      gatewayResponse: {},
+      order: richOrder,
+      scheduleAfter: vi.fn(),
+      settlementGateway: 'paystack',
+      signal,
+      supabase: supabase as never,
+      transaction,
+    });
+
+    expect(mockSendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ signal })
+    );
+  });
+
   it('schedules ad tracking after the response path instead of inside the outbox', async () => {
     const supabase = createSupabase();
     const scheduleAfter = vi.fn((job: () => Promise<void>) => job());

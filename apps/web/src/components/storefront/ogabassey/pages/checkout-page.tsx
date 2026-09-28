@@ -41,7 +41,6 @@ import {
 import { usePaymentReturnReset } from './checkout/use-payment-return-reset';
 import { useEffect, useState, useRef } from 'react';
 import { useCart } from '@/hooks/cart';
-import type { CartItem } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { useCurrency } from '@/hooks/use-currency';
 import type {
@@ -64,7 +63,6 @@ import {
 import { asRoute } from '@/lib/routes';
 import { getSubdivisions } from '@/lib/shipping/merchant-rates/subdivisions';
 import { toast } from '@/hooks/use-toast';
-import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import {
   calculateCartCatalogSubtotal,
@@ -83,37 +81,28 @@ import {
   CHECKOUT_PENDING_ORDER_STORAGE_KEY,
   type PendingCheckoutOrderSnapshot,
 } from './checkout/pending-checkout-order';
-import { prepareCheckoutOrderSubmission } from './checkout/prepare-checkout-order-submission';
-import {
-  clearCheckoutIdempotencyKey,
-  getCheckoutIdempotencyKey,
-} from './checkout/checkout-idempotency';
+import { clearCheckoutIdempotencyKey } from './checkout/checkout-idempotency';
 import { captureCheckoutPaymentCompleted } from './checkout/capture-checkout-payment-completed';
 import { useCheckoutSubmissionState } from './checkout/hooks/use-checkout-submission-state';
-import { captureCheckoutPaymentStarted } from './checkout/capture-checkout-payment-started';
 import { executeResumedDirectPayment } from './checkout/handlers/direct-payment';
-import { getCheckoutOrderErrorMessage } from './checkout/checkout-order-error-message';
-import { submitFreshCheckout } from './checkout/handlers/submit-fresh-checkout';
-import { signUpCheckoutCustomer } from './checkout/handlers/sign-up-checkout-customer';
 import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import { PaymentStep } from './checkout/components/PaymentStep';
 import { useRedvaultPaymentAvailability } from './checkout/hooks/use-redvault-payment-availability';
 import {
-  KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST,
   inferAddressLocationFromInput,
 } from './checkout/utils';
+import { useCheckoutOrderSubmission } from './checkout/hooks/use-checkout-order-submission';
 import { useWalletFundedBankTransfer } from './checkout/hooks/use-wallet-funded-bank-transfer';
 import { useStorefrontCustomerSession } from './checkout/hooks/use-storefront-customer-session';
 import {
-  resolveCheckoutStartValues,
   useResumedCheckoutStartFunnel,
 } from './checkout/hooks/use-resumed-checkout-start-funnel';
-import { readCheckoutAttemptGeneration, rotateCheckoutAttemptGeneration } from './checkout/checkout-attempt-generation';
+import { deriveCheckoutDisplayModel } from './checkout/derive-checkout-display-model';
+import { readCheckoutAttemptGeneration } from './checkout/checkout-attempt-generation';
 import { DeferredWalletFundedTransferModal as WalletFundedTransferModal } from './checkout/components/DeferredWalletFundedTransferModal';
 import { DeferredWalletTransferConsentDialog as WalletTransferConsentDialog } from './checkout/components/DeferredWalletTransferConsentDialog';
 import {
   DesktopOrderSummary,
-  type CheckoutItem,
 } from './checkout/components/DesktopOrderSummary';
 
 
@@ -365,49 +354,17 @@ export const CheckoutPage: React.FC = () => {
   const [isLoadingResumedOrder, setIsLoadingResumedOrder] = useState(!!resumeOrderId);
   const [resumeOrderError, setResumeOrderError] = useState<string | null>(null);
 
-  // Tag each item at construction time so downstream rendering narrows on
-  // `item.kind` (a literal discriminator) rather than `'cartItemId' in item`,
-  // which would silently break if either type ever gained an optional
-  // `cartItemId` field. Active cart wins when populated; otherwise fall back
-  // to the resumed order's items.
-  const hasCheckoutCartItems = checkoutCart.length > 0;
-  const displayItems: CheckoutItem[] =
-    hasCheckoutCartItems
-      ? checkoutCart.map((item) => ({ kind: 'cart' as const, ...item }))
-      : (resumedOrder?.items ?? []).map((item) => ({ kind: 'resumed' as const, ...item }));
-  const resumedOrderCartItems: CartItem[] =
-    !hasCheckoutCartItems && resumedOrder
-      ? resumedOrder.items.map((item) => ({
-          brand: '',
-          cartItemId: item.id,
-          description: '',
-          gtin: '',
-          id: item.product_id || item.id,
-          image: item.image_url || '',
-          imageHint: item.product_name,
-          imageLarge: item.image_url || '',
-          manage_stock: false,
-          mpn: '',
-          name: item.product_name,
-          price: item.price,
-          quantity: item.quantity,
-          status: 'active' as const,
-          stock: item.quantity,
-        }))
-      : [];
-  const mobileSummaryCart = hasCheckoutCartItems
-    ? checkoutCart
-    : resumedOrderCartItems;
-  const effectiveItemSubtotal = hasCheckoutCartItems
-    ? itemSubtotal
-    : resumedOrder?.subtotal || 0;
-  // Displayed totals share the funnel's stamped derivation (single
-  // source in the focused hook module): a resumed render shows the
-  // canonical order total, never the subtotal-only variant.
-  const { total: effectiveCheckoutCartTotal } = resolveCheckoutStartValues({
+  const {
+    displayItems,
+    effectiveCheckoutCartTotal,
+    effectiveItemSubtotal,
+    hasCheckoutCartItems,
+    mobileSummaryCart,
+  } = deriveCheckoutDisplayModel({
+    checkoutCart,
     checkoutCartTotal,
     currencyCode,
-    hasCheckoutCartItems,
+    itemSubtotal,
     resumedOrder,
   });
 
@@ -705,334 +662,83 @@ export const CheckoutPage: React.FC = () => {
     }
   }, [pendingCheckoutOrder, merchant?.id, clearPendingCheckoutOrder]);
 
-  const handlePlaceOrder = async () => {
-    // Double-submit protection: prevent race conditions from rapid clicks
-    if (!tryBeginSubmission(redvaultStatus === 'pending' || redvaultStatus === 'held')) return;
-
-    if (!merchant?.id) {
-      toast({
-        title: 'Error',
-        description: 'Merchant context not available. Please try again.',
-        variant: 'destructive',
-      });
-      isOrderInFlightRef.current = false;
-      return;
-    }
-
-    if (!customerEmail || !firstName || !lastName) {
-      toast({
-        title: 'Missing Information',
-        description: 'Please fill in your name and email.',
-        variant: 'destructive',
-      });
-      isOrderInFlightRef.current = false;
-      return;
-    }
-
-    // Handle resumed orders from mobile app (order already exists, just need payment)
-    if (resumedOrder && preferredGateway) {
-      setIsProcessing(true);
-      // Promise `.finally()` instead of a try/finally statement, which would
-      // bail React Compiler; semantics are identical.
-      await executeDirectPayment().finally(() => {
-        isOrderInFlightRef.current = false;
-      });
-      return;
-    }
-
-    const preparedSubmission = prepareCheckoutOrderSubmission({
-      payment: {
-        method: paymentMethod,
-        bankTransferAvailable: bankTransferCheckoutAvailable,
-        paystackAvailable: paystackCheckoutAvailable,
-        korapayAvailable: korapayCheckoutAvailable,
-        redvaultAvailable: redvaultAvailability.available,
-        remainingAmount,
-        total,
-      },
-      delivery: {
-        method: deliveryMethod,
-        selectedQuoteId,
-        selectedQuoteMatchesMethod: selectedQuoteMatchesDeliveryMethod,
-        airportRequiresQuote,
-        airportType,
-        quotes: shippingQuotes,
-        addresses,
-        selectedAddressId,
-        isNewAddressMode,
-        newAddressStreet,
-        newAddressCity,
-        newAddressState,
-        customerPhone,
-        merchantCountry,
-        deliveryCost,
-      },
-      identity: {
-        merchantId: merchant.id,
-        customerEmail,
-        customerName: (firstName + ' ' + lastName).trim(),
-        customerPhone,
-        checkoutItems: buildCheckoutOrderItems(checkoutCart),
-        useWalletCredit: paymentSession.checkoutValues.useWalletCredit,
-        walletAmountUsed,
-        discountCode: paymentSession.checkoutValues.discountCode,
-        giftWrappingCost,
-      },
-    });
-    if (preparedSubmission.kind === 'issue') {
-      if (preparedSubmission.issue === 'delivery-option') {
-        toast({
-          title: 'Select Delivery Option',
-          description: 'Please select a delivery option before placing your order.',
-          variant: 'destructive',
-        });
-        setCurrentStep('delivery');
-        setCompletedSteps((prev) => ({ ...prev, delivery: false }));
-        isOrderInFlightRef.current = false;
-        return;
-      }
-      if (
-        preparedSubmission.issue === 'bank-transfer-unavailable' ||
-        preparedSubmission.issue === 'paystack-unavailable' ||
-        preparedSubmission.issue === 'korapay-unavailable' ||
-        preparedSubmission.issue === 'redvault-unavailable'
-      ) {
-        const unavailableMessage = {
-          'bank-transfer-unavailable': 'Bank transfer is not available for this store yet. Please choose a different payment method.',
-          'paystack-unavailable': 'Paystack is not available for this store yet. Please choose a different payment method.',
-          'korapay-unavailable': 'Korapay is not available for this store yet. Please choose a different payment method.',
-          'redvault-unavailable': 'Pay with UBA is not available right now. Please choose a different payment method.',
-        }[preparedSubmission.issue];
-        toast({
-          title: 'Payment Unavailable',
-          description: unavailableMessage,
-          variant: 'destructive',
-        });
-        isOrderInFlightRef.current = false;
-        return;
-      }
-      if (preparedSubmission.issue === 'klump-unavailable') {
-        toast(KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST);
-        releaseSubmission();
-        return;
-      }
-      if (preparedSubmission.issue === 'incomplete-address') {
-        toast({
-          title: 'Incomplete Address',
-          description: 'Please enter your full address (Street, City, State).',
-          variant: 'destructive',
-        });
-        setIsProcessing(false);
-        setCompletedSteps((prev) => ({ ...prev, delivery: false }));
-        isOrderInFlightRef.current = false;
-        setCurrentStep('delivery');
-        return;
-      }
-      if (preparedSubmission.issue === 'delivery-required') {
-        toast({
-          title: 'Delivery option required',
-          description: 'Please select a delivery option to continue.',
-          variant: 'destructive',
-        });
-        releaseSubmission();
-        return;
-      }
-      toast({
-        title: 'Shipping rate expired',
-        description: 'Please select a delivery option again.',
-        variant: 'destructive',
-      });
-      releaseSubmission();
-      return;
-    }
-    setIsProcessing(true);
-
-    const { items: orderItems, checkoutFingerprint } = preparedSubmission.identity;
-
-    await submitFreshCheckout({
-      redvaultPrepared: {
-        paymentMethod,
-        redvaultOrderReady,
-        checkoutFingerprint,
-        waitForResolvedStorefrontCustomerAuth,
-        isOrderInFlightRef,
-        setIsProcessing,
-        setRedvaultStatus: paymentSession.redvault.setStatus,
-        setRedvaultOrderReady: paymentSession.redvault.setOrderReady,
-        clearPendingCheckoutOrder,
-        createAccount,
-        user,
-        accountPassword,
-        firstName,
-        lastName,
-        merchantId: merchant?.id ?? '',
-      },
-      onRedvaultPaymentStarted: ({ orderId, currency, reference, total, orderNumber }) => {
-          captureCheckoutPaymentStarted({
-            currency,
-            orderId,
-            orderNumber,
-            paymentMethod: 'uba_redvault',
-            reference,
-            total,
-          });
-      },
-      lifecycle: {
-          prepared: preparedSubmission,
-          state: {
-            pendingOrder: pendingCheckoutOrder,
-            merchant,
-            customer: {
-              email: customerEmail,
-              phone: customerPhone,
-              name: `${firstName} ${lastName}`.trim(),
-              firstName,
-              lastName,
-              userId: user?.id,
-            },
-            newsletterOptIn,
-            paymentMethod,
-            total,
-            orderRequestSubtotal: checkoutCartTotal,
-            subtotal: effectiveItemSubtotal,
-            shipping: deliveryCost,
-            tax: orderTotals?.taxAmount ?? 0,
-            giftWrappingCost,
-            discountAmount: paymentSession.checkoutValues.discountAmount,
-            discountCode: paymentSession.checkoutValues.discountCode,
-            useWalletCredit: paymentSession.checkoutValues.useWalletCredit,
-            walletAmountUsed,
-            currency: currencyCode,
-            deliveryMethod,
-            airportType,
-            selectedQuoteId,
-            selectedQuoteMatchesMethod:
-              selectedQuoteMatchesDeliveryMethod,
-            merchantCountry,
-          },
-          actions: {
-            getIdempotencyKey: () =>
-              getCheckoutIdempotencyKey(checkoutFingerprint),
-            cart,
-            removeFromCart,
-            clearPendingCheckoutOrder,
-            clearCheckoutIdempotencyKey: () =>
-              clearCheckoutIdempotencyKey(checkoutFingerprint),
-            onShippingRateRejected: () => {
-              raiseCheckoutError(
-                'Shipping cost changed — please refresh and try again.'
-              );
-            },
-            getOrderErrorMessage: getCheckoutOrderErrorMessage,
-            waitForResolvedCustomerAuth:
-              waitForResolvedStorefrontCustomerAuth,
-            isOrderInFlightRef,
-            setIsProcessing,
-            setRedvaultStatus: paymentSession.redvault.setStatus,
-            clearCheckoutSession,
-            clearCart,
-            pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
-            onRedvaultSummary: paymentSession.redvault.setSummary,
-            onOrderCreated: () => {
-              rotateCheckoutAttemptGeneration();
-              setCheckoutOrderCreated(true);
-            },
-            onPendingSnapshot: setPendingCheckoutOrder,
-            setRedvaultOrderReady: paymentSession.redvault.setOrderReady,
-            releaseSubmission,
-          },
-          redvault: {
-            enabled: paymentMethod === 'uba_redvault' && !redvaultOrderReady,
-            customerName: `${firstName} ${lastName}`.trim(),
-          },
-      },
-      createPaymentOptions: (lifecycle) => {
-        const {
-          order,
-          wallet: walletResult,
-          amountDueToGateway,
-          createdOrderNumber,
-          orderChargeCurrency,
-          billingAddress,
-        } = lifecycle;
-        const signupAttempt = { current: false };
-        const signUpCustomer = (logSuccess = false) =>
-          signUpCheckoutCustomer({
-            attempt: signupAttempt,
-            enabled: createAccount,
-            hasUser: Boolean(user),
-            password: accountPassword,
-            email: customerEmail,
-            firstName,
-            lastName,
-            phone: customerPhone,
-            logSuccess,
-          });
-        return {
-          dispatch: {
-          merchant,
-          paymentMethod,
-          total,
-          currencyCode,
-          firstName,
-          lastName,
-          customerEmail,
-          customerPhone,
-          billingAddress,
-          checkoutFingerprint,
-          checkoutCart,
-          cart,
-          orderItems,
-          walletFundedTransfer,
-          waitForResolvedStorefrontCustomerAuth,
-          setIsProcessing,
-          isOrderInFlightRef,
-          setDvaData,
-          setDvaCountdown,
-          setIsInitializingDva,
-          setRedvaultStatus: paymentSession.redvault.setStatus,
-          setPendingCryptoOrder,
-          setShowCryptoSelector,
-          setCryptoPaymentData,
-          clearPendingCheckoutOrder,
-          clearCheckoutSession,
-          clearCart,
-          navigate: (path) => router.push(asRoute(getHref(path))),
-          redirect: (url) => window.location.assign(url),
-          payForMeDetails: paymentSession.payForMe.details,
-          },
-          order,
-          wallet: walletResult,
-          amountDueToGateway,
-          createdOrderNumber,
-          orderChargeCurrency,
-          checkoutFingerprint,
-          paymentMethod,
-          setWalletBalance: paymentSession.wallet.setBalance,
-          capturePaymentStarted: (reference) => {
-            captureCheckoutPaymentStarted({
-              currency: orderChargeCurrency,
-              orderId: order.id,
-              orderNumber: createdOrderNumber,
-              paymentMethod,
-              reference,
-              total: order.total ?? total,
-            });
-          },
-          completeSignup: signUpCustomer,
-          signupBeforePayment:
-            paymentMethod !== 'uba_redvault' &&
-            createAccount &&
-            !user &&
-            accountPassword.length >= 6
-              ? () => signUpCustomer(true)
-              : undefined,
-          releaseSubmission,
-        };
-      },
-      handleError: handleSubmissionError,
-    });
-  };
+  const { handlePlaceOrder } = useCheckoutOrderSubmission({
+    account: {
+      createAccount,
+      password: accountPassword,
+      user,
+      waitForResolvedCustomerAuth: waitForResolvedStorefrontCustomerAuth,
+    },
+    cart: {
+      cart,
+      checkoutCart,
+      checkoutCartTotal,
+      clearCart,
+      removeFromCart,
+    },
+    contact: {
+      customerEmail,
+      customerPhone,
+      firstName,
+      lastName,
+      newsletterOptIn,
+    },
+    delivery: {
+      session: delivery,
+      method: deliveryMethod,
+      airportType,
+      airportRequiresQuote,
+      newAddressStreet,
+      newAddressCity,
+      newAddressState,
+      merchantCountry,
+      giftWrappingCost,
+      effectiveItemSubtotal,
+      taxAmount: orderTotals?.taxAmount ?? 0,
+    },
+    merchant,
+    navigation: {
+      setCurrentStep,
+      setCompletedSteps,
+      pushSuccessRoute: (url) => router.push(asRoute(url)),
+      getHref,
+    },
+    order: {
+      pending: pendingCheckoutOrder,
+      clearPending: clearPendingCheckoutOrder,
+      setPending: setPendingCheckoutOrder,
+      setOrderCreated: setCheckoutOrderCreated,
+      clearCheckoutSession,
+      setDvaData,
+      setDvaCountdown,
+      setIsInitializingDva,
+      setPendingCryptoOrder,
+      setShowCryptoSelector,
+      setCryptoPaymentData,
+      walletFundedTransfer,
+    },
+    payment: {
+      session: paymentSession,
+      bankTransferAvailable: bankTransferCheckoutAvailable,
+      paystackAvailable: paystackCheckoutAvailable,
+      korapayAvailable: korapayCheckoutAvailable,
+      redvaultAvailable: redvaultAvailability.available,
+      currencyCode,
+    },
+    resumed: {
+      order: resumedOrder,
+      preferredGateway,
+      trackingToken: resumeTrackingToken,
+      merchantSlugFromResume: resumeMerchantSlug,
+    },
+    processing: {
+      setIsProcessing,
+      isOrderInFlightRef,
+      tryBeginSubmission,
+      releaseSubmission,
+      handleSubmissionError,
+    },
+  });
 
   const isPayForMeValid = paymentSession.payForMe.isValid;
 

@@ -116,6 +116,7 @@ export function DiscoveryBackfillPanel({ merchantId }: { merchantId: string }) {
       saveProgress(progressKey, null, false);
     }
     let needsVerification = nextCursor !== null;
+    let providerRateLimitRetries = 0;
     try {
       while (!stopRequested.current) {
         const controller = new AbortController();
@@ -136,9 +137,8 @@ export function DiscoveryBackfillPanel({ merchantId }: { merchantId: string }) {
         )
           break;
         if (!response.ok) {
-          const payload: { error?: string; resetIn?: number } = await response
-            .json()
-            .catch(() => ({}));
+          const payload: { code?: string; error?: string; resetIn?: number } =
+            await response.json().catch(() => ({}));
           if (
             response.status === 429 &&
             typeof payload.resetIn === 'number' &&
@@ -147,6 +147,14 @@ export function DiscoveryBackfillPanel({ merchantId }: { merchantId: string }) {
             payload.resetIn >= 0
           ) {
             if (stopRequested.current || !isCurrentRun()) break;
+            if (payload.code === 'EMBEDDING_PROVIDER_RATE_LIMITED') {
+              providerRateLimitRetries += 1;
+              if (providerRateLimitRetries >= 5) {
+                throw new Error(
+                  'The embedding provider limit has not reset. Continue indexing later.'
+                );
+              }
+            }
             setWaiting(true);
             await waitForQuota(
               Math.max(1, Math.ceil(payload.resetIn)),
@@ -164,6 +172,7 @@ export function DiscoveryBackfillPanel({ merchantId }: { merchantId: string }) {
         }
         const result: BatchResult = await response.json();
         if (!isCurrentRun()) break;
+        providerRateLimitRetries = 0;
         setScanned((count) => count + result.scanned);
         setGenerated((count) => count + result.generated);
         nextCursor = result.nextCursor;

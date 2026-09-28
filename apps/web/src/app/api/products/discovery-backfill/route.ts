@@ -83,8 +83,31 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result, {
       headers: { 'Cache-Control': 'no-store' },
     });
-  } catch {
-    console.error('Discovery backfill batch failed');
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : '';
+    const providerStatus = /^Embedding provider returned (\d{3})$/.exec(
+      message
+    )?.[1];
+    if (providerStatus === '429') {
+      console.error('Discovery backfill provider rate limited');
+      return NextResponse.json(
+        {
+          error: 'Embedding provider is temporarily rate limited',
+          code: 'EMBEDDING_PROVIDER_RATE_LIMITED',
+          resetIn: 60,
+        },
+        { status: 429 }
+      );
+    }
+    const safeReason =
+      /^(?:Catalog read failed|Embedding state read failed|Embedding write failed): (?:[A-Z0-9]{5}|PGRST\d{3})$/.test(
+        message
+      ) ||
+      /^Embedding provider returned \d{3}$/.test(message) ||
+      message === 'Embedding provider returned an invalid vector'
+        ? message
+        : 'unknown';
+    console.error('Discovery backfill batch failed', { reason: safeReason });
     return NextResponse.json(
       { error: 'Discovery indexing failed. Retry this batch.' },
       { status: 502 }

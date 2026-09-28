@@ -150,6 +150,14 @@ BEGIN
     WHERE id = p_refund_id AND transaction_type = 'refund'
       AND gateway = 'paystack' AND status IN ('refund_pending', 'pending', 'failed');
   GET DIAGNOSTICS v_count = ROW_COUNT;
-  RETURN v_count = 1;
+  IF v_count = 1 THEN RETURN true; END IF;
+  -- A completed row needs no hold: polling ignores terminal rows and the
+  -- review filed before this call is the durable record. Report success
+  -- so redeliveries acknowledge instead of 503ing forever.
+  RETURN EXISTS (
+    SELECT 1 FROM public.transactions
+    WHERE id = p_refund_id AND transaction_type = 'refund'
+      AND gateway = 'paystack' AND status = 'completed'
+  );
 END;
 $$;

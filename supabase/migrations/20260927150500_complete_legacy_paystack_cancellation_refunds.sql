@@ -44,7 +44,9 @@ BEGIN
   IF NOT FOUND AND v_refund.metadata->>'payment_transaction_id' IS NULL THEN
     -- Legacy refunds carry no payment link. Mirror the cancellation claim
     -- rule: accept the order's sole completed external payment when it
-    -- shares the refund's gateway and amount.
+    -- shares the refund's gateway and covers its amount. Partial refunds
+    -- verify against their own row amount; the completion gate below sums
+    -- them per leg.
     SELECT count(*) INTO v_external_payments FROM public.transactions
       WHERE order_id = v_order.id AND merchant_id = v_order.merchant_id
         AND transaction_type = 'payment' AND status = 'completed'
@@ -56,11 +58,11 @@ BEGIN
         WHERE order_id = v_order.id AND merchant_id = v_order.merchant_id
           AND transaction_type = 'payment' AND status = 'completed'
           AND amount > 0 AND gateway = v_refund.gateway
-          AND amount = v_refund.amount;
+          AND amount >= v_refund.amount;
     END IF;
   END IF;
   IF NOT FOUND OR v_payment.gateway_reference IS NULL
-    OR v_payment.amount <> v_refund.amount
+    OR v_refund.amount > v_payment.amount
     OR upper(v_refund.currency) <> upper(p_currency)
     OR round(v_refund.amount * 100)::bigint <> p_amount_kobo
     OR (v_refund.metadata ? 'provider_payment_transaction_id' AND
@@ -117,7 +119,7 @@ BEGIN
         WHERE r.order_id = v_order.id AND r.merchant_id = v_order.merchant_id
           AND r.transaction_type = 'refund' AND r.gateway = p.gateway
           AND r.status = 'completed'
-          AND r.amount = p.amount
+          AND r.amount > 0
           AND upper(r.currency) = upper(p.currency)
           -- A locally completed Paystack refund counts only after this RPC
           -- provider-verified it; other gateways keep local-status trust.
@@ -143,6 +145,9 @@ BEGIN
               )
             )
           )
+        -- Partial refunds accumulate: the leg is covered when matching
+        -- rows sum to at least its amount, mirroring the executor rule.
+        HAVING coalesce(sum(r.amount), 0) >= p.amount
       )
   ) AND (
     v_order.payment_status IN ('paid', 'partially_paid', 'refunded')

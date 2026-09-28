@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
     const scheduleAfter = (task: () => Promise<void>) => after(task);
     let abandonedAttemptSweep: AbandonedPaystackAttemptSummary = {
       checked: 0,
+      completed: [],
       failed: false,
       held: [],
       retired: [],
@@ -51,6 +52,7 @@ export async function GET(request: NextRequest) {
     let abandonedAttemptSweepFailed = false;
     try {
       abandonedAttemptSweep = await reconcileAbandonedPaystackAttempts({
+        scheduleAfter,
         supabase,
       });
       abandonedAttemptSweepFailed = abandonedAttemptSweep.failed;

@@ -70,7 +70,7 @@ AS $$
       array_to_json(ARRAY[p.name, p.brand, p.category, p.description])::text,
       'UTF8'
     ), 'sha256'), 'hex')
-  ORDER BY e.embedding OPERATOR(extensions.<=>) query_embedding
+  ORDER BY e.embedding OPERATOR(extensions.<=>) query_embedding, e.product_id
   LIMIT LEAST(GREATEST(coalesce(result_limit, 20), 1), 100)
   OFFSET LEAST(GREATEST(coalesce(result_offset, 0), 0), 1000);
 $$;

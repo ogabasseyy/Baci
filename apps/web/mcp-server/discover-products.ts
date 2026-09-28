@@ -3,7 +3,7 @@ import { DISCOVERY_PRODUCT_PROJECTION } from './discovery-product-projection';
 import { inferSmartphoneCategory } from './infer-smartphone-category';
 import { hydrateSearchProductAvailability } from './search-product-availability';
 import { loadMcpSearchProducts } from './search-products-query';
-import { singleWordDiscoveryTerm } from './search-products-relevance';
+import { isBroadUseCaseQuery, singleWordDiscoveryTerm } from './search-products-relevance';
 import {
   matchesMcpPostHydrationFilters,
   toMcpSearchProductRows,
@@ -49,11 +49,11 @@ export async function discoverMcpProducts({
   }
   const explicitCatalogFilter = [args.category, args.brand, args.condition]
     .some((value) => Boolean(value && sanitizeString(value, 50).trim()));
-  const ambiguousSingleWord = loaded.sanitizedQuery &&
-    singleWordDiscoveryTerm(loaded.sanitizedQuery) &&
+  const ambiguousQuery = loaded.sanitizedQuery &&
+    (singleWordDiscoveryTerm(loaded.sanitizedQuery) || isBroadUseCaseQuery(loaded.sanitizedQuery)) &&
     !explicitCatalogFilter &&
     !inferSmartphoneCategory(loaded.sanitizedQuery, args.category);
-  if (semanticSearch && loaded.sanitizedQuery && !ambiguousSingleWord &&
+  if (semanticSearch && loaded.sanitizedQuery && !ambiguousQuery &&
     selectSearchProductsByPrice(hydratedProducts, args, limit).length < limit) {
     try {
       const seenIds = new Set(products.map((product) => product.id));

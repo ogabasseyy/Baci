@@ -93,6 +93,19 @@ BEGIN
 END;
 $editor$;
 
+SET LOCAL ROLE service_role;
+INSERT INTO public.product_discovery_embeddings (
+  product_id, merchant_id, embedding, source_hash
+)
+SELECT p.id, p.merchant_id,
+  ('[' || repeat('0,', 767) || '1]')::extensions.vector(768),
+  encode(extensions.digest(convert_to(
+    array_to_json(ARRAY[p.name, p.brand, p.category, p.description])::text, 'UTF8'
+  ), 'sha256'), 'hex')
+FROM public.products p
+WHERE p.id = 'cb58d110-0000-4000-8000-000000000103';
+SET LOCAL ROLE authenticated;
+
 DO $boundary$
 BEGIN
   IF (SELECT source_hash FROM public.product_discovery_embeddings
@@ -119,21 +132,24 @@ BEGIN
     ('[' || repeat('0,', 767) || '1]')::extensions.vector(768),
     'cb58d110-0000-4000-8000-000000000001', 20
   ) AS result;
-  IF result_ids IS DISTINCT FROM ARRAY['cb58d110-0000-4000-8000-000000000101'::uuid] THEN
+  IF result_ids IS DISTINCT FROM ARRAY[
+    'cb58d110-0000-4000-8000-000000000101'::uuid,
+    'cb58d110-0000-4000-8000-000000000103'::uuid
+  ] THEN
     RAISE EXCEPTION 'public search exposed an inactive or unrelated product: %', result_ids;
   END IF;
-  IF EXISTS (
-    SELECT 1 FROM public.search_product_discovery_embeddings(
+  IF (SELECT result.product_id FROM public.search_product_discovery_embeddings(
       ('[' || repeat('0,', 767) || '1]')::extensions.vector(768),
-      'cb58d110-0000-4000-8000-000000000001', 20, 1
-    )
-  ) THEN
-    RAISE EXCEPTION 'semantic result offset did not advance the page';
+      'cb58d110-0000-4000-8000-000000000001', 1, 1
+    ) AS result) IS DISTINCT FROM 'cb58d110-0000-4000-8000-000000000103'::uuid THEN
+    RAISE EXCEPTION 'semantic pagination did not preserve deterministic ID ordering';
   END IF;
 END;
 $search$;
 
 SET LOCAL ROLE service_role;
+DELETE FROM public.product_discovery_embeddings
+WHERE product_id = 'cb58d110-0000-4000-8000-000000000103';
 UPDATE public.products SET name = 'Renamed Discovery Camera'
 WHERE id = 'cb58d110-0000-4000-8000-000000000101';
 SET LOCAL ROLE anon;

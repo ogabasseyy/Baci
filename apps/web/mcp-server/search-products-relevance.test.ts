@@ -15,6 +15,8 @@ describe('catalog discovery relevance evaluation', () => {
     { query: 'work', expected: [] },
     { query: 'work?', expected: [] },
     { query: 'work!', expected: [] },
+    { query: 'work:', expected: [] },
+    { query: '"work"', expected: [] },
     { query: 'gaming', expected: ['Dell G15 Gaming Laptop'] },
     { query: 'camera', expected: ['Xiaomi Security Camera'] },
     { query: 'charger', expected: ['Apple 20W Fast Charger'] },
@@ -38,6 +40,15 @@ describe('catalog discovery relevance evaluation', () => {
     expect(matchesSingleWordDiscoveryQuery({
       name: 'DreamWorks Toy', category: 'Accessories', description: 'Collectible figures',
     }, 'work', undefined)).toBe(false);
+  });
+
+  it('preserves compact product names and accessory inflection', () => {
+    expect(matchesSingleWordDiscoveryQuery({
+      name: 'MacBook Pro', category: 'Laptops',
+    }, 'macbookpro', undefined)).toBe(true);
+    expect(matchesSingleWordDiscoveryQuery({
+      name: 'Phone Pouch', category: 'Accessories',
+    }, 'accessory', undefined)).toBe(true);
   });
 
   it('does not filter multiword product names or model numbers after ranked retrieval', () => {

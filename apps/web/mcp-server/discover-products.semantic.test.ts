@@ -75,6 +75,16 @@ describe('gated semantic discovery', () => {
     expect(semanticSearch).not.toHaveBeenCalled();
   });
 
+  it('does not turn a broad use-case phrase into semantic product recommendations', async () => {
+    const { supabase } = discoveryClient();
+    const semanticSearch = vi.fn(async () => ['laptop']);
+    await discoverMcpProducts({
+      args: { query: 'for work' }, merchantId: 'merchant-1',
+      sanitizeString: (input) => input, semanticSearch, supabase,
+    });
+    expect(semanticSearch).not.toHaveBeenCalled();
+  });
+
   it('does not treat a sanitized-empty category as a narrowing filter', async () => {
     const { supabase } = discoveryClient();
     const semanticSearch = vi.fn(async () => ['laptop']);

@@ -97,7 +97,7 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
   {
     repositoryPath:
       'supabase/migrations/20260927150000_paystack_cancellation_refund_completion.sql',
-    sha256: 'af699ea66f8123eeba016abe132d00ab0f862bff3749267004b80b131d900710',
+    sha256: 'aa03cce1a7e6743d02061016bc02b7e3c48ed7ec2ed589f30b68d7848a960761',
   },
   {
     repositoryPath:
@@ -117,12 +117,12 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
   {
     repositoryPath:
       'supabase/migrations/20260927150400_paystack_cancellation_refund_pending_status.sql',
-    sha256: 'd9ef1be090addca546a2081274c66d314fb6d9a5101851dc37d379c6e88099cf',
+    sha256: '3d514a7ffa28b10227bf709070af122546830816348e1245461baefb45689d76',
   },
   {
     repositoryPath:
       'supabase/migrations/20260927150500_complete_legacy_paystack_cancellation_refunds.sql',
-    sha256: 'ce84fa6b0cfd0113fe1d237011a1b3cdbea734f1c55b1f45e289dba6b699df8c',
+    sha256: 'f50fca575e9e9be81ce101ab6377e69384969228e29888fd9a2251ff448610eb',
   },
   {
     repositoryPath:

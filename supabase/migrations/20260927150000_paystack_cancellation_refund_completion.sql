@@ -108,6 +108,7 @@ BEGIN
     SELECT 1 FROM public.transactions p
     WHERE p.order_id = v_order.id AND p.merchant_id = v_order.merchant_id
       AND p.transaction_type = 'payment' AND p.status = 'completed'
+      AND p.amount > 0
       AND coalesce(p.gateway, '') NOT IN
         ('wallet', 'savings', 'store_credit', 'cash', 'manual', 'pay_on_delivery')
       AND NOT EXISTS (
@@ -118,9 +119,26 @@ BEGIN
           AND r.metadata->>'payment_transaction_id' = p.id::text
           AND r.amount = p.amount
       )
-  ) AND v_order.payment_status IN ('paid', 'partially_paid', 'refunded') THEN
+  ) AND (
+    v_order.payment_status IN ('paid', 'partially_paid', 'refunded')
+    -- A wedged order (completed gateway legs the sweep never flipped to
+    -- paid) stays merchant-cancellable: its funded legs were just refunded,
+    -- so it must transition, reverse settlements, and notify like a paid
+    -- order. Unfunded pending orders stay out.
+    OR (
+      v_order.payment_status = 'pending'
+      AND EXISTS (
+        SELECT 1 FROM public.transactions funded
+        WHERE funded.order_id = v_order.id AND funded.merchant_id = v_order.merchant_id
+          AND funded.transaction_type = 'payment' AND funded.status = 'completed'
+          AND funded.amount > 0
+          AND coalesce(funded.gateway, '') NOT IN
+            ('wallet', 'savings', 'store_credit', 'cash', 'manual', 'pay_on_delivery')
+      )
+    )
+  ) THEN
     UPDATE public.orders SET payment_status = 'refunded', updated_at = now()
-      WHERE id = v_order.id AND payment_status IN ('paid', 'partially_paid');
+      WHERE id = v_order.id AND payment_status IN ('paid', 'partially_paid', 'pending');
     INSERT INTO public.paystack_cancellation_refund_notifications
       (order_id, merchant_id, event_type)
     VALUES (v_order.id, v_order.merchant_id, 'processed_customer_email'),

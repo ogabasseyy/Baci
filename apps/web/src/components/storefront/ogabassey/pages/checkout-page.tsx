@@ -3,7 +3,6 @@ import { useCheckoutAddressInference } from './checkout/hooks/use-checkout-addre
 import { useCheckoutDeliveryAddressHandlers } from './checkout/hooks/use-checkout-delivery-address-handlers';
 import { useCheckoutDeliveryOptions } from './checkout/hooks/use-checkout-delivery-options';
 import { useCheckoutShippingQuotes } from './checkout/hooks/use-checkout-shipping-quotes';
-import { buildCheckoutOrderLifecycleOptions } from './checkout/build-checkout-order-lifecycle-options';
 import { useLoadResumedOrder } from './checkout/hooks/use-load-resumed-order';
 import { useOrderTotals } from './checkout/hooks/use-order-totals';
 import { resolveCheckoutResumeContext } from './checkout/resolve-checkout-resume-context';
@@ -98,10 +97,9 @@ import {
   type PendingCheckoutOrderSnapshot,
 } from './checkout/pending-checkout-order';
 import { prepareCheckoutOrderSubmission } from './checkout/prepare-checkout-order-submission';
-import {
-  submitRedvaultPreparedOrder,
-  type RedvaultPreparedOrder,
-  type RedvaultStatus,
+import type {
+  RedvaultPreparedOrder,
+  RedvaultStatus,
 } from './checkout/handlers/redvault-prepared-order-submit';
 import {
   clearCheckoutIdempotencyKey,
@@ -112,8 +110,7 @@ import { useCheckoutSubmissionState } from './checkout/hooks/use-checkout-submis
 import { captureCheckoutPaymentStarted } from './checkout/capture-checkout-payment-started';
 import { executeResumedDirectPayment } from './checkout/handlers/direct-payment';
 import { getCheckoutOrderErrorMessage } from './checkout/checkout-order-error-message';
-import { runCheckoutOrderLifecycle } from './checkout/handlers/checkout-order-lifecycle';
-import { continueCheckoutPayment } from './checkout/handlers/continue-checkout-payment';
+import { submitFreshCheckout } from './checkout/handlers/submit-fresh-checkout';
 import { signUpCheckoutCustomer } from './checkout/handlers/sign-up-checkout-customer';
 import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import { PaymentStep } from './checkout/components/PaymentStep';
@@ -1093,24 +1090,10 @@ export const CheckoutPage: React.FC = () => {
     }
     setIsProcessing(true);
 
-    const { items: orderItems, checkoutFingerprint } =
-      preparedSubmission.identity;
+    const { items: orderItems, checkoutFingerprint } = preparedSubmission.identity;
 
-    let createdOrderId: string | undefined;
-    let createdOrderNumber = '';
-    let orderChargeCurrency = currencyCode;
-    // Set only when a provider flow actually opens. Pre-payment browser
-    // failures (blocked session storage, invoice/POD branches that never
-    // start a payment) must not be attributed as payment_failed.
-    let paymentStarted = false;
-    // Initialized provider reference for this submit, mirrored wherever a
-    // start is stamped so post-start failures reconcile to the same attempt.
-    let initializedReference: string | undefined;
-    // A REDVAULT order prepared by an earlier click initializes through
-    // the extracted submit handler (stale-fingerprint cancel, guest
-    // signup/attach, initialization, and redirect/hold handling).
-    if (
-      await submitRedvaultPreparedOrder({
+    await submitFreshCheckout({
+      redvaultPrepared: {
         paymentMethod,
         redvaultOrderReady,
         checkoutFingerprint,
@@ -1126,12 +1109,8 @@ export const CheckoutPage: React.FC = () => {
         firstName,
         lastName,
         merchantId: merchant?.id ?? '',
-        // The prepared order initializes through the extracted handler:
-        // record its start here so the funnel does not jump from
-        // order_created straight to completion/failure.
-        onPaymentStarted: ({ orderId, currency, reference, total, orderNumber }) => {
-          paymentStarted = true;
-          initializedReference = reference;
+      },
+      onRedvaultPaymentStarted: ({ orderId, currency, reference, total, orderNumber }) => {
           captureCheckoutPaymentStarted({
             currency,
             orderId,
@@ -1140,15 +1119,8 @@ export const CheckoutPage: React.FC = () => {
             reference,
             total,
           });
-        },
-      })
-    ) {
-      return;
-    }
-
-    try {
-      const lifecycle = await runCheckoutOrderLifecycle(
-        buildCheckoutOrderLifecycleOptions({
+      },
+      lifecycle: {
           prepared: preparedSubmission,
           state: {
             pendingOrder: pendingCheckoutOrder,
@@ -1204,10 +1176,7 @@ export const CheckoutPage: React.FC = () => {
             clearCart,
             pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
             onRedvaultSummary: setRedvaultSummary,
-            onOrderCreated: ({ orderId, orderNumber, currency }) => {
-              createdOrderId = orderId;
-              createdOrderNumber = orderNumber;
-              orderChargeCurrency = currency;
+            onOrderCreated: () => {
               rotateCheckoutAttemptGeneration();
               setCheckoutOrderCreated(true);
             },
@@ -1219,33 +1188,31 @@ export const CheckoutPage: React.FC = () => {
             enabled: paymentMethod === 'uba_redvault' && !redvaultOrderReady,
             customerName: `${firstName} ${lastName}`.trim(),
           },
-        })
-      );
-      if (lifecycle.kind !== 'payment_ready') return;
-
-      const {
-        order,
-        wallet: walletResult,
-        amountDueToGateway,
-        createdOrderNumber: lifecycleOrderNumber,
-        orderChargeCurrency: lifecycleCurrency,
-        billingAddress,
-      } = lifecycle;
-      const signupAttempt = { current: false };
-      const signUpCustomer = (logSuccess = false) =>
-        signUpCheckoutCustomer({
-          attempt: signupAttempt,
-          enabled: createAccount,
-          hasUser: Boolean(user),
-          password: accountPassword,
-          email: customerEmail,
-          firstName,
-          lastName,
-          phone: customerPhone,
-          logSuccess,
-        });
-      await continueCheckoutPayment({
-        dispatch: {
+      },
+      createPaymentOptions: (lifecycle) => {
+        const {
+          order,
+          wallet: walletResult,
+          amountDueToGateway,
+          createdOrderNumber,
+          orderChargeCurrency,
+          billingAddress,
+        } = lifecycle;
+        const signupAttempt = { current: false };
+        const signUpCustomer = (logSuccess = false) =>
+          signUpCheckoutCustomer({
+            attempt: signupAttempt,
+            enabled: createAccount,
+            hasUser: Boolean(user),
+            password: accountPassword,
+            email: customerEmail,
+            firstName,
+            lastName,
+            phone: customerPhone,
+            logSuccess,
+          });
+        return {
+          dispatch: {
           merchant,
           paymentMethod,
           total,
@@ -1276,52 +1243,38 @@ export const CheckoutPage: React.FC = () => {
           navigate: (path) => router.push(asRoute(getHref(path))),
           redirect: (url) => window.location.assign(url),
           payForMeDetails,
-        },
-        order,
-        wallet: walletResult,
-        amountDueToGateway,
-        createdOrderNumber,
-        orderChargeCurrency,
-        checkoutFingerprint,
-        paymentMethod,
-        setWalletBalance,
-        capturePaymentStarted: (reference) => {
-          paymentStarted = true;
-          captureCheckoutPaymentStarted({
-            currency: orderChargeCurrency,
-            orderId: order.id,
-            orderNumber: createdOrderNumber,
-            paymentMethod,
-            reference,
-            total: order.total ?? total,
-          });
-        },
-        hasPaymentStarted: () => paymentStarted,
-        setInitializedReference: (reference) => {
-          initializedReference = reference;
-        },
-        completeSignup: signUpCustomer,
-        signupBeforePayment:
-          paymentMethod !== 'uba_redvault' &&
-          createAccount &&
-          !user &&
-          accountPassword.length >= 6
-            ? () => signUpCustomer(true)
-            : undefined,
-        releaseSubmission,
-      });
-    } catch (error) {
-      handleSubmissionError(error, {
-        createdOrderId,
-        paymentStarted,
-        payment: {
-          currency: orderChargeCurrency,
-          orderNumber: createdOrderNumber,
+          },
+          order,
+          wallet: walletResult,
+          amountDueToGateway,
+          createdOrderNumber,
+          orderChargeCurrency,
+          checkoutFingerprint,
           paymentMethod,
-          reference: initializedReference,
-        },
-      });
-    }
+          setWalletBalance,
+          capturePaymentStarted: (reference) => {
+            captureCheckoutPaymentStarted({
+              currency: orderChargeCurrency,
+              orderId: order.id,
+              orderNumber: createdOrderNumber,
+              paymentMethod,
+              reference,
+              total: order.total ?? total,
+            });
+          },
+          completeSignup: signUpCustomer,
+          signupBeforePayment:
+            paymentMethod !== 'uba_redvault' &&
+            createAccount &&
+            !user &&
+            accountPassword.length >= 6
+              ? () => signUpCustomer(true)
+              : undefined,
+          releaseSubmission,
+        };
+      },
+      handleError: handleSubmissionError,
+    });
   };
 
   const isPayForMeValid =

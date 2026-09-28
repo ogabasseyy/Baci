@@ -26,7 +26,16 @@ interface SearchDropdownProps {
   isVisible: boolean;
   onClose: () => void;
   onQueryChange?: (text: string) => void;
+  /**
+   * Full-search submission for the "See all results" action and the
+   * standalone input submit. Receives the current raw input so the target
+   * can navigate with what the shopper just typed. When omitted, the
+   * action is hidden and standalone submit keeps its legacy
+   * save-and-dismiss behavior.
+   */
+  onSeeAllResults?: (query: string) => void;
   query?: string;
+  showMinLengthHint?: boolean;
   topOffset: number;
 }
 
@@ -35,7 +44,9 @@ export function SearchDropdown({
   isVisible,
   onClose,
   onQueryChange: onExternalQueryChange,
+  onSeeAllResults,
   query: externalQuery,
+  showMinLengthHint = false,
   topOffset,
 }: SearchDropdownProps) {
   const colorScheme = useColorScheme() ?? 'light';
@@ -93,6 +104,12 @@ export function SearchDropdown({
   };
 
   const handleSubmit = () => {
+    // The results screen owns search-history writes for submitted queries,
+    // so a wired submit path navigates without saving here (single write).
+    if (onSeeAllResults) {
+      onSeeAllResults(activeQuery);
+      return;
+    }
     if (activeQuery.trim().length >= 2) {
       saveSearch(activeQuery.trim());
       Keyboard.dismiss();
@@ -175,14 +192,17 @@ export function SearchDropdown({
           <SearchDropdownList
             categories={categories as Category[]}
             colors={colors}
+            currentQuery={activeQuery}
             isLoading={isLoading}
             onCategoryPress={handleCategoryPress}
             onClearHistory={clearHistory}
             onProductPress={handleProductPress}
+            onSeeAllResults={onSeeAllResults}
             onSuggestionPress={handleSuggestionPress}
             products={products}
             query={effectiveQuery}
             recentSearches={recentSearches}
+            showMinLengthHint={showMinLengthHint}
           />
         </ScrollView>
       </View>

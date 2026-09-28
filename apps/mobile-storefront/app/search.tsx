@@ -1,5 +1,5 @@
-import { router, Stack } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Keyboard } from 'react-native';
 import SearchScreenView from '@/components/search/SearchScreenView';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -12,6 +12,23 @@ import type { Product } from '@/types/product';
 
 const SEARCH_HISTORY_KEY = 'search_history';
 const MAX_SEARCH_HISTORY = 10;
+const MIN_SEARCH_QUERY_LENGTH = 2;
+
+/**
+ * Validates the Expo Router `q` parameter before use. Repeated parameters
+ * arrive as arrays and are ambiguous, so only a single string of at least
+ * the search threshold is accepted.
+ */
+function parseRouteSearchQuery(
+  param: string | string[] | undefined
+): string | null {
+  if (typeof param !== 'string') {
+    return null;
+  }
+
+  const trimmed = param.trim();
+  return trimmed.length >= MIN_SEARCH_QUERY_LENGTH ? trimmed : null;
+}
 const DEFAULT_SEARCHES = [
   'iPhone 15 Pro',
   'Samsung Galaxy S24',
@@ -62,10 +79,14 @@ function loadInitialRecentSearches(): string[] {
 export default function SearchScreen() {
   const colors = Colors[useColorScheme() ?? 'light'];
   const { isOnline } = useNetworkState();
-  const [query, setQuery] = useState('');
+  const { q: routeQueryParam } = useLocalSearchParams<{
+    q?: string | string[];
+  }>();
+  const routeQuery = parseRouteSearchQuery(routeQueryParam);
+  const [query, setQuery] = useState(routeQuery ?? '');
   const activeQuery = query.trim();
-  const [debouncedQuery, setDebouncedQuery] = useState(activeQuery);
-  const hasSearchQuery = debouncedQuery.length >= 2;
+  const [debouncedQuery, setDebouncedQuery] = useState(routeQuery ?? '');
+  const hasSearchQuery = debouncedQuery.length >= MIN_SEARCH_QUERY_LENGTH;
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [minPrice, setMinPrice] = useState(0);
   const [maxPrice, setMaxPrice] = useState(0);
@@ -92,8 +113,9 @@ export default function SearchScreen() {
     };
   }, [activeQuery]);
 
-  const saveToHistory = (searchTerm: string) => {
-    if (!searchTerm.trim() || searchTerm.length < 2) return;
+  const saveToHistory = useCallback((searchTerm: string) => {
+    if (!searchTerm.trim() || searchTerm.length < MIN_SEARCH_QUERY_LENGTH)
+      return;
 
     setRecentSearches((previousSearches) => {
       const filtered = previousSearches.filter(
@@ -109,7 +131,24 @@ export default function SearchScreen() {
 
       return updated;
     });
-  };
+  }, []);
+
+  // Applies a newly arrived route query to an already-mounted screen and
+  // records each submitted route query in history exactly once. In-screen
+  // edits never retrigger this effect, so typing after navigation is safe.
+  const appliedRouteQueryRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (routeQuery && appliedRouteQueryRef.current !== routeQuery) {
+      appliedRouteQueryRef.current = routeQuery;
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+      setQuery(routeQuery);
+      setDebouncedQuery(routeQuery);
+      saveToHistory(routeQuery);
+    }
+  }, [routeQuery, saveToHistory]);
 
   const commitSearchQuery = (value: string) => {
     const trimmedValue = value.trim();
@@ -120,7 +159,7 @@ export default function SearchScreen() {
 
     setQuery(trimmedValue);
     setDebouncedQuery(trimmedValue);
-    if (trimmedValue.length >= 2) {
+    if (trimmedValue.length >= MIN_SEARCH_QUERY_LENGTH) {
       saveToHistory(trimmedValue);
     }
     Keyboard.dismiss();
@@ -131,7 +170,18 @@ export default function SearchScreen() {
     selectedCategory,
     categories
   );
-  const { products, isLoading } = useProducts({
+  // The product query stays disabled until a valid search is committed so the
+  // idle recent-search screen never fetches an unseen product page.
+  const {
+    error: productsError,
+    hasMore,
+    isLoading,
+    isLoadingMore,
+    loadMore,
+    products,
+    refetch: refetchProducts,
+    total: totalCount,
+  } = useProducts({
     search: hasSearchQuery ? debouncedQuery : undefined,
     limit: 20,
     category: selectedCategoryId,
@@ -140,6 +190,7 @@ export default function SearchScreen() {
     minPrice: minPrice > 0 ? minPrice : undefined,
     maxPrice: maxPrice > 0 ? maxPrice : undefined,
     minRating: minRating > 0 ? minRating : undefined,
+    enabled: hasSearchQuery,
   });
   const { brands: brandNames } = useProductBrands({
     search: hasSearchQuery ? debouncedQuery : undefined,
@@ -148,7 +199,20 @@ export default function SearchScreen() {
     minPrice: minPrice > 0 ? minPrice : undefined,
     maxPrice: maxPrice > 0 ? maxPrice : undefined,
     minRating: minRating > 0 ? minRating : undefined,
+    enabled: hasSearchQuery,
   });
+
+  // Guards the list end event against duplicate fetches; the hook queues a
+  // bottom-reached signal that arrives mid-refetch instead of dropping it.
+  const handleEndReached = useCallback(() => {
+    if (hasSearchQuery && hasMore && !isLoading && !isLoadingMore) {
+      loadMore();
+    }
+  }, [hasMore, hasSearchQuery, isLoading, isLoadingMore, loadMore]);
+
+  const handleRetry = useCallback(() => {
+    void refetchProducts();
+  }, [refetchProducts]);
   const categoryNames = ['All', ...categories.map((category) => category.name)];
 
   // Adjust state inline during render (guarded, converges after one pass) so
@@ -181,8 +245,10 @@ export default function SearchScreen() {
         categories={categories}
         categoryNames={categoryNames}
         colors={colors}
+        committedQuery={hasSearchQuery ? debouncedQuery : ''}
         hasSearchQuery={hasSearchQuery}
         isLoading={isLoading}
+        isLoadingMore={isLoadingMore}
         isOnline={isOnline}
         maxPrice={maxPrice}
         minPrice={minPrice}
@@ -193,6 +259,7 @@ export default function SearchScreen() {
         }
         onCategorySelect={handleCategorySelect}
         onClearQuery={() => setQuery('')}
+        onEndReached={handleEndReached}
         onPriceChange={(minimum, maximum) => {
           setMinPrice(minimum);
           setMaxPrice(maximum);
@@ -204,6 +271,7 @@ export default function SearchScreen() {
           saveToHistory(search);
           Keyboard.dismiss();
         }}
+        onRetry={handleRetry}
         onSelectBrand={setSelectedBrand}
         onSelectCondition={setSelectedCondition}
         onSelectRating={setMinRating}
@@ -212,9 +280,11 @@ export default function SearchScreen() {
         products={products}
         query={query}
         recentSearches={recentSearches}
+        searchError={hasSearchQuery ? productsError : null}
         selectedBrand={selectedBrand}
         selectedCategory={selectedCategory}
         selectedCondition={selectedCondition}
+        totalCount={totalCount}
         viewMode={viewMode}
       />
     </>

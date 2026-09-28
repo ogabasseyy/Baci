@@ -2,7 +2,18 @@ import { render, screen } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
+import type { NormalizedProduct } from '@/lib/normalize-product';
 import { getStorefrontSearchProducts } from '@/lib/storefront-search';
+
+const { mockRedirect, mockNotFound } = vi.hoisted(() => ({
+  mockRedirect: vi.fn(),
+  mockNotFound: vi.fn(),
+}));
+
+vi.mock('next/navigation', () => ({
+  notFound: (...args: unknown[]) => mockNotFound(...args),
+  redirect: (...args: unknown[]) => mockRedirect(...args),
+}));
 
 vi.mock('@/lib/cached-data', () => ({
   getRequestScopedMerchant: vi.fn(),
@@ -58,8 +69,8 @@ function createSearchPageProps(
     condition?: string;
     max_price?: string;
     min_price?: string;
-    page?: string;
-    q?: string;
+    page?: string | string[];
+    q?: string | string[];
     sort?: string;
   } = {}
 ) {
@@ -72,7 +83,7 @@ function createSearchPageProps(
   };
 }
 
-function createSearchProducts(count: number) {
+function createSearchProducts(count: number): NormalizedProduct[] {
   return Array.from({ length: count }, (_, index) => ({
     id: `product-${index + 1}`,
     name: index === 0 ? 'iPhone 16' : `iPhone ${index + 17}`,
@@ -80,7 +91,7 @@ function createSearchProducts(count: number) {
     slug: index === 0 ? 'iphone-16' : `iphone-${index + 17}`,
     category: 'Phones',
     category_slug: 'phones',
-  }));
+  })) as NormalizedProduct[];
 }
 
 function mockStorefrontContext() {
@@ -105,6 +116,8 @@ describe('SearchPageContent', () => {
     vi.mocked(getRequestScopedMerchant).mockReset();
     mockGetStorefrontSearchProducts.mockReset();
     mockHeaders.mockReset();
+    mockRedirect.mockReset();
+    mockNotFound.mockReset();
   });
 
   it('shows the first slice of capped results and request-scoped schema URLs', async () => {
@@ -500,5 +513,342 @@ describe('SearchPageContent', () => {
     expect(
       screen.getByRole('link', { name: /contact support/i })
     ).toHaveAttribute('href', '/ogabassey/contact');
+  });
+
+  it('pages past the first 20 matches without recording a new submission', async () => {
+    mockStorefrontContext();
+    mockGetStorefrontSearchProducts.mockResolvedValueOnce({
+      count: 45,
+      didYouMean: null,
+      products: createSearchProducts(20),
+      productIds: [],
+      query: 'iphone',
+    });
+
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphone', page: '2' })
+      )) as React.ReactElement
+    );
+
+    expect(mockGetStorefrontSearchProducts).toHaveBeenCalledTimes(1);
+    expect(mockGetStorefrontSearchProducts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchantId: 'merchant-1',
+        query: 'iphone',
+        limit: 20,
+        offset: 20,
+        trackAnalytics: false,
+      })
+    );
+    expect(
+      screen.getByText(/Showing 21–40 of 45 results for “iphone”/i)
+    ).toBeInTheDocument();
+    expect(mockRedirect).not.toHaveBeenCalled();
+
+    // Query-preserving pagination with a truthful current-page marker.
+    const pagination = screen.getByRole('navigation', {
+      name: /search results pagination/i,
+    });
+    expect(pagination).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /previous/i })).toHaveAttribute(
+      'href',
+      '/ogabassey/search?q=iphone'
+    );
+    expect(screen.getByRole('link', { name: /next/i })).toHaveAttribute(
+      'href',
+      '/ogabassey/search?q=iphone&page=3'
+    );
+    expect(screen.getByRole('link', { name: '2' })).toHaveAttribute(
+      'aria-current',
+      'page'
+    );
+
+    const schemas = Array.from(
+      document.querySelectorAll('script[type="application/ld+json"]')
+    ).map(
+      (script) =>
+        JSON.parse(script.textContent || '{}') as {
+          '@type'?: string;
+          url?: string;
+          mainEntity?: {
+            itemListElement?: Array<{ position?: number }>;
+          };
+        }
+    );
+    const collectionSchema = schemas.find(
+      (schema) => schema['@type'] === 'CollectionPage'
+    );
+    expect(collectionSchema?.url).toContain('page=2');
+    expect(collectionSchema?.mainEntity?.itemListElement?.[0]?.position).toBe(
+      21
+    );
+  });
+
+  it('records the first page as a new search submission', async () => {
+    mockStorefrontContext();
+    mockGetStorefrontSearchProducts.mockResolvedValueOnce({
+      count: 45,
+      didYouMean: null,
+      products: createSearchProducts(20),
+      productIds: [],
+      query: 'iphone',
+    });
+
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphone' })
+      )) as React.ReactElement
+    );
+
+    expect(mockGetStorefrontSearchProducts).toHaveBeenCalledWith(
+      expect.objectContaining({ offset: 0, trackAnalytics: true })
+    );
+  });
+
+  it('redirects a malformed page to the first page', async () => {
+    mockStorefrontContext();
+    mockGetStorefrontSearchProducts.mockResolvedValue({
+      count: 45,
+      didYouMean: null,
+      products: createSearchProducts(20),
+      productIds: [],
+      query: 'iphone',
+    });
+
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphone', page: 'abc' })
+      )) as React.ReactElement
+    );
+
+    expect(mockRedirect).toHaveBeenCalledWith('/ogabassey/search?q=iphone');
+  });
+
+  it('redirects a repeated page parameter to the first page', async () => {
+    mockStorefrontContext();
+    mockGetStorefrontSearchProducts.mockResolvedValue({
+      count: 45,
+      didYouMean: null,
+      products: createSearchProducts(20),
+      productIds: [],
+      query: 'iphone',
+    });
+
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphone', page: ['1', '2'] })
+      )) as React.ReactElement
+    );
+
+    expect(mockRedirect).toHaveBeenCalledWith('/ogabassey/search?q=iphone');
+  });
+
+  it('treats a repeated query as an empty search', async () => {
+    mockStorefrontContext();
+
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: ['iphone', 'galaxy'] })
+      )) as React.ReactElement
+    );
+
+    expect(getStorefrontSearchProducts).not.toHaveBeenCalled();
+    expect(screen.getByText('Start a search')).toBeInTheDocument();
+  });
+
+  it('collapses a paged query-less URL to the plain search route', async () => {
+    mockStorefrontContext();
+
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: '', page: '3' })
+      )) as React.ReactElement
+    );
+
+    expect(mockRedirect).toHaveBeenCalledWith('/ogabassey/search');
+    expect(getStorefrontSearchProducts).not.toHaveBeenCalled();
+  });
+
+  it('recovers an out-of-range page through an untracked first-page probe', async () => {
+    mockStorefrontContext();
+    // The RPC reports its total only on returned rows, so the out-of-range
+    // fetch reports a zero count; the probe reveals the true total.
+    mockGetStorefrontSearchProducts
+      .mockResolvedValueOnce({
+        count: 0,
+        didYouMean: null,
+        products: [],
+        productIds: [],
+        query: 'iphone',
+      })
+      .mockResolvedValueOnce({
+        count: 45,
+        didYouMean: null,
+        products: createSearchProducts(20),
+        productIds: [],
+        query: 'iphone',
+      });
+
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphone', page: '5' })
+      )) as React.ReactElement
+    );
+
+    expect(mockGetStorefrontSearchProducts).toHaveBeenCalledTimes(2);
+    expect(mockGetStorefrontSearchProducts).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ offset: 80, trackAnalytics: false })
+    );
+    expect(mockGetStorefrontSearchProducts).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ offset: 0, trackAnalytics: false })
+    );
+    expect(mockRedirect).toHaveBeenCalledWith(
+      '/ogabassey/search?q=iphone&page=3'
+    );
+  });
+
+  it('shows genuine no-results when the recovery probe is empty', async () => {
+    mockStorefrontContext();
+    mockGetStorefrontSearchProducts
+      .mockResolvedValueOnce({
+        count: 0,
+        didYouMean: null,
+        products: [],
+        productIds: [],
+        query: 'iphon',
+      })
+      .mockResolvedValueOnce({
+        count: 0,
+        didYouMean: 'iphone',
+        products: [],
+        productIds: [],
+        query: 'iphon',
+      });
+
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphon', page: '3' })
+      )) as React.ReactElement
+    );
+
+    expect(mockRedirect).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole('heading', { name: /no products found/i })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /iphone/i })).toHaveAttribute(
+      'href',
+      '/ogabassey/search?q=iphone'
+    );
+  });
+
+  it('bounds deep pages through a last-page redirect', async () => {
+    mockStorefrontContext();
+    mockGetStorefrontSearchProducts.mockResolvedValueOnce({
+      count: 45,
+      didYouMean: null,
+      products: createSearchProducts(20),
+      productIds: [],
+      query: 'iphone',
+    });
+
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphone', page: '101' })
+      )) as React.ReactElement
+    );
+
+    // No giant-offset query is issued; the single probe stays untracked.
+    expect(mockGetStorefrontSearchProducts).toHaveBeenCalledTimes(1);
+    expect(mockGetStorefrontSearchProducts).toHaveBeenCalledWith(
+      expect.objectContaining({ offset: 0, trackAnalytics: false })
+    );
+    expect(mockRedirect).toHaveBeenCalledWith(
+      '/ogabassey/search?q=iphone&page=3'
+    );
+  });
+
+  it('renders a prefilled in-page search form', async () => {
+    mockStorefrontContext();
+    mockGetStorefrontSearchProducts.mockResolvedValueOnce({
+      count: 45,
+      didYouMean: null,
+      products: createSearchProducts(20),
+      productIds: [],
+      query: 'iphone',
+    });
+
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphone', page: '2' })
+      )) as React.ReactElement
+    );
+
+    const form = screen.getByRole('form', { name: 'Edit search' });
+    expect(form).toHaveAttribute('action', '/ogabassey/search');
+    expect(screen.getByLabelText('Search products')).toHaveValue('iphone');
+  });
+
+  it('renders the search form against the custom-domain route', async () => {
+    mockHeaders.mockResolvedValue(
+      new Headers([
+        ['host', 'shop.example.ng'],
+        ['x-custom-domain', 'shop.example.ng'],
+        ['x-pathname', '/search'],
+      ])
+    );
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue({
+      id: 'merchant-1',
+      slug: 'ogabassey',
+      custom_domain: 'shop.example.ng',
+      business_name: 'Ogabassey',
+      payout_currency: 'NGN',
+    } as never);
+    mockGetStorefrontSearchProducts.mockResolvedValueOnce({
+      count: 1,
+      didYouMean: null,
+      products: createSearchProducts(1),
+      productIds: [],
+      query: 'iphone',
+    });
+
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphone' })
+      )) as React.ReactElement
+    );
+
+    expect(screen.getByRole('form', { name: 'Edit search' })).toHaveAttribute(
+      'action',
+      '/search'
+    );
+  });
+
+  it('renders a distinct error state when the search fails', async () => {
+    mockStorefrontContext();
+    mockGetStorefrontSearchProducts.mockRejectedValueOnce(
+      new Error('search rpc down')
+    );
+
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphone' })
+      )) as React.ReactElement
+    );
+
+    expect(
+      screen.getByRole('heading', { name: /temporarily unavailable/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: /no products found/i })
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /try again/i })).toHaveAttribute(
+      'href',
+      '/ogabassey/search?q=iphone'
+    );
+    // The submitted query survives the failure for editing and retry.
+    expect(screen.getByLabelText('Search products')).toHaveValue('iphone');
   });
 });

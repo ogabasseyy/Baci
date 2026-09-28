@@ -555,4 +555,342 @@ describe('SearchAutocomplete', () => {
 
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   });
+
+  it('submits the typed query on Enter even when product suggestions exist', async () => {
+    vi.useRealTimers();
+    const onSubmitSearch = vi.fn();
+    const onSelectProduct = vi.fn();
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockResolvedValue({
+      json: async () => ({
+        suggestions: [
+          {
+            id: 'product-1',
+            name: 'iPhone 16',
+            slug: 'iphone-16',
+            category: 'Smartphones',
+            price: 900_000,
+            image_small: '',
+          },
+        ],
+        popularSearches: [],
+      }),
+    } as Response);
+
+    render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="iphone"
+        onChange={vi.fn()}
+        onSelectProduct={onSelectProduct}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', { name: /iphone 16/i })
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Enter' });
+
+    expect(onSubmitSearch).toHaveBeenCalledTimes(1);
+    expect(onSubmitSearch).toHaveBeenCalledWith('iphone');
+    expect(onSelectProduct).not.toHaveBeenCalled();
+  });
+
+  it('keeps blank queries on the current page instead of submitting', () => {
+    vi.useRealTimers();
+    const onSubmitSearch = vi.fn();
+
+    render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="   "
+        onChange={vi.fn()}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Enter' });
+
+    expect(onSubmitSearch).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole('button', { name: /see all results/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it('submits a highlighted popular search instead of filling the input', async () => {
+    vi.useRealTimers();
+    const onSubmitSearch = vi.fn();
+    const onChange = vi.fn();
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockResolvedValue({
+      json: async () => ({
+        suggestions: [
+          {
+            id: 'product-1',
+            name: 'iPhone 16',
+            slug: 'iphone-16',
+            category: 'Smartphones',
+            price: 900_000,
+            image_small: '',
+          },
+        ],
+        popularSearches: [{ search_query: 'iphone case', search_count: 42 }],
+      }),
+    } as Response);
+
+    render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="iphone"
+        onChange={onChange}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    const input = screen.getByRole('searchbox');
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', { name: /iphone case/i })
+      ).toBeInTheDocument();
+    });
+
+    // Arrow past the product suggestion onto the popular search.
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onSubmitSearch).toHaveBeenCalledTimes(1);
+    expect(onSubmitSearch).toHaveBeenCalledWith('iphone case');
+    expect(onChange).not.toHaveBeenCalledWith('iphone case');
+  });
+
+  it('fills the input for a highlighted popular search without a submit handler', async () => {
+    vi.useRealTimers();
+    const onChange = vi.fn();
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockResolvedValue({
+      json: async () => ({
+        suggestions: [],
+        popularSearches: [{ search_query: 'iphone case', search_count: 42 }],
+      }),
+    } as Response);
+
+    render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="iphone"
+        onChange={onChange}
+      />
+    );
+
+    const input = screen.getByRole('searchbox');
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', { name: /iphone case/i })
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onChange).toHaveBeenCalledWith('iphone case');
+  });
+
+  it('shows a working "See all results" action beside the suggestions', async () => {
+    vi.useRealTimers();
+    const onSubmitSearch = vi.fn();
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockResolvedValue({
+      json: async () => ({
+        suggestions: [
+          {
+            id: 'product-1',
+            name: 'iPhone 16',
+            slug: 'iphone-16',
+            category: 'Smartphones',
+            price: 900_000,
+            image_small: '',
+          },
+        ],
+        popularSearches: [],
+      }),
+    } as Response);
+
+    render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="iphone"
+        onChange={vi.fn()}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    const seeAll = await screen.findByRole('button', {
+      name: /see all results for “iphone”/i,
+    });
+
+    // A listbox may only own option/group children: the action must be a
+    // sibling beside it, not an option inside it.
+    const listbox = screen.getByRole('listbox');
+    expect(listbox).not.toContainElement(seeAll);
+
+    fireEvent.click(seeAll);
+    expect(onSubmitSearch).toHaveBeenCalledTimes(1);
+    expect(onSubmitSearch).toHaveBeenCalledWith('iphone');
+  });
+
+  it('shows "See all results" even when there are no suggestions', async () => {
+    vi.useRealTimers();
+    const onSubmitSearch = vi.fn();
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockResolvedValue({
+      json: async () => ({
+        suggestions: [],
+        popularSearches: [],
+      }),
+    } as Response);
+
+    render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="zzzz"
+        onChange={vi.fn()}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
+
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    const seeAll = screen.getByRole('button', { name: /see all results/i });
+    fireEvent.click(seeAll);
+    expect(onSubmitSearch).toHaveBeenCalledWith('zzzz');
+  });
+
+  it('keeps product suggestion clicks as direct-product shortcuts', async () => {
+    vi.useRealTimers();
+    const onSelectProduct = vi.fn();
+    const onSubmitSearch = vi.fn();
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockResolvedValue({
+      json: async () => ({
+        suggestions: [
+          {
+            id: 'product-1',
+            name: 'iPhone 16',
+            slug: 'iphone-16',
+            category: 'Smartphones',
+            price: 900_000,
+            image_small: '',
+          },
+        ],
+        popularSearches: [],
+      }),
+    } as Response);
+
+    render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="iphone"
+        onChange={vi.fn()}
+        onSelectProduct={onSelectProduct}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    const option = await screen.findByRole('option', { name: /iphone 16/i });
+    fireEvent.click(option);
+
+    expect(onSelectProduct).toHaveBeenCalledTimes(1);
+    expect(onSelectProduct.mock.calls[0]?.[0]).toContain('iphone-16');
+    expect(onSubmitSearch).not.toHaveBeenCalled();
+  });
+
+  it('opens a keyboard-highlighted product directly', async () => {
+    vi.useRealTimers();
+    const onSelectProduct = vi.fn();
+    const onSubmitSearch = vi.fn();
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockResolvedValue({
+      json: async () => ({
+        suggestions: [
+          {
+            id: 'product-1',
+            name: 'iPhone 16',
+            slug: 'iphone-16',
+            category: 'Smartphones',
+            price: 900_000,
+            image_small: '',
+          },
+        ],
+        popularSearches: [],
+      }),
+    } as Response);
+
+    render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="iphone"
+        onChange={vi.fn()}
+        onSelectProduct={onSelectProduct}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    const input = screen.getByRole('searchbox');
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', { name: /iphone 16/i })
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onSelectProduct).toHaveBeenCalledTimes(1);
+    expect(onSelectProduct.mock.calls[0]?.[0]).toContain('iphone-16');
+    expect(onSubmitSearch).not.toHaveBeenCalled();
+  });
+
+  it('hides "See all results" when no submit handler is wired', async () => {
+    vi.useRealTimers();
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockResolvedValue({
+      json: async () => ({
+        suggestions: [
+          {
+            id: 'product-1',
+            name: 'iPhone 16',
+            slug: 'iphone-16',
+            category: 'Smartphones',
+            price: 900_000,
+            image_small: '',
+          },
+        ],
+        popularSearches: [],
+      }),
+    } as Response);
+
+    render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="iphone"
+        onChange={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+    });
+
+    expect(
+      screen.queryByRole('button', { name: /see all results/i })
+    ).not.toBeInTheDocument();
+  });
 });

@@ -31,7 +31,11 @@ interface SearchScreenViewProps {
   categories: Category[];
   categoryNames: string[];
   colors: (typeof Colors)['light'];
+  /** The committed (debounced) query behind the current result set. */
+  committedQuery: string;
   hasSearchQuery: boolean;
+  /** True while additional pages are being appended. */
+  isLoadingMore: boolean;
   isLoading: boolean;
   isOnline: boolean;
   maxPrice: number;
@@ -41,10 +45,12 @@ interface SearchScreenViewProps {
   onCategoryPress: (slug: string) => void;
   onCategorySelect: (category: string) => void;
   onClearQuery: () => void;
+  onEndReached: () => void;
   onPriceChange: (min: number, max: number) => void;
   onProductPress: (product: Product) => void;
   onQueryChange: (query: string) => void;
   onRecentSearch: (query: string) => void;
+  onRetry: () => void;
   onSelectBrand: (brand: string) => void;
   onSelectCondition: (condition: string) => void;
   onSelectRating: (rating: number) => void;
@@ -53,10 +59,23 @@ interface SearchScreenViewProps {
   products: Product[];
   query: string;
   recentSearches: string[];
+  /** Non-null when the committed search failed to load. */
+  searchError: string | null;
   selectedBrand: string;
   selectedCategory: string;
   selectedCondition: string;
+  /** Total matches reported by the search backend. */
+  totalCount: number;
   viewMode: 'grid' | 'list';
+}
+
+function formatResultsCount(totalCount: number, loadedCount: number) {
+  if (totalCount > loadedCount) {
+    return `Showing ${loadedCount} of ${totalCount} results`;
+  }
+
+  const count = totalCount > 0 ? totalCount : loadedCount;
+  return `${count} result${count === 1 ? '' : 's'}`;
 }
 
 export default function SearchScreenView({
@@ -64,8 +83,10 @@ export default function SearchScreenView({
   categories,
   categoryNames,
   colors,
+  committedQuery,
   hasSearchQuery,
   isLoading,
+  isLoadingMore,
   isOnline,
   maxPrice,
   minPrice,
@@ -74,10 +95,12 @@ export default function SearchScreenView({
   onCategoryPress,
   onCategorySelect,
   onClearQuery,
+  onEndReached,
   onPriceChange,
   onProductPress,
   onQueryChange,
   onRecentSearch,
+  onRetry,
   onSelectBrand,
   onSelectCondition,
   onSelectRating,
@@ -86,9 +109,11 @@ export default function SearchScreenView({
   products,
   query,
   recentSearches,
+  searchError,
   selectedBrand,
   selectedCategory,
   selectedCondition,
+  totalCount,
   viewMode,
 }: SearchScreenViewProps) {
   const renderResults = () => {
@@ -121,6 +146,38 @@ export default function SearchScreenView({
       );
     }
 
+    // A failed search is never reported as "no results": it keeps the retry
+    // path and the query input visible instead.
+    if (searchError) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Ionicons
+            name="alert-circle-outline"
+            size={64}
+            color={colors.textSecondary}
+          />
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>
+            Couldn&apos;t load results
+          </Text>
+          <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+            Something went wrong while searching
+            {committedQuery ? ` for “${committedQuery}”` : ''}. Check your
+            connection and try again.
+          </Text>
+          <Pressable
+            onPress={onRetry}
+            style={[styles.retryButton, { backgroundColor: colors.primary }]}
+            accessibilityRole="button"
+            accessibilityLabel="Retry search"
+          >
+            <Text style={[styles.retryButtonText, { color: colors.white }]}>
+              Try again
+            </Text>
+          </Pressable>
+        </View>
+      );
+    }
+
     if (products.length === 0) {
       return (
         <View style={styles.emptyContainer}>
@@ -133,8 +190,33 @@ export default function SearchScreenView({
             No results found
           </Text>
           <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-            Try searching for something else
+            {committedQuery
+              ? `No products match “${committedQuery}”. Try a different spelling or browse a category.`
+              : 'Try searching for something else'}
           </Text>
+          {categories.length > 0 && (
+            <View style={styles.browseChipsRow}>
+              {categories.slice(0, 4).map((category) => (
+                <Pressable
+                  key={category.slug}
+                  style={[
+                    styles.browseChip,
+                    {
+                      backgroundColor: colors.card,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                  onPress={() => onCategoryPress(category.slug)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Browse ${category.name}`}
+                >
+                  <Text style={[styles.browseChipText, { color: colors.text }]}>
+                    {category.name}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
         </View>
       );
     }
@@ -158,6 +240,30 @@ export default function SearchScreenView({
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
+        onEndReached={onEndReached}
+        onEndReachedThreshold={0.5}
+        ListHeaderComponent={
+          <View style={styles.resultsCountHeader}>
+            <Text
+              style={[styles.resultsCountText, { color: colors.textSecondary }]}
+            >
+              {formatResultsCount(totalCount, products.length)}
+              {committedQuery ? ` for “${committedQuery}”` : ''}
+            </Text>
+          </View>
+        }
+        ListFooterComponent={
+          isLoadingMore ? (
+            <View style={styles.resultsFooter}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text
+                style={[styles.loadingText, { color: colors.textSecondary }]}
+              >
+                Loading more…
+              </Text>
+            </View>
+          ) : null
+        }
       />
     );
   };

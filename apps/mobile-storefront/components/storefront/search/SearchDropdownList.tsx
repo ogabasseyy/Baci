@@ -14,32 +14,96 @@ type ThemeColors = (typeof Colors)['light'];
 interface SearchDropdownListProps {
   categories: Category[];
   colors: ThemeColors;
+  /**
+   * The shopper's current raw input. Debounced `query` drives suggestion
+   * states, but the "See all results" action submits this value so it acts
+   * on what was just typed instead of a stale debounced snapshot.
+   */
+  currentQuery?: string;
   isLoading: boolean;
   onCategoryPress: (slug: string) => void;
   onClearHistory: () => void;
   onProductPress: (product: Product) => void;
+  onSeeAllResults?: (query: string) => void;
   onSuggestionPress: (term: string) => void;
   products: Product[];
   query: string;
   recentSearches: string[];
+  showMinLengthHint?: boolean;
+}
+
+function SeeAllResultsButton({
+  colors,
+  currentQuery,
+  onSeeAllResults,
+}: {
+  colors: ThemeColors;
+  currentQuery: string;
+  onSeeAllResults: (query: string) => void;
+}) {
+  const trimmedQuery = currentQuery.trim();
+  return (
+    <Pressable
+      style={[styles.seeAllButton, { borderColor: colors.border }]}
+      onPress={() => onSeeAllResults(currentQuery)}
+      accessibilityLabel={`See all results for ${trimmedQuery}`}
+      accessibilityRole="button"
+    >
+      <Ionicons name="search" size={16} color={BRAND.primary} />
+      <Text
+        style={[styles.seeAllText, { color: BRAND.primary }]}
+        numberOfLines={1}
+      >
+        See all results for “{trimmedQuery}”
+      </Text>
+      <Ionicons name="arrow-forward-outline" size={14} color={BRAND.primary} />
+    </Pressable>
+  );
 }
 
 export function SearchDropdownList({
   categories,
   colors,
+  currentQuery = '',
   isLoading,
   onCategoryPress,
   onClearHistory,
   onProductPress,
+  onSeeAllResults,
   onSuggestionPress,
   products,
   query,
   recentSearches,
+  showMinLengthHint = false,
 }: SearchDropdownListProps) {
   const hasQuery = query.length >= 2;
+  const trimmedCurrentQuery = currentQuery.trim();
+  const showSeeAllResults =
+    onSeeAllResults !== undefined && trimmedCurrentQuery.length >= 2;
+  const showHint = showMinLengthHint === true && trimmedCurrentQuery.length < 2;
+  const seeAllButton =
+    showSeeAllResults && onSeeAllResults ? (
+      <SeeAllResultsButton
+        colors={colors}
+        currentQuery={currentQuery}
+        onSeeAllResults={onSeeAllResults}
+      />
+    ) : null;
   if (!hasQuery) {
     return (
       <>
+        {showHint ? (
+          <View
+            style={styles.hintContainer}
+            accessibilityLiveRegion="polite"
+            accessibilityLabel="Type at least 2 characters to search"
+          >
+            <Text style={[styles.hintText, { color: colors.textSecondary }]}>
+              Type at least 2 characters to search
+            </Text>
+          </View>
+        ) : null}
+        {seeAllButton}
         {recentSearches.length > 0 ? (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -133,27 +197,33 @@ export function SearchDropdownList({
 
   if (isLoading) {
     return (
-      <View style={styles.statusContainer}>
-        <ActivityIndicator size="small" color={BRAND.primary} />
-        <Text style={[styles.statusText, { color: colors.textSecondary }]}>
-          Searching…
-        </Text>
+      <View>
+        <View style={styles.statusContainer}>
+          <ActivityIndicator size="small" color={BRAND.primary} />
+          <Text style={[styles.statusText, { color: colors.textSecondary }]}>
+            Searching…
+          </Text>
+        </View>
+        {seeAllButton}
       </View>
     );
   }
 
   if (!products || products.length === 0) {
     return (
-      <View style={styles.statusContainer}>
-        <Ionicons
-          name="search-outline"
-          size={32}
-          color={colors.icon}
-          style={{ opacity: 0.4 }}
-        />
-        <Text style={[styles.statusText, { color: colors.textSecondary }]}>
-          No results for "{query}"
-        </Text>
+      <View>
+        <View style={styles.statusContainer}>
+          <Ionicons
+            name="search-outline"
+            size={32}
+            color={colors.icon}
+            style={{ opacity: 0.4 }}
+          />
+          <Text style={[styles.statusText, { color: colors.textSecondary }]}>
+            No results for "{query}"
+          </Text>
+        </View>
+        {seeAllButton}
       </View>
     );
   }
@@ -207,6 +277,7 @@ export function SearchDropdownList({
           />
         </Pressable>
       ))}
+      {seeAllButton}
     </View>
   );
 }

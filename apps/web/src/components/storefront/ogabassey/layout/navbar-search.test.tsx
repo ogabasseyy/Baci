@@ -16,10 +16,12 @@ vi.mock('@/components/storefront/search-autocomplete', () => ({
     value,
     onChange,
     onSelectProduct,
+    onSubmitSearch,
   }: {
     value: string;
     onChange: (value: string) => void;
     onSelectProduct: (url: string) => void;
+    onSubmitSearch?: (query: string) => void;
   }) => (
     <div>
       <input
@@ -30,6 +32,9 @@ vi.mock('@/components/storefront/search-autocomplete', () => ({
       />
       <button type="button" onClick={() => onSelectProduct('/products/iphone')}>
         Select product
+      </button>
+      <button type="button" onClick={() => onSubmitSearch?.(value)}>
+        Submit search
       </button>
     </div>
   ),
@@ -78,6 +83,58 @@ describe('NavbarSearch', () => {
     fireEvent.click(screen.getByRole('button', { name: /select product/i }));
 
     expect(mocks.push).toHaveBeenCalledWith('/ogabassey/products/iphone');
+  });
+
+  it('routes loaded-autocomplete submissions to the encoded search page', async () => {
+    render(
+      <NavbarSearch
+        basePath="/ogabassey"
+        isBlogPage={false}
+        merchantId="merchant-1"
+      />
+    );
+
+    fireEvent.focus(screen.getByRole('searchbox', { name: /search products/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: /submit search/i })
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByRole('searchbox', { name: /search products/i }), {
+      target: { value: 'iphone 15 pro' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /submit search/i }));
+
+    expect(mocks.push).toHaveBeenCalledWith(
+      '/ogabassey/search?q=iphone%2015%20pro'
+    );
+  });
+
+  it('ignores blank loaded-autocomplete submissions', async () => {
+    render(
+      <NavbarSearch
+        basePath="/ogabassey"
+        isBlogPage={false}
+        merchantId="merchant-1"
+      />
+    );
+
+    fireEvent.focus(screen.getByRole('searchbox', { name: /search products/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: /submit search/i })
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByRole('searchbox', { name: /search products/i }), {
+      target: { value: '   ' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /submit search/i }));
+
+    expect(mocks.push).not.toHaveBeenCalled();
   });
 
   it('submits blog searches to the blog route', () => {

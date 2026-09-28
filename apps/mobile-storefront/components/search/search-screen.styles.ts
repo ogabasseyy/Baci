@@ -109,6 +109,46 @@ const styles = StyleSheet.create({
   productRight: {
     paddingLeft: 8,
   },
+  resultsCountHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  resultsCountText: {
+    fontSize: 13,
+  },
+  resultsFooter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  browseChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginTop: 16,
+    gap: 8,
+  },
+  browseChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  browseChipText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
 });
 
 export default styles;

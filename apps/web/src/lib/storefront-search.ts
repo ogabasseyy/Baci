@@ -292,6 +292,7 @@ export async function collectRankedSearchProductIds(args: {
   filters?: StorefrontSearchFilters;
   sort?: StorefrontSearchSort;
   maxCandidates?: number;
+  trackAnalytics?: boolean;
 }): Promise<RankedSearchCandidates> {
   const productIds: string[] = [];
   let query = '';
@@ -314,7 +315,7 @@ export async function collectRankedSearchProductIds(args: {
       sort: args.sort,
       limit: RANKED_FILTER_PAGE_SIZE,
       offset: pageOffset,
-      trackAnalytics: pageOffset === 0,
+      trackAnalytics: pageOffset === 0 && (args.trackAnalytics ?? true),
     });
 
     total = page.count;
@@ -378,6 +379,12 @@ export async function getStorefrontSearchProducts(args: {
   limit: number;
   offset?: number;
   sort?: StorefrontSearchSort;
+  /**
+   * Record this call as a new submission in `search_analytics`. Page views
+   * past the first page and internal recovery queries pass `false` so
+   * refinement navigation never inflates submission counts.
+   */
+  trackAnalytics?: boolean;
 }): Promise<StorefrontSearchProductsPage> {
   const publicSupabase = createPublicClient({
     clientInfo: 'baci-storefront-search-page',
@@ -401,6 +408,7 @@ export async function getStorefrontSearchProducts(args: {
       limit: requestedLimit,
       offset: requestedOffset,
       sort: args.sort,
+      trackAnalytics: args.trackAnalytics,
     });
 
     if (searchResult.productIds.length === 0) {
@@ -424,6 +432,7 @@ export async function getStorefrontSearchProducts(args: {
     query: args.query,
     filters: { ...args.filters, condition: null },
     sort: args.sort,
+    trackAnalytics: args.trackAnalytics,
   });
 
   if (candidates.productIds.length === 0) {

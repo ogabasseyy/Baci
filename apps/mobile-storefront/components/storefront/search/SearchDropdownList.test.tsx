@@ -92,4 +92,78 @@ describe('SearchDropdownList', () => {
     fireEvent.press(screen.getByLabelText(/iPhone 14 Pro/i));
     expect(onProductPress).toHaveBeenCalledWith(products[0]);
   });
+
+  it('submits the current input rather than the debounced suggestion query', () => {
+    const onSeeAllResults = jest.fn();
+
+    render(
+      <SearchDropdownList
+        categories={[]}
+        colors={Colors.light}
+        currentQuery="iphone 15 pro"
+        isLoading={false}
+        onCategoryPress={() => {}}
+        onClearHistory={() => {}}
+        onProductPress={() => {}}
+        onSeeAllResults={onSeeAllResults}
+        onSuggestionPress={() => {}}
+        products={products}
+        query="iph"
+        recentSearches={[]}
+      />
+    );
+
+    fireEvent.press(screen.getByLabelText('See all results for iphone 15 pro'));
+    expect(onSeeAllResults).toHaveBeenCalledWith('iphone 15 pro');
+  });
+
+  it('shows the minimum-length hint after a short submit attempt', () => {
+    render(
+      <SearchDropdownList
+        categories={[]}
+        colors={Colors.light}
+        currentQuery="i"
+        isLoading={false}
+        onCategoryPress={() => {}}
+        onClearHistory={() => {}}
+        onProductPress={() => {}}
+        onSeeAllResults={() => {}}
+        onSuggestionPress={() => {}}
+        products={[]}
+        query=""
+        recentSearches={[]}
+        showMinLengthHint
+      />
+    );
+
+    expect(
+      screen.getByLabelText('Type at least 2 characters to search')
+    ).toBeTruthy();
+    expect(screen.queryByLabelText(/see all results/i)).toBeNull();
+  });
+
+  it('hides the minimum-length hint once the input is long enough', () => {
+    render(
+      <SearchDropdownList
+        categories={[]}
+        colors={Colors.light}
+        currentQuery="iphone"
+        isLoading={false}
+        onCategoryPress={() => {}}
+        onClearHistory={() => {}}
+        onProductPress={() => {}}
+        onSeeAllResults={() => {}}
+        onSuggestionPress={() => {}}
+        products={[]}
+        query=""
+        recentSearches={[]}
+        showMinLengthHint
+      />
+    );
+
+    expect(
+      screen.queryByLabelText('Type at least 2 characters to search')
+    ).toBeNull();
+    expect(screen.getByLabelText('See all results for iphone')).toBeTruthy();
+  });
 });

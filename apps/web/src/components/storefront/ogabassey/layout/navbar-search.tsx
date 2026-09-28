@@ -136,6 +136,7 @@ export function NavbarSearch({
         value={searchQuery}
         onChange={setSearchQuery}
         onSelectProduct={handleProductSelect}
+        onSubmitSearch={pushSearchRoute}
         placeholder="Search products, brands and categories"
         className={SEARCH_INPUT_CLASS_NAME}
         autoFocus={shouldAutoFocusAutocomplete}

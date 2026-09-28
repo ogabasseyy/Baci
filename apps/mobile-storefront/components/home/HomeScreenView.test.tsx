@@ -142,10 +142,30 @@ jest.mock('@/components/storefront/SearchDropdown', () => {
     SearchDropdown: ({
       isVisible,
       onClose,
+      onSeeAllResults,
+      query,
+      showMinLengthHint,
     }: {
       isVisible: boolean;
       onClose: () => void;
-    }) => (isVisible ? <Text onPress={onClose}>Search results</Text> : null),
+      onSeeAllResults?: (query: string) => void;
+      query?: string;
+      showMinLengthHint?: boolean;
+    }) =>
+      isVisible ? (
+        <>
+          <Text onPress={onClose}>Search results</Text>
+          <Text
+            testID="mock-see-all-results"
+            onPress={() => onSeeAllResults?.(query ?? '')}
+          >
+            Mock see all results
+          </Text>
+          {showMinLengthHint ? (
+            <Text testID="mock-min-length-hint">Mock min length hint</Text>
+          ) : null}
+        </>
+      ) : null,
   };
 });
 
@@ -199,6 +219,7 @@ function createProps() {
     onSearchCancel: jest.fn(),
     onSearchQueryChange: jest.fn(),
     onSearchSubmit: jest.fn(),
+    onSeeAllResults: jest.fn(),
     primaryColor: '#0ea5e9',
     primaryProductGridIndex: 1,
     refreshing: false,
@@ -207,6 +228,7 @@ function createProps() {
     searchVisible: false,
     selectedCategoryId: null,
     shouldRenderDecorations: true,
+    showSearchMinLengthHint: false,
   };
 }
 

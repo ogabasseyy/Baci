@@ -3,6 +3,7 @@ import { recoverPendingCheckoutOrder } from './recover-pending-checkout-order';
 import { submitCheckoutOrder } from './submit-checkout-order';
 import { persistPendingCheckoutOrder } from '../persist-pending-checkout-order';
 import { runCheckoutOrderLifecycle } from './checkout-order-lifecycle';
+import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
 
 vi.mock('./recover-pending-checkout-order', () => ({
   recoverPendingCheckoutOrder: vi.fn(),
@@ -17,6 +18,48 @@ vi.mock('../persist-pending-checkout-order', () => ({
 vi.mock('@/lib/posthog/capture-checkout-funnel-event', () => ({
   captureCheckoutFunnelEventOnce: vi.fn(),
 }));
+
+function lifecycleOptions(): Parameters<typeof runCheckoutOrderLifecycle>[0] {
+  return {
+    reuse: { paymentMethod: 'paystack' } as never,
+    recoveryContext: {} as never,
+    submit: {
+      getIdempotencyKey: async () => 'key',
+      orderRequest: {} as never,
+      paymentMethod: 'paystack',
+      total: 100,
+      onVoucherRejected: vi.fn(),
+      onPendingOrderInvalidated: vi.fn(async () => undefined),
+      onShippingRateRejected: vi.fn(),
+      getOrderErrorMessage: vi.fn(() => 'failed'),
+    },
+    customer: {
+      email: 'ada@example.com',
+      phone: '08000000000',
+      merchantId: 'merchant-1',
+    },
+    fingerprint: 'fingerprint',
+    paymentMethod: 'paystack',
+    itemCount: 1,
+    shipping: 0,
+    subtotal: 100,
+    tax: 0,
+    fallbackTotal: 100,
+    currencyFallback: 'NGN',
+    shippingAddress: { address: '1 Main St', city: 'Lagos', state: 'Lagos' },
+    merchantCountry: 'NG',
+    onRedvaultSummary: vi.fn(),
+    onOrderCreated: vi.fn(),
+    onPendingSnapshot: vi.fn(),
+    redvaultReview: {
+      enabled: false,
+      customerName: 'Ada Customer',
+      checkoutFingerprint: 'fingerprint',
+      setReady: vi.fn(),
+      releaseSubmission: vi.fn(),
+    },
+  };
+}
 
 describe('runCheckoutOrderLifecycle', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -175,5 +218,56 @@ describe('runCheckoutOrderLifecycle', () => {
       orderNumber: 'ORDER-1',
       currency: 'EUR',
     });
+  });
+
+  it('does not submit or persist when pending-order recovery handled the request', async () => {
+    vi.mocked(recoverPendingCheckoutOrder).mockResolvedValue({
+      kind: 'handled',
+    });
+
+    await expect(
+      runCheckoutOrderLifecycle(lifecycleOptions())
+    ).resolves.toEqual({ kind: 'handled' });
+
+    expect(submitCheckoutOrder).not.toHaveBeenCalled();
+    expect(persistPendingCheckoutOrder).not.toHaveBeenCalled();
+  });
+
+  it('keeps the created order fenced when a funnel event fails', async () => {
+    vi.mocked(recoverPendingCheckoutOrder).mockResolvedValue({
+      kind: 'submit',
+      pendingOrder: { reusableOrder: null, clearStoredOrder: false },
+    });
+    vi.mocked(submitCheckoutOrder).mockResolvedValue({
+      order: {
+        id: 'order-12345678',
+        order_number: 'BC-123',
+        currency: 'NGN',
+        total: 100,
+      },
+      wallet: null,
+      amountDueToGateway: 100,
+    });
+    vi.mocked(captureCheckoutFunnelEventOnce).mockImplementation(() => {
+      throw new Error('funnel unavailable');
+    });
+    const input = lifecycleOptions();
+
+    await expect(runCheckoutOrderLifecycle(input)).resolves.toMatchObject({
+      kind: 'payment_ready',
+      order: { id: 'order-12345678' },
+    });
+
+    expect(input.onOrderCreated).toHaveBeenCalledWith({
+      orderId: 'order-12345678',
+      orderNumber: 'BC-123',
+      currency: 'NGN',
+    });
+    expect(persistPendingCheckoutOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: 'order-12345678' })
+    );
+    expect(input.onPendingSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: 'order-12345678' })
+    );
   });
 });

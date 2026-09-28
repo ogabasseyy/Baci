@@ -141,25 +141,29 @@ export async function runCheckoutOrderLifecycle({
     typeof order.payment_method === 'string' ? order.payment_method : undefined,
     paymentMethod
   );
-  captureCheckoutFunnelEventOnce(
-    CHECKOUT_FUNNEL_EVENTS.orderCreated,
-    order.id,
-    buildCheckoutFunnelProperties({
-      channel: 'web',
-      currency: orderChargeCurrency,
-      itemCount,
-      orderId: order.id,
-      orderNumber: createdOrderNumber,
-      paymentIntent: getCheckoutPaymentIntent(finalizedPaymentMethod),
-      paymentMethod: finalizedPaymentMethod,
-      paymentStatus: order.payment_status || 'unpaid',
-      shipping,
-      source: 'web_checkout',
-      subtotal,
-      tax,
-      total: order.total ?? fallbackTotal,
-    })
-  );
+  try {
+    captureCheckoutFunnelEventOnce(
+      CHECKOUT_FUNNEL_EVENTS.orderCreated,
+      order.id,
+      buildCheckoutFunnelProperties({
+        channel: 'web',
+        currency: orderChargeCurrency,
+        itemCount,
+        orderId: order.id,
+        orderNumber: createdOrderNumber,
+        paymentIntent: getCheckoutPaymentIntent(finalizedPaymentMethod),
+        paymentMethod: finalizedPaymentMethod,
+        paymentStatus: order.payment_status || 'unpaid',
+        shipping,
+        source: 'web_checkout',
+        subtotal,
+        tax,
+        total: order.total ?? fallbackTotal,
+      })
+    );
+  } catch {
+    // Telemetry is best-effort; it must not prevent fencing a created order.
+  }
 
   const billingAddress = buildCheckoutBillingAddress(
     shippingAddress.address,

@@ -83,9 +83,17 @@ export async function reconcilePaystackCancellationRefund(
     typeof paymentId === 'string'
       ? await resolveLinkedPayment(supabase, refund, paymentId)
       : await resolveSoleLegacyPayment(supabase, refund);
+  // Partial refunds verify against their own row amount; the completion
+  // RPC sums them per payment leg. Over-refunds and non-positive rows
+  // cannot belong to this payment.
+  const paymentAmount = Number(payment?.amount);
+  const refundAmount = Number(refund.amount);
   if (
     !payment?.gateway_reference ||
-    Number(payment.amount) !== Number(refund.amount) ||
+    !Number.isFinite(paymentAmount) ||
+    !Number.isFinite(refundAmount) ||
+    refundAmount <= 0 ||
+    refundAmount > paymentAmount ||
     payment.currency.toUpperCase() !== refund.currency.toUpperCase()
   ) {
     throw new Error('refund_payment_link_mismatch');

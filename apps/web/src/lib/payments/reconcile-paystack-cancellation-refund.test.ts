@@ -83,6 +83,47 @@ describe('Paystack cancellation refund reconciliation', () => {
     );
   });
 
+  it('verifies a partial refund against its own row amount', async () => {
+    const db = database();
+    provider.fetchRefund.mockResolvedValueOnce({
+      success: true,
+      data: {
+        id: 42,
+        transaction: 123,
+        amount: 4000,
+        currency: 'NGN',
+        status: 'processed',
+      },
+    });
+
+    await expect(
+      reconcilePaystackCancellationRefund(db as never, {
+        ...refund,
+        amount: 40,
+      })
+    ).resolves.toBe('updated');
+    expect(db.rpc).toHaveBeenCalledWith(
+      'record_verified_paystack_cancellation_refund_v1',
+      expect.objectContaining({ p_amount_kobo: 4000 })
+    );
+  });
+
+  it.each([
+    120, 0, -5,
+  ])('rejects a refund amount of %s against a 100 payment', async (amount) => {
+    const db = database();
+
+    await expect(
+      reconcilePaystackCancellationRefund(db as never, {
+        ...refund,
+        amount,
+      })
+    ).rejects.toThrow('refund_payment_link_mismatch');
+    expect(provider.fetchRefund).not.toHaveBeenCalled();
+    expect(provider.verifyTransaction).not.toHaveBeenCalled();
+    expect(db.rpc).not.toHaveBeenCalled();
+  });
+
   it('does not complete a refund linked to a different Paystack payment', async () => {
     const db = database();
     provider.fetchRefund.mockResolvedValueOnce({

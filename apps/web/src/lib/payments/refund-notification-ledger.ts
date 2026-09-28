@@ -10,13 +10,14 @@ function formatAmount(amount: number, currency: string): string {
 
 /**
  * Total the refunded amount for a cancelled order's notification, mirroring
- * the completion RPC: every funded external payment leg links one
- * same-gateway, same-amount completed refund. Refund-state legs (e.g.
- * PayPal flips the payment row itself to refund_pending while its
- * provider refund is pending) still need their linked refund; only
- * self-terminal refunded legs carry their own evidence. Unlinked legacy
- * refunds match when the order holds exactly one completed external
- * payment leg. Throws refund_notification_ledger_* on mismatch.
+ * the completion RPC: every funded external payment leg sums its linked
+ * same-gateway, same-currency completed refunds to at least its amount.
+ * Refund-state legs (e.g. PayPal flips the payment row itself to
+ * refund_pending while its provider refund is pending) still need their
+ * linked refund; only self-terminal refunded legs carry their own
+ * evidence. Unlinked legacy refunds match when the order holds exactly
+ * one completed external payment leg. Throws
+ * refund_notification_ledger_* on mismatch.
  */
 export async function refundNotificationLedgerAmount({
   merchantId,
@@ -55,17 +56,26 @@ export async function refundNotificationLedgerAmount({
     if (leg.status === 'refunded') {
       return { amount: leg.amount, currency: leg.currency };
     }
-    return refundLegs.find((refund) => {
-      if (
-        refund.gateway !== leg.gateway ||
-        Number(refund.amount) !== Number(leg.amount)
-      )
-        return false;
-      const link = (
-        refund.metadata as { payment_transaction_id?: unknown } | null
-      )?.payment_transaction_id;
-      return link === leg.id || (link == null && linkableLegs.length === 1);
-    });
+    const legCurrency = String(leg.currency ?? '').toUpperCase();
+    const matchedKobo = refundLegs
+      .filter((refund) => {
+        if (refund.gateway !== leg.gateway) return false;
+        if (
+          String(refund.currency ?? '').toUpperCase() !== legCurrency ||
+          !(Number(refund.amount) > 0)
+        )
+          return false;
+        const link = (
+          refund.metadata as { payment_transaction_id?: unknown } | null
+        )?.payment_transaction_id;
+        return link === leg.id || (link == null && linkableLegs.length === 1);
+      })
+      .reduce(
+        (sum, refund) => sum + Math.round(Number(refund.amount) * 100),
+        0
+      );
+    if (matchedKobo < Math.round(Number(leg.amount) * 100)) return undefined;
+    return { amount: matchedKobo / 100, currency: leg.currency };
   });
   if (
     externalLegs.length === 0 ||

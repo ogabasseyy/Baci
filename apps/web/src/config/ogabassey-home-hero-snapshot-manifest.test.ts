@@ -4,7 +4,7 @@ import { OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL } from '@/config/ogabassey';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { OGABASSEY_HOME_HERO_SNAPSHOT_MANIFEST } from './ogabassey-home-hero-snapshot-manifest';
 
-// Mirror of SNAPSHOT_WIDTHS in scripts/lib/ogabassey-hero-snapshots.mjs
+// Mirror of SNAPSHOT_WIDTHS in scripts/lib/ogabassey-hero-snapshot-config.mjs
 // (the emitted mobile ladder from the 256 floor; tiers >= 1440 excluded as
 // unreachable under the 767px media cap). The pipeline writes these
 // descriptors; this test fails if the manifest ever carries anything else.

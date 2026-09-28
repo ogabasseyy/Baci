@@ -73,6 +73,47 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
     return vi.fn().mockResolvedValue({ data: 'review-1', error });
   }
 
+  it('files ambiguous reviews only for cancelled orders', async () => {
+    const rpc = reviewRpc();
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        selectQuery([
+          payment('pay-1', 'order-1', 'merchant-1'),
+          payment('pay-2', 'order-2', 'merchant-2'),
+          payment('pay-9', 'order-9', 'merchant-9'),
+        ])
+      )
+      .mockReturnValueOnce(
+        selectQuery([
+          cancelledOrder('order-1'),
+          cancelledOrder('order-2'),
+          {
+            cancelled_at: null,
+            id: 'order-9',
+            shipping_status: 'processing',
+          },
+        ])
+      );
+    const supabase = { from, rpc } as unknown as SupabaseClient;
+
+    await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
+
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc).toHaveBeenCalledWith(
+      'file_paystack_refund_recovery_review_v1',
+      expect.objectContaining({ p_order_id: 'order-1' })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'file_paystack_refund_recovery_review_v1',
+      expect.objectContaining({ p_order_id: 'order-2' })
+    );
+    expect(rpc).not.toHaveBeenCalledWith(
+      'file_paystack_refund_recovery_review_v1',
+      expect.objectContaining({ p_order_id: 'order-9' })
+    );
+  });
+
   it('files one review per order when three payments share the reference', async () => {
     const rpc = reviewRpc();
     const from = vi
@@ -82,6 +123,13 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
           payment('pay-1', 'order-1', 'merchant-1'),
           payment('pay-2', 'order-2', 'merchant-2'),
           payment('pay-3', 'order-3', 'merchant-3'),
+        ])
+      )
+      .mockReturnValueOnce(
+        selectQuery([
+          cancelledOrder('order-1'),
+          cancelledOrder('order-2'),
+          cancelledOrder('order-3'),
         ])
       );
     const supabase = { from, rpc } as unknown as SupabaseClient;

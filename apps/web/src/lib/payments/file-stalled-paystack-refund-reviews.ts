@@ -1,9 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
-import {
-  filePaystackRefundCandidateReviews,
-  type RefundRecoveryEvidence,
-} from './file-paystack-refund-candidate-reviews';
+import { fileCancelledPaystackRefundCandidateReviews } from './file-cancelled-paystack-refund-candidate-reviews';
+import type { RefundRecoveryEvidence } from './file-paystack-refund-candidate-reviews';
 
 interface StalledPayment {
   amount: number;
@@ -11,20 +9,6 @@ interface StalledPayment {
   id: string;
   merchant_id: string;
   order_id: string | null;
-}
-
-interface StalledOrder {
-  cancelled_at: string | null;
-  id: string;
-  shipping_status: string | null;
-}
-
-function isCancelledOrder(order: StalledOrder): boolean {
-  return (
-    order.cancelled_at != null &&
-    (order.shipping_status === 'cancelled' ||
-      order.shipping_status === 'canceled')
-  );
 }
 
 /**
@@ -66,35 +50,12 @@ export async function fileStalledPaystackRefundReviews(
     });
     return;
   }
-  const orderIds = [
-    ...new Set(
-      stalled
-        .map((row) => row.order_id)
-        .filter((id): id is string => typeof id === 'string')
-    ),
-  ];
-  const cancelled = new Set<string>();
-  if (orderIds.length > 0) {
-    const { data: orders, error: orderError } = await supabase
-      .from('orders')
-      .select('id, cancelled_at, shipping_status')
-      .in('id', orderIds);
-    if (orderError) throw new Error('refund_event_order_lookup_failed');
-    for (const order of (orders ?? []) as StalledOrder[]) {
-      if (isCancelledOrder(order)) cancelled.add(order.id);
-    }
-  }
-  const reviewable = stalled.filter(
-    (row) => row.order_id !== null && cancelled.has(row.order_id)
+  await fileCancelledPaystackRefundCandidateReviews(
+    supabase,
+    stalled,
+    evidence,
+    `Paystack refund ${refundId} matches a non-completed local payment for reference ${gatewayReference}`
   );
-  if (reviewable.length > 0) {
-    await filePaystackRefundCandidateReviews(
-      supabase,
-      reviewable,
-      evidence,
-      `Paystack refund ${refundId} matches a non-completed local payment for reference ${gatewayReference}`
-    );
-  }
   logger.info({
     message: 'Unknown Paystack refund event matches a non-completed payment',
     refundId,

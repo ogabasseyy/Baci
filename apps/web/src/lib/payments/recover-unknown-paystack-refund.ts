@@ -3,7 +3,7 @@ import { logger } from '@/lib/logger';
 import { selectPaystackRefundReference } from '@/lib/select-paystack-refund-reference';
 import { fetchPaystackPaymentById } from './fetch-paystack-payment-by-id';
 import { fetchRefund } from './fetch-paystack-refund';
-import { filePaystackRefundCandidateReviews } from './file-paystack-refund-candidate-reviews';
+import { fileCancelledPaystackRefundCandidateReviews } from './file-cancelled-paystack-refund-candidate-reviews';
 import { filePaystackRefundRecoveryReview } from './file-paystack-refund-recovery-review';
 import { fileRefundEvidenceReview } from './file-refund-evidence-review';
 import { fileStalledPaystackRefundReviews } from './file-stalled-paystack-refund-reviews';
@@ -145,9 +145,11 @@ export async function recoverUnknownPaystackRefund(
   };
   if (candidates.length > 1) {
     // The reference resolves to completed payments on different orders and
-    // redelivery cannot disambiguate them: persist one review per order so
-    // ops can route the verified provider refund, then acknowledge.
-    await filePaystackRefundCandidateReviews(
+    // redelivery cannot disambiguate them: persist one review per
+    // cancelled order so ops can route the verified provider refund,
+    // then acknowledge. Active-order matches are merchant evidence and
+    // stay out of the cancellation queue.
+    await fileCancelledPaystackRefundCandidateReviews(
       supabase,
       candidates,
       evidence,

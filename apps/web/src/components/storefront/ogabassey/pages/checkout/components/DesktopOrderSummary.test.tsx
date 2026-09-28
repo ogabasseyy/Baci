@@ -51,36 +51,38 @@ describe('desktop checkout summary visibility', () => {
   }, 20_000);
 
   it('keeps the summary and order action visible at desktop width even when a hidden utility loads last', () => {
+    const props = {
+      displayItems: [],
+      formatCurrencyAuto: (amount: number) => `₦${amount}`,
+      summarySubtotal: 100,
+      orderTotals: { total: 118, taxAmount: 7 },
+      taxLabel: 'Tax',
+      deliveryCost: 12,
+      discountAmount: 5,
+      deliveryMethod: 'pickup' as const,
+      selectedQuoteId: '',
+      giftWrappingCost: 0,
+      paymentMethod: 'paystack' as const,
+      walletCurrencySupported: true,
+      walletRedemptionAllowed: true,
+      walletLoading: false,
+      walletBalance: 0,
+      hasUser: true,
+      currencySymbol: '₦',
+      payWithWallet: false,
+      setPayWithWallet: vi.fn(),
+      walletAmountUsed: 0,
+      remainingAmount: 114,
+      checkoutPayWithWallet: false,
+      redvaultSummary: null,
+      newsletterOptIn: false,
+      setNewsletterOptIn: vi.fn(),
+      handlePlaceOrder: vi.fn(),
+      isProcessing: false,
+      isPayForMeValid: true,
+    };
     const html = renderToStaticMarkup(
-      <DesktopOrderSummary
-        displayItems={[]}
-        formatCurrencyAuto={(amount) => `₦${amount}`}
-        summarySubtotal={100}
-        orderTotals={{ total: 118, taxAmount: 7 }}
-        taxLabel="Tax"
-        deliveryCost={12}
-        discountAmount={5}
-        deliveryMethod="pickup"
-        selectedQuoteId=""
-        giftWrappingCost={0}
-        paymentMethod="paystack"
-        walletCurrencySupported={true}
-        walletLoading={false}
-        walletBalance={0}
-        hasUser={true}
-        currencySymbol="₦"
-        payWithWallet={false}
-        setPayWithWallet={vi.fn()}
-        walletAmountUsed={0}
-        remainingAmount={114}
-        checkoutPayWithWallet={false}
-        redvaultSummary={null}
-        newsletterOptIn={false}
-        setNewsletterOptIn={vi.fn()}
-        handlePlaceOrder={vi.fn()}
-        isProcessing={false}
-        isPayForMeValid={true}
-      />
+      <DesktopOrderSummary {...props} />
     );
     const summaryClasses = html.match(/<div class="([^"]*lg:block[^"]*)"/);
     const actionClasses = html.match(/<button[^>]*class="([^"]*)"[^>]*>Place Order/);
@@ -95,5 +97,15 @@ describe('desktop checkout summary visibility', () => {
     expect(html).toMatch(/<span>Tax<\/span><span>₦7<\/span>/);
     expect(html).toMatch(/<span>Discount<\/span><span>-₦5<\/span>/);
     expect(html).toMatch(/<span>Total<\/span><span>₦114<\/span>/);
+
+    const resumedHtml = renderToStaticMarkup(
+      <DesktopOrderSummary
+        {...props}
+        walletRedemptionAllowed={false}
+        walletBalance={2500}
+      />
+    );
+    expect(resumedHtml).not.toContain('Wallet Credit');
+    expect(resumedHtml).toContain('₦114');
   });
 });

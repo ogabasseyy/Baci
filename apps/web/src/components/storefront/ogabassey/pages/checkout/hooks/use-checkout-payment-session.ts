@@ -69,6 +69,13 @@ export function useCheckoutPaymentSession({
     contact: '',
     note: '',
   });
+  const walletRedemptionAllowed =
+    hasCheckoutCartItems || !resumeOrder.resumeOrderId;
+  const updatePayWithWallet = (nextValue: boolean) => {
+    if (walletRedemptionAllowed || !nextValue) {
+      setPayWithWallet(nextValue);
+    }
+  };
 
   const selectMethod = (nextMethod: PaymentMethod) => {
     if (
@@ -112,10 +119,16 @@ export function useCheckoutPaymentSession({
       signal: controller.signal,
       setWalletLoading,
       setWalletBalance,
-      setPayWithWallet,
+      setPayWithWallet: updatePayWithWallet,
     });
     return () => controller.abort();
-  }, [hasAuthenticatedUser, merchantSlug, walletSessionIdentity]);
+  }, [hasAuthenticatedUser, merchantSlug, walletRedemptionAllowed, walletSessionIdentity]);
+
+  useEffect(() => {
+    if (!walletRedemptionAllowed) {
+      setPayWithWallet(false);
+    }
+  }, [walletRedemptionAllowed]);
 
   // A resumed order's persisted total already includes its discount. The
   // checkout can render while the resume request is pending, so ignore any
@@ -135,7 +148,7 @@ export function useCheckoutPaymentSession({
     discountAmount,
     discountCode: appliedDiscount?.code,
     paymentMethod: method,
-    payWithWallet,
+    payWithWallet: walletRedemptionAllowed && payWithWallet,
     walletBalance,
     walletCurrencySupported: currencyCode === 'NGN',
   });
@@ -158,8 +171,9 @@ export function useCheckoutPaymentSession({
       setBalance: setWalletBalance,
       loading: walletLoading,
       currencySupported: currencyCode === 'NGN',
-      payWithWallet,
-      setPayWithWallet,
+      redemptionAllowed: walletRedemptionAllowed,
+      payWithWallet: walletRedemptionAllowed && payWithWallet,
+      setPayWithWallet: updatePayWithWallet,
       amountUsed: checkoutValues.walletAmountUsed,
       remainingAmount: checkoutValues.total - checkoutValues.walletAmountUsed,
     },

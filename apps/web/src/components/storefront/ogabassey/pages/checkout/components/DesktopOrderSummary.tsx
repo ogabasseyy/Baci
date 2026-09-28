@@ -25,6 +25,7 @@ interface DesktopOrderSummaryProps {
   giftWrappingCost: number;
   paymentMethod: PaymentMethod;
   walletCurrencySupported: boolean;
+  walletRedemptionAllowed: boolean;
   walletLoading: boolean;
   walletBalance: number;
   hasUser: boolean;
@@ -55,6 +56,7 @@ export function DesktopOrderSummary({
   giftWrappingCost,
   paymentMethod,
   walletCurrencySupported,
+  walletRedemptionAllowed,
   walletLoading,
   walletBalance,
   hasUser,
@@ -173,7 +175,7 @@ export function DesktopOrderSummary({
           )}
 
           {/* Wallet Credit Section (2025: progressive disclosure - only show if balance > 0 or loading). NGN-ledger: hidden on non-NGN orders. */}
-          {paymentMethod !== 'uba_redvault' && walletCurrencySupported && (walletLoading || walletBalance > 0) && hasUser && (
+          {walletRedemptionAllowed && paymentMethod !== 'uba_redvault' && walletCurrencySupported && (walletLoading || walletBalance > 0) && hasUser && (
             <div className="py-2 animate-in fade-in">
               {walletLoading ? (
                 <div className="flex items-center gap-2 text-gray-500">

@@ -1119,6 +1119,7 @@ export const CheckoutPage: React.FC = () => {
             giftWrappingCost={summaryAmounts.summaryGiftWrappingCost}
             paymentMethod={paymentMethod}
             walletCurrencySupported={paymentSession.wallet.currencySupported}
+            walletRedemptionAllowed={paymentSession.wallet.redemptionAllowed}
             walletLoading={paymentSession.wallet.loading}
             walletBalance={paymentSession.wallet.balance}
             hasUser={Boolean(user)}

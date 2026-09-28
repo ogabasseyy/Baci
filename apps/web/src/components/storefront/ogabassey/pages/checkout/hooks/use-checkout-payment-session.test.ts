@@ -155,6 +155,86 @@ describe('useCheckoutPaymentSession', () => {
     expect(result.current.wallet.payWithWallet).toBe(true);
   });
 
+  it.each(['credpal', 'credit_direct'] as const)(
+    'does not apply wallet credit to an authenticated resumed %s payment',
+    async (preferredGateway) => {
+      vi.mocked(fetch).mockImplementation(async (input) => {
+        if (String(input).includes('/customer/wallet')) {
+          return {
+            ok: true,
+            json: async () => ({ balance: 2500 }),
+          } as Response;
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            id: 'resumed-order',
+            total: 11_500,
+            customer_name: 'Ada Customer',
+            customer_email: 'ada@example.test',
+            customer_phone: '+2348000000000',
+            items: [],
+          }),
+        } as Response;
+      });
+      const input = options({
+        baseTotal: 11_500,
+        hasAuthenticatedUser: true,
+        merchantSlug: 'store',
+        resumeOrder: {
+          ...options().resumeOrder,
+          resumeOrderId: 'resumed-order',
+          resumeMerchantSlug: 'store',
+          preferredGateway,
+        },
+      });
+      const { result } = renderHook(() =>
+        useCheckoutPaymentSession(input as never)
+      );
+
+      await waitFor(() => expect(result.current.wallet.balance).toBe(2500));
+      await waitFor(() => expect(result.current.method).toBe(preferredGateway));
+
+      expect(result.current.wallet.payWithWallet).toBe(false);
+      expect(result.current.wallet.amountUsed).toBe(0);
+      expect(result.current.wallet.remainingAmount).toBe(11_500);
+      expect(result.current.checkoutValues.payWithWallet).toBe(false);
+
+      act(() => {
+        result.current.selectMethod('paystack');
+        result.current.selectMethod(preferredGateway);
+      });
+
+      expect(result.current.wallet.amountUsed).toBe(0);
+      expect(result.current.wallet.remainingAmount).toBe(11_500);
+    }
+  );
+
+  it('keeps wallet credit available when an active cart takes precedence over a resume ID', () => {
+    const input = options({
+      baseTotal: 11_500,
+      hasCheckoutCartItems: true,
+      resumeOrder: {
+        ...options().resumeOrder,
+        resumeOrderId: 'resumed-order',
+        resumeMerchantSlug: 'store',
+      },
+    });
+    const { result } = renderHook(() =>
+      useCheckoutPaymentSession(input as never)
+    );
+
+    act(() => {
+      result.current.wallet.setBalance(2500);
+      result.current.wallet.setPayWithWallet(true);
+      result.current.selectMethod('paystack');
+    });
+
+    expect(result.current.wallet.payWithWallet).toBe(true);
+    expect(result.current.wallet.amountUsed).toBe(2500);
+    expect(result.current.wallet.remainingAmount).toBe(9000);
+  });
+
   it('uses the existing discount rounding and caps wallet credit to NGN order total', () => {
     const { result } = renderHook(() =>
       useCheckoutPaymentSession(options() as never)

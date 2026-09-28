@@ -69,4 +69,30 @@ describe('POST /api/cron/process-settlements?cancellationsOnly=true', () => {
     expect(response.status).toBe(401);
     expect(mocks.processCancellationDrain).not.toHaveBeenCalled();
   });
+
+  it.each([
+    '1',
+    'True',
+    'yes',
+  ])('rejects malformed cancellationsOnly=%s without database work', async (value) => {
+    const response = await POST(
+      new Request(
+        `https://usebaci.com/api/cron/process-settlements?cancellationsOnly=${value}`,
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.CRON_SECRET}`,
+          },
+          method: 'POST',
+        }
+      )
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Invalid cancellationsOnly value',
+    });
+    expect(mocks.processCancellationDrain).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
 });

@@ -17,6 +17,15 @@ describe('selectPaystackRefundReference', () => {
     );
   });
 
+  it('accepts the full Paystack reference alphabet', () => {
+    expect(selectPaystackRefundReference('PSK-1.2=3_4', undefined)).toBe(
+      'PSK-1.2=3_4'
+    );
+    expect(selectPaystackRefundReference(undefined, 'order=7.status')).toBe(
+      'order=7.status'
+    );
+  });
+
   it('returns undefined when neither reference is usable', () => {
     expect(selectPaystackRefundReference('has space', 'n/a!')).toBeUndefined();
     expect(selectPaystackRefundReference(undefined, undefined)).toBeUndefined();

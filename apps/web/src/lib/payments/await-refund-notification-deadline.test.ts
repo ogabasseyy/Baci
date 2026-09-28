@@ -1,28 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  assertRefundNotificationSendTime,
-  awaitRefundNotificationDeadline,
-} from './await-refund-notification-deadline';
+import { awaitRefundNotificationDeadline } from './await-refund-notification-deadline';
 
-describe('refund notification deadline', () => {
+describe('awaitRefundNotificationDeadline', () => {
   afterEach(() => vi.useRealTimers());
 
   it('passes through work without a deadline', async () => {
     expect(await awaitRefundNotificationDeadline(Promise.resolve('sent'))).toBe(
       'sent'
     );
-    expect(() => assertRefundNotificationSendTime()).not.toThrow();
-  });
-
-  it('rejects a send when too little time remains', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1_000_000);
-    expect(() => assertRefundNotificationSendTime(Date.now() + 19_999)).toThrow(
-      'refund_notification_deadline_before_send'
-    );
-    expect(() =>
-      assertRefundNotificationSendTime(Date.now() + 20_000)
-    ).not.toThrow();
   });
 
   it('stops waiting with time left to persist an uncertain outcome', async () => {

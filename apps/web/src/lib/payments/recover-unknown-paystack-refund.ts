@@ -1,8 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
+import { selectPaystackRefundReference } from '@/lib/select-paystack-refund-reference';
 import { verifyTransaction } from '@/lib/verify-paystack-transaction';
 import { fetchPaystackPaymentById } from './fetch-paystack-payment-by-id';
 import { fetchRefund } from './fetch-paystack-refund';
+import { filePaystackRefundCandidateReviews } from './file-paystack-refund-candidate-reviews';
 import { filePaystackRefundRecoveryReview } from './file-paystack-refund-recovery-review';
 import { fileRefundEvidenceReview } from './file-refund-evidence-review';
 import { holdPaystackRefundForReview } from './hold-paystack-refund-for-review';
@@ -95,9 +97,12 @@ export async function recoverUnknownPaystackRefund(
       throw new Error('paystack_refund_payment_lookup_mismatch');
     }
   }
+  // The recovery path shares the webhook's reference alphabet: a reference
+  // the selector will not pick is unusable downstream.
   if (
     typeof resolvedPaymentReference !== 'string' ||
-    !/^[A-Za-z0-9_-]{1,100}$/.test(resolvedPaymentReference)
+    selectPaystackRefundReference(resolvedPaymentReference, undefined) !==
+      resolvedPaymentReference
   ) {
     throw new Error('paystack_refund_payment_reference_invalid');
   }
@@ -137,35 +142,21 @@ export async function recoverUnknownPaystackRefund(
   if (paymentError) throw new Error('refund_event_payment_lookup_failed');
   const candidates = (payments ?? []) as RecoveryPayment[];
   const payment = candidates[0];
+  const evidence = {
+    providerPaymentTransactionId: original.id,
+    providerRefundId: refundId,
+    reference: resolvedPaymentReference,
+  };
   if (candidates.length > 1) {
     // The reference resolves to completed payments on different orders and
     // redelivery cannot disambiguate them: persist one review per order so
     // ops can route the verified provider refund, then acknowledge.
-    for (const candidate of candidates) {
-      if (!candidate.order_id) continue;
-      await filePaystackRefundRecoveryReview(supabase, {
-        candidates: candidates.map((entry) => ({
-          payment_transaction_id: entry.id,
-          order_id: entry.order_id,
-          amount: entry.amount,
-          gateway_reference: entry.gateway_reference,
-        })),
-        merchantId: candidate.merchant_id,
-        metadata: {
-          provider_refund_id: refundId,
-          provider_payment_transaction_id: original.id,
-          reference: resolvedPaymentReference,
-          audit_record_failed: true,
-          recovered_from_provider_event: true,
-        },
-        orderId: candidate.order_id,
-        // Deliberately unset: every candidate review shares this provider
-        // refund, and the open-by-paystack-ref index would collapse all but
-        // the first order's review.
-        paystackRef: null,
-        reason: `Paystack refund ${refundId} matches multiple completed payments for reference ${resolvedPaymentReference}`,
-      });
-    }
+    await filePaystackRefundCandidateReviews(
+      supabase,
+      candidates,
+      evidence,
+      `Paystack refund ${refundId} matches multiple completed payments for reference ${resolvedPaymentReference}`
+    );
     logger.info({
       message:
         'Unknown Paystack refund event matches multiple completed payments',
@@ -174,6 +165,33 @@ export async function recoverUnknownPaystackRefund(
     return;
   }
   if (candidates.length !== 1 || !payment || !payment.order_id) {
+    // No completed local payment: a stale pending attempt may already have
+    // captured and been refunded before the sweep examined it. Retain the
+    // verified provider evidence instead of treating it as unrelated.
+    const { data: stalledRows, error: stalledError } = await supabase
+      .from('transactions')
+      .select('id, order_id, merchant_id, gateway_reference, amount')
+      .eq('gateway', 'paystack')
+      .eq('gateway_reference', resolvedPaymentReference)
+      .eq('transaction_type', 'payment')
+      .in('status', ['pending', 'processing', 'failed'])
+      .limit(2);
+    if (stalledError) throw new Error('refund_event_payment_lookup_failed');
+    const stalled = (stalledRows ?? []) as RecoveryPayment[];
+    if (stalled.length > 0) {
+      await filePaystackRefundCandidateReviews(
+        supabase,
+        stalled,
+        evidence,
+        `Paystack refund ${refundId} matches a non-completed local payment for reference ${resolvedPaymentReference}`
+      );
+      logger.info({
+        message:
+          'Unknown Paystack refund event matches a non-completed payment',
+        refundId,
+      });
+      return;
+    }
     logger.info({
       message:
         'Unknown Paystack refund event matches no single completed payment',

@@ -51,20 +51,12 @@ const order = {
 function selectQuery(data: unknown, error: unknown = null) {
   return {
     eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
     is: vi.fn().mockReturnThis(),
     limit: vi.fn().mockResolvedValue({ data, error }),
     maybeSingle: vi.fn().mockResolvedValue({ data, error }),
     select: vi.fn().mockReturnThis(),
   };
-}
-
-function updateQuery(data: unknown, error: unknown = null) {
-  const chain = {
-    eq: vi.fn().mockReturnThis(),
-    is: vi.fn().mockReturnThis(),
-    select: vi.fn().mockResolvedValue({ data, error }),
-  };
-  return { update: vi.fn().mockReturnValue(chain) };
 }
 
 describe('recoverUnknownPaystackRefund recovery reviews', () => {
@@ -96,29 +88,28 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
     mocks.reconcilePaystackCancellationRefund.mockResolvedValue('updated');
   });
 
-  function reviewInsert(error: unknown = null) {
-    return { insert: vi.fn().mockResolvedValue({ error }) };
+  function reviewRpc(error: unknown = null) {
+    return vi.fn().mockResolvedValue({ data: 'review-1', error });
   }
 
   it('files one review per order when the reference matches two payments', async () => {
-    const firstInsert = reviewInsert();
-    const secondInsert = reviewInsert();
+    const rpc = reviewRpc();
     const from = vi
       .fn()
-      .mockReturnValueOnce(selectQuery([firstPayment, secondPayment]))
-      .mockReturnValueOnce(firstInsert)
-      .mockReturnValueOnce(secondInsert);
-    const supabase = { from } as unknown as SupabaseClient;
+      .mockReturnValueOnce(selectQuery([firstPayment, secondPayment]));
+    const supabase = { from, rpc } as unknown as SupabaseClient;
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
-    expect(firstInsert.insert).toHaveBeenCalledWith(
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc).toHaveBeenNthCalledWith(
+      1,
+      'file_paystack_refund_recovery_review_v1',
       expect.objectContaining({
-        issue_type: 'order_cancellation_refund_requires_review',
-        order_id: 'order-1',
-        merchant_id: 'merchant-1',
-        paystack_ref: null,
-        metadata: expect.objectContaining({
+        p_order_id: 'order-1',
+        p_merchant_id: 'merchant-1',
+        p_paystack_ref: null,
+        p_metadata: expect.objectContaining({
           provider_refund_id: 202,
           provider_payment_transaction_id: 555,
           audit_record_failed: true,
@@ -128,42 +119,39 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
             }),
           },
         }),
-        candidates: [
+        p_candidates: [
           expect.objectContaining({ payment_transaction_id: 'pay-1' }),
           expect.objectContaining({ payment_transaction_id: 'pay-2' }),
         ],
       })
     );
-    expect(secondInsert.insert).toHaveBeenCalledWith(
+    expect(rpc).toHaveBeenNthCalledWith(
+      2,
+      'file_paystack_refund_recovery_review_v1',
       expect.objectContaining({
-        order_id: 'order-2',
-        merchant_id: 'merchant-2',
+        p_order_id: 'order-2',
+        p_merchant_id: 'merchant-2',
       })
     );
     expect(mocks.reconcilePaystackCancellationRefund).not.toHaveBeenCalled();
   });
 
   it('merges redelivered ambiguity evidence into the open reviews', async () => {
-    const firstInsert = reviewInsert({ code: '23505' });
-    const secondInsert = reviewInsert({ code: '23505' });
-    const firstUpdate = updateQuery([{ id: 'review-1' }]);
-    const secondUpdate = updateQuery([{ id: 'review-2' }]);
+    const rpc = reviewRpc();
     const from = vi
       .fn()
-      .mockReturnValueOnce(selectQuery([firstPayment, secondPayment]))
-      .mockReturnValueOnce(firstInsert)
-      .mockReturnValueOnce(selectQuery([{ id: 'review-1', metadata: {} }]))
-      .mockReturnValueOnce(firstUpdate)
-      .mockReturnValueOnce(secondInsert)
-      .mockReturnValueOnce(selectQuery([{ id: 'review-2', metadata: {} }]))
-      .mockReturnValueOnce(secondUpdate);
-    const supabase = { from } as unknown as SupabaseClient;
+      .mockReturnValueOnce(selectQuery([firstPayment, secondPayment]));
+    const supabase = { from, rpc } as unknown as SupabaseClient;
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
-    expect(firstUpdate.update).toHaveBeenCalledWith(
+    // The merge moved server-side: redelivery refiles the same evidence
+    // payload and the RPC absorbs it into the open reviews.
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc).toHaveBeenCalledWith(
+      'file_paystack_refund_recovery_review_v1',
       expect.objectContaining({
-        metadata: expect.objectContaining({
+        p_metadata: expect.objectContaining({
           refund_evidence: expect.objectContaining({
             'provider:202': expect.objectContaining({
               audit_record_failed: true,
@@ -172,29 +160,28 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
         }),
       })
     );
-    expect(secondUpdate.update).toHaveBeenCalledTimes(1);
   });
 
   it('files the provider evidence when the audit collides with a non-refund row', async () => {
     const auditInsert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
-    const review = reviewInsert();
+    const rpc = reviewRpc();
     const from = vi
       .fn()
       .mockReturnValueOnce(selectQuery([firstPayment]))
       .mockReturnValueOnce(selectQuery(order))
       .mockReturnValueOnce({ insert: auditInsert })
-      .mockReturnValueOnce(selectQuery(null))
-      .mockReturnValueOnce(review);
-    const supabase = { from } as unknown as SupabaseClient;
+      .mockReturnValueOnce(selectQuery(null));
+    const supabase = { from, rpc } as unknown as SupabaseClient;
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
-    expect(review.insert).toHaveBeenCalledWith(
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith(
+      'file_paystack_refund_recovery_review_v1',
       expect.objectContaining({
-        issue_type: 'order_cancellation_refund_requires_review',
-        order_id: 'order-1',
-        paystack_ref: '202',
-        metadata: expect.objectContaining({
+        p_order_id: 'order-1',
+        p_paystack_ref: '202',
+        p_metadata: expect.objectContaining({
           provider_refund_id: 202,
           provider_payment_transaction_id: 555,
           payment_transaction_id: 'pay-1',
@@ -207,35 +194,73 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
 
   it('merges a colliding redelivery into the open review instead of failing', async () => {
     const auditInsert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
-    const review = reviewInsert({ code: '23505' });
-    const merged = updateQuery([{ id: 'review-1' }]);
+    const rpc = reviewRpc();
     const from = vi
       .fn()
       .mockReturnValueOnce(selectQuery([firstPayment]))
       .mockReturnValueOnce(selectQuery(order))
       .mockReturnValueOnce({ insert: auditInsert })
-      .mockReturnValueOnce(selectQuery(null))
-      .mockReturnValueOnce(review)
-      .mockReturnValueOnce(selectQuery([{ id: 'review-1', metadata: {} }]))
-      .mockReturnValueOnce(merged);
+      .mockReturnValueOnce(selectQuery(null));
+    const supabase = { from, rpc } as unknown as SupabaseClient;
+
+    await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
+
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains evidence when only a non-completed payment matches', async () => {
+    const rpc = reviewRpc();
+    const stalledPayment = { ...firstPayment, id: 'pay-stalled' };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(selectQuery([]))
+      .mockReturnValueOnce(selectQuery([stalledPayment]));
+    const supabase = { from, rpc } as unknown as SupabaseClient;
+
+    await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
+
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith(
+      'file_paystack_refund_recovery_review_v1',
+      expect.objectContaining({
+        p_order_id: 'order-1',
+        p_paystack_ref: null,
+        p_reason: expect.stringContaining('non-completed local payment'),
+        p_metadata: expect.objectContaining({
+          provider_refund_id: 202,
+          provider_payment_transaction_id: 555,
+          audit_record_failed: true,
+        }),
+        p_candidates: [
+          expect.objectContaining({ payment_transaction_id: 'pay-stalled' }),
+        ],
+      })
+    );
+    expect(mocks.reconcilePaystackCancellationRefund).not.toHaveBeenCalled();
+  });
+
+  it('acknowledges the event when no local payment matches at all', async () => {
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(selectQuery([]))
+      .mockReturnValueOnce(selectQuery([]));
     const supabase = { from } as unknown as SupabaseClient;
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
-    expect(merged.update).toHaveBeenCalledTimes(1);
+    expect(from).toHaveBeenCalledTimes(2);
   });
 
   it('throws when the recovery review cannot be persisted', async () => {
     const auditInsert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
-    const review = reviewInsert({ code: 'XX000' });
+    const rpc = reviewRpc({ code: 'XX000' });
     const from = vi
       .fn()
       .mockReturnValueOnce(selectQuery([firstPayment]))
       .mockReturnValueOnce(selectQuery(order))
       .mockReturnValueOnce({ insert: auditInsert })
-      .mockReturnValueOnce(selectQuery(null))
-      .mockReturnValueOnce(review);
-    const supabase = { from } as unknown as SupabaseClient;
+      .mockReturnValueOnce(selectQuery(null));
+    const supabase = { from, rpc } as unknown as SupabaseClient;
 
     await expect(
       recoverUnknownPaystackRefund(supabase, 202, 'PSK-1')

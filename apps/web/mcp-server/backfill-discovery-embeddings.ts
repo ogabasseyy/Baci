@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
+import { discoveryEmbeddingSource } from './discovery-embedding-source';
 import { embedDiscoveryText } from './gemini-discovery-embedding';
 
 type ProductRow = {
@@ -67,16 +67,11 @@ export async function backfillDiscoveryEmbeddings() {
     if (priorError) throw new Error(`Embedding state read failed: ${priorError.code}`);
     const priorHashes = new Map((priorRows ?? []).map((row) => [row.product_id, row.source_hash]));
     for (const product of products) {
-      const sourceHash = createHash('sha256').update(JSON.stringify([
-        product.name, product.brand, product.category, product.description,
-      ])).digest('hex');
+      const { sourceHash, text } = discoveryEmbeddingSource(product);
       if (priorHashes.get(product.id) === sourceHash) continue;
-      const text = [product.brand, product.category, product.description]
-        .filter((part): part is string => typeof part === 'string')
-        .join('. ').replace(/<[^>]{0,2000}>/g, ' ').replace(/\s+/g, ' ').slice(0, 6000);
       const embedding = await embedDiscoveryText({
         apiKey: geminiKey, kind: 'document', title: product.name,
-        text: text.trim() || product.name,
+        text,
       });
       const { error: writeError } = await client.from('product_discovery_embeddings')
         .upsert({

@@ -174,7 +174,7 @@ until customer authorization and production readiness are verified.
 | `MCP_PUBLIC_ORIGIN` | No | Public HTTPS origin for proxied product images (default: `https://mcp.ogabassey.com`; set to the temporary tunnel origin for local ChatGPT QA) |
 | `MCP_TRUST_PROXY_REAL_IP` | Production Compose: yes | The server defaults to `false`. Set `true` only when the reverse proxy overwrites `X-Real-IP` on every request and the MCP port is reachable only through that proxy; otherwise set `false`. |
 | `MCP_SEMANTIC_SEARCH_ENABLED` | No | Defaults to `false`. Enable only after applying the discovery migration, generating current vectors, and checking search evaluation results. |
-| `GEMINI_API_KEY` | Only for semantic search | Private Gemini API key for `gemini-embedding-2`; never send it to ChatGPT or a browser. |
+| `GEMINI_API_KEY` | For semantic search and catalog backfills | Private Gemini API key for `gemini-embedding-2`; never send it to ChatGPT or a browser. |
 | `MCP_ENABLE_AGENTIC_CHECKOUT_TOOLS` | No | Explicitly forwarded by Compose; defaults to `false`. Set `true` only when checkout credentials and APIs are ready. |
 | `BACI_AGENTIC_ACCESS_TOKEN` | Yes for checkout | Baci-owned bearer token for agentic checkout APIs; this is not an OpenAI Platform API key |
 | `BACI_AGENTIC_SIGNING_KEY` | Yes for checkout | Baci-owned HMAC signing key for agentic checkout APIs |
@@ -197,7 +197,13 @@ function is not an indexing source for this pilot. Candidate ranking is exact
 after merchant filtering at the current catalog size; an approximate vector
 index should be considered only with measured tenant-level recall and latency.
 
-After migrating, run
+For Ogabassey, a user with product-edit permission can use
+`/dashboard/products/discovery` to backfill from their signed-in merchant
+session. The dashboard processes five active products per request, skips
+unchanged sources, and can be stopped and restarted without handling a JWT.
+It uses the server-side Gemini key and keeps semantic search disabled.
+
+For a private operator backfill instead, run
 `pnpm --filter @baci/web exec tsx mcp-server/backfill-discovery-embeddings.ts`
 with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
 `SUPABASE_ACCESS_TOKEN` (a merchant user's short-lived JWT), `MERCHANT_ID`, and

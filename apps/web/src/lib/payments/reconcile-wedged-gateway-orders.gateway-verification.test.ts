@@ -88,7 +88,8 @@ describe('reconcileWedgedGatewayOrders gateway verification', () => {
     });
 
     expect(mocks.verifyPaystackPayment).toHaveBeenCalledWith(
-      wedgedCandidate.gateway_reference
+      wedgedCandidate.gateway_reference,
+      undefined
     );
     expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledWith(
       expect.objectContaining({

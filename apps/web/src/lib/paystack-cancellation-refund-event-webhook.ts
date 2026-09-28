@@ -23,7 +23,13 @@ export async function handlePaystackCancellationRefundEvent(
   // cannot reach and held rows polling skips.
   const refundId = data?.id;
   let unknownRefundId: number | undefined;
-  if (typeof refundId === 'number' && Number.isSafeInteger(refundId)) {
+  // Nonpositive IDs can never match a provider refund: fall through to the
+  // reference path instead of 503ing on a validation failure every delivery.
+  if (
+    typeof refundId === 'number' &&
+    Number.isSafeInteger(refundId) &&
+    refundId > 0
+  ) {
     const { data: refund, error: lookupError } = await supabase
       .from('transactions')
       .select(

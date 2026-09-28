@@ -70,4 +70,35 @@ describe('reconcileWedgedGatewayOrders pass deadline', () => {
       now.mockRestore();
     }
   });
+
+  it('bounds in-flight verification to the remaining pass share', async () => {
+    const supabase = buildSupabase({ data: [wedgedCandidate] });
+    mocks.verifyPaystackPayment.mockResolvedValue({
+      code: 'NETWORK_ERROR',
+      error: 'socket hangup',
+      success: false,
+    });
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_100_000);
+
+    try {
+      const summary = await reconcileWedgedGatewayOrders({
+        deadlineMs: 1_180_000,
+        scheduleAfter,
+        supabase,
+      });
+
+      expect(mocks.verifyPaystackPayment).toHaveBeenCalledWith(
+        wedgedCandidate.gateway_reference,
+        expect.any(AbortSignal)
+      );
+      expect(summary.skipped).toEqual([
+        {
+          reason: 'paystack_verification_unavailable',
+          transactionId: 'txn-1',
+        },
+      ]);
+    } finally {
+      now.mockRestore();
+    }
+  });
 });

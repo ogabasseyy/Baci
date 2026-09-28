@@ -49,6 +49,25 @@ describe('verifyGatewayCharge', () => {
     });
   });
 
+  it('forwards the abort signal to Paystack verification', async () => {
+    mocks.verifyPaystackPayment.mockResolvedValue({
+      data: {
+        amount: 12_345,
+        currency: 'NGN',
+        status: 'success',
+      },
+      success: true,
+    });
+    const signal = AbortSignal.timeout(1000);
+
+    await verifyGatewayCharge('paystack', 'successful-ref', undefined, signal);
+
+    expect(mocks.verifyPaystackPayment).toHaveBeenCalledWith(
+      'successful-ref',
+      signal
+    );
+  });
+
   it.each([
     'HTTP_400',
     'HTTP_404',

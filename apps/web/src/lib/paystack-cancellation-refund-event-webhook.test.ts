@@ -259,6 +259,24 @@ describe('handlePaystackCancellationRefundEvent', () => {
     expect(response.status).toBe(503);
   });
 
+  it.each([
+    0, -1,
+  ])('falls back to the reference path for a nonpositive refund id (%s)', async (refundId) => {
+    const db = database(null);
+
+    const response = await handlePaystackCancellationRefundEvent(db, {
+      data: { id: refundId, transaction_reference: 'PAYMENT-1' },
+      event: 'refund.processed',
+    });
+
+    expect(db.from).not.toHaveBeenCalled();
+    expect(mocks.reconcilePaystackRefundEvent).toHaveBeenCalledWith(
+      db,
+      'PAYMENT-1'
+    );
+    expect(response.status).toBe(200);
+  });
+
   it('fails retryably when event reconciliation throws', async () => {
     const db = database(null);
     mocks.reconcilePaystackRefundEvent.mockRejectedValue(new Error('down'));

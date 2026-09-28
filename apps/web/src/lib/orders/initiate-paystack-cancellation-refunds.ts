@@ -179,7 +179,26 @@ export async function initiatePaystackCancellationRefunds({
         },
       });
     if (insertTxError) {
-      if (insertTxError.code !== '23505') {
+      let recordedByAnotherWriter = false;
+      if (insertTxError.code === '23505') {
+        // A concurrent webhook recovery may have recorded this refund —
+        // but the unique index spans all transaction types and gateways,
+        // so a collision alone proves nothing. Only treat the refund as
+        // recorded after verifying the winning row is this provider
+        // refund.
+        const { data: conflicting, error: conflictLookupError } = await supabase
+          .from('transactions')
+          .select('id, transaction_type, gateway, gateway_reference')
+          .eq('order_id', order.id)
+          .eq('gateway_reference', String(paystackRefund.data.id))
+          .maybeSingle();
+        recordedByAnotherWriter =
+          !conflictLookupError &&
+          conflicting?.transaction_type === 'refund' &&
+          conflicting?.gateway === 'paystack' &&
+          conflicting?.gateway_reference === String(paystackRefund.data.id);
+      }
+      if (!recordedByAnotherWriter) {
         // The provider accepted this refund but no local row exists, so the
         // webhook and polling reconcilers cannot discover it. Persist the
         // provider ID in the review before quarantining.
@@ -195,8 +214,6 @@ export async function initiatePaystackCancellationRefunds({
           transactions: [transaction],
         });
       }
-      // A duplicate audit row means the webhook recovery recorded this
-      // refund first: the row exists, so polling reconciles it normally.
     }
     refundIds.push(paystackRefund.data.id);
   }

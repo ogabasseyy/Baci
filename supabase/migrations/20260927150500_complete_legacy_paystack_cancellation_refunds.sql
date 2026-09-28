@@ -14,6 +14,7 @@ DECLARE
   v_order public.orders%ROWTYPE;
   v_external_payments integer;
   v_settlement public.merchant_settlements%ROWTYPE;
+  v_direct_split boolean;
   v_balance numeric;
   v_status text := lower(btrim(coalesce(p_provider_status, '')));
 BEGIN
@@ -159,31 +160,39 @@ BEGIN
         AND settlement.status IN ('pending', 'processing', 'settled')
       FOR UPDATE
     LOOP
-      IF v_settlement.status IN ('pending', 'processing') THEN
-        UPDATE public.merchant_wallets
-        SET upcoming_balance = upcoming_balance - v_settlement.net_amount,
-            upcoming_count = greatest(0, upcoming_count - 1),
-            updated_at = now()
-        WHERE id = v_settlement.wallet_id;
-      ELSE
-        UPDATE public.merchant_wallets
-        SET available_balance = available_balance - v_settlement.net_amount,
-            total_earned = total_earned - v_settlement.net_amount,
-            updated_at = now()
-        WHERE id = v_settlement.wallet_id
-        RETURNING available_balance INTO v_balance;
-        IF v_balance IS NULL THEN
-          RAISE EXCEPTION 'paystack_refund_settlement_wallet_missing';
+      -- Direct-split settlements settled straight to the merchant's Paystack
+      -- subaccount and never credited the Baci wallet: cancel the row below
+      -- without moving wallet balances that were never credited.
+      v_direct_split := COALESCE(
+        v_settlement.metadata ->> 'redvault_direct_split', 'false'
+      ) = 'true';
+      IF NOT v_direct_split THEN
+        IF v_settlement.status IN ('pending', 'processing') THEN
+          UPDATE public.merchant_wallets
+          SET upcoming_balance = upcoming_balance - v_settlement.net_amount,
+              upcoming_count = greatest(0, upcoming_count - 1),
+              updated_at = now()
+          WHERE id = v_settlement.wallet_id;
+        ELSE
+          UPDATE public.merchant_wallets
+          SET available_balance = available_balance - v_settlement.net_amount,
+              total_earned = total_earned - v_settlement.net_amount,
+              updated_at = now()
+          WHERE id = v_settlement.wallet_id
+          RETURNING available_balance INTO v_balance;
+          IF v_balance IS NULL THEN
+            RAISE EXCEPTION 'paystack_refund_settlement_wallet_missing';
+          END IF;
+          INSERT INTO public.wallet_transactions (
+            wallet_id, merchant_id, type, amount, balance_after,
+            source_type, source_id, description, status, metadata
+          ) VALUES (
+            v_settlement.wallet_id, v_settlement.merchant_id, 'refund',
+            v_settlement.net_amount, v_balance, 'refund', v_refund.id,
+            'Paystack cancellation refund settlement reversal', 'completed',
+            jsonb_build_object('settlement_id', v_settlement.id, 'order_id', v_order.id)
+          );
         END IF;
-        INSERT INTO public.wallet_transactions (
-          wallet_id, merchant_id, type, amount, balance_after,
-          source_type, source_id, description, status, metadata
-        ) VALUES (
-          v_settlement.wallet_id, v_settlement.merchant_id, 'refund',
-          v_settlement.net_amount, v_balance, 'refund', v_refund.id,
-          'Paystack cancellation refund settlement reversal', 'completed',
-          jsonb_build_object('settlement_id', v_settlement.id, 'order_id', v_order.id)
-        );
       END IF;
       UPDATE public.merchant_settlements
       SET status = 'cancelled', updated_at = now()

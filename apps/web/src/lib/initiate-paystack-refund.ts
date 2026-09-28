@@ -7,11 +7,15 @@ import { paystackRequest } from './paystack-request';
  * @param transaction - Transaction reference or ID
  * @param amount - Amount to refund in kobo (optional, defaults to full amount)
  * @param reason - Reason for refund (optional)
+ * @param timeoutMs - Abort the provider call after this long (optional).
+ * An abort surfaces as NETWORK_ERROR, which callers already treat as
+ * ambiguous provider state.
  */
 export async function initiateRefund(
   transaction: string,
   amount?: number,
-  reason?: string
+  reason?: string,
+  timeoutMs?: number
 ): Promise<
   PaystackResult<{
     id: number;
@@ -43,6 +47,9 @@ export async function initiateRefund(
   }>('/refund', {
     method: 'POST',
     body: JSON.stringify(payload),
+    ...(timeoutMs !== undefined && Number.isFinite(timeoutMs) && timeoutMs > 0
+      ? { signal: AbortSignal.timeout(timeoutMs) }
+      : {}),
   });
 
   if (!result.success) {

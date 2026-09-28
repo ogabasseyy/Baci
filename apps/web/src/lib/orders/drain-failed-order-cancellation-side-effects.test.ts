@@ -64,6 +64,33 @@ describe('drainFailedOrderCancellationSideEffects', () => {
     ]);
   });
 
+  it('stops starting candidates once the invocation deadline passes', async () => {
+    const candidate = {
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-1',
+      step: 'refund',
+    };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(terminalQuery([candidate]))
+      .mockReturnValueOnce(terminalQuery([]));
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_270_000);
+
+    try {
+      const result = await drainFailedOrderCancellationSideEffects({
+        deadlineMs: 1_270_000,
+        sendCancellationEmail: vi.fn(),
+        supabase: { from } as never,
+      });
+
+      expect(mocks.run).not.toHaveBeenCalled();
+      expect(from).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({ drained: [], failed: [], skipped: [] });
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it('fails closed when candidate lookup fails', async () => {
     const from = vi
       .fn()

@@ -78,6 +78,7 @@ describe('processCancellationDrain', () => {
     expect(response.status).toBe(200);
     expect(mocks.drainFailedOrderCancellationSideEffects).toHaveBeenCalledWith(
       expect.objectContaining({
+        deadlineMs: expect.any(Number),
         limit: 9,
         sendCancellationEmail: mocks.sendEmail,
       })
@@ -137,6 +138,7 @@ describe('processCancellationDrain', () => {
         mocks.drainFailedOrderCancellationSideEffects
       ).toHaveBeenCalledWith(
         expect.objectContaining({
+          deadlineMs: 1_270_000,
           limit: 0,
           sendCancellationEmail: mocks.sendEmail,
         })

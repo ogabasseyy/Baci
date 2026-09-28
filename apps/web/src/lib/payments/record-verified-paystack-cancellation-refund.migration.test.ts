@@ -102,10 +102,11 @@ describe('verified paystack cancellation refund migration', () => {
     const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
 
     expect(migrationSql).toContain(
-      "AND settlement.gateway = 'paystack' AND settlement.status IN ('pending', 'processing', 'settled')"
+      "AND settlement.source_id = v_order.id AND settlement.status IN ('pending', 'processing', 'settled')"
     );
+    expect(migrationSql).not.toContain("settlement.gateway = 'paystack'");
     expect(migrationSql).toContain(
-      "'Paystack cancellation refund settlement reversal'"
+      "v_settlement.gateway || ' cancellation refund settlement reversal'"
     );
     expect(migrationSql).toContain(
       "v_settlement.metadata ->> 'redvault_direct_split', 'false' ) = 'true'"

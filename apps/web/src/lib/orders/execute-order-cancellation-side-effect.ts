@@ -31,6 +31,7 @@ export type CancellationEmailSender = (
 ) => Promise<CancellationEmailResult>;
 
 export async function executeOrderCancellationSideEffect({
+  deadlineMs,
   merchant,
   order,
   reason,
@@ -38,6 +39,7 @@ export async function executeOrderCancellationSideEffect({
   step,
   supabase,
 }: {
+  deadlineMs?: number;
   merchant: CancellationMerchant;
   order: CancellationOrder;
   reason?: string;
@@ -155,6 +157,7 @@ export async function executeOrderCancellationSideEffect({
     });
   }
   const refundIds = await initiatePaystackCancellationRefunds({
+    deadlineMs,
     order,
     reason,
     refundedPaymentIds,

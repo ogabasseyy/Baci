@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GatewayPaymentTransaction } from './gateway-payment-transaction';
 import { initiatePaystackCancellationRefunds } from './initiate-paystack-cancellation-refunds';
+import { DeliveryUncertainError } from './run-order-cancellation-side-effect';
 
 const mocks = vi.hoisted(() => ({
   initiatePaystackRefund: vi.fn(),
@@ -67,7 +68,8 @@ describe('initiatePaystackCancellationRefunds', () => {
     expect(mocks.initiatePaystackRefund).toHaveBeenCalledWith(
       'PSK-1',
       1250,
-      'Order cancelled'
+      'Order cancelled',
+      undefined
     );
     expect(insert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -114,6 +116,62 @@ describe('initiatePaystackCancellationRefunds', () => {
         }),
       })
     );
+  });
+
+  it('bounds each leg to the remaining deadline', async () => {
+    acceptedRefund();
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_200_000);
+
+    try {
+      const refundIds = await initiatePaystackCancellationRefunds({
+        deadlineMs: 1_270_000,
+        order,
+        refundedPaymentIds: new Set(),
+        supabase,
+        transactions: [transaction],
+      });
+
+      expect(refundIds).toEqual([101]);
+      expect(mocks.initiatePaystackRefund).toHaveBeenCalledWith(
+        'PSK-1',
+        1250,
+        'Order cancelled',
+        70_000
+      );
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('throws a retryable error without calling the provider past the deadline', async () => {
+    acceptedRefund();
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_270_000);
+
+    try {
+      const failure = await initiatePaystackCancellationRefunds({
+        deadlineMs: 1_270_000,
+        order,
+        refundedPaymentIds: new Set(),
+        supabase,
+        transactions: [transaction],
+      }).then(
+        () => {
+          throw new Error('expected the deadline to throw');
+        },
+        (error: unknown) => error
+      );
+
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).not.toBeInstanceOf(DeliveryUncertainError);
+      expect((failure as Error).message).toBe(
+        'cancellation_refund_deadline_exceeded'
+      );
+      expect(mocks.initiatePaystackRefund).not.toHaveBeenCalled();
+      expect(insert).not.toHaveBeenCalled();
+      expect(mocks.quarantineRefund).not.toHaveBeenCalled();
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it('throws a retriable error on ambiguous provider failures', async () => {

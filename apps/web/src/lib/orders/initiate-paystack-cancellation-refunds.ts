@@ -11,12 +11,14 @@ import { DeliveryUncertainError } from '@/lib/orders/run-order-cancellation-side
  * proceed; quarantine paths file a reconciliation review first.
  */
 export async function initiatePaystackCancellationRefunds({
+  deadlineMs,
   order,
   reason,
   refundedPaymentIds,
   supabase,
   transactions,
 }: {
+  deadlineMs?: number;
   order: {
     currency: string | null;
     id: string;
@@ -32,11 +34,20 @@ export async function initiatePaystackCancellationRefunds({
 
   for (const transaction of transactions) {
     if (refundedPaymentIds.has(transaction.id)) continue;
+    // Bound every leg to the remaining invocation deadline: a plain
+    // Error keeps the step retryable, so unattempted legs run on the
+    // next tick instead of stranding a mid-flight claim.
+    const timeoutMs =
+      deadlineMs === undefined ? undefined : deadlineMs - Date.now();
+    if (timeoutMs !== undefined && timeoutMs <= 0) {
+      throw new Error('cancellation_refund_deadline_exceeded');
+    }
     const transactionAmount = Number(transaction.amount);
     const paystackRefund = await initiatePaystackRefund(
       transaction.gateway_reference as string,
       Math.round(transactionAmount * 100),
-      reason || 'Order cancelled'
+      reason || 'Order cancelled',
+      timeoutMs
     );
     if (!paystackRefund.success) {
       const isAmbiguousFailure =

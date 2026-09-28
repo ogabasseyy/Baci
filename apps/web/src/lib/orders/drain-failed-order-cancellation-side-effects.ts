@@ -39,10 +39,12 @@ const MERCHANT_SELECT =
 
 export async function drainFailedOrderCancellationSideEffects({
   supabase,
+  deadlineMs,
   limit = DEFAULT_LIMIT,
   sendCancellationEmail,
 }: {
   supabase: SupabaseClient;
+  deadlineMs?: number;
   limit?: number;
   sendCancellationEmail: CancellationEmailSender;
 }): Promise<CancellationSideEffectDrainSummary> {
@@ -110,6 +112,17 @@ export async function drainFailedOrderCancellationSideEffects({
 
   for (const candidate of candidates.values()) {
     const { order_id: orderId, step } = candidate;
+    // A refund step can outlast the fixed per-step estimate (multiple
+    // serial provider calls), so stop starting work once the invocation
+    // deadline passes instead of claiming a row the abort would strand.
+    if (deadlineMs !== undefined && Date.now() >= deadlineMs) {
+      logger.info({
+        message: 'Stopping cancellation side-effect drain at cron deadline',
+        orderId,
+        step,
+      });
+      break;
+    }
     try {
       const { data: order, error: orderError } = await supabase
         .from('orders')
@@ -141,6 +154,7 @@ export async function drainFailedOrderCancellationSideEffects({
         supabase,
         execute: () =>
           executeOrderCancellationSideEffect({
+            deadlineMs,
             merchant,
             order,
             reason: order.cancellation_reason ?? undefined,

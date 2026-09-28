@@ -125,7 +125,16 @@ export async function revalidateProductsReliable(
         }
       }
 
-      revalidateProductSlugs(merchantId, resolvedSlugs);
+      // Hard-expire when an edge purge follows in-process (product purge or
+      // whole-storefront hostname purge): SWR would serve the pre-mutation
+      // snapshot to the first post-purge request and re-seed the edge.
+      if ((shouldPurgeProducts || purgeWholeStorefront) && merchantSlug) {
+        revalidateProductSlugs(merchantId, resolvedSlugs, {
+          expireImmediately: true,
+        });
+      } else {
+        revalidateProductSlugs(merchantId, resolvedSlugs);
+      }
 
       if (shouldPurgeProducts && merchantSlug) {
         // Expire the merchant-scoped related-blog enrichment before the edge

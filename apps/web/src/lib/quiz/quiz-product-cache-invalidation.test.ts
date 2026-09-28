@@ -12,7 +12,10 @@ import { invalidateQuizProductCaches } from './quiz-product-cache-invalidation';
 
 function createClient(
   reservationRows: unknown[] = [],
-  options: { failReservationsAfterFirstPage?: boolean } = {}
+  options: {
+    failReservationsAfterFirstPage?: boolean;
+    expiredEventsError?: unknown;
+  } = {}
 ) {
   const eventRows = [
     {
@@ -41,8 +44,8 @@ function createClient(
               ? reservationRows
               : [];
       const builder: {
-        data: unknown[];
-        error: null;
+        data: unknown;
+        error: unknown;
         select: ReturnType<typeof vi.fn>;
         gte: ReturnType<typeof vi.fn>;
         order: ReturnType<typeof vi.fn>;
@@ -71,7 +74,12 @@ function createClient(
         }),
         not: vi.fn(() => builder),
         in: vi.fn(() => {
-          builder.data = table === 'quiz_events' ? expiredEventRows : rows;
+          if (options.expiredEventsError && table === 'quiz_events') {
+            builder.data = null;
+            builder.error = options.expiredEventsError;
+          } else {
+            builder.data = table === 'quiz_events' ? expiredEventRows : rows;
+          }
           return builder;
         }),
       };
@@ -195,6 +203,34 @@ describe('invalidateQuizProductCaches', () => {
         supabase: client,
         targetSweepIncomplete: true,
       });
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('sweep incomplete'),
+        expect.objectContaining({ changedAfter: '2026-09-01T00:00:00Z' })
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('marks the run incomplete when the award owner lookup keeps failing', async () => {
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      const client = createClient([], {
+        expiredEventsError: { message: 'owner lookup down' },
+      });
+
+      await invalidateQuizProductCaches(
+        client as never,
+        '2026-09-01T00:00:00Z'
+      );
+
+      // The unmapped awards cannot be attributed, so the collected
+      // merchants escalate to the conservative hostname fallback.
+      expect(mockScheduleOrderProductBlogPurge).toHaveBeenCalledWith(
+        expect.objectContaining({ targetSweepIncomplete: true })
+      );
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('sweep incomplete'),
         expect.objectContaining({ changedAfter: '2026-09-01T00:00:00Z' })

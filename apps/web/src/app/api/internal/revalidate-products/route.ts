@@ -203,8 +203,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           createPublicClient({
             clientInfo: 'internal-revalidate-products-purge',
           });
-        const { entries, resolvedSlugs, blogPostSlugs } =
-          await enrichProductPurgeEntries(purgeClient, merchantId, products);
+        const {
+          entries,
+          resolvedSlugs,
+          blogPostSlugs,
+          blogPostSlugsIncomplete,
+        } = await enrichProductPurgeEntries(purgeClient, merchantId, products);
         // Bust the per-slug Next product-detail caches for every resolved slug
         // BEFORE scheduling the edge purge: the PDP snapshot is tagged per-slug
         // and is NOT invalidated by the slug-less revalidateProducts above, so a
@@ -225,7 +229,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           // Related blog enrichment shares the merchant product tag. Expire it
           // before the edge purge can cause an article MISS to refill stale data.
           expireProductBlogCache(merchantId);
-          if (blogPostSlugs.length > 0) {
+          if (blogPostSlugsIncomplete) {
+            // The article lookup totally failed: the affected article URLs
+            // are unknown, so evict the hostname (a superset of the product
+            // purge) rather than leaving linked rails stale until TTL.
+            scheduleStorefrontHostnamePurge(authoritativeMerchantSlug);
+          } else if (blogPostSlugs.length > 0) {
             scheduleStorefrontProductPurge(authoritativeMerchantSlug, entries, {
               blogPostSlugs,
             });

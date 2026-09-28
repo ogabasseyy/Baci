@@ -101,23 +101,17 @@ export async function scheduleCheckoutProductBlogPurge({
     // variant while their order items store variant_id: null, so resolve
     // policies by product_id (including the anchor) instead of trusting
     // the stored variant ids.
-    const { data: variantRows, error: variantLookupError } = await supabase
-      .from('product_variants')
-      .select('product_id, inventory_tracking_policy')
-      .eq('merchant_id', merchantId)
-      .in('product_id', Array.from(productsNeedingVariantLookup))
-      .returns<VariantPolicyRow[]>();
+    try {
+      const { data: variantRows, error: variantLookupError } = await supabase
+        .from('product_variants')
+        .select('product_id, inventory_tracking_policy')
+        .eq('merchant_id', merchantId)
+        .in('product_id', Array.from(productsNeedingVariantLookup))
+        .returns<VariantPolicyRow[]>();
 
-    if (variantLookupError) {
-      variantPolicyLookupFailed = true;
-      logger.error({
-        message:
-          'Failed to resolve variant inventory policies after order creation',
-        error: variantLookupError,
-        orderId,
-        merchantId,
-      });
-    } else {
+      if (variantLookupError) {
+        throw variantLookupError;
+      }
       for (const variant of variantRows ?? []) {
         if (
           isInventoryTrackedProduct(
@@ -128,6 +122,18 @@ export async function scheduleCheckoutProductBlogPurge({
           serializedVariantProductIds.add(variant.product_id);
         }
       }
+    } catch (lookupError) {
+      // A rejected variant read preserves the candidate ids exactly like
+      // an `{ error }` result: the products stay in the purge set below
+      // instead of escaping with no invalidation scheduled.
+      variantPolicyLookupFailed = true;
+      logger.error({
+        message:
+          'Failed to resolve variant inventory policies after order creation',
+        error: lookupError,
+        orderId,
+        merchantId,
+      });
     }
   }
 

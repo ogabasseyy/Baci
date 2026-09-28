@@ -2,6 +2,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { enrichProductPurgeEntries } from '@/lib/authoritative-product-purge-enrichment';
 import { revalidateProductSlugs } from '@/lib/cache-revalidation';
 import { expireProductBlogCacheReliable } from '@/lib/expire-product-blog-cache-reliable';
+import {
+  buildInternalProductPurgeEntries,
+  collectResolvedProductSlugs,
+} from '@/lib/internal-product-purge-entries';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
 import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
 
@@ -68,11 +72,18 @@ export async function scheduleOrderProductBlogPurge({
       enriched.blogPostSlugsIncomplete === true || targetSweepIncomplete;
     slugs = enriched.resolvedSlugs ?? entries.map((entry) => entry.slug);
   } catch (error) {
-    console.warn('Skipped order-related blog purge after enrichment failed', {
-      merchantId,
-      error,
-    });
-    return;
+    // Enrichment only rejects when a row lookup itself threw (transport or
+    // a broken client): the caller-supplied ids still name the affected
+    // products, so continue with hint entries and unknown purge scope — the
+    // hostname fallback below covers the unresolved article/product URLs.
+    console.warn(
+      'Order-related product enrichment failed; continuing with caller hints',
+      { merchantId, error }
+    );
+    entries = buildInternalProductPurgeEntries(products);
+    blogPostSlugs = [];
+    blogPostSlugsIncomplete = true;
+    slugs = collectResolvedProductSlugs(products);
   }
   if (entries.length === 0) {
     return;

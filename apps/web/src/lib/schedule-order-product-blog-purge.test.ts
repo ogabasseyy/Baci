@@ -173,7 +173,7 @@ describe('scheduleOrderProductBlogPurge', () => {
     }
   });
 
-  it('fails open when product enrichment rejects', async () => {
+  it('evicts the hostname from caller hints when product enrichment rejects', async () => {
     const consoleSpy = vi
       .spyOn(console, 'warn')
       .mockImplementation(() => undefined);
@@ -192,9 +192,20 @@ describe('scheduleOrderProductBlogPurge', () => {
         })
       ).resolves.toBeUndefined();
 
+      // The caller-supplied ids still name the affected products, so a
+      // rejected enrichment escalates to the hostname fallback instead of
+      // skipping invalidation entirely.
+      expect(mockRevalidateSlugs).toHaveBeenCalledWith(
+        'merchant-1',
+        ['product-1'],
+        { expireImmediately: true }
+      );
       expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
+      expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
+        'ogabassey'
+      );
       expect(consoleSpy).toHaveBeenCalledWith(
-        'Skipped order-related blog purge after enrichment failed',
+        'Order-related product enrichment failed; continuing with caller hints',
         expect.objectContaining({ merchantId: 'merchant-1' })
       );
     } finally {

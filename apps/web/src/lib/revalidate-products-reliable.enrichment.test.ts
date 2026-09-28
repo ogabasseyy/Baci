@@ -61,16 +61,23 @@ describe('revalidateProductsReliable enrichment path', () => {
       'merchant-1',
       products
     );
-    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith('merchant-1', [
-      'iphone-15',
-      'product-id',
-    ]);
+    // Hard-expired: an edge purge follows in-process, so SWR would reseed it.
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      ['iphone-15', 'product-id'],
+      { expireImmediately: true }
+    );
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'ogabassey',
       [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
       { blogPostSlugs: ['iphone-15-buying-guide'] }
     );
     expect(mockExpireProductBlogCache).toHaveBeenCalledWith('merchant-1');
+    // The hard expiry precedes the edge purge: the first post-purge PDP
+    // request must regenerate instead of re-seeding the edge from SWR.
+    expect(mockRevalidateProductSlugs.mock.invocationCallOrder[0]).toBeLessThan(
+      mockScheduleStorefrontProductPurge.mock.invocationCallOrder[0]
+    );
   });
 
   it('keeps caller-provided purge hints when enrichment rejects', async () => {
@@ -86,9 +93,12 @@ describe('revalidateProductsReliable enrichment path', () => {
       supabase: supabase as never,
     });
 
-    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith('merchant-1', [
-      'iphone-15',
-    ]);
+    // Hard-expired: an edge purge follows in-process, so SWR would reseed it.
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      ['iphone-15'],
+      { expireImmediately: true }
+    );
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'ogabassey',
       [{ slug: 'iphone-15', categorySegment: 'smartphones' }]
@@ -107,10 +117,12 @@ describe('revalidateProductsReliable enrichment path', () => {
     });
 
     expect(mockEnrichProductPurgeEntries).not.toHaveBeenCalled();
-    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith('merchant-1', [
-      'iphone-15',
-      'product-id',
-    ]);
+    // Hard-expired: an edge purge follows in-process, so SWR would reseed it.
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      ['iphone-15', 'product-id'],
+      { expireImmediately: true }
+    );
     expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
     expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
       'ogabassey'

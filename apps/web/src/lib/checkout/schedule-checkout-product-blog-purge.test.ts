@@ -23,20 +23,25 @@ vi.mock('@/lib/logger', () => ({
 function createSupabase({
   productResult,
   variantResult = { data: [], error: null },
+  variantReject,
 }: {
   productResult: { data: unknown[] | null; error: unknown };
   variantResult?: { data: unknown[] | null; error: unknown };
+  variantReject?: unknown;
 }) {
   const supabase = {
     from: vi.fn((table: string) => ({
       select: vi.fn(() => ({
         eq: vi.fn(() => ({
           in: vi.fn(() => ({
-            returns: vi
-              .fn()
-              .mockResolvedValue(
-                table === 'products' ? productResult : variantResult
-              ),
+            returns:
+              variantReject !== undefined && table !== 'products'
+                ? vi.fn().mockRejectedValue(variantReject)
+                : vi
+                    .fn()
+                    .mockResolvedValue(
+                      table === 'products' ? productResult : variantResult
+                    ),
           })),
         })),
       })),
@@ -144,6 +149,36 @@ describe('scheduleCheckoutProductBlogPurge', () => {
 
     expect(mocks.schedule).toHaveBeenCalledWith(
       expect.objectContaining({ productIds: ['unmanaged'] })
+    );
+  });
+
+  it('keeps unmanaged candidates when the variant read rejects', async () => {
+    const supabase = createSupabase({
+      productResult: {
+        data: [
+          { id: 'unmanaged', slug: 'unmanaged-phone', manage_stock: false },
+        ],
+        error: null,
+      },
+      variantReject: new Error('transport down'),
+    });
+
+    await scheduleCheckoutProductBlogPurge({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-1',
+      orderItems: [{ product_id: 'unmanaged', variant_id: null }],
+      supabase,
+    });
+
+    expect(mocks.schedule).toHaveBeenCalledWith(
+      expect.objectContaining({ productIds: ['unmanaged'] })
+    );
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message:
+          'Failed to resolve variant inventory policies after order creation',
+      })
     );
   });
 

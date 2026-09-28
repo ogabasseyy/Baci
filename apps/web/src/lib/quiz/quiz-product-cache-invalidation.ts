@@ -195,29 +195,41 @@ export async function invalidateQuizProductCaches(
       start < expiredEventIds.length;
       start += QUIZ_EVENT_ID_CHUNK_SIZE
     ) {
-      try {
-        const expiredEventResult = await client
-          .from('quiz_events')
-          .select('id, merchant_id')
-          .in(
-            'id',
-            expiredEventIds.slice(start, start + QUIZ_EVENT_ID_CHUNK_SIZE)
-          );
-        if (!expiredEventResult.error) {
-          for (const row of (expiredEventResult.data ??
-            []) as QuizEventCacheRow[]) {
-            if (
-              typeof row.id === 'string' &&
-              row.id.trim().length > 0 &&
-              typeof row.merchant_id === 'string' &&
-              row.merchant_id.trim().length > 0
-            ) {
-              eventMerchantIds.set(row.id.trim(), row.merchant_id.trim());
-            }
+      // Expired awards are absent from the `updated_at` event sweep (the
+      // expiry RPC touches quiz_awards only), so an unmapped owner chunk
+      // would drop its awards forever once `changedAfter` advances. Retry
+      // once, then mark the run incomplete so collected merchants still
+      // escalate to the hostname fallback.
+      let ownerRows: QuizEventCacheRow[] | null = null;
+      for (let attempt = 0; attempt < 2 && !ownerRows; attempt += 1) {
+        try {
+          const expiredEventResult = await client
+            .from('quiz_events')
+            .select('id, merchant_id')
+            .in(
+              'id',
+              expiredEventIds.slice(start, start + QUIZ_EVENT_ID_CHUNK_SIZE)
+            );
+          if (!expiredEventResult.error) {
+            ownerRows = (expiredEventResult.data ?? []) as QuizEventCacheRow[];
           }
+        } catch {
+          // Retried below; a persistent failure marks the run incomplete.
         }
-      } catch {
-        // The quiz RPC already completed; cache expiry remains best effort.
+      }
+      if (!ownerRows) {
+        sweepIncomplete = true;
+        continue;
+      }
+      for (const row of ownerRows) {
+        if (
+          typeof row.id === 'string' &&
+          row.id.trim().length > 0 &&
+          typeof row.merchant_id === 'string' &&
+          row.merchant_id.trim().length > 0
+        ) {
+          eventMerchantIds.set(row.id.trim(), row.merchant_id.trim());
+        }
       }
     }
   }

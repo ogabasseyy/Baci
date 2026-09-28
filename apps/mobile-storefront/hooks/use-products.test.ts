@@ -248,6 +248,68 @@ describe('useProducts', () => {
     );
   });
 
+  it('starts one next-page fetch for synchronous duplicate loadMore calls', async () => {
+    mockFetchProductsPage.mockResolvedValueOnce({
+      products: [createProduct('prod-1')],
+      nextOffset: 1,
+      total: 5,
+    });
+    const queryClient = createQueryClient();
+
+    const { result } = renderHook(() => useProducts({ limit: 1 }), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(result.current.hasMore).toBe(true));
+
+    mockFetchProductsPage.mockResolvedValueOnce({
+      products: [createProduct('prod-2')],
+      nextOffset: 2,
+      total: 5,
+    });
+
+    const callsBeforeLoadMore = mockFetchProductsPage.mock.calls.length;
+    act(() => {
+      // Two end-reached signals before any rerender: both see the same
+      // stale fetching flags, so only the synchronous lock dedupes them.
+      result.current.loadMore();
+      result.current.loadMore();
+    });
+
+    await waitFor(() => {
+      expect(mockFetchProductsPage.mock.calls.length).toBe(
+        callsBeforeLoadMore + 1
+      );
+    });
+    expect(mockFetchProductsPage).toHaveBeenLastCalledWith(
+      'merchant-1',
+      { limit: 1 },
+      1
+    );
+
+    // The lock releases once the fetch settles: a later signal fetches again.
+    await waitFor(() =>
+      expect(
+        result.current.products.some((product) => product.id === 'prod-2')
+      ).toBe(true)
+    );
+    mockFetchProductsPage.mockResolvedValueOnce({
+      products: [createProduct('prod-3')],
+      nextOffset: null,
+      total: 5,
+    });
+
+    act(() => {
+      result.current.loadMore();
+    });
+
+    await waitFor(() => {
+      expect(mockFetchProductsPage.mock.calls.length).toBe(
+        callsBeforeLoadMore + 2
+      );
+    });
+  });
+
   it('surfaces fetch errors and exposes an empty product list', async () => {
     mockFetchProductsPage.mockRejectedValueOnce(new Error('network down'));
     const queryClient = createQueryClient();

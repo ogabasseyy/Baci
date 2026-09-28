@@ -136,6 +136,11 @@ export function SearchAutocomplete({
   // suggestion fetch returned nothing.
   const canSubmitSearch = Boolean(onSubmitSearch) && trimmedValue.length > 0;
   const showPopup = isOpen && (hasResults || canSubmitSearch);
+  // The empty-state message and its screen-reader announcement share one
+  // gate: only a settled successful response may claim there are no
+  // suggestions — never the debounce window, a pending request, or a
+  // failure. Queries that never fetch (e.g. one character) stay silent.
+  const hasSuggestionsResponse = settledQuery === debouncedValue;
 
   useEffect(() => {
     if (!autoFocus) {
@@ -250,7 +255,7 @@ export function SearchAutocomplete({
         {isOpen &&
           hasResults &&
           `${resultsCount} ${resultsCount === 1 ? 'result' : 'results'} available`}
-        {isOpen && !hasResults && isPopupLength(value) && 'No results found'}
+        {isOpen && !hasResults && hasSuggestionsResponse && 'No results found'}
       </div>
 
       {showPopup && (
@@ -258,7 +263,7 @@ export function SearchAutocomplete({
           canSubmitSearch={canSubmitSearch}
           formatCurrencyCompact={formatCurrencyCompact}
           hasResults={hasResults}
-          hasSuggestionsResponse={settledQuery === debouncedValue}
+          hasSuggestionsResponse={hasSuggestionsResponse}
           highlightedIndex={highlightedIndex}
           listboxId={listboxId}
           loading={loading}

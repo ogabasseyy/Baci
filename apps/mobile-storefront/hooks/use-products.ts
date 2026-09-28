@@ -25,6 +25,27 @@ import {
 } from '@/hooks/product-utils';
 import { useMerchant } from '@/hooks/use-merchant';
 
+/**
+ * Starts a next-page fetch unless one is already in flight. State flags
+ * (isFetchingNextPage, isLoadingMore) update only after a rerender, so two
+ * end-reached signals arriving synchronously would both pass the state
+ * guards and start duplicate fetches; this ref lock releases when the
+ * fetch settles, on success or failure.
+ */
+function fetchLockedNextPage(
+  inFlightRef: { current: boolean },
+  fetchNextPage: () => Promise<unknown>
+) {
+  if (inFlightRef.current) {
+    return;
+  }
+  inFlightRef.current = true;
+  const release = () => {
+    inFlightRef.current = false;
+  };
+  void fetchNextPage().then(release, release);
+}
+
 export function useProducts(options: UseProductsOptions = {}) {
   const { data: merchant } = useMerchant();
   const merchantId = merchant?.id || CONSTANT_MERCHANT_ID;
@@ -56,6 +77,7 @@ export function useProducts(options: UseProductsOptions = {}) {
   });
 
   const pendingLoadMoreRef = useRef(false);
+  const nextPageInFlightRef = useRef(false);
 
   useEffect(() => {
     if (!hasNextPage) {
@@ -65,7 +87,7 @@ export function useProducts(options: UseProductsOptions = {}) {
 
     if (pendingLoadMoreRef.current && !isFetching && !isFetchingNextPage) {
       pendingLoadMoreRef.current = false;
-      void fetchNextPage();
+      fetchLockedNextPage(nextPageInFlightRef, fetchNextPage);
     }
   }, [fetchNextPage, hasNextPage, isFetching, isFetchingNextPage]);
 
@@ -100,7 +122,7 @@ export function useProducts(options: UseProductsOptions = {}) {
         return;
       }
 
-      void fetchNextPage();
+      fetchLockedNextPage(nextPageInFlightRef, fetchNextPage);
     },
     isLoadingMore: isFetchingNextPage,
   };

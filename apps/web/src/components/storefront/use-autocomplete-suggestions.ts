@@ -69,7 +69,16 @@ export function useAutocompleteSuggestions({
       `/api/search/autocomplete?q=${encodeURIComponent(debouncedValue)}&merchant_id=${merchantId}&limit=10`,
       { signal: controller.signal }
     )
-      .then((response) => response.json())
+      // The route returns JSON even for failures (e.g. a 500 body), which
+      // would otherwise parse into empty arrays and settle the query as a
+      // genuine "No suggestions" response. Reject first so failures take
+      // the catch path and leave the query unsettled.
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Autocomplete request failed: ${response.status}`);
+        }
+        return response.json();
+      })
       .then(
         (data: {
           suggestions?: AutocompleteProduct[];

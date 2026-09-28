@@ -4,7 +4,7 @@ import { useAutocompleteSuggestions } from './use-autocomplete-suggestions';
 
 function mockFetch(payload: unknown) {
   globalThis.fetch = vi.fn(() =>
-    Promise.resolve({ json: () => Promise.resolve(payload) })
+    Promise.resolve({ ok: true, json: () => Promise.resolve(payload) })
   ) as unknown as typeof fetch;
 }
 
@@ -82,6 +82,32 @@ describe('useAutocompleteSuggestions', () => {
     expect(onResultsReceived).not.toHaveBeenCalled();
   });
 
+  it('treats a JSON error response as a failure, not an empty result', async () => {
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: false,
+        status: 500,
+        json: () => Promise.resolve({ error: 'Failed' }),
+      })
+    ) as unknown as typeof fetch;
+    const onResultsReceived = vi.fn();
+
+    const { result } = renderHook(() =>
+      useAutocompleteSuggestions({
+        debouncedValue: 'iph',
+        merchantId: 'm1',
+        onResultsReceived,
+      })
+    );
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+    expect(result.current.suggestions).toEqual([]);
+    expect(result.current.settledQuery).toBeNull();
+    expect(onResultsReceived).not.toHaveBeenCalled();
+  });
+
   it('clears results and the loading flag on demand', async () => {
     mockFetch({ suggestions: [{ id: 'p1', name: 'iPhone' }] });
     const onResultsReceived = vi.fn();
@@ -115,9 +141,12 @@ describe('useAutocompleteSuggestions', () => {
     });
     globalThis.fetch = vi
       .fn()
-      .mockImplementationOnce(() => Promise.resolve({ json: () => firstJson }))
+      .mockImplementationOnce(() =>
+        Promise.resolve({ ok: true, json: () => firstJson })
+      )
       .mockImplementationOnce(() =>
         Promise.resolve({
+          ok: true,
           json: () => Promise.resolve({ suggestions: [], popularSearches: [] }),
         })
       ) as unknown as typeof fetch;

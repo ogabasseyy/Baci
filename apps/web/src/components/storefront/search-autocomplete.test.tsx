@@ -52,6 +52,7 @@ describe('SearchAutocomplete', () => {
     vi.useRealTimers();
     globalThis.fetch = vi.fn(() =>
       Promise.resolve({
+        ok: true,
         json: () => Promise.resolve({ suggestions: [], popularSearches: [] }),
       })
     ) as unknown as typeof fetch;
@@ -267,6 +268,7 @@ describe('SearchAutocomplete', () => {
     const onSelectProduct = vi.fn();
     const fetchMock = vi.mocked(globalThis.fetch);
     fetchMock.mockResolvedValue({
+      ok: true,
       json: async () => ({
         suggestions: [
           {
@@ -350,6 +352,7 @@ describe('SearchAutocomplete', () => {
     vi.useRealTimers();
     const fetchMock = vi.mocked(globalThis.fetch);
     fetchMock.mockResolvedValue({
+      ok: true,
       json: async () => ({
         suggestions: [
           {
@@ -388,6 +391,7 @@ describe('SearchAutocomplete', () => {
     vi.useRealTimers();
     const fetchMock = vi.mocked(globalThis.fetch);
     fetchMock.mockResolvedValue({
+      ok: true,
       json: async () => ({
         suggestions: [
           {
@@ -425,6 +429,7 @@ describe('SearchAutocomplete', () => {
     vi.useRealTimers();
     const fetchMock = vi.mocked(globalThis.fetch);
     fetchMock.mockResolvedValue({
+      ok: true,
       json: async () => ({
         suggestions: [
           {
@@ -532,6 +537,7 @@ describe('SearchAutocomplete', () => {
     vi.useRealTimers();
     const fetchMock = vi.mocked(globalThis.fetch);
     fetchMock.mockResolvedValue({
+      ok: true,
       json: async () => ({
         suggestions: [],
         popularSearches: [],
@@ -562,6 +568,7 @@ describe('SearchAutocomplete', () => {
     const onSelectProduct = vi.fn();
     const fetchMock = vi.mocked(globalThis.fetch);
     fetchMock.mockResolvedValue({
+      ok: true,
       json: async () => ({
         suggestions: [
           {
@@ -627,6 +634,7 @@ describe('SearchAutocomplete', () => {
     const onChange = vi.fn();
     const fetchMock = vi.mocked(globalThis.fetch);
     fetchMock.mockResolvedValue({
+      ok: true,
       json: async () => ({
         suggestions: [
           {
@@ -675,6 +683,7 @@ describe('SearchAutocomplete', () => {
     const onChange = vi.fn();
     const fetchMock = vi.mocked(globalThis.fetch);
     fetchMock.mockResolvedValue({
+      ok: true,
       json: async () => ({
         suggestions: [],
         popularSearches: [{ search_query: 'iphone case', search_count: 42 }],
@@ -707,6 +716,7 @@ describe('SearchAutocomplete', () => {
     const onSubmitSearch = vi.fn();
     const fetchMock = vi.mocked(globalThis.fetch);
     fetchMock.mockResolvedValue({
+      ok: true,
       json: async () => ({
         suggestions: [
           {
@@ -750,13 +760,14 @@ describe('SearchAutocomplete', () => {
     const onSubmitSearch = vi.fn();
     const fetchMock = vi.mocked(globalThis.fetch);
     fetchMock.mockResolvedValue({
+      ok: true,
       json: async () => ({
         suggestions: [],
         popularSearches: [],
       }),
     } as Response);
 
-    render(
+    const { container } = render(
       <SearchAutocomplete
         merchantId="merchant-1"
         value="zzzz"
@@ -771,10 +782,13 @@ describe('SearchAutocomplete', () => {
 
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
     // The empty response settled, so the genuine no-suggestions message
-    // appears alongside the submit action.
+    // appears alongside the submit action, with the matching announcement.
     await waitFor(() => {
       expect(screen.getByText(/no suggestions for/i)).toBeInTheDocument();
     });
+    expect(container.querySelector('.sr-only')?.textContent ?? '').toContain(
+      'No results found'
+    );
     const seeAll = screen.getByRole('button', { name: /see all results/i });
     fireEvent.click(seeAll);
     expect(onSubmitSearch).toHaveBeenCalledWith('zzzz');
@@ -786,6 +800,7 @@ describe('SearchAutocomplete', () => {
     const onSubmitSearch = vi.fn();
     const fetchMock = vi.mocked(globalThis.fetch);
     fetchMock.mockResolvedValue({
+      ok: true,
       json: async () => ({
         suggestions: [
           {
@@ -825,6 +840,7 @@ describe('SearchAutocomplete', () => {
     const onSubmitSearch = vi.fn();
     const fetchMock = vi.mocked(globalThis.fetch);
     fetchMock.mockResolvedValue({
+      ok: true,
       json: async () => ({
         suggestions: [
           {
@@ -905,6 +921,7 @@ describe('SearchAutocomplete', () => {
     vi.useRealTimers();
     const fetchMock = vi.mocked(globalThis.fetch);
     fetchMock.mockResolvedValue({
+      ok: true,
       json: async () => ({
         suggestions: [
           {
@@ -941,7 +958,7 @@ describe('SearchAutocomplete', () => {
     vi.useRealTimers();
     const onSubmitSearch = vi.fn();
 
-    render(
+    const { container } = render(
       <SearchAutocomplete
         merchantId="merchant-1"
         value="x"
@@ -962,6 +979,11 @@ describe('SearchAutocomplete', () => {
     expect(
       screen.getByRole('button', { name: /see all results for “x”/i })
     ).toBeInTheDocument();
+    // Queries that never fetch stay silent for screen readers too: no
+    // settled response, no "No results found" announcement.
+    expect(
+      container.querySelector('.sr-only')?.textContent ?? ''
+    ).not.toContain('No results found');
   });
 
   it('submits the typed value after a highlight is edited away', async () => {
@@ -970,6 +992,7 @@ describe('SearchAutocomplete', () => {
     const onSubmitSearch = vi.fn();
     const fetchMock = vi.mocked(globalThis.fetch);
     fetchMock.mockResolvedValue({
+      ok: true,
       json: async () => ({
         suggestions: [
           {

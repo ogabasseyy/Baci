@@ -244,6 +244,7 @@ const PENDING_SOURCES = [
   'a61ec98a5bde936a3fc4520e2b4d2d0abcd14a0ca82cea2351ca9723210b3148 20260928120000_backfill_paystack_dva_attempt_markers.sql',
   '3068ec3581028c67ad1bd4cf1c5d49b768c4be77e1cbf2f915fd304461e7b9a3 20260928120000_backfill_paystack_dva_attempt_markers.sql',
   '6a1eee47ca989a7c9379afb7a7cf9829cb972cd5e5884abf64d19d27c7441250 20260928130000_file_paystack_refund_recovery_review.sql',
+  '5065ad3fd1d4ef88693f44bf100c81c4f35076ef1c416f4e42b7443ed528a025 20260928140000_aggregate_claim_refund_coverage.sql',
   PENDING_SOURCES_HEAD,
   STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_CLUSTER_GUIDE_PENDING_SOURCES,

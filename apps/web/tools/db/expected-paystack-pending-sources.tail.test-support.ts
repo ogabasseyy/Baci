@@ -184,4 +184,9 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
       'supabase/migrations/20260928130000_file_paystack_refund_recovery_review.sql',
     sha256: '6a1eee47ca989a7c9379afb7a7cf9829cb972cd5e5884abf64d19d27c7441250',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928140000_aggregate_claim_refund_coverage.sql',
+    sha256: '5065ad3fd1d4ef88693f44bf100c81c4f35076ef1c416f4e42b7443ed528a025',
+  },
 ];

@@ -83,4 +83,21 @@ describe('verified paystack cancellation refund migration', () => {
       "AND p.transaction_type = 'payment' AND p.status IN ('completed', 'refund_pending')"
     );
   });
+
+  it('keeps orphan provider evidence open until a local refund row matches it', () => {
+    expect(existsSync(migrationPath)).toBe(true);
+    if (!existsSync(migrationPath)) return;
+
+    const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
+
+    expect(migrationSql).toContain(
+      "review.metadata->>'audit_record_failed' IS DISTINCT FROM 'true'"
+    );
+    expect(migrationSql).toContain(
+      "r.gateway_reference = review.metadata->>'provider_refund_id'"
+    );
+    expect(migrationSql).toContain(
+      "r.gateway_reference = split_part(e.key, ':', 2)"
+    );
+  });
 });

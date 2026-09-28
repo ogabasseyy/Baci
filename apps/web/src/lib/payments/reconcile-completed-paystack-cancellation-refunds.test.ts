@@ -115,6 +115,9 @@ describe('legacy completed Paystack cancellation refunds', () => {
       legacyRefund,
       'paystack_refund_evidence_mismatch'
     );
+    expect(fileReview.mock.invocationCallOrder[0]).toBeLessThan(
+      update.mock.invocationCallOrder[0] as number
+    );
   });
 
   it('rotates a transient failure without filing a review', async () => {
@@ -158,6 +161,25 @@ describe('legacy completed Paystack cancellation refunds', () => {
     await expect(
       reconcileCompletedPaystackCancellationRefunds({ from } as never)
     ).rejects.toThrow('completed_refund_demote_failed');
-    expect(fileReview).not.toHaveBeenCalled();
+    expect(fileReview).toHaveBeenCalled();
+  });
+
+  it('keeps the row completed when the review write fails before demotion', async () => {
+    reconcile.mockRejectedValue(new Error('paystack_refund_evidence_mismatch'));
+    isDeterministic.mockReturnValue(true);
+    fileReview.mockRejectedValue(
+      new Error('refund_evidence_review_persistence_failed')
+    );
+    const chain = updateChain();
+    const update = vi.fn().mockReturnValue(chain);
+    const from = vi
+      .fn()
+      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([legacyRefund])) })
+      .mockReturnValueOnce({ update });
+
+    await expect(
+      reconcileCompletedPaystackCancellationRefunds({ from } as never)
+    ).rejects.toThrow('refund_evidence_review_persistence_failed');
+    expect(update).not.toHaveBeenCalled();
   });
 });

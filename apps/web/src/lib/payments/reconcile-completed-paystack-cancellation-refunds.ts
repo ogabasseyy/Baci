@@ -36,9 +36,13 @@ export async function reconcileCompletedPaystackCancellationRefunds(
         reason: reason instanceof Error ? reason.message : 'unknown',
       });
       if (isDeterministicRefundError(reason)) {
-        // Evidence that can never verify: demote so the pending worker
-        // re-tracks the row, and file the mismatch for operations instead
-        // of retrying this completed row forever.
+        // Evidence that can never verify: file the mismatch for operations,
+        // then demote so the pending worker re-tracks the row instead of
+        // retrying this completed row forever. Filing first matters: if the
+        // review write fails, the row must stay completed so this worker
+        // retries it — a demoted legacy row without the cancellation
+        // description is selected by neither worker.
+        await fileRefundEvidenceReview(supabase, refund, reason.message);
         const { error: demoteError } = await supabase
           .from('transactions')
           .update({
@@ -48,7 +52,6 @@ export async function reconcileCompletedPaystackCancellationRefunds(
           .eq('id', refund.id)
           .eq('status', 'completed');
         if (demoteError) throw new Error('completed_refund_demote_failed');
-        await fileRefundEvidenceReview(supabase, refund, reason.message);
         continue;
       }
       const { error: rotationError } = await supabase

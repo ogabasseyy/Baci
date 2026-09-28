@@ -1,10 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { escapeHtmlText } from '@/lib/sanitize';
-import {
-  assertRefundNotificationSendTime,
-  awaitRefundNotificationDeadline,
-} from './await-refund-notification-deadline';
+import { assertRefundNotificationSendTime } from './assert-refund-notification-send-time';
+import { awaitRefundNotificationDeadline } from './await-refund-notification-deadline';
 import { refundNotificationLedgerAmount } from './refund-notification-ledger';
 
 type RefundEmailSender = (message: {

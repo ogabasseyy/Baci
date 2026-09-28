@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { buildSettlementNotificationEmail } from '@/lib/build-settlement-notification-email';
 import { constantTimeEqual } from '@/lib/constant-time-equal';
 import { notifyMerchant } from '@/lib/expo-push';
@@ -38,8 +39,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Validate before any database work: a malformed flag must never
+    // silently fall through to the full settlement job.
+    const parsedCancellationsOnly = z
+      .enum(['true', 'false'])
+      .optional()
+      .safeParse(
+        new URL(request.url).searchParams.get('cancellationsOnly') ?? undefined
+      );
+    if (!parsedCancellationsOnly.success) {
+      return NextResponse.json(
+        { error: 'Invalid cancellationsOnly value' },
+        { status: 400 }
+      );
+    }
+
     const supabase = createServiceClient();
-    if (new URL(request.url).searchParams.get('cancellationsOnly') === 'true') {
+    if (parsedCancellationsOnly.data === 'true') {
       return processCancellationDrain(supabase, sendEmail, notifyMerchant);
     }
 

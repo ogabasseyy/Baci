@@ -4,6 +4,7 @@
 // later converts to permanently non-retryable delivery_uncertain — even when
 // the mail actually went out. Budget the serial drain from the time the
 // reconciliation workers actually consumed so only sends that fit run.
+// Shared with notification-drain-deadline: keep both budgets identical.
 const INVOCATION_BUDGET_MS = 5 * 60_000;
 const SAFETY_MARGIN_MS = 30_000;
 // Allow for ZeptoMail's four 30-second attempts and backoff, plus database
@@ -18,8 +19,4 @@ export function notificationDrainLimit(elapsedMs: number): number {
     0,
     Math.min(MAX_DRAIN_LIMIT, Math.floor(remaining / PER_SEND_WORST_MS))
   );
-}
-
-export function notificationDrainDeadlineMs(startedAtMs: number): number {
-  return startedAtMs + INVOCATION_BUDGET_MS - SAFETY_MARGIN_MS;
 }

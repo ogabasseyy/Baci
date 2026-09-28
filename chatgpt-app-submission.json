@@ -111,7 +111,7 @@
       "user_prompt": "Using Ogabassey, find a fragrance diffuser in Accessories and show its listed price and image.",
       "file_attachment_urls": null,
       "tools_triggered": "search_products",
-      "expected_output": "Shows matching fragrance diffusers from the Ogabassey catalog, or clearly says none match; no unrelated phone recommendations.",
+      "expected_output": "Shows the Moodo Smart Home Fragrance Diffuser listing in Accessories with its current listed price and image, without unrelated phone recommendations. If the listing is no longer active, say so rather than inventing a substitute.",
       "expected_output_url": null
     },
     {

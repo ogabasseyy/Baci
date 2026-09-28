@@ -120,6 +120,7 @@ function normalizeRuntimeRecipientEmail(email: unknown): string | null {
 }
 
 interface SendEmailParams {
+  signal?: AbortSignal;
   to: string;
   toName?: string;
   subject: string;
@@ -382,6 +383,7 @@ function isRetryableError(errorCode?: string): boolean {
  * Send transactional email via ZeptoMail with HTML content
  */
 export async function sendEmail({
+  signal,
   to,
   toName,
   subject,
@@ -520,7 +522,8 @@ export async function sendEmail({
               ],
             }),
           },
-          token
+          token,
+          signal
         );
 
         await updateEmailAttempts(auditIds, {

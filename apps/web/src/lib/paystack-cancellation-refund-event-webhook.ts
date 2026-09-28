@@ -135,26 +135,26 @@ export async function handlePaystackCancellationRefundEvent(
     nestedReference,
     flatReference
   );
-  if (paymentReference !== undefined) {
-    if (unknownRefundId !== undefined) {
-      try {
-        await recoverUnknownPaystackRefund(
-          supabase,
-          unknownRefundId,
-          paymentReference
-        );
-      } catch (error) {
-        logger.error({
-          message: 'Paystack refund recovery failed',
-          error,
-        });
-        return NextResponse.json(
-          { error: 'Refund reconciliation unavailable' },
-          { status: 503 }
-        );
-      }
-      return NextResponse.json({ message: 'Refund event reconciled' });
+  if (unknownRefundId !== undefined) {
+    try {
+      await recoverUnknownPaystackRefund(
+        supabase,
+        unknownRefundId,
+        paymentReference
+      );
+    } catch (error) {
+      logger.error({
+        message: 'Paystack refund recovery failed',
+        error,
+      });
+      return NextResponse.json(
+        { error: 'Refund reconciliation unavailable' },
+        { status: 503 }
+      );
     }
+    return NextResponse.json({ message: 'Refund event reconciled' });
+  }
+  if (paymentReference !== undefined) {
     try {
       await reconcilePaystackRefundEvent(supabase, paymentReference);
     } catch (error) {

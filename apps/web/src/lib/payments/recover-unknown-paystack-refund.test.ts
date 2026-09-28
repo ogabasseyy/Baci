@@ -3,12 +3,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { recoverUnknownPaystackRefund } from './recover-unknown-paystack-refund';
 
 const mocks = vi.hoisted(() => ({
+  fetchPaystackPaymentById: vi.fn(),
   fetchRefund: vi.fn(),
   fileRefundEvidenceReview: vi.fn(),
   holdPaystackRefundForReview: vi.fn(),
   loggerInfo: vi.fn(),
   reconcilePaystackCancellationRefund: vi.fn(),
   verifyTransaction: vi.fn(),
+}));
+
+vi.mock('./fetch-paystack-payment-by-id', () => ({
+  fetchPaystackPaymentById: mocks.fetchPaystackPaymentById,
 }));
 
 vi.mock('./fetch-paystack-refund', () => ({
@@ -76,6 +81,10 @@ describe('recoverUnknownPaystackRefund', () => {
       },
       success: true,
     });
+    mocks.fetchPaystackPaymentById.mockResolvedValue({
+      data: { id: 555, reference: 'PSK-1' },
+      success: true,
+    });
     mocks.reconcilePaystackCancellationRefund.mockResolvedValue('updated');
   });
 
@@ -133,6 +142,46 @@ describe('recoverUnknownPaystackRefund', () => {
       })
     );
     expect(mocks.fileRefundEvidenceReview).not.toHaveBeenCalled();
+  });
+
+  it('derives the reference from a provider payment for an ID-only event', async () => {
+    const { insert, supabase } = database();
+
+    await recoverUnknownPaystackRefund(supabase, 202);
+
+    expect(mocks.fetchPaystackPaymentById).toHaveBeenCalledWith(
+      555,
+      expect.any(AbortSignal)
+    );
+    expect(mocks.verifyTransaction).toHaveBeenCalledWith(
+      'PSK-1',
+      expect.any(AbortSignal)
+    );
+    expect(insert).toHaveBeenCalledOnce();
+  });
+
+  it('fails retryably when the numeric payment lookup is unavailable', async () => {
+    mocks.fetchPaystackPaymentById.mockResolvedValue({ success: false });
+    const { insert, supabase } = database();
+
+    await expect(recoverUnknownPaystackRefund(supabase, 202)).rejects.toThrow(
+      'paystack_refund_payment_lookup_unavailable'
+    );
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it('never links a refund to a different numeric provider payment', async () => {
+    mocks.fetchPaystackPaymentById.mockResolvedValue({
+      data: { id: 999, reference: 'PSK-1' },
+      success: true,
+    });
+    const { insert, supabase } = database();
+
+    await expect(recoverUnknownPaystackRefund(supabase, 202)).rejects.toThrow(
+      'paystack_refund_payment_lookup_mismatch'
+    );
+    expect(mocks.verifyTransaction).not.toHaveBeenCalled();
+    expect(insert).not.toHaveBeenCalled();
   });
 
   it('reconciles the winning row when a concurrent event records first', async () => {

@@ -53,10 +53,11 @@ export async function backfillDiscoveryEmbeddings() {
         .eq('product_id', product.id)
         .maybeSingle();
       if (priorError) throw new Error(`Embedding state read failed: ${priorError.code}`);
-      // Both values originate from Postgres timestamptz. Equality preserves
-      // microseconds without parsing through JavaScript's millisecond Date.
-      if (prior?.source_updated_at && product.updated_at &&
-        prior.source_updated_at === product.updated_at) continue;
+      // Legacy NULL timestamps have no freshness signal until the product's
+      // update trigger assigns one. A prior vector is sufficient meanwhile.
+      // For non-NULL values, string equality preserves Postgres microseconds.
+      if (prior?.source_updated_at && (!product.updated_at ||
+        prior.source_updated_at === product.updated_at)) continue;
       const text = [product.brand, product.category, product.description]
         .filter((part): part is string => typeof part === 'string')
         .join('. ').replace(/<[^>]{0,2000}>/g, ' ').replace(/\s+/g, ' ').slice(0, 6000);

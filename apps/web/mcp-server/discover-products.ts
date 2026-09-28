@@ -79,6 +79,12 @@ export async function discoverMcpProducts({
       console.error('Semantic discovery unavailable; using catalog search only');
     }
   }
+  if (args.sort === 'newest') {
+    hydratedProducts.sort((a, b) =>
+      (b.product.created_at ?? '').localeCompare(a.product.created_at ?? '') ||
+      a.product.id.localeCompare(b.product.id)
+    );
+  }
   return {
     ...loaded,
     selectedProducts: selectSearchProductsByPrice(hydratedProducts, args, limit),

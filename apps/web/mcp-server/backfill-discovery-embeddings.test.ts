@@ -93,4 +93,31 @@ describe('merchant-authenticated discovery backfill', () => {
     }));
     expect(upsert).toHaveBeenCalledOnce();
   });
+
+  it('skips a previously embedded legacy product with no update timestamp', async () => {
+    for (const [name, value] of Object.entries(environment)) vi.stubEnv(name, value);
+    const productQuery = {
+      eq: vi.fn(() => productQuery), order: vi.fn(() => productQuery),
+      range: vi.fn(async () => ({ data: [{
+        id: '22222222-2222-4222-8222-222222222222', merchant_id: environment.MERCHANT_ID,
+        name: 'Legacy Camera', brand: null, category: 'Accessories',
+        description: null, updated_at: null,
+      }], error: null })),
+    };
+    const embeddingQuery = {
+      eq: vi.fn(() => embeddingQuery),
+      maybeSingle: vi.fn(async () => ({
+        data: { source_updated_at: '2026-09-28T00:00:00Z' }, error: null,
+      })),
+    };
+    const upsert = vi.fn(async () => ({ error: null }));
+    mocks.createClient.mockReturnValue({ from: vi.fn((table: string) => ({
+      select: vi.fn(() => table === 'products' ? productQuery : embeddingQuery), upsert,
+    })) });
+
+    await backfillDiscoveryEmbeddings();
+
+    expect(mocks.embedDiscoveryText).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
+  });
 });

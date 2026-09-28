@@ -28,7 +28,7 @@ CREATE POLICY product_discovery_embeddings_merchant_read
 
 CREATE POLICY product_discovery_embeddings_merchant_insert
   ON public.product_discovery_embeddings FOR INSERT TO authenticated
-  WITH CHECK (public.has_merchant_access(merchant_id) AND EXISTS (
+  WITH CHECK (public.check_staff_permission((SELECT auth.uid()), merchant_id, 'products', 'edit') AND EXISTS (
     SELECT 1 FROM public.products p
     WHERE p.id = product_discovery_embeddings.product_id
       AND p.merchant_id = product_discovery_embeddings.merchant_id
@@ -36,8 +36,8 @@ CREATE POLICY product_discovery_embeddings_merchant_insert
 
 CREATE POLICY product_discovery_embeddings_merchant_update
   ON public.product_discovery_embeddings FOR UPDATE TO authenticated
-  USING (public.has_merchant_access(merchant_id))
-  WITH CHECK (public.has_merchant_access(merchant_id) AND EXISTS (
+  USING (public.check_staff_permission((SELECT auth.uid()), merchant_id, 'products', 'edit'))
+  WITH CHECK (public.check_staff_permission((SELECT auth.uid()), merchant_id, 'products', 'edit') AND EXISTS (
     SELECT 1 FROM public.products p
     WHERE p.id = product_discovery_embeddings.product_id
       AND p.merchant_id = product_discovery_embeddings.merchant_id

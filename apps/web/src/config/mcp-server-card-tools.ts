@@ -135,37 +135,6 @@ export const PUBLIC_MCP_TOOLS = [
     annotations: READ_ONLY_TOOL_ANNOTATIONS,
   },
   {
-    name: 'get_recommendations',
-    title: 'Get Recommendations',
-    description: 'Get product recommendations based on use case and budget.',
-    inputSchema: {
-      $schema: DRAFT_07_SCHEMA,
-      type: 'object',
-      properties: {
-        use_case: {
-          type: 'string',
-          minLength: 1,
-          maxLength: 50,
-          description: 'What the product is for (gaming, work, etc.)',
-        },
-        category: {
-          description:
-            'Optional product category, such as laptops or smartphones',
-          type: 'string',
-          maxLength: 50,
-        },
-        budget: {
-          description: 'Max budget in NGN',
-          type: 'number',
-          minimum: 0,
-          maximum: 1_000_000_000,
-        },
-      },
-      required: ['use_case'],
-    },
-    annotations: READ_ONLY_TOOL_ANNOTATIONS,
-  },
-  {
     name: 'get_product_variants',
     title: 'Get Product Variants',
     description:

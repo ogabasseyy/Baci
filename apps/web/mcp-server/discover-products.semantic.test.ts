@@ -2,14 +2,16 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import { discoverMcpProducts } from './discover-products';
 
-function discoveryClient() {
+function discoveryClient(sameCreatedAt = false) {
   const products = [
-    { id: 'laptop', name: 'Office Laptop', category: 'Laptops', brand: 'Dell', price: 80000, manage_stock: false },
-    { id: 'camera', name: 'Security Camera', category: 'Accessories', price: 50000, manage_stock: false },
+    { id: 'laptop', name: 'Office Laptop', category: 'Laptops', brand: 'Dell', price: 80000, manage_stock: false, created_at: '2026-01-01T00:00:00Z' },
+    { id: 'camera', name: 'Security Camera', category: 'Accessories', price: 50000, manage_stock: false, created_at: sameCreatedAt ? '2026-01-01T00:00:00Z' : '2026-09-01T00:00:00Z' },
   ];
   const query = {
     eq: vi.fn(() => query),
-    in: vi.fn(async () => ({ data: products, error: null })),
+    in: vi.fn(async (_column: string, ids: string[]) => ({
+      data: products.filter((product) => ids.includes(product.id)), error: null,
+    })),
   };
   return {
     supabase: {
@@ -55,5 +57,20 @@ describe('gated semantic discovery', () => {
       supabase,
     });
     expect(result.selectedProducts.map(({ product }) => product.id)).toEqual(['laptop']);
+  });
+
+  it.each([false, true])('orders semantic candidates by newest date and then ID (equal dates: %s)', async (sameCreatedAt) => {
+    const { supabase } = discoveryClient(sameCreatedAt);
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({
+      data: [{ product_id: 'laptop', total_count: 1 }], error: null,
+    } as never);
+    const result = await discoverMcpProducts({
+      args: { query: 'smart gadget', sort: 'newest', limit: 2 },
+      merchantId: 'merchant-1',
+      sanitizeString: (input) => input,
+      semanticSearch: async () => ['camera'],
+      supabase,
+    });
+    expect(result.selectedProducts.map(({ product }) => product.id)).toEqual(['camera', 'laptop']);
   });
 });

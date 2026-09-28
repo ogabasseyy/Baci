@@ -216,7 +216,7 @@ const PENDING_SOURCES = [
   'e92fdbcad279fb7cbf8bc1553404b5e54026c124e2b0c5c29d334b9cd2b1bad7 20260925090000_pr3468_followup_payment_hardening.sql',
   'd48421f956f86ef4c18a4fcf84eb74f0f4ea9a486393fc957e5ac659d1691eea 20260925100000_credit_direct_inventory_proof.sql',
   'a234118a7dcf99f1eb9a7b9a56e7e45e887241c104e78ba0d4bb7cb2c3ef66db 20260926120000_public_storefront_domain_resolution.sql',
-  '837f7af7f5acba84d5e96ce9066da90263a12994416dfeac65e8f4d98c8c72e9 20260928080000_product_discovery_embeddings.sql',
+  'd49d59ba538d31b2379a8db227bcc86140abdae04e6760fb947a57e7e2b3717e 20260928080000_product_discovery_embeddings.sql',
   PENDING_SOURCES_HEAD,
   STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_CLUSTER_GUIDE_PENDING_SOURCES,

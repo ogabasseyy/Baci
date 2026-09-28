@@ -22,10 +22,10 @@ function createRankedSearchSupabase(category?: string, nameForId?: (id: string) 
   };
   const select = vi.fn(() => query);
   const rpc = vi.fn(
-    async (_functionName: string, args: { result_offset?: number }) => {
+    async (_functionName: string, args: { result_limit?: number; result_offset?: number }) => {
       const offset = args.result_offset ?? 0;
       const rows = Array.from(
-        { length: POST_FILTER_RESULT_PAGE_SIZE },
+        { length: args.result_limit ?? POST_FILTER_RESULT_PAGE_SIZE },
         (_, index) => ({
           product_id: `ranked-${offset + index}`,
           total_count: 10_000,
@@ -93,6 +93,10 @@ describe('loadMcpSearchProducts', () => {
     });
     expect(result.products.map((product) => product.name)).toEqual(['Work Laptop']);
     expect(rpc.mock.calls.length).toBeGreaterThan(1);
+    expect(rpc.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      result_limit: POST_FILTER_RESULT_PAGE_SIZE,
+      result_offset: 0,
+    }));
   });
 
   it('loads a bounded ranked candidate pool without parent-price filters or ordering', async () => {

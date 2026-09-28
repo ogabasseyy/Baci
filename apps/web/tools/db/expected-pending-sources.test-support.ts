@@ -347,7 +347,7 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260928080000_product_discovery_embeddings.sql',
-    sha256: '837f7af7f5acba84d5e96ce9066da90263a12994416dfeac65e8f4d98c8c72e9',
+    sha256: 'd49d59ba538d31b2379a8db227bcc86140abdae04e6760fb947a57e7e2b3717e',
   },
 ]
   .sort((left, right) =>

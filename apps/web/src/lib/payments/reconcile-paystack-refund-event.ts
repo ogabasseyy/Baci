@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { selectPaystackRefundReference } from '@/lib/select-paystack-refund-reference';
 import { fileRefundEvidenceReview } from './file-refund-evidence-review';
 import { holdPaystackRefundForReview } from './hold-paystack-refund-for-review';
 import { isDeterministicRefundError } from './is-deterministic-paystack-refund-error';
@@ -9,7 +10,13 @@ export async function reconcilePaystackRefundEvent(
   supabase: SupabaseClient,
   transactionReference: string
 ): Promise<void> {
-  if (!/^[A-Za-z0-9_-]{1,100}$/.test(transactionReference)) return;
+  // Share the webhook reference alphabet: the caller already selected
+  // this reference with the same validator, so only unusable values return.
+  if (
+    selectPaystackRefundReference(transactionReference, undefined) !==
+    transactionReference
+  )
+    return;
   const { data: payments, error: paymentError } = await supabase
     .from('transactions')
     .select('id, order_id, merchant_id')

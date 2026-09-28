@@ -37,4 +37,36 @@ describe('verifyTransaction', () => {
     );
     expect(result).toMatchObject({ success: false, code: 'NETWORK_ERROR' });
   });
+
+  it('accepts references with dots and equals signs', async () => {
+    const { verifyTransaction } = await import(
+      '@/lib/verify-paystack-transaction'
+    );
+    const failingFetch = vi.fn().mockRejectedValue(new Error('socket closed'));
+    vi.stubGlobal('fetch', failingFetch);
+
+    const result = await verifyTransaction('PSK.1=x');
+
+    expect(failingFetch).toHaveBeenCalledWith(
+      expect.stringContaining('/transaction/verify/PSK.1%3Dx'),
+      expect.anything()
+    );
+    expect(result).toMatchObject({ success: false, code: 'NETWORK_ERROR' });
+  });
+
+  it('rejects references outside the shared alphabet', async () => {
+    const { verifyTransaction } = await import(
+      '@/lib/verify-paystack-transaction'
+    );
+    const neverFetch = vi.fn();
+    vi.stubGlobal('fetch', neverFetch);
+
+    const result = await verifyTransaction('bad reference!');
+
+    expect(neverFetch).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      success: false,
+      code: 'VALIDATION_ERROR',
+    });
+  });
 });

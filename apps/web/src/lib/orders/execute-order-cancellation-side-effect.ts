@@ -141,7 +141,7 @@ export async function executeOrderCancellationSideEffect({
   }
   const { data: refundRows, error: refundLookupError } = await supabase
     .from('transactions')
-    .select('gateway_reference, metadata, status')
+    .select('gateway_reference, metadata, status, amount, currency, gateway')
     .eq('order_id', order.id)
     .eq('merchant_id', order.merchant_id)
     .eq('transaction_type', 'refund')
@@ -173,11 +173,49 @@ export async function executeOrderCancellationSideEffect({
       transactions,
     });
   }
-  const refundedPaymentIds = new Set(
-    (refundRows ?? [])
-      .filter((row) => row.status === 'completed')
-      .map(linkedPaymentId)
-      .filter((id): id is string => typeof id === 'string')
+  // A completed row marks its leg refunded only when it matches the
+  // leg's own gateway and currency and the matched rows cover the full
+  // leg amount: a partial or foreign row must quarantine for
+  // reconciliation instead of silently skipping the remaining balance.
+  const normalizeMoneyField = (value: unknown): string =>
+    String(value ?? '')
+      .trim()
+      .toUpperCase();
+  const legById = new Map(transactions.map((leg) => [leg.id, leg]));
+  const matchedRefundKobo = new Map<string, number>();
+  const completedLinkedLegIds = new Set<string>();
+  for (const row of refundRows ?? []) {
+    if (row.status !== 'completed') continue;
+    const paymentId = linkedPaymentId(row);
+    if (paymentId === null) continue;
+    completedLinkedLegIds.add(paymentId);
+    const leg = legById.get(paymentId);
+    if (!leg) continue;
+    if (
+      normalizeMoneyField(row.gateway) !== normalizeMoneyField(leg.gateway) ||
+      normalizeMoneyField(row.currency) !== normalizeMoneyField(leg.currency)
+    ) {
+      continue;
+    }
+    const rowKobo = Math.round(Number(row.amount) * 100);
+    if (!Number.isSafeInteger(rowKobo) || rowKobo <= 0) continue;
+    matchedRefundKobo.set(
+      paymentId,
+      (matchedRefundKobo.get(paymentId) ?? 0) + rowKobo
+    );
+  }
+  const refundedPaymentIds = new Set<string>();
+  const mismatchedTransactions: GatewayPaymentTransaction[] = [];
+  for (const leg of transactions) {
+    const legKobo = Math.round(Number(leg.amount) * 100);
+    if ((matchedRefundKobo.get(leg.id) ?? 0) >= legKobo) {
+      refundedPaymentIds.add(leg.id);
+    } else if (completedLinkedLegIds.has(leg.id)) {
+      mismatchedTransactions.push(leg);
+    }
+  }
+  const mismatchedIds = new Set(
+    mismatchedTransactions.map((transaction) => transaction.id)
   );
   // Legs with a provider-accepted audit row are still in flight: the
   // reconciler completes them and the drain resumes the remaining legs.
@@ -219,13 +257,29 @@ export async function executeOrderCancellationSideEffect({
   if (awaitingTransactions.length > 0) {
     throw new Error('cancellation_refund_awaiting_provider_completion');
   }
+  // Withhold mismatched legs from initiation: their completed rows do not
+  // cover them in matching money, so a full-leg provider refund now would
+  // double-refund the covered portion. Clean legs still move below.
   const refundIds = await initiatePaystackCancellationRefunds({
     deadlineMs,
     order,
     reason,
     refundedPaymentIds,
     supabase,
-    transactions,
+    transactions: transactions.filter(
+      (transaction) => !mismatchedIds.has(transaction.id)
+    ),
   });
+  if (mismatchedTransactions.length > 0) {
+    await quarantineRefund({
+      metadata: { mismatched_leg_count: mismatchedTransactions.length },
+      order,
+      preflight: true,
+      reason:
+        'Completed cancellation refunds do not cover their payment legs; verify amounts before another provider refund',
+      supabase,
+      transactions: mismatchedTransactions,
+    });
+  }
   return { refundIds };
 }

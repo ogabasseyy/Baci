@@ -1,6 +1,7 @@
 import { logger } from './logger';
 import type { PaystackResult } from './paystack';
 import { paystackRequest } from './paystack-request';
+import { selectPaystackRefundReference } from './select-paystack-refund-reference';
 
 /**
  * Initiate a refund for a Paystack transaction
@@ -23,8 +24,9 @@ export async function initiateRefund(
     transaction: number | { id: number; reference: string };
   }>
 > {
-  // Validate transaction reference format
-  if (!transaction || !/^[A-Za-z0-9_-]{1,100}$/.test(transaction)) {
+  // Share the webhook/recovery reference alphabet: Paystack references
+  // may contain dots and equals signs, which must reach the provider.
+  if (selectPaystackRefundReference(transaction, undefined) !== transaction) {
     return {
       success: false,
       error: 'Invalid transaction reference format',

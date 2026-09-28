@@ -41,7 +41,6 @@ import {
 import { usePaymentReturnReset } from './checkout/use-payment-return-reset';
 import { useEffect, useState, useRef } from 'react';
 import { useCart } from '@/hooks/cart';
-import type { CartItem } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { useCurrency } from '@/hooks/use-currency';
 import type {
@@ -96,15 +95,14 @@ import { useCheckoutOrderSubmission } from './checkout/hooks/use-checkout-order-
 import { useWalletFundedBankTransfer } from './checkout/hooks/use-wallet-funded-bank-transfer';
 import { useStorefrontCustomerSession } from './checkout/hooks/use-storefront-customer-session';
 import {
-  resolveCheckoutStartValues,
   useResumedCheckoutStartFunnel,
 } from './checkout/hooks/use-resumed-checkout-start-funnel';
+import { deriveCheckoutDisplayModel } from './checkout/derive-checkout-display-model';
 import { readCheckoutAttemptGeneration } from './checkout/checkout-attempt-generation';
 import { DeferredWalletFundedTransferModal as WalletFundedTransferModal } from './checkout/components/DeferredWalletFundedTransferModal';
 import { DeferredWalletTransferConsentDialog as WalletTransferConsentDialog } from './checkout/components/DeferredWalletTransferConsentDialog';
 import {
   DesktopOrderSummary,
-  type CheckoutItem,
 } from './checkout/components/DesktopOrderSummary';
 
 
@@ -356,49 +354,17 @@ export const CheckoutPage: React.FC = () => {
   const [isLoadingResumedOrder, setIsLoadingResumedOrder] = useState(!!resumeOrderId);
   const [resumeOrderError, setResumeOrderError] = useState<string | null>(null);
 
-  // Tag each item at construction time so downstream rendering narrows on
-  // `item.kind` (a literal discriminator) rather than `'cartItemId' in item`,
-  // which would silently break if either type ever gained an optional
-  // `cartItemId` field. Active cart wins when populated; otherwise fall back
-  // to the resumed order's items.
-  const hasCheckoutCartItems = checkoutCart.length > 0;
-  const displayItems: CheckoutItem[] =
-    hasCheckoutCartItems
-      ? checkoutCart.map((item) => ({ kind: 'cart' as const, ...item }))
-      : (resumedOrder?.items ?? []).map((item) => ({ kind: 'resumed' as const, ...item }));
-  const resumedOrderCartItems: CartItem[] =
-    !hasCheckoutCartItems && resumedOrder
-      ? resumedOrder.items.map((item) => ({
-          brand: '',
-          cartItemId: item.id,
-          description: '',
-          gtin: '',
-          id: item.product_id || item.id,
-          image: item.image_url || '',
-          imageHint: item.product_name,
-          imageLarge: item.image_url || '',
-          manage_stock: false,
-          mpn: '',
-          name: item.product_name,
-          price: item.price,
-          quantity: item.quantity,
-          status: 'active' as const,
-          stock: item.quantity,
-        }))
-      : [];
-  const mobileSummaryCart = hasCheckoutCartItems
-    ? checkoutCart
-    : resumedOrderCartItems;
-  const effectiveItemSubtotal = hasCheckoutCartItems
-    ? itemSubtotal
-    : resumedOrder?.subtotal || 0;
-  // Displayed totals share the funnel's stamped derivation (single
-  // source in the focused hook module): a resumed render shows the
-  // canonical order total, never the subtotal-only variant.
-  const { total: effectiveCheckoutCartTotal } = resolveCheckoutStartValues({
+  const {
+    displayItems,
+    effectiveCheckoutCartTotal,
+    effectiveItemSubtotal,
+    hasCheckoutCartItems,
+    mobileSummaryCart,
+  } = deriveCheckoutDisplayModel({
+    checkoutCart,
     checkoutCartTotal,
     currencyCode,
-    hasCheckoutCartItems,
+    itemSubtotal,
     resumedOrder,
   });
 

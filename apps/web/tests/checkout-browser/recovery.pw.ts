@@ -182,7 +182,15 @@ test('resumed order shows server totals and contact details with an empty cart',
   await page.getByRole('button', { name: 'Contact Information' }).click();
   await page.getByRole('textbox', { name: 'First Name' }).fill('Grace');
   await page.getByRole('button', { name: 'Continue to Delivery' }).click();
-  await page.waitForLoadState('networkidle');
+  await expect(
+    page.getByRole('button', { name: 'Contact Information' })
+  ).toHaveAccessibleDescription('Grace Okon · +2348031234567');
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      })
+  );
   expect(resumeLookupRequests).toBe(1);
 });
 

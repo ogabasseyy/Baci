@@ -129,6 +129,7 @@ export default function SearchScreen() {
     hasMore,
     isLoading,
     isLoadingMore,
+    isNextPageError: productsNextPageError,
     loadMore,
     products,
     refetch: refetchProducts,
@@ -207,6 +208,7 @@ export default function SearchScreen() {
         hasSearchQuery={hasSearchQuery}
         isLoading={isLoading}
         isLoadingMore={isLoadingMore}
+        isNextPageError={hasSearchQuery && productsNextPageError}
         isOnline={isOnline}
         maxPrice={maxPrice}
         minPrice={minPrice}

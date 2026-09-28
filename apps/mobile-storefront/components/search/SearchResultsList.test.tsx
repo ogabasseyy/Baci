@@ -56,9 +56,11 @@ function renderList(
     colors: Colors.light,
     committedQuery: '',
     isLoadingMore: false,
+    isNextPageError: false,
     listError: null,
     onEndReached: jest.fn(),
     onProductPress: jest.fn(),
+    onRetry: jest.fn(),
     onRetryNextPage: jest.fn(),
     products: [],
     totalCount: 0,
@@ -117,12 +119,15 @@ describe('SearchResultsList', () => {
   });
 
   it('keeps loaded products visible when the next page fails', () => {
+    const onRetry = jest.fn();
     const onRetryNextPage = jest.fn();
     const products = [{ id: 'product-1', name: 'iPhone 16' }] as Product[];
 
     renderList({
       committedQuery: 'iphone',
+      isNextPageError: true,
       listError: 'Search failed',
+      onRetry,
       onRetryNextPage,
       products,
       totalCount: 45,
@@ -135,5 +140,30 @@ describe('SearchResultsList', () => {
       screen.getByRole('button', { name: 'Retry loading more results' })
     );
     expect(onRetryNextPage).toHaveBeenCalledTimes(1);
+    expect(onRetry).not.toHaveBeenCalled();
+  });
+
+  it('refetches loaded pages when a background refetch fails', () => {
+    const onRetry = jest.fn();
+    const onRetryNextPage = jest.fn();
+    const products = [{ id: 'product-1', name: 'iPhone 16' }] as Product[];
+
+    renderList({
+      committedQuery: 'iphone',
+      isNextPageError: false,
+      listError: 'Search failed',
+      onRetry,
+      onRetryNextPage,
+      products,
+      totalCount: 45,
+    });
+
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Retry loading more results' })
+    );
+    // A failed reconnect refetch retains products with the same generic
+    // error: retrying must replay the loaded pages, not append an offset.
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(onRetryNextPage).not.toHaveBeenCalled();
   });
 });

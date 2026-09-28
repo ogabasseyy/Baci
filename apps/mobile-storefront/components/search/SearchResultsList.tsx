@@ -9,11 +9,15 @@ interface SearchResultsListProps {
   colors: (typeof Colors)['light'];
   committedQuery: string;
   isLoadingMore: boolean;
-  /** Next-page failure while earlier pages stay visible. Null when healthy. */
+  /** True when the footer error came from a next-page fetch (not a refetch). */
+  isNextPageError: boolean;
+  /** Retained-results failure (next-page or background refetch). Null when healthy. */
   listError: string | null;
   onEndReached: () => void;
   onProductPress: (product: Product) => void;
-  /** Retries the failed next-page offset (footer only). */
+  /** Retries loaded pages after a background-refetch failure. */
+  onRetry: () => void;
+  /** Retries the failed next-page offset. */
   onRetryNextPage: () => void;
   products: Product[];
   totalCount: number;
@@ -23,9 +27,11 @@ export default function SearchResultsList({
   colors,
   committedQuery,
   isLoadingMore,
+  isNextPageError,
   listError,
   onEndReached,
   onProductPress,
+  onRetry,
   onRetryNextPage,
   products,
   totalCount,
@@ -80,7 +86,7 @@ export default function SearchResultsList({
               Couldn&apos;t load more results.
             </Text>
             <Pressable
-              onPress={onRetryNextPage}
+              onPress={isNextPageError ? onRetryNextPage : onRetry}
               style={[styles.retryButton, { backgroundColor: colors.primary }]}
               accessibilityRole="button"
               accessibilityLabel="Retry loading more results"

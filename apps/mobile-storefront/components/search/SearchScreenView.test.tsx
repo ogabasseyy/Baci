@@ -46,6 +46,7 @@ function renderView(
     hasSearchQuery: false,
     isLoading: false,
     isLoadingMore: false,
+    isNextPageError: false,
     isOnline: true,
     maxPrice: 0,
     minPrice: 0,

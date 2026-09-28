@@ -235,4 +235,20 @@ describe('SearchScreen route', () => {
     });
     expect(refetch).toHaveBeenCalledTimes(1);
   });
+
+  it('forwards the next-page error flag so the footer routes its retry', () => {
+    mockUseLocalSearchParams.mockReturnValue({ q: 'iphone' });
+    mockUseProducts.mockReturnValue(
+      mockProductState({ error: 'Search failed', isNextPageError: true })
+    );
+
+    const { rerender } = render(<SearchScreen />);
+    expect(mockViewProps.current).toMatchObject({ isNextPageError: true });
+
+    mockUseProducts.mockReturnValue(
+      mockProductState({ error: 'Search failed', isNextPageError: false })
+    );
+    rerender(<SearchScreen />);
+    expect(mockViewProps.current).toMatchObject({ isNextPageError: false });
+  });
 });

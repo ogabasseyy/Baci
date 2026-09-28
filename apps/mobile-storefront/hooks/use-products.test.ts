@@ -310,6 +310,80 @@ describe('useProducts', () => {
     });
   });
 
+  it('releases the pagination lock when the query changes mid-fetch', async () => {
+    mockFetchProductsPage.mockResolvedValueOnce({
+      products: [createProduct('prod-a1')],
+      nextOffset: 1,
+      total: 5,
+    });
+    const queryClient = createQueryClient();
+
+    const { result, rerender } = renderHook(
+      ({ search }: { search: string }) => useProducts({ limit: 1, search }),
+      {
+        initialProps: { search: 'aa' },
+        wrapper: createWrapper(queryClient),
+      }
+    );
+
+    await waitFor(() => expect(result.current.hasMore).toBe(true));
+
+    // The next page for A hangs with the lock held.
+    let resolveHanging: (() => void) | undefined;
+    mockFetchProductsPage.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveHanging = () =>
+          resolve({
+            products: [createProduct('prod-a2')],
+            nextOffset: null,
+            total: 5,
+          });
+      })
+    );
+    act(() => {
+      result.current.loadMore();
+    });
+    await waitFor(() => expect(result.current.isLoadingMore).toBe(true));
+
+    // Moving to query B auto-fetches its first page; its own next-page
+    // fetch must start even though A's request never settled.
+    mockFetchProductsPage.mockResolvedValueOnce({
+      products: [createProduct('prod-b1')],
+      nextOffset: 1,
+      total: 5,
+    });
+    rerender({ search: 'bb' });
+    await waitFor(() =>
+      expect(
+        result.current.products.some((product) => product.id === 'prod-b1')
+      ).toBe(true)
+    );
+
+    mockFetchProductsPage.mockResolvedValueOnce({
+      products: [createProduct('prod-b2')],
+      nextOffset: null,
+      total: 5,
+    });
+    act(() => {
+      result.current.loadMore();
+    });
+
+    await waitFor(() => {
+      expect(mockFetchProductsPage).toHaveBeenLastCalledWith(
+        'merchant-1',
+        { limit: 1, search: 'bb' },
+        1
+      );
+    });
+
+    resolveHanging?.();
+    await waitFor(() =>
+      expect(
+        result.current.products.some((product) => product.id === 'prod-b2')
+      ).toBe(true)
+    );
+  });
+
   it('surfaces fetch errors and exposes an empty product list', async () => {
     mockFetchProductsPage.mockRejectedValueOnce(new Error('network down'));
     const queryClient = createQueryClient();

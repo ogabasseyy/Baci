@@ -33,6 +33,8 @@ interface SearchScreenViewProps {
   /** True while additional pages are being appended. */
   isLoadingMore: boolean;
   isLoading: boolean;
+  /** True when the current error came from a next-page fetch (not a refetch). */
+  isNextPageError: boolean;
   isOnline: boolean;
   maxPrice: number;
   minPrice: number;
@@ -76,6 +78,7 @@ export default function SearchScreenView({
   hasSearchQuery,
   isLoading,
   isLoadingMore,
+  isNextPageError,
   isOnline,
   maxPrice,
   minPrice,
@@ -165,9 +168,11 @@ export default function SearchScreenView({
         colors={colors}
         committedQuery={committedQuery}
         isLoadingMore={isLoadingMore}
+        isNextPageError={isNextPageError}
         listError={searchError}
         onEndReached={onEndReached}
         onProductPress={onProductPress}
+        onRetry={onRetry}
         onRetryNextPage={onRetryNextPage}
         products={products}
         totalCount={totalCount}

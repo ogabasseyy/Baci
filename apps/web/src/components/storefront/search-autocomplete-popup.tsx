@@ -147,6 +147,13 @@ export function SearchAutocompletePopup({
                       aria-selected={highlightedIndex === optionIndex}
                       onClick={() => {
                         onChange(search.search_query);
+                        // Match the keyboard path: submit-wired consumers
+                        // navigate on activation, so pointer and touch users
+                        // are not left on the current page with a closed
+                        // popup. Legacy consumers keep fill-only behavior.
+                        if (canSubmitSearch) {
+                          onSubmitSearch(search.search_query);
+                        }
                         onClose();
                       }}
                       className={cn(

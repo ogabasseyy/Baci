@@ -59,6 +59,7 @@ export function useProducts(options: UseProductsOptions = {}) {
     hasNextPage,
     isError,
     isFetchedAfterMount,
+    isFetchNextPageError,
     isFetching,
     isFetchingNextPage,
     isLoading,
@@ -78,6 +79,19 @@ export function useProducts(options: UseProductsOptions = {}) {
 
   const pendingLoadMoreRef = useRef(false);
   const nextPageInFlightRef = useRef(false);
+  const nextPageLockKeyRef = useRef<string | null>(null);
+
+  // Scope the in-flight lock to the active query: a pending next-page fetch
+  // for query A must not discard loadMore calls after the shopper moves to
+  // query B (new key, same hook instance). The queued bottom-reached signal
+  // is equally query-scoped. Adjusted inline during render so the reset
+  // lands before any handler in the same commit can read it.
+  const nextPageLockKey = JSON.stringify(['products', merchantId, options]);
+  if (nextPageLockKeyRef.current !== nextPageLockKey) {
+    nextPageLockKeyRef.current = nextPageLockKey;
+    nextPageInFlightRef.current = false;
+    pendingLoadMoreRef.current = false;
+  }
 
   useEffect(() => {
     if (!hasNextPage) {
@@ -104,6 +118,10 @@ export function useProducts(options: UseProductsOptions = {}) {
     isFetching,
     isError,
     error: error?.message || null,
+    // True only when the failing request was a next-page fetch (as opposed
+    // to a background refetch of loaded pages), so error footers can route
+    // the retry to loadMore versus refetch.
+    isNextPageError: isFetchNextPageError,
     hasMore: hasNextPage || false,
     refetch,
     loadMore: () => {

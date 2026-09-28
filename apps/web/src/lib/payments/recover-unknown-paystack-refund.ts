@@ -49,6 +49,46 @@ async function reconcileRecoveredRow(
   }
 }
 
+// File a recovery review when no local refund row exists to attach it to.
+// Redeliveries and concurrent events converge on the single open review per
+// order instead of refiling: the open-by-order unique index turns a lost
+// race into a no-op, so deterministic conditions never become retry storms.
+async function fileRecoveryReviewOnce(
+  supabase: SupabaseClient,
+  review: {
+    candidates: Record<string, unknown>[];
+    merchantId: string;
+    metadata: Record<string, unknown>;
+    orderId: string;
+    paystackRef: string | null;
+    reason: string;
+  }
+): Promise<void> {
+  const { data: open, error: openError } = await supabase
+    .from('reconciliation_review')
+    .select('id')
+    .eq('issue_type', 'order_cancellation_refund_requires_review')
+    .eq('order_id', review.orderId)
+    .is('resolved_at', null)
+    .limit(1);
+  if (openError) throw new Error('refund_recovery_review_failed');
+  if (open && (open as unknown[]).length > 0) return;
+  const { error: insertError } = await supabase
+    .from('reconciliation_review')
+    .insert({
+      issue_type: 'order_cancellation_refund_requires_review',
+      order_id: review.orderId,
+      merchant_id: review.merchantId,
+      paystack_ref: review.paystackRef,
+      reason: review.reason,
+      candidates: review.candidates,
+      metadata: review.metadata,
+    });
+  if (insertError && (insertError as { code?: string }).code !== '23505') {
+    throw new Error('refund_recovery_review_failed');
+  }
+}
+
 /**
  * Recover a provider refund the signed event references but no local audit
  * row records — e.g. a merchant-created replacement for a failed automatic
@@ -136,6 +176,42 @@ export async function recoverUnknownPaystackRefund(
   if (paymentError) throw new Error('refund_event_payment_lookup_failed');
   const candidates = (payments ?? []) as RecoveryPayment[];
   const payment = candidates[0];
+  if (candidates.length > 1) {
+    // The reference resolves to completed payments on different orders and
+    // redelivery cannot disambiguate them: persist one review per order so
+    // ops can route the verified provider refund, then acknowledge.
+    for (const candidate of candidates) {
+      if (!candidate.order_id) continue;
+      await fileRecoveryReviewOnce(supabase, {
+        candidates: candidates.map((entry) => ({
+          payment_transaction_id: entry.id,
+          order_id: entry.order_id,
+          amount: entry.amount,
+          gateway_reference: entry.gateway_reference,
+        })),
+        merchantId: candidate.merchant_id,
+        metadata: {
+          provider_refund_id: refundId,
+          provider_payment_transaction_id: original.id,
+          reference: resolvedPaymentReference,
+          audit_record_failed: true,
+          recovered_from_provider_event: true,
+        },
+        orderId: candidate.order_id,
+        // Deliberately unset: every candidate review shares this provider
+        // refund, and the open-by-paystack-ref index would collapse all but
+        // the first order's review.
+        paystackRef: null,
+        reason: `Paystack refund ${refundId} matches multiple completed payments for reference ${resolvedPaymentReference}`,
+      });
+    }
+    logger.info({
+      message:
+        'Unknown Paystack refund event matches multiple completed payments',
+      refundId,
+    });
+    return;
+  }
   if (candidates.length !== 1 || !payment || !payment.order_id) {
     logger.info({
       message:
@@ -190,6 +266,35 @@ export async function recoverUnknownPaystackRefund(
         await reconcileRecoveredRow(supabase, raced);
         return;
       }
+      // The order/reference slot is held by a row that is not this Paystack
+      // refund, so redelivery would collide forever: persist the verified
+      // provider evidence for reconciliation, then acknowledge.
+      await fileRecoveryReviewOnce(supabase, {
+        candidates: [
+          {
+            payment_transaction_id: payment.id,
+            order_id: payment.order_id,
+            amount: payment.amount,
+            gateway_reference: payment.gateway_reference,
+          },
+        ],
+        merchantId: payment.merchant_id,
+        metadata: {
+          provider_refund_id: refundId,
+          provider_payment_transaction_id: original.id,
+          payment_transaction_id: payment.id,
+          audit_record_failed: true,
+          recovered_from_provider_event: true,
+        },
+        orderId: payment.order_id,
+        paystackRef: String(refundId),
+        reason: `Paystack refund ${refundId} collides with a non-refund transaction and cannot be recorded`,
+      });
+      logger.info({
+        message: 'Unknown Paystack refund audit collides; review filed',
+        refundId,
+      });
+      return;
     }
     throw new Error('refund_recovery_audit_failed');
   }

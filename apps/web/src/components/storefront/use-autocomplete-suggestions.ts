@@ -65,6 +65,11 @@ export function useAutocompleteSuggestions({
     const controller = new AbortController();
     let isMounted = true;
     setLoading(true);
+    // A previous query may still be marked settled while this request is
+    // pending (e.g. return to A after B failed and cleared the arrays).
+    // Reset first so only this request's successful response can settle
+    // the current query.
+    setSettledQuery(null);
     fetch(
       `/api/search/autocomplete?q=${encodeURIComponent(debouncedValue)}&merchant_id=${merchantId}&limit=10`,
       { signal: controller.signal }

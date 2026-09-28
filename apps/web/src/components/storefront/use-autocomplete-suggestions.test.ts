@@ -108,6 +108,78 @@ describe('useAutocompleteSuggestions', () => {
     expect(onResultsReceived).not.toHaveBeenCalled();
   });
 
+  it('resets the settled query while a repeat request is pending', async () => {
+    let resolveRepeat: (value: unknown) => void = () => undefined;
+    const repeatJson = new Promise((resolve) => {
+      resolveRepeat = resolve;
+    });
+    // Route by URL: successful suggestion fetches also emit an analytics
+    // POST to /api/events, which must not consume a scripted response.
+    const autocompleteResponses = [
+      () =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              suggestions: [{ id: 'p1', name: 'iPhone' }],
+              popularSearches: [],
+            }),
+        }),
+      () => Promise.reject(new Error('down')),
+      () => Promise.resolve({ ok: true, json: () => repeatJson }),
+    ];
+    globalThis.fetch = vi.fn((url: unknown) => {
+      if (typeof url === 'string' && url.startsWith('/api/events')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({}),
+        });
+      }
+      const next = autocompleteResponses.shift();
+      if (!next) {
+        throw new Error(`unexpected autocomplete call: ${String(url)}`);
+      }
+      return next();
+    }) as unknown as typeof fetch;
+    const onResultsReceived = vi.fn();
+
+    const { result, rerender } = renderHook(
+      ({ debouncedValue }: { debouncedValue: string }) =>
+        useAutocompleteSuggestions({
+          debouncedValue,
+          merchantId: 'm1',
+          onResultsReceived,
+        }),
+      { initialProps: { debouncedValue: 'aa' } }
+    );
+
+    await waitFor(() => {
+      expect(result.current.settledQuery).toBe('aa');
+    });
+
+    rerender({ debouncedValue: 'bb' });
+    await waitFor(() => {
+      expect(result.current.suggestions).toEqual([]);
+    });
+    expect(result.current.settledQuery).toBeNull();
+
+    // Returning to the first query must not reuse its stale settlement
+    // while the retry is still pending.
+    rerender({ debouncedValue: 'aa' });
+    await waitFor(() => {
+      expect(result.current.loading).toBe(true);
+    });
+    expect(result.current.settledQuery).toBeNull();
+
+    await act(async () => {
+      resolveRepeat({ suggestions: [], popularSearches: [] });
+      await repeatJson;
+    });
+    await waitFor(() => {
+      expect(result.current.settledQuery).toBe('aa');
+    });
+  });
+
   it('clears results and the loading flag on demand', async () => {
     mockFetch({ suggestions: [{ id: 'p1', name: 'iPhone' }] });
     const onResultsReceived = vi.fn();

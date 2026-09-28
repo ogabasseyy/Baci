@@ -10,6 +10,13 @@ import { z } from 'zod';
 // a malformed or changed provider delivery (held refunds have no polling
 // fallback). A bare numeric transaction is not usable: the handler reads
 // only the nested reference string.
+// A reference counts as usable only in the shape the reference-path
+// reconciler consumes; anything else is silently unusable downstream, so
+// the schema rejects it rather than acknowledging a no-op delivery. The
+// base fields stay plain strings so an ID-keyed event with a noisy
+// reference still validates: the refund-ID path ignores the reference.
+const USABLE_REFERENCE = /^[A-Za-z0-9_-]{1,100}$/;
+
 export const paystackRefundEventSchema = z
   .object({
     data: z
@@ -43,8 +50,10 @@ export const paystackRefundEventSchema = z
       Number.isSafeInteger(data.id) &&
       data.id > 0;
     const hasReference =
-      (typeof nestedReference === 'string' && nestedReference.length > 0) ||
-      (typeof flatReference === 'string' && flatReference.length > 0);
+      (typeof nestedReference === 'string' &&
+        USABLE_REFERENCE.test(nestedReference)) ||
+      (typeof flatReference === 'string' &&
+        USABLE_REFERENCE.test(flatReference));
     if (!hasRefundId && !hasReference) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

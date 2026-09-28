@@ -1,8 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { verifyTransaction } from '@/lib/paystack';
 import { fileDuplicatePaymentCapture } from './file-duplicate-payment-capture';
-import { fileTerminalAttemptEvidenceMismatch } from './file-terminal-attempt-evidence-mismatch';
 import { finalizePartiallyPaidAbandonedAttempt } from './finalize-partially-paid-abandoned-attempt';
+import { resolveAbandonedAttemptMismatch } from './resolve-abandoned-attempt-mismatch';
 
 const DEFAULT_LIMIT = 25;
 // Give an abandoned checkout time to settle before releasing a paid order.
@@ -245,32 +245,14 @@ export async function reconcileAbandonedPaystackAttempts({
       continue;
     }
     if (mismatchKind) {
-      if (
-        result.success &&
-        (result.data.status === 'abandoned' || result.data.status === 'failed')
-      ) {
-        // Terminal provider state with mismatched evidence is deterministic:
-        // file it for operations and stamp the row instead of rotating it
-        // through every future sweep. Non-terminal mismatches keep their
-        // hold: the provider state may still change.
-        const filed = await fileTerminalAttemptEvidenceMismatch({
-          attempt,
-          evidence: {
-            mismatchDetail: `provider ${result.data.reference} ${result.data.amount} ${result.data.currency}`,
-            mismatchKind,
-            providerAmount: result.data.amount,
-            providerCurrency: result.data.currency,
-            providerReference: result.data.reference,
-            providerStatus: result.data.status,
-          },
-          supabase,
-        });
-        if (filed) {
-          summary.reviewsFiled.push(attempt.id);
-          continue;
-        }
-      }
-      await hold(mismatchKind);
+      await resolveAbandonedAttemptMismatch({
+        attempt,
+        hold,
+        mismatchKind,
+        result,
+        reviewsFiled: summary.reviewsFiled,
+        supabase,
+      });
       continue;
     }
     if (

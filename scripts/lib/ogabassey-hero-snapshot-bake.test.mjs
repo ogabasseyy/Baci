@@ -1,18 +1,9 @@
 import { createHash } from 'node:crypto';
-import {
-  existsSync,
-  mkdtempSync,
-  mkdirSync,
-  readdirSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  bakeSnapshots,
-  pruneSnapshotOrphans,
-} from './ogabassey-hero-snapshot-bake.mjs';
+import { bakeSnapshots } from './ogabassey-hero-snapshot-bake.mjs';
 import {
   DEFAULT_WIDTH,
   SNAPSHOT_QUALITY,
@@ -37,6 +28,8 @@ function makeFakeSharp({
   bakedWidth = null,
   calls = null,
   encodeTag = 'v1',
+  orientation = undefined,
+  sourceHeight = 1600,
   sourceWidth = 1600,
 } = {}) {
   return (input) => {
@@ -59,7 +52,12 @@ function makeFakeSharp({
       },
       async metadata() {
         if (Buffer.isBuffer(input)) {
-          return { width: sourceWidth, format: 'jpeg' };
+          return {
+            width: sourceWidth,
+            height: sourceHeight,
+            format: 'jpeg',
+            orientation,
+          };
         }
         const match = String(input).match(/-(\d+)\.avif$/);
         return {
@@ -69,18 +67,6 @@ function makeFakeSharp({
       },
     };
     return chain;
-  };
-}
-
-function makeEntry(overrides = {}) {
-  return {
-    sourceUrl: SOURCE_URL,
-    srcSet: '/_hero/ogabassey/aaa-640.avif 640w',
-    href: '/_hero/ogabassey/aaa-640.avif',
-    quality: SNAPSHOT_QUALITY,
-    widths: [640],
-    sourceSha256: 'b'.repeat(64),
-    ...overrides,
   };
 }
 
@@ -154,6 +140,40 @@ describe('bakeSnapshots', () => {
     expect(readdirSync(outDir)).toEqual([]);
   });
 
+  it('validates the auto-oriented width for EXIF-rotated sources', async () => {
+    // Stored 900x1600, displayed 1600x900 after .rotate(): must pass.
+    const outDir = resolve(mkdtempSync(join(tmpdir(), 'hero-bake-')), 'ogabassey');
+    const entries = await bakeSnapshots({
+      fetchImpl: makeFakeFetch(),
+      outDir,
+      sharpImpl: makeFakeSharp({
+        orientation: 6,
+        sourceHeight: 1600,
+        sourceWidth: 900,
+      }),
+      slug: 'ogabassey',
+      urls: [SOURCE_URL],
+    });
+    expect(entries).toHaveLength(1);
+  });
+
+  it('still rejects an EXIF-rotated source narrower than 1200 when oriented', async () => {
+    const outDir = resolve(mkdtempSync(join(tmpdir(), 'hero-bake-')), 'ogabassey');
+    await expect(
+      bakeSnapshots({
+        fetchImpl: makeFakeFetch(),
+        outDir,
+        sharpImpl: makeFakeSharp({
+          orientation: 8,
+          sourceHeight: 1000,
+          sourceWidth: 700,
+        }),
+        slug: 'ogabassey',
+        urls: [SOURCE_URL],
+      })
+    ).rejects.toThrow(/1000px wide/);
+  });
+
   it('rejects a baked file whose dimensions do not match', async () => {
     const outDir = resolve(mkdtempSync(join(tmpdir(), 'hero-bake-')), 'ogabassey');
     await expect(
@@ -183,29 +203,5 @@ describe('bakeSnapshots', () => {
     const [repeat] = await bake('v1');
     expect(repeat.srcSet).toBe(before.srcSet);
     expect(repeat.href).toBe(before.href);
-  });
-});
-
-describe('pruneSnapshotOrphans', () => {
-  it('prunes only unreferenced pipeline-managed files', () => {
-    const outDir = resolve(mkdtempSync(join(tmpdir(), 'hero-prune-')), 'ogabassey');
-    mkdirSync(outDir, { recursive: true });
-    const kept = 'aaaaaaaaaaaa-640.avif';
-    const orphan = 'bbbbbbbbbbbb-640.avif';
-    const foreign = 'hand-placed.png';
-    for (const file of [kept, orphan, foreign]) {
-      writeFileSync(resolve(outDir, file), 'x');
-    }
-    const pruned = pruneSnapshotOrphans(outDir, [
-      makeEntry({
-        srcSet: `/_hero/ogabassey/${kept} 640w`,
-        href: `/_hero/ogabassey/${kept}`,
-      }),
-    ]);
-
-    expect(pruned).toEqual([orphan]);
-    expect(existsSync(resolve(outDir, kept))).toBe(true);
-    expect(existsSync(resolve(outDir, orphan))).toBe(false);
-    expect(existsSync(resolve(outDir, foreign))).toBe(true);
   });
 });

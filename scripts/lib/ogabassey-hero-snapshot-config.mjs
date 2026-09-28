@@ -17,6 +17,9 @@ export const SNAPSHOT_WIDTHS = [256, 384, 640, 750, 828, 1080, 1200];
 export const SNAPSHOT_QUALITY = 70;
 export const DEFAULT_WIDTH = 960;
 export const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
+// Per-URL download deadline: generous for a <=15MB CDN fetch (effective
+// floor ~1Mbps), but a stalled server must fail, never hang the pipeline.
+export const DOWNLOAD_TIMEOUT_MS = 120_000;
 export const MANAGED_FILE_PATTERN = /^[0-9a-f]{12}-\d+\.avif$/;
 
 export class HeroSnapshotError extends Error {

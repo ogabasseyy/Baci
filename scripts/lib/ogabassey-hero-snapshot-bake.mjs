@@ -1,11 +1,10 @@
 // Snapshot baking and orphan pruning for the hero snapshot pipeline.
 
 import { createHash } from 'node:crypto';
-import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   DEFAULT_WIDTH,
-  MANAGED_FILE_PATTERN,
   SNAPSHOT_QUALITY,
   SNAPSHOT_WIDTHS,
   snapshotError,
@@ -27,7 +26,14 @@ export async function bakeSnapshots({
     const sourceSha256 = createHash('sha256').update(sourceBytes).digest('hex');
     // eslint-disable-next-line no-await-in-loop
     const meta = await sharpImpl(sourceBytes).metadata();
-    const sourceWidth = meta.width ?? 0;
+    // Validate the AUTO-ORIENTED width: `.rotate()` below swaps EXIF 5-8
+    // dimensions, so the raw metadata width would wrongly reject a
+    // portrait-stored landscape image.
+    const swapsDimensions =
+      typeof meta.orientation === 'number' &&
+      meta.orientation >= 5 &&
+      meta.orientation <= 8;
+    const sourceWidth = swapsDimensions ? (meta.height ?? 0) : (meta.width ?? 0);
     if (sourceWidth < Math.max(...SNAPSHOT_WIDTHS)) {
       // Never upscale: a source smaller than the widest snapshot would bake
       // blur. Fail loudly so the old manifest stays deployed instead.
@@ -80,26 +86,4 @@ export async function bakeSnapshots({
     });
   }
   return entries;
-}
-
-export function pruneSnapshotOrphans(outDir, entries) {
-  const referenced = new Set();
-  for (const entry of entries) {
-    referenced.add(entry.href.split('/').pop());
-    for (const part of entry.srcSet.split(',')) {
-      const file = part.trim().split(/\s+/)[0].split('/').pop();
-      if (file) referenced.add(file);
-    }
-  }
-  const pruned = [];
-  for (const file of readdirSync(outDir)) {
-    // Only ever delete files this pipeline could have written.
-    if (!MANAGED_FILE_PATTERN.test(file) || referenced.has(file)) {
-      continue;
-    }
-    rmSync(resolve(outDir, file));
-    pruned.push(file);
-    console.log(`[hero-snapshots] pruned orphan ${file}`);
-  }
-  return pruned;
 }

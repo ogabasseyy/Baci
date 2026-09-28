@@ -1,12 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  HeroSnapshotError,
+  DOWNLOAD_TIMEOUT_MS,
   MAX_SOURCE_BYTES,
 } from './ogabassey-hero-snapshot-config.mjs';
-import {
-  fetchSnapshotSource,
-  parseSnapshotArgs,
-} from './ogabassey-hero-snapshot-source.mjs';
+import { fetchSnapshotSource } from './ogabassey-hero-snapshot-source.mjs';
 
 const SOURCE_URL = 'https://cdn.ogabassey.com/core-assets/products/dell.jpg';
 
@@ -60,55 +57,21 @@ function streamBody(chunks) {
   };
 }
 
-describe('parseSnapshotArgs', () => {
-  it('parses slug and dedupes/trims urls', () => {
-    expect(
-      parseSnapshotArgs([
-        'node',
-        'script.mjs',
-        '--slug',
-        'ogabassey',
-        `  ${SOURCE_URL} `,
-        SOURCE_URL,
-      ])
-    ).toEqual({ slug: 'ogabassey', urls: [SOURCE_URL] });
+function abortError() {
+  return Object.assign(new Error('The operation was aborted'), {
+    name: 'AbortError',
   });
-
-  it('rejects a missing or malformed slug', () => {
-    expect(() => parseSnapshotArgs(['node', 's.mjs', SOURCE_URL])).toThrow(
-      HeroSnapshotError
-    );
-    expect(() =>
-      parseSnapshotArgs(['node', 's.mjs', '--slug', 'Oga_Bassey!', SOURCE_URL])
-    ).toThrow(/--slug/);
-  });
-
-  it('rejects unknown flags', () => {
-    expect(() =>
-      parseSnapshotArgs([
-        'node',
-        's.mjs',
-        '--slug',
-        'ogabassey',
-        '--quality',
-        '80',
-        SOURCE_URL,
-      ])
-    ).toThrow(/unknown flag/);
-  });
-
-  it('rejects an empty url set', () => {
-    expect(() =>
-      parseSnapshotArgs(['node', 's.mjs', '--slug', 'ogabassey'])
-    ).toThrow(/at least one/);
-  });
-});
+}
 
 describe('fetchSnapshotSource', () => {
   it('returns bytes for a valid image response', async () => {
     const { fetchImpl } = makeFakeFetch({ url: SOURCE_URL });
     const bytes = await fetchSnapshotSource(SOURCE_URL, fetchImpl);
     expect(Buffer.from(bytes).toString()).toBe('fake-source-bytes');
+    expect(fetchImpl).toHaveBeenCalledWith(
+      SOURCE_URL,
+      expect.objectContaining({ redirect: 'follow', signal: expect.any(AbortSignal) })
+    );
   });
 
   it.each([
@@ -137,6 +100,30 @@ describe('fetchSnapshotSource', () => {
     const { fetchImpl } = makeFakeFetch({ contentType: 'text/html' });
     await expect(fetchSnapshotSource(SOURCE_URL, fetchImpl)).rejects.toThrow(
       /content-type/
+    );
+  });
+
+  it('converts an aborted fetch into a timeout error', async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw abortError();
+    });
+    await expect(fetchSnapshotSource(SOURCE_URL, fetchImpl)).rejects.toThrow(
+      new RegExp(`timed out after ${DOWNLOAD_TIMEOUT_MS}ms`)
+    );
+  });
+
+  it('converts a mid-stream abort into a timeout error', async () => {
+    const body = {
+      getReader: () => ({
+        read: async () => {
+          throw abortError();
+        },
+        cancel: async () => {},
+      }),
+    };
+    const { fetchImpl } = makeFakeFetch({ body });
+    await expect(fetchSnapshotSource(SOURCE_URL, fetchImpl)).rejects.toThrow(
+      /timed out/
     );
   });
 

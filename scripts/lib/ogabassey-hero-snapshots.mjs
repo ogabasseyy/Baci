@@ -19,12 +19,10 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
-import {
-  bakeSnapshots,
-  pruneSnapshotOrphans,
-} from './ogabassey-hero-snapshot-bake.mjs';
+import { parseSnapshotArgs } from './ogabassey-hero-snapshot-args.mjs';
+import { bakeSnapshots } from './ogabassey-hero-snapshot-bake.mjs';
 import { writeSnapshotManifest } from './ogabassey-hero-snapshot-manifest.mjs';
-import { parseSnapshotArgs } from './ogabassey-hero-snapshot-source.mjs';
+import { pruneSnapshotOrphans } from './ogabassey-hero-snapshot-prune.mjs';
 
 export function defaultWebRoot() {
   const here = dirname(fileURLToPath(import.meta.url));

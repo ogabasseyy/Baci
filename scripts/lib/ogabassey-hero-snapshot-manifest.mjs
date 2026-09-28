@@ -18,17 +18,23 @@ export function readSnapshotManifestTenants(existing) {
   // loudly below.
   const tenants = {};
   const blockMatch = existing.match(/> = (\{[\s\S]*?\n\});\s*$/);
-  if (blockMatch) {
-    let parsed;
-    try {
-      parsed = new Function(`return (${blockMatch[1]});`)();
-    } catch {
-      throw snapshotError(
-        'existing manifest body is not parseable; fix it before regenerating'
-      );
-    }
-    Object.assign(tenants, parsed);
+  if (!blockMatch) {
+    // A present-but-unlocatable body is corruption, not an empty manifest:
+    // returning no tenants here would rewrite the file with only the
+    // current slug, silently discarding every other tenant.
+    throw snapshotError(
+      'existing manifest body cannot be located; fix it before regenerating'
+    );
   }
+  let parsed;
+  try {
+    parsed = new Function(`return (${blockMatch[1]});`)();
+  } catch {
+    throw snapshotError(
+      'existing manifest body is not parseable; fix it before regenerating'
+    );
+  }
+  Object.assign(tenants, parsed);
   return { tenants, version };
 }
 

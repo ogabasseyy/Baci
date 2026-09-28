@@ -1,32 +1,11 @@
-// Source acquisition for the hero snapshot pipeline: CLI argument parsing
-// plus bounded, redirect-safe CDN fetching.
+// Bounded, redirect-safe, time-boxed source fetching for the hero snapshot
+// pipeline.
 
-import { MAX_SOURCE_BYTES, snapshotError } from './ogabassey-hero-snapshot-config.mjs';
-
-export function parseSnapshotArgs(argv) {
-  const args = argv.slice(2);
-  let slug = null;
-  const urls = [];
-  for (let i = 0; i < args.length; i += 1) {
-    if (args[i] === '--slug') {
-      slug = args[i + 1] ?? null;
-      i += 1;
-    } else if (args[i].startsWith('--')) {
-      throw snapshotError(`unknown flag ${args[i]}`);
-    } else {
-      urls.push(args[i]);
-    }
-  }
-  if (!slug || !/^[a-z0-9-]+$/.test(slug)) {
-    throw snapshotError(
-      'pass --slug <storefront-slug> (lowercase alphanumerics and dashes)'
-    );
-  }
-  if (urls.length === 0) {
-    throw snapshotError('pass at least one CDN source URL to snapshot');
-  }
-  return { slug, urls: [...new Set(urls.map((u) => u.trim()))] };
-}
+import {
+  DOWNLOAD_TIMEOUT_MS,
+  MAX_SOURCE_BYTES,
+  snapshotError,
+} from './ogabassey-hero-snapshot-config.mjs';
 
 function finalResponseUrl(res, originalUrl) {
   // `fetch` follows redirects, so the original URL's protocol check is not
@@ -91,6 +70,13 @@ async function readBoundedBody(res, url) {
   return bytes;
 }
 
+function isTimeoutCause(error) {
+  return (
+    error instanceof Error &&
+    (error.name === 'AbortError' || error.name === 'TimeoutError')
+  );
+}
+
 export async function fetchSnapshotSource(url, fetchImpl) {
   let parsed;
   try {
@@ -101,7 +87,20 @@ export async function fetchSnapshotSource(url, fetchImpl) {
   if (parsed.protocol !== 'https:') {
     throw snapshotError(`refusing non-https source: ${url}`);
   }
-  const res = await fetchImpl(url, { redirect: 'follow' });
+  // Time-box the whole download (connect, headers, and body): a stalled
+  // server must surface as a controlled error, never hang the pipeline.
+  const signal = AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetchImpl(url, { redirect: 'follow', signal });
+  } catch (error) {
+    if (isTimeoutCause(error)) {
+      throw snapshotError(
+        `fetch ${url} -> timed out after ${DOWNLOAD_TIMEOUT_MS}ms`
+      );
+    }
+    throw error;
+  }
   if (!res.ok) {
     throw snapshotError(`fetch ${url} -> HTTP ${res.status}`);
   }
@@ -110,5 +109,14 @@ export async function fetchSnapshotSource(url, fetchImpl) {
   if (!contentType.startsWith('image/')) {
     throw snapshotError(`fetch ${url} -> unexpected content-type ${contentType}`);
   }
-  return readBoundedBody(res, url);
+  try {
+    return await readBoundedBody(res, url);
+  } catch (error) {
+    if (isTimeoutCause(error)) {
+      throw snapshotError(
+        `fetch ${url} -> timed out after ${DOWNLOAD_TIMEOUT_MS}ms`
+      );
+    }
+    throw error;
+  }
 }

@@ -75,12 +75,12 @@ describe('readSnapshotManifestTenants', () => {
     ).toThrow(/not parseable/);
   });
 
-  it('treats a missing body as empty (fresh manifest edge)', () => {
-    const { tenants, version } = readSnapshotManifestTenants(
-      'export const OGABASSEY_HOME_HERO_SNAPSHOT_MANIFEST_VERSION = 2;\n'
-    );
-    expect(version).toBe(2);
-    expect(tenants).toEqual({});
+  it('rejects a body that cannot be located (truncated manifest)', () => {
+    expect(() =>
+      readSnapshotManifestTenants(
+        'export const OGABASSEY_HOME_HERO_SNAPSHOT_MANIFEST_VERSION = 2;\n'
+      )
+    ).toThrow(/cannot be located/);
   });
 });
 

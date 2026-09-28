@@ -186,11 +186,14 @@ BEGIN
           IF v_balance IS NULL THEN
             RAISE EXCEPTION 'refund_settlement_wallet_missing';
           END IF;
+          -- Debit-type entry: backfill_wallet_balances rebuilds
+          -- available_balance by crediting completed refund rows, so a
+          -- refund-typed reversal would add the funds back on rebuild.
           INSERT INTO public.wallet_transactions (
             wallet_id, merchant_id, type, amount, balance_after,
             source_type, source_id, description, status, metadata
           ) VALUES (
-            v_settlement.wallet_id, v_settlement.merchant_id, 'refund',
+            v_settlement.wallet_id, v_settlement.merchant_id, 'debit',
             v_settlement.net_amount, v_balance, 'refund', v_refund.id,
             v_settlement.gateway || ' cancellation refund settlement reversal',
             'completed',

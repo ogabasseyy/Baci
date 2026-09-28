@@ -1,6 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
+import { fileRefundEvidenceReview } from '@/lib/payments/file-refund-evidence-review';
+import { holdPaystackRefundForReview } from '@/lib/payments/hold-paystack-refund-for-review';
+import { isDeterministicRefundError } from '@/lib/payments/is-deterministic-paystack-refund-error';
+import type { RefundRow } from '@/lib/payments/paystack-cancellation-refund-row';
 import { reconcilePaystackCancellationRefund } from '@/lib/payments/reconcile-paystack-cancellation-refund';
 import { reconcilePaystackRefundEvent } from '@/lib/payments/reconcile-paystack-refund-event';
 import { recoverUnknownPaystackRefund } from '@/lib/payments/recover-unknown-paystack-refund';
@@ -65,10 +69,38 @@ export async function handlePaystackCancellationRefundEvent(
       }
       try {
         await reconcilePaystackCancellationRefund(supabase, refund);
-      } catch (error) {
+      } catch (reason) {
+        // Deterministic mismatches (bad payment link, evidence mismatch)
+        // never heal on redelivery — and failed rows are invisible to
+        // polling — so file the durable review/hold used by the reference
+        // path instead of 503ing forever.
+        if (isDeterministicRefundError(reason)) {
+          try {
+            await fileRefundEvidenceReview(
+              supabase,
+              refund as RefundRow,
+              reason.message
+            );
+            await holdPaystackRefundForReview(
+              supabase,
+              (refund as RefundRow).id,
+              reason.message
+            );
+          } catch (persistenceError) {
+            logger.error({
+              message: 'Paystack refund review persistence failed',
+              error: persistenceError,
+            });
+            return NextResponse.json(
+              { error: 'Refund reconciliation unavailable' },
+              { status: 503 }
+            );
+          }
+          return NextResponse.json({ message: 'Refund event reconciled' });
+        }
         logger.error({
           message: 'Paystack refund reconciliation failed',
-          error,
+          error: reason,
         });
         return NextResponse.json(
           { error: 'Refund reconciliation unavailable' },

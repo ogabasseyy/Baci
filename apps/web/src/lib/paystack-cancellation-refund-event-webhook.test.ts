@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handlePaystackCancellationRefundEvent } from './paystack-cancellation-refund-event-webhook';
 
 const mocks = vi.hoisted(() => ({
+  fileRefundEvidenceReview: vi.fn(),
+  holdPaystackRefundForReview: vi.fn(),
   reconcilePaystackCancellationRefund: vi.fn(),
   reconcilePaystackRefundEvent: vi.fn(),
-  recoverUnknownPaystackRefund: vi.fn(),
 }));
 
 vi.mock('@/lib/payments/reconcile-paystack-cancellation-refund', () => ({
@@ -15,8 +16,11 @@ vi.mock('@/lib/payments/reconcile-paystack-cancellation-refund', () => ({
 vi.mock('@/lib/payments/reconcile-paystack-refund-event', () => ({
   reconcilePaystackRefundEvent: mocks.reconcilePaystackRefundEvent,
 }));
-vi.mock('@/lib/payments/recover-unknown-paystack-refund', () => ({
-  recoverUnknownPaystackRefund: mocks.recoverUnknownPaystackRefund,
+vi.mock('@/lib/payments/file-refund-evidence-review', () => ({
+  fileRefundEvidenceReview: mocks.fileRefundEvidenceReview,
+}));
+vi.mock('@/lib/payments/hold-paystack-refund-for-review', () => ({
+  holdPaystackRefundForReview: mocks.holdPaystackRefundForReview,
 }));
 
 describe('handlePaystackCancellationRefundEvent', () => {
@@ -35,7 +39,6 @@ describe('handlePaystackCancellationRefundEvent', () => {
     vi.clearAllMocks();
     mocks.reconcilePaystackRefundEvent.mockResolvedValue(undefined);
     mocks.reconcilePaystackCancellationRefund.mockResolvedValue('updated');
-    mocks.recoverUnknownPaystackRefund.mockResolvedValue(undefined);
   });
 
   it('reconciles the refund row matching the provider refund ID', async () => {
@@ -201,37 +204,59 @@ describe('handlePaystackCancellationRefundEvent', () => {
     expect(response.status).toBe(200);
   });
 
-  it('recovers an unknown provider refund instead of rechecking stale rows', async () => {
-    const db = database(null);
+  it('quarantines deterministic refund-ID mismatches instead of retrying', async () => {
+    const refund = {
+      cancel_order: {
+        cancelled_at: '2026-09-27T00:00:00Z',
+        shipping_status: 'cancelled',
+      },
+      id: 'refund-1',
+    };
+    const db = database(refund);
+    mocks.reconcilePaystackCancellationRefund.mockRejectedValue(
+      new Error('refund_payment_link_mismatch')
+    );
 
     const response = await handlePaystackCancellationRefundEvent(db, {
-      data: { id: 202, transaction: { reference: 'PSK-1' } },
+      data: { id: 42 },
       event: 'refund.processed',
     });
 
-    expect(mocks.recoverUnknownPaystackRefund).toHaveBeenCalledWith(
+    expect(mocks.fileRefundEvidenceReview).toHaveBeenCalledWith(
       db,
-      202,
-      'PSK-1'
+      refund,
+      'refund_payment_link_mismatch'
     );
-    expect(mocks.reconcilePaystackRefundEvent).not.toHaveBeenCalled();
-    expect(mocks.reconcilePaystackCancellationRefund).not.toHaveBeenCalled();
+    expect(mocks.holdPaystackRefundForReview).toHaveBeenCalledWith(
+      db,
+      'refund-1',
+      'refund_payment_link_mismatch'
+    );
     expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      message: 'Refund event reconciled',
+    });
   });
 
-  it('fails retryably when unknown-refund recovery throws', async () => {
-    const db = database(null);
-    mocks.recoverUnknownPaystackRefund.mockRejectedValue(new Error('down'));
+  it('fails retryably when review persistence throws', async () => {
+    const db = database({
+      cancel_order: {
+        cancelled_at: '2026-09-27T00:00:00Z',
+        shipping_status: 'cancelled',
+      },
+      id: 'refund-1',
+    });
+    mocks.reconcilePaystackCancellationRefund.mockRejectedValue(
+      new Error('paystack_refund_evidence_mismatch')
+    );
+    mocks.fileRefundEvidenceReview.mockRejectedValue(new Error('down'));
 
     const response = await handlePaystackCancellationRefundEvent(db, {
-      data: { id: 202, transaction_reference: 'PAYMENT-1' },
+      data: { id: 42 },
       event: 'refund.processed',
     });
 
     expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toEqual({
-      error: 'Refund reconciliation unavailable',
-    });
   });
 
   it('fails retryably when event reconciliation throws', async () => {

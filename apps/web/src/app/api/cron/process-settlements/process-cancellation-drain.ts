@@ -11,23 +11,28 @@ import { sendEmail } from '@/lib/zeptomail';
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
 /**
- * Run the cancellation/refund worker batch: drain failed cancellation side
- * effects, reconcile pending and completed Paystack cancellation refunds in
- * parallel, then drain refund notifications within the remaining cron
- * budget. Workers report per-row failure counts instead of throwing, so
- * both rejections and reported failures surface as a 503.
+ * Run the cancellation/refund worker batch: reconcile pending and completed
+ * Paystack cancellation refunds first, then retry failed cancellation side
+ * effects against the settled refund state, then drain refund notifications
+ * within the remaining cron budget. The side-effect drain must observe
+ * completed refunds: running it in parallel lets it read a refund as
+ * nonterminal, then file a preflight review and record delivery_uncertain
+ * after the pending-refund worker already completed it. Workers report
+ * per-row failure counts instead of throwing, so both rejections and
+ * reported failures surface as a 503.
  */
 export async function processCancellationDrain(supabase: ServiceClient) {
   const workersStartedAt = Date.now();
-  const [cancellationResult, refundResult, legacyRefundResult] =
-    await Promise.allSettled([
-      drainFailedOrderCancellationSideEffects({
-        sendCancellationEmail: sendEmail,
-        supabase,
-      }),
-      reconcilePendingPaystackCancellationRefunds(supabase),
-      reconcileCompletedPaystackCancellationRefunds(supabase),
-    ]);
+  const [refundResult, legacyRefundResult] = await Promise.allSettled([
+    reconcilePendingPaystackCancellationRefunds(supabase),
+    reconcileCompletedPaystackCancellationRefunds(supabase),
+  ]);
+  const [cancellationResult] = await Promise.allSettled([
+    drainFailedOrderCancellationSideEffects({
+      sendCancellationEmail: sendEmail,
+      supabase,
+    }),
+  ]);
   // Budget the serial drain from the remaining invocation time: an
   // aborted send strands its notification as processing, which becomes
   // permanently non-retryable delivery_uncertain. Skipped rows stay

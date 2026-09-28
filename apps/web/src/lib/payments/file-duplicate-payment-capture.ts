@@ -13,6 +13,8 @@ export interface DuplicateCaptureEvidence {
  * Files a duplicate-capture review for a stale attempt Paystack verified as
  * captured, merging into the open review on conflict, then stamps the row so
  * the sweep never reselects it. Returns true when the evidence is durable.
+ * The stamp merges database-side: spreading the stale in-memory metadata
+ * snapshot would clobber a concurrent charge.success completion.
  */
 export async function fileDuplicatePaymentCapture({
   attempt,
@@ -70,16 +72,13 @@ export async function fileDuplicatePaymentCapture({
     );
     if (mergeError || merged !== true) return false;
   }
-  const { error: stampError } = await supabase
-    .from('transactions')
-    .update({
-      metadata: {
-        ...(attempt.metadata ?? {}),
-        abandoned_sweep_resolution: 'verified_success_captured',
-        abandoned_sweep_resolved_at: new Date().toISOString(),
-      },
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', attempt.id);
-  return !stampError;
+  const { data: stamped, error: stampError } = await supabase.rpc(
+    'stamp_abandoned_sweep_resolution_v1',
+    {
+      p_transaction_id: attempt.id,
+      p_expected_reference: attempt.gateway_reference,
+      p_resolution: 'verified_success_captured',
+    }
+  );
+  return !stampError && stamped === true;
 }

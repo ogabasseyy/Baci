@@ -26,7 +26,7 @@ describe('PAYSTACK_PENDING_SOURCES', () => {
 
     expect(sources).toEqual(EXPECTED_PAYSTACK_PENDING_SOURCES);
     expect(sources.at(-1)?.repositoryPath).toBe(
-      'supabase/migrations/20260927151100_merge_abandoned_attempt_evidence_mismatch.sql'
+      'supabase/migrations/20260927151200_stamp_abandoned_sweep_resolution.sql'
     );
   });
 

@@ -36,7 +36,9 @@ describe('abandoned Paystack attempt duplicate captures', () => {
   it('files a duplicate-capture review and retires a verified successful attempt', async () => {
     const { client, lookup, update } = createClient();
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
     withReviewTable(client, reviewInsert);
+    Object.assign(client, { rpc });
 
     const summary = await reconcileAbandonedPaystackAttempts({
       supabase: client as never,
@@ -55,13 +57,13 @@ describe('abandoned Paystack attempt duplicate captures', () => {
         paystack_ref: 'BAC-OLD',
       })
     );
-    expect(update).toHaveBeenCalledTimes(1);
-    expect(update).toHaveBeenCalledWith(
+    expect(update).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
       expect.objectContaining({
-        metadata: expect.objectContaining({
-          abandoned_sweep_resolution: 'verified_success_captured',
-        }),
-        updated_at: expect.any(String),
+        p_expected_reference: 'BAC-OLD',
+        p_resolution: 'verified_success_captured',
+        p_transaction_id: 'attempt-1',
       })
     );
     expect(lookup.is).toHaveBeenCalledWith(
@@ -95,7 +97,11 @@ describe('abandoned Paystack attempt duplicate captures', () => {
         p_transaction_id: 'attempt-1',
       })
     );
-    expect(update).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
+      expect.objectContaining({ p_resolution: 'verified_success_captured' })
+    );
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('holds a verified success when merging its evidence fails', async () => {
@@ -126,7 +132,9 @@ describe('abandoned Paystack attempt duplicate captures', () => {
   ])('files a mismatched successful capture with its provider evidence', async (overrides, mismatch) => {
     const { client, update } = createClient();
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
     withReviewTable(client, reviewInsert);
+    Object.assign(client, { rpc });
 
     const summary = await reconcileAbandonedPaystackAttempts({
       supabase: client as never,
@@ -144,7 +152,7 @@ describe('abandoned Paystack attempt duplicate captures', () => {
         }),
       })
     );
-    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('holds a mismatched success under its mismatch reason when filing fails', async () => {
@@ -190,17 +198,11 @@ describe('abandoned Paystack attempt duplicate captures', () => {
   });
 
   it('holds a verified success when its resolution stamp fails', async () => {
-    const { client, update } = createClient();
+    const { client } = createClient();
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
     withReviewTable(client, reviewInsert);
-    const stampChain = { eq: vi.fn(), select: vi.fn() };
-    stampChain.eq.mockReturnValue(stampChain);
-    Object.assign(stampChain, {
-      // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are awaited thenables.
-      then: (resolve: (result: { error: Error }) => void) =>
-        resolve({ error: new Error('stamp unavailable') }),
-    });
-    update.mockReturnValueOnce(stampChain);
+    Object.assign(client, { rpc });
 
     const summary = await reconcileAbandonedPaystackAttempts({
       supabase: client as never,

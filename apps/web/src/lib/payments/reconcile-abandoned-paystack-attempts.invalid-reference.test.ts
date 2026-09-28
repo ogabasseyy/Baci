@@ -36,9 +36,11 @@ describe('abandoned Paystack attempts with invalid references', () => {
   }
 
   it('files a durable review instead of rotating an invalid reference', async () => {
-    const { client, update } = createClient([invalidCandidate()]);
+    const { client } = createClient([invalidCandidate()]);
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
     withReviewTable(client, reviewInsert);
+    Object.assign(client, { rpc });
 
     const summary = await reconcileAbandonedPaystackAttempts({
       supabase: client as never,
@@ -54,11 +56,12 @@ describe('abandoned Paystack attempts with invalid references', () => {
         paystack_ref: 'not a reference!',
       })
     );
-    expect(update).toHaveBeenCalledWith(
+    expect(rpc).toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
       expect.objectContaining({
-        metadata: expect.objectContaining({
-          abandoned_sweep_resolution: 'invalid_reference',
-        }),
+        p_expected_reference: 'not a reference!',
+        p_resolution: 'invalid_reference',
+        p_transaction_id: 'attempt-1',
       })
     );
   });

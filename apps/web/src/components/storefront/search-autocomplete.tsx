@@ -99,6 +99,9 @@ export function SearchAutocomplete({
     setPrevValue(value);
     if (value.length < 2) {
       clearSuggestions();
+      // The highlight must not outlive its options: the submit popup can
+      // stay open for a one-character query after the arrays clear.
+      setHighlightedIndex(-1);
       if (!isPopupLength(value)) {
         setIsOpen(false);
       }
@@ -112,6 +115,7 @@ export function SearchAutocomplete({
     setPrevDebouncedValue(debouncedValue);
     if (debouncedValue.length < 2) {
       clearSuggestions();
+      setHighlightedIndex(-1);
       if (!isPopupLength(debouncedValue)) {
         setIsOpen(false);
       }

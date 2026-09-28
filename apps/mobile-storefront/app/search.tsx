@@ -65,8 +65,10 @@ export default function SearchScreen() {
   }, [activeQuery]);
 
   // Applies a newly arrived route query to an already-mounted screen and
-  // records each submitted route query in history exactly once. In-screen
-  // edits never retrigger this effect, so typing after navigation is safe.
+  // records each submitted route query in history exactly once. A transition
+  // to a missing or invalid route param clears the route-owned search state
+  // so stale results never linger on a parameterless route. In-screen edits
+  // never change the route param, so typing after navigation is safe.
   const appliedRouteQueryRef = useRef<string | null>(null);
   const applyRouteQuery = useEffectEvent((nextQuery: string) => {
     if (debounceTimerRef.current) {
@@ -77,12 +79,28 @@ export default function SearchScreen() {
     setDebouncedQuery(nextQuery);
     saveToHistory(nextQuery);
   });
-  useEffect(() => {
-    if (routeQuery && appliedRouteQueryRef.current !== routeQuery) {
-      appliedRouteQueryRef.current = routeQuery;
-      applyRouteQuery(routeQuery);
+  const clearRouteQuery = useEffectEvent(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
     }
-  }, [routeQuery]);
+    setQuery('');
+    setDebouncedQuery('');
+  });
+  useEffect(() => {
+    const nextRouteQuery = parseRouteSearchQuery(routeQueryParam);
+    if (nextRouteQuery) {
+      if (appliedRouteQueryRef.current !== nextRouteQuery) {
+        appliedRouteQueryRef.current = nextRouteQuery;
+        applyRouteQuery(nextRouteQuery);
+      }
+      return;
+    }
+    if (appliedRouteQueryRef.current !== null) {
+      appliedRouteQueryRef.current = null;
+      clearRouteQuery();
+    }
+  }, [routeQueryParam]);
 
   const commitSearchQuery = (value: string) => {
     const trimmedValue = value.trim();

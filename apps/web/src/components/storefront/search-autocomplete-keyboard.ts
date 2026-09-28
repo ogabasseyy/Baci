@@ -35,6 +35,11 @@ export function createAutocompleteKeyDownHandler({
 }: AutocompleteKeyDownInput) {
   return (e: KeyboardEvent) => {
     const totalItems = suggestions.length + popularSearches.length;
+    // A highlight can outlive its options when the query is edited down and
+    // the arrays clear while the submit popup stays open. Treat a stale
+    // index as no highlight so Enter falls back to the typed value instead
+    // of dereferencing a missing option.
+    const hasHighlight = highlightedIndex >= 0 && highlightedIndex < totalItems;
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -42,7 +47,7 @@ export function createAutocompleteKeyDownHandler({
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       onHighlight((prev) => (prev > 0 ? prev - 1 : -1));
-    } else if (e.key === 'Enter' && highlightedIndex >= 0) {
+    } else if (e.key === 'Enter' && hasHighlight) {
       e.preventDefault();
       if (highlightedIndex < suggestions.length) {
         const product = suggestions[highlightedIndex];
@@ -51,14 +56,16 @@ export function createAutocompleteKeyDownHandler({
       } else {
         const searchIndex = highlightedIndex - suggestions.length;
         const search = popularSearches[searchIndex];
+        // Sync the controlled input first: submit-wired consumers (e.g. the
+        // navbar) persist across the navigation, so the input must display
+        // the submitted suggestion rather than the previous text.
+        onChange(search.search_query);
         if (onSubmitSearch) {
           onSubmitSearch(search.search_query);
-        } else {
-          onChange(search.search_query);
         }
         onClose();
       }
-    } else if (e.key === 'Enter' && highlightedIndex < 0) {
+    } else if (e.key === 'Enter' && !hasHighlight) {
       // With an explicit submit handler, Enter always submits the typed
       // query as a browsable search — even when product suggestions exist.
       // Blank queries stay on the current page. Without the handler, keep

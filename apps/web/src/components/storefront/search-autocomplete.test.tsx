@@ -621,7 +621,7 @@ describe('SearchAutocomplete', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('submits a highlighted popular search instead of filling the input', async () => {
+  it('syncs the input to a highlighted popular search before submitting', async () => {
     vi.useRealTimers();
     const onSubmitSearch = vi.fn();
     const onChange = vi.fn();
@@ -665,7 +665,9 @@ describe('SearchAutocomplete', () => {
 
     expect(onSubmitSearch).toHaveBeenCalledTimes(1);
     expect(onSubmitSearch).toHaveBeenCalledWith('iphone case');
-    expect(onChange).not.toHaveBeenCalledWith('iphone case');
+    // The controlled input syncs first so the persisted navbar displays the
+    // submitted suggestion instead of the previous text after navigation.
+    expect(onChange).toHaveBeenCalledWith('iphone case');
   });
 
   it('fills the input for a highlighted popular search without a submit handler', async () => {
@@ -955,6 +957,66 @@ describe('SearchAutocomplete', () => {
     expect(
       screen.getByRole('button', { name: /see all results for “x”/i })
     ).toBeInTheDocument();
+  });
+
+  it('submits the typed value after a highlight is edited away', async () => {
+    vi.useRealTimers();
+    const onChange = vi.fn();
+    const onSubmitSearch = vi.fn();
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockResolvedValue({
+      json: async () => ({
+        suggestions: [
+          {
+            id: 'product-1',
+            name: 'iPhone 16',
+            slug: 'iphone-16',
+            category: 'Smartphones',
+            price: 900_000,
+            image_small: '',
+          },
+        ],
+        popularSearches: [],
+      }),
+    } as Response);
+
+    const { rerender } = render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="iphone"
+        onChange={onChange}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    const input = screen.getByRole('searchbox');
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', { name: /iphone 16/i })
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(screen.getByRole('option', { name: /iphone 16/i })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+
+    // Editing down to one character clears the options while the submit
+    // popup stays open; Enter must submit the typed value, not crash on
+    // the stale highlight.
+    fireEvent.change(input, { target: { value: 'x' } });
+    rerender(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="x"
+        onChange={onChange}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Enter' });
+    expect(onSubmitSearch).toHaveBeenCalledWith('x');
   });
 
   it('keeps the popup open while a one-character submit query is typed', () => {

@@ -167,6 +167,31 @@ describe('SearchScreen route', () => {
     });
   });
 
+  it('clears stale results when the route query becomes invalid', () => {
+    mockUseLocalSearchParams.mockReturnValue({ q: 'iphone' });
+
+    const { rerender } = render(<SearchScreen />);
+    expect(mockViewProps.current).toMatchObject({
+      query: 'iphone',
+      hasSearchQuery: true,
+    });
+    expect(mockUseProducts).toHaveBeenLastCalledWith(
+      expect.objectContaining({ search: 'iphone', enabled: true })
+    );
+
+    mockUseLocalSearchParams.mockReturnValue({});
+    rerender(<SearchScreen />);
+
+    expect(mockViewProps.current).toMatchObject({
+      query: '',
+      committedQuery: '',
+      hasSearchQuery: false,
+    });
+    expect(mockUseProducts).toHaveBeenLastCalledWith(
+      expect.objectContaining({ search: undefined, enabled: false })
+    );
+  });
+
   it('guards the list end event against duplicate fetches', () => {
     const loadMore = jest.fn();
     mockUseLocalSearchParams.mockReturnValue({ q: 'iphone' });

@@ -74,7 +74,25 @@ describe('createAutocompleteKeyDownHandler', () => {
 
     press('Enter');
 
+    expect(handlers.onChange).toHaveBeenCalledWith('galaxy');
     expect(onSubmitSearch).toHaveBeenCalledWith('galaxy');
+    expect(handlers.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the typed value when the highlight outlives its options', () => {
+    const onSubmitSearch = vi.fn();
+    const { handlers, press } = setup({
+      highlightedIndex: 3,
+      onSubmitSearch,
+      popularSearches: [],
+      suggestions: [],
+      value: 'x',
+    });
+
+    const event = press('Enter');
+
+    expect(event.preventDefault).toHaveBeenCalled();
+    expect(onSubmitSearch).toHaveBeenCalledWith('x');
     expect(handlers.onClose).toHaveBeenCalledTimes(1);
   });
 

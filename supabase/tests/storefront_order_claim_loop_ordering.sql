@@ -23,6 +23,7 @@ DECLARE
   v_chat_loop text;
   v_confirm_loop text;
   v_release_loop text;
+  v_sold_loop text;
 BEGIN
   SELECT pg_catalog.pg_get_functiondef(function_definition.oid)
   INTO v_create_loop
@@ -107,6 +108,27 @@ BEGIN
 
   IF v_release_loop !~ 'FOR\s+v_item\s+IN\s+SELECT\s+oi\.id\s*,\s*oi\.product_id[^;]*?ORDER\s+BY\s+oi\.product_id\s*,\s*oi\.variant_id\s*,\s*oi\.id\s+FOR\s+UPDATE\s+LOOP' THEN
     RAISE EXCEPTION 'release item loop must order by product/variant/unit';
+  END IF;
+
+  IF (SELECT count(*) FROM regexp_matches(v_release_loop, 'ORDER\s+BY\s+pv\.product_id\s*,\s*vi\.variant_id\s*,\s*vi\.id', 'g')) <> 2 THEN
+    RAISE EXCEPTION 'release unit locks must order by product/variant/unit in both branches';
+  END IF;
+
+  SELECT pg_catalog.pg_get_functiondef(function_definition.oid)
+  INTO v_sold_loop
+  FROM pg_catalog.pg_proc AS function_definition
+  JOIN pg_catalog.pg_namespace AS function_schema
+    ON function_schema.oid = function_definition.pronamespace
+  WHERE function_schema.nspname = 'private'
+    AND function_definition.proname = 'mark_order_inventory_units_sold'
+    AND function_definition.pronargs = 2;
+
+  IF v_sold_loop IS NULL THEN
+    RAISE EXCEPTION 'private.mark_order_inventory_units_sold is missing';
+  END IF;
+
+  IF (SELECT count(*) FROM regexp_matches(v_sold_loop, 'ORDER\s+BY\s+pv\.product_id\s*,\s*vi\.variant_id\s*,\s*vi\.id', 'g')) <> 1 THEN
+    RAISE EXCEPTION 'sold unit locks must order by product/variant/unit';
   END IF;
 END
 $$;

@@ -67,9 +67,10 @@ function parseFunctionPrivilege(text) {
         const granteeClause = leading
           .slice(index + keyword[0].length)
           .replace(/;\s*$/, '');
-        if (operation === 'REVOKE' && /\bGRANTED\s+BY\b/i.test(granteeClause)) {
-          return null;
-        }
+        const grantor =
+          /\bGRANTED\s+BY\s+("[^"]+"|[a-z_][a-z0-9_]*)/i.exec(
+            granteeClause
+          )?.[1] ?? null;
         return {
           functionList: leading.slice(prefix[0].length, index).trim(),
           grantees: granteeClause
@@ -78,6 +79,7 @@ function parseFunctionPrivilege(text) {
               ''
             )
             .trim(),
+          grantor,
           index: text.length - leading.length,
           operation,
         };

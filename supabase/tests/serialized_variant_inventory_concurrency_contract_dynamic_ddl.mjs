@@ -164,7 +164,7 @@ function normalizedExecutePayload(payload) {
 }
 
 function assignedExecutePayloads(source, executeIndex, payload) {
-  const variable = /^\s*([a-z_][a-z0-9_]*)\s*$/i.exec(payload);
+  const variable = /^\s*\(?\s*([a-z_][a-z0-9_]*)\s*\)?\s*$/i.exec(payload);
   if (!variable) return [];
   const before = source.slice(0, executeIndex);
   const collect = (pattern, flags) =>

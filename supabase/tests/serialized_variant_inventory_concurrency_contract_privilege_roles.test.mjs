@@ -97,7 +97,7 @@ test('parses session role changes for privilege lifecycle analysis', () => {
     serializedInventoryPrivilegeRoles.parseRoleChange(
       '  SET ROLE "authenticated";'
     ),
-    { index: 2, kind: 'role', role: 'authenticated' }
+    { index: 2, kind: 'role', local: false, role: 'authenticated' }
   );
   assert.deepEqual(
     serializedInventoryPrivilegeRoles.parseRoleChange('RESET ROLE;'),
@@ -110,6 +110,7 @@ test('parses session role changes for privilege lifecycle analysis', () => {
     {
       index: 0,
       kind: 'role',
+      local: false,
       role: 'authenticated',
       sessionAuthorization: true,
     }
@@ -130,13 +131,25 @@ test('parses session role changes for privilege lifecycle analysis', () => {
     serializedInventoryPrivilegeRoles.parseRoleChange(
       'SET LOCAL ROLE authenticated;'
     ),
-    { index: 0, kind: 'role', role: 'authenticated' }
+    { index: 0, kind: 'role', local: true, role: 'authenticated' }
   );
   assert.deepEqual(
     serializedInventoryPrivilegeRoles.parseRoleChange(
       'SET SESSION ROLE authenticated;'
     ),
-    { index: 0, kind: 'role', role: 'authenticated' }
+    { index: 0, kind: 'role', local: false, role: 'authenticated' }
+  );
+  assert.deepEqual(
+    serializedInventoryPrivilegeRoles.parseRoleChange(
+      'SET LOCAL SESSION AUTHORIZATION authenticated;'
+    ),
+    {
+      index: 0,
+      kind: 'role',
+      local: true,
+      role: 'authenticated',
+      sessionAuthorization: true,
+    }
   );
   assert.deepEqual(
     serializedInventoryPrivilegeRoles.parseRoleChange('SET ROLE NONE;'),

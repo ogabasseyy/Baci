@@ -52,6 +52,7 @@ function parseRoleMembership(text) {
 
 function parseRoleChange(text) {
   const leading = text.trim();
+  const local = /^SET\s+LOCAL\b/i.test(leading);
   const setRole =
     /^SET\s+(?:LOCAL\s+|SESSION\s+)?ROLE\s+("[^"]+"|[a-z_][a-z0-9_]*)\s*;?$/i.exec(
       leading
@@ -63,11 +64,12 @@ function parseRoleChange(text) {
     return {
       index: text.indexOf(leading),
       kind: 'role',
+      local,
       role: normalizeRoleName(setRole[1]),
     };
   }
   const setSessionAuthorization =
-    /^SET\s+SESSION\s+AUTHORIZATION\s+("[^"]+"|[a-z_][a-z0-9_]*)\s*;?$/i.exec(
+    /^SET\s+(?:LOCAL\s+)?SESSION\s+AUTHORIZATION\s+("[^"]+"|[a-z_][a-z0-9_]*)\s*;?$/i.exec(
       leading
     );
   if (setSessionAuthorization) {
@@ -81,6 +83,7 @@ function parseRoleChange(text) {
     return {
       index: text.indexOf(leading),
       kind: 'role',
+      local,
       role: normalizeRoleName(setSessionAuthorization[1]),
       sessionAuthorization: true,
     };

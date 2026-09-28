@@ -172,3 +172,56 @@ test('splits reassigned owners with quote awareness', () => {
     true
   );
 });
+
+test('parses DROP OWNED role lists with cascade and quote awareness', () => {
+  const signature = 'private.fixture(uuid)';
+  assert.deepEqual(
+    functionLifecycleEvents(
+      'DROP OWNED BY deployer, "ops,lead" CASCADE;',
+      signature
+    ).map(({ kind, roles }) => ({ kind, roles })),
+    [{ kind: 'drop-owned', roles: ['deployer', 'ops,lead'] }]
+  );
+  assert.deepEqual(
+    functionLifecycleEvents('DROP OWNED BY CURRENT_USER;', signature).map(
+      ({ kind, roles }) => ({ kind, roles })
+    ),
+    [{ kind: 'drop-owned', roles: ['current_user'] }]
+  );
+});
+
+test('invalidates functions owned by a dropped-owned role', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = [
+    'SET ROLE deployer;',
+    `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;`,
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+    `GRANT EXECUTE ON FUNCTION ${signature} TO authenticated;`,
+    'DROP OWNED BY deployer;',
+  ].join('\n');
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    false
+  );
+});
+
+test('keeps functions owned by other roles after DROP OWNED', () => {
+  const signature = 'private.fixture(uuid)';
+  const source = [
+    'SET ROLE deployer;',
+    `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;`,
+    `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC;`,
+    `GRANT EXECUTE ON FUNCTION ${signature} TO authenticated;`,
+    'DROP OWNED BY mallory;',
+  ].join('\n');
+  assert.equal(
+    serializedInventoryPrivilegeExecution.authenticatedCanExecute(
+      source,
+      signature
+    ),
+    true
+  );
+});

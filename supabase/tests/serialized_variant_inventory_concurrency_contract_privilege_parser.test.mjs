@@ -21,17 +21,29 @@ test('removes grant options and grantor clauses from function grantees', () => {
   );
 });
 
-test('drops grantor-qualified revokes to preserve other grantors', () => {
+test('captures the grantor on qualified revokes for per-grantor tracking', () => {
+  assert.deepEqual(
+    {
+      grantees: serializedInventoryPrivilegeParser.parseFunctionPrivilege(
+        'REVOKE EXECUTE ON FUNCTION private.fixture(uuid) FROM authenticated GRANTED BY postgres;'
+      )?.grantees,
+      grantor: serializedInventoryPrivilegeParser.parseFunctionPrivilege(
+        'REVOKE EXECUTE ON FUNCTION private.fixture(uuid) FROM authenticated GRANTED BY postgres;'
+      )?.grantor,
+      operation: serializedInventoryPrivilegeParser.parseFunctionPrivilege(
+        'REVOKE EXECUTE ON FUNCTION private.fixture(uuid) FROM authenticated GRANTED BY postgres;'
+      )?.operation,
+    },
+    {
+      grantees: 'authenticated',
+      grantor: 'postgres',
+      operation: 'REVOKE',
+    }
+  );
   assert.equal(
     serializedInventoryPrivilegeParser.parseFunctionPrivilege(
-      'REVOKE EXECUTE ON FUNCTION private.fixture(uuid) FROM authenticated GRANTED BY postgres;'
-    ),
-    null
-  );
-  assert.notEqual(
-    serializedInventoryPrivilegeParser.parseFunctionPrivilege(
       'REVOKE EXECUTE ON FUNCTION private.fixture(uuid) FROM authenticated;'
-    ),
+    )?.grantor ?? null,
     null
   );
 });

@@ -258,7 +258,8 @@ function latestFunctionBody(functionName, sources = migrationSources) {
       source,
       functionMovePattern(functionName, 'gi')
     );
-    const invalidator = [drop, move]
+    const dropOwned = latestStatementMatch(source, /DROP\s+OWNED\b[^;]*;/gi);
+    const invalidator = [drop, move, dropOwned]
       .filter(Boolean)
       .sort((left, right) => left.index - right.index)
       .at(-1);

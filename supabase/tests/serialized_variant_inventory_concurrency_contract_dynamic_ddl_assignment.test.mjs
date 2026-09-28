@@ -87,3 +87,22 @@ $wrapper$;`;
     true
   );
 });
+
+test('resolves assigned DDL executed through a parenthesized variable', () => {
+  const source = `DO $wrapper$
+DECLARE
+  v_sql text;
+BEGIN
+  v_sql := 'ALTER FUNCTION private.confirm_order_inventory_reservations(uuid, uuid) OWNER TO mallory';
+  EXECUTE (v_sql);
+END;
+$wrapper$;`;
+
+  assert.equal(
+    hasDynamicFunctionDdl(
+      source,
+      'private.confirm_order_inventory_reservations(uuid, uuid)'
+    ),
+    true
+  );
+});

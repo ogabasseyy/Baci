@@ -120,9 +120,24 @@ function functionLifecycleEvents(source, signature) {
       .map((role) => serializedInventoryPrivilegeRoles.normalizeRoleName(role)),
     owner: serializedInventoryPrivilegeRoles.normalizeRoleName(match[2]),
   }));
-  return [...creates, ...inboundMoves, ...drops, ...reassigns].sort(
-    (left, right) => left.index - right.index
-  );
+  const dropOwned = [
+    ...source.matchAll(
+      /DROP\s+OWNED\s+BY\s+((?:"[^"]+"|[a-z_][a-z0-9_]*)(?:\s*,\s*(?:"[^"]+"|[a-z_][a-z0-9_]*))*)\s*(?:CASCADE|RESTRICT)?\s*;/gi
+    ),
+  ].map((match) => ({
+    index: match.index,
+    kind: 'drop-owned',
+    roles: serializedInventorySqlParser
+      .splitTopLevelList(match[1])
+      .map((role) => serializedInventoryPrivilegeRoles.normalizeRoleName(role)),
+  }));
+  return [
+    ...creates,
+    ...inboundMoves,
+    ...drops,
+    ...reassigns,
+    ...dropOwned,
+  ].sort((left, right) => left.index - right.index);
 }
 
 export const serializedInventoryPrivilegeLifecycle = {

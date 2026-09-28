@@ -41,6 +41,18 @@ function hasTopLevelException(source) {
   return false;
 }
 
+function catchesAuthorizationFailure(executable) {
+  const blocks = executable.split(/(?<!\bRAISE\s+)EXCEPTION\b/i).slice(1);
+  return blocks.some((block) => {
+    const handlers = block.split(/\bEND\b/i)[0];
+    return (
+      /\binsufficient_privilege\b/i.test(handlers) ||
+      /\bOTHERS\b/i.test(handlers) ||
+      /\bSQLSTATE\s+'42501'/i.test(handlers)
+    );
+  });
+}
+
 function publicWrapperPreservesMerchantParameter(source, delegatePattern) {
   const normalizedSource =
     serializedInventorySqlParser.stripSqlComments(source);
@@ -82,6 +94,7 @@ function publicWrapperPreservesMerchantParameter(source, delegatePattern) {
   return (
     !/\bp_merchant_id\s*(?::=|=)/i.test(between) &&
     !/\bINTO\s+(?:STRICT\s+)?p_merchant_id\b/i.test(between) &&
+    !catchesAuthorizationFailure(executable) &&
     serializedInventoryControlFlow.dominatesControlFlow(
       executable,
       authorization.index,
@@ -146,6 +159,17 @@ test('public inventory wrappers preserve the authorized merchant parameter', () 
       publicWrapperPreservesMerchantParameter(inverted, delegatePattern),
       false,
       `${signature} must reject authorization moved to an ELSE arm`
+    );
+
+    const caught = source.replace(
+      /END;\s*$/,
+      'EXCEPTION WHEN insufficient_privilege THEN RETURN NULL;\nEND;'
+    );
+    assert.notEqual(caught, source);
+    assert.equal(
+      publicWrapperPreservesMerchantParameter(caught, delegatePattern),
+      false,
+      `${signature} must reject handlers that catch authorization failures`
     );
 
     const nestedForbidden = source.replace(

@@ -34,6 +34,7 @@
       "apps/web/src/components/storefront/ogabassey/pages/checkout/resolve-checkout-resume-context.test.ts",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/derive-checkout-display-model*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/derive-checkout-payment-base-total*",
+      "apps/web/src/components/storefront/ogabassey/pages/checkout/derive-checkout-summary-amounts*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/build-checkout-order-request*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/prepare-checkout-order-identity*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-load-resumed-order*",

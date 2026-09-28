@@ -8,6 +8,8 @@ export const candidate = {
   merchant_id: 'merchant-1',
   gateway_reference: 'BAC-OLD',
   metadata: {},
+  paid_order: { payment_status: 'paid' },
+  platform_fee: null as number | null,
   status: 'pending',
 };
 

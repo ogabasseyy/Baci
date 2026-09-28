@@ -104,6 +104,12 @@ BEGIN
           AND r.status = 'completed'
           AND r.amount = p.amount
           AND upper(r.currency) = upper(p.currency)
+          -- A locally completed Paystack refund counts only after this RPC
+          -- provider-verified it; other gateways keep local-status trust.
+          AND (
+            r.gateway <> 'paystack'
+            OR r.metadata->>'provider_refund_status' = 'processed'
+          )
           AND (
             r.metadata->>'payment_transaction_id' = p.id::text
             OR (

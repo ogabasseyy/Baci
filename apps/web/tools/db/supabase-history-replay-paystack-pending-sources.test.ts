@@ -26,7 +26,7 @@ describe('PAYSTACK_PENDING_SOURCES', () => {
 
     expect(sources).toEqual(EXPECTED_PAYSTACK_PENDING_SOURCES);
     expect(sources.at(-1)?.repositoryPath).toBe(
-      'supabase/migrations/20260927151000_backfill_paystack_dva_placeholder_marker.sql'
+      'supabase/migrations/20260927150900_merge_duplicate_payment_capture_evidence.sql'
     );
   });
 

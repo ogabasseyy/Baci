@@ -61,4 +61,15 @@ describe('verified paystack cancellation refund migration', () => {
 
     expect(migrationSql).toContain('AND upper(r.currency) = upper(p.currency)');
   });
+
+  it('requires provider verification on counted Paystack refunds', () => {
+    expect(existsSync(migrationPath)).toBe(true);
+    if (!existsSync(migrationPath)) return;
+
+    const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
+
+    expect(migrationSql).toContain(
+      "OR r.metadata->>'provider_refund_status' = 'processed'"
+    );
+  });
 });

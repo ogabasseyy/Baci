@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { verifyTransaction } from '@/lib/paystack';
 import { fileDuplicatePaymentCapture } from './file-duplicate-payment-capture';
+import { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
 
 const DEFAULT_LIMIT = 25;
 // Give an abandoned checkout time to settle before releasing a paid order.
@@ -16,11 +17,23 @@ interface PendingAttempt {
   merchant_id: string;
   metadata: Record<string, unknown> | null;
   order_id: string;
+  paid_order?: { payment_status: string } | Array<{ payment_status: string }>;
+  platform_fee: number | null;
   status: 'pending' | 'processing';
+}
+
+function paidOrderStatus(
+  paidOrder: PendingAttempt['paid_order']
+): string | undefined {
+  if (!paidOrder) return undefined;
+  return Array.isArray(paidOrder)
+    ? paidOrder[0]?.payment_status
+    : paidOrder.payment_status;
 }
 
 export interface AbandonedPaystackAttemptSummary {
   checked: number;
+  completed: string[];
   failed: boolean;
   held: Array<{ id: string; reason: string; rotationFailed?: boolean }>;
   retired: string[];
@@ -39,14 +52,19 @@ export async function reconcileAbandonedPaystackAttempts({
   verify = verifyTransaction,
   limit = DEFAULT_LIMIT,
   olderThanMinutes = DEFAULT_OLDER_THAN_MINUTES,
+  scheduleAfter = () => {
+    // No-op default for unit tests; the cron route passes after().
+  },
 }: {
   supabase: SupabaseClient;
   verify?: typeof verifyTransaction;
   limit?: number;
   olderThanMinutes?: number;
+  scheduleAfter?: (task: () => Promise<void>) => void;
 }): Promise<AbandonedPaystackAttemptSummary> {
   const summary: AbandonedPaystackAttemptSummary = {
     checked: 0,
+    completed: [],
     failed: false,
     held: [],
     retired: [],
@@ -59,7 +77,7 @@ export async function reconcileAbandonedPaystackAttempts({
   const { data: attempts, error: lookupError } = await supabase
     .from('transactions')
     .select(
-      'id, order_id, merchant_id, gateway_reference, amount, currency, status, metadata, paid_order:orders!transactions_order_id_fkey!inner(payment_status)'
+      'id, order_id, merchant_id, gateway_reference, amount, currency, status, metadata, platform_fee, paid_order:orders!transactions_order_id_fkey!inner(payment_status)'
     )
     .eq('transaction_type', 'payment')
     .eq('gateway', 'paystack')
@@ -178,6 +196,60 @@ export async function reconcileAbandonedPaystackAttempts({
       }
     }
     if (result.success && result.data.status === 'success') {
+      // On a partially paid order the completed transaction may be only the
+      // first leg, so this verified capture can be the legitimate remaining
+      // payment rather than a duplicate. Route it through the atomic order
+      // finalizer, which distinguishes completion from overpayment, before
+      // classifying anything as a duplicate. Mismatched captures never
+      // complete: they are filed with their evidence below.
+      if (
+        !mismatchKind &&
+        paidOrderStatus(attempt.paid_order) === 'partially_paid'
+      ) {
+        const outcome = await finalizeOrderGatewayPayment({
+          actor: 'cron:reconcile-gateway-paid-orders',
+          gateway: 'paystack',
+          gatewayResponse: result.data as unknown as Record<string, unknown>,
+          orderId: attempt.order_id,
+          reference: attempt.gateway_reference,
+          scheduleAfter,
+          supabase,
+          transaction: {
+            amount: attempt.amount,
+            gateway_reference: attempt.gateway_reference,
+            id: attempt.id,
+            merchant_id: attempt.merchant_id,
+            order_id: attempt.order_id,
+            platform_fee: attempt.platform_fee,
+          },
+          // Candidates are always pending/processing here, never completed.
+          wonTransactionFlip: true,
+        });
+        if (outcome.kind === 'completed') {
+          summary.completed.push(attempt.id);
+          continue;
+        }
+        if (
+          outcome.kind === 'order_cancelled' ||
+          outcome.kind === 'order_skipped'
+        ) {
+          summary.reviewsFiled.push(attempt.id);
+          continue;
+        }
+        if (
+          outcome.kind === 'completion_failed' &&
+          typeof outcome.error === 'object' &&
+          outcome.error !== null &&
+          (outcome.error as { error_code?: unknown }).error_code ===
+            'TRANSACTION_IN_UNEXPECTED_STATE'
+        ) {
+          await hold('changed_concurrently');
+          continue;
+        }
+        summary.failed = true;
+        await hold(outcome.kind);
+        continue;
+      }
       // The order is already paid by another transaction, so a verified
       // capture here is a possible duplicate charge. The wedged sweep never
       // sees paid orders, so file it for operations and retire the row;

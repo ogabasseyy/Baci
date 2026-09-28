@@ -197,7 +197,13 @@ function is not an indexing source for this pilot. Candidate ranking is exact
 after merchant filtering at the current catalog size; an approximate vector
 index should be considered only with measured tenant-level recall and latency.
 
-After migrating, run
+For Ogabassey, a user with product-edit permission can use
+`/dashboard/products/discovery` to backfill from their signed-in merchant
+session. The dashboard processes five active products per request, skips
+unchanged sources, and can be stopped and restarted without handling a JWT.
+It uses the server-side Gemini key and keeps semantic search disabled.
+
+For a private operator backfill instead, run
 `pnpm --filter @baci/web exec tsx mcp-server/backfill-discovery-embeddings.ts`
 with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
 `SUPABASE_ACCESS_TOKEN` (a merchant user's short-lived JWT), `MERCHANT_ID`, and

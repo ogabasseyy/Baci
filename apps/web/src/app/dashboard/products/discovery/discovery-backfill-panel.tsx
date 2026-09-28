@@ -43,6 +43,7 @@ export function DiscoveryBackfillPanel({ merchantId }: { merchantId: string }) {
     if (complete) {
       setScanned(0);
       setGenerated(0);
+      setCursor(null);
       setComplete(false);
     }
     try {

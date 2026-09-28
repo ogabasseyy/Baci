@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DiscoveryBackfillPanel } from './discovery-backfill-panel';
 
@@ -129,16 +135,62 @@ describe('dashboard catalog indexing', () => {
     expect(options.signal?.aborted).toBe(false);
     view.unmount();
     expect(options.signal?.aborted).toBe(true);
-    finishRequest?.({
-      ok: true,
-      json: async () => ({
-        scanned: 5,
-        generated: 5,
-        nextCursor: 'cursor-1',
-        done: false,
-      }),
+    await act(async () => {
+      finishRequest?.({
+        ok: true,
+        json: async () => ({
+          scanned: 5,
+          generated: 5,
+          nextCursor: 'cursor-1',
+          done: false,
+        }),
+      });
     });
-    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(fetchWithCsrf).toHaveBeenCalledTimes(1);
+  });
+
+  it('restarts at the beginning after a failed first update-check batch', async () => {
+    fetchWithCsrf
+      .mockImplementationOnce(() =>
+        page({
+          scanned: 1,
+          generated: 1,
+          nextCursor: 'old-last-id',
+          done: true,
+        })
+      )
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        json: async () => ({ error: 'Retry this batch.' }),
+      })
+      .mockImplementationOnce(() =>
+        page({
+          scanned: 1,
+          generated: 0,
+          nextCursor: 'new-last-id',
+          done: true,
+        })
+      );
+    render(<DiscoveryBackfillPanel merchantId={merchantId} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Start indexing' }));
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('Indexing complete.')
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Check for updates' }));
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Retry this batch.')
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Start indexing' }));
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('Indexing complete.')
+    );
+    expect(fetchWithCsrf).toHaveBeenNthCalledWith(
+      3,
+      '/api/products/discovery-backfill',
+      expect.objectContaining({
+        body: JSON.stringify({ merchantId, cursor: null }),
+      })
+    );
   });
 });

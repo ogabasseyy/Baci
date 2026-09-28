@@ -19,7 +19,9 @@ export async function reconcilePaystackRefundEvent(
     return;
   const { data: payments, error: paymentError } = await supabase
     .from('transactions')
-    .select('id, order_id, merchant_id')
+    .select(
+      'id, order_id, merchant_id, cancel_order:orders!transactions_order_id_fkey(cancelled_at,shipping_status)'
+    )
     .eq('gateway', 'paystack')
     .eq('gateway_reference', transactionReference)
     .eq('transaction_type', 'payment')
@@ -28,6 +30,24 @@ export async function reconcilePaystackRefundEvent(
   if (paymentError) throw new Error('refund_event_payment_lookup_failed');
   for (const payment of payments ?? []) {
     if (!payment.order_id) continue;
+    // Mirror the ID handler's cancellation gate: a reference-only event
+    // for a non-cancelled order must not reach the cancellation-only
+    // reconciler, which would reject it and file an unrelated review.
+    const cancelOrder = (
+      payment as {
+        cancel_order?: {
+          cancelled_at?: string | null;
+          shipping_status?: string | null;
+        } | null;
+      }
+    ).cancel_order;
+    if (
+      cancelOrder?.cancelled_at == null ||
+      (cancelOrder.shipping_status !== 'cancelled' &&
+        cancelOrder.shipping_status !== 'canceled')
+    ) {
+      continue;
+    }
     const { data: refunds, error } = await supabase
       .from('transactions')
       .select(

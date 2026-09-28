@@ -15,7 +15,10 @@ export function database(
       amount: number;
       currency: string;
       gateway: string;
-      metadata: { payment_transaction_id?: string };
+      metadata: {
+        payment_transaction_id?: string;
+        provider_refund_status?: string;
+      };
     }>;
   } = {}
 ) {
@@ -73,7 +76,10 @@ export function database(
       amount: 60,
       currency: 'NGN',
       gateway: 'paystack',
-      metadata: { payment_transaction_id: 'payment-1' },
+      metadata: {
+        payment_transaction_id: 'payment-1',
+        provider_refund_status: 'processed',
+      },
     },
   ];
   const ledgerQuery = () => {

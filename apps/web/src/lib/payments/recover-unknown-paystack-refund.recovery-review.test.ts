@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   fetchRefund: vi.fn(),
   loggerInfo: vi.fn(),
   reconcilePaystackCancellationRefund: vi.fn(),
-  verifyTransaction: vi.fn(),
 }));
 
 vi.mock('./fetch-paystack-payment-by-id', () => ({
@@ -15,9 +14,6 @@ vi.mock('./fetch-paystack-payment-by-id', () => ({
 }));
 vi.mock('./fetch-paystack-refund', () => ({
   fetchRefund: mocks.fetchRefund,
-}));
-vi.mock('@/lib/verify-paystack-transaction', () => ({
-  verifyTransaction: mocks.verifyTransaction,
 }));
 vi.mock('./reconcile-paystack-cancellation-refund', () => ({
   reconcilePaystackCancellationRefund:
@@ -69,15 +65,6 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
         id: 202,
         status: 'processed',
         transaction: 555,
-      },
-      success: true,
-    });
-    mocks.verifyTransaction.mockResolvedValue({
-      data: {
-        amount: 10000,
-        currency: 'NGN',
-        id: 555,
-        reference: 'PSK-1',
       },
       success: true,
     });

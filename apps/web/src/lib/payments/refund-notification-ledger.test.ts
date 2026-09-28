@@ -59,13 +59,19 @@ describe('refundNotificationLedgerAmount', () => {
           amount: 60,
           currency: 'NGN',
           gateway: 'paystack',
-          metadata: { payment_transaction_id: 'pay-1' },
+          metadata: {
+            payment_transaction_id: 'pay-1',
+            provider_refund_status: 'processed',
+          },
         },
         {
           amount: 40,
           currency: 'NGN',
           gateway: 'paystack',
-          metadata: { payment_transaction_id: 'pay-2' },
+          metadata: {
+            payment_transaction_id: 'pay-2',
+            provider_refund_status: 'processed',
+          },
         },
       ],
     });
@@ -125,13 +131,19 @@ describe('refundNotificationLedgerAmount', () => {
           amount: 40,
           currency: 'NGN',
           gateway: 'paystack',
-          metadata: { payment_transaction_id: 'pay-1' },
+          metadata: {
+            payment_transaction_id: 'pay-1',
+            provider_refund_status: 'processed',
+          },
         },
         {
           amount: 60,
           currency: 'NGN',
           gateway: 'paystack',
-          metadata: { payment_transaction_id: 'pay-1' },
+          metadata: {
+            payment_transaction_id: 'pay-1',
+            provider_refund_status: 'processed',
+          },
         },
       ],
     });
@@ -161,7 +173,10 @@ describe('refundNotificationLedgerAmount', () => {
           amount: 40,
           currency: 'NGN',
           gateway: 'paystack',
-          metadata: { payment_transaction_id: 'pay-1' },
+          metadata: {
+            payment_transaction_id: 'pay-1',
+            provider_refund_status: 'processed',
+          },
         },
       ],
     });
@@ -191,11 +206,56 @@ describe('refundNotificationLedgerAmount', () => {
           amount: 40,
           currency: 'NGN',
           gateway: 'paystack',
-          metadata: { payment_transaction_id: 'pay-1' },
+          metadata: {
+            payment_transaction_id: 'pay-1',
+            provider_refund_status: 'processed',
+          },
         },
         {
           amount: 60,
           currency: 'USD',
+          gateway: 'paystack',
+          metadata: {
+            payment_transaction_id: 'pay-1',
+            provider_refund_status: 'processed',
+          },
+        },
+      ],
+    });
+
+    await expect(
+      refundNotificationLedgerAmount({
+        merchantId: 'merchant-1',
+        order,
+        supabase,
+      })
+    ).rejects.toThrow('refund_notification_ledger_mismatch');
+  });
+
+  it('excludes unverified Paystack rows from the total', async () => {
+    const { supabase } = database({
+      payments: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'paystack',
+          id: 'pay-1',
+          status: 'completed',
+        },
+      ],
+      refunds: [
+        {
+          amount: 40,
+          currency: 'NGN',
+          gateway: 'paystack',
+          metadata: {
+            payment_transaction_id: 'pay-1',
+            provider_refund_status: 'processed',
+          },
+        },
+        {
+          amount: 60,
+          currency: 'NGN',
           gateway: 'paystack',
           metadata: { payment_transaction_id: 'pay-1' },
         },
@@ -234,7 +294,10 @@ describe('refundNotificationLedgerAmount', () => {
           amount: 60,
           currency: 'NGN',
           gateway: 'paystack',
-          metadata: { payment_transaction_id: 'pay-1' },
+          metadata: {
+            payment_transaction_id: 'pay-1',
+            provider_refund_status: 'processed',
+          },
         },
       ],
     });

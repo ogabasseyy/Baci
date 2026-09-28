@@ -177,6 +177,9 @@ export async function executeOrderCancellationSideEffect({
   // leg's own gateway and currency and the matched rows cover the full
   // leg amount: a partial or foreign row must quarantine for
   // reconciliation instead of silently skipping the remaining balance.
+  // Paystack rows count only after provider verification, mirroring the
+  // completion RPC; unverified rows wait for the verification workers
+  // instead of triggering another provider refund.
   const normalizeMoneyField = (value: unknown): string =>
     String(value ?? '')
       .trim()
@@ -184,6 +187,7 @@ export async function executeOrderCancellationSideEffect({
   const legById = new Map(transactions.map((leg) => [leg.id, leg]));
   const matchedRefundKobo = new Map<string, number>();
   const completedLinkedLegIds = new Set<string>();
+  const unverifiedLinkedLegIds = new Set<string>();
   for (const row of refundRows ?? []) {
     if (row.status !== 'completed') continue;
     const paymentId = linkedPaymentId(row);
@@ -195,6 +199,14 @@ export async function executeOrderCancellationSideEffect({
       normalizeMoneyField(row.gateway) !== normalizeMoneyField(leg.gateway) ||
       normalizeMoneyField(row.currency) !== normalizeMoneyField(leg.currency)
     ) {
+      continue;
+    }
+    if (
+      normalizeMoneyField(row.gateway) === 'PAYSTACK' &&
+      (row.metadata as { provider_refund_status?: unknown } | null)
+        ?.provider_refund_status !== 'processed'
+    ) {
+      unverifiedLinkedLegIds.add(paymentId);
       continue;
     }
     const rowKobo = Math.round(Number(row.amount) * 100);
@@ -254,7 +266,15 @@ export async function executeOrderCancellationSideEffect({
       awaitingRefundPaymentIds.has(transaction.id) &&
       !refundedPaymentIds.has(transaction.id)
   );
-  if (awaitingTransactions.length > 0) {
+  // Legs whose only completed rows are still unverified wait for the
+  // verification workers: skipping them would strand a demotion, and
+  // initiating alongside them would double-refund a real row.
+  const unverifiedTransactions = transactions.filter(
+    (transaction) =>
+      !refundedPaymentIds.has(transaction.id) &&
+      unverifiedLinkedLegIds.has(transaction.id)
+  );
+  if (awaitingTransactions.length > 0 || unverifiedTransactions.length > 0) {
     throw new Error('cancellation_refund_awaiting_provider_completion');
   }
   // Withhold mismatched legs from initiation: their completed rows do not

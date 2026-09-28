@@ -1,7 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { selectPaystackRefundReference } from '@/lib/select-paystack-refund-reference';
-import { verifyTransaction } from '@/lib/verify-paystack-transaction';
 import { fetchPaystackPaymentById } from './fetch-paystack-payment-by-id';
 import { fetchRefund } from './fetch-paystack-refund';
 import { filePaystackRefundCandidateReviews } from './file-paystack-refund-candidate-reviews';
@@ -67,15 +66,10 @@ export async function recoverUnknownPaystackRefund(
   refundId: number,
   paymentReference?: string
 ): Promise<void> {
-  const [providerRefund, referencedPayment] = await Promise.all([
-    fetchRefund(refundId, AbortSignal.timeout(PROVIDER_READ_TIMEOUT_MS)),
-    paymentReference === undefined
-      ? Promise.resolve(null)
-      : verifyTransaction(
-          paymentReference,
-          AbortSignal.timeout(PROVIDER_READ_TIMEOUT_MS)
-        ),
-  ]);
+  const providerRefund = await fetchRefund(
+    refundId,
+    AbortSignal.timeout(PROVIDER_READ_TIMEOUT_MS)
+  );
   if (!providerRefund.success) {
     throw new Error('paystack_refund_verification_unavailable');
   }
@@ -83,19 +77,29 @@ export async function recoverUnknownPaystackRefund(
   if (!Number.isSafeInteger(current.transaction) || current.transaction <= 0) {
     throw new Error('paystack_refund_transaction_invalid');
   }
-  let resolvedPaymentReference = paymentReference;
-  if (resolvedPaymentReference === undefined) {
-    const fetchedPayment = await fetchPaystackPaymentById(
-      current.transaction,
-      AbortSignal.timeout(PROVIDER_READ_TIMEOUT_MS)
-    );
-    if (!fetchedPayment.success) {
-      throw new Error('paystack_refund_payment_lookup_unavailable');
-    }
-    resolvedPaymentReference = fetchedPayment.data.reference;
-    if (fetchedPayment.data.id !== current.transaction) {
-      throw new Error('paystack_refund_payment_lookup_mismatch');
-    }
+  // Always resolve the payment from the refund's own numeric transaction
+  // ID: the webhook reference is only a hint and may be stale. A stale
+  // hint is logged but never blocks recovery of the verified refund.
+  const fetchedPayment = await fetchPaystackPaymentById(
+    current.transaction,
+    AbortSignal.timeout(PROVIDER_READ_TIMEOUT_MS)
+  );
+  if (!fetchedPayment.success) {
+    throw new Error('paystack_refund_payment_lookup_unavailable');
+  }
+  if (fetchedPayment.data.id !== current.transaction) {
+    throw new Error('paystack_refund_payment_lookup_mismatch');
+  }
+  const resolvedPaymentReference = fetchedPayment.data.reference;
+  if (
+    paymentReference !== undefined &&
+    paymentReference !== resolvedPaymentReference
+  ) {
+    logger.info({
+      message:
+        'Unknown Paystack refund event reference is stale; using the authoritative payment',
+      refundId,
+    });
   }
   // The recovery path shares the webhook's reference alphabet: a reference
   // the selector will not pick is unusable downstream.
@@ -106,20 +110,9 @@ export async function recoverUnknownPaystackRefund(
   ) {
     throw new Error('paystack_refund_payment_reference_invalid');
   }
-  const providerPayment =
-    referencedPayment ??
-    (await verifyTransaction(
-      resolvedPaymentReference,
-      AbortSignal.timeout(PROVIDER_READ_TIMEOUT_MS)
-    ));
-  if (!providerPayment.success) {
-    throw new Error('paystack_refund_verification_unavailable');
-  }
-  const original = providerPayment.data;
+  const original = fetchedPayment.data;
   if (
     current.id !== refundId ||
-    current.transaction !== original.id ||
-    original.reference !== resolvedPaymentReference ||
     !Number.isSafeInteger(current.amount) ||
     current.amount <= 0 ||
     typeof current.currency !== 'string' ||

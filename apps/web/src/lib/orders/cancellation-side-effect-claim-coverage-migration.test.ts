@@ -21,6 +21,9 @@ describe('Cancellation side-effect claim coverage migration', () => {
     expect(coverageRegression).toContain(
       'legacy sole-payment cover must auto-complete'
     );
+    expect(coverageRegression).toContain(
+      'unverified full cover must stay claimed'
+    );
     expect(coverageRegression).toContain('ROLLBACK;');
   });
 });

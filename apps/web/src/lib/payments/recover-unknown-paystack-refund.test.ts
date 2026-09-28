@@ -9,7 +9,6 @@ const mocks = vi.hoisted(() => ({
   holdPaystackRefundForReview: vi.fn(),
   loggerInfo: vi.fn(),
   reconcilePaystackCancellationRefund: vi.fn(),
-  verifyTransaction: vi.fn(),
 }));
 
 vi.mock('./fetch-paystack-payment-by-id', () => ({
@@ -18,9 +17,6 @@ vi.mock('./fetch-paystack-payment-by-id', () => ({
 
 vi.mock('./fetch-paystack-refund', () => ({
   fetchRefund: mocks.fetchRefund,
-}));
-vi.mock('@/lib/verify-paystack-transaction', () => ({
-  verifyTransaction: mocks.verifyTransaction,
 }));
 vi.mock('./reconcile-paystack-cancellation-refund', () => ({
   reconcilePaystackCancellationRefund:
@@ -69,15 +65,6 @@ describe('recoverUnknownPaystackRefund', () => {
         id: 202,
         status: 'processed',
         transaction: 555,
-      },
-      success: true,
-    });
-    mocks.verifyTransaction.mockResolvedValue({
-      data: {
-        amount: 10000,
-        currency: 'NGN',
-        id: 555,
-        reference: 'PSK-1',
       },
       success: true,
     });
@@ -153,11 +140,31 @@ describe('recoverUnknownPaystackRefund', () => {
       555,
       expect.any(AbortSignal)
     );
-    expect(mocks.verifyTransaction).toHaveBeenCalledWith(
-      'PSK-1',
+    expect(insert).toHaveBeenCalledOnce();
+  });
+
+  it('recovers through a stale webhook reference using the authoritative payment', async () => {
+    const { insert, supabase } = database();
+
+    await recoverUnknownPaystackRefund(supabase, 202, 'STALE-REF');
+
+    expect(mocks.fetchPaystackPaymentById).toHaveBeenCalledWith(
+      555,
       expect.any(AbortSignal)
     );
-    expect(insert).toHaveBeenCalledOnce();
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gateway_reference: '202',
+        metadata: expect.objectContaining({
+          payment_transaction_id: 'pay-1',
+          provider_payment_transaction_id: 555,
+        }),
+      })
+    );
+    expect(mocks.reconcilePaystackCancellationRefund).toHaveBeenCalledOnce();
+    expect(mocks.loggerInfo).toHaveBeenCalledWith(
+      expect.objectContaining({ refundId: 202 })
+    );
   });
 
   it('fails retryably when the numeric payment lookup is unavailable', async () => {
@@ -180,7 +187,6 @@ describe('recoverUnknownPaystackRefund', () => {
     await expect(recoverUnknownPaystackRefund(supabase, 202)).rejects.toThrow(
       'paystack_refund_payment_lookup_mismatch'
     );
-    expect(mocks.verifyTransaction).not.toHaveBeenCalled();
     expect(insert).not.toHaveBeenCalled();
   });
 
@@ -219,7 +225,7 @@ describe('recoverUnknownPaystackRefund', () => {
     expect(mocks.reconcilePaystackCancellationRefund).not.toHaveBeenCalled();
   });
 
-  it('acknowledges events whose refund does not match the payment', async () => {
+  it('throws when the authoritative payment belongs to another transaction', async () => {
     mocks.fetchRefund.mockResolvedValue({
       data: {
         amount: 10000,
@@ -227,6 +233,26 @@ describe('recoverUnknownPaystackRefund', () => {
         id: 202,
         status: 'processed',
         transaction: 999,
+      },
+      success: true,
+    });
+    const { insert, supabase } = database();
+
+    await expect(
+      recoverUnknownPaystackRefund(supabase, 202, 'PSK-1')
+    ).rejects.toThrow('paystack_refund_payment_lookup_mismatch');
+    expect(insert).not.toHaveBeenCalled();
+    expect(mocks.reconcilePaystackCancellationRefund).not.toHaveBeenCalled();
+  });
+
+  it('acknowledges events whose refund echo does not match the request', async () => {
+    mocks.fetchRefund.mockResolvedValue({
+      data: {
+        amount: 10000,
+        currency: 'NGN',
+        id: 203,
+        status: 'processed',
+        transaction: 555,
       },
       success: true,
     });

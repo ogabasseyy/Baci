@@ -1,3 +1,4 @@
+import { isBroadIntentDiscoveryWord } from './broad-intent-discovery-word';
 import { singleWordDiscoveryTerm } from './single-word-discovery-term';
 
 /** A single unqualified word must appear as a whole word in product text.
@@ -11,9 +12,14 @@ export function matchesSingleWordDiscoveryQuery(
   const term = singleWordDiscoveryTerm(query);
   if (!term || category) return true;
   const fields = [product.name, product.brand, product.category, product.description]
-    .filter((value): value is string => typeof value === 'string')
-    .map((value) => value.toLocaleLowerCase('en').match(/[a-z0-9]+/g) ?? []);
-  const words = fields.flat();
+    .map((value) => typeof value === 'string'
+      ? value.toLocaleLowerCase('en').match(/[a-z0-9]+/g) ?? []
+      : []);
+  // Broad use-case words appear in marketing copy for unrelated products, so
+  // only identifying fields can match them. Product-type words keep matching
+  // descriptions, e.g. "diffuser" for a fragrance machine.
+  const matchableFields = isBroadIntentDiscoveryWord(term) ? fields.slice(0, 3) : fields;
+  const words = matchableFields.flat();
   const matchesTerm = (word: string) => word === term || word === `${term}s` || `${word}s` === term ||
     (term.endsWith('y') && word === `${term.slice(0, -1)}ies`) ||
     (word.endsWith('y') && term === `${word.slice(0, -1)}ies`);

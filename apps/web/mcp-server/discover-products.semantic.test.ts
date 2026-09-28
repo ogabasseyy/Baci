@@ -108,6 +108,38 @@ describe('gated semantic discovery', () => {
     expect(result.selectedProducts.map(({ product }) => product.id)).toEqual(['laptop']);
   });
 
+  it.each(['for work?', 'For Work!', 'something for gaming?'])(
+    'still guards a punctuated broad use-case phrase: %s', async (query) => {
+      const { supabase } = discoveryClient();
+      const semanticSearch = vi.fn(async () => ['laptop']);
+      await discoverMcpProducts({
+        args: { query }, merchantId: 'merchant-1',
+        sanitizeString: (input) => input, semanticSearch, supabase,
+      });
+      expect(semanticSearch).not.toHaveBeenCalled();
+    }
+  );
+
+  it('drops staged semantic candidates when a later page fails', async () => {
+    const { supabase } = discoveryClient();
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({
+      data: [{ product_id: 'laptop', total_count: 1 }], error: null,
+    } as never);
+    const semanticSearch = vi.fn(async (_query: string, offset: number) => {
+      if (offset === 0) return ['camera', ...Array.from({ length: 39 }, (_, index) => `other-${index}`)];
+      throw new Error('page unavailable');
+    });
+    const result = await discoverMcpProducts({
+      args: { query: 'smart gadget', sort: 'newest', limit: 2 },
+      merchantId: 'merchant-1',
+      sanitizeString: (input) => input,
+      semanticSearch,
+      supabase,
+    });
+    expect(semanticSearch.mock.calls.map(([, offset]) => offset)).toEqual([0, 40]);
+    expect(result.selectedProducts.map(({ product }) => product.id)).toEqual(['laptop']);
+  });
+
   it.each([false, true])('orders semantic candidates by newest date and then ID (equal dates: %s)', async (sameCreatedAt) => {
     const { supabase } = discoveryClient(sameCreatedAt);
     vi.mocked(supabase.rpc).mockResolvedValueOnce({

@@ -30,7 +30,8 @@ type DiscoveryInput = {
 };
 
 function isBroadUseCaseQuery(query: string | undefined): boolean {
-  return /^(?:(?:something|anything|products?|items?|gadgets?|best|recommendations?)\s+)?(?:for|to help with)\s+[a-z ]+$/i.test(query?.trim() ?? '');
+  const normalized = query?.normalize('NFKC').toLocaleLowerCase('en').match(/[a-z0-9]+/g)?.join(' ') ?? '';
+  return /^(?:(?:something|anything|products?|items?|gadgets?|best|recommendations?)\s+)?(?:for|to help with)\s+[a-z ]+$/.test(normalized);
 }
 
 export async function discoverMcpProducts({
@@ -61,6 +62,7 @@ export async function discoverMcpProducts({
     selectSearchProductsByPrice(hydratedProducts, args, limit).length < limit) {
     try {
       const seenIds = new Set(products.map((product) => product.id));
+      const semanticProducts: typeof hydratedProducts = [];
       for (let offset = 0; offset < 200; offset += 40) {
         const pageIds = await semanticSearch(loaded.sanitizedQuery, offset);
         const semanticIds = pageIds.filter((id) => !seenIds.has(id));
@@ -83,14 +85,15 @@ export async function discoverMcpProducts({
             .filter((product) => product && matchesMcpPostHydrationFilters(product, {
               brand, category, condition,
             }));
-          hydratedProducts.push(...await hydrateSearchProductAvailability(
+          semanticProducts.push(...await hydrateSearchProductAvailability(
             candidates, supabase, merchantId, args.condition
           ));
         }
         if (pageIds.length < 40 ||
           (args.sort !== 'newest' && args.sort !== 'price_asc' && args.sort !== 'price_desc' &&
-            selectSearchProductsByPrice(hydratedProducts, args, limit).length >= limit)) break;
+            selectSearchProductsByPrice([...hydratedProducts, ...semanticProducts], args, limit).length >= limit)) break;
       }
+      hydratedProducts.push(...semanticProducts);
     } catch {
       // Semantic discovery is optional. The catalog's lexical results remain usable.
       console.error('Semantic discovery unavailable; using catalog search only');

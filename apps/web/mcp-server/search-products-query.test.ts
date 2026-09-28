@@ -98,6 +98,17 @@ describe('loadMcpSearchProducts', () => {
     expect(result.products[0]?.name).toBe('Aroma Machine');
   });
 
+  it('drops description-only matches for a broad use-case word', async () => {
+    const { supabase } = createRankedSearchSupabase(
+      'Furniture', () => 'Ergonomic Chair', () => 'Perfect for work and study'
+    );
+    const result = await loadMcpSearchProducts({
+      args: { query: 'work', limit: 1 }, merchantId: 'merchant-1',
+      sanitizeString: (input) => input, supabase,
+    });
+    expect(result.products).toEqual([]);
+  });
+
   it('filters a punctuated one-word query like its unpunctuated form', async () => {
     const { rpc, supabase } = createRankedSearchSupabase('Accessories', (id) =>
       id === 'ranked-150' ? 'Work Laptop' : 'DreamWorks Dragons Toy'

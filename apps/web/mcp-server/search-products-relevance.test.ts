@@ -42,6 +42,27 @@ describe('catalog discovery relevance evaluation', () => {
     }, 'work', undefined)).toBe(false);
   });
 
+  it('excludes description-only matches for broad use-case words', () => {
+    expect(matchesSingleWordDiscoveryQuery({
+      name: 'Ergonomic Chair', category: 'Furniture', description: 'Perfect for work and study',
+    }, 'work', undefined)).toBe(false);
+    expect(matchesSingleWordDiscoveryQuery({
+      name: 'Office Desk', brand: null, category: 'Furniture', description: 'Great for gaming setups',
+    }, 'gaming', undefined)).toBe(false);
+    expect(matchesSingleWordDiscoveryQuery({
+      name: 'Gold Necklace', category: 'Jewelry', description: 'Perfect gifts for her',
+    }, 'gifts', undefined)).toBe(false);
+  });
+
+  it('keeps identifying-field matches for broad use-case words', () => {
+    expect(matchesSingleWordDiscoveryQuery({
+      name: 'Work Laptop', category: 'Laptops', description: 'Business machine',
+    }, 'work', undefined)).toBe(true);
+    expect(matchesSingleWordDiscoveryQuery({
+      name: 'Ergonomic Chair', category: 'Office Furniture', description: 'Perfect for work',
+    }, 'office', undefined)).toBe(true);
+  });
+
   it('preserves compact product names and accessory inflection', () => {
     expect(matchesSingleWordDiscoveryQuery({
       name: 'MacBook Pro', category: 'Laptops',

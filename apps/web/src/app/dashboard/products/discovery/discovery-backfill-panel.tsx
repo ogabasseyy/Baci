@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { fetchWithCsrf } from '@/lib/api-client';
@@ -21,6 +21,17 @@ export function DiscoveryBackfillPanel({ merchantId }: { merchantId: string }) {
   const [error, setError] = useState<string | null>(null);
   const stopRequested = useRef(false);
   const inProgress = useRef(false);
+  const activeRequest = useRef<AbortController | null>(null);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      stopRequested.current = true;
+      activeRequest.current?.abort();
+    };
+  }, []);
 
   const run = async () => {
     if (inProgress.current) return;
@@ -36,14 +47,18 @@ export function DiscoveryBackfillPanel({ merchantId }: { merchantId: string }) {
     }
     try {
       while (!stopRequested.current) {
+        const controller = new AbortController();
+        activeRequest.current = controller;
         const response = await fetchWithCsrf(
           '/api/products/discovery-backfill',
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ merchantId, cursor: nextCursor }),
+            signal: controller.signal,
           }
         );
+        activeRequest.current = null;
         if (!response.ok) {
           const payload: { error?: string; resetIn?: number } = await response
             .json()
@@ -65,12 +80,15 @@ export function DiscoveryBackfillPanel({ merchantId }: { merchantId: string }) {
         }
       }
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : 'Indexing failed. Try again.'
-      );
+      if (mounted.current && !stopRequested.current) {
+        setError(
+          cause instanceof Error ? cause.message : 'Indexing failed. Try again.'
+        );
+      }
     } finally {
+      activeRequest.current = null;
       inProgress.current = false;
-      setRunning(false);
+      if (mounted.current) setRunning(false);
     }
   };
 
@@ -92,7 +110,7 @@ export function DiscoveryBackfillPanel({ merchantId }: { merchantId: string }) {
               : cursor
                 ? 'Indexing paused.'
                 : 'Ready to index.'}{' '}
-          {scanned} scanned, {generated} updated.
+          {scanned} scanned, {generated} updates confirmed.
         </p>
         {error && (
           <p role="alert" className="text-sm text-destructive">

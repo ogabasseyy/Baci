@@ -37,7 +37,7 @@ describe('dashboard catalog indexing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start indexing' }));
     await waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent(
-        'Indexing complete. 7 scanned, 5 updated.'
+        'Indexing complete. 7 scanned, 5 updates confirmed.'
       )
     );
     expect(fetchWithCsrf).toHaveBeenNthCalledWith(
@@ -87,7 +87,7 @@ describe('dashboard catalog indexing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Continue indexing' }));
     await waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent(
-        'Indexing complete. 6 scanned, 6 updated.'
+        'Indexing complete. 6 scanned, 6 updates confirmed.'
       )
     );
     expect(fetchWithCsrf).toHaveBeenNthCalledWith(
@@ -112,5 +112,33 @@ describe('dashboard catalog indexing', () => {
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent('Indexing failed.')
     );
+  });
+
+  it('aborts the active batch and stops future requests when the panel unmounts', async () => {
+    let finishRequest: ((value: unknown) => void) | undefined;
+    fetchWithCsrf.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishRequest = resolve;
+        })
+    );
+    const view = render(<DiscoveryBackfillPanel merchantId={merchantId} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Start indexing' }));
+    await waitFor(() => expect(fetchWithCsrf).toHaveBeenCalledTimes(1));
+    const options = fetchWithCsrf.mock.calls[0][1] as RequestInit;
+    expect(options.signal?.aborted).toBe(false);
+    view.unmount();
+    expect(options.signal?.aborted).toBe(true);
+    finishRequest?.({
+      ok: true,
+      json: async () => ({
+        scanned: 5,
+        generated: 5,
+        nextCursor: 'cursor-1',
+        done: false,
+      }),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fetchWithCsrf).toHaveBeenCalledTimes(1);
   });
 });

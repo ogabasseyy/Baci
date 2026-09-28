@@ -3,9 +3,7 @@ import { useCheckoutAddressInference } from './checkout/hooks/use-checkout-addre
 import { useCheckoutDeliveryAddressHandlers } from './checkout/hooks/use-checkout-delivery-address-handlers';
 import { useCheckoutDeliveryOptions } from './checkout/hooks/use-checkout-delivery-options';
 import { useCheckoutShippingQuotes } from './checkout/hooks/use-checkout-shipping-quotes';
-import { dispatchCheckoutPayment } from './checkout/handlers/dispatch-checkout-payment';
 import { buildCheckoutOrderRequest } from './checkout/build-checkout-order-request';
-import { prepareCheckoutDelivery } from './checkout/handlers/prepare-checkout-delivery';
 import { useLoadResumedOrder } from './checkout/hooks/use-load-resumed-order';
 import { useOrderTotals } from './checkout/hooks/use-order-totals';
 import { resolveCheckoutResumeContext } from './checkout/resolve-checkout-resume-context';
@@ -15,14 +13,12 @@ import {
   useDvaConfirmTransfer,
   type DvaModalData,
 } from './checkout/hooks/use-dva-confirm-transfer';
-import { isAirportDeliveryReady } from './checkout/is-airport-delivery-ready';
 
 import { DeferredCryptoSelectorModal as CryptoSelectorModal } from './checkout/components/DeferredCryptoSelectorModal';
 import {
   CHECKOUT_FUNNEL_EVENTS,
   buildCheckoutFunnelProperties,
   getCheckoutPaymentIntent,
-  resolveFinalizedCheckoutPaymentMethod,
 } from '@baci/shared/contracts';
 import {
   AlertCircle,
@@ -43,14 +39,13 @@ import { MobileOrderSummary } from '../components/MobileCheckoutComponents';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
 import { resolveMerchantDeliveryMethod } from './checkout/resolve-merchant-delivery-method';
-import { buildCheckoutBillingAddress } from './checkout/build-checkout-billing-address';
+import { isAirportDeliveryReady } from './checkout/is-airport-delivery-ready';
 import { useCheckoutFormState } from './checkout/hooks/use-checkout-form-state';
 import { useCheckoutStepState } from './checkout/hooks/use-checkout-step-state';
 import {
   useJuicywayPayment,
   type JuicywayPendingOrder,
 } from './checkout/hooks/use-juicyway-payment';
-import { persistPendingCheckoutOrder } from './checkout/persist-pending-checkout-order';
 import { usePaymentReturnReset } from './checkout/use-payment-return-reset';
 import { useEffect, useState, useRef } from 'react';
 import { useCart } from '@/hooks/cart';
@@ -83,7 +78,6 @@ import {
 import { asRoute } from '@/lib/routes';
 import { getSubdivisions } from '@/lib/shipping/merchant-rates/subdivisions';
 import { toast } from '@/hooks/use-toast';
-import { createClient } from '@/lib/supabase/client';
 import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import {
@@ -103,13 +97,12 @@ import {
   CHECKOUT_PENDING_ORDER_STORAGE_KEY,
   type PendingCheckoutOrderSnapshot,
 } from './checkout/pending-checkout-order';
-import { prepareCheckoutOrderIdentity } from './checkout/prepare-checkout-order-identity';
+import { prepareCheckoutOrderSubmission } from './checkout/prepare-checkout-order-submission';
 import {
   submitRedvaultPreparedOrder,
   type RedvaultPreparedOrder,
   type RedvaultStatus,
 } from './checkout/handlers/redvault-prepared-order-submit';
-import { recoverPendingCheckoutOrder } from './checkout/handlers/recover-pending-checkout-order';
 import {
   clearCheckoutIdempotencyKey,
   getCheckoutIdempotencyKey,
@@ -119,13 +112,9 @@ import { useCheckoutSubmissionState } from './checkout/hooks/use-checkout-submis
 import { captureCheckoutPaymentStarted } from './checkout/capture-checkout-payment-started';
 import { executeResumedDirectPayment } from './checkout/handlers/direct-payment';
 import { getCheckoutOrderErrorMessage } from './checkout/checkout-order-error-message';
-import {
-  submitCheckoutOrder,
-  type CheckoutPaymentOrder,
-  type CheckoutWalletRedemption,
-} from './checkout/handlers/submit-checkout-order';
-import { completeCheckoutOrder } from './checkout/handlers/complete-checkout-order';
-import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
+import { runCheckoutOrderLifecycle } from './checkout/handlers/checkout-order-lifecycle';
+import { continueCheckoutPayment } from './checkout/handlers/continue-checkout-payment';
+import { signUpCheckoutCustomer } from './checkout/handlers/sign-up-checkout-customer';
 import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import { selectRejectedVoucherLines } from './checkout/select-rejected-voucher-lines';
 import { PaymentStep } from './checkout/components/PaymentStep';
@@ -145,7 +134,6 @@ import {
   isGiglGoFasterQuote,
   isMerchantQuote,
   isStationPickupQuote,
-  isKlumpUnavailableForGatewayAmount,
 } from './checkout/utils';
 import { useWalletFundedBankTransfer } from './checkout/hooks/use-wallet-funded-bank-transfer';
 import { useStorefrontCustomerSession } from './checkout/hooks/use-storefront-customer-session';
@@ -1000,121 +988,103 @@ export const CheckoutPage: React.FC = () => {
       return;
     }
 
-    if (
-      ((deliveryMethod === 'door' || deliveryMethod === 'pickup_station') && !selectedQuoteId) ||
-      (deliveryMethod === 'airport' && !isAirportDeliveryReady(airportRequiresQuote, selectedQuoteMatchesDeliveryMethod))
-    ) {
-      toast({
-        title: 'Select Delivery Option',
-        description: 'Please select a delivery option before placing your order.',
-        variant: 'destructive',
-      });
-      setCurrentStep('delivery');
-      setCompletedSteps((prev) => ({ ...prev, delivery: false }));
-      isOrderInFlightRef.current = false;
-      return;
-    }
-
-    // Note: `airportType` is typed as `'delivery' | 'pickup'` with a
-    // 'delivery' default, so an explicit `!airportType` guard here would be
-    // unreachable. Airport flow validation lives in `isDeliveryValid`.
-
-    if (paymentMethod === 'bank_transfer' && !bankTransferCheckoutAvailable) {
-      toast({
-        title: 'Payment Unavailable',
-        description:
-          'Bank transfer is not available for this store yet. Please choose a different payment method.',
-        variant: 'destructive',
-      });
-      isOrderInFlightRef.current = false;
-      return;
-    }
-
-    if (paymentMethod === 'paystack' && !paystackCheckoutAvailable) {
-      toast({
-        title: 'Payment Unavailable',
-        description:
-          'Paystack is not available for this store yet. Please choose a different payment method.',
-        variant: 'destructive',
-      });
-      isOrderInFlightRef.current = false;
-      return;
-    }
-
-    if (paymentMethod === 'korapay' && !korapayCheckoutAvailable) {
-      toast({
-        title: 'Payment Unavailable',
-        description:
-          'Korapay is not available for this store yet. Please choose a different payment method.',
-        variant: 'destructive',
-      });
-      isOrderInFlightRef.current = false;
-      return;
-    }
-
-    if (paymentMethod === 'uba_redvault' && !redvaultAvailability.available) {
-      toast({
-        title: 'Payment Unavailable',
-        description: 'Pay with UBA is not available right now. Please choose a different payment method.',
-        variant: 'destructive',
-      });
-      isOrderInFlightRef.current = false;
-      return;
-    }
-
-    if (
-      isKlumpUnavailableForGatewayAmount({
-        paymentMethod,
-        payableAmount: remainingAmount,
-        orderAmount: total,
-      })
-    ) {
-      toast(KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST);
-      releaseSubmission();
-      return;
-    }
-
-    setIsProcessing(true);
-
-    const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
-
-    const preparedDelivery = prepareCheckoutDelivery({
-      method: deliveryMethod,
-      selectedQuoteId,
-      selectedQuoteMatchesMethod: selectedQuoteMatchesDeliveryMethod,
-      airportRequiresQuote,
-      quotes: shippingQuotes,
-      selectedAddress,
-      isNewAddressMode,
-      newAddressStreet,
-      newAddressCity,
-      newAddressState,
-      airportType,
-      customerPhone,
-      merchantCountry,
+    const preparedSubmission = prepareCheckoutOrderSubmission({
+      payment: {
+        method: paymentMethod,
+        bankTransferAvailable: bankTransferCheckoutAvailable,
+        paystackAvailable: paystackCheckoutAvailable,
+        korapayAvailable: korapayCheckoutAvailable,
+        redvaultAvailable: redvaultAvailability.available,
+        remainingAmount,
+        total,
+      },
+      delivery: {
+        method: deliveryMethod,
+        selectedQuoteId,
+        selectedQuoteMatchesMethod: selectedQuoteMatchesDeliveryMethod,
+        airportRequiresQuote,
+        airportType,
+        quotes: shippingQuotes,
+        addresses,
+        selectedAddressId,
+        isNewAddressMode,
+        newAddressStreet,
+        newAddressCity,
+        newAddressState,
+        customerPhone,
+        merchantCountry,
+        deliveryCost,
+      },
+      identity: {
+        merchantId: merchant.id,
+        customerEmail,
+        customerName: (firstName + ' ' + lastName).trim(),
+        customerPhone,
+        checkoutItems: buildCheckoutOrderItems(checkoutCart),
+        useWalletCredit: checkoutValues.useWalletCredit,
+        walletAmountUsed,
+        discountCode: checkoutValues.discountCode,
+        giftWrappingCost,
+      },
     });
-    if (preparedDelivery.issue === 'incomplete-address') {
-      toast({
-        title: 'Incomplete Address',
-        description: 'Please enter your full address (Street, City, State).',
-        variant: 'destructive',
-      });
-      setIsProcessing(false);
-      setCompletedSteps((prev) => ({ ...prev, delivery: false }));
-      isOrderInFlightRef.current = false;
-      setCurrentStep('delivery');
-      return;
-    }
-    if (preparedDelivery.issue === 'required') {
-      toast({
-        title: 'Delivery option required',
-        description: 'Please select a delivery option to continue.',
-        variant: 'destructive',
-      });
-      releaseSubmission();
-      return;
-    }
-    if (preparedDelivery.issue === 'expired') {
+    if (preparedSubmission.kind === 'issue') {
+      if (preparedSubmission.issue === 'delivery-option') {
+        toast({
+          title: 'Select Delivery Option',
+          description: 'Please select a delivery option before placing your order.',
+          variant: 'destructive',
+        });
+        setCurrentStep('delivery');
+        setCompletedSteps((prev) => ({ ...prev, delivery: false }));
+        isOrderInFlightRef.current = false;
+        return;
+      }
+      if (
+        preparedSubmission.issue === 'bank-transfer-unavailable' ||
+        preparedSubmission.issue === 'paystack-unavailable' ||
+        preparedSubmission.issue === 'korapay-unavailable' ||
+        preparedSubmission.issue === 'redvault-unavailable'
+      ) {
+        const unavailableMessage = {
+          'bank-transfer-unavailable': 'Bank transfer is not available for this store yet. Please choose a different payment method.',
+          'paystack-unavailable': 'Paystack is not available for this store yet. Please choose a different payment method.',
+          'korapay-unavailable': 'Korapay is not available for this store yet. Please choose a different payment method.',
+          'redvault-unavailable': 'Pay with UBA is not available right now. Please choose a different payment method.',
+        }[preparedSubmission.issue];
+        toast({
+          title: 'Payment Unavailable',
+          description: unavailableMessage,
+          variant: 'destructive',
+        });
+        isOrderInFlightRef.current = false;
+        return;
+      }
+      if (preparedSubmission.issue === 'klump-unavailable') {
+        toast(KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST);
+        releaseSubmission();
+        return;
+      }
+      if (preparedSubmission.issue === 'incomplete-address') {
+        toast({
+          title: 'Incomplete Address',
+          description: 'Please enter your full address (Street, City, State).',
+          variant: 'destructive',
+        });
+        setIsProcessing(false);
+        setCompletedSteps((prev) => ({ ...prev, delivery: false }));
+        isOrderInFlightRef.current = false;
+        setCurrentStep('delivery');
+        return;
+      }
+      if (preparedSubmission.issue === 'delivery-required') {
+        toast({
+          title: 'Delivery option required',
+          description: 'Please select a delivery option to continue.',
+          variant: 'destructive',
+        });
+        releaseSubmission();
+        return;
+      }
       toast({
         title: 'Shipping rate expired',
         description: 'Please select a delivery option again.',
@@ -1123,39 +1093,18 @@ export const CheckoutPage: React.FC = () => {
       releaseSubmission();
       return;
     }
-
-    const shippingAddressData = preparedDelivery.address;
-    const { address: finalAddress, city: finalCity, state: finalState } = shippingAddressData;
-    const merchantRateId = preparedDelivery.merchantRateId;
-    const shippingProvider = preparedDelivery.provider;
-    const trackingNumber = undefined;
+    setIsProcessing(true);
 
     const {
-      items: orderItems,
-      normalizedPaymentMethod,
-      checkoutFingerprint,
-    } = prepareCheckoutOrderIdentity({
-      paymentMethod,
-      merchantId: merchant.id,
-      customerEmail,
-      customerName: `${firstName} ${lastName}`.trim(),
-      customerPhone,
-      deliveryMethod,
-      shippingFee: deliveryCost,
-      shippingProvider,
-      selectedQuoteId:
-        deliveryMethod === 'door' ||
-        deliveryMethod === 'pickup_station' ||
-        (deliveryMethod === 'airport' && selectedQuoteMatchesDeliveryMethod)
-          ? selectedQuoteId || undefined
-          : undefined,
-      shippingAddress: shippingAddressData,
-      items: buildCheckoutOrderItems(checkoutCart),
-      useWalletCredit: checkoutValues.useWalletCredit,
-      walletAmountUsed,
-      discountCode: checkoutValues.discountCode,
-      giftWrappingCost,
-    });
+      delivery: preparedDelivery,
+      identity: preparedIdentity,
+    } = preparedSubmission;
+    const shippingAddressData = preparedDelivery.address;
+    const { finalAddress, finalCity, finalState } = preparedDelivery;
+    const merchantRateId = preparedDelivery.merchantRateId;
+    const shippingProvider = preparedDelivery.shippingProvider;
+    const { items: orderItems, normalizedPaymentMethod, checkoutFingerprint } =
+      preparedIdentity;
 
     let createdOrderId: string | undefined;
     let createdOrderNumber = '';
@@ -1208,31 +1157,24 @@ export const CheckoutPage: React.FC = () => {
     }
 
     try {
-      let order: CheckoutPaymentOrder;
-      let walletResult: CheckoutWalletRedemption | null = null;
-      let amountDueToGateway = total;
-
-      const reuse = {
-        pendingOrder: pendingCheckoutOrder,
-        merchantId: merchant.id,
-        merchantSlug: merchant.slug,
-        customerEmail,
-        checkoutFingerprint,
-        paymentMethod: normalizedPaymentMethod,
-        shippingProvider,
-        // Airport forwards its real carrier quote only when it still matches
-        // the selected method. Merchant-rate synthetic ids stay omitted.
-        selectedQuoteId:
-          deliveryMethod === 'airport'
-            ? selectedQuoteMatchesDeliveryMethod
-              ? selectedQuoteId || undefined
-              : undefined
-            : getForwardableSelectedQuoteId(deliveryMethod, selectedQuoteId),
-        shippingRateId: merchantRateId ?? undefined,
-      };
-      const recovery = await recoverPendingCheckoutOrder({
-        reuse,
-        context: {
+      const lifecycle = await runCheckoutOrderLifecycle({
+        reuse: {
+          pendingOrder: pendingCheckoutOrder,
+          merchantId: merchant.id,
+          merchantSlug: merchant.slug,
+          customerEmail,
+          checkoutFingerprint,
+          paymentMethod: normalizedPaymentMethod,
+          shippingProvider,
+          selectedQuoteId:
+            deliveryMethod === 'airport'
+              ? selectedQuoteMatchesDeliveryMethod
+                ? selectedQuoteId || undefined
+                : undefined
+              : getForwardableSelectedQuoteId(deliveryMethod, selectedQuoteId),
+          shippingRateId: merchantRateId ?? undefined,
+        },
+        recoveryContext: {
           firstName,
           lastName,
           customerPhone,
@@ -1249,322 +1191,175 @@ export const CheckoutPage: React.FC = () => {
           clearCart,
           pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
         },
-      });
-      if (recovery.kind === 'handled') return;
-
-      const submittedOrder = await submitCheckoutOrder({
-        resolvedPendingOrder: recovery.pendingOrder,
-        getIdempotencyKey: () => getCheckoutIdempotencyKey(checkoutFingerprint),
-        orderRequest: buildCheckoutOrderRequest({
-          merchantId: merchant.id,
-          items: orderItems,
-          paymentMethod: normalizedPaymentMethod,
-          acceptsMarketing: newsletterOptIn,
-          customer: {
-            name: `${firstName} ${lastName}`.trim(),
-            email: customerEmail,
-            phone: customerPhone,
-            userId: user?.id,
-          },
-          money: {
-            subtotal: checkoutCartTotal,
-            shipping: deliveryCost,
-            tax: orderTotals?.taxAmount ?? 0,
-            giftWrapping: giftWrappingCost,
-            discountAmount: checkoutValues.discountAmount,
-            discountCode: checkoutValues.discountCode,
-            useWalletCredit: checkoutValues.useWalletCredit,
-            walletAmount: walletAmountUsed,
-          },
-          delivery: {
-            method: deliveryMethod,
-            airportType,
-            quoteMatchesMethod: selectedQuoteMatchesDeliveryMethod,
-            selectedQuoteId,
-            merchantRateId,
-            provider: shippingProvider,
-            address: shippingAddressData,
-          },
-        }),
-        paymentMethod,
-        total,
-        onVoucherRejected: (errorData) => {
-          for (const line of selectRejectedVoucherLines(cart, errorData)) {
-            if (line.cartItemId) {
-              removeFromCart(line.cartItemId);
-            } else {
-              removeFromCart(line.id, line.variantId);
-            }
-          }
-        },
-        onPendingOrderInvalidated: async () => {
-          clearPendingCheckoutOrder();
-          await clearCheckoutIdempotencyKey(checkoutFingerprint);
-        },
-        onShippingRateRejected: () => {
-          raiseCheckoutError('Shipping cost changed — please refresh and try again.');
-        },
-        getOrderErrorMessage: getCheckoutOrderErrorMessage,
-      });
-      order = submittedOrder.order;
-      walletResult = submittedOrder.wallet;
-      amountDueToGateway = submittedOrder.amountDueToGateway;
-      if (submittedOrder.redvaultSummary) {
-        setRedvaultSummary(submittedOrder.redvaultSummary);
-      }
-
-      createdOrderId = order.id;
-      createdOrderNumber =
-        order.order_number || order.id.slice(0, 8).toUpperCase();
-      // A created order completes this checkout attempt: rotate the session
-      // generation so a repeat purchase emits a fresh checkout_started, and
-      // suppress further starts for this attempt (post-creation rerenders
-      // must not re-emit just because the generation already rotated).
-      rotateCheckoutAttemptGeneration();
-      setCheckoutOrderCreated(true);
-      orderChargeCurrency =
-        typeof order.currency === 'string' && order.currency.trim()
-          ? order.currency.trim().toUpperCase()
-          : currencyCode;
-      // The server is authoritative only when it actually finalized
-      // coverage (see resolveFinalizedCheckoutPaymentMethod): attribute
-      // creation to the finalized method so creation and completion share
-      // one funnel. Any other server value keeps the UI gateway.
-      const serverPaymentMethod =
-        typeof order.payment_method === 'string'
-          ? order.payment_method
-          : undefined;
-      const finalizedPaymentMethod = resolveFinalizedCheckoutPaymentMethod(
-        serverPaymentMethod,
-        paymentMethod
-      );
-      captureCheckoutFunnelEventOnce(
-        CHECKOUT_FUNNEL_EVENTS.orderCreated,
-        order.id,
-        buildCheckoutFunnelProperties({
-          channel: 'web',
-          currency: orderChargeCurrency,
-          itemCount: orderItems.reduce((count, item) => count + item.quantity, 0),
-          orderId: order.id,
-          orderNumber: createdOrderNumber,
-          paymentIntent: getCheckoutPaymentIntent(finalizedPaymentMethod),
-          paymentMethod: finalizedPaymentMethod,
-          paymentStatus: order.payment_status || 'unpaid',
-          shipping: deliveryCost,
-          source: 'web_checkout',
-          subtotal: effectiveItemSubtotal,
-          tax: orderTotals?.taxAmount ?? 0,
-          total: order.total ?? total,
-        })
-      );
-
-      // The ORDER row's stamped currency is authoritative for payment
-      // initialization: a reused/idempotent order keeps its original currency
-      // even if the merchant's payout currency changed after it was created,
-      // and the initialize API rejects an explicit client/order mismatch.
-      // Both order sources return it (/api/orders and /api/orders/reuse);
-      // fall back to the merchant-resolved code only if it is ever absent.
-      // orderChargeCurrency was already resolved from the created ORDER
-      // row above; reuse it (do not redeclare: the assignment above and
-      // this block share one scope).
-      const billingAddress = buildCheckoutBillingAddress(
-        finalAddress,
-        finalCity,
-        finalState,
-        merchantCountry
-      );
-
-      // Persist the fence before any early return: the REDVAULT review
-      // branch below returns before payment, so a reload mid-review would
-      // otherwise lose the snapshot and let a method switch open a second
-      // order while this one still reserves inventory.
-      const pendingSnapshot: PendingCheckoutOrderSnapshot = {
-        orderId: order.id,
-        orderNumber: order.order_number,
-        trackingToken: order.tracking_token,
-        merchantId: merchant.id,
-        customerEmail,
-        customerPhone,
-        checkoutFingerprint,
-        paymentMethod: normalizedPaymentMethod,
-        amountDueToGateway,
-        createdAt: new Date().toISOString(),
-      };
-      persistPendingCheckoutOrder(pendingSnapshot);
-      setPendingCheckoutOrder(pendingSnapshot);
-
-      if (paymentMethod === 'uba_redvault' && !redvaultOrderReady) {
-        setRedvaultOrderReady({
-          billingAddress,
-          customerEmail,
-          customerName: `${firstName} ${lastName}`.trim(),
-          customerPhone,
-          currency: orderChargeCurrency,
-          orderId: order.id,
-          checkoutFingerprint,
-          trackingToken: order.tracking_token,
-          // Stamped for the prepared start: the full revenue value and
-          // number, matching the fresh-path start event — never the
-          // residual gateway due.
-          total: order.total ?? total,
-          orderNumber: createdOrderNumber,
-        });
-        releaseSubmission();
-        return;
-      }
-
-      // 1b. Create account if requested (Awaited to ensure session is set before moving to next page)
-      if (
-        paymentMethod !== 'uba_redvault' &&
-        createAccount &&
-        !user &&
-        accountPassword.length >= 6
-      ) {
-        try {
-          const supabase = createClient();
-          await supabase.auth.signUp({
-            email: customerEmail,
-            password: accountPassword,
-            options: {
-              data: {
-                first_name: firstName,
-                last_name: lastName,
-                phone: customerPhone,
-                source: 'checkout',
-                signup_type: 'customer'  // Prevents merchant record creation
+        submit: {
+          getIdempotencyKey: () => getCheckoutIdempotencyKey(checkoutFingerprint),
+          orderRequest: buildCheckoutOrderRequest({
+            merchantId: merchant.id,
+            items: orderItems,
+            paymentMethod: normalizedPaymentMethod,
+            acceptsMarketing: newsletterOptIn,
+            customer: {
+              name: `${firstName} ${lastName}`.trim(),
+              email: customerEmail,
+              phone: customerPhone,
+              userId: user?.id,
+            },
+            money: {
+              subtotal: checkoutCartTotal,
+              shipping: deliveryCost,
+              tax: orderTotals?.taxAmount ?? 0,
+              giftWrapping: giftWrappingCost,
+              discountAmount: checkoutValues.discountAmount,
+              discountCode: checkoutValues.discountCode,
+              useWalletCredit: checkoutValues.useWalletCredit,
+              walletAmount: walletAmountUsed,
+            },
+            delivery: {
+              method: deliveryMethod,
+              airportType,
+              quoteMatchesMethod: selectedQuoteMatchesDeliveryMethod,
+              selectedQuoteId,
+              merchantRateId,
+              provider: shippingProvider,
+              address: shippingAddressData,
+            },
+          }),
+          paymentMethod,
+          total,
+          onVoucherRejected: (errorData) => {
+            for (const line of selectRejectedVoucherLines(cart, errorData)) {
+              if (line.cartItemId) {
+                removeFromCart(line.cartItemId);
+              } else {
+                removeFromCart(line.id, line.variantId);
               }
             }
-          });
-          console.log('Account created and session initialized');
-        } catch (authError) {
-          // Log but don't block the order if signup fails (e.g. email exists)
-          console.error('Silent signup background error:', authError);
-        }
-      }
-
-      const paymentAmount = amountDueToGateway ?? total;
-
-      if (
-        isKlumpUnavailableForGatewayAmount({
-          paymentMethod,
-          payableAmount: paymentAmount,
-          orderAmount: total,
-        })
-      ) {
-        toast(KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST);
-        releaseSubmission();
-        return;
-      }
-
-      // Marks the per-attempt started flag and delegates the event shape
-      // to the focused helper: initialization failures before a provider
-      // flow opens keep the error UI but must not emit an unmatched start.
-      const capturePaymentStarted = (reference?: string) => {
-        paymentStarted = true;
-        captureCheckoutPaymentStarted({
-          currency: orderChargeCurrency,
-          orderId: order.id,
-          orderNumber: createdOrderNumber,
-          paymentMethod,
-          reference,
-          // Revenue is the canonical order total, not the residual due
-          // at the provider after wallet/savings credit — matching
-          // order_created above and the eventual completion.
-          // paymentAmount stays on the provider initialization, which
-          // charges only the residual.
-          total: order.total ?? total,
-        });
-      };
-
-      // Update local wallet balance if redemption occurred
-      if (walletResult?.amountUsed) {
-        setWalletBalance(walletResult.newBalance);
-      }
-
-      // 2. Handle payment based on method
-      // Special case: If wallet fully covers the order, no payment gateway needed
-      // Order API already marks it as paid, just redirect to success
-      if (paymentMethod !== 'uba_redvault' && paymentAmount <= 0) {
-        await completeCheckoutOrder({
-          order,
-          checkoutFingerprint,
-          completion: {
-            kind: 'zero_due',
-            paymentMethod,
-            currency: orderChargeCurrency,
-            orderNumber: createdOrderNumber,
-            total,
           },
+          onPendingOrderInvalidated: async () => {
+            clearPendingCheckoutOrder();
+            await clearCheckoutIdempotencyKey(checkoutFingerprint);
+          },
+          onShippingRateRejected: () => {
+            raiseCheckoutError('Shipping cost changed — please refresh and try again.');
+          },
+          getOrderErrorMessage: getCheckoutOrderErrorMessage,
+        },
+        customer: { email: customerEmail, phone: customerPhone, merchantId: merchant.id },
+        fingerprint: checkoutFingerprint,
+        paymentMethod,
+        itemCount: orderItems.reduce((count, item) => count + item.quantity, 0),
+        shipping: deliveryCost,
+        subtotal: effectiveItemSubtotal,
+        tax: orderTotals?.taxAmount ?? 0,
+        fallbackTotal: total,
+        currencyFallback: currencyCode,
+        shippingAddress: { address: finalAddress, city: finalCity, state: finalState },
+        merchantCountry,
+        onRedvaultSummary: setRedvaultSummary,
+        onOrderCreated: ({ orderId, orderNumber, currency }) => {
+          createdOrderId = orderId;
+          createdOrderNumber = orderNumber;
+          orderChargeCurrency = currency;
+          rotateCheckoutAttemptGeneration();
+          setCheckoutOrderCreated(true);
+        },
+        onPendingSnapshot: setPendingCheckoutOrder,
+        redvaultReview: {
+          enabled: paymentMethod === 'uba_redvault' && !redvaultOrderReady,
+          customerName: `${firstName} ${lastName}`.trim(),
+          checkoutFingerprint,
+          setReady: setRedvaultOrderReady,
+          releaseSubmission,
+        },
+      });
+      if (lifecycle.kind !== 'payment_ready') return;
+
+      const {
+        order,
+        wallet: walletResult,
+        amountDueToGateway,
+        createdOrderNumber: lifecycleOrderNumber,
+        orderChargeCurrency: lifecycleCurrency,
+        billingAddress,
+      } = lifecycle;
+      const signupAttempt = { current: false };
+      const signUpCustomer = (logSuccess = false) =>
+        signUpCheckoutCustomer({
+          attempt: signupAttempt,
+          enabled: createAccount,
+          hasUser: Boolean(user),
+          password: accountPassword,
+          email: customerEmail,
+          firstName,
+          lastName,
+          phone: customerPhone,
+          logSuccess,
+        });
+      await continueCheckoutPayment({
+        dispatch: {
+          merchant,
+          paymentMethod,
+          total,
+          currencyCode,
+          firstName,
+          lastName,
+          customerEmail,
+          customerPhone,
+          billingAddress,
+          checkoutFingerprint,
+          checkoutCart,
+          cart,
+          orderItems,
+          walletFundedTransfer,
+          waitForResolvedStorefrontCustomerAuth,
+          setIsProcessing,
+          isOrderInFlightRef,
+          setDvaData,
+          setDvaCountdown,
+          setIsInitializingDva,
+          setRedvaultStatus,
+          setPendingCryptoOrder,
+          setShowCryptoSelector,
+          setCryptoPaymentData,
           clearPendingCheckoutOrder,
           clearCheckoutSession,
           clearCart,
-          pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
-        });
-        return;
-      }
-
-      await dispatchCheckoutPayment({
-        merchant,
+          navigate: (path) => router.push(asRoute(getHref(path))),
+          redirect: (url) => window.location.assign(url),
+          payForMeDetails,
+        },
         order,
-        paymentMethod,
-        total,
-        paymentAmount,
+        wallet: walletResult,
+        amountDueToGateway,
         createdOrderNumber,
         orderChargeCurrency,
-        currencyCode,
-        firstName,
-        lastName,
-        customerEmail,
-        customerPhone,
-        billingAddress,
         checkoutFingerprint,
-        checkoutCart,
-        cart,
-        orderItems,
-        walletFundedTransfer,
-        waitForResolvedStorefrontCustomerAuth,
-        setIsProcessing,
-        isOrderInFlightRef,
-        setDvaData,
-        setDvaCountdown,
-        setIsInitializingDva,
-        setRedvaultStatus,
-        setPendingCryptoOrder,
-        setShowCryptoSelector,
-        setCryptoPaymentData,
-        capturePaymentStarted,
-        clearPendingCheckoutOrder,
-        clearCheckoutSession,
-        clearCart,
-        payForMeDetails,
-        navigate: (path) => router.push(asRoute(getHref(path))),
-        redirect: (url) => window.location.assign(url),
+        paymentMethod,
+        setWalletBalance,
+        capturePaymentStarted: (reference) => {
+          paymentStarted = true;
+          captureCheckoutPaymentStarted({
+            currency: orderChargeCurrency,
+            orderId: order.id,
+            orderNumber: createdOrderNumber,
+            paymentMethod,
+            reference,
+            total: order.total ?? total,
+          });
+        },
         hasPaymentStarted: () => paymentStarted,
         setInitializedReference: (reference) => {
           initializedReference = reference;
         },
-        completeSignup: async () => {
-          if (createAccount && !user && accountPassword.length >= 6) {
-            try {
-              const supabase = createClient();
-              await supabase.auth.signUp({
-                email: customerEmail,
-                password: accountPassword,
-                options: {
-                  data: {
-                    first_name: firstName,
-                    last_name: lastName,
-                    phone: customerPhone,
-                    source: 'checkout',
-                    signup_type: 'customer',
-                  },
-                },
-              });
-            } catch (authError) {
-              console.error('Silent signup background error:', authError);
-            }
-          }
-        },
+        completeSignup: signUpCustomer,
+        signupBeforePayment:
+          paymentMethod !== 'uba_redvault' &&
+          createAccount &&
+          !user &&
+          accountPassword.length >= 6
+            ? () => signUpCustomer(true)
+            : undefined,
+        releaseSubmission,
       });
     } catch (error) {
       handleSubmissionError(error, {

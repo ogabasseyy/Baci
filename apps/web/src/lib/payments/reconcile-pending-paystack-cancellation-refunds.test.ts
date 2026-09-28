@@ -52,6 +52,7 @@ describe('pending Paystack cancellation refund reconciliation', () => {
       in: vi.fn().mockReturnThis(),
       not: vi.fn().mockReturnThis(),
       is: vi.fn().mockReturnThis(),
+      like: vi.fn().mockReturnThis(),
       order: vi.fn().mockReturnThis(),
       limit: vi.fn().mockResolvedValue({ data: [refund], error: null }),
     };
@@ -85,6 +86,15 @@ describe('pending Paystack cancellation refund reconciliation', () => {
       'refund_pending',
       'pending',
     ]);
+    expect(candidates.not).toHaveBeenCalledWith(
+      'cancelled_order.cancelled_at',
+      'is',
+      null
+    );
+    expect(candidates.like).toHaveBeenCalledWith(
+      'description',
+      'Refund for cancelled order #%'
+    );
     expect(rpc).toHaveBeenCalledWith(
       'record_verified_paystack_cancellation_refund_v1',
       expect.objectContaining({ p_provider_status: 'processing' })

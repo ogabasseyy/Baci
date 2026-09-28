@@ -13,12 +13,18 @@ export async function reconcilePendingPaystackCancellationRefunds(
   const { data, error } = await supabase
     .from('transactions')
     .select(
-      'id, order_id, merchant_id, gateway_reference, amount, currency, metadata, status'
+      'id, order_id, merchant_id, gateway_reference, amount, currency, metadata, status, cancelled_order:orders!transactions_order_id_fkey!inner(cancelled_at)'
     )
     .eq('transaction_type', 'refund')
     .eq('gateway', 'paystack')
     .in('status', ['refund_pending', 'pending'])
     .is('metadata->>refund_reconciliation_hold', null)
+    // Only cancellation refunds: the order must be cancelled and the row
+    // must carry the cancellation audit description. Unrelated pending
+    // refunds would fail verification with an order mismatch and get
+    // held out of their own recovery path.
+    .not('cancelled_order.cancelled_at', 'is', null)
+    .like('description', 'Refund for cancelled order #%')
     .order('updated_at', { ascending: true })
     .limit(limit);
   if (error) throw new Error('pending_refund_lookup_failed');

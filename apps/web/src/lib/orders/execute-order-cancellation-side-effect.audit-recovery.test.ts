@@ -177,7 +177,13 @@ describe('cancellation refund audit recovery', () => {
         status: 'refund_pending',
         metadata: expect.objectContaining({
           provider_payment_transaction_id: 456,
-          refund_reconciliation_hold: 'provider_creation_evidence_mismatch',
+        }),
+      })
+    );
+    expect(auditInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.not.objectContaining({
+          refund_reconciliation_hold: expect.anything(),
         }),
       })
     );

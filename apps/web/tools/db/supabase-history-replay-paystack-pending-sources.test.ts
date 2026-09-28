@@ -26,7 +26,7 @@ describe('PAYSTACK_PENDING_SOURCES', () => {
 
     expect(sources).toEqual(EXPECTED_PAYSTACK_PENDING_SOURCES);
     expect(sources.at(-1)?.repositoryPath).toBe(
-      'supabase/migrations/20260928130000_file_paystack_refund_recovery_review.sql'
+      'supabase/migrations/20260928140000_aggregate_claim_refund_coverage.sql'
     );
   });
 

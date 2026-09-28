@@ -97,7 +97,10 @@ import { useStorefrontCustomerSession } from './checkout/hooks/use-storefront-cu
 import {
   useResumedCheckoutStartFunnel,
 } from './checkout/hooks/use-resumed-checkout-start-funnel';
-import { deriveCheckoutDisplayModel } from './checkout/derive-checkout-display-model';
+import {
+  deriveCheckoutDisplayModel,
+  deriveCheckoutSummaryAmounts,
+} from './checkout/derive-checkout-display-model';
 import { deriveCheckoutPaymentBaseTotal } from './checkout/derive-checkout-payment-base-total';
 import { readCheckoutAttemptGeneration } from './checkout/checkout-attempt-generation';
 import { DeferredWalletFundedTransferModal as WalletFundedTransferModal } from './checkout/components/DeferredWalletFundedTransferModal';
@@ -362,6 +365,7 @@ export const CheckoutPage: React.FC = () => {
     summarySubtotal,
     hasCheckoutCartItems,
     mobileSummaryCart,
+    summaryOrder,
   } = deriveCheckoutDisplayModel({
     checkoutCart,
     checkoutCartTotal,
@@ -369,7 +373,6 @@ export const CheckoutPage: React.FC = () => {
     itemSubtotal,
     resumedOrder,
   });
-  const summaryOrder = hasCheckoutCartItems ? null : resumedOrder;
 
   // Set once an order is created for this attempt: post-creation rerenders
   // (pending-order persist, widget state) must not re-emit checkout_started
@@ -526,10 +529,6 @@ export const CheckoutPage: React.FC = () => {
     deliveryCost,
     taxRate,
   });
-  const summaryTaxAmount = summaryOrder?.tax_amount ?? orderTotals?.taxAmount ?? 0;
-  const summaryDeliveryCost = summaryOrder?.shipping_cost ?? deliveryCost;
-  const summaryGiftWrappingCost =
-    summaryOrder?.gift_wrapping_fee ?? giftWrappingCost;
   const paymentSession = useCheckoutPaymentSession({
     baseTotal: deriveCheckoutPaymentBaseTotal({
       effectiveCheckoutCartTotal,
@@ -559,8 +558,15 @@ export const CheckoutPage: React.FC = () => {
       setResumeOrderError,
     },
   });
-  const summaryDiscountAmount =
-    summaryOrder?.discount_amount ?? paymentSession.checkoutValues.discountAmount;
+  const summaryAmounts = deriveCheckoutSummaryAmounts({
+    deliveryCost,
+    deliveryMethod,
+    discountAmount: paymentSession.checkoutValues.discountAmount,
+    giftWrappingCost,
+    hasCheckoutCartItems,
+    orderTotals,
+    resumedOrder,
+  });
 
   // Load the address state list. NG hits /api/shipping/locations (rich data);
   // non-NG markets derive their states from the subdivision vocabulary. Keyed
@@ -951,11 +957,11 @@ export const CheckoutPage: React.FC = () => {
         {paymentMethod !== 'uba_redvault' && <MobileOrderSummary
           cart={mobileSummaryCart}
           cartTotal={summarySubtotal}
-          deliveryCost={summaryDeliveryCost}
-          taxAmount={summaryTaxAmount}
-          discountAmount={summaryDiscountAmount}
-          deliveryMethod={summaryOrder ? null : deliveryMethod}
-          giftWrappingCost={summaryGiftWrappingCost}
+          deliveryCost={summaryAmounts.summaryDeliveryCost}
+          taxAmount={summaryAmounts.summaryTaxAmount}
+          discountAmount={summaryAmounts.summaryDiscountAmount}
+          deliveryMethod={summaryAmounts.summaryDeliveryMethod}
+          giftWrappingCost={summaryAmounts.summaryGiftWrappingCost}
           walletBalance={paymentSession.wallet.balance}
           payWithWallet={paymentSession.checkoutValues.payWithWallet}
           walletAmountUsed={walletAmountUsed}
@@ -1106,14 +1112,13 @@ export const CheckoutPage: React.FC = () => {
             displayItems={displayItems}
             formatCurrencyAuto={formatCurrencyAuto}
             summarySubtotal={summarySubtotal}
-            orderTotals={summaryOrder
-              ? { total: summaryOrder.total, taxAmount: summaryTaxAmount }
-              : orderTotals}
-            deliveryCost={summaryDeliveryCost}
-            deliveryMethod={summaryOrder ? null : deliveryMethod}
-            discountAmount={summaryDiscountAmount}
+            orderTotals={summaryAmounts.summaryOrderTotals}
+            taxLabel={summaryAmounts.summaryTaxLabel}
+            deliveryCost={summaryAmounts.summaryDeliveryCost}
+            deliveryMethod={summaryAmounts.summaryDeliveryMethod}
+            discountAmount={summaryAmounts.summaryDiscountAmount}
             selectedQuoteId={selectedQuoteId}
-            giftWrappingCost={summaryGiftWrappingCost}
+            giftWrappingCost={summaryAmounts.summaryGiftWrappingCost}
             paymentMethod={paymentMethod}
             walletCurrencySupported={paymentSession.wallet.currencySupported}
             walletLoading={paymentSession.wallet.loading}

@@ -10,7 +10,6 @@
     "includes": [
       "**",
       "!**/.next",
-      "!**/.next-checkout-*",
       "!**/node_modules",
       "!**/.wrangler",
       "!**/.qualification-dist",

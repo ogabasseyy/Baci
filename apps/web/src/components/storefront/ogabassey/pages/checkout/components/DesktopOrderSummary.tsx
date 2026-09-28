@@ -17,6 +17,7 @@ interface DesktopOrderSummaryProps {
   formatCurrencyAuto: (amount: number) => string;
   summarySubtotal: number;
   orderTotals: { total: number; taxAmount: number } | null;
+  taxLabel: string;
   deliveryCost: number;
   discountAmount: number;
   deliveryMethod: DeliveryMethod | null;
@@ -46,6 +47,7 @@ export function DesktopOrderSummary({
   formatCurrencyAuto,
   summarySubtotal,
   orderTotals,
+  taxLabel,
   deliveryCost,
   discountAmount,
   deliveryMethod,
@@ -139,7 +141,7 @@ export function DesktopOrderSummary({
           </div>
           {orderTotals && (
             <div className="flex justify-between text-gray-600 text-sm">
-              <span>VAT (7.5%)</span>
+              <span>{taxLabel}</span>
               <span>{formatCurrencyAuto(orderTotals.taxAmount)}</span>
             </div>
           )}

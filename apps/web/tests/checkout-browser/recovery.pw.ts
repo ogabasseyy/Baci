@@ -173,7 +173,7 @@ test('resumed order shows server totals and contact details with an empty cart',
   ).toContainText('₦100,000');
   await expect(
     page
-      .getByText('VAT (7.5%)', { exact: true })
+      .getByText('Tax', { exact: true })
       .filter({ visible: true })
       .locator('..')
   ).toContainText('₦7,500');
@@ -215,10 +215,11 @@ test('resumed summary keeps stamped shipping and discount in the canonical due',
   await seedCheckout(page, { emptyCart: true });
   const adjustedOrder = {
     ...order,
+    tax_amount: 5_000,
     shipping_fee: 12_500,
     gift_wrapping_fee: 1_000,
     discount_amount: 5_000,
-    total: 116_000,
+    total: 113_500,
   };
   await page.route('**/api/storefront/orders/**', (route) =>
     route.fulfill({ json: adjustedOrder })
@@ -241,6 +242,12 @@ test('resumed summary keeps stamped shipping and discount in the canonical due',
   ).toContainText('₦12,500');
   await expect(
     page
+      .getByText('Tax', { exact: true })
+      .filter({ visible: true })
+      .locator('..')
+  ).toContainText('₦5,000');
+  await expect(
+    page
       .getByText('Discount', { exact: true })
       .filter({ visible: true })
       .locator('..')
@@ -250,7 +257,7 @@ test('resumed summary keeps stamped shipping and discount in the canonical due',
       .getByText('Total', { exact: true })
       .filter({ visible: true })
       .locator('..')
-  ).toContainText('₦116,000');
+  ).toContainText('₦113,500');
 });
 
 test('manual QA scenario controls are opt-in and reset local checkout state', async ({

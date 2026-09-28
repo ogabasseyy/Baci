@@ -57,6 +57,7 @@ describe('desktop checkout summary visibility', () => {
         formatCurrencyAuto={(amount) => `₦${amount}`}
         summarySubtotal={100}
         orderTotals={{ total: 118, taxAmount: 7 }}
+        taxLabel="Tax"
         deliveryCost={12}
         discountAmount={5}
         deliveryMethod="pickup"
@@ -91,6 +92,7 @@ describe('desktop checkout summary visibility', () => {
     expect(displayAtViewport(summaryClasses?.[1] ?? '', 390)).toBe('none');
     expect(displayAtViewport(actionClasses?.[1] ?? '', 390)).toBe('none');
     expect(html).toMatch(/<span>Subtotal<\/span><span>₦100<\/span>/);
+    expect(html).toMatch(/<span>Tax<\/span><span>₦7<\/span>/);
     expect(html).toMatch(/<span>Discount<\/span><span>-₦5<\/span>/);
     expect(html).toMatch(/<span>Total<\/span><span>₦118<\/span>/);
   });

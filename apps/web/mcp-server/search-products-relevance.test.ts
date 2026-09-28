@@ -31,6 +31,15 @@ describe('catalog discovery relevance evaluation', () => {
     expect(matchesSingleWordDiscoveryQuery(catalog[1], 'work', 'Laptops')).toBe(true);
   });
 
+  it('keeps a whole-word product-type match that appears only in the description', () => {
+    expect(matchesSingleWordDiscoveryQuery({
+      name: 'Aroma Machine', category: 'Accessories', description: 'Fragrance diffuser for rooms',
+    }, 'diffuser', undefined)).toBe(true);
+    expect(matchesSingleWordDiscoveryQuery({
+      name: 'DreamWorks Toy', category: 'Accessories', description: 'Collectible figures',
+    }, 'work', undefined)).toBe(false);
+  });
+
   it('does not filter multiword product names or model numbers after ranked retrieval', () => {
     expect(matchesSingleWordDiscoveryQuery(catalog[4], 'Samsung Galaxy S24 Ultra', undefined)).toBe(true);
     expect(matchesSingleWordDiscoveryQuery(catalog[5], '15C', undefined)).toBe(true);

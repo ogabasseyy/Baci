@@ -34,7 +34,7 @@ describe('semantic fallback after price validation', () => {
       semanticSearch, supabase,
     });
 
-    expect(semanticSearch).toHaveBeenCalledWith('office laptop');
+    expect(semanticSearch).toHaveBeenCalledWith('office laptop', 0);
     expect(result.selectedProducts.map(({ product }) => product.id)).toEqual(['affordable']);
   });
 });

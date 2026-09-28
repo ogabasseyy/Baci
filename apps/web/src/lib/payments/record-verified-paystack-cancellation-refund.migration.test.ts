@@ -95,6 +95,20 @@ describe('verified paystack cancellation refund migration', () => {
     );
   });
 
+  it('reverses the order paystack settlements with the refund transition', () => {
+    expect(existsSync(migrationPath)).toBe(true);
+    if (!existsSync(migrationPath)) return;
+
+    const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
+
+    expect(migrationSql).toContain(
+      "AND settlement.gateway = 'paystack' AND settlement.status IN ('pending', 'processing', 'settled')"
+    );
+    expect(migrationSql).toContain(
+      "'Paystack cancellation refund settlement reversal'"
+    );
+  });
+
   it('keeps orphan provider evidence open until a local refund row matches it', () => {
     expect(existsSync(migrationPath)).toBe(true);
     if (!existsSync(migrationPath)) return;

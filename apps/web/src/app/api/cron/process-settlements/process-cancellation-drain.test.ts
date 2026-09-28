@@ -120,6 +120,27 @@ describe('processCancellationDrain', () => {
     }
   });
 
+  it('retries side effects only after refund reconciliation settles', async () => {
+    let resolveRefunds!: (value: unknown) => void;
+    const refundsGate = new Promise((resolve) => {
+      resolveRefunds = resolve as (value: unknown) => void;
+    });
+    mocks.reconcilePendingPaystackCancellationRefunds.mockReturnValueOnce(
+      refundsGate.then(() => ({ checked: 0, failed: 0 }))
+    );
+
+    const drainPromise = processCancellationDrain(supabase);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(
+      mocks.drainFailedOrderCancellationSideEffects
+    ).not.toHaveBeenCalled();
+    resolveRefunds(undefined);
+    await drainPromise;
+    expect(mocks.drainFailedOrderCancellationSideEffects).toHaveBeenCalled();
+  });
+
   it('still reconciles refunds when cancellation side effect draining fails', async () => {
     mocks.drainFailedOrderCancellationSideEffects.mockRejectedValueOnce(
       new Error('temporary failure')

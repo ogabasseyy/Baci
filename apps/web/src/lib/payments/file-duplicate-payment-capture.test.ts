@@ -19,11 +19,10 @@ const evidence = {
 describe('fileDuplicatePaymentCapture', () => {
   it('files the review and stamps the row resolved', async () => {
     const insert = vi.fn().mockResolvedValue({ error: null });
-    const update = vi.fn(() => ({ eq: vi.fn().mockResolvedValue({}) }));
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
     const db = {
-      from: vi.fn((table: string) =>
-        table === 'reconciliation_review' ? { insert } : { update }
-      ),
+      from: vi.fn(() => ({ insert })),
+      rpc,
     };
 
     await expect(
@@ -39,23 +38,21 @@ describe('fileDuplicatePaymentCapture', () => {
         txn_id: 'attempt-1',
       })
     );
-    expect(update).toHaveBeenCalledWith(
+    expect(rpc).toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
       expect.objectContaining({
-        metadata: expect.objectContaining({
-          abandoned_sweep_resolution: 'verified_success_captured',
-        }),
+        p_expected_reference: 'BAC-OLD',
+        p_resolution: 'verified_success_captured',
+        p_transaction_id: 'attempt-1',
       })
     );
   });
 
   it('merges into the open review on conflict', async () => {
     const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
-    const update = vi.fn(() => ({ eq: vi.fn().mockResolvedValue({}) }));
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
     const db = {
-      from: vi.fn((table: string) =>
-        table === 'reconciliation_review' ? { insert } : { update }
-      ),
+      from: vi.fn(() => ({ insert })),
       rpc,
     };
 
@@ -105,13 +102,10 @@ describe('fileDuplicatePaymentCapture', () => {
 
   it('returns false when the resolution stamp fails', async () => {
     const insert = vi.fn().mockResolvedValue({ error: null });
-    const update = vi.fn(() => ({
-      eq: vi.fn().mockResolvedValue({ error: { message: 'down' } }),
-    }));
+    const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
     const db = {
-      from: vi.fn((table: string) =>
-        table === 'reconciliation_review' ? { insert } : { update }
-      ),
+      from: vi.fn(() => ({ insert })),
+      rpc,
     };
 
     await expect(

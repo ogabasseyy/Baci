@@ -26,7 +26,9 @@ describe('abandoned Paystack attempt terminal mismatches', () => {
   ])('files a terminal mismatch review for a verified abandoned attempt with mismatched payment evidence', async (evidence) => {
     const { client, update } = createClient();
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
     withReviewTable(client, reviewInsert);
+    Object.assign(client, { rpc });
     const verify = vi.fn().mockResolvedValue({
       success: true,
       data: { reference: 'BAC-OLD', status: 'abandoned', ...evidence },
@@ -46,11 +48,12 @@ describe('abandoned Paystack attempt terminal mismatches', () => {
         txn_id: 'attempt-1',
       })
     );
-    expect(update).toHaveBeenCalledWith(
+    expect(rpc).toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
       expect.objectContaining({
-        metadata: expect.objectContaining({
-          abandoned_sweep_resolution: 'terminal_evidence_mismatch',
-        }),
+        p_expected_reference: 'BAC-OLD',
+        p_resolution: 'terminal_evidence_mismatch',
+        p_transaction_id: 'attempt-1',
       })
     );
     expect(update).not.toHaveBeenCalledWith(
@@ -59,7 +62,7 @@ describe('abandoned Paystack attempt terminal mismatches', () => {
   });
 
   it('resolves a terminal mismatch by stamping when its review slot is occupied', async () => {
-    const { client, update } = createClient();
+    const { client } = createClient();
     const reviewInsert = vi
       .fn()
       .mockResolvedValue({ error: { code: '23505' } });
@@ -84,12 +87,9 @@ describe('abandoned Paystack attempt terminal mismatches', () => {
     expect(summary.reviewsFiled).toEqual(['attempt-1']);
     expect(summary.held).toEqual([]);
     expect(summary.failed).toBe(false);
-    expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        metadata: expect.objectContaining({
-          abandoned_sweep_resolution: 'terminal_evidence_mismatch',
-        }),
-      })
+    expect(rpc).toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
+      expect.objectContaining({ p_resolution: 'terminal_evidence_mismatch' })
     );
   });
 });

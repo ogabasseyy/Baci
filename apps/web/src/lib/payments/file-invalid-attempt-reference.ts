@@ -55,16 +55,13 @@ export async function fileInvalidAttemptReference({
     );
     if (mergeError || merged !== true) return false;
   }
-  const { error: stampError } = await supabase
-    .from('transactions')
-    .update({
-      metadata: {
-        ...(attempt.metadata ?? {}),
-        abandoned_sweep_resolution: 'invalid_reference',
-        abandoned_sweep_resolved_at: new Date().toISOString(),
-      },
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', attempt.id);
-  return !stampError;
+  const { data: stamped, error: stampError } = await supabase.rpc(
+    'stamp_abandoned_sweep_resolution_v1',
+    {
+      p_transaction_id: attempt.id,
+      p_expected_reference: attempt.gateway_reference,
+      p_resolution: 'invalid_reference',
+    }
+  );
+  return !stampError && stamped === true;
 }

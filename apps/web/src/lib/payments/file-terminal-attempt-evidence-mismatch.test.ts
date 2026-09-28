@@ -21,21 +21,15 @@ describe('fileTerminalAttemptEvidenceMismatch', () => {
   };
 
   const insert = vi.fn();
-  const update = vi.fn();
   const rpc = vi.fn();
   const supabase = {
-    from: vi.fn((table: string) =>
-      table === 'reconciliation_review' ? { insert } : { update }
-    ),
+    from: vi.fn(() => ({ insert })),
     rpc,
   } as never;
 
   beforeEach(() => {
     vi.resetAllMocks();
     insert.mockResolvedValue({ error: null });
-    update.mockReturnValue({
-      eq: vi.fn().mockResolvedValue({ error: null }),
-    });
     rpc.mockResolvedValue({ data: true, error: null });
   });
 
@@ -53,12 +47,12 @@ describe('fileTerminalAttemptEvidenceMismatch', () => {
         txn_id: 'attempt-1',
       })
     );
-    expect(update).toHaveBeenCalledWith(
+    expect(rpc).toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
       expect.objectContaining({
-        metadata: expect.objectContaining({
-          abandoned_sweep_resolution: 'terminal_evidence_mismatch',
-          paystack_payment_type: 'card',
-        }),
+        p_expected_reference: 'BAC-OLD',
+        p_resolution: 'terminal_evidence_mismatch',
+        p_transaction_id: 'attempt-1',
       })
     );
   });
@@ -78,23 +72,23 @@ describe('fileTerminalAttemptEvidenceMismatch', () => {
         p_transaction_id: 'attempt-1',
       })
     );
-    expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        metadata: expect.objectContaining({
-          abandoned_sweep_resolution: 'terminal_evidence_mismatch',
-        }),
-      })
+    expect(rpc).toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
+      expect.objectContaining({ p_resolution: 'terminal_evidence_mismatch' })
     );
   });
 
   it('returns false without stamping when the merge fails', async () => {
     insert.mockResolvedValue({ error: { code: '23505' } });
-    rpc.mockResolvedValue({ data: false, error: null });
+    rpc.mockResolvedValueOnce({ data: false, error: null });
 
     await expect(
       fileTerminalAttemptEvidenceMismatch({ attempt, evidence, supabase })
     ).resolves.toBe(false);
-    expect(update).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
+      expect.anything()
+    );
   });
 
   it('returns false without stamping on a non-conflict insert error', async () => {
@@ -103,13 +97,11 @@ describe('fileTerminalAttemptEvidenceMismatch', () => {
     await expect(
       fileTerminalAttemptEvidenceMismatch({ attempt, evidence, supabase })
     ).resolves.toBe(false);
-    expect(update).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it('returns false when the resolution stamp fails', async () => {
-    update.mockReturnValue({
-      eq: vi.fn().mockResolvedValue({ error: new Error('stamp failed') }),
-    });
+    rpc.mockResolvedValueOnce({ data: false, error: null });
 
     await expect(
       fileTerminalAttemptEvidenceMismatch({ attempt, evidence, supabase })

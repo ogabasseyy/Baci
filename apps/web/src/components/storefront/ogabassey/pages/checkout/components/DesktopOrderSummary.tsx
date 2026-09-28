@@ -160,7 +160,7 @@ export function DesktopOrderSummary({
             </span>
           </div>
           {discountAmount > 0 && (
-            <div className="flex justify-between text-green-700 text-sm">
+            <div className="flex justify-between text-store-primary text-sm">
               <span>Discount</span>
               <span>-{formatCurrencyAuto(discountAmount)}</span>
             </div>

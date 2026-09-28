@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CartItem } from '@/hooks/cart';
-import {
-  deriveCheckoutDisplayModel,
-  deriveCheckoutSummaryAmounts,
-} from './derive-checkout-display-model';
+import { deriveCheckoutDisplayModel } from './derive-checkout-display-model';
 import type { ResumedOrder } from './types';
 
 function cartItem(id: string, price: number): CartItem {
@@ -143,65 +140,6 @@ describe('deriveCheckoutDisplayModel', () => {
       hasCheckoutCartItems: false,
       summaryOrder: null,
       mobileSummaryCart: [],
-    });
-  });
-
-  it('projects persisted resumed adjustments and uses a rate-neutral tax label', () => {
-    const order = resumedOrder({
-      total: 1_450,
-      subtotal: 1_100,
-      shipping_cost: 300,
-      tax_amount: 100,
-      discount_amount: 75,
-      gift_wrapping_fee: 25,
-    });
-    expect(
-      deriveCheckoutSummaryAmounts({
-        deliveryCost: 0,
-        deliveryMethod: 'door',
-        discountAmount: 0,
-        giftWrappingCost: 0,
-        hasCheckoutCartItems: false,
-        orderTotals: { total: 2_000, taxAmount: 150 },
-        resumedOrder: order,
-      })
-    ).toEqual({
-      summaryOrder: order,
-      summaryTaxAmount: 100,
-      summaryDeliveryCost: 300,
-      summaryGiftWrappingCost: 25,
-      summaryDiscountAmount: 75,
-      summaryDeliveryMethod: null,
-      summaryOrderTotals: { total: 1_450, taxAmount: 100 },
-      summaryTaxLabel: 'Tax',
-    });
-  });
-
-  it('keeps active-cart summary values ahead of any resumed order', () => {
-    expect(
-      deriveCheckoutSummaryAmounts({
-        deliveryCost: 40,
-        deliveryMethod: 'pickup',
-        discountAmount: 10,
-        giftWrappingCost: 5,
-        hasCheckoutCartItems: true,
-        orderTotals: { total: 160, taxAmount: 15 },
-        resumedOrder: resumedOrder({
-          tax_amount: 20,
-          shipping_cost: 30,
-          discount_amount: 25,
-          gift_wrapping_fee: 8,
-        }),
-      })
-    ).toEqual({
-      summaryOrder: null,
-      summaryTaxAmount: 15,
-      summaryDeliveryCost: 40,
-      summaryGiftWrappingCost: 5,
-      summaryDiscountAmount: 10,
-      summaryDeliveryMethod: 'pickup',
-      summaryOrderTotals: { total: 160, taxAmount: 15 },
-      summaryTaxLabel: 'VAT (7.5%)',
     });
   });
 });

@@ -97,10 +97,8 @@ import { useStorefrontCustomerSession } from './checkout/hooks/use-storefront-cu
 import {
   useResumedCheckoutStartFunnel,
 } from './checkout/hooks/use-resumed-checkout-start-funnel';
-import {
-  deriveCheckoutDisplayModel,
-  deriveCheckoutSummaryAmounts,
-} from './checkout/derive-checkout-display-model';
+import { deriveCheckoutDisplayModel } from './checkout/derive-checkout-display-model';
+import { deriveCheckoutSummaryAmounts } from './checkout/derive-checkout-summary-amounts';
 import { deriveCheckoutPaymentBaseTotal } from './checkout/derive-checkout-payment-base-total';
 import { readCheckoutAttemptGeneration } from './checkout/checkout-attempt-generation';
 import { DeferredWalletFundedTransferModal as WalletFundedTransferModal } from './checkout/components/DeferredWalletFundedTransferModal';

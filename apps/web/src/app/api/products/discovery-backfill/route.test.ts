@@ -127,4 +127,52 @@ describe('merchant discovery backfill API', () => {
       'private provider failure'
     );
   });
+
+  it('lets the indexer wait and retry a provider rate limit', async () => {
+    mocks.backfill.mockRejectedValueOnce(
+      new Error('Embedding provider returned 429')
+    );
+    const response = await POST(
+      request(JSON.stringify({ merchantId, cursor: null }))
+    );
+    expect(response.status).toBe(429);
+    expect(await response.json()).toEqual({
+      error: 'Embedding provider is temporarily rate limited',
+      resetIn: 60,
+    });
+  });
+
+  it('does not label other provider failures as a rate limit', async () => {
+    mocks.backfill.mockRejectedValueOnce(
+      new Error('Embedding provider returned 503')
+    );
+    const response = await POST(
+      request(JSON.stringify({ merchantId, cursor: null }))
+    );
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({
+      error: 'Discovery indexing failed. Retry this batch.',
+    });
+  });
+
+  it('logs a safe database failure code without exposing it to the shopper', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      mocks.backfill.mockRejectedValueOnce(
+        new Error('Embedding write failed: 23505')
+      );
+      const response = await POST(
+        request(JSON.stringify({ merchantId, cursor: null }))
+      );
+      expect(response.status).toBe(502);
+      expect(await response.json()).toEqual({
+        error: 'Discovery indexing failed. Retry this batch.',
+      });
+      expect(log).toHaveBeenCalledWith('Discovery backfill batch failed', {
+        reason: 'Embedding write failed: 23505',
+      });
+    } finally {
+      log.mockRestore();
+    }
+  });
 });

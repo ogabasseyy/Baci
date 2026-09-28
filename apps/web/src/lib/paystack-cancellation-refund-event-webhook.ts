@@ -17,7 +17,7 @@ export async function handlePaystackCancellationRefundEvent(
   // cannot reach and held rows polling skips.
   const refundId = data?.id;
   if (typeof refundId === 'number' && Number.isSafeInteger(refundId)) {
-    const { data: refund } = await supabase
+    const { data: refund, error: lookupError } = await supabase
       .from('transactions')
       .select(
         'id, order_id, merchant_id, gateway_reference, amount, currency, metadata, status'
@@ -26,6 +26,16 @@ export async function handlePaystackCancellationRefundEvent(
       .eq('gateway', 'paystack')
       .eq('gateway_reference', String(refundId))
       .maybeSingle();
+    if (lookupError) {
+      logger.error({
+        message: 'Paystack refund lookup failed',
+        error: lookupError,
+      });
+      return NextResponse.json(
+        { error: 'Refund reconciliation unavailable' },
+        { status: 503 }
+      );
+    }
     if (refund) {
       try {
         await reconcilePaystackCancellationRefund(supabase, refund);

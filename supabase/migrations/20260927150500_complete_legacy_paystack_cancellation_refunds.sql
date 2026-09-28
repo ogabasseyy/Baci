@@ -90,11 +90,16 @@ BEGIN
   END IF;
   IF v_status <> 'processed' THEN RETURN v_status; END IF;
 
-  -- Every completed external payment leg needs its own completed refund.
+  -- Every funded external payment leg needs terminal refund evidence.
+  -- Refund-state legs (e.g. PayPal flips the payment row itself to
+  -- refund_pending while its provider refund is pending) have no
+  -- separate refund row yet, so scanning only completed legs would
+  -- mark the order refunded too early. Self-terminal refunded legs
+  -- carry their own evidence and stay out of this scan.
   IF NOT EXISTS (
     SELECT 1 FROM public.transactions p
     WHERE p.order_id = v_order.id AND p.merchant_id = v_order.merchant_id
-      AND p.transaction_type = 'payment' AND p.status = 'completed'
+      AND p.transaction_type = 'payment' AND p.status IN ('completed', 'refund_pending')
       AND coalesce(p.gateway, '') NOT IN
         ('wallet', 'savings', 'store_credit', 'cash', 'manual', 'pay_on_delivery')
       AND NOT EXISTS (

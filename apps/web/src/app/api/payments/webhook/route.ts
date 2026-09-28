@@ -71,6 +71,7 @@ import {
   paystackZeroCandidateReviewGatewayResponseSchema,
   referenceSchema,
 } from '@/schemas/payments';
+import { paystackRefundEventSchema } from '@/schemas/paystack-refund-event';
 
 type PaymentGateway = 'paystack' | 'korapay';
 
@@ -661,9 +662,20 @@ export async function POST(request: NextRequest) {
     }
 
     if (gateway === 'paystack' && body.event?.startsWith('refund.')) {
+      const parsed = paystackRefundEventSchema.safeParse(body);
+      if (!parsed.success) {
+        logger.error({
+          message: 'Invalid Paystack refund webhook payload',
+          error: parsed.error.message,
+        });
+        return NextResponse.json(
+          { error: 'Invalid refund event payload' },
+          { status: 400 }
+        );
+      }
       return handlePaystackCancellationRefundEvent(
         createServiceClient(),
-        body as unknown as Record<string, unknown>
+        parsed.data as unknown as Record<string, unknown>
       );
     }
 

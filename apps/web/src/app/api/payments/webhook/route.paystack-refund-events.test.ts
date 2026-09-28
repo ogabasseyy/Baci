@@ -133,6 +133,23 @@ describe('POST /api/payments/webhook paystack refund events', () => {
     );
   });
 
+  it('rejects a malformed Paystack refund payload before reconciling', async () => {
+    const body = {
+      event: 'refund.processed',
+      data: { id: 'not-a-number' },
+    };
+    const response = await POST(
+      createMockRequest(body, {
+        'x-paystack-signature': createSignature(
+          JSON.stringify(body),
+          'test-paystack-secret'
+        ),
+      })
+    );
+    expect(response.status).toBe(400);
+    expect(mockReconcilePaystackRefundEvent).not.toHaveBeenCalled();
+  });
+
   it('rejects an unsigned Paystack refund event', async () => {
     const response = await POST(
       createMockRequest(

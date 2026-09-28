@@ -13,9 +13,11 @@ export interface TerminalAttemptMismatchEvidence {
  * Files an evidence-mismatch review for a stale attempt Paystack reports as
  * terminal (abandoned/failed) with evidence that does not match the local
  * row, then stamps the row so the sweep never reselects it. Returns true
- * when the evidence is durable. A conflicting open review (23505) returns
- * false so the attempt keeps its ordinary hold until the slot frees;
- * swallowing distinct attempt evidence into another ticket would hide it.
+ * when the row is durably resolved. A conflicting open review (23505) still
+ * retries the stamp: the review already covers this order, but without the
+ * stamp a transient stamp failure would rotate the attempt forever, since
+ * every later sweep hits the same conflict. Only a failed stamp or a
+ * non-conflict insert error returns false.
  */
 export async function fileTerminalAttemptEvidenceMismatch({
   attempt,
@@ -55,7 +57,7 @@ export async function fileTerminalAttemptEvidenceMismatch({
         evidence_mismatch: evidence.mismatchKind,
       },
     });
-  if (reviewError) {
+  if (reviewError && (reviewError as { code?: string }).code !== '23505') {
     return false;
   }
   const { error: stampError } = await supabase

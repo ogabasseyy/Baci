@@ -55,6 +55,27 @@ describe('abandoned Paystack attempts on partially paid orders', () => {
     expect(fileCapture).not.toHaveBeenCalled();
   });
 
+  it('routes a verified processing capture through the order finalizer', async () => {
+    const { client } = createClient([
+      { ...partialCandidate(), status: 'processing' },
+    ]);
+
+    await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify: vi.fn().mockResolvedValue(verifiedCapture),
+    });
+
+    expect(finalizePartial).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attempt: expect.objectContaining({
+          id: 'attempt-1',
+          status: 'processing',
+        }),
+      })
+    );
+    expect(fileCapture).not.toHaveBeenCalled();
+  });
+
   it('still files duplicates for verified captures on fully paid orders', async () => {
     const { client } = createClient([
       { ...candidate, paid_order: { payment_status: 'paid' } },

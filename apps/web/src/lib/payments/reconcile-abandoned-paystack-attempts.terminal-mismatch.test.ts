@@ -58,8 +58,8 @@ describe('abandoned Paystack attempt terminal mismatches', () => {
     );
   });
 
-  it('holds a terminal mismatch when its review slot is occupied', async () => {
-    const { client } = createClient();
+  it('resolves a terminal mismatch by stamping when its review slot is occupied', async () => {
+    const { client, update } = createClient();
     const reviewInsert = vi
       .fn()
       .mockResolvedValue({ error: { code: '23505' } });
@@ -79,9 +79,15 @@ describe('abandoned Paystack attempt terminal mismatches', () => {
       verify,
     });
 
-    expect(summary.reviewsFiled).toEqual([]);
-    expect(summary.held).toEqual([
-      { id: 'attempt-1', reason: 'payment_evidence_mismatch' },
-    ]);
+    expect(summary.reviewsFiled).toEqual(['attempt-1']);
+    expect(summary.held).toEqual([]);
+    expect(summary.failed).toBe(false);
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          abandoned_sweep_resolution: 'terminal_evidence_mismatch',
+        }),
+      })
+    );
   });
 });

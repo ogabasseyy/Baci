@@ -47,14 +47,16 @@ describe('resolveAbandonedAttemptMismatch', () => {
   ])('files a %s mismatch and records the review', async (status) => {
     const reviewsFiled: string[] = [];
 
-    await resolveAbandonedAttemptMismatch({
-      attempt,
-      hold,
-      mismatchKind: 'payment_evidence_mismatch',
-      result: terminalResult(status),
-      reviewsFiled,
-      supabase,
-    });
+    await expect(
+      resolveAbandonedAttemptMismatch({
+        attempt,
+        hold,
+        mismatchKind: 'payment_evidence_mismatch',
+        result: terminalResult(status),
+        reviewsFiled,
+        supabase,
+      })
+    ).resolves.toBe(false);
 
     expect(mocks.fileTerminalAttemptEvidenceMismatch).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -73,14 +75,16 @@ describe('resolveAbandonedAttemptMismatch', () => {
     mocks.fileTerminalAttemptEvidenceMismatch.mockResolvedValue(false);
     const reviewsFiled: string[] = [];
 
-    await resolveAbandonedAttemptMismatch({
-      attempt,
-      hold,
-      mismatchKind: 'payment_evidence_mismatch',
-      result: terminalResult('abandoned'),
-      reviewsFiled,
-      supabase,
-    });
+    await expect(
+      resolveAbandonedAttemptMismatch({
+        attempt,
+        hold,
+        mismatchKind: 'payment_evidence_mismatch',
+        result: terminalResult('abandoned'),
+        reviewsFiled,
+        supabase,
+      })
+    ).resolves.toBe(true);
 
     expect(hold).toHaveBeenCalledWith('payment_evidence_mismatch');
     expect(reviewsFiled).toEqual([]);
@@ -89,14 +93,16 @@ describe('resolveAbandonedAttemptMismatch', () => {
   it('holds a non-terminal mismatch without filing', async () => {
     const reviewsFiled: string[] = [];
 
-    await resolveAbandonedAttemptMismatch({
-      attempt,
-      hold,
-      mismatchKind: 'reference_mismatch',
-      result: terminalResult('pending'),
-      reviewsFiled,
-      supabase,
-    });
+    await expect(
+      resolveAbandonedAttemptMismatch({
+        attempt,
+        hold,
+        mismatchKind: 'reference_mismatch',
+        result: terminalResult('pending'),
+        reviewsFiled,
+        supabase,
+      })
+    ).resolves.toBe(false);
 
     expect(mocks.fileTerminalAttemptEvidenceMismatch).not.toHaveBeenCalled();
     expect(hold).toHaveBeenCalledWith('reference_mismatch');

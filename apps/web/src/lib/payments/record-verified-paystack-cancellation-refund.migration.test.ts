@@ -84,6 +84,17 @@ describe('verified paystack cancellation refund migration', () => {
     );
   });
 
+  it('keeps completed rows completed on nonterminal provider verdicts', () => {
+    expect(existsSync(migrationPath)).toBe(true);
+    if (!existsSync(migrationPath)) return;
+
+    const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
+
+    expect(migrationSql).toContain(
+      "WHEN v_refund.status = 'completed' THEN 'completed'"
+    );
+  });
+
   it('keeps orphan provider evidence open until a local refund row matches it', () => {
     expect(existsSync(migrationPath)).toBe(true);
     if (!existsSync(migrationPath)) return;

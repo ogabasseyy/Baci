@@ -1,23 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fileTerminalAttemptEvidenceMismatch } from './file-terminal-attempt-evidence-mismatch';
+import { fileInvalidAttemptReference } from './file-invalid-attempt-reference';
 
-describe('fileTerminalAttemptEvidenceMismatch', () => {
+describe('fileInvalidAttemptReference', () => {
   const attempt = {
-    amount: 100,
-    currency: 'NGN',
-    gateway_reference: 'BAC-OLD',
+    gateway_reference: 'not a reference!',
     id: 'attempt-1',
     merchant_id: 'merchant-1',
-    metadata: { paystack_payment_type: 'card' },
+    metadata: {},
     order_id: 'order-1',
-  };
-  const evidence = {
-    mismatchDetail: 'provider BAC-OLD 9900 NGN',
-    mismatchKind: 'payment_evidence_mismatch',
-    providerAmount: 9900,
-    providerCurrency: 'NGN',
-    providerReference: 'BAC-OLD',
-    providerStatus: 'abandoned',
   };
 
   const insert = vi.fn();
@@ -36,25 +26,26 @@ describe('fileTerminalAttemptEvidenceMismatch', () => {
     });
   });
 
-  it('files the mismatch review and stamps the sweep resolution', async () => {
+  it('files the invalid-reference review and stamps the sweep resolution', async () => {
     await expect(
-      fileTerminalAttemptEvidenceMismatch({ attempt, evidence, supabase })
+      fileInvalidAttemptReference({
+        attempt,
+        reason: 'Invalid transaction reference format',
+        supabase,
+      })
     ).resolves.toBe(true);
 
     expect(insert).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_type: 'abandoned_attempt_evidence_mismatch',
-        merchant_id: 'merchant-1',
-        order_id: 'order-1',
-        paystack_ref: 'BAC-OLD',
+        paystack_ref: 'not a reference!',
         txn_id: 'attempt-1',
       })
     );
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({
         metadata: expect.objectContaining({
-          abandoned_sweep_resolution: 'terminal_evidence_mismatch',
-          paystack_payment_type: 'card',
+          abandoned_sweep_resolution: 'invalid_reference',
         }),
       })
     );
@@ -64,22 +55,24 @@ describe('fileTerminalAttemptEvidenceMismatch', () => {
     insert.mockResolvedValue({ error: { code: '23505' } });
 
     await expect(
-      fileTerminalAttemptEvidenceMismatch({ attempt, evidence, supabase })
-    ).resolves.toBe(true);
-    expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        metadata: expect.objectContaining({
-          abandoned_sweep_resolution: 'terminal_evidence_mismatch',
-        }),
+      fileInvalidAttemptReference({
+        attempt,
+        reason: 'Invalid transaction reference format',
+        supabase,
       })
-    );
+    ).resolves.toBe(true);
+    expect(update).toHaveBeenCalled();
   });
 
   it('returns false without stamping on a non-conflict insert error', async () => {
     insert.mockResolvedValue({ error: { code: '40001' } });
 
     await expect(
-      fileTerminalAttemptEvidenceMismatch({ attempt, evidence, supabase })
+      fileInvalidAttemptReference({
+        attempt,
+        reason: 'Invalid transaction reference format',
+        supabase,
+      })
     ).resolves.toBe(false);
     expect(update).not.toHaveBeenCalled();
   });
@@ -90,7 +83,11 @@ describe('fileTerminalAttemptEvidenceMismatch', () => {
     });
 
     await expect(
-      fileTerminalAttemptEvidenceMismatch({ attempt, evidence, supabase })
+      fileInvalidAttemptReference({
+        attempt,
+        reason: 'Invalid transaction reference format',
+        supabase,
+      })
     ).resolves.toBe(false);
   });
 });

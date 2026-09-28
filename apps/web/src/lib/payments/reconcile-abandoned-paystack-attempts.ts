@@ -1,8 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { verifyTransaction } from '@/lib/paystack';
-import { fileDuplicatePaymentCapture } from './file-duplicate-payment-capture';
-import { finalizePartiallyPaidAbandonedAttempt } from './finalize-partially-paid-abandoned-attempt';
+import { fileInvalidAttemptReference } from './file-invalid-attempt-reference';
 import { resolveAbandonedAttemptMismatch } from './resolve-abandoned-attempt-mismatch';
+import { resolveVerifiedAbandonedAttemptCapture } from './resolve-verified-abandoned-attempt-capture';
 
 const DEFAULT_LIMIT = 25;
 // Give an abandoned checkout time to settle before releasing a paid order.
@@ -172,6 +172,23 @@ export async function reconcileAbandonedPaystackAttempts({
       continue;
     }
     if (!result.success) {
+      if (result.code === 'VALIDATION_ERROR') {
+        // The stored reference itself is malformed: provider verification
+        // rejects it deterministically, so file a durable review and stamp
+        // the row instead of rotating it on every sweep.
+        const filed = await fileInvalidAttemptReference({
+          attempt,
+          reason: result.error,
+          supabase,
+        });
+        if (filed) {
+          summary.reviewsFiled.push(attempt.id);
+          continue;
+        }
+        summary.failed = true;
+        await hold('invalid_reference');
+        continue;
+      }
       if (isVerificationUnavailable(result.code)) summary.failed = true;
       if (
         result.code !== 'HTTP_404' ||
@@ -197,55 +214,20 @@ export async function reconcileAbandonedPaystackAttempts({
       }
     }
     if (result.success && result.data.status === 'success') {
-      // On a partially paid order the completed transaction may be only the
-      // first leg, so this verified capture can be the legitimate remaining
-      // payment rather than a duplicate. Route it through the atomic order
-      // finalizer before classifying anything as a duplicate.
-      if (
-        !mismatchKind &&
-        paidOrderStatus(attempt.paid_order) === 'partially_paid'
-      ) {
-        await finalizePartiallyPaidAbandonedAttempt({
-          attempt,
-          hold,
-          providerData: result.data as unknown as Record<string, unknown>,
-          scheduleAfter,
-          summary,
-          supabase,
-        });
-        continue;
-      }
-      // The order is already paid by another transaction, so a verified
-      // capture here is a possible duplicate charge. The wedged sweep never
-      // sees paid orders, so file it for operations and retire the row;
-      // otherwise it would rotate through this batch forever. A mismatched
-      // capture is still real money, so it is filed with its evidence
-      // instead of rotating as an ordinary hold.
-      const filed = await fileDuplicatePaymentCapture({
+      await resolveVerifiedAbandonedAttemptCapture({
         attempt,
-        evidence: {
-          providerAmount: result.data.amount,
-          providerCurrency: result.data.currency,
-          providerReference: result.data.reference,
-          providerStatus: result.data.status,
-          ...(mismatchKind
-            ? {
-                mismatchDetail: `provider ${result.data.reference} ${result.data.amount} ${result.data.currency}`,
-                mismatchKind,
-              }
-            : {}),
-        },
+        hold,
+        mismatchKind,
+        paidOrderStatus: paidOrderStatus(attempt.paid_order),
+        result,
+        scheduleAfter,
+        summary,
         supabase,
       });
-      if (filed) {
-        summary.reviewsFiled.push(attempt.id);
-        continue;
-      }
-      await hold(mismatchKind ?? 'success');
       continue;
     }
     if (mismatchKind) {
-      await resolveAbandonedAttemptMismatch({
+      const filingFailed = await resolveAbandonedAttemptMismatch({
         attempt,
         hold,
         mismatchKind,
@@ -253,6 +235,7 @@ export async function reconcileAbandonedPaystackAttempts({
         reviewsFiled: summary.reviewsFiled,
         supabase,
       });
+      if (filingFailed) summary.failed = true;
       continue;
     }
     if (

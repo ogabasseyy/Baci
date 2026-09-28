@@ -70,12 +70,18 @@ BEGIN
   END IF;
 
   -- A locally completed row with a contradictory provider verdict falls
-  -- through: persist the provider status, notify, and rotate updated_at below
-  -- instead of re-selecting this row on every legacy recheck.
+  -- through: persist the provider status, notify, and rotate updated_at below.
+  -- Nonterminal verdicts (pending/processing/needs-attention) keep a
+  -- completed row completed so the legacy recheck keeps verifying it:
+  -- demoting to refund_pending would strand legacy rows that lack the
+  -- cancellation description the pending worker requires, leaving them
+  -- selected by neither worker.
   IF v_refund.status = 'failed' AND v_status <> 'processed' THEN RETURN 'already_failed'; END IF;
   UPDATE public.transactions SET
     status = CASE WHEN v_status = 'processed' THEN 'completed'
-                  WHEN v_status = 'failed' THEN 'failed' ELSE 'refund_pending' END,
+                  WHEN v_status = 'failed' THEN 'failed'
+                  WHEN v_refund.status = 'completed' THEN 'completed'
+                  ELSE 'refund_pending' END,
     metadata = (coalesce(metadata, '{}'::jsonb) - 'refund_reconciliation_hold') ||
       jsonb_build_object('provider_refund_status', v_status),
     updated_at = now()

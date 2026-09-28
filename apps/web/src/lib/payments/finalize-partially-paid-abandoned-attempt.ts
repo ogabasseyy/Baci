@@ -22,6 +22,7 @@ export async function finalizePartiallyPaidAbandonedAttempt({
     merchant_id: string;
     order_id: string;
     platform_fee: number | null;
+    status: 'pending' | 'processing';
   };
   hold: (reason: string) => Promise<void>;
   providerData: Record<string, unknown>;
@@ -29,6 +30,28 @@ export async function finalizePartiallyPaidAbandonedAttempt({
   summary: { completed: string[]; failed: boolean; reviewsFiled: string[] };
   supabase: SupabaseClient;
 }): Promise<void> {
+  if (attempt.status === 'processing') {
+    // The completion RPC admits only pending/completed rows, so atomically
+    // normalize a wedged processing row to pending first. Zero matched rows
+    // means a concurrent webhook completed it meanwhile — a genuine
+    // concurrent change, not a wedged row.
+    const { data: admitted, error: admitError } = await supabase
+      .from('transactions')
+      .update({ status: 'pending', updated_at: new Date().toISOString() })
+      .eq('id', attempt.id)
+      .eq('order_id', attempt.order_id)
+      .eq('merchant_id', attempt.merchant_id)
+      .eq('transaction_type', 'payment')
+      .eq('gateway', 'paystack')
+      .eq('gateway_reference', attempt.gateway_reference)
+      .eq('status', 'processing')
+      .select('id');
+    if (admitError) summary.failed = true;
+    if (admitError || admitted?.length !== 1) {
+      await hold('changed_concurrently');
+      return;
+    }
+  }
   const outcome = await finalizeOrderGatewayPayment({
     actor: 'cron:reconcile-gateway-paid-orders',
     gateway: 'paystack',

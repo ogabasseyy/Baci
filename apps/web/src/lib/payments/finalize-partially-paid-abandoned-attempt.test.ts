@@ -14,7 +14,15 @@ const attempt = {
   merchant_id: 'merchant-1',
   order_id: 'order-1',
   platform_fee: 2,
-};
+  status: 'pending',
+} as const;
+
+function admittingClient(admitted: unknown[] | null, error: unknown = null) {
+  const select = vi.fn().mockResolvedValue({ data: admitted, error });
+  const chain = { eq: vi.fn(), select };
+  chain.eq.mockReturnValue(chain);
+  return { from: vi.fn(() => ({ update: vi.fn(() => chain) })), select };
+}
 
 function harness() {
   return {
@@ -107,5 +115,56 @@ describe('finalizePartiallyPaidAbandonedAttempt', () => {
 
     expect(h.summary.failed).toBe(true);
     expect(h.hold).toHaveBeenCalledWith('completion_failed');
+  });
+
+  it('admits a processing attempt to pending before finalizing it', async () => {
+    const h = harness();
+    const { from, select } = admittingClient([{ id: 'attempt-1' }]);
+    finalize.mockResolvedValue({ kind: 'completed' });
+
+    await finalizePartiallyPaidAbandonedAttempt({
+      ...h,
+      attempt: { ...attempt, status: 'processing' },
+      providerData: {},
+      supabase: { from } as never,
+    });
+
+    expect(select).toHaveBeenCalledWith('id');
+    expect(finalize).toHaveBeenCalled();
+    expect(h.summary.completed).toEqual(['attempt-1']);
+    expect(h.hold).not.toHaveBeenCalled();
+  });
+
+  it('holds a processing attempt lost to a concurrent completion', async () => {
+    const h = harness();
+    const { from } = admittingClient([]);
+    finalize.mockResolvedValue({ kind: 'completed' });
+
+    await finalizePartiallyPaidAbandonedAttempt({
+      ...h,
+      attempt: { ...attempt, status: 'processing' },
+      providerData: {},
+      supabase: { from } as never,
+    });
+
+    expect(finalize).not.toHaveBeenCalled();
+    expect(h.hold).toHaveBeenCalledWith('changed_concurrently');
+    expect(h.summary.failed).toBe(false);
+  });
+
+  it('fails the sweep when admitting a processing attempt errors', async () => {
+    const h = harness();
+    const { from } = admittingClient(null, new Error('database unavailable'));
+
+    await finalizePartiallyPaidAbandonedAttempt({
+      ...h,
+      attempt: { ...attempt, status: 'processing' },
+      providerData: {},
+      supabase: { from } as never,
+    });
+
+    expect(finalize).not.toHaveBeenCalled();
+    expect(h.hold).toHaveBeenCalledWith('changed_concurrently');
+    expect(h.summary.failed).toBe(true);
   });
 });

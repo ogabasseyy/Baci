@@ -129,7 +129,6 @@ describe('abandoned Paystack attempt operational failures', () => {
   it.each([
     'HTTP_404',
     'HTTP_400',
-    'VALIDATION_ERROR',
   ])('holds without failing on a genuine provider verdict (%s)', async (code) => {
     const { client } = createClient();
 

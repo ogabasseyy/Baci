@@ -3,7 +3,7 @@ import { useCheckoutAddressInference } from './checkout/hooks/use-checkout-addre
 import { useCheckoutDeliveryAddressHandlers } from './checkout/hooks/use-checkout-delivery-address-handlers';
 import { useCheckoutDeliveryOptions } from './checkout/hooks/use-checkout-delivery-options';
 import { useCheckoutShippingQuotes } from './checkout/hooks/use-checkout-shipping-quotes';
-import { useLoadResumedOrder } from './checkout/hooks/use-load-resumed-order';
+import { useCheckoutPaymentSession } from './checkout/hooks/use-checkout-payment-session';
 import { useOrderTotals } from './checkout/hooks/use-order-totals';
 import { resolveCheckoutResumeContext } from './checkout/resolve-checkout-resume-context';
 
@@ -32,7 +32,6 @@ import { CheckoutDeliveryStep } from './checkout/components/CheckoutDeliveryStep
 import type { SavedCheckoutAddress as SavedAddress } from './checkout/components/DeliveryAddressFields';
 import {
   DiscountCodeInput,
-  type DiscountResult,
 } from '@/components/storefront/checkout/discount-code-input';
 import { MobileOrderSummary } from '../components/MobileCheckoutComponents';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -56,16 +55,11 @@ import type {
   CryptoCurrency,
   DeliveryMethod,
   DvaData,
-  PaymentMethod,
   PendingCryptoOrder,
-  PaymentTab,
   ResumedOrder,
 } from './checkout/types';
 import { mapApiOrderToResumedOrder } from './checkout/map-api-order-to-resumed-order';
-import {
-  loadShippingStates,
-  loadWalletBalance,
-} from './checkout/checkout-page-data-loaders';
+import { loadShippingStates } from './checkout/checkout-page-data-loaders';
 import {
   usePersistedState,
 } from '@/hooks/use-persisted-state';
@@ -97,10 +91,6 @@ import {
   type PendingCheckoutOrderSnapshot,
 } from './checkout/pending-checkout-order';
 import { prepareCheckoutOrderSubmission } from './checkout/prepare-checkout-order-submission';
-import type {
-  RedvaultPreparedOrder,
-  RedvaultStatus,
-} from './checkout/handlers/redvault-prepared-order-submit';
 import {
   clearCheckoutIdempotencyKey,
   getCheckoutIdempotencyKey,
@@ -114,8 +104,6 @@ import { submitFreshCheckout } from './checkout/handlers/submit-fresh-checkout';
 import { signUpCheckoutCustomer } from './checkout/handlers/sign-up-checkout-customer';
 import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import { PaymentStep } from './checkout/components/PaymentStep';
-import type { RedvaultQuoteSummary } from './checkout/components/redvault/RedvaultPaymentOption';
-import { getRedvaultCompatibleCheckoutValues } from './checkout/redvault-compatible-checkout-values';
 import { useRedvaultPaymentAvailability } from './checkout/hooks/use-redvault-payment-availability';
 import {
   calculateDeliveryCost,
@@ -730,38 +718,45 @@ export const CheckoutPage: React.FC = () => {
   // Payment State (declared before the resumed-order effect below, which
   // pre-selects the tab/method for BNPL deep links — React Compiler requires
   // declaration before first access)
-  const [paymentTab, setPaymentTab] = useState<PaymentTab>('full');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('');
-  const [redvaultSummary, setRedvaultSummary] =
-    useState<RedvaultQuoteSummary | null>(null);
-  const [redvaultStatus, setRedvaultStatus] =
-    useState<RedvaultStatus>('idle');
-  const [redvaultOrderReady, setRedvaultOrderReady] =
-    useState<RedvaultPreparedOrder | null>(null);
-  const selectPaymentMethod = (nextMethod: PaymentMethod) => {
-    if (isOrderInFlightRef.current || redvaultStatus === 'pending' || redvaultStatus === 'held') return;
-    if (
-      nextMethod !== paymentMethod &&
-      (nextMethod === 'uba_redvault' || paymentMethod === 'uba_redvault')
-    ) {
-      // Retain a stored REDVAULT fence: after an indeterminate init the
-      // order may be persisted and capturing, so only the submit-time
-      // resolver (which validates server state and blocks a second order
-      // while unresolved) may clear it — never the method switch itself.
-      if (pendingCheckoutOrder?.paymentMethod !== 'uba_redvault') {
-        clearPendingCheckoutOrder();
-      }
-      setRedvaultSummary(null);
-      setRedvaultStatus('idle');
-      setRedvaultOrderReady(null);
-    }
-    setPaymentMethod(nextMethod);
-  };
-
-  useLoadResumedOrder({
-    resumeOrderId, resumeMerchantSlug, resumeTrackingToken, resumeLookupEmail,
-    preferredGateway, setIsLoadingResumedOrder, setResumedOrder, setCheckoutFields,
-    setPaymentTab, setPaymentMethod: selectPaymentMethod, setResumeOrderError,
+  const deliveryCost = calculateDeliveryCost(
+    deliveryMethod,
+    selectedQuoteId,
+    shippingQuotes,
+    airportType,
+  );
+  const taxRate = merchant?.vat_registration_status === 'registered'
+    ? (merchant.vat_rate ?? 7.5) / 100
+    : 0;
+  const orderTotals = useOrderTotals({
+    cartTotal: effectiveItemSubtotal,
+    deliveryCost,
+    taxRate,
+  });
+  const paymentSession = useCheckoutPaymentSession({
+    baseTotal:
+      effectiveCheckoutCartTotal +
+      deliveryCost +
+      giftWrappingCost +
+      (orderTotals?.taxAmount ?? 0),
+    clearPendingCheckoutOrder,
+    currencyCode,
+    discountSubtotal: effectiveCheckoutCartTotal,
+    hasAuthenticatedUser: Boolean(user),
+    isOrderInFlightRef,
+    merchantSlug: merchant?.slug ?? undefined,
+    pendingCheckoutOrder,
+    walletSessionIdentity: user,
+    resumeOrder: {
+      resumeOrderId,
+      resumeMerchantSlug,
+      resumeTrackingToken,
+      resumeLookupEmail,
+      preferredGateway,
+      setIsLoadingResumedOrder,
+      setResumedOrder,
+      setCheckoutFields,
+      setResumeOrderError,
+    },
   });
 
   // Load the address state list. NG hits /api/shipping/locations (rich data);
@@ -783,21 +778,7 @@ export const CheckoutPage: React.FC = () => {
 
 
 
-  // Wallet state (2025: auto-apply when balance > 0)
-  const [walletBalance, setWalletBalance] = useState(0);
-  const [walletLoading, setWalletLoading] = useState(false);
-  const [payWithWallet, setPayWithWallet] = useState(false);
-  const [appliedDiscount, setAppliedDiscount] =
-    useState<DiscountResult | null>(null);
-
   // Note: currentStep and completedSteps are now part of checkoutForm (persisted)
-
-  // Pay For Me State
-  const [payForMeDetails, setPayForMeDetails] = useState({
-    name: '',
-    contact: '',
-    note: '',
-  });
 
   // Prefill user data if logged in
   useEffect(() => {
@@ -826,24 +807,6 @@ export const CheckoutPage: React.FC = () => {
     }
   }, [user, customerEmail, firstName, lastName, customerPhone]);
 
-  // Fetch wallet balance for logged-in customers (2025 best practice:
-  // auto-apply at checkout). The async try/finally flow lives in module-scope
-  // `loadWalletBalance` so the compiler can memoize this component.
-  useEffect(() => {
-    if (!user || !merchant?.slug) return;
-
-    const abortController = new AbortController();
-    loadWalletBalance({
-      merchantSlug: merchant.slug,
-      signal: abortController.signal,
-      setWalletLoading,
-      setWalletBalance,
-      setPayWithWallet,
-    });
-
-    return () => abortController.abort();
-  }, [user, merchant?.slug]);
-
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
@@ -863,52 +826,12 @@ export const CheckoutPage: React.FC = () => {
     return `${start.toLocaleDateString('en-GB', options)} to ${end.toLocaleDateString('en-GB', options)}`;
   };
 
-  const deliveryCost = calculateDeliveryCost(
-    deliveryMethod,
-    selectedQuoteId,
-    shippingQuotes,
-    airportType,
-  );
-
-  const taxRate = merchant?.vat_registration_status === 'registered'
-    ? (merchant.vat_rate ?? 7.5) / 100
-    : 0;
-  const orderTotals = useOrderTotals({
-    cartTotal: effectiveItemSubtotal,
-    deliveryCost,
-    taxRate,
-  });
-
-  // Server-computed discount amount (the route re-validates against the
-  // canonical subtotal); fall back to a local estimate only if it's missing.
-  const discountAmount = appliedDiscount
-    ? (appliedDiscount.discount_amount ??
-      (appliedDiscount.discount_type === 'percentage'
-        ? Math.round(
-            effectiveCheckoutCartTotal * (appliedDiscount.discount_value / 100)
-          )
-        : Math.min(appliedDiscount.discount_value, effectiveCheckoutCartTotal)))
-    : 0;
-  // Wallet credit calculation (2025: can't redeem more than order total).
-  // The customer wallet is an NGN-denominated ledger, so redemption is only
-  // offered on NGN orders — mirrors the server-side guard in /api/orders.
-  const walletCurrencySupported = currencyCode === 'NGN';
-  const checkoutValues = getRedvaultCompatibleCheckoutValues({
-    baseTotal:
-      effectiveCheckoutCartTotal +
-      deliveryCost +
-      giftWrappingCost +
-      (orderTotals?.taxAmount ?? 0),
-    discountAmount,
-    discountCode: appliedDiscount?.code,
-    paymentMethod,
-    payWithWallet,
-    walletBalance,
-    walletCurrencySupported,
-  });
-  const total = checkoutValues.total;
-  const walletAmountUsed = checkoutValues.walletAmountUsed;
-  const remainingAmount = total - walletAmountUsed;
+  const paymentMethod = paymentSession.method;
+  const redvaultStatus = paymentSession.redvault.status;
+  const redvaultOrderReady = paymentSession.redvault.orderReady;
+  const walletAmountUsed = paymentSession.wallet.amountUsed;
+  const remainingAmount = paymentSession.wallet.remainingAmount;
+  const total = paymentSession.total;
 
 
   // Thin caller: the resumed BNPL flow lives in the direct-payment
@@ -1016,9 +939,9 @@ export const CheckoutPage: React.FC = () => {
         customerName: (firstName + ' ' + lastName).trim(),
         customerPhone,
         checkoutItems: buildCheckoutOrderItems(checkoutCart),
-        useWalletCredit: checkoutValues.useWalletCredit,
+        useWalletCredit: paymentSession.checkoutValues.useWalletCredit,
         walletAmountUsed,
-        discountCode: checkoutValues.discountCode,
+        discountCode: paymentSession.checkoutValues.discountCode,
         giftWrappingCost,
       },
     });
@@ -1100,8 +1023,8 @@ export const CheckoutPage: React.FC = () => {
         waitForResolvedStorefrontCustomerAuth,
         isOrderInFlightRef,
         setIsProcessing,
-        setRedvaultStatus,
-        setRedvaultOrderReady,
+        setRedvaultStatus: paymentSession.redvault.setStatus,
+        setRedvaultOrderReady: paymentSession.redvault.setOrderReady,
         clearPendingCheckoutOrder,
         createAccount,
         user,
@@ -1141,9 +1064,9 @@ export const CheckoutPage: React.FC = () => {
             shipping: deliveryCost,
             tax: orderTotals?.taxAmount ?? 0,
             giftWrappingCost,
-            discountAmount: checkoutValues.discountAmount,
-            discountCode: checkoutValues.discountCode,
-            useWalletCredit: checkoutValues.useWalletCredit,
+            discountAmount: paymentSession.checkoutValues.discountAmount,
+            discountCode: paymentSession.checkoutValues.discountCode,
+            useWalletCredit: paymentSession.checkoutValues.useWalletCredit,
             walletAmountUsed,
             currency: currencyCode,
             deliveryMethod,
@@ -1171,17 +1094,17 @@ export const CheckoutPage: React.FC = () => {
               waitForResolvedStorefrontCustomerAuth,
             isOrderInFlightRef,
             setIsProcessing,
-            setRedvaultStatus,
+            setRedvaultStatus: paymentSession.redvault.setStatus,
             clearCheckoutSession,
             clearCart,
             pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
-            onRedvaultSummary: setRedvaultSummary,
+            onRedvaultSummary: paymentSession.redvault.setSummary,
             onOrderCreated: () => {
               rotateCheckoutAttemptGeneration();
               setCheckoutOrderCreated(true);
             },
             onPendingSnapshot: setPendingCheckoutOrder,
-            setRedvaultOrderReady,
+            setRedvaultOrderReady: paymentSession.redvault.setOrderReady,
             releaseSubmission,
           },
           redvault: {
@@ -1233,7 +1156,7 @@ export const CheckoutPage: React.FC = () => {
           setDvaData,
           setDvaCountdown,
           setIsInitializingDva,
-          setRedvaultStatus,
+          setRedvaultStatus: paymentSession.redvault.setStatus,
           setPendingCryptoOrder,
           setShowCryptoSelector,
           setCryptoPaymentData,
@@ -1242,7 +1165,7 @@ export const CheckoutPage: React.FC = () => {
           clearCart,
           navigate: (path) => router.push(asRoute(getHref(path))),
           redirect: (url) => window.location.assign(url),
-          payForMeDetails,
+          payForMeDetails: paymentSession.payForMe.details,
           },
           order,
           wallet: walletResult,
@@ -1251,7 +1174,7 @@ export const CheckoutPage: React.FC = () => {
           orderChargeCurrency,
           checkoutFingerprint,
           paymentMethod,
-          setWalletBalance,
+          setWalletBalance: paymentSession.wallet.setBalance,
           capturePaymentStarted: (reference) => {
             captureCheckoutPaymentStarted({
               currency: orderChargeCurrency,
@@ -1277,10 +1200,7 @@ export const CheckoutPage: React.FC = () => {
     });
   };
 
-  const isPayForMeValid =
-    paymentMethod === 'payforme'
-      ? Boolean(payForMeDetails.name && payForMeDetails.contact)
-      : true;
+  const isPayForMeValid = paymentSession.payForMe.isValid;
 
   // Loading state (Initial fetch OR waiting for auto-trigger)
   // This prevents the form from flashing briefly before the payment widget opens
@@ -1481,11 +1401,11 @@ export const CheckoutPage: React.FC = () => {
           cartTotal={effectiveCheckoutCartTotal}
           deliveryCost={resumedOrder ? resumedOrder.shipping_cost : deliveryCost}
           taxAmount={resumedOrder?.tax_amount ?? orderTotals?.taxAmount ?? 0}
-          discountAmount={resumedOrder?.discount_amount ?? checkoutValues.discountAmount}
+          discountAmount={resumedOrder?.discount_amount ?? paymentSession.checkoutValues.discountAmount}
           deliveryMethod={resumedOrder ? null : deliveryMethod}
           giftWrappingCost={giftWrappingCost}
-          walletBalance={walletBalance}
-          payWithWallet={checkoutValues.payWithWallet}
+          walletBalance={paymentSession.wallet.balance}
+          payWithWallet={paymentSession.checkoutValues.payWithWallet}
           walletAmountUsed={walletAmountUsed}
           remainingAmount={resumedOrder?.total ?? remainingAmount}
         />}
@@ -1502,9 +1422,9 @@ export const CheckoutPage: React.FC = () => {
               currencyCountryCode={merchant?.country ?? 'NG'}
               payoutCurrency={merchant?.payout_currency ?? null}
               productIds={checkoutCart.map((item) => item.id)}
-              appliedDiscount={appliedDiscount}
-              onApply={setAppliedDiscount}
-              onRemove={() => setAppliedDiscount(null)}
+              appliedDiscount={paymentSession.discount.applied}
+              onApply={paymentSession.discount.setApplied}
+              onRemove={() => paymentSession.discount.setApplied(null)}
             />
           </div>
         )}
@@ -1603,15 +1523,15 @@ export const CheckoutPage: React.FC = () => {
               focusOnActivate={focusActiveStep}
               currentStep={currentStep}
               completedSteps={completedSteps}
-              paymentTab={paymentTab}
-              setPaymentTab={setPaymentTab}
+              paymentTab={paymentSession.tab}
+              setPaymentTab={paymentSession.setTab}
               paymentMethod={paymentMethod}
-              setPaymentMethod={selectPaymentMethod}
+              setPaymentMethod={paymentSession.selectMethod}
               isProcessing={isProcessing}
               isPayForMeValid={isPayForMeValid}
               isDeliveryValid={isDeliveryValid}
-              payForMeDetails={payForMeDetails}
-              setPayForMeDetails={setPayForMeDetails}
+              payForMeDetails={paymentSession.payForMe.details}
+              setPayForMeDetails={paymentSession.payForMe.setDetails}
               dva={{ isInitializingDva }}
               newsletterOptIn={newsletterOptIn}
               setNewsletterOptIn={setNewsletterOptIn}
@@ -1624,7 +1544,7 @@ export const CheckoutPage: React.FC = () => {
               currency={currencyCode}
               redvaultAvailable={redvaultAvailability.available}
               redvaultStatus={redvaultStatus}
-              redvaultSummary={redvaultSummary}
+              redvaultSummary={paymentSession.redvault.summary}
               redvaultOrderReady={Boolean(redvaultOrderReady)}
             />
 
@@ -1640,17 +1560,17 @@ export const CheckoutPage: React.FC = () => {
             selectedQuoteId={selectedQuoteId}
             giftWrappingCost={giftWrappingCost}
             paymentMethod={paymentMethod}
-            walletCurrencySupported={walletCurrencySupported}
-            walletLoading={walletLoading}
-            walletBalance={walletBalance}
+            walletCurrencySupported={paymentSession.wallet.currencySupported}
+            walletLoading={paymentSession.wallet.loading}
+            walletBalance={paymentSession.wallet.balance}
             hasUser={Boolean(user)}
             currencySymbol={currencySymbol}
-            payWithWallet={payWithWallet}
-            setPayWithWallet={setPayWithWallet}
+            payWithWallet={paymentSession.wallet.payWithWallet}
+            setPayWithWallet={paymentSession.wallet.setPayWithWallet}
             walletAmountUsed={walletAmountUsed}
             remainingAmount={remainingAmount}
-            checkoutPayWithWallet={checkoutValues.payWithWallet}
-            redvaultSummary={redvaultSummary}
+            checkoutPayWithWallet={paymentSession.checkoutValues.payWithWallet}
+            redvaultSummary={paymentSession.redvault.summary}
             newsletterOptIn={newsletterOptIn}
             setNewsletterOptIn={setNewsletterOptIn}
             handlePlaceOrder={handlePlaceOrder}

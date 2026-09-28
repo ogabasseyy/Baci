@@ -21,11 +21,12 @@
 // URLs are immutable-cached for a year and may still be referenced by
 // documents served before this run, so a bake never deletes on its own.
 // `--check` re-fetches kept sources and fails on hash drift (in-place
-// merchandising overwrites); run it on a schedule.
+// merchandising overwrites) or bake age past SNAPSHOT_MAX_AGE_MS; it runs
+// on a schedule via .github/workflows/ogabassey-hero-snapshot-freshness.yml
+// and needs no installed dependencies.
 
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
-import sharp from 'sharp';
 import { parseSnapshotArgs } from './ogabassey-hero-snapshot-args.mjs';
 import { bakeSnapshots } from './ogabassey-hero-snapshot-bake.mjs';
 import { checkSnapshotFreshness } from './ogabassey-hero-snapshot-check.mjs';
@@ -35,7 +36,6 @@ import { pruneSnapshotOrphans } from './ogabassey-hero-snapshot-prune.mjs';
 
 export async function runGenerateOgabasseyHeroSnapshots(argv, deps = {}) {
   const fetchImpl = deps.fetchImpl ?? fetch;
-  const sharpImpl = deps.sharpImpl ?? sharp;
   const paths = resolveSnapshotPaths(deps.webRoot ?? null);
   const webRoot = paths.webRoot;
   const manifestPath = deps.manifestPath ?? paths.manifestPath;
@@ -44,6 +44,10 @@ export async function runGenerateOgabasseyHeroSnapshots(argv, deps = {}) {
   if (check) {
     return checkSnapshotFreshness({ fetchImpl, manifestPath, slug, urls });
   }
+  // sharp is loaded only on the bake path: `--check` must run on bare
+  // node (stdlib + global fetch) so the scheduled freshness workflow needs
+  // no dependency install.
+  const sharpImpl = deps.sharpImpl ?? (await import('sharp')).default;
   const outDir = resolve(webRoot, 'public/_hero', slug);
   const { bakedPaths, entries } = await bakeSnapshots({
     fetchImpl,

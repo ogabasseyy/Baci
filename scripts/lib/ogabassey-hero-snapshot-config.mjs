@@ -21,3 +21,9 @@ export const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
 // floor ~1Mbps), but a stalled server must fail, never hang the pipeline.
 export const DOWNLOAD_TIMEOUT_MS = 120_000;
 export const MANAGED_FILE_PATTERN = /^[0-9a-f]{12}-\d+\.avif$/;
+// Re-bake cadence enforced by `--check` (see
+// .github/workflows/ogabassey-hero-snapshot-freshness.yml). This is the
+// single source of truth for the freshness window: the runtime resolver is
+// intentionally wall-clock-free so prerendered and request-time consumers
+// always agree, and freshness is enforced here instead.
+export const SNAPSHOT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;

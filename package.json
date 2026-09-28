@@ -10,6 +10,7 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "check:ad-tracking-native-config": "pnpm --filter @baci/mobile-storefront check:ad-tracking-native-config",
+    "check:hero-snapshots": "node scripts/generate-ogabassey-hero-snapshots.mjs --slug ogabassey --check",
     "check:platform-drift": "pnpm --filter baci-mobile-admin check:platform-drift && pnpm --filter @baci/mobile-storefront check:platform-drift",
     "check:route-size": "pnpm --filter @baci/mobile-storefront check:route-size",
     "start": "turbo start",

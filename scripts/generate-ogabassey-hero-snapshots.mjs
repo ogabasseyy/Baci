@@ -4,7 +4,8 @@
 // Run:  node scripts/generate-ogabassey-hero-snapshots.mjs --slug ogabassey <sourceUrl> [...]
 //       node scripts/generate-ogabassey-hero-snapshots.mjs --slug ogabassey --check [sourceUrl ...]
 //       node scripts/generate-ogabassey-hero-snapshots.mjs --slug ogabassey --prune <sourceUrl> [...]
-// Deps: sharp (already present via Next image optimization).
+// Deps: sharp (already present via Next image optimization) for bake/prune
+// only; `--check` runs on bare node with no install.
 
 import { runGenerateOgabasseyHeroSnapshots } from './lib/ogabassey-hero-snapshots.mjs';
 

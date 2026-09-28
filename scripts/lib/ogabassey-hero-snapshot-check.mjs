@@ -4,11 +4,15 @@
 // represent the source. This mode re-fetches each kept source and compares
 // its sha256 against the manifest's `sourceSha256`, failing loudly on
 // drift so an in-place merchandising overwrite is re-baked instead of
-// served stale indefinitely. Intended for scheduled runs; automation
-// wiring is a follow-up to this change.
+// served stale indefinitely. It also rejects entries baked longer ago
+// than SNAPSHOT_MAX_AGE_MS: the runtime resolver is wall-clock-free by
+// design (prerendered and request-time consumers must agree), so the
+// re-bake cadence is enforced here, on a schedule — see
+// .github/workflows/ogabassey-hero-snapshot-freshness.yml.
 
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { SNAPSHOT_MAX_AGE_MS } from './ogabassey-hero-snapshot-config.mjs';
 import { HeroSnapshotError } from './ogabassey-hero-snapshot-errors.mjs';
 import { readSnapshotManifestTenants } from './ogabassey-hero-snapshot-manifest-read.mjs';
 import { fetchSnapshotSource } from './ogabassey-hero-snapshot-source.mjs';
@@ -40,8 +44,24 @@ export async function checkSnapshotFreshness({
       );
     }
   }
-  const drifted = [];
+  const expired = [];
+  const hashTargets = [];
   for (const url of targets) {
+    const bakedAt = Date.parse(entries[url].bakedAt ?? '');
+    if (!Number.isFinite(bakedAt)) {
+      throw new HeroSnapshotError(
+        `snapshot entry for ${url} under slug ${slug} has no parseable bakedAt; re-bake to repair the manifest`
+      );
+    }
+    if (Date.now() - bakedAt > SNAPSHOT_MAX_AGE_MS) {
+      console.log(`[hero-snapshots] EXPIRED ${url}`);
+      expired.push(url);
+    } else {
+      hashTargets.push(url);
+    }
+  }
+  const drifted = [];
+  for (const url of hashTargets) {
     // eslint-disable-next-line no-await-in-loop
     const sourceBytes = await fetchSnapshotSource(url, fetchImpl);
     const actual = createHash('sha256').update(sourceBytes).digest('hex');
@@ -52,10 +72,17 @@ export async function checkSnapshotFreshness({
       drifted.push(url);
     }
   }
-  if (drifted.length > 0) {
+  if (drifted.length > 0 || expired.length > 0) {
+    const reasons = [];
+    if (drifted.length > 0) {
+      reasons.push(`drifted: ${drifted.join(', ')}`);
+    }
+    if (expired.length > 0) {
+      reasons.push(`expired (re-bake required): ${expired.join(', ')}`);
+    }
     throw new HeroSnapshotError(
-      `snapshot drift for ${drifted.length} url(s), re-bake: ${drifted.join(', ')}`
+      `snapshot freshness failed for ${drifted.length + expired.length} url(s), re-bake: ${reasons.join('; ')}`
     );
   }
-  return { checked: targets, drifted };
+  return { checked: targets, drifted, expired };
 }

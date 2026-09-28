@@ -18,15 +18,21 @@ function makeFakeFetch(bytesByUrl) {
   }));
 }
 
-function seedManifestFile(webRoot, entries) {
+function seedManifestFile(webRoot, entries, bakedAtByUrl = {}) {
   const dir = resolve(webRoot, 'src/config');
   mkdirSync(dir, { recursive: true });
   const manifestPath = resolve(dir, 'ogabassey-hero-snapshot-manifest.ts');
   const body = Object.entries(entries)
-    .map(
-      ([url, sha]) =>
-        `    '${url}': {\n      sourceUrl: '${url}',\n      sourceSha256: '${sha}',\n    },`
-    )
+    .map(([url, sha]) => {
+      const bakedAt =
+        url in bakedAtByUrl ? bakedAtByUrl[url] : new Date().toISOString();
+      const bakedAtLine =
+        bakedAt === null ? '' : `\n      bakedAt: '${bakedAt}',`;
+      return (
+        `    '${url}': {\n      sourceUrl: '${url}',\n      sourceSha256: '${sha}',` +
+        `${bakedAtLine}\n    },`
+      );
+    })
     .join('\n');
   writeFileSync(
     manifestPath,
@@ -102,6 +108,48 @@ describe('checkSnapshotFreshness', () => {
 
     expect(checked).toEqual([SOURCE_URL]);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails on entries older than the re-bake cadence without fetching', async () => {
+    const webRoot = mkdtempSync(join(tmpdir(), 'hero-check-'));
+    const manifestPath = seedManifestFile(
+      webRoot,
+      { [SOURCE_URL]: sha('bytes-v1') },
+      {
+        [SOURCE_URL]: new Date(
+          Date.now() - 31 * 24 * 60 * 60 * 1000
+        ).toISOString(),
+      }
+    );
+    const fetchImpl = makeFakeFetch({
+      [SOURCE_URL]: Buffer.from('bytes-v1'),
+    });
+    await expect(
+      checkSnapshotFreshness({
+        fetchImpl,
+        manifestPath,
+        slug: 'ogabassey',
+        urls: [],
+      })
+    ).rejects.toThrow(new RegExp(`expired.*re-bake.*${SOURCE_URL}`));
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('fails on entries with a missing bakedAt', async () => {
+    const webRoot = mkdtempSync(join(tmpdir(), 'hero-check-'));
+    const manifestPath = seedManifestFile(
+      webRoot,
+      { [SOURCE_URL]: sha('bytes-v1') },
+      { [SOURCE_URL]: null }
+    );
+    await expect(
+      checkSnapshotFreshness({
+        fetchImpl: makeFakeFetch({}),
+        manifestPath,
+        slug: 'ogabassey',
+        urls: [],
+      })
+    ).rejects.toThrow(/no parseable bakedAt/);
   });
 
   it('rejects unknown slugs and unkept urls', async () => {

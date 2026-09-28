@@ -111,13 +111,16 @@ describe('resolveOgabasseyHomeHeroSnapshot validation', () => {
     ).toBeNull();
   });
 
-  it('rejects an entry older than the freshness window', () => {
-    expect(
-      resolveOgabasseyHomeHeroSnapshot(
-        OGABASSEY_HOME_HERO_SNAPSHOT_TENANT,
-        'https://cdn.ogabassey.com/expired.avif'
-      )
-    ).toBeNull();
+  // Bake age never gates serving: the resolver is wall-clock-free so the
+  // prerendered preload slot and the request-time <picture> always agree.
+  // Freshness (hash drift + re-bake cadence) is enforced by the scheduled
+  // `--check`, which fails loudly instead of silently disabling the path.
+  it('serves an old entry identically in every render phase', () => {
+    const snapshot = resolveOgabasseyHomeHeroSnapshot(
+      OGABASSEY_HOME_HERO_SNAPSHOT_TENANT,
+      'https://cdn.ogabassey.com/expired.avif'
+    );
+    expect(snapshot?.href).toBe('/_hero/ogabassey/abc-640.avif');
   });
 
   it('resolves a well-formed fresh entry', () => {

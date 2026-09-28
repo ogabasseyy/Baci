@@ -3,7 +3,7 @@ import { useCheckoutAddressInference } from './checkout/hooks/use-checkout-addre
 import { useCheckoutDeliveryAddressHandlers } from './checkout/hooks/use-checkout-delivery-address-handlers';
 import { useCheckoutDeliveryOptions } from './checkout/hooks/use-checkout-delivery-options';
 import { useCheckoutShippingQuotes } from './checkout/hooks/use-checkout-shipping-quotes';
-import { buildCheckoutOrderRequest } from './checkout/build-checkout-order-request';
+import { buildCheckoutOrderLifecycleOptions } from './checkout/build-checkout-order-lifecycle-options';
 import { useLoadResumedOrder } from './checkout/hooks/use-load-resumed-order';
 import { useOrderTotals } from './checkout/hooks/use-order-totals';
 import { resolveCheckoutResumeContext } from './checkout/resolve-checkout-resume-context';
@@ -116,7 +116,6 @@ import { runCheckoutOrderLifecycle } from './checkout/handlers/checkout-order-li
 import { continueCheckoutPayment } from './checkout/handlers/continue-checkout-payment';
 import { signUpCheckoutCustomer } from './checkout/handlers/sign-up-checkout-customer';
 import { captureClientEvent } from '@/lib/posthog/capture-client-event';
-import { selectRejectedVoucherLines } from './checkout/select-rejected-voucher-lines';
 import { PaymentStep } from './checkout/components/PaymentStep';
 import type { RedvaultQuoteSummary } from './checkout/components/redvault/RedvaultPaymentOption';
 import { getRedvaultCompatibleCheckoutValues } from './checkout/redvault-compatible-checkout-values';
@@ -127,7 +126,6 @@ import {
   createSelectDeliveryMethod,
   getAirDeliveryQuotes,
   getDoorDeliveryQuotes,
-  getForwardableSelectedQuoteId,
   getStationPickupQuote,
   getStationPickupQuotes,
   inferAddressLocationFromInput,
@@ -1095,16 +1093,8 @@ export const CheckoutPage: React.FC = () => {
     }
     setIsProcessing(true);
 
-    const {
-      delivery: preparedDelivery,
-      identity: preparedIdentity,
-    } = preparedSubmission;
-    const shippingAddressData = preparedDelivery.address;
-    const { finalAddress, finalCity, finalState } = preparedDelivery;
-    const merchantRateId = preparedDelivery.merchantRateId;
-    const shippingProvider = preparedDelivery.shippingProvider;
-    const { items: orderItems, normalizedPaymentMethod, checkoutFingerprint } =
-      preparedIdentity;
+    const { items: orderItems, checkoutFingerprint } =
+      preparedSubmission.identity;
 
     let createdOrderId: string | undefined;
     let createdOrderNumber = '';
@@ -1157,121 +1147,80 @@ export const CheckoutPage: React.FC = () => {
     }
 
     try {
-      const lifecycle = await runCheckoutOrderLifecycle({
-        reuse: {
-          pendingOrder: pendingCheckoutOrder,
-          merchantId: merchant.id,
-          merchantSlug: merchant.slug,
-          customerEmail,
-          checkoutFingerprint,
-          paymentMethod: normalizedPaymentMethod,
-          shippingProvider,
-          selectedQuoteId:
-            deliveryMethod === 'airport'
-              ? selectedQuoteMatchesDeliveryMethod
-                ? selectedQuoteId || undefined
-                : undefined
-              : getForwardableSelectedQuoteId(deliveryMethod, selectedQuoteId),
-          shippingRateId: merchantRateId ?? undefined,
-        },
-        recoveryContext: {
-          firstName,
-          lastName,
-          customerPhone,
-          finalAddress,
-          finalCity,
-          finalState,
-          merchantCountry,
-          waitForResolvedStorefrontCustomerAuth,
-          isOrderInFlightRef,
-          setIsProcessing,
-          setRedvaultStatus,
-          clearPendingCheckoutOrder,
-          clearCheckoutSession,
-          clearCart,
-          pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
-        },
-        submit: {
-          getIdempotencyKey: () => getCheckoutIdempotencyKey(checkoutFingerprint),
-          orderRequest: buildCheckoutOrderRequest({
-            merchantId: merchant.id,
-            items: orderItems,
-            paymentMethod: normalizedPaymentMethod,
-            acceptsMarketing: newsletterOptIn,
+      const lifecycle = await runCheckoutOrderLifecycle(
+        buildCheckoutOrderLifecycleOptions({
+          prepared: preparedSubmission,
+          state: {
+            pendingOrder: pendingCheckoutOrder,
+            merchant,
             customer: {
-              name: `${firstName} ${lastName}`.trim(),
               email: customerEmail,
               phone: customerPhone,
+              name: `${firstName} ${lastName}`.trim(),
+              firstName,
+              lastName,
               userId: user?.id,
             },
-            money: {
-              subtotal: checkoutCartTotal,
-              shipping: deliveryCost,
-              tax: orderTotals?.taxAmount ?? 0,
-              giftWrapping: giftWrappingCost,
-              discountAmount: checkoutValues.discountAmount,
-              discountCode: checkoutValues.discountCode,
-              useWalletCredit: checkoutValues.useWalletCredit,
-              walletAmount: walletAmountUsed,
+            newsletterOptIn,
+            paymentMethod,
+            total,
+            orderRequestSubtotal: checkoutCartTotal,
+            subtotal: effectiveItemSubtotal,
+            shipping: deliveryCost,
+            tax: orderTotals?.taxAmount ?? 0,
+            giftWrappingCost,
+            discountAmount: checkoutValues.discountAmount,
+            discountCode: checkoutValues.discountCode,
+            useWalletCredit: checkoutValues.useWalletCredit,
+            walletAmountUsed,
+            currency: currencyCode,
+            deliveryMethod,
+            airportType,
+            selectedQuoteId,
+            selectedQuoteMatchesMethod:
+              selectedQuoteMatchesDeliveryMethod,
+            merchantCountry,
+          },
+          actions: {
+            getIdempotencyKey: () =>
+              getCheckoutIdempotencyKey(checkoutFingerprint),
+            cart,
+            removeFromCart,
+            clearPendingCheckoutOrder,
+            clearCheckoutIdempotencyKey: () =>
+              clearCheckoutIdempotencyKey(checkoutFingerprint),
+            onShippingRateRejected: () => {
+              raiseCheckoutError(
+                'Shipping cost changed — please refresh and try again.'
+              );
             },
-            delivery: {
-              method: deliveryMethod,
-              airportType,
-              quoteMatchesMethod: selectedQuoteMatchesDeliveryMethod,
-              selectedQuoteId,
-              merchantRateId,
-              provider: shippingProvider,
-              address: shippingAddressData,
+            getOrderErrorMessage: getCheckoutOrderErrorMessage,
+            waitForResolvedCustomerAuth:
+              waitForResolvedStorefrontCustomerAuth,
+            isOrderInFlightRef,
+            setIsProcessing,
+            setRedvaultStatus,
+            clearCheckoutSession,
+            clearCart,
+            pushSuccessRoute: (path) => router.push(asRoute(getHref(path))),
+            onRedvaultSummary: setRedvaultSummary,
+            onOrderCreated: ({ orderId, orderNumber, currency }) => {
+              createdOrderId = orderId;
+              createdOrderNumber = orderNumber;
+              orderChargeCurrency = currency;
+              rotateCheckoutAttemptGeneration();
+              setCheckoutOrderCreated(true);
             },
-          }),
-          paymentMethod,
-          total,
-          onVoucherRejected: (errorData) => {
-            for (const line of selectRejectedVoucherLines(cart, errorData)) {
-              if (line.cartItemId) {
-                removeFromCart(line.cartItemId);
-              } else {
-                removeFromCart(line.id, line.variantId);
-              }
-            }
+            onPendingSnapshot: setPendingCheckoutOrder,
+            setRedvaultOrderReady,
+            releaseSubmission,
           },
-          onPendingOrderInvalidated: async () => {
-            clearPendingCheckoutOrder();
-            await clearCheckoutIdempotencyKey(checkoutFingerprint);
+          redvault: {
+            enabled: paymentMethod === 'uba_redvault' && !redvaultOrderReady,
+            customerName: `${firstName} ${lastName}`.trim(),
           },
-          onShippingRateRejected: () => {
-            raiseCheckoutError('Shipping cost changed — please refresh and try again.');
-          },
-          getOrderErrorMessage: getCheckoutOrderErrorMessage,
-        },
-        customer: { email: customerEmail, phone: customerPhone, merchantId: merchant.id },
-        fingerprint: checkoutFingerprint,
-        paymentMethod,
-        itemCount: orderItems.reduce((count, item) => count + item.quantity, 0),
-        shipping: deliveryCost,
-        subtotal: effectiveItemSubtotal,
-        tax: orderTotals?.taxAmount ?? 0,
-        fallbackTotal: total,
-        currencyFallback: currencyCode,
-        shippingAddress: { address: finalAddress, city: finalCity, state: finalState },
-        merchantCountry,
-        onRedvaultSummary: setRedvaultSummary,
-        onOrderCreated: ({ orderId, orderNumber, currency }) => {
-          createdOrderId = orderId;
-          createdOrderNumber = orderNumber;
-          orderChargeCurrency = currency;
-          rotateCheckoutAttemptGeneration();
-          setCheckoutOrderCreated(true);
-        },
-        onPendingSnapshot: setPendingCheckoutOrder,
-        redvaultReview: {
-          enabled: paymentMethod === 'uba_redvault' && !redvaultOrderReady,
-          customerName: `${firstName} ${lastName}`.trim(),
-          checkoutFingerprint,
-          setReady: setRedvaultOrderReady,
-          releaseSubmission,
-        },
-      });
+        })
+      );
       if (lifecycle.kind !== 'payment_ready') return;
 
       const {

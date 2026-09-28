@@ -177,4 +177,25 @@ describe('POST /api/payments/webhook paystack refund events', () => {
     expect(response.status).toBe(401);
     expect(mockReconcilePaystackRefundEvent).not.toHaveBeenCalled();
   });
+
+  it.each([
+    42,
+    {},
+    [],
+  ])('ignores a signed payload with a non-string event (%s)', async (event) => {
+    const body = { event, data: { reference: 'PAYMENT-1' } };
+    const response = await POST(
+      createMockRequest(body, {
+        'x-paystack-signature': createSignature(
+          JSON.stringify(body),
+          'test-paystack-secret'
+        ),
+      })
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      message: 'Event ignored',
+    });
+    expect(mockReconcilePaystackRefundEvent).not.toHaveBeenCalled();
+  });
 });

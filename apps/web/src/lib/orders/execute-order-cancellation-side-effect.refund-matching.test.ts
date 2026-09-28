@@ -55,7 +55,10 @@ function completedRefund(
     currency: 'NGN',
     gateway: 'paystack',
     gateway_reference: '42',
-    metadata: { payment_transaction_id: paymentId },
+    metadata: {
+      payment_transaction_id: paymentId,
+      provider_refund_status: 'processed',
+    },
     status: 'completed',
     ...overrides,
   };

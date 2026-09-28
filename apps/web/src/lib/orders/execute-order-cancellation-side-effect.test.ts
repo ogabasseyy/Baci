@@ -166,7 +166,10 @@ describe('executeOrderCancellationSideEffect', () => {
           amount: 100,
           currency: 'NGN',
           gateway: 'paystack',
-          metadata: { payment_transaction_id: 'payment-1' },
+          metadata: {
+            payment_transaction_id: 'payment-1',
+            provider_refund_status: 'processed',
+          },
           status: 'completed',
         },
       ],

@@ -661,7 +661,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (gateway === 'paystack' && body.event?.startsWith('refund.')) {
+    if (
+      gateway === 'paystack' &&
+      typeof body.event === 'string' &&
+      body.event.startsWith('refund.')
+    ) {
       const parsed = paystackRefundEventSchema.safeParse(body);
       if (!parsed.success) {
         logger.error({

@@ -73,7 +73,15 @@ describe('Paystack cancellation refund mismatch evidence', () => {
       eq: vi.fn().mockReturnThis(),
       limit: vi.fn().mockResolvedValue({
         data: [
-          { id: 'payment-1', order_id: 'order-1', merchant_id: 'merchant-1' },
+          {
+            id: 'payment-1',
+            order_id: 'order-1',
+            merchant_id: 'merchant-1',
+            cancel_order: {
+              cancelled_at: '2026-09-27T00:00:00Z',
+              shipping_status: 'cancelled',
+            },
+          },
         ],
         error: null,
       }),
@@ -150,7 +158,15 @@ describe('Paystack cancellation refund mismatch evidence', () => {
       eq: vi.fn().mockReturnThis(),
       limit: vi.fn().mockResolvedValue({
         data: [
-          { id: 'payment-1', order_id: 'order-1', merchant_id: 'merchant-1' },
+          {
+            id: 'payment-1',
+            order_id: 'order-1',
+            merchant_id: 'merchant-1',
+            cancel_order: {
+              cancelled_at: '2026-09-27T00:00:00Z',
+              shipping_status: 'cancelled',
+            },
+          },
         ],
         error: null,
       }),
@@ -231,6 +247,38 @@ describe('Paystack cancellation refund mismatch evidence', () => {
       'gateway_reference',
       'PSK.1=x'
     );
+  });
+
+  it.each([
+    { cancelled_at: null, shipping_status: 'cancelled' },
+    {
+      cancelled_at: '2026-09-27T00:00:00Z',
+      shipping_status: 'delivered',
+    },
+    null,
+  ])('skips payments whose order is not cancelled (%s)', async (cancelOrder) => {
+    const paymentCandidates = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({
+        data: [
+          {
+            id: 'payment-1',
+            order_id: 'order-1',
+            merchant_id: 'merchant-1',
+            cancel_order: cancelOrder,
+          },
+        ],
+        error: null,
+      }),
+    };
+    const from = vi.fn().mockReturnValueOnce(paymentCandidates);
+    const rpc = vi.fn();
+
+    await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
+
+    expect(from).toHaveBeenCalledTimes(1);
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it('ignores references outside the shared alphabet', async () => {

@@ -25,13 +25,19 @@ describe('Paystack refund notification recovery', () => {
           amount: 60,
           currency: 'NGN',
           gateway: 'paystack',
-          metadata: { payment_transaction_id: 'payment-1' },
+          metadata: {
+            payment_transaction_id: 'payment-1',
+            provider_refund_status: 'processed',
+          },
         },
         {
           amount: 45,
           currency: 'NGN',
           gateway: 'korapay',
-          metadata: { payment_transaction_id: 'payment-2' },
+          metadata: {
+            payment_transaction_id: 'payment-2',
+            provider_refund_status: 'processed',
+          },
         },
       ],
     });
@@ -56,7 +62,10 @@ describe('Paystack refund notification recovery', () => {
           amount: 60,
           currency: 'NGN',
           gateway: 'paystack',
-          metadata: { payment_transaction_id: 'payment-1' },
+          metadata: {
+            payment_transaction_id: 'payment-1',
+            provider_refund_status: 'processed',
+          },
         },
       ],
     });

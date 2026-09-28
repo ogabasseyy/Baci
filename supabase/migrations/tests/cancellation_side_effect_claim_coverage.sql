@@ -29,6 +29,7 @@ DECLARE
   v_split_order uuid := 'c0ffee00-0000-4000-8000-00000000c104';
   v_currency_order uuid := 'c0ffee00-0000-4000-8000-00000000c105';
   v_legacy_order uuid := 'c0ffee00-0000-4000-8000-00000000c106';
+  v_unverified_order uuid := 'c0ffee00-0000-4000-8000-00000000c107';
   v_won boolean;
   v_status text;
 BEGIN
@@ -42,7 +43,7 @@ BEGIN
   SELECT o.id, v_merchant_id, 'ORD-CLAIM-' || o.id::text, 100, 'NGN',
     'paid', 'cancelled', now()
   FROM (VALUES (v_full_order), (v_partial_order), (v_split_order),
-    (v_currency_order), (v_legacy_order)) AS o(id);
+    (v_currency_order), (v_legacy_order), (v_unverified_order)) AS o(id);
 
   -- One completed 100 NGN paystack leg per order.
   INSERT INTO public.transactions (
@@ -63,6 +64,9 @@ BEGIN
       'completed'),
     ('d0000000-0000-4000-8000-000000000005', v_legacy_order,
       v_merchant_id, 'payment', 'paystack', 'BAC-CLAIM-5', 100, 'NGN',
+      'completed'),
+    ('d0000000-0000-4000-8000-000000000006', v_unverified_order,
+      v_merchant_id, 'payment', 'paystack', 'BAC-CLAIM-6', 100, 'NGN',
       'completed');
 
   -- Full cover: one linked 100 refund.
@@ -73,7 +77,8 @@ BEGIN
     v_full_order, v_merchant_id, 'refund', 'paystack', '301', 100, 'NGN',
     'completed',
     jsonb_build_object(
-      'payment_transaction_id', 'd0000000-0000-4000-8000-000000000001'
+      'payment_transaction_id', 'd0000000-0000-4000-8000-000000000001',
+      'provider_refund_status', 'processed'
     )
   );
 
@@ -85,7 +90,8 @@ BEGIN
     v_partial_order, v_merchant_id, 'refund', 'paystack', '302', 40, 'NGN',
     'completed',
     jsonb_build_object(
-      'payment_transaction_id', 'd0000000-0000-4000-8000-000000000002'
+      'payment_transaction_id', 'd0000000-0000-4000-8000-000000000002',
+      'provider_refund_status', 'processed'
     )
   );
 
@@ -97,13 +103,15 @@ BEGIN
     v_split_order, v_merchant_id, 'refund', 'paystack', '303', 40, 'NGN',
     'completed',
     jsonb_build_object(
-      'payment_transaction_id', 'd0000000-0000-4000-8000-000000000003'
+      'payment_transaction_id', 'd0000000-0000-4000-8000-000000000003',
+      'provider_refund_status', 'processed'
     )
   ), (
     v_split_order, v_merchant_id, 'refund', 'paystack', '304', 60, 'NGN',
     'completed',
     jsonb_build_object(
-      'payment_transaction_id', 'd0000000-0000-4000-8000-000000000003'
+      'payment_transaction_id', 'd0000000-0000-4000-8000-000000000003',
+      'provider_refund_status', 'processed'
     )
   );
 
@@ -115,7 +123,8 @@ BEGIN
     v_currency_order, v_merchant_id, 'refund', 'paystack', '305', 100, 'USD',
     'completed',
     jsonb_build_object(
-      'payment_transaction_id', 'd0000000-0000-4000-8000-000000000004'
+      'payment_transaction_id', 'd0000000-0000-4000-8000-000000000004',
+      'provider_refund_status', 'processed'
     )
   );
 
@@ -125,7 +134,8 @@ BEGIN
     amount, currency, status, metadata
   ) VALUES (
     v_legacy_order, v_merchant_id, 'refund', 'paystack', '306', 100, 'NGN',
-    'completed', '{}'::jsonb
+    'completed',
+    jsonb_build_object('provider_refund_status', 'processed')
   );
 
   SELECT we_won, current_status INTO v_won, v_status
@@ -166,6 +176,27 @@ BEGIN
   );
   IF v_won IS DISTINCT FROM false OR v_status <> 'completed' THEN
     RAISE EXCEPTION 'legacy sole-payment cover must auto-complete, got %/%', v_won, v_status;
+  END IF;
+
+  -- Unverified: a linked full refund without provider evidence does not
+  -- cover the leg; the executor must run and await verification.
+  INSERT INTO public.transactions (
+    order_id, merchant_id, transaction_type, gateway, gateway_reference,
+    amount, currency, status, metadata
+  ) VALUES (
+    v_unverified_order, v_merchant_id, 'refund', 'paystack', '307', 100,
+    'NGN', 'completed',
+    jsonb_build_object(
+      'payment_transaction_id', 'd0000000-0000-4000-8000-000000000006'
+    )
+  );
+
+  SELECT we_won, current_status INTO v_won, v_status
+  FROM public.claim_order_cancellation_side_effect(
+    v_unverified_order, 'refund', gen_random_uuid()
+  );
+  IF v_won IS DISTINCT FROM true OR v_status <> 'claimed' THEN
+    RAISE EXCEPTION 'unverified full cover must stay claimed, got %/%', v_won, v_status;
   END IF;
 
   SELECT we_won, current_status INTO v_won, v_status

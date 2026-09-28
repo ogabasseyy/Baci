@@ -11,7 +11,8 @@ function formatAmount(amount: number, currency: string): string {
 /**
  * Total the refunded amount for a cancelled order's notification, mirroring
  * the completion RPC: every funded external payment leg sums its linked
- * same-gateway, same-currency completed refunds to at least its amount.
+ * same-gateway, same-currency completed refunds to at least its amount,
+ * counting Paystack rows only after provider verification.
  * Refund-state legs (e.g. PayPal flips the payment row itself to
  * refund_pending while its provider refund is pending) still need their
  * linked refund; only self-terminal refunded legs carry their own
@@ -60,14 +61,23 @@ export async function refundNotificationLedgerAmount({
     const matchedKobo = refundLegs
       .filter((refund) => {
         if (refund.gateway !== leg.gateway) return false;
+        const metadata = refund.metadata as {
+          payment_transaction_id?: unknown;
+          provider_refund_status?: unknown;
+        } | null;
+        // A locally completed Paystack refund counts only after it is
+        // provider-verified; other gateways keep local-status trust.
+        if (
+          refund.gateway === 'paystack' &&
+          metadata?.provider_refund_status !== 'processed'
+        )
+          return false;
         if (
           String(refund.currency ?? '').toUpperCase() !== legCurrency ||
           !(Number(refund.amount) > 0)
         )
           return false;
-        const link = (
-          refund.metadata as { payment_transaction_id?: unknown } | null
-        )?.payment_transaction_id;
+        const link = metadata?.payment_transaction_id;
         return link === leg.id || (link == null && linkableLegs.length === 1);
       })
       .reduce(

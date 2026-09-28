@@ -359,11 +359,18 @@ describe('useProducts', () => {
       ).toBe(true)
     );
 
-    mockFetchProductsPage.mockResolvedValueOnce({
-      products: [createProduct('prod-b2')],
-      nextOffset: null,
-      total: 5,
-    });
+    // B's next page hangs too; A's late settlement must not unlock it.
+    let resolveHangingB: (() => void) | undefined;
+    mockFetchProductsPage.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveHangingB = () =>
+          resolve({
+            products: [createProduct('prod-b2')],
+            nextOffset: null,
+            total: 5,
+          });
+      })
+    );
     act(() => {
       result.current.loadMore();
     });
@@ -376,7 +383,21 @@ describe('useProducts', () => {
       );
     });
 
-    resolveHanging?.();
+    const callsBeforeLateSettle = mockFetchProductsPage.mock.calls.length;
+    await act(async () => {
+      resolveHanging?.();
+    });
+
+    // A's obsolete release is key-guarded, so B's lock still holds and a
+    // second end signal starts no duplicate B request.
+    act(() => {
+      result.current.loadMore();
+    });
+    expect(mockFetchProductsPage.mock.calls.length).toBe(callsBeforeLateSettle);
+
+    await act(async () => {
+      resolveHangingB?.();
+    });
     await waitFor(() =>
       expect(
         result.current.products.some((product) => product.id === 'prod-b2')

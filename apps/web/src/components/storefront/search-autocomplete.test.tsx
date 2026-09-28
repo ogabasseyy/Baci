@@ -749,6 +749,11 @@ describe('SearchAutocomplete', () => {
     // sibling beside it, not an option inside it.
     const listbox = screen.getByRole('listbox');
     expect(listbox).not.toContainElement(seeAll);
+    // With a rendered listbox, the combobox reports expanded.
+    expect(screen.getByRole('combobox')).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
 
     fireEvent.click(seeAll);
     expect(onSubmitSearch).toHaveBeenCalledTimes(1);
@@ -979,6 +984,12 @@ describe('SearchAutocomplete', () => {
     expect(
       screen.getByRole('button', { name: /see all results for “x”/i })
     ).toBeInTheDocument();
+    // The action-only popup is not a listbox, so the combobox reports
+    // collapsed even though the popup is visible.
+    expect(screen.getByRole('combobox')).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    );
     // Queries that never fetch stay silent for screen readers too: no
     // settled response, no "No results found" announcement.
     expect(

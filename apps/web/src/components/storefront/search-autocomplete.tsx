@@ -160,7 +160,14 @@ export function SearchAutocomplete({
         className
       )}
       role="combobox"
-      aria-expanded={showPopup}
+      // Expansion refers to the listbox popup specifically: when only the
+      // standalone "See all results" action is visible (one-character
+      // query, failed request, or genuinely empty response), no listbox
+      // exists in the DOM, so reporting expanded would send screen
+      // readers looking for a suggestion list that is absent. The action
+      // itself is a native button right after the input in DOM order, so
+      // it stays keyboard and screen-reader discoverable either way.
+      aria-expanded={showPopup && hasResults}
       aria-haspopup="listbox"
       aria-controls={showPopup && hasResults ? listboxId : undefined}
       aria-owns={showPopup && hasResults ? listboxId : undefined}

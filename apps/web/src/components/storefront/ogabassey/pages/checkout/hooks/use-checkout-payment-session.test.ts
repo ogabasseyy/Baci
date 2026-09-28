@@ -15,8 +15,8 @@ function options(overrides: Record<string, unknown> = {}) {
     pendingCheckoutOrder: null,
     walletSessionIdentity: null,
     resumeOrder: {
-      resumeOrderId: null,
-      resumeMerchantSlug: null,
+      resumeOrderId: null as string | null,
+      resumeMerchantSlug: null as string | null,
       resumeTrackingToken: null,
       resumeLookupEmail: null,
       preferredGateway: null,
@@ -176,6 +176,40 @@ describe('useCheckoutPaymentSession', () => {
     expect(result.current.total).toBe(10_500);
     expect(result.current.wallet.amountUsed).toBe(10_500);
     expect(result.current.wallet.remainingAmount).toBe(0);
+  });
+
+  it('does not subtract a local discount from a resumed order total', () => {
+    const input = options();
+    const { result, rerender } = renderHook(
+      ({ currentOptions }: { currentOptions: ReturnType<typeof options> }) =>
+        useCheckoutPaymentSession(currentOptions as never),
+      { initialProps: { currentOptions: input } }
+    );
+    act(() => {
+      result.current.discount.setApplied({
+        valid: true,
+        code: 'SAVE',
+        discount_type: 'fixed',
+        discount_value: 800,
+      });
+    });
+    expect(result.current.total).toBe(10_700);
+
+    rerender({
+      currentOptions: {
+        ...input,
+        baseTotal: 10_700,
+        resumeOrder: {
+          ...input.resumeOrder,
+          resumeOrderId: 'resumed-order',
+          resumeMerchantSlug: 'store',
+        },
+      },
+    });
+
+    expect(result.current.discount.applied).not.toBeNull();
+    expect(result.current.checkoutValues.discountAmount).toBe(0);
+    expect(result.current.total).toBe(10_700);
   });
 
   it('keeps wallet credit disabled for non-NGN while preserving discount math', () => {

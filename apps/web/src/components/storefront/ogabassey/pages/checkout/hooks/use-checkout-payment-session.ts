@@ -115,7 +115,10 @@ export function useCheckoutPaymentSession({
     return () => controller.abort();
   }, [hasAuthenticatedUser, merchantSlug, walletSessionIdentity]);
 
-  const discountAmount = appliedDiscount
+  // A resumed order's persisted total already includes its discount. The
+  // checkout can render while the resume request is pending, so ignore any
+  // discount entered during that brief loading window once resume is known.
+  const discountAmount = appliedDiscount && !resumeOrder.resumeOrderId
     ? (appliedDiscount.discount_amount ??
       (appliedDiscount.discount_type === 'percentage'
         ? Math.round(

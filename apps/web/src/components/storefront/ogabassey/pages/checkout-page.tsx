@@ -970,7 +970,7 @@ export const CheckoutPage: React.FC = () => {
             resumedOrder.total and skips order creation, so a discount applied
             here would only change the displayed total/fingerprint, not the
             amount actually charged. */}
-        {!resumedOrder && (
+        {!resumeOrderId && !resumedOrder && (
           <div className="mt-4">
             <DiscountCodeInput
               merchantId={merchant?.id || ''}

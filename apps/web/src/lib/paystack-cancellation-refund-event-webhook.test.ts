@@ -53,6 +53,26 @@ describe('handlePaystackCancellationRefundEvent', () => {
     });
   });
 
+  it('fails retryably when the refund lookup errors', async () => {
+    const query = {
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: null,
+        error: { message: 'db unavailable' },
+      }),
+      select: vi.fn().mockReturnThis(),
+    };
+    const db = { from: vi.fn(() => query) } as unknown as SupabaseClient;
+
+    const response = await handlePaystackCancellationRefundEvent(db, {
+      data: { id: 42 },
+      event: 'refund.processed',
+    });
+
+    expect(mocks.reconcilePaystackCancellationRefund).not.toHaveBeenCalled();
+    expect(response.status).toBe(503);
+  });
+
   it('fails retryably when the refund-ID reconciliation throws', async () => {
     const db = database({ id: 'refund-1' });
     mocks.reconcilePaystackCancellationRefund.mockRejectedValue(

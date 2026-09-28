@@ -72,4 +72,15 @@ describe('verified paystack cancellation refund migration', () => {
       "OR r.metadata->>'provider_refund_status' = 'processed'"
     );
   });
+
+  it('waits for refund-state payment legs before completing the order', () => {
+    expect(existsSync(migrationPath)).toBe(true);
+    if (!existsSync(migrationPath)) return;
+
+    const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
+
+    expect(migrationSql).toContain(
+      "AND p.transaction_type = 'payment' AND p.status IN ('completed', 'refund_pending')"
+    );
+  });
 });

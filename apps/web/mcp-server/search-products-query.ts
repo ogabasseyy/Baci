@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { inferSmartphoneCategory } from './infer-smartphone-category';
+import { DISCOVERY_PRODUCT_PROJECTION } from './discovery-product-projection';
+import { matchesSingleWordDiscoveryQuery } from './search-products-relevance';
 import {
   buildSearchProductsV2RpcArgs,
   MAX_POST_FILTER_RESULT_PAGES,
@@ -42,9 +44,6 @@ export type LoadMcpSearchProductsResult = {
   sanitizedQuery: string | undefined;
   sawRankedRows: boolean;
 };
-
-const productSelect =
-  'id, name, slug, price, compare_at_price, images, condition, condition_detail, available_conditions, has_condition_offers, brand, category, manage_stock, stock_quantity, has_variants, updated_at, created_at';
 
 async function loadRankedMcpProducts({
   args,
@@ -127,7 +126,7 @@ async function loadRankedMcpProducts({
 
     const { data: productRows, error } = await supabase
       .from('products')
-      .select(productSelect)
+      .select(DISCOVERY_PRODUCT_PROJECTION)
       .eq('merchant_id', merchantId)
       .eq('status', 'active')
       .in('id', rankedProductIds);
@@ -145,7 +144,7 @@ async function loadRankedMcpProducts({
           brand: sanitizedBrand,
           category: sanitizedCategory,
           condition: sanitizedCondition,
-        })
+        }) && matchesSingleWordDiscoveryQuery(product, sanitizedQuery, sanitizedCategory)
       );
     }
 
@@ -190,7 +189,7 @@ async function loadCatalogMcpProducts({
   ) => {
     let query = supabase
       .from('products')
-      .select(productSelect)
+      .select(DISCOVERY_PRODUCT_PROJECTION)
       .eq('merchant_id', merchantId)
       .eq('status', 'active');
 
@@ -308,7 +307,8 @@ export async function loadMcpSearchProducts({
     : undefined;
   const limit = Math.min(Math.max(args.limit || 10, 1), 20);
   const hasPostHydrationFilters = Boolean(
-    sanitizedBrand || sanitizedCategory || sanitizedCondition
+    sanitizedBrand || sanitizedCategory || sanitizedCondition ||
+    (sanitizedQuery && /^[a-z]{3,}$/i.test(sanitizedQuery))
   );
   const priceSensitive = args.min_price !== undefined ||
     args.max_price !== undefined ||

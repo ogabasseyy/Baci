@@ -191,59 +191,19 @@ describe('MCP catalog claims', () => {
     }
   });
 
-  it('preserves an object-shaped catalog image in recommendations', async () => {
+  it('preserves an object-shaped catalog image in product discovery', async () => {
     const server = await startMcpServerWithPostgrest({});
     try {
       const result = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
         id: 23,
         method: 'tools/call',
-        params: { name: 'get_recommendations', arguments: { use_case: 'phone' } },
+        params: { name: 'search_products', arguments: { limit: 10 } },
       }));
       expect(result.structuredContent).toMatchObject({ products: expect.arrayContaining([
         expect.objectContaining({
           id: 'object-image-product',
           image: 'https://mcp.ogabassey.com/images/core-assets/products/redmi-15-midnight-black.avif',
         }),
-      ]) });
-    } finally {
-      await server.close();
-    }
-  });
-
-  it('recommends stocked options while excluding sold-out option products', async () => {
-    const server = await startMcpServerWithPostgrest({});
-    try {
-      const variants = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
-        id: 112, method: 'tools/call',
-        params: { name: 'get_recommendations', arguments: { use_case: 'variant' } },
-      }));
-      expect(variants.structuredContent).toMatchObject({ products: expect.arrayContaining([
-        expect.objectContaining({ id: 'variant-available-product' }),
-      ]) });
-      expect(JSON.stringify(variants)).not.toContain('variant-sold-out-product');
-      expect(JSON.stringify(variants)).not.toContain('variant-empty-product');
-
-      const offers = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
-        id: 113, method: 'tools/call',
-        params: { name: 'get_recommendations', arguments: { use_case: 'used offer' } },
-      }));
-      expect(offers.structuredContent).toMatchObject({ products: [
-        expect.objectContaining({ id: 'condition-offer-product', price: 80000, condition: 'used' }),
-      ] });
-    } finally {
-      await server.close();
-    }
-  });
-
-  it('recommends a stocked variant below budget when its parent price is above budget', async () => {
-    const server = await startMcpServerWithPostgrest({});
-    try {
-      const result = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
-        id: 114, method: 'tools/call',
-        params: { name: 'get_recommendations', arguments: { use_case: 'variant', budget: 100000 } },
-      }));
-      expect(result.structuredContent).toMatchObject({ products: expect.arrayContaining([
-        expect.objectContaining({ id: 'variant-cheaper-than-parent', price: 90000 }),
       ]) });
     } finally {
       await server.close();

@@ -6,13 +6,13 @@ import {
 } from './search-products-ranking';
 import { loadMcpSearchProducts } from './search-products-query';
 
-function createRankedSearchSupabase(category?: string) {
+function createRankedSearchSupabase(category?: string, nameForId?: (id: string) => string) {
   const inMock = vi.fn(async (_column: string, productIds: string[]) => ({
     data: productIds.map((id) => ({
       brand: 'Samsung',
       category,
       id,
-      name: `Product ${id}`,
+      name: nameForId?.(id) ?? `Product ${id}`,
     })),
     error: null,
   }));
@@ -81,6 +81,20 @@ function createCatalogSearchSupabase(rowCount = POST_FILTER_RESULT_PAGE_SIZE) {
 }
 
 describe('loadMcpSearchProducts', () => {
+  it('skips a DreamWorks substring match and scans for a whole-word work product', async () => {
+    const { rpc, supabase } = createRankedSearchSupabase('Accessories', (id) =>
+      id === 'ranked-150' ? 'Work Laptop' : 'DreamWorks Dragons Toy'
+    );
+    const result = await loadMcpSearchProducts({
+      args: { query: 'work', limit: 1 },
+      merchantId: 'merchant-1',
+      sanitizeString: (input) => input,
+      supabase,
+    });
+    expect(result.products.map((product) => product.name)).toEqual(['Work Laptop']);
+    expect(rpc.mock.calls.length).toBeGreaterThan(1);
+  });
+
   it('loads a bounded ranked candidate pool without parent-price filters or ordering', async () => {
     const { rpc, supabase } = createRankedSearchSupabase('Smartphones');
     const result = await loadMcpSearchProducts({

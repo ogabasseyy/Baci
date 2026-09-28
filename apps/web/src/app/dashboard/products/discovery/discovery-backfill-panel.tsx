@@ -128,7 +128,7 @@ export function DiscoveryBackfillPanel({ merchantId }: { merchantId: string }) {
             signal: controller.signal,
           }
         );
-        activeRequest.current = null;
+        if (activeRequest.current === controller) activeRequest.current = null;
         if (
           !isCurrentRun() ||
           (stopRequested.current && response.status === 429)

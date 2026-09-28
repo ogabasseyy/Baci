@@ -151,6 +151,32 @@ describe('dashboard catalog indexing rate limits and merchant changes', () => {
     );
   });
 
+  it('keeps the new merchant request abortable after the old request settles', async () => {
+    const otherMerchantId = '33333333-3333-4333-8333-333333333333';
+    let finishOldRequest: ((value: unknown) => void) | undefined;
+    fetchWithCsrf
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishOldRequest = resolve;
+          })
+      )
+      .mockImplementationOnce(() => new Promise(() => {}));
+    const view = render(<DiscoveryBackfillPanel merchantId={merchantId} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Start indexing' }));
+    await waitFor(() => expect(fetchWithCsrf).toHaveBeenCalledTimes(1));
+    view.rerender(<DiscoveryBackfillPanel merchantId={otherMerchantId} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Start indexing' }));
+    await waitFor(() => expect(fetchWithCsrf).toHaveBeenCalledTimes(2));
+    const newSignal = (fetchWithCsrf.mock.calls[1][1] as RequestInit).signal;
+    expect(newSignal?.aborted).toBe(false);
+    await act(async () => {
+      finishOldRequest?.({ ok: true, json: async () => ({ done: true }) });
+    });
+    view.unmount();
+    expect(newSignal?.aborted).toBe(true);
+  });
+
   it('honors a server retry delay longer than one minute', async () => {
     vi.useFakeTimers();
     try {

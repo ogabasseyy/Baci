@@ -57,7 +57,9 @@ export default function SearchResultsEmptyState({
         accessibilityRole="button"
         accessibilityLabel="Browse all products"
       >
-        <Text style={[styles.retryButtonText, { color: colors.white }]}>
+        <Text
+          style={[styles.retryButtonText, { color: colors.primaryForeground }]}
+        >
           Browse all products
         </Text>
       </Pressable>

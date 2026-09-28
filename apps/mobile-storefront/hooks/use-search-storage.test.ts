@@ -111,6 +111,48 @@ describe('useSearchStorage', () => {
     expect(mockStorageData.search_history).toBeUndefined();
   });
 
+  it('keeps the optimistic save when persistence fails without notifying', () => {
+    const home = renderHook(() => useSearchStorage());
+    const results = renderHook(() => useSearchStorage());
+    const { syncStorage } = jest.requireMock('@/lib/storage') as {
+      syncStorage: { setItem: jest.Mock };
+    };
+    syncStorage.setItem.mockImplementationOnce(() => {
+      throw new Error('disk full');
+    });
+
+    act(() => {
+      results.result.current.saveSearch('pixel');
+    });
+
+    expect(results.result.current.recentSearches[0]).toBe('pixel');
+    expect(home.result.current.recentSearches).not.toContain('pixel');
+  });
+
+  it('keeps the optimistic clear when removal fails without notifying', () => {
+    const home = renderHook(() => useSearchStorage());
+    const results = renderHook(() => useSearchStorage());
+
+    act(() => {
+      results.result.current.saveSearch('pixel');
+    });
+    expect(home.result.current.recentSearches).toContain('pixel');
+
+    const { syncStorage } = jest.requireMock('@/lib/storage') as {
+      syncStorage: { removeItem: jest.Mock };
+    };
+    syncStorage.removeItem.mockImplementationOnce(() => {
+      throw new Error('disk full');
+    });
+
+    act(() => {
+      results.result.current.clearHistory();
+    });
+
+    expect(results.result.current.recentSearches).toEqual([]);
+    expect(home.result.current.recentSearches).toContain('pixel');
+  });
+
   it('stops syncing after an instance unmounts', () => {
     const home = renderHook(() => useSearchStorage());
     const results = renderHook(() => useSearchStorage());

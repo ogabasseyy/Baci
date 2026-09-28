@@ -32,6 +32,11 @@ export function useAutocompleteSuggestions({
     AutocompletePopularSearch[]
   >([]);
   const [loading, setLoading] = useState(false);
+  // The debounced query whose fetch last resolved successfully. Gates the
+  // "No suggestions" empty state so it appears only after a genuine empty
+  // response — never during the debounce, while loading, or after a
+  // failure (a failed request shows the submit action with no message).
+  const [settledQuery, setSettledQuery] = useState<string | null>(null);
 
   const onResultsRef = useRef(onResultsReceived);
   useEffect(() => {
@@ -42,6 +47,7 @@ export function useAutocompleteSuggestions({
     setLoading(false);
     setSuggestions([]);
     setPopularSearches([]);
+    setSettledQuery(null);
   };
 
   useEffect(() => {
@@ -74,6 +80,7 @@ export function useAutocompleteSuggestions({
           }
           setSuggestions(data.suggestions || []);
           setPopularSearches(data.popularSearches || []);
+          setSettledQuery(debouncedValue);
           onResultsRef.current();
 
           // Track search event for merchant analytics
@@ -104,5 +111,11 @@ export function useAutocompleteSuggestions({
     };
   }, [debouncedValue, merchantId]);
 
-  return { clearSuggestions, loading, popularSearches, suggestions };
+  return {
+    clearSuggestions,
+    loading,
+    popularSearches,
+    settledQuery,
+    suggestions,
+  };
 }

@@ -11,6 +11,12 @@ interface SearchAutocompletePopupProps {
   canSubmitSearch: boolean;
   formatCurrencyCompact: (price: number) => string;
   hasResults: boolean;
+  /**
+   * True once the current query's fetch resolved successfully. Gates the
+   * "No suggestions" message so it never appears during the debounce,
+   * while loading, or after a failed request.
+   */
+  hasSuggestionsResponse: boolean;
   highlightedIndex: number;
   listboxId: string;
   loading: boolean;
@@ -33,6 +39,7 @@ export function SearchAutocompletePopup({
   canSubmitSearch,
   formatCurrencyCompact,
   hasResults,
+  hasSuggestionsResponse,
   highlightedIndex,
   listboxId,
   loading,
@@ -168,7 +175,7 @@ export function SearchAutocompletePopup({
           </div>
         </div>
       )}
-      {!hasResults && canSubmitSearch && (
+      {!hasResults && canSubmitSearch && hasSuggestionsResponse && (
         <p className="px-4 pt-3 text-sm text-gray-500">
           No suggestions for “{trimmedValue}”
         </p>

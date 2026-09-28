@@ -27,6 +27,7 @@ function renderPopup(
     canSubmitSearch: false,
     formatCurrencyCompact: (price: number) => `$${price}`,
     hasResults: true,
+    hasSuggestionsResponse: true,
     highlightedIndex: -1,
     listboxId: 'search-listbox-m1',
     loading: false,
@@ -111,6 +112,28 @@ describe('SearchAutocompletePopup', () => {
     );
 
     expect(screen.queryByText(/no suggestions for/i)).not.toBeInTheDocument();
+  });
+
+  it('withholds the no-suggestions note until the request settles', () => {
+    const { rerender, props } = renderPopup({
+      canSubmitSearch: true,
+      hasResults: false,
+      hasSuggestionsResponse: false,
+      suggestions: [],
+    });
+
+    // During the debounce, while loading, or after a failure the popup
+    // offers the submit action without claiming there are no suggestions.
+    expect(screen.queryByText(/no suggestions for/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /see all results/i })
+    ).toBeInTheDocument();
+
+    rerender(
+      <SearchAutocompletePopup {...props} hasSuggestionsResponse={true} />
+    );
+
+    expect(screen.getByText(/no suggestions for/i)).toBeInTheDocument();
   });
 
   it('announces the loading status while a fetch is pending', () => {

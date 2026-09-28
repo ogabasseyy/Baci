@@ -770,6 +770,11 @@ describe('SearchAutocomplete', () => {
     });
 
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    // The empty response settled, so the genuine no-suggestions message
+    // appears alongside the submit action.
+    await waitFor(() => {
+      expect(screen.getByText(/no suggestions for/i)).toBeInTheDocument();
+    });
     const seeAll = screen.getByRole('button', { name: /see all results/i });
     fireEvent.click(seeAll);
     expect(onSubmitSearch).toHaveBeenCalledWith('zzzz');

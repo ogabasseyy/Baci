@@ -34,6 +34,7 @@ describe('useAutocompleteSuggestions', () => {
     });
     expect(result.current.popularSearches).toHaveLength(1);
     expect(result.current.loading).toBe(false);
+    expect(result.current.settledQuery).toBe('iph');
     expect(onResultsReceived).toHaveBeenCalledTimes(1);
     expect(globalThis.fetch).toHaveBeenCalledWith(
       '/api/search/autocomplete?q=iph&merchant_id=m1&limit=10',
@@ -56,6 +57,28 @@ describe('useAutocompleteSuggestions', () => {
     expect(globalThis.fetch).not.toHaveBeenCalled();
     expect(result.current.suggestions).toEqual([]);
     expect(result.current.loading).toBe(false);
+    expect(onResultsReceived).not.toHaveBeenCalled();
+  });
+
+  it('leaves the settled query unset when the request fails', async () => {
+    globalThis.fetch = vi.fn(() =>
+      Promise.reject(new Error('autocomplete down'))
+    ) as unknown as typeof fetch;
+    const onResultsReceived = vi.fn();
+
+    const { result } = renderHook(() =>
+      useAutocompleteSuggestions({
+        debouncedValue: 'iph',
+        merchantId: 'm1',
+        onResultsReceived,
+      })
+    );
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+    expect(result.current.suggestions).toEqual([]);
+    expect(result.current.settledQuery).toBeNull();
     expect(onResultsReceived).not.toHaveBeenCalled();
   });
 
@@ -82,6 +105,7 @@ describe('useAutocompleteSuggestions', () => {
     expect(result.current.suggestions).toEqual([]);
     expect(result.current.popularSearches).toEqual([]);
     expect(result.current.loading).toBe(false);
+    expect(result.current.settledQuery).toBeNull();
   });
 
   it('abandons a superseded fetch instead of painting stale results', async () => {

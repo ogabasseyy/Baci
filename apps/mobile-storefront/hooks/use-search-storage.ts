@@ -107,23 +107,34 @@ export function useSearchStorage() {
       (s) => s.toLowerCase() !== searchTerm.toLowerCase()
     );
     const updated = [searchTerm, ...filtered].slice(0, MAX_SEARCH_HISTORY);
+    // Notify only after successful persistence: the writer stays optimistic
+    // when storage fails, and subscribers must not re-read stale storage
+    // over any instance's in-memory state.
+    let persisted = true;
     try {
       storage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(updated));
     } catch (e) {
+      persisted = false;
       console.warn('Failed to save search history', e);
     }
     setRecentSearches(updated);
-    notifySearchHistoryChanged();
+    if (persisted) {
+      notifySearchHistoryChanged();
+    }
   };
 
   const clearHistory = () => {
-    setRecentSearches([]);
+    let cleared = true;
     try {
       storage.removeItem(SEARCH_HISTORY_KEY);
     } catch (e) {
+      cleared = false;
       console.warn('Failed to clear search history', e);
     }
-    notifySearchHistoryChanged();
+    setRecentSearches([]);
+    if (cleared) {
+      notifySearchHistoryChanged();
+    }
   };
 
   return {

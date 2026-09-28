@@ -35,7 +35,9 @@ export default function SearchResultsErrorState({
         accessibilityRole="button"
         accessibilityLabel="Retry search"
       >
-        <Text style={[styles.retryButtonText, { color: colors.white }]}>
+        <Text
+          style={[styles.retryButtonText, { color: colors.primaryForeground }]}
+        >
           Try again
         </Text>
       </Pressable>

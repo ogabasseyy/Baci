@@ -85,7 +85,12 @@ export default function SearchResultsList({
               accessibilityRole="button"
               accessibilityLabel="Retry loading more results"
             >
-              <Text style={[styles.retryButtonText, { color: colors.white }]}>
+              <Text
+                style={[
+                  styles.retryButtonText,
+                  { color: colors.primaryForeground },
+                ]}
+              >
                 Try again
               </Text>
             </Pressable>

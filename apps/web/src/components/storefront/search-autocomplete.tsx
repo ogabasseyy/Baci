@@ -49,15 +49,20 @@ export function SearchAutocomplete({
   const isPopupLength = (text: string) =>
     onSubmitSearch ? text.trim().length > 0 : text.length >= 2;
 
-  const { clearSuggestions, loading, popularSearches, suggestions } =
-    useAutocompleteSuggestions({
-      debouncedValue,
-      merchantId,
-      onResultsReceived: () => {
-        setIsOpen(true);
-        setHighlightedIndex(-1);
-      },
-    });
+  const {
+    clearSuggestions,
+    loading,
+    popularSearches,
+    settledQuery,
+    suggestions,
+  } = useAutocompleteSuggestions({
+    debouncedValue,
+    merchantId,
+    onResultsReceived: () => {
+      setIsOpen(true);
+      setHighlightedIndex(-1);
+    },
+  });
 
   const handleKeyDown = createAutocompleteKeyDownHandler({
     highlightedIndex,
@@ -253,6 +258,7 @@ export function SearchAutocomplete({
           canSubmitSearch={canSubmitSearch}
           formatCurrencyCompact={formatCurrencyCompact}
           hasResults={hasResults}
+          hasSuggestionsResponse={settledQuery === debouncedValue}
           highlightedIndex={highlightedIndex}
           listboxId={listboxId}
           loading={loading}

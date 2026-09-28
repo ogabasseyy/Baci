@@ -4,15 +4,13 @@ import { loadSemanticDiscoveryCandidateIds } from './semantic-discovery-candidat
 
 describe('semantic discovery candidates', () => {
   it('keeps only current-model candidates above the relevance threshold', async () => {
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
-      embedding: { values: Array(768).fill(0.01) },
-    }), { status: 200 })) as unknown as typeof fetch;
+    const embedding = Array(768).fill(0.01) as number[];
     const rpc = vi.fn(async () => ({ data: [
       { product_id: 'relevant', similarity: 0.72 },
       { product_id: 'weak', similarity: 0.4 },
     ], error: null }));
     const ids = await loadSemanticDiscoveryCandidateIds({
-      apiKey: 'test-key', fetchImpl, merchantId: 'merchant-1', query: 'office laptop',
+      embedding, merchantId: 'merchant-1',
       supabase: { rpc } as unknown as SupabaseClient,
     });
     expect(ids).toEqual(['relevant']);
@@ -21,26 +19,22 @@ describe('semantic discovery candidates', () => {
   });
 
   it('forwards the semantic page offset to the merchant-scoped RPC', async () => {
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
-      embedding: { values: Array(768).fill(0.01) },
-    }), { status: 200 })) as unknown as typeof fetch;
+    const embedding = Array(768).fill(0.01) as number[];
     const rpc = vi.fn(async () => ({ data: [], error: null }));
     await loadSemanticDiscoveryCandidateIds({
-      apiKey: 'test-key', fetchImpl, merchantId: 'merchant-1', offset: 40,
-      query: 'office laptop', supabase: { rpc } as unknown as SupabaseClient,
+      embedding, merchantId: 'merchant-1', offset: 40,
+      supabase: { rpc } as unknown as SupabaseClient,
     });
     expect(rpc).toHaveBeenCalledWith('search_product_discovery_embeddings',
       expect.objectContaining({ result_offset: 40 }));
   });
 
   it('rejects a semantic lookup error so catalog search can fall back to lexical results', async () => {
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
-      embedding: { values: Array(768).fill(0.01) },
-    }), { status: 200 })) as unknown as typeof fetch;
+    const embedding = Array(768).fill(0.01) as number[];
     const lookupError = new Error('semantic RPC unavailable');
     const rpc = vi.fn(async () => ({ data: null, error: lookupError }));
     await expect(loadSemanticDiscoveryCandidateIds({
-      apiKey: 'test-key', fetchImpl, merchantId: 'merchant-1', query: 'office laptop',
+      embedding, merchantId: 'merchant-1',
       supabase: { rpc } as unknown as SupabaseClient,
     })).rejects.toBe(lookupError);
   });

@@ -49,6 +49,7 @@ import { resolveMcpPaystackDvaAccess } from './mcp-paystack-dva-access';
 import { registerAgenticUcpTools } from './agentic-ucp-tools';
 import { resolveMcpSearchProductCondition } from './product-condition-filter';
 import { discoverMcpProducts } from './discover-products';
+import { embedDiscoveryText } from './gemini-discovery-embedding';
 import { loadSemanticDiscoveryCandidateIds } from './semantic-discovery-candidates';
 import { getMcpOfferAvailability } from './product-offer-availability';
 import { buildMcpProductDetail } from './product-detail';
@@ -1248,6 +1249,7 @@ function createOgabasseyServer() {
         const merchantId = await getMerchantId();
         if (!merchantId) throw new Error('Merchant ID unavailable');
         const semanticApiKey = process.env.GEMINI_API_KEY;
+        let queryEmbedding: Promise<number[]> | undefined;
 
         const { priceScanComplete, sanitizedQuery, selectedProducts } =
           await discoverMcpProducts({
@@ -1255,9 +1257,14 @@ function createOgabasseyServer() {
             merchantId,
             sanitizeString,
             semanticSearch: process.env.MCP_SEMANTIC_SEARCH_ENABLED === 'true' && semanticApiKey
-              ? (query, offset) => loadSemanticDiscoveryCandidateIds({
-                  apiKey: semanticApiKey, merchantId, offset, query, supabase,
-                })
+              ? async (query, offset) => {
+                  queryEmbedding ??= embedDiscoveryText({
+                    apiKey: semanticApiKey, kind: 'query', text: query,
+                  });
+                  return loadSemanticDiscoveryCandidateIds({
+                    embedding: await queryEmbedding, merchantId, offset, supabase,
+                  });
+                }
               : undefined,
             supabase,
           });

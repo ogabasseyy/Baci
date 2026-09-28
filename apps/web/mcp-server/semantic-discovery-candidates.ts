@@ -1,28 +1,22 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { embedDiscoveryText } from './gemini-discovery-embedding';
 
 type SemanticRow = { product_id?: unknown; similarity?: unknown };
 
 /** Semantic candidates are only considered after lexical retrieval and still
  * pass catalog visibility, category, condition, option-price and stock checks. */
 export async function loadSemanticDiscoveryCandidateIds({
-  apiKey,
-  fetchImpl,
+  embedding,
   merchantId,
   offset = 0,
-  query,
   supabase,
 }: {
-  apiKey: string;
-  fetchImpl?: typeof fetch;
+  embedding: number[];
   merchantId: string;
   offset?: number;
-  query: string;
   supabase: SupabaseClient;
 }): Promise<string[]> {
-  const vector = await embedDiscoveryText({ apiKey, fetchImpl, kind: 'query', text: query });
   const { data, error } = await supabase.rpc('search_product_discovery_embeddings', {
-    query_embedding: JSON.stringify(vector),
+    query_embedding: JSON.stringify(embedding),
     merchant_id_param: merchantId,
     result_limit: 40,
     result_offset: offset,

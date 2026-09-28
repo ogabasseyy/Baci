@@ -196,6 +196,41 @@ describe('Paystack refund notifications', () => {
     );
   });
 
+  it('totals refund-pending legs with linked completed refunds', async () => {
+    const db = database('processed_customer_email', 'refunded', {
+      payments: [
+        { amount: 60, gateway: 'paystack', id: 'payment-1' },
+        {
+          amount: 40,
+          gateway: 'paystack',
+          id: 'payment-2',
+          status: 'refund_pending',
+        },
+      ],
+      refunds: [
+        {
+          amount: 60,
+          currency: 'NGN',
+          gateway: 'paystack',
+          metadata: { payment_transaction_id: 'payment-1' },
+        },
+        {
+          amount: 40,
+          currency: 'NGN',
+          gateway: 'paystack',
+          metadata: { payment_transaction_id: 'payment-2' },
+        },
+      ],
+    });
+    await expect(
+      drainPaystackRefundNotifications(db as never, mocks.sendEmail)
+    ).resolves.toEqual({ claimed: 1, sent: 1, failed: 0, exhausted: 0 });
+    expect(mocks.sendEmail.mock.calls[0][0].textContent).toContain('100');
+    expect(db.finish.update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'sent' })
+    );
+  });
+
   it('reports notifications that exhausted their retries', async () => {
     const db = database('processed_customer_email');
     db.finish.limit.mockResolvedValueOnce({

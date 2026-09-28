@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
-import { isExternalPaymentGateway } from '@/lib/orders/is-external-payment-gateway';
 import { escapeHtmlText } from '@/lib/sanitize';
+import { refundNotificationLedgerAmount } from './refund-notification-ledger';
 
 type RefundEmailSender = (message: {
   to: string;
@@ -29,13 +29,6 @@ interface NotificationRow {
     | 'processed_merchant_push'
     | 'failed_merchant_push';
   claim_token: string;
-}
-
-function formatAmount(amount: number, currency: string): string {
-  return new Intl.NumberFormat('en-NG', {
-    style: 'currency',
-    currency,
-  }).format(amount);
 }
 
 export async function drainPaystackRefundNotifications(
@@ -125,77 +118,11 @@ export async function drainPaystackRefundNotifications(
         order.order_number || order.id.slice(0, 8).toUpperCase();
       let amount = '';
       if (row.event_type.startsWith('processed_')) {
-        const { data: paymentLegs, error: paymentLegError } = await supabase
-          .from('transactions')
-          .select('id, gateway, amount, currency, status')
-          .eq('order_id', order.id)
-          .eq('merchant_id', row.merchant_id)
-          .eq('transaction_type', 'payment')
-          .in('status', ['completed', 'refunded']);
-        if (paymentLegError || !paymentLegs?.length) {
-          throw new Error('refund_notification_ledger_lookup_failed');
-        }
-        const externalLegs = paymentLegs.filter(
-          (leg) =>
-            Number(leg.amount) > 0 && isExternalPaymentGateway(leg.gateway)
-        );
-        const { data: refundLegs, error: refundLegError } = await supabase
-          .from('transactions')
-          .select('amount, currency, gateway, metadata')
-          .eq('order_id', order.id)
-          .eq('merchant_id', row.merchant_id)
-          .eq('transaction_type', 'refund')
-          .eq('status', 'completed');
-        if (refundLegError || !refundLegs?.length) {
-          throw new Error('refund_notification_ledger_lookup_failed');
-        }
-        // Mirror the completion RPC: every external payment leg links one
-        // same-gateway, same-amount completed refund, including legs that
-        // operations refunded outside Paystack. Unlinked legacy refunds
-        // match when the order holds exactly one completed external payment
-        // leg. Self-terminal refunded legs (e.g. PayPal flips the payment
-        // row itself) carry their own evidence and contribute directly.
-        const completedLegs = externalLegs.filter(
-          (leg) => leg.status !== 'refunded'
-        );
-        const linkedRefunds = externalLegs.map((leg) => {
-          if (leg.status === 'refunded') {
-            return { amount: leg.amount, currency: leg.currency };
-          }
-          return refundLegs.find((refund) => {
-            if (
-              refund.gateway !== leg.gateway ||
-              Number(refund.amount) !== Number(leg.amount)
-            )
-              return false;
-            const link = (
-              refund.metadata as { payment_transaction_id?: unknown } | null
-            )?.payment_transaction_id;
-            return (
-              link === leg.id || (link == null && completedLegs.length === 1)
-            );
-          });
+        amount = await refundNotificationLedgerAmount({
+          merchantId: row.merchant_id,
+          order,
+          supabase,
         });
-        if (
-          externalLegs.length === 0 ||
-          linkedRefunds.some((refund) => refund === undefined)
-        ) {
-          throw new Error('refund_notification_ledger_mismatch');
-        }
-        const refundAmount = (
-          linkedRefunds as Array<{ amount: number }>
-        ).reduce((sum, leg) => sum + Number(leg.amount), 0);
-        if (
-          refundAmount <= 0 ||
-          linkedRefunds.some(
-            (leg) =>
-              (leg as { currency: string }).currency.toUpperCase() !==
-              (order.currency || 'NGN').toUpperCase()
-          )
-        ) {
-          throw new Error('refund_notification_ledger_mismatch');
-        }
-        amount = formatAmount(refundAmount, order.currency || 'NGN');
       }
       if (row.event_type === 'processed_customer_email') {
         if (!order.customer_email)

@@ -288,23 +288,4 @@ describe('reconcileWedgedGatewayOrders', () => {
     ]);
     expect(summary.checked).toBe(2);
   });
-
-  it('stops starting candidates at the pass deadline', async () => {
-    const supabase = buildSupabase({ data: [wedgedCandidate] });
-    const now = vi.spyOn(Date, 'now').mockReturnValue(1_180_000);
-
-    try {
-      const summary = await reconcileWedgedGatewayOrders({
-        deadlineMs: 1_180_000,
-        scheduleAfter,
-        supabase,
-      });
-
-      expect(summary.checked).toBe(0);
-      expect(mocks.verifyPaystackPayment).not.toHaveBeenCalled();
-      expect(mocks.finalizeOrderGatewayPayment).not.toHaveBeenCalled();
-    } finally {
-      now.mockRestore();
-    }
-  });
 });

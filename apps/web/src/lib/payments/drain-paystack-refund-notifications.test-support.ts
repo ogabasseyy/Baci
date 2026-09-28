@@ -78,15 +78,22 @@ export function database(
   ];
   const ledgerQuery = () => {
     let mode: 'payments' | 'refunds' = 'refunds';
+    let statusFilter: readonly unknown[] | null = null;
     const resolveLedger = () =>
       Promise.resolve({
         data:
           mode === 'payments'
-            ? payments.map((payment) => ({
-                currency: 'NGN',
-                status: 'completed',
-                ...payment,
-              }))
+            ? payments
+                .map((payment) => ({
+                  currency: 'NGN',
+                  status: 'completed',
+                  ...payment,
+                }))
+                .filter(
+                  (payment) =>
+                    statusFilter === null ||
+                    statusFilter.includes(payment.status)
+                )
             : refunds,
         error: null,
       });
@@ -94,9 +101,11 @@ export function database(
       eq: vi.fn((column: string) =>
         column === 'status' ? resolveLedger() : query
       ),
-      in: vi.fn((column: string) =>
-        column === 'status' ? resolveLedger() : query
-      ),
+      in: vi.fn((column: string, values?: readonly unknown[]) => {
+        if (column !== 'status') return query;
+        statusFilter = values ?? null;
+        return resolveLedger();
+      }),
       select: vi.fn((columns: string) => {
         mode = columns.includes('metadata') ? 'refunds' : 'payments';
         return query;

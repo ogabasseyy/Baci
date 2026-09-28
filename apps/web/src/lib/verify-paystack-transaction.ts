@@ -5,6 +5,7 @@ import {
   type PaystackResult,
 } from './paystack';
 import { paystackRequest } from './paystack-request';
+import { selectPaystackRefundReference } from './select-paystack-refund-reference';
 
 /**
  * Verify a Paystack transaction
@@ -13,9 +14,10 @@ export async function verifyTransaction(
   reference: string,
   signal?: AbortSignal
 ): Promise<PaystackResult<PaymentVerificationResponse>> {
-  // Validate reference format to prevent SSRF attacks
-  // Paystack references are typically alphanumeric with some special chars
-  if (!reference || !/^[A-Za-z0-9_-]{1,100}$/.test(reference)) {
+  // Validate reference format to prevent SSRF attacks. Share the
+  // webhook/recovery alphabet: dots and equals signs stay safe because the
+  // reference is encoded into the request path below.
+  if (selectPaystackRefundReference(reference, undefined) !== reference) {
     return {
       success: false,
       error: 'Invalid transaction reference format',

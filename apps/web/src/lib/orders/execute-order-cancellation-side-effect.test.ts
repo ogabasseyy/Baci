@@ -59,7 +59,13 @@ function refundClient({
 }: {
   insertError?: Error | null;
   payments?: (typeof paystackPayment)[];
-  refundRows?: { metadata: Record<string, unknown>; status: string }[];
+  refundRows?: {
+    amount?: number;
+    currency?: string;
+    gateway?: string;
+    metadata: Record<string, unknown>;
+    status: string;
+  }[];
 } = {}) {
   const insert = vi.fn().mockResolvedValue({ error: insertError });
   const paymentLookup = transactionQuery(payments);
@@ -157,6 +163,9 @@ describe('executeOrderCancellationSideEffect', () => {
       ],
       refundRows: [
         {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'paystack',
           metadata: { payment_transaction_id: 'payment-1' },
           status: 'completed',
         },

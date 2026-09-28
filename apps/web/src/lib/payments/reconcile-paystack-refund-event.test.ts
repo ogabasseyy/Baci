@@ -214,4 +214,34 @@ describe('Paystack cancellation refund mismatch evidence', () => {
       { p_refund_id: 'refund-1', p_reason: 'paystack_refund_evidence_mismatch' }
     );
   });
+
+  it('reconciles references with dots and equals signs', async () => {
+    const paymentCandidates = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+    };
+    const from = vi.fn().mockReturnValueOnce(paymentCandidates);
+    const rpc = vi.fn();
+
+    await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK.1=x');
+
+    expect(from).toHaveBeenCalledWith('transactions');
+    expect(paymentCandidates.eq).toHaveBeenCalledWith(
+      'gateway_reference',
+      'PSK.1=x'
+    );
+  });
+
+  it('ignores references outside the shared alphabet', async () => {
+    const from = vi.fn();
+    const rpc = vi.fn();
+
+    await reconcilePaystackRefundEvent(
+      { from, rpc } as never,
+      'bad reference!'
+    );
+
+    expect(from).not.toHaveBeenCalled();
+  });
 });

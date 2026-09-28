@@ -26,6 +26,23 @@ describe('initiateRefund', () => {
     expect(mocks.paystackRequest).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'PSK.1=x',
+    'ref.with.dots',
+    'ref=with=equals',
+  ])('accepts Paystack references with dots and equals signs (%s)', async (transaction) => {
+    mocks.paystackRequest.mockResolvedValue({ success: true });
+
+    await initiateRefund(transaction, 10000);
+
+    expect(mocks.paystackRequest).toHaveBeenCalledWith(
+      '/refund',
+      expect.objectContaining({
+        body: JSON.stringify({ transaction, amount: 10000 }),
+      })
+    );
+  });
+
   it('forwards the refund with amount and reason', async () => {
     mocks.paystackRequest.mockResolvedValue({ success: true });
 

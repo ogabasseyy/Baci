@@ -81,6 +81,20 @@ function createCatalogSearchSupabase(rowCount = POST_FILTER_RESULT_PAGE_SIZE) {
 }
 
 describe('loadMcpSearchProducts', () => {
+  it('filters a punctuated one-word query like its unpunctuated form', async () => {
+    const { rpc, supabase } = createRankedSearchSupabase('Accessories', (id) =>
+      id === 'ranked-150' ? 'Work Laptop' : 'DreamWorks Dragons Toy'
+    );
+    const result = await loadMcpSearchProducts({
+      args: { query: 'work?', limit: 1 }, merchantId: 'merchant-1',
+      sanitizeString: (input) => input, supabase,
+    });
+    expect(result.products.map((product) => product.name)).toEqual(['Work Laptop']);
+    expect(rpc.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      result_limit: POST_FILTER_RESULT_PAGE_SIZE,
+    }));
+  });
+
   it('skips a DreamWorks substring match and scans for a whole-word work product', async () => {
     const { rpc, supabase } = createRankedSearchSupabase('Accessories', (id) =>
       id === 'ranked-150' ? 'Work Laptop' : 'DreamWorks Dragons Toy'

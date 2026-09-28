@@ -17,7 +17,20 @@ describe('semantic discovery candidates', () => {
     });
     expect(ids).toEqual(['relevant']);
     expect(rpc).toHaveBeenCalledWith('search_product_discovery_embeddings',
-      expect.objectContaining({ merchant_id_param: 'merchant-1', result_limit: 40 }));
+      expect.objectContaining({ merchant_id_param: 'merchant-1', result_limit: 40, result_offset: 0 }));
+  });
+
+  it('forwards the semantic page offset to the merchant-scoped RPC', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      embedding: { values: Array(768).fill(0.01) },
+    }), { status: 200 })) as unknown as typeof fetch;
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    await loadSemanticDiscoveryCandidateIds({
+      apiKey: 'test-key', fetchImpl, merchantId: 'merchant-1', offset: 40,
+      query: 'office laptop', supabase: { rpc } as unknown as SupabaseClient,
+    });
+    expect(rpc).toHaveBeenCalledWith('search_product_discovery_embeddings',
+      expect.objectContaining({ result_offset: 40 }));
   });
 
   it('rejects a semantic lookup error so catalog search can fall back to lexical results', async () => {

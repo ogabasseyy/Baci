@@ -52,7 +52,8 @@ GRANT INSERT, UPDATE ON public.product_discovery_embeddings TO authenticated;
 CREATE FUNCTION public.search_product_discovery_embeddings(
   query_embedding extensions.vector(768),
   merchant_id_param uuid,
-  result_limit integer DEFAULT 20
+  result_limit integer DEFAULT 20,
+  result_offset integer DEFAULT 0
 )
 RETURNS TABLE (product_id uuid, similarity real)
 LANGUAGE sql STABLE SECURITY DEFINER
@@ -70,12 +71,13 @@ AS $$
       'UTF8'
     ), 'sha256'), 'hex')
   ORDER BY e.embedding OPERATOR(extensions.<=>) query_embedding
-  LIMIT LEAST(GREATEST(coalesce(result_limit, 20), 1), 100);
+  LIMIT LEAST(GREATEST(coalesce(result_limit, 20), 1), 100)
+  OFFSET LEAST(GREATEST(coalesce(result_offset, 0), 0), 1000);
 $$;
 
 REVOKE ALL ON FUNCTION public.search_product_discovery_embeddings(
-  extensions.vector, uuid, integer
+  extensions.vector, uuid, integer, integer
 ) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.search_product_discovery_embeddings(
-  extensions.vector, uuid, integer
+  extensions.vector, uuid, integer, integer
 ) TO anon, authenticated;

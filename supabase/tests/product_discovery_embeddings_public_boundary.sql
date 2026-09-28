@@ -122,6 +122,14 @@ BEGIN
   IF result_ids IS DISTINCT FROM ARRAY['cb58d110-0000-4000-8000-000000000101'::uuid] THEN
     RAISE EXCEPTION 'public search exposed an inactive or unrelated product: %', result_ids;
   END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.search_product_discovery_embeddings(
+      ('[' || repeat('0,', 767) || '1]')::extensions.vector(768),
+      'cb58d110-0000-4000-8000-000000000001', 20, 1
+    )
+  ) THEN
+    RAISE EXCEPTION 'semantic result offset did not advance the page';
+  END IF;
 END;
 $search$;
 

@@ -3,6 +3,7 @@ import { DISCOVERY_PRODUCT_PROJECTION } from './discovery-product-projection';
 import { inferSmartphoneCategory } from './infer-smartphone-category';
 import { hydrateSearchProductAvailability } from './search-product-availability';
 import { loadMcpSearchProducts } from './search-products-query';
+import { singleWordDiscoveryTerm } from './search-products-relevance';
 import {
   matchesMcpPostHydrationFilters,
   toMcpSearchProductRows,
@@ -24,7 +25,7 @@ type DiscoveryInput = {
   args: DiscoveryArgs;
   merchantId: string;
   sanitizeString: (input: string, maxLength?: number) => string;
-  semanticSearch?: (query: string) => Promise<string[]>;
+  semanticSearch?: (query: string, offset: number) => Promise<string[]>;
   supabase: SupabaseClient;
 };
 
@@ -49,36 +50,42 @@ export async function discoverMcpProducts({
   const explicitCatalogFilter = [args.category, args.brand, args.condition]
     .some((value) => Boolean(value && sanitizeString(value, 50).trim()));
   const ambiguousSingleWord = loaded.sanitizedQuery &&
-    /^[a-z]{3,}$/i.test(loaded.sanitizedQuery) &&
+    singleWordDiscoveryTerm(loaded.sanitizedQuery) &&
     !explicitCatalogFilter &&
     !inferSmartphoneCategory(loaded.sanitizedQuery, args.category);
   if (semanticSearch && loaded.sanitizedQuery && !ambiguousSingleWord &&
     selectSearchProductsByPrice(hydratedProducts, args, limit).length < limit) {
     try {
-      const lexicalIds = new Set(products.map((product) => product.id));
-      const semanticIds = (await semanticSearch(loaded.sanitizedQuery))
-        .filter((id) => !lexicalIds.has(id)).slice(0, 40);
-      if (semanticIds.length > 0) {
-        const { data, error } = await supabase.from('products')
-          .select(DISCOVERY_PRODUCT_PROJECTION)
-          .eq('merchant_id', merchantId)
-          .eq('status', 'active')
-          .in('id', semanticIds);
-        if (error) throw error;
-        const byId = new Map(toMcpSearchProductRows(data).map((product) => [product.id, product]));
-        const category = args.category
-          ? sanitizeString(args.category, 50)
-          : inferSmartphoneCategory(loaded.sanitizedQuery, args.category);
-        const brand = args.brand ? sanitizeString(args.brand, 50) : undefined;
-        const condition = args.condition ? sanitizeString(args.condition, 50) : undefined;
-        const candidates = semanticIds
-          .map((id) => byId.get(id))
-          .filter((product) => product && matchesMcpPostHydrationFilters(product, {
-            brand, category, condition,
-          }));
-        hydratedProducts.push(...await hydrateSearchProductAvailability(
-          candidates, supabase, merchantId, args.condition
-        ));
+      const seenIds = new Set(products.map((product) => product.id));
+      for (let offset = 0; offset < 200; offset += 40) {
+        const pageIds = await semanticSearch(loaded.sanitizedQuery, offset);
+        const semanticIds = pageIds.filter((id) => !seenIds.has(id));
+        semanticIds.forEach((id) => seenIds.add(id));
+        if (semanticIds.length > 0) {
+          const { data, error } = await supabase.from('products')
+            .select(DISCOVERY_PRODUCT_PROJECTION)
+            .eq('merchant_id', merchantId)
+            .eq('status', 'active')
+            .in('id', semanticIds);
+          if (error) throw error;
+          const byId = new Map(toMcpSearchProductRows(data).map((product) => [product.id, product]));
+          const category = args.category
+            ? sanitizeString(args.category, 50)
+            : inferSmartphoneCategory(loaded.sanitizedQuery, args.category);
+          const brand = args.brand ? sanitizeString(args.brand, 50) : undefined;
+          const condition = args.condition ? sanitizeString(args.condition, 50) : undefined;
+          const candidates = semanticIds
+            .map((id) => byId.get(id))
+            .filter((product) => product && matchesMcpPostHydrationFilters(product, {
+              brand, category, condition,
+            }));
+          hydratedProducts.push(...await hydrateSearchProductAvailability(
+            candidates, supabase, merchantId, args.condition
+          ));
+        }
+        if (pageIds.length < 40 ||
+          (args.sort !== 'newest' && args.sort !== 'price_asc' && args.sort !== 'price_desc' &&
+            selectSearchProductsByPrice(hydratedProducts, args, limit).length >= limit)) break;
       }
     } catch {
       // Semantic discovery is optional. The catalog's lexical results remain usable.

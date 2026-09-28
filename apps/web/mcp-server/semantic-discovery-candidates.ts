@@ -9,12 +9,14 @@ export async function loadSemanticDiscoveryCandidateIds({
   apiKey,
   fetchImpl,
   merchantId,
+  offset = 0,
   query,
   supabase,
 }: {
   apiKey: string;
   fetchImpl?: typeof fetch;
   merchantId: string;
+  offset?: number;
   query: string;
   supabase: SupabaseClient;
 }): Promise<string[]> {
@@ -23,6 +25,7 @@ export async function loadSemanticDiscoveryCandidateIds({
     query_embedding: JSON.stringify(vector),
     merchant_id_param: merchantId,
     result_limit: 40,
+    result_offset: offset,
   });
   if (error) throw error;
   return ((data ?? []) as SemanticRow[])

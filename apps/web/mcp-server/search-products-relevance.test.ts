@@ -13,6 +13,8 @@ const catalog = [
 describe('catalog discovery relevance evaluation', () => {
   it.each([
     { query: 'work', expected: [] },
+    { query: 'work?', expected: [] },
+    { query: 'work!', expected: [] },
     { query: 'gaming', expected: ['Dell G15 Gaming Laptop'] },
     { query: 'camera', expected: ['Xiaomi Security Camera'] },
     { query: 'charger', expected: ['Apple 20W Fast Charger'] },

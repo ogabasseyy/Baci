@@ -1255,8 +1255,8 @@ function createOgabasseyServer() {
             merchantId,
             sanitizeString,
             semanticSearch: process.env.MCP_SEMANTIC_SEARCH_ENABLED === 'true' && semanticApiKey
-              ? (query) => loadSemanticDiscoveryCandidateIds({
-                  apiKey: semanticApiKey, merchantId, query, supabase,
+              ? (query, offset) => loadSemanticDiscoveryCandidateIds({
+                  apiKey: semanticApiKey, merchantId, offset, query, supabase,
                 })
               : undefined,
             supabase,

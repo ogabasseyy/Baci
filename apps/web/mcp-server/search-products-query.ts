@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { inferSmartphoneCategory } from './infer-smartphone-category';
+import { singleWordDiscoveryTerm } from './search-products-relevance';
 import { loadRankedMcpProducts, type SearchProductsArgs } from './search-products-ranked';
 import { DISCOVERY_PRODUCT_PROJECTION } from './discovery-product-projection';
 import {
@@ -173,7 +174,7 @@ export async function loadMcpSearchProducts({
   const limit = Math.min(Math.max(args.limit || 10, 1), 20);
   const hasPostHydrationFilters = Boolean(
     sanitizedBrand || sanitizedCategory || sanitizedCondition ||
-    (sanitizedQuery && /^[a-z]{3,}$/i.test(sanitizedQuery))
+    singleWordDiscoveryTerm(sanitizedQuery)
   );
   const priceSensitive = args.min_price !== undefined ||
     args.max_price !== undefined ||

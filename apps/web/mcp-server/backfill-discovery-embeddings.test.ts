@@ -106,6 +106,9 @@ describe('merchant-authenticated discovery backfill', () => {
       title: 'Redmi 15', text: 'Redmi 15',
     }));
     expect(upsert).toHaveBeenCalledOnce();
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+      generated_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+    }));
   });
 
   it('skips an unchanged vector regardless of unrelated product updates', async () => {

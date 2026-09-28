@@ -85,6 +85,7 @@ export async function backfillDiscoveryEmbeddings() {
           embedding: JSON.stringify(embedding),
           source_hash: sourceHash,
           model: 'gemini-embedding-2',
+          generated_at: new Date().toISOString(),
         });
       if (writeError) throw new Error(`Embedding write failed: ${writeError.code}`);
       processed += 1;

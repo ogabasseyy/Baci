@@ -33,7 +33,7 @@ describe('gated semantic discovery', () => {
       supabase,
     });
     expect(result.selectedProducts.map(({ product }) => product.id)).toEqual(['laptop']);
-    expect(semanticSearch).toHaveBeenCalledWith('work');
+    expect(semanticSearch).toHaveBeenCalledWith('work', 0);
   });
 
   it('falls back to lexical results when the optional embedding lookup fails', async () => {
@@ -46,7 +46,21 @@ describe('gated semantic discovery', () => {
       supabase,
     });
     expect(result.selectedProducts).toEqual([]);
-    expect(semanticSearch).toHaveBeenCalledWith('office laptop');
+    expect(semanticSearch).toHaveBeenCalledWith('office laptop', 0);
+  });
+
+  it('pages past filtered semantic candidates to find a matching product', async () => {
+    const { supabase } = discoveryClient();
+    const semanticSearch = vi.fn(async (_query: string, offset: number) =>
+      offset === 0 ? Array.from({ length: 40 }, (_, index) => `other-${index}`) : ['laptop']
+    );
+    const result = await discoverMcpProducts({
+      args: { query: 'office device', category: 'Laptops', limit: 1 },
+      merchantId: 'merchant-1', sanitizeString: (input) => input,
+      semanticSearch, supabase,
+    });
+    expect(result.selectedProducts.map(({ product }) => product.id)).toEqual(['laptop']);
+    expect(semanticSearch.mock.calls.map(([, offset]) => offset)).toEqual([0, 40]);
   });
 
   it('does not reintroduce recommendations for an ambiguous single word', async () => {

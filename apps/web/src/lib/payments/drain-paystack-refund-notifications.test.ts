@@ -10,7 +10,13 @@ function database(
   eventType: string,
   paymentStatus = 'refunded',
   ledger: {
-    payments?: Array<{ amount: number; gateway: string; id: string }>;
+    payments?: Array<{
+      amount: number;
+      currency?: string;
+      gateway: string;
+      id: string;
+      status?: string;
+    }>;
     refunds?: Array<{
       amount: number;
       currency: string;
@@ -76,14 +82,24 @@ function database(
   ];
   const ledgerQuery = () => {
     let mode: 'payments' | 'refunds' = 'refunds';
+    const resolveLedger = () =>
+      Promise.resolve({
+        data:
+          mode === 'payments'
+            ? payments.map((payment) => ({
+                currency: 'NGN',
+                status: 'completed',
+                ...payment,
+              }))
+            : refunds,
+        error: null,
+      });
     const query = {
       eq: vi.fn((column: string) =>
-        column === 'status'
-          ? Promise.resolve({
-              data: mode === 'payments' ? payments : refunds,
-              error: null,
-            })
-          : query
+        column === 'status' ? resolveLedger() : query
+      ),
+      in: vi.fn((column: string) =>
+        column === 'status' ? resolveLedger() : query
       ),
       select: vi.fn((columns: string) => {
         mode = columns.includes('metadata') ? 'refunds' : 'payments';
@@ -188,6 +204,36 @@ describe('Paystack refund notifications', () => {
         last_error: 'refund_notification_ledger_mismatch',
         status: 'failed',
       })
+    );
+  });
+
+  it('totals self-terminal refunded legs with linked refunds', async () => {
+    const db = database('processed_customer_email', 'refunded', {
+      payments: [
+        { amount: 60, gateway: 'paystack', id: 'payment-1' },
+        {
+          amount: 40,
+          currency: 'NGN',
+          gateway: 'paypal',
+          id: 'payment-2',
+          status: 'refunded',
+        },
+      ],
+      refunds: [
+        {
+          amount: 60,
+          currency: 'NGN',
+          gateway: 'paystack',
+          metadata: { payment_transaction_id: 'payment-1' },
+        },
+      ],
+    });
+    await expect(
+      drainPaystackRefundNotifications(db as never, mocks.sendEmail)
+    ).resolves.toEqual({ claimed: 1, sent: 1, failed: 0 });
+    expect(mocks.sendEmail.mock.calls[0][0].textContent).toContain('100');
+    expect(db.finish.update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'sent' })
     );
   });
 

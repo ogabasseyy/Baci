@@ -97,11 +97,11 @@ export async function drainPaystackRefundNotifications(
       if (row.event_type.startsWith('processed_')) {
         const { data: paymentLegs, error: paymentLegError } = await supabase
           .from('transactions')
-          .select('id, gateway, amount')
+          .select('id, gateway, amount, currency, status')
           .eq('order_id', order.id)
           .eq('merchant_id', row.merchant_id)
           .eq('transaction_type', 'payment')
-          .eq('status', 'completed');
+          .in('status', ['completed', 'refunded']);
         if (paymentLegError || !paymentLegs?.length) {
           throw new Error('refund_notification_ledger_lookup_failed');
         }
@@ -122,9 +122,17 @@ export async function drainPaystackRefundNotifications(
         // Mirror the completion RPC: every external payment leg links one
         // same-gateway, same-amount completed refund, including legs that
         // operations refunded outside Paystack. Unlinked legacy refunds
-        // match when the order holds exactly one external payment leg.
-        const linkedRefunds = externalLegs.map((leg) =>
-          refundLegs.find((refund) => {
+        // match when the order holds exactly one completed external payment
+        // leg. Self-terminal refunded legs (e.g. PayPal flips the payment
+        // row itself) carry their own evidence and contribute directly.
+        const completedLegs = externalLegs.filter(
+          (leg) => leg.status !== 'refunded'
+        );
+        const linkedRefunds = externalLegs.map((leg) => {
+          if (leg.status === 'refunded') {
+            return { amount: leg.amount, currency: leg.currency };
+          }
+          return refundLegs.find((refund) => {
             if (
               refund.gateway !== leg.gateway ||
               Number(refund.amount) !== Number(leg.amount)
@@ -134,10 +142,10 @@ export async function drainPaystackRefundNotifications(
               refund.metadata as { payment_transaction_id?: unknown } | null
             )?.payment_transaction_id;
             return (
-              link === leg.id || (link == null && externalLegs.length === 1)
+              link === leg.id || (link == null && completedLegs.length === 1)
             );
-          })
-        );
+          });
+        });
         if (
           externalLegs.length === 0 ||
           linkedRefunds.some((refund) => refund === undefined)

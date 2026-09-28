@@ -68,6 +68,25 @@ describe('verifyGatewayCharge', () => {
     );
   });
 
+  it('forwards the abort signal to Korapay verification', async () => {
+    mocks.verifyKorapayPayment.mockResolvedValue({
+      data: {
+        amount: 12_345,
+        currency: 'NGN',
+        status: 'success',
+      },
+      success: true,
+    });
+    const signal = AbortSignal.timeout(1000);
+
+    await verifyGatewayCharge('korapay', 'successful-ref', undefined, signal);
+
+    expect(mocks.verifyKorapayPayment).toHaveBeenCalledWith(
+      'successful-ref',
+      signal
+    );
+  });
+
   it.each([
     'HTTP_400',
     'HTTP_404',

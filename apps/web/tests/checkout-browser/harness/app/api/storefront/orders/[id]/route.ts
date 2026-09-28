@@ -7,9 +7,10 @@ export async function GET(
 ) {
   const { id } = await context.params;
   const query = new URL(request.url).searchParams;
+  const trackingToken = query.get('token') ?? query.get('tracking_token');
   if (
     id !== order.id ||
-    query.get('tracking_token') !== order.tracking_token ||
+    trackingToken !== order.tracking_token ||
     query.get('merchant_slug') !== 'ogabassey'
   )
     return json({ error: 'Fixture order lookup did not match' }, 404);

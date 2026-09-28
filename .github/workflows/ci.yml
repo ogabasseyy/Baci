@@ -307,6 +307,7 @@ jobs:
           --sql-check supabase/migrations/tests/admin_order_transaction_discount_cleanup.sql
           --sql-check supabase/migrations/tests/persist_quiz_award_amount_snapshot.sql
           --sql-check supabase/tests/search_products_not_archived_nulls.sql
+          --sql-check supabase/tests/product_discovery_embeddings_public_boundary.sql
           --sql-check supabase/migrations/tests/quiz_instant_deadline_publication_v2.sql
           --sql-check supabase/migrations/tests/quiz_instant_deadline_runtime_gate_v2.sql
           --sql-check supabase/migrations/tests/quiz_live_score_publication_gate_v2.sql

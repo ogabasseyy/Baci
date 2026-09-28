@@ -74,7 +74,6 @@ Use this skill when helping a user browse, compare, or buy from Ogabassey, a Bac
 - get_product: fetch detailed product information by product_id or exact product_name.
 - get_product_variants: fetch available colors, storage options, SIM options, and condition offers.
 - get_store_info: answer contact, shipping, returns, payment, general, and policy questions.
-- get_recommendations: recommend products for a use case, category, and optional budget.
 - browse_categories: list available catalog categories.
 - get_brands: list available brands, optionally filtered by category.
 - get_shipping_quote: estimate delivery options for a Nigerian destination.

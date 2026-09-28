@@ -37,6 +37,7 @@ test('manual shipping fixture renders and selects the real local door quote', as
     name: 'Continue to Payment',
   });
   await expect(continueButton).toBeEnabled();
+
   await continueButton.click();
   const paystack = page.getByRole('radio', { name: /paystack/i });
   await expect(paystack).toBeVisible();

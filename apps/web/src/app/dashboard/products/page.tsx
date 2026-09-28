@@ -1,8 +1,10 @@
 import { cookies } from 'next/headers';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { BagLoader } from '@/components/ui/bag-loader';
 import { getMerchantForUser } from '@/lib/merchant-server';
+import { permissionGrantsAccess } from '@/lib/permission-grant';
 import { getProducts } from '@/lib/products-server';
 import { createClient } from '@/lib/supabase/server';
 import { productListQuerySchema } from '@/schemas/product-list-query';
@@ -25,7 +27,7 @@ export default async function ProductsPage({
   const supabase = createClient(cookieStore);
 
   // 1. Get Merchant (Cached)
-  const { merchant, user } = await getMerchantForUser();
+  const { merchant, staffAccess, user } = await getMerchantForUser();
 
   if (!user) {
     redirect('/login');
@@ -67,6 +69,22 @@ export default async function ProductsPage({
         </div>
       }
     >
+      {merchant.slug === 'ogabassey' &&
+        (staffAccess.isOwner ||
+          permissionGrantsAccess(
+            staffAccess.permissions,
+            'products',
+            'edit'
+          )) && (
+          <div className="px-6 pt-4 text-sm">
+            <Link
+              href="/dashboard/products/discovery"
+              className="text-primary hover:underline"
+            >
+              Manage ChatGPT product search indexing →
+            </Link>
+          </div>
+        )}
       <ProductsClientPage initialData={initialData} />
     </Suspense>
   );

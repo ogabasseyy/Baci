@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { inferSmartphoneCategory } from './infer-smartphone-category';
-import { singleWordDiscoveryTerm } from './search-products-relevance';
+import { singleWordDiscoveryTerm } from './single-word-discovery-term';
 import { loadRankedMcpProducts, type SearchProductsArgs } from './search-products-ranked';
 import { DISCOVERY_PRODUCT_PROJECTION } from './discovery-product-projection';
 import {

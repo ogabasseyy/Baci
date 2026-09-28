@@ -3,7 +3,7 @@ import { DISCOVERY_PRODUCT_PROJECTION } from './discovery-product-projection';
 import { inferSmartphoneCategory } from './infer-smartphone-category';
 import { hydrateSearchProductAvailability } from './search-product-availability';
 import { loadMcpSearchProducts } from './search-products-query';
-import { isBroadUseCaseQuery, singleWordDiscoveryTerm } from './search-products-relevance';
+import { singleWordDiscoveryTerm } from './single-word-discovery-term';
 import {
   matchesMcpPostHydrationFilters,
   toMcpSearchProductRows,
@@ -28,6 +28,10 @@ type DiscoveryInput = {
   semanticSearch?: (query: string, offset: number) => Promise<string[]>;
   supabase: SupabaseClient;
 };
+
+function isBroadUseCaseQuery(query: string | undefined): boolean {
+  return /^(?:(?:something|anything|products?|items?|gadgets?|best|recommendations?)\s+)?(?:for|to help with)\s+[a-z ]+$/i.test(query?.trim() ?? '');
+}
 
 export async function discoverMcpProducts({
   args,

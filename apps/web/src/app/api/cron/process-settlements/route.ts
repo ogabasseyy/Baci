@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
 import { buildSettlementNotificationEmail } from '@/lib/build-settlement-notification-email';
 import { constantTimeEqual } from '@/lib/constant-time-equal';
 import { notifyMerchant } from '@/lib/expo-push';
@@ -7,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { drainFailedOrderCancellationSideEffects } from '@/lib/orders/drain-failed-order-cancellation-side-effects';
 import { createServiceClient } from '@/lib/supabase/service';
 import { sendEmail } from '@/lib/zeptomail';
+import { processSettlementsQuerySchema } from '@/schemas/process-settlements-query';
 import { processCancellationDrain } from './process-cancellation-drain';
 
 /**
@@ -22,6 +22,8 @@ import { processCancellationDrain } from './process-cancellation-drain';
  *
  * Security: Requires Authorization: Bearer <CRON_SECRET>
  */
+export const maxDuration = 300;
+
 export async function POST(request: Request) {
   try {
     // Verify cron secret
@@ -41,13 +43,11 @@ export async function POST(request: Request) {
 
     // Validate before any database work: a malformed flag must never
     // silently fall through to the full settlement job.
-    const parsedCancellationsOnly = z
-      .enum(['true', 'false'])
-      .optional()
-      .safeParse(
-        new URL(request.url).searchParams.get('cancellationsOnly') ?? undefined
-      );
-    if (!parsedCancellationsOnly.success) {
+    const parsedQuery = processSettlementsQuerySchema.safeParse({
+      cancellationsOnly:
+        new URL(request.url).searchParams.get('cancellationsOnly') ?? undefined,
+    });
+    if (!parsedQuery.success) {
       return NextResponse.json(
         { error: 'Invalid cancellationsOnly value' },
         { status: 400 }
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     }
 
     const supabase = createServiceClient();
-    if (parsedCancellationsOnly.data === 'true') {
+    if (parsedQuery.data.cancellationsOnly === 'true') {
       return processCancellationDrain(supabase, sendEmail, notifyMerchant);
     }
 

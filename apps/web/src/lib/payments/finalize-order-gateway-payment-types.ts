@@ -11,6 +11,9 @@ export interface FinalizeOrderGatewayPaymentArgs {
   wonTransactionFlip: boolean;
   actor: string;
   scheduleAfter: (task: () => Promise<void>) => void;
+  // Aborts the awaited network leg (the paid-email send) when the caller
+  // runs under a pass deadline; unbounded callers leave it unset.
+  signal?: AbortSignal;
 }
 
 export type FinalizeOrderGatewayPaymentOutcome =

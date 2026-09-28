@@ -98,6 +98,55 @@ describe('drainFailedPaidOrderSideEffects finalize deadline', () => {
     ]);
   });
 
+  it('passes an abort signal to finalize that fires with the pass deadline', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+    const supabase = buildSupabase({ data: [failedRow] });
+    mocks.finalizeOrderGatewayPayment.mockResolvedValue({
+      healed: false,
+      kind: 'completed',
+      orderNumber: 'ORD-1',
+    });
+
+    await drainFailedPaidOrderSideEffects({
+      deadlineMs: 1_030_000,
+      finalizePayment: mocks.finalizeOrderGatewayPayment,
+      fileWedgeReview: vi.fn(),
+      scheduleAfter,
+      supabase,
+    });
+
+    // The signal shares the deadline race's 10s buffer (30s budget - 10s):
+    // the orphaned finalize aborts with time left to persist its own
+    // failure instead of delivering email after the caller gave up.
+    expect(timeoutSpy).toHaveBeenCalledTimes(1);
+    expect(timeoutSpy).toHaveBeenCalledWith(20_000);
+    const signal = mocks.finalizeOrderGatewayPayment.mock.calls[0][0]
+      .signal as AbortSignal;
+    expect(signal).toBe(timeoutSpy.mock.results[0]?.value);
+  });
+
+  it('leaves finalize unbound when the drain has no deadline', async () => {
+    const supabase = buildSupabase({ data: [failedRow] });
+    mocks.finalizeOrderGatewayPayment.mockResolvedValue({
+      healed: false,
+      kind: 'completed',
+      orderNumber: 'ORD-1',
+    });
+
+    await drainFailedPaidOrderSideEffects({
+      finalizePayment: mocks.finalizeOrderGatewayPayment,
+      fileWedgeReview: vi.fn(),
+      scheduleAfter,
+      supabase,
+    });
+
+    expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
   it('still drains when finalize finishes inside the deadline', async () => {
     const supabase = buildSupabase({ data: [failedRow] });
     mocks.finalizeOrderGatewayPayment.mockResolvedValue({

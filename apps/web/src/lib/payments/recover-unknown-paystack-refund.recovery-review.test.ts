@@ -49,9 +49,10 @@ function selectQuery(data: unknown, error: unknown = null) {
     eq: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
     is: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockResolvedValue({ data, error }),
     maybeSingle: vi.fn().mockResolvedValue({ data, error }),
     select: vi.fn().mockReturnThis(),
+    // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are thenable.
+    then: (resolve: (value: unknown) => void) => resolve({ data, error }),
   };
 }
 
@@ -201,7 +202,8 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
     const from = vi
       .fn()
       .mockReturnValueOnce(selectQuery([]))
-      .mockReturnValueOnce(selectQuery([stalledPayment]));
+      .mockReturnValueOnce(selectQuery([stalledPayment]))
+      .mockReturnValueOnce(selectQuery([order]));
     const supabase = { from, rpc } as unknown as SupabaseClient;
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');

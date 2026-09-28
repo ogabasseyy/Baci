@@ -32,6 +32,7 @@ export async function finalizeOrderGatewayPayment({
   wonTransactionFlip,
   actor,
   scheduleAfter,
+  signal,
 }: FinalizeOrderGatewayPaymentArgs): Promise<FinalizeOrderGatewayPaymentOutcome> {
   const result = await resolveOrderGatewayCompletion({
     actor,
@@ -210,6 +211,7 @@ export async function finalizeOrderGatewayPayment({
     order: richOrder,
     scheduleAfter,
     settlementGateway: gateway,
+    signal,
     supabase,
     transaction: {
       amount: transaction.amount,

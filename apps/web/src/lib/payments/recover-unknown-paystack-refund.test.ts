@@ -49,9 +49,10 @@ const order = {
 function selectQuery(data: unknown, error: unknown = null) {
   return {
     eq: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockResolvedValue({ data, error }),
     maybeSingle: vi.fn().mockResolvedValue({ data, error }),
     select: vi.fn().mockReturnThis(),
+    // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are thenable.
+    then: (resolve: (value: unknown) => void) => resolve({ data, error }),
   };
 }
 

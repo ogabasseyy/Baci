@@ -6,6 +6,7 @@ import { fetchRefund } from './fetch-paystack-refund';
 import { filePaystackRefundCandidateReviews } from './file-paystack-refund-candidate-reviews';
 import { filePaystackRefundRecoveryReview } from './file-paystack-refund-recovery-review';
 import { fileRefundEvidenceReview } from './file-refund-evidence-review';
+import { fileStalledPaystackRefundReviews } from './file-stalled-paystack-refund-reviews';
 import { holdPaystackRefundForReview } from './hold-paystack-refund-for-review';
 import { isDeterministicRefundError } from './is-deterministic-paystack-refund-error';
 import type { RefundRow } from './paystack-cancellation-refund-row';
@@ -124,14 +125,16 @@ export async function recoverUnknownPaystackRefund(
     });
     return;
   }
+  // Fetch every completed match (no LIMIT): the ambiguity branch files
+  // one review per order, so truncating here would silently drop orders
+  // from a corrupt/ambiguous reference shared across payments.
   const { data: payments, error: paymentError } = await supabase
     .from('transactions')
     .select('id, order_id, merchant_id, gateway_reference, amount')
     .eq('gateway', 'paystack')
     .eq('gateway_reference', resolvedPaymentReference)
     .eq('transaction_type', 'payment')
-    .eq('status', 'completed')
-    .limit(2);
+    .eq('status', 'completed');
   if (paymentError) throw new Error('refund_event_payment_lookup_failed');
   const candidates = (payments ?? []) as RecoveryPayment[];
   const payment = candidates[0];
@@ -161,33 +164,9 @@ export async function recoverUnknownPaystackRefund(
     // No completed local payment: a stale pending attempt may already have
     // captured and been refunded before the sweep examined it. Retain the
     // verified provider evidence instead of treating it as unrelated.
-    const { data: stalledRows, error: stalledError } = await supabase
-      .from('transactions')
-      .select('id, order_id, merchant_id, gateway_reference, amount')
-      .eq('gateway', 'paystack')
-      .eq('gateway_reference', resolvedPaymentReference)
-      .eq('transaction_type', 'payment')
-      .in('status', ['pending', 'processing', 'failed'])
-      .limit(2);
-    if (stalledError) throw new Error('refund_event_payment_lookup_failed');
-    const stalled = (stalledRows ?? []) as RecoveryPayment[];
-    if (stalled.length > 0) {
-      await filePaystackRefundCandidateReviews(
-        supabase,
-        stalled,
-        evidence,
-        `Paystack refund ${refundId} matches a non-completed local payment for reference ${resolvedPaymentReference}`
-      );
-      logger.info({
-        message:
-          'Unknown Paystack refund event matches a non-completed payment',
-        refundId,
-      });
-      return;
-    }
-    logger.info({
-      message:
-        'Unknown Paystack refund event matches no single completed payment',
+    await fileStalledPaystackRefundReviews(supabase, {
+      evidence,
+      gatewayReference: resolvedPaymentReference,
       refundId,
     });
     return;

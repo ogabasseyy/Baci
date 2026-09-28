@@ -48,15 +48,14 @@ import {
 import { resolveMcpPaystackDvaAccess } from './mcp-paystack-dva-access';
 import { registerAgenticUcpTools } from './agentic-ucp-tools';
 import { resolveMcpSearchProductCondition } from './product-condition-filter';
-import { loadMcpSearchProducts } from './search-products-query';
+import { discoverMcpProducts } from './discover-products';
+import { embedDiscoveryText } from './gemini-discovery-embedding';
+import { loadSemanticDiscoveryCandidateIds } from './semantic-discovery-candidates';
 import { getMcpOfferAvailability } from './product-offer-availability';
 import { buildMcpProductDetail } from './product-detail';
 import { loadMcpProductVariants } from './product-variants';
 import { serveProductImage } from './product-image-proxy';
-import { hydrateSearchProductAvailability } from './search-product-availability';
-import { selectSearchProductsByPrice } from './select-search-products-by-price';
 import { checkProductImageRateLimit } from './product-image-rate-limit-singleton';
-import { selectRecommendedProducts } from './recommendation-products';
 import { STORE_WIDGET_URI } from './widget-resource-uri';
 
 // =============================================================================
@@ -1214,7 +1213,7 @@ function createOgabasseyServer() {
       title: 'Search Products',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
-        'Search the Ogabassey public catalog by name, brand, category, condition, and price. When the buyer asks for phones or smartphones, set category to Smartphones so tablets are excluded. Returns listed prices, variant options, and reported availability; it does not confirm a live stock reservation.',
+        'Use this when a buyer wants to find real Ogabassey products. Search by product name, brand, category, condition, and price. For a broad use case such as work, gaming, or photography, ask which product type they want before searching if it is unclear. Set an explicit category when the buyer names one (Smartphones, Tablets, Laptops, or Accessories). Do not present unrelated catalog items as recommendations. Returns listed prices, options, and reported availability; it does not reserve stock.',
       inputSchema: {
         query: z
           .string()
@@ -1249,12 +1248,24 @@ function createOgabasseyServer() {
       try {
         const merchantId = await getMerchantId();
         if (!merchantId) throw new Error('Merchant ID unavailable');
+        const semanticApiKey = process.env.GEMINI_API_KEY;
+        let queryEmbedding: Promise<number[]> | undefined;
 
-        const { products, limit, priceScanComplete, sanitizedQuery, sawRankedRows } =
-          await loadMcpSearchProducts({
+        const { priceScanComplete, sanitizedQuery, selectedProducts } =
+          await discoverMcpProducts({
             args,
             merchantId,
             sanitizeString,
+            semanticSearch: process.env.MCP_SEMANTIC_SEARCH_ENABLED === 'true' && semanticApiKey
+              ? async (query, offset) => {
+                  queryEmbedding ??= embedDiscoveryText({
+                    apiKey: semanticApiKey, kind: 'query', text: query,
+                  });
+                  return loadSemanticDiscoveryCandidateIds({
+                    embedding: await queryEmbedding, merchantId, offset, supabase,
+                  });
+                }
+              : undefined,
             supabase,
           });
 
@@ -1266,38 +1277,6 @@ function createOgabasseyServer() {
           };
         }
 
-        if (sanitizedQuery && !sawRankedRows) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `No specific products found for "${sanitizedQuery}". Try broader terms.`,
-              },
-            ],
-            structuredContent: { products: [], status: 'empty' },
-          };
-        }
-
-        // Graceful fallback for empty results
-        if (!products || products.length === 0) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `No specific products found for "${sanitizedQuery || 'your criteria'}". Try broader terms.`,
-              },
-            ],
-            structuredContent: { products: [], status: 'empty' },
-          };
-        }
-
-        const hydratedProducts: Awaited<ReturnType<typeof hydrateSearchProductAvailability>> = [];
-        for (let offset = 0; offset < products.length; offset += 100) {
-          hydratedProducts.push(...await hydrateSearchProductAvailability(
-            products.slice(offset, offset + 100), supabase, merchantId, args.condition
-          ));
-        }
-        const selectedProducts = selectSearchProductsByPrice(hydratedProducts, args, limit);
         const formatted = selectedProducts.map(({ product: p, displayPrice, displayCondition, displayCompareAtPrice, stockSummary, availableVariants: variants }) => {
           // A compare-at price indicates a listed discount, not a price trend.
           const isDiscounted = typeof displayPrice === 'number' &&
@@ -1343,7 +1322,7 @@ function createOgabasseyServer() {
             content: [
               {
                 type: 'text',
-                text: `No specific products found for "${sanitizedQuery || 'your criteria'}". Try broader terms.`,
+                text: `No clear catalog match for "${sanitizedQuery || 'your criteria'}". Specify a product type, brand, or model and try again.`,
               },
             ],
             structuredContent: { products: [], status: 'empty' },
@@ -1975,126 +1954,6 @@ function createOgabasseyServer() {
       };
     }
   );
-
-  // Tool: Get recommendations
-  server.registerTool(
-    'get_recommendations',
-    {
-      title: 'Get Recommendations',
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-      description: 'Get product recommendations based on use case and budget.',
-      inputSchema: {
-        use_case: z
-          .string()
-          .min(1)
-          .max(50)
-          .describe('What the product is for (gaming, work, etc.)'),
-        budget: z
-          .number()
-          .min(0)
-          .max(1000000000)
-          .optional()
-          .describe('Max budget in NGN'),
-      },
-      _meta: {
-        'openai/outputTemplate': STORE_WIDGET_URI,
-        'openai/toolInvocation/invoking': 'Finding recommendations...',
-        'openai/toolInvocation/invoked': 'Recommendations ready',
-      },
-    },
-    async (args) => {
-      const merchantId = await getMerchantId();
-      if (!merchantId) {
-        return {
-          content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
-          structuredContent: { products: [] },
-        };
-      }
-
-      const sanitizedUseCase = sanitizeString(args.use_case, 50).toLowerCase();
-      const keywords: Record<string, string[]> = {
-        gaming: ['gaming', 'pro', 'max'],
-        work: ['pro', 'business', 'macbook'],
-        photography: ['camera', 'pro', 'ultra'],
-        budget: ['lite', 'mini'],
-        student: ['ipad', 'laptop', 'air'],
-      };
-
-      const kws = keywords[sanitizedUseCase] || [sanitizedUseCase];
-      const availabilityFilter = 'manage_stock.is.false,manage_stock.is.null,stock_quantity.gt.0,has_variants.is.true,has_condition_offers.is.true';
-
-      let query = supabase
-        .from('products')
-        .select(
-          'id, name, slug, price, compare_at_price, images, description, condition, brand, category, manage_stock, stock_quantity, has_variants, has_condition_offers'
-        )
-        .eq('merchant_id', merchantId)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .order('id', { ascending: false });
-
-      const budget = args.budget === undefined
-        ? undefined
-        : sanitizePrice(args.budget) ?? 1000000000;
-      if (budget !== undefined) {
-        query = query.or(
-          `and(or(${availabilityFilter}),or(price.lte.${budget},has_variants.is.true,has_condition_offers.is.true))`
-        );
-      } else {
-        query = query.or(availabilityFilter);
-      }
-
-      const final = await selectRecommendedProducts({
-        keywords: kws,
-        budget,
-        fetchPage: async (offset, limit) => {
-          const { data, error } = await query.range(offset, offset + limit - 1);
-          return error ? null : data;
-        },
-        fetchVariants: async (ids) => {
-          const { data, error } = await supabase.rpc('get_storefront_product_variants', { p_product_ids: ids });
-          return error ? null : data;
-        },
-        fetchOffers: async (ids) => {
-          const { data, error } = await supabase.from('product_offers')
-            .select('product_id, condition, price, stock_quantity')
-            .eq('merchant_id', merchantId)
-            .eq('status', 'active')
-            .in('product_id', ids);
-          return error ? null : data;
-        },
-      });
-
-      const formatted = final.map((p) => ({
-        id: p.id,
-        name: p.name,
-        slug: p.slug,
-        price: p.recommendationPrice ?? p.price,
-        condition: p.recommendationCondition ?? p.condition ?? 'new',
-        image: getSafeCatalogImageUrl(p.images?.[0]?.url || p.images?.[0]),
-      }));
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Based on "${sanitizedUseCase}"${args.budget ? ` (budget: ${formatPrice(args.budget)})` : ''}, here are my recommendations:`,
-          },
-        ],
-        structuredContent: { products: formatted },
-        _meta: {
-          'openai/outputTemplate': STORE_WIDGET_URI,
-          'openai/widgetPrefersBorder': true,
-        },
-      };
-    }
-  );
-  // [REMOVED] smart_recommend
-  // [REMOVED] estimate_trade_in
-  // [REMOVED] find_gift
-  // [REMOVED] calculate_installment
-  // [REMOVED] find_deals
-
 
   // Tool: Get product variants
   server.registerTool(

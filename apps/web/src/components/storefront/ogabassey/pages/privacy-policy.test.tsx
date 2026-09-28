@@ -58,6 +58,8 @@ describe('OgabasseyV2PrivacyPolicy', () => {
       expect(screen.queryByText(/we delete or de-identify personal data no later than/)).not.toBeInTheDocument();
       expect(screen.getByText(/at least six years after the year of assessment/)).toBeInTheDocument();
       expect(screen.getByText(/do not create a saved Ogabassey account search history/)).toBeInTheDocument();
+      expect(screen.getByText(/send product search text to Google Gemini/)).toBeInTheDocument();
+      expect(screen.getByText(/up to 55 days for abuse monitoring/)).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Your Privacy Choices' })).toBeInTheDocument();
       expect(screen.getByText(/If you cannot use that address, email us/)).toBeInTheDocument();
       expect(

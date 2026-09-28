@@ -21,7 +21,6 @@ const PUBLIC_MCP_TOOL_NAMES = [
   'get_product',
   'get_product_variants',
   'get_store_info',
-  'get_recommendations',
   'browse_categories',
   'get_brands',
   'get_shipping_quote',

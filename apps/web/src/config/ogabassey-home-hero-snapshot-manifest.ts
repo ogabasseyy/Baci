@@ -3,7 +3,7 @@
 // image, keyed by tenant slug then exact CDN source URL. A source URL with
 // no entry here renders the legacy CDN path (rotation-safe by construction:
 // rotated content misses its key and falls back instead of mismatching).
-// Manifest version: 1. Generated: 2026-09-28T18:47:50.156Z.
+// Manifest version: 1. Generated: 2026-09-28T20:28:11.215Z.
 
 export interface OgabasseyHomeHeroSnapshotManifestEntry {
   sourceUrl: string;
@@ -31,10 +31,10 @@ export const OGABASSEY_HOME_HERO_SNAPSHOT_MANIFEST: Record<
         sourceUrl:
           'https://cdn.ogabassey.com/core-assets/products/premium-laptops/dell-alienware-m18-r2.jpg',
         srcSet:
-          '/_hero/ogabassey/ad69426ce2b4-640.avif 640w, /_hero/ogabassey/ad69426ce2b4-750.avif 750w, /_hero/ogabassey/ad69426ce2b4-828.avif 828w, /_hero/ogabassey/ad69426ce2b4-1080.avif 1080w, /_hero/ogabassey/ad69426ce2b4-1200.avif 1200w',
-        href: '/_hero/ogabassey/ad69426ce2b4-1080.avif',
+          '/_hero/ogabassey/8c92755d04fa-256.avif 256w, /_hero/ogabassey/aecfea40391c-384.avif 384w, /_hero/ogabassey/00f161a044ae-640.avif 640w, /_hero/ogabassey/e1581b5548a9-750.avif 750w, /_hero/ogabassey/fc59703d261f-828.avif 828w, /_hero/ogabassey/c17e9b60454f-1080.avif 1080w, /_hero/ogabassey/5ad5e22b11b8-1200.avif 1200w',
+        href: '/_hero/ogabassey/c17e9b60454f-1080.avif',
         quality: 70,
-        widths: [640, 750, 828, 1080, 1200],
+        widths: [256, 384, 640, 750, 828, 1080, 1200],
         sourceSha256:
           'ad69426ce2b4b2135bc4bb0732fe19885af6c3fe34ae93ef7ba58c9febf0e26b',
       },

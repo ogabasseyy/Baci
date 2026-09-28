@@ -4,10 +4,11 @@ import { OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL } from '@/config/ogabassey';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { OGABASSEY_HOME_HERO_SNAPSHOT_MANIFEST } from './ogabassey-home-hero-snapshot-manifest';
 
-// Mirror of SNAPSHOT_WIDTHS in scripts/generate-ogabassey-hero-snapshots.mjs
-// (a subset of next.config `deviceSizes`). The pipeline writes these
+// Mirror of SNAPSHOT_WIDTHS in scripts/lib/ogabassey-hero-snapshots.mjs
+// (the emitted mobile ladder from the 256 floor; tiers >= 1440 excluded as
+// unreachable under the 767px media cap). The pipeline writes these
 // descriptors; this test fails if the manifest ever carries anything else.
-const PIPELINE_WIDTHS = new Set([640, 750, 828, 1080, 1200]);
+const PIPELINE_WIDTHS = new Set([256, 384, 640, 750, 828, 1080, 1200]);
 
 describe('hero snapshot manifest integrity', () => {
   it('covers the committed first-flush URL', () => {

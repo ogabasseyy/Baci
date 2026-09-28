@@ -107,6 +107,10 @@ describe('verified paystack cancellation refund migration', () => {
     expect(migrationSql).toContain(
       "'Paystack cancellation refund settlement reversal'"
     );
+    expect(migrationSql).toContain(
+      "v_settlement.metadata ->> 'redvault_direct_split', 'false' ) = 'true'"
+    );
+    expect(migrationSql).toContain('IF NOT v_direct_split THEN');
   });
 
   it('keeps orphan provider evidence open until a local refund row matches it', () => {

@@ -4,53 +4,26 @@ import Colors from '@/constants/Colors';
 import type { Category, Product } from '@/types/product';
 import SearchScreenView from './SearchScreenView';
 
-jest.mock('@/components/storefront/FilterBar', () => ({
-  FilterBar: function MockFilterBar() {
-    return null;
-  },
+jest.mock('./SearchResultsEmptyState', () => ({
+  __esModule: true,
+  default: () => null,
 }));
 
-jest.mock('@/components/storefront/ProductCard', () => ({
-  ProductCard: function MockProductCard() {
-    return null;
-  },
-}));
-
-jest.mock('@shopify/flash-list', () => {
-  const { Pressable, Text, View } = jest.requireActual(
+jest.mock('./SearchResultsList', () => {
+  const { Text, View } = jest.requireActual(
     'react-native'
   ) as typeof import('react-native');
-  const React = jest.requireActual('react') as typeof import('react');
 
   return {
-    FlashList: function MockFlashList({
-      ListFooterComponent,
-      ListHeaderComponent,
-      data,
-      onEndReached,
-      renderItem,
+    __esModule: true,
+    default: function MockSearchResultsList({
+      listError,
     }: {
-      ListFooterComponent?: React.ReactNode;
-      ListHeaderComponent?: React.ReactNode;
-      data: Array<{ id: string }>;
-      onEndReached?: () => void;
-      renderItem?: (info: {
-        item: { id: string };
-        index: number;
-      }) => React.ReactNode;
+      listError?: string | null;
     }) {
       return (
-        <View testID="mock-flash-list">
-          {ListHeaderComponent}
-          {data.map((item, index) => (
-            <View key={item.id} testID={`mock-flash-item-${item.id}`}>
-              {renderItem?.({ item, index })}
-            </View>
-          ))}
-          {ListFooterComponent}
-          <Pressable testID="mock-flash-end-reached" onPress={onEndReached}>
-            <Text>End reached</Text>
-          </Pressable>
+        <View testID="mock-results-list">
+          <Text>{listError ?? 'no-list-error'}</Text>
         </View>
       );
     },
@@ -58,7 +31,7 @@ jest.mock('@shopify/flash-list', () => {
 });
 
 const categories: Category[] = [
-  { id: 'phones', name: 'Phones', slug: 'phones' },
+  { id: 'cat-1', name: 'Phones', slug: 'phones' },
 ];
 
 function renderView(
@@ -104,47 +77,18 @@ function renderView(
     ...overrides,
   };
 
-  return { props, ...render(<SearchScreenView {...props} />) };
+  return render(<SearchScreenView {...props} />);
 }
 
 describe('SearchScreenView', () => {
-  it('supports search header actions without automatically focusing input', () => {
-    const onBack = jest.fn();
-    const onClearQuery = jest.fn();
-    const onQueryChange = jest.fn();
-    const onSubmitQuery = jest.fn();
-
-    renderView({
-      onBack,
-      onClearQuery,
-      onQueryChange,
-      onSubmitQuery,
-      query: 'phone',
-    });
-
-    const input = screen.getByLabelText('Search products');
-    expect(input.props.autoFocus).toBeFalsy();
-    fireEvent.changeText(input, 'laptop');
-    fireEvent(input, 'submitEditing');
-    fireEvent.press(screen.getByRole('button', { name: 'Clear search' }));
-    fireEvent.press(screen.getByRole('button', { name: 'Go back' }));
-
-    expect(onQueryChange).toHaveBeenCalledWith('laptop');
-    expect(onSubmitQuery).toHaveBeenCalledTimes(1);
-    expect(onClearQuery).toHaveBeenCalledTimes(1);
-    expect(onBack).toHaveBeenCalledTimes(1);
-  });
-
-  it('renders recent searches and popular categories as actions', () => {
-    const onCategoryPress = jest.fn();
+  it('renders recent searches and categories when idle', () => {
     const onRecentSearch = jest.fn();
+    const onCategoryPress = jest.fn();
 
-    renderView({ onCategoryPress, onRecentSearch });
+    renderView({ onRecentSearch, onCategoryPress });
 
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Recent search: iPhone 15 Pro' })
-    );
-    fireEvent.press(screen.getByRole('button', { name: 'Category: Phones' }));
+    fireEvent.press(screen.getByText('iPhone 15 Pro'));
+    fireEvent.press(screen.getByText('Phones'));
 
     expect(onRecentSearch).toHaveBeenCalledWith('iPhone 15 Pro');
     expect(onCategoryPress).toHaveBeenCalledWith('phones');
@@ -157,60 +101,6 @@ describe('SearchScreenView', () => {
     expect(
       screen.getByText('Connect to the internet to search products')
     ).toBeTruthy();
-  });
-
-  it('shows a truthful loaded count and appends pages at the list end', () => {
-    const onEndReached = jest.fn();
-    const products = [
-      { id: 'product-1', name: 'iPhone 16' },
-      { id: 'product-2', name: 'iPhone 15' },
-    ] as Product[];
-
-    renderView({
-      committedQuery: 'iphone',
-      hasSearchQuery: true,
-      onEndReached,
-      products,
-      query: 'iphone',
-      totalCount: 45,
-    });
-
-    expect(
-      screen.getByText('Showing 2 of 45 results for “iphone”')
-    ).toBeTruthy();
-    expect(screen.getByTestId('mock-flash-list')).toBeTruthy();
-
-    fireEvent.press(screen.getByTestId('mock-flash-end-reached'));
-    expect(onEndReached).toHaveBeenCalledTimes(1);
-  });
-
-  it('shows the total once every match is loaded', () => {
-    const products = [{ id: 'product-1', name: 'iPhone 16' }] as Product[];
-
-    renderView({
-      committedQuery: 'iphone 16',
-      hasSearchQuery: true,
-      products,
-      query: 'iphone 16',
-      totalCount: 1,
-    });
-
-    expect(screen.getByText('1 result for “iphone 16”')).toBeTruthy();
-  });
-
-  it('shows a loading footer while more results append', () => {
-    const products = [{ id: 'product-1', name: 'iPhone 16' }] as Product[];
-
-    renderView({
-      committedQuery: 'iphone',
-      hasSearchQuery: true,
-      isLoadingMore: true,
-      products,
-      query: 'iphone',
-      totalCount: 45,
-    });
-
-    expect(screen.getByText('Loading more…')).toBeTruthy();
   });
 
   it('renders a retryable error state instead of no-results copy', () => {
@@ -231,24 +121,20 @@ describe('SearchScreenView', () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
-  it('names the submitted query and category paths on zero matches', () => {
-    const onCategoryPress = jest.fn();
+  it('keeps loaded products visible when the next page fails', () => {
+    const products = [{ id: 'product-1', name: 'iPhone 16' }] as Product[];
 
     renderView({
-      committedQuery: 'zzzz',
+      committedQuery: 'iphone',
       hasSearchQuery: true,
-      onCategoryPress,
-      query: 'zzzz',
+      products,
+      query: 'iphone',
+      searchError: 'Search failed',
+      totalCount: 45,
     });
 
-    expect(screen.getByText('No results found')).toBeTruthy();
-    expect(
-      screen.getByText(
-        'No products match “zzzz”. Try a different spelling or browse a category.'
-      )
-    ).toBeTruthy();
-
-    fireEvent.press(screen.getByRole('button', { name: 'Browse Phones' }));
-    expect(onCategoryPress).toHaveBeenCalledWith('phones');
+    expect(screen.queryByText("Couldn't load results")).toBeNull();
+    expect(screen.getByTestId('mock-results-list')).toBeTruthy();
+    expect(screen.getByText('Search failed')).toBeTruthy();
   });
 });

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND, SHADOWS } from '@/constants/Colors';
+import { MIN_SEARCH_QUERY_LENGTH } from '@/constants/search';
 import { type Category, useCategories, useProducts } from '@/hooks';
 import { useSearchStorage } from '@/hooks/use-search-storage';
 import type { Product } from '@/types/product';
@@ -66,7 +67,10 @@ export function SearchDropdown({
   });
   const { recentSearches, saveSearch, clearHistory } = useSearchStorage();
   const { products, isLoading } = useProducts({
-    search: effectiveQuery.length >= 2 ? effectiveQuery : undefined,
+    search:
+      effectiveQuery.length >= MIN_SEARCH_QUERY_LENGTH
+        ? effectiveQuery
+        : undefined,
     limit: MAX_RESULTS,
   });
   const { data: categories = [] } = useCategories();
@@ -110,7 +114,7 @@ export function SearchDropdown({
       onSeeAllResults(activeQuery);
       return;
     }
-    if (activeQuery.trim().length >= 2) {
+    if (activeQuery.trim().length >= MIN_SEARCH_QUERY_LENGTH) {
       saveSearch(activeQuery.trim());
       Keyboard.dismiss();
     }

@@ -7,7 +7,6 @@ import { StorefrontPagination } from '@/components/storefront/ogabassey/componen
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { asRoute } from '@/lib/routes';
-import { generateBreadcrumbSchema, getProductUrl } from '@/lib/seo-utils';
 import { buildRequestScopedStoreUrl } from '@/lib/store-url';
 import {
   buildStorefrontPageHref,
@@ -25,6 +24,13 @@ import {
 } from '@/lib/storefront-search-params';
 import { isValidMerchantIdentifier } from '@/lib/validation';
 import { ProductIndexCard } from '../products/product-index-card';
+import { SearchPageErrorPanel } from './search-page-error-panel';
+import { SearchPageForm } from './search-page-form';
+import { SearchPageNoResultsPanel } from './search-page-no-results-panel';
+import { getPriceFormatter } from './search-page-price';
+import { buildSearchPageSchemas } from './search-page-schema';
+import { SearchPageStartPanel } from './search-page-start-panel';
+import { formatSearchSummary } from './search-page-summary';
 
 export interface SearchPageProps {
   params: Promise<{ slug: string }>;
@@ -32,59 +38,6 @@ export interface SearchPageProps {
     q?: string | string[];
     page?: string | string[];
   }>;
-}
-
-const RESULT_COUNT_FORMATTER = new Intl.NumberFormat('en-NG');
-
-const priceFormatterCache = new Map<string, Intl.NumberFormat>();
-
-function getPriceFormatter(currency: string): Intl.NumberFormat {
-  let formatter = priceFormatterCache.get(currency);
-  if (!formatter) {
-    formatter = new Intl.NumberFormat('en-NG', {
-      style: 'currency',
-      currency,
-      maximumFractionDigits: 0,
-    });
-    priceFormatterCache.set(currency, formatter);
-  }
-  return formatter;
-}
-
-function formatResultCount(count: number) {
-  return RESULT_COUNT_FORMATTER.format(count);
-}
-
-function formatSearchSummary({
-  query,
-  totalCount,
-  visibleCount,
-  page,
-}: {
-  query: string;
-  totalCount: number;
-  visibleCount: number;
-  page: number;
-}) {
-  if (!query) {
-    return 'Enter a search term to browse matching products.';
-  }
-
-  if (totalCount === 0 || visibleCount === 0) {
-    return `No results found for “${query}”`;
-  }
-
-  if (totalCount > visibleCount) {
-    if (page <= 1) {
-      return `Showing first ${formatResultCount(visibleCount)} of ${formatResultCount(totalCount)} results for “${query}”`;
-    }
-
-    const rangeStart = (page - 1) * STOREFRONT_PRODUCTS_PER_PAGE + 1;
-    const rangeEnd = rangeStart + visibleCount - 1;
-    return `Showing ${formatResultCount(rangeStart)}–${formatResultCount(rangeEnd)} of ${formatResultCount(totalCount)} results for “${query}”`;
-  }
-
-  return `${formatResultCount(totalCount)} result${totalCount === 1 ? '' : 's'} for “${query}”`;
 }
 
 const EMPTY_SEARCH_RESULT: StorefrontSearchProductsPage = {
@@ -155,7 +108,7 @@ export async function SearchPageContent({
         // probe instead of issuing a giant-offset query.
         const probe = await fetchSearchPage(0, false);
         if (probe.count === 0) {
-          searchResult = probe;
+          redirectHref = buildSearchHref(query, 1);
         } else {
           const lastPage = Math.ceil(
             probe.count / STOREFRONT_PRODUCTS_PER_PAGE
@@ -178,7 +131,10 @@ export async function SearchPageContent({
           // no-results state from an invalid page.
           const probe = await fetchSearchPage(0, false);
           if (probe.count === 0) {
-            searchResult = probe;
+            // A page beyond the first of an empty result set is not a
+            // distinct page: normalize to the canonical first-page URL so
+            // unbounded ?page=N variants never render duplicate empties.
+            redirectHref = buildSearchHref(query, 1);
           } else {
             const lastPage = Math.max(
               1,
@@ -218,49 +174,25 @@ export async function SearchPageContent({
   const merchantCurrency = resolveMerchantCurrencyConfig(merchant).code;
   const priceFormatter = getPriceFormatter(merchantCurrency);
   const visibleCount = searchFailed ? 0 : effectiveResult.products.length;
+  // Pagination never advertises pages the bounded offset cannot serve.
   const totalPages =
     searchFailed || effectiveResult.count <= 0
       ? 0
-      : Math.ceil(effectiveResult.count / STOREFRONT_PRODUCTS_PER_PAGE);
-  const breadcrumbSchema = generateBreadcrumbSchema([
-    { name: merchant.business_name, url: storeUrl },
-    { name: 'Search Results', url: pageUrl },
-  ]);
-  const positionOffset = (page - 1) * STOREFRONT_PRODUCTS_PER_PAGE;
-  const searchResultsSchema = {
-    '@context': 'https://schema.org',
-    '@type': 'CollectionPage',
-    name: searchQuery
-      ? `Search results for ${searchQuery}`
-      : `Search results | ${merchant.business_name}`,
-    url: pageUrl,
-    mainEntity: {
-      '@type': 'ItemList',
-      itemListElement: searchFailed
-        ? []
-        : effectiveResult.products.map((product, index) => {
-            const productUrl = `${storeUrl}${getProductUrl(product)}`;
-
-            return {
-              '@type': 'ListItem',
-              position: positionOffset + index + 1,
-              item: {
-                '@type': 'Product',
-                name: product.name,
-                url: productUrl || undefined,
-                image: product.imageLarge || product.image || undefined,
-                offers: {
-                  '@type': 'Offer',
-                  price: product.price,
-                  priceCurrency: merchantCurrency,
-                  url: productUrl || undefined,
-                },
-              },
-            };
-          }),
-    },
-    numberOfItems: visibleCount,
-  };
+      : Math.min(
+          Math.ceil(effectiveResult.count / STOREFRONT_PRODUCTS_PER_PAGE),
+          STOREFRONT_SEARCH_MAX_PAGE
+        );
+  const { breadcrumbSchema, searchResultsSchema } = buildSearchPageSchemas({
+    businessName: merchant.business_name,
+    merchantCurrency,
+    page,
+    pageUrl,
+    products: effectiveResult.products,
+    searchFailed,
+    searchQuery,
+    storeUrl,
+    visibleCount,
+  });
 
   const summaryText = searchFailed
     ? `We couldn't load results for “${query}”.`
@@ -304,32 +236,7 @@ export async function SearchPageContent({
             </p>
           </div>
 
-          <form
-            method="get"
-            action={searchBasePath}
-            aria-label="Edit search"
-            className="mt-6 flex max-w-xl gap-2"
-          >
-            <label htmlFor="search-page-input" className="sr-only">
-              Search products
-            </label>
-            <input
-              id="search-page-input"
-              name="q"
-              type="search"
-              defaultValue={query}
-              placeholder="Search products…"
-              maxLength={200}
-              autoComplete="off"
-              className="min-w-0 flex-1 rounded-xl border border-store-background-text/15 bg-store-background px-4 py-2.5 text-sm text-store-background-text placeholder:text-store-background-text/40 focus:border-store-primary focus:outline-hidden"
-            />
-            <button
-              type="submit"
-              className="shrink-0 rounded-xl bg-store-primary px-4 py-2.5 text-sm font-semibold text-store-primary-text transition hover:opacity-90"
-            >
-              Search
-            </button>
-          </form>
+          <SearchPageForm action={searchBasePath} defaultQuery={query} />
 
           {!searchFailed && effectiveResult.didYouMean && didYouMeanHref && (
             <p className="mt-4 text-sm text-store-background-text/55">
@@ -345,31 +252,11 @@ export async function SearchPageContent({
           )}
 
           {searchFailed ? (
-            <div className="mt-10 rounded-3xl border border-store-background-text/10 bg-store-background px-6 py-16 text-center shadow-sm">
-              <h2 className="text-xl font-semibold text-store-background-text">
-                Search is temporarily unavailable
-              </h2>
-              <p className="mt-2 text-sm text-store-background-text/55">
-                We couldn&apos;t load results for “{query}”. Try again in a
-                moment.
-              </p>
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-                <Link
-                  href={asRoute(buildSearchHref(query, page))}
-                  prefetch={false}
-                  className="rounded-md bg-store-primary px-4 py-2 text-sm font-semibold text-store-primary-text transition hover:opacity-90"
-                >
-                  Try again
-                </Link>
-                <Link
-                  href={asRoute(allProductsHref)}
-                  prefetch={false}
-                  className="rounded-md border border-store-background-text/15 px-4 py-2 text-sm font-semibold text-store-background-text transition hover:border-store-primary hover:text-store-primary"
-                >
-                  View all products
-                </Link>
-              </div>
-            </div>
+            <SearchPageErrorPanel
+              allProductsHref={allProductsHref}
+              query={query}
+              retryHref={buildSearchHref(query, page)}
+            />
           ) : searchQuery ? (
             effectiveResult.products.length > 0 ? (
               <>
@@ -391,40 +278,14 @@ export async function SearchPageContent({
                 />
               </>
             ) : (
-              <div className="mt-10 rounded-3xl border border-store-background-text/10 bg-store-background px-6 py-16 text-center shadow-sm">
-                <h2 className="text-xl font-semibold text-store-background-text">
-                  No products found
-                </h2>
-                <p className="mt-2 text-sm text-store-background-text/55">
-                  We could not find any products matching “{searchQuery}”.
-                </p>
-                <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-                  <Link
-                    href={asRoute(allProductsHref)}
-                    prefetch={false}
-                    className="rounded-md bg-store-primary px-4 py-2 text-sm font-semibold text-store-primary-text transition hover:opacity-90"
-                  >
-                    View all products
-                  </Link>
-                  <Link
-                    href={asRoute(contactHref)}
-                    prefetch={false}
-                    className="rounded-md border border-store-background-text/15 px-4 py-2 text-sm font-semibold text-store-background-text transition hover:border-store-primary hover:text-store-primary"
-                  >
-                    Contact support
-                  </Link>
-                </div>
-              </div>
+              <SearchPageNoResultsPanel
+                allProductsHref={allProductsHref}
+                contactHref={contactHref}
+                searchQuery={searchQuery}
+              />
             )
           ) : (
-            <div className="mt-10 rounded-3xl border border-store-background-text/10 bg-store-background px-6 py-16 text-center shadow-sm">
-              <h2 className="text-xl font-semibold text-store-background-text">
-                Start a search
-              </h2>
-              <p className="mt-2 text-sm text-store-background-text/55">
-                Enter a product name or keyword to see matching items.
-              </p>
-            </div>
+            <SearchPageStartPanel />
           )}
         </div>
       </div>

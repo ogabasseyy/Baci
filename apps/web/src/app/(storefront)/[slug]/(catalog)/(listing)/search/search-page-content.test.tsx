@@ -710,7 +710,7 @@ describe('SearchPageContent', () => {
     );
   });
 
-  it('shows genuine no-results when the recovery probe is empty', async () => {
+  it('normalizes an empty out-of-range page to the first page', async () => {
     mockStorefrontContext();
     mockGetStorefrontSearchProducts
       .mockResolvedValueOnce({
@@ -734,13 +734,39 @@ describe('SearchPageContent', () => {
       )) as React.ReactElement
     );
 
+    // The no-results state renders at the canonical first-page URL (where the
+    // probe's did-you-mean suggestion is recomputed) instead of duplicating
+    // empty content across unbounded ?page=N variants.
+    expect(mockRedirect).toHaveBeenCalledWith('/ogabassey/search?q=iphon');
+  });
+
+  it('caps pagination at the maximum servable page', async () => {
+    mockStorefrontContext();
+    mockGetStorefrontSearchProducts.mockResolvedValueOnce({
+      count: 5230,
+      didYouMean: null,
+      products: createSearchProducts(20),
+      productIds: [],
+      query: 'iphone',
+    });
+
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphone', page: '100' })
+      )) as React.ReactElement
+    );
+
     expect(mockRedirect).not.toHaveBeenCalled();
+    expect(screen.getByRole('link', { name: '100' })).toHaveAttribute(
+      'aria-current',
+      'page'
+    );
     expect(
-      screen.getByRole('heading', { name: /no products found/i })
-    ).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /iphone/i })).toHaveAttribute(
+      screen.queryByRole('link', { name: /next/i })
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /previous/i })).toHaveAttribute(
       'href',
-      '/ogabassey/search?q=iphone'
+      '/ogabassey/search?q=iphone&page=99'
     );
   });
 

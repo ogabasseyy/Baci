@@ -2,7 +2,6 @@ import * as Sentry from '@sentry/react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useIsFocused } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Keyboard } from 'react-native';
 import {
   runOnJS,
   useAnimatedScrollHandler,
@@ -18,6 +17,7 @@ import { getHomeContentBottomPadding } from '@/constants/layout';
 import { usePageConfig } from '@/hooks';
 import { CONSTANT_MERCHANT_ID } from '@/hooks/product-utils';
 import { useDeferredFocusRender } from '@/hooks/use-deferred-focus-render';
+import { useHomeSearchControls } from '@/hooks/use-home-search';
 import { useMerchant } from '@/hooks/use-merchant';
 import { useNetworkState } from '@/hooks/use-network-state';
 import { CONFIG } from '@/lib/config';
@@ -28,8 +28,6 @@ import { getTemplateConfig } from '@/lib/templates';
 
 const HEADER_SOLID_BACKGROUND_OFFSET_PX = 10;
 const HEADER_VISIBILITY_ANIMATION_DURATION_MS = 180;
-
-const MIN_SEARCH_QUERY_LENGTH = 2;
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
@@ -67,19 +65,11 @@ export default function HomeScreen() {
   const headerVisibilityTarget = useSharedValue(1);
   const previousOffsetY = useSharedValue(0);
   const isScrolledShared = useSharedValue(false);
-  const searchVisibleShared = useSharedValue(false);
 
   // 2026 Best Practice: Network state monitoring for offline UX
   // Note: Manual onReconnect refetch removed — onlineManager.setOnline(true)
   // combined with refetchOnReconnect: true handles automatic refetching.
   const { isOnline } = useNetworkState();
-
-  const [searchVisible, setSearchVisible] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showSearchMinLengthHint, setShowSearchMinLengthHint] = useState(false);
-  // Guards against a second push while the first /search navigation is in
-  // flight (double submit from keyboard + action press in quick succession).
-  const searchNavigatingRef = useRef(false);
 
   const setHeaderVisibilityTarget = (target: 0 | 1) => {
     'worklet';
@@ -91,63 +81,20 @@ export default function HomeScreen() {
     );
   };
 
-  const handleSearch = () => {
-    searchVisibleShared.set(true);
-    setHeaderVisibilityTarget(1);
-    setSearchVisible(true);
-  };
-
-  const handleSearchCancel = () => {
-    searchVisibleShared.set(false);
-    setSearchVisible(false);
-    setSearchQuery('');
-    setShowSearchMinLengthHint(false);
-  };
-
-  const submitHomeSearch = (rawQuery: string) => {
-    const trimmedQuery = rawQuery.trim();
-    if (trimmedQuery.length < MIN_SEARCH_QUERY_LENGTH) {
-      setShowSearchMinLengthHint(true);
-      return;
-    }
-    if (searchNavigatingRef.current) {
-      return;
-    }
-    searchNavigatingRef.current = true;
-    setShowSearchMinLengthHint(false);
-    // Capture the query, then close the dropdown and release input focus
-    // before navigating so the home screen is clean on return.
-    searchVisibleShared.set(false);
-    setSearchVisible(false);
-    Keyboard.dismiss();
-    router.push({ pathname: '/search', params: { q: trimmedQuery } });
-  };
-
-  const handleSearchSubmit = () => {
-    submitHomeSearch(searchQuery);
-  };
-
-  const handleSeeAllResults = (query: string) => {
-    submitHomeSearch(query);
-  };
-
-  const handleSearchQueryChange = (text: string) => {
-    setSearchQuery(text);
-    if (
-      showSearchMinLengthHint &&
-      text.trim().length >= MIN_SEARCH_QUERY_LENGTH
-    ) {
-      setShowSearchMinLengthHint(false);
-    }
-  };
-
-  // Re-arm submission when home regains focus (back navigation from /search
-  // or a product opened from the dropdown).
-  useEffect(() => {
-    if (isFocused) {
-      searchNavigatingRef.current = false;
-    }
-  }, [isFocused]);
+  const {
+    handleSearch,
+    handleSearchCancel,
+    handleSearchQueryChange,
+    handleSearchSubmit,
+    handleSeeAllResults,
+    searchQuery,
+    searchVisible,
+    searchVisibleShared,
+    showSearchMinLengthHint,
+  } = useHomeSearchControls({
+    isFocused,
+    onSearchOpen: () => setHeaderVisibilityTarget(1),
+  });
 
   const handleRefresh = async () => {
     setRefreshing(true);

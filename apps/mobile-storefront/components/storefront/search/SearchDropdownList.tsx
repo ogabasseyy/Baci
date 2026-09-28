@@ -3,10 +3,12 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { SafeImage } from '@/components/ui/SafeImage';
 import type Colors from '@/constants/Colors';
 import { BRAND } from '@/constants/Colors';
+import { MIN_SEARCH_QUERY_LENGTH } from '@/constants/search';
 import type { Category } from '@/hooks';
 import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import { formatPrice, type Product } from '@/types/product';
 import { searchDropdownStyles as styles } from './SearchDropdown.styles';
+import { SeeAllResultsButton } from './SeeAllResultsButton';
 
 const MAX_RESULTS = 6;
 type ThemeColors = (typeof Colors)['light'];
@@ -32,35 +34,6 @@ interface SearchDropdownListProps {
   showMinLengthHint?: boolean;
 }
 
-function SeeAllResultsButton({
-  colors,
-  currentQuery,
-  onSeeAllResults,
-}: {
-  colors: ThemeColors;
-  currentQuery: string;
-  onSeeAllResults: (query: string) => void;
-}) {
-  const trimmedQuery = currentQuery.trim();
-  return (
-    <Pressable
-      style={[styles.seeAllButton, { borderColor: colors.border }]}
-      onPress={() => onSeeAllResults(currentQuery)}
-      accessibilityLabel={`See all results for ${trimmedQuery}`}
-      accessibilityRole="button"
-    >
-      <Ionicons name="search" size={16} color={BRAND.primary} />
-      <Text
-        style={[styles.seeAllText, { color: BRAND.primary }]}
-        numberOfLines={1}
-      >
-        See all results for “{trimmedQuery}”
-      </Text>
-      <Ionicons name="arrow-forward-outline" size={14} color={BRAND.primary} />
-    </Pressable>
-  );
-}
-
 export function SearchDropdownList({
   categories,
   colors,
@@ -76,11 +49,14 @@ export function SearchDropdownList({
   recentSearches,
   showMinLengthHint = false,
 }: SearchDropdownListProps) {
-  const hasQuery = query.length >= 2;
+  const hasQuery = query.length >= MIN_SEARCH_QUERY_LENGTH;
   const trimmedCurrentQuery = currentQuery.trim();
   const showSeeAllResults =
-    onSeeAllResults !== undefined && trimmedCurrentQuery.length >= 2;
-  const showHint = showMinLengthHint === true && trimmedCurrentQuery.length < 2;
+    onSeeAllResults !== undefined &&
+    trimmedCurrentQuery.length >= MIN_SEARCH_QUERY_LENGTH;
+  const showHint =
+    showMinLengthHint === true &&
+    trimmedCurrentQuery.length < MIN_SEARCH_QUERY_LENGTH;
   const seeAllButton =
     showSeeAllResults && onSeeAllResults ? (
       <SeeAllResultsButton
@@ -96,10 +72,10 @@ export function SearchDropdownList({
           <View
             style={styles.hintContainer}
             accessibilityLiveRegion="polite"
-            accessibilityLabel="Type at least 2 characters to search"
+            accessibilityLabel={`Type at least ${MIN_SEARCH_QUERY_LENGTH} characters to search`}
           >
             <Text style={[styles.hintText, { color: colors.textSecondary }]}>
-              Type at least 2 characters to search
+              Type at least {MIN_SEARCH_QUERY_LENGTH} characters to search
             </Text>
           </View>
         ) : null}

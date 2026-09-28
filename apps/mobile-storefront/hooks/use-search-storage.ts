@@ -9,6 +9,7 @@
  */
 
 import { useState } from 'react';
+import { MIN_SEARCH_QUERY_LENGTH } from '@/constants/search';
 import { syncStorage as storage } from '@/lib/storage'; // Assuming this is the correct import based on search.tsx analysis
 
 const SEARCH_HISTORY_KEY = 'search_history';
@@ -53,7 +54,8 @@ export function useSearchStorage() {
   );
 
   const saveSearch = (searchTerm: string) => {
-    if (!searchTerm.trim() || searchTerm.length < 2) return;
+    if (!searchTerm.trim() || searchTerm.length < MIN_SEARCH_QUERY_LENGTH)
+      return;
 
     setRecentSearches((prev) => {
       // Remove duplicates and add to front

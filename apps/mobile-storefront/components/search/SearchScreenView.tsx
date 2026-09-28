@@ -1,19 +1,15 @@
 import Ionicons, {
   type IoniconsIconName,
 } from '@react-native-vector-icons/ionicons';
-import { FlashList } from '@shopify/flash-list';
-import {
-  ActivityIndicator,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FilterBar } from '@/components/storefront/FilterBar';
-import { ProductCard } from '@/components/storefront/ProductCard';
 import type Colors from '@/constants/Colors';
 import type { Category, Product } from '@/types/product';
+import SearchResultsEmptyState from './SearchResultsEmptyState';
+import SearchResultsErrorState from './SearchResultsErrorState';
+import SearchResultsHeader from './SearchResultsHeader';
+import SearchResultsList from './SearchResultsList';
 import styles from './search-screen.styles';
 
 const CATEGORY_ICONS: Record<string, IoniconsIconName> = {
@@ -67,15 +63,6 @@ interface SearchScreenViewProps {
   /** Total matches reported by the search backend. */
   totalCount: number;
   viewMode: 'grid' | 'list';
-}
-
-function formatResultsCount(totalCount: number, loadedCount: number) {
-  if (totalCount > loadedCount) {
-    return `Showing ${loadedCount} of ${totalCount} results`;
-  }
-
-  const count = totalCount > 0 ? totalCount : loadedCount;
-  return `${count} result${count === 1 ? '' : 's'}`;
 }
 
 export default function SearchScreenView({
@@ -147,123 +134,40 @@ export default function SearchScreenView({
     }
 
     // A failed search is never reported as "no results": it keeps the retry
-    // path and the query input visible instead.
-    if (searchError) {
+    // path and the query input visible instead. When earlier pages already
+    // loaded, the list stays visible and the failure surfaces as a footer.
+    if (searchError && products.length === 0) {
       return (
-        <View style={styles.emptyContainer}>
-          <Ionicons
-            name="alert-circle-outline"
-            size={64}
-            color={colors.textSecondary}
-          />
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>
-            Couldn&apos;t load results
-          </Text>
-          <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-            Something went wrong while searching
-            {committedQuery ? ` for “${committedQuery}”` : ''}. Check your
-            connection and try again.
-          </Text>
-          <Pressable
-            onPress={onRetry}
-            style={[styles.retryButton, { backgroundColor: colors.primary }]}
-            accessibilityRole="button"
-            accessibilityLabel="Retry search"
-          >
-            <Text style={[styles.retryButtonText, { color: colors.white }]}>
-              Try again
-            </Text>
-          </Pressable>
-        </View>
+        <SearchResultsErrorState
+          colors={colors}
+          committedQuery={committedQuery}
+          onRetry={onRetry}
+        />
       );
     }
 
     if (products.length === 0) {
       return (
-        <View style={styles.emptyContainer}>
-          <Ionicons
-            name="search-outline"
-            size={64}
-            color={colors.textSecondary}
-          />
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>
-            No results found
-          </Text>
-          <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-            {committedQuery
-              ? `No products match “${committedQuery}”. Try a different spelling or browse a category.`
-              : 'Try searching for something else'}
-          </Text>
-          {categories.length > 0 && (
-            <View style={styles.browseChipsRow}>
-              {categories.slice(0, 4).map((category) => (
-                <Pressable
-                  key={category.slug}
-                  style={[
-                    styles.browseChip,
-                    {
-                      backgroundColor: colors.card,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                  onPress={() => onCategoryPress(category.slug)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Browse ${category.name}`}
-                >
-                  <Text style={[styles.browseChipText, { color: colors.text }]}>
-                    {category.name}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
-        </View>
+        <SearchResultsEmptyState
+          categories={categories}
+          colors={colors}
+          committedQuery={committedQuery}
+          onCategoryPress={onCategoryPress}
+        />
       );
     }
 
     return (
-      <FlashList
-        data={products}
-        renderItem={({ item, index }) => (
-          <View
-            style={[
-              styles.productWrapper,
-              index % 2 === 0 ? styles.productLeft : styles.productRight,
-            ]}
-          >
-            <ProductCard product={item} onPress={() => onProductPress(item)} />
-          </View>
-        )}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        contentContainerStyle={styles.resultsContainer}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
+      <SearchResultsList
+        colors={colors}
+        committedQuery={committedQuery}
+        isLoadingMore={isLoadingMore}
+        listError={searchError}
         onEndReached={onEndReached}
-        onEndReachedThreshold={0.5}
-        ListHeaderComponent={
-          <View style={styles.resultsCountHeader}>
-            <Text
-              style={[styles.resultsCountText, { color: colors.textSecondary }]}
-            >
-              {formatResultsCount(totalCount, products.length)}
-              {committedQuery ? ` for “${committedQuery}”` : ''}
-            </Text>
-          </View>
-        }
-        ListFooterComponent={
-          isLoadingMore ? (
-            <View style={styles.resultsFooter}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text
-                style={[styles.loadingText, { color: colors.textSecondary }]}
-              >
-                Loading more…
-              </Text>
-            </View>
-          ) : null
-        }
+        onProductPress={onProductPress}
+        onRetry={onRetry}
+        products={products}
+        totalCount={totalCount}
       />
     );
   };
@@ -327,45 +231,14 @@ export default function SearchScreenView({
       style={[styles.container, { backgroundColor: colors.background }]}
       edges={['top']}
     >
-      <View style={styles.header}>
-        <Pressable
-          onPress={onBack}
-          style={styles.backButton}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-        >
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </Pressable>
-        <View
-          style={[
-            styles.searchInputContainer,
-            { backgroundColor: colors.muted, borderColor: colors.border },
-          ]}
-        >
-          <Ionicons name="search-outline" size={18} color={colors.icon} />
-          <TextInput
-            style={[styles.searchInput, { color: colors.text }]}
-            accessibilityLabel="Search products"
-            placeholder="Search products..."
-            placeholderTextColor={colors.placeholder}
-            value={query}
-            onChangeText={onQueryChange}
-            onSubmitEditing={onSubmitQuery}
-            returnKeyType="search"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          {query.length > 0 && (
-            <Pressable
-              onPress={onClearQuery}
-              accessibilityRole="button"
-              accessibilityLabel="Clear search"
-            >
-              <Ionicons name="close-circle" size={18} color={colors.icon} />
-            </Pressable>
-          )}
-        </View>
-      </View>
+      <SearchResultsHeader
+        colors={colors}
+        onBack={onBack}
+        onClearQuery={onClearQuery}
+        onQueryChange={onQueryChange}
+        onSubmitQuery={onSubmitQuery}
+        query={query}
+      />
       {hasSearchQuery && (
         <FilterBar
           categories={categoryNames}

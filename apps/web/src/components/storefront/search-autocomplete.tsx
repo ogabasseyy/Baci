@@ -299,7 +299,15 @@ export function SearchAutocomplete({
           type="search"
           placeholder={placeholder}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            onChange(e.target.value);
+            // Open eagerly for submit-wired consumers so the "See all
+            // results" action stays reachable while the fetch is pending
+            // and when it fails outright (touch users have no Enter key).
+            if (onSubmitSearch && e.target.value.trim()) {
+              setIsOpen(true);
+            }
+          }}
           onKeyDown={handleKeyDown}
           onFocus={() => value.length >= 2 && setIsOpen(true)}
           className={cn(

@@ -858,6 +858,42 @@ describe('SearchAutocomplete', () => {
     expect(onSubmitSearch).not.toHaveBeenCalled();
   });
 
+  it('keeps "See all results" reachable when the suggestion fetch fails', async () => {
+    vi.useRealTimers();
+    const onSubmitSearch = vi.fn();
+    const onChange = vi.fn();
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockRejectedValue(new Error('autocomplete down'));
+
+    const { rerender } = render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value=""
+        onChange={onChange}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    const input = screen.getByRole('searchbox');
+    fireEvent.change(input, { target: { value: 'iphone' } });
+    rerender(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="iphone"
+        onChange={onChange}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
+
+    const seeAll = screen.getByRole('button', { name: /see all results/i });
+    fireEvent.click(seeAll);
+    expect(onSubmitSearch).toHaveBeenCalledWith('iphone');
+  });
+
   it('hides "See all results" when no submit handler is wired', async () => {
     vi.useRealTimers();
     const fetchMock = vi.mocked(globalThis.fetch);

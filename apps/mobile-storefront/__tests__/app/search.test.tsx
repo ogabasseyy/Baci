@@ -1,11 +1,15 @@
 import { act, render } from '@testing-library/react-native';
+import type { ComponentProps } from 'react';
+import type SearchScreenView from '@/components/search/SearchScreenView';
 import SearchScreen from '../../app/search';
+
+type SearchScreenViewProps = ComponentProps<typeof SearchScreenView>;
 
 const mockUseLocalSearchParams = jest.fn();
 const mockUseProducts = jest.fn();
 const mockUseProductBrands = jest.fn();
 const mockUseCategories = jest.fn();
-const mockViewProps: { current: Record<string, any> | null } = {
+const mockViewProps: { current: SearchScreenViewProps | null } = {
   current: null,
 };
 const mockStorageData: Record<string, string> = {};
@@ -44,7 +48,7 @@ jest.mock('@/lib/storage', () => ({
 
 jest.mock('@/components/search/SearchScreenView', () => ({
   __esModule: true,
-  default: (props: Record<string, unknown>) => {
+  default: (props: SearchScreenViewProps) => {
     mockViewProps.current = props;
     return null;
   },

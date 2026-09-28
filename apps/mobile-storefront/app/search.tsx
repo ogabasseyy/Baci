@@ -1,9 +1,10 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { Keyboard } from 'react-native';
 import SearchScreenView from '@/components/search/SearchScreenView';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { MIN_SEARCH_QUERY_LENGTH } from '@/constants/search';
 import { useCategories, useProductBrands, useProducts } from '@/hooks';
 import { useNetworkState } from '@/hooks/use-network-state';
 import { resolveSelectedCategoryId } from '@/lib/product-filter-options';
@@ -12,7 +13,6 @@ import type { Product } from '@/types/product';
 
 const SEARCH_HISTORY_KEY = 'search_history';
 const MAX_SEARCH_HISTORY = 10;
-const MIN_SEARCH_QUERY_LENGTH = 2;
 
 /**
  * Validates the Expo Router `q` parameter before use. Repeated parameters
@@ -113,7 +113,9 @@ export default function SearchScreen() {
     };
   }, [activeQuery]);
 
-  const saveToHistory = useCallback((searchTerm: string) => {
+  // Plain functions throughout: React Compiler owns memoization, so manual
+  // useCallback/useMemo wrappers are prohibited in this repo.
+  const saveToHistory = (searchTerm: string) => {
     if (!searchTerm.trim() || searchTerm.length < MIN_SEARCH_QUERY_LENGTH)
       return;
 
@@ -131,24 +133,27 @@ export default function SearchScreen() {
 
       return updated;
     });
-  }, []);
+  };
 
   // Applies a newly arrived route query to an already-mounted screen and
   // records each submitted route query in history exactly once. In-screen
   // edits never retrigger this effect, so typing after navigation is safe.
   const appliedRouteQueryRef = useRef<string | null>(null);
+  const applyRouteQuery = useEffectEvent((nextQuery: string) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    setQuery(nextQuery);
+    setDebouncedQuery(nextQuery);
+    saveToHistory(nextQuery);
+  });
   useEffect(() => {
     if (routeQuery && appliedRouteQueryRef.current !== routeQuery) {
       appliedRouteQueryRef.current = routeQuery;
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-        debounceTimerRef.current = null;
-      }
-      setQuery(routeQuery);
-      setDebouncedQuery(routeQuery);
-      saveToHistory(routeQuery);
+      applyRouteQuery(routeQuery);
     }
-  }, [routeQuery, saveToHistory]);
+  }, [routeQuery]);
 
   const commitSearchQuery = (value: string) => {
     const trimmedValue = value.trim();
@@ -204,15 +209,15 @@ export default function SearchScreen() {
 
   // Guards the list end event against duplicate fetches; the hook queues a
   // bottom-reached signal that arrives mid-refetch instead of dropping it.
-  const handleEndReached = useCallback(() => {
+  const handleEndReached = () => {
     if (hasSearchQuery && hasMore && !isLoading && !isLoadingMore) {
       loadMore();
     }
-  }, [hasMore, hasSearchQuery, isLoading, isLoadingMore, loadMore]);
+  };
 
-  const handleRetry = useCallback(() => {
+  const handleRetry = () => {
     void refetchProducts();
-  }, [refetchProducts]);
+  };
   const categoryNames = ['All', ...categories.map((category) => category.name)];
 
   // Adjust state inline during render (guarded, converges after one pass) so

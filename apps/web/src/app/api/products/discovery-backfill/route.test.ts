@@ -138,6 +138,7 @@ describe('merchant discovery backfill API', () => {
     expect(response.status).toBe(429);
     expect(await response.json()).toEqual({
       error: 'Embedding provider is temporarily rate limited',
+      code: 'EMBEDDING_PROVIDER_RATE_LIMITED',
       resetIn: 60,
     });
   });
@@ -155,11 +156,14 @@ describe('merchant discovery backfill API', () => {
     });
   });
 
-  it('logs a safe database failure code without exposing it to the shopper', async () => {
+  it.each([
+    '23505',
+    'PGRST500',
+  ])('logs a safe database failure code %s without exposing it to the shopper', async (code) => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       mocks.backfill.mockRejectedValueOnce(
-        new Error('Embedding write failed: 23505')
+        new Error(`Embedding write failed: ${code}`)
       );
       const response = await POST(
         request(JSON.stringify({ merchantId, cursor: null }))
@@ -169,7 +173,7 @@ describe('merchant discovery backfill API', () => {
         error: 'Discovery indexing failed. Retry this batch.',
       });
       expect(log).toHaveBeenCalledWith('Discovery backfill batch failed', {
-        reason: 'Embedding write failed: 23505',
+        reason: `Embedding write failed: ${code}`,
       });
     } finally {
       log.mockRestore();

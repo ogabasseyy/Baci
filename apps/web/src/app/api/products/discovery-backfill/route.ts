@@ -93,13 +93,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: 'Embedding provider is temporarily rate limited',
+          code: 'EMBEDDING_PROVIDER_RATE_LIMITED',
           resetIn: 60,
         },
         { status: 429 }
       );
     }
     const safeReason =
-      /^(?:Catalog read failed|Embedding state read failed|Embedding write failed): [A-Z0-9]{5}$/.test(
+      /^(?:Catalog read failed|Embedding state read failed|Embedding write failed): (?:[A-Z0-9]{5}|PGRST\d{3})$/.test(
         message
       ) ||
       /^Embedding provider returned \d{3}$/.test(message) ||

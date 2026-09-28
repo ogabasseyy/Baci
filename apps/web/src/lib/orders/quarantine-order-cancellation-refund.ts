@@ -2,6 +2,19 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { DeliveryUncertainError } from '@/lib/orders/run-order-cancellation-side-effect';
 import type { GatewayPaymentTransaction } from './gateway-payment-transaction';
 
+function toReviewCandidates(
+  order: { currency: string | null },
+  transactions: GatewayPaymentTransaction[]
+) {
+  return transactions.map((transaction) => ({
+    amount: Number(transaction.amount),
+    currency: transaction.currency ?? order.currency ?? 'NGN',
+    gateway: transaction.gateway,
+    gatewayReference: transaction.gateway_reference,
+    paymentTransactionId: transaction.id,
+  }));
+}
+
 export async function quarantineRefund({
   metadata,
   order,
@@ -25,13 +38,7 @@ export async function quarantineRefund({
   const { error: reviewError } = await supabase
     .from('reconciliation_review')
     .insert({
-      candidates: transactions.map((transaction) => ({
-        amount: Number(transaction.amount),
-        currency: transaction.currency ?? order.currency ?? 'NGN',
-        gateway: transaction.gateway,
-        gatewayReference: transaction.gateway_reference,
-        paymentTransactionId: transaction.id,
-      })),
+      candidates: toReviewCandidates(order, transactions),
       issue_type: 'order_cancellation_refund_requires_review',
       merchant_id: order.merchant_id,
       metadata: metadata ?? {},
@@ -66,6 +73,42 @@ export async function quarantineRefund({
         }
       );
       if (mergeError || merged !== true) {
+        if (preflight) {
+          throw new Error(
+            'Refund requires reconciliation, but merging its recovery evidence failed'
+          );
+        }
+        throw new DeliveryUncertainError(
+          'Refund requires reconciliation, but merging its recovery evidence failed'
+        );
+      }
+    }
+    // Merge leg-level evidence (reason, accepted IDs, candidates) keyed by
+    // the failed leg — or the first leg when the caller names none — so a
+    // second quarantine is not discarded when another leg already opened
+    // the order-level review.
+    const failedPaymentTransactionId = metadata?.failed_payment_transaction_id;
+    const legTransactionId =
+      typeof failedPaymentTransactionId === 'string' &&
+      failedPaymentTransactionId.length > 0
+        ? failedPaymentTransactionId
+        : transactions[0]?.id;
+    if (typeof legTransactionId === 'string' && legTransactionId.length > 0) {
+      const acceptedRefundIds = metadata?.accepted_refund_ids;
+      const { data: legMerged, error: legMergeError } = await supabase.rpc(
+        'merge_paystack_cancellation_refund_leg_evidence_v1',
+        {
+          p_order_id: order.id,
+          p_merchant_id: order.merchant_id,
+          p_payment_transaction_id: legTransactionId,
+          p_reason: reason,
+          p_accepted_refund_ids: Array.isArray(acceptedRefundIds)
+            ? acceptedRefundIds
+            : null,
+          p_candidates: toReviewCandidates(order, transactions),
+        }
+      );
+      if (legMergeError || legMerged !== true) {
         if (preflight) {
           throw new Error(
             'Refund requires reconciliation, but merging its recovery evidence failed'

@@ -34,8 +34,10 @@ describe('quarantineRefund', () => {
 
   it('keeps a duplicate preflight review quarantined', async () => {
     const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
     const supabase = {
       from: vi.fn().mockReturnValue({ insert }),
+      rpc,
     } as unknown as Pick<SupabaseClient, 'from' | 'rpc'>;
 
     await expect(
@@ -79,6 +81,14 @@ describe('quarantineRefund', () => {
         p_provider_refund_id: 123,
       })
     );
+    expect(rpc).toHaveBeenCalledWith(
+      'merge_paystack_cancellation_refund_leg_evidence_v1',
+      expect.objectContaining({
+        p_merchant_id: 'merchant-id',
+        p_order_id: 'order-id',
+        p_payment_transaction_id: 'payment-id',
+      })
+    );
   });
 
   it('keeps an accepted refund uncertain when merging its evidence fails', async () => {
@@ -104,9 +114,9 @@ describe('quarantineRefund', () => {
     expect((error as Error).message).toMatch('merging its recovery evidence');
   });
 
-  it('skips the merge on conflict without provider evidence', async () => {
+  it('merges leg evidence on conflict without provider evidence', async () => {
     const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
-    const rpc = vi.fn();
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
     const supabase = {
       from: vi.fn().mockReturnValue({ insert }),
       rpc,
@@ -120,7 +130,72 @@ describe('quarantineRefund', () => {
         transactions: [transaction],
       })
     ).rejects.toBeInstanceOf(DeliveryUncertainError);
-    expect(rpc).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalledWith(
+      'merge_paystack_cancellation_refund_provider_evidence_v1',
+      expect.anything()
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'merge_paystack_cancellation_refund_leg_evidence_v1',
+      expect.objectContaining({
+        p_accepted_refund_ids: null,
+        p_merchant_id: 'merchant-id',
+        p_order_id: 'order-id',
+        p_payment_transaction_id: 'payment-id',
+        p_reason: 'unsupported gateway',
+      })
+    );
+  });
+
+  it('merges failed-leg evidence with accepted refund IDs', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    const supabase = {
+      from: vi.fn().mockReturnValue({ insert }),
+      rpc,
+    } as unknown as Pick<SupabaseClient, 'from' | 'rpc'>;
+
+    await expect(
+      quarantineRefund({
+        metadata: {
+          accepted_refund_ids: [101],
+          failed_payment_transaction_id: 'payment-2',
+        },
+        order,
+        reason: 'Paystack refund initiation failed',
+        supabase,
+        transactions: [{ ...transaction, id: 'payment-2' }],
+      })
+    ).rejects.toBeInstanceOf(DeliveryUncertainError);
+    expect(rpc).toHaveBeenCalledWith(
+      'merge_paystack_cancellation_refund_leg_evidence_v1',
+      expect.objectContaining({
+        p_accepted_refund_ids: [101],
+        p_candidates: [
+          expect.objectContaining({ paymentTransactionId: 'payment-2' }),
+        ],
+        p_payment_transaction_id: 'payment-2',
+      })
+    );
+  });
+
+  it('keeps the step uncertain when merging leg evidence fails', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
+    const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
+    const supabase = {
+      from: vi.fn().mockReturnValue({ insert }),
+      rpc,
+    } as unknown as Pick<SupabaseClient, 'from' | 'rpc'>;
+
+    const error = await quarantineRefund({
+      metadata: { failed_payment_transaction_id: 'payment-id' },
+      order,
+      reason: 'Paystack refund initiation failed',
+      supabase,
+      transactions: [transaction],
+    }).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(DeliveryUncertainError);
+    expect((error as Error).message).toMatch('merging its recovery evidence');
   });
 
   it('keeps an accepted refund uncertain when review persistence fails', async () => {

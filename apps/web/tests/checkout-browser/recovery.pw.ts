@@ -138,6 +138,18 @@ test('resumed order shows server totals and contact details with an empty cart',
   page,
 }) => {
   await seedCheckout(page, { emptyCart: true });
+  let resumeLookupRequests = 0;
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (
+      request.method() === 'GET' &&
+      url.pathname === `/api/storefront/orders/${order.id}` &&
+      url.searchParams.get('merchant_slug') === 'ogabassey' &&
+      url.searchParams.get('token') === order.tracking_token
+    ) {
+      resumeLookupRequests += 1;
+    }
+  });
   const resumeLookup = page.waitForResponse((response) => {
     const url = new URL(response.url());
     return (
@@ -170,6 +182,8 @@ test('resumed order shows server totals and contact details with an empty cart',
   await page.getByRole('button', { name: 'Contact Information' }).click();
   await page.getByRole('textbox', { name: 'First Name' }).fill('Grace');
   await page.getByRole('button', { name: 'Continue to Delivery' }).click();
+  await page.waitForLoadState('networkidle');
+  expect(resumeLookupRequests).toBe(1);
 });
 
 test('manual QA scenario controls are opt-in and reset local checkout state', async ({

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
-import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
+import type { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
 import {
   PAID_ORDER_SIDE_EFFECT_ATTEMPT_CAP,
   PERMANENT_PAID_ORDER_SIDE_EFFECT_ERRORS,
@@ -8,6 +8,7 @@ import {
 import { recoverStrandedPaidOrderSideEffects } from '@/lib/payments/recover-stranded-paid-order-side-effects';
 import { REPLAYABLE_PAID_ORDER_SIDE_EFFECT_STEPS } from '@/lib/payments/replayable-paid-order-side-effect-steps';
 import { retireTerminalSideEffectDrain } from '@/lib/payments/retire-terminal-side-effect-drain';
+import type { retireWedgeWithReview } from '@/lib/payments/retire-wedge-with-review';
 import {
   buildJuicywayVerificationContext,
   isHealableGateway,
@@ -15,13 +16,8 @@ import {
   verifyGatewayCharge,
 } from '@/lib/payments/verify-gateway-charge';
 
-// Second half of the reconcile cron: orders that ARE paid but whose outbox
-// side effects (receipt email, settlement, ad tracking) recorded a failure —
-// e.g. the paid-order fetch failed after the atomic flip, or the side-effect
-// runner itself crashed and persistPaidOrderSideEffectRetry filed markers.
-// The wedge sweep cannot see these (it scans NOT-paid orders only), so this
-// drain re-runs the finalizer, whose claim-gated outbox retries exactly the
-// failed steps. Stub/permanent errors are excluded to avoid retry loops.
+// Re-run the claim-gated finalizer for failed paid-order side effects.
+// Exclude permanent errors to avoid retry loops.
 
 const DEFAULT_LIMIT = 10;
 // Comfortably past the claim RPC's 60s takeover window.
@@ -57,11 +53,15 @@ type DrainCandidateRow = {
 export async function drainFailedPaidOrderSideEffects({
   supabase,
   scheduleAfter,
+  finalizePayment,
+  fileWedgeReview,
   limit = DEFAULT_LIMIT,
   deadlineMs,
 }: {
   supabase: SupabaseClient;
   scheduleAfter: (task: () => Promise<void>) => void;
+  finalizePayment: typeof finalizeOrderGatewayPayment;
+  fileWedgeReview: typeof retireWedgeWithReview;
   limit?: number;
   deadlineMs?: number;
 }): Promise<FailedSideEffectDrainSummary> {
@@ -174,6 +174,7 @@ export async function drainFailedPaidOrderSideEffects({
       }
       if (!txn.gateway_reference) {
         await retireTerminalSideEffectDrain({
+          fileWedgeReview,
           orderId,
           reason:
             'Paid-order side-effect drain found a completed transaction with no gateway reference; manual reconciliation required',
@@ -226,6 +227,7 @@ export async function drainFailedPaidOrderSideEffects({
         if (!verification.ok) {
           if (isTerminalGatewayVerificationReason(verification.reason)) {
             await retireTerminalSideEffectDrain({
+              fileWedgeReview,
               orderId,
               reason: `Paid-order side-effect drain: ${gateway} could not safely confirm reference ${txn.gateway_reference} (${verification.reason}${verification.gatewayStatus ? `: ${verification.gatewayStatus}` : ''}); manual reconciliation required`,
               resolution:
@@ -248,7 +250,7 @@ export async function drainFailedPaidOrderSideEffects({
         gatewayResponse = verification.response;
       }
 
-      const outcome = await finalizeOrderGatewayPayment({
+      const outcome = await finalizePayment({
         actor: 'cron:reconcile-gateway-paid-orders:drain',
         gateway,
         gatewayResponse,

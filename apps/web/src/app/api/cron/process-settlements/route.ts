@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { buildSettlementNotificationEmail } from '@/lib/build-settlement-notification-email';
 import { constantTimeEqual } from '@/lib/constant-time-equal';
+import { notifyMerchant } from '@/lib/expo-push';
 import { logger } from '@/lib/logger';
 import { drainFailedOrderCancellationSideEffects } from '@/lib/orders/drain-failed-order-cancellation-side-effects';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
 
     const supabase = createServiceClient();
     if (new URL(request.url).searchParams.get('cancellationsOnly') === 'true') {
-      return processCancellationDrain(supabase);
+      return processCancellationDrain(supabase, sendEmail, notifyMerchant);
     }
 
     // 1. Process due settlements

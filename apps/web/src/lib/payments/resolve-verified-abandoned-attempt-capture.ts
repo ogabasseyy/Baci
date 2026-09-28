@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { verifyTransaction } from '@/lib/paystack';
 import { fileDuplicatePaymentCapture } from './file-duplicate-payment-capture';
+import type { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
 import { finalizePartiallyPaidAbandonedAttempt } from './finalize-partially-paid-abandoned-attempt';
 
 type VerifiedCapture = Extract<
@@ -18,6 +19,7 @@ type VerifiedCapture = Extract<
  */
 export async function resolveVerifiedAbandonedAttemptCapture({
   attempt,
+  finalizePayment,
   hold,
   mismatchKind,
   paidOrderStatus,
@@ -37,6 +39,7 @@ export async function resolveVerifiedAbandonedAttemptCapture({
     platform_fee: number | null;
     status: 'pending' | 'processing';
   };
+  finalizePayment?: typeof finalizeOrderGatewayPayment;
   hold: (reason: string) => Promise<void>;
   mismatchKind: string | null;
   paidOrderStatus: string | undefined;
@@ -46,8 +49,14 @@ export async function resolveVerifiedAbandonedAttemptCapture({
   supabase: SupabaseClient;
 }): Promise<void> {
   if (!mismatchKind && paidOrderStatus === 'partially_paid') {
+    if (!finalizePayment) {
+      summary.failed = true;
+      await hold('payment_finalizer_unavailable');
+      return;
+    }
     await finalizePartiallyPaidAbandonedAttempt({
       attempt,
+      finalizePayment,
       hold,
       providerData: result.data as unknown as Record<string, unknown>,
       scheduleAfter,

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
+import type { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
 
 /**
  * Complete a verified capture on a partially paid order through the atomic
@@ -9,6 +9,7 @@ import { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
  */
 export async function finalizePartiallyPaidAbandonedAttempt({
   attempt,
+  finalizePayment,
   hold,
   providerData,
   scheduleAfter,
@@ -24,6 +25,7 @@ export async function finalizePartiallyPaidAbandonedAttempt({
     platform_fee: number | null;
     status: 'pending' | 'processing';
   };
+  finalizePayment: typeof finalizeOrderGatewayPayment;
   hold: (reason: string) => Promise<void>;
   providerData: Record<string, unknown>;
   scheduleAfter: (task: () => Promise<void>) => void;
@@ -52,7 +54,7 @@ export async function finalizePartiallyPaidAbandonedAttempt({
       return;
     }
   }
-  const outcome = await finalizeOrderGatewayPayment({
+  const outcome = await finalizePayment({
     actor: 'cron:reconcile-gateway-paid-orders',
     gateway: 'paystack',
     gatewayResponse: providerData,

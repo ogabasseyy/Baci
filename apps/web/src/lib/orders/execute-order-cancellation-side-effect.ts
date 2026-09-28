@@ -122,10 +122,26 @@ export async function executeOrderCancellationSideEffect({
     const metadata = row.metadata as {
       payment_transaction_id?: unknown;
     } | null;
-    return typeof metadata?.payment_transaction_id === 'string'
-      ? metadata.payment_transaction_id
+    const paymentId = metadata?.payment_transaction_id;
+    return typeof paymentId === 'string' &&
+      transactions.some((transaction) => transaction.id === paymentId)
+      ? paymentId
       : null;
   };
+  const unlinkedRefunds = (refundRows ?? []).filter(
+    (row) => linkedPaymentId(row) === null
+  );
+  if (unlinkedRefunds.length > 0) {
+    await quarantineRefund({
+      metadata: { unlinked_refund_count: unlinkedRefunds.length },
+      order,
+      preflight: true,
+      reason:
+        'An existing refund cannot be linked to a payment leg; verify it before another provider refund',
+      supabase,
+      transactions,
+    });
+  }
   const refundedPaymentIds = new Set(
     (refundRows ?? [])
       .filter((row) => row.status === 'completed')

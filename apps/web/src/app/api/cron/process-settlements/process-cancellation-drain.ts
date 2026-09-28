@@ -5,12 +5,13 @@ import {
   cancellationSideEffectDrainLimit,
 } from '@/lib/orders/cancellation-side-effect-drain-limit';
 import { drainFailedOrderCancellationSideEffects } from '@/lib/orders/drain-failed-order-cancellation-side-effects';
+import type { MerchantRefundPushSender } from '@/lib/payments/drain-paystack-refund-notifications';
 import { drainPaystackRefundNotifications } from '@/lib/payments/drain-paystack-refund-notifications';
 import { notificationDrainLimit } from '@/lib/payments/notification-drain-limit';
 import { reconcileCompletedPaystackCancellationRefunds } from '@/lib/payments/reconcile-completed-paystack-cancellation-refunds';
 import { reconcilePendingPaystackCancellationRefunds } from '@/lib/payments/reconcile-pending-paystack-cancellation-refunds';
 import type { createServiceClient } from '@/lib/supabase/service';
-import { sendEmail } from '@/lib/zeptomail';
+import type { sendEmail } from '@/lib/zeptomail';
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -26,7 +27,11 @@ type ServiceClient = ReturnType<typeof createServiceClient>;
  * per-row failure counts instead of throwing, so both rejections and
  * reported failures surface as a 503.
  */
-export async function processCancellationDrain(supabase: ServiceClient) {
+export async function processCancellationDrain(
+  supabase: ServiceClient,
+  sendCancellationEmail: typeof sendEmail,
+  sendMerchantPush: MerchantRefundPushSender
+) {
   const workersStartedAt = Date.now();
   const [refundResult, legacyRefundResult] = await Promise.allSettled([
     reconcilePendingPaystackCancellationRefunds(supabase),
@@ -49,7 +54,7 @@ export async function processCancellationDrain(supabase: ServiceClient) {
     drainFailedOrderCancellationSideEffects({
       deadlineMs: cancellationDrainDeadlineMs(workersStartedAt),
       limit: sideEffectLimit,
-      sendCancellationEmail: sendEmail,
+      sendCancellationEmail,
       supabase,
     }),
   ]);
@@ -65,7 +70,12 @@ export async function processCancellationDrain(supabase: ServiceClient) {
     });
   }
   const notificationResult = await Promise.allSettled([
-    drainPaystackRefundNotifications(supabase, sendEmail, drainLimit),
+    drainPaystackRefundNotifications(
+      supabase,
+      sendCancellationEmail,
+      drainLimit,
+      sendMerchantPush
+    ),
   ]);
   // The workers fulfill with per-row failure counts instead of throwing,
   // so a rejection-only check would report persistent outages as success.

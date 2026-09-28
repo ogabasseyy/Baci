@@ -42,6 +42,7 @@ describe('abandoned Paystack attempts on partially paid orders', () => {
     const { client } = createClient([partialCandidate()]);
 
     await reconcileAbandonedPaystackAttempts({
+      finalizePayment: vi.fn(),
       supabase: client as never,
       verify: vi.fn().mockResolvedValue(verifiedCapture),
     });
@@ -61,6 +62,7 @@ describe('abandoned Paystack attempts on partially paid orders', () => {
     ]);
 
     await reconcileAbandonedPaystackAttempts({
+      finalizePayment: vi.fn(),
       supabase: client as never,
       verify: vi.fn().mockResolvedValue(verifiedCapture),
     });

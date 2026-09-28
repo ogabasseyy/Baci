@@ -3,9 +3,11 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { eventPipelineChatCredentialPaths } from './event-pipeline-chat-credential-paths';
+import { eventPipelineGatewayCronCredentialPaths } from './event-pipeline-gateway-cron-credential-paths';
 import { eventPipelineGiglCredentialPaths } from './event-pipeline-gigl-credential-paths';
 import { eventPipelineImmediateOrderCredentialPaths } from './event-pipeline-immediate-order-credential-paths';
 import { eventPipelineJumiaCredentialPaths } from './event-pipeline-jumia-credential-paths';
+import { eventPipelinePaystackRefundCredentialPaths } from './event-pipeline-paystack-refund-credential-paths';
 import { eventPipelinePiggyvestCredentialPaths } from './event-pipeline-piggyvest-credential-paths';
 import { eventPipelineRedvaultCredentialPaths } from './event-pipeline-redvault-credential-paths';
 import { eventPipelineRepairPickupCredentialPaths } from './event-pipeline-repair-pickup-credential-paths';
@@ -278,6 +280,8 @@ describe('event pipeline credential-path authority', () => {
       ...eventPipelineRedvaultCredentialPaths,
       ...eventPipelineShippingCredentialPaths,
       ...eventPipelineChatCredentialPaths,
+      ...eventPipelinePaystackRefundCredentialPaths,
+      ...eventPipelineGatewayCronCredentialPaths,
     ]);
   });
 });

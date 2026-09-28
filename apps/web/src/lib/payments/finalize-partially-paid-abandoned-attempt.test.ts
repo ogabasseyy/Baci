@@ -26,6 +26,7 @@ function admittingClient(admitted: unknown[] | null, error: unknown = null) {
 
 function harness() {
   return {
+    finalizePayment: finalize,
     hold: vi.fn().mockResolvedValue(undefined),
     scheduleAfter: vi.fn(),
     summary: {

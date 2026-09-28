@@ -20,6 +20,19 @@ type RefundEmailSender = (message: {
   };
 }) => Promise<{ deliveryOutcome?: 'unknown'; success: boolean }>;
 
+export type MerchantRefundPushSender = (
+  merchantId: string,
+  title: string,
+  body: string,
+  data: Record<string, unknown>,
+  channelId: 'payments'
+) => Promise<{
+  sent: number;
+  failed: number;
+  errors: string[];
+  deliveryOutcome?: 'unknown';
+}>;
+
 interface NotificationRow {
   id: string;
   order_id: string;
@@ -34,7 +47,8 @@ interface NotificationRow {
 export async function drainPaystackRefundNotifications(
   supabase: SupabaseClient,
   sendEmail: RefundEmailSender,
-  limit = 20
+  limit = 20,
+  sendMerchantPush?: MerchantRefundPushSender
 ): Promise<{
   claimed: number;
   sent: number;
@@ -167,34 +181,60 @@ export async function drainPaystackRefundNotifications(
             ? `Refunds totaling ${amount} have been processed for cancelled order #${orderNumber}.`
             : `Paystack could not complete the refund for order #${orderNumber}. Check the refund in Paystack.`;
           outcome = 'delivery_uncertain';
-          if (!merchant.email) {
+          if (sendMerchantPush) {
+            const pushed = await sendMerchantPush(
+              merchant.id,
+              title,
+              body,
+              {
+                type: completed
+                  ? 'paystack_refund_processed'
+                  : 'paystack_refund_needs_attention',
+                order_id: order.id,
+                order_number: orderNumber,
+              },
+              'payments'
+            );
+            if (
+              pushed.deliveryOutcome === 'unknown' ||
+              (pushed.sent > 0 &&
+                (pushed.failed > 0 || pushed.errors.length > 0))
+            ) {
+              throw new Error('refund_merchant_push_uncertain');
+            }
+            if (pushed.sent > 0) outcome = 'sent';
+          }
+          // No active app token: deliver the same notification by email.
+          if (outcome !== 'sent' && !merchant.email) {
             outcome = 'failed';
             throw new Error('refund_merchant_contact_missing');
           }
-          const result = await sendEmail({
-            to: merchant.email,
-            subject: `${title}: order #${orderNumber}`,
-            textContent: body,
-            htmlContent: `<p>${escapeHtmlText(body)}</p>`,
-            emailType: 'notifications',
-            auditContext: {
-              merchantId: merchant.id,
-              orderId: order.id,
-              metadata: {
-                trigger: completed
-                  ? 'paystack_refund_processed_merchant'
-                  : 'paystack_refund_attention_merchant',
+          if (outcome !== 'sent') {
+            const result = await sendEmail({
+              to: merchant.email,
+              subject: `${title}: order #${orderNumber}`,
+              textContent: body,
+              htmlContent: `<p>${escapeHtmlText(body)}</p>`,
+              emailType: 'notifications',
+              auditContext: {
+                merchantId: merchant.id,
+                orderId: order.id,
+                metadata: {
+                  trigger: completed
+                    ? 'paystack_refund_processed_merchant'
+                    : 'paystack_refund_attention_merchant',
+                },
               },
-            },
-          });
-          if (result.success) {
-            outcome = 'sent';
-          } else if (result.deliveryOutcome === 'unknown') {
-            outcome = 'delivery_uncertain';
-            lastError = 'refund_merchant_email_unknown';
-          } else {
-            outcome = 'failed';
-            lastError = 'refund_merchant_email_rejected';
+            });
+            if (result.success) {
+              outcome = 'sent';
+            } else if (result.deliveryOutcome === 'unknown') {
+              outcome = 'delivery_uncertain';
+              lastError = 'refund_merchant_email_unknown';
+            } else {
+              outcome = 'failed';
+              lastError = 'refund_merchant_email_rejected';
+            }
           }
         }
       }

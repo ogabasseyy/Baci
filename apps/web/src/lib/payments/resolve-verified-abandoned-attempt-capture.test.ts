@@ -61,6 +61,7 @@ describe('resolveVerifiedAbandonedAttemptCapture', () => {
       hold,
       mismatchKind: null,
       paidOrderStatus: 'partially_paid',
+      finalizePayment: vi.fn(),
       result,
       scheduleAfter,
       summary: s,

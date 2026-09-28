@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   createServiceClient: vi.fn(),
   drainFailedPaidOrderSideEffects: vi.fn(),
+  finalizeOrderGatewayPayment: vi.fn(),
+  fileWedgeReview: vi.fn(),
   getCronSecret: vi.fn(),
   logger: { error: vi.fn(), warn: vi.fn() },
   reconcileAbandonedPaystackAttempts: vi.fn(),
@@ -28,6 +30,9 @@ vi.mock('@/lib/payments/reconcile-abandoned-paystack-attempts', () => ({
 vi.mock('@/lib/payments/drain-failed-paid-order-side-effects', () => ({
   drainFailedPaidOrderSideEffects: mocks.drainFailedPaidOrderSideEffects,
 }));
+vi.mock('@/lib/payments/finalize-order-gateway-payment', () => ({
+  finalizeOrderGatewayPayment: mocks.finalizeOrderGatewayPayment,
+}));
 
 import { GET } from './route';
 
@@ -42,10 +47,21 @@ function buildRequest(authorization?: string) {
   );
 }
 
+function mockSweepResult(result: unknown) {
+  mocks.reconcileWedgedGatewayOrders.mockImplementation(async (input) => {
+    await input.beforeSweep?.({
+      finalizePayment: mocks.finalizeOrderGatewayPayment,
+      fileWedgeReview: mocks.fileWedgeReview,
+    });
+    return result;
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getCronSecret.mockReturnValue(CRON_SECRET);
   mocks.createServiceClient.mockReturnValue({});
+  mockSweepResult({ checked: 0, failed: [], healed: [], skipped: [] });
   mocks.reconcileAbandonedPaystackAttempts.mockResolvedValue({
     checked: 0,
     failed: false,
@@ -91,7 +107,7 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
       healed: [{ orderId: 'order-1', orderNumber: 'ORD-1' }],
       skipped: [],
     };
-    mocks.reconcileWedgedGatewayOrders.mockResolvedValue(summary);
+    mockSweepResult(summary);
 
     const response = await GET(buildRequest(`Bearer ${CRON_SECRET}`));
     const body = await response.json();
@@ -124,7 +140,7 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
   });
 
   it('shares the invocation budget across the three passes', async () => {
-    mocks.reconcileWedgedGatewayOrders.mockResolvedValue({ checked: 0 });
+    mockSweepResult({ checked: 0 });
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     try {
       const response = await GET(buildRequest(`Bearer ${CRON_SECRET}`));
@@ -145,7 +161,7 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
   });
 
   it('surfaces and logs recovered/stranded side effects even when nothing else changed', async () => {
-    mocks.reconcileWedgedGatewayOrders.mockResolvedValue({
+    mockSweepResult({
       checked: 0,
       detectedUnhealable: [],
       failed: [],
@@ -183,7 +199,7 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
     mocks.reconcileAbandonedPaystackAttempts.mockRejectedValue(
       new Error('candidate lookup failed')
     );
-    mocks.reconcileWedgedGatewayOrders.mockResolvedValue({
+    mockSweepResult({
       checked: 0,
       detectedUnhealable: [],
       failed: [],
@@ -208,7 +224,7 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
       held: [{ id: 'attempt-1', reason: 'retirement_failed' }],
       retired: ['attempt-2'],
     });
-    mocks.reconcileWedgedGatewayOrders.mockResolvedValue({
+    mockSweepResult({
       checked: 0,
       detectedUnhealable: [],
       failed: [],

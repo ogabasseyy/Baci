@@ -4,9 +4,13 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { snapshotError } from './ogabassey-hero-snapshot-config.mjs';
+import { HeroSnapshotError } from './ogabassey-hero-snapshot-errors.mjs';
 import { readSnapshotManifestTenants } from './ogabassey-hero-snapshot-manifest-read.mjs';
 import { serializeSnapshotManifestFile } from './ogabassey-hero-snapshot-manifest-serialize.mjs';
+
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
 
 export async function writeSnapshotManifest({
   entries,
@@ -20,7 +24,7 @@ export async function writeSnapshotManifest({
   try {
     existing = readFileSync(manifestPath, 'utf8');
   } catch {
-    throw snapshotError(
+    throw new HeroSnapshotError(
       `manifest not found at ${manifestPath}; it is checked in with the repo`
     );
   }
@@ -48,10 +52,26 @@ export async function writeSnapshotManifest({
       .map((dir) => resolve(dir, 'node_modules/.bin/biome'))
       .find((bin) => existsSync(bin));
     if (biomeBin) {
-      execFileSync(biomeBin, ['check', '--write', manifestPath], {
-        cwd: root,
-        stdio: 'pipe',
-      });
+      try {
+        execFileSync(biomeBin, ['check', '--write', manifestPath], {
+          cwd: root,
+          stdio: 'pipe',
+        });
+      } catch (error) {
+        // The new manifest is already on disk and the orchestrator is about
+        // to delete this run's baked files: restore the previous manifest
+        // first, or its entries would dangle at deleted assets.
+        try {
+          writeFileSync(manifestPath, existing);
+        } catch {
+          throw new HeroSnapshotError(
+            `manifest formatting failed and the previous manifest could not be restored: ${errorMessage(error)}`
+          );
+        }
+        throw new HeroSnapshotError(
+          `manifest formatting failed, previous manifest restored: ${errorMessage(error)}`
+        );
+      }
     } else {
       console.warn(
         '[hero-snapshots] WARN: biome not found; run biome check --write on the manifest'

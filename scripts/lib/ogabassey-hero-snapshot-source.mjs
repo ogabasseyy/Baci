@@ -4,8 +4,8 @@
 import {
   DOWNLOAD_TIMEOUT_MS,
   MAX_SOURCE_BYTES,
-  snapshotError,
 } from './ogabassey-hero-snapshot-config.mjs';
+import { HeroSnapshotError } from './ogabassey-hero-snapshot-errors.mjs';
 
 function finalResponseUrl(res, originalUrl) {
   // `fetch` follows redirects, so the original URL's protocol check is not
@@ -18,10 +18,10 @@ function finalResponseUrl(res, originalUrl) {
   try {
     protocol = new URL(finalUrl).protocol;
   } catch {
-    throw snapshotError(`redirect resolved to an invalid URL: ${finalUrl}`);
+    throw new HeroSnapshotError(`redirect resolved to an invalid URL: ${finalUrl}`);
   }
   if (protocol !== 'https:') {
-    throw snapshotError(
+    throw new HeroSnapshotError(
       `refusing non-https final URL after redirects: ${finalUrl}`
     );
   }
@@ -33,14 +33,14 @@ async function readBoundedBody(res, url) {
   // let a huge response OOM the generator before the controlled error.
   const declared = Number(res.headers.get('content-length'));
   if (Number.isFinite(declared) && declared > MAX_SOURCE_BYTES) {
-    throw snapshotError(
+    throw new HeroSnapshotError(
       `fetch ${url} -> declared ${declared} bytes (limit ${MAX_SOURCE_BYTES})`
     );
   }
   if (!res.body || typeof res.body.getReader !== 'function') {
     const bytes = Buffer.from(await res.arrayBuffer());
     if (bytes.length === 0 || bytes.length > MAX_SOURCE_BYTES) {
-      throw snapshotError(
+      throw new HeroSnapshotError(
         `fetch ${url} -> ${bytes.length} bytes (limit ${MAX_SOURCE_BYTES})`
       );
     }
@@ -57,7 +57,7 @@ async function readBoundedBody(res, url) {
     if (total > MAX_SOURCE_BYTES) {
       // eslint-disable-next-line no-await-in-loop
       await reader.cancel();
-      throw snapshotError(
+      throw new HeroSnapshotError(
         `fetch ${url} -> over ${MAX_SOURCE_BYTES} bytes (limit ${MAX_SOURCE_BYTES})`
       );
     }
@@ -65,7 +65,7 @@ async function readBoundedBody(res, url) {
   }
   const bytes = Buffer.concat(chunks);
   if (bytes.length === 0) {
-    throw snapshotError(`fetch ${url} -> 0 bytes (limit ${MAX_SOURCE_BYTES})`);
+    throw new HeroSnapshotError(`fetch ${url} -> 0 bytes (limit ${MAX_SOURCE_BYTES})`);
   }
   return bytes;
 }
@@ -82,10 +82,10 @@ export async function fetchSnapshotSource(url, fetchImpl) {
   try {
     parsed = new URL(url);
   } catch {
-    throw snapshotError(`not a URL: ${url}`);
+    throw new HeroSnapshotError(`not a URL: ${url}`);
   }
   if (parsed.protocol !== 'https:') {
-    throw snapshotError(`refusing non-https source: ${url}`);
+    throw new HeroSnapshotError(`refusing non-https source: ${url}`);
   }
   // Time-box the whole download (connect, headers, and body): a stalled
   // server must surface as a controlled error, never hang the pipeline.
@@ -95,25 +95,25 @@ export async function fetchSnapshotSource(url, fetchImpl) {
     res = await fetchImpl(url, { redirect: 'follow', signal });
   } catch (error) {
     if (isTimeoutCause(error)) {
-      throw snapshotError(
+      throw new HeroSnapshotError(
         `fetch ${url} -> timed out after ${DOWNLOAD_TIMEOUT_MS}ms`
       );
     }
     throw error;
   }
   if (!res.ok) {
-    throw snapshotError(`fetch ${url} -> HTTP ${res.status}`);
+    throw new HeroSnapshotError(`fetch ${url} -> HTTP ${res.status}`);
   }
   finalResponseUrl(res, url);
   const contentType = res.headers.get('content-type') ?? '';
   if (!contentType.startsWith('image/')) {
-    throw snapshotError(`fetch ${url} -> unexpected content-type ${contentType}`);
+    throw new HeroSnapshotError(`fetch ${url} -> unexpected content-type ${contentType}`);
   }
   try {
     return await readBoundedBody(res, url);
   } catch (error) {
     if (isTimeoutCause(error)) {
-      throw snapshotError(
+      throw new HeroSnapshotError(
         `fetch ${url} -> timed out after ${DOWNLOAD_TIMEOUT_MS}ms`
       );
     }

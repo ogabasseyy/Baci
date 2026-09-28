@@ -21,15 +21,3 @@ export const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
 // floor ~1Mbps), but a stalled server must fail, never hang the pipeline.
 export const DOWNLOAD_TIMEOUT_MS = 120_000;
 export const MANAGED_FILE_PATTERN = /^[0-9a-f]{12}-\d+\.avif$/;
-
-export class HeroSnapshotError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'HeroSnapshotError';
-  }
-}
-
-export function snapshotError(message) {
-  // Untagged: the CLI wrapper adds the `[hero-snapshots] ERROR:` prefix.
-  return new HeroSnapshotError(message);
-}

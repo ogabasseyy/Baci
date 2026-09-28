@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -160,6 +161,36 @@ describe('runGenerateOgabasseyHeroSnapshots', () => {
 
     expect(existsSync(resolve(outDir, orphan))).toBe(true);
     // This run's baked files are removed; only the pre-existing orphan stays.
+    expect(readdirSync(outDir)).toEqual([orphan]);
+  });
+
+  it('restores the manifest and cleans baked files when formatting fails', async () => {
+    const webRoot = mkdtempSync(join(tmpdir(), 'hero-run-'));
+    const manifestPath = seedManifestFile(webRoot);
+    const before = readFileSync(manifestPath, 'utf8');
+    const outDir = resolve(webRoot, 'public/_hero/ogabassey');
+    mkdirSync(outDir, { recursive: true });
+    const orphan = 'ffffffffffff-640.avif';
+    writeFileSync(resolve(outDir, orphan), 'stale');
+    const binDir = resolve(webRoot, 'node_modules/.bin');
+    mkdirSync(binDir, { recursive: true });
+    const fakeBiome = resolve(binDir, 'biome');
+    writeFileSync(fakeBiome, '#!/bin/sh\nexit 1\n');
+    chmodSync(fakeBiome, 0o755);
+
+    await expect(
+      runGenerateOgabasseyHeroSnapshots(
+        ['node', 's.mjs', '--slug', 'ogabassey', SOURCE_URL],
+        {
+          fetchImpl: makeFakeFetch(),
+          sharpImpl: makeFakeSharp(),
+          skipBiomeFormat: false,
+          webRoot,
+        }
+      )
+    ).rejects.toThrow(/previous manifest restored/);
+
+    expect(readFileSync(manifestPath, 'utf8')).toBe(before);
     expect(readdirSync(outDir)).toEqual([orphan]);
   });
 });

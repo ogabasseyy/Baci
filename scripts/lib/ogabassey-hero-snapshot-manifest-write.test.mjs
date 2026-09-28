@@ -1,4 +1,10 @@
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -64,6 +70,30 @@ describe('writeSnapshotManifest', () => {
     expect(tenants.ogabassey[SOURCE_URL].href).toBe(
       '/_hero/ogabassey/aaa-640.avif'
     );
+  });
+
+  it('restores the previous manifest when formatting fails', async () => {
+    const webRoot = mkdtempSync(join(tmpdir(), 'hero-manifest-'));
+    const manifestPath = seedManifestFile(webRoot);
+    const before = readFileSync(manifestPath, 'utf8');
+    // A biome binary that exits nonzero, resolved via `root`.
+    const binDir = resolve(webRoot, 'node_modules/.bin');
+    mkdirSync(binDir, { recursive: true });
+    const fakeBiome = resolve(binDir, 'biome');
+    writeFileSync(fakeBiome, '#!/bin/sh\nexit 1\n');
+    chmodSync(fakeBiome, 0o755);
+
+    await expect(
+      writeSnapshotManifest({
+        entries: [makeEntry()],
+        manifestPath,
+        root: webRoot,
+        skipBiomeFormat: false,
+        slug: 'ogabassey',
+        webRoot,
+      })
+    ).rejects.toThrow(/previous manifest restored/);
+    expect(readFileSync(manifestPath, 'utf8')).toBe(before);
   });
 
   it('fails when the manifest is missing', async () => {

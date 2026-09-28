@@ -7,8 +7,8 @@ import {
   DEFAULT_WIDTH,
   SNAPSHOT_QUALITY,
   SNAPSHOT_WIDTHS,
-  snapshotError,
 } from './ogabassey-hero-snapshot-config.mjs';
+import { HeroSnapshotError } from './ogabassey-hero-snapshot-errors.mjs';
 import { fetchSnapshotSource } from './ogabassey-hero-snapshot-source.mjs';
 
 export async function bakeSnapshots({
@@ -72,7 +72,7 @@ async function bakeOneUrl({
   if (sourceWidth < Math.max(...SNAPSHOT_WIDTHS)) {
     // Never upscale: a source smaller than the widest snapshot would bake
     // blur. Fail loudly so the old manifest stays deployed instead.
-    throw snapshotError(
+    throw new HeroSnapshotError(
       `${sourceUrl} is ${sourceWidth}px wide, need >= ${Math.max(...SNAPSHOT_WIDTHS)}px`
     );
   }
@@ -107,7 +107,7 @@ async function bakeOneUrl({
     // eslint-disable-next-line no-await-in-loop
     const baked = await sharpImpl(filePath).metadata();
     if (baked.width !== width || baked.format !== 'heif') {
-      throw snapshotError(
+      throw new HeroSnapshotError(
         `${fileName}: baked ${baked.width}px/${baked.format}, want ${width}px/avif`
       );
     }

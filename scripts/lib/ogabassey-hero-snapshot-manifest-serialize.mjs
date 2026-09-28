@@ -1,6 +1,6 @@
 // Manifest file serializer for the hero snapshot pipeline.
 
-import { snapshotError } from './ogabassey-hero-snapshot-config.mjs';
+import { HeroSnapshotError } from './ogabassey-hero-snapshot-errors.mjs';
 
 function serializeSnapshotManifestBody(manifest) {
   // TS body in the repo's quote style (single quotes, unquoted identifier
@@ -23,7 +23,7 @@ function serializeSnapshotManifestBody(manifest) {
   }
   for (const value of allStrings) {
     if (value.includes("'") || value.includes('"') || value.includes('`')) {
-      throw snapshotError(
+      throw new HeroSnapshotError(
         `value breaks manifest serialization: ${value.slice(0, 80)}`
       );
     }

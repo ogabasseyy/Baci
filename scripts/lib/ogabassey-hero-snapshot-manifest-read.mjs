@@ -1,6 +1,6 @@
 // Manifest body reader for the hero snapshot pipeline.
 
-import { snapshotError } from './ogabassey-hero-snapshot-config.mjs';
+import { HeroSnapshotError } from './ogabassey-hero-snapshot-errors.mjs';
 
 export function readSnapshotManifestTenants(existing) {
   const versionMatch = existing.match(
@@ -16,7 +16,7 @@ export function readSnapshotManifestTenants(existing) {
     // A present-but-unlocatable body is corruption, not an empty manifest:
     // returning no tenants here would rewrite the file with only the
     // current slug, silently discarding every other tenant.
-    throw snapshotError(
+    throw new HeroSnapshotError(
       'existing manifest body cannot be located; fix it before regenerating'
     );
   }
@@ -24,7 +24,7 @@ export function readSnapshotManifestTenants(existing) {
   try {
     parsed = new Function(`return (${blockMatch[1]});`)();
   } catch {
-    throw snapshotError(
+    throw new HeroSnapshotError(
       'existing manifest body is not parseable; fix it before regenerating'
     );
   }

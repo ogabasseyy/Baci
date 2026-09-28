@@ -1,6 +1,6 @@
 // CLI argument parsing for the hero snapshot pipeline.
 
-import { snapshotError } from './ogabassey-hero-snapshot-config.mjs';
+import { HeroSnapshotError } from './ogabassey-hero-snapshot-errors.mjs';
 
 export function parseSnapshotArgs(argv) {
   const args = argv.slice(2);
@@ -11,18 +11,18 @@ export function parseSnapshotArgs(argv) {
       slug = args[i + 1] ?? null;
       i += 1;
     } else if (args[i].startsWith('--')) {
-      throw snapshotError(`unknown flag ${args[i]}`);
+      throw new HeroSnapshotError(`unknown flag ${args[i]}`);
     } else {
       urls.push(args[i]);
     }
   }
   if (!slug || !/^[a-z0-9-]+$/.test(slug)) {
-    throw snapshotError(
+    throw new HeroSnapshotError(
       'pass --slug <storefront-slug> (lowercase alphanumerics and dashes)'
     );
   }
   if (urls.length === 0) {
-    throw snapshotError('pass at least one CDN source URL to snapshot');
+    throw new HeroSnapshotError('pass at least one CDN source URL to snapshot');
   }
   return { slug, urls: [...new Set(urls.map((u) => u.trim()))] };
 }

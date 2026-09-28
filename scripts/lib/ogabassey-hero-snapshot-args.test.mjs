@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HeroSnapshotError } from './ogabassey-hero-snapshot-config.mjs';
+import { HeroSnapshotError } from './ogabassey-hero-snapshot-errors.mjs';
 import { parseSnapshotArgs } from './ogabassey-hero-snapshot-args.mjs';
 
 const SOURCE_URL = 'https://cdn.ogabassey.com/core-assets/products/dell.jpg';

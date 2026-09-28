@@ -2,7 +2,7 @@ import {
   MOBILE_HERO_IMAGE_SIZES,
   MOBILE_HERO_SOURCE_MEDIA,
 } from '@/components/storefront/ogabassey/components/hero-mobile-image-config';
-import { OGABASSEY_HOME_HERO_SNAPSHOT_TENANT } from '@/config/ogabassey-home-hero-same-origin';
+import { OGABASSEY_HOME_HERO_SNAPSHOT_TENANT } from '@/config/ogabassey-home-hero-snapshot-tenant';
 import { ogabasseyHomeHeroResourceHintProjection } from '@/lib/ogabassey-home-hero-resource-hint-projection';
 import { resolveOgabasseyHomeHeroSnapshot } from '@/lib/ogabassey-home-hero-snapshot';
 

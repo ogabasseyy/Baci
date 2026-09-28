@@ -1,6 +1,6 @@
 import { buildLaunchSlides } from '@/components/storefront/ogabassey/components/build-launch-slides';
 import { Hero } from '@/components/storefront/ogabassey/components/Hero';
-import { OGABASSEY_HOME_HERO_SNAPSHOT_TENANT } from '@/config/ogabassey-home-hero-same-origin';
+import { OGABASSEY_HOME_HERO_SNAPSHOT_TENANT } from '@/config/ogabassey-home-hero-snapshot-tenant';
 import type { getRequestScopedMerchant } from '@/lib/cached-data';
 import { resolveOgabasseyHomeHeroSnapshot } from '@/lib/ogabassey-home-hero-snapshot';
 import { buildStoreUrl } from '@/lib/store-url';

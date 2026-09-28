@@ -5,7 +5,7 @@ import {
   MOBILE_HERO_SOURCE_MEDIA,
 } from '@/components/storefront/ogabassey/components/hero-mobile-image-config';
 import { OGABASSEY_CDN_ORIGIN } from '@/components/storefront/ogabassey/config/storefront-origins';
-import { OGABASSEY_HOME_HERO_SNAPSHOT_TENANT } from '@/config/ogabassey-home-hero-same-origin';
+import { OGABASSEY_HOME_HERO_SNAPSHOT_TENANT } from '@/config/ogabassey-home-hero-snapshot-tenant';
 import { isOgabasseyCdnImageUrl } from '@/lib/ogabassey-cdn-image-url';
 import { ogabasseyHomeHeroResourceHintProjection } from '@/lib/ogabassey-home-hero-resource-hint-projection';
 import { resolveOgabasseyHomeHeroSnapshot } from '@/lib/ogabassey-home-hero-snapshot';

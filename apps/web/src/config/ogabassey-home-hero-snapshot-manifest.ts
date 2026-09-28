@@ -3,7 +3,7 @@
 // image, keyed by tenant slug then exact CDN source URL. A source URL with
 // no entry here renders the legacy CDN path (rotation-safe by construction:
 // rotated content misses its key and falls back instead of mismatching).
-// Manifest version: 1. Generated: 2026-09-28T20:28:11.215Z.
+// Manifest version: 1. Generated: 2026-09-28T22:32:38.247Z.
 
 export interface OgabasseyHomeHeroSnapshotManifestEntry {
   sourceUrl: string;
@@ -17,6 +17,9 @@ export interface OgabasseyHomeHeroSnapshotManifestEntry {
   /** sha256 of the source bytes the snapshot was baked from (audit only;
    *  runtime matching is by exact sourceUrl key, never by hash). */
   sourceSha256: string;
+  /** ISO bake timestamp. Entries older than the resolver's max age fail
+   *  closed to the CDN path until a re-bake refreshes them. */
+  bakedAt: string;
 }
 
 export const OGABASSEY_HOME_HERO_SNAPSHOT_MANIFEST_VERSION = 1;
@@ -37,6 +40,7 @@ export const OGABASSEY_HOME_HERO_SNAPSHOT_MANIFEST: Record<
         widths: [256, 384, 640, 750, 828, 1080, 1200],
         sourceSha256:
           'ad69426ce2b4b2135bc4bb0732fe19885af6c3fe34ae93ef7ba58c9febf0e26b',
+        bakedAt: '2026-09-28T22:32:38.246Z',
       },
   },
 };

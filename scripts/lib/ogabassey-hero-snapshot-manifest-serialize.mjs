@@ -17,7 +17,8 @@ function serializeSnapshotManifestBody(manifest) {
         entry.sourceUrl,
         entry.srcSet,
         entry.href,
-        entry.sourceSha256
+        entry.sourceSha256,
+        entry.bakedAt
       );
     }
   }
@@ -43,6 +44,7 @@ function serializeSnapshotManifestBody(manifest) {
       lines.push(`      quality: ${entry.quality},`);
       lines.push(`      widths: [${entry.widths.join(', ')}],`);
       lines.push(`      sourceSha256: '${entry.sourceSha256}',`);
+      lines.push(`      bakedAt: '${entry.bakedAt}',`);
       lines.push('    },');
     }
     lines.push('  },');
@@ -71,6 +73,9 @@ export interface OgabasseyHomeHeroSnapshotManifestEntry {
   /** sha256 of the source bytes the snapshot was baked from (audit only;
    *  runtime matching is by exact sourceUrl key, never by hash). */
   sourceSha256: string;
+  /** ISO bake timestamp. Entries older than the resolver's max age fail
+   *  closed to the CDN path until a re-bake refreshes them. */
+  bakedAt: string;
 }
 
 export const OGABASSEY_HOME_HERO_SNAPSHOT_MANIFEST_VERSION = ${version};

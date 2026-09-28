@@ -96,6 +96,7 @@ describe('bakeSnapshots', () => {
     const [entry] = entries;
     expect(entry.sourceUrl).toBe(SOURCE_URL);
     expect(entry.quality).toBe(SNAPSHOT_QUALITY);
+    expect(Number.isFinite(Date.parse(entry.bakedAt))).toBe(true);
     expect(entry.widths).toEqual([...SNAPSHOT_WIDTHS].sort((a, b) => a - b));
     // Filenames hash the ENCODED bytes: same encoder output, same URL.
     for (const width of SNAPSHOT_WIDTHS) {

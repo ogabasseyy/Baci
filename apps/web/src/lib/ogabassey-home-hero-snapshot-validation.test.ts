@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { OGABASSEY_HOME_HERO_SNAPSHOT_TENANT } from '@/config/ogabassey-home-hero-same-origin';
+import { OGABASSEY_HOME_HERO_SNAPSHOT_TENANT } from '@/config/ogabassey-home-hero-snapshot-tenant';
 import { resolveOgabasseyHomeHeroSnapshot } from './ogabassey-home-hero-snapshot';
 
 const FLAG = 'NEXT_PUBLIC_OGABASSEY_HOME_HERO_SAME_ORIGIN_ENABLED';
@@ -17,6 +17,7 @@ vi.mock('@/config/ogabassey-home-hero-snapshot-manifest', () => ({
         quality: 70,
         widths: [640],
         sourceSha256: '0'.repeat(64),
+        bakedAt: new Date().toISOString(),
       },
       'https://cdn.ogabassey.com/off-origin-href.avif': {
         sourceUrl: 'https://cdn.ogabassey.com/off-origin-href.avif',
@@ -25,6 +26,7 @@ vi.mock('@/config/ogabassey-home-hero-snapshot-manifest', () => ({
         quality: 70,
         widths: [640],
         sourceSha256: '0'.repeat(64),
+        bakedAt: new Date().toISOString(),
       },
       'https://cdn.ogabassey.com/traversal.avif': {
         sourceUrl: 'https://cdn.ogabassey.com/traversal.avif',
@@ -33,6 +35,7 @@ vi.mock('@/config/ogabassey-home-hero-snapshot-manifest', () => ({
         quality: 70,
         widths: [640],
         sourceSha256: '0'.repeat(64),
+        bakedAt: new Date().toISOString(),
       },
       'https://cdn.ogabassey.com/wrong-route.avif': {
         sourceUrl: 'https://cdn.ogabassey.com/wrong-route.avif',
@@ -41,6 +44,7 @@ vi.mock('@/config/ogabassey-home-hero-snapshot-manifest', () => ({
         quality: 70,
         widths: [640],
         sourceSha256: '0'.repeat(64),
+        bakedAt: new Date().toISOString(),
       },
       'https://cdn.ogabassey.com/mismatch.avif': {
         sourceUrl: 'https://cdn.ogabassey.com/other.avif',
@@ -49,6 +53,7 @@ vi.mock('@/config/ogabassey-home-hero-snapshot-manifest', () => ({
         quality: 70,
         widths: [640],
         sourceSha256: '0'.repeat(64),
+        bakedAt: new Date().toISOString(),
       },
       'https://cdn.ogabassey.com/empty.avif': {
         sourceUrl: 'https://cdn.ogabassey.com/empty.avif',
@@ -57,6 +62,25 @@ vi.mock('@/config/ogabassey-home-hero-snapshot-manifest', () => ({
         quality: 70,
         widths: [640],
         sourceSha256: '0'.repeat(64),
+        bakedAt: new Date().toISOString(),
+      },
+      'https://cdn.ogabassey.com/expired.avif': {
+        sourceUrl: 'https://cdn.ogabassey.com/expired.avif',
+        srcSet: '/_hero/ogabassey/abc-640.avif 640w',
+        href: '/_hero/ogabassey/abc-640.avif',
+        quality: 70,
+        widths: [640],
+        sourceSha256: '0'.repeat(64),
+        bakedAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      'https://cdn.ogabassey.com/fresh.avif': {
+        sourceUrl: 'https://cdn.ogabassey.com/fresh.avif',
+        srcSet: '/_hero/ogabassey/abc-640.avif 640w',
+        href: '/_hero/ogabassey/abc-640.avif',
+        quality: 70,
+        widths: [640],
+        sourceSha256: '0'.repeat(64),
+        bakedAt: new Date().toISOString(),
       },
     },
   },
@@ -85,5 +109,22 @@ describe('resolveOgabasseyHomeHeroSnapshot validation', () => {
         sourceUrl
       )
     ).toBeNull();
+  });
+
+  it('rejects an entry older than the freshness window', () => {
+    expect(
+      resolveOgabasseyHomeHeroSnapshot(
+        OGABASSEY_HOME_HERO_SNAPSHOT_TENANT,
+        'https://cdn.ogabassey.com/expired.avif'
+      )
+    ).toBeNull();
+  });
+
+  it('resolves a well-formed fresh entry', () => {
+    const snapshot = resolveOgabasseyHomeHeroSnapshot(
+      OGABASSEY_HOME_HERO_SNAPSHOT_TENANT,
+      'https://cdn.ogabassey.com/fresh.avif'
+    );
+    expect(snapshot?.href).toBe('/_hero/ogabassey/abc-640.avif');
   });
 });

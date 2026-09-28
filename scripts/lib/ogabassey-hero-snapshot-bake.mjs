@@ -127,5 +127,6 @@ async function bakeOneUrl({
     quality: SNAPSHOT_QUALITY,
     widths: [...SNAPSHOT_WIDTHS].sort((a, b) => a - b),
     sourceSha256,
+    bakedAt: new Date().toISOString(),
   };
 }

@@ -44,6 +44,7 @@ describe('hero snapshot manifest integrity', () => {
         expect([...descriptors].sort((a, b) => a - b)).toEqual(entry.widths);
         expect(files).toContain(entry.href);
         expect(entry.sourceSha256).toMatch(/^[0-9a-f]{64}$/);
+        expect(Number.isFinite(Date.parse(entry.bakedAt))).toBe(true);
       }
     }
   });

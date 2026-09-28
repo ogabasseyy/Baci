@@ -43,6 +43,7 @@ function makeEntry(overrides = {}) {
     quality: SNAPSHOT_QUALITY,
     widths: [640],
     sourceSha256: 'b'.repeat(64),
+    bakedAt: '2026-09-28T00:00:00.000Z',
     ...overrides,
   };
 }

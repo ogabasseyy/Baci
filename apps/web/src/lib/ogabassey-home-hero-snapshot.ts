@@ -1,10 +1,15 @@
 import 'server-only';
-import {
-  isOgabasseyHomeHeroSameOriginEnabled,
-  OGABASSEY_HOME_HERO_SNAPSHOT_TENANT,
-} from '@/config/ogabassey-home-hero-same-origin';
+import { isOgabasseyHomeHeroSameOriginEnabled } from '@/config/ogabassey-home-hero-same-origin';
 import { OGABASSEY_HOME_HERO_SNAPSHOT_MANIFEST } from '@/config/ogabassey-home-hero-snapshot-manifest';
+import { OGABASSEY_HOME_HERO_SNAPSHOT_TENANT } from '@/config/ogabassey-home-hero-snapshot-tenant';
 import type { OgabasseyHomeHeroSnapshot } from './ogabassey-home-hero-snapshot-types';
+
+// Fail-closed freshness gate: CDN source paths are mutable (the CDN
+// transformer keys its cache on source size + mtime), so an exact URL
+// match alone cannot prove the checked-in bytes still represent the
+// source. Entries older than this stop resolving (CDN fallback) until a
+// re-bake refreshes them; `--check` detects in-place overwrites sooner.
+const SNAPSHOT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 function isValidSnapshotPath(value: string): boolean {
   return (
@@ -20,10 +25,14 @@ function isValidSnapshotPath(value: string): boolean {
  * when the CDN path must be used instead.
  *
  * Fail-open by design: flag off, unknown tenant, blank/non-string source,
- * missing manifest entry, entry/source mismatch, or a malformed entry all
- * return null, and every caller treats null as "render the legacy CDN bytes".
- * Rotation safety comes from the exact-URL key: content that rotated after
- * the snapshot was baked has no entry and falls back automatically.
+ * missing manifest entry, entry/source mismatch, a malformed entry, or an
+ * entry older than SNAPSHOT_MAX_AGE_MS all return null, and every caller
+ * treats null as "render the legacy CDN bytes". Rotation safety comes from
+ * the exact-URL key: content that rotated after the snapshot was baked has
+ * no entry and falls back automatically. The age gate additionally bounds
+ * in-place overwrites (same URL, new bytes): without it a stale snapshot
+ * would serve indefinitely, since nothing revalidates content at request
+ * time.
  *
  * Static data only (no backend reads, no request APIs), so the first-flush
  * committed slot may call this without breaking its streaming constraint.
@@ -51,6 +60,15 @@ export function resolveOgabasseyHomeHeroSnapshot(
     const tenantEntries = OGABASSEY_HOME_HERO_SNAPSHOT_MANIFEST[slug];
     const entry = tenantEntries?.[source];
     if (!entry || entry.sourceUrl !== source) {
+      return null;
+    }
+    // Freshness gate: a missing/unparseable timestamp or an entry older
+    // than the max age fails closed to the CDN path (re-bake to refresh).
+    const bakedAt = Date.parse(entry.bakedAt ?? '');
+    if (
+      !Number.isFinite(bakedAt) ||
+      Date.now() - bakedAt > SNAPSHOT_MAX_AGE_MS
+    ) {
       return null;
     }
     if (

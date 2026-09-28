@@ -17,9 +17,9 @@ CREATE INDEX product_discovery_embeddings_merchant_idx
 
 ALTER TABLE public.product_discovery_embeddings ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY product_discovery_embeddings_public_read
-  ON public.product_discovery_embeddings FOR SELECT TO anon, authenticated
-  USING (EXISTS (
+CREATE POLICY product_discovery_embeddings_merchant_read
+  ON public.product_discovery_embeddings FOR SELECT TO authenticated
+  USING (public.has_merchant_access(merchant_id) AND EXISTS (
     SELECT 1 FROM public.products p
     WHERE p.id = product_discovery_embeddings.product_id
       AND p.merchant_id = product_discovery_embeddings.merchant_id
@@ -44,16 +44,18 @@ CREATE POLICY product_discovery_embeddings_merchant_update
   ));
 
 REVOKE ALL ON public.product_discovery_embeddings FROM PUBLIC, anon, authenticated;
-GRANT SELECT ON public.product_discovery_embeddings TO anon, authenticated;
+GRANT SELECT ON public.product_discovery_embeddings TO authenticated;
 GRANT INSERT, UPDATE ON public.product_discovery_embeddings TO authenticated;
 
+-- Public callers receive only IDs and scores of active merchant products;
+-- raw vectors remain readable only to the owning merchant under RLS.
 CREATE FUNCTION public.search_product_discovery_embeddings(
   query_embedding extensions.vector(768),
   merchant_id_param uuid,
   result_limit integer DEFAULT 20
 )
 RETURNS TABLE (product_id uuid, similarity real)
-LANGUAGE sql STABLE SECURITY INVOKER
+LANGUAGE sql STABLE SECURITY DEFINER
 SET search_path = ''
 AS $$
   SELECT e.product_id, (1 - (e.embedding OPERATOR(extensions.<=>) query_embedding))::real

@@ -4,7 +4,7 @@ import { discoverMcpProducts } from './discover-products';
 
 function discoveryClient() {
   const products = [
-    { id: 'laptop', name: 'Office Laptop', category: 'Laptops', price: 80000, manage_stock: false },
+    { id: 'laptop', name: 'Office Laptop', category: 'Laptops', brand: 'Dell', price: 80000, manage_stock: false },
     { id: 'camera', name: 'Security Camera', category: 'Accessories', price: 50000, manage_stock: false },
   ];
   const query = {
@@ -43,5 +43,17 @@ describe('gated semantic discovery', () => {
       supabase,
     });
     expect(result.selectedProducts).toEqual([]);
+  });
+
+  it('uses the sanitized lexical brand and category for semantic candidates', async () => {
+    const { supabase } = discoveryClient();
+    const result = await discoverMcpProducts({
+      args: { query: 'work', category: '***Laptops***', brand: '***Dell***' },
+      merchantId: 'merchant-1',
+      sanitizeString: (input) => input.replace(/\*/g, ''),
+      semanticSearch: async () => ['laptop'],
+      supabase,
+    });
+    expect(result.selectedProducts.map(({ product }) => product.id)).toEqual(['laptop']);
   });
 });

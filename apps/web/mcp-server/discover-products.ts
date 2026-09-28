@@ -60,11 +60,15 @@ export async function discoverMcpProducts({
           .in('id', semanticIds);
         if (error) throw error;
         const byId = new Map(toMcpSearchProductRows(data).map((product) => [product.id, product]));
-        const category = args.category || inferSmartphoneCategory(loaded.sanitizedQuery, args.category);
+        const category = args.category
+          ? sanitizeString(args.category, 50)
+          : inferSmartphoneCategory(loaded.sanitizedQuery, args.category);
+        const brand = args.brand ? sanitizeString(args.brand, 50) : undefined;
+        const condition = args.condition ? sanitizeString(args.condition, 50) : undefined;
         const candidates = semanticIds
           .map((id) => byId.get(id))
           .filter((product) => product && matchesMcpPostHydrationFilters(product, {
-            brand: args.brand, category, condition: args.condition,
+            brand, category, condition,
           }));
         hydratedProducts.push(...await hydrateSearchProductAvailability(
           candidates, supabase, merchantId, args.condition

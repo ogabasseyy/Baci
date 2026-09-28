@@ -4,16 +4,18 @@ This MCP (Model Context Protocol) server enables ChatGPT integration with the Og
 
 - Search products
 - Get product details
-- Check order status
+- Read public delivery and returns guidance
 - Get store information
 - Find matching products by category and budget
 
 `search_products` is the single discovery tool. Broad requests such as “for
 work” ask for a product type before searching when the intent is ambiguous;
 exact names, brands, categories, conditions, and budgets use the ranked catalog
-search. The optional Gemini Embedding 2 fallback is disabled until the index is
-backfilled and evaluated. It never overrides merchant, publication, category,
-condition, option price, or stock checks.
+search. The older standalone recommendation tool was removed after it returned
+unrelated catalog items for broad use cases. The optional Gemini Embedding 2
+fallback is disabled until the index is backfilled and evaluated. It never
+overrides merchant, publication, category, condition, option price, or stock
+checks.
 
 ## Quick Start
 
@@ -119,7 +121,7 @@ With trust disabled, the server uses the validated socket `remoteAddress`.
 3. Click **Create** under **Connectors**
 4. Enter your MCP URL (e.g., `https://mcp.ogabassey.com/mcp` or your ngrok URL)
 5. Name: "Ogabassey Store"
-6. Description: "Search products, check orders, and discover matching Ogabassey products"
+6. Description: "Search Ogabassey products, compare options, and review cart handoffs"
 
 ## Available Tools
 
@@ -155,14 +157,13 @@ Once connected, users can ask:
 
 - "Show me phones under 500,000 naira"
 - "What's the iPhone 15 Pro Max price?"
-- "Show me the current order tracking page"
 - "What's your shipping policy?"
 - "I need a laptop for gaming, budget 800k"
-- "Create a checkout session for two iPhone 15 Pro Max units"
-- "Show me my current checkout session"
-- "Update my checkout session to use my Lagos shipping address"
-- "Complete my checkout session with my confirmed payment authorization"
-- "Cancel my current checkout session"
+- "Add one Apple 20W charger to my cart and let me review it on Ogabassey"
+
+Order lookup, payment-account generation, and signed agentic checkout are
+separate, default-off integrations. Do not advertise them in the public app
+until customer authorization and production readiness are verified.
 
 ## Environment Variables
 

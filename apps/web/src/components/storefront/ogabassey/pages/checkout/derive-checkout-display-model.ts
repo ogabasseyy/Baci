@@ -52,6 +52,11 @@ export function deriveCheckoutDisplayModel({
     hasCheckoutCartItems,
     resumedOrder,
   });
+  // Resumed total is all-in; the summary's subtotal must remain the stamped
+  // item subtotal so tax, delivery, and other order adjustments aren't added twice.
+  const summarySubtotal = hasCheckoutCartItems
+    ? effectiveCheckoutCartTotal
+    : (resumedOrder?.subtotal ?? effectiveCheckoutCartTotal);
 
   return {
     displayItems,
@@ -59,6 +64,7 @@ export function deriveCheckoutDisplayModel({
     effectiveItemSubtotal: hasCheckoutCartItems
       ? itemSubtotal
       : resumedOrder?.subtotal || 0,
+    summarySubtotal,
     hasCheckoutCartItems,
     mobileSummaryCart: hasCheckoutCartItems
       ? checkoutCart

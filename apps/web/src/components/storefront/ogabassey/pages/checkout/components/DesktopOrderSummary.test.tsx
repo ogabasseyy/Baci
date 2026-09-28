@@ -55,9 +55,10 @@ describe('desktop checkout summary visibility', () => {
       <DesktopOrderSummary
         displayItems={[]}
         formatCurrencyAuto={(amount) => `₦${amount}`}
-        effectiveCheckoutCartTotal={100}
-        orderTotals={null}
-        deliveryCost={0}
+        summarySubtotal={100}
+        orderTotals={{ total: 118, taxAmount: 7 }}
+        deliveryCost={12}
+        discountAmount={5}
         deliveryMethod="pickup"
         selectedQuoteId=""
         giftWrappingCost={0}
@@ -70,7 +71,7 @@ describe('desktop checkout summary visibility', () => {
         payWithWallet={false}
         setPayWithWallet={vi.fn()}
         walletAmountUsed={0}
-        remainingAmount={100}
+        remainingAmount={118}
         checkoutPayWithWallet={false}
         redvaultSummary={null}
         newsletterOptIn={false}
@@ -89,5 +90,8 @@ describe('desktop checkout summary visibility', () => {
     expect(displayAtViewport(actionClasses?.[1] ?? '', 1092)).toBe('flex');
     expect(displayAtViewport(summaryClasses?.[1] ?? '', 390)).toBe('none');
     expect(displayAtViewport(actionClasses?.[1] ?? '', 390)).toBe('none');
+    expect(html).toMatch(/<span>Subtotal<\/span><span>₦100<\/span>/);
+    expect(html).toMatch(/<span>Discount<\/span><span>-₦5<\/span>/);
+    expect(html).toMatch(/<span>Total<\/span><span>₦118<\/span>/);
   });
 });

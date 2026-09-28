@@ -98,6 +98,7 @@ import {
   useResumedCheckoutStartFunnel,
 } from './checkout/hooks/use-resumed-checkout-start-funnel';
 import { deriveCheckoutDisplayModel } from './checkout/derive-checkout-display-model';
+import { deriveCheckoutPaymentBaseTotal } from './checkout/derive-checkout-payment-base-total';
 import { readCheckoutAttemptGeneration } from './checkout/checkout-attempt-generation';
 import { DeferredWalletFundedTransferModal as WalletFundedTransferModal } from './checkout/components/DeferredWalletFundedTransferModal';
 import { DeferredWalletTransferConsentDialog as WalletTransferConsentDialog } from './checkout/components/DeferredWalletTransferConsentDialog';
@@ -358,6 +359,7 @@ export const CheckoutPage: React.FC = () => {
     displayItems,
     effectiveCheckoutCartTotal,
     effectiveItemSubtotal,
+    summarySubtotal,
     hasCheckoutCartItems,
     mobileSummaryCart,
   } = deriveCheckoutDisplayModel({
@@ -367,6 +369,7 @@ export const CheckoutPage: React.FC = () => {
     itemSubtotal,
     resumedOrder,
   });
+  const summaryOrder = hasCheckoutCartItems ? null : resumedOrder;
 
   // Set once an order is created for this attempt: post-creation rerenders
   // (pending-order persist, widget state) must not re-emit checkout_started
@@ -523,12 +526,19 @@ export const CheckoutPage: React.FC = () => {
     deliveryCost,
     taxRate,
   });
+  const summaryTaxAmount = summaryOrder?.tax_amount ?? orderTotals?.taxAmount ?? 0;
+  const summaryDeliveryCost = summaryOrder?.shipping_cost ?? deliveryCost;
+  const summaryGiftWrappingCost =
+    summaryOrder?.gift_wrapping_fee ?? giftWrappingCost;
   const paymentSession = useCheckoutPaymentSession({
-    baseTotal:
-      effectiveCheckoutCartTotal +
-      deliveryCost +
-      giftWrappingCost +
-      (orderTotals?.taxAmount ?? 0),
+    baseTotal: deriveCheckoutPaymentBaseTotal({
+      effectiveCheckoutCartTotal,
+      deliveryCost,
+      giftWrappingCost,
+      hasCheckoutCartItems,
+      taxAmount: orderTotals?.taxAmount ?? 0,
+      resumedOrderTotal: summaryOrder?.total ?? null,
+    }),
     clearPendingCheckoutOrder,
     currencyCode,
     discountSubtotal: effectiveCheckoutCartTotal,
@@ -549,6 +559,8 @@ export const CheckoutPage: React.FC = () => {
       setResumeOrderError,
     },
   });
+  const summaryDiscountAmount =
+    summaryOrder?.discount_amount ?? paymentSession.checkoutValues.discountAmount;
 
   // Load the address state list. NG hits /api/shipping/locations (rich data);
   // non-NG markets derive their states from the subdivision vocabulary. Keyed
@@ -938,16 +950,16 @@ export const CheckoutPage: React.FC = () => {
         {/* MOBILE ORDER SUMMARY (Collapsible) */}
         {paymentMethod !== 'uba_redvault' && <MobileOrderSummary
           cart={mobileSummaryCart}
-          cartTotal={effectiveCheckoutCartTotal}
-          deliveryCost={resumedOrder ? resumedOrder.shipping_cost : deliveryCost}
-          taxAmount={resumedOrder?.tax_amount ?? orderTotals?.taxAmount ?? 0}
-          discountAmount={resumedOrder?.discount_amount ?? paymentSession.checkoutValues.discountAmount}
-          deliveryMethod={resumedOrder ? null : deliveryMethod}
-          giftWrappingCost={giftWrappingCost}
+          cartTotal={summarySubtotal}
+          deliveryCost={summaryDeliveryCost}
+          taxAmount={summaryTaxAmount}
+          discountAmount={summaryDiscountAmount}
+          deliveryMethod={summaryOrder ? null : deliveryMethod}
+          giftWrappingCost={summaryGiftWrappingCost}
           walletBalance={paymentSession.wallet.balance}
           payWithWallet={paymentSession.checkoutValues.payWithWallet}
           walletAmountUsed={walletAmountUsed}
-          remainingAmount={resumedOrder?.total ?? remainingAmount}
+          remainingAmount={summaryOrder?.total ?? remainingAmount}
         />}
 
         {/* Hidden in the resumed-order flow: that path charges the persisted
@@ -1093,12 +1105,15 @@ export const CheckoutPage: React.FC = () => {
           <DesktopOrderSummary
             displayItems={displayItems}
             formatCurrencyAuto={formatCurrencyAuto}
-            effectiveCheckoutCartTotal={effectiveCheckoutCartTotal}
-            orderTotals={orderTotals}
-            deliveryCost={deliveryCost}
-            deliveryMethod={deliveryMethod}
+            summarySubtotal={summarySubtotal}
+            orderTotals={summaryOrder
+              ? { total: summaryOrder.total, taxAmount: summaryTaxAmount }
+              : orderTotals}
+            deliveryCost={summaryDeliveryCost}
+            deliveryMethod={summaryOrder ? null : deliveryMethod}
+            discountAmount={summaryDiscountAmount}
             selectedQuoteId={selectedQuoteId}
-            giftWrappingCost={giftWrappingCost}
+            giftWrappingCost={summaryGiftWrappingCost}
             paymentMethod={paymentMethod}
             walletCurrencySupported={paymentSession.wallet.currencySupported}
             walletLoading={paymentSession.wallet.loading}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CartItem } from '@/hooks/cart';
 import { deriveCheckoutDisplayModel } from './derive-checkout-display-model';
+import { deriveCheckoutPaymentBaseTotal } from './derive-checkout-payment-base-total';
 import type { ResumedOrder } from './types';
 
 function cartItem(id: string, price: number): CartItem {
@@ -68,6 +69,7 @@ describe('deriveCheckoutDisplayModel', () => {
     expect(model).toMatchObject({
       effectiveCheckoutCartTotal: 1_500,
       effectiveItemSubtotal: 1_400,
+      summarySubtotal: 1_500,
       hasCheckoutCartItems: true,
     });
     expect(model.displayItems).toEqual([{ kind: 'cart', ...item }]);
@@ -75,7 +77,14 @@ describe('deriveCheckoutDisplayModel', () => {
   });
 
   it('projects resumed order rows and preserves its canonical total', () => {
-    const order = resumedOrder({ total: 1_450, subtotal: 1_100 });
+    const order = resumedOrder({
+      total: 1_450,
+      subtotal: 1_100,
+      shipping_cost: 300,
+      tax_amount: 100,
+      discount_amount: 75,
+      gift_wrapping_fee: 25,
+    });
     const model = deriveCheckoutDisplayModel({
       checkoutCart: [],
       checkoutCartTotal: 2_000,
@@ -87,6 +96,7 @@ describe('deriveCheckoutDisplayModel', () => {
     expect(model).toMatchObject({
       effectiveCheckoutCartTotal: 1_450,
       effectiveItemSubtotal: 1_100,
+      summarySubtotal: 1_100,
       hasCheckoutCartItems: false,
     });
     expect(model.displayItems).toEqual([
@@ -126,8 +136,50 @@ describe('deriveCheckoutDisplayModel', () => {
       displayItems: [],
       effectiveCheckoutCartTotal: 875,
       effectiveItemSubtotal: 0,
+      summarySubtotal: 875,
       hasCheckoutCartItems: false,
       mobileSummaryCart: [],
     });
+  });
+});
+
+describe('deriveCheckoutPaymentBaseTotal', () => {
+  it('uses the resumed order canonical total without adding stamped adjustments again', () => {
+    expect(
+      deriveCheckoutPaymentBaseTotal({
+        effectiveCheckoutCartTotal: 100_000,
+        deliveryCost: 12_500,
+        giftWrappingCost: 1_000,
+        hasCheckoutCartItems: false,
+        taxAmount: 7_500,
+        resumedOrderTotal: 116_000,
+      })
+    ).toBe(116_000);
+  });
+
+  it('keeps the fresh-cart subtotal, delivery, wrapping, and tax calculation', () => {
+    expect(
+      deriveCheckoutPaymentBaseTotal({
+        effectiveCheckoutCartTotal: 100_000,
+        deliveryCost: 12_500,
+        giftWrappingCost: 1_000,
+        hasCheckoutCartItems: true,
+        taxAmount: 7_500,
+        resumedOrderTotal: null,
+      })
+    ).toBe(121_000);
+  });
+
+  it('keeps active-cart pricing when a resumed order is also present', () => {
+    expect(
+      deriveCheckoutPaymentBaseTotal({
+        effectiveCheckoutCartTotal: 100_000,
+        deliveryCost: 12_500,
+        giftWrappingCost: 1_000,
+        hasCheckoutCartItems: true,
+        taxAmount: 7_500,
+        resumedOrderTotal: 99_000,
+      })
+    ).toBe(121_000);
   });
 });

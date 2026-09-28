@@ -15,10 +15,11 @@ export type CheckoutItem =
 interface DesktopOrderSummaryProps {
   displayItems: CheckoutItem[];
   formatCurrencyAuto: (amount: number) => string;
-  effectiveCheckoutCartTotal: number;
+  summarySubtotal: number;
   orderTotals: { total: number; taxAmount: number } | null;
   deliveryCost: number;
-  deliveryMethod: DeliveryMethod;
+  discountAmount: number;
+  deliveryMethod: DeliveryMethod | null;
   selectedQuoteId: string;
   giftWrappingCost: number;
   paymentMethod: PaymentMethod;
@@ -43,9 +44,10 @@ interface DesktopOrderSummaryProps {
 export function DesktopOrderSummary({
   displayItems,
   formatCurrencyAuto,
-  effectiveCheckoutCartTotal,
+  summarySubtotal,
   orderTotals,
   deliveryCost,
+  discountAmount,
   deliveryMethod,
   selectedQuoteId,
   giftWrappingCost,
@@ -133,7 +135,7 @@ export function DesktopOrderSummary({
         <div className="space-y-3 mb-6">
           <div className="flex justify-between text-gray-600 text-sm">
             <span>Subtotal</span>
-            <span>{formatCurrencyAuto(effectiveCheckoutCartTotal)}</span>
+            <span>{formatCurrencyAuto(summarySubtotal)}</span>
           </div>
           {orderTotals && (
             <div className="flex justify-between text-gray-600 text-sm">
@@ -155,6 +157,12 @@ export function DesktopOrderSummary({
                 : deliveryCost === 0 ? 'Free' : formatCurrencyAuto(deliveryCost)}
             </span>
           </div>
+          {discountAmount > 0 && (
+            <div className="flex justify-between text-green-700 text-sm">
+              <span>Discount</span>
+              <span>-{formatCurrencyAuto(discountAmount)}</span>
+            </div>
+          )}
           {giftWrappingCost > 0 && (
             <div className="flex justify-between text-gray-600 text-sm">
               <span>Gift Wrapping</span>

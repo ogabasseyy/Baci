@@ -9,7 +9,10 @@ import type {
   CancellationOrder,
 } from '@/lib/orders/order-cancellation-side-effect-types';
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
-import type { OrderCancellationSideEffectStep } from '@/lib/orders/run-order-cancellation-side-effect';
+import {
+  DeferredError,
+  type OrderCancellationSideEffectStep,
+} from '@/lib/orders/run-order-cancellation-side-effect';
 import { unsupportedRefundReasons } from '@/lib/orders/unsupported-refund-reasons';
 
 export async function executeOrderCancellationSideEffect({
@@ -216,7 +219,11 @@ export async function executeOrderCancellationSideEffect({
       unverifiedLinkedLegIds.has(transaction.id)
   );
   if (awaitingTransactions.length > 0 || unverifiedTransactions.length > 0) {
-    throw new Error('cancellation_refund_awaiting_provider_completion');
+    // Defer without consuming a retry attempt: only provider
+    // reconciliation can change this condition, and burning the
+    // five-attempt budget on it would strand the remaining legs
+    // permanently once the pending refund completes.
+    throw new DeferredError('cancellation_refund_awaiting_provider_completion');
   }
   // Withhold mismatched legs from initiation: their completed rows do not
   // cover them in matching money, so a full-leg provider refund now would

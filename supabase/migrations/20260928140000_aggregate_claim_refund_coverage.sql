@@ -4,6 +4,9 @@
 -- its leg, so a partial row completed the step while the executor's
 -- coverage validation (and the remaining balance) never ran. Sum
 -- same-gateway, same-currency rows per leg to match the executor rule.
+-- Deferred rows (provider-awaiting work that must not consume retries)
+-- are reclaimable without incrementing attempts, so a pending refund
+-- that completes late still resumes its remaining legs.
 CREATE OR REPLACE FUNCTION public.claim_order_cancellation_side_effect(
   p_order_id uuid,
   p_step text,
@@ -124,9 +127,11 @@ BEGIN
     ON CONFLICT (order_id, step) DO UPDATE SET
       status = 'claimed', claim_token = EXCLUDED.claim_token,
       claimed_at = now(), completed_at = NULL, error = NULL,
-      attempts = side_effect.attempts + 1
-    WHERE side_effect.status = 'failed'
-      AND side_effect.attempts < 5;
+      attempts = CASE WHEN side_effect.status = 'deferred'
+                      THEN side_effect.attempts
+                      ELSE side_effect.attempts + 1 END
+    WHERE (side_effect.status = 'failed' AND side_effect.attempts < 5)
+       OR side_effect.status = 'deferred';
   END IF;
 
   RETURN QUERY
@@ -144,4 +149,51 @@ REVOKE ALL ON FUNCTION public.claim_order_cancellation_side_effect(
 ) FROM PUBLIC, anon, authenticated, service_role, postgres;
 GRANT EXECUTE ON FUNCTION public.claim_order_cancellation_side_effect(
   uuid, text, uuid
+) TO service_role;
+
+-- Accept a deferred finish: provider-awaiting work parks without failing,
+-- and the drain reselects it until reconciliation advances.
+CREATE OR REPLACE FUNCTION public.finish_order_cancellation_side_effect(
+  p_order_id uuid,
+  p_step text,
+  p_claim_token uuid,
+  p_status text,
+  p_result jsonb DEFAULT NULL,
+  p_error text DEFAULT NULL
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_updated boolean := false;
+BEGIN
+  IF (SELECT auth.role()) IS DISTINCT FROM 'service_role' THEN
+    RAISE EXCEPTION 'service_role_required' USING ERRCODE = '42501';
+  END IF;
+  IF p_status NOT IN ('completed', 'failed', 'delivery_uncertain', 'deferred') THEN
+    RAISE EXCEPTION 'invalid_cancellation_side_effect_status';
+  END IF;
+
+  UPDATE public.order_cancellation_side_effects AS side_effect
+     SET status = p_status,
+         completed_at = CASE WHEN p_status = 'completed' THEN now() ELSE NULL END,
+         result = p_result,
+         error = CASE WHEN p_status = 'completed' THEN NULL ELSE p_error END
+   WHERE side_effect.order_id = p_order_id
+     AND side_effect.step = p_step
+     AND side_effect.claim_token = p_claim_token
+     AND side_effect.status = 'claimed'
+  RETURNING true INTO v_updated;
+
+  RETURN COALESCE(v_updated, false);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.finish_order_cancellation_side_effect(
+  uuid, text, uuid, text, jsonb, text
+) FROM PUBLIC, anon, authenticated, service_role, postgres;
+GRANT EXECUTE ON FUNCTION public.finish_order_cancellation_side_effect(
+  uuid, text, uuid, text, jsonb, text
 ) TO service_role;

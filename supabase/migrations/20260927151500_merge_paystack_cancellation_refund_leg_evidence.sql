@@ -5,13 +5,17 @@
 -- accepted provider IDs, and leg candidates: merge them under the leg key
 -- alongside the provider-ID evidence merged by
 -- merge_paystack_cancellation_refund_provider_evidence_v1.
+-- Ambiguous initiation merges its flag under the leg key so the
+-- completion gate never auto-closes the review on other legs' evidence.
+DROP FUNCTION IF EXISTS public.merge_paystack_cancellation_refund_leg_evidence_v1(uuid, uuid, uuid, text, jsonb, jsonb);
 CREATE FUNCTION public.merge_paystack_cancellation_refund_leg_evidence_v1(
   p_order_id uuid,
   p_merchant_id uuid,
   p_payment_transaction_id uuid,
   p_reason text,
   p_accepted_refund_ids jsonb,
-  p_candidates jsonb
+  p_candidates jsonb,
+  p_ambiguous boolean DEFAULT false
 ) RETURNS boolean
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
@@ -66,6 +70,13 @@ BEGIN
           jsonb_build_object(
             'reason', left(p_reason, 120),
             'accepted_refund_ids', coalesce(p_accepted_refund_ids, '[]'::jsonb),
+            -- Sticky: a later deterministic merge for the same leg must
+            -- not clear an earlier ambiguity — only operations resolves
+            -- the uncertainty that a provider refund already exists.
+            'ambiguous', coalesce(p_ambiguous, false) OR coalesce(
+              ((metadata->'refund_evidence')->('leg:' || p_payment_transaction_id::text)->>'ambiguous')::boolean,
+              false
+            ),
             'observed_at', now()
           )
         ),
@@ -76,7 +87,7 @@ BEGIN
   RETURN true;
 END;
 $$;
-REVOKE ALL ON FUNCTION public.merge_paystack_cancellation_refund_leg_evidence_v1(uuid,uuid,uuid,text,jsonb,jsonb)
+REVOKE ALL ON FUNCTION public.merge_paystack_cancellation_refund_leg_evidence_v1(uuid,uuid,uuid,text,jsonb,jsonb,boolean)
   FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.merge_paystack_cancellation_refund_leg_evidence_v1(uuid,uuid,uuid,text,jsonb,jsonb)
+GRANT EXECUTE ON FUNCTION public.merge_paystack_cancellation_refund_leg_evidence_v1(uuid,uuid,uuid,text,jsonb,jsonb,boolean)
   TO service_role;

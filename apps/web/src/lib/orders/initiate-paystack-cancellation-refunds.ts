@@ -58,6 +58,10 @@ export async function initiatePaystackCancellationRefunds({
           metadata: {
             accepted_refund_ids: refundIds,
             failed_payment_transaction_id: transaction.id,
+            // An ambiguous later failure may still have created a provider
+            // refund: mark it so the completion gate never auto-closes the
+            // review on other legs' evidence.
+            ...(isAmbiguousFailure ? { ambiguous_initiation: true } : {}),
           },
           order,
           reason:
@@ -71,6 +75,7 @@ export async function initiatePaystackCancellationRefunds({
         // quarantining; otherwise no reconciler could ever discover it.
         await quarantineRefund({
           metadata: {
+            ambiguous_initiation: true,
             failed_payment_transaction_id: transaction.id,
           },
           order,

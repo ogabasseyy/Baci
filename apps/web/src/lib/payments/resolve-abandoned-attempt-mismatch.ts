@@ -9,8 +9,9 @@ type VerifyResult = Awaited<ReturnType<typeof verifyTransaction>>;
  * provider state (abandoned/failed) is deterministic: file it for
  * operations and stamp the row instead of rotating it through every future
  * sweep. Non-terminal mismatches keep their hold: the provider state may
- * still change. A filing failure also falls back to the hold so the next
- * sweep retries.
+ * still change. Returns true only when terminal evidence was filed
+ * nowhere durably, so the caller can surface the operational failure while
+ * the hold retains the retry.
  */
 export async function resolveAbandonedAttemptMismatch({
   attempt,
@@ -34,7 +35,7 @@ export async function resolveAbandonedAttemptMismatch({
   result: VerifyResult;
   reviewsFiled: string[];
   supabase: SupabaseClient;
-}): Promise<void> {
+}): Promise<boolean> {
   if (
     result.success &&
     (result.data.status === 'abandoned' || result.data.status === 'failed')
@@ -53,8 +54,11 @@ export async function resolveAbandonedAttemptMismatch({
     });
     if (filed) {
       reviewsFiled.push(attempt.id);
-      return;
+      return false;
     }
+    await hold(mismatchKind);
+    return true;
   }
   await hold(mismatchKind);
+  return false;
 }

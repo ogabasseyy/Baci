@@ -113,7 +113,7 @@ describe('abandoned Paystack attempt duplicate captures', () => {
     });
 
     expect(summary.reviewsFiled).toEqual([]);
-    expect(summary.failed).toBe(false);
+    expect(summary.failed).toBe(true);
     expect(summary.held).toEqual([{ id: 'attempt-1', reason: 'success' }]);
     expect(update).toHaveBeenCalledWith({
       updated_at: expect.any(String),
@@ -160,7 +160,7 @@ describe('abandoned Paystack attempt duplicate captures', () => {
     });
 
     expect(summary.reviewsFiled).toEqual([]);
-    expect(summary.failed).toBe(false);
+    expect(summary.failed).toBe(true);
     expect(summary.held).toEqual([
       { id: 'attempt-1', reason: 'payment_evidence_mismatch' },
     ]);
@@ -182,7 +182,7 @@ describe('abandoned Paystack attempt duplicate captures', () => {
     });
 
     expect(summary.reviewsFiled).toEqual([]);
-    expect(summary.failed).toBe(false);
+    expect(summary.failed).toBe(true);
     expect(summary.held).toEqual([{ id: 'attempt-1', reason: 'success' }]);
     expect(update).toHaveBeenCalledWith({
       updated_at: expect.any(String),
@@ -208,7 +208,7 @@ describe('abandoned Paystack attempt duplicate captures', () => {
     });
 
     expect(summary.reviewsFiled).toEqual([]);
-    expect(summary.failed).toBe(false);
+    expect(summary.failed).toBe(true);
     expect(summary.held).toEqual([{ id: 'attempt-1', reason: 'success' }]);
   });
 });

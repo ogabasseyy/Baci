@@ -4,6 +4,7 @@ import { constantTimeEqual } from '@/lib/constant-time-equal';
 import { logger } from '@/lib/logger';
 import { drainFailedOrderCancellationSideEffects } from '@/lib/orders/drain-failed-order-cancellation-side-effects';
 import { drainPaystackRefundNotifications } from '@/lib/payments/drain-paystack-refund-notifications';
+import { notificationDrainLimit } from '@/lib/payments/notification-drain-limit';
 import { reconcileCompletedPaystackCancellationRefunds } from '@/lib/payments/reconcile-completed-paystack-cancellation-refunds';
 import { reconcilePendingPaystackCancellationRefunds } from '@/lib/payments/reconcile-pending-paystack-cancellation-refunds';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
 
     const supabase = createServiceClient();
     if (new URL(request.url).searchParams.get('cancellationsOnly') === 'true') {
+      const workersStartedAt = Date.now();
       const [cancellationResult, refundResult, legacyRefundResult] =
         await Promise.allSettled([
           drainFailedOrderCancellationSideEffects({
@@ -50,8 +52,19 @@ export async function POST(request: Request) {
           reconcilePendingPaystackCancellationRefunds(supabase),
           reconcileCompletedPaystackCancellationRefunds(supabase),
         ]);
+      // Budget the serial drain from the remaining invocation time: an
+      // aborted send strands its notification as processing, which becomes
+      // permanently non-retryable delivery_uncertain. Skipped rows stay
+      // pending/failed for the next invocation.
+      const drainLimit = notificationDrainLimit(Date.now() - workersStartedAt);
+      if (drainLimit <= 0) {
+        logger.warn({
+          message: 'Skipping refund notification drain: cron budget exhausted',
+          elapsedMs: Date.now() - workersStartedAt,
+        });
+      }
       const notificationResult = await Promise.allSettled([
-        drainPaystackRefundNotifications(supabase, sendEmail),
+        drainPaystackRefundNotifications(supabase, sendEmail, drainLimit),
       ]);
       // The workers fulfill with per-row failure counts instead of throwing,
       // so a rejection-only check would report persistent outages as success.

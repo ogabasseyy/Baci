@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   reconcilePendingPaystackCancellationRefunds: vi.fn(),
   from: vi.fn(),
   loggerError: vi.fn(),
+  loggerWarn: vi.fn(),
   rpc: vi.fn(),
   sendEmail: vi.fn(),
 }));
@@ -14,6 +15,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/logger', () => ({
   logger: {
     error: mocks.loggerError,
+    warn: mocks.loggerWarn,
   },
 }));
 
@@ -104,9 +106,30 @@ describe('POST /api/cron/process-settlements?cancellationsOnly=true', () => {
     ).toHaveBeenCalled();
     expect(mocks.drainPaystackRefundNotifications).toHaveBeenCalledWith(
       expect.anything(),
-      mocks.sendEmail
+      mocks.sendEmail,
+      9
     );
     expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it('skips the notification drain when the workers exhausted the cron budget', async () => {
+    const now = vi.spyOn(Date, 'now');
+    now
+      .mockReturnValueOnce(1_000_000)
+      .mockReturnValueOnce(1_290_000)
+      .mockReturnValue(1_290_000);
+    try {
+      const response = await POST(makeCancellationDrainRequest());
+
+      expect(response.status).toBe(200);
+      expect(mocks.drainPaystackRefundNotifications).toHaveBeenCalledWith(
+        expect.anything(),
+        mocks.sendEmail,
+        0
+      );
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it('still reconciles refunds when cancellation side effect draining fails', async () => {

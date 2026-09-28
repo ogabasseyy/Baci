@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  OGABASSEY_HOME_HERO_SNAPSHOT_TENANT,
-  resolveOgabasseyHomeHeroSnapshot,
-} from './ogabassey-home-hero-snapshot';
+import { OGABASSEY_HOME_HERO_SNAPSHOT_TENANT } from '@/config/ogabassey-home-hero-same-origin';
+import { resolveOgabasseyHomeHeroSnapshot } from './ogabassey-home-hero-snapshot';
 
 const FLAG = 'NEXT_PUBLIC_OGABASSEY_HOME_HERO_SAME_ORIGIN_ENABLED';
 

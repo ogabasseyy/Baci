@@ -1,10 +1,8 @@
 import { buildLaunchSlides } from '@/components/storefront/ogabassey/components/build-launch-slides';
 import { Hero } from '@/components/storefront/ogabassey/components/Hero';
+import { OGABASSEY_HOME_HERO_SNAPSHOT_TENANT } from '@/config/ogabassey-home-hero-same-origin';
 import type { getRequestScopedMerchant } from '@/lib/cached-data';
-import {
-  OGABASSEY_HOME_HERO_SNAPSHOT_TENANT,
-  resolveOgabasseyHomeHeroSnapshot,
-} from '@/lib/ogabassey-home-hero-snapshot';
+import { resolveOgabasseyHomeHeroSnapshot } from '@/lib/ogabassey-home-hero-snapshot';
 import { buildStoreUrl } from '@/lib/store-url';
 import type { loadOgabasseyLaunchProducts } from './ogabassey-home-launch-products';
 

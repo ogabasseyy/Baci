@@ -2,8 +2,15 @@
 // entries with preserved tenants and writes the checked-in manifest file.
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { HeroSnapshotError } from './ogabassey-hero-snapshot-errors.mjs';
 import { readSnapshotManifestTenants } from './ogabassey-hero-snapshot-manifest-read.mjs';
 import { serializeSnapshotManifestFile } from './ogabassey-hero-snapshot-manifest-serialize.mjs';
@@ -40,43 +47,52 @@ export async function writeSnapshotManifest({
   )) {
     manifest[slug][entry.sourceUrl] = entry;
   }
-  writeFileSync(
-    manifestPath,
-    serializeSnapshotManifestFile(manifest, version, new Date().toISOString())
-  );
-  // Keep `pnpm lint` green immediately after regenerating: biome owns final
-  // line-breaking (long URLs exceed the print width). Not fatal when biome
-  // is unavailable — the manifest is valid either way; lint flags it later.
-  if (!skipBiomeFormat) {
-    const biomeBin = [root, webRoot]
-      .map((dir) => resolve(dir, 'node_modules/.bin/biome'))
-      .find((bin) => existsSync(bin));
-    if (biomeBin) {
-      try {
-        execFileSync(biomeBin, ['check', '--write', manifestPath], {
-          cwd: root,
-          stdio: 'pipe',
-        });
-      } catch (error) {
-        // The new manifest is already on disk and the orchestrator is about
-        // to delete this run's baked files: restore the previous manifest
-        // first, or its entries would dangle at deleted assets.
+  // Atomic replacement: serialize and format a temp sibling, then rename
+  // over the live manifest. A failed write (ENOSPC, I/O error) or a
+  // failed formatter can therefore never leave a truncated manifest behind
+  // while the orchestrator deletes this run's baked files. The temp file
+  // shares the manifest's directory so the rename stays on one filesystem,
+  // and keeps the `.ts` extension so the formatter accepts it. Leftovers
+  // (only from a killed process) are removed at the start of the next run.
+  for (const stale of readdirSync(dirname(manifestPath))) {
+    if (stale.startsWith('ogabassey-home-hero-snapshot-manifest.tmp-')) {
+      rmSync(resolve(dirname(manifestPath), stale), { force: true });
+    }
+  }
+  const tmpPath = manifestPath.replace(/\.ts$/, `.tmp-${process.pid}.ts`);
+  try {
+    writeFileSync(
+      tmpPath,
+      serializeSnapshotManifestFile(manifest, version, new Date().toISOString())
+    );
+    // Keep `pnpm lint` green immediately after regenerating: biome owns final
+    // line-breaking (long URLs exceed the print width). Not fatal when biome
+    // is unavailable — the manifest is valid either way; lint flags it later.
+    if (!skipBiomeFormat) {
+      const biomeBin = [root, webRoot]
+        .map((dir) => resolve(dir, 'node_modules/.bin/biome'))
+        .find((bin) => existsSync(bin));
+      if (biomeBin) {
         try {
-          writeFileSync(manifestPath, existing);
-        } catch {
+          execFileSync(biomeBin, ['check', '--write', tmpPath], {
+            cwd: root,
+            stdio: 'pipe',
+          });
+        } catch (error) {
           throw new HeroSnapshotError(
-            `manifest formatting failed and the previous manifest could not be restored: ${errorMessage(error)}`
+            `manifest formatting failed: ${errorMessage(error)}`
           );
         }
-        throw new HeroSnapshotError(
-          `manifest formatting failed, previous manifest restored: ${errorMessage(error)}`
+      } else {
+        console.warn(
+          '[hero-snapshots] WARN: biome not found; run biome check --write on the manifest'
         );
       }
-    } else {
-      console.warn(
-        '[hero-snapshots] WARN: biome not found; run biome check --write on the manifest'
-      );
     }
+    renameSync(tmpPath, manifestPath);
+  } catch (error) {
+    rmSync(tmpPath, { force: true });
+    throw error;
   }
   console.log(
     `[hero-snapshots] wrote manifest (${entries.length} ${entries.length === 1 ? 'entry' : 'entries'} for ${slug})`

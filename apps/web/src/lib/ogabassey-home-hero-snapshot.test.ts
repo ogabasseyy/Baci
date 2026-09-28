@@ -1,10 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL } from '@/config/ogabassey';
+import { OGABASSEY_HOME_HERO_SNAPSHOT_TENANT } from '@/config/ogabassey-home-hero-same-origin';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
-import {
-  OGABASSEY_HOME_HERO_SNAPSHOT_TENANT,
-  resolveOgabasseyHomeHeroSnapshot,
-} from './ogabassey-home-hero-snapshot';
+import { resolveOgabasseyHomeHeroSnapshot } from './ogabassey-home-hero-snapshot';
 
 const FLAG = 'NEXT_PUBLIC_OGABASSEY_HOME_HERO_SAME_ORIGIN_ENABLED';
 const ROTATED_URL =

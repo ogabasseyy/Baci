@@ -6,12 +6,10 @@ import { Hero } from '@/components/storefront/ogabassey/components/Hero';
 import type { LaunchProductSlide } from '@/components/storefront/ogabassey/components/LaunchCarousel';
 import { loadUnpublishedStorefront } from '@/components/storefront/unpublished-storefront';
 import { OGABASSEY_TITLE } from '@/config/ogabassey';
+import { OGABASSEY_HOME_HERO_SNAPSHOT_TENANT } from '@/config/ogabassey-home-hero-same-origin';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
-import {
-  OGABASSEY_HOME_HERO_SNAPSHOT_TENANT,
-  resolveOgabasseyHomeHeroSnapshot,
-} from '@/lib/ogabassey-home-hero-snapshot';
+import { resolveOgabasseyHomeHeroSnapshot } from '@/lib/ogabassey-home-hero-snapshot';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { resolveMerchantContextIdentifier } from '@/lib/storefront-route-identifier';
 import { OgabasseyHomeDynamicContent } from './ogabassey-home-dynamic-content';

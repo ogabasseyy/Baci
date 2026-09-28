@@ -83,7 +83,7 @@ beforeEach(() => {
 });
 
 describe('runGenerateOgabasseyHeroSnapshots', () => {
-  it('runs end to end: bakes, writes, then prunes', async () => {
+  it('runs end to end: bakes, writes, then prunes with --prune', async () => {
     const webRoot = mkdtempSync(join(tmpdir(), 'hero-run-'));
     const manifestPath = seedManifestFile(webRoot);
     const outDir = resolve(webRoot, 'public/_hero/ogabassey');
@@ -92,7 +92,7 @@ describe('runGenerateOgabasseyHeroSnapshots', () => {
     writeFileSync(resolve(outDir, orphan), 'stale');
 
     const { entries, slug } = await runGenerateOgabasseyHeroSnapshots(
-      ['node', 's.mjs', '--slug', 'ogabassey', SOURCE_URL],
+      ['node', 's.mjs', '--slug', 'ogabassey', '--prune', SOURCE_URL],
       {
         fetchImpl: makeFakeFetch(),
         sharpImpl: makeFakeSharp(),
@@ -110,6 +110,28 @@ describe('runGenerateOgabasseyHeroSnapshots', () => {
     );
     expect(Object.keys(tenants.ogabassey)).toEqual([SOURCE_URL]);
     expect(tenants['other-tenant']).toEqual({});
+  });
+
+  it('keeps orphans without --prune (published urls stay valid)', async () => {
+    const webRoot = mkdtempSync(join(tmpdir(), 'hero-run-'));
+    seedManifestFile(webRoot);
+    const outDir = resolve(webRoot, 'public/_hero/ogabassey');
+    mkdirSync(outDir, { recursive: true });
+    const orphan = 'aaaaaaaaaaaa-640.avif';
+    writeFileSync(resolve(outDir, orphan), 'stale-but-published');
+
+    await runGenerateOgabasseyHeroSnapshots(
+      ['node', 's.mjs', '--slug', 'ogabassey', SOURCE_URL],
+      {
+        fetchImpl: makeFakeFetch(),
+        sharpImpl: makeFakeSharp(),
+        skipBiomeFormat: true,
+        webRoot,
+      }
+    );
+
+    expect(existsSync(resolve(outDir, orphan))).toBe(true);
+    expect(readdirSync(outDir)).toHaveLength(SNAPSHOT_WIDTHS.length + 1);
   });
 
   it('leaves the manifest and orphans untouched when a later url fails', async () => {
@@ -164,7 +186,7 @@ describe('runGenerateOgabasseyHeroSnapshots', () => {
     expect(readdirSync(outDir)).toEqual([orphan]);
   });
 
-  it('restores the manifest and cleans baked files when formatting fails', async () => {
+  it('keeps the live manifest and cleans baked files when formatting fails', async () => {
     const webRoot = mkdtempSync(join(tmpdir(), 'hero-run-'));
     const manifestPath = seedManifestFile(webRoot);
     const before = readFileSync(manifestPath, 'utf8');
@@ -188,7 +210,7 @@ describe('runGenerateOgabasseyHeroSnapshots', () => {
           webRoot,
         }
       )
-    ).rejects.toThrow(/previous manifest restored/);
+    ).rejects.toThrow(/manifest formatting failed/);
 
     expect(readFileSync(manifestPath, 'utf8')).toBe(before);
     expect(readdirSync(outDir)).toEqual([orphan]);

@@ -1,15 +1,10 @@
 import 'server-only';
-import { isOgabasseyHomeHeroSameOriginEnabled } from '@/config/ogabassey-home-hero-same-origin';
+import {
+  isOgabasseyHomeHeroSameOriginEnabled,
+  OGABASSEY_HOME_HERO_SNAPSHOT_TENANT,
+} from '@/config/ogabassey-home-hero-same-origin';
 import { OGABASSEY_HOME_HERO_SNAPSHOT_MANIFEST } from '@/config/ogabassey-home-hero-snapshot-manifest';
-import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import type { OgabasseyHomeHeroSnapshot } from './ogabassey-home-hero-snapshot-types';
-
-/** Tenant key the snapshot pipeline writes under. Only this tenant has
- *  snapshots; every other slug resolves to null (CDN fallback). Multi-tenant
- *  snapshots would add manifest keys and pass `merchant.slug` at call sites —
- *  current scope is ogabassey-only and every call site is in an
- *  ogabassey-specific file. */
-export const OGABASSEY_HOME_HERO_SNAPSHOT_TENANT = OGABASSEY_TEMPLATE_ID;
 
 function isValidSnapshotPath(value: string): boolean {
   return (

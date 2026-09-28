@@ -1,3 +1,5 @@
+import { OGABASSEY_TEMPLATE_ID } from './templates';
+
 /**
  * Dark-launch flag for same-origin delivery of the OgaBassey mobile home-hero
  * slide-0 image (AVIF tier only).
@@ -24,3 +26,11 @@ export function isOgabasseyHomeHeroSameOriginEnabled(): boolean {
     process.env.NEXT_PUBLIC_OGABASSEY_HOME_HERO_SAME_ORIGIN_ENABLED === 'true'
   );
 }
+
+/** Tenant key the snapshot pipeline writes under. Only this tenant has
+ *  snapshots; every other slug resolves to null (CDN fallback). Multi-tenant
+ *  snapshots would add manifest keys and pass `merchant.slug` at call sites —
+ *  current scope is ogabassey-only and every call site is in an
+ *  ogabassey-specific file. Lives here (not in the resolver) so the
+ *  resolver module keeps a single primary export. */
+export const OGABASSEY_HOME_HERO_SNAPSHOT_TENANT = OGABASSEY_TEMPLATE_ID;

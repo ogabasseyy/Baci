@@ -10,17 +10,25 @@
 //
 // Invoked via scripts/generate-ogabassey-hero-snapshots.mjs:
 //   node scripts/generate-ogabassey-hero-snapshots.mjs --slug ogabassey <sourceUrl> [...]
+//   node scripts/generate-ogabassey-hero-snapshots.mjs --slug ogabassey --check [sourceUrl ...]
+//   node scripts/generate-ogabassey-hero-snapshots.mjs --slug ogabassey --prune <sourceUrl> [...]
 // The URL list is the COMPLETE set kept for the slug: entries not listed
-// are dropped from the manifest and their orphaned `*.avif` files pruned.
-// Always pass the committed slide-0 URL
+// are dropped from the manifest. Always pass the committed slide-0 URL
 // (OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL) first so the first-flush slot
 // stays covered, plus any current shell slide-0 candidates.
+//
+// Orphan `*.avif` files are deleted ONLY with `--prune`: published snapshot
+// URLs are immutable-cached for a year and may still be referenced by
+// documents served before this run, so a bake never deletes on its own.
+// `--check` re-fetches kept sources and fails on hash drift (in-place
+// merchandising overwrites); run it on a schedule.
 
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import sharp from 'sharp';
 import { parseSnapshotArgs } from './ogabassey-hero-snapshot-args.mjs';
 import { bakeSnapshots } from './ogabassey-hero-snapshot-bake.mjs';
+import { checkSnapshotFreshness } from './ogabassey-hero-snapshot-check.mjs';
 import { writeSnapshotManifest } from './ogabassey-hero-snapshot-manifest-write.mjs';
 import { resolveSnapshotPaths } from './ogabassey-hero-snapshot-paths.mjs';
 import { pruneSnapshotOrphans } from './ogabassey-hero-snapshot-prune.mjs';
@@ -32,7 +40,10 @@ export async function runGenerateOgabasseyHeroSnapshots(argv, deps = {}) {
   const webRoot = paths.webRoot;
   const manifestPath = deps.manifestPath ?? paths.manifestPath;
   const root = deps.root ?? paths.root;
-  const { slug, urls } = parseSnapshotArgs(argv);
+  const { check, prune, slug, urls } = parseSnapshotArgs(argv);
+  if (check) {
+    return checkSnapshotFreshness({ fetchImpl, manifestPath, slug, urls });
+  }
   const outDir = resolve(webRoot, 'public/_hero', slug);
   const { bakedPaths, entries } = await bakeSnapshots({
     fetchImpl,
@@ -62,6 +73,11 @@ export async function runGenerateOgabasseyHeroSnapshots(argv, deps = {}) {
     }
     throw error;
   }
-  pruneSnapshotOrphans(outDir, entries);
+  // Orphan deletion is explicit (`--prune`): published snapshot URLs are
+  // immutable-cached for a year and may still be referenced by documents
+  // served before this run, so a bake never deletes on its own.
+  if (prune) {
+    pruneSnapshotOrphans(outDir, entries);
+  }
   return { entries, outDir, slug };
 }

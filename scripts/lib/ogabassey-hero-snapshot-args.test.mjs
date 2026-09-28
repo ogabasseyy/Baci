@@ -15,7 +15,49 @@ describe('parseSnapshotArgs', () => {
         `  ${SOURCE_URL} `,
         SOURCE_URL,
       ])
-    ).toEqual({ slug: 'ogabassey', urls: [SOURCE_URL] });
+    ).toEqual({ check: false, prune: false, slug: 'ogabassey', urls: [SOURCE_URL] });
+  });
+
+  it('parses the prune flag (orphan deletion is opt-in)', () => {
+    expect(
+      parseSnapshotArgs([
+        'node',
+        'script.mjs',
+        '--slug',
+        'ogabassey',
+        '--prune',
+        SOURCE_URL,
+      ])
+    ).toEqual({ check: false, prune: true, slug: 'ogabassey', urls: [SOURCE_URL] });
+  });
+
+  it('parses check mode with optional urls', () => {
+    expect(
+      parseSnapshotArgs(['node', 'script.mjs', '--slug', 'ogabassey', '--check'])
+    ).toEqual({ check: true, prune: false, slug: 'ogabassey', urls: [] });
+    expect(
+      parseSnapshotArgs([
+        'node',
+        'script.mjs',
+        '--slug',
+        'ogabassey',
+        '--check',
+        SOURCE_URL,
+      ])
+    ).toEqual({ check: true, prune: false, slug: 'ogabassey', urls: [SOURCE_URL] });
+  });
+
+  it('rejects check combined with prune', () => {
+    expect(() =>
+      parseSnapshotArgs([
+        'node',
+        's.mjs',
+        '--slug',
+        'ogabassey',
+        '--check',
+        '--prune',
+      ])
+    ).toThrow(/mutually exclusive/);
   });
 
   it('rejects a missing or malformed slug', () => {

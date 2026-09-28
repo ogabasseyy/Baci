@@ -1,7 +1,9 @@
 import {
   chmodSync,
+  existsSync,
   mkdtempSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   writeFileSync,
 } from 'node:fs';
@@ -72,7 +74,7 @@ describe('writeSnapshotManifest', () => {
     );
   });
 
-  it('restores the previous manifest when formatting fails', async () => {
+  it('leaves the live manifest untouched when formatting fails', async () => {
     const webRoot = mkdtempSync(join(tmpdir(), 'hero-manifest-'));
     const manifestPath = seedManifestFile(webRoot);
     const before = readFileSync(manifestPath, 'utf8');
@@ -92,8 +94,38 @@ describe('writeSnapshotManifest', () => {
         slug: 'ogabassey',
         webRoot,
       })
-    ).rejects.toThrow(/previous manifest restored/);
+    ).rejects.toThrow(/manifest formatting failed/);
+    // Atomic replacement: the live file never changed, temp cleaned up.
     expect(readFileSync(manifestPath, 'utf8')).toBe(before);
+    expect(
+      readdirSync(resolve(webRoot, 'src/config')).filter((f) =>
+        f.includes('.tmp-')
+      )
+    ).toEqual([]);
+  });
+
+  it('removes stale temp siblings from killed runs', async () => {
+    const webRoot = mkdtempSync(join(tmpdir(), 'hero-manifest-'));
+    const manifestPath = seedManifestFile(webRoot);
+    const stale = resolve(
+      webRoot,
+      'src/config/ogabassey-home-hero-snapshot-manifest.tmp-99999.ts'
+    );
+    writeFileSync(stale, 'stale');
+    const unrelated = resolve(webRoot, 'src/config/notes.tmp-x.ts');
+    writeFileSync(unrelated, 'hands off');
+
+    await writeSnapshotManifest({
+      entries: [makeEntry()],
+      manifestPath,
+      root: webRoot,
+      skipBiomeFormat: true,
+      slug: 'ogabassey',
+      webRoot,
+    });
+
+    expect(existsSync(stale)).toBe(false);
+    expect(existsSync(unrelated)).toBe(true);
   });
 
   it('fails when the manifest is missing', async () => {

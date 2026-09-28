@@ -2,11 +2,9 @@ import {
   MOBILE_HERO_IMAGE_SIZES,
   MOBILE_HERO_SOURCE_MEDIA,
 } from '@/components/storefront/ogabassey/components/hero-mobile-image-config';
+import { OGABASSEY_HOME_HERO_SNAPSHOT_TENANT } from '@/config/ogabassey-home-hero-same-origin';
 import { ogabasseyHomeHeroResourceHintProjection } from '@/lib/ogabassey-home-hero-resource-hint-projection';
-import {
-  OGABASSEY_HOME_HERO_SNAPSHOT_TENANT,
-  resolveOgabasseyHomeHeroSnapshot,
-} from '@/lib/ogabassey-home-hero-snapshot';
+import { resolveOgabasseyHomeHeroSnapshot } from '@/lib/ogabassey-home-hero-snapshot';
 
 /**
  * Scanner-visible twin of the react-dom `preload()` in

@@ -10,6 +10,7 @@ function options(overrides: Record<string, unknown> = {}) {
     currencyCode: 'NGN',
     discountSubtotal: 10_000,
     hasAuthenticatedUser: false,
+    hasCheckoutCartItems: false,
     isOrderInFlightRef: { current: false },
     merchantSlug: undefined,
     pendingCheckoutOrder: null,
@@ -209,6 +210,31 @@ describe('useCheckoutPaymentSession', () => {
 
     expect(result.current.discount.applied).not.toBeNull();
     expect(result.current.checkoutValues.discountAmount).toBe(0);
+    expect(result.current.total).toBe(10_700);
+  });
+
+  it('preserves active-cart discount behavior when a resume ID is also present', () => {
+    const input = options({
+      hasCheckoutCartItems: true,
+      resumeOrder: {
+        ...options().resumeOrder,
+        resumeOrderId: 'resumed-order',
+        resumeMerchantSlug: 'store',
+      },
+    });
+    const { result } = renderHook(() =>
+      useCheckoutPaymentSession(input as never)
+    );
+    act(() => {
+      result.current.discount.setApplied({
+        valid: true,
+        code: 'SAVE',
+        discount_type: 'fixed',
+        discount_value: 800,
+      });
+    });
+
+    expect(result.current.checkoutValues.discountAmount).toBe(800);
     expect(result.current.total).toBe(10_700);
   });
 

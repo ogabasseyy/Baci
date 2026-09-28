@@ -21,16 +21,22 @@ export function deriveCheckoutSummaryAmounts({
   resumedOrder,
 }: DeriveCheckoutSummaryAmountsInput) {
   const summaryOrder = hasCheckoutCartItems ? null : resumedOrder;
-  const summaryTaxAmount =
-    summaryOrder?.tax_amount ?? orderTotals?.taxAmount ?? 0;
+  const summaryTaxAmount = summaryOrder
+    ? (summaryOrder.tax_amount ?? 0)
+    : (orderTotals?.taxAmount ?? 0);
 
   return {
     summaryOrder,
     summaryTaxAmount,
-    summaryDeliveryCost: summaryOrder?.shipping_cost ?? deliveryCost,
-    summaryGiftWrappingCost:
-      summaryOrder?.gift_wrapping_fee ?? giftWrappingCost,
-    summaryDiscountAmount: summaryOrder?.discount_amount ?? discountAmount,
+    summaryDeliveryCost: summaryOrder
+      ? (summaryOrder.shipping_cost ?? 0)
+      : deliveryCost,
+    summaryGiftWrappingCost: summaryOrder
+      ? (summaryOrder.gift_wrapping_fee ?? 0)
+      : giftWrappingCost,
+    summaryDiscountAmount: summaryOrder
+      ? (summaryOrder.discount_amount ?? 0)
+      : discountAmount,
     summaryDeliveryMethod: summaryOrder ? null : deliveryMethod,
     summaryOrderTotals: summaryOrder
       ? { total: summaryOrder.total, taxAmount: summaryTaxAmount }

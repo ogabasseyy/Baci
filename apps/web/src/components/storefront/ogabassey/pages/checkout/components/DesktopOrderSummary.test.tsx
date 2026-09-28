@@ -72,7 +72,7 @@ describe('desktop checkout summary visibility', () => {
         payWithWallet={false}
         setPayWithWallet={vi.fn()}
         walletAmountUsed={0}
-        remainingAmount={118}
+        remainingAmount={114}
         checkoutPayWithWallet={false}
         redvaultSummary={null}
         newsletterOptIn={false}
@@ -94,6 +94,6 @@ describe('desktop checkout summary visibility', () => {
     expect(html).toMatch(/<span>Subtotal<\/span><span>₦100<\/span>/);
     expect(html).toMatch(/<span>Tax<\/span><span>₦7<\/span>/);
     expect(html).toMatch(/<span>Discount<\/span><span>-₦5<\/span>/);
-    expect(html).toMatch(/<span>Total<\/span><span>₦118<\/span>/);
+    expect(html).toMatch(/<span>Total<\/span><span>₦114<\/span>/);
   });
 });

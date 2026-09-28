@@ -540,6 +540,7 @@ export const CheckoutPage: React.FC = () => {
     currencyCode,
     discountSubtotal: effectiveCheckoutCartTotal,
     hasAuthenticatedUser: Boolean(user),
+    hasCheckoutCartItems,
     isOrderInFlightRef,
     merchantSlug: merchant?.slug ?? undefined,
     pendingCheckoutOrder,
@@ -963,14 +964,13 @@ export const CheckoutPage: React.FC = () => {
           walletBalance={paymentSession.wallet.balance}
           payWithWallet={paymentSession.checkoutValues.payWithWallet}
           walletAmountUsed={walletAmountUsed}
-          remainingAmount={summaryOrder?.total ?? remainingAmount}
+          remainingAmount={remainingAmount}
         />}
 
-        {/* Hidden in the resumed-order flow: that path charges the persisted
-            resumedOrder.total and skips order creation, so a discount applied
-            here would only change the displayed total/fingerprint, not the
-            amount actually charged. */}
-        {!resumeOrderId && !resumedOrder && (
+        {/* Resumed-order-only checkout uses its persisted total and skips order
+            creation, so local discounts must not change its displayed due. An
+            active cart remains the pricing source when both are present. */}
+        {(hasCheckoutCartItems || (!resumeOrderId && !resumedOrder)) && (
           <div className="mt-4">
             <DiscountCodeInput
               merchantId={merchant?.id || ''}

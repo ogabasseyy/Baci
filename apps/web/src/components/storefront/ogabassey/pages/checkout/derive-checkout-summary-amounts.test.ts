@@ -91,4 +91,28 @@ describe('deriveCheckoutSummaryAmounts', () => {
       summaryTaxLabel: 'VAT (7.5%)',
     });
   });
+
+  it('does not substitute live-cart charges for missing resumed adjustments', () => {
+    const order = resumedOrder();
+    delete order.tax_amount;
+    delete order.gift_wrapping_fee;
+    delete order.discount_amount;
+    expect(
+      deriveCheckoutSummaryAmounts({
+        deliveryCost: 90,
+        deliveryMethod: 'door',
+        discountAmount: 40,
+        giftWrappingCost: 20,
+        hasCheckoutCartItems: false,
+        orderTotals: { total: 2_000, taxAmount: 150 },
+        resumedOrder: order,
+      })
+    ).toMatchObject({
+      summaryTaxAmount: 0,
+      summaryDeliveryCost: 200,
+      summaryGiftWrappingCost: 0,
+      summaryDiscountAmount: 0,
+      summaryOrderTotals: { total: order.total, taxAmount: 0 },
+    });
+  });
 });

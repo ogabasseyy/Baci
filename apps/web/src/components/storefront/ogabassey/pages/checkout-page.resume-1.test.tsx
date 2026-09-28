@@ -1,14 +1,66 @@
+import { resumedOrderPayload } from './checkout-page-bnpl.test-support';
 import {
   CheckoutPage,
   expect,
   it,
+  mockMobileOrderSummary,
   render,
   screen,
+  useAuthSafe,
   usePersistedState,
   useSearchParams,
   vi,
   waitFor,
 } from './checkout-page-test-support';
+
+it('shows the wallet-adjusted due amount in a resumed mobile summary', async () => {
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams({
+      orderId: 'ord-1',
+      trackingToken: 'tok-123',
+    }) as unknown as ReturnType<typeof useSearchParams>
+  );
+  vi.mocked(useAuthSafe).mockReturnValue({
+    user: {
+      id: 'customer-1',
+      email: 'ada@example.com',
+      user_metadata: {},
+    },
+  } as unknown as ReturnType<typeof useAuthSafe>);
+  const fetchMock = vi
+    .spyOn(globalThis, 'fetch')
+    .mockImplementation((input) => {
+      if (String(input).startsWith('/api/storefront/orders/ord-1')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            ...resumedOrderPayload('NGN'),
+            total: 5_750,
+            subtotal: 5_000,
+            tax_amount: 0,
+            shipping_cost: 750,
+          }),
+        } as Response);
+      }
+      if (String(input).startsWith('/api/storefront/customer/wallet')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ balance: 1_000 }),
+        } as Response);
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) } as Response);
+    });
+
+  try {
+    render(<CheckoutPage />);
+    await waitFor(() => {
+      const calls = vi.mocked(mockMobileOrderSummary).mock.calls;
+      expect(calls.at(-1)?.[0].remainingAmount).toBe(4_750);
+    });
+  } finally {
+    fetchMock.mockRestore();
+  }
+});
 
 it('wraps the resume-error state in the OgaBassey checkout scope', async () => {
   vi.mocked(useSearchParams).mockReturnValue(

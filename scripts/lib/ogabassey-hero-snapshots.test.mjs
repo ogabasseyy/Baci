@@ -159,5 +159,7 @@ describe('runGenerateOgabasseyHeroSnapshots', () => {
     ).rejects.toThrow(/not found/);
 
     expect(existsSync(resolve(outDir, orphan))).toBe(true);
+    // This run's baked files are removed; only the pre-existing orphan stays.
+    expect(readdirSync(outDir)).toEqual([orphan]);
   });
 });

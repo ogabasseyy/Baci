@@ -16,6 +16,7 @@
 // (OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL) first so the first-flush slot
 // stays covered, plus any current shell slide-0 candidates.
 
+import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import sharp from 'sharp';
 import { parseSnapshotArgs } from './ogabassey-hero-snapshot-args.mjs';
@@ -33,7 +34,7 @@ export async function runGenerateOgabasseyHeroSnapshots(argv, deps = {}) {
   const root = deps.root ?? paths.root;
   const { slug, urls } = parseSnapshotArgs(argv);
   const outDir = resolve(webRoot, 'public/_hero', slug);
-  const entries = await bakeSnapshots({
+  const { bakedPaths, entries } = await bakeSnapshots({
     fetchImpl,
     outDir,
     sharpImpl,
@@ -42,15 +43,25 @@ export async function runGenerateOgabasseyHeroSnapshots(argv, deps = {}) {
   });
   // Write before pruning: if the manifest read/serialize/write fails, the
   // old files are still on disk and the old manifest still references them.
-  // (Baked files already exist, so the new manifest never dangles.)
-  await writeSnapshotManifest({
-    entries,
-    manifestPath,
-    root,
-    skipBiomeFormat: deps.skipBiomeFormat ?? false,
-    slug,
-    webRoot,
-  });
+  // (Baked files already exist, so the new manifest never dangles.) On a
+  // write failure, also remove this run's baked files so they cannot be
+  // committed accidentally while unreferenced; pre-existing files were
+  // never tracked and stay untouched.
+  try {
+    await writeSnapshotManifest({
+      entries,
+      manifestPath,
+      root,
+      skipBiomeFormat: deps.skipBiomeFormat ?? false,
+      slug,
+      webRoot,
+    });
+  } catch (error) {
+    for (const filePath of bakedPaths) {
+      rmSync(filePath, { force: true });
+    }
+    throw error;
+  }
   pruneSnapshotOrphans(outDir, entries);
   return { entries, outDir, slug };
 }

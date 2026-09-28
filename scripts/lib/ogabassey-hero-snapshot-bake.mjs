@@ -1,7 +1,7 @@
 // Snapshot baking for the hero snapshot pipeline.
 
 import { createHash } from 'node:crypto';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   DEFAULT_WIDTH,
@@ -23,6 +23,9 @@ export async function bakeSnapshots({
   // Rollback set: if any URL fails after earlier ones baked, remove this
   // run's files so a failed invocation never leaves unreferenced AVIFs in
   // the checked-in public directory for someone to commit accidentally.
+  // Only files CREATED by this run are tracked: content-addressed names
+  // mean a regenerated URL rewrites identical bytes over a committed file
+  // the old manifest still references — deleting that would dangle it.
   const bakedPaths = [];
   try {
     for (const sourceUrl of urls) {
@@ -44,7 +47,7 @@ export async function bakeSnapshots({
     }
     throw error;
   }
-  return entries;
+  return { bakedPaths, entries };
 }
 
 async function bakeOneUrl({
@@ -94,8 +97,13 @@ async function bakeOneUrl({
       .slice(0, 12);
     const fileName = `${fileHash}-${width}.avif`;
     const filePath = resolve(outDir, fileName);
+    // Same name implies same bytes (content hash): overwriting a committed
+    // file is a no-op content-wise, and it must NOT join the rollback set.
+    const createdByThisRun = !existsSync(filePath);
     writeFileSync(filePath, encoded);
-    bakedPaths.push(filePath);
+    if (createdByThisRun) {
+      bakedPaths.push(filePath);
+    }
     // eslint-disable-next-line no-await-in-loop
     const baked = await sharpImpl(filePath).metadata();
     if (baked.width !== width || baked.format !== 'heif') {

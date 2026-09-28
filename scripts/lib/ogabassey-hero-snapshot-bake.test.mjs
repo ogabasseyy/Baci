@@ -1,5 +1,12 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readdirSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -77,7 +84,7 @@ beforeEach(() => {
 describe('bakeSnapshots', () => {
   it('bakes the full width ladder with encoded-hash names', async () => {
     const outDir = resolve(mkdtempSync(join(tmpdir(), 'hero-bake-')), 'ogabassey');
-    const entries = await bakeSnapshots({
+    const { entries } = await bakeSnapshots({
       fetchImpl: makeFakeFetch(),
       outDir,
       sharpImpl: makeFakeSharp(),
@@ -143,7 +150,7 @@ describe('bakeSnapshots', () => {
   it('validates the auto-oriented width for EXIF-rotated sources', async () => {
     // Stored 900x1600, displayed 1600x900 after .rotate(): must pass.
     const outDir = resolve(mkdtempSync(join(tmpdir(), 'hero-bake-')), 'ogabassey');
-    const entries = await bakeSnapshots({
+    const { entries } = await bakeSnapshots({
       fetchImpl: makeFakeFetch(),
       outDir,
       sharpImpl: makeFakeSharp({
@@ -195,6 +202,36 @@ describe('bakeSnapshots', () => {
     expect(readdirSync(outDir)).toEqual([]);
   });
 
+  it('preserves pre-existing files when rolling back', async () => {
+    const outDir = resolve(mkdtempSync(join(tmpdir(), 'hero-bake-')), 'ogabassey');
+    mkdirSync(outDir, { recursive: true });
+    // Regeneration rewrites identical bytes (content hash); the committed
+    // file must survive a later-url failure, not join the rollback set.
+    const committedName = `${createHash('sha256').update('fake-avif-v1-256').digest('hex').slice(0, 12)}-256.avif`;
+    writeFileSync(resolve(outDir, committedName), 'fake-avif-v1-256');
+    const failingFetch = vi.fn(async (url) => ({
+      ok: !String(url).includes('bad.jpg'),
+      status: String(url).includes('bad.jpg') ? 500 : 200,
+      url: String(url),
+      headers: { get: () => 'image/jpeg' },
+      arrayBuffer: async () => Buffer.from('fake-source-bytes'),
+    }));
+    await expect(
+      bakeSnapshots({
+        fetchImpl: failingFetch,
+        outDir,
+        sharpImpl: makeFakeSharp(),
+        slug: 'ogabassey',
+        urls: [SOURCE_URL, 'https://cdn.ogabassey.com/bad.jpg'],
+      })
+    ).rejects.toThrow(/HTTP 500/);
+
+    expect(readdirSync(outDir)).toEqual([committedName]);
+    expect(readFileSync(resolve(outDir, committedName), 'utf8')).toBe(
+      'fake-avif-v1-256'
+    );
+  });
+
   it('rejects a baked file whose dimensions do not match', async () => {
     const outDir = resolve(mkdtempSync(join(tmpdir(), 'hero-bake-')), 'ogabassey');
     await expect(
@@ -209,14 +246,16 @@ describe('bakeSnapshots', () => {
   });
 
   it('mints new urls when the encoder output changes (immutable safety)', async () => {
-    const bake = (encodeTag) =>
-      bakeSnapshots({
-        fetchImpl: makeFakeFetch(),
-        outDir: resolve(mkdtempSync(join(tmpdir(), 'hero-bake-')), 'ogabassey'),
-        sharpImpl: makeFakeSharp({ encodeTag }),
-        slug: 'ogabassey',
-        urls: [SOURCE_URL],
-      });
+    const bake = async (encodeTag) =>
+      (
+        await bakeSnapshots({
+          fetchImpl: makeFakeFetch(),
+          outDir: resolve(mkdtempSync(join(tmpdir(), 'hero-bake-')), 'ogabassey'),
+          sharpImpl: makeFakeSharp({ encodeTag }),
+          slug: 'ogabassey',
+          urls: [SOURCE_URL],
+        })
+      ).entries;
     const [before] = await bake('v1');
     const [after] = await bake('v2-quality-bump');
     expect(after.srcSet).not.toBe(before.srcSet);

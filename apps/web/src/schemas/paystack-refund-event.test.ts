@@ -53,8 +53,30 @@ describe('paystackRefundEventSchema', () => {
     [{ data: { transaction: 123 }, event: 'refund.processed' }],
     [{ data: { transaction: { reference: '' } }, event: 'refund.failed' }],
     [{ data: { transaction_reference: '' }, event: 'refund.processed' }],
+    [
+      {
+        data: { transaction: { reference: 'has space' } },
+        event: 'refund.failed',
+      },
+    ],
+    [{ data: { transaction_reference: 'n/a!' }, event: 'refund.processed' }],
+    [
+      {
+        data: { transaction_reference: 'x'.repeat(101) },
+        event: 'refund.processed',
+      },
+    ],
   ])('rejects events without a usable identifier (%j)', (payload) => {
     expect(paystackRefundEventSchema.safeParse(payload).success).toBe(false);
+  });
+
+  it('accepts an ID-keyed event even when its reference is noisy', () => {
+    expect(
+      paystackRefundEventSchema.safeParse({
+        data: { id: 42, transaction: { reference: 'has space' } },
+        event: 'refund.processed',
+      }).success
+    ).toBe(true);
   });
 
   it('passes unknown provider fields through', () => {

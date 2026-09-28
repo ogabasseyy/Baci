@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
-import { cancellationSideEffectDrainLimit } from '@/lib/orders/cancellation-side-effect-drain-limit';
+import {
+  cancellationDrainDeadlineMs,
+  cancellationSideEffectDrainLimit,
+} from '@/lib/orders/cancellation-side-effect-drain-limit';
 import { drainFailedOrderCancellationSideEffects } from '@/lib/orders/drain-failed-order-cancellation-side-effects';
 import { drainPaystackRefundNotifications } from '@/lib/payments/drain-paystack-refund-notifications';
 import { notificationDrainLimit } from '@/lib/payments/notification-drain-limit';
@@ -44,6 +47,7 @@ export async function processCancellationDrain(supabase: ServiceClient) {
   }
   const [cancellationResult] = await Promise.allSettled([
     drainFailedOrderCancellationSideEffects({
+      deadlineMs: cancellationDrainDeadlineMs(workersStartedAt),
       limit: sideEffectLimit,
       sendCancellationEmail: sendEmail,
       supabase,

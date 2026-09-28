@@ -146,17 +146,20 @@ BEGIN
   ) AND v_order.payment_status IN ('paid', 'partially_paid', 'refunded') THEN
     UPDATE public.orders SET payment_status = 'refunded', updated_at = now()
       WHERE id = v_order.id AND payment_status IN ('paid', 'partially_paid');
-    -- Reverse the order's Paystack settlements atomically with the refund
-    -- transition. process_due_settlements never joins order state, so a
-    -- pending row would otherwise credit the merchant after the customer
-    -- was refunded, while settled funds would remain in available balance.
-    -- Already-cancelled rows (re-entry on a refunded order) match nothing.
+    -- Reverse the order's settlements atomically with the refund
+    -- transition. This branch runs only once every funded external leg
+    -- has terminal refund evidence, so every gateway leg behind these
+    -- rows is refunded — including non-Paystack legs in mixed-gateway
+    -- cancellations. process_due_settlements never joins order state, so
+    -- a pending row would otherwise credit the merchant after the
+    -- customer was refunded, while settled funds would remain in
+    -- available balance. Already-cancelled rows (re-entry on a refunded
+    -- order) match nothing.
     FOR v_settlement IN
       SELECT settlement.* FROM public.merchant_settlements AS settlement
       WHERE settlement.merchant_id = v_order.merchant_id
         AND settlement.source_type = 'order'
         AND settlement.source_id = v_order.id
-        AND settlement.gateway = 'paystack'
         AND settlement.status IN ('pending', 'processing', 'settled')
       FOR UPDATE
     LOOP
@@ -181,7 +184,7 @@ BEGIN
           WHERE id = v_settlement.wallet_id
           RETURNING available_balance INTO v_balance;
           IF v_balance IS NULL THEN
-            RAISE EXCEPTION 'paystack_refund_settlement_wallet_missing';
+            RAISE EXCEPTION 'refund_settlement_wallet_missing';
           END IF;
           INSERT INTO public.wallet_transactions (
             wallet_id, merchant_id, type, amount, balance_after,
@@ -189,7 +192,8 @@ BEGIN
           ) VALUES (
             v_settlement.wallet_id, v_settlement.merchant_id, 'refund',
             v_settlement.net_amount, v_balance, 'refund', v_refund.id,
-            'Paystack cancellation refund settlement reversal', 'completed',
+            v_settlement.gateway || ' cancellation refund settlement reversal',
+            'completed',
             jsonb_build_object('settlement_id', v_settlement.id, 'order_id', v_order.id)
           );
         END IF;

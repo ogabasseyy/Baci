@@ -157,7 +157,8 @@ describe('executeOrderCancellationSideEffect', () => {
     expect(mocks.initiateRefund).toHaveBeenCalledWith(
       'ref-1',
       6000,
-      'Order cancelled'
+      'Order cancelled',
+      undefined
     );
     expect(supabase.insert).toHaveBeenCalledWith(
       expect.objectContaining({ amount: 60, transaction_type: 'refund' })
@@ -204,7 +205,8 @@ describe('executeOrderCancellationSideEffect', () => {
     expect(mocks.initiateRefund).toHaveBeenCalledWith(
       'ref-2',
       4000,
-      'Order cancelled'
+      'Order cancelled',
+      undefined
     );
     expect(supabase.insert).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -19,3 +19,13 @@ export function cancellationSideEffectDrainLimit(elapsedMs: number): number {
     Math.min(MAX_DRAIN_LIMIT, Math.floor(remaining / PER_STEP_WORST_MS))
   );
 }
+
+/**
+ * Absolute epoch-ms deadline for cancellation side-effect work started at
+ * `startedAtMs`: the invocation budget minus the safety margin. Steps and
+ * provider calls check the remaining time against this instead of trusting
+ * the fixed per-step estimate.
+ */
+export function cancellationDrainDeadlineMs(startedAtMs: number): number {
+  return startedAtMs + INVOCATION_BUDGET_MS - SAFETY_MARGIN_MS;
+}

@@ -49,4 +49,30 @@ describe('initiateRefund', () => {
       })
     );
   });
+
+  it('aborts the provider call at the callers timeout', async () => {
+    mocks.paystackRequest.mockResolvedValue({ success: true });
+
+    await initiateRefund('PSK-1', 10000, 'Order cancelled', 5000);
+
+    expect(mocks.paystackRequest).toHaveBeenCalledWith(
+      '/refund',
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    );
+    const { signal } = mocks.paystackRequest.mock.calls[0][1] as {
+      signal: AbortSignal;
+    };
+    expect(signal.aborted).toBe(false);
+  });
+
+  it('sends no abort signal without a timeout', async () => {
+    mocks.paystackRequest.mockResolvedValue({ success: true });
+
+    await initiateRefund('PSK-1', 10000, 'Order cancelled');
+
+    expect(mocks.paystackRequest).toHaveBeenCalledWith('/refund', {
+      body: '{"transaction":"PSK-1","amount":10000,"customer_note":"Order cancelled"}',
+      method: 'POST',
+    });
+  });
 });

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { cancellationSideEffectDrainLimit } from './cancellation-side-effect-drain-limit';
+import {
+  cancellationDrainDeadlineMs,
+  cancellationSideEffectDrainLimit,
+} from './cancellation-side-effect-drain-limit';
 
 describe('cancellationSideEffectDrainLimit', () => {
   it('drains the worst-case batch when the workers were fast', () => {
@@ -16,5 +19,11 @@ describe('cancellationSideEffectDrainLimit', () => {
   it('skips the drain when no step fits safely', () => {
     expect(cancellationSideEffectDrainLimit(270_000)).toBe(0);
     expect(cancellationSideEffectDrainLimit(400_000)).toBe(0);
+  });
+});
+
+describe('cancellationDrainDeadlineMs', () => {
+  it('sets the absolute deadline at the budget minus the safety margin', () => {
+    expect(cancellationDrainDeadlineMs(1_000_000)).toBe(1_270_000);
   });
 });

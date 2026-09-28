@@ -185,13 +185,15 @@ describe('cancellation refund safety', () => {
       1,
       'paystack-ref-1',
       6000,
-      'Order cancelled'
+      'Order cancelled',
+      undefined
     );
     expect(mocks.initiateRefund).toHaveBeenNthCalledWith(
       2,
       'paystack-ref-2',
       4000,
-      'Order cancelled'
+      'Order cancelled',
+      undefined
     );
     expect(refundInsert).toHaveBeenCalledTimes(2);
     expect(refundInsert).toHaveBeenCalledWith(

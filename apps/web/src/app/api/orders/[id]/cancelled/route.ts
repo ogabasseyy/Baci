@@ -129,24 +129,18 @@ export async function POST(
             .filter((product) => !isInventoryTrackedProduct(product))
             .map((product) => product.id)
         );
-        const variantIds = Array.from(
-          new Set(
-            (orderItems ?? [])
-              .filter((item) =>
-                productsNeedingVariantLookup.has(item.product_id)
-              )
-              .map((item) => item.variant_id)
-              .filter((variantId): variantId is string => Boolean(variantId))
-          )
-        );
         const serializedVariantProductIds = new Set<string>();
         let variantPolicyLookupFailed = false;
-        if (variantIds.length > 0) {
+        // Simple products can carry serialized inventory on an internal
+        // anchor variant while their order items store variant_id: null,
+        // so resolve policies by product_id (including the anchor) instead
+        // of trusting the stored variant ids.
+        if (productsNeedingVariantLookup.size > 0) {
           const { data: variants, error: variantsError } = await supabase
             .from('product_variants')
             .select('id, product_id, inventory_tracking_policy')
             .eq('merchant_id', merchantId)
-            .in('id', variantIds);
+            .in('product_id', Array.from(productsNeedingVariantLookup));
           if (variantsError) {
             variantPolicyLookupFailed = true;
             // A variant projection failure must not suppress cache invalidation

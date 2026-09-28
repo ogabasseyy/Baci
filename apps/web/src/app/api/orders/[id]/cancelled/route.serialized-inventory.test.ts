@@ -152,4 +152,35 @@ describe('merchant cancellation serialized inventory', () => {
       expect.objectContaining({ productIds: ['product-1'], supabase })
     );
   });
+
+  it('purges a simple serialized product whose order item stores no variant id', async () => {
+    const supabase = createSupabase({
+      product: {
+        id: 'product-1',
+        manage_stock: false,
+        inventory_tracking_policy: 'off',
+        slug: 'simple-serialized-phone',
+      },
+      orderItem: { product_id: 'product-1', variant_id: null },
+      variantRows: [
+        {
+          id: 'anchor-1',
+          product_id: 'product-1',
+          inventory_tracking_policy: 'serialized_strict',
+        },
+      ],
+    });
+    configure(supabase);
+
+    const response = await POST(request(), {
+      params: Promise.resolve({ id: 'order-1' }),
+    });
+
+    // Variant policies resolve by product_id (including the internal
+    // anchor), so the null stored variant id cannot hide the purge.
+    expect(response.status).toBe(202);
+    expect(mocks.schedule).toHaveBeenCalledWith(
+      expect.objectContaining({ productIds: ['product-1'], supabase })
+    );
+  });
 });

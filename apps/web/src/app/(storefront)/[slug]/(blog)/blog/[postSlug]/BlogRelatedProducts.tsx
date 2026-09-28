@@ -34,6 +34,18 @@ function formatRelatedProductPrice(
     return null;
   }
 
+  // Symmetric offer guard: when the offer projection is unresolved
+  // (hydration error/skipped leaves offers unset without the purchasable
+  // flag) or confirmed empty, there is no selectable offer SKU at the base
+  // amount, so a depleted base price must not print as the fallback.
+  if (
+    product.has_condition_offers === true &&
+    product.has_purchasable_condition_offer !== true &&
+    (product.offers?.length ?? 0) === 0
+  ) {
+    return null;
+  }
+
   // The price-range helper reserves unlimited semantics for explicit
   // `manage_stock: false`; legacy null is managed inventory (PDP parity).
   // Pass the original policy through so variant and offer prices follow

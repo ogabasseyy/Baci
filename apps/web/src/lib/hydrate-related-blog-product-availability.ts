@@ -234,6 +234,17 @@ export async function hydrateRelatedBlogProductAvailability(
         merchantId,
         error,
       });
+      // The production variant RPC does not project
+      // inventory_tracking_policy, so a provisional `false` may come from an
+      // exhausted serialized_then_unlimited row the stock-only first pass
+      // could not recognize. Discard suspect provisionals rather than
+      // reporting an unlimited product unavailable; stocked (`true`)
+      // provisionals are safe under every policy.
+      resolvedProducts = resolvedProducts.map((product) =>
+        product.has_purchasable_variant === false
+          ? { ...product, has_purchasable_variant: undefined }
+          : product
+      );
     }
   }
 

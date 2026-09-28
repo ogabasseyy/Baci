@@ -114,6 +114,7 @@ export async function invalidateQuizProductCaches(
           .select('id, merchant_id, settings')
           .gte('updated_at', changedAfter)
           .order('updated_at', { ascending: true })
+          .order('id', { ascending: true })
           .range(from, to)
     );
     for (const row of eventRows) {
@@ -143,6 +144,7 @@ export async function invalidateQuizProductCaches(
           .select('merchant_id, product_id')
           .gte('updated_at', changedAfter)
           .order('updated_at', { ascending: true })
+          .order('id', { ascending: true })
           .range(from, to)
       );
     for (const row of reservationRows) {
@@ -162,6 +164,7 @@ export async function invalidateQuizProductCaches(
           .not('expired_at', 'is', null)
           .gte('expired_at', changedAfter)
           .order('expired_at', { ascending: true })
+          .order('id', { ascending: true })
           .range(from, to)
     );
   } catch {

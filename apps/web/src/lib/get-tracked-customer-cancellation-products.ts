@@ -2,11 +2,6 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { isInventoryTrackedProduct } from '@/lib/is-inventory-tracked-product';
 import { logger } from '@/lib/logger';
 
-type CustomerCancellationOrderItem = {
-  product_id?: unknown;
-  variant_id?: unknown;
-};
-
 type ProductPolicyRow = {
   id?: unknown;
   inventory_tracking_policy?: unknown;
@@ -27,12 +22,10 @@ export type TrackedCustomerCancellationProduct = {
 /** Resolves only products whose cancellation can change public availability. */
 export async function getTrackedCustomerCancellationProducts({
   merchantId,
-  orderItems,
   productIds,
   supabase,
 }: {
   merchantId: string;
-  orderItems: readonly CustomerCancellationOrderItem[];
   productIds: readonly string[];
   supabase: SupabaseClient;
 }): Promise<TrackedCustomerCancellationProduct[]> {
@@ -81,34 +74,20 @@ export async function getTrackedCustomerCancellationProducts({
       .map((product) => product.id)
       .filter((id): id is string => typeof id === 'string')
   );
-  const variantIds = Array.from(
-    new Set(
-      orderItems
-        .filter((item) => {
-          const productId = item.product_id;
-          return (
-            typeof productId === 'string' &&
-            productsNeedingVariantLookup.has(productId.trim())
-          );
-        })
-        .map((item) => item.variant_id)
-        .filter(
-          (variantId): variantId is string =>
-            typeof variantId === 'string' && variantId.trim().length > 0
-        )
-        .map((variantId) => variantId.trim())
-    )
-  );
   const variantsByProductId = new Map<string, VariantPolicyRow[]>();
   let variantPolicyLookupFailed = false;
 
-  if (variantIds.length > 0) {
+  // Simple products can carry serialized inventory on an internal anchor
+  // variant while their order items store variant_id: null, so resolve
+  // policies by product_id (including the anchor) instead of trusting
+  // the stored variant ids.
+  if (productsNeedingVariantLookup.size > 0) {
     try {
       const { data: variantRows, error: variantRowsError } = await supabase
         .from('product_variants')
         .select('product_id, inventory_tracking_policy')
         .eq('merchant_id', merchantId)
-        .in('id', variantIds);
+        .in('product_id', Array.from(productsNeedingVariantLookup));
       if (variantRowsError) {
         variantPolicyLookupFailed = true;
         // Child policy is an optimization; a failed projection must not

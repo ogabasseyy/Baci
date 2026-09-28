@@ -114,9 +114,12 @@ describe('POST /api/internal/revalidate-products', () => {
     );
 
     expect(res.status).toBe(200);
+    // Hard-expired even without purge inputs: a later control-metadata
+    // chunk may schedule an edge purge over these tags.
     expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
       MERCHANT_ID,
-      productSlugs
+      productSlugs,
+      { expireImmediately: true }
     );
     expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
   });
@@ -224,12 +227,13 @@ describe('POST /api/internal/revalidate-products', () => {
       'ogabassey',
       [{ slug: 'iphone-15', categorySegment: 'smartphones' }]
     );
-    // Per-slug Next caches busted for the authoritative slug + id, BEFORE the
-    // edge purge is scheduled.
-    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(MERCHANT_ID, [
-      'iphone-15',
-      'prod-1',
-    ]);
+    // Per-slug Next caches hard-expired for the authoritative slug + id,
+    // BEFORE the edge purge is scheduled.
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      ['iphone-15', 'prod-1'],
+      { expireImmediately: true }
+    );
     expect(mockRevalidateProductSlugs.mock.invocationCallOrder[0]).toBeLessThan(
       mockScheduleStorefrontProductPurge.mock.invocationCallOrder[0]
     );

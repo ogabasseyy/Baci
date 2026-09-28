@@ -202,8 +202,9 @@ export async function scheduleProductBlogPurge({
       // article lookup fails the affected URLs are unknown — evict the
       // hostname rather than leaving articles stale until TTL. This covers
       // the post-delete ID-resolution failure, where the cascaded
-      // relationships can no longer be queried again. Bulk import opts out
-      // via skipWhenNoLinkedPosts and stays best-effort.
+      // relationships can no longer be queried again. Callers that combine
+      // skipProductPurge with skipWhenNoLinkedPosts opt out of this
+      // fallback and stay best-effort.
       const fallbackSlug = merchantSlug?.trim();
       if (fallbackSlug) {
         scheduleStorefrontHostnamePurge(fallbackSlug);

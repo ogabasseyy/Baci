@@ -111,7 +111,7 @@ describe('merchant cancellation variant policy fallback', () => {
     });
 
     expect(response.status).toBe(202);
-    expect(variantIn).toHaveBeenCalledWith('id', ['variant-2']);
+    expect(variantIn).toHaveBeenCalledWith('product_id', ['product-2']);
     expect(productIn).toHaveBeenCalledWith('id', ['product-1', 'product-2']);
     expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith('merchant-1', [
       'managed-phone',

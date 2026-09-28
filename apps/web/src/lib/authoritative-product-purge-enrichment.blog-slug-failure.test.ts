@@ -27,6 +27,7 @@ describe('enrichProductPurgeEntries blog slug lookup failure', () => {
         { slug: 'buds-pro', categorySegment: 'audio' },
       ]);
       expect(result.blogPostSlugs).toEqual([]);
+      expect(result.blogPostSlugsIncomplete).toBe(true);
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('continuing without article purge'),
         expect.objectContaining({ merchantId: 'merchant-1' })

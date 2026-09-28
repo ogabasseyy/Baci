@@ -163,6 +163,40 @@ describe('hydrateRelatedBlogProductAvailability variant paths', () => {
     }
   });
 
+  it('discards a provisional unavailable flag when the serialized summary fails', async () => {
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    // Production-shaped row: get_storefront_product_variants does not
+    // project inventory_tracking_policy, so the first pass cannot tell an
+    // exhausted unlimited variant from a depleted strict one.
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: 'variant-1',
+          product_id: VARIANT_PRODUCT_ID,
+          stock_quantity: 0,
+        },
+      ],
+      error: null,
+    });
+    mockSerializedHydrate.mockRejectedValueOnce(
+      new Error('summary unavailable')
+    );
+
+    try {
+      const result = await hydrateRelatedBlogProductAvailability(
+        { rpc } as never,
+        [product()],
+        { merchantId: 'merchant-1' }
+      );
+
+      expect(result[0]?.has_purchasable_variant).toBeUndefined();
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it('keeps a zero-stock serialized_then_unlimited variant purchasable when the serialized summary fails', async () => {
     const warnSpy = vi
       .spyOn(console, 'warn')

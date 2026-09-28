@@ -217,7 +217,6 @@ export async function POST(
       if (merchantId && productIds.length > 0) {
         const trackedProducts = await getTrackedCustomerCancellationProducts({
           merchantId,
-          orderItems,
           productIds,
           supabase: auth.supabase,
         });

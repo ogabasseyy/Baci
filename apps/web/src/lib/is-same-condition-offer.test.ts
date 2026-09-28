@@ -17,4 +17,10 @@ describe('isSameConditionOffer', () => {
     expect(isSameConditionOffer(null, 'new')).toBe(false);
     expect(isSameConditionOffer(undefined, undefined)).toBe(false);
   });
+
+  it('defaults a null parent condition to new like the PDP', () => {
+    expect(isSameConditionOffer('new', null)).toBe(true);
+    expect(isSameConditionOffer('New', undefined)).toBe(true);
+    expect(isSameConditionOffer('used', null)).toBe(false);
+  });
 });

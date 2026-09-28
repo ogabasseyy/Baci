@@ -90,7 +90,8 @@ describe('internal product revalidation whole-storefront skip', () => {
     expect(mockEnrichProductPurgeEntries).not.toHaveBeenCalled();
     expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
       MERCHANT_ID,
-      expect.arrayContaining(['iphone-15', 'prod-1'])
+      expect.arrayContaining(['iphone-15', 'prod-1']),
+      { expireImmediately: true }
     );
     expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
       'ogabassey'

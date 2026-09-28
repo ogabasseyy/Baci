@@ -31,6 +31,13 @@ export interface AuthoritativeProductPurgeEnrichment {
   resolvedSlugs: string[];
   /** Published article slugs whose related-product rail embeds these products. */
   blogPostSlugs: string[];
+  /**
+   * True when the article lookup totally failed and `blogPostSlugs` is
+   * empty for that reason (not because no articles link the products).
+   * Callers that can evict by hostname should do so instead of trusting
+   * the empty set.
+   */
+  blogPostSlugsIncomplete: boolean;
 }
 
 /**
@@ -142,6 +149,7 @@ export async function enrichProductPurgeEntries(
   ];
 
   let blogPostSlugs: string[] = [];
+  let blogPostSlugsIncomplete = false;
   if (idsToResolve.length > 0 || entries.length > 0) {
     try {
       blogPostSlugs = await getPublishedBlogPostSlugsForProducts(
@@ -153,8 +161,10 @@ export async function enrichProductPurgeEntries(
           .filter((segment): segment is string => Boolean(segment))
       );
     } catch (error) {
-      // Fail-open: the lookup throws only when it preserved zero rows. Article
-      // URLs wait for TTL, but the core product purge below still fires.
+      // Fail-open, but say so: the lookup throws only when it preserved
+      // zero rows, so an empty set here is unknown — not "no articles".
+      // Flag it for callers that can evict by hostname instead.
+      blogPostSlugsIncomplete = true;
       console.warn(
         'Failed to resolve published blog posts for Cloudflare product purge (continuing without article purge):',
         { merchantId, error }
@@ -169,5 +179,6 @@ export async function enrichProductPurgeEntries(
       authoritativeSlugsById
     ),
     blogPostSlugs,
+    blogPostSlugsIncomplete,
   };
 }

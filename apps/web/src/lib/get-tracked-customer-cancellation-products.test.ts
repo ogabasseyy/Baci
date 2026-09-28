@@ -55,11 +55,6 @@ describe('getTrackedCustomerCancellationProducts', () => {
     // Act
     const result = await getTrackedCustomerCancellationProducts({
       merchantId: 'merchant-1',
-      orderItems: [
-        { product_id: 'managed', variant_id: 'variant-1' },
-        { product_id: 'unlimited' },
-        { product_id: 'serialized', variant_id: 'variant-2' },
-      ],
       productIds: ['managed', 'unlimited', 'serialized'],
       supabase,
     });
@@ -87,7 +82,6 @@ describe('getTrackedCustomerCancellationProducts', () => {
     // Act
     const result = await getTrackedCustomerCancellationProducts({
       merchantId: 'merchant-1',
-      orderItems: [{ product_id: 'managed', variant_id: 'variant-1' }],
       productIds: ['managed'],
       supabase,
     });
@@ -108,10 +102,6 @@ describe('getTrackedCustomerCancellationProducts', () => {
     // Act
     const result = await getTrackedCustomerCancellationProducts({
       merchantId: 'merchant-1',
-      orderItems: [
-        { product_id: 'managed', variant_id: 'variant-1' },
-        { product_id: 'serialized', variant_id: 'variant-2' },
-      ],
       productIds: ['managed', 'serialized', 'managed'],
       supabase,
     });
@@ -120,6 +110,61 @@ describe('getTrackedCustomerCancellationProducts', () => {
     expect(result).toEqual([
       { id: 'managed', slug: null },
       { id: 'serialized', slug: null },
+    ]);
+  });
+
+  it('tracks simple serialized products whose order rows store no variant id', async () => {
+    // Arrange: policies resolve by product_id (including the internal
+    // anchor), never from stored variant ids.
+    const inCalls: Array<{ column: string; values: unknown }> = [];
+    const productResult = {
+      data: [
+        {
+          id: 'simple-serialized',
+          slug: 'simple-serialized-phone',
+          manage_stock: false,
+        },
+      ],
+      error: null,
+    };
+    const variantResult = {
+      data: [
+        {
+          product_id: 'simple-serialized',
+          inventory_tracking_policy: 'serialized_strict',
+        },
+      ],
+      error: null,
+    };
+    const supabase = {
+      from: vi.fn((table: string) => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            in: vi.fn((column: string, values: unknown) => {
+              inCalls.push({ column, values });
+              return Promise.resolve(
+                table === 'products' ? productResult : variantResult
+              );
+            }),
+          })),
+        })),
+      })),
+    } as unknown as SupabaseClient;
+
+    // Act
+    const result = await getTrackedCustomerCancellationProducts({
+      merchantId: 'merchant-1',
+      productIds: ['simple-serialized'],
+      supabase,
+    });
+
+    // Assert
+    expect(inCalls).toContainEqual({
+      column: 'product_id',
+      values: ['simple-serialized'],
+    });
+    expect(result).toEqual([
+      { id: 'simple-serialized', slug: 'simple-serialized-phone' },
     ]);
   });
 });

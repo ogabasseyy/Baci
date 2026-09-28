@@ -25,7 +25,9 @@ function createClient(reservationRows: unknown[] = []) {
   ];
   const awardRows = [{ event_id: 'event-2', product_id: 'product-2' }];
   const expiredEventRows = [{ id: 'event-2', merchant_id: 'merchant-2' }];
+  const orderCalls: Array<{ column: unknown; table: string }> = [];
   return {
+    orderCalls,
     from: vi.fn((table: string) => {
       const rows: unknown[] =
         table === 'quiz_events'
@@ -49,7 +51,10 @@ function createClient(reservationRows: unknown[] = []) {
         error: null,
         select: vi.fn(() => builder),
         gte: vi.fn(() => builder),
-        order: vi.fn(() => builder),
+        order: vi.fn((column: unknown) => {
+          orderCalls.push({ table, column });
+          return builder;
+        }),
         range: vi.fn((from: number, to: number) => {
           builder.data = rows.slice(from, to + 1);
           return builder;
@@ -150,5 +155,36 @@ describe('invalidateQuizProductCaches', () => {
     expect(productIds).toHaveLength(1001);
     expect(productIds?.[0]).toBe('product-0');
     expect(productIds?.[1000]).toBe('product-1000');
+  });
+
+  it('orders every sweep by a unique id tie-breaker', async () => {
+    // Set-based RPCs can stamp 1,000+ rows with the same timestamp; a
+    // timestamp-only offset order would duplicate or omit boundary rows.
+    const reservationRows = Array.from({ length: 1001 }, (_, index) => ({
+      id: `reservation-${String(index).padStart(4, '0')}`,
+      merchant_id: 'merchant-3',
+      product_id: `product-${index}`,
+      updated_at: '2026-09-01T00:00:00Z',
+    }));
+    const client = createClient(reservationRows);
+
+    await invalidateQuizProductCaches(client as never, '2026-09-01T00:00:00Z');
+
+    for (const table of [
+      'quiz_events',
+      'quiz_prize_reservations',
+      'quiz_awards',
+    ]) {
+      expect(
+        client.orderCalls.filter((call) => call.table === table)
+      ).toContainEqual({ table, column: 'id' });
+    }
+    const merchantCall = mockScheduleOrderProductBlogPurge.mock.calls.find(
+      ([input]) =>
+        (input as { merchantId?: string }).merchantId === 'merchant-3'
+    );
+    expect(
+      (merchantCall?.[0] as { productIds?: string[] })?.productIds
+    ).toHaveLength(1001);
   });
 });

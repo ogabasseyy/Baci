@@ -56,4 +56,30 @@ describe('scheduleProductBlogPurge lookup failure', () => {
       warnSpy.mockRestore();
     }
   });
+
+  it('evicts the hostname when the lookup fails for a blog-only follow-up', async () => {
+    mockLookup.mockRejectedValueOnce(new Error('category lookup unavailable'));
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      await scheduleProductBlogPurge({
+        supabase,
+        merchantId: 'merchant-1',
+        merchantSlug: 'store',
+        productIds: ['product-1'],
+        entries,
+        skipProductPurge: true,
+      });
+
+      expect(mockSchedule).not.toHaveBeenCalled();
+      expect(mockHostnamePurge).toHaveBeenCalledWith('store');
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Skipped product blog purge scheduling',
+        expect.objectContaining({ merchantId: 'merchant-1' })
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });

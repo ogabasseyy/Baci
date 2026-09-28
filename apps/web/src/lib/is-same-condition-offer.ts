@@ -12,7 +12,9 @@ function normalizeOfferCondition(value: unknown): string | undefined {
  * Mirror the categorized PDP ("Filter offers to exclude main product
  * condition"): an offer row carrying the parent product's own condition is
  * not a selectable alternate, so it must not mark the rail available or
- * advertise its price. Rows with an unknown condition are kept fail-open.
+ * advertise its price. The PDP defaults a legacy null parent condition to
+ * `new`, so the comparison does the same; rows with an unknown OFFER
+ * condition are kept fail-open.
  */
 export function isSameConditionOffer(
   offerCondition: unknown,
@@ -20,5 +22,5 @@ export function isSameConditionOffer(
 ): boolean {
   const normalizedOffer = normalizeOfferCondition(offerCondition);
   if (normalizedOffer === undefined) return false;
-  return normalizedOffer === normalizeOfferCondition(parentCondition);
+  return normalizedOffer === normalizeOfferCondition(parentCondition ?? 'new');
 }

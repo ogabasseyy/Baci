@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockEnrichProductPurgeEntries = vi.fn();
 const mockScheduleStorefrontProductPurge = vi.fn();
+const mockScheduleStorefrontHostnamePurge = vi.fn();
 const mockExpireProductBlogCacheReliable = vi.fn().mockResolvedValue(true);
 const mockRevalidateSlugs = vi.fn();
 vi.mock('@/lib/cache-revalidation', () => ({
@@ -15,6 +16,10 @@ vi.mock('@/lib/authoritative-product-purge-enrichment', () => ({
 vi.mock('@/lib/storefront-product-purge', () => ({
   scheduleStorefrontProductPurge: (...args: unknown[]) =>
     mockScheduleStorefrontProductPurge(...args),
+}));
+vi.mock('@/lib/storefront-product-purge-hostnames', () => ({
+  scheduleStorefrontHostnamePurge: (...args: unknown[]) =>
+    mockScheduleStorefrontHostnamePurge(...args),
 }));
 vi.mock('@/lib/expire-product-blog-cache-reliable', () => ({
   expireProductBlogCacheReliable: (...args: unknown[]) =>
@@ -210,6 +215,27 @@ describe('scheduleOrderProductBlogPurge', () => {
     expect(maybeSingle).not.toHaveBeenCalled();
     expect(mockEnrichProductPurgeEntries).not.toHaveBeenCalled();
     expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
+  });
+
+  it('evicts the hostname when the article lookup reports incomplete', async () => {
+    const { supabase } = makeSupabase({});
+    mockEnrichProductPurgeEntries.mockResolvedValueOnce({
+      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      blogPostSlugs: [],
+      blogPostSlugsIncomplete: true,
+    });
+
+    await scheduleOrderProductBlogPurge({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      productIds: ['product-1'],
+      supabase: supabase as never,
+    });
+
+    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
+    expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
+      'ogabassey'
+    );
   });
 
   it('skips the edge purge when the worker hard-expiry reports failure', async () => {

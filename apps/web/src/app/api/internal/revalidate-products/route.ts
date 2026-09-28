@@ -161,18 +161,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // bust their per-slug Next caches. The per-slug bust needs only merchantId,
   // so it remains independent of the merchant-slug-gated Cloudflare purge.
   if (productSlugs && productSlugs.length > 0) {
-    // The order/blog purge path (expireProductBlogCache) is an availability
-    // boundary: its caller evicts the edge immediately after this returns,
-    // so the per-slug PDP snapshots are hard-expired — SWR would serve the
-    // pre-mutation snapshot to the first post-purge request and re-seed the
-    // edge with stale stock. Standalone import-chunk slugs keep SWR.
-    if (shouldExpireProductBlogCache) {
-      revalidateProductSlugs(merchantId, productSlugs, {
-        expireImmediately: true,
-      });
-    } else {
-      revalidateProductSlugs(merchantId, productSlugs);
-    }
+    // Every slug chunk is hard-expired: this request cannot know whether a
+    // later control-metadata chunk will schedule an edge purge, and SWR
+    // would serve the pre-mutation snapshot to the first post-purge request
+    // and re-seed the edge with stale stock. Standalone import chunks are
+    // no exception — an import that updates an existing product must not
+    // repopulate the edge with the old price or stock.
+    revalidateProductSlugs(merchantId, productSlugs, {
+      expireImmediately: true,
+    });
   }
   if (products && products.length > 0) {
     try {
@@ -182,11 +179,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         // lookups — on a large catalog/blog they can exceed the worker's
         // fallback timeout before the hostname purge is scheduled. The
         // per-slug Next bust still runs from the caller-supplied hints
-        // (explicit productSlugs were busted above).
-        revalidateProductSlugs(
-          merchantId,
-          collectResolvedProductSlugs(products)
-        );
+        // (explicit productSlugs were busted above). Hard-expire when the
+        // hostname purge below will fire so it cannot refill from SWR.
+        const hintSlugs = collectResolvedProductSlugs(products);
+        if (authoritativeMerchantSlug) {
+          revalidateProductSlugs(merchantId, hintSlugs, {
+            expireImmediately: true,
+          });
+        } else {
+          revalidateProductSlugs(merchantId, hintSlugs);
+        }
       } else {
         // Enrich from the product ROWS with the SAME resolution
         // `/api/cache/revalidate` performs, so an {id}-only import/save entry
@@ -207,10 +209,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         // BEFORE scheduling the edge purge: the PDP snapshot is tagged per-slug
         // and is NOT invalidated by the slug-less revalidateProducts above, so a
         // Cloudflare MISS would otherwise refill from stale Next data until TTL.
-        revalidateProductSlugs(
-          merchantId,
-          Array.from(new Set([...(productSlugs ?? []), ...resolvedSlugs]))
+        // Hard-expire when the purge below will fire; SWR would serve the
+        // pre-mutation snapshot to the first post-purge request.
+        const bustSlugs = Array.from(
+          new Set([...(productSlugs ?? []), ...resolvedSlugs])
         );
+        if (authoritativeMerchantSlug) {
+          revalidateProductSlugs(merchantId, bustSlugs, {
+            expireImmediately: true,
+          });
+        } else {
+          revalidateProductSlugs(merchantId, bustSlugs);
+        }
         if (authoritativeMerchantSlug && !purgeWholeStorefront) {
           // Related blog enrichment shares the merchant product tag. Expire it
           // before the edge purge can cause an article MISS to refill stale data.

@@ -40,8 +40,13 @@ describe('scheduleNewProductBlogPurgeAfterResponse', () => {
       productIds: ['product-1'],
       entries: [{ slug: 'pixel-11', categorySegment: 'smartphones' }],
       categorySlugs: ['Smartphones'],
-      skipWhenNoLinkedPosts: true,
+      skipProductPurge: true,
     });
+    // skipWhenNoLinkedPosts would also disable the scheduler's hostname
+    // fallback when the deferred article lookup fails.
+    expect(mockSchedule).not.toHaveBeenCalledWith(
+      expect.objectContaining({ skipWhenNoLinkedPosts: true })
+    );
   });
 
   it('does not queue a public blog lookup for draft products', () => {

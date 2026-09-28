@@ -45,6 +45,10 @@ export function scheduleNewProductBlogPurgeAfterResponse({
       },
     ],
     categorySlugs: category ? [category] : [],
-    skipWhenNoLinkedPosts: true,
+    // The core product purge already ran in scheduleNewProductCaches, so
+    // this follow-up is blog-only — but it must NOT pass
+    // skipWhenNoLinkedPosts, which would also disable the scheduler's
+    // hostname-purge fallback when the article lookup fails.
+    skipProductPurge: true,
   });
 }

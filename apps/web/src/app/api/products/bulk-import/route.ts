@@ -250,7 +250,9 @@ export async function POST(request: NextRequest) {
           categorySlugs: publicPurgeEntries.map(
             (entry) => entry.categorySegment
           ),
-          skipWhenNoLinkedPosts: true,
+          // skipProductPurge alone: the core purge ran above, and omitting
+          // skipWhenNoLinkedPosts keeps the scheduler's hostname fallback
+          // when the deferred article lookup fails.
           skipProductPurge: true,
         });
       } catch (purgeError) {

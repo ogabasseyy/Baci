@@ -145,4 +145,63 @@ describe('scheduleCheckoutProductBlogPurge', () => {
       expect.objectContaining({ productIds: ['unmanaged'] })
     );
   });
+
+  it('purges simple serialized items whose order rows store no variant id', async () => {
+    const inCalls: Array<{ column: string; values: unknown }> = [];
+    const productResult = {
+      data: [
+        {
+          id: 'simple-serialized',
+          slug: 'simple-serialized-phone',
+          manage_stock: false,
+        },
+      ],
+      error: null,
+    };
+    const variantResult = {
+      data: [
+        {
+          product_id: 'simple-serialized',
+          inventory_tracking_policy: 'serialized_strict',
+        },
+      ],
+      error: null,
+    };
+    const supabase = {
+      from: vi.fn((table: string) => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            in: vi.fn((column: string, values: unknown) => {
+              inCalls.push({ column, values });
+              return {
+                returns: vi
+                  .fn()
+                  .mockResolvedValue(
+                    table === 'products' ? productResult : variantResult
+                  ),
+              };
+            }),
+          })),
+        })),
+      })),
+    } as unknown as SupabaseClient;
+
+    await scheduleCheckoutProductBlogPurge({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-1',
+      orderItems: [{ product_id: 'simple-serialized', variant_id: null }],
+      supabase,
+    });
+
+    // Policies resolve by product_id (including the internal anchor), not
+    // from the stored variant ids the order row omits.
+    expect(inCalls).toContainEqual({
+      column: 'product_id',
+      values: ['simple-serialized'],
+    });
+    expect(mocks.schedule).toHaveBeenCalledWith(
+      expect.objectContaining({ productIds: ['simple-serialized'] })
+    );
+  });
 });

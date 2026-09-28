@@ -86,27 +86,19 @@ export async function scheduleCheckoutProductBlogPurge({
       .filter((product) => !isInventoryTrackedProduct(product))
       .map((product) => product.id)
   );
-  const variantIds = Array.from(
-    new Set(
-      orderItems
-        .filter(
-          (item) =>
-            typeof item.product_id === 'string' &&
-            productsNeedingVariantLookup.has(item.product_id.trim())
-        )
-        .map((item) => item.variant_id?.trim())
-        .filter((id): id is string => Boolean(id))
-    )
-  );
   const serializedVariantProductIds = new Set<string>();
   let variantPolicyLookupFailed = false;
 
-  if (variantIds.length > 0) {
+  if (productsNeedingVariantLookup.size > 0) {
+    // Simple products can carry serialized inventory on an internal anchor
+    // variant while their order items store variant_id: null, so resolve
+    // policies by product_id (including the anchor) instead of trusting
+    // the stored variant ids.
     const { data: variantRows, error: variantLookupError } = await supabase
       .from('product_variants')
       .select('product_id, inventory_tracking_policy')
       .eq('merchant_id', merchantId)
-      .in('id', variantIds)
+      .in('product_id', Array.from(productsNeedingVariantLookup))
       .returns<VariantPolicyRow[]>();
 
     if (variantLookupError) {

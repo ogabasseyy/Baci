@@ -3,6 +3,7 @@ import { enrichProductPurgeEntries } from '@/lib/authoritative-product-purge-enr
 import { revalidateProductSlugs } from '@/lib/cache-revalidation';
 import { expireProductBlogCacheReliable } from '@/lib/expire-product-blog-cache-reliable';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
+import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
 
 interface ScheduleOrderProductBlogPurgeInput {
   merchantId: string;
@@ -46,6 +47,7 @@ export async function scheduleOrderProductBlogPurge({
   const products = normalizedProductIds.map((id) => ({ id }));
   let entries: Awaited<ReturnType<typeof enrichProductPurgeEntries>>['entries'];
   let blogPostSlugs: string[];
+  let blogPostSlugsIncomplete: boolean;
   let slugs: string[];
   try {
     const enriched = await enrichProductPurgeEntries(
@@ -55,6 +57,7 @@ export async function scheduleOrderProductBlogPurge({
     );
     entries = enriched.entries;
     blogPostSlugs = enriched.blogPostSlugs;
+    blogPostSlugsIncomplete = enriched.blogPostSlugsIncomplete === true;
     slugs = enriched.resolvedSlugs ?? entries.map((entry) => entry.slug);
   } catch (error) {
     console.warn('Skipped order-related blog purge after enrichment failed', {
@@ -116,7 +119,12 @@ export async function scheduleOrderProductBlogPurge({
     return;
   }
 
-  if (blogPostSlugs.length > 0) {
+  if (blogPostSlugsIncomplete) {
+    // The article lookup totally failed: the affected article URLs are
+    // unknown, so evict the hostname (a superset of the product purge)
+    // rather than leaving linked rails stale until TTL.
+    scheduleStorefrontHostnamePurge(merchantSlug);
+  } else if (blogPostSlugs.length > 0) {
     scheduleStorefrontProductPurge(merchantSlug, entries, {
       blogPostSlugs,
     });

@@ -242,6 +242,15 @@ describe('customer cancellation cache invalidation', () => {
           select: vi.fn(() => ({ eq: vi.fn(() => ({ in: productIn })) })),
         };
       }
+      if (table === 'product_variants') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              in: vi.fn().mockResolvedValue({ data: [], error: null }),
+            })),
+          })),
+        };
+      }
       throw new Error(`Unexpected table ${table}`);
     }) as typeof supabase.from;
     mockAuthenticateApiRequest.mockResolvedValue({

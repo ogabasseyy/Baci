@@ -230,4 +230,32 @@ describe('BlogRelatedProducts pricing', () => {
       screen.getByRole('link', { name: /galaxy s25/i })
     ).not.toHaveTextContent('₦850,000');
   });
+
+  it('hides the base price when the offer projection is unresolved', () => {
+    render(
+      <BlogRelatedProducts
+        basePath="/ogabassey"
+        currencySource={{ country: 'NG', payout_currency: 'NGN' }}
+        products={[
+          {
+            id: 'product-unresolved-offers',
+            name: 'iPhone 16 Used',
+            price: 400000,
+            manage_stock: true,
+            stock: 0,
+            stock_quantity: 0,
+            has_condition_offers: true,
+            slug: 'iphone-16-used',
+          },
+        ]}
+      />
+    );
+
+    // The offer RPC failed, so offers/has_purchasable_condition_offer are
+    // undefined: stocked offers may exist, but the depleted base amount
+    // must not print as the fallback.
+    expect(
+      screen.getByRole('link', { name: /iphone 16 used/i })
+    ).not.toHaveTextContent('₦400,000');
+  });
 });

@@ -38,24 +38,6 @@ test('manual shipping fixture renders and selects the real local door quote', as
   });
   await expect(continueButton).toBeEnabled();
 
-  await page
-    .getByRole('button', { name: 'Clear address', exact: true })
-    .click();
-  await expect(address).toHaveValue('');
-  await expect(
-    page.getByText('GIG Logistics - Standard', { exact: true })
-  ).toHaveCount(0);
-  await expect(continueButton).toBeDisabled();
-
-  const refreshedQuoteResponse = page.waitForResponse(
-    (response) =>
-      response.url().includes('/api/shipping/quotes') &&
-      response.request().method() === 'POST' &&
-      response.request().postDataJSON().receiver.address.includes('12 Broad')
-  );
-  await address.fill('12 Broad Street, Lagos Island, Lagos');
-  expect((await refreshedQuoteResponse).status()).toBe(200);
-  await expect(continueButton).toBeEnabled();
   await continueButton.click();
   const paystack = page.getByRole('radio', { name: /paystack/i });
   await expect(paystack).toBeVisible();

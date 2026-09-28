@@ -31,7 +31,8 @@ export const test = base.extend<{
         if (qaScenario === 'payment-retry') paymentRetryScenario = true;
         if (
           qaScenario === 'manual-api-integration' ||
-          qaScenario === 'manual-checkout-flow'
+          qaScenario === 'manual-checkout-flow' ||
+          qaScenario === 'manual-address-clear'
         )
           manualApiScenarioWasVisited = true;
         if (qaScenario === 'manual-api-integration')
@@ -40,9 +41,11 @@ export const test = base.extend<{
           manualCheckoutFlowVisited = true;
       });
       const manualApiScenario = () =>
-        ['manual-api-integration', 'manual-checkout-flow'].includes(
-          new URL(page.url()).searchParams.get('qa') ?? ''
-        );
+        [
+          'manual-api-integration',
+          'manual-checkout-flow',
+          'manual-address-clear',
+        ].includes(new URL(page.url()).searchParams.get('qa') ?? '');
       page.on('pageerror', (error) => errors.push(error.message));
       page.on('console', (message) => {
         if (message.type() !== 'error') return;

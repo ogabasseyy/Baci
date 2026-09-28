@@ -267,7 +267,7 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260927150500_complete_legacy_paystack_cancellation_refunds.sql',
-    sha256: 'f21be85c5ebd6bb838e119b2cd8a14cf2cd1d4fa326fa663b262fb2e7adee1de',
+    sha256: 'd51823746942a696ee5d55e334d4cc7db0d65f9a988a670f8a5f579232a9da62',
   },
   {
     repositoryPath:

@@ -145,13 +145,40 @@ BEGIN
     -- Every payment leg is provider-verified complete, so the cancellation
     -- saga is done regardless of which metadata shape the open reviews
     -- carry (top-level IDs, accepted leg lists, or merged evidence).
+    -- Reviews that record a provider-accepted refund with no local audit row
+    -- (audit_record_failed) stay open until their provider refund ID matches
+    -- a completed local refund row: closing them on other legs' evidence
+    -- would drop an unreconciled customer refund.
     UPDATE public.reconciliation_review review
       SET resolved_at = now(),
           resolution_notes = 'Paystack verified all cancelled-order gateway refunds'
       WHERE review.order_id = v_order.id
         AND review.merchant_id = v_order.merchant_id
         AND review.issue_type = 'order_cancellation_refund_requires_review'
-        AND review.resolved_at IS NULL;
+        AND review.resolved_at IS NULL
+        AND (
+          review.metadata->>'audit_record_failed' IS DISTINCT FROM 'true'
+          OR EXISTS (
+            SELECT 1 FROM public.transactions r
+            WHERE r.order_id = v_order.id AND r.merchant_id = v_order.merchant_id
+              AND r.transaction_type = 'refund' AND r.gateway = 'paystack'
+              AND r.status = 'completed'
+              AND r.gateway_reference = review.metadata->>'provider_refund_id'
+          )
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM jsonb_each(coalesce(review.metadata->'refund_evidence', '{}'::jsonb)) AS e(key, value)
+          WHERE (e.value->>'audit_record_failed')::boolean IS TRUE
+            AND e.key LIKE 'provider:%'
+            AND NOT EXISTS (
+              SELECT 1 FROM public.transactions r
+              WHERE r.order_id = v_order.id AND r.merchant_id = v_order.merchant_id
+                AND r.transaction_type = 'refund' AND r.gateway = 'paystack'
+                AND r.status = 'completed'
+                AND r.gateway_reference = split_part(e.key, ':', 2)
+            )
+        );
   END IF;
   RETURN 'processed';
 END;

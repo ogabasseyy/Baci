@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { logger } from '@/lib/logger';
 import { scheduleCheckoutProductBlogPurge } from './schedule-checkout-product-blog-purge';
 
 const mocks = vi.hoisted(() => ({
@@ -202,6 +203,37 @@ describe('scheduleCheckoutProductBlogPurge', () => {
     });
     expect(mocks.schedule).toHaveBeenCalledWith(
       expect.objectContaining({ productIds: ['simple-serialized'] })
+    );
+  });
+
+  it('schedules the known-ids fallback when the products read rejects', async () => {
+    const supabase = {
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            in: vi.fn(() => ({
+              returns: vi.fn().mockRejectedValue(new Error('transport down')),
+            })),
+          })),
+        })),
+      })),
+    } as unknown as SupabaseClient;
+
+    await scheduleCheckoutProductBlogPurge({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-1',
+      orderItems: [{ product_id: 'product-1', variant_id: null }],
+      supabase,
+    });
+
+    expect(mocks.schedule).toHaveBeenCalledWith(
+      expect.objectContaining({ productIds: ['product-1'] })
+    );
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Failed to resolve product slugs for PDP cache revalidation',
+      })
     );
   });
 });

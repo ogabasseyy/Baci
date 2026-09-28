@@ -64,6 +64,26 @@ function makeFailingItemsSupabase(merchantSlug: string | null) {
   };
 }
 
+function makeRejectingItemsSupabase(merchantSlug: string | null) {
+  const itemsBuilder: Record<string, unknown> = {};
+  itemsBuilder.select = vi.fn(() => itemsBuilder);
+  itemsBuilder.eq = vi.fn(() => Promise.reject(new Error('transport down')));
+  const merchantsBuilder: Record<string, unknown> = {};
+  merchantsBuilder.select = vi.fn(() => merchantsBuilder);
+  merchantsBuilder.eq = vi.fn(() => merchantsBuilder);
+  merchantsBuilder.maybeSingle = vi.fn(() =>
+    Promise.resolve({
+      data: merchantSlug ? { slug: merchantSlug } : null,
+      error: null,
+    })
+  );
+  return {
+    from: vi.fn((table: string) =>
+      table === 'merchants' ? merchantsBuilder : itemsBuilder
+    ),
+  };
+}
+
 describe('scheduleOrderBlogPurgeForOrderAfterResponse', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -160,5 +180,23 @@ describe('scheduleOrderBlogPurgeForOrderAfterResponse', () => {
     await pending;
     expect(mockScheduleOrderProductBlogPurge).not.toHaveBeenCalled();
     expect(mockScheduleStorefrontHostnamePurge).not.toHaveBeenCalled();
+  });
+
+  it('falls back to a hostname purge when the order-item read rejects', async () => {
+    const rejectingSupabase = makeRejectingItemsSupabase('ogabassey');
+    let pending: Promise<unknown> | undefined;
+    mockAfter.mockImplementationOnce((next: () => unknown) => {
+      pending = Promise.resolve(next());
+    });
+    scheduleOrderBlogPurgeForOrderAfterResponse({
+      supabase: rejectingSupabase as never,
+      merchantId: 'merchant-1',
+      orderId: 'order-1',
+    });
+    await pending;
+    expect(mockScheduleOrderProductBlogPurge).not.toHaveBeenCalled();
+    expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
+      'ogabassey'
+    );
   });
 });

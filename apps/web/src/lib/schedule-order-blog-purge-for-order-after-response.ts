@@ -103,6 +103,15 @@ async function purgeOrderBlogProducts({
         error,
       }
     );
+    // A rejected order-items read must take the same conservative path as
+    // an `{ error }` result: without product evidence the targeted purge
+    // above cannot run, so evict by hostname instead of skipping silently.
+    await purgeOrderBlogProductsConservatively({
+      error,
+      merchantId,
+      orderId,
+      supabase,
+    });
   }
 }
 

@@ -34,14 +34,16 @@ function formatRelatedProductPrice(
     return null;
   }
 
-  // Symmetric offer guard: when the offer projection is unresolved
+  // Unresolved-offer guard: when the offer projection never resolved
   // (hydration error/skipped leaves offers unset without the purchasable
-  // flag) or confirmed empty, there is no selectable offer SKU at the base
-  // amount, so a depleted base price must not print as the fallback.
+  // flag), stocked offers may exist, so a depleted base price must not
+  // print as the fallback. A confirmed-empty projection (offers: []) is
+  // different: the base SKU itself remains directly purchasable, so the
+  // base price still shows (matching the inline-token path).
   if (
     product.has_condition_offers === true &&
-    product.has_purchasable_condition_offer !== true &&
-    (product.offers?.length ?? 0) === 0
+    product.offers === undefined &&
+    product.has_purchasable_condition_offer !== true
   ) {
     return null;
   }

@@ -238,6 +238,23 @@ describe('scheduleOrderProductBlogPurge', () => {
     );
   });
 
+  it('evicts the hostname when the caller sweep reports incomplete', async () => {
+    const { supabase } = makeSupabase({});
+
+    await scheduleOrderProductBlogPurge({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      productIds: ['product-1'],
+      supabase: supabase as never,
+      targetSweepIncomplete: true,
+    });
+
+    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
+    expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
+      'ogabassey'
+    );
+  });
+
   it('skips the edge purge when the worker hard-expiry reports failure', async () => {
     const consoleSpy = vi
       .spyOn(console, 'warn')

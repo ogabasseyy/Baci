@@ -258,4 +258,33 @@ describe('BlogRelatedProducts pricing', () => {
       screen.getByRole('link', { name: /iphone 16 used/i })
     ).not.toHaveTextContent('₦400,000');
   });
+
+  it('shows the stocked base price when offers hydrate confirmed-empty', () => {
+    render(
+      <BlogRelatedProducts
+        basePath="/ogabassey"
+        currencySource={{ country: 'NG', payout_currency: 'NGN' }}
+        products={[
+          {
+            id: 'product-confirmed-empty-offers',
+            name: 'iPhone 16',
+            price: 150000,
+            manage_stock: true,
+            stock: 3,
+            stock_quantity: 3,
+            has_condition_offers: true,
+            has_purchasable_condition_offer: false,
+            offers: [],
+            slug: 'iphone-16',
+          },
+        ]}
+      />
+    );
+
+    // Confirmed-empty differs from unresolved: the base SKU itself is
+    // directly purchasable, so its price shows (inline-token parity).
+    expect(screen.getByRole('link', { name: /iphone 16/i })).toHaveTextContent(
+      '₦150,000'
+    );
+  });
 });

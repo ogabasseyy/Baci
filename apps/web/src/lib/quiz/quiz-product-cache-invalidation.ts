@@ -64,11 +64,13 @@ interface QuizCacheTargetPage<T> {
  * Drain a bounded target sweep across pages. The next worker iteration uses
  * a new `changedAfter` timestamp, so rows truncated by a single limited
  * query would never be revisited; pagination keeps every changed row
- * covered. A mid-sweep failure keeps the pages already collected.
+ * covered. A mid-sweep failure keeps the pages already collected but flags
+ * the sweep incomplete — the run must conservatively invalidate instead of
+ * treating the partial set as complete.
  */
 async function collectQuizCacheTargetRows<T>(
   fetchPage: (from: number, to: number) => PromiseLike<QuizCacheTargetPage<T>>
-): Promise<T[]> {
+): Promise<{ incomplete: boolean; rows: T[] }> {
   const rows: T[] = [];
   for (let page = 0; ; page += 1) {
     let result: QuizCacheTargetPage<T>;
@@ -78,15 +80,15 @@ async function collectQuizCacheTargetRows<T>(
         (page + 1) * QUIZ_CACHE_TARGET_BATCH_LIMIT - 1
       );
     } catch {
-      return rows;
+      return { incomplete: true, rows };
     }
     if (result.error) {
-      return rows;
+      return { incomplete: true, rows };
     }
     const pageRows = result.data ?? [];
     rows.push(...pageRows);
     if (pageRows.length < QUIZ_CACHE_TARGET_BATCH_LIMIT) {
-      return rows;
+      return { incomplete: false, rows };
     }
   }
 }
@@ -105,9 +107,10 @@ export async function invalidateQuizProductCaches(
 
   const productIdsByMerchant = new Map<string, Set<string>>();
   const eventMerchantIds = new Map<string, string>();
+  let sweepIncomplete = false;
 
   try {
-    const eventRows = await collectQuizCacheTargetRows<QuizEventCacheRow>(
+    const eventPage = await collectQuizCacheTargetRows<QuizEventCacheRow>(
       (from, to) =>
         client
           .from('quiz_events')
@@ -117,7 +120,8 @@ export async function invalidateQuizProductCaches(
           .order('id', { ascending: true })
           .range(from, to)
     );
-    for (const row of eventRows) {
+    sweepIncomplete = sweepIncomplete || eventPage.incomplete;
+    for (const row of eventPage.rows) {
       if (
         typeof row.id === 'string' &&
         row.id.trim().length > 0 &&
@@ -134,10 +138,11 @@ export async function invalidateQuizProductCaches(
     }
   } catch {
     // The quiz RPC already completed; cache expiry remains best effort.
+    sweepIncomplete = true;
   }
 
   try {
-    const reservationRows =
+    const reservationPage =
       await collectQuizCacheTargetRows<QuizReservationCacheRow>((from, to) =>
         client
           .from('quiz_prize_reservations')
@@ -147,16 +152,18 @@ export async function invalidateQuizProductCaches(
           .order('id', { ascending: true })
           .range(from, to)
       );
-    for (const row of reservationRows) {
+    sweepIncomplete = sweepIncomplete || reservationPage.incomplete;
+    for (const row of reservationPage.rows) {
       addProductId(productIdsByMerchant, row.merchant_id, row.product_id);
     }
   } catch {
     // The quiz RPC already completed; cache expiry remains best effort.
+    sweepIncomplete = true;
   }
 
   let awardRows: QuizAwardCacheRow[] = [];
   try {
-    awardRows = await collectQuizCacheTargetRows<QuizAwardCacheRow>(
+    const awardPage = await collectQuizCacheTargetRows<QuizAwardCacheRow>(
       (from, to) =>
         client
           .from('quiz_awards')
@@ -167,8 +174,11 @@ export async function invalidateQuizProductCaches(
           .order('id', { ascending: true })
           .range(from, to)
     );
+    sweepIncomplete = sweepIncomplete || awardPage.incomplete;
+    awardRows = awardPage.rows;
   } catch {
     // The quiz RPC already completed; cache expiry remains best effort.
+    sweepIncomplete = true;
   }
   const expiredEventIds = Array.from(
     new Set(
@@ -222,12 +232,23 @@ export async function invalidateQuizProductCaches(
     );
   }
 
+  if (sweepIncomplete) {
+    // A mid-sweep page failure leaves rows past the failure unknown, and
+    // the next worker iteration uses a new `changedAfter` that will never
+    // revisit them. Escalate the collected merchants to the conservative
+    // hostname fallback instead of purging a partial product set.
+    console.warn(
+      'Quiz product cache sweep incomplete; escalating collected merchants to hostname purge',
+      { changedAfter }
+    );
+  }
   for (const [merchantId, productIds] of productIdsByMerchant) {
     try {
       await scheduleOrderProductBlogPurge({
         merchantId,
         productIds: Array.from(productIds),
         supabase: client,
+        ...(sweepIncomplete ? { targetSweepIncomplete: true } : {}),
       });
     } catch {
       // The quiz RPC already completed; edge eviction remains best effort.

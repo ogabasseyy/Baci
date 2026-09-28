@@ -10,6 +10,12 @@ interface ScheduleOrderProductBlogPurgeInput {
   merchantSlug?: string | null;
   productIds: readonly (string | null | undefined)[];
   supabase: SupabaseClient;
+  /**
+   * Set when the caller's target sweep may have truncated rows (e.g. a
+   * mid-sweep page failure): the purge scope is unknown, so the hostname
+   * fallback replaces the product-scoped purge.
+   */
+  targetSweepIncomplete?: boolean;
 }
 
 /**
@@ -27,6 +33,7 @@ export async function scheduleOrderProductBlogPurge({
   merchantSlug: suppliedMerchantSlug,
   productIds,
   supabase,
+  targetSweepIncomplete = false,
 }: ScheduleOrderProductBlogPurgeInput): Promise<void> {
   const normalizedProductIds = Array.from(
     new Set(
@@ -57,7 +64,8 @@ export async function scheduleOrderProductBlogPurge({
     );
     entries = enriched.entries;
     blogPostSlugs = enriched.blogPostSlugs;
-    blogPostSlugsIncomplete = enriched.blogPostSlugsIncomplete === true;
+    blogPostSlugsIncomplete =
+      enriched.blogPostSlugsIncomplete === true || targetSweepIncomplete;
     slugs = enriched.resolvedSlugs ?? entries.map((entry) => entry.slug);
   } catch (error) {
     console.warn('Skipped order-related blog purge after enrichment failed', {
@@ -120,9 +128,9 @@ export async function scheduleOrderProductBlogPurge({
   }
 
   if (blogPostSlugsIncomplete) {
-    // The article lookup totally failed: the affected article URLs are
-    // unknown, so evict the hostname (a superset of the product purge)
-    // rather than leaving linked rails stale until TTL.
+    // The purge scope is unknown (failed article lookup or truncated
+    // caller sweep): evict the hostname (a superset of the product purge)
+    // rather than leaving affected URLs stale until TTL.
     scheduleStorefrontHostnamePurge(merchantSlug);
   } else if (blogPostSlugs.length > 0) {
     scheduleStorefrontProductPurge(merchantSlug, entries, {

@@ -10,7 +10,10 @@ vi.mock('@/lib/schedule-order-product-blog-purge', () => ({
 
 import { invalidateQuizProductCaches } from './quiz-product-cache-invalidation';
 
-function createClient(reservationRows: unknown[] = []) {
+function createClient(
+  reservationRows: unknown[] = [],
+  options: { failReservationsAfterFirstPage?: boolean } = {}
+) {
   const eventRows = [
     {
       id: 'event-1',
@@ -56,6 +59,13 @@ function createClient(reservationRows: unknown[] = []) {
           return builder;
         }),
         range: vi.fn((from: number, to: number) => {
+          if (
+            options.failReservationsAfterFirstPage &&
+            table === 'quiz_prize_reservations' &&
+            from > 0
+          ) {
+            throw new Error('page unavailable');
+          }
           builder.data = rows.slice(from, to + 1);
           return builder;
         }),
@@ -155,6 +165,43 @@ describe('invalidateQuizProductCaches', () => {
     expect(productIds).toHaveLength(1001);
     expect(productIds?.[0]).toBe('product-0');
     expect(productIds?.[1000]).toBe('product-1000');
+  });
+
+  it('escalates collected merchants when a later sweep page fails', async () => {
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      const reservationRows = Array.from({ length: 1001 }, (_, index) => ({
+        merchant_id: 'merchant-3',
+        product_id: `product-${index}`,
+      }));
+      const client = createClient(reservationRows, {
+        failReservationsAfterFirstPage: true,
+      });
+
+      await invalidateQuizProductCaches(
+        client as never,
+        '2026-09-01T00:00:00Z'
+      );
+
+      const expectedIds = Array.from(
+        { length: 1000 },
+        (_, index) => `product-${index}`
+      );
+      expect(mockScheduleOrderProductBlogPurge).toHaveBeenCalledWith({
+        merchantId: 'merchant-3',
+        productIds: expectedIds,
+        supabase: client,
+        targetSweepIncomplete: true,
+      });
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('sweep incomplete'),
+        expect.objectContaining({ changedAfter: '2026-09-01T00:00:00Z' })
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('orders every sweep by a unique id tie-breaker', async () => {

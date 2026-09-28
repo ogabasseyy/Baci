@@ -49,14 +49,21 @@ export async function scheduleCheckoutProductBlogPurge({
   );
   if (productIds.length === 0) return;
 
-  const { data: productRows, error: productLookupError } = await supabase
-    .from('products')
-    .select('id, slug, manage_stock, inventory_tracking_policy')
-    .eq('merchant_id', merchantId)
-    .in('id', productIds)
-    .returns<ProductPolicyRow[]>();
-
-  if (productLookupError) {
+  let productRows: ProductPolicyRow[] | null;
+  try {
+    const result = await supabase
+      .from('products')
+      .select('id, slug, manage_stock, inventory_tracking_policy')
+      .eq('merchant_id', merchantId)
+      .in('id', productIds)
+      .returns<ProductPolicyRow[]>();
+    if (result.error) {
+      throw result.error;
+    }
+    productRows = result.data;
+  } catch (lookupError) {
+    // A rejected products read must schedule the same known-ids fallback
+    // as an `{ error }` result; otherwise the purge is skipped entirely.
     scheduleOrderProductBlogPurgeAfterResponse({
       merchantId,
       merchantSlug,
@@ -65,7 +72,7 @@ export async function scheduleCheckoutProductBlogPurge({
     });
     logger.error({
       message: 'Failed to resolve product slugs for PDP cache revalidation',
-      error: productLookupError,
+      error: lookupError,
       orderId,
       merchantId,
     });

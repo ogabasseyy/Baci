@@ -28,6 +28,7 @@ import {
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
+import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
 import { cacheRevalidateRequestSchema } from '@/schemas/cache-revalidate-route';
 
 /**
@@ -141,8 +142,16 @@ export async function POST(request: NextRequest) {
         // products-carrying request, independent of whether that slug lookup
         // succeeds. Fail-open lives inside enrichProductPurgeEntries: any lookup
         // problem falls back to the caller's flat hints.
-        const { entries, resolvedSlugs, blogPostSlugs } =
-          await enrichProductPurgeEntries(auth.supabase, merchantId, products);
+        const {
+          entries,
+          resolvedSlugs,
+          blogPostSlugs,
+          blogPostSlugsIncomplete,
+        } = await enrichProductPurgeEntries(
+          auth.supabase,
+          merchantId,
+          products
+        );
         // Bust the per-slug Next product-detail caches for every resolved slug
         // BEFORE scheduling the edge purge below: without this, a Cloudflare
         // MISS after the purge refills the edge from the still-tagged Next
@@ -179,7 +188,12 @@ export async function POST(request: NextRequest) {
         if (merchantSlug) {
           // The shared scheduler switches to a bounded hostname purge above its
           // distinct-entry threshold, so it still evicts every affected PDP.
-          if (blogPostSlugs.length > 0) {
+          if (blogPostSlugsIncomplete) {
+            // The article lookup totally failed: the affected article URLs
+            // are unknown, so evict the hostname (a superset of the product
+            // purge) rather than leaving linked rails stale until TTL.
+            scheduleStorefrontHostnamePurge(merchantSlug);
+          } else if (blogPostSlugs.length > 0) {
             scheduleStorefrontProductPurge(merchantSlug, entries, {
               blogPostSlugs,
             });

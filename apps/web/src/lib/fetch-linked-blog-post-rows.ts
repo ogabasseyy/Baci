@@ -45,21 +45,30 @@ export async function fetchLinkedBlogPostRows(
       chunkStart + LINKED_PRODUCT_ID_CHUNK_SIZE
     );
     for (let page = 0; ; page += 1) {
-      const { data, error } = await supabase
-        .from('blog_post_products')
-        .select(
-          'id, blog_post_id, blog_posts!inner(slug, status, published_at)'
-        )
-        .eq('merchant_id', merchantId)
-        .eq('blog_posts.status', 'published')
-        .not('blog_posts.published_at', 'is', null)
-        .in('product_id', productIdChunk)
-        .order('blog_post_id', { ascending: true })
-        .order('id', { ascending: true })
-        .range(
-          page * LINKED_POST_PAGE_SIZE,
-          (page + 1) * LINKED_POST_PAGE_SIZE - 1
-        );
+      let data: unknown;
+      let error: unknown;
+      try {
+        ({ data, error } = await supabase
+          .from('blog_post_products')
+          .select(
+            'id, blog_post_id, blog_posts!inner(slug, status, published_at)'
+          )
+          .eq('merchant_id', merchantId)
+          .eq('blog_posts.status', 'published')
+          .not('blog_posts.published_at', 'is', null)
+          .in('product_id', productIdChunk)
+          .order('blog_post_id', { ascending: true })
+          .order('id', { ascending: true })
+          .range(
+            page * LINKED_POST_PAGE_SIZE,
+            (page + 1) * LINKED_POST_PAGE_SIZE - 1
+          ));
+      } catch (pageError) {
+        // A rejected page preserves the rows already fetched exactly like
+        // an `{ error }` result; the caller escalates when nothing survived.
+        lastError = pageError;
+        break;
+      }
 
       if (error) {
         lastError = error;

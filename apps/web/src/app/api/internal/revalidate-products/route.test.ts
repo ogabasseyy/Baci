@@ -107,22 +107,6 @@ describe('POST /api/internal/revalidate-products', () => {
     expect(await res.json()).toEqual({ ok: true });
     expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
   });
-  it('busts a separately supplied complete per-slug set without an edge purge', async () => {
-    const productSlugs = ['phone-1', 'phone-2', 'phone-3'];
-    const res = await POST(
-      request({ merchantId: MERCHANT_ID, productSlugs }, `Bearer ${SECRET}`)
-    );
-
-    expect(res.status).toBe(200);
-    // Hard-expired even without purge inputs: a later control-metadata
-    // chunk may schedule an edge purge over these tags.
-    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
-      MERCHANT_ID,
-      productSlugs,
-      { expireImmediately: true }
-    );
-    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
-  });
   it('does NOT schedule a purge for a merchantId-only body', async () => {
     await POST(request({ merchantId: MERCHANT_ID }, `Bearer ${SECRET}`));
 

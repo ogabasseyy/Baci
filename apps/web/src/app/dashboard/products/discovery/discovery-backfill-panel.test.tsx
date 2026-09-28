@@ -19,7 +19,10 @@ const page = (result: unknown) =>
   });
 
 describe('dashboard catalog indexing', () => {
-  beforeEach(() => fetchWithCsrf.mockReset());
+  beforeEach(() => {
+    fetchWithCsrf.mockReset();
+    window.localStorage.clear();
+  });
 
   it('runs batches under the selected merchant session and reports completion', async () => {
     fetchWithCsrf
@@ -43,7 +46,7 @@ describe('dashboard catalog indexing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start indexing' }));
     await waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent(
-        'Indexing complete. 7 scanned, 5 updates confirmed.'
+        'Indexing complete. 7 scanned this visit, 5 updates confirmed.'
       )
     );
     expect(fetchWithCsrf).toHaveBeenNthCalledWith(
@@ -93,7 +96,7 @@ describe('dashboard catalog indexing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Continue indexing' }));
     await waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent(
-        'Indexing complete. 6 scanned, 6 updates confirmed.'
+        'Indexing complete. 6 scanned this visit, 6 updates confirmed.'
       )
     );
     expect(fetchWithCsrf).toHaveBeenNthCalledWith(
@@ -190,6 +193,45 @@ describe('dashboard catalog indexing', () => {
       '/api/products/discovery-backfill',
       expect.objectContaining({
         body: JSON.stringify({ merchantId, cursor: null }),
+      })
+    );
+  });
+
+  it('restores a saved cursor after the page reloads', async () => {
+    const savedCursor = '22222222-2222-4222-8222-222222222222';
+    fetchWithCsrf
+      .mockImplementationOnce(() =>
+        page({ scanned: 5, generated: 5, nextCursor: savedCursor, done: false })
+      )
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        json: async () => ({ error: 'Retry this batch.' }),
+      })
+      .mockImplementationOnce(() =>
+        page({ scanned: 1, generated: 0, nextCursor: savedCursor, done: true })
+      );
+    const view = render(<DiscoveryBackfillPanel merchantId={merchantId} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Start indexing' }));
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Retry this batch.')
+    );
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(`discovery-backfill:${merchantId}`) ?? '{}'
+      )
+    ).toMatchObject({ cursor: savedCursor, complete: false });
+    view.unmount();
+    render(<DiscoveryBackfillPanel merchantId={merchantId} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Continue indexing' }));
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('Indexing complete.')
+    );
+    expect(fetchWithCsrf).toHaveBeenNthCalledWith(
+      3,
+      '/api/products/discovery-backfill',
+      expect.objectContaining({
+        body: JSON.stringify({ merchantId, cursor: savedCursor }),
       })
     );
   });

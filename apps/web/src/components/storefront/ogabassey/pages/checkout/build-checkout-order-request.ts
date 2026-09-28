@@ -83,14 +83,11 @@ export function buildCheckoutOrderRequest({
       ? { shipping_rate_id: delivery.merchantRateId }
       : {}),
     selected_quote_id:
-      delivery.method === 'airport'
-        ? delivery.quoteMatchesMethod
-          ? delivery.selectedQuoteId || null
-          : null
-        : (getForwardableSelectedQuoteId(
-            delivery.method,
-            delivery.selectedQuoteId
-          ) ?? null),
+      getForwardableSelectedQuoteId(
+        delivery.method,
+        delivery.selectedQuoteId,
+        delivery.quoteMatchesMethod
+      ) ?? null,
     use_wallet_credit: money.useWalletCredit,
     wallet_amount: money.walletAmount,
     user_id: customer.userId,

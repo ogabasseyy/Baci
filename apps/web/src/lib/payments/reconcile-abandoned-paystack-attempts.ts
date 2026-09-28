@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { verifyTransaction } from '@/lib/paystack';
 import { fileDuplicatePaymentCapture } from './file-duplicate-payment-capture';
-import { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
+import { finalizePartiallyPaidAbandonedAttempt } from './finalize-partially-paid-abandoned-attempt';
 
 const DEFAULT_LIMIT = 25;
 // Give an abandoned checkout time to settle before releasing a paid order.
@@ -199,55 +199,19 @@ export async function reconcileAbandonedPaystackAttempts({
       // On a partially paid order the completed transaction may be only the
       // first leg, so this verified capture can be the legitimate remaining
       // payment rather than a duplicate. Route it through the atomic order
-      // finalizer, which distinguishes completion from overpayment, before
-      // classifying anything as a duplicate. Mismatched captures never
-      // complete: they are filed with their evidence below.
+      // finalizer before classifying anything as a duplicate.
       if (
         !mismatchKind &&
         paidOrderStatus(attempt.paid_order) === 'partially_paid'
       ) {
-        const outcome = await finalizeOrderGatewayPayment({
-          actor: 'cron:reconcile-gateway-paid-orders',
-          gateway: 'paystack',
-          gatewayResponse: result.data as unknown as Record<string, unknown>,
-          orderId: attempt.order_id,
-          reference: attempt.gateway_reference,
+        await finalizePartiallyPaidAbandonedAttempt({
+          attempt,
+          hold,
+          providerData: result.data as unknown as Record<string, unknown>,
           scheduleAfter,
+          summary,
           supabase,
-          transaction: {
-            amount: attempt.amount,
-            gateway_reference: attempt.gateway_reference,
-            id: attempt.id,
-            merchant_id: attempt.merchant_id,
-            order_id: attempt.order_id,
-            platform_fee: attempt.platform_fee,
-          },
-          // Candidates are always pending/processing here, never completed.
-          wonTransactionFlip: true,
         });
-        if (outcome.kind === 'completed') {
-          summary.completed.push(attempt.id);
-          continue;
-        }
-        if (
-          outcome.kind === 'order_cancelled' ||
-          outcome.kind === 'order_skipped'
-        ) {
-          summary.reviewsFiled.push(attempt.id);
-          continue;
-        }
-        if (
-          outcome.kind === 'completion_failed' &&
-          typeof outcome.error === 'object' &&
-          outcome.error !== null &&
-          (outcome.error as { error_code?: unknown }).error_code ===
-            'TRANSACTION_IN_UNEXPECTED_STATE'
-        ) {
-          await hold('changed_concurrently');
-          continue;
-        }
-        summary.failed = true;
-        await hold(outcome.kind);
         continue;
       }
       // The order is already paid by another transaction, so a verified

@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const finalize = vi.hoisted(() => vi.fn());
+const finalizePartial = vi.hoisted(() => vi.fn());
 const fileCapture = vi.hoisted(() => vi.fn());
-vi.mock('./finalize-order-gateway-payment', () => ({
-  finalizeOrderGatewayPayment: finalize,
+vi.mock('./finalize-partially-paid-abandoned-attempt', () => ({
+  finalizePartiallyPaidAbandonedAttempt: finalizePartial,
 }));
 vi.mock('./file-duplicate-payment-capture', () => ({
   fileDuplicatePaymentCapture: fileCapture,
@@ -38,70 +38,21 @@ describe('abandoned Paystack attempts on partially paid orders', () => {
     vi.clearAllMocks();
   });
 
-  it('finalizes a verified capture instead of filing a duplicate', async () => {
+  it('routes a verified capture through the order finalizer', async () => {
     const { client } = createClient([partialCandidate()]);
-    finalize.mockResolvedValue({
-      healed: false,
-      kind: 'completed',
-      orderNumber: 'ORD-1',
-    });
-    const scheduleAfter = vi.fn();
 
-    const summary = await reconcileAbandonedPaystackAttempts({
-      scheduleAfter,
+    await reconcileAbandonedPaystackAttempts({
       supabase: client as never,
       verify: vi.fn().mockResolvedValue(verifiedCapture),
     });
 
-    expect(finalize).toHaveBeenCalledWith(
+    expect(finalizePartial).toHaveBeenCalledWith(
       expect.objectContaining({
-        actor: 'cron:reconcile-gateway-paid-orders',
-        gateway: 'paystack',
-        orderId: 'order-1',
-        reference: 'BAC-OLD',
-        scheduleAfter,
-        transaction: expect.objectContaining({
-          id: 'attempt-1',
-          platform_fee: 2,
-        }),
-        wonTransactionFlip: true,
+        attempt: expect.objectContaining({ id: 'attempt-1' }),
+        providerData: verifiedCapture.data,
       })
     );
     expect(fileCapture).not.toHaveBeenCalled();
-    expect(summary.completed).toEqual(['attempt-1']);
-    expect(summary.reviewsFiled).toEqual([]);
-  });
-
-  it('records a review when the finalizer reports a cancelled order', async () => {
-    const { client } = createClient([partialCandidate()]);
-    finalize.mockResolvedValue({ kind: 'order_cancelled' });
-
-    const summary = await reconcileAbandonedPaystackAttempts({
-      supabase: client as never,
-      verify: vi.fn().mockResolvedValue(verifiedCapture),
-    });
-
-    expect(summary.reviewsFiled).toEqual(['attempt-1']);
-    expect(summary.completed).toEqual([]);
-    expect(fileCapture).not.toHaveBeenCalled();
-  });
-
-  it('fails the sweep when order completion errors', async () => {
-    const { client } = createClient([partialCandidate()]);
-    finalize.mockResolvedValue({
-      error: new Error('completion unavailable'),
-      kind: 'completion_failed',
-    });
-
-    const summary = await reconcileAbandonedPaystackAttempts({
-      supabase: client as never,
-      verify: vi.fn().mockResolvedValue(verifiedCapture),
-    });
-
-    expect(summary.failed).toBe(true);
-    expect(summary.held).toEqual([
-      { id: 'attempt-1', reason: 'completion_failed' },
-    ]);
   });
 
   it('still files duplicates for verified captures on fully paid orders', async () => {
@@ -115,7 +66,7 @@ describe('abandoned Paystack attempts on partially paid orders', () => {
       verify: vi.fn().mockResolvedValue(verifiedCapture),
     });
 
-    expect(finalize).not.toHaveBeenCalled();
+    expect(finalizePartial).not.toHaveBeenCalled();
     expect(fileCapture).toHaveBeenCalled();
     expect(summary.reviewsFiled).toEqual(['attempt-1']);
   });
@@ -132,7 +83,7 @@ describe('abandoned Paystack attempts on partially paid orders', () => {
       }),
     });
 
-    expect(finalize).not.toHaveBeenCalled();
+    expect(finalizePartial).not.toHaveBeenCalled();
     expect(fileCapture).toHaveBeenCalledWith(
       expect.objectContaining({
         evidence: expect.objectContaining({

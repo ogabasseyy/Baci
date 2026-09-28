@@ -113,7 +113,9 @@ export async function initiatePaystackCancellationRefunds({
                   ? providerPaymentId
                   : null,
               provider_refund_status: providerStatus,
-              refund_reconciliation_hold: 'provider_creation_evidence_mismatch',
+              // Deliberately unheld: if the quarantine review below fails
+              // transiently, the polling reconciler must still discover
+              // this row, re-verify it, and file the review itself.
             },
           });
         if (uncertainInsertError) {

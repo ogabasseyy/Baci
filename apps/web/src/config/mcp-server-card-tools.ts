@@ -73,7 +73,7 @@ export const PUBLIC_MCP_TOOLS = [
     name: 'add_to_cart',
     title: 'Add to Cart',
     description:
-      'Add a product to the shopping cart. This tool is accessible from the in-chat widget for real-time cart updates.',
+      'Prepare an Ogabassey cart handoff URL. A simple item is added when the shopper opens that URL; products with options open their selection page.',
     inputSchema: {
       $schema: DRAFT_07_SCHEMA,
       type: 'object',
@@ -85,22 +85,14 @@ export const PUBLIC_MCP_TOOLS = [
         quantity: {
           default: 1,
           description: 'Quantity to add',
-          type: 'number',
+          type: 'integer',
           minimum: 1,
           maximum: 10,
-        },
-        session_id: {
-          description: 'Cart session identifier',
-          type: 'string',
         },
       },
       required: ['product_id'],
     },
-    annotations: {
-      destructiveHint: false,
-      openWorldHint: false,
-      readOnlyHint: false,
-    },
+    annotations: READ_ONLY_TOOL_ANNOTATIONS,
   },
   {
     name: 'get_product',

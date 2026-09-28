@@ -108,7 +108,10 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
           to run the store and fulfil orders. When you use our ChatGPT app,
           OpenAI processes your conversation under its own privacy terms and
           sends us the tool inputs needed to answer your request. We do not sell
-          your personal information.
+          your personal information. When semantic catalog search is enabled,
+          we send product search text to Google Gemini to find matching items.
+          We do not deliberately include account, order, or payment records in
+          those requests.
         </p>
       ) : (
         <p>
@@ -161,6 +164,10 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
                   Ogabassey account search history. Our server processes the
                   tool request to return products; ChatGPT controls the
                   retention of your conversation under OpenAI&apos;s own policy.
+                  When semantic search is enabled, Google may retain the search
+                  request for up to 55 days for abuse monitoring under its
+                  Gemini API terms. Its Paid Tier terms say these requests are
+                  not used to improve Google products.
                 </p>
               </div>
             ),

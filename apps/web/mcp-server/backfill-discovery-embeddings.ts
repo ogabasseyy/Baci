@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { embedDiscoveryText } from './gemini-discovery-embedding';
@@ -9,8 +10,18 @@ type ProductRow = {
   brand: string | null;
   category: string | null;
   description: string | null;
-  updated_at: string | null;
 };
+
+function isMerchantUserToken(token: string): boolean {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8')) as unknown;
+    return typeof payload === 'object' && payload !== null &&
+      'role' in payload && payload.role === 'authenticated' &&
+      'sub' in payload && typeof payload.sub === 'string';
+  } catch {
+    return false;
+  }
+}
 
 /** Merchant-authenticated, resumable backfill. Never accepts a service-role key. */
 export async function backfillDiscoveryEmbeddings() {
@@ -21,6 +32,9 @@ export async function backfillDiscoveryEmbeddings() {
   const merchantId = process.env.MERCHANT_ID;
   if (!url || !anonKey || !accessToken || !geminiKey || !merchantId) {
     throw new Error('Provide Supabase URL, anon key, merchant access token, Gemini key, and merchant ID');
+  }
+  if (!isMerchantUserToken(accessToken)) {
+    throw new Error('SUPABASE_ACCESS_TOKEN must be a merchant user JWT');
   }
   if (!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(merchantId)) {
     throw new Error('MERCHANT_ID must be a UUID');
@@ -38,7 +52,7 @@ export async function backfillDiscoveryEmbeddings() {
   let offset = 0;
   while (processed < maxProducts) {
     const { data, error } = await client.from('products')
-      .select('id, merchant_id, name, brand, category, description, updated_at')
+      .select('id, merchant_id, name, brand, category, description')
       .eq('merchant_id', merchantId)
       .eq('status', 'active')
       .order('id')
@@ -49,15 +63,14 @@ export async function backfillDiscoveryEmbeddings() {
     for (const product of products) {
       const { data: prior, error: priorError } = await client
         .from('product_discovery_embeddings')
-        .select('source_updated_at')
+        .select('source_hash')
         .eq('product_id', product.id)
         .maybeSingle();
       if (priorError) throw new Error(`Embedding state read failed: ${priorError.code}`);
-      // Legacy NULL timestamps have no freshness signal until the product's
-      // update trigger assigns one. A prior vector is sufficient meanwhile.
-      // For non-NULL values, string equality preserves Postgres microseconds.
-      if (prior?.source_updated_at && (!product.updated_at ||
-        prior.source_updated_at === product.updated_at)) continue;
+      const sourceHash = createHash('sha256').update(JSON.stringify([
+        product.name, product.brand, product.category, product.description,
+      ])).digest('hex');
+      if (prior?.source_hash === sourceHash) continue;
       const text = [product.brand, product.category, product.description]
         .filter((part): part is string => typeof part === 'string')
         .join('. ').replace(/<[^>]{0,2000}>/g, ' ').replace(/\s+/g, ' ').slice(0, 6000);
@@ -70,7 +83,7 @@ export async function backfillDiscoveryEmbeddings() {
           product_id: product.id,
           merchant_id: product.merchant_id,
           embedding: JSON.stringify(embedding),
-          source_updated_at: product.updated_at ?? new Date().toISOString(),
+          source_hash: sourceHash,
           model: 'gemini-embedding-2',
         });
       if (writeError) throw new Error(`Embedding write failed: ${writeError.code}`);

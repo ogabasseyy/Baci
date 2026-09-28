@@ -204,8 +204,9 @@ with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
 `GEMINI_API_KEY` supplied privately to the process. Never put them in command
 arguments or commit them.
 The script uses merchant RLS and processes at most 50 products per invocation
-unless `MAX_PRODUCTS` is set. Re-run it after catalog changes; stale vectors are
-excluded by the search RPC until refreshed. Keep the runtime flag disabled if
+unless `MAX_PRODUCTS` is set. Re-run it after product name, brand, category, or
+description changes; the search RPC excludes those stale vectors until refreshed.
+Price and stock updates retain the existing vector. Keep the runtime flag disabled if
 the initial backfill or recurring refresh cannot be operated. Do not use a
 service-role key for the backfill.
 

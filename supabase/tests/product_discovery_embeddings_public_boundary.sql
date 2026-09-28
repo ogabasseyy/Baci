@@ -21,15 +21,22 @@ VALUES
    'New Discovery Camera', 'new-discovery-camera', 50000, 'active');
 
 INSERT INTO public.product_discovery_embeddings (
-  product_id, merchant_id, embedding, source_updated_at
+  product_id, merchant_id, embedding, source_hash
 )
 SELECT p.id, p.merchant_id,
-  ('[' || repeat('0,', 767) || '1]')::extensions.vector(768), p.updated_at
+  ('[' || repeat('0,', 767) || '1]')::extensions.vector(768),
+  encode(extensions.digest(convert_to(
+    array_to_json(ARRAY[p.name, p.brand, p.category, p.description])::text, 'UTF8'
+  ), 'sha256'), 'hex')
 FROM public.products p
 WHERE p.id IN (
   'cb58d110-0000-4000-8000-000000000101',
   'cb58d110-0000-4000-8000-000000000102'
 );
+
+-- Stock/price mutations should not hide a still-current catalog embedding.
+UPDATE public.products SET price = 50100
+WHERE id = 'cb58d110-0000-4000-8000-000000000101';
 
 RESET ROLE;
 INSERT INTO auth.users (id) VALUES ('cb58d110-0000-4000-8000-000000000201');
@@ -57,11 +64,11 @@ BEGIN
   END IF;
   BEGIN
     INSERT INTO public.product_discovery_embeddings (
-      product_id, merchant_id, embedding, source_updated_at
+      product_id, merchant_id, embedding, source_hash
     ) VALUES (
       'cb58d110-0000-4000-8000-000000000103',
       'cb58d110-0000-4000-8000-000000000001',
-      ('[' || repeat('0,', 767) || '1]')::extensions.vector(768), now()
+      ('[' || repeat('0,', 767) || '1]')::extensions.vector(768), repeat('0', 64)
     );
     RAISE EXCEPTION 'read-only staff inserted an embedding';
   EXCEPTION WHEN insufficient_privilege THEN
@@ -88,6 +95,11 @@ $editor$;
 
 DO $boundary$
 BEGIN
+  IF (SELECT source_hash FROM public.product_discovery_embeddings
+      WHERE product_id = 'cb58d110-0000-4000-8000-000000000101')
+      IS DISTINCT FROM '1179d62b0254a32ab3cfc82886b9eb550fc9e11c92ceb1fbcf350dfaf04166b2' THEN
+    RAISE EXCEPTION 'SQL source fingerprint differs from the backfill format';
+  END IF;
   IF pg_catalog.has_table_privilege('anon', 'public.product_discovery_embeddings', 'SELECT') THEN
     RAISE EXCEPTION 'anonymous callers must not read raw product embeddings';
   END IF;
@@ -112,5 +124,22 @@ BEGIN
   END IF;
 END;
 $search$;
+
+SET LOCAL ROLE service_role;
+UPDATE public.products SET name = 'Renamed Discovery Camera'
+WHERE id = 'cb58d110-0000-4000-8000-000000000101';
+SET LOCAL ROLE anon;
+DO $stale$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM public.search_product_discovery_embeddings(
+      ('[' || repeat('0,', 767) || '1]')::extensions.vector(768),
+      'cb58d110-0000-4000-8000-000000000001', 20
+    )
+  ) THEN
+    RAISE EXCEPTION 'stale text embedding remains publicly searchable';
+  END IF;
+END;
+$stale$;
 
 ROLLBACK;

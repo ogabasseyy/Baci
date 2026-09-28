@@ -4,7 +4,7 @@ CREATE TABLE public.product_discovery_embeddings (
   product_id uuid PRIMARY KEY REFERENCES public.products(id) ON DELETE CASCADE,
   merchant_id uuid NOT NULL REFERENCES public.merchants(id) ON DELETE CASCADE,
   embedding extensions.vector(768) NOT NULL,
-  source_updated_at timestamptz NOT NULL,
+  source_hash text NOT NULL CHECK (source_hash ~ '^[0-9a-f]{64}$'),
   model text NOT NULL DEFAULT 'gemini-embedding-2'
     CHECK (model = 'gemini-embedding-2'),
   generated_at timestamptz NOT NULL DEFAULT now()
@@ -65,7 +65,10 @@ AS $$
     AND p.merchant_id = merchant_id_param
     AND p.status = 'active'
     AND e.model = 'gemini-embedding-2'
-    AND (p.updated_at IS NULL OR e.source_updated_at >= p.updated_at)
+    AND e.source_hash = encode(extensions.digest(convert_to(
+      array_to_json(ARRAY[p.name, p.brand, p.category, p.description])::text,
+      'UTF8'
+    ), 'sha256'), 'hex')
   ORDER BY e.embedding OPERATOR(extensions.<=>) query_embedding
   LIMIT LEAST(GREATEST(coalesce(result_limit, 20), 1), 100);
 $$;

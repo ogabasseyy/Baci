@@ -31,8 +31,7 @@ export const test = base.extend<{
         if (qaScenario === 'payment-retry') paymentRetryScenario = true;
         if (
           qaScenario === 'manual-api-integration' ||
-          qaScenario === 'manual-checkout-flow' ||
-          qaScenario === 'manual-address-clear'
+          qaScenario === 'manual-checkout-flow'
         )
           manualApiScenarioWasVisited = true;
         if (qaScenario === 'manual-api-integration')

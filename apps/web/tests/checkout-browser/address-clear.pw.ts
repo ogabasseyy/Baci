@@ -45,5 +45,8 @@ test('focused address clear control removes its quote and disables Continue', as
   );
   await address.fill('12 Broad Street, Lagos Island, Lagos');
   expect((await refreshedQuoteResponse).status()).toBe(200);
+  await expect(
+    page.getByText('GIG Logistics - Standard', { exact: true })
+  ).toBeVisible();
   await expect(continueButton).toBeEnabled();
 });

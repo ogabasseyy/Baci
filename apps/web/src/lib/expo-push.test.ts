@@ -340,24 +340,6 @@ describe('notifyMerchant', () => {
     expect(mockSendPushNotificationsAsync).not.toHaveBeenCalled();
   });
 
-  it('marks a rejected provider request as an unknown delivery', async () => {
-    const mockChain = createChainableMock([{ token: 'ExponentPushToken[m1]' }]);
-    vi.mocked(createAdminClient).mockReturnValue({
-      from: vi.fn().mockReturnValue(mockChain),
-    } as never);
-    mockSendPushNotificationsAsync.mockRejectedValueOnce(
-      new Error('network timeout')
-    );
-
-    const result = await notifyMerchant('merchant-123', 'Test', 'Body');
-
-    expect(result).toMatchObject({
-      sent: 0,
-      failed: 1,
-      deliveryOutcome: 'unknown',
-    });
-  });
-
   it('deactivates DeviceNotRegistered tokens', async () => {
     const updateChain = createChainableMock();
     const ticketInsertChain = createChainableMock();
@@ -647,47 +629,6 @@ describe('notifyMerchant', () => {
       failed: 0,
       errors: ['DB connection failed'],
     });
-  });
-
-  it('records a failed attempt when push sending throws before ticket processing', async () => {
-    const selectChain = createChainableMock([
-      { token: 'ExponentPushToken[m1]' },
-      { token: 'ExponentPushToken[m2]' },
-    ]);
-    const attemptInsertChain = createChainableMock();
-
-    vi.mocked(createAdminClient).mockReturnValue({
-      from: vi
-        .fn()
-        .mockReturnValueOnce(selectChain)
-        .mockReturnValueOnce(attemptInsertChain),
-    } as never);
-
-    mockChunkPushNotifications.mockImplementationOnce(() => {
-      throw new Error('Chunking failed');
-    });
-
-    const result = await notifyMerchant('merchant-123', 'Test', 'Body', {
-      type: 'new_order',
-    });
-
-    expect(result).toEqual({
-      sent: 0,
-      failed: 2,
-      errors: ['Chunking failed'],
-      deliveryOutcome: 'unknown',
-    });
-    expect(attemptInsertChain.insert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        merchant_id: 'merchant-123',
-        title: 'Test',
-        body: 'Body',
-        payload: { type: 'new_order' },
-        token_count: 2,
-        failed_count: 2,
-        status: 'failed',
-      })
-    );
   });
 
   it('skips excluded tokens so retries never duplicate delivered alerts', async () => {

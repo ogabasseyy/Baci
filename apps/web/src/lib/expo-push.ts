@@ -23,6 +23,7 @@ import {
   sendPushNotificationChunks,
 } from './expo-push-chunk-delivery';
 import { excludeDeliveredTokens, withDeliveredTokens } from './expo-push-retry';
+import { hasUncertainTicketDelivery } from './expo-push-ticket-delivery';
 
 // Module-scope cache: locale + minimumFractionDigits are static; currency varies.
 const _currencyFormatterCache = new Map<string, Intl.NumberFormat>();
@@ -525,12 +526,7 @@ export async function processTickets(
   supabase: ReturnType<typeof createAdminClient>,
   context?: TicketContext
 ): Promise<NotificationSendResult> {
-  // ExpoError tickets are synthesized after a provider request failed without
-  // a definitive response; delivery may still have happened.
-  const deliveryUnknown = tickets.some(
-    (ticket) =>
-      ticket.status === 'error' && ticket.details?.error === 'ExpoError'
-  );
+  const deliveryUnknown = hasUncertainTicketDelivery(tickets);
   let sent = 0;
   let failed = 0;
   const succeededTokens: string[] = [];

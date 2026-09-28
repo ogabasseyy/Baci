@@ -18,32 +18,48 @@ function makeFakeFetch(bytesByUrl) {
   }));
 }
 
-function seedManifestFile(webRoot, entries, bakedAtByUrl = {}) {
+function seedManifestFile(webRoot, entries, options = {}) {
+  const { bakedAtByUrl = {}, brokenAssets = {} } = options;
   const dir = resolve(webRoot, 'src/config');
   mkdirSync(dir, { recursive: true });
-  const manifestPath = resolve(dir, 'ogabassey-hero-snapshot-manifest.ts');
+  const outDir = resolve(webRoot, 'public/_hero/ogabassey');
+  mkdirSync(outDir, { recursive: true });
   const body = Object.entries(entries)
     .map(([url, sha]) => {
       const bakedAt =
         url in bakedAtByUrl ? bakedAtByUrl[url] : new Date().toISOString();
       const bakedAtLine =
         bakedAt === null ? '' : `\n      bakedAt: '${bakedAt}',`;
+      // One content-addressed asset per entry; broken modes leave the
+      // manifest reference intact while breaking the file it points at.
+      const content = Buffer.from(`snapshot-bytes:${url}`);
+      const fileName = `${digestHex(content).slice(0, 12)}-640.avif`;
+      const href = `/_hero/ogabassey/${fileName}`;
+      const mode = brokenAssets[url] ?? 'ok';
+      if (mode === 'corrupt') {
+        writeFileSync(resolve(outDir, fileName), Buffer.from('corrupt'));
+      } else if (mode !== 'missing') {
+        writeFileSync(resolve(outDir, fileName), content);
+      }
+      const descriptor = mode === 'width-mismatch' ? '1280w' : '640w';
       return (
-        `    '${url}': {\n      sourceUrl: '${url}',\n      sourceSha256: '${sha}',` +
+        `    '${url}': {\n      sourceUrl: '${url}',\n      sourceSha256: '${sha}',\n` +
+        `      href: '${href}',\n      srcSet: '${href} ${descriptor}',` +
         `${bakedAtLine}\n    },`
       );
     })
     .join('\n');
+  const manifestPath = resolve(dir, 'ogabassey-hero-snapshot-manifest.ts');
   writeFileSync(
     manifestPath,
     `export const OGABASSEY_HOME_HERO_SNAPSHOT_MANIFEST_VERSION = 1;\n\n` +
       `export const OGABASSEY_HOME_HERO_SNAPSHOT_MANIFEST: Record<string, Record<string, object>> = ` +
       `{\n  ogabassey: {\n${body}\n  },\n};\n`
   );
-  return manifestPath;
+  return { manifestPath, outDir };
 }
 
-function sha(bytes) {
+function digestHex(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
@@ -54,9 +70,9 @@ beforeEach(() => {
 describe('checkSnapshotFreshness', () => {
   it('passes when every kept source matches its recorded hash', async () => {
     const webRoot = mkdtempSync(join(tmpdir(), 'hero-check-'));
-    const manifestPath = seedManifestFile(webRoot, {
-      [SOURCE_URL]: sha('bytes-v1'),
-      [OTHER_URL]: sha('other-bytes'),
+    const { manifestPath, outDir } = seedManifestFile(webRoot, {
+      [SOURCE_URL]: digestHex('bytes-v1'),
+      [OTHER_URL]: digestHex('other-bytes'),
     });
     const { checked, drifted } = await checkSnapshotFreshness({
       fetchImpl: makeFakeFetch({
@@ -64,6 +80,7 @@ describe('checkSnapshotFreshness', () => {
         [OTHER_URL]: Buffer.from('other-bytes'),
       }),
       manifestPath,
+      outDir,
       slug: 'ogabassey',
       urls: [],
     });
@@ -74,8 +91,8 @@ describe('checkSnapshotFreshness', () => {
 
   it('fails loudly on an in-place source overwrite', async () => {
     const webRoot = mkdtempSync(join(tmpdir(), 'hero-check-'));
-    const manifestPath = seedManifestFile(webRoot, {
-      [SOURCE_URL]: sha('bytes-v1'),
+    const { manifestPath, outDir } = seedManifestFile(webRoot, {
+      [SOURCE_URL]: digestHex('bytes-v1'),
     });
     await expect(
       checkSnapshotFreshness({
@@ -83,6 +100,7 @@ describe('checkSnapshotFreshness', () => {
           [SOURCE_URL]: Buffer.from('bytes-v2-overwritten'),
         }),
         manifestPath,
+        outDir,
         slug: 'ogabassey',
         urls: [],
       })
@@ -91,9 +109,9 @@ describe('checkSnapshotFreshness', () => {
 
   it('checks only the requested subset when urls are given', async () => {
     const webRoot = mkdtempSync(join(tmpdir(), 'hero-check-'));
-    const manifestPath = seedManifestFile(webRoot, {
-      [SOURCE_URL]: sha('bytes-v1'),
-      [OTHER_URL]: sha('other-bytes'),
+    const { manifestPath, outDir } = seedManifestFile(webRoot, {
+      [SOURCE_URL]: digestHex('bytes-v1'),
+      [OTHER_URL]: digestHex('other-bytes'),
     });
     const fetchImpl = makeFakeFetch({
       [SOURCE_URL]: Buffer.from('bytes-v1'),
@@ -102,6 +120,7 @@ describe('checkSnapshotFreshness', () => {
     const { checked } = await checkSnapshotFreshness({
       fetchImpl,
       manifestPath,
+      outDir,
       slug: 'ogabassey',
       urls: [SOURCE_URL],
     });
@@ -112,13 +131,15 @@ describe('checkSnapshotFreshness', () => {
 
   it('fails on entries older than the re-bake cadence without fetching', async () => {
     const webRoot = mkdtempSync(join(tmpdir(), 'hero-check-'));
-    const manifestPath = seedManifestFile(
+    const { manifestPath, outDir } = seedManifestFile(
       webRoot,
-      { [SOURCE_URL]: sha('bytes-v1') },
+      { [SOURCE_URL]: digestHex('bytes-v1') },
       {
-        [SOURCE_URL]: new Date(
-          Date.now() - 31 * 24 * 60 * 60 * 1000
-        ).toISOString(),
+        bakedAtByUrl: {
+          [SOURCE_URL]: new Date(
+            Date.now() - 31 * 24 * 60 * 60 * 1000
+          ).toISOString(),
+        },
       }
     );
     const fetchImpl = makeFakeFetch({
@@ -128,6 +149,7 @@ describe('checkSnapshotFreshness', () => {
       checkSnapshotFreshness({
         fetchImpl,
         manifestPath,
+        outDir,
         slug: 'ogabassey',
         urls: [],
       })
@@ -137,30 +159,57 @@ describe('checkSnapshotFreshness', () => {
 
   it('fails on entries with a missing bakedAt', async () => {
     const webRoot = mkdtempSync(join(tmpdir(), 'hero-check-'));
-    const manifestPath = seedManifestFile(
+    const { manifestPath, outDir } = seedManifestFile(
       webRoot,
-      { [SOURCE_URL]: sha('bytes-v1') },
-      { [SOURCE_URL]: null }
+      { [SOURCE_URL]: digestHex('bytes-v1') },
+      { bakedAtByUrl: { [SOURCE_URL]: null } }
     );
     await expect(
       checkSnapshotFreshness({
         fetchImpl: makeFakeFetch({}),
         manifestPath,
+        outDir,
         slug: 'ogabassey',
         urls: [],
       })
     ).rejects.toThrow(/no parseable bakedAt/);
   });
 
+  it('fails on missing or corrupted local assets without fetching', async () => {
+    for (const mode of ['missing', 'corrupt', 'width-mismatch']) {
+      const webRoot = mkdtempSync(join(tmpdir(), 'hero-check-'));
+      const { manifestPath, outDir } = seedManifestFile(
+        webRoot,
+        { [SOURCE_URL]: digestHex('bytes-v1') },
+        { brokenAssets: { [SOURCE_URL]: mode } }
+      );
+      const fetchImpl = makeFakeFetch({
+        [SOURCE_URL]: Buffer.from('bytes-v1'),
+      });
+      // eslint-disable-next-line no-await-in-loop
+      await expect(
+        checkSnapshotFreshness({
+          fetchImpl,
+          manifestPath,
+          outDir,
+          slug: 'ogabassey',
+          urls: [],
+        })
+      ).rejects.toThrow(/local assets invalid.*re-bake/);
+      expect(fetchImpl).not.toHaveBeenCalled();
+    }
+  });
+
   it('rejects unknown slugs and unkept urls', async () => {
     const webRoot = mkdtempSync(join(tmpdir(), 'hero-check-'));
-    const manifestPath = seedManifestFile(webRoot, {
-      [SOURCE_URL]: sha('bytes-v1'),
+    const { manifestPath, outDir } = seedManifestFile(webRoot, {
+      [SOURCE_URL]: digestHex('bytes-v1'),
     });
     await expect(
       checkSnapshotFreshness({
         fetchImpl: makeFakeFetch({}),
         manifestPath,
+        outDir,
         slug: 'nope',
         urls: [],
       })
@@ -169,6 +218,7 @@ describe('checkSnapshotFreshness', () => {
       checkSnapshotFreshness({
         fetchImpl: makeFakeFetch({}),
         manifestPath,
+        outDir,
         slug: 'ogabassey',
         urls: ['https://cdn.ogabassey.com/unkept.jpg'],
       })

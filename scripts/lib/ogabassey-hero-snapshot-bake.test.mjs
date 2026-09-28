@@ -233,6 +233,55 @@ describe('bakeSnapshots', () => {
     );
   });
 
+  it('leaves no partial or temp files when the asset write fails', async () => {
+    const outDir = resolve(mkdtempSync(join(tmpdir(), 'hero-bake-')), 'ogabassey');
+    mkdirSync(outDir, { recursive: true });
+    // A committed asset the old manifest still references: the failed run
+    // must neither truncate it nor leave a partial/temp sibling behind.
+    const committedName = 'committed-asset-640.avif';
+    writeFileSync(resolve(outDir, committedName), 'committed-bytes');
+    // Fail the atomic replacement deterministically (and as any user): a
+    // directory at the destination path makes the temp→final rename throw
+    // after the temp write succeeded, exercising the same catch block as a
+    // mid-write ENOSPC.
+    const firstName = `${createHash('sha256').update('fake-avif-v1-256').digest('hex').slice(0, 12)}-256.avif`;
+    mkdirSync(resolve(outDir, firstName));
+    await expect(
+      bakeSnapshots({
+        fetchImpl: makeFakeFetch(),
+        outDir,
+        sharpImpl: makeFakeSharp(),
+        slug: 'ogabassey',
+        urls: [SOURCE_URL],
+      })
+    ).rejects.toThrow();
+    expect(readdirSync(outDir).sort()).toEqual(
+      [committedName, firstName].sort()
+    );
+    expect(
+      readdirSync(outDir).some((name) => name.includes('.tmp-'))
+    ).toBe(false);
+    expect(readFileSync(resolve(outDir, committedName), 'utf8')).toBe(
+      'committed-bytes'
+    );
+  });
+
+  it('sweeps stale temp siblings from a killed run before baking', async () => {
+    const outDir = resolve(mkdtempSync(join(tmpdir(), 'hero-bake-')), 'ogabassey');
+    mkdirSync(outDir, { recursive: true });
+    writeFileSync(resolve(outDir, 'abc123-640.avif.tmp-99999999'), 'partial');
+    await bakeSnapshots({
+      fetchImpl: makeFakeFetch(),
+      outDir,
+      sharpImpl: makeFakeSharp(),
+      slug: 'ogabassey',
+      urls: [SOURCE_URL],
+    });
+    expect(
+      readdirSync(outDir).some((name) => name.includes('.tmp-'))
+    ).toBe(false);
+  });
+
   it('rejects a baked file whose dimensions do not match', async () => {
     const outDir = resolve(mkdtempSync(join(tmpdir(), 'hero-bake-')), 'ogabassey');
     await expect(

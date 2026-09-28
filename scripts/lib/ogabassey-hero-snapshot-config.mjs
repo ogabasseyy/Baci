@@ -20,7 +20,7 @@ export const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
 // Per-URL download deadline: generous for a <=15MB CDN fetch (effective
 // floor ~1Mbps), but a stalled server must fail, never hang the pipeline.
 export const DOWNLOAD_TIMEOUT_MS = 120_000;
-export const MANAGED_FILE_PATTERN = /^[0-9a-f]{12}-\d+\.avif$/;
+export const MANAGED_FILE_PATTERN = /^(?<hash>[0-9a-f]{12})-(?<width>\d+)\.avif$/;
 // Re-bake cadence enforced by `--check` (see
 // .github/workflows/ogabassey-hero-snapshot-freshness.yml). This is the
 // single source of truth for the freshness window: the runtime resolver is

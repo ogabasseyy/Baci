@@ -8,18 +8,23 @@
 // than SNAPSHOT_MAX_AGE_MS: the runtime resolver is wall-clock-free by
 // design (prerendered and request-time consumers must agree), so the
 // re-bake cadence is enforced here, on a schedule — see
-// .github/workflows/ogabassey-hero-snapshot-freshness.yml.
+// .github/workflows/ogabassey-hero-snapshot-freshness.yml. Every run
+// additionally verifies the manifest-referenced local AVIF files exist
+// with bytes matching their content-addressed filenames, so a deleted or
+// hand-corrupted asset fails the check even when the remote hash matches.
 
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { SNAPSHOT_MAX_AGE_MS } from './ogabassey-hero-snapshot-config.mjs';
 import { HeroSnapshotError } from './ogabassey-hero-snapshot-errors.mjs';
+import { verifySnapshotLocalAssets } from './ogabassey-hero-snapshot-local-assets.mjs';
 import { readSnapshotManifestTenants } from './ogabassey-hero-snapshot-manifest-read.mjs';
 import { fetchSnapshotSource } from './ogabassey-hero-snapshot-source.mjs';
 
 export async function checkSnapshotFreshness({
   fetchImpl,
   manifestPath,
+  outDir,
   slug,
   urls,
 }) {
@@ -60,6 +65,16 @@ export async function checkSnapshotFreshness({
       hashTargets.push(url);
     }
   }
+  // Local assets before network: a deleted or hand-corrupted AVIF must
+  // fail the check even when the remote source hash still matches.
+  const { verifiedFiles } = verifySnapshotLocalAssets({
+    entries,
+    outDir,
+    urls: targets,
+  });
+  console.log(
+    `[hero-snapshots] verified ${verifiedFiles.length} local asset(s)`
+  );
   const drifted = [];
   for (const url of hashTargets) {
     // eslint-disable-next-line no-await-in-loop

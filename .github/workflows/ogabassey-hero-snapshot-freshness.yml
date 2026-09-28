@@ -17,6 +17,9 @@ on:
     paths:
       - "scripts/generate-ogabassey-hero-snapshots.mjs"
       - "scripts/lib/ogabassey-hero-snapshot-*.mjs"
+      # The orchestrator filename is plural `snapshots` (no trailing dash),
+      # so the glob above does not match it.
+      - "scripts/lib/ogabassey-hero-snapshots.mjs"
       - "apps/web/src/config/ogabassey-home-hero-snapshot-manifest.ts"
       - "apps/web/src/lib/ogabassey-home-hero-snapshot.ts"
       - ".github/workflows/ogabassey-hero-snapshot-freshness.yml"

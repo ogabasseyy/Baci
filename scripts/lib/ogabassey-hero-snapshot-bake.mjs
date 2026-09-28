@@ -1,7 +1,14 @@
 // Snapshot baking for the hero snapshot pipeline.
 
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { resolve } from 'node:path';
 import {
   DEFAULT_WIDTH,
@@ -19,6 +26,15 @@ export async function bakeSnapshots({
   urls,
 }) {
   mkdirSync(outDir, { recursive: true });
+  // A killed run can leave `<name>.tmp-<pid>` siblings behind; they match
+  // neither the managed pattern (so `--prune` ignores them) nor any
+  // manifest entry, so sweep them before baking. Managed names never
+  // contain `.tmp-`, so this cannot delete a real asset.
+  for (const stale of readdirSync(outDir)) {
+    if (/\.tmp-\d+$/.test(stale)) {
+      rmSync(resolve(outDir, stale), { force: true });
+    }
+  }
   const entries = [];
   // Rollback set: if any URL fails after earlier ones baked, remove this
   // run's files so a failed invocation never leaves unreferenced AVIFs in
@@ -100,7 +116,19 @@ async function bakeOneUrl({
     // Same name implies same bytes (content hash): overwriting a committed
     // file is a no-op content-wise, and it must NOT join the rollback set.
     const createdByThisRun = !existsSync(filePath);
-    writeFileSync(filePath, encoded);
+    // Atomic replacement: a direct write that fails mid-stream (ENOSPC)
+    // would leave a partial file the rollback set never tracked — or
+    // truncate a committed asset the old manifest still references. The
+    // temp sibling shares the directory so the rename stays on one
+    // filesystem; on failure the destination is untouched either way.
+    const tmpPath = `${filePath}.tmp-${process.pid}`;
+    try {
+      writeFileSync(tmpPath, encoded);
+      renameSync(tmpPath, filePath);
+    } catch (error) {
+      rmSync(tmpPath, { force: true });
+      throw error;
+    }
     if (createdByThisRun) {
       bakedPaths.push(filePath);
     }

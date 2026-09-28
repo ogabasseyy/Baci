@@ -41,14 +41,20 @@ export async function runGenerateOgabasseyHeroSnapshots(argv, deps = {}) {
   const manifestPath = deps.manifestPath ?? paths.manifestPath;
   const root = deps.root ?? paths.root;
   const { check, prune, slug, urls } = parseSnapshotArgs(argv);
+  const outDir = deps.outDir ?? resolve(webRoot, 'public/_hero', slug);
   if (check) {
-    return checkSnapshotFreshness({ fetchImpl, manifestPath, slug, urls });
+    return checkSnapshotFreshness({
+      fetchImpl,
+      manifestPath,
+      outDir,
+      slug,
+      urls,
+    });
   }
   // sharp is loaded only on the bake path: `--check` must run on bare
   // node (stdlib + global fetch) so the scheduled freshness workflow needs
   // no dependency install.
   const sharpImpl = deps.sharpImpl ?? (await import('sharp')).default;
-  const outDir = resolve(webRoot, 'public/_hero', slug);
   const { bakedPaths, entries } = await bakeSnapshots({
     fetchImpl,
     outDir,

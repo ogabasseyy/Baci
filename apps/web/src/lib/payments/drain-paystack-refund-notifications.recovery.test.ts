@@ -76,14 +76,24 @@ function database(
   ];
   const ledgerQuery = () => {
     let mode: 'payments' | 'refunds' = 'refunds';
+    const resolveLedger = () =>
+      Promise.resolve({
+        data:
+          mode === 'payments'
+            ? payments.map((payment) => ({
+                currency: 'NGN',
+                status: 'completed',
+                ...payment,
+              }))
+            : refunds,
+        error: null,
+      });
     const query = {
       eq: vi.fn((column: string) =>
-        column === 'status'
-          ? Promise.resolve({
-              data: mode === 'payments' ? payments : refunds,
-              error: null,
-            })
-          : query
+        column === 'status' ? resolveLedger() : query
+      ),
+      in: vi.fn((column: string) =>
+        column === 'status' ? resolveLedger() : query
       ),
       select: vi.fn((columns: string) => {
         mode = columns.includes('metadata') ? 'refunds' : 'payments';

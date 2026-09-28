@@ -44,10 +44,17 @@ describe('paystackRefundEventSchema', () => {
     expect(paystackRefundEventSchema.safeParse(payload).success).toBe(false);
   });
 
-  it('parses data-less events so the handler can acknowledge them', () => {
-    expect(
-      paystackRefundEventSchema.safeParse({ event: 'refund.processed' }).success
-    ).toBe(true);
+  it.each([
+    [{ event: 'refund.processed' }],
+    [{ data: {}, event: 'refund.processed' }],
+    [{ data: { status: 'processed' }, event: 'refund.processed' }],
+    [{ data: { id: 0 }, event: 'refund.processed' }],
+    [{ data: { id: -5 }, event: 'refund.processed' }],
+    [{ data: { transaction: 123 }, event: 'refund.processed' }],
+    [{ data: { transaction: { reference: '' } }, event: 'refund.failed' }],
+    [{ data: { transaction_reference: '' }, event: 'refund.processed' }],
+  ])('rejects events without a usable identifier (%j)', (payload) => {
+    expect(paystackRefundEventSchema.safeParse(payload).success).toBe(false);
   });
 
   it('passes unknown provider fields through', () => {

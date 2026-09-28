@@ -150,6 +150,20 @@ describe('POST /api/payments/webhook paystack refund events', () => {
     expect(mockReconcilePaystackRefundEvent).not.toHaveBeenCalled();
   });
 
+  it('rejects a signed refund event without a usable identifier', async () => {
+    const body = { event: 'refund.processed', data: { status: 'processed' } };
+    const response = await POST(
+      createMockRequest(body, {
+        'x-paystack-signature': createSignature(
+          JSON.stringify(body),
+          'test-paystack-secret'
+        ),
+      })
+    );
+    expect(response.status).toBe(400);
+    expect(mockReconcilePaystackRefundEvent).not.toHaveBeenCalled();
+  });
+
   it('rejects an unsigned Paystack refund event', async () => {
     const response = await POST(
       createMockRequest(

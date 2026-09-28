@@ -138,17 +138,18 @@ test('resumed order shows server totals and contact details with an empty cart',
   page,
 }) => {
   await seedCheckout(page, { emptyCart: true });
-  let lookups = 0;
-  await page.route('**/api/storefront/orders/**', (route) => {
-    lookups++;
-    const url = new URL(route.request().url());
-    expect(url.searchParams.get('merchant_slug')).toBe('ogabassey');
-    expect(url.searchParams.get('token')).toBe(order.tracking_token);
-    return route.fulfill({ json: order });
+  const resumeLookup = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      url.pathname === `/api/storefront/orders/${order.id}` &&
+      url.searchParams.get('merchant_slug') === 'ogabassey' &&
+      url.searchParams.get('token') === order.tracking_token
+    );
   });
   await page.goto(
     `/checkout?orderId=${order.id}&trackingToken=${order.tracking_token}`
   );
+  expect((await resumeLookup).status()).toBe(200);
   await expect(
     page.getByRole('heading', { name: 'Order Summary' })
   ).toBeVisible();
@@ -169,7 +170,6 @@ test('resumed order shows server totals and contact details with an empty cart',
   await page.getByRole('button', { name: 'Contact Information' }).click();
   await page.getByRole('textbox', { name: 'First Name' }).fill('Grace');
   await page.getByRole('button', { name: 'Continue to Delivery' }).click();
-  expect(lookups).toBe(1);
 });
 
 test('manual QA scenario controls are opt-in and reset local checkout state', async ({

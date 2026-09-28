@@ -1,5 +1,6 @@
 import { test as base, expect } from '@playwright/test';
 import { isFixtureAssetRequest } from './request-allowlist';
+import { order } from './setup';
 
 export const test = base.extend<{
   networkGuard: undefined;
@@ -120,11 +121,19 @@ export const test = base.extend<{
         const isManualStorefrontOrderRead =
           /^\/api\/storefront\/orders\/[^/]+$/.test(url.pathname) &&
           request.method() === 'GET';
+        const isFixtureResumeOrderRead =
+          request.method() === 'GET' &&
+          url.pathname === `/api/storefront/orders/${order.id}`;
         if (
           manualApiScenario() &&
           url.origin === new URL(page.url()).origin &&
           (manualApiMethods[url.pathname]?.includes(request.method()) ||
             isManualStorefrontOrderRead)
+        )
+          return route.continue();
+        if (
+          isFixtureResumeOrderRead &&
+          url.origin === new URL(page.url()).origin
         )
           return route.continue();
         const responses: Record<string, unknown> = {

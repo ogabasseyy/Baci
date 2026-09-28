@@ -46,7 +46,13 @@ export async function discoverMcpProducts({
       products.slice(offset, offset + 100), supabase, merchantId, args.condition
     ));
   }
-  if (semanticSearch && loaded.sanitizedQuery &&
+  const explicitCatalogFilter = [args.category, args.brand, args.condition]
+    .some((value) => Boolean(value && sanitizeString(value, 50).trim()));
+  const ambiguousSingleWord = loaded.sanitizedQuery &&
+    /^[a-z]{3,}$/i.test(loaded.sanitizedQuery) &&
+    !explicitCatalogFilter &&
+    !inferSmartphoneCategory(loaded.sanitizedQuery, args.category);
+  if (semanticSearch && loaded.sanitizedQuery && !ambiguousSingleWord &&
     selectSearchProductsByPrice(hydratedProducts, args, limit).length < limit) {
     try {
       const lexicalIds = new Set(products.map((product) => product.id));

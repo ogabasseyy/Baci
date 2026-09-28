@@ -38,13 +38,38 @@ describe('gated semantic discovery', () => {
 
   it('falls back to lexical results when the optional embedding lookup fails', async () => {
     const { supabase } = discoveryClient();
+    const semanticSearch = vi.fn(async () => { throw new Error('provider unavailable'); });
     const result = await discoverMcpProducts({
-      args: { query: 'work' }, merchantId: 'merchant-1',
+      args: { query: 'office laptop' }, merchantId: 'merchant-1',
       sanitizeString: (input) => input,
-      semanticSearch: async () => { throw new Error('provider unavailable'); },
+      semanticSearch,
       supabase,
     });
     expect(result.selectedProducts).toEqual([]);
+    expect(semanticSearch).toHaveBeenCalledWith('office laptop');
+  });
+
+  it('does not reintroduce recommendations for an ambiguous single word', async () => {
+    const { supabase } = discoveryClient();
+    const semanticSearch = vi.fn(async () => ['laptop']);
+    const result = await discoverMcpProducts({
+      args: { query: 'work' }, merchantId: 'merchant-1',
+      sanitizeString: (input) => input,
+      semanticSearch, supabase,
+    });
+    expect(result.selectedProducts).toEqual([]);
+    expect(semanticSearch).not.toHaveBeenCalled();
+  });
+
+  it('does not treat a sanitized-empty category as a narrowing filter', async () => {
+    const { supabase } = discoveryClient();
+    const semanticSearch = vi.fn(async () => ['laptop']);
+    await discoverMcpProducts({
+      args: { query: 'work', category: '***' }, merchantId: 'merchant-1',
+      sanitizeString: (input) => input.replace(/\*/g, ''),
+      semanticSearch, supabase,
+    });
+    expect(semanticSearch).not.toHaveBeenCalled();
   });
 
   it('uses the sanitized lexical brand and category for semantic candidates', async () => {

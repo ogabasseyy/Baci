@@ -59,7 +59,7 @@ function renderList(
     listError: null,
     onEndReached: jest.fn(),
     onProductPress: jest.fn(),
-    onRetry: jest.fn(),
+    onRetryNextPage: jest.fn(),
     products: [],
     totalCount: 0,
     ...overrides,
@@ -117,13 +117,13 @@ describe('SearchResultsList', () => {
   });
 
   it('keeps loaded products visible when the next page fails', () => {
-    const onRetry = jest.fn();
+    const onRetryNextPage = jest.fn();
     const products = [{ id: 'product-1', name: 'iPhone 16' }] as Product[];
 
     renderList({
       committedQuery: 'iphone',
       listError: 'Search failed',
-      onRetry,
+      onRetryNextPage,
       products,
       totalCount: 45,
     });
@@ -134,6 +134,6 @@ describe('SearchResultsList', () => {
     fireEvent.press(
       screen.getByRole('button', { name: 'Retry loading more results' })
     );
-    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(onRetryNextPage).toHaveBeenCalledTimes(1);
   });
 });

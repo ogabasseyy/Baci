@@ -1,6 +1,12 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { SearchPageErrorPanel } from './search-page-error-panel';
+
+const mockRefresh = vi.fn();
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: mockRefresh }),
+}));
 
 vi.mock('next/link', () => ({
   default: ({
@@ -20,12 +26,11 @@ vi.mock('next/link', () => ({
 }));
 
 describe('SearchPageErrorPanel', () => {
-  it('offers retry and the all-products route without no-results copy', () => {
+  it('offers a route refresh retry and the all-products route', () => {
     render(
       <SearchPageErrorPanel
         allProductsHref="/ogabassey/products"
         query="iphone"
-        retryHref="/ogabassey/search?q=iphone"
       />
     );
 
@@ -35,10 +40,12 @@ describe('SearchPageErrorPanel', () => {
     expect(
       screen.queryByRole('heading', { name: /no products found/i })
     ).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /try again/i })).toHaveAttribute(
-      'href',
-      '/ogabassey/search?q=iphone'
-    );
+
+    // Retry refreshes the current route (re-executing the search) instead of
+    // linking to the identical URL, which would reuse the cached error route.
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }));
+    expect(mockRefresh).toHaveBeenCalledTimes(1);
+
     expect(
       screen.getByRole('link', { name: /view all products/i })
     ).toHaveAttribute('href', '/ogabassey/products');

@@ -1,57 +1,18 @@
 'use client';
 
-import { Search, TrendingUp, X } from 'lucide-react';
-import Image from 'next/image';
+import { Search, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { useCurrencyWithCountry } from '@/hooks/use-currency';
 import { useDebounce } from '@/hooks/use-debounce';
-import { trackEvent } from '@/lib/event-tracking';
-import { getProductUrl } from '@/lib/product-url';
 import { cn } from '@/lib/utils';
+import { createAutocompleteKeyDownHandler } from './search-autocomplete-keyboard';
+import { SearchAutocompletePopup } from './search-autocomplete-popup';
+import type { SearchAutocompleteProps } from './search-autocomplete-types';
+import { useAutocompleteSuggestions } from './use-autocomplete-suggestions';
 
-interface Product {
-  id: string;
-  name: string;
-  slug?: string;
-  category?: string; // Backward compatibility (TEXT column - deprecated)
-  category_id?: string; // FK to categories table
-  categories?: {
-    id: string;
-    name: string;
-    slug?: string;
-  }; // Joined category object
-  condition?: 'new' | 'used' | string;
-  condition_detail?: string;
-  price: number;
-  image_small: string;
-}
-
-interface PopularSearch {
-  search_query: string;
-  search_count: number;
-}
-
-export interface SearchAutocompleteProps {
-  merchantId: string;
-  value: string;
-  onChange: (value: string) => void;
-  onSelectProduct?: (url: string) => void;
-  /**
-   * Explicit full-search submission (e.g. navigate to a results page).
-   * When provided, Enter with no highlighted option submits the current
-   * input instead of opening the first product suggestion. When omitted,
-   * the legacy first-product behavior is preserved.
-   */
-  onSubmitSearch?: (query: string) => void;
-  placeholder?: string;
-  className?: string;
-  id?: string;
-  name?: string;
-  autoFocus?: boolean;
-  countryCode?: string | null;
-  payoutCurrency?: string | null;
-}
+// Re-exported so consumers keep importing the props from this module.
+export type { SearchAutocompleteProps } from './search-autocomplete-types';
 
 export function SearchAutocomplete({
   merchantId,
@@ -68,9 +29,6 @@ export function SearchAutocomplete({
   payoutCurrency,
 }: SearchAutocompleteProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [suggestions, setSuggestions] = useState<Product[]>([]);
-  const [popularSearches, setPopularSearches] = useState<PopularSearch[]>([]);
-  const [loading, setLoading] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -82,6 +40,36 @@ export function SearchAutocomplete({
     safeCountryCode,
     payoutCurrency
   );
+
+  // The popup length threshold follows the consumer contract everywhere
+  // (open, focus-reopen, reset): submit-wired popups stay available for any
+  // nonblank query — the results route accepts single characters — while
+  // legacy popups need a fetchable (2+) query. Suggestion clearing keeps
+  // the 2+ fetch gate regardless.
+  const isPopupLength = (text: string) =>
+    onSubmitSearch ? text.trim().length > 0 : text.length >= 2;
+
+  const { clearSuggestions, loading, popularSearches, suggestions } =
+    useAutocompleteSuggestions({
+      debouncedValue,
+      merchantId,
+      onResultsReceived: () => {
+        setIsOpen(true);
+        setHighlightedIndex(-1);
+      },
+    });
+
+  const handleKeyDown = createAutocompleteKeyDownHandler({
+    highlightedIndex,
+    onChange,
+    onClose: () => setIsOpen(false),
+    onHighlight: setHighlightedIndex,
+    onSelectProduct,
+    onSubmitSearch,
+    popularSearches,
+    suggestions,
+    value,
+  });
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -110,10 +98,10 @@ export function SearchAutocomplete({
   if (value !== prevValue) {
     setPrevValue(value);
     if (value.length < 2) {
-      setLoading(false);
-      setSuggestions([]);
-      setPopularSearches([]);
-      setIsOpen(false);
+      clearSuggestions();
+      if (!isPopupLength(value)) {
+        setIsOpen(false);
+      }
     }
   }
 
@@ -123,121 +111,12 @@ export function SearchAutocomplete({
   if (debouncedValue !== prevDebouncedValue) {
     setPrevDebouncedValue(debouncedValue);
     if (debouncedValue.length < 2) {
-      setLoading(false);
-      setSuggestions([]);
-      setPopularSearches([]);
-      setIsOpen(false);
+      clearSuggestions();
+      if (!isPopupLength(debouncedValue)) {
+        setIsOpen(false);
+      }
     }
   }
-
-  // Debounced search with autocomplete suggestions
-  useEffect(() => {
-    if (debouncedValue.length < 2) {
-      return;
-    }
-
-    // Abort the request when this debounced query is superseded (cleanup runs on
-    // the next debouncedValue) so a slow earlier query can never paint over newer
-    // results and the server stops work it no longer needs. We deliberately do
-    // NOT abort on every raw keystroke: that would cancel the in-flight request
-    // without guaranteeing a replacement (e.g. type "iphones" then backspace to
-    // "iphone" within the debounce window — debouncedValue never changes, so the
-    // effect would not re-run and the dropdown would be left empty).
-    const controller = new AbortController();
-    let isMounted = true;
-    setLoading(true);
-    fetch(
-      `/api/search/autocomplete?q=${encodeURIComponent(debouncedValue)}&merchant_id=${merchantId}&limit=10`,
-      { signal: controller.signal }
-    )
-      .then((response) => response.json())
-      .then(
-        (data: {
-          suggestions?: Product[];
-          popularSearches?: PopularSearch[];
-        }) => {
-          if (!isMounted) {
-            return;
-          }
-          setSuggestions(data.suggestions || []);
-          setPopularSearches(data.popularSearches || []);
-          setIsOpen(true);
-          setHighlightedIndex(-1);
-
-          // Track search event for merchant analytics
-          const resultsCount =
-            (data.suggestions?.length || 0) +
-            (data.popularSearches?.length || 0);
-          trackEvent.search(merchantId, debouncedValue, resultsCount);
-        }
-      )
-      .catch((error: unknown) => {
-        // Ignore aborts from superseded keystrokes / unmount.
-        if (controller.signal.aborted || !isMounted) {
-          return;
-        }
-        console.error('Autocomplete error:', error);
-        setSuggestions([]);
-        setPopularSearches([]);
-      })
-      .finally(() => {
-        if (isMounted) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-      controller.abort();
-    };
-  }, [debouncedValue, merchantId]);
-
-  // Keyboard navigation
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    const totalItems = suggestions.length + popularSearches.length;
-
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setHighlightedIndex((prev) => (prev < totalItems - 1 ? prev + 1 : prev));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : -1));
-    } else if (e.key === 'Enter' && highlightedIndex >= 0) {
-      e.preventDefault();
-      if (highlightedIndex < suggestions.length) {
-        const product = suggestions[highlightedIndex];
-        onSelectProduct?.(getProductUrl(product));
-        setIsOpen(false);
-      } else {
-        const searchIndex = highlightedIndex - suggestions.length;
-        const search = popularSearches[searchIndex];
-        if (onSubmitSearch) {
-          onSubmitSearch(search.search_query);
-        } else {
-          onChange(search.search_query);
-        }
-        setIsOpen(false);
-      }
-    } else if (e.key === 'Enter' && highlightedIndex < 0) {
-      // With an explicit submit handler, Enter always submits the typed
-      // query as a browsable search — even when product suggestions exist.
-      // Blank queries stay on the current page. Without the handler, keep
-      // the legacy behavior of opening the first product suggestion.
-      if (onSubmitSearch) {
-        if (value.trim()) {
-          e.preventDefault();
-          onSubmitSearch(value);
-          setIsOpen(false);
-        }
-      } else if (suggestions.length > 0) {
-        e.preventDefault();
-        onSelectProduct?.(getProductUrl(suggestions[0]));
-        setIsOpen(false);
-      }
-    } else if (e.key === 'Escape') {
-      setIsOpen(false);
-    }
-  };
 
   const hasResults = suggestions.length > 0 || popularSearches.length > 0;
   const listboxId = `search-listbox-${merchantId}`;
@@ -309,7 +188,11 @@ export function SearchAutocomplete({
             }
           }}
           onKeyDown={handleKeyDown}
-          onFocus={() => value.length >= 2 && setIsOpen(true)}
+          onFocus={() => {
+            if (isPopupLength(value)) {
+              setIsOpen(true);
+            }
+          }}
           className={cn(
             // Padding has TWO sources (see the icon comment): core CSS keyed on
             // `__field` / `__input--has-value` for storefront `source(none)`
@@ -336,8 +219,7 @@ export function SearchAutocomplete({
             onClick={() => {
               onChange('');
               setIsOpen(false);
-              setSuggestions([]);
-              setPopularSearches([]);
+              clearSuggestions();
               inputRef.current?.focus();
             }}
             // Geometry has TWO sources (see the icon comment): core CSS
@@ -359,167 +241,26 @@ export function SearchAutocomplete({
         {isOpen &&
           hasResults &&
           `${resultsCount} ${resultsCount === 1 ? 'result' : 'results'} available`}
-        {isOpen && !hasResults && value.length >= 2 && 'No results found'}
+        {isOpen && !hasResults && isPopupLength(value) && 'No results found'}
       </div>
 
-      {/* The popup container is deliberately NOT the listbox: a listbox may
-          only own option/group children, so the "See all results" action and
-          the loading status render as siblings beside it. */}
       {showPopup && (
-        <div className="absolute z-50 mt-2 w-full rounded-xl border border-gray-100 shadow-2xl bg-white text-gray-900 overflow-hidden ring-1 ring-black/5">
-          {hasResults && (
-            <div id={listboxId} role="listbox" aria-label="Search suggestions">
-              <div className="max-h-[400px] overflow-y-auto py-2">
-                {/* Product suggestions */}
-                {suggestions.length > 0 && (
-                  // biome-ignore lint/a11y/useSemanticElements: role="group" is correct for listbox groups
-                  <div
-                    className="mb-2"
-                    role="group"
-                    aria-labelledby="products-group-label"
-                  >
-                    <div
-                      id="products-group-label"
-                      className="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-gray-400"
-                    >
-                      Products
-                    </div>
-                    {suggestions.map((product, index) => (
-                      <button
-                        type="button"
-                        key={product.id}
-                        id={`search-option-${index}`}
-                        role="option"
-                        aria-selected={highlightedIndex === index}
-                        onClick={() => {
-                          onSelectProduct?.(getProductUrl(product));
-                          setIsOpen(false);
-                        }}
-                        className={cn(
-                          'flex w-full items-center gap-3 px-4 py-2 text-left transition-colors',
-                          highlightedIndex === index
-                            ? 'bg-red-50/80 text-gray-900'
-                            : 'hover:bg-gray-50'
-                        )}
-                      >
-                        {product.image_small ? (
-                          <div className="relative size-10 shrink-0 overflow-hidden rounded bg-gray-100 border border-gray-100">
-                            <Image
-                              src={product.image_small}
-                              alt=""
-                              fill
-                              sizes="40px"
-                              className="object-cover"
-                              aria-hidden="true"
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex size-10 items-center justify-center rounded bg-gray-100 text-gray-400">
-                            <Search size={16} />
-                          </div>
-                        )}
-                        <div className="flex-1 overflow-hidden">
-                          <div className="truncate font-semibold text-sm text-gray-900">
-                            {product.name}
-                          </div>
-                          <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
-                            {(product.categories?.name || product.category) && (
-                              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
-                                {product.categories?.name || product.category}
-                              </span>
-                            )}
-                            <span className="font-bold text-red-600">
-                              <span className="sr-only">Price: </span>
-                              {formatCurrencyCompact(product.price)}
-                            </span>
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Popular searches */}
-                {popularSearches.length > 0 && (
-                  // biome-ignore lint/a11y/useSemanticElements: role="group" is correct for listbox groups
-                  <div role="group" aria-labelledby="popular-searches-label">
-                    <div
-                      id="popular-searches-label"
-                      className="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-gray-400 border-t border-gray-50 mt-2"
-                    >
-                      Popular searches
-                    </div>
-                    {popularSearches.map((search, index) => {
-                      const optionIndex = suggestions.length + index;
-                      return (
-                        <button
-                          type="button"
-                          key={search.search_query}
-                          id={`search-option-${optionIndex}`}
-                          role="option"
-                          aria-selected={highlightedIndex === optionIndex}
-                          onClick={() => {
-                            onChange(search.search_query);
-                            setIsOpen(false);
-                          }}
-                          className={cn(
-                            'flex w-full items-center gap-3 px-4 py-2 text-left transition-colors',
-                            highlightedIndex === optionIndex
-                              ? 'bg-red-50/80 text-gray-900'
-                              : 'hover:bg-gray-50'
-                          )}
-                        >
-                          <div className="flex bg-gray-100 rounded-full p-1.5 text-gray-500">
-                            <TrendingUp
-                              className="size-3.5"
-                              aria-hidden="true"
-                            />
-                          </div>
-                          <span className="flex-1 truncate text-sm font-medium text-gray-700">
-                            {search.search_query}
-                          </span>
-                          {search.search_count > 10 && (
-                            <span className="text-[10px] font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
-                              Trending
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-          {!hasResults && canSubmitSearch && (
-            <p className="px-4 pt-3 text-sm text-gray-500">
-              No suggestions for “{trimmedValue}”
-            </p>
-          )}
-          {canSubmitSearch && (
-            <button
-              type="button"
-              onClick={() => {
-                onSubmitSearch?.(value);
-                setIsOpen(false);
-              }}
-              className="mt-1 flex w-full items-center justify-center gap-2 border-t border-gray-100 bg-gray-50 px-4 py-2.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-600"
-            >
-              <Search className="size-4" aria-hidden="true" />
-              <span className="truncate">
-                See all results for “{trimmedValue}”
-              </span>
-            </button>
-          )}
-          {loading && (
-            <div
-              className="border-t border-gray-100 bg-gray-50 p-2 text-center text-xs font-medium text-gray-500"
-              aria-live="polite"
-            >
-              Searching…
-            </div>
-          )}
-        </div>
+        <SearchAutocompletePopup
+          canSubmitSearch={canSubmitSearch}
+          formatCurrencyCompact={formatCurrencyCompact}
+          hasResults={hasResults}
+          highlightedIndex={highlightedIndex}
+          listboxId={listboxId}
+          loading={loading}
+          onChange={onChange}
+          onClose={() => setIsOpen(false)}
+          onSelectProduct={onSelectProduct}
+          onSubmitSearch={onSubmitSearch ?? (() => undefined)}
+          popularSearches={popularSearches}
+          suggestions={suggestions}
+          trimmedValue={trimmedValue}
+          value={value}
+        />
       )}
     </div>
   );

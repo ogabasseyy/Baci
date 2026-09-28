@@ -929,4 +929,60 @@ describe('SearchAutocomplete', () => {
       screen.queryByRole('button', { name: /see all results/i })
     ).not.toBeInTheDocument();
   });
+
+  it('reopens the submit popup on focus for a one-character query', () => {
+    vi.useRealTimers();
+    const onSubmitSearch = vi.fn();
+
+    render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="x"
+        onChange={vi.fn()}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    // Short queries never fetch, so nothing opens the popup initially.
+    expect(
+      screen.queryByRole('button', { name: /see all results/i })
+    ).not.toBeInTheDocument();
+
+    // Refocusing reopens the submit-wired popup: the results route accepts
+    // single characters, so touch users can recover the action without
+    // editing the query.
+    fireEvent.focus(screen.getByRole('searchbox'));
+    expect(
+      screen.getByRole('button', { name: /see all results for “x”/i })
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the popup open while a one-character submit query is typed', () => {
+    vi.useRealTimers();
+    const onChange = vi.fn();
+    const onSubmitSearch = vi.fn();
+
+    const { rerender } = render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value=""
+        onChange={onChange}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'x' } });
+    rerender(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="x"
+        onChange={onChange}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: /see all results for “x”/i })
+    ).toBeInTheDocument();
+  });
 });

@@ -13,6 +13,7 @@ const { mockRedirect, mockNotFound } = vi.hoisted(() => ({
 vi.mock('next/navigation', () => ({
   notFound: (...args: unknown[]) => mockNotFound(...args),
   redirect: (...args: unknown[]) => mockRedirect(...args),
+  useRouter: () => ({ refresh: vi.fn() }),
 }));
 
 vi.mock('@/lib/cached-data', () => ({
@@ -870,10 +871,11 @@ describe('SearchPageContent', () => {
     expect(
       screen.queryByRole('heading', { name: /no products found/i })
     ).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /try again/i })).toHaveAttribute(
-      'href',
-      '/ogabassey/search?q=iphone'
-    );
+    // Retry is a route refresh (re-executes the search), not a link to the
+    // identical URL, which would reuse the cached error route.
+    expect(
+      screen.getByRole('button', { name: /try again/i })
+    ).toBeInTheDocument();
     // The submitted query survives the failure for editing and retry.
     expect(screen.getByLabelText('Search products')).toHaveValue('iphone');
   });

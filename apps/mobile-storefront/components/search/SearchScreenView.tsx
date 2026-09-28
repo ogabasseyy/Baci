@@ -47,6 +47,8 @@ interface SearchScreenViewProps {
   onQueryChange: (query: string) => void;
   onRecentSearch: (query: string) => void;
   onRetry: () => void;
+  /** Retries a failed next-page fetch without refetching loaded pages. */
+  onRetryNextPage: () => void;
   onSelectBrand: (brand: string) => void;
   onSelectCondition: (condition: string) => void;
   onSelectRating: (rating: number) => void;
@@ -88,6 +90,7 @@ export default function SearchScreenView({
   onQueryChange,
   onRecentSearch,
   onRetry,
+  onRetryNextPage,
   onSelectBrand,
   onSelectCondition,
   onSelectRating,
@@ -165,7 +168,7 @@ export default function SearchScreenView({
         listError={searchError}
         onEndReached={onEndReached}
         onProductPress={onProductPress}
-        onRetry={onRetry}
+        onRetryNextPage={onRetryNextPage}
         products={products}
         totalCount={totalCount}
       />

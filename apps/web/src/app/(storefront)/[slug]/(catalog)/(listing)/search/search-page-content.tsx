@@ -255,7 +255,6 @@ export async function SearchPageContent({
             <SearchPageErrorPanel
               allProductsHref={allProductsHref}
               query={query}
-              retryHref={buildSearchHref(query, page)}
             />
           ) : searchQuery ? (
             effectiveResult.products.length > 0 ? (

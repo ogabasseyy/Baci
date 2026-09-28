@@ -60,6 +60,7 @@ function renderView(
     onQueryChange: jest.fn(),
     onRecentSearch: jest.fn(),
     onRetry: jest.fn(),
+    onRetryNextPage: jest.fn(),
     onSelectBrand: jest.fn(),
     onSelectCondition: jest.fn(),
     onSelectRating: jest.fn(),

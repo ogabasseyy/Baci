@@ -13,7 +13,8 @@ interface SearchResultsListProps {
   listError: string | null;
   onEndReached: () => void;
   onProductPress: (product: Product) => void;
-  onRetry: () => void;
+  /** Retries the failed next-page offset (footer only). */
+  onRetryNextPage: () => void;
   products: Product[];
   totalCount: number;
 }
@@ -25,7 +26,7 @@ export default function SearchResultsList({
   listError,
   onEndReached,
   onProductPress,
-  onRetry,
+  onRetryNextPage,
   products,
   totalCount,
 }: SearchResultsListProps) {
@@ -79,7 +80,7 @@ export default function SearchResultsList({
               Couldn&apos;t load more results.
             </Text>
             <Pressable
-              onPress={onRetry}
+              onPress={onRetryNextPage}
               style={[styles.retryButton, { backgroundColor: colors.primary }]}
               accessibilityRole="button"
               accessibilityLabel="Retry loading more results"

@@ -8,12 +8,24 @@
  * - Syncs across instances via storage events (if needed)
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MIN_SEARCH_QUERY_LENGTH } from '@/constants/search';
 import { syncStorage as storage } from '@/lib/storage'; // Assuming this is the correct import based on search.tsx analysis
 
 const SEARCH_HISTORY_KEY = 'search_history';
 const MAX_SEARCH_HISTORY = 10;
+
+// Module-level subscribers keep every mounted history reader (home dropdown,
+// overlay, results screen) in sync: a write from one screen re-reads into the
+// others without a remount, and the single persisted entry is never duplicated.
+type SearchHistoryListener = () => void;
+const searchHistoryListeners = new Set<SearchHistoryListener>();
+
+function notifySearchHistoryChanged() {
+  for (const listener of searchHistoryListeners) {
+    listener();
+  }
+}
 
 const DEFAULT_SEARCHES = [
   'iPhone 15 Pro',
@@ -24,28 +36,45 @@ const DEFAULT_SEARCHES = [
 ];
 
 /**
- * Read persisted search history synchronously. Used as a lazy useState
- * initializer so the saved history is available on the first render instead
- * of being patched in by an effect.
+ * Read persisted search history synchronously, normalizing defensively:
+ * blank and case-duplicate entries are dropped so every reader starts from
+ * the same clean list. Returns null when nothing valid is persisted.
  */
-function loadInitialSearchHistory(): string[] {
+function readPersistedSearchHistory(): string[] | null {
   try {
     const saved = storage.getItem(SEARCH_HISTORY_KEY);
-    if (saved) {
-      const parsed: unknown = JSON.parse(saved);
-      if (
-        Array.isArray(parsed) &&
-        parsed.every((item): item is string => typeof item === 'string')
-      ) {
-        return parsed;
-      }
+    if (!saved) {
+      return null;
+    }
+    const parsed: unknown = JSON.parse(saved);
+    if (
+      Array.isArray(parsed) &&
+      parsed.every((item): item is string => typeof item === 'string')
+    ) {
+      const seen = new Set<string>();
+      return parsed.filter((item) => {
+        const normalized = item.trim().toLowerCase();
+        if (!normalized || seen.has(normalized)) {
+          return false;
+        }
+        seen.add(normalized);
+        return true;
+      });
     }
   } catch (e) {
     // Fail silently, use defaults
     console.warn('Failed to load search history', e);
   }
 
-  return DEFAULT_SEARCHES;
+  return null;
+}
+
+/**
+ * Lazy useState initializer so the saved history is available on the first
+ * render instead of being patched in by an effect.
+ */
+function loadInitialSearchHistory(): string[] {
+  return readPersistedSearchHistory() ?? DEFAULT_SEARCHES;
 }
 
 export function useSearchStorage() {
@@ -53,26 +82,38 @@ export function useSearchStorage() {
     loadInitialSearchHistory
   );
 
+  // Re-read persisted history whenever another mounted instance writes, so a
+  // term saved on the results screen appears in the still-mounted home
+  // dropdown when the shopper navigates back.
+  useEffect(() => {
+    const reload = () => {
+      setRecentSearches(readPersistedSearchHistory() ?? []);
+    };
+    searchHistoryListeners.add(reload);
+    return () => {
+      searchHistoryListeners.delete(reload);
+    };
+  }, []);
+
   const saveSearch = (searchTerm: string) => {
     if (!searchTerm.trim() || searchTerm.length < MIN_SEARCH_QUERY_LENGTH)
       return;
 
-    setRecentSearches((prev) => {
-      // Remove duplicates and add to front
-      const filtered = prev.filter(
-        (s) => s.toLowerCase() !== searchTerm.toLowerCase()
-      );
-      const updated = [searchTerm, ...filtered].slice(0, MAX_SEARCH_HISTORY);
-
-      // Persist to storage
-      try {
-        storage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(updated));
-      } catch (e) {
-        console.warn('Failed to save search history', e);
-      }
-
-      return updated;
-    });
+    // Compute eagerly (not in a state updater) so persistence lands before
+    // subscribers re-read, and subscriber setState never fires during this
+    // component's render phase. Saves are discrete user events, so the state
+    // snapshot is always fresh here.
+    const filtered = recentSearches.filter(
+      (s) => s.toLowerCase() !== searchTerm.toLowerCase()
+    );
+    const updated = [searchTerm, ...filtered].slice(0, MAX_SEARCH_HISTORY);
+    try {
+      storage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Failed to save search history', e);
+    }
+    setRecentSearches(updated);
+    notifySearchHistoryChanged();
   };
 
   const clearHistory = () => {
@@ -82,6 +123,7 @@ export function useSearchStorage() {
     } catch (e) {
       console.warn('Failed to clear search history', e);
     }
+    notifySearchHistoryChanged();
   };
 
   return {

@@ -7,12 +7,9 @@ import Colors from '@/constants/Colors';
 import { MIN_SEARCH_QUERY_LENGTH } from '@/constants/search';
 import { useCategories, useProductBrands, useProducts } from '@/hooks';
 import { useNetworkState } from '@/hooks/use-network-state';
+import { useSearchStorage } from '@/hooks/use-search-storage';
 import { resolveSelectedCategoryId } from '@/lib/product-filter-options';
-import { syncStorage as storage } from '@/lib/storage';
 import type { Product } from '@/types/product';
-
-const SEARCH_HISTORY_KEY = 'search_history';
-const MAX_SEARCH_HISTORY = 10;
 
 /**
  * Validates the Expo Router `q` parameter before use. Repeated parameters
@@ -28,52 +25,6 @@ function parseRouteSearchQuery(
 
   const trimmed = param.trim();
   return trimmed.length >= MIN_SEARCH_QUERY_LENGTH ? trimmed : null;
-}
-const DEFAULT_SEARCHES = [
-  'iPhone 15 Pro',
-  'Samsung Galaxy S24',
-  'AirPods Pro',
-  'MacBook Air',
-  'Apple Watch',
-];
-
-function dedupeRecentSearches(searches: string[]) {
-  const seen = new Set<string>();
-
-  return searches.filter((search) => {
-    const normalizedSearch = search.trim().toLowerCase();
-    if (!normalizedSearch || seen.has(normalizedSearch)) {
-      return false;
-    }
-
-    seen.add(normalizedSearch);
-    return true;
-  });
-}
-
-function loadInitialRecentSearches(): string[] {
-  try {
-    const saved = storage.getItem(SEARCH_HISTORY_KEY);
-    if (!saved) return DEFAULT_SEARCHES;
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(saved);
-    } catch {
-      return DEFAULT_SEARCHES;
-    }
-
-    if (
-      Array.isArray(parsed) &&
-      parsed.every((item): item is string => typeof item === 'string')
-    ) {
-      return dedupeRecentSearches(parsed);
-    }
-  } catch {
-    // Retain defaults when device storage is unavailable.
-  }
-
-  return DEFAULT_SEARCHES;
 }
 
 export default function SearchScreen() {
@@ -94,9 +45,9 @@ export default function SearchScreen() {
   const [selectedCondition, setSelectedCondition] = useState('All');
   const [minRating, setMinRating] = useState(0);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [recentSearches, setRecentSearches] = useState<string[]>(
-    loadInitialRecentSearches
-  );
+  // Shared history state: writes here propagate to the still-mounted home
+  // dropdown and overlay through the hook's subscription, with one write.
+  const { recentSearches, saveSearch: saveToHistory } = useSearchStorage();
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -112,28 +63,6 @@ export default function SearchScreen() {
       }
     };
   }, [activeQuery]);
-
-  // Plain functions throughout: React Compiler owns memoization, so manual
-  // useCallback/useMemo wrappers are prohibited in this repo.
-  const saveToHistory = (searchTerm: string) => {
-    if (!searchTerm.trim() || searchTerm.length < MIN_SEARCH_QUERY_LENGTH)
-      return;
-
-    setRecentSearches((previousSearches) => {
-      const filtered = previousSearches.filter(
-        (search) => search.toLowerCase() !== searchTerm.toLowerCase()
-      );
-      const updated = [searchTerm, ...filtered].slice(0, MAX_SEARCH_HISTORY);
-
-      try {
-        storage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(updated));
-      } catch {
-        // Search remains usable if persistence fails.
-      }
-
-      return updated;
-    });
-  };
 
   // Applies a newly arrived route query to an already-mounted screen and
   // records each submitted route query in history exactly once. In-screen
@@ -218,6 +147,12 @@ export default function SearchScreen() {
   const handleRetry = () => {
     void refetchProducts();
   };
+  // A failed next page retries that offset via loadMore: refetch only
+  // replays already-loaded pages, so routing the footer through refetch
+  // would clear the error without appending the missing page.
+  const handleRetryNextPage = () => {
+    loadMore();
+  };
   const categoryNames = ['All', ...categories.map((category) => category.name)];
 
   // Adjust state inline during render (guarded, converges after one pass) so
@@ -277,6 +212,7 @@ export default function SearchScreen() {
           Keyboard.dismiss();
         }}
         onRetry={handleRetry}
+        onRetryNextPage={handleRetryNextPage}
         onSelectBrand={setSelectedBrand}
         onSelectCondition={setSelectedCondition}
         onSelectRating={setMinRating}

@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import type { OgabasseyHomeHeroSnapshot } from '@/lib/ogabassey-home-hero-snapshot-types';
 import { asRoute } from '@/lib/routes';
 import { CarouselPlayToggle } from './carousel-play-toggle';
 import { CarouselProgressFill } from './carousel-progress-fill';
@@ -40,11 +41,15 @@ interface HeroMobileCarouselProps {
   /** Keep the first image eager/high-priority only when it can be LCP.
    *  Below-fold carousels under a committed text hero must stay lazy. */
   prioritizeFirstImage?: boolean;
+  /** Same-origin AVIF snapshot for `slides[0]`, resolved server-side. Passed
+   *  to the slide-0 LCP image only; slides past the first stay on the CDN. */
+  slideZeroSnapshot?: OgabasseyHomeHeroSnapshot | null;
 }
 
 export function HeroMobileCarousel({
   prioritizeFirstImage = true,
   slides,
+  slideZeroSnapshot,
 }: HeroMobileCarouselProps) {
   const slideCount = slides.length;
   const hasMultipleSlides = slideCount > 1;
@@ -187,6 +192,7 @@ export function HeroMobileCarousel({
                     alt={slide.imageAlt}
                     imageFit="contain"
                     shouldPrioritizeImage
+                    snapshot={slideZeroSnapshot}
                     src={slide.imageUrl}
                   />
                 ) : shouldRenderImage ? (

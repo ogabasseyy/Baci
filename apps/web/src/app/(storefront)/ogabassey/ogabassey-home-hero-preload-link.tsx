@@ -1,4 +1,12 @@
+import {
+  MOBILE_HERO_IMAGE_SIZES,
+  MOBILE_HERO_SOURCE_MEDIA,
+} from '@/components/storefront/ogabassey/components/hero-mobile-image-config';
 import { ogabasseyHomeHeroResourceHintProjection } from '@/lib/ogabassey-home-hero-resource-hint-projection';
+import {
+  OGABASSEY_HOME_HERO_SNAPSHOT_TENANT,
+  resolveOgabasseyHomeHeroSnapshot,
+} from '@/lib/ogabassey-home-hero-snapshot';
 
 /**
  * Scanner-visible twin of the react-dom `preload()` in
@@ -21,6 +29,29 @@ export function OgabasseyHomeHeroPreloadLink({
 }: {
   src: string | null | undefined;
 }) {
+  // Same-origin snapshot twin, resolved from the static manifest (no backend
+  // reads, so the first-flush committed slot keeps its streaming constraint).
+  // Applies only when the manifest holds this exact src — rotated content
+  // falls through to the CDN projection below.
+  const snapshot = resolveOgabasseyHomeHeroSnapshot(
+    OGABASSEY_HOME_HERO_SNAPSHOT_TENANT,
+    src
+  );
+  if (snapshot) {
+    return (
+      <link
+        rel="preload"
+        as="image"
+        href={snapshot.href}
+        imageSrcSet={snapshot.srcSet}
+        imageSizes={MOBILE_HERO_IMAGE_SIZES}
+        media={MOBILE_HERO_SOURCE_MEDIA}
+        fetchPriority="high"
+        type="image/avif"
+        data-ogabassey-home-hero-preload="true"
+      />
+    );
+  }
   const projection = ogabasseyHomeHeroResourceHintProjection.build(src);
   if (!projection) {
     return null;

@@ -1,4 +1,5 @@
 import { getImageProps } from 'next/image';
+import type { OgabasseyHomeHeroSnapshot } from '@/lib/ogabassey-home-hero-snapshot-types';
 import { ogabasseyFallbackImageLoader } from '@/lib/ogabassey-image-fallback-loader';
 import { buildOgabasseyAvifSrcSet } from '@/lib/ogabassey-image-format-sources';
 import {
@@ -15,6 +16,11 @@ interface MobileLcpHeroImageProps {
   imageFit?: 'contain' | 'cover';
   inlineSrc?: string;
   shouldPrioritizeImage: boolean;
+  /** Same-origin AVIF snapshot for `src`, resolved server-side. Only the
+   *  AVIF `<source>` tier swaps to it (and only when its `sourceUrl` exactly
+   *  equals `src`); the fallback `<source>` and `<img>` stay on the CDN
+   *  bytes so non-AVIF browsers render exactly as before. */
+  snapshot?: OgabasseyHomeHeroSnapshot | null;
   src: string;
 }
 
@@ -29,6 +35,7 @@ export function MobileLcpHeroImage({
   imageFit,
   inlineSrc,
   shouldPrioritizeImage,
+  snapshot,
   src,
 }: MobileLcpHeroImageProps) {
   const {
@@ -55,7 +62,16 @@ export function MobileLcpHeroImage({
   // way AVIF-capable browsers get AVIF while others get the decodable fallback.
   // `null` when the source is not an OgaBassey transform URL (external image) —
   // the plain `<source>` then serves everyone.
-  const avifSrcSet = buildOgabasseyAvifSrcSet(productSrcSet);
+  //
+  // A same-origin snapshot replaces this tier only, and only when it was
+  // baked from this exact `src` (last-mile rotation guard). The snapshot
+  // srcSet carries the same width descriptors and quality the CDN AVIF tier
+  // would, so responsive selection is unchanged — only the origin differs.
+  const snapshotSrcSet =
+    snapshot && snapshot.sourceUrl === src.trim() && snapshot.srcSet
+      ? snapshot.srcSet
+      : null;
+  const avifSrcSet = snapshotSrcSet ?? buildOgabasseyAvifSrcSet(productSrcSet);
 
   return (
     <picture className="block h-full w-full">

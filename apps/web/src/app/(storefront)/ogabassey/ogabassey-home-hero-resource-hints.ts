@@ -1,8 +1,16 @@
 import 'server-only';
 import { preconnect, prefetchDNS, preload } from 'react-dom';
+import {
+  MOBILE_HERO_IMAGE_SIZES,
+  MOBILE_HERO_SOURCE_MEDIA,
+} from '@/components/storefront/ogabassey/components/hero-mobile-image-config';
 import { OGABASSEY_CDN_ORIGIN } from '@/components/storefront/ogabassey/config/storefront-origins';
 import { isOgabasseyCdnImageUrl } from '@/lib/ogabassey-cdn-image-url';
 import { ogabasseyHomeHeroResourceHintProjection } from '@/lib/ogabassey-home-hero-resource-hint-projection';
+import {
+  OGABASSEY_HOME_HERO_SNAPSHOT_TENANT,
+  resolveOgabasseyHomeHeroSnapshot,
+} from '@/lib/ogabassey-home-hero-snapshot';
 
 /**
  * Early resource hints for the home hero's slide-0 LCP image.
@@ -37,9 +45,32 @@ export function preloadOgabasseyHomeHeroResources(
     }
     // Preserve the origin hints even if a later image transform fails. The
     // hints are safe for a canonical CDN candidate; only the image preload
-    // depends on the projection completing successfully.
+    // depends on the projection completing successfully. Origin hints stay
+    // even when the slide-0 image preload below goes same-origin: carousel
+    // slides past the first still load from the CDN.
     prefetchDNS(OGABASSEY_CDN_ORIGIN);
     preconnect(OGABASSEY_CDN_ORIGIN);
+
+    // Same-origin snapshot twin of the CDN projection below, resolved from
+    // the static manifest (no backend reads). Applies only when the manifest
+    // holds this exact candidate — rotated content falls through to the CDN
+    // path. Geometry, sizes, media, and priority match the rendered
+    // picture's AVIF tier so preload-matching still dedupes into one fetch.
+    const snapshot = resolveOgabasseyHomeHeroSnapshot(
+      OGABASSEY_HOME_HERO_SNAPSHOT_TENANT,
+      candidate
+    );
+    if (snapshot) {
+      preload(snapshot.href, {
+        as: 'image',
+        fetchPriority: 'high',
+        imageSizes: MOBILE_HERO_IMAGE_SIZES,
+        imageSrcSet: snapshot.srcSet,
+        media: MOBILE_HERO_SOURCE_MEDIA,
+        type: 'image/avif',
+      });
+      return;
+    }
 
     const projection = ogabasseyHomeHeroResourceHintProjection.build(src);
     if (!projection) {

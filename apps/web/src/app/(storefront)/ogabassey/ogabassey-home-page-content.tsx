@@ -8,6 +8,10 @@ import { loadUnpublishedStorefront } from '@/components/storefront/unpublished-s
 import { OGABASSEY_TITLE } from '@/config/ogabassey';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
+import {
+  OGABASSEY_HOME_HERO_SNAPSHOT_TENANT,
+  resolveOgabasseyHomeHeroSnapshot,
+} from '@/lib/ogabassey-home-hero-snapshot';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { resolveMerchantContextIdentifier } from '@/lib/storefront-route-identifier';
 import { OgabasseyHomeDynamicContent } from './ogabassey-home-dynamic-content';
@@ -79,6 +83,14 @@ export async function OgabasseyHomePageContent({
   // stale identifier mapping can never render another merchant's catalog.
   const requestMerchantShellSlides =
     shellMerchantId === merchant.id ? shellSlides : null;
+  // Same-origin snapshot for the slide-0 LCP image. Resolved against the
+  // publication-bound slides above (never the unbound shell): null unless
+  // the flag is on, the tenant matches, and the manifest holds this exact
+  // slide-0 URL — any mismatch renders the legacy CDN bytes.
+  const slideZeroSnapshot = resolveOgabasseyHomeHeroSnapshot(
+    OGABASSEY_HOME_HERO_SNAPSHOT_TENANT,
+    requestMerchantShellSlides?.[0]?.imageUrl
+  );
 
   return (
     <>
@@ -88,6 +100,7 @@ export async function OgabasseyHomePageContent({
           omitDocumentHeading={omitDocumentHeading}
           omitMobileCarousel={omitMobileCarousel}
           slides={requestMerchantShellSlides}
+          slideZeroSnapshot={slideZeroSnapshot}
         />
       ) : omitDocumentHeading ? null : (
         <h1 className="sr-only">{OGABASSEY_TITLE}</h1>

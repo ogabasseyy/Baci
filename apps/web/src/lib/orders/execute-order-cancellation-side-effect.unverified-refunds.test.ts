@@ -10,7 +10,10 @@ vi.mock('@/lib/orders/build-order-cancellation-email-message', () => ({
 }));
 
 import { executeOrderCancellationSideEffect } from './execute-order-cancellation-side-effect';
-import { DeliveryUncertainError } from './run-order-cancellation-side-effect';
+import {
+  DeferredError,
+  DeliveryUncertainError,
+} from './run-order-cancellation-side-effect';
 
 const merchant = {
   business_name: 'Store',
@@ -103,6 +106,7 @@ describe('cancellation unverified refunds', () => {
 
     expect(error).toBeInstanceOf(Error);
     expect(error).not.toBeInstanceOf(DeliveryUncertainError);
+    expect(error).toBeInstanceOf(DeferredError);
     expect((error as Error).message).toBe(
       'cancellation_refund_awaiting_provider_completion'
     );

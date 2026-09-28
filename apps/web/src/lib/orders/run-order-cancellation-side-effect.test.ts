@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  DeferredError,
   DeliveryUncertainError,
   runOrderCancellationSideEffect,
 } from './run-order-cancellation-side-effect';
@@ -51,6 +52,27 @@ describe('runOrderCancellationSideEffect', () => {
       })
     ).resolves.toBe('completed');
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('defers provider-awaiting work without failing it', async () => {
+    const supabase = client({ current_status: 'claimed', we_won: true });
+
+    await expect(
+      runOrderCancellationSideEffect({
+        execute: async () => {
+          throw new DeferredError(
+            'cancellation_refund_awaiting_provider_completion'
+          );
+        },
+        orderId: 'order-1',
+        step: 'refund',
+        supabase: supabase as never,
+      })
+    ).resolves.toBe('deferred');
+    expect(supabase.rpc).toHaveBeenLastCalledWith(
+      'finish_order_cancellation_side_effect',
+      expect.objectContaining({ p_status: 'deferred' })
+    );
   });
 
   it('persists ambiguous provider delivery without retrying it', async () => {

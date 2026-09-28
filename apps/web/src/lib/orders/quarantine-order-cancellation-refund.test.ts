@@ -114,6 +114,36 @@ describe('quarantineRefund', () => {
     expect((error as Error).message).toMatch('merging its recovery evidence');
   });
 
+  it('forwards ambiguous initiation into the merged leg evidence', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    const supabase = {
+      from: vi.fn().mockReturnValue({ insert }),
+      rpc,
+    } as unknown as Pick<SupabaseClient, 'from' | 'rpc'>;
+
+    await expect(
+      quarantineRefund({
+        metadata: {
+          ambiguous_initiation: true,
+          failed_payment_transaction_id: 'payment-id',
+        },
+        order,
+        reason:
+          'Paystack refund initiation failed ambiguously and may already exist for this payment leg',
+        supabase,
+        transactions: [transaction],
+      })
+    ).rejects.toBeInstanceOf(DeliveryUncertainError);
+    expect(rpc).toHaveBeenCalledWith(
+      'merge_paystack_cancellation_refund_leg_evidence_v1',
+      expect.objectContaining({
+        p_ambiguous: true,
+        p_payment_transaction_id: 'payment-id',
+      })
+    );
+  });
+
   it('merges leg evidence on conflict without provider evidence', async () => {
     const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
@@ -130,6 +160,12 @@ describe('quarantineRefund', () => {
         transactions: [transaction],
       })
     ).rejects.toBeInstanceOf(DeliveryUncertainError);
+    expect(rpc).toHaveBeenCalledWith(
+      'merge_paystack_cancellation_refund_leg_evidence_v1',
+      expect.objectContaining({
+        p_ambiguous: false,
+      })
+    );
     expect(rpc).not.toHaveBeenCalledWith(
       'merge_paystack_cancellation_refund_provider_evidence_v1',
       expect.anything()

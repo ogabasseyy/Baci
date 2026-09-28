@@ -257,6 +257,20 @@ BEGIN
               AND r.gateway_reference = review.metadata->>'provider_refund_id'
           )
         )
+        -- Ambiguous initiation evidence is never auto-resolved: the
+        -- original request may have created a provider refund no audit
+        -- row records, and closing on a replacement's coverage would hide
+        -- the undiscovered duplicate. New filings mark it explicitly;
+        -- legacy ambiguous filings carry only
+        -- failed_payment_transaction_id (accepted legs prove a partial
+        -- deterministic failure instead); merged legs carry it under
+        -- their leg key. Only operations (or a future provider-evidence
+        -- check) resolves that uncertainty.
+        AND coalesce((review.metadata->>'ambiguous_initiation')::boolean, false) IS NOT TRUE
+        AND (
+          review.metadata->>'failed_payment_transaction_id' IS NULL
+          OR review.metadata ? 'accepted_refund_ids'
+        )
         AND NOT EXISTS (
           SELECT 1
           FROM jsonb_each(coalesce(review.metadata->'refund_evidence', '{}'::jsonb)) AS e(key, value)
@@ -269,6 +283,12 @@ BEGIN
                 AND r.status = 'completed'
                 AND r.gateway_reference = split_part(e.key, ':', 2)
             )
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM jsonb_each(coalesce(review.metadata->'refund_evidence', '{}'::jsonb)) AS e(key, value)
+          WHERE e.key LIKE 'leg:%'
+            AND coalesce((e.value->>'ambiguous')::boolean, false) IS TRUE
         );
   END IF;
   RETURN 'processed';

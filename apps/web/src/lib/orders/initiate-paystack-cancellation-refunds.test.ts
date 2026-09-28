@@ -265,6 +265,7 @@ describe('initiatePaystackCancellationRefunds', () => {
     expect(mocks.quarantineRefund).toHaveBeenCalledWith(
       expect.objectContaining({
         metadata: expect.objectContaining({
+          ambiguous_initiation: true,
           failed_payment_transaction_id: 'tx-1',
         }),
       })

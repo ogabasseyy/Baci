@@ -81,6 +81,22 @@ export async function drainFailedOrderCancellationSideEffects({
     );
   }
 
+  // Deferred rows wait on provider reconciliation, not on retries: reselect
+  // them without the attempts cap so a pending refund that completes late
+  // still resumes its remaining legs. The claim RPC never increments
+  // attempts for deferred rows, so this cannot spin the retry budget.
+  const { data: deferredRows, error: deferredLookupError } = await supabase
+    .from('order_cancellation_side_effects')
+    .select(select)
+    .eq('status', 'deferred')
+    .order('claimed_at', { ascending: true })
+    .limit(limit);
+  if (deferredLookupError) {
+    throw new Error(
+      `deferred_cancellation_side_effect_lookup_failed: ${deferredLookupError.message}`
+    );
+  }
+
   for (const raw of staleRows ?? []) {
     const stale = raw as CandidateRow;
     const { error: quarantineError } = await supabase
@@ -102,7 +118,7 @@ export async function drainFailedOrderCancellationSideEffects({
   }
 
   const candidates = new Map<string, CandidateRow>();
-  for (const row of failedRows ?? []) {
+  for (const row of [...(failedRows ?? []), ...(deferredRows ?? [])]) {
     const candidate = row as CandidateRow;
     candidates.set(`${candidate.order_id}:${candidate.step}`, candidate);
     if (candidates.size >= limit) break;

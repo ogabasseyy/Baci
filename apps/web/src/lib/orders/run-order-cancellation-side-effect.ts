@@ -15,6 +15,12 @@ interface ClaimResult {
 
 export class DeliveryUncertainError extends Error {}
 
+// Thrown when the step cannot advance until provider reconciliation moves
+// (e.g. a refund leg is still pending at Paystack). Unlike a failure this
+// consumes no retry attempt: the drain reselects deferred rows until the
+// provider state advances.
+export class DeferredError extends Error {}
+
 export async function runOrderCancellationSideEffect({
   execute,
   orderId,
@@ -45,13 +51,18 @@ export async function runOrderCancellationSideEffect({
   }
 
   let result: Json | undefined;
-  let status: 'completed' | 'failed' | 'delivery_uncertain' = 'completed';
+  let status: 'completed' | 'failed' | 'delivery_uncertain' | 'deferred' =
+    'completed';
   let errorMessage: string | null = null;
   try {
     result = await execute();
   } catch (error) {
     status =
-      error instanceof DeliveryUncertainError ? 'delivery_uncertain' : 'failed';
+      error instanceof DeliveryUncertainError
+        ? 'delivery_uncertain'
+        : error instanceof DeferredError
+          ? 'deferred'
+          : 'failed';
     errorMessage = error instanceof Error ? error.message : String(error);
   }
 

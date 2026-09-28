@@ -106,6 +106,7 @@ export async function quarantineRefund({
             ? acceptedRefundIds
             : null,
           p_candidates: toReviewCandidates(order, transactions),
+          p_ambiguous: metadata?.ambiguous_initiation === true,
         }
       );
       if (legMergeError || legMerged !== true) {

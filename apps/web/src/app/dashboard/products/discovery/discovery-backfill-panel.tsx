@@ -115,6 +115,7 @@ export function DiscoveryBackfillPanel({ merchantId }: { merchantId: string }) {
       setComplete(false);
       saveProgress(progressKey, null, false);
     }
+    let needsVerification = nextCursor !== null;
     try {
       while (!stopRequested.current) {
         const controller = new AbortController();
@@ -143,11 +144,14 @@ export function DiscoveryBackfillPanel({ merchantId }: { merchantId: string }) {
             typeof payload.resetIn === 'number' &&
             Number.isFinite(payload.resetIn) &&
             Number.isSafeInteger(Math.ceil(payload.resetIn)) &&
-            payload.resetIn > 0
+            payload.resetIn >= 0
           ) {
             if (stopRequested.current || !isCurrentRun()) break;
             setWaiting(true);
-            await waitForQuota(Math.ceil(payload.resetIn), isCurrentRun);
+            await waitForQuota(
+              Math.max(1, Math.ceil(payload.resetIn)),
+              isCurrentRun
+            );
             if (!isCurrentRun()) break;
             setWaiting(false);
             continue;
@@ -164,6 +168,13 @@ export function DiscoveryBackfillPanel({ merchantId }: { merchantId: string }) {
         setGenerated((count) => count + result.generated);
         nextCursor = result.nextCursor;
         setCursor(nextCursor);
+        if (result.done && needsVerification) {
+          needsVerification = false;
+          nextCursor = null;
+          setCursor(null);
+          saveProgress(progressKey, null, false);
+          continue;
+        }
         saveProgress(progressKey, nextCursor, result.done);
         if (result.done) {
           setComplete(true);

@@ -87,6 +87,9 @@ describe('dashboard catalog indexing', () => {
           nextCursor: 'cursor-2',
           done: true,
         })
+      )
+      .mockImplementationOnce(() =>
+        page({ scanned: 5, generated: 0, nextCursor: null, done: true })
       );
     render(<DiscoveryBackfillPanel merchantId={merchantId} />);
     fireEvent.click(screen.getByRole('button', { name: 'Start indexing' }));
@@ -96,7 +99,7 @@ describe('dashboard catalog indexing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Continue indexing' }));
     await waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent(
-        'Indexing complete. 6 scanned this visit, 6 updates confirmed.'
+        'Indexing complete. 11 scanned this visit, 6 updates confirmed.'
       )
     );
     expect(fetchWithCsrf).toHaveBeenNthCalledWith(
@@ -104,6 +107,13 @@ describe('dashboard catalog indexing', () => {
       '/api/products/discovery-backfill',
       expect.objectContaining({
         body: JSON.stringify({ merchantId, cursor: 'cursor-1' }),
+      })
+    );
+    expect(fetchWithCsrf).toHaveBeenNthCalledWith(
+      4,
+      '/api/products/discovery-backfill',
+      expect.objectContaining({
+        body: JSON.stringify({ merchantId, cursor: null }),
       })
     );
   });
@@ -210,6 +220,9 @@ describe('dashboard catalog indexing', () => {
       })
       .mockImplementationOnce(() =>
         page({ scanned: 1, generated: 0, nextCursor: savedCursor, done: true })
+      )
+      .mockImplementationOnce(() =>
+        page({ scanned: 5, generated: 1, nextCursor: null, done: true })
       );
     const view = render(<DiscoveryBackfillPanel merchantId={merchantId} />);
     fireEvent.click(screen.getByRole('button', { name: 'Start indexing' }));
@@ -234,5 +247,44 @@ describe('dashboard catalog indexing', () => {
         body: JSON.stringify({ merchantId, cursor: savedCursor }),
       })
     );
+    expect(fetchWithCsrf).toHaveBeenNthCalledWith(
+      4,
+      '/api/products/discovery-backfill',
+      expect.objectContaining({
+        body: JSON.stringify({ merchantId, cursor: null }),
+      })
+    );
+  });
+
+  it('retries a rate limit response at the exact reset boundary', async () => {
+    vi.useFakeTimers();
+    try {
+      fetchWithCsrf
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          json: async () => ({ resetIn: 0 }),
+        })
+        .mockImplementationOnce(() =>
+          page({ scanned: 1, generated: 1, nextCursor: null, done: true })
+        );
+      render(<DiscoveryBackfillPanel merchantId={merchantId} />);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Start indexing' }));
+        await Promise.resolve();
+      });
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Waiting for the request limit to reset'
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      expect(fetchWithCsrf).toHaveBeenCalledTimes(2);
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Indexing complete.'
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

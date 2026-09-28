@@ -61,7 +61,7 @@ vi.mock(
   })
 );
 
-import { POST } from './route';
+import { maxDuration, POST } from './route';
 
 function makeCronRequest(secret = 'test-secret') {
   return new Request('https://usebaci.com/api/cron/process-settlements', {
@@ -73,6 +73,10 @@ function makeCronRequest(secret = 'test-secret') {
 }
 
 describe('POST /api/cron/process-settlements', () => {
+  it('declares the five-minute function duration', () => {
+    expect(maxDuration).toBe(300);
+  });
+
   beforeEach(() => {
     for (const mock of Object.values(mocks)) {
       mock.mockReset();

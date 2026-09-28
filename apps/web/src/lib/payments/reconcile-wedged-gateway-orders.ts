@@ -150,6 +150,19 @@ export async function reconcileWedgedGatewayOrders({
         continue;
       }
 
+      // Bound the in-flight provider read to the remaining pass share: a
+      // hung verification must abort with the share instead of starving
+      // the passes behind it. Aborts surface as transient-unavailable and
+      // retry next run.
+      const verifyRemaining =
+        deadlineMs === undefined ? undefined : deadlineMs - Date.now();
+      if (verifyRemaining !== undefined && verifyRemaining <= 0) {
+        logger.info({
+          message: 'Stopping wedged-order sweep at pass deadline',
+          transactionId: candidate.id,
+        });
+        break;
+      }
       const verification = await verifyGatewayCharge(
         candidate.gateway,
         candidate.gateway_reference,
@@ -158,7 +171,10 @@ export async function reconcileWedgedGatewayOrders({
               candidate.metadata,
               candidate.created_at
             )
-          : undefined
+          : undefined,
+        verifyRemaining === undefined
+          ? undefined
+          : AbortSignal.timeout(verifyRemaining)
       );
 
       if (!verification.ok) {

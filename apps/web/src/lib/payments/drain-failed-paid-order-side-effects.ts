@@ -193,14 +193,36 @@ export async function drainFailedPaidOrderSideEffects({
 
       let gatewayResponse = txn.gateway_response;
       if (!gatewayResponse) {
+        // Bound the in-flight provider read to the remaining pass share so
+        // a hung verification cannot overrun the route budget. Aborts
+        // surface as transient-unavailable and retry next run.
+        const verifyRemaining =
+          deadlineMs === undefined ? undefined : deadlineMs - Date.now();
+        if (verifyRemaining !== undefined && verifyRemaining <= 0) {
+          logger.info({
+            message: 'Stopping paid side-effect drain at pass deadline',
+            orderId,
+          });
+          break;
+        }
+        const verifySignal =
+          verifyRemaining === undefined
+            ? undefined
+            : AbortSignal.timeout(verifyRemaining);
         const verification =
           gateway === 'juicyway'
             ? await verifyGatewayCharge(
                 gateway,
                 txn.gateway_reference,
-                buildJuicywayVerificationContext(txn.metadata, txn.created_at)
+                buildJuicywayVerificationContext(txn.metadata, txn.created_at),
+                verifySignal
               )
-            : await verifyGatewayCharge(gateway, txn.gateway_reference);
+            : await verifyGatewayCharge(
+                gateway,
+                txn.gateway_reference,
+                undefined,
+                verifySignal
+              );
         if (!verification.ok) {
           if (isTerminalGatewayVerificationReason(verification.reason)) {
             await retireTerminalSideEffectDrain({

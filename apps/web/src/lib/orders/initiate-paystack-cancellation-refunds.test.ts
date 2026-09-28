@@ -177,16 +177,74 @@ describe('initiatePaystackCancellationRefunds', () => {
   it('treats a duplicate audit row as recorded without quarantining', async () => {
     acceptedRefund();
     insert.mockResolvedValue({ error: { code: '23505' } });
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        gateway: 'paystack',
+        gateway_reference: '101',
+        id: 'refund-1',
+        transaction_type: 'refund',
+      },
+      error: null,
+    });
+    const local = {
+      from: vi.fn(() => ({
+        eq: vi.fn().mockReturnThis(),
+        insert,
+        maybeSingle,
+        select: vi.fn().mockReturnThis(),
+      })),
+    } as never;
 
     const refundIds = await initiatePaystackCancellationRefunds({
       order,
       refundedPaymentIds: new Set(),
-      supabase,
+      supabase: local,
       transactions: [transaction],
     });
 
     expect(refundIds).toEqual([101]);
     expect(mocks.quarantineRefund).not.toHaveBeenCalled();
+  });
+
+  it('quarantines a cross-type reference collision instead of trusting it', async () => {
+    acceptedRefund();
+    insert.mockResolvedValue({ error: { code: '23505' } });
+    mocks.quarantineRefund.mockRejectedValue(new Error('quarantined'));
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        gateway: 'paystack',
+        gateway_reference: '101',
+        id: 'payment-other',
+        transaction_type: 'payment',
+      },
+      error: null,
+    });
+    const local = {
+      from: vi.fn(() => ({
+        eq: vi.fn().mockReturnThis(),
+        insert,
+        maybeSingle,
+        select: vi.fn().mockReturnThis(),
+      })),
+    } as never;
+
+    await expect(
+      initiatePaystackCancellationRefunds({
+        order,
+        refundedPaymentIds: new Set(),
+        supabase: local,
+        transactions: [transaction],
+      })
+    ).rejects.toThrow('quarantined');
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          audit_record_failed: true,
+          payment_transaction_id: 'tx-1',
+          provider_refund_id: 101,
+        }),
+      })
+    );
   });
 
   it('throws a retriable error on ambiguous provider failures', async () => {

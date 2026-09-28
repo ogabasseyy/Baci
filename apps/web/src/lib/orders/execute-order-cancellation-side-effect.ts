@@ -110,7 +110,7 @@ export async function executeOrderCancellationSideEffect({
   }
   const { data: refundRows, error: refundLookupError } = await supabase
     .from('transactions')
-    .select('metadata, status')
+    .select('gateway_reference, metadata, status')
     .eq('order_id', order.id)
     .eq('merchant_id', order.merchant_id)
     .eq('transaction_type', 'refund')
@@ -118,34 +118,42 @@ export async function executeOrderCancellationSideEffect({
   if (refundLookupError) {
     throw new Error('Unable to verify existing cancellation refunds');
   }
+  const linkedPaymentId = (row: { metadata: unknown }): string | null => {
+    const metadata = row.metadata as {
+      payment_transaction_id?: unknown;
+    } | null;
+    return typeof metadata?.payment_transaction_id === 'string'
+      ? metadata.payment_transaction_id
+      : null;
+  };
   const refundedPaymentIds = new Set(
     (refundRows ?? [])
       .filter((row) => row.status === 'completed')
-      .map((row) => {
-        const metadata = row.metadata;
-        return metadata &&
-          typeof metadata === 'object' &&
-          !Array.isArray(metadata)
-          ? metadata.payment_transaction_id
-          : null;
-      })
+      .map(linkedPaymentId)
       .filter((id): id is string => typeof id === 'string')
   );
-  const pendingRefundPaymentIds = new Set(
-    (refundRows ?? [])
-      .filter((row) => row.status !== 'completed')
-      .map((row) => {
-        const metadata = row.metadata;
-        return metadata &&
-          typeof metadata === 'object' &&
-          !Array.isArray(metadata)
-          ? metadata.payment_transaction_id
-          : null;
-      })
-      .filter((id): id is string => typeof id === 'string')
-  );
+  // Legs with a provider-accepted audit row are still in flight: the
+  // reconciler completes them and the drain resumes the remaining legs.
+  // Only legs without provider evidence (failed or ambiguous rows) need a
+  // terminal quarantine review.
+  const awaitingRefundPaymentIds = new Set<string>();
+  const reviewRefundPaymentIds = new Set<string>();
+  for (const row of refundRows ?? []) {
+    if (row.status === 'completed') continue;
+    const paymentId = linkedPaymentId(row);
+    if (typeof paymentId !== 'string') continue;
+    if (
+      row.status === 'refund_pending' &&
+      typeof row.gateway_reference === 'string' &&
+      /^[1-9][0-9]*$/.test(row.gateway_reference)
+    ) {
+      awaitingRefundPaymentIds.add(paymentId);
+    } else {
+      reviewRefundPaymentIds.add(paymentId);
+    }
+  }
   const pendingTransactions = transactions.filter((transaction) =>
-    pendingRefundPaymentIds.has(transaction.id)
+    reviewRefundPaymentIds.has(transaction.id)
   );
   if (pendingTransactions.length > 0) {
     await quarantineRefund({
@@ -155,6 +163,14 @@ export async function executeOrderCancellationSideEffect({
       supabase,
       transactions: pendingTransactions,
     });
+  }
+  const awaitingTransactions = transactions.filter(
+    (transaction) =>
+      awaitingRefundPaymentIds.has(transaction.id) &&
+      !refundedPaymentIds.has(transaction.id)
+  );
+  if (awaitingTransactions.length > 0) {
+    throw new Error('cancellation_refund_awaiting_provider_completion');
   }
   const refundIds = await initiatePaystackCancellationRefunds({
     deadlineMs,

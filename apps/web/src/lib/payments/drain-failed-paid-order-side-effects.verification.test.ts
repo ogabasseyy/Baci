@@ -84,7 +84,8 @@ describe('drainFailedPaidOrderSideEffects verification', () => {
         juicywayHasExpectedSettlementMetadata: true,
         juicywaySessionId: '550e8400-e29b-41d4-a716-446655440000',
         juicywayTransactionCreatedAt: '2026-07-01T00:00:00.000Z',
-      }
+      },
+      undefined
     );
     expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledWith(
       expect.objectContaining({ gateway: 'juicyway' })
@@ -114,13 +115,56 @@ describe('drainFailedPaidOrderSideEffects verification', () => {
       supabase,
     });
 
-    expect(mocks.verifyGatewayCharge).toHaveBeenCalledWith('paystack', 'REF-1');
+    expect(mocks.verifyGatewayCharge).toHaveBeenCalledWith(
+      'paystack',
+      'REF-1',
+      undefined,
+      undefined
+    );
     expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledWith(
       expect.objectContaining({
         gatewayResponse: { fees: 123, status: 'success' },
       })
     );
     expect(summary.drained).toEqual([{ orderId: 'order-1' }]);
+  });
+
+  it('bounds in-flight verification to the remaining pass share', async () => {
+    const missingEvidenceRow = {
+      ...failedRow,
+      transactions: { ...failedRow.transactions, gateway_response: null },
+    };
+    const supabase = buildSupabase({ data: [missingEvidenceRow] });
+    mocks.verifyGatewayCharge.mockResolvedValue({
+      amount: 58290.6,
+      currency: 'NGN',
+      ok: true,
+      response: { fees: 123, status: 'success' },
+    });
+    mocks.finalizeOrderGatewayPayment.mockResolvedValue({
+      healed: false,
+      kind: 'completed',
+      orderNumber: 'ORD-1',
+    });
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_200_000);
+
+    try {
+      const summary = await drainFailedPaidOrderSideEffects({
+        deadlineMs: 1_270_000,
+        scheduleAfter,
+        supabase,
+      });
+
+      expect(mocks.verifyGatewayCharge).toHaveBeenCalledWith(
+        'paystack',
+        'REF-1',
+        undefined,
+        expect.any(AbortSignal)
+      );
+      expect(summary.drained).toEqual([{ orderId: 'order-1' }]);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it('skips when missing gateway evidence cannot be re-verified', async () => {

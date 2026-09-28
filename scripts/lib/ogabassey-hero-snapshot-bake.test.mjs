@@ -174,6 +174,27 @@ describe('bakeSnapshots', () => {
     ).rejects.toThrow(/1000px wide/);
   });
 
+  it('rolls back earlier urls when a later one fails', async () => {
+    const outDir = resolve(mkdtempSync(join(tmpdir(), 'hero-bake-')), 'ogabassey');
+    const failingFetch = vi.fn(async (url) => ({
+      ok: !String(url).includes('bad.jpg'),
+      status: String(url).includes('bad.jpg') ? 500 : 200,
+      url: String(url),
+      headers: { get: () => 'image/jpeg' },
+      arrayBuffer: async () => Buffer.from('fake-source-bytes'),
+    }));
+    await expect(
+      bakeSnapshots({
+        fetchImpl: failingFetch,
+        outDir,
+        sharpImpl: makeFakeSharp(),
+        slug: 'ogabassey',
+        urls: [SOURCE_URL, 'https://cdn.ogabassey.com/bad.jpg'],
+      })
+    ).rejects.toThrow(/HTTP 500/);
+    expect(readdirSync(outDir)).toEqual([]);
+  });
+
   it('rejects a baked file whose dimensions do not match', async () => {
     const outDir = resolve(mkdtempSync(join(tmpdir(), 'hero-bake-')), 'ogabassey');
     await expect(

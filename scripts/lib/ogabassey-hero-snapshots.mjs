@@ -16,29 +16,21 @@
 // (OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL) first so the first-flush slot
 // stays covered, plus any current shell slide-0 candidates.
 
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import sharp from 'sharp';
 import { parseSnapshotArgs } from './ogabassey-hero-snapshot-args.mjs';
 import { bakeSnapshots } from './ogabassey-hero-snapshot-bake.mjs';
-import { writeSnapshotManifest } from './ogabassey-hero-snapshot-manifest.mjs';
+import { writeSnapshotManifest } from './ogabassey-hero-snapshot-manifest-write.mjs';
+import { resolveSnapshotPaths } from './ogabassey-hero-snapshot-paths.mjs';
 import { pruneSnapshotOrphans } from './ogabassey-hero-snapshot-prune.mjs';
-
-export function defaultWebRoot() {
-  const here = dirname(fileURLToPath(import.meta.url));
-  return resolve(here, '../../apps/web');
-}
-
-export function defaultManifestPath(webRoot) {
-  return resolve(webRoot, 'src/config/ogabassey-home-hero-snapshot-manifest.ts');
-}
 
 export async function runGenerateOgabasseyHeroSnapshots(argv, deps = {}) {
   const fetchImpl = deps.fetchImpl ?? fetch;
   const sharpImpl = deps.sharpImpl ?? sharp;
-  const webRoot = deps.webRoot ?? defaultWebRoot();
-  const manifestPath = deps.manifestPath ?? defaultManifestPath(webRoot);
-  const root = deps.root ?? resolve(webRoot, '../..');
+  const paths = resolveSnapshotPaths(deps.webRoot ?? null);
+  const webRoot = paths.webRoot;
+  const manifestPath = deps.manifestPath ?? paths.manifestPath;
+  const root = deps.root ?? paths.root;
   const { slug, urls } = parseSnapshotArgs(argv);
   const outDir = resolve(webRoot, 'public/_hero', slug);
   const entries = await bakeSnapshots({

@@ -10,12 +10,8 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SNAPSHOT_WIDTHS } from './ogabassey-hero-snapshot-config.mjs';
-import { readSnapshotManifestTenants } from './ogabassey-hero-snapshot-manifest.mjs';
-import {
-  defaultManifestPath,
-  defaultWebRoot,
-  runGenerateOgabasseyHeroSnapshots,
-} from './ogabassey-hero-snapshots.mjs';
+import { readSnapshotManifestTenants } from './ogabassey-hero-snapshot-manifest-read.mjs';
+import { runGenerateOgabasseyHeroSnapshots } from './ogabassey-hero-snapshots.mjs';
 
 const SOURCE_URL = 'https://cdn.ogabassey.com/core-assets/products/dell.jpg';
 
@@ -85,16 +81,6 @@ beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
-describe('default paths', () => {
-  it('derives webRoot and manifestPath under the repo', () => {
-    const webRoot = defaultWebRoot();
-    expect(webRoot.endsWith(join('apps', 'web'))).toBe(true);
-    expect(defaultManifestPath(webRoot)).toBe(
-      resolve(webRoot, 'src/config/ogabassey-home-hero-snapshot-manifest.ts')
-    );
-  });
-});
-
 describe('runGenerateOgabasseyHeroSnapshots', () => {
   it('runs end to end: bakes, writes, then prunes', async () => {
     const webRoot = mkdtempSync(join(tmpdir(), 'hero-run-'));
@@ -148,6 +134,8 @@ describe('runGenerateOgabasseyHeroSnapshots', () => {
 
     expect(readFileSync(manifestPath, 'utf8')).toBe(before);
     expect(existsSync(resolve(outDir, orphan))).toBe(true);
+    // Rolled back: only the pre-seeded orphan remains, no partial bakes.
+    expect(readdirSync(outDir)).toEqual([orphan]);
   });
 
   it('keeps old files when the manifest write fails (write precedes prune)', async () => {

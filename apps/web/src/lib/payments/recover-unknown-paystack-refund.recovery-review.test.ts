@@ -84,7 +84,10 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
     const rpc = reviewRpc();
     const from = vi
       .fn()
-      .mockReturnValueOnce(selectQuery([firstPayment, secondPayment]));
+      .mockReturnValueOnce(selectQuery([firstPayment, secondPayment]))
+      .mockReturnValueOnce(
+        selectQuery([order, { ...order, id: 'order-2', order_number: 'B-2' }])
+      );
     const supabase = { from, rpc } as unknown as SupabaseClient;
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
@@ -128,7 +131,10 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
     const rpc = reviewRpc();
     const from = vi
       .fn()
-      .mockReturnValueOnce(selectQuery([firstPayment, secondPayment]));
+      .mockReturnValueOnce(selectQuery([firstPayment, secondPayment]))
+      .mockReturnValueOnce(
+        selectQuery([order, { ...order, id: 'order-2', order_number: 'B-2' }])
+      );
     const supabase = { from, rpc } as unknown as SupabaseClient;
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');

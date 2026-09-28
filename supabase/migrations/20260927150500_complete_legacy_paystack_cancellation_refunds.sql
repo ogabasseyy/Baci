@@ -254,6 +254,11 @@ BEGIN
             WHERE r.order_id = v_order.id AND r.merchant_id = v_order.merchant_id
               AND r.transaction_type = 'refund' AND r.gateway = 'paystack'
               AND r.status = 'completed'
+              -- A locally completed row resolves audit-failed evidence only
+              -- after provider verification: other writers can complete a
+              -- row without it, and closing on status alone would drop an
+              -- unreconciled or duplicate provider refund.
+              AND r.metadata->>'provider_refund_status' = 'processed'
               AND r.gateway_reference = review.metadata->>'provider_refund_id'
           )
         )
@@ -281,6 +286,7 @@ BEGIN
               WHERE r.order_id = v_order.id AND r.merchant_id = v_order.merchant_id
                 AND r.transaction_type = 'refund' AND r.gateway = 'paystack'
                 AND r.status = 'completed'
+                AND r.metadata->>'provider_refund_status' = 'processed'
                 AND r.gateway_reference = split_part(e.key, ':', 2)
             )
         )

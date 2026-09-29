@@ -108,6 +108,23 @@ describe('useCheckoutCustomerLifecycle', () => {
     });
   });
 
+  it('keeps signed-in email when user metadata is absent', async () => {
+    const userWithoutMetadata = {
+      ...signedInUser,
+      user_metadata: null,
+    } as unknown as SupabaseUser;
+    getUser.mockResolvedValue({ data: { user: userWithoutMetadata } });
+    const { result } = setupLifecycle(null);
+
+    await waitFor(() => expect(result.current.pageLoading).toBe(false));
+
+    expect(result.current.form.getValues()).toMatchObject({
+      firstName: '',
+      lastName: '',
+      email: 'buyer@example.com',
+    });
+  });
+
   it('completes session loading when customer lookup fails', async () => {
     getUser.mockResolvedValue({ data: { user: signedInUser } });
     vi.mocked(fetch).mockRejectedValue(new Error('offline'));

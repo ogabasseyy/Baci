@@ -84,6 +84,8 @@ function applyCheckoutCustomerPrefill(
   }
 
   const metadata = user.user_metadata;
+  if (!metadata) return;
+
   const firstName = metadata.first_name;
   const fullName = metadata.full_name;
   const name = metadata.name;

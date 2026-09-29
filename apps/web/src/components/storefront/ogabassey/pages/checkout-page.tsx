@@ -12,15 +12,13 @@ import {
   type DvaModalData,
 } from './checkout/hooks/use-dva-confirm-transfer';
 
-import { DeferredCryptoSelectorModal as CryptoSelectorModal } from './checkout/components/DeferredCryptoSelectorModal';
 import {
   CHECKOUT_FUNNEL_EVENTS,
   buildCheckoutFunnelProperties,
   getCheckoutPaymentIntent,
 } from '@baci/shared/contracts';
 import { ChevronRight, ShieldCheck } from 'lucide-react';
-import { DvaModal } from './checkout/components/DvaModal';
-import { CryptoPaymentModal } from './checkout/components/CryptoPaymentModal';
+import { CheckoutPaymentOverlays } from './checkout/components/CheckoutPaymentOverlays';
 import { CheckoutStepComposition } from './checkout/components/CheckoutStepComposition';
 import {
   DiscountCodeInput,
@@ -91,8 +89,6 @@ import { deriveCheckoutDisplayModel } from './checkout/derive-checkout-display-m
 import { deriveCheckoutSummaryAmounts } from './checkout/derive-checkout-summary-amounts';
 import { deriveCheckoutPaymentBaseTotal } from './checkout/derive-checkout-payment-base-total';
 import { readCheckoutAttemptGeneration } from './checkout/checkout-attempt-generation';
-import { DeferredWalletFundedTransferModal as WalletFundedTransferModal } from './checkout/components/DeferredWalletFundedTransferModal';
-import { DeferredWalletTransferConsentDialog as WalletTransferConsentDialog } from './checkout/components/DeferredWalletTransferConsentDialog';
 import { CheckoutResumeStatus } from './checkout/components/CheckoutResumeStatus';
 import {
   DesktopOrderSummary,
@@ -260,20 +256,6 @@ export const CheckoutPage: React.FC = () => {
   const [accountPassword, setAccountPassword] = useState('');
   const setNewsletterOptIn = (value: boolean) => setCheckoutField('newsletterOptIn', value);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-
-  // Copy to clipboard helper (2025: Clipboard API with visual feedback)
-  const [copiedText, setCopiedText] = useState<string | null>(null);
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedText(text);
-      // Auto-clear after 2 seconds
-      setTimeout(() => setCopiedText(null), 2000);
-    } catch (err) {
-      // Clipboard API not supported - show error instead of using deprecated method
-      console.error('Clipboard API not available:', err);
-    }
-  };
 
   // Dedicated Virtual Account (DVA) state
   const [dvaData, setDvaData] = useState<DvaModalData | null>(null);
@@ -765,81 +747,59 @@ export const CheckoutPage: React.FC = () => {
         onSuccess={() => setIsAuthModalOpen(false)}
       />}
 
-      {/* Crypto Selector Modal */}
-      {showCryptoSelector && (
-        <CryptoSelectorModal
-          selectedCryptoCurrency={selectedCryptoCurrency}
-          selectedCryptoChain={selectedCryptoChain}
-          supportedChains={cryptoChainSupport[selectedCryptoCurrency]}
-          isInitializingCrypto={isInitializingCrypto}
-          onCurrencyChange={(currency) => { cancelCryptoInitialization(); handleCryptoCurrencyChange(currency); }}
-          onChainChange={(chain) => { cancelCryptoInitialization(); setSelectedCryptoChain(chain); }}
-          onInitialize={initializeCryptoPayment}
-          onClose={() => {
+      <CheckoutPaymentOverlays
+        cryptoSelector={showCryptoSelector ? {
+          selectedCryptoCurrency,
+          selectedCryptoChain,
+          supportedChains: cryptoChainSupport[selectedCryptoCurrency],
+          isInitializingCrypto,
+          onCurrencyChange: (currency) => {
+            cancelCryptoInitialization();
+            handleCryptoCurrencyChange(currency);
+          },
+          onChainChange: (chain) => {
+            cancelCryptoInitialization();
+            setSelectedCryptoChain(chain);
+          },
+          onInitialize: initializeCryptoPayment,
+          onClose: () => {
             cancelCryptoInitialization();
             setShowCryptoSelector(false);
             setPendingCryptoOrder(null);
             isOrderInFlightRef.current = false;
-          }}
-        />
-      )}
-
-      {/* Crypto Payment Modal */}
-      {cryptoPaymentData && (
-        <CryptoPaymentModal
-          data={cryptoPaymentData}
-          verificationStatus={cryptoVerificationStatus}
-          isVerifying={isVerifyingCrypto}
-          copiedText={copiedText}
-          onVerify={verifyCryptoPayment}
-          onCopyToClipboard={copyToClipboard}
-          onClose={dismissCryptoModal}
-          onCloseConfirm={() => {
-            const confirmed = confirm(
-              'Are you sure you want to close? If you\'ve already sent payment, your order will still be processed once the payment is detected.'
-            );
-            if (confirmed) dismissCryptoModal();
-          }}
-        />
-      )}
-
-      {/* Wallet-funded bank transfer (P4a): consent, then the customer's own
-          standing wallet account number — money in, wallet credited, order
-          auto-debited. Legacy order-DVA modal below is untouched. */}
-      {walletFundedTransfer.consentRequested && (
-        <WalletTransferConsentDialog
-          merchantName={merchant?.business_name || 'This store'}
-          onAccept={walletFundedTransfer.acceptConsent}
-          onDecline={walletFundedTransfer.declineConsent}
-        />
-      )}
-
-      {walletFundedTransfer.account && walletFundedTransfer.intent && (
-        <WalletFundedTransferModal
-          account={walletFundedTransfer.account}
-          copiedText={copiedText}
-          error={walletFundedTransfer.error}
-          formatCurrency={formatCurrencyAuto}
-          intent={walletFundedTransfer.intent}
-          isChecking={walletFundedTransfer.isChecking}
-          onCheckNow={walletFundedTransfer.checkNow}
-          onClose={walletFundedTransfer.close}
-          onCopy={copyToClipboard}
-        />
-      )}
-
-      {/* Dedicated Virtual Account (DVA) Modal */}
-      {dvaData && (
-        <DvaModal
-          data={dvaData}
-          copiedText={copiedText}
-          formatCurrency={formatCurrencyAuto}
-          isVerifying={isVerifyingDva}
-          onClose={closeDvaModal}
-          onConfirmTransfer={handleDvaConfirmTransfer}
-          onCopyToClipboard={copyToClipboard}
-        />
-      )}
+          },
+        } : undefined}
+        cryptoPayment={cryptoPaymentData ? {
+          data: cryptoPaymentData,
+          verificationStatus: cryptoVerificationStatus,
+          isVerifying: isVerifyingCrypto,
+          onVerify: verifyCryptoPayment,
+          onClose: dismissCryptoModal,
+        } : undefined}
+        walletTransfer={{
+          consent: walletFundedTransfer.consentRequested ? {
+            merchantName: merchant?.business_name || 'This store',
+            onAccept: walletFundedTransfer.acceptConsent,
+            onDecline: walletFundedTransfer.declineConsent,
+          } : undefined,
+          funding: walletFundedTransfer.account && walletFundedTransfer.intent ? {
+            account: walletFundedTransfer.account,
+            error: walletFundedTransfer.error,
+            formatCurrency: formatCurrencyAuto,
+            intent: walletFundedTransfer.intent,
+            isChecking: walletFundedTransfer.isChecking,
+            onCheckNow: walletFundedTransfer.checkNow,
+            onClose: walletFundedTransfer.close,
+          } : undefined,
+        }}
+        dva={dvaData ? {
+          data: dvaData,
+          formatCurrency: formatCurrencyAuto,
+          isVerifying: isVerifyingDva,
+          onClose: closeDvaModal,
+          onConfirmTransfer: handleDvaConfirmTransfer,
+        } : undefined}
+      />
 
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}

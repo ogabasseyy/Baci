@@ -189,6 +189,10 @@ body {
 }
 
 .mode-fullscreen .products-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
+}
+
+.mode-fullscreen .products-grid--single {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
 }
 

@@ -87,6 +87,22 @@ describe('discovery product intent', () => {
     expect(matchesDiscoveryProductIntent({
       name: 'iPhone 15 Pro Max Case', category: 'Accessories',
     }, 'iPhone 15 Pro Max case')).toBe(true);
+    expect(matchesDiscoveryProductIntent({
+      name: 'iPhone 15 Pro Max Case', category: 'Accessories',
+    }, 'iPhone 15 Pro case')).toBe(false);
+  });
+
+  it('rejects incompatible accessory titles and compatibility brands', () => {
+    expect(matchesDiscoveryProductIntent({
+      name: 'Laptop Case', category: 'Laptop Accessories',
+    }, 'cheap laptop')).toBe(false);
+    expect(matchesDiscoveryProductIntent({
+      name: 'iPhone 15 Case', brand: 'Apple', category: 'Accessories',
+      description: 'Protective case compatible with iPhone 15.',
+    }, 'case for Samsung phone')).toBe(false);
+    expect(matchesDiscoveryProductIntent({
+      name: 'Protective Case for Samsung Galaxy S24', brand: 'Generic', category: 'Accessories',
+    }, 'case for Samsung phone')).toBe(true);
   });
 
   it.each([

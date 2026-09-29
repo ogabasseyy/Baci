@@ -103,8 +103,18 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
   if (itemType && !categoryWords.some((word) => matchesWord([word], itemType)) &&
     nameWords.some((word) => accessoryHeadTypes.has(word) && !matchesWord([word], itemType))) return false;
 
+  // Category and compatibility text may mention the requested device, but an
+  // accessory title still describes the thing being sold.
+  if (itemType && !phoneAccessoryTypes.has(itemType) &&
+    nameWords.some((word) => accessoryHeadTypes.has(word))) return false;
+
+  // Brands after "for" describe compatibility (for example, a case for
+  // Samsung), rather than the accessory's manufacturer.
   const requestedBrands = itemWords.filter((word) => knownBrandWords.has(word));
+  const compatibilityWords = words([product.name, product.description].filter(Boolean).join(' '));
   if (requestedBrands.some((brand) => !matchesWord(identityWords, brand))) return false;
+  const compatibilityBrands = coreWords.slice(itemWords.length).filter((word) => knownBrandWords.has(word));
+  if (compatibilityBrands.some((brand) => !matchesWord(compatibilityWords, brand))) return false;
 
   // "Phone pouch" describes an accessory, even if its description mentions
   // phones. A handset must be catalogued or named as the actual item.
@@ -125,6 +135,14 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
       !matchesWord(itemText, preceding)) return false;
     for (let next = index + 1; modelQualifiers.has(coreWords[next]); next += 1) {
       if (!matchesWord(identityWords, coreWords[next])) return false;
+    }
+    const productAnchorIndex = identityWords.findIndex((word) => word === token);
+    if (productAnchorIndex >= 0) {
+      const queryQualifiers: string[] = [];
+      for (let next = index + 1; modelQualifiers.has(coreWords[next]); next += 1) queryQualifiers.push(coreWords[next]);
+      const productQualifiers: string[] = [];
+      for (let next = productAnchorIndex + 1; modelQualifiers.has(identityWords[next]); next += 1) productQualifiers.push(identityWords[next]);
+      if (productQualifiers.some((qualifier) => !queryQualifiers.includes(qualifier))) return false;
     }
   }
   return true;

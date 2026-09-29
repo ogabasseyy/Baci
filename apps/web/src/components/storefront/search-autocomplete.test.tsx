@@ -113,6 +113,21 @@ describe('SearchAutocomplete', () => {
     expect(input).toHaveClass('pl-11');
   });
 
+  it('forwards an optional maximum input length', () => {
+    render(
+      <SearchAutocomplete
+        merchantId="test-merchant"
+        value=""
+        onChange={vi.fn()}
+        maxLength={100}
+      />
+    );
+
+    expect(
+      screen.getByRole('searchbox', { name: /search products/i })
+    ).toHaveAttribute('maxlength', '100');
+  });
+
   it('shows clear button when value is present', () => {
     const handleChange = vi.fn();
     render(

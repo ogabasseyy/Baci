@@ -32,6 +32,12 @@ export interface SearchAutocompleteProps {
    * the legacy first-product behavior is preserved.
    */
   onSubmitSearch?: (query: string) => void;
+  /**
+   * Maximum input length. Submit-wired consumers that truncate the route
+   * query (e.g. the navbar's 100-character cap) pass the same limit so
+   * the displayed value can never disagree with the submitted query.
+   */
+  maxLength?: number;
   placeholder?: string;
   className?: string;
   id?: string;

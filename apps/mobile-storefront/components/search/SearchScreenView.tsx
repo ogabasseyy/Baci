@@ -173,6 +173,7 @@ export default function SearchScreenView({
         committedQuery={committedQuery}
         isLoadingMore={isLoadingMore}
         isNextPageError={isNextPageError}
+        isRetrying={isRetrying}
         listError={searchError}
         onEndReached={onEndReached}
         onProductPress={onProductPress}

@@ -11,6 +11,8 @@ interface SearchResultsListProps {
   isLoadingMore: boolean;
   /** True when the footer error came from a next-page fetch (not a refetch). */
   isNextPageError: boolean;
+  /** True while any retry/refetch request is in flight. */
+  isRetrying: boolean;
   /** Retained-results failure (next-page or background refetch). Null when healthy. */
   listError: string | null;
   onEndReached: () => void;
@@ -28,6 +30,7 @@ export default function SearchResultsList({
   committedQuery,
   isLoadingMore,
   isNextPageError,
+  isRetrying,
   listError,
   onEndReached,
   onProductPress,
@@ -73,11 +76,11 @@ export default function SearchResultsList({
         </View>
       }
       ListFooterComponent={
-        isLoadingMore ? (
+        isLoadingMore || (listError && isRetrying) ? (
           <View style={styles.resultsFooter}>
             <ActivityIndicator size="small" color={colors.primary} />
             <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-              Loading more…
+              {isLoadingMore ? 'Loading more…' : 'Retrying…'}
             </Text>
           </View>
         ) : listError ? (

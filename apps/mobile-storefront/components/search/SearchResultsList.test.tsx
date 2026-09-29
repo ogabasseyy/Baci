@@ -57,6 +57,7 @@ function renderList(
     committedQuery: '',
     isLoadingMore: false,
     isNextPageError: false,
+    isRetrying: false,
     listError: null,
     onEndReached: jest.fn(),
     onProductPress: jest.fn(),
@@ -141,6 +142,24 @@ describe('SearchResultsList', () => {
     );
     expect(onRetryNextPage).toHaveBeenCalledTimes(1);
     expect(onRetry).not.toHaveBeenCalled();
+  });
+
+  it('shows progress instead of the retry while a refetch retry pends', () => {
+    const products = [{ id: 'product-1', name: 'iPhone 16' }] as Product[];
+
+    renderList({
+      committedQuery: 'iphone',
+      isNextPageError: false,
+      isRetrying: true,
+      listError: 'Search failed',
+      products,
+      totalCount: 45,
+    });
+
+    expect(screen.getByText('Retrying…')).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: 'Retry loading more results' })
+    ).toBeNull();
   });
 
   it('refetches loaded pages when a background refetch fails', () => {

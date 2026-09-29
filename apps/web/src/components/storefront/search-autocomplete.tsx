@@ -20,6 +20,7 @@ export function SearchAutocomplete({
   onChange,
   onSelectProduct,
   onSubmitSearch,
+  maxLength,
   placeholder = 'Search products...',
   className,
   id = 'search-input',
@@ -198,6 +199,7 @@ export function SearchAutocomplete({
           ref={inputRef}
           type="search"
           placeholder={placeholder}
+          maxLength={maxLength}
           value={value}
           onChange={(e) => {
             onChange(e.target.value);

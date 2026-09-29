@@ -137,6 +137,10 @@ export function NavbarSearch({
         onChange={setSearchQuery}
         onSelectProduct={handleProductSelect}
         onSubmitSearch={pushSearchRoute}
+        // Match pushSearchRoute's 100-character truncation (and the
+        // fallback input below) so the persistent value can never exceed
+        // the submitted query.
+        maxLength={100}
         placeholder="Search products, brands and categories"
         className={SEARCH_INPUT_CLASS_NAME}
         autoFocus={shouldAutoFocusAutocomplete}

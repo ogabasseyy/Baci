@@ -14,11 +14,13 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/components/storefront/search-autocomplete', () => ({
   SearchAutocomplete: ({
     value,
+    maxLength,
     onChange,
     onSelectProduct,
     onSubmitSearch,
   }: {
     value: string;
+    maxLength?: number;
     onChange: (value: string) => void;
     onSelectProduct: (url: string) => void;
     onSubmitSearch?: (query: string) => void;
@@ -28,6 +30,7 @@ vi.mock('@/components/storefront/search-autocomplete', () => ({
         type="search"
         aria-label="Search products"
         value={value}
+        maxLength={maxLength}
         onChange={(event) => onChange(event.target.value)}
       />
       <button type="button" onClick={() => onSelectProduct('/products/iphone')}>
@@ -83,6 +86,31 @@ describe('NavbarSearch', () => {
     fireEvent.click(screen.getByRole('button', { name: /select product/i }));
 
     expect(mocks.push).toHaveBeenCalledWith('/ogabassey/products/iphone');
+  });
+
+  it('caps the loaded autocomplete input at the route truncation limit', async () => {
+    render(
+      <NavbarSearch
+        basePath="/ogabassey"
+        isBlogPage={false}
+        merchantId="merchant-1"
+      />
+    );
+
+    fireEvent.focus(screen.getByRole('searchbox', { name: /search products/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: /submit search/i })
+      ).toBeInTheDocument();
+    });
+
+    // pushSearchRoute truncates to 100 characters: the input carries the
+    // same cap so the persistent value can never exceed the submitted
+    // query after a long paste.
+    expect(
+      screen.getByRole('searchbox', { name: /search products/i })
+    ).toHaveAttribute('maxlength', '100');
   });
 
   it('routes loaded-autocomplete submissions to the encoded search page', async () => {

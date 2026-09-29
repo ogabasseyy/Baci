@@ -148,6 +148,40 @@ describe('POST /api/cron/process-settlements', () => {
     expect(mocks.in).toHaveBeenCalledWith('id', ['settlement-1']);
   });
 
+  it('skips announcing a settlement reversed after the batch read', async () => {
+    // A concurrent refund cancelled the snapshotted row before the
+    // per-merchant send: announcing it would tell the merchant
+    // reversed funds settled.
+    mocks.in.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'settlement-1',
+          settlement_notified: false,
+          status: 'cancelled',
+        },
+      ],
+      error: null,
+    });
+
+    const response = await POST(makeCronRequest());
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.notifications).toEqual({ failed: 0, sent: 0 });
+    expect(mocks.sendEmail).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it('guards the notified mark against a reversal racing the send', async () => {
+    const response = await POST(makeCronRequest());
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.notifications).toEqual({ failed: 0, sent: 1 });
+    expect(mocks.eq).toHaveBeenCalledWith('status', 'settled');
+    expect(mocks.eq).toHaveBeenCalledWith('settlement_notified', false);
+  });
+
   it('continues without sending emails when pending notification lookup fails', async () => {
     mocks.limit.mockResolvedValue({
       data: null,

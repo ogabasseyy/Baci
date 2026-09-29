@@ -93,6 +93,38 @@ describe('drainFailedOrderCancellationSideEffects', () => {
     }
   });
 
+  it('skips an email step without claiming when its sender budget will not fit', async () => {
+    const candidate = {
+      attempts: 4,
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-1',
+      step: 'customer_email',
+    };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(terminalQuery([candidate]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([]));
+    // 30s left: past the deadline guard but short of the 48s
+    // single-attempt sender budget. Claiming would burn the final
+    // attempt only for the email to refuse before sending.
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_240_000);
+
+    try {
+      const result = await drainFailedOrderCancellationSideEffects({
+        deadlineMs: 1_270_000,
+        sendCancellationEmail: vi.fn(),
+        supabase: { from } as never,
+      });
+
+      expect(mocks.run).not.toHaveBeenCalled();
+      expect(from).toHaveBeenCalledTimes(3);
+      expect(result).toEqual({ drained: [], failed: [], skipped: [] });
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it('fails closed when candidate lookup fails', async () => {
     const from = vi
       .fn()

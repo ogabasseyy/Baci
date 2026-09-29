@@ -13,7 +13,9 @@ import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail';
 // One transport attempt per sender: the cancellation phase cannot fit a
 // full retry loop, so the next cron tick retries instead of in-process
 // retries burning the phase and stranding the row delivery_uncertain.
-const EMAIL_ATTEMPTS_PER_SENDER = 1;
+// Shared with the drain's pre-claim budget skip: keep both call sites
+// on this constant.
+export const EMAIL_ATTEMPTS_PER_SENDER = 1;
 
 export async function executeCustomerEmailCancellationSideEffect({
   deadlineMs,

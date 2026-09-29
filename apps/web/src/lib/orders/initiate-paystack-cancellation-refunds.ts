@@ -109,6 +109,13 @@ export async function initiatePaystackCancellationRefunds({
             ambiguous_initiation: isAmbiguousFailure,
           },
           order,
+          // A deterministic rejection accepted nothing, so a transient
+          // review-write failure must stay retryable: terminalizing
+          // here would strand the customer unrefunded with no review
+          // after a temporary database failure. Ambiguous failures
+          // may still have created a provider refund, so they keep
+          // the terminal quarantine.
+          preflight: !isAmbiguousFailure,
           reason: isAmbiguousFailure
             ? 'Paystack refund initiation failed ambiguously and may already exist for this payment leg'
             : 'Paystack refund initiation was rejected for this payment leg',

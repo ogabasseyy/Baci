@@ -84,6 +84,9 @@ export async function fileDuplicatePaymentCapture({
         p_gateway: evidence.gateway,
         p_charge_id: evidence.providerReference,
         p_reason: `Stale attempt ${attempt.gateway_reference} verified as captured${detail}`,
+        p_provider_amount: evidence.providerAmount,
+        p_provider_currency: evidence.providerCurrency,
+        p_provider_status: evidence.providerStatus,
       }
     );
     if (mergeError || merged !== true) return false;

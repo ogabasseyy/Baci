@@ -1,6 +1,10 @@
 -- Preserve the first open duplicate-capture review while recording each
 -- additional verified capture on the same order. A second sweep worker
--- must not overwrite it.
+-- must not overwrite it. Every merged capture carries its full provider
+-- evidence (amount, currency, status): the row is stamped and never
+-- reselected, so without them operations cannot reconcile a later
+-- charge whose provider evidence differs from the local transaction.
+DROP FUNCTION IF EXISTS public.merge_duplicate_payment_capture_evidence_v1(uuid,uuid,uuid,text,text,text,text);
 CREATE FUNCTION public.merge_duplicate_payment_capture_evidence_v1(
   p_order_id uuid,
   p_merchant_id uuid,
@@ -8,7 +12,10 @@ CREATE FUNCTION public.merge_duplicate_payment_capture_evidence_v1(
   p_gateway_reference text,
   p_gateway text,
   p_charge_id text,
-  p_reason text
+  p_reason text,
+  p_provider_amount numeric,
+  p_provider_currency text,
+  p_provider_status text
 ) RETURNS boolean
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
@@ -22,7 +29,10 @@ BEGIN
     OR nullif(btrim(coalesce(p_gateway_reference, '')), '') IS NULL
     OR nullif(btrim(coalesce(p_gateway, '')), '') IS NULL
     OR nullif(btrim(coalesce(p_charge_id, '')), '') IS NULL
-    OR nullif(btrim(p_reason), '') IS NULL THEN
+    OR nullif(btrim(p_reason), '') IS NULL
+    OR p_provider_amount IS NULL
+    OR nullif(btrim(coalesce(p_provider_currency, '')), '') IS NULL
+    OR nullif(btrim(coalesce(p_provider_status, '')), '') IS NULL THEN
     RETURN false;
   END IF;
   -- The wedge sweep files duplicate captures for every healable gateway,
@@ -56,6 +66,9 @@ BEGIN
             'gateway_reference', left(p_gateway_reference, 120),
             'gateway', left(p_gateway, 40),
             'charge_id', left(p_charge_id, 120),
+            'provider_amount', p_provider_amount,
+            'provider_currency', left(p_provider_currency, 12),
+            'provider_status', left(p_provider_status, 60),
             'reason', left(p_reason, 120),
             'observed_at', now()
           )
@@ -66,7 +79,7 @@ BEGIN
   RETURN true;
 END;
 $$;
-REVOKE ALL ON FUNCTION public.merge_duplicate_payment_capture_evidence_v1(uuid,uuid,uuid,text,text,text,text)
+REVOKE ALL ON FUNCTION public.merge_duplicate_payment_capture_evidence_v1(uuid,uuid,uuid,text,text,text,text,numeric,text,text)
   FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.merge_duplicate_payment_capture_evidence_v1(uuid,uuid,uuid,text,text,text,text)
+GRANT EXECUTE ON FUNCTION public.merge_duplicate_payment_capture_evidence_v1(uuid,uuid,uuid,text,text,text,text,numeric,text,text)
   TO service_role;

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { escapeHtmlText } from '@/lib/sanitize';
+import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail';
 import { assertRefundNotificationSendTime } from './assert-refund-notification-send-time';
 import { awaitRefundNotificationDeadline } from './await-refund-notification-deadline';
 import { countDeadLetteredPaystackRefundNotifications } from './count-dead-lettered-paystack-refund-notifications';
@@ -127,7 +128,14 @@ export async function drainPaystackRefundNotifications(
         if (!order.customer_email)
           throw new Error('refund_customer_email_missing');
         const text = `Hello ${order.customer_name || 'there'}, we have processed the refund of ${amount} for cancelled order #${orderNumber}. Your bank or card provider may take up to 10 business days to show the funds. If they do not arrive, contact ${merchant.support_email || merchant.email}.`;
-        assertRefundNotificationSendTime(deadlineMs);
+        // Admit on the full four-attempt sender budget, not the 20s
+        // default: starting the uncapped loop short of it lets the
+        // deadline abort mid-send and terminalize a retryable row as
+        // delivery_uncertain.
+        assertRefundNotificationSendTime(
+          deadlineMs,
+          zeptomailSendAdmissionBudgetMs()
+        );
         // A thrown mail call has unknown delivery outcome; do not auto-retry it.
         outcome = 'delivery_uncertain';
         const result = await awaitRefundNotificationDeadline(
@@ -223,7 +231,14 @@ export async function drainPaystackRefundNotifications(
           }
           if (outcome !== 'sent') {
             outcome = 'failed';
-            assertRefundNotificationSendTime(deadlineMs);
+            // Re-check the FULL sender budget after the push attempt:
+            // push consumed part of the row's reserve, and the 20s
+            // default would start an email loop the deadline then
+            // aborts into delivery_uncertain.
+            assertRefundNotificationSendTime(
+              deadlineMs,
+              zeptomailSendAdmissionBudgetMs()
+            );
             outcome = 'delivery_uncertain';
             const result = await awaitRefundNotificationDeadline(
               sendEmail({

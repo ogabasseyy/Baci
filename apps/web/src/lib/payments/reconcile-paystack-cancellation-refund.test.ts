@@ -11,6 +11,7 @@ vi.mock('./fetch-paystack-refund', () => ({
   fetchRefund: provider.fetchRefund,
 }));
 
+import { isDeterministicRefundError } from './is-deterministic-paystack-refund-error';
 import { reconcilePaystackCancellationRefund } from './reconcile-paystack-cancellation-refund';
 
 const refund = {
@@ -81,6 +82,50 @@ describe('Paystack cancellation refund reconciliation', () => {
         p_amount_kobo: 10000,
       })
     );
+  });
+
+  it('files a deterministic rejection when the provider lookup 404s', async () => {
+    provider.fetchRefund.mockResolvedValueOnce({
+      code: 'HTTP_404',
+      error: 'Refund not found',
+      success: false,
+    });
+    const failure = await reconcilePaystackCancellationRefund(
+      database() as never,
+      refund
+    ).then(
+      () => {
+        throw new Error('expected the lookup rejection to throw');
+      },
+      (error: unknown) => error
+    );
+    // A definitive rejection never heals: the worker must file and hold
+    // instead of rotating the row forever as merely unavailable.
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toBe('paystack_refund_lookup_rejected');
+    expect(isDeterministicRefundError(failure)).toBe(true);
+  });
+
+  it('stays retryable when the provider lookup fails transiently', async () => {
+    provider.fetchRefund.mockResolvedValueOnce({
+      code: 'HTTP_503',
+      error: 'upstream down',
+      success: false,
+    });
+    const failure = await reconcilePaystackCancellationRefund(
+      database() as never,
+      refund
+    ).then(
+      () => {
+        throw new Error('expected the outage to throw');
+      },
+      (error: unknown) => error
+    );
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toBe(
+      'paystack_refund_verification_unavailable'
+    );
+    expect(isDeterministicRefundError(failure)).toBe(false);
   });
 
   it('verifies a partial refund against its own row amount', async () => {

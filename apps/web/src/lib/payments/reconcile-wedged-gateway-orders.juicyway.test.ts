@@ -96,9 +96,10 @@ describe('reconcileWedgedGatewayOrders Juicyway', () => {
         gateway: 'juicyway',
         orderId: 'order-1',
         reference: 'BAC-JUICY',
-        // The cron never claims the flip: classification comes from the
-        // atomic completion result, not the stale candidate snapshot.
-        wonTransactionFlip: false,
+        // The pending candidate keeps its fresh-capture signal; a
+        // same-transaction replay is distinguished downstream by the
+        // outbox payer evidence.
+        wonTransactionFlip: true,
       })
     );
     expect(summary.healed).toEqual([

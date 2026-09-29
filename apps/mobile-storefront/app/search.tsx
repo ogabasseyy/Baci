@@ -9,6 +9,7 @@ import {
   MIN_SEARCH_QUERY_LENGTH,
 } from '@/constants/search';
 import { useCategories, useProductBrands, useProducts } from '@/hooks';
+import { isSearchableQuery } from '@/hooks/is-searchable-query';
 import { parseRouteSearchQuery } from '@/hooks/parse-route-search-query';
 import { useNetworkState } from '@/hooks/use-network-state';
 import { useSearchRouteQuerySync } from '@/hooks/use-search-route-query-sync';
@@ -26,7 +27,15 @@ export default function SearchScreen() {
   const [query, setQuery] = useState(routeQuery ?? '');
   const activeQuery = query.trim();
   const [debouncedQuery, setDebouncedQuery] = useState(routeQuery ?? '');
-  const hasSearchQuery = debouncedQuery.length >= MIN_SEARCH_QUERY_LENGTH;
+  // A committed query also has to survive product-search normalization:
+  // punctuation-only input passes the length check but the fetch would
+  // resolve it to zero matches. Gating here (rather than per submit
+  // path) covers typed commits, debounced typing, and recent searches
+  // uniformly: unsearchable input stays on the idle screen instead of
+  // presenting a misleading no-results journey.
+  const hasSearchQuery =
+    debouncedQuery.length >= MIN_SEARCH_QUERY_LENGTH &&
+    isSearchableQuery(debouncedQuery);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [minPrice, setMinPrice] = useState(0);
   const [maxPrice, setMaxPrice] = useState(0);
@@ -108,7 +117,10 @@ export default function SearchScreen() {
 
     setQuery(trimmedValue);
     setDebouncedQuery(trimmedValue);
-    if (trimmedValue.length >= MIN_SEARCH_QUERY_LENGTH) {
+    if (
+      trimmedValue.length >= MIN_SEARCH_QUERY_LENGTH &&
+      isSearchableQuery(trimmedValue)
+    ) {
       saveToHistory(trimmedValue);
     }
     Keyboard.dismiss();

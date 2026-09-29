@@ -6,6 +6,7 @@ import {
   MAX_SEARCH_QUERY_LENGTH,
   MIN_SEARCH_QUERY_LENGTH,
 } from '@/constants/search';
+import { isSearchableQuery } from './is-searchable-query';
 
 interface UseHomeSearchControlsInput {
   isFocused: boolean;
@@ -44,7 +45,14 @@ export function useHomeSearchControls({
 
   const submitHomeSearch = (rawQuery: string) => {
     const trimmedQuery = rawQuery.trim().slice(0, MAX_SEARCH_QUERY_LENGTH);
-    if (trimmedQuery.length < MIN_SEARCH_QUERY_LENGTH) {
+    // Punctuation-only input passes the length check but normalizes to
+    // nothing, which the product fetch resolves to zero matches: keep it
+    // in the input with the hint instead of navigating to a misleading
+    // no-results journey for a query that was never searchable.
+    if (
+      trimmedQuery.length < MIN_SEARCH_QUERY_LENGTH ||
+      !isSearchableQuery(trimmedQuery)
+    ) {
       setShowSearchMinLengthHint(true);
       return;
     }
@@ -78,7 +86,8 @@ export function useHomeSearchControls({
     setSearchQuery(boundedQuery);
     if (
       showSearchMinLengthHint &&
-      boundedQuery.trim().length >= MIN_SEARCH_QUERY_LENGTH
+      boundedQuery.trim().length >= MIN_SEARCH_QUERY_LENGTH &&
+      isSearchableQuery(boundedQuery)
     ) {
       setShowSearchMinLengthHint(false);
     }

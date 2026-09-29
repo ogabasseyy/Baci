@@ -22,6 +22,12 @@ interface SearchResultsListProps {
   /** Retries the failed next-page offset. */
   onRetryNextPage: () => void;
   products: Product[];
+  /**
+   * Result-set identity (committed query + refinements). Applied as the
+   * list key so a new result set remounts at the top instead of
+   * inheriting a previous query's scroll offset.
+   */
+  resultsKey: string;
   totalCount: number;
 }
 
@@ -37,6 +43,7 @@ export default function SearchResultsList({
   onRetry,
   onRetryNextPage,
   products,
+  resultsKey,
   totalCount,
 }: SearchResultsListProps) {
   const countText =
@@ -46,6 +53,7 @@ export default function SearchResultsList({
 
   return (
     <FlashList
+      key={resultsKey}
       data={products}
       renderItem={({ item, index }) => (
         <View

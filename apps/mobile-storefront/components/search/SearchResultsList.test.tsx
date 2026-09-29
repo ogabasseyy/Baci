@@ -64,6 +64,7 @@ function renderList(
     onRetry: jest.fn(),
     onRetryNextPage: jest.fn(),
     products: [],
+    resultsKey: '["iphone","All","All","All",0,0,0]',
     totalCount: 0,
     ...overrides,
   };

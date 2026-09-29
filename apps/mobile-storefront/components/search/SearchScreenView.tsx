@@ -168,6 +168,23 @@ export default function SearchScreenView({
       );
     }
 
+    // Result-set identity: remounts the list whenever the committed
+    // query or any refinement changes. Without this, a cached query B
+    // renders in the same FlashList instance (isLoading stays false) and
+    // inherits A's scroll offset — landing the shopper mid-list, where a
+    // retained near-end position can immediately fire onEndReached and
+    // load page two. Returning from a product keeps the identity (and
+    // the scroll position) because neither side changes.
+    const resultsKey = JSON.stringify([
+      committedQuery,
+      selectedBrand,
+      selectedCategory,
+      selectedCondition,
+      minPrice,
+      maxPrice,
+      minRating,
+    ]);
+
     return (
       <SearchResultsList
         colors={colors}
@@ -181,6 +198,7 @@ export default function SearchScreenView({
         onRetry={onRetry}
         onRetryNextPage={onRetryNextPage}
         products={products}
+        resultsKey={resultsKey}
         totalCount={totalCount}
       />
     );

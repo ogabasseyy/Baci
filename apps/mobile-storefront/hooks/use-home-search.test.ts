@@ -134,6 +134,25 @@ describe('useHomeSearchControls', () => {
     expect(result.current.searchVisible).toBe(true);
   });
 
+  it('keeps punctuation-only queries in the input instead of navigating', () => {
+    const { result } = setup();
+
+    act(() => {
+      result.current.handleSearch();
+      result.current.handleSearchQueryChange('!!');
+    });
+    act(() => {
+      result.current.handleSearchSubmit();
+    });
+
+    // Passes the length check but normalizes to nothing, which the fetch
+    // would resolve to zero matches: stay put with guidance.
+    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(result.current.searchQuery).toBe('!!');
+    expect(result.current.showSearchMinLengthHint).toBe(true);
+    expect(result.current.searchVisible).toBe(true);
+  });
+
   it('prevents a second push while navigation is in flight', () => {
     const { result, rerender } = setup();
 

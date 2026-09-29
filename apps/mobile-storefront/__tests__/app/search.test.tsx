@@ -138,6 +138,23 @@ describe('SearchScreen route', () => {
     expect(syncStorage.setItem).not.toHaveBeenCalled();
   });
 
+  it('stays idle for route params that normalize to nothing', () => {
+    mockUseLocalSearchParams.mockReturnValue({ q: '!!' });
+
+    render(<SearchScreen />);
+
+    // Passes the length check but the fetch would resolve it to zero
+    // matches: treat the deep link as invalid instead of presenting a
+    // misleading no-results journey.
+    expect(mockViewProps.current).toMatchObject({
+      query: '',
+      hasSearchQuery: false,
+    });
+    expect(mockUseProducts).toHaveBeenLastCalledWith(
+      expect.objectContaining({ search: undefined, enabled: false })
+    );
+  });
+
   it('applies a new route query on a mounted screen without clobbering later edits', () => {
     mockUseLocalSearchParams.mockReturnValue({ q: 'iphone' });
 

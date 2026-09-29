@@ -176,4 +176,40 @@ describe('SearchScreen route', () => {
       expect.stringContaining('a'.repeat(150))
     );
   });
+
+  it('leaves punctuation-only commits idle instead of searching', () => {
+    mockUseLocalSearchParams.mockReturnValue({});
+    mockUseProducts.mockReturnValue(mockProductState());
+
+    render(<SearchScreen />);
+
+    act(() => {
+      mockViewProps.current?.onQueryChange('!!');
+    });
+    act(() => {
+      jest.advanceTimersByTime(250);
+    });
+
+    // Passes the length check but normalizes to nothing: no committed
+    // search, no fetch, no history entry — the idle screen stays.
+    expect(mockViewProps.current).toMatchObject({
+      query: '!!',
+      committedQuery: '',
+    });
+    expect(mockUseProducts).toHaveBeenLastCalledWith(
+      expect.objectContaining({ search: undefined, enabled: false })
+    );
+
+    act(() => {
+      mockViewProps.current?.onSubmitQuery();
+    });
+    const { syncStorage } = jest.requireMock('@/lib/storage') as {
+      syncStorage: { setItem: jest.Mock };
+    };
+    expect(syncStorage.setItem).not.toHaveBeenCalledWith(
+      'search_history',
+      expect.stringContaining('!!')
+    );
+    expect(mockViewProps.current).toMatchObject({ committedQuery: '' });
+  });
 });

@@ -18,12 +18,15 @@ jest.mock('./SearchResultsList', () => {
     __esModule: true,
     default: function MockSearchResultsList({
       listError,
+      resultsKey,
     }: {
       listError?: string | null;
+      resultsKey?: string;
     }) {
       return (
         <View testID="mock-results-list">
           <Text>{listError ?? 'no-list-error'}</Text>
+          <Text testID="mock-results-key">{resultsKey ?? 'no-key'}</Text>
         </View>
       );
     },
@@ -139,5 +142,66 @@ describe('SearchScreenView', () => {
     expect(screen.queryByText("Couldn't load results")).toBeNull();
     expect(screen.getByTestId('mock-results-list')).toBeTruthy();
     expect(screen.getByText('Search failed')).toBeTruthy();
+  });
+
+  it('rekeys the results list when the committed query changes', () => {
+    const products = [{ id: 'product-1', name: 'iPhone 16' }] as Product[];
+    const base = {
+      hasSearchQuery: true,
+      products,
+      totalCount: 1,
+    };
+
+    const first = renderView({ ...base, committedQuery: 'iphone' });
+    const iphoneKey = screen.getByTestId('mock-results-key').props.children;
+    expect(iphoneKey).toContain('iphone');
+    first.unmount();
+
+    // A new committed query remounts the list at the top instead of
+    // inheriting the previous query's scroll offset.
+    renderView({ ...base, committedQuery: 'galaxy' });
+    const galaxyKey = screen.getByTestId('mock-results-key').props.children;
+    expect(galaxyKey).not.toBe(iphoneKey);
+    expect(galaxyKey).toContain('galaxy');
+  });
+
+  it('rekeys the results list when a refinement changes', () => {
+    const products = [{ id: 'product-1', name: 'iPhone 16' }] as Product[];
+    const base = {
+      committedQuery: 'iphone',
+      hasSearchQuery: true,
+      products,
+      totalCount: 1,
+    };
+
+    const first = renderView(base);
+    const unrefinedKey = screen.getByTestId('mock-results-key').props.children;
+    first.unmount();
+
+    renderView({ ...base, selectedBrand: 'Apple' });
+    const refinedKey = screen.getByTestId('mock-results-key').props.children;
+    expect(refinedKey).not.toBe(unrefinedKey);
+    expect(refinedKey).toContain('Apple');
+  });
+
+  it('keeps the results list identity stable for the same result set', () => {
+    const products = [{ id: 'product-1', name: 'iPhone 16' }] as Product[];
+    const base = {
+      committedQuery: 'iphone',
+      hasSearchQuery: true,
+      products,
+      totalCount: 1,
+    };
+
+    const first = renderView(base);
+    const beforeKey = screen.getByTestId('mock-results-key').props.children;
+    first.unmount();
+
+    // Returning from a product re-renders the same query and refinements:
+    // the identity (and scroll position) must not reset.
+    renderView(base);
+    expect(screen.getByTestId('mock-results-key').props.children).toBe(
+      beforeKey
+    );
   });
 });

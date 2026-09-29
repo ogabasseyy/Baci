@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { assertRefundNotificationSendTime } from './assert-refund-notification-send-time';
 import { awaitRefundNotificationDeadline } from './await-refund-notification-deadline';
+import { fileDuplicatePaymentCapture } from './file-duplicate-payment-capture';
 import type { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
 
 /**
@@ -122,6 +123,43 @@ export async function finalizePartiallyPaidAbandonedAttempt({
     throw finalizeError;
   }
   if (outcome.kind === 'completed') {
+    if (outcome.capturedOnPaidOrder) {
+      // The order filled before our atomic flip: this capture is extra
+      // money, so classify from the completion result — not the stale
+      // partially-paid snapshot — and file the possible duplicate charge
+      // instead of recording a completion.
+      const capture = providerData as unknown as {
+        amount: number;
+        currency: string;
+        reference: string;
+        status: string;
+      };
+      const filed = await fileDuplicatePaymentCapture({
+        attempt: {
+          gateway_reference: attempt.gateway_reference,
+          id: attempt.id,
+          merchant_id: attempt.merchant_id,
+          // Unread by the filer; the stamp merges database-side so a
+          // concurrent completion is never clobbered.
+          metadata: null,
+          order_id: attempt.order_id,
+        },
+        evidence: {
+          providerAmount: capture.amount,
+          providerCurrency: capture.currency,
+          providerReference: capture.reference,
+          providerStatus: capture.status,
+        },
+        supabase,
+      });
+      if (filed) {
+        summary.reviewsFiled.push(attempt.id);
+        return;
+      }
+      summary.failed = true;
+      await hold('duplicate_capture_review_failed');
+      return;
+    }
     summary.completed.push(attempt.id);
     return;
   }

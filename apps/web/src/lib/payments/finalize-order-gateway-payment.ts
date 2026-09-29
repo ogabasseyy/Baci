@@ -173,6 +173,7 @@ export async function finalizeOrderGatewayPayment({
   // before the modern side-effect drain to avoid duplicating those effects.
   if (legacyPaidReplay) {
     return {
+      capturedOnPaidOrder: false,
       healed,
       kind: 'completed',
       orderNumber: completion.order_number ?? null,
@@ -232,6 +233,7 @@ export async function finalizeOrderGatewayPayment({
         reference,
       });
       return {
+        capturedOnPaidOrder: true,
         healed,
         kind: 'completed',
         orderNumber: completion.order_number ?? null,
@@ -287,6 +289,7 @@ export async function finalizeOrderGatewayPayment({
   }
 
   return {
+    capturedOnPaidOrder: capturedOnAlreadyPaidOrder,
     healed,
     kind: 'completed',
     orderNumber: completion.order_number ?? null,

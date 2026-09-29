@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GatewayPaymentTransaction } from './gateway-payment-transaction';
 import { initiatePaystackCancellationRefunds } from './initiate-paystack-cancellation-refunds';
-import { DeliveryUncertainError } from './run-order-cancellation-side-effect';
+import {
+  initiationOrder,
+  initiationTransaction,
+  mockAcceptedRefund,
+} from './initiate-paystack-cancellation-refunds.test-helpers';
 
 const mocks = vi.hoisted(() => ({
   initiatePaystackRefund: vi.fn(),
@@ -23,19 +26,8 @@ vi.mock('@/lib/logger', () => ({
 describe('initiatePaystackCancellationRefunds', () => {
   const insert = vi.fn();
   const supabase = { from: vi.fn(() => ({ insert })) } as never;
-  const order = {
-    currency: 'NGN',
-    id: 'order-1',
-    merchant_id: 'merchant-1',
-    order_number: 'B-1',
-  };
-  const transaction: GatewayPaymentTransaction = {
-    amount: 12.5,
-    currency: 'NGN',
-    gateway: 'paystack',
-    gateway_reference: 'PSK-1',
-    id: 'tx-1',
-  } as GatewayPaymentTransaction;
+  const order = initiationOrder;
+  const transaction = initiationTransaction;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -43,15 +35,7 @@ describe('initiatePaystackCancellationRefunds', () => {
   });
 
   function acceptedRefund(overrides: Record<string, unknown> = {}) {
-    mocks.initiatePaystackRefund.mockResolvedValue({
-      data: {
-        id: 101,
-        status: 'queued',
-        transaction: { id: 55, reference: 'PSK-1' },
-        ...overrides,
-      },
-      success: true,
-    });
+    mockAcceptedRefund(mocks.initiatePaystackRefund, overrides);
   }
 
   it('audits accepted refunds as refund_pending before returning', async () => {
@@ -116,62 +100,6 @@ describe('initiatePaystackCancellationRefunds', () => {
         }),
       })
     );
-  });
-
-  it('bounds each leg to the remaining deadline', async () => {
-    acceptedRefund();
-    const now = vi.spyOn(Date, 'now').mockReturnValue(1_200_000);
-
-    try {
-      const refundIds = await initiatePaystackCancellationRefunds({
-        deadlineMs: 1_270_000,
-        order,
-        refundedPaymentIds: new Set(),
-        supabase,
-        transactions: [transaction],
-      });
-
-      expect(refundIds).toEqual([101]);
-      expect(mocks.initiatePaystackRefund).toHaveBeenCalledWith(
-        'PSK-1',
-        1250,
-        'Order cancelled',
-        70_000
-      );
-    } finally {
-      now.mockRestore();
-    }
-  });
-
-  it('throws a retryable error without calling the provider past the deadline', async () => {
-    acceptedRefund();
-    const now = vi.spyOn(Date, 'now').mockReturnValue(1_270_000);
-
-    try {
-      const failure = await initiatePaystackCancellationRefunds({
-        deadlineMs: 1_270_000,
-        order,
-        refundedPaymentIds: new Set(),
-        supabase,
-        transactions: [transaction],
-      }).then(
-        () => {
-          throw new Error('expected the deadline to throw');
-        },
-        (error: unknown) => error
-      );
-
-      expect(failure).toBeInstanceOf(Error);
-      expect(failure).not.toBeInstanceOf(DeliveryUncertainError);
-      expect((failure as Error).message).toBe(
-        'cancellation_refund_deadline_exceeded'
-      );
-      expect(mocks.initiatePaystackRefund).not.toHaveBeenCalled();
-      expect(insert).not.toHaveBeenCalled();
-      expect(mocks.quarantineRefund).not.toHaveBeenCalled();
-    } finally {
-      now.mockRestore();
-    }
   });
 
   it('treats a duplicate audit row as recorded without quarantining', async () => {
@@ -242,31 +170,6 @@ describe('initiatePaystackCancellationRefunds', () => {
           audit_record_failed: true,
           payment_transaction_id: 'tx-1',
           provider_refund_id: 101,
-        }),
-      })
-    );
-  });
-
-  it('throws a retriable error on ambiguous provider failures', async () => {
-    mocks.initiatePaystackRefund.mockResolvedValue({
-      code: 'NETWORK_ERROR',
-      error: 'socket hangup',
-      success: false,
-    });
-
-    const result = initiatePaystackCancellationRefunds({
-      order,
-      refundedPaymentIds: new Set(),
-      supabase,
-      transactions: [transaction],
-    });
-
-    await expect(result).rejects.toThrow('socket hangup');
-    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
-      expect.objectContaining({
-        metadata: expect.objectContaining({
-          ambiguous_initiation: true,
-          failed_payment_transaction_id: 'tx-1',
         }),
       })
     );

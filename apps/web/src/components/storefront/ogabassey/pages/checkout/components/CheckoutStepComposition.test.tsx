@@ -29,7 +29,7 @@ vi.mock('./CheckoutDeliveryStep', () => ({
     >
       {completed ? 'Delivery details complete' : 'Delivery details incomplete'}
       <button type="button" disabled={disabled}>
-        Continue to delivery
+        Delivery Method
       </button>
     </section>
   ),
@@ -81,7 +81,7 @@ describe('CheckoutStepComposition', () => {
       screen.getByRole('region', { name: 'Contact details' })
     ).toHaveAttribute('aria-current', 'step');
     expect(
-      screen.getByRole('button', { name: 'Continue to delivery' })
+      screen.getByRole('button', { name: 'Delivery Method' })
     ).toBeDisabled();
 
     rerender(
@@ -109,7 +109,7 @@ describe('CheckoutStepComposition', () => {
       screen.getByRole('region', { name: 'Delivery details' })
     ).toHaveAttribute('aria-current', 'step');
     expect(
-      screen.getByRole('button', { name: 'Continue to delivery' })
+      screen.getByRole('button', { name: 'Delivery Method' })
     ).toBeEnabled();
     expect(
       screen.getByText('Current checkout step: delivery')

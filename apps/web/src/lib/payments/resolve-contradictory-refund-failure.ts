@@ -25,34 +25,63 @@ interface FailedRefundRow {
   metadata: { payment_transaction_id?: unknown } | null;
 }
 
+interface ReplacementRefundRow {
+  amount: number | string | null;
+  currency: string | null;
+  gateway: string | null;
+  metadata: { payment_transaction_id?: unknown } | null;
+}
+
+/**
+ * A postdating completed refund suppresses a failed leg only when it
+ * covers that same leg: identical payment leg, gateway, and currency,
+ * with an amount at least the failed refund's. Anything unmatchable
+ * fails closed so the contradiction is filed and alerted.
+ */
+function replacementCoversFailedLeg(
+  replacement: ReplacementRefundRow,
+  failed: FailedRefundRow
+): boolean {
+  const failedLeg = failed.metadata?.payment_transaction_id;
+  if (typeof failedLeg !== 'string' || failedLeg.length === 0) return false;
+  if (replacement.metadata?.payment_transaction_id !== failedLeg) return false;
+  if (
+    typeof replacement.gateway !== 'string' ||
+    typeof failed.gateway !== 'string' ||
+    replacement.gateway.toLowerCase() !== failed.gateway.toLowerCase()
+  ) {
+    return false;
+  }
+  if (
+    typeof replacement.currency !== 'string' ||
+    typeof failed.currency !== 'string' ||
+    replacement.currency.toUpperCase() !== failed.currency.toUpperCase()
+  ) {
+    return false;
+  }
+  const replacementAmount = Number(replacement.amount);
+  const failedAmount = Number(failed.amount);
+  if (!Number.isFinite(replacementAmount) || !Number.isFinite(failedAmount)) {
+    return false;
+  }
+  return replacementAmount >= failedAmount;
+}
+
 /**
  * Decide a failure alert on an order still marked refunded. Returns true
- * only when a completed refund row postdates the failure — durable
- * evidence that a later successful replacement refund superseded it.
- * Otherwise the failure is fresh contradiction: file a falsely-refunded
- * review and return false so the caller still sends the merchant alert.
- * Throws on lookup/file failures so the notification retries instead of
- * silently dropping the contradiction.
+ * only when a completed refund row postdates the failure AND covers the
+ * same failed payment leg — durable evidence that a later successful
+ * replacement refund superseded it. Otherwise the failure is fresh
+ * contradiction: file a falsely-refunded review and return false so the
+ * caller still sends the merchant alert. Throws on lookup/file failures
+ * so the notification retries instead of silently dropping the
+ * contradiction.
  */
 export async function resolveContradictoryRefundFailure(
   supabase: Pick<SupabaseClient, 'from' | 'rpc'>,
   row: ContradictionRow,
   order: ContradictionOrder
 ): Promise<boolean> {
-  const { data: replacements, error: replacementError } = await supabase
-    .from('transactions')
-    .select('id')
-    .eq('order_id', row.order_id)
-    .eq('merchant_id', row.merchant_id)
-    .eq('transaction_type', 'refund')
-    .eq('status', 'completed')
-    .gt('created_at', row.created_at)
-    .limit(1);
-  if (replacementError) {
-    throw new Error('refund_notification_replacement_lookup_failed');
-  }
-  if ((replacements ?? []).length > 0) return true;
-
   const { data: refundRows, error: refundError } = await supabase
     .from('transactions')
     .select('id, gateway_reference, amount, currency, gateway, metadata')
@@ -71,6 +100,27 @@ export async function resolveContradictoryRefundFailure(
           ?.provider_refund_status as string
       )
   );
+  const { data: replacements, error: replacementError } = await supabase
+    .from('transactions')
+    .select('id, amount, currency, gateway, metadata')
+    .eq('order_id', row.order_id)
+    .eq('merchant_id', row.merchant_id)
+    .eq('transaction_type', 'refund')
+    .eq('status', 'completed')
+    .gt('created_at', row.created_at)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (replacementError) {
+    throw new Error('refund_notification_replacement_lookup_failed');
+  }
+  const legMatched = ((replacements ?? []) as ReplacementRefundRow[]).some(
+    (replacement) =>
+      failedRows.some((failed) =>
+        replacementCoversFailedLeg(replacement, failed)
+      )
+  );
+  if (legMatched) return true;
+
   const failedPaymentIds = [
     ...new Set(
       failedRows

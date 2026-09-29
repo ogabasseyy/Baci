@@ -256,10 +256,14 @@ export async function reconcileAbandonedPaystackAttempts({
       if (filingFailed) summary.failed = true;
       continue;
     }
+    // A provider-reversed attempt is terminal like failed/abandoned:
+    // the money came back, so retire it instead of rotating `updated_at`
+    // on every sweep (merchant cancellation rejects pending/processing).
     if (
       result.success &&
       result.data.status !== 'abandoned' &&
-      result.data.status !== 'failed'
+      result.data.status !== 'failed' &&
+      result.data.status !== 'reversed'
     ) {
       await hold(result.data.status);
       continue;

@@ -28,7 +28,11 @@ export function useCheckoutOrderSubmission(context: CheckoutOrderSubmissionConte
       return;
     }
 
-    if (resumed.order && resumed.preferredGateway) {
+    if (
+      resumed.order &&
+      resumed.preferredGateway &&
+      cart.checkoutCart.length === 0
+    ) {
       processing.setIsProcessing(true);
       await executeResumedDirectPayment({
         resumedOrder: resumed.order,

@@ -23,6 +23,8 @@ interface UseCheckoutPaymentSessionOptions {
   currencyCode: string;
   discountSubtotal: number;
   hasAuthenticatedUser: boolean;
+  hasCheckoutCartItems: boolean;
+  isHydrated: boolean;
   isOrderInFlightRef: { current: boolean };
   merchantSlug?: string;
   pendingCheckoutOrder: PendingCheckoutOrderSnapshot | null;
@@ -43,6 +45,8 @@ export function useCheckoutPaymentSession({
   currencyCode,
   discountSubtotal,
   hasAuthenticatedUser,
+  hasCheckoutCartItems,
+  isHydrated,
   isOrderInFlightRef,
   merchantSlug,
   pendingCheckoutOrder,
@@ -67,6 +71,13 @@ export function useCheckoutPaymentSession({
     contact: '',
     note: '',
   });
+  const walletRedemptionAllowed =
+    hasCheckoutCartItems || !resumeOrder.resumeOrderId;
+  const updatePayWithWallet = (nextValue: boolean) => {
+    if (walletRedemptionAllowed || !nextValue) {
+      setPayWithWallet(nextValue);
+    }
+  };
 
   const selectMethod = (nextMethod: PaymentMethod) => {
     if (
@@ -94,6 +105,10 @@ export function useCheckoutPaymentSession({
 
   useLoadResumedOrder({
     ...resumeOrder,
+    // Once the persisted cart is authoritative, resume data must not overwrite
+    // the active checkout's fields. Wait for hydration before deciding.
+    resumeOrderId:
+      isHydrated && !hasCheckoutCartItems ? resumeOrder.resumeOrderId : null,
     setPaymentTab: setTab,
     setPaymentMethod: selectMethod,
   });
@@ -110,12 +125,23 @@ export function useCheckoutPaymentSession({
       signal: controller.signal,
       setWalletLoading,
       setWalletBalance,
-      setPayWithWallet,
+      setPayWithWallet: updatePayWithWallet,
     });
     return () => controller.abort();
-  }, [hasAuthenticatedUser, merchantSlug, walletSessionIdentity]);
+  }, [hasAuthenticatedUser, merchantSlug, walletRedemptionAllowed, walletSessionIdentity]);
 
-  const discountAmount = appliedDiscount
+  useEffect(() => {
+    if (!walletRedemptionAllowed) {
+      setPayWithWallet(false);
+    }
+  }, [walletRedemptionAllowed]);
+
+  // A resumed order's persisted total already includes its discount. The
+  // checkout can render while the resume request is pending, so ignore any
+  // discount entered during that brief loading window once resume is known.
+  const resumedOrderSuppliesPaymentBase =
+    Boolean(resumeOrder.resumeOrderId) && !hasCheckoutCartItems;
+  const discountAmount = appliedDiscount && !resumedOrderSuppliesPaymentBase
     ? (appliedDiscount.discount_amount ??
       (appliedDiscount.discount_type === 'percentage'
         ? Math.round(
@@ -128,7 +154,7 @@ export function useCheckoutPaymentSession({
     discountAmount,
     discountCode: appliedDiscount?.code,
     paymentMethod: method,
-    payWithWallet,
+    payWithWallet: walletRedemptionAllowed && payWithWallet,
     walletBalance,
     walletCurrencySupported: currencyCode === 'NGN',
   });
@@ -151,8 +177,9 @@ export function useCheckoutPaymentSession({
       setBalance: setWalletBalance,
       loading: walletLoading,
       currencySupported: currencyCode === 'NGN',
-      payWithWallet,
-      setPayWithWallet,
+      redemptionAllowed: walletRedemptionAllowed,
+      payWithWallet: walletRedemptionAllowed && payWithWallet,
+      setPayWithWallet: updatePayWithWallet,
       amountUsed: checkoutValues.walletAmountUsed,
       remainingAmount: checkoutValues.total - checkoutValues.walletAmountUsed,
     },

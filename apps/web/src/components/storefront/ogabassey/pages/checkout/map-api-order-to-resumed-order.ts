@@ -4,6 +4,15 @@ import type { ResumedOrder } from './types';
 export function mapApiOrderToResumedOrder(
   orderData: Record<string, unknown>,
 ): ResumedOrder {
+  const rawSubtotal = orderData.subtotal;
+  const parsedSubtotal =
+    typeof rawSubtotal === 'number' ||
+    (typeof rawSubtotal === 'string' && rawSubtotal.trim().length > 0)
+      ? Number(rawSubtotal)
+      : Number.NaN;
+  const subtotal = Number.isFinite(parsedSubtotal)
+    ? parsedSubtotal
+    : undefined;
   const shippingAddress =
     orderData.shipping_address &&
     typeof orderData.shipping_address === 'object' &&
@@ -14,7 +23,7 @@ export function mapApiOrderToResumedOrder(
   return {
     id: String(orderData.id ?? ''),
     short_id: String(orderData.short_id ?? ''),
-    subtotal: Number(orderData.subtotal) || 0,
+    subtotal,
     // Authenticated order detail selects `shipping_fee`; public tracking exposes `shipping_cost`.
     shipping_cost:
       Number(orderData.shipping_cost ?? orderData.shipping_fee) || 0,

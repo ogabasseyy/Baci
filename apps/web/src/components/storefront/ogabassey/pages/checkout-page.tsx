@@ -98,6 +98,8 @@ import {
   useResumedCheckoutStartFunnel,
 } from './checkout/hooks/use-resumed-checkout-start-funnel';
 import { deriveCheckoutDisplayModel } from './checkout/derive-checkout-display-model';
+import { deriveCheckoutSummaryAmounts } from './checkout/derive-checkout-summary-amounts';
+import { deriveCheckoutPaymentBaseTotal } from './checkout/derive-checkout-payment-base-total';
 import { readCheckoutAttemptGeneration } from './checkout/checkout-attempt-generation';
 import { DeferredWalletFundedTransferModal as WalletFundedTransferModal } from './checkout/components/DeferredWalletFundedTransferModal';
 import { DeferredWalletTransferConsentDialog as WalletTransferConsentDialog } from './checkout/components/DeferredWalletTransferConsentDialog';
@@ -358,8 +360,10 @@ export const CheckoutPage: React.FC = () => {
     displayItems,
     effectiveCheckoutCartTotal,
     effectiveItemSubtotal,
+    summarySubtotal,
     hasCheckoutCartItems,
     mobileSummaryCart,
+    summaryOrder,
   } = deriveCheckoutDisplayModel({
     checkoutCart,
     checkoutCartTotal,
@@ -524,15 +528,20 @@ export const CheckoutPage: React.FC = () => {
     taxRate,
   });
   const paymentSession = useCheckoutPaymentSession({
-    baseTotal:
-      effectiveCheckoutCartTotal +
-      deliveryCost +
-      giftWrappingCost +
-      (orderTotals?.taxAmount ?? 0),
+    baseTotal: deriveCheckoutPaymentBaseTotal({
+      effectiveCheckoutCartTotal,
+      deliveryCost,
+      giftWrappingCost,
+      hasCheckoutCartItems,
+      taxAmount: orderTotals?.taxAmount ?? 0,
+      resumedOrderTotal: summaryOrder?.total ?? null,
+    }),
     clearPendingCheckoutOrder,
     currencyCode,
     discountSubtotal: effectiveCheckoutCartTotal,
     hasAuthenticatedUser: Boolean(user),
+    hasCheckoutCartItems,
+    isHydrated,
     isOrderInFlightRef,
     merchantSlug: merchant?.slug ?? undefined,
     pendingCheckoutOrder,
@@ -548,6 +557,15 @@ export const CheckoutPage: React.FC = () => {
       setCheckoutFields,
       setResumeOrderError,
     },
+  });
+  const summaryAmounts = deriveCheckoutSummaryAmounts({
+    deliveryCost,
+    deliveryMethod,
+    discountAmount: paymentSession.checkoutValues.discountAmount,
+    giftWrappingCost,
+    hasCheckoutCartItems,
+    orderTotals,
+    resumedOrder,
   });
 
   // Load the address state list. NG hits /api/shipping/locations (rich data);
@@ -646,11 +664,18 @@ export const CheckoutPage: React.FC = () => {
 
   // Auto-trigger payment for resumed orders
   useEffect(() => {
-    if (resumedOrder && preferredGateway && !autoTriggerRef.current && !isProcessing) {
+    if (
+      isHydrated &&
+      checkoutCart.length === 0 &&
+      resumedOrder &&
+      preferredGateway &&
+      !autoTriggerRef.current &&
+      !isProcessing
+    ) {
       autoTriggerRef.current = true;
       executeDirectPayment();
     }
-  }, [resumedOrder, preferredGateway]);
+  }, [checkoutCart.length, isHydrated, isProcessing, preferredGateway, resumedOrder]);
 
   useEffect(() => {
     if (
@@ -744,9 +769,17 @@ export const CheckoutPage: React.FC = () => {
 
   // Loading state (Initial fetch OR waiting for auto-trigger)
   // This prevents the form from flashing briefly before the payment widget opens
-  const isAutoTriggerProcessing = resumedOrder && !!preferredGateway && !isProcessing;
+  const isAutoTriggerProcessing =
+    isHydrated &&
+    checkoutCart.length === 0 &&
+    resumedOrder &&
+    !!preferredGateway &&
+    !isProcessing;
 
-  if (isLoadingResumedOrder || isAutoTriggerProcessing) {
+  if (
+    (checkoutCart.length === 0 && isLoadingResumedOrder) ||
+    isAutoTriggerProcessing
+  ) {
     return (
       <div className="ogabassey-checkout-page min-h-screen bg-gray-50/50 flex items-center justify-center pb-20">
         <div className="flex flex-col items-center gap-4">
@@ -760,7 +793,7 @@ export const CheckoutPage: React.FC = () => {
   }
 
   // Error state for order resumption
-  if (resumeOrderId && resumeOrderError) {
+  if (checkoutCart.length === 0 && resumeOrderId && resumeOrderError) {
     return (
       <div className="ogabassey-checkout-page min-h-screen bg-gray-50/50 flex items-center justify-center pb-20">
         <div className="text-center max-w-md mx-auto px-4">
@@ -938,23 +971,22 @@ export const CheckoutPage: React.FC = () => {
         {/* MOBILE ORDER SUMMARY (Collapsible) */}
         {paymentMethod !== 'uba_redvault' && <MobileOrderSummary
           cart={mobileSummaryCart}
-          cartTotal={effectiveCheckoutCartTotal}
-          deliveryCost={resumedOrder ? resumedOrder.shipping_cost : deliveryCost}
-          taxAmount={resumedOrder?.tax_amount ?? orderTotals?.taxAmount ?? 0}
-          discountAmount={resumedOrder?.discount_amount ?? paymentSession.checkoutValues.discountAmount}
-          deliveryMethod={resumedOrder ? null : deliveryMethod}
-          giftWrappingCost={giftWrappingCost}
+          cartTotal={summarySubtotal}
+          deliveryCost={summaryAmounts.summaryDeliveryCost}
+          taxAmount={summaryAmounts.summaryTaxAmount}
+          discountAmount={summaryAmounts.summaryDiscountAmount}
+          deliveryMethod={summaryAmounts.summaryDeliveryMethod}
+          giftWrappingCost={summaryAmounts.summaryGiftWrappingCost}
           walletBalance={paymentSession.wallet.balance}
           payWithWallet={paymentSession.checkoutValues.payWithWallet}
           walletAmountUsed={walletAmountUsed}
-          remainingAmount={resumedOrder?.total ?? remainingAmount}
+          remainingAmount={remainingAmount}
         />}
 
-        {/* Hidden in the resumed-order flow: that path charges the persisted
-            resumedOrder.total and skips order creation, so a discount applied
-            here would only change the displayed total/fingerprint, not the
-            amount actually charged. */}
-        {!resumedOrder && (
+        {/* Resumed-order-only checkout uses its persisted total and skips order
+            creation, so local discounts must not change its displayed due. An
+            active cart remains the pricing source when both are present. */}
+        {(hasCheckoutCartItems || (!resumeOrderId && !resumedOrder)) && (
           <div className="mt-4">
             <DiscountCodeInput
               merchantId={merchant?.id || ''}
@@ -1093,14 +1125,17 @@ export const CheckoutPage: React.FC = () => {
           <DesktopOrderSummary
             displayItems={displayItems}
             formatCurrencyAuto={formatCurrencyAuto}
-            effectiveCheckoutCartTotal={effectiveCheckoutCartTotal}
-            orderTotals={orderTotals}
-            deliveryCost={deliveryCost}
-            deliveryMethod={deliveryMethod}
+            summarySubtotal={summarySubtotal}
+            orderTotals={summaryAmounts.summaryOrderTotals}
+            taxLabel={summaryAmounts.summaryTaxLabel}
+            deliveryCost={summaryAmounts.summaryDeliveryCost}
+            deliveryMethod={summaryAmounts.summaryDeliveryMethod}
+            discountAmount={summaryAmounts.summaryDiscountAmount}
             selectedQuoteId={selectedQuoteId}
-            giftWrappingCost={giftWrappingCost}
+            giftWrappingCost={summaryAmounts.summaryGiftWrappingCost}
             paymentMethod={paymentMethod}
             walletCurrencySupported={paymentSession.wallet.currencySupported}
+            walletRedemptionAllowed={paymentSession.wallet.redemptionAllowed}
             walletLoading={paymentSession.wallet.loading}
             walletBalance={paymentSession.wallet.balance}
             hasUser={Boolean(user)}

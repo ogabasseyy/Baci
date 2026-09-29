@@ -152,6 +152,49 @@ describe('useCheckoutOrderSubmission', () => {
     expect(context.processing.isOrderInFlightRef.current).toBe(false);
   });
 
+  it('uses active-cart amounts when a resume link and preferred gateway coexist', async () => {
+    const context = createContext();
+    context.cart.checkoutCart = [
+      {
+        id: 'cart-item-1',
+        cartItemId: 'cart-item-1',
+        name: 'Active cart item',
+        price: 10_000,
+        quantity: 1,
+      } as CheckoutOrderSubmissionContext['cart']['checkoutCart'][number],
+    ];
+    context.cart.checkoutCartTotal = 10_000;
+    context.payment.session = {
+      ...context.payment.session,
+      method: 'credpal',
+      total: 10_750,
+      wallet: { ...context.payment.session.wallet, remainingAmount: 8_250, amountUsed: 2_500 },
+      checkoutValues: { ...context.payment.session.checkoutValues, useWalletCredit: true },
+    } as CheckoutOrderSubmissionContext['payment']['session'];
+    vi.mocked(prepareCheckoutOrderSubmission).mockReturnValue({
+      kind: 'issue',
+      issue: 'delivery-option',
+    });
+    const { result } = renderHook(() => useCheckoutOrderSubmission(context));
+
+    await act(async () => result.current.handlePlaceOrder());
+
+    expect(executeResumedDirectPayment).not.toHaveBeenCalled();
+    expect(prepareCheckoutOrderSubmission).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payment: expect.objectContaining({
+          method: 'credpal',
+          total: 10_750,
+          remainingAmount: 8_250,
+        }),
+        identity: expect.objectContaining({
+          useWalletCredit: true,
+          walletAmountUsed: 2_500,
+        }),
+      })
+    );
+  });
+
   it('keeps the in-flight fence held while a resumed gateway is still opening', async () => {
     const context = createContext();
     const { result } = renderHook(() => useCheckoutOrderSubmission(context));

@@ -23,6 +23,7 @@ import { openCreditDirectCheckout } from '@/lib/credit-direct-client';
 import { openCredPalCheckout } from '@/lib/credpal';
 import { hasPriceNegotiationEntitlement } from '@/lib/feature-flags';
 import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
+import { MobileOrderSummary as mockMobileOrderSummary } from '../components/MobileCheckoutComponents';
 import * as checkoutIdempotency from './checkout/checkout-idempotency';
 import {
   CHECKOUT_IDEMPOTENCY_STORAGE_KEY,
@@ -161,6 +162,7 @@ export {
   mockCaptureCheckoutFunnelEventOnce,
   mockCaptureClientEvent,
   mockCheckoutSubmissionState,
+  mockMobileOrderSummary,
   openCreditDirectCheckout,
   openCredPalCheckout,
   readCreditDirectPopupMarker,

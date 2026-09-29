@@ -75,7 +75,7 @@ export interface ResumedOrder {
   currency?: string;
   id: string;
   short_id: string;
-  subtotal: number;
+  subtotal?: number;
   shipping_cost: number;
   total: number;
   customer_name: string;

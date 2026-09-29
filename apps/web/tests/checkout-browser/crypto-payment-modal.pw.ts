@@ -36,7 +36,7 @@ test('shows each verification state in the real modal with a local QR image', as
       .getByRole('button', { name: 'Close crypto payment modal' })
       .click();
     await expect(page.getByRole('status')).toContainText(
-      'Modal closed from header.'
+      'Crypto payment modal closed.'
     );
   }
 });
@@ -100,7 +100,7 @@ test('header close dismisses immediately without a browser confirmation', async 
     .click();
 
   await expect(page.getByRole('status')).toContainText(
-    'Modal closed from header.'
+    'Crypto payment modal closed.'
   );
   expect(dialogs).toEqual([]);
 });
@@ -131,7 +131,7 @@ test('footer close can be canceled or accepted by the browser confirmation', asy
   });
   await closeLater.click();
   await expect(page.getByRole('status')).toContainText(
-    'Modal closed from order status.'
+    'Crypto payment modal closed.'
   );
 });
 
@@ -159,13 +159,19 @@ test('copies the synthetic recipient address with the browser clipboard', async 
     browserName !== 'chromium',
     'Clipboard permissions are Chromium-only here.'
   );
+  await page.clock.install();
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/crypto-payment-modal');
   await page.getByRole('button', { name: 'Open crypto payment modal' }).click();
+  await page.clock.pauseAt(new Date(Date.now() + 10_000));
   await page.getByTitle('Copy Address').click();
 
   await expect(page.getByTitle('Copied!')).toBeVisible();
   await expect
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
     .toBe(fixtureAddress);
+  await page.clock.runFor(1999);
+  await expect(page.getByTitle('Copied!')).toBeVisible();
+  await page.clock.runFor(1);
+  await expect(page.getByTitle('Copy Address')).toBeVisible();
 });

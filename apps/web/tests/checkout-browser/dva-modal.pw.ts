@@ -56,8 +56,10 @@ test('copies the synthetic account number to the clipboard', async ({
     'Clipboard permissions are Chromium-only here.'
   );
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.clock.install();
   await page.goto('/dva-modal');
   await page.getByRole('button', { name: 'Open DVA modal' }).click();
+  await page.clock.pauseAt(new Date(Date.now() + 10_000));
   await page.getByRole('button', { name: 'Copy account number' }).click();
 
   await expect
@@ -66,4 +68,8 @@ test('copies the synthetic account number to the clipboard', async ({
   await expect(
     page.getByRole('button', { name: 'Copy account number' })
   ).toHaveClass(/border-green-300/);
+  await page.clock.runFor(2000);
+  await expect(
+    page.getByRole('button', { name: 'Copy account number' })
+  ).not.toHaveClass(/border-green-300/);
 });

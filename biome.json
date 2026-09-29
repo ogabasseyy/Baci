@@ -10,6 +10,7 @@
     "includes": [
       "**",
       "!**/.next",
+      "!**/.next-checkout-*",
       "!**/node_modules",
       "!**/.wrangler",
       "!**/.qualification-dist",
@@ -59,6 +60,8 @@
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CheckoutPaymentOverlays.test.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-clipboard-feedback.ts",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-clipboard-feedback.test.ts",
+      "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-wallet-funded-order-completion.ts",
+      "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-wallet-funded-order-completion.test.ts",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/PaymentStepAccessibility.test.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CheckoutAccountFields.test.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CheckoutAccountFields.tsx",

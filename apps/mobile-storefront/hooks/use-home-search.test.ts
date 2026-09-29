@@ -59,6 +59,25 @@ describe('useHomeSearchControls', () => {
     dismissSpy.mockRestore();
   });
 
+  it('truncates over-long queries to the shared maximum before pushing', () => {
+    const { result } = setup();
+    const longQuery = 'a'.repeat(150);
+
+    act(() => {
+      result.current.handleSearch();
+      result.current.handleSearchQueryChange(longQuery);
+    });
+    act(() => {
+      result.current.handleSearchSubmit();
+    });
+
+    expect(mockRouterPush).toHaveBeenCalledTimes(1);
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/search',
+      params: { q: 'a'.repeat(100) },
+    });
+  });
+
   it('keeps short queries in the input with a minimum-length hint', () => {
     const { result } = setup();
 

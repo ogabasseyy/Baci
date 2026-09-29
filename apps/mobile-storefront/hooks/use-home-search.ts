@@ -2,7 +2,10 @@ import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Keyboard } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
-import { MIN_SEARCH_QUERY_LENGTH } from '@/constants/search';
+import {
+  MAX_SEARCH_QUERY_LENGTH,
+  MIN_SEARCH_QUERY_LENGTH,
+} from '@/constants/search';
 
 interface UseHomeSearchControlsInput {
   isFocused: boolean;
@@ -40,7 +43,7 @@ export function useHomeSearchControls({
   };
 
   const submitHomeSearch = (rawQuery: string) => {
-    const trimmedQuery = rawQuery.trim();
+    const trimmedQuery = rawQuery.trim().slice(0, MAX_SEARCH_QUERY_LENGTH);
     if (trimmedQuery.length < MIN_SEARCH_QUERY_LENGTH) {
       setShowSearchMinLengthHint(true);
       return;

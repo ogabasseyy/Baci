@@ -3,12 +3,14 @@ import {
   getProductSearchTotalCount,
 } from '@baci/shared';
 import { cookies } from 'next/headers';
-import { after } from 'next/server';
-import { logger } from './logger';
 import { type NormalizedProduct, normalizeProduct } from './normalize-product';
 import { isValidUuid, sanitizeSearchQuery } from './sanitize-core';
 import { storefrontProductFilters } from './storefront-product-filters';
 import { STOREFRONT_PRODUCTS_COMPACT_SELECT } from './storefront-products-select';
+import {
+  type StorefrontSearchAnalyticsSupabase,
+  scheduleSearchAnalyticsInsert,
+} from './storefront-search-analytics';
 import { findStorefrontSearchDidYouMean } from './storefront-search-did-you-mean';
 import { createPublicClient } from './supabase/public';
 import { createClient } from './supabase/server';
@@ -28,12 +30,6 @@ export interface StorefrontSearchSupabase {
     data: unknown;
     error: { message: string } | null;
   }>;
-}
-
-interface StorefrontSearchAnalyticsSupabase {
-  from: (table: string) => {
-    insert: (value: Record<string, unknown>) => PromiseLike<{ error: unknown }>;
-  };
 }
 
 export type StorefrontSearchSort =
@@ -89,18 +85,6 @@ const MAX_SEARCH_LIMIT = 100;
 // beyond the first RPC page are not silently omitted.
 const RANKED_FILTER_PAGE_SIZE = MAX_SEARCH_LIMIT;
 
-function isAfterOutsideRequestScopeError(error: unknown) {
-  return (
-    error instanceof Error && error.message.includes('outside a request scope')
-  );
-}
-
-function createSearchAnalyticsClient() {
-  return createPublicClient({
-    clientInfo: 'baci-storefront-search-analytics',
-  });
-}
-
 function clampSearchLimit(limit: number) {
   return Math.min(Math.max(Math.trunc(limit || 20), 1), MAX_SEARCH_LIMIT);
 }
@@ -123,75 +107,6 @@ export function toStorefrontSearchSort(
   };
 
   return sort ? (sortMap[sort] ?? 'relevance') : 'relevance';
-}
-
-function runSearchAnalyticsAfterResponse(callback: () => Promise<void>) {
-  try {
-    after(callback);
-  } catch (error) {
-    if (!isAfterOutsideRequestScopeError(error)) {
-      throw error;
-    }
-
-    // `after()` is available only inside a Next request/render lifecycle. Keep
-    // analytics non-blocking for plain unit tests and non-request callers.
-    void callback();
-  }
-}
-
-async function insertSearchAnalytics({
-  supabase,
-  merchantId,
-  query,
-  resultsCount,
-}: {
-  supabase: StorefrontSearchAnalyticsSupabase;
-  merchantId: string;
-  query: string;
-  resultsCount: number;
-}) {
-  try {
-    const { error: analyticsError } = await supabase
-      .from('search_analytics')
-      .insert({
-        merchant_id: merchantId,
-        search_query: query,
-        results_count: resultsCount,
-        search_method: 'server',
-      });
-
-    if (analyticsError) {
-      logger.warn({
-        message: 'Storefront search analytics insert failed',
-        error: analyticsError,
-        merchantId,
-        query,
-      });
-    }
-  } catch (analyticsError) {
-    logger.warn({
-      message: 'Storefront search analytics insert failed',
-      error: analyticsError,
-      merchantId,
-      query,
-    });
-  }
-}
-
-function scheduleSearchAnalyticsInsert(args: {
-  supabase?: StorefrontSearchAnalyticsSupabase;
-  merchantId: string;
-  query: string;
-  resultsCount: number;
-}) {
-  const supabase = args.supabase ?? createSearchAnalyticsClient();
-
-  runSearchAnalyticsAfterResponse(() =>
-    insertSearchAnalytics({
-      ...args,
-      supabase,
-    })
-  );
 }
 
 export async function searchStorefrontProducts({
@@ -380,9 +295,11 @@ export async function getStorefrontSearchProducts(args: {
   offset?: number;
   sort?: StorefrontSearchSort;
   /**
-   * Record this call as a new submission in `search_analytics`. Page views
-   * past the first page and internal recovery queries pass `false` so
-   * refinement navigation never inflates submission counts.
+   * Record this call as a new submission in `search_analytics`, but only
+   * after the search fully succeeds (ranked call plus hydration): partial
+   * failures stay untracked so a retry records the submission exactly
+   * once. Page views past the first page and internal recovery queries
+   * pass `false` so refinement navigation never inflates submission counts.
    */
   trackAnalytics?: boolean;
 }): Promise<StorefrontSearchProductsPage> {
@@ -397,6 +314,23 @@ export async function getStorefrontSearchProducts(args: {
     conditionFilter && !storefrontProductFilters.isAllFilter(conditionFilter)
   );
 
+  // Analytics records only fully successful searches. The ranked calls below
+  // run untracked; scheduling happens at each return instead. `after()` runs
+  // even for error-panel renders, so scheduling before the fallible
+  // did-you-mean/hydration steps would record partial failures — and a retry
+  // would then recount the same submission. Counts reflect the returned
+  // page (post-filter matches on the family path: what the shopper sees).
+  const shouldTrackSearch = args.trackAnalytics ?? true;
+  const trackSearchSubmission = (result: { count: number; query: string }) => {
+    if (shouldTrackSearch) {
+      scheduleSearchAnalyticsInsert({
+        merchantId: args.merchantId,
+        query: result.query,
+        resultsCount: result.count,
+      });
+    }
+  };
+
   // Fast path: no in-memory family filter, so search_products_v2 owns
   // pagination and returns the exact total count in one page.
   if (!needsConditionFamilyFilter) {
@@ -408,10 +342,11 @@ export async function getStorefrontSearchProducts(args: {
       limit: requestedLimit,
       offset: requestedOffset,
       sort: args.sort,
-      trackAnalytics: args.trackAnalytics,
+      trackAnalytics: false,
     });
 
     if (searchResult.productIds.length === 0) {
+      trackSearchSubmission(searchResult);
       return { ...searchResult, products: [] };
     }
 
@@ -421,7 +356,9 @@ export async function getStorefrontSearchProducts(args: {
       productIds: searchResult.productIds,
     });
 
-    return { ...searchResult, products };
+    const result = { ...searchResult, products };
+    trackSearchSubmission(result);
+    return result;
   }
 
   // Family-filter path: condition families are matched in memory, so accumulate
@@ -432,17 +369,19 @@ export async function getStorefrontSearchProducts(args: {
     query: args.query,
     filters: { ...args.filters, condition: null },
     sort: args.sort,
-    trackAnalytics: args.trackAnalytics,
+    trackAnalytics: false,
   });
 
   if (candidates.productIds.length === 0) {
-    return {
+    const result = {
       count: 0,
       didYouMean: candidates.didYouMean,
       productIds: [],
       products: [],
       query: candidates.query,
     };
+    trackSearchSubmission(result);
+    return result;
   }
 
   const hydrated = await hydrateRankedStorefrontProducts({
@@ -462,11 +401,13 @@ export async function getStorefrontSearchProducts(args: {
     requestedOffset + requestedLimit
   );
 
-  return {
+  const result = {
     count: filteredProducts.length,
     didYouMean: candidates.didYouMean,
     productIds: products.map((product) => product.id),
     products,
     query: candidates.query,
   };
+  trackSearchSubmission(result);
+  return result;
 }

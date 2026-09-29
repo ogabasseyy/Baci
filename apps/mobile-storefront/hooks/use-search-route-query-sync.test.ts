@@ -15,6 +15,10 @@ describe('parseRouteSearchQuery', () => {
     expect(parseRouteSearchQuery(['iphone', 'galaxy'])).toBeNull();
     expect(parseRouteSearchQuery(undefined)).toBeNull();
   });
+
+  it('truncates over-long direct params to the shared maximum', () => {
+    expect(parseRouteSearchQuery('a'.repeat(150))).toBe('a'.repeat(100));
+  });
 });
 
 describe('useSearchRouteQuerySync', () => {

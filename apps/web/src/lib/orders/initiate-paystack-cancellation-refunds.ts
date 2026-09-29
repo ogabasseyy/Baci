@@ -53,7 +53,14 @@ export async function initiatePaystackCancellationRefunds({
       const isAmbiguousFailure =
         paystackRefund.code === 'NETWORK_ERROR' ||
         paystackRefund.code?.startsWith('HTTP_5');
-      if (refundIds.length > 0) {
+      // A rate-limited leg was definitely rejected: nothing was accepted,
+      // so quarantining terminally would strand the remaining legs after
+      // the accepted ones settle. Throw retryable instead — the drain
+      // defers while accepted legs are in flight, then resumes here with
+      // settled legs skipped. Ambiguous and deterministic failures still
+      // quarantine below: the provider may have accepted, or never will.
+      const isDefiniteTransientFailure = paystackRefund.code === 'HTTP_429';
+      if (refundIds.length > 0 && !isDefiniteTransientFailure) {
         await quarantineRefund({
           metadata: {
             accepted_refund_ids: refundIds,

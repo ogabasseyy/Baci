@@ -29,7 +29,17 @@ export type FinalizeOrderGatewayPaymentOutcome =
       status: number;
     }
   | { kind: 'inventory_cleanup_failed' }
-  | { kind: 'completed'; healed: boolean; orderNumber: string | null };
+  | {
+      kind: 'completed';
+      healed: boolean;
+      orderNumber: string | null;
+      // True when the atomic completion found the order already paid by
+      // another transaction, so this capture settled without the normal
+      // side effects. Callers working from a possibly-stale order
+      // snapshot (cron sweeps) use this — not the snapshot — to decide
+      // whether the capture is a possible duplicate charge.
+      capturedOnPaidOrder?: boolean;
+    };
 
 export interface FinalizeOrderGatewayPaymentTransaction {
   id: string;

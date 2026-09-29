@@ -242,6 +242,7 @@ describe('finalizeOrderGatewayPayment', () => {
     );
 
     expect(outcome).toEqual({
+      capturedOnPaidOrder: false,
       healed: false,
       kind: 'completed',
       orderNumber: null,
@@ -409,7 +410,10 @@ describe('finalizeOrderGatewayPayment', () => {
       )
     );
 
-    expect(outcome).toMatchObject({ kind: 'completed' });
+    expect(outcome).toMatchObject({
+      capturedOnPaidOrder: true,
+      kind: 'completed',
+    });
     expect(mocks.ensurePaidOrderInventoryConfirmed).not.toHaveBeenCalled();
     // The customer was already confirmed for the paying transaction: these
     // captured funds owe settlement only, outside the order-scoped outbox.

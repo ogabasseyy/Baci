@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const finalize = vi.hoisted(() => vi.fn());
+const fileDuplicate = vi.hoisted(() => vi.fn());
 vi.mock('./finalize-order-gateway-payment', () => ({
   finalizeOrderGatewayPayment: finalize,
+}));
+vi.mock('./file-duplicate-payment-capture', () => ({
+  fileDuplicatePaymentCapture: fileDuplicate,
 }));
 
 import { finalizePartiallyPaidAbandonedAttempt } from './finalize-partially-paid-abandoned-attempt';
@@ -220,6 +224,65 @@ describe('finalizePartiallyPaidAbandonedAttempt', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('files a duplicate review when the order filled before the atomic flip', async () => {
+    const h = harness();
+    finalize.mockResolvedValue({
+      capturedOnPaidOrder: true,
+      healed: false,
+      kind: 'completed',
+      orderNumber: 'ORD-1',
+    });
+    fileDuplicate.mockResolvedValue(true);
+
+    await finalizePartiallyPaidAbandonedAttempt({
+      ...h,
+      attempt,
+      providerData: {
+        amount: 10000,
+        currency: 'NGN',
+        reference: 'BAC-OLD',
+        status: 'success',
+      },
+    });
+
+    // The partially-paid snapshot was stale: the atomic completion found
+    // the order already paid, so this capture is extra money and owes a
+    // duplicate-charge review instead of a completion record.
+    expect(fileDuplicate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evidence: {
+          providerAmount: 10000,
+          providerCurrency: 'NGN',
+          providerReference: 'BAC-OLD',
+          providerStatus: 'success',
+        },
+      })
+    );
+    expect(h.summary.reviewsFiled).toEqual(['attempt-1']);
+    expect(h.summary.completed).toEqual([]);
+    expect(h.summary.failed).toBe(false);
+    expect(h.hold).not.toHaveBeenCalled();
+  });
+
+  it('fails the sweep when the late duplicate review cannot be filed', async () => {
+    const h = harness();
+    finalize.mockResolvedValue({
+      capturedOnPaidOrder: true,
+      kind: 'completed',
+    });
+    fileDuplicate.mockResolvedValue(false);
+
+    await finalizePartiallyPaidAbandonedAttempt({
+      ...h,
+      attempt,
+      providerData: {},
+    });
+
+    expect(h.summary.failed).toBe(true);
+    expect(h.hold).toHaveBeenCalledWith('duplicate_capture_review_failed');
+    expect(h.summary.reviewsFiled).toEqual([]);
   });
 
   it('fails the sweep when admitting a processing attempt errors', async () => {

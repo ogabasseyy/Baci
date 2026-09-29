@@ -217,6 +217,50 @@ describe('SearchScreen route', () => {
     expect(loadMore).toHaveBeenCalledTimes(1);
   });
 
+  it('blocks pagination while a background refresh error stands', () => {
+    const loadMore = jest.fn();
+    mockUseLocalSearchParams.mockReturnValue({ q: 'iphone' });
+    mockUseProducts.mockReturnValue(
+      mockProductState({
+        error: 'Search failed',
+        hasMore: true,
+        isNextPageError: false,
+        loadMore,
+        products: [{ id: 'product-1', name: 'iPhone 16' }],
+      })
+    );
+
+    render(<SearchScreen />);
+
+    // The footer appearing can itself emit an end event: it must not
+    // append a page that would clear the refresh error behind stale data.
+    act(() => {
+      mockViewProps.current?.onEndReached();
+    });
+    expect(loadMore).not.toHaveBeenCalled();
+  });
+
+  it('allows pagination to retry a failed next page', () => {
+    const loadMore = jest.fn();
+    mockUseLocalSearchParams.mockReturnValue({ q: 'iphone' });
+    mockUseProducts.mockReturnValue(
+      mockProductState({
+        error: 'Search failed',
+        hasMore: true,
+        isNextPageError: true,
+        loadMore,
+        products: [{ id: 'product-1', name: 'iPhone 16' }],
+      })
+    );
+
+    render(<SearchScreen />);
+
+    act(() => {
+      mockViewProps.current?.onEndReached();
+    });
+    expect(loadMore).toHaveBeenCalledTimes(1);
+  });
+
   it('surfaces search errors with a retry path', () => {
     const refetch = jest.fn();
     mockUseLocalSearchParams.mockReturnValue({ q: 'iphone' });

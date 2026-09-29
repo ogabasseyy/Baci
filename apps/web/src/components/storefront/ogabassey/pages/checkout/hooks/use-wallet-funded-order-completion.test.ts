@@ -30,7 +30,7 @@ describe('useWalletFundedOrderCompletion', () => {
     const clearPending = vi.fn(() => events.push('pending'));
     const clearSession = vi.fn(() => events.push('session'));
     const clearCart = vi.fn(() => events.push('cart'));
-    const { result } = renderHook(() =>
+    const { result, unmount } = renderHook(() =>
       useWalletFundedOrderCompletion({
         clearCart,
         clearCheckoutSession: clearSession,
@@ -45,16 +45,16 @@ describe('useWalletFundedOrderCompletion', () => {
         checkoutFingerprint: 'fingerprint-1',
         currency: 'NGN',
         intentId: 'intent-1',
-        orderId: 'order-1',
+        orderId: 'order /1',
         orderNumber: 'ORD-1',
         total: 5750,
-        trackingToken: 'track-1',
+        trackingToken: 'track /?&',
       });
     });
 
     expect(captureMock).toHaveBeenCalledWith({
       currency: 'NGN',
-      orderId: 'order-1',
+      orderId: 'order /1',
       orderNumber: 'ORD-1',
       paymentMethod: 'bank_transfer',
       reference: 'intent-1',
@@ -64,7 +64,7 @@ describe('useWalletFundedOrderCompletion', () => {
     expect(clearKeyMock).toHaveBeenCalledWith('fingerprint-1');
     expect(clearSession).toHaveBeenCalledOnce();
     expect(pushMock).toHaveBeenCalledWith(
-      '/shop/order-success?orderId=order-1&wallet=true&trackingToken=track-1'
+      '/shop/order-success?orderId=order+%2F1&wallet=true&trackingToken=track+%2F%3F%26'
     );
     expect(events).toEqual([
       'capture',
@@ -73,6 +73,7 @@ describe('useWalletFundedOrderCompletion', () => {
       'session',
       'route',
     ]);
+    unmount();
     expect(clearCart).not.toHaveBeenCalled();
 
     act(() => vi.advanceTimersByTime(499));
@@ -112,5 +113,33 @@ describe('useWalletFundedOrderCompletion', () => {
     expect(pushMock).toHaveBeenCalledWith(
       '/order-success?orderId=order-2&wallet=true'
     );
+  });
+
+  it('keeps the post-navigation cart clear scheduled when the checkout hook unmounts', () => {
+    vi.useFakeTimers();
+    const clearCart = vi.fn();
+    const { result, unmount } = renderHook(() =>
+      useWalletFundedOrderCompletion({
+        clearCart,
+        clearCheckoutSession: vi.fn(),
+        clearPendingCheckoutOrder: vi.fn(),
+        getHref: (path) => path,
+        paymentMethod: 'bank_transfer',
+      })
+    );
+
+    act(() => {
+      result.current({
+        checkoutFingerprint: 'fingerprint-3',
+        currency: 'NGN',
+        intentId: 'intent-3',
+        orderId: 'order-3',
+        total: 5000,
+      });
+    });
+    unmount();
+
+    act(() => vi.advanceTimersByTime(500));
+    expect(clearCart).toHaveBeenCalledOnce();
   });
 });

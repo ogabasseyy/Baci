@@ -17,17 +17,14 @@ export function useWalletFundedOrderCompletion({
   clearPendingCheckoutOrder,
   getHref,
   paymentMethod,
-  routerPush,
 }: {
   clearCart: () => void;
   clearCheckoutSession: () => void;
   clearPendingCheckoutOrder: () => void;
   getHref: (path: string) => string;
   paymentMethod: string;
-  routerPush?: (url: string) => void;
 }) {
   const router = useRouter();
-  const push = routerPush ?? ((url: string) => router.push(asRoute(url)));
 
   return ({
     checkoutFingerprint,
@@ -53,7 +50,7 @@ export function useWalletFundedOrderCompletion({
     if (trackingToken) {
       successQuery.set('trackingToken', trackingToken);
     }
-    push(getHref(`/order-success?${successQuery.toString()}`));
+    router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
     setTimeout(clearCart, 500);
   };
 }

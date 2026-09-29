@@ -45,12 +45,12 @@ describe('MCP policy and widget responses', () => {
         await postMcpJsonRpc(server.baseUrl, {
           id: 0,
           method: 'resources/read',
-          params: { uri: 'ui://widget/store-v2.html' },
+          params: { uri: 'ui://widget/store-v3.html' },
         })
       );
       expect(resource.contents).toEqual([
         expect.objectContaining({
-          uri: 'ui://widget/store-v2.html',
+          uri: 'ui://widget/store-v3.html',
           _meta: expect.objectContaining({
             ui: expect.objectContaining({
               csp: {
@@ -70,7 +70,7 @@ describe('MCP policy and widget responses', () => {
         params: {},
       }));
       expect(tools.find((tool) => tool.name === 'search_products')?._meta)
-        .toMatchObject({ 'openai/outputTemplate': 'ui://widget/store-v2.html' });
+        .toMatchObject({ 'openai/outputTemplate': 'ui://widget/store-v3.html' });
     } finally {
       await server.close();
     }
@@ -82,9 +82,11 @@ describe('MCP policy and widget responses', () => {
       const resource = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
         id: 91,
         method: 'resources/read',
-        params: { uri: 'ui://widget/store-v2.html' },
+        params: { uri: 'ui://widget/store-v3.html' },
       }));
       const contents = resource.contents as Array<{ text: string }>;
+      expect(contents[0].text).toContain('.mode-fullscreen .products-grid--single');
+      expect(contents[0].text).toContain('.products-grid--single .product-card');
       const render = await fetch(`${server.baseUrl}/mcp/render/store`);
       expect(render.status).toBe(200);
       expect(await render.text()).toBe(contents[0].text);

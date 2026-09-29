@@ -5,6 +5,7 @@ import { useOrderTotals } from './checkout/hooks/use-order-totals';
 import { resolveCheckoutResumeContext } from './checkout/resolve-checkout-resume-context';
 
 import { useCheckoutDeliverySession } from './checkout/hooks/use-checkout-delivery-session';
+import { useCheckoutCustomerPrefill } from './checkout/hooks/use-checkout-customer-prefill';
 import {
   useDvaConfirmTransfer,
   type DvaModalData,
@@ -568,32 +569,11 @@ export const CheckoutPage: React.FC = () => {
 
   // Note: currentStep and completedSteps are now part of checkoutForm (persisted)
 
-  // Prefill user data if logged in
-  useEffect(() => {
-    if (user) {
-      if (user.email && !customerEmail) setCustomerEmail(user.email);
-
-      // Auto-fill name if not set
-      if (!firstName && !lastName) {
-        if (user.user_metadata?.first_name || user.user_metadata?.last_name) {
-          setFirstName(user.user_metadata.first_name || '');
-          setLastName(user.user_metadata.last_name || '');
-        } else if (user.user_metadata?.full_name) {
-          const parts = user.user_metadata.full_name.split(' ');
-          setFirstName(parts[0] || '');
-          setLastName(parts.slice(1).join(' ') || '');
-        } else if (user.user_metadata?.name) {
-          const parts = user.user_metadata.name.split(' ');
-          setFirstName(parts[0] || '');
-          setLastName(parts.slice(1).join(' ') || '');
-        }
-      }
-
-      if (user.user_metadata?.phone && !customerPhone) {
-        setCustomerPhone(user.user_metadata.phone);
-      }
-    }
-  }, [user, customerEmail, firstName, lastName, customerPhone]);
+  useCheckoutCustomerPrefill({
+    user,
+    values: { customerEmail, customerPhone, firstName, lastName },
+    setFields: setCheckoutFields,
+  });
 
   useEffect(() => {
     window.scrollTo(0, 0);

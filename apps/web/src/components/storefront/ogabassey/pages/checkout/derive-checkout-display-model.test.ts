@@ -68,6 +68,7 @@ describe('deriveCheckoutDisplayModel', () => {
     expect(model).toMatchObject({
       effectiveCheckoutCartTotal: 1_500,
       effectiveItemSubtotal: 1_400,
+      summarySubtotal: 1_500,
       hasCheckoutCartItems: true,
     });
     expect(model.displayItems).toEqual([{ kind: 'cart', ...item }]);
@@ -75,7 +76,14 @@ describe('deriveCheckoutDisplayModel', () => {
   });
 
   it('projects resumed order rows and preserves its canonical total', () => {
-    const order = resumedOrder({ total: 1_450, subtotal: 1_100 });
+    const order = resumedOrder({
+      total: 1_450,
+      subtotal: 1_100,
+      shipping_cost: 300,
+      tax_amount: 100,
+      discount_amount: 75,
+      gift_wrapping_fee: 25,
+    });
     const model = deriveCheckoutDisplayModel({
       checkoutCart: [],
       checkoutCartTotal: 2_000,
@@ -87,7 +95,9 @@ describe('deriveCheckoutDisplayModel', () => {
     expect(model).toMatchObject({
       effectiveCheckoutCartTotal: 1_450,
       effectiveItemSubtotal: 1_100,
+      summarySubtotal: 1_100,
       hasCheckoutCartItems: false,
+      summaryOrder: order,
     });
     expect(model.displayItems).toEqual([
       { kind: 'resumed', ...order.items[0] },
@@ -126,8 +136,50 @@ describe('deriveCheckoutDisplayModel', () => {
       displayItems: [],
       effectiveCheckoutCartTotal: 875,
       effectiveItemSubtotal: 0,
+      summarySubtotal: 875,
       hasCheckoutCartItems: false,
+      summaryOrder: null,
       mobileSummaryCart: [],
     });
+  });
+
+  it('derives a missing resumed subtotal from persisted order adjustments', () => {
+    const model = deriveCheckoutDisplayModel({
+      checkoutCart: [],
+      checkoutCartTotal: 0,
+      currencyCode: 'NGN',
+      itemSubtotal: 0,
+      resumedOrder: resumedOrder({
+        subtotal: undefined,
+        total: 12_750,
+        shipping_cost: 1_000,
+        tax_amount: 750,
+        discount_amount: 500,
+        gift_wrapping_fee: 1_500,
+      }),
+    });
+
+    expect(model.effectiveCheckoutCartTotal).toBe(12_750);
+    expect(model.summarySubtotal).toBe(10_000);
+    expect(model.effectiveItemSubtotal).toBe(10_000);
+  });
+
+  it('clamps a negative resumed subtotal fallback to zero', () => {
+    const model = deriveCheckoutDisplayModel({
+      checkoutCart: [],
+      checkoutCartTotal: 0,
+      currencyCode: 'NGN',
+      itemSubtotal: 0,
+      resumedOrder: resumedOrder({
+        subtotal: undefined,
+        total: 100,
+        shipping_cost: 200,
+        tax_amount: 0,
+        discount_amount: 0,
+      }),
+    });
+
+    expect(model.summarySubtotal).toBe(0);
+    expect(model.effectiveItemSubtotal).toBe(0);
   });
 });

@@ -15,14 +15,17 @@ export type CheckoutItem =
 interface DesktopOrderSummaryProps {
   displayItems: CheckoutItem[];
   formatCurrencyAuto: (amount: number) => string;
-  effectiveCheckoutCartTotal: number;
+  summarySubtotal: number;
   orderTotals: { total: number; taxAmount: number } | null;
+  taxLabel: string;
   deliveryCost: number;
-  deliveryMethod: DeliveryMethod;
+  discountAmount: number;
+  deliveryMethod: DeliveryMethod | null;
   selectedQuoteId: string;
   giftWrappingCost: number;
   paymentMethod: PaymentMethod;
   walletCurrencySupported: boolean;
+  walletRedemptionAllowed: boolean;
   walletLoading: boolean;
   walletBalance: number;
   hasUser: boolean;
@@ -43,14 +46,17 @@ interface DesktopOrderSummaryProps {
 export function DesktopOrderSummary({
   displayItems,
   formatCurrencyAuto,
-  effectiveCheckoutCartTotal,
+  summarySubtotal,
   orderTotals,
+  taxLabel,
   deliveryCost,
+  discountAmount,
   deliveryMethod,
   selectedQuoteId,
   giftWrappingCost,
   paymentMethod,
   walletCurrencySupported,
+  walletRedemptionAllowed,
   walletLoading,
   walletBalance,
   hasUser,
@@ -133,11 +139,11 @@ export function DesktopOrderSummary({
         <div className="space-y-3 mb-6">
           <div className="flex justify-between text-gray-600 text-sm">
             <span>Subtotal</span>
-            <span>{formatCurrencyAuto(effectiveCheckoutCartTotal)}</span>
+            <span>{formatCurrencyAuto(summarySubtotal)}</span>
           </div>
           {orderTotals && (
             <div className="flex justify-between text-gray-600 text-sm">
-              <span>VAT (7.5%)</span>
+              <span>{taxLabel}</span>
               <span>{formatCurrencyAuto(orderTotals.taxAmount)}</span>
             </div>
           )}
@@ -155,6 +161,12 @@ export function DesktopOrderSummary({
                 : deliveryCost === 0 ? 'Free' : formatCurrencyAuto(deliveryCost)}
             </span>
           </div>
+          {discountAmount > 0 && (
+            <div className="flex justify-between text-store-primary text-sm">
+              <span>Discount</span>
+              <span>-{formatCurrencyAuto(discountAmount)}</span>
+            </div>
+          )}
           {giftWrappingCost > 0 && (
             <div className="flex justify-between text-gray-600 text-sm">
               <span>Gift Wrapping</span>
@@ -163,7 +175,7 @@ export function DesktopOrderSummary({
           )}
 
           {/* Wallet Credit Section (2025: progressive disclosure - only show if balance > 0 or loading). NGN-ledger: hidden on non-NGN orders. */}
-          {paymentMethod !== 'uba_redvault' && walletCurrencySupported && (walletLoading || walletBalance > 0) && hasUser && (
+          {walletRedemptionAllowed && paymentMethod !== 'uba_redvault' && walletCurrencySupported && (walletLoading || walletBalance > 0) && hasUser && (
             <div className="py-2 animate-in fade-in">
               {walletLoading ? (
                 <div className="flex items-center gap-2 text-gray-500">

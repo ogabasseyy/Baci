@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { isAirportDeliveryReady } from '../is-airport-delivery-ready';
 import { resolveMerchantDeliveryMethod } from '../resolve-merchant-delivery-method';
 import {
@@ -21,6 +21,7 @@ import { useCheckoutAddressInference } from './use-checkout-address-inference';
 import { useCheckoutDeliveryAddressHandlers } from './use-checkout-delivery-address-handlers';
 import { useCheckoutDeliveryOptions } from './use-checkout-delivery-options';
 import { useCheckoutShippingQuotes } from './use-checkout-shipping-quotes';
+import { loadShippingStates } from '../checkout-page-data-loaders';
 import type { DeliveryMethod } from '../types';
 
 type CheckoutForm = ReturnType<typeof useCheckoutFormState>;
@@ -57,6 +58,17 @@ export function useCheckoutDeliverySession({
   const [isNewAddressMode, setIsNewAddressMode] = useState(true);
   const [shippingStates, setShippingStates] = useState<string[]>([]);
   const [isLoadingLocations, setIsLoadingLocations] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadShippingStates({
+      merchantCountry: shippingInput.merchantCountry,
+      signal: controller.signal,
+      setIsLoadingLocations,
+      setShippingStates,
+    });
+
+    return () => controller.abort();
+  }, [shippingInput.merchantCountry]);
   const { clearInferredLocationDebounce, scheduleInferredLocationUpdate } =
     inferredLocation;
 
@@ -229,9 +241,7 @@ export function useCheckoutDeliverySession({
       isNewMode: isNewAddressMode,
       setIsNewMode: setIsNewAddressMode,
       shippingStates,
-      setShippingStates,
       isLoadingLocations,
-      setIsLoadingLocations,
       isNewDeliveryAddressReady: quotes.isNewDeliveryAddressReady,
       handlers: addressHandlers,
     },

@@ -37,10 +37,8 @@ const wedgedCandidate = {
 };
 
 function buildSupabase(data: unknown[]) {
-  const stampUpdate = vi.fn().mockReturnValue({
-    eq: vi.fn().mockResolvedValue({ error: null }),
-  });
-  const builder: Record<string, unknown> = { update: stampUpdate };
+  const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+  const builder: Record<string, unknown> = {};
   for (const method of [
     'select',
     'eq',
@@ -56,8 +54,8 @@ function buildSupabase(data: unknown[]) {
   builder.limit = vi.fn().mockResolvedValue({ data, error: null });
   return {
     from: vi.fn().mockReturnValue(builder),
-    stampUpdate,
-  } as unknown as SupabaseClient & { stampUpdate: ReturnType<typeof vi.fn> };
+    rpc,
+  } as unknown as SupabaseClient & { rpc: ReturnType<typeof vi.fn> };
 }
 
 const scheduleAfter = (task: () => Promise<void>) => {
@@ -119,11 +117,11 @@ describe('reconcileWedgedGatewayOrders gateway verification', () => {
       { reason: 'gateway_status_not_success', transactionId: 'txn-1' },
     ]);
     expect(mocks.finalizeOrderGatewayPayment).not.toHaveBeenCalled();
-    expect(supabase.stampUpdate).toHaveBeenCalledWith(
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'stamp_wedge_sweep_resolution_v1',
       expect.objectContaining({
-        metadata: expect.objectContaining({
-          wedge_sweep_resolution: 'gateway_verification_negative',
-        }),
+        p_resolution: 'gateway_verification_negative',
+        p_transaction_id: 'txn-1',
       })
     );
   });
@@ -146,7 +144,10 @@ describe('reconcileWedgedGatewayOrders gateway verification', () => {
         transactionId: 'txn-1',
       },
     ]);
-    expect(supabase.stampUpdate).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'stamp_wedge_sweep_resolution_v1',
+      expect.anything()
+    );
   });
 
   it('skips on gateway/database amount mismatch', async () => {

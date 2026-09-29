@@ -88,13 +88,18 @@ export async function fileDuplicatePaymentCapture({
     );
     if (mergeError || merged !== true) return false;
   }
-  const { data: stamped, error: stampError } = await supabase.rpc(
-    'stamp_abandoned_sweep_resolution_v1',
-    {
-      p_transaction_id: attempt.id,
-      p_expected_reference: attempt.gateway_reference,
-      p_resolution: 'verified_success_captured',
-    }
-  );
+  // The Paystack stamp guards on gateway = 'paystack', so a verified
+  // Korapay/Juicyway capture needs the gateway-neutral variant: without
+  // it the stamp returns false, the filing reports failure, and the sweep
+  // retries the oldest captured row forever.
+  const stampFn =
+    evidence.gateway === 'paystack'
+      ? 'stamp_abandoned_sweep_resolution_v1'
+      : 'stamp_abandoned_sweep_resolution_any_gateway_v1';
+  const { data: stamped, error: stampError } = await supabase.rpc(stampFn, {
+    p_transaction_id: attempt.id,
+    p_expected_reference: attempt.gateway_reference,
+    p_resolution: 'verified_success_captured',
+  });
   return !stampError && stamped === true;
 }

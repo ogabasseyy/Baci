@@ -122,12 +122,12 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
   {
     repositoryPath:
       'supabase/migrations/20260927150450_close_verified_cancellation_refund_reviews.sql',
-    sha256: 'ecb5de6d03d2928706ae5441b1869e5f1229025c841930592225ae8792f4e943',
+    sha256: '8e1381471dd7d931312091e6efbde27f06c4be384f09c572faf2770f9f600353',
   },
   {
     repositoryPath:
       'supabase/migrations/20260927150500_complete_legacy_paystack_cancellation_refunds.sql',
-    sha256: 'c838d2d84ae75484db8e1d4f735b21a48885ef9c7d2b9b9d03e54c8c52cd51f8',
+    sha256: '768fd48d40f38937b3de8dac2be51bc17227678aefe7eedb3c9f885a3d992063',
   },
   {
     repositoryPath:
@@ -203,5 +203,35 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
     repositoryPath:
       'supabase/migrations/20260928160000_allow_deferred_cancellation_side_effects.sql',
     sha256: '973e68d49d496b6ba9d08515a5b759b867632a5b8cf386bd873577ce42021d87',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928170000_provider_refund_outside_cancellation_review.sql',
+    sha256: '2ef2b6ad3a3c1655b473378eb83c8280e9a340d5a131dd6d566bd467b9972503',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928171000_merge_provider_refund_outside_cancellation_evidence.sql',
+    sha256: 'cea3ac9429b91dd3d9d3b49df040845d0548517b95b2c334c08173b95f1b83cd',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928172000_flag_paystack_cancellation_over_refunds.sql',
+    sha256: '7573bbe0b4c021ddfff53dbe7d360afc8cfbe4724fc4d3e5236efa0bed7e0495',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928173000_stamp_wedge_sweep_resolution.sql',
+    sha256: '98ed8b366cd50daf672b599db3c447b6f6c62f44d9a7752db289cbcdab4eea41',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928174000_stamp_abandoned_sweep_resolution_any_gateway.sql',
+    sha256: '6a380c0cbaaf0914c933165eb401df04aa42e702241942fd664bc58f01beb318',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928175000_partial_capture_short_review_type.sql',
+    sha256: '88b8af90db3ccb9ed8bec2caf3094857b430c888656e3ffc09f485921c6c4cd7',
   },
 ];

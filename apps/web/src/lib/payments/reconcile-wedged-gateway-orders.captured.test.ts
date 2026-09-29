@@ -55,7 +55,10 @@ describe('reconcileWedgedGatewayOrders late outcomes', () => {
     await reconcileWedgedGatewayOrders({ scheduleAfter, supabase });
 
     // Without a durable ops row the payment must stay visible to the sweep.
-    expect(supabase.stampUpdate).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'stamp_wedge_sweep_resolution_v1',
+      expect.anything()
+    );
   });
 
   it('files a duplicate review when the order filled before finalization', async () => {
@@ -100,11 +103,11 @@ describe('reconcileWedgedGatewayOrders late outcomes', () => {
       { orderId: 'order-1', transactionId: 'txn-1' },
     ]);
     expect(summary.healed).toEqual([]);
-    expect(supabase.stampUpdate).toHaveBeenCalledWith(
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'stamp_wedge_sweep_resolution_v1',
       expect.objectContaining({
-        metadata: expect.objectContaining({
-          wedge_sweep_resolution: 'duplicate_capture_reviewed',
-        }),
+        p_resolution: 'duplicate_capture_reviewed',
+        p_transaction_id: 'txn-1',
       })
     );
   });
@@ -134,7 +137,10 @@ describe('reconcileWedgedGatewayOrders late outcomes', () => {
     expect(summary.failed).toEqual([
       { reason: 'duplicate_capture_review_failed', transactionId: 'txn-1' },
     ]);
-    expect(supabase.stampUpdate).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'stamp_wedge_sweep_resolution_v1',
+      expect.anything()
+    );
   });
 
   it('records finalizer failures without aborting the run', async () => {
@@ -256,6 +262,9 @@ describe('reconcileWedgedGatewayOrders late outcomes', () => {
     expect(summary.failed).toEqual([
       { reason: 'duplicate_capture_evidence_invalid', transactionId: 'txn-1' },
     ]);
-    expect(supabase.stampUpdate).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'stamp_wedge_sweep_resolution_v1',
+      expect.anything()
+    );
   });
 });

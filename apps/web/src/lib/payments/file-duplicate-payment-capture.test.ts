@@ -91,6 +91,20 @@ describe('fileDuplicatePaymentCapture', () => {
         }),
       })
     );
+    // The Paystack-gated stamp would return false for this row and retry
+    // the oldest captured row forever; the neutral stamp retires it.
+    expect(rpc).toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_any_gateway_v1',
+      expect.objectContaining({
+        p_expected_reference: 'BAC-JUICY',
+        p_resolution: 'verified_success_captured',
+        p_transaction_id: 'attempt-1',
+      })
+    );
+    expect(rpc).not.toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
+      expect.anything()
+    );
   });
 
   it('merges into the open review on conflict', async () => {

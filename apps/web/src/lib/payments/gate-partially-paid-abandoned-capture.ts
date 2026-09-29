@@ -4,6 +4,7 @@ import { calculatePlatformFee } from '@/lib/paystack';
 import { merchantInvoicePartialPaymentCompletionSchema } from '@/schemas/merchant-invoice-partial-payment-completion';
 import { fileDuplicatePaymentCapture } from './file-duplicate-payment-capture';
 import { fileConflictAndRetire } from './gate-partially-paid-abandoned-capture-conflict';
+import { fileShortCaptureAndRetire } from './gate-partially-paid-abandoned-capture-short';
 import { extractVerifiedGatewayFeeNgn } from './verified-gateway-fee';
 
 const INVOICE_PARTIAL_ALLOCATION = 'merchant_invoice_partial';
@@ -230,6 +231,12 @@ async function gateNonInvoicePartialCapture(
   if (captureMinor > outstandingMinor) {
     return await fileOverpaymentDuplicate(context);
   }
-  await hold('partial_balance_short');
-  return 'done';
+  // A verified shortfall is terminal evidence, not a transient gap: the
+  // captured funds are real money below the balance, so file them for
+  // operations and retire the attempt instead of rotating the hold.
+  return await fileShortCaptureAndRetire(context, {
+    captureMinor,
+    outstandingMinor,
+    providerData,
+  });
 }

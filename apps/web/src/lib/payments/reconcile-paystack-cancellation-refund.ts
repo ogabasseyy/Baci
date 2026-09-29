@@ -4,6 +4,9 @@ import { fetchRefund } from './fetch-paystack-refund';
 import type { RefundRow } from './paystack-cancellation-refund-row';
 
 /** A signed event is only a wake-up hint. Provider reads decide the transition. */
+const PAYMENT_ID_UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const EXTERNAL_PAYMENT_GATEWAYS_EXCLUSION = new Set([
   'wallet',
   'savings',
@@ -71,13 +74,18 @@ export async function reconcilePaystackCancellationRefund(
 ): Promise<'updated' | 'unchanged'> {
   const refundId = Number(refund.gateway_reference);
   const paymentId = refund.metadata?.payment_transaction_id;
+  // A malformed link (empty string, legacy non-UUID) must fail as a
+  // deterministic bad link: sending it to the UUID transactions.id filter
+  // raises an invalid-UUID read error that looks retryable, rotating the
+  // row forever instead of filing the bad-link review and hold.
   if (
     !Number.isSafeInteger(refundId) ||
     refundId <= 0 ||
     !refund.order_id ||
     (typeof paymentId !== 'string' &&
       paymentId !== undefined &&
-      paymentId !== null)
+      paymentId !== null) ||
+    (typeof paymentId === 'string' && !PAYMENT_ID_UUID_PATTERN.test(paymentId))
   )
     throw new Error('invalid_local_refund_link');
 

@@ -26,7 +26,7 @@ describe('PAYSTACK_PENDING_SOURCES', () => {
 
     expect(sources).toEqual(EXPECTED_PAYSTACK_PENDING_SOURCES);
     expect(sources.at(-1)?.repositoryPath).toBe(
-      'supabase/migrations/20260928160000_allow_deferred_cancellation_side_effects.sql'
+      'supabase/migrations/20260928175000_partial_capture_short_review_type.sql'
     );
   });
 

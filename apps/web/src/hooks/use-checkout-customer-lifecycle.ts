@@ -43,7 +43,7 @@ function setPrefillValue(
   setValue(name, value, { shouldValidate: true, shouldDirty: true });
 }
 
-export function applyCheckoutCustomerPrefill(
+function applyCheckoutCustomerPrefill(
   { user, customerData }: CheckoutIdentity,
   setValue: UseFormSetValue<CheckoutShippingValues>
 ) {

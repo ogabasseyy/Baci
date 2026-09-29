@@ -3,7 +3,6 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { useForm } from 'react-hook-form';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  applyCheckoutCustomerPrefill,
   type CheckoutShippingValues,
   useCheckoutCustomerLifecycle,
 } from './use-checkout-customer-lifecycle';
@@ -131,6 +130,15 @@ describe('useCheckoutCustomerLifecycle', () => {
   it('enters guest shipping without a session and accepts later auth success', async () => {
     const { result } = setupLifecycle();
     await waitFor(() => expect(result.current.pageLoading).toBe(false));
+    expect(result.current.form.getValues()).toEqual({
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      address: '',
+      city: '',
+      state: '',
+    });
 
     act(() => result.current.handleGuestCheckout());
     expect(result.current.step).toBe(1);
@@ -142,11 +150,5 @@ describe('useCheckoutCustomerLifecycle', () => {
     await waitFor(() =>
       expect(result.current.form.getValues('email')).toBe('buyer@example.com')
     );
-  });
-
-  it('does not apply identity prefill for a guest', () => {
-    const setValue = vi.fn();
-    applyCheckoutCustomerPrefill({ user: null, customerData: null }, setValue);
-    expect(setValue).not.toHaveBeenCalled();
   });
 });

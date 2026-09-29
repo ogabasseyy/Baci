@@ -1490,7 +1490,11 @@ function CheckoutPageContent() {
 
   if (pageLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div
+        aria-label="Loading checkout"
+        className="flex min-h-screen items-center justify-center bg-background"
+        role="status"
+      >
         <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     );

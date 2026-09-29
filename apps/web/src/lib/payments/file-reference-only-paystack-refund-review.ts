@@ -72,6 +72,10 @@ export async function fileReferenceOnlyPaystackRefundReview(
     txn_id: paymentId,
   });
   if (error?.code === '23505') {
+    // The order already has an open review: merge this leg as ambiguous.
+    // A non-ambiguous merge would let a later replacement refund
+    // auto-close the review even though this event may represent an
+    // additional provider refund with no local row or provider ID.
     const { data: merged, error: mergeError } = await supabase.rpc(
       'merge_paystack_cancellation_refund_leg_evidence_v1',
       {
@@ -81,7 +85,7 @@ export async function fileReferenceOnlyPaystackRefundReview(
         p_reason: reason,
         p_accepted_refund_ids: null,
         p_candidates: candidates,
-        p_ambiguous: false,
+        p_ambiguous: true,
       }
     );
     if (mergeError || merged !== true) {

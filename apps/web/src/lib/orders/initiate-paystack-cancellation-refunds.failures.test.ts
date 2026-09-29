@@ -164,6 +164,40 @@ describe('initiatePaystackCancellationRefunds failures', () => {
     expect(insert).toHaveBeenCalledTimes(1);
   });
 
+  it('quarantines a deterministic first-leg rejection instead of burning retries', async () => {
+    mocks.initiatePaystackRefund.mockResolvedValue({
+      code: 'VALIDATION_ERROR',
+      error: 'Invalid transaction reference format',
+      success: false,
+    });
+    mocks.quarantineRefund.mockRejectedValue(
+      new DeliveryUncertainError('quarantined')
+    );
+
+    await expect(
+      initiatePaystackCancellationRefunds({
+        order,
+        refundedPaymentIds: new Set(),
+        supabase,
+        transactions: [transaction],
+      })
+    ).rejects.toBeInstanceOf(DeliveryUncertainError);
+    // The provider will never accept this leg on retry: leaving it
+    // retryable would burn the five-attempt budget and exclude the row
+    // permanently with the customer unrefunded and no review filed.
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          failed_payment_transaction_id: 'tx-1',
+        }),
+        reason: expect.stringContaining('rejected'),
+      })
+    );
+    expect(
+      mocks.quarantineRefund.mock.calls[0]?.[0].metadata
+    ).not.toHaveProperty('ambiguous_initiation');
+  });
+
   it('still quarantines an ambiguous later leg after an accepted leg', async () => {
     const secondLeg = {
       ...transaction,

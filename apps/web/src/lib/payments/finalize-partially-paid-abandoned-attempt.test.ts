@@ -10,36 +10,14 @@ vi.mock('./file-duplicate-payment-capture', () => ({
 }));
 
 import { finalizePartiallyPaidAbandonedAttempt } from './finalize-partially-paid-abandoned-attempt';
-
-const attempt = {
-  amount: 100,
-  gateway_reference: 'BAC-OLD',
-  id: 'attempt-1',
-  merchant_id: 'merchant-1',
-  order_id: 'order-1',
-  platform_fee: 2,
-  status: 'pending',
-} as const;
-
-function admittingClient(admitted: unknown[] | null, error: unknown = null) {
-  const select = vi.fn().mockResolvedValue({ data: admitted, error });
-  const chain = { eq: vi.fn(), select };
-  chain.eq.mockReturnValue(chain);
-  return { from: vi.fn(() => ({ update: vi.fn(() => chain) })), select };
-}
+import {
+  admittingClient,
+  finalizationAttempt as attempt,
+  finalizationHarness,
+} from './finalize-partially-paid-abandoned-attempt.test-helpers';
 
 function harness() {
-  return {
-    finalizePayment: finalize,
-    hold: vi.fn().mockResolvedValue(undefined),
-    scheduleAfter: vi.fn(),
-    summary: {
-      completed: [] as string[],
-      failed: false,
-      reviewsFiled: [] as string[],
-    },
-    supabase: {} as never,
-  };
+  return finalizationHarness(finalize);
 }
 
 describe('finalizePartiallyPaidAbandonedAttempt', () => {

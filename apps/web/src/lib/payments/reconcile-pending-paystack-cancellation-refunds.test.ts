@@ -42,7 +42,7 @@ describe('pending Paystack cancellation refund reconciliation', () => {
       currency: 'NGN',
       status: 'refund_pending',
       metadata: {
-        payment_transaction_id: 'payment-1',
+        payment_transaction_id: '11111111-1111-4111-8111-111111111111',
         provider_payment_transaction_id: 123,
       },
     };
@@ -61,7 +61,7 @@ describe('pending Paystack cancellation refund reconciliation', () => {
       eq: vi.fn().mockReturnThis(),
       maybeSingle: vi.fn().mockResolvedValue({
         data: {
-          id: 'payment-1',
+          id: '11111111-1111-4111-8111-111111111111',
           order_id: 'order-1',
           merchant_id: 'merchant-1',
           gateway_reference: 'PSK-1',

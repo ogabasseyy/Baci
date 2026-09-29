@@ -33,12 +33,12 @@ interface ReplacementRefundRow {
 }
 
 /**
- * A postdating completed refund suppresses a failed leg only when it
- * covers that same leg: identical payment leg, gateway, and currency,
- * with an amount at least the failed refund's. Anything unmatchable
- * fails closed so the contradiction is filed and alerted.
+ * A postdating completed refund belongs to a failed leg only when it
+ * targets that same leg: identical payment leg, gateway, and currency.
+ * Anything unmatchable fails closed so the contradiction is filed and
+ * alerted.
  */
-function replacementCoversFailedLeg(
+function replacementMatchesFailedLeg(
   replacement: ReplacementRefundRow,
   failed: FailedRefundRow
 ): boolean {
@@ -59,12 +59,29 @@ function replacementCoversFailedLeg(
   ) {
     return false;
   }
-  const replacementAmount = Number(replacement.amount);
+  return true;
+}
+
+/**
+ * A failed leg is covered only when its matching postdating replacements
+ * sum to at least the failed refund's amount: a failed 100-unit refund
+ * replaced by two completed 50-unit refunds on the same leg is fully
+ * superseded. Malformed amounts fail closed.
+ */
+function failedLegCoveredByReplacements(
+  failed: FailedRefundRow,
+  replacements: ReplacementRefundRow[]
+): boolean {
   const failedAmount = Number(failed.amount);
-  if (!Number.isFinite(replacementAmount) || !Number.isFinite(failedAmount)) {
-    return false;
+  if (!Number.isFinite(failedAmount)) return false;
+  let covered = 0;
+  for (const replacement of replacements) {
+    if (!replacementMatchesFailedLeg(replacement, failed)) continue;
+    const replacementAmount = Number(replacement.amount);
+    if (!Number.isFinite(replacementAmount)) return false;
+    covered += replacementAmount;
   }
-  return replacementAmount >= failedAmount;
+  return covered >= failedAmount;
 }
 
 /**
@@ -120,9 +137,7 @@ export async function resolveContradictoryRefundFailure(
   const allLegsCovered =
     failedRows.length > 0 &&
     failedRows.every((failed) =>
-      replacementsList.some((replacement) =>
-        replacementCoversFailedLeg(replacement, failed)
-      )
+      failedLegCoveredByReplacements(failed, replacementsList)
     );
   if (allLegsCovered) return true;
 

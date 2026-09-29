@@ -46,12 +46,15 @@ function harness() {
 
 function ordersClient(order: unknown, error: unknown = null) {
   const maybeSingle = vi.fn().mockResolvedValue({ data: order, error });
+  const insert = vi.fn().mockResolvedValue({ error: null });
   const from = vi.fn(() => ({
     eq: vi.fn().mockReturnThis(),
+    insert,
     maybeSingle,
     select: vi.fn().mockReturnThis(),
   }));
-  return { from, rpc: vi.fn() };
+  const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+  return { from, insert, rpc };
 }
 
 describe('gatePartiallyPaidAbandonedCapture routing', () => {
@@ -165,23 +168,23 @@ describe('gatePartiallyPaidAbandonedCapture routing', () => {
   it.each([
     {
       amount: 1000,
+      filesShortReview: true,
       name: 'shortfall',
       total: 10.01,
       paid: 0,
-      held: 'partial_balance_short',
     },
     {
       amount: 1001,
+      filesShortReview: false,
       name: 'surplus',
       total: 10,
       paid: 0,
-      held: null,
     },
   ])('routes a one-kobo $name to review instead of exact completion', async ({
     amount,
     total,
     paid,
-    held,
+    filesShortReview,
   }) => {
     const plainAttempt = { ...attempt, metadata: {} };
     const db = ordersClient({ amount_paid: paid, total });
@@ -194,11 +197,23 @@ describe('gatePartiallyPaidAbandonedCapture routing', () => {
       supabase: db as never,
     });
 
-    // A float tolerance would read both as exact; integer kobo keeps
-    // the shortfall held and files the surplus as a duplicate.
+    // A float tolerance would read both as exact; integer kobo files
+    // the shortfall for review and the surplus as a duplicate.
     expect(gate).toBe('done');
-    if (held) {
-      expect(h.hold).toHaveBeenCalledWith(held);
+    if (filesShortReview) {
+      expect(db.insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          issue_type: 'partial_capture_short_requires_review',
+        })
+      );
+      expect(db.rpc).toHaveBeenCalledWith(
+        'stamp_abandoned_sweep_resolution_v1',
+        expect.objectContaining({
+          p_resolution: 'partial_capture_short_reviewed',
+        })
+      );
+      expect(h.summary.reviewsFiled).toEqual(['attempt-1']);
+      expect(h.hold).not.toHaveBeenCalled();
       expect(mocks.fileDuplicatePaymentCapture).not.toHaveBeenCalled();
     } else {
       expect(mocks.fileDuplicatePaymentCapture).toHaveBeenCalled();
@@ -206,7 +221,7 @@ describe('gatePartiallyPaidAbandonedCapture routing', () => {
     }
   });
 
-  it('holds a non-invoice underpayment without failing the sweep', async () => {
+  it('files a non-invoice underpayment for review instead of holding it', async () => {
     const plainAttempt = { ...attempt, metadata: {} };
     const db = ordersClient({ amount_paid: 30, total: 100 });
     const h = harness();
@@ -219,9 +234,29 @@ describe('gatePartiallyPaidAbandonedCapture routing', () => {
     });
 
     // 50 against 70 owing: promoting would trigger full paid side
-    // effects, so the row waits for the remaining payment instead.
+    // effects, but the verified capture is real money — file it and
+    // retire the row instead of rotating the same hold forever.
     expect(gate).toBe('done');
-    expect(h.hold).toHaveBeenCalledWith('partial_balance_short');
+    expect(db.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'partial_capture_short_requires_review',
+        paystack_ref: 'BAC-OLD',
+        txn_id: 'attempt-1',
+        metadata: expect.objectContaining({
+          capture_amount_minor: 5000,
+          outstanding_amount_minor: 7000,
+        }),
+      })
+    );
+    expect(db.rpc).toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
+      expect.objectContaining({
+        p_resolution: 'partial_capture_short_reviewed',
+        p_transaction_id: 'attempt-1',
+      })
+    );
+    expect(h.summary.reviewsFiled).toEqual(['attempt-1']);
+    expect(h.hold).not.toHaveBeenCalled();
     expect(h.summary.failed).toBe(false);
   });
 

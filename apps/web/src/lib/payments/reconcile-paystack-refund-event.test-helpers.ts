@@ -8,7 +8,7 @@ export const REFUND_FIXTURE = {
   amount: 100,
   currency: 'NGN',
   metadata: {
-    payment_transaction_id: 'payment-1',
+    payment_transaction_id: '11111111-1111-4111-8111-111111111111',
     provider_payment_transaction_id: 123,
   },
   status: 'refund_pending',
@@ -66,7 +66,7 @@ export function buildPaymentLookup() {
     eq: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockResolvedValue({
       data: {
-        id: 'payment-1',
+        id: '11111111-1111-4111-8111-111111111111',
         order_id: 'order-1',
         merchant_id: 'merchant-1',
         gateway_reference: 'PSK-1',

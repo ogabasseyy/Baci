@@ -160,11 +160,11 @@ describe('reconcileWedgedGatewayOrders', () => {
     ]);
     expect(mocks.finalizeOrderGatewayPayment).not.toHaveBeenCalled();
     // Logged once, stamped so it never consumes the hourly batch again.
-    expect(supabase.stampUpdate).toHaveBeenCalledWith(
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'stamp_wedge_sweep_resolution_v1',
       expect.objectContaining({
-        metadata: expect.objectContaining({
-          wedge_sweep_resolution: 'unhealable_gateway_logged',
-        }),
+        p_resolution: 'unhealable_gateway_logged',
+        p_transaction_id: 'txn-1',
       })
     );
   });
@@ -196,11 +196,11 @@ describe('reconcileWedgedGatewayOrders', () => {
     expect(summary.reviewsFiled).toEqual([
       { orderId: 'order-1', transactionId: 'txn-1' },
     ]);
-    expect(supabase.stampUpdate).toHaveBeenCalledWith(
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'stamp_wedge_sweep_resolution_v1',
       expect.objectContaining({
-        metadata: expect.objectContaining({
-          wedge_sweep_resolution: 'order_cancelled',
-        }),
+        p_resolution: 'order_cancelled',
+        p_transaction_id: 'txn-1',
       })
     );
   });

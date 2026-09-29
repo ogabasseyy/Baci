@@ -14,6 +14,7 @@ import type {
   GatewayChargeVerification,
   HealableGateway,
 } from '@/lib/payments/verify-gateway-charge';
+import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail';
 
 type VerifiedCharge = Extract<GatewayChargeVerification, { ok: true }>;
 
@@ -42,12 +43,17 @@ export async function finalizeVerifiedWedge({
   supabase: SupabaseClient;
   verification: VerifiedCharge;
 }): Promise<'finalized' | 'stop'> {
-  // Reserve budget before starting finalize: verification may have
-  // consumed the pass, and finalize would spend the paid-email retry
-  // budget past the deadline, starving the failed-side-effect pass.
-  // Rows we never start stay unstamped for the next sweep.
+  // Reserve the full paid-email retry budget before starting finalize:
+  // verification may have consumed the pass, and the default 20s check
+  // would admit a pass too short for the uncapped four-attempt sender
+  // loop — the finalize signal would then abort mid-send and strand the
+  // step delivery_uncertain instead of retrying next sweep. Rows we
+  // never start stay unstamped for the next sweep.
   try {
-    assertRefundNotificationSendTime(deadlineMs);
+    assertRefundNotificationSendTime(
+      deadlineMs,
+      zeptomailSendAdmissionBudgetMs()
+    );
   } catch {
     logger.info({
       message: 'Stopping wedged-order sweep before finalize budget runs out',
@@ -68,6 +74,11 @@ export async function finalizeVerifiedWedge({
   const outcome = await awaitRefundNotificationDeadline(
     finalizeOrderGatewayPayment({
       actor: 'cron:reconcile-gateway-paid-orders',
+      // Match the signal's 10s buffer: the platform-sender fallback
+      // declines unless its own attempt fits before the cutoff.
+      ...(deadlineMs !== undefined && {
+        fallbackDeadlineMs: deadlineMs - 10_000,
+      }),
       gateway: candidate.gateway,
       gatewayResponse: verification.response,
       orderId: candidate.order_id,

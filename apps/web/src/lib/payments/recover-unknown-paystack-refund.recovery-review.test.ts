@@ -209,6 +209,9 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
       .fn()
       .mockReturnValueOnce(selectQuery([]))
       .mockReturnValueOnce(selectQuery([stalledPayment]))
+      .mockReturnValueOnce(selectQuery([order]))
+      // Active-order candidate lookup: the order is cancelled, so the
+      // non-cancellation queue files nothing and rpc stays at one call.
       .mockReturnValueOnce(selectQuery([order]));
     const supabase = { from, rpc } as unknown as SupabaseClient;
 

@@ -133,6 +133,7 @@ describe('gatePartiallyPaidAbandonedCapture short captures', () => {
     expect(db.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_type: 'partial_capture_short_requires_review',
+        merchant_id: 'merchant-1',
         reason: expect.stringContaining('5000 of 7000 kobo'),
       })
     );

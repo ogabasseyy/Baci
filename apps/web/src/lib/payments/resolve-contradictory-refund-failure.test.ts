@@ -28,6 +28,7 @@ describe('resolveContradictoryRefundFailure', () => {
     const failedRows = [
       {
         amount: 100,
+        created_at: '2026-09-27T12:00:00Z',
         currency: 'NGN',
         gateway: 'paystack',
         gateway_reference: 'RFD-1',
@@ -43,6 +44,7 @@ describe('resolveContradictoryRefundFailure', () => {
         data: [
           {
             amount: 100,
+            created_at: '2026-09-27T13:00:00Z',
             currency: 'NGN',
             gateway: 'paystack',
             id: 'refund-2',
@@ -61,10 +63,13 @@ describe('resolveContradictoryRefundFailure', () => {
     await expect(
       resolveContradictoryRefundFailure({ from } as never, row, order)
     ).resolves.toBe(true);
-    expect(replacement.gt).toHaveBeenCalledWith(
-      'created_at',
-      '2026-09-27T12:00:00Z'
+    // Timing is evaluated per failed leg in code, not against the
+    // shared notification timestamp: both queries fetch created_at and
+    // no longer floor on the notification row.
+    expect(replacement.select).toHaveBeenCalledWith(
+      expect.stringContaining('created_at')
     );
+    expect(replacement.gt).not.toHaveBeenCalled();
     expect(mocks.quarantineRefund).not.toHaveBeenCalled();
   });
 
@@ -131,6 +136,7 @@ describe('resolveContradictoryRefundFailure', () => {
     const failedRows = [
       {
         amount: 100,
+        created_at: '2026-09-27T12:00:00Z',
         currency: 'NGN',
         gateway: 'paystack',
         gateway_reference: 'RFD-1',
@@ -142,6 +148,7 @@ describe('resolveContradictoryRefundFailure', () => {
       },
       {
         amount: 50,
+        created_at: '2026-09-27T12:30:00Z',
         currency: 'NGN',
         gateway: 'paystack',
         gateway_reference: 'RFD-3',
@@ -177,6 +184,7 @@ describe('resolveContradictoryRefundFailure', () => {
             data: [
               {
                 amount: 100,
+                created_at: '2026-09-27T13:00:00Z',
                 currency: 'NGN',
                 gateway: 'paystack',
                 id: 'refund-2',

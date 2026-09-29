@@ -29,6 +29,7 @@ async function fileConflictReview(
   const { error } = await supabase.from('reconciliation_review').insert({
     candidates: null,
     issue_type: 'merchant_invoice_partial_payment_conflict',
+    merchant_id: attempt.merchant_id,
     metadata: { error_code: errorCode },
     order_id: attempt.order_id,
     paystack_ref: attempt.gateway_reference,

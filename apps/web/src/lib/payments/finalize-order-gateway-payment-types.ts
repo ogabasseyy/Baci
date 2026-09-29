@@ -14,6 +14,9 @@ export interface FinalizeOrderGatewayPaymentArgs {
   // Aborts the awaited network leg (the paid-email send) when the caller
   // runs under a pass deadline; unbounded callers leave it unset.
   signal?: AbortSignal;
+  // Bounds the paid-email platform-sender fallback to the pass deadline
+  // so it declines unless its own attempt fits; unset when unbounded.
+  fallbackDeadlineMs?: number;
 }
 
 export type FinalizeOrderGatewayPaymentOutcome =

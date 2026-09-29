@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { fileCancelledPaystackRefundCandidateReviews } from './file-cancelled-paystack-refund-candidate-reviews';
 import type { RefundRecoveryEvidence } from './file-paystack-refund-candidate-reviews';
+import { fileActiveOrderPaystackRefundCandidateReviews } from './file-provider-refund-outside-cancellation-review';
 
 interface StalledPayment {
   amount: number;
@@ -15,21 +16,24 @@ interface StalledPayment {
  * Retain verified provider evidence when no completed local payment
  * matches: a stale pending attempt may already have captured and been
  * refunded before the sweep examined it. Every stalled match is fetched
- * (no LIMIT) so a repeated reference cannot drop an order silently, but
- * only matches on cancelled orders are filed — a refund for a stale
- * payment on an active order is merchant evidence, and filing it into
- * the cancellation queue would misroute it and merge it into a future
- * genuine cancellation review for the order.
+ * (no LIMIT) so a repeated reference cannot drop an order silently.
+ * Cancelled-order matches file into the cancellation queue; a refund
+ * for a stale payment on an active order is merchant evidence, so it
+ * files into the non-cancellation queue instead — acknowledging it
+ * with neither review nor local refund row would let a later charge
+ * recovery mark the order paid even though the customer was refunded.
  */
 export async function fileStalledPaystackRefundReviews(
   supabase: SupabaseClient,
   {
     evidence,
     gatewayReference,
+    refund,
     refundId,
   }: {
     evidence: RefundRecoveryEvidence;
     gatewayReference: string;
+    refund: { amount: number; currency: string; status: string };
     refundId: number;
   }
 ): Promise<void> {
@@ -50,11 +54,19 @@ export async function fileStalledPaystackRefundReviews(
     });
     return;
   }
+  const reason = `Paystack refund ${refundId} matches a non-completed local payment for reference ${gatewayReference}`;
   await fileCancelledPaystackRefundCandidateReviews(
     supabase,
     stalled,
     evidence,
-    `Paystack refund ${refundId} matches a non-completed local payment for reference ${gatewayReference}`
+    reason
+  );
+  await fileActiveOrderPaystackRefundCandidateReviews(
+    supabase,
+    stalled,
+    evidence,
+    reason,
+    refund
   );
   logger.info({
     message: 'Unknown Paystack refund event matches a non-completed payment',

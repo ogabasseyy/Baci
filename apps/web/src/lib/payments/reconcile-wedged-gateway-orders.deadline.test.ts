@@ -113,7 +113,10 @@ describe('reconcileWedgedGatewayOrders pass deadline', () => {
       kind: 'completed',
       orderNumber: 'ORD-1',
     });
-    const now = vi.spyOn(Date, 'now').mockReturnValue(1_100_000);
+    // 180s remaining: above the full 135s four-attempt email budget, so the
+    // candidate admits. Below that budget the sweep refuses instead (see the
+    // test above).
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
 
     try {
       const summary = await reconcileWedgedGatewayOrders({
@@ -123,7 +126,10 @@ describe('reconcileWedgedGatewayOrders pass deadline', () => {
       });
 
       expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledWith(
-        expect.objectContaining({ signal: expect.any(AbortSignal) })
+        expect.objectContaining({
+          fallbackDeadlineMs: 1_170_000,
+          signal: expect.any(AbortSignal),
+        })
       );
       expect(summary.healed).toEqual([
         { orderId: 'order-1', orderNumber: 'ORD-1' },
@@ -149,12 +155,15 @@ describe('reconcileWedgedGatewayOrders pass deadline', () => {
         })
       );
 
+      // 150s remaining: above the full 135s four-attempt email budget, so
+      // the candidate admits and the never-settling finalize is what the
+      // sweep must stop waiting for at the deadline.
       const pending = reconcileWedgedGatewayOrders({
-        deadlineMs: 1_121_000,
+        deadlineMs: 1_250_000,
         scheduleAfter,
         supabase,
       });
-      await vi.advanceTimersByTimeAsync(11_000);
+      await vi.advanceTimersByTimeAsync(151_000);
       const summary = await pending;
 
       expect(summary.failed).toEqual([

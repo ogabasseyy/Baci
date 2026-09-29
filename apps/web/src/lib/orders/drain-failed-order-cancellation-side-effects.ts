@@ -125,12 +125,14 @@ export async function drainFailedOrderCancellationSideEffects({
     string,
     CandidateRow & { isLastAttempt: boolean }
   >();
-  // Only failed rows burn the attempts budget: a deferred row reselects
-  // uncapped, so its attempt count must never trigger last-attempt
-  // evidence filing. Merge both queues by age (ISO claimed_at sorts
-  // lexicographically): filling the batch from failed rows first would
-  // starve provider-awaiting refunds whenever the failure backlog stays
-  // above the limit.
+  // Deferred rows reselect uncapped and the claim RPC never increments
+  // their attempts, but an already-exhausted deferred row must still run
+  // as a last attempt: without the flag a 429 is recorded as an
+  // ordinary failure the capped failed-queue never reselects, so the
+  // leg disappears without its exhausted-rate-limit review. Merge both
+  // queues by age (ISO claimed_at sorts lexicographically): filling the
+  // batch from failed rows first would starve provider-awaiting refunds
+  // whenever the failure backlog stays above the limit.
   const merged: Array<CandidateRow & { isLastAttempt: boolean }> = [
     ...((failedRows ?? []) as CandidateRow[]).map((row) => ({
       ...row,
@@ -138,7 +140,7 @@ export async function drainFailedOrderCancellationSideEffects({
     })),
     ...((deferredRows ?? []) as CandidateRow[]).map((row) => ({
       ...row,
-      isLastAttempt: false,
+      isLastAttempt: row.attempts >= MAX_ATTEMPTS - 1,
     })),
   ].sort((a, b) =>
     a.claimed_at < b.claimed_at ? -1 : a.claimed_at > b.claimed_at ? 1 : 0

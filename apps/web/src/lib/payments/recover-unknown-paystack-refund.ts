@@ -165,6 +165,11 @@ export async function recoverUnknownPaystackRefund(
     await fileStalledPaystackRefundReviews(supabase, {
       evidence,
       gatewayReference: resolvedPaymentReference,
+      refund: {
+        amount: current.amount / 100,
+        currency: current.currency,
+        status: current.status,
+      },
       refundId,
     });
     return;

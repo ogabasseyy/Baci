@@ -240,6 +240,7 @@ describe('gatePartiallyPaidAbandonedCapture routing', () => {
     expect(db.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_type: 'partial_capture_short_requires_review',
+        merchant_id: 'merchant-1',
         paystack_ref: 'BAC-OLD',
         txn_id: 'attempt-1',
         metadata: expect.objectContaining({

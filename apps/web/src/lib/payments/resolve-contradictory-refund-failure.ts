@@ -18,6 +18,7 @@ interface ContradictionOrder {
 
 interface FailedRefundRow {
   amount: number | string | null;
+  created_at: string;
   currency: string | null;
   gateway: string | null;
   gateway_reference: string | null;
@@ -27,16 +28,20 @@ interface FailedRefundRow {
 
 interface ReplacementRefundRow {
   amount: number | string | null;
+  created_at: string;
   currency: string | null;
   gateway: string | null;
   metadata: { payment_transaction_id?: unknown } | null;
 }
 
 /**
- * A postdating completed refund belongs to a failed leg only when it
- * targets that same leg: identical payment leg, gateway, and currency.
- * Anything unmatchable fails closed so the contradiction is filed and
- * alerted.
+ * A replacement suppresses a failed leg only when it both targets that
+ * same leg (identical payment leg, gateway, and currency) and was
+ * created after the failure itself. Timing is per leg, not per the
+ * shared notification row: a later failure on another leg resets the
+ * notification's timestamp, which would otherwise exclude an earlier
+ * leg's valid replacement and alert falsely. Anything unmatchable or
+ * unparseable fails closed so the contradiction is filed and alerted.
  */
 function replacementMatchesFailedLeg(
   replacement: ReplacementRefundRow,
@@ -59,7 +64,12 @@ function replacementMatchesFailedLeg(
   ) {
     return false;
   }
-  return true;
+  const replacedAt = Date.parse(replacement.created_at);
+  const failedAt = Date.parse(failed.created_at);
+  if (!Number.isFinite(replacedAt) || !Number.isFinite(failedAt)) {
+    return false;
+  }
+  return replacedAt > failedAt;
 }
 
 /**
@@ -101,7 +111,9 @@ export async function resolveContradictoryRefundFailure(
 ): Promise<boolean> {
   const { data: refundRows, error: refundError } = await supabase
     .from('transactions')
-    .select('id, gateway_reference, amount, currency, gateway, metadata')
+    .select(
+      'id, gateway_reference, amount, currency, gateway, metadata, created_at'
+    )
     .eq('order_id', row.order_id)
     .eq('merchant_id', row.merchant_id)
     .eq('transaction_type', 'refund')
@@ -117,14 +129,16 @@ export async function resolveContradictoryRefundFailure(
           ?.provider_refund_status as string
       )
   );
+  // Newest completions first with no shared timestamp floor: coverage
+  // timing is evaluated per failed leg in code, since the shared
+  // notification row's timestamp resets when any leg fails.
   const { data: replacements, error: replacementError } = await supabase
     .from('transactions')
-    .select('id, amount, currency, gateway, metadata')
+    .select('id, amount, currency, gateway, metadata, created_at')
     .eq('order_id', row.order_id)
     .eq('merchant_id', row.merchant_id)
     .eq('transaction_type', 'refund')
     .eq('status', 'completed')
-    .gt('created_at', row.created_at)
     .order('created_at', { ascending: false })
     .limit(50);
   if (replacementError) {

@@ -19,6 +19,7 @@ import {
 function failedRow(overrides: Record<string, unknown> = {}) {
   return {
     amount: 100,
+    created_at: '2026-09-27T12:00:00Z',
     currency: 'NGN',
     gateway: 'paystack',
     gateway_reference: 'RFD-1',
@@ -34,6 +35,7 @@ function failedRow(overrides: Record<string, unknown> = {}) {
 function replacement(overrides: Record<string, unknown> = {}) {
   return {
     amount: 50,
+    created_at: '2026-09-27T13:00:00Z',
     currency: 'NGN',
     gateway: 'paystack',
     id: 'refund-2',
@@ -122,6 +124,92 @@ describe('resolveContradictoryRefundFailure aggregate coverage', () => {
       resolveContradictoryRefundFailure({ from } as never, row, order)
     ).resolves.toBe(true);
     expect(mocks.quarantineRefund).not.toHaveBeenCalled();
+  });
+
+  it('keeps an earlier replacement when a later failure resets the notification clock', async () => {
+    // Leg A fails at 10:00 and is replaced at 11:00; leg B fails at
+    // 14:00, resetting the shared notification row to 15:00, and is
+    // replaced at 14:30. Timing against the notification row would
+    // exclude A's valid replacement and alert falsely; per-leg timing
+    // covers both.
+    const resetRow = { ...row, created_at: '2026-09-27T15:00:00Z' };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        chain(
+          {
+            data: [
+              failedRow({ created_at: '2026-09-27T10:00:00Z' }),
+              failedRow({
+                created_at: '2026-09-27T14:00:00Z',
+                gateway_reference: 'RFD-3',
+                id: 'refund-3',
+                metadata: {
+                  payment_transaction_id: 'payment-3',
+                  provider_refund_status: 'failed',
+                },
+              }),
+            ],
+            error: null,
+          },
+          'limit'
+        )
+      )
+      .mockReturnValueOnce(
+        chain(
+          {
+            data: [
+              replacement({
+                amount: 100,
+                created_at: '2026-09-27T11:00:00Z',
+                id: 'refund-2',
+              }),
+              replacement({
+                amount: 100,
+                created_at: '2026-09-27T14:30:00Z',
+                id: 'refund-4',
+                metadata: { payment_transaction_id: 'payment-3' },
+              }),
+            ],
+            error: null,
+          },
+          'limit'
+        )
+      );
+
+    await expect(
+      resolveContradictoryRefundFailure({ from } as never, resetRow, order)
+    ).resolves.toBe(true);
+    expect(mocks.quarantineRefund).not.toHaveBeenCalled();
+  });
+
+  it('ignores replacements that predate their failed leg', async () => {
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(chain({ data: [failedRow()], error: null }, 'limit'))
+      .mockReturnValueOnce(
+        chain(
+          {
+            data: [
+              replacement({
+                amount: 100,
+                created_at: '2026-09-27T11:00:00Z',
+                id: 'refund-2',
+              }),
+            ],
+            error: null,
+          },
+          'limit'
+        )
+      )
+      .mockReturnValueOnce(chain({ data: [], error: null }, 'in'));
+
+    // The 11:00 replacement predates the 12:00 failure, so it cannot
+    // supersede it — the contradiction files.
+    await expect(
+      resolveContradictoryRefundFailure({ from } as never, row, order)
+    ).resolves.toBe(false);
+    expect(mocks.quarantineRefund).toHaveBeenCalled();
   });
 
   it('fails closed when a matching replacement amount is malformed', async () => {

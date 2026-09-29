@@ -209,6 +209,9 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
       .mockReturnValueOnce(
         selectQuery([payment('pay-1', 'order-1', 'merchant-1')])
       )
+      .mockReturnValueOnce(selectQuery([cancelledOrder('order-1')]))
+      // Active-queue lookup: the order is cancelled, so the
+      // non-cancellation queue files nothing.
       .mockReturnValueOnce(selectQuery([cancelledOrder('order-1')]));
     const supabase = { from, rpc } as unknown as SupabaseClient;
 
@@ -220,6 +223,56 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
     expect(rpc).toHaveBeenCalledWith(
       'file_paystack_refund_recovery_review_v1',
       expect.objectContaining({ p_order_id: 'order-1' })
+    );
+  });
+
+  it('files malformed evidence for active orders before throwing for redelivery', async () => {
+    mocks.fetchRefund.mockResolvedValue({
+      data: {
+        amount: 12.5,
+        currency: 'NGN',
+        id: 202,
+        status: 'processed',
+        transaction: 555,
+      },
+      success: true,
+    });
+    const active = [
+      {
+        cancelled_at: null,
+        id: 'order-9',
+        order_number: 'ORD-9',
+        shipping_status: 'processing',
+      },
+    ];
+    const rpc = reviewRpc();
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        selectQuery([payment('pay-9', 'order-9', 'merchant-9')])
+      )
+      .mockReturnValueOnce(selectQuery(active))
+      .mockReturnValueOnce(selectQuery(active))
+      .mockReturnValueOnce({ insert: reviewInsert });
+    const supabase = { from, rpc } as unknown as SupabaseClient;
+
+    await expect(
+      recoverUnknownPaystackRefund(supabase, 202, 'PSK-1')
+    ).rejects.toThrow('paystack_refund_evidence_invalid');
+
+    // The cancellation queue drops the active order, so without the
+    // non-cancellation filing the evidence would vanish with the last
+    // provider retry while the order stays paid and fulfillable.
+    expect(rpc).not.toHaveBeenCalled();
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'provider_refund_outside_cancellation',
+        merchant_id: 'merchant-9',
+        order_id: 'order-9',
+        metadata: expect.objectContaining({ provider_refund_id: 202 }),
+        reason: expect.stringContaining('unusable provider evidence'),
+      })
     );
   });
 

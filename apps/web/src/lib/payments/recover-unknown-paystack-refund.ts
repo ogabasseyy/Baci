@@ -118,11 +118,32 @@ export async function recoverUnknownPaystackRefund(
     // permanently malformed shape stays visible for operations.
     if (candidates.length === 0)
       throw new Error('paystack_refund_evidence_unmatched');
+    const invalidReason = `Paystack refund ${refundId} returned unusable provider evidence for reference ${resolvedPaymentReference}`;
     await fileCancelledPaystackRefundCandidateReviews(
       supabase,
       candidates,
       evidence,
-      `Paystack refund ${refundId} returned unusable provider evidence for reference ${resolvedPaymentReference}`
+      invalidReason
+    );
+    // The cancellation queue drops active orders, but a potentially
+    // refunded active order must not rely on provider redeliveries
+    // alone: persist the malformed evidence to the non-cancellation
+    // queue too, so it stays visible after retries stop. Amounts are
+    // sanitized because the provider shape is unusable by definition.
+    await fileActiveOrderPaystackRefundCandidateReviews(
+      supabase,
+      candidates,
+      evidence,
+      invalidReason,
+      {
+        amount:
+          Number.isSafeInteger(current.amount) && current.amount > 0
+            ? current.amount / 100
+            : 0,
+        currency:
+          typeof current.currency === 'string' ? current.currency : 'unknown',
+        status: typeof current.status === 'string' ? current.status : 'unknown',
+      }
     );
     throw new Error('paystack_refund_evidence_invalid');
   }

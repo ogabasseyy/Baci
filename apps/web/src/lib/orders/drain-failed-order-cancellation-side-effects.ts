@@ -1,12 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { ORDER_WITH_ITEMS_QUERY } from '@/lib/order-queries';
+import { EMAIL_ATTEMPTS_PER_SENDER } from '@/lib/orders/execute-customer-email-cancellation-side-effect';
 import { executeOrderCancellationSideEffect } from '@/lib/orders/execute-order-cancellation-side-effect';
 import type { CancellationEmailSender } from '@/lib/orders/order-cancellation-side-effect-types';
 import {
   type OrderCancellationSideEffectStep,
   runOrderCancellationSideEffect,
 } from '@/lib/orders/run-order-cancellation-side-effect';
+import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail';
 
 const DEFAULT_LIMIT = 10;
 const MAX_ATTEMPTS = 5;
@@ -162,6 +164,25 @@ export async function drainFailedOrderCancellationSideEffects({
         step,
       });
       break;
+    }
+    // A customer-email step admitted without its sender budget would
+    // claim (burning an attempt) only to refuse before sending; under
+    // a sustained backlog five such budget-only failures would cap the
+    // row and the email would never send. Skip it unclaimed so it stays
+    // failed for a tick with room. Later refund steps still run.
+    if (
+      step === 'customer_email' &&
+      deadlineMs !== undefined &&
+      deadlineMs - Date.now() <
+        zeptomailSendAdmissionBudgetMs(EMAIL_ATTEMPTS_PER_SENDER)
+    ) {
+      logger.info({
+        message:
+          'Skipping cancellation email without claiming: too little budget remains to send',
+        orderId,
+        step,
+      });
+      continue;
     }
     try {
       const { data: order, error: orderError } = await supabase

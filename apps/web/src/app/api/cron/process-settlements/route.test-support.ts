@@ -41,11 +41,13 @@ export function stubDefaultSettlementRun(mocks: RouteMocks) {
   });
   mocks.select.mockReturnValue({
     eq: mocks.eq,
+    in: mocks.in,
     limit: mocks.limit,
     order: mocks.order,
   });
   mocks.eq.mockReturnValue({
     eq: mocks.eq,
+    in: mocks.in,
     limit: mocks.limit,
     order: mocks.order,
   });
@@ -72,10 +74,23 @@ export function stubDefaultSettlementRun(mocks: RouteMocks) {
     error: null,
   });
   mocks.update.mockReturnValue({
+    eq: mocks.eq,
     in: mocks.in,
   });
-  mocks.in.mockResolvedValue({ data: null, error: null });
+  // Revalidation reads the snapshotted row as still settled by default;
+  // the guarded mark ignores its resolution.
+  mocks.in.mockResolvedValue({
+    data: [
+      {
+        id: 'settlement-1',
+        settlement_notified: false,
+        status: 'settled',
+      },
+    ],
+    error: null,
+  });
   mocks.from
+    .mockReturnValueOnce({ select: mocks.select })
     .mockReturnValueOnce({ select: mocks.select })
     .mockReturnValueOnce({ update: mocks.update });
   mocks.sendEmail.mockResolvedValue({ messageId: 'msg-1', success: true });

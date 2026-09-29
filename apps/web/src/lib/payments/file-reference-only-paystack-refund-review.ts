@@ -3,11 +3,12 @@ import { logger } from '@/lib/logger';
 
 /**
  * File a durable review for a signed reference-only refund event with no
- * local audit row (provider-side manual refund, lost audit insert). A
- * completed linked row means the event is a late duplicate and stays
- * silent; otherwise polling can never rediscover the provider refund, so
- * the review stays open for operations instead of acknowledging silently.
- * Redeliveries merge into the open review instead of duplicating it.
+ * local audit row (provider-side manual refund, lost audit insert).
+ * Verified linked rows that cover the payment amount mean the event is a
+ * late duplicate and stays silent; otherwise polling can never rediscover
+ * the provider refund, so the review stays open for operations instead of
+ * acknowledging silently. Redeliveries merge into the open review
+ * instead of duplicating it.
  */
 export async function fileReferenceOnlyPaystackRefundReview(
   supabase: SupabaseClient,
@@ -30,10 +31,12 @@ export async function fileReferenceOnlyPaystackRefundReview(
   // Suppress only on coverage the completion RPC would accept: a locally
   // completed row that provider verification later rejects must not
   // discard this event, since a reference-only event carries no refund ID
-  // for polling to rediscover.
+  // for polling to rediscover. Partial coverage must not suppress
+  // either: a 40 NGN verified refund against a 100 NGN payment leaves a
+  // balance this event may be the only evidence for.
   const { data: settled, error: settledError } = await supabase
     .from('transactions')
-    .select('currency, metadata')
+    .select('amount, currency, metadata')
     .eq('order_id', orderId)
     .eq('merchant_id', merchantId)
     .eq('transaction_type', 'refund')
@@ -41,18 +44,20 @@ export async function fileReferenceOnlyPaystackRefundReview(
     .eq('metadata->>payment_transaction_id', paymentId)
     .eq('status', 'completed');
   if (settledError) throw new Error('refund_event_lookup_failed');
-  if (
-    (
-      (settled ?? []) as Array<{
-        currency: string | null;
-        metadata: { provider_refund_status?: unknown } | null;
-      }>
-    ).some(
+  const linkedCovered = (
+    (settled ?? []) as Array<{
+      amount: number | string;
+      currency: string | null;
+      metadata: { provider_refund_status?: unknown } | null;
+    }>
+  )
+    .filter(
       (row) =>
         row.metadata?.provider_refund_status === 'processed' &&
         (row.currency ?? '').toUpperCase() === currency.toUpperCase()
     )
-  ) {
+    .reduce((total, row) => total + (Number(row.amount) || 0), 0);
+  if (amount > 0 && linkedCovered >= amount) {
     return;
   }
 

@@ -62,6 +62,7 @@ describe('Paystack reference-only refund events', () => {
       .mockReturnValueOnce(
         buildSettledCandidates([
           {
+            amount: 100,
             currency: 'NGN',
             metadata: { provider_refund_status: 'processed' },
           },

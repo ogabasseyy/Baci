@@ -75,6 +75,7 @@ describe('fileReferenceOnlyPaystackRefundReview', () => {
       .mockReturnValueOnce(
         listQuery([
           {
+            amount: 100,
             currency: 'NGN',
             metadata: { provider_refund_status: 'processed' },
           },
@@ -90,6 +91,36 @@ describe('fileReferenceOnlyPaystackRefundReview', () => {
 
     expect(insert).not.toHaveBeenCalled();
     expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('files when verified linked rows only partially cover the payment', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        listQuery([
+          {
+            amount: 40,
+            currency: 'NGN',
+            metadata: { provider_refund_status: 'processed' },
+          },
+        ])
+      )
+      .mockReturnValueOnce(listQuery(multiLegPayments))
+      .mockReturnValueOnce({ insert });
+
+    await fileReferenceOnlyPaystackRefundReview(
+      { from, rpc: vi.fn() } as never,
+      reviewInput
+    );
+
+    // The 60 NGN balance may be the provider refund this ID-less event
+    // evidences; suppressing would drop the only durable trace.
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'order_cancellation_refund_requires_review',
+      })
+    );
   });
 
   it('files when the linked row is completed but not provider-verified', async () => {

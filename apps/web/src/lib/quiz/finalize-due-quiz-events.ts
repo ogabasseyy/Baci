@@ -6,10 +6,8 @@ import {
 } from '@/lib/quiz/quiz-runtime-env';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/types/supabase';
-import {
-  invalidateQuizProductCaches,
-  resolveQuizSweepWatermarks,
-} from './quiz-product-cache-invalidation';
+import { invalidateQuizProductCaches } from './quiz-product-cache-invalidation';
+import { resolveQuizSweepWatermarks } from './quiz-sweep-watermarks';
 
 const COUNT_KEYS = [
   'scheduledPromoted',

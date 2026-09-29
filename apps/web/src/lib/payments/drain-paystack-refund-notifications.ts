@@ -5,6 +5,7 @@ import { assertRefundNotificationSendTime } from './assert-refund-notification-s
 import { awaitRefundNotificationDeadline } from './await-refund-notification-deadline';
 import { countDeadLetteredPaystackRefundNotifications } from './count-dead-lettered-paystack-refund-notifications';
 import { refundNotificationLedgerAmount } from './refund-notification-ledger';
+import { resolveContradictoryRefundFailure } from './resolve-contradictory-refund-failure';
 
 type RefundEmailSender = (message: {
   to: string;
@@ -46,6 +47,7 @@ interface NotificationRow {
     | 'processed_merchant_push'
     | 'failed_merchant_push';
   claim_token: string;
+  created_at: string;
 }
 
 export async function drainPaystackRefundNotifications(
@@ -162,8 +164,18 @@ export async function drainPaystackRefundNotifications(
         }
       } else {
         const completed = row.event_type === 'processed_merchant_push';
-        if (!completed && order.payment_status === 'refunded') {
-          outcome = 'sent'; // A later processed event superseded the alert.
+        // A refunded order usually means a later processed event
+        // superseded this failure alert — but a failure reported after
+        // the refunded transition is fresh contradiction. Suppress only
+        // on durable replacement evidence; otherwise the helper files a
+        // falsely-refunded review and the alert below still sends.
+        const contradictoryFailure =
+          !completed && order.payment_status === 'refunded';
+        const superseded =
+          contradictoryFailure &&
+          (await resolveContradictoryRefundFailure(supabase, row, order));
+        if (superseded) {
+          outcome = 'sent';
         } else {
           const title = completed
             ? 'Refund processed'

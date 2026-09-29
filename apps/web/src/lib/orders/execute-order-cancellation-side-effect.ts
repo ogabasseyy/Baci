@@ -65,38 +65,6 @@ export async function executeOrderCancellationSideEffect({
   if (!transactions.length) {
     throw new Error('No completed gateway payment transaction found');
   }
-  // In-flight non-Paystack legs (e.g. PayPal flips the payment row itself
-  // while its provider refund is pending) are not unsupported: their
-  // provider refund resolves on its own, so they must reach the
-  // provider-awaiting deferral below instead of quarantining terminally
-  // and stranding the remaining Paystack legs. Reference-less legs still
-  // quarantine — with nothing to track they can never resolve by waiting.
-  const unsupportedLegs = transactions.filter(
-    (transaction) =>
-      !transaction.gateway_reference ||
-      (transaction.gateway !== 'paystack' &&
-        transaction.status !== 'refund_pending')
-  );
-  if (unsupportedLegs.length > 0) {
-    const unsupportedReasons = unsupportedRefundReasons(unsupportedLegs);
-    await quarantineRefund({
-      order,
-      preflight: true,
-      reason: `Automatic cancellation refund requires review: ${unsupportedReasons.join(', ')}`,
-      supabase,
-      transactions,
-    });
-  }
-  const gatewayRefundAmount = transactions.reduce(
-    (total, transaction) => total + (Number(transaction.amount) || 0),
-    0
-  );
-  if (
-    gatewayRefundAmount <= 0 ||
-    transactions.some((transaction) => Number(transaction.amount) <= 0)
-  ) {
-    throw new Error('Completed payment transaction has no refundable amount');
-  }
   const { data: refundRows, error: refundLookupError } = await supabase
     .from('transactions')
     .select('gateway_reference, metadata, status, amount, currency, gateway')
@@ -187,6 +155,41 @@ export async function executeOrderCancellationSideEffect({
   const mismatchedIds = new Set(
     mismatchedTransactions.map((transaction) => transaction.id)
   );
+  // Unsupported and reference-less legs quarantine only when uncovered:
+  // a fully refunded non-Paystack leg needs no further action, and
+  // terminalizing the row for it would strand the remaining Paystack
+  // legs. In-flight non-Paystack legs (e.g. PayPal flips the payment row
+  // itself while its provider refund is pending) are not unsupported:
+  // their provider refund resolves on its own, so they must reach the
+  // provider-awaiting deferral below instead. Reference-less legs still
+  // quarantine — with nothing to track they can never resolve by waiting.
+  const unsupportedLegs = transactions.filter(
+    (transaction) =>
+      !refundedPaymentIds.has(transaction.id) &&
+      (!transaction.gateway_reference ||
+        (transaction.gateway !== 'paystack' &&
+          transaction.status !== 'refund_pending'))
+  );
+  if (unsupportedLegs.length > 0) {
+    const unsupportedReasons = unsupportedRefundReasons(unsupportedLegs);
+    await quarantineRefund({
+      order,
+      preflight: true,
+      reason: `Automatic cancellation refund requires review: ${unsupportedReasons.join(', ')}`,
+      supabase,
+      transactions,
+    });
+  }
+  const gatewayRefundAmount = transactions.reduce(
+    (total, transaction) => total + (Number(transaction.amount) || 0),
+    0
+  );
+  if (
+    gatewayRefundAmount <= 0 ||
+    transactions.some((transaction) => Number(transaction.amount) <= 0)
+  ) {
+    throw new Error('Completed payment transaction has no refundable amount');
+  }
   // Legs with a provider-accepted audit row are still in flight: the
   // reconciler completes them and the drain resumes the remaining legs.
   // Only legs without provider evidence (failed or ambiguous rows) need a

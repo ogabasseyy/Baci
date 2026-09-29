@@ -45,6 +45,9 @@ async function fileConflictReview(
     txn_id: attempt.id,
   });
   if (!error) return true;
+  // This issue type dedupes per transfer (txn/ref), not per order, so a
+  // conflict means this same capture was already filed — a second capture
+  // files its own row. Redelivery is success; nothing merges.
   if ((error as { code?: string }).code === POSTGRES_UNIQUE_VIOLATION) {
     return true;
   }
@@ -153,8 +156,7 @@ export async function gatePartiallyPaidAbandonedCapture(
     return await gateNonInvoicePartialCapture(context);
   }
   // Mirror the webhook's settlement-input validation: the RPC enforces
-  // the same contract, but the specific code tells operations which
-  // input to reconcile.
+  // the same contract, but the specific code names the bad input.
   const grossAmount = Number(attempt.amount);
   const gatewayFee = extractVerifiedGatewayFeeNgn('paystack', providerData);
   const storedPlatformFee =

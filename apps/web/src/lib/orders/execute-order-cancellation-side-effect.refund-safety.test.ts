@@ -63,6 +63,7 @@ describe('cancellation refund safety', () => {
           },
         ])
       )
+      .mockReturnValueOnce(transactionQuery([]))
       .mockReturnValueOnce({ insert: reviewInsert });
 
     await expect(

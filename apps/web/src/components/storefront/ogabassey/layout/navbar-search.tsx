@@ -6,6 +6,15 @@ import type React from 'react';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import type { SearchAutocompleteProps } from '@/components/storefront/search-autocomplete';
+import { parseStorefrontSearchQueryParam } from '@/lib/storefront-search-params';
+
+/**
+ * Maximum query the navbar accepts and submits. The search page itself
+ * accepts up to 200 characters, so route-synced queries are normalized to
+ * this limit: the input must never display a longer term than Enter would
+ * submit (HTML maxLength does not truncate programmatic assignments).
+ */
+const NAVBAR_SEARCH_MAX_LENGTH = 100;
 
 /**
  * Syncs the persistent navbar input when the active search route's query
@@ -18,10 +27,20 @@ import type { SearchAutocompleteProps } from '@/components/storefront/search-aut
 function SearchRouteQuerySync({ onSync }: { onSync: (query: string) => void }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const routeQuery =
+  // The value mirrors the route parser exactly: repeated or missing `q`
+  // params yield the same empty query the results page renders (instead of
+  // the first raw value), and the result is normalized to the navbar
+  // limit so the displayed term always equals the submitted term.
+  const routeQueries =
     pathname !== null && pathname.endsWith('/search')
-      ? (searchParams.get('q') ?? '')
+      ? searchParams.getAll('q')
       : null;
+  const routeQuery =
+    routeQueries === null
+      ? null
+      : parseStorefrontSearchQueryParam(
+          routeQueries.length === 1 ? (routeQueries[0] ?? '') : undefined
+        ).slice(0, NAVBAR_SEARCH_MAX_LENGTH);
 
   useEffect(() => {
     // Runs only when the route query changes, so in-progress edits are
@@ -81,7 +100,7 @@ export function NavbarSearch({
   }
 
   const pushSearchRoute = (query: string) => {
-    const trimmedQuery = query.trim().slice(0, 100);
+    const trimmedQuery = query.trim().slice(0, NAVBAR_SEARCH_MAX_LENGTH);
     if (!trimmedQuery) {
       return;
     }
@@ -148,7 +167,7 @@ export function NavbarSearch({
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
           placeholder="Search blog posts..."
-          maxLength={100}
+          maxLength={NAVBAR_SEARCH_MAX_LENGTH}
           aria-label="Search blog posts"
           id="blog-search-input"
           name="search"
@@ -171,10 +190,9 @@ export function NavbarSearch({
         onChange={setSearchQuery}
         onSelectProduct={handleProductSelect}
         onSubmitSearch={pushSearchRoute}
-        // Match pushSearchRoute's 100-character truncation (and the
-        // fallback input below) so the persistent value can never exceed
-        // the submitted query.
-        maxLength={100}
+        // Match the shared navbar limit (and the fallback input below)
+        // so the persistent value can never exceed the submitted query.
+        maxLength={NAVBAR_SEARCH_MAX_LENGTH}
         placeholder="Search products, brands and categories"
         className={SEARCH_INPUT_CLASS_NAME}
         autoFocus={shouldAutoFocusAutocomplete}
@@ -199,7 +217,7 @@ export function NavbarSearch({
         onFocus={() => activateAutocomplete(true)}
         onPointerDown={() => activateAutocomplete(false)}
         placeholder="Search products, brands and categories"
-        maxLength={100}
+        maxLength={NAVBAR_SEARCH_MAX_LENGTH}
         aria-label="Search products"
         id="search-input"
         name="q"

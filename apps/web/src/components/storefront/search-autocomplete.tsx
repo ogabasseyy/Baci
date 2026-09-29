@@ -66,13 +66,30 @@ export function SearchAutocomplete({
     },
   });
 
+  // Navigation-closing activations (full-search submit, product select)
+  // also cancel the pending suggestion request: persistent consumers (e.g.
+  // the navbar) stay mounted across the navigation, and a late response
+  // would otherwise reopen the popup over the destination page via
+  // onResultsReceived. Dismissals (Escape, outside click) keep close-only
+  // behavior so refocusing restores the retained results.
+  const handleSelectProduct = (url: string) => {
+    clearSuggestions();
+    onSelectProduct?.(url);
+  };
+  const handleSubmitSearch = onSubmitSearch
+    ? (query: string) => {
+        clearSuggestions();
+        onSubmitSearch(query);
+      }
+    : undefined;
+
   const handleKeyDown = createAutocompleteKeyDownHandler({
     highlightedIndex,
     onChange,
     onClose: () => setIsOpen(false),
     onHighlight: setHighlightedIndex,
-    onSelectProduct,
-    onSubmitSearch,
+    onSelectProduct: handleSelectProduct,
+    onSubmitSearch: handleSubmitSearch,
     popularSearches,
     suggestions,
     value,
@@ -216,8 +233,11 @@ export function SearchAutocomplete({
             // live-update typeahead). isOpen here is the pre-update state.
             if (!isOpen && nextValue.length >= 2) {
               clearSuggestions();
-              setHighlightedIndex(-1);
             }
+            // A highlight always belongs to the previous text's options:
+            // reset on every keystroke so Enter can never follow a stale
+            // option for the old query while the new fetch is pending.
+            setHighlightedIndex(-1);
             onChange(nextValue);
             // Open eagerly for submit-wired consumers so the "See all
             // results" action stays reachable while the fetch is pending
@@ -283,8 +303,8 @@ export function SearchAutocomplete({
           loading={loading}
           onChange={onChange}
           onClose={() => setIsOpen(false)}
-          onSelectProduct={onSelectProduct}
-          onSubmitSearch={onSubmitSearch ?? (() => undefined)}
+          onSelectProduct={handleSelectProduct}
+          onSubmitSearch={handleSubmitSearch ?? (() => undefined)}
           popularSearches={popularSearches}
           suggestions={suggestions}
           trimmedValue={trimmedValue}

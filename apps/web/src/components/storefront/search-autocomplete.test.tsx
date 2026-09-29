@@ -1221,4 +1221,144 @@ describe('SearchAutocomplete', () => {
       screen.getByRole('button', { name: /see all results for “x”/i })
     ).toBeInTheDocument();
   });
+
+  it('resets the highlight when the query is edited while the popup is open', async () => {
+    vi.useRealTimers();
+    const onChange = vi.fn();
+    const onSelectProduct = vi.fn();
+    const onSubmitSearch = vi.fn();
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        suggestions: [
+          {
+            id: 'product-1',
+            name: 'iPhone 16',
+            slug: 'iphone-16',
+            category: 'Smartphones',
+            price: 900_000,
+            image_small: '',
+          },
+        ],
+        popularSearches: [],
+      }),
+    } as Response);
+
+    const { rerender } = render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="iphone"
+        onChange={onChange}
+        onSelectProduct={onSelectProduct}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    const input = screen.getByRole('searchbox');
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', { name: /iphone 16/i })
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(screen.getByRole('option', { name: /iphone 16/i })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+
+    // Editing to another fetchable query keeps the old options visible
+    // until the new fetch resolves, but the highlight belongs to the
+    // previous text: Enter must submit the new query, not follow the
+    // stale option.
+    fireEvent.change(input, { target: { value: 'iphonex' } });
+    rerender(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="iphonex"
+        onChange={onChange}
+        onSelectProduct={onSelectProduct}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    expect(screen.getByRole('option', { name: /iphone 16/i })).toHaveAttribute(
+      'aria-selected',
+      'false'
+    );
+
+    fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Enter' });
+    expect(onSubmitSearch).toHaveBeenCalledWith('iphonex');
+    expect(onSelectProduct).not.toHaveBeenCalled();
+  });
+
+  it('cancels the pending request when submitting the full search', async () => {
+    vi.useRealTimers();
+    const onSubmitSearch = vi.fn();
+    let resolveJson: (value: unknown) => void = () => undefined;
+    const jsonPromise = new Promise((resolve) => {
+      resolveJson = resolve;
+    });
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => jsonPromise })
+    ) as unknown as typeof fetch;
+    globalThis.fetch = fetchMock;
+
+    render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="ip"
+        onChange={vi.fn()}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    // Focus opens the submit popup; the debounced fetch stays pending.
+    fireEvent.focus(screen.getByRole('searchbox'));
+    const seeAll = screen.getByRole('button', {
+      name: /see all results for “ip”/i,
+    });
+    await waitFor(() => {
+      expect(vi.mocked(fetchMock)).toHaveBeenCalledTimes(1);
+    });
+    const signal = vi.mocked(fetchMock).mock.calls[0]?.[1]?.signal as
+      | AbortSignal
+      | undefined;
+    expect(signal?.aborted).toBe(false);
+
+    // Submitting navigates away (persistent consumers stay mounted), so
+    // the pending request is cancelled with the close.
+    fireEvent.click(seeAll);
+    expect(onSubmitSearch).toHaveBeenCalledWith('ip');
+    expect(signal?.aborted).toBe(true);
+    expect(
+      screen.queryByRole('button', { name: /see all results/i })
+    ).not.toBeInTheDocument();
+
+    // The late response must not reopen the popup over the new page.
+    await act(async () => {
+      resolveJson({
+        suggestions: [
+          {
+            id: 'late-1',
+            name: 'Late arrival',
+            slug: 'late-arrival',
+            category: 'Phones',
+            price: 100,
+            image_small: '',
+          },
+        ],
+        popularSearches: [],
+      });
+      await jsonPromise;
+    });
+
+    expect(
+      screen.queryByRole('button', { name: /see all results/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('option', { name: /late arrival/i })
+    ).not.toBeInTheDocument();
+  });
 });

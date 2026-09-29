@@ -6,9 +6,10 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   // Route-reader mocks for the search-route query sync. The default is a
   // non-search route so the pre-existing tests exercise the navbar with no
-  // route query syncing underneath them.
+  // route query syncing underneath them. The query is a raw string so
+  // repeated parameters can be expressed.
   pathname: '/ogabassey',
-  query: '',
+  queryString: '',
 }));
 
 vi.mock('next/navigation', () => ({
@@ -16,7 +17,7 @@ vi.mock('next/navigation', () => ({
   useRouter: vi.fn(() => ({
     push: mocks.push,
   })),
-  useSearchParams: () => new URLSearchParams({ q: mocks.query }),
+  useSearchParams: () => new URLSearchParams(mocks.queryString),
 }));
 
 vi.mock('@/components/storefront/search-autocomplete', () => ({
@@ -197,7 +198,7 @@ describe('NavbarSearch', () => {
 describe('NavbarSearch search-route query sync', () => {
   beforeEach(() => {
     mocks.pathname = '/ogabassey/search';
-    mocks.query = 'misspelled';
+    mocks.queryString = 'q=misspelled';
     mocks.push.mockClear();
   });
 
@@ -237,7 +238,7 @@ describe('NavbarSearch search-route query sync', () => {
     const { rerender } = renderNavbar();
     expect(searchInput().value).toBe('misspelled');
 
-    mocks.query = 'corrected';
+    mocks.queryString = 'q=corrected';
     rerenderNavbar(rerender);
 
     expect(searchInput().value).toBe('corrected');
@@ -259,5 +260,31 @@ describe('NavbarSearch search-route query sync', () => {
     fireEvent.change(searchInput(), { target: { value: 'typed' } });
 
     expect(searchInput().value).toBe('typed');
+  });
+
+  it('truncates an over-limit route query to the navbar maximum', () => {
+    // The search page accepts up to 200 characters; the navbar submits at
+    // most 100, so the synced input must show what Enter would submit.
+    const longQuery = 'a'.repeat(200);
+    mocks.queryString = `q=${longQuery}`;
+    renderNavbar();
+
+    expect(searchInput().value).toBe('a'.repeat(100));
+  });
+
+  it('syncs an empty query when q is repeated, matching the route parser', () => {
+    // The server rejects repeated params with an empty search state; the
+    // navbar must agree instead of adopting the first raw value.
+    mocks.queryString = 'q=iphone&q=galaxy';
+    renderNavbar();
+
+    expect(searchInput().value).toBe('');
+  });
+
+  it('syncs an empty query when the search route has no q param', () => {
+    mocks.queryString = 'page=2';
+    renderNavbar();
+
+    expect(searchInput().value).toBe('');
   });
 });

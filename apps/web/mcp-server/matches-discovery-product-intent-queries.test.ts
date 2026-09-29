@@ -147,4 +147,27 @@ describe('discovery product intent', () => {
     expect(matchesDiscoveryProductIntent({ name: 'Sony WH1000XM5 Wireless Headphones', category: 'Headphones' }, 'Sony WH-1000XM5 headphones')).toBe(true);
     expect(matchesDiscoveryProductIntent({ name: 'Sony WH-1000XM5', category: 'Headphones' }, 'Sony WH1000XM5 headphones')).toBe(true);
   });
+
+  it('recognizes mount and tripod accessory heads', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'Adjustable Phone Mount', category: 'Phone Accessories' }, 'phone mount')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Phone Tripod', category: 'Accessories' }, 'phone tripod')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Adjustable Phone Mount', category: 'Phone Accessories' }, 'cheap phone')).toBe(false);
+  });
+
+  it('parses compatibility phrases beyond for', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'Protective Case', category: 'Accessories', description: 'Compatible with iPhone 15' }, 'case compatible with iPhone 15')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Samsung Galaxy Case', category: 'Accessories', description: 'Compatible with Galaxy S24' }, 'case compatible with iPhone 15')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'Protective Case', category: 'Accessories', description: 'Fits iPhone 15' }, 'case that fits iPhone 15')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Samsung Galaxy Case', category: 'Accessories', description: 'Fits Galaxy S24' }, 'case that fits iPhone 15')).toBe(false);
+  });
+
+  it('validates single-digit models attached to a family', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'Google Pixel 9', brand: 'Google', category: 'Smartphones' }, 'Google Pixel 9 phone')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Google Pixel 8 Pro', brand: 'Google', category: 'Smartphones' }, 'Google Pixel 9 phone')).toBe(false);
+  });
+
+  it('keeps Apple handsets out of Android searches', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'Samsung Galaxy S24', brand: 'Samsung', category: 'Smartphones' }, 'Android phones')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'iPhone 15', category: 'Smartphones' }, 'Android phones')).toBe(false);
+  });
 });

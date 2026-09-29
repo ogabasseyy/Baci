@@ -194,16 +194,36 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
   const compatibilityWords = words([product.name, product.description].filter(Boolean).join(' '));
   if (!matchesIdentityTerms(requestedIdentityTerms, scope)) return false;
   if (!matchesIdentityTerms(trailingIdentityTerms, scope)) return false;
+  // "Android" constrains the platform for handset-seeking queries: Apple
+  // handsets never qualify. Catalog text usually omits the OS, so anything
+  // else keeps its existing checks instead of requiring the word.
+  const seeksHandset = !itemType || itemType === 'phone' || itemType === 'phones' ||
+    itemType === 'smartphone' || itemType === 'smartphones';
+  if (seeksHandset && coreWords.includes('android') && identityWords.some((word) =>
+    word === 'apple' || word === 'iphone' || word === 'iphones' || word === 'ios')) return false;
   // Model qualifiers constrain the candidate even without a numeric anchor
   // ("MacBook Pro" is not a MacBook Air); alternatives scope them per branch.
   const qualifierWords = hasAlternativeItemTypes
     ? matchedBranches.flatMap((branch) => branch.phraseWords)
     : itemWords;
   if (qualifierWords.some((word) => modelQualifiers.has(word) && !matchesWord(identityWords, word))) return false;
-  const compatibilityIndex = coreWords.indexOf('for', itemWords.length);
-  const compatibilityEnd = coreWords.findIndex((word, index) => index > compatibilityIndex && detailBoundary.has(word));
+  // Compatibility targets follow "for", "compatible with", or "fits".
+  const compatibilityIntroducers = new Set(['for', 'compatible', 'fits']);
+  let compatibilityIndex = -1;
+  for (let index = itemWords.length; index < coreWords.length; index += 1) {
+    if (compatibilityIntroducers.has(coreWords[index] ?? '')) {
+      compatibilityIndex = index;
+      break;
+    }
+  }
+  let compatibilityStart = compatibilityIndex < 0 ? 0 : compatibilityIndex + 1;
+  if (coreWords[compatibilityIndex] === 'compatible' && coreWords[compatibilityStart] === 'with') {
+    compatibilityStart += 1;
+  }
+  const compatibilityEnd = compatibilityIndex < 0 ? 0 : coreWords.findIndex((word, index) =>
+    index >= compatibilityStart && detailBoundary.has(word));
   const compatibilityTerms = compatibilityIndex < 0 ? [] : coreWords.slice(
-    compatibilityIndex + 1,
+    compatibilityStart,
     compatibilityEnd < 0 ? coreWords.length : compatibilityEnd
   )
     .filter((word) => !['a', 'an', 'the', 'phone', 'phones', 'device', 'devices'].includes(word));

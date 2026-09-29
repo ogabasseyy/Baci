@@ -6,51 +6,7 @@ import {
 } from './search-products-ranking';
 import { inferSmartphoneCategory } from './infer-smartphone-category';
 import { loadMcpSearchProducts } from './search-products-query';
-
-function createRankedSearchSupabase(
-  category?: string,
-  nameForId?: (id: string) => string,
-  descriptionForId?: (id: string) => string
-) {
-  const inMock = vi.fn(async (_column: string, productIds: string[]) => ({
-    data: productIds.map((id) => ({
-      brand: 'Samsung',
-      category,
-      description: descriptionForId?.(id),
-      id,
-      name: nameForId?.(id) ?? `Product ${id}`,
-    })),
-    error: null,
-  }));
-  const query = {
-    eq: vi.fn(() => query),
-    in: inMock,
-  };
-  const select = vi.fn(() => query);
-  const rpc = vi.fn(
-    async (_functionName: string, args: { result_limit?: number; result_offset?: number }) => {
-      const offset = args.result_offset ?? 0;
-      const rows = Array.from(
-        { length: args.result_limit ?? POST_FILTER_RESULT_PAGE_SIZE },
-        (_, index) => ({
-          product_id: `ranked-${offset + index}`,
-          total_count: 10_000,
-        })
-      );
-
-      return { data: rows, error: null };
-    }
-  );
-
-  return {
-    rpc,
-    select,
-    supabase: {
-      from: vi.fn(() => ({ select })),
-      rpc,
-    } as unknown as SupabaseClient,
-  };
-}
+import { createRankedSearchSupabase } from './search-products-query.test-utils';
 
 function createCatalogSearchSupabase(rowCount = POST_FILTER_RESULT_PAGE_SIZE) {
   const rows = Array.from({ length: rowCount }, (_, index) => ({
@@ -97,35 +53,6 @@ describe('loadMcpSearchProducts', () => {
     });
     expect(select).toHaveBeenCalledWith(expect.stringContaining('description'));
     expect(result.products[0]?.name).toBe('Aroma Machine');
-  });
-
-  it('backfills lexical candidates after intent filtering rejects the first ranked page', async () => {
-    const { rpc, supabase } = createRankedSearchSupabase('Printers', (id) =>
-      id === 'ranked-100' ? 'Google Pixel Buds Pro' : 'HP Wireless Printer',
-      (id) => id === 'ranked-100' ? 'Wireless earbuds with noise cancelling' : ''
-    );
-    const result = await loadMcpSearchProducts({
-      args: { query: 'wireless earbuds', limit: 1 }, merchantId: 'merchant-1',
-      sanitizeString: (input) => input, supabase,
-    });
-
-    expect(result.products.map((product) => product.name)).toEqual(['Google Pixel Buds Pro']);
-    expect(rpc).toHaveBeenCalledTimes(2);
-    expect(rpc.mock.calls.map(([, args]) => args.result_offset)).toEqual([0, POST_FILTER_RESULT_PAGE_SIZE]);
-  });
-
-  it('scans further ranked pages for single-word model queries', async () => {
-    const { rpc, supabase } = createRankedSearchSupabase('Laptops', (id) =>
-      id === `ranked-${POST_FILTER_RESULT_PAGE_SIZE}` ? 'MacBook Air M3' : 'MacBook Air M2'
-    );
-    const result = await loadMcpSearchProducts({
-      args: { query: 'MacBook M3', limit: 1 }, merchantId: 'merchant-1',
-      sanitizeString: (input) => input, supabase,
-    });
-
-    expect(result.products.map((product) => product.name)).toEqual(['MacBook Air M3']);
-    expect(rpc).toHaveBeenCalledTimes(2);
-    expect(rpc.mock.calls.map(([, args]) => args.result_offset)).toEqual([0, POST_FILTER_RESULT_PAGE_SIZE]);
   });
 
   it('drops description-only matches for a broad use-case word', async () => {

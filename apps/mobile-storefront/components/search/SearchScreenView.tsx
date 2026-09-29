@@ -151,6 +151,7 @@ export default function SearchScreenView({
           colors={colors}
           committedQuery={committedQuery}
           isRetrying={isRetrying}
+          onCategoryPress={onCategoryPress}
           onRetry={onRetry}
         />
       );

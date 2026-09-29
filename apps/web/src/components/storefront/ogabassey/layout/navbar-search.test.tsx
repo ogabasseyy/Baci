@@ -180,6 +180,33 @@ describe('NavbarSearch', () => {
     expect(mocks.push).not.toHaveBeenCalled();
   });
 
+  it('ignores submissions that sanitize to an empty route query', async () => {
+    render(
+      <NavbarSearch
+        basePath="/ogabassey"
+        isBlogPage={false}
+        merchantId="merchant-1"
+      />
+    );
+
+    fireEvent.focus(screen.getByRole('searchbox', { name: /search products/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: /submit search/i })
+      ).toBeInTheDocument();
+    });
+
+    // Non-blank, but the route sanitizer strips every character: navigating
+    // would land on the blank search-start state and clear the navbar.
+    fireEvent.change(screen.getByRole('searchbox', { name: /search products/i }), {
+      target: { value: '<>()' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /submit search/i }));
+
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
   it('submits blog searches to the blog route', () => {
     render(
       <NavbarSearch

@@ -10,6 +10,7 @@ function renderErrorState(
     colors: Colors.light,
     committedQuery: '',
     isRetrying: false,
+    onCategoryPress: jest.fn(),
     onRetry: jest.fn(),
     ...overrides,
   };
@@ -40,5 +41,17 @@ describe('SearchResultsErrorState', () => {
 
     fireEvent.press(screen.getByRole('button', { name: 'Retry search' }));
     expect(onRetry).not.toHaveBeenCalled();
+  });
+
+  it('offers the all-products escape alongside the retry', () => {
+    const onCategoryPress = jest.fn();
+
+    renderErrorState({ committedQuery: 'iphone', onCategoryPress });
+
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Browse all products' })
+    );
+    expect(onCategoryPress).toHaveBeenCalledTimes(1);
+    expect(onCategoryPress).toHaveBeenCalledWith('all');
   });
 });

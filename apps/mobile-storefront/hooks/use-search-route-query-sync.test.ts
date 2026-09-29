@@ -1,25 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { renderHook } from '@testing-library/react-native';
-import {
-  parseRouteSearchQuery,
-  useSearchRouteQuerySync,
-} from './use-search-route-query-sync';
-
-describe('parseRouteSearchQuery', () => {
-  it('accepts a single trimmed query at the search threshold', () => {
-    expect(parseRouteSearchQuery('  iphone  ')).toBe('iphone');
-  });
-
-  it('rejects short, repeated, and missing params', () => {
-    expect(parseRouteSearchQuery('i')).toBeNull();
-    expect(parseRouteSearchQuery(['iphone', 'galaxy'])).toBeNull();
-    expect(parseRouteSearchQuery(undefined)).toBeNull();
-  });
-
-  it('truncates over-long direct params to the shared maximum', () => {
-    expect(parseRouteSearchQuery('a'.repeat(150))).toBe('a'.repeat(100));
-  });
-});
+import { useSearchRouteQuerySync } from './use-search-route-query-sync';
 
 describe('useSearchRouteQuerySync', () => {
   function setup(initialParam: string | string[] | undefined) {

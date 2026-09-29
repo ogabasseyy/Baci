@@ -105,6 +105,15 @@ export function NavbarSearch({
       return;
     }
 
+    // The results route sanitizes `q` (stripping e.g. "<>()"), so a
+    // non-blank value made entirely of stripped characters would parse to
+    // an empty query there: gate on the same parser so submitting it stays
+    // put instead of navigating to the blank search-start state (which
+    // would then clear the navbar through the route sync).
+    if (!isBlogPage && !parseStorefrontSearchQueryParam(trimmedQuery)) {
+      return;
+    }
+
     if (isBlogPage) {
       router.push(
         `${basePath}/blog?search=${encodeURIComponent(trimmedQuery)}` as `/${string}`

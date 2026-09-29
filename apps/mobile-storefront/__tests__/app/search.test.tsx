@@ -167,6 +167,55 @@ describe('SearchScreen route', () => {
     });
   });
 
+  it('resets refinements when a new route query arrives on a mounted screen', () => {
+    mockUseLocalSearchParams.mockReturnValue({ q: 'iphone' });
+    mockUseProductBrands.mockReturnValue({ brands: ['Apple'] });
+
+    const { rerender } = render(<SearchScreen />);
+
+    act(() => {
+      mockViewProps.current?.onCategorySelect('Phones');
+      mockViewProps.current?.onSelectBrand('Apple');
+      mockViewProps.current?.onSelectCondition('New');
+      mockViewProps.current?.onSelectRating(4);
+      mockViewProps.current?.onPriceChange(100, 500);
+    });
+    expect(mockUseProducts).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        search: 'iphone',
+        brand: 'Apple',
+        condition: 'New',
+        minPrice: 100,
+        maxPrice: 500,
+        minRating: 4,
+      })
+    );
+
+    mockUseLocalSearchParams.mockReturnValue({ q: 'galaxy' });
+    rerender(<SearchScreen />);
+
+    expect(mockViewProps.current).toMatchObject({
+      query: 'galaxy',
+      committedQuery: 'galaxy',
+      selectedCategory: 'All',
+      selectedBrand: 'All',
+      selectedCondition: 'All',
+      minPrice: 0,
+      maxPrice: 0,
+      minRating: 0,
+    });
+    expect(mockUseProducts).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        search: 'galaxy',
+        brand: undefined,
+        condition: undefined,
+        minPrice: undefined,
+        maxPrice: undefined,
+        minRating: undefined,
+      })
+    );
+  });
+
   it('clears stale results when the route query becomes invalid', () => {
     mockUseLocalSearchParams.mockReturnValue({ q: 'iphone' });
 

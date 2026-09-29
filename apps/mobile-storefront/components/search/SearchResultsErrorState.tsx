@@ -8,6 +8,7 @@ interface SearchResultsErrorStateProps {
   committedQuery: string;
   /** True while a retry request is in flight. */
   isRetrying: boolean;
+  onCategoryPress: (slug: string) => void;
   onRetry: () => void;
 }
 
@@ -15,6 +16,7 @@ export default function SearchResultsErrorState({
   colors,
   committedQuery,
   isRetrying,
+  onCategoryPress,
   onRetry,
 }: SearchResultsErrorStateProps) {
   return (
@@ -50,6 +52,18 @@ export default function SearchResultsErrorState({
           style={[styles.retryButtonText, { color: colors.primaryForeground }]}
         >
           {isRetrying ? 'Retrying…' : 'Try again'}
+        </Text>
+      </Pressable>
+      <Pressable
+        onPress={() => onCategoryPress('all')}
+        style={[styles.retryButton, { backgroundColor: colors.primary }]}
+        accessibilityRole="button"
+        accessibilityLabel="Browse all products"
+      >
+        <Text
+          style={[styles.retryButtonText, { color: colors.primaryForeground }]}
+        >
+          Browse all products
         </Text>
       </Pressable>
     </View>

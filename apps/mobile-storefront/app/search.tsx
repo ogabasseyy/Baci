@@ -9,11 +9,9 @@ import {
   MIN_SEARCH_QUERY_LENGTH,
 } from '@/constants/search';
 import { useCategories, useProductBrands, useProducts } from '@/hooks';
+import { parseRouteSearchQuery } from '@/hooks/parse-route-search-query';
 import { useNetworkState } from '@/hooks/use-network-state';
-import {
-  parseRouteSearchQuery,
-  useSearchRouteQuerySync,
-} from '@/hooks/use-search-route-query-sync';
+import { useSearchRouteQuerySync } from '@/hooks/use-search-route-query-sync';
 import { useSearchStorage } from '@/hooks/use-search-storage';
 import { resolveSelectedCategoryId } from '@/lib/product-filter-options';
 import type { Product } from '@/types/product';
@@ -56,7 +54,10 @@ export default function SearchScreen() {
   }, [activeQuery]);
 
   // Route-owned query application: each submitted route query lands in
-  // history exactly once. The sync hook below drives these callbacks.
+  // history exactly once, and starts from unrefined results — refinements
+  // from a previous query must not narrow the newly arrived one. The sync
+  // hook below drives these callbacks. (The display-only view mode is not
+  // a refinement and is preserved.)
   const applyRouteQuery = useEffectEvent((nextQuery: string) => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -64,6 +65,12 @@ export default function SearchScreen() {
     }
     setQuery(nextQuery);
     setDebouncedQuery(nextQuery);
+    setSelectedCategory('All');
+    setMinPrice(0);
+    setMaxPrice(0);
+    setSelectedBrand('All');
+    setSelectedCondition('All');
+    setMinRating(0);
     saveToHistory(nextQuery);
   });
   const clearRouteQuery = useEffectEvent(() => {
@@ -73,6 +80,12 @@ export default function SearchScreen() {
     }
     setQuery('');
     setDebouncedQuery('');
+    setSelectedCategory('All');
+    setMinPrice(0);
+    setMaxPrice(0);
+    setSelectedBrand('All');
+    setSelectedCondition('All');
+    setMinRating(0);
   });
   useSearchRouteQuerySync({
     routeQueryParam,

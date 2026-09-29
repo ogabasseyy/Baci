@@ -108,6 +108,10 @@ describe('abandoned Paystack attempt operational failures', () => {
     'CONFIG_ERROR',
     'HTTP_401',
     'HTTP_403',
+    // A provider timeout is transient, not a verdict on the reference:
+    // retiring it would strand a still-pending transaction while
+    // cancellation keeps rejecting pending attempts.
+    'HTTP_408',
     'HTTP_429',
     'HTTP_500',
     'HTTP_503',

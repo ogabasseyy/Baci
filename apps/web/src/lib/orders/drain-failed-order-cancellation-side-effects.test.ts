@@ -125,6 +125,51 @@ describe('drainFailedOrderCancellationSideEffects', () => {
     }
   });
 
+  it('fills the batch past a budget-ineligible email instead of starving refunds', async () => {
+    const email = {
+      attempts: 1,
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-1',
+      step: 'customer_email',
+    };
+    const refund = {
+      attempts: 1,
+      claimed_at: '2026-07-22T00:00:00Z',
+      order_id: 'order-2',
+      step: 'refund',
+    };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(terminalQuery([email, refund]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(
+        terminalQuery({ id: 'order-2', merchant_id: 'merchant-2' })
+      )
+      .mockReturnValueOnce(terminalQuery({ id: 'merchant-2' }));
+    // One slot left and 30s on the clock: the older email cannot meet
+    // its 48s sender budget, so the refund must take the slot instead
+    // of the batch going out empty every invocation.
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_240_000);
+
+    try {
+      const result = await drainFailedOrderCancellationSideEffects({
+        deadlineMs: 1_270_000,
+        limit: 1,
+        sendCancellationEmail: vi.fn(),
+        supabase: { from } as never,
+      });
+
+      expect(mocks.run).toHaveBeenCalledTimes(1);
+      expect(mocks.run).toHaveBeenCalledWith(
+        expect.objectContaining({ orderId: 'order-2', step: 'refund' })
+      );
+      expect(result.drained).toEqual([{ orderId: 'order-2', step: 'refund' }]);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it('fails closed when candidate lookup fails', async () => {
     const from = vi
       .fn()

@@ -33,12 +33,21 @@ function paidOrderStatus(
 function isVerificationUnavailable(code: string | undefined): boolean {
   if (code === 'NETWORK_ERROR' || code === 'CONFIG_ERROR') return true;
   const status = Number(/^HTTP_(\d{3})$/.exec(code ?? '')?.[1]);
-  return status === 401 || status === 403 || status === 429 || status >= 500;
+  return (
+    status === 401 ||
+    status === 403 ||
+    status === 408 ||
+    status === 429 ||
+    status >= 500
+  );
 }
 
-// Client errors other than auth/rate-limit/missing mean Paystack
+// Client errors other than auth/timeout/rate-limit/missing mean Paystack
 // deterministically rejects this reference: it will never verify on
-// retry, so review it instead of holding it as an outage forever.
+// retry, so review it instead of holding it as an outage forever. A 408
+// is a transient provider timeout, not a verdict on the reference:
+// retiring it would stamp a still-pending transaction out of future
+// sweeps while cancellation keeps rejecting pending attempts.
 function isDefinitiveProviderRejection(code: string | undefined): boolean {
   const status = Number(/^HTTP_(\d{3})$/.exec(code ?? '')?.[1]);
   return (
@@ -47,6 +56,7 @@ function isDefinitiveProviderRejection(code: string | undefined): boolean {
     status !== 401 &&
     status !== 403 &&
     status !== 404 &&
+    status !== 408 &&
     status !== 429
   );
 }

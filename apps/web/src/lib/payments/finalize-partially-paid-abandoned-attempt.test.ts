@@ -2,11 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const finalize = vi.hoisted(() => vi.fn());
 const fileDuplicate = vi.hoisted(() => vi.fn());
+const gatePartial = vi.hoisted(() => vi.fn());
 vi.mock('./finalize-order-gateway-payment', () => ({
   finalizeOrderGatewayPayment: finalize,
 }));
 vi.mock('./file-duplicate-payment-capture', () => ({
   fileDuplicatePaymentCapture: fileDuplicate,
+}));
+vi.mock('./gate-partially-paid-abandoned-capture', () => ({
+  gatePartiallyPaidAbandonedCapture: gatePartial,
 }));
 
 import { finalizePartiallyPaidAbandonedAttempt } from './finalize-partially-paid-abandoned-attempt';
@@ -23,6 +27,18 @@ function harness() {
 describe('finalizePartiallyPaidAbandonedAttempt', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    gatePartial.mockResolvedValue('proceed');
+  });
+
+  it('skips the finalizer when the balance gate handles the capture', async () => {
+    const h = harness();
+    gatePartial.mockResolvedValue('done');
+    await finalizePartiallyPaidAbandonedAttempt({
+      ...h,
+      attempt,
+      providerData: {},
+    });
+    expect(finalize).not.toHaveBeenCalled();
   });
 
   it('records a completed order without claiming the transaction flip', async () => {

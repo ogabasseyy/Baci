@@ -3,12 +3,15 @@ import { assertRefundNotificationSendTime } from './assert-refund-notification-s
 import { awaitRefundNotificationDeadline } from './await-refund-notification-deadline';
 import { fileDuplicatePaymentCapture } from './file-duplicate-payment-capture';
 import type { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
+import { gatePartiallyPaidAbandonedCapture } from './gate-partially-paid-abandoned-capture';
 
 /**
- * Complete a verified capture on a partially paid order through the atomic
- * order finalizer, which distinguishes the legitimate remaining payment
- * from an overpayment. Mismatched captures never reach this path: they
- * are filed with their evidence instead.
+ * Complete a verified capture on a partially paid order. The balance gate
+ * runs first: invoice legs record strict underpayments through the atomic
+ * partial-payment RPC (never promoting the order) and file overpayments
+ * as duplicates; only an exact-balance capture reaches the atomic order
+ * finalizer below. Mismatched captures never reach this path: they are
+ * filed with their evidence instead.
  */
 export async function finalizePartiallyPaidAbandonedAttempt({
   attempt,
@@ -25,6 +28,7 @@ export async function finalizePartiallyPaidAbandonedAttempt({
     gateway_reference: string;
     id: string;
     merchant_id: string;
+    metadata?: Record<string, unknown> | null;
     order_id: string;
     platform_fee: number | null;
     status: 'pending' | 'processing';
@@ -69,6 +73,19 @@ export async function finalizePartiallyPaidAbandonedAttempt({
     await hold('finalize_budget_exhausted');
     return;
   }
+  // The generic finalizer promotes any non-paid order to paid, so an
+  // underpayment would trigger full paid side effects. The gate records
+  // or files partial outcomes first and only exact-balance captures
+  // proceed. It runs after the processing normalization above because
+  // the partial-payment RPC admits only pending rows.
+  const gate = await gatePartiallyPaidAbandonedCapture({
+    attempt,
+    hold,
+    providerData,
+    summary,
+    supabase,
+  });
+  if (gate === 'done') return;
   // Cancel the finalize itself — not just this wait — when the pass
   // budget runs out: the signal aborts the in-flight paid-email send
   // (ZeptoMail treats aborts as terminal, never retried), so an

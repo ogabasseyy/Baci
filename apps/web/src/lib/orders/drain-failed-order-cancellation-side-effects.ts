@@ -13,6 +13,7 @@ const MAX_ATTEMPTS = 5;
 const STALE_CLAIM_MINUTES = 15;
 
 interface CandidateRow {
+  attempts: number;
   claimed_at: string;
   order_id: string;
   step: OrderCancellationSideEffectStep;
@@ -51,7 +52,7 @@ export async function drainFailedOrderCancellationSideEffects({
     failed: [],
     skipped: [],
   };
-  const select = 'order_id, step, claimed_at';
+  const select = 'order_id, step, claimed_at, attempts';
   const { data: failedRows, error: failedLookupError } = await supabase
     .from('order_cancellation_side_effects')
     .select(select)
@@ -110,17 +111,35 @@ export async function drainFailedOrderCancellationSideEffects({
       .eq('step', stale.step)
       .eq('status', 'claimed')
       .eq('claimed_at', stale.claimed_at);
+    // A terminalized stale claim is a failure, not benign skipped work:
+    // the refund may have been accepted without a persisted outcome and
+    // the row will never run again, so the route must surface it in its
+    // non-2xx health signal instead of reporting success.
     const reason = quarantineError
       ? 'stale_claim_quarantine_failed'
       : 'stale_claim_delivery_uncertain';
-    const target = quarantineError ? summary.failed : summary.skipped;
-    target.push({ orderId: stale.order_id, reason, step: stale.step });
+    summary.failed.push({ orderId: stale.order_id, reason, step: stale.step });
   }
 
-  const candidates = new Map<string, CandidateRow>();
-  for (const row of [...(failedRows ?? []), ...(deferredRows ?? [])]) {
-    const candidate = row as CandidateRow;
-    candidates.set(`${candidate.order_id}:${candidate.step}`, candidate);
+  const candidates = new Map<
+    string,
+    CandidateRow & { isLastAttempt: boolean }
+  >();
+  // Only failed rows burn the attempts budget: a deferred row reselects
+  // uncapped, so its attempt count must never trigger last-attempt
+  // evidence filing.
+  for (const row of (failedRows ?? []) as CandidateRow[]) {
+    candidates.set(`${row.order_id}:${row.step}`, {
+      ...row,
+      isLastAttempt: row.attempts >= MAX_ATTEMPTS - 1,
+    });
+    if (candidates.size >= limit) break;
+  }
+  for (const row of (deferredRows ?? []) as CandidateRow[]) {
+    candidates.set(`${row.order_id}:${row.step}`, {
+      ...row,
+      isLastAttempt: false,
+    });
     if (candidates.size >= limit) break;
   }
 
@@ -169,6 +188,7 @@ export async function drainFailedOrderCancellationSideEffects({
         execute: () =>
           executeOrderCancellationSideEffect({
             deadlineMs,
+            isLastAttempt: candidate.isLastAttempt,
             merchant,
             order,
             reason: order.cancellation_reason ?? undefined,

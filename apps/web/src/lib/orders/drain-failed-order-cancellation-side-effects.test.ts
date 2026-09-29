@@ -146,13 +146,14 @@ describe('drainFailedOrderCancellationSideEffects', () => {
     expect(updateQuery.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'delivery_uncertain' })
     );
-    expect(result.skipped).toEqual([
+    expect(result.failed).toEqual([
       {
         orderId: 'order-2',
         reason: 'stale_claim_delivery_uncertain',
         step: 'refund',
       },
     ]);
+    expect(result.skipped).toEqual([]);
   });
 
   it('resumes deferred rows regardless of spent attempts', async () => {
@@ -189,5 +190,85 @@ describe('drainFailedOrderCancellationSideEffects', () => {
       expect.objectContaining({ orderId: 'order-1', step: 'refund' })
     );
     expect(result.drained).toEqual([{ orderId: 'order-1', step: 'refund' }]);
+  });
+
+  it('marks the final failed attempt so rate limits file evidence', async () => {
+    const lastAttempt = {
+      attempts: 4,
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-1',
+      step: 'refund',
+    };
+    const freshAttempt = {
+      attempts: 1,
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-2',
+      step: 'refund',
+    };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(terminalQuery([lastAttempt, freshAttempt]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(
+        terminalQuery({ id: 'order-1', merchant_id: 'merchant-1' })
+      )
+      .mockReturnValueOnce(terminalQuery({ id: 'merchant-1' }))
+      .mockReturnValueOnce(
+        terminalQuery({ id: 'order-2', merchant_id: 'merchant-1' })
+      )
+      .mockReturnValueOnce(terminalQuery({ id: 'merchant-1' }));
+
+    await drainFailedOrderCancellationSideEffects({
+      sendCancellationEmail: vi.fn(),
+      supabase: { from } as never,
+    });
+
+    expect(mocks.run).toHaveBeenCalledTimes(2);
+    for (const call of mocks.run.mock.calls) {
+      await (call[0] as { execute: () => Promise<unknown> }).execute();
+    }
+    expect(mocks.execute).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ isLastAttempt: true })
+    );
+    expect(mocks.execute).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ isLastAttempt: false })
+    );
+  });
+
+  it('never marks deferred rows as the last attempt', async () => {
+    const deferred = {
+      attempts: 4,
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-1',
+      step: 'refund',
+    };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([deferred]))
+      .mockReturnValueOnce(
+        terminalQuery({ id: 'order-1', merchant_id: 'merchant-1' })
+      )
+      .mockReturnValueOnce(terminalQuery({ id: 'merchant-1' }));
+
+    await drainFailedOrderCancellationSideEffects({
+      sendCancellationEmail: vi.fn(),
+      supabase: { from } as never,
+    });
+
+    expect(mocks.run).toHaveBeenCalledTimes(1);
+    await (
+      mocks.run.mock.calls[0][0] as { execute: () => Promise<unknown> }
+    ).execute();
+    // Deferred rows reselect without the attempts cap, so a transient
+    // failure there still retries: filing last-attempt evidence would be
+    // a false terminalization.
+    expect(mocks.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ isLastAttempt: false })
+    );
   });
 });

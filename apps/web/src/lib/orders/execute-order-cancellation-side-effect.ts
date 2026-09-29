@@ -17,6 +17,7 @@ import { unsupportedRefundReasons } from '@/lib/orders/unsupported-refund-reason
 
 export async function executeOrderCancellationSideEffect({
   deadlineMs,
+  isLastAttempt,
   merchant,
   order,
   reason,
@@ -25,6 +26,7 @@ export async function executeOrderCancellationSideEffect({
   supabase,
 }: {
   deadlineMs?: number;
+  isLastAttempt?: boolean;
   merchant: CancellationMerchant;
   order: CancellationOrder;
   reason?: string;
@@ -246,6 +248,7 @@ export async function executeOrderCancellationSideEffect({
   // double-refund the covered portion. Clean legs still move below.
   const refundIds = await initiatePaystackCancellationRefunds({
     deadlineMs,
+    isLastAttempt,
     order,
     reason,
     refundedPaymentIds,

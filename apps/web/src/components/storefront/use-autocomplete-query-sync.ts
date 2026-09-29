@@ -138,6 +138,15 @@ export function useAutocompleteQuerySync({
       // the new value repopulates immediately after.
       clearSuggestions();
       onHighlightReset();
+      if (value === debouncedValue) {
+        // ...unless the value came back to the current debounced query
+        // (external A -> B -> A within the window): the debounced value
+        // never changed, so no fetch is scheduled — restart this query's
+        // request explicitly or the popup stays empty until the next
+        // edit or focus. (value is 2+ in this branch, so the restored
+        // query is always fetchable.)
+        setRefetchToken((token) => token + 1);
+      }
     }
   }
 

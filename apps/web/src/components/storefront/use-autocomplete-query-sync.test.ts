@@ -141,4 +141,36 @@ describe('useAutocompleteQuerySync', () => {
     expect(result.current.suggestions).toEqual([]);
     expect(onHighlightReset).toHaveBeenCalledTimes(1);
   });
+
+  it('restarts the request when an external change returns to the debounced query', async () => {
+    mockFetch(SUGGESTION_PAYLOAD);
+
+    const { initialProps, rerender, result } = setup();
+
+    await waitFor(() => {
+      expect(result.current.suggestions).toHaveLength(1);
+    });
+    // Scope to the autocomplete endpoint: result tracking also emits an
+    // analytics beacon through the shared fetch mock.
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const autocompleteCalls = () =>
+      fetchMock.mock.calls.filter(
+        ([url]) =>
+          typeof url === 'string' && url.startsWith('/api/search/autocomplete')
+      );
+    expect(autocompleteCalls()).toHaveLength(1);
+
+    // Rapid external A -> B -> A within the debounce window: both legs
+    // clear, but the debounced value never moves, so without an explicit
+    // restart no fetch is scheduled and the popup stays empty.
+    rerender({ ...initialProps, value: 'galaxy' });
+    expect(result.current.suggestions).toEqual([]);
+    rerender({ ...initialProps, value: 'iphone' });
+
+    await waitFor(() => {
+      expect(result.current.suggestions).toHaveLength(1);
+    });
+    expect(autocompleteCalls()).toHaveLength(2);
+    expect(autocompleteCalls()[1]?.[0]).toContain('q=iphone');
+  });
 });

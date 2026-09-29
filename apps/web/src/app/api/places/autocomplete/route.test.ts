@@ -30,15 +30,14 @@ function createGoogleResponse(
   }>
 ) {
   return {
-    suggestions: suggestions.map((s) => ({
-      placePrediction: {
-        placeId: s.placeId,
-        structuredFormat: {
-          mainText: { text: s.mainText },
-          secondaryText: { text: s.secondaryText || '' },
-        },
-        text: { text: s.fullText },
+    status: 'OK',
+    predictions: suggestions.map((s) => ({
+      place_id: s.placeId,
+      structured_formatting: {
+        main_text: s.mainText,
+        secondary_text: s.secondaryText || '',
       },
+      description: s.fullText,
     })),
   };
 }
@@ -112,15 +111,8 @@ describe('GET /api/places/autocomplete', () => {
     });
 
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://places.googleapis.com/v1/places:autocomplete',
-      expect.objectContaining({
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': 'test-api-key',
-        },
-        body: JSON.stringify({ input: 'Lagos' }),
-      })
+      'https://maps.googleapis.com/maps/api/place/autocomplete/json?input=Lagos&key=test-api-key',
+      { opentelemetry: { ignore: true } }
     );
   });
 
@@ -138,15 +130,21 @@ describe('GET /api/places/autocomplete', () => {
 
     await GET(request);
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      'https://places.googleapis.com/v1/places:autocomplete',
-      expect.objectContaining({
-        body: JSON.stringify({
-          input: 'test',
-          sessionToken: 'session-123',
-        }),
-      })
+    const requestedUrl = new URL(String(mockFetch.mock.calls[0]?.[0]));
+    expect(requestedUrl.searchParams.get('input')).toBe('test');
+    expect(requestedUrl.searchParams.get('sessiontoken')).toBe('session-123');
+    expect(requestedUrl.searchParams.get('key')).toBe('test-api-key');
+  });
+
+  it('rejects an oversized session token before making an upstream request', async () => {
+    const response = await GET(
+      makeRequest({ input: 'Lagos', sessionToken: 's'.repeat(257) })
     );
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data).toEqual({ error: 'Invalid sessionToken format' });
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it('includes country restriction when country param is provided', async () => {
@@ -163,43 +161,34 @@ describe('GET /api/places/autocomplete', () => {
 
     await GET(request);
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      'https://places.googleapis.com/v1/places:autocomplete',
-      expect.objectContaining({
-        body: JSON.stringify({
-          input: 'Lagos',
-          includedRegionCodes: ['NG'],
-        }),
-      })
-    );
+    const requestedUrl = new URL(String(mockFetch.mock.calls[0]?.[0]));
+    expect(requestedUrl.searchParams.get('input')).toBe('Lagos');
+    expect(requestedUrl.searchParams.get('components')).toBe('country:ng');
   });
 
   it('filters out non-placePrediction suggestions', async () => {
     const mixedResponse = {
-      suggestions: [
+      status: 'OK',
+      predictions: [
         {
-          placePrediction: {
-            placeId: 'ChIJ1234',
-            structuredFormat: {
-              mainText: { text: 'Valid Place' },
-              secondaryText: { text: 'Nigeria' },
-            },
-            text: { text: 'Valid Place, Nigeria' },
+          place_id: 'ChIJ1234',
+          structured_formatting: {
+            main_text: 'Valid Place',
+            secondary_text: 'Nigeria',
           },
+          description: 'Valid Place, Nigeria',
         },
         {
-          // Missing placePrediction - should be filtered out
-          otherType: { data: 'something' },
+          // Missing place_id - should be filtered out.
+          description: 'Missing place ID',
         },
         {
-          placePrediction: {
-            placeId: 'ChIJ5678',
-            structuredFormat: {
-              mainText: { text: 'Another Valid' },
-              secondaryText: { text: 'Lagos' },
-            },
-            text: { text: 'Another Valid, Lagos' },
+          place_id: 'ChIJ5678',
+          structured_formatting: {
+            main_text: 'Another Valid',
+            secondary_text: 'Lagos',
           },
+          description: 'Another Valid, Lagos',
         },
       ],
     };
@@ -235,10 +224,10 @@ describe('GET /api/places/autocomplete', () => {
     const response = await GET(request);
     const data = await response.json();
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(502);
     expect(data).toEqual({
       error: 'Failed to fetch predictions',
-      details: errorText,
+      code: 'PLACES_AUTOCOMPLETE_HTTP_ERROR',
     });
   });
 
@@ -256,10 +245,10 @@ describe('GET /api/places/autocomplete', () => {
     const response = await GET(request);
     const data = await response.json();
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(502);
     expect(data).toEqual({
       error: 'Failed to fetch predictions',
-      details: errorText,
+      code: 'PLACES_AUTOCOMPLETE_HTTP_ERROR',
     });
   });
 
@@ -324,13 +313,12 @@ describe('GET /api/places/autocomplete', () => {
 
   it('handles missing structuredFormat by falling back to text.text', async () => {
     const responseWithoutStructuredFormat = {
-      suggestions: [
+      status: 'OK',
+      predictions: [
         {
-          placePrediction: {
-            placeId: 'ChIJ1234',
-            text: { text: 'Full Text Only' },
-            // No structuredFormat
-          },
+          place_id: 'ChIJ1234',
+          description: 'Full Text Only',
+          // No structured_formatting.
         },
       ],
     };
@@ -359,8 +347,8 @@ describe('GET /api/places/autocomplete', () => {
   it('handles empty suggestions array from Google API', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ suggestions: [] }),
-      text: async () => '{"suggestions":[]}',
+      json: async () => ({ status: 'ZERO_RESULTS', predictions: [] }),
+      text: async () => '{"status":"ZERO_RESULTS","predictions":[]}',
     } as Response);
 
     const request = makeRequest({ input: 'xyz123notfound' });
@@ -372,11 +360,46 @@ describe('GET /api/places/autocomplete', () => {
     expect(data.predictions).toEqual([]);
   });
 
+  it('returns a safe 429 response when Legacy Places reports a quota limit', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        status: 'OVER_QUERY_LIMIT',
+        error_message: 'Provider detail that must not reach the client',
+      }),
+    } as Response);
+
+    const response = await GET(makeRequest({ input: 'Lagos' }));
+    const data = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(data).toEqual({
+      error: 'Failed to fetch predictions',
+      code: 'PLACES_AUTOCOMPLETE_UPSTREAM_ERROR',
+    });
+  });
+
+  it('preserves 429 for an HTTP-level upstream quota response', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+    } as Response);
+
+    const response = await GET(makeRequest({ input: 'Lagos' }));
+    const data = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(data).toEqual({
+      error: 'Failed to fetch predictions',
+      code: 'PLACES_AUTOCOMPLETE_HTTP_ERROR',
+    });
+  });
+
   it('handles missing suggestions field in Google API response', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({}),
-      text: async () => '{}',
+      json: async () => ({ status: 'OK' }),
+      text: async () => '{"status":"OK"}',
     } as Response);
 
     const request = makeRequest({ input: 'test' });

@@ -132,11 +132,17 @@ describe('legacy completed Paystack cancellation refunds', () => {
   it('demotes a deterministic mismatch for pending re-tracking and files it for review', async () => {
     reconcile.mockRejectedValue(new Error('paystack_refund_evidence_mismatch'));
     isDeterministic.mockReturnValue(true);
+    const auditedRefund = {
+      ...legacyRefund,
+      description: 'Refund for cancelled order #B-1',
+    };
     const chain = updateChain();
     const update = vi.fn().mockReturnValue(chain);
     const from = vi
       .fn()
-      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([legacyRefund])) })
+      .mockReturnValueOnce({
+        select: vi.fn(() => selectQuery([auditedRefund])),
+      })
       .mockReturnValueOnce({ update });
     const supabase = { from } as never;
 
@@ -152,12 +158,42 @@ describe('legacy completed Paystack cancellation refunds', () => {
     expect(chain.eq).toHaveBeenCalledWith('status', 'completed');
     expect(fileReview).toHaveBeenCalledWith(
       supabase,
-      legacyRefund,
+      auditedRefund,
       'paystack_refund_evidence_mismatch'
     );
     expect(fileReview.mock.invocationCallOrder[0]).toBeLessThan(
       update.mock.invocationCallOrder[0] as number
     );
+  });
+
+  it('rotates a legacy deterministic mismatch here instead of stranding it', async () => {
+    reconcile.mockRejectedValue(new Error('paystack_refund_evidence_mismatch'));
+    isDeterministic.mockReturnValue(true);
+    const chain = updateChain();
+    const update = vi.fn().mockReturnValue(chain);
+    const from = vi
+      .fn()
+      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([legacyRefund])) })
+      .mockReturnValueOnce({ update });
+    const supabase = { from } as never;
+
+    await expect(
+      reconcileCompletedPaystackCancellationRefunds(supabase)
+    ).resolves.toEqual({ checked: 1, failed: 1 });
+
+    // The legacy row carries no cancellation description, so the pending
+    // worker would never select it after a demote; it stays completed and
+    // rotates here so this recheck revisits it after operations intervenes.
+    expect(fileReview).toHaveBeenCalledWith(
+      supabase,
+      legacyRefund,
+      'paystack_refund_evidence_mismatch'
+    );
+    expect(update).toHaveBeenCalledWith({
+      updated_at: expect.any(String),
+    });
+    expect(chain.eq).toHaveBeenCalledWith('id', 'refund-1');
+    expect(chain.eq).toHaveBeenCalledWith('status', 'completed');
   });
 
   it('rotates a transient failure without filing a review', async () => {
@@ -195,7 +231,16 @@ describe('legacy completed Paystack cancellation refunds', () => {
     const update = vi.fn().mockReturnValue(chain);
     const from = vi
       .fn()
-      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([legacyRefund])) })
+      .mockReturnValueOnce({
+        select: vi.fn(() =>
+          selectQuery([
+            {
+              ...legacyRefund,
+              description: 'Refund for cancelled order #B-1',
+            },
+          ])
+        ),
+      })
       .mockReturnValueOnce({ update });
 
     await expect(

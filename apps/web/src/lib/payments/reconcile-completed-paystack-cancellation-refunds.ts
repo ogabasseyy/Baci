@@ -17,7 +17,7 @@ export async function reconcileCompletedPaystackCancellationRefunds(
   const { data, error } = await supabase
     .from('transactions')
     .select(
-      'id, order_id, merchant_id, gateway_reference, amount, currency, metadata, status, cancellation_order:orders!transactions_order_id_fkey!inner(payment_status,shipping_status,cancelled_at)'
+      'id, order_id, merchant_id, gateway_reference, amount, currency, description, metadata, status, cancellation_order:orders!transactions_order_id_fkey!inner(payment_status,shipping_status,cancelled_at)'
     )
     .eq('transaction_type', 'refund')
     .eq('gateway', 'paystack')
@@ -59,9 +59,22 @@ export async function reconcileCompletedPaystackCancellationRefunds(
         // then demote so the pending worker re-tracks the row instead of
         // retrying this completed row forever. Filing first matters: if the
         // review write fails, the row must stay completed so this worker
-        // retries it — a demoted legacy row without the cancellation
-        // description is selected by neither worker.
+        // retries it.
         await fileRefundEvidenceReview(supabase, refund, reason.message);
+        if (!refund.description?.startsWith('Refund for cancelled order #')) {
+          // Legacy rows carry no cancellation description, so the pending
+          // worker would never select them after a demote; rotate here
+          // instead so this legacy recheck keeps revisiting the row after
+          // operations corrects the reviewed evidence.
+          const { error: legacyRotationError } = await supabase
+            .from('transactions')
+            .update({ updated_at: new Date().toISOString() })
+            .eq('id', refund.id)
+            .eq('status', 'completed');
+          if (legacyRotationError)
+            throw new Error('completed_refund_rotation_failed');
+          continue;
+        }
         const { error: demoteError } = await supabase
           .from('transactions')
           .update({

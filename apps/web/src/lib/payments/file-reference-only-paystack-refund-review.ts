@@ -40,6 +40,48 @@ export async function fileReferenceOnlyPaystackRefundReview(
   if (settledError) throw new Error('refund_event_lookup_failed');
   if ((settled ?? []).length > 0) return;
 
+  // Legacy refunds carry no payment link. Mirror the completion RPC's
+  // sole-external-payment rule: when the order's single completed
+  // external payment is a Paystack leg covered by unlinked completed
+  // refunds, the payment is already reconciled. Filing here would leave
+  // a permanent false review — without a provider refund ID no closer
+  // could ever resolve it.
+  const { data: externalPayments, error: paymentsError } = await supabase
+    .from('transactions')
+    .select('amount, gateway')
+    .eq('order_id', orderId)
+    .eq('merchant_id', merchantId)
+    .eq('transaction_type', 'payment')
+    .eq('status', 'completed')
+    .gt('amount', 0)
+    .not(
+      'gateway',
+      'in',
+      '(wallet,savings,store_credit,cash,manual,pay_on_delivery)'
+    );
+  if (paymentsError) throw new Error('refund_event_lookup_failed');
+  if ((externalPayments ?? []).length === 1) {
+    const sole = (
+      externalPayments as Array<{ amount: number | string; gateway: string }>
+    )[0] as { amount: number | string; gateway: string };
+    if (sole.gateway === 'paystack') {
+      const { data: legacyRefunds, error: legacyError } = await supabase
+        .from('transactions')
+        .select('amount')
+        .eq('order_id', orderId)
+        .eq('merchant_id', merchantId)
+        .eq('transaction_type', 'refund')
+        .eq('gateway', 'paystack')
+        .eq('status', 'completed')
+        .is('metadata->>payment_transaction_id', null);
+      if (legacyError) throw new Error('refund_event_lookup_failed');
+      const covered = (
+        (legacyRefunds ?? []) as Array<{ amount: number | string }>
+      ).reduce((total, row) => total + (Number(row.amount) || 0), 0);
+      if (covered >= Number(sole.amount)) return;
+    }
+  }
+
   const reason =
     `Paystack refund event for payment ${paymentReference} has no local ` +
     'audit row; verify the provider refund before another is initiated';

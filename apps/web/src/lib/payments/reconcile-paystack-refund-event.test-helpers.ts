@@ -50,6 +50,9 @@ export function buildSettledCandidates(data: unknown) {
   return {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    gt: vi.fn().mockReturnThis(),
+    is: vi.fn().mockReturnThis(),
+    not: vi.fn().mockReturnThis(),
     limit: vi.fn().mockResolvedValue({ data, error: null }),
   };
 }

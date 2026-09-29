@@ -184,11 +184,16 @@ describe('recoverUnknownPaystackRefund', () => {
         issue_type: 'provider_refund_outside_cancellation',
         merchant_id: 'merchant-1',
         order_id: 'order-1',
-        paystack_ref: '202',
+        paystack_ref: null,
         metadata: expect.objectContaining({
           payment_transaction_id: 'pay-1',
           provider_payment_transaction_id: 555,
           provider_refund_id: 202,
+          refund_evidence: expect.objectContaining({
+            'provider:202': expect.objectContaining({
+              payment_transaction_id: 'pay-1',
+            }),
+          }),
         }),
       })
     );
@@ -206,14 +211,21 @@ describe('recoverUnknownPaystackRefund', () => {
     ).rejects.toThrow('active_order_refund_review_failed');
   });
 
-  it('treats a redelivered active-order refund as already filed', async () => {
-    const { supabase } = database({
+  it('merges a redelivered active-order refund into the open review', async () => {
+    const { rpc, supabase } = database({
       insertError: { code: '23505' },
       orderRow: { ...order, cancelled_at: null },
     });
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
+    expect(rpc).toHaveBeenCalledWith(
+      'merge_provider_refund_outside_cancellation_evidence_v1',
+      expect.objectContaining({
+        p_evidence_key: 'provider:202',
+        p_order_id: 'order-1',
+      })
+    );
     expect(mocks.reconcilePaystackCancellationRefund).not.toHaveBeenCalled();
   });
 

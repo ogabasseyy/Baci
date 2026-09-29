@@ -544,6 +544,29 @@ describe('zeptomail audit logging', () => {
     ]);
   });
 
+  it('stops after one attempt per sender when capped', async () => {
+    sendMailMock.mockRejectedValue({
+      error: { message: 'Server overloaded', code: 'TM_5001', details: null },
+    });
+    const { sendEmail } = await import('./zeptomail');
+
+    const result = await sendEmail({
+      to: 'customer@example.com',
+      subject: 'Capped Test',
+      htmlContent: '<p>Hello</p>',
+      emailType: 'orders',
+      auditContext: { merchantId: 'merchant-1', orderId: 'order-1' },
+      maxAttemptsPerSender: 1,
+    });
+
+    // Retryable, but the cap means no in-process retry and no pointless
+    // backoff sleep: the cron tick retries instead.
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('TM_5001');
+    expect(result).not.toHaveProperty('deliveryOutcome');
+    expect(sendMailMock).toHaveBeenCalledTimes(1);
+  });
+
   it('runs the platform fallback when the remaining budget fits it', async () => {
     getActiveMerchantSendingDomainMock.mockResolvedValue('ogabassey.com');
     sendMailMock.mockImplementation((args: { from?: { address?: string } }) => {

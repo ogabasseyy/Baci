@@ -141,5 +141,10 @@ describe('verified paystack cancellation refund migration', () => {
     expect(migrationSql).toContain(
       "v_refund.metadata->>'provider_refund_status' = v_status"
     );
+    // Repeat verdicts still rotate updated_at so reviewed nonterminal
+    // rows cannot pin the workers' oldest-25 batch.
+    expect(migrationSql).toContain(
+      'UPDATE public.transactions SET updated_at = now() WHERE id = v_refund.id'
+    );
   });
 });

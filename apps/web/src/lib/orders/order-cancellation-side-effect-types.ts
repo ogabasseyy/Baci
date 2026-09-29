@@ -24,5 +24,9 @@ export type CancellationEmailResult = {
 };
 
 export type CancellationEmailSender = (
-  message: CancellationEmailMessage & { signal?: AbortSignal }
+  message: CancellationEmailMessage & {
+    signal?: AbortSignal;
+    fallbackDeadlineMs?: number;
+    maxAttemptsPerSender?: number;
+  }
 ) => Promise<CancellationEmailResult>;

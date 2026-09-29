@@ -8,6 +8,12 @@ import type {
 import { DeliveryUncertainError } from '@/lib/orders/run-order-cancellation-side-effect';
 import { assertRefundNotificationSendTime } from '@/lib/payments/assert-refund-notification-send-time';
 import { awaitRefundNotificationDeadline } from '@/lib/payments/await-refund-notification-deadline';
+import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail';
+
+// One transport attempt per sender: the cancellation phase cannot fit a
+// full retry loop, so the next cron tick retries instead of in-process
+// retries burning the phase and stranding the row delivery_uncertain.
+const EMAIL_ATTEMPTS_PER_SENDER = 1;
 
 export async function executeCustomerEmailCancellationSideEffect({
   deadlineMs,
@@ -26,10 +32,13 @@ export async function executeCustomerEmailCancellationSideEffect({
   if (!sendCancellationEmail) {
     throw new Error('Cancellation email sender is required');
   }
-  // Refuse the send when too little cron budget remains: the row stays
-  // failed and retries on the next tick instead of stranding a claim the
-  // invocation timeout would convert to delivery_uncertain.
-  assertRefundNotificationSendTime(deadlineMs);
+  // Refuse the send unless a full capped attempt loop fits: the row
+  // stays failed and retries on the next tick instead of stranding a
+  // claim the invocation timeout would convert to delivery_uncertain.
+  assertRefundNotificationSendTime(
+    deadlineMs,
+    zeptomailSendAdmissionBudgetMs(EMAIL_ATTEMPTS_PER_SENDER)
+  );
   let emailResult: CancellationEmailResult;
   try {
     emailResult = await awaitRefundNotificationDeadline(
@@ -41,10 +50,14 @@ export async function executeCustomerEmailCancellationSideEffect({
           reason,
           refundAmount,
         }),
+        maxAttemptsPerSender: EMAIL_ATTEMPTS_PER_SENDER,
         ...(deadlineMs !== undefined && {
           signal: AbortSignal.timeout(
             Math.max(1, deadlineMs - Date.now() - 10_000)
           ),
+          // Match the signal's 10s buffer: the platform-sender
+          // fallback declines unless its own attempt fits.
+          fallbackDeadlineMs: deadlineMs - 10_000,
         }),
       }),
       deadlineMs

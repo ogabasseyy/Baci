@@ -124,6 +124,25 @@ describe('Paystack cancellation refund reconciliation', () => {
     expect(db.rpc).not.toHaveBeenCalled();
   });
 
+  it('keeps a failed payment lookup retryable instead of a mismatch', async () => {
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi
+        .fn()
+        .mockResolvedValue({ data: null, error: new Error('db down') }),
+    };
+    const db = { from: vi.fn(() => query), rpc: vi.fn() };
+
+    // A transient read outage must not file a mismatch review and hold
+    // a valid refund out of polling permanently.
+    await expect(
+      reconcilePaystackCancellationRefund(db as never, refund)
+    ).rejects.toThrow('refund_event_lookup_failed');
+    expect(provider.fetchRefund).not.toHaveBeenCalled();
+    expect(db.rpc).not.toHaveBeenCalled();
+  });
+
   it('does not complete a refund linked to a different Paystack payment', async () => {
     const db = database();
     provider.fetchRefund.mockResolvedValueOnce({

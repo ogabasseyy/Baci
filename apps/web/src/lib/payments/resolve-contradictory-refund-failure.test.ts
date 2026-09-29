@@ -147,6 +147,83 @@ describe('resolveContradictoryRefundFailure', () => {
     );
   });
 
+  it('files when a replacement covers only one of two failed legs', async () => {
+    const failedRows = [
+      {
+        amount: 100,
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: 'RFD-1',
+        id: 'refund-1',
+        metadata: {
+          payment_transaction_id: 'payment-1',
+          provider_refund_status: 'failed',
+        },
+      },
+      {
+        amount: 50,
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: 'RFD-3',
+        id: 'refund-3',
+        metadata: {
+          payment_transaction_id: 'payment-3',
+          provider_refund_status: 'failed',
+        },
+      },
+    ];
+    const legs = [
+      {
+        amount: 100,
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: 'PSK-1',
+        id: 'payment-1',
+      },
+      {
+        amount: 50,
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: 'PSK-3',
+        id: 'payment-3',
+      },
+    ];
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(chain({ data: failedRows, error: null }, 'limit'))
+      .mockReturnValueOnce(
+        chain(
+          {
+            data: [
+              {
+                amount: 100,
+                currency: 'NGN',
+                gateway: 'paystack',
+                id: 'refund-2',
+                metadata: { payment_transaction_id: 'payment-1' },
+              },
+            ],
+            error: null,
+          },
+          'limit'
+        )
+      )
+      .mockReturnValueOnce(chain({ data: legs, error: null }, 'in'));
+
+    await expect(
+      resolveContradictoryRefundFailure({ from } as never, row, order)
+    ).resolves.toBe(false);
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          contradictory_refund_failure: true,
+          failed_payment_transaction_ids: ['payment-1', 'payment-3'],
+          failed_refund_ids: ['refund-1', 'refund-3'],
+        }),
+      })
+    );
+  });
+
   it('files a falsely-refunded review when the failure is the latest evidence', async () => {
     const failedRows = [
       {

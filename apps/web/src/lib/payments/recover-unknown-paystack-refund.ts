@@ -5,13 +5,15 @@ import { fetchPaystackPaymentById } from './fetch-paystack-payment-by-id';
 import { fetchRefund } from './fetch-paystack-refund';
 import { fileCancelledPaystackRefundCandidateReviews } from './file-cancelled-paystack-refund-candidate-reviews';
 import { filePaystackRefundRecoveryReview } from './file-paystack-refund-recovery-review';
-import { fileProviderRefundOutsideCancellationReview } from './file-provider-refund-outside-cancellation-review';
-import { fileRefundEvidenceReview } from './file-refund-evidence-review';
+import {
+  fileActiveOrderPaystackRefundCandidateReviews,
+  fileProviderRefundOutsideCancellationReview,
+} from './file-provider-refund-outside-cancellation-review';
 import { fileStalledPaystackRefundReviews } from './file-stalled-paystack-refund-reviews';
-import { holdPaystackRefundForReview } from './hold-paystack-refund-for-review';
-import { isDeterministicRefundError } from './is-deterministic-paystack-refund-error';
-import type { RefundRow } from './paystack-cancellation-refund-row';
-import { reconcilePaystackCancellationRefund } from './reconcile-paystack-cancellation-refund';
+import {
+  lookupLocalRefundByProviderId,
+  reconcileRecoveredRow,
+} from './recover-unknown-paystack-refund-row';
 
 const PROVIDER_READ_TIMEOUT_MS = 8_000;
 
@@ -21,36 +23,6 @@ interface RecoveryPayment {
   id: string;
   merchant_id: string;
   order_id: string | null;
-}
-
-async function lookupLocalRefundByProviderId(
-  supabase: SupabaseClient,
-  refundId: number
-): Promise<RefundRow | null> {
-  const { data, error } = await supabase
-    .from('transactions')
-    .select(
-      'id, order_id, merchant_id, gateway_reference, amount, currency, metadata, status'
-    )
-    .eq('transaction_type', 'refund')
-    .eq('gateway', 'paystack')
-    .eq('gateway_reference', String(refundId))
-    .maybeSingle();
-  if (error) throw new Error('refund_event_lookup_failed');
-  return (data as RefundRow | null) ?? null;
-}
-
-async function reconcileRecoveredRow(
-  supabase: SupabaseClient,
-  refund: RefundRow
-): Promise<void> {
-  try {
-    await reconcilePaystackCancellationRefund(supabase, refund);
-  } catch (reason) {
-    if (!isDeterministicRefundError(reason)) throw reason;
-    await fileRefundEvidenceReview(supabase, refund, reason.message);
-    await holdPaystackRefundForReview(supabase, refund.id, reason.message);
-  }
 }
 
 /**
@@ -158,13 +130,26 @@ export async function recoverUnknownPaystackRefund(
     // The reference resolves to completed payments on different orders and
     // redelivery cannot disambiguate them: persist one review per
     // cancelled order so ops can route the verified provider refund,
-    // then acknowledge. Active-order matches are merchant evidence and
-    // stay out of the cancellation queue.
+    // then acknowledge. Active-order matches stay out of the
+    // cancellation queue but still need operations eyes, so they file
+    // into the non-cancellation queue below.
+    const reason = `Paystack refund ${refundId} matches multiple completed payments for reference ${resolvedPaymentReference}`;
     await fileCancelledPaystackRefundCandidateReviews(
       supabase,
       candidates,
       evidence,
-      `Paystack refund ${refundId} matches multiple completed payments for reference ${resolvedPaymentReference}`
+      reason
+    );
+    await fileActiveOrderPaystackRefundCandidateReviews(
+      supabase,
+      candidates,
+      evidence,
+      reason,
+      {
+        amount: current.amount / 100,
+        currency: current.currency,
+        status: current.status,
+      }
     );
     logger.info({
       message:

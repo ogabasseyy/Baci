@@ -37,13 +37,19 @@ function database({
   racedRow?: unknown;
 } = {}) {
   const insert = vi.fn().mockResolvedValue({ error: insertError });
+  const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
   const from = vi
     .fn()
     .mockReturnValueOnce(selectQuery(paymentRows))
     .mockReturnValueOnce(selectQuery(orderRow))
     .mockReturnValueOnce({ insert })
     .mockReturnValueOnce(selectQuery(racedRow));
-  return { from, insert, supabase: { from } as unknown as SupabaseClient };
+  return {
+    from,
+    insert,
+    rpc,
+    supabase: { from, rpc } as unknown as SupabaseClient,
+  };
 }
 
 export const recoverUnknownPaystackRefundTestKit = {

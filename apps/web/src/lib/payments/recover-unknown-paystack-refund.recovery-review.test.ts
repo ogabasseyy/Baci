@@ -82,12 +82,12 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
 
   it('files one review per order when the reference matches two payments', async () => {
     const rpc = reviewRpc();
+    const orders = [order, { ...order, id: 'order-2', order_number: 'B-2' }];
     const from = vi
       .fn()
       .mockReturnValueOnce(selectQuery([firstPayment, secondPayment]))
-      .mockReturnValueOnce(
-        selectQuery([order, { ...order, id: 'order-2', order_number: 'B-2' }])
-      );
+      .mockReturnValueOnce(selectQuery(orders))
+      .mockReturnValueOnce(selectQuery(orders));
     const supabase = { from, rpc } as unknown as SupabaseClient;
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
@@ -129,12 +129,12 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
 
   it('merges redelivered ambiguity evidence into the open reviews', async () => {
     const rpc = reviewRpc();
+    const orders = [order, { ...order, id: 'order-2', order_number: 'B-2' }];
     const from = vi
       .fn()
       .mockReturnValueOnce(selectQuery([firstPayment, secondPayment]))
-      .mockReturnValueOnce(
-        selectQuery([order, { ...order, id: 'order-2', order_number: 'B-2' }])
-      );
+      .mockReturnValueOnce(selectQuery(orders))
+      .mockReturnValueOnce(selectQuery(orders));
     const supabase = { from, rpc } as unknown as SupabaseClient;
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');

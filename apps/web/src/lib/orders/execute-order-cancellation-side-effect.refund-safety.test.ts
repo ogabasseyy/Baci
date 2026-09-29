@@ -123,7 +123,7 @@ describe('cancellation refund safety', () => {
           payment_transaction_id: 'payment-1',
           provider_refund_status: 'pending',
         }),
-        status: 'pending',
+        status: 'refund_pending',
       })
     );
     expect(from).toHaveBeenCalledTimes(3);
@@ -193,10 +193,16 @@ describe('cancellation refund safety', () => {
     );
     expect(refundInsert).toHaveBeenCalledTimes(2);
     expect(refundInsert).toHaveBeenCalledWith(
-      expect.objectContaining({ gateway_reference: '42', status: 'pending' })
+      expect.objectContaining({
+        gateway_reference: '42',
+        status: 'refund_pending',
+      })
     );
     expect(refundInsert).toHaveBeenCalledWith(
-      expect.objectContaining({ gateway_reference: '43', status: 'pending' })
+      expect.objectContaining({
+        gateway_reference: '43',
+        status: 'refund_pending',
+      })
     );
   });
 
@@ -330,7 +336,7 @@ describe('cancellation refund safety', () => {
     expect(auditInsert).toHaveBeenCalledWith(
       expect.objectContaining({
         gateway_reference: '44',
-        status: 'pending',
+        status: 'refund_pending',
         metadata: expect.objectContaining({
           provider_payment_transaction_id: 456,
           refund_reconciliation_hold: 'provider_creation_evidence_mismatch',

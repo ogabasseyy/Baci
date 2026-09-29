@@ -191,14 +191,18 @@ export async function executeOrderCancellationSideEffect({
     const providerStatus = String(paystackRefund.data.status ?? '')
       .trim()
       .toLowerCase();
-    const providerPaymentId = paystackRefund.data.transaction?.id;
+    const providerTransaction = paystackRefund.data.transaction;
+    const providerPaymentId =
+      typeof providerTransaction === 'number'
+        ? providerTransaction
+        : providerTransaction?.id;
     if (
       !Number.isSafeInteger(paystackRefund.data.id) ||
       paystackRefund.data.id <= 0 ||
       !Number.isSafeInteger(providerPaymentId) ||
       providerPaymentId <= 0 ||
-      paystackRefund.data.transaction?.reference !==
-        transaction.gateway_reference
+      (typeof providerTransaction !== 'number' &&
+        providerTransaction?.reference !== transaction.gateway_reference)
     ) {
       if (
         Number.isSafeInteger(paystackRefund.data.id) &&
@@ -212,7 +216,7 @@ export async function executeOrderCancellationSideEffect({
             transaction_type: 'refund',
             amount: transactionAmount,
             currency: transaction.currency || order.currency || 'NGN',
-            status: 'pending',
+            status: 'refund_pending',
             gateway: 'paystack',
             gateway_reference: String(paystackRefund.data.id),
             description: `Refund for cancelled order #${order.order_number || order.id.slice(0, 8)}`,
@@ -265,7 +269,7 @@ export async function executeOrderCancellationSideEffect({
         amount: transactionAmount,
         currency: transaction.currency || order.currency || 'NGN',
         // Fetch Refund independently verifies even an immediate processed reply.
-        status: 'pending',
+        status: 'refund_pending',
         gateway: transaction.gateway,
         gateway_reference: String(paystackRefund.data.id),
         description: `Refund for cancelled order #${order.order_number || order.id.slice(0, 8)}`,

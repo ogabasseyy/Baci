@@ -118,7 +118,7 @@ describe('executeOrderCancellationSideEffect', () => {
     expect(supabase.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         amount: 100,
-        status: 'pending',
+        status: 'refund_pending',
         metadata: expect.objectContaining({
           payment_transaction_id: 'payment-1',
           provider_payment_transaction_id: 123,

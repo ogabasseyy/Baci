@@ -36,7 +36,12 @@ describe('inter-naira-font.css', () => {
       /url\("(\/fonts\/(inter-naira\.([0-9a-f]{12})\.woff2))"\)/
     );
     expect(match).not.toBeNull();
-    const [, , filename, suffix] = match as RegExpMatchArray;
+    const [, , filename, suffix] = (match ?? []) as string[];
+    expect(typeof filename).toBe('string');
+    expect(typeof suffix).toBe('string');
+    if (typeof filename !== 'string' || typeof suffix !== 'string') {
+      throw new Error('hashed font URL missing from inter-naira-font.css');
+    }
     const repoRoot = join(
       dirname(fileURLToPath(import.meta.url)),
       '..',

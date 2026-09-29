@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CheckoutShippingQuotesOptions } from './checkout-shipping-quotes-options';
 import { useCheckoutDeliverySession } from './use-checkout-delivery-session';
 import type { ShippingQuote } from '../types';
+import { getSubdivisions } from '@/lib/shipping/merchant-rates/subdivisions';
 
 const merchantPickupQuote: ShippingQuote = {
   id: 'merchant-pickup',
@@ -88,19 +89,31 @@ describe('useCheckoutDeliverySession', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('invalidates an in-flight quote when the address changes', async () => {
-    mockFetch.mockImplementation((_input, init) =>
-      new Promise((_resolve, reject) => {
+    mockFetch.mockImplementation((input, init) => {
+      if (String(input).includes('/api/shipping/locations')) {
+        return Promise.resolve(Response.json({ states: [] }));
+      }
+      return new Promise((_resolve, reject) => {
         init?.signal?.addEventListener('abort', () => {
           reject(new DOMException('Aborted', 'AbortError'));
         });
-      })
-    );
+      });
+    });
     const input = options();
     const { result } = renderHook(() =>
       useCheckoutDeliverySession(input)
     );
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledOnce());
-    const quoteRequestSignal = mockFetch.mock.calls[0]?.[1]?.signal;
+    await waitFor(() =>
+      expect(
+        mockFetch.mock.calls.filter(([url]) =>
+          String(url).includes('/api/shipping/quotes')
+        )
+      ).toHaveLength(1)
+    );
+    const quoteCall = mockFetch.mock.calls.find(([url]) =>
+      String(url).includes('/api/shipping/quotes')
+    );
+    const quoteRequestSignal = quoteCall?.[1]?.signal;
 
     act(() => result.current.address.handlers.onStreetChange('2 Allen Avenue'));
 
@@ -111,8 +124,49 @@ describe('useCheckoutDeliverySession', () => {
     });
   });
 
+  it('aborts stale Nigerian locations when the merchant country changes', async () => {
+    let resolveLocations: ((response: Response) => void) | undefined;
+    let locationsSignal: AbortSignal | undefined;
+    mockFetch.mockImplementation((input, init) => {
+      if (String(input).includes('/api/shipping/locations')) {
+        locationsSignal = init?.signal ?? undefined;
+        return new Promise<Response>((resolve) => {
+          resolveLocations = resolve;
+        });
+      }
+      return Promise.resolve(quoteResponse([]));
+    });
+    const input = options();
+    const { result, rerender } = renderHook(
+      (props) => useCheckoutDeliverySession(props),
+      { initialProps: input }
+    );
+
+    await waitFor(() => expect(locationsSignal).toBeDefined());
+    rerender({ ...input, merchantCountry: 'IN' });
+
+    const indiaStates = getSubdivisions('IN').map(({ name }) => name);
+    await waitFor(() =>
+      expect(result.current.address.shippingStates).toEqual(indiaStates)
+    );
+    expect(locationsSignal?.aborted).toBe(true);
+
+    await act(async () => {
+      resolveLocations?.(Response.json({ states: ['Stale Nigerian State'] }));
+    });
+
+    expect(result.current.address.shippingStates).toEqual(indiaStates);
+    expect(result.current.address.isLoadingLocations).toBe(false);
+  });
+
   it('uses the selected merchant station rate for validation and delivery cost', async () => {
-    mockFetch.mockResolvedValue(quoteResponse([merchantPickupQuote]));
+    mockFetch.mockImplementation((input) =>
+      Promise.resolve(
+        String(input).includes('/api/shipping/locations')
+          ? Response.json({ states: [] })
+          : quoteResponse([merchantPickupQuote])
+      )
+    );
     const input = options({
       deliveryMethod: 'pickup_station',
       persistedSelectedQuoteId: merchantPickupQuote.id,
@@ -130,13 +184,25 @@ describe('useCheckoutDeliverySession', () => {
   });
 
   it('moves legacy pickup onto the configured merchant station rate', async () => {
-    mockFetch.mockResolvedValue(quoteResponse([merchantPickupQuote]));
+    mockFetch.mockImplementation((input) =>
+      Promise.resolve(
+        String(input).includes('/api/shipping/locations')
+          ? Response.json({ states: [] })
+          : quoteResponse([merchantPickupQuote])
+      )
+    );
     const input = options();
     const { rerender } = renderHook(
       (props) => useCheckoutDeliverySession(props),
       { initialProps: input }
     );
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledOnce());
+    await waitFor(() =>
+      expect(
+        mockFetch.mock.calls.filter(([url]) =>
+          String(url).includes('/api/shipping/quotes')
+        )
+      ).toHaveLength(1)
+    );
 
     rerender({ ...input, deliveryMethod: 'pickup' });
 

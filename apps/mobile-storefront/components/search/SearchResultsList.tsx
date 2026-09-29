@@ -86,13 +86,19 @@ export default function SearchResultsList({
         ) : listError ? (
           <View style={styles.resultsFooter}>
             <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-              Couldn&apos;t load more results.
+              {isNextPageError
+                ? "Couldn't load more results."
+                : "Couldn't refresh results."}
             </Text>
             <Pressable
               onPress={isNextPageError ? onRetryNextPage : onRetry}
               style={[styles.retryButton, { backgroundColor: colors.primary }]}
               accessibilityRole="button"
-              accessibilityLabel="Retry loading more results"
+              accessibilityLabel={
+                isNextPageError
+                  ? 'Retry loading more results'
+                  : 'Retry refreshing results'
+              }
             >
               <Text
                 style={[

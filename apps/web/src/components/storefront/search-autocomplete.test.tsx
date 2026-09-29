@@ -1073,6 +1073,83 @@ describe('SearchAutocomplete', () => {
     expect(onSubmitSearch).toHaveBeenCalledWith('x');
   });
 
+  it('drops stale options when editing after dismissing the popup', async () => {
+    vi.useRealTimers();
+    const onChange = vi.fn();
+    const onSubmitSearch = vi.fn();
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          suggestions: [
+            {
+              id: 'product-1',
+              name: 'iPhone 16',
+              slug: 'iphone-16',
+              category: 'Smartphones',
+              price: 900_000,
+              image_small: '',
+            },
+          ],
+          popularSearches: [],
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ suggestions: [], popularSearches: [] }),
+      } as Response);
+
+    const { rerender } = render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="iphone"
+        onChange={onChange}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    const input = screen.getByRole('searchbox');
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', { name: /iphone 16/i })
+      ).toBeInTheDocument();
+    });
+
+    // Dismiss the populated popup, then edit to a different query: the
+    // reopened popup must not offer the previous query's options beneath
+    // the new text.
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: 'galaxy' } });
+    rerender(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="galaxy"
+        onChange={onChange}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    expect(
+      screen.queryByRole('option', { name: /iphone 16/i })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /see all results for “galaxy”/i })
+    ).toBeInTheDocument();
+
+    // The fresh fetch for the new query still goes out normally (call
+    // counts include analytics posts, so match the request URL instead).
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('q=galaxy'),
+        expect.anything()
+      );
+    });
+  });
+
   it('keeps the popup open while a one-character submit query is typed', () => {
     vi.useRealTimers();
     const onChange = vi.fn();

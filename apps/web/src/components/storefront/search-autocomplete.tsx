@@ -202,11 +202,22 @@ export function SearchAutocomplete({
           maxLength={maxLength}
           value={value}
           onChange={(e) => {
-            onChange(e.target.value);
+            const nextValue = e.target.value;
+            // When the popup is closed (dismissed via Escape or an outside
+            // click), the retained arrays still belong to the previous
+            // query: drop them so the reopened popup cannot offer stale
+            // options beneath the new text. While open, the previous
+            // results stay visible until the new fetch resolves (standard
+            // live-update typeahead). isOpen here is the pre-update state.
+            if (!isOpen && nextValue.length >= 2) {
+              clearSuggestions();
+              setHighlightedIndex(-1);
+            }
+            onChange(nextValue);
             // Open eagerly for submit-wired consumers so the "See all
             // results" action stays reachable while the fetch is pending
             // and when it fails outright (touch users have no Enter key).
-            if (onSubmitSearch && e.target.value.trim()) {
+            if (onSubmitSearch && nextValue.trim()) {
               setIsOpen(true);
             }
           }}

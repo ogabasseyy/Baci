@@ -177,8 +177,11 @@ describe('SearchResultsList', () => {
       totalCount: 45,
     });
 
+    // The footer labels a refresh failure accurately instead of claiming
+    // a pagination failure.
+    expect(screen.getByText("Couldn't refresh results.")).toBeTruthy();
     fireEvent.press(
-      screen.getByRole('button', { name: 'Retry loading more results' })
+      screen.getByRole('button', { name: 'Retry refreshing results' })
     );
     // A failed reconnect refetch retains products with the same generic
     // error: retrying must replay the loaded pages, not append an offset.

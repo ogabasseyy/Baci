@@ -113,6 +113,20 @@ describe('loadMcpSearchProducts', () => {
     expect(rpc.mock.calls.map(([, args]) => args.result_offset)).toEqual([0, POST_FILTER_RESULT_PAGE_SIZE]);
   });
 
+  it('scans further ranked pages for single-word model queries', async () => {
+    const { rpc, supabase } = createRankedSearchSupabase('Laptops', (id) =>
+      id === `ranked-${POST_FILTER_RESULT_PAGE_SIZE}` ? 'MacBook Air M3' : 'MacBook Air M2'
+    );
+    const result = await loadMcpSearchProducts({
+      args: { query: 'MacBook M3', limit: 1 }, merchantId: 'merchant-1',
+      sanitizeString: (input) => input, supabase,
+    });
+
+    expect(result.products.map((product) => product.name)).toEqual(['MacBook Air M3']);
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc.mock.calls.map(([, args]) => args.result_offset)).toEqual([0, POST_FILTER_RESULT_PAGE_SIZE]);
+  });
+
   it('drops description-only matches for a broad use-case word', async () => {
     const { supabase } = createRankedSearchSupabase(
       'Furniture', () => 'Ergonomic Chair', () => 'Perfect for work and study'

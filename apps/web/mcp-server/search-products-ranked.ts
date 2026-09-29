@@ -56,7 +56,10 @@ export async function loadRankedMcpProducts({
     ? MAX_POST_FILTER_RESULT_PAGES * POST_FILTER_RESULT_PAGE_SIZE
     : limit;
   const queryWords = sanitizedQuery.normalize('NFKC').toLocaleLowerCase('en').match(/[a-z0-9]+/g) ?? [];
-  const needsIntentScan = queryWords.filter((word) => /^[a-z]+$/.test(word)).length >= 2;
+  // Model/spec queries ("MacBook M3", "20w charger") carry a single alphabetic
+  // word but still filter whole pages, so they need the backfill scan too.
+  const needsIntentScan = queryWords.filter((word) => /^[a-z]+$/.test(word)).length >= 2 ||
+    queryWords.some((word) => /\d/.test(word));
   const needsCandidateScan = hasPostHydrationFilters || priceSensitive || needsIntentScan;
   let pageOffset = 0;
   let totalRankedMatches = Number.POSITIVE_INFINITY;

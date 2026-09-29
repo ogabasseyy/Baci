@@ -244,4 +244,28 @@ describe('discovery product intent', () => {
       name: 'iPhone 15', category: 'Smartphones',
     }, 'phone accessories')).toBe(false);
   });
+
+  it('accepts descriptive modifiers from the category and description lead', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', brand: 'Dell', category: 'Business Laptops' }, 'business laptop')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Galaxy Buds', category: 'Accessories', description: 'Noise cancelling wireless earbuds' }, 'noise cancelling earbuds')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude Laptop', brand: 'Dell', category: 'Laptops' }, 'ASUS laptop')).toBe(false);
+  });
+
+  it('validates specifications written with separated units', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', category: 'Laptops', description: '16 GB RAM, 512 GB SSD' }, 'laptop with 16 GB RAM')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', category: 'Laptops', description: '8 GB RAM, 256 GB SSD' }, 'laptop with 16 GB RAM')).toBe(false);
+  });
+
+  it('keeps numeric constraints local to each alternative', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', category: 'Laptops' }, 'iPhone 15 case or Dell laptop')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'iPhone 15 Case', category: 'Accessories' }, 'iPhone 15 case or Dell laptop')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'iPhone 14 Case', category: 'Accessories' }, 'iPhone 15 case or Dell laptop')).toBe(false);
+  });
+
+  it('treats lower-bound phrases as price boundaries', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', category: 'Laptops' }, 'laptop over 500000')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', category: 'Laptops' }, 'laptop above 500000')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', category: 'Laptops' }, 'laptop from 500000')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'USB-C Charger', category: 'Accessories' }, 'charger from Samsung')).toBe(true);
+  });
 });

@@ -1730,4 +1730,143 @@ describe('SearchAutocomplete', () => {
       screen.queryByRole('button', { name: /see all results/i })
     ).not.toBeInTheDocument();
   });
+
+  it('refetches settled suggestions when refocusing after a submit cleared them', async () => {
+    vi.useRealTimers();
+    const onSubmitSearch = vi.fn();
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        suggestions: [
+          {
+            id: 'product-1',
+            name: 'iPhone 16',
+            slug: 'iphone-16',
+            category: 'Smartphones',
+            price: 900_000,
+            image_small: '',
+          },
+        ],
+        popularSearches: [],
+      }),
+    } as Response);
+
+    render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="iphone"
+        onChange={vi.fn()}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', { name: /iphone 16/i })
+      ).toBeInTheDocument();
+    });
+
+    // Submitting clears the settled arrays without changing the debounced
+    // query (persistent consumers navigate with the component mounted).
+    fireEvent.click(
+      screen.getByRole('button', { name: /see all results for “iphone”/i })
+    );
+    expect(onSubmitSearch).toHaveBeenCalledWith('iphone');
+    expect(
+      screen.queryByRole('option', { name: /iphone 16/i })
+    ).not.toBeInTheDocument();
+
+    // Focusing the unchanged input afterwards (back navigation, persistent
+    // results-page navbar) must refetch them instead of leaving the popup
+    // limited to the submit action.
+    const autocompleteCalls = () =>
+      vi
+        .mocked(fetchMock)
+        .mock.calls.filter(
+          ([url]) =>
+            typeof url === 'string' &&
+            url.startsWith('/api/search/autocomplete')
+        );
+    fireEvent.focus(screen.getByRole('searchbox'));
+
+    await waitFor(() => {
+      expect(autocompleteCalls()).toHaveLength(2);
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', { name: /iphone 16/i })
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('resets the highlight when the controlled value changes externally', async () => {
+    vi.useRealTimers();
+    const onSelectProduct = vi.fn();
+    const onSubmitSearch = vi.fn();
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        suggestions: [
+          {
+            id: 'product-1',
+            name: 'iPhone 16',
+            slug: 'iphone-16',
+            category: 'Smartphones',
+            price: 900_000,
+            image_small: '',
+          },
+        ],
+        popularSearches: [],
+      }),
+    } as Response);
+
+    const { rerender } = render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="iphone"
+        onChange={vi.fn()}
+        onSelectProduct={onSelectProduct}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    const input = screen.getByRole('searchbox');
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', { name: /iphone 16/i })
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(screen.getByRole('option', { name: /iphone 16/i })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+
+    // An external replacement (e.g. the navbar route sync after a
+    // did-you-mean navigation) bypasses the input's keystroke reset: the
+    // highlight must still drop so Enter cannot select the previous
+    // query's option. Retained options stay until the new fetch resolves,
+    // matching live-update typing.
+    rerender(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="galaxy"
+        onChange={vi.fn()}
+        onSelectProduct={onSelectProduct}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    expect(screen.getByRole('option', { name: /iphone 16/i })).toHaveAttribute(
+      'aria-selected',
+      'false'
+    );
+
+    fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Enter' });
+    expect(onSubmitSearch).toHaveBeenCalledWith('galaxy');
+    expect(onSelectProduct).not.toHaveBeenCalled();
+  });
 });

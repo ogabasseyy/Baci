@@ -165,9 +165,17 @@ export function SearchAutocomplete({
       // the debounced value never changed, so restart the request
       // explicitly. Unrelated typing never matches — the value must equal
       // both the live debounced query and the recorded cleared one — so
-      // this fires only on a genuine restore.
+      // this fires only on a genuine restore. The highlight is already
+      // clear from the short-input reset above.
       setRefetchToken((token) => token + 1);
       setClearedQuery(null);
+    } else {
+      // Any other external value change (e.g. the navbar route sync
+      // replacing the query after a did-you-mean navigation) bypasses the
+      // input's keystroke reset: the highlight still belongs to the
+      // previous text's options, so drop it. Retained options stay visible
+      // until the new fetch resolves, matching live-update typing.
+      setHighlightedIndex(-1);
     }
   }
 
@@ -298,6 +306,21 @@ export function SearchAutocomplete({
             suppressReopenRef.current = false;
             if (isPopupLength(value)) {
               setIsOpen(true);
+            }
+            // A navigation-closing submit clears settled results without
+            // changing the debounced query, so focusing the unchanged input
+            // afterwards (back navigation, persistent results-page navbar)
+            // must refetch them. Only when the debounce has settled on the
+            // current value — a mismatched debounce means a newer query is
+            // already on its way — nothing is in flight, and no fresh
+            // response is stored.
+            if (
+              value.length >= 2 &&
+              value === debouncedValue &&
+              !loading &&
+              settledQuery !== debouncedValue
+            ) {
+              setRefetchToken((token) => token + 1);
             }
           }}
           className={cn(

@@ -552,9 +552,11 @@ describe('SearchPageContent', () => {
       name: /search results pagination/i,
     });
     expect(pagination).toBeInTheDocument();
+    // Page-1 returns carry an explicit page parameter so landing on them
+    // never counts as a fresh search submission.
     expect(screen.getByRole('link', { name: /previous/i })).toHaveAttribute(
       'href',
-      '/ogabassey/search?q=iphone'
+      '/ogabassey/search?q=iphone&page=1'
     );
     expect(screen.getByRole('link', { name: /next/i })).toHaveAttribute(
       'href',
@@ -586,7 +588,7 @@ describe('SearchPageContent', () => {
     );
   });
 
-  it('records the first page as a new search submission', async () => {
+  it('records a submission entry without a page param as a new search', async () => {
     mockStorefrontContext();
     mockGetStorefrontSearchProducts.mockResolvedValueOnce({
       count: 45,
@@ -598,13 +600,77 @@ describe('SearchPageContent', () => {
 
     render(
       (await SearchPageContent(
-        createSearchPageProps({ q: 'iphone' })
+        createSearchPageProps({ q: 'iphone', page: undefined })
       )) as React.ReactElement
     );
 
     expect(mockGetStorefrontSearchProducts).toHaveBeenCalledWith(
       expect.objectContaining({ offset: 0, trackAnalytics: true })
     );
+  });
+
+  it('does not record an explicit page-1 navigation as a new search', async () => {
+    mockStorefrontContext();
+    mockGetStorefrontSearchProducts.mockResolvedValueOnce({
+      count: 45,
+      didYouMean: null,
+      products: createSearchProducts(20),
+      productIds: [],
+      query: 'iphone',
+    });
+
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphone', page: '1' })
+      )) as React.ReactElement
+    );
+
+    expect(mockGetStorefrontSearchProducts).toHaveBeenCalledWith(
+      expect.objectContaining({ offset: 0, trackAnalytics: false })
+    );
+  });
+
+  it('tracks one submission across a page 1 → 2 → 1 journey', async () => {
+    mockStorefrontContext();
+    mockGetStorefrontSearchProducts.mockResolvedValue({
+      count: 45,
+      didYouMean: null,
+      products: createSearchProducts(20),
+      productIds: [],
+      query: 'iphone',
+    });
+
+    // Fresh submission entry: no page parameter.
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphone', page: undefined })
+      )) as React.ReactElement
+    );
+    expect(mockGetStorefrontSearchProducts).toHaveBeenLastCalledWith(
+      expect.objectContaining({ offset: 0, trackAnalytics: true })
+    );
+
+    // Paging forward is navigation, not a submission.
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphone', page: '2' })
+      )) as React.ReactElement
+    );
+    expect(mockGetStorefrontSearchProducts).toHaveBeenLastCalledWith(
+      expect.objectContaining({ offset: 20, trackAnalytics: false })
+    );
+
+    // Returning to page 1 via the Previous link (explicit page=1) must not
+    // recount the original submission.
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphone', page: '1' })
+      )) as React.ReactElement
+    );
+    expect(mockGetStorefrontSearchProducts).toHaveBeenLastCalledWith(
+      expect.objectContaining({ offset: 0, trackAnalytics: false })
+    );
+    expect(mockGetStorefrontSearchProducts).toHaveBeenCalledTimes(3);
   });
 
   it('redirects a malformed page to the first page', async () => {
@@ -623,7 +689,9 @@ describe('SearchPageContent', () => {
       )) as React.ReactElement
     );
 
-    expect(mockRedirect).toHaveBeenCalledWith('/ogabassey/search?q=iphone');
+    expect(mockRedirect).toHaveBeenCalledWith(
+      '/ogabassey/search?q=iphone&page=1'
+    );
   });
 
   it('redirects a repeated page parameter to the first page', async () => {
@@ -642,7 +710,9 @@ describe('SearchPageContent', () => {
       )) as React.ReactElement
     );
 
-    expect(mockRedirect).toHaveBeenCalledWith('/ogabassey/search?q=iphone');
+    expect(mockRedirect).toHaveBeenCalledWith(
+      '/ogabassey/search?q=iphone&page=1'
+    );
   });
 
   it('treats a repeated query as an empty search', async () => {
@@ -735,10 +805,13 @@ describe('SearchPageContent', () => {
       )) as React.ReactElement
     );
 
-    // The no-results state renders at the canonical first-page URL (where the
+    // The no-results state renders at the explicit first-page URL (where the
     // probe's did-you-mean suggestion is recomputed) instead of duplicating
-    // empty content across unbounded ?page=N variants.
-    expect(mockRedirect).toHaveBeenCalledWith('/ogabassey/search?q=iphon');
+    // empty content across unbounded ?page=N variants — and the landing
+    // never counts as a fresh submission.
+    expect(mockRedirect).toHaveBeenCalledWith(
+      '/ogabassey/search?q=iphon&page=1'
+    );
   });
 
   it('caps pagination at the maximum servable page', async () => {

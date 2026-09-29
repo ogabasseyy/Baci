@@ -70,10 +70,20 @@ export async function SearchPageContent({
   const headersList = await headers();
   const pathPrefix = getStorefrontPathPrefix(headersList, merchant);
   const searchBasePath = `${pathPrefix}/search`;
+  // Submission entries (search form, navbar, see-all, did-you-mean) never
+  // carry a page parameter; only their renders count as new searches.
+  const buildSubmissionHref = (targetQuery: string) =>
+    `${searchBasePath}?q=${encodeURIComponent(targetQuery)}`;
   const buildSearchHref = (targetQuery: string, targetPage: number) => {
     const pageOneHref = targetQuery
-      ? `${searchBasePath}?q=${encodeURIComponent(targetQuery)}`
+      ? buildSubmissionHref(targetQuery)
       : searchBasePath;
+    if (targetQuery && targetPage <= 1) {
+      // Navigational page-1 targets (redirects, pagination) carry an
+      // explicit page parameter so landing on them never counts as a fresh
+      // search submission the way a submission entry does.
+      return `${pageOneHref}&page=1`;
+    }
     return buildStorefrontPageHref(pageOneHref, targetPage);
   };
 
@@ -119,11 +129,14 @@ export async function SearchPageContent({
           );
         }
       } else {
-        // Only the first page counts as a new search submission; deeper page
-        // views and recovery probes must not inflate submission analytics.
+        // Only an explicit search-submission entry counts as a new search:
+        // submission URLs never carry a page parameter, while every
+        // pagination link and page-1 redirect target does. Inferring from
+        // the page number would recount page 1 after paging forward and
+        // back; deeper page views and recovery probes stay untracked.
         searchResult = await fetchSearchPage(
           (page - 1) * STOREFRONT_PRODUCTS_PER_PAGE,
-          page === 1
+          rawPage === undefined
         );
         if (page > 1 && searchResult.products.length === 0) {
           // The RPC reports its total only on returned rows, so an empty
@@ -132,8 +145,9 @@ export async function SearchPageContent({
           const probe = await fetchSearchPage(0, false);
           if (probe.count === 0) {
             // A page beyond the first of an empty result set is not a
-            // distinct page: normalize to the canonical first-page URL so
-            // unbounded ?page=N variants never render duplicate empties.
+            // distinct page: normalize to the explicit first-page URL so
+            // unbounded ?page=N variants never render duplicate empties
+            // (and the landing never counts as a fresh submission).
             redirectHref = buildSearchHref(query, 1);
           } else {
             const lastPage = Math.max(
@@ -164,8 +178,10 @@ export async function SearchPageContent({
 
   const allProductsHref = `${pathPrefix}/products`;
   const contactHref = `${pathPrefix}/contact`;
+  // A did-you-mean follow is a fresh submission, so it keeps the
+  // page-less submission URL (and its render is tracked as one).
   const didYouMeanHref = effectiveResult.didYouMean
-    ? buildSearchHref(effectiveResult.didYouMean, 1)
+    ? buildSubmissionHref(effectiveResult.didYouMean)
     : null;
   const storeUrl = buildRequestScopedStoreUrl(merchant, headersList);
   const pageUrl = searchQuery

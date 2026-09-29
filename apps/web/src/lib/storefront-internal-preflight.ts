@@ -22,6 +22,24 @@ export type StorefrontInternalPreflightSurface =
   | 'product-canonical'
   | 'product-slug';
 
+export type StorefrontPreflightRpcOutcome =
+  | 'success'
+  | 'empty-result'
+  | 'client-timeout'
+  | 'database-timeout'
+  | 'fetch-error'
+  | 'rpc-error'
+  | 'parse-error';
+
+export interface StorefrontPreflightRpcAttempt {
+  attemptId: string;
+  deadlineMs: number;
+  elapsedMs: number;
+  outcome: StorefrontPreflightRpcOutcome;
+  rpcName: string;
+  surface: StorefrontInternalPreflightSurface;
+}
+
 interface StorefrontInternalPreflightContext {
   surface: StorefrontInternalPreflightSurface;
   identifier: string;
@@ -34,6 +52,11 @@ interface StorefrontInternalPreflightContext {
    * spread; captureFailOpen forwards it as a PostHog property.
    */
   detail?: string;
+  attemptId?: string;
+  deadlineMs?: number;
+  elapsedMs?: number;
+  outcome?: StorefrontPreflightRpcOutcome;
+  rpcName?: string;
 }
 
 /**
@@ -159,6 +182,38 @@ function warnFailOpen(context: StorefrontInternalPreflightContext) {
   void captureFailOpen(context).catch(() => false);
 }
 
+/** Logs one completed RPC attempt with no merchant or URL identifiers. */
+function logRpcAttempt(attempt: StorefrontPreflightRpcAttempt): void {
+  try {
+    console.info('[storefront-preflight-rpc] attempt', {
+      attempt_id: attempt.attemptId,
+      deadline_ms: attempt.deadlineMs,
+      elapsed_ms: attempt.elapsedMs,
+      outcome: attempt.outcome,
+      rpc_name: attempt.rpcName,
+      surface: attempt.surface,
+    });
+  } catch {
+    // Telemetry must never change the fail-open or navigation behavior.
+  }
+}
+
+function getRpcAttemptProperties(
+  context: StorefrontInternalPreflightContext
+): Record<string, unknown> {
+  return {
+    ...(context.attemptId ? { attempt_id: context.attemptId } : {}),
+    ...(context.deadlineMs === undefined
+      ? {}
+      : { deadline_ms: context.deadlineMs }),
+    ...(context.elapsedMs === undefined
+      ? {}
+      : { elapsed_ms: context.elapsedMs }),
+    ...(context.outcome ? { outcome: context.outcome } : {}),
+    ...(context.rpcName ? { rpc_name: context.rpcName } : {}),
+  };
+}
+
 /**
  * A deliberately skipped preflight (unsafe/malformed slug) is expected bot
  * garbage, not an incident: log it bounded, never capture an exception.
@@ -201,6 +256,7 @@ async function captureFailOpen(context: StorefrontInternalPreflightContext) {
         slug: truncateSlugForDiagnostics(context.slug),
         status: context.status,
         surface: context.surface,
+        ...getRpcAttemptProperties(context),
       }
     );
   } catch {
@@ -275,6 +331,7 @@ export const storefrontInternalPreflight = {
   getFetchErrorReason,
   captureFailOpen,
   isLoopbackOrigin,
+  logRpcAttempt,
   readJsonResponse,
   resolveBaseUrl,
   warnFailOpen,

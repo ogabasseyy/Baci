@@ -2,7 +2,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { storefrontPreflightRpcMemo } from '@/lib/storefront-preflight-rpc-memo';
 import { createPublicClient } from '@/lib/supabase/public';
 import { createAbortSignalTimeout } from './abort-signal-timeout';
-import type { StorefrontInternalPreflightSurface } from './storefront-internal-preflight';
+import type {
+  StorefrontInternalPreflightSurface,
+  StorefrontPreflightRpcAttempt,
+  StorefrontPreflightRpcOutcome,
+} from './storefront-internal-preflight';
 import {
   storefrontInternalPreflight,
   UNKNOWN_STOREFRONT_FAIL_OPEN_REASON,
@@ -174,6 +178,30 @@ async function runStorefrontPreflightRpcAttempt(
     return null;
   }
 
+  const attemptId = globalThis.crypto.randomUUID();
+  const startedAt = performance.now();
+  const elapsedMs = () =>
+    Math.max(0, Math.round(performance.now() - startedAt));
+  const logAttempt = (
+    outcome: StorefrontPreflightRpcOutcome
+  ): Omit<StorefrontPreflightRpcAttempt, 'surface'> => {
+    const attempt: StorefrontPreflightRpcAttempt = {
+      attemptId,
+      deadlineMs: timeoutMs,
+      elapsedMs: elapsedMs(),
+      outcome,
+      rpcName: fn,
+      surface: failOpenContext.surface,
+    };
+    storefrontInternalPreflight.logRpcAttempt(attempt);
+    return {
+      attemptId: attempt.attemptId,
+      deadlineMs: attempt.deadlineMs,
+      elapsedMs: attempt.elapsedMs,
+      outcome: attempt.outcome,
+      rpcName: attempt.rpcName,
+    };
+  };
   const timeout = createAbortSignalTimeout(timeoutMs);
 
   let result: StorefrontPreflightRpcResult;
@@ -181,14 +209,19 @@ async function runStorefrontPreflightRpcAttempt(
     result = await rpcImpl(fn, args, timeout.signal);
   } catch (error) {
     const reason = isAbortLikeError(error) ? 'timeout' : 'fetch-error';
+    const outcome = reason === 'timeout' ? 'client-timeout' : 'fetch-error';
     if (reason === 'timeout') {
       storefrontPreflightRpcMemo.write(key, storefrontPreflightRpcMemo.timeout);
     }
     breaker.recordFailure();
+    const attemptContext = logAttempt(outcome);
     storefrontInternalPreflight.warnFailOpen({
       ...failOpenContext,
+      ...attemptContext,
       reason,
       detail: thrownErrorDetail(error),
+      outcome,
+      rpcName: fn,
     });
     captureBreakerOpenTransition(failOpenContext);
     return null;
@@ -198,17 +231,29 @@ async function runStorefrontPreflightRpcAttempt(
 
   if (result.error) {
     const reason = classifyRpcErrorReason(result.error);
+    const outcome =
+      result.error.code?.trim() === '57014'
+        ? 'database-timeout'
+        : reason === 'timeout'
+          ? 'client-timeout'
+          : reason === 'fetch-error'
+            ? 'fetch-error'
+            : 'rpc-error';
     if (reason === 'timeout') {
       storefrontPreflightRpcMemo.write(key, storefrontPreflightRpcMemo.timeout);
     }
     breaker.recordFailure();
+    const attemptContext = logAttempt(outcome);
     storefrontInternalPreflight.warnFailOpen({
       ...failOpenContext,
+      ...attemptContext,
       reason,
       detail: boundedErrorDetail(
         result.error.code ?? '',
         result.error.message ?? ''
       ),
+      outcome,
+      rpcName: fn,
     });
     captureBreakerOpenTransition(failOpenContext);
     return null;
@@ -223,20 +268,24 @@ async function runStorefrontPreflightRpcAttempt(
       Array.isArray(result.data) &&
       result.data.length === 0
     ) {
+      logAttempt('empty-result');
       storefrontPreflightRpcMemo.write(
         key,
         storefrontPreflightRpcMemo.emptyResult
       );
       return null;
     }
+    const attemptContext = logAttempt('parse-error');
     storefrontInternalPreflight.warnFailOpen({
       ...failOpenContext,
+      ...attemptContext,
       reason: 'parse',
     });
     return null;
   }
 
   storefrontPreflightRpcMemo.write(key, row);
+  logAttempt('success');
   return row;
 }
 

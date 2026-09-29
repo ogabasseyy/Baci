@@ -1,0 +1,78 @@
+import { vi } from 'vitest';
+
+export const REFUND_FIXTURE = {
+  id: 'refund-1',
+  order_id: 'order-1',
+  merchant_id: 'merchant-1',
+  gateway_reference: '42',
+  amount: 100,
+  currency: 'NGN',
+  metadata: {
+    payment_transaction_id: 'payment-1',
+    provider_payment_transaction_id: 123,
+  },
+  status: 'refund_pending',
+};
+
+export function cancelledPaymentRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'payment-1',
+    order_id: 'order-1',
+    merchant_id: 'merchant-1',
+    amount: 100,
+    currency: 'NGN',
+    cancel_order: {
+      cancelled_at: '2026-09-27T00:00:00Z',
+      shipping_status: 'cancelled',
+    },
+    ...overrides,
+  };
+}
+
+export function buildPaymentCandidates(rows: unknown[]) {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockResolvedValue({ data: rows, error: null }),
+  };
+}
+
+export function buildRefundCandidates(data: unknown) {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockResolvedValue({ data, error: null }),
+  };
+}
+
+export function buildSettledCandidates(data: unknown) {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockResolvedValue({ data, error: null }),
+  };
+}
+
+export function buildPaymentLookup() {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({
+      data: {
+        id: 'payment-1',
+        order_id: 'order-1',
+        merchant_id: 'merchant-1',
+        gateway_reference: 'PSK-1',
+        amount: 100,
+        currency: 'NGN',
+        status: 'completed',
+      },
+      error: null,
+    }),
+  };
+}
+
+export function buildReviewInsert(error: unknown = null) {
+  return { insert: vi.fn().mockResolvedValue({ error }) };
+}

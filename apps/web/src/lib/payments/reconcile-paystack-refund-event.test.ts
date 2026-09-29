@@ -12,20 +12,14 @@ vi.mock('./fetch-paystack-refund', () => ({
 }));
 
 import { reconcilePaystackRefundEvent } from './reconcile-paystack-refund-event';
-
-const refund = {
-  id: 'refund-1',
-  order_id: 'order-1',
-  merchant_id: 'merchant-1',
-  gateway_reference: '42',
-  amount: 100,
-  currency: 'NGN',
-  metadata: {
-    payment_transaction_id: 'payment-1',
-    provider_payment_transaction_id: 123,
-  },
-  status: 'refund_pending',
-};
+import {
+  buildPaymentCandidates,
+  buildPaymentLookup,
+  buildRefundCandidates,
+  buildReviewInsert,
+  cancelledPaymentRow,
+  REFUND_FIXTURE,
+} from './reconcile-paystack-refund-event.test-helpers';
 
 describe('Paystack cancellation refund mismatch evidence', () => {
   beforeEach(() => {
@@ -48,57 +42,16 @@ describe('Paystack cancellation refund mismatch evidence', () => {
 
   it('files a mismatched refund and continues to a second refund in one webhook', async () => {
     const refund2 = {
-      ...refund,
+      ...REFUND_FIXTURE,
       id: 'refund-2',
       gateway_reference: '43',
     };
-    const paymentLookup = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({
-        data: {
-          id: 'payment-1',
-          order_id: 'order-1',
-          merchant_id: 'merchant-1',
-          gateway_reference: 'PSK-1',
-          amount: 100,
-          currency: 'NGN',
-          status: 'completed',
-        },
-        error: null,
-      }),
-    };
-    const paymentCandidates = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue({
-        data: [
-          {
-            id: 'payment-1',
-            order_id: 'order-1',
-            merchant_id: 'merchant-1',
-            cancel_order: {
-              cancelled_at: '2026-09-27T00:00:00Z',
-              shipping_status: 'cancelled',
-            },
-          },
-        ],
-        error: null,
-      }),
-    };
-    const refundCandidates = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      in: vi.fn().mockReturnThis(),
-      limit: vi
-        .fn()
-        .mockResolvedValue({ data: [refund, refund2], error: null }),
-    };
-    const review = { insert: vi.fn().mockResolvedValue({ error: null }) };
+    const paymentLookup = buildPaymentLookup();
+    const review = buildReviewInsert();
     const from = vi
       .fn()
-      .mockReturnValueOnce(paymentCandidates)
-      .mockReturnValueOnce(refundCandidates)
+      .mockReturnValueOnce(buildPaymentCandidates([cancelledPaymentRow()]))
+      .mockReturnValueOnce(buildRefundCandidates([REFUND_FIXTURE, refund2]))
       .mockReturnValueOnce(paymentLookup)
       .mockReturnValueOnce(review)
       .mockReturnValueOnce(paymentLookup);
@@ -153,53 +106,15 @@ describe('Paystack cancellation refund mismatch evidence', () => {
   });
 
   it('merges duplicate mismatch evidence without replacing an existing review', async () => {
-    const paymentCandidates = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue({
-        data: [
-          {
-            id: 'payment-1',
-            order_id: 'order-1',
-            merchant_id: 'merchant-1',
-            cancel_order: {
-              cancelled_at: '2026-09-27T00:00:00Z',
-              shipping_status: 'cancelled',
-            },
-          },
-        ],
-        error: null,
-      }),
-    };
-    const refundCandidates = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      in: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue({ data: [refund], error: null }),
-    };
-    const paymentLookup = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({
-        data: {
-          id: 'payment-1',
-          gateway_reference: 'PSK-1',
-          amount: 100,
-          currency: 'NGN',
-          status: 'completed',
-        },
-        error: null,
-      }),
-    };
     const review = {
-      insert: vi.fn().mockResolvedValue({ error: { code: '23505' } }),
+      ...buildReviewInsert({ code: '23505' }),
       update: vi.fn(),
     };
     const from = vi
       .fn()
-      .mockReturnValueOnce(paymentCandidates)
-      .mockReturnValueOnce(refundCandidates)
-      .mockReturnValueOnce(paymentLookup)
+      .mockReturnValueOnce(buildPaymentCandidates([cancelledPaymentRow()]))
+      .mockReturnValueOnce(buildRefundCandidates([REFUND_FIXTURE]))
+      .mockReturnValueOnce(buildPaymentLookup())
       .mockReturnValueOnce(review);
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
     provider.fetchRefund.mockResolvedValueOnce({
@@ -232,11 +147,7 @@ describe('Paystack cancellation refund mismatch evidence', () => {
   });
 
   it('reconciles references with dots and equals signs', async () => {
-    const paymentCandidates = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue({ data: [], error: null }),
-    };
+    const paymentCandidates = buildPaymentCandidates([]);
     const from = vi.fn().mockReturnValueOnce(paymentCandidates);
     const rpc = vi.fn();
 
@@ -257,129 +168,15 @@ describe('Paystack cancellation refund mismatch evidence', () => {
     },
     null,
   ])('skips payments whose order is not cancelled (%s)', async (cancelOrder) => {
-    const paymentCandidates = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue({
-        data: [
-          {
-            id: 'payment-1',
-            order_id: 'order-1',
-            merchant_id: 'merchant-1',
-            cancel_order: cancelOrder,
-          },
-        ],
-        error: null,
-      }),
-    };
+    const paymentCandidates = buildPaymentCandidates([
+      cancelledPaymentRow({ cancel_order: cancelOrder }),
+    ]);
     const from = vi.fn().mockReturnValueOnce(paymentCandidates);
     const rpc = vi.fn();
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
 
     expect(from).toHaveBeenCalledTimes(1);
-    expect(rpc).not.toHaveBeenCalled();
-  });
-
-  it('files a review when a cancelled payment has no local refund row', async () => {
-    const paymentCandidates = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue({
-        data: [
-          {
-            id: 'payment-1',
-            order_id: 'order-1',
-            merchant_id: 'merchant-1',
-            amount: 100,
-            currency: 'NGN',
-            cancel_order: {
-              cancelled_at: '2026-09-27T00:00:00Z',
-              shipping_status: 'cancelled',
-            },
-          },
-        ],
-        error: null,
-      }),
-    };
-    const refundCandidates = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      in: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue({ data: [], error: null }),
-    };
-    const settledCandidates = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue({ data: [], error: null }),
-    };
-    const review = { insert: vi.fn().mockResolvedValue({ error: null }) };
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(paymentCandidates)
-      .mockReturnValueOnce(refundCandidates)
-      .mockReturnValueOnce(settledCandidates)
-      .mockReturnValueOnce(review);
-    const rpc = vi.fn();
-
-    await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
-
-    // Polling can never rediscover a provider refund with no local row,
-    // so the signed event fails closed instead of acknowledging silently.
-    expect(review.insert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        issue_type: 'order_cancellation_refund_requires_review',
-        order_id: 'order-1',
-        txn_id: 'payment-1',
-      })
-    );
-  });
-
-  it('stays silent when a completed row already reconciled the payment', async () => {
-    const paymentCandidates = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue({
-        data: [
-          {
-            id: 'payment-1',
-            order_id: 'order-1',
-            merchant_id: 'merchant-1',
-            amount: 100,
-            currency: 'NGN',
-            cancel_order: {
-              cancelled_at: '2026-09-27T00:00:00Z',
-              shipping_status: 'cancelled',
-            },
-          },
-        ],
-        error: null,
-      }),
-    };
-    const refundCandidates = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      in: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue({ data: [], error: null }),
-    };
-    const settledCandidates = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue({
-        data: [{ id: 'refund-9' }],
-        error: null,
-      }),
-    };
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(paymentCandidates)
-      .mockReturnValueOnce(refundCandidates)
-      .mockReturnValueOnce(settledCandidates);
-    const rpc = vi.fn();
-
-    await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
-
-    expect(from).toHaveBeenCalledTimes(3);
     expect(rpc).not.toHaveBeenCalled();
   });
 

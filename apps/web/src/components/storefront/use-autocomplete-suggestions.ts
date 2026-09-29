@@ -43,7 +43,15 @@ export function useAutocompleteSuggestions({
     onResultsRef.current = onResultsReceived;
   });
 
+  // The currently in-flight request, if any, so dismissing the popup can
+  // cancel it (see clearSuggestions).
+  const inFlightControllerRef = useRef<AbortController | null>(null);
+
   const clearSuggestions = () => {
+    // Abort the in-flight request so a late response can neither repaint
+    // the cleared results nor reopen the popup via onResultsReceived.
+    inFlightControllerRef.current?.abort();
+    inFlightControllerRef.current = null;
     setLoading(false);
     setSuggestions([]);
     setPopularSearches([]);
@@ -63,6 +71,7 @@ export function useAutocompleteSuggestions({
     // "iphone" within the debounce window — debouncedValue never changes, so the
     // effect would not re-run and the dropdown would be left empty).
     const controller = new AbortController();
+    inFlightControllerRef.current = controller;
     let isMounted = true;
     setLoading(true);
     // A previous query may still be marked settled while this request is
@@ -89,7 +98,10 @@ export function useAutocompleteSuggestions({
           suggestions?: AutocompleteProduct[];
           popularSearches?: AutocompletePopularSearch[];
         }) => {
-          if (!isMounted) {
+          // Skip responses for requests cancelled by supersession, unmount,
+          // or popup dismissal (clearSuggestions aborts the in-flight
+          // request so it can neither repaint nor reopen the popup).
+          if (!isMounted || controller.signal.aborted) {
             return;
           }
           setSuggestions(data.suggestions || []);
@@ -122,6 +134,9 @@ export function useAutocompleteSuggestions({
     return () => {
       isMounted = false;
       controller.abort();
+      if (inFlightControllerRef.current === controller) {
+        inFlightControllerRef.current = null;
+      }
     };
   }, [debouncedValue, merchantId]);
 

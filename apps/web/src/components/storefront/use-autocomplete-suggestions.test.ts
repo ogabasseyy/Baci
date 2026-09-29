@@ -249,4 +249,51 @@ describe('useAutocompleteSuggestions', () => {
       result.current.suggestions.find((item) => item.id === 'stale')
     ).toBeUndefined();
   });
+
+  it('aborts the in-flight request when suggestions are cleared', async () => {
+    let resolveJson: (value: unknown) => void = () => undefined;
+    const jsonPromise = new Promise((resolve) => {
+      resolveJson = resolve;
+    });
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => jsonPromise })
+    ) as unknown as typeof fetch;
+    const onResultsReceived = vi.fn();
+
+    const { result } = renderHook(() =>
+      useAutocompleteSuggestions({
+        debouncedValue: 'iph',
+        merchantId: 'm1',
+        onResultsReceived,
+      })
+    );
+
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    });
+    const firstCall = vi.mocked(globalThis.fetch).mock.calls[0];
+    const signal = firstCall?.[1]?.signal as AbortSignal | undefined;
+    expect(signal?.aborted).toBe(false);
+
+    // Dismissing the popup (Escape / clear) cancels the pending fetch.
+    act(() => {
+      result.current.clearSuggestions();
+    });
+    expect(signal?.aborted).toBe(true);
+    expect(result.current.loading).toBe(false);
+
+    // The late response must neither repaint nor reopen the popup.
+    await act(async () => {
+      resolveJson({
+        suggestions: [{ id: 'late', name: 'Late' }],
+        popularSearches: [],
+      });
+      await jsonPromise;
+    });
+
+    expect(result.current.suggestions).toEqual([]);
+    expect(result.current.settledQuery).toBeNull();
+    expect(result.current.loading).toBe(false);
+    expect(onResultsReceived).not.toHaveBeenCalled();
+  });
 });

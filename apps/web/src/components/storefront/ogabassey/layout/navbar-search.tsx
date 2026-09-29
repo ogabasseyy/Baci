@@ -1,11 +1,38 @@
 'use client';
 
 import { Search } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import type { SearchAutocompleteProps } from '@/components/storefront/search-autocomplete';
+
+/**
+ * Syncs the persistent navbar input when the active search route's query
+ * changes underneath it (e.g. following a "Did you mean" link): the
+ * shared layout keeps NavbarSearch mounted across that navigation, so
+ * without this the input would keep showing the old term and Enter would
+ * navigate back to the misspelled search. Reads the route inside its own
+ * Suspense boundary so static prerenders never touch useSearchParams.
+ */
+function SearchRouteQuerySync({ onSync }: { onSync: (query: string) => void }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const routeQuery =
+    pathname !== null && pathname.endsWith('/search')
+      ? (searchParams.get('q') ?? '')
+      : null;
+
+  useEffect(() => {
+    // Runs only when the route query changes, so in-progress edits are
+    // preserved while the route is unchanged; navigation always wins.
+    if (routeQuery !== null) {
+      onSync(routeQuery);
+    }
+  }, [routeQuery, onSync]);
+
+  return null;
+}
 
 type SearchAutocompleteComponent = React.ComponentType<SearchAutocompleteProps>;
 
@@ -113,6 +140,9 @@ export function NavbarSearch({
   if (isBlogPage) {
     return (
       <form onSubmit={handleSubmit} className="ogabassey-navbar-search">
+        <Suspense>
+          <SearchRouteQuerySync onSync={setSearchQuery} />
+        </Suspense>
         <Input
           type="search"
           value={searchQuery}
@@ -131,8 +161,12 @@ export function NavbarSearch({
 
   if (SearchAutocompleteComponent) {
     return (
-      <SearchAutocompleteComponent
-        merchantId={merchantId}
+      <>
+        <Suspense>
+          <SearchRouteQuerySync onSync={setSearchQuery} />
+        </Suspense>
+        <SearchAutocompleteComponent
+          merchantId={merchantId}
         value={searchQuery}
         onChange={setSearchQuery}
         onSelectProduct={handleProductSelect}
@@ -144,12 +178,16 @@ export function NavbarSearch({
         placeholder="Search products, brands and categories"
         className={SEARCH_INPUT_CLASS_NAME}
         autoFocus={shouldAutoFocusAutocomplete}
-      />
+        />
+      </>
     );
   }
 
   return (
     <form onSubmit={handleSubmit} className="ogabassey-navbar-search">
+      <Suspense>
+        <SearchRouteQuerySync onSync={setSearchQuery} />
+      </Suspense>
       <Search className="ogabassey-navbar-search__icon" aria-hidden="true" />
       <Input
         type="search"

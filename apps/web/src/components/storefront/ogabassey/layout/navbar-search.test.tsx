@@ -1,14 +1,22 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
+  // Route-reader mocks for the search-route query sync. The default is a
+  // non-search route so the pre-existing tests exercise the navbar with no
+  // route query syncing underneath them.
+  pathname: '/ogabassey',
+  query: '',
 }));
 
 vi.mock('next/navigation', () => ({
+  usePathname: () => mocks.pathname,
   useRouter: vi.fn(() => ({
     push: mocks.push,
   })),
+  useSearchParams: () => new URLSearchParams({ q: mocks.query }),
 }));
 
 vi.mock('@/components/storefront/search-autocomplete', () => ({
@@ -183,5 +191,73 @@ describe('NavbarSearch', () => {
     expect(mocks.push).toHaveBeenCalledWith(
       '/ogabassey/blog?search=flash%20sale'
     );
+  });
+});
+
+describe('NavbarSearch search-route query sync', () => {
+  beforeEach(() => {
+    mocks.pathname = '/ogabassey/search';
+    mocks.query = 'misspelled';
+    mocks.push.mockClear();
+  });
+
+  function renderNavbar() {
+    return render(
+      <NavbarSearch
+        basePath="/ogabassey"
+        isBlogPage={false}
+        merchantId="merchant-1"
+      />
+    );
+  }
+
+  function rerenderNavbar(rerender: (ui: ReactNode) => void) {
+    rerender(
+      <NavbarSearch
+        basePath="/ogabassey"
+        isBlogPage={false}
+        merchantId="merchant-1"
+      />
+    );
+  }
+
+  function searchInput() {
+    return screen.getByRole('searchbox', {
+      name: /search products/i,
+    }) as HTMLInputElement;
+  }
+
+  it('adopts the active search route query on mount', () => {
+    renderNavbar();
+
+    expect(searchInput().value).toBe('misspelled');
+  });
+
+  it('follows the route query when navigation changes it (did-you-mean)', () => {
+    const { rerender } = renderNavbar();
+    expect(searchInput().value).toBe('misspelled');
+
+    mocks.query = 'corrected';
+    rerenderNavbar(rerender);
+
+    expect(searchInput().value).toBe('corrected');
+  });
+
+  it('preserves in-progress edits while the route query is unchanged', () => {
+    const { rerender } = renderNavbar();
+
+    fireEvent.change(searchInput(), { target: { value: 'misspelled edit' } });
+    rerenderNavbar(rerender);
+
+    expect(searchInput().value).toBe('misspelled edit');
+  });
+
+  it('leaves the input alone on non-search routes', () => {
+    mocks.pathname = '/ogabassey';
+    renderNavbar();
+
+    fireEvent.change(searchInput(), { target: { value: 'typed' } });
+
+    expect(searchInput().value).toBe('typed');
   });
 });

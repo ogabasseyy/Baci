@@ -1,4 +1,5 @@
 import type React from 'react';
+import type { OgabasseyHomeHeroSnapshot } from '@/lib/ogabassey-home-hero-snapshot-types';
 import { GadgetPattern } from './GadgetPattern';
 import { HeroDesktopGrid } from './hero-desktop-grid';
 import { HeroMobileCarousel } from './hero-mobile-carousel';
@@ -22,6 +23,9 @@ interface HeroProps {
    *  each viewport is the eager LCP element. An empty, published feed keeps the
    *  same viewport geometry with the baked product-agnostic banner. */
   slides: LaunchProductSlide[];
+  /** Same-origin AVIF snapshot for `slides[0]`, resolved server-side.
+   *  Mobile carousel only; the desktop grid always renders CDN bytes. */
+  slideZeroSnapshot?: OgabasseyHomeHeroSnapshot | null;
 }
 
 function HeroEmptyGeometry() {
@@ -54,6 +58,7 @@ export const Hero: React.FC<HeroProps> = ({
   omitMobileCarousel = false,
   prioritizeMobileHeroImage,
   slides,
+  slideZeroSnapshot,
 }) => {
   const shouldPrioritizeMobileHeroImage =
     prioritizeMobileHeroImage ?? !omitDocumentHeading;
@@ -85,6 +90,7 @@ export const Hero: React.FC<HeroProps> = ({
               <HeroMobileCarousel
                 prioritizeFirstImage={shouldPrioritizeMobileHeroImage}
                 slides={slides}
+                slideZeroSnapshot={slideZeroSnapshot}
               />
             )}
             <HeroDesktopGrid slides={slides} />

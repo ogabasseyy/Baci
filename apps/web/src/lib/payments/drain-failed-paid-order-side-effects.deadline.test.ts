@@ -79,16 +79,18 @@ describe('drainFailedPaidOrderSideEffects finalize deadline', () => {
       new Promise<never>(() => {})
     );
 
+    // 200s clears the full 135s sender budget, so the hanging
+    // finalize starts and the race records the overrun.
     const draining = drainFailedPaidOrderSideEffects({
-      deadlineMs: 1_030_000,
+      deadlineMs: 1_200_000,
       finalizePayment: mocks.finalizeOrderGatewayPayment,
       fileWedgeReview: vi.fn(),
       scheduleAfter,
       supabase,
     });
-    // The deadline race fires 10s before the pass ends (30s budget - 10s
-    // buffer), so the overrun is recorded with time left to report it.
-    await vi.advanceTimersByTimeAsync(20_000);
+    // The deadline race fires 10s before the pass ends (200s budget -
+    // 10s buffer), so the overrun is recorded with time left to report it.
+    await vi.advanceTimersByTimeAsync(190_000);
     const summary = await draining;
 
     expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledTimes(1);
@@ -110,21 +112,24 @@ describe('drainFailedPaidOrderSideEffects finalize deadline', () => {
     });
 
     await drainFailedPaidOrderSideEffects({
-      deadlineMs: 1_030_000,
+      deadlineMs: 1_200_000,
       finalizePayment: mocks.finalizeOrderGatewayPayment,
       fileWedgeReview: vi.fn(),
       scheduleAfter,
       supabase,
     });
 
-    // The signal shares the deadline race's 10s buffer (30s budget - 10s):
-    // the orphaned finalize aborts with time left to persist its own
-    // failure instead of delivering email after the caller gave up.
+    // The signal shares the deadline race's 10s buffer (200s budget -
+    // 10s): the orphaned finalize aborts with time left to persist its
+    // own failure instead of delivering email after the caller gave up.
     expect(timeoutSpy).toHaveBeenCalledTimes(1);
-    expect(timeoutSpy).toHaveBeenCalledWith(20_000);
+    expect(timeoutSpy).toHaveBeenCalledWith(190_000);
     const signal = mocks.finalizeOrderGatewayPayment.mock.calls[0][0]
       .signal as AbortSignal;
     expect(signal).toBe(timeoutSpy.mock.results[0]?.value);
+    expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledWith(
+      expect.objectContaining({ fallbackDeadlineMs: 1_190_000 })
+    );
   });
 
   it('leaves finalize unbound when the drain has no deadline', async () => {
@@ -156,7 +161,7 @@ describe('drainFailedPaidOrderSideEffects finalize deadline', () => {
     });
 
     const summary = await drainFailedPaidOrderSideEffects({
-      deadlineMs: Date.now() + 120_000,
+      deadlineMs: Date.now() + 200_000,
       finalizePayment: mocks.finalizeOrderGatewayPayment,
       fileWedgeReview: vi.fn(),
       scheduleAfter,
@@ -165,6 +170,31 @@ describe('drainFailedPaidOrderSideEffects finalize deadline', () => {
 
     expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledTimes(1);
     expect(summary.drained).toEqual([{ orderId: 'order-1' }]);
+    expect(summary.failed).toEqual([]);
+  });
+
+  it('stops the drain when only part of the sender budget remains', async () => {
+    const supabase = buildSupabase({ data: [failedRow] });
+    mocks.finalizeOrderGatewayPayment.mockResolvedValue({
+      healed: false,
+      kind: 'completed',
+      orderNumber: 'ORD-1',
+    });
+
+    // 60s clears the old 20s check but not the full 135s four-attempt
+    // sender budget: starting finalize would abort mid-send into
+    // delivery_uncertain, marking the email completed instead of
+    // leaving the row failed for the next drain.
+    const summary = await drainFailedPaidOrderSideEffects({
+      deadlineMs: Date.now() + 60_000,
+      finalizePayment: mocks.finalizeOrderGatewayPayment,
+      fileWedgeReview: vi.fn(),
+      scheduleAfter,
+      supabase,
+    });
+
+    expect(mocks.finalizeOrderGatewayPayment).not.toHaveBeenCalled();
+    expect(summary.drained).toEqual([]);
     expect(summary.failed).toEqual([]);
   });
 });

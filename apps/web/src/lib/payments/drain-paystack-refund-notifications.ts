@@ -50,6 +50,7 @@ interface NotificationRow {
     | 'failed_merchant_push';
   claim_token: string;
   created_at: string;
+  generation: number;
 }
 
 export async function drainPaystackRefundNotifications(
@@ -294,9 +295,38 @@ export async function drainPaystackRefundNotifications(
       .eq('id', row.id)
       .eq('claim_token', row.claim_token)
       .eq('status', 'processing')
+      // A failure recorded mid-claim bumps the generation: concluding
+      // on the stale read would lose the fresh contradiction, so the
+      // finish must fail and the row requeue instead.
+      .eq('generation', row.generation)
       .select('id')
       .maybeSingle();
     if (finishError || !finished) {
+      // The claim may still be ours with a newer generation (a failure
+      // landed mid-flight): requeue it for the next sweep rather than
+      // counting a failure. Terminalized or landed rows match nothing
+      // and keep the failure below.
+      const { data: requeued, error: requeueError } = await supabase
+        .from('paystack_cancellation_refund_notifications')
+        .update({
+          status: 'pending',
+          claimed_at: null,
+          claim_token: null,
+          last_error: null,
+        })
+        .eq('id', row.id)
+        .eq('claim_token', row.claim_token)
+        .eq('status', 'processing')
+        .select('id')
+        .maybeSingle();
+      if (!requeueError && requeued) {
+        logger.info({
+          message:
+            'Refund notification requeued: fresh failures arrived during its claim',
+          notificationId: row.id,
+        });
+        continue;
+      }
       logger.error({
         message: 'Refund notification delivery outcome could not be persisted',
         notificationId: row.id,

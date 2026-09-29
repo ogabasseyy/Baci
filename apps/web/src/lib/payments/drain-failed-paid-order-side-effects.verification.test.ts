@@ -150,7 +150,8 @@ describe('drainFailedPaidOrderSideEffects verification', () => {
       kind: 'completed',
       orderNumber: 'ORD-1',
     });
-    const now = vi.spyOn(Date, 'now').mockReturnValue(1_200_000);
+    // 170s clears the full 135s sender budget so verification runs.
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_100_000);
 
     try {
       const summary = await drainFailedPaidOrderSideEffects({

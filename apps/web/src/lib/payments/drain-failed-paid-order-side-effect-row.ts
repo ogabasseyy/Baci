@@ -11,6 +11,7 @@ import {
   isTerminalGatewayVerificationReason,
   verifyGatewayCharge,
 } from '@/lib/payments/verify-gateway-charge';
+import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail';
 
 export type DrainCandidateRow = {
   order_id: string;
@@ -144,12 +145,17 @@ export async function drainFailedPaidOrderSideEffectRow({
       gatewayResponse = verification.response;
     }
 
-    // Reserve budget before starting finalize: its side effects (email
-    // retries, settlement writes) cannot finish inside a sliver of
-    // remaining pass time; rows we never start stay failed for the next
-    // drain.
+    // Reserve the full paid-email retry budget before starting
+    // finalize: the default 20s check would admit a pass too short for
+    // the uncapped four-attempt sender loop, and the finalize signal
+    // would then abort mid-send into delivery_uncertain — marking the
+    // email completed instead of leaving the row failed for the next
+    // drain. Rows we never start stay failed for the next drain.
     try {
-      assertRefundNotificationSendTime(deadlineMs);
+      assertRefundNotificationSendTime(
+        deadlineMs,
+        zeptomailSendAdmissionBudgetMs()
+      );
     } catch {
       logger.info({
         message:
@@ -171,6 +177,11 @@ export async function drainFailedPaidOrderSideEffectRow({
     const outcome = await awaitRefundNotificationDeadline(
       finalizePayment({
         actor: 'cron:reconcile-gateway-paid-orders:drain',
+        // Match the signal's 10s buffer: the platform-sender fallback
+        // declines unless its own attempt fits before the cutoff.
+        ...(deadlineMs !== undefined && {
+          fallbackDeadlineMs: deadlineMs - 10_000,
+        }),
         gateway,
         gatewayResponse,
         orderId,

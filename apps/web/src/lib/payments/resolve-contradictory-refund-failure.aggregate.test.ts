@@ -39,7 +39,10 @@ function replacement(overrides: Record<string, unknown> = {}) {
     currency: 'NGN',
     gateway: 'paystack',
     id: 'refund-2',
-    metadata: { payment_transaction_id: 'payment-1' },
+    metadata: {
+      payment_transaction_id: 'payment-1',
+      provider_refund_status: 'processed',
+    },
     ...overrides,
   };
 }
@@ -107,7 +110,10 @@ describe('resolveContradictoryRefundFailure aggregate coverage', () => {
             data: [
               replacement({
                 id: 'refund-2',
-                metadata: { payment_transaction_id: 'payment-9' },
+                metadata: {
+                  payment_transaction_id: 'payment-9',
+                  provider_refund_status: 'processed',
+                },
               }),
               replacement({ currency: 'USD', id: 'refund-3' }),
               replacement({ gateway: 'korapay', id: 'refund-4' }),
@@ -168,7 +174,10 @@ describe('resolveContradictoryRefundFailure aggregate coverage', () => {
                 amount: 100,
                 created_at: '2026-09-27T14:30:00Z',
                 id: 'refund-4',
-                metadata: { payment_transaction_id: 'payment-3' },
+                metadata: {
+                  payment_transaction_id: 'payment-3',
+                  provider_refund_status: 'processed',
+                },
               }),
             ],
             error: null,

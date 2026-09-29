@@ -202,6 +202,17 @@ BEGIN
   WHERE id = v_refund.id;
 
   IF v_status IN ('failed', 'needs-attention') THEN
+    -- A failure arriving during an active claim must not be lost when
+    -- the worker concludes on older evidence: bump the generation (the
+    -- claim itself is never clobbered) so the worker's finish detects
+    -- the fresh contradiction and requeues it for the next sweep. Runs
+    -- before the reset below so a recycled row keeps generation 0.
+    UPDATE public.paystack_cancellation_refund_notifications
+    SET generation = generation + 1
+    WHERE order_id = v_order.id
+      AND merchant_id = v_order.merchant_id
+      AND event_type = 'failed_merchant_push'
+      AND status IN ('pending', 'processing');
     -- A later failure on another leg (or a contradictory failure after
     -- the order became refunded) must re-alert: reset a settled row to
     -- claimable. Queued rows already guarantee a covering alert.
@@ -215,7 +226,8 @@ BEGIN
       claim_token = NULL,
       last_error = NULL,
       sent_at = NULL,
-      created_at = now()
+      created_at = now(),
+      generation = 0
     WHERE paystack_cancellation_refund_notifications.status IN
       ('sent', 'failed', 'delivery_uncertain');
     RETURN v_status;

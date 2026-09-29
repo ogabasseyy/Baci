@@ -48,6 +48,7 @@ export function database(
     event_type: eventType,
     claim_token: 'claim-1',
     created_at: '2026-09-27T12:00:00Z',
+    generation: 0,
   };
   const finish = {
     update: vi.fn().mockReturnThis(),

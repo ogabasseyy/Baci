@@ -186,4 +186,16 @@ describe('discovery product intent', () => {
     expect(matchesDiscoveryProductIntent({ name: 'Phone Accessories Bundle', category: 'Phone Accessories' }, 'cheap phone')).toBe(false);
     expect(matchesDiscoveryProductIntent({ name: '20 W Fast Charger', category: 'Accessories' }, '20w charger')).toBe(true);
   });
+
+  it('keeps an explicit phone accessories request out of handset results', () => {
+    expect(matchesDiscoveryProductIntent({
+      name: 'Protective Phone Case', category: 'Phone Accessories',
+    }, 'phone accessories')).toBe(true);
+    expect(matchesDiscoveryProductIntent({
+      name: 'USB-C Phone Charger', category: 'Phone Accessories',
+    }, 'phone accessories')).toBe(true);
+    expect(matchesDiscoveryProductIntent({
+      name: 'iPhone 15', category: 'Smartphones',
+    }, 'phone accessories')).toBe(false);
+  });
 });

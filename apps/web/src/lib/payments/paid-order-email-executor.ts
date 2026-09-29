@@ -85,12 +85,14 @@ function validateRichPaidOrder(order: RichPaidOrder) {
 
 export function buildEmailExecutor({
   actor,
+  fallbackDeadlineMs,
   merchantDetails,
   merchantFetchError,
   order,
   signal,
 }: {
   actor: string;
+  fallbackDeadlineMs?: number;
   merchantDetails: MerchantDetails | null;
   merchantFetchError: { code?: string; message?: string } | null;
   order: RichPaidOrder;
@@ -152,6 +154,7 @@ export function buildEmailExecutor({
       },
       clientReference: `order:${validatedOrder.id}:paid_email`,
       emailType: 'orders',
+      fallbackDeadlineMs,
       fromName: getFromName(validatedMerchantDetails),
       htmlContent: generateOrderConfirmationEmail(emailData),
       replyTo: resolveMerchantReplyTo({

@@ -69,4 +69,37 @@ describe('drainFailedOrderCancellationSideEffects candidate selection', () => {
     );
     expect(summary.drained).toEqual([{ orderId: 'order-old', step: 'refund' }]);
   });
+
+  it('carries the exhausted state into deferred executions', async () => {
+    const exhausted = {
+      attempts: 5,
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-deferred',
+      step: 'refund',
+    };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([exhausted]))
+      .mockReturnValueOnce(
+        terminalQuery({ id: 'order-deferred', merchant_id: 'merchant-1' })
+      )
+      .mockReturnValueOnce(terminalQuery({ id: 'merchant-1' }));
+
+    await drainFailedOrderCancellationSideEffects({
+      limit: 1,
+      sendCancellationEmail: vi.fn(),
+      supabase: { from } as never,
+    });
+
+    // Without the flag a 429 is recorded as an ordinary failure the
+    // capped failed-queue never reselects, losing the leg without its
+    // exhausted-rate-limit review.
+    const [call] = mocks.run.mock.calls;
+    await (call[0] as { execute: () => Promise<unknown> }).execute();
+    expect(mocks.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ isLastAttempt: true })
+    );
+  });
 });

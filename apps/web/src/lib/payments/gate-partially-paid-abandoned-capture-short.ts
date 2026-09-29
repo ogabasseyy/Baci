@@ -41,6 +41,7 @@ async function fileShortCaptureReview(
   const { error } = await supabase.from('reconciliation_review').insert({
     candidates: null,
     issue_type: 'partial_capture_short_requires_review',
+    merchant_id: attempt.merchant_id,
     metadata: {
       capture_amount_minor: captureMinor,
       currency: typeof capture.currency === 'string' ? capture.currency : 'NGN',

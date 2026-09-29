@@ -191,6 +191,7 @@ describe('gatePartiallyPaidAbandonedCapture reviews', () => {
     expect(db.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_type: 'merchant_invoice_partial_payment_conflict',
+        merchant_id: 'merchant-1',
         txn_id: 'attempt-1',
       })
     );

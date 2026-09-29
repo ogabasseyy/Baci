@@ -72,6 +72,9 @@ export interface RunPaidOrderSideEffectsArgs {
   // Aborts the paid-email send when the caller runs under a pass
   // deadline; the DB-local executors ignore it.
   signal?: AbortSignal;
+  // Bounds the paid-email platform-sender fallback to the pass deadline
+  // so it declines unless its own attempt fits; unset when unbounded.
+  fallbackDeadlineMs?: number;
   supabase: ServiceRoleClient;
   transaction: PaidOrderSideEffectTransaction;
 }

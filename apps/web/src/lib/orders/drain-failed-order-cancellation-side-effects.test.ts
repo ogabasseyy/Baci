@@ -238,7 +238,7 @@ describe('drainFailedOrderCancellationSideEffects', () => {
     );
   });
 
-  it('never marks deferred rows as the last attempt', async () => {
+  it('marks an already-exhausted deferred row as the last attempt', async () => {
     const deferred = {
       attempts: 4,
       claimed_at: '2026-07-21T00:00:00Z',
@@ -264,9 +264,40 @@ describe('drainFailedOrderCancellationSideEffects', () => {
     await (
       mocks.run.mock.calls[0][0] as { execute: () => Promise<unknown> }
     ).execute();
-    // Deferred rows reselect without the attempts cap, so a transient
-    // failure there still retries: filing last-attempt evidence would be
-    // a false terminalization.
+    // A 429 on this row is recorded as an ordinary failure the capped
+    // failed-queue never reselects, so without the flag the leg would
+    // disappear without its exhausted-rate-limit review.
+    expect(mocks.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ isLastAttempt: true })
+    );
+  });
+
+  it('runs a fresh deferred row as a non-final attempt', async () => {
+    const deferred = {
+      attempts: 1,
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-1',
+      step: 'refund',
+    };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([deferred]))
+      .mockReturnValueOnce(
+        terminalQuery({ id: 'order-1', merchant_id: 'merchant-1' })
+      )
+      .mockReturnValueOnce(terminalQuery({ id: 'merchant-1' }));
+
+    await drainFailedOrderCancellationSideEffects({
+      sendCancellationEmail: vi.fn(),
+      supabase: { from } as never,
+    });
+
+    expect(mocks.run).toHaveBeenCalledTimes(1);
+    await (
+      mocks.run.mock.calls[0][0] as { execute: () => Promise<unknown> }
+    ).execute();
     expect(mocks.execute).toHaveBeenCalledWith(
       expect.objectContaining({ isLastAttempt: false })
     );

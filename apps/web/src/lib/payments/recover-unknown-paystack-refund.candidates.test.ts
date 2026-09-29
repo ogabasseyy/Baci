@@ -168,6 +168,11 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
 
   it('files every stalled match when the reference repeats on cancelled orders', async () => {
     const rpc = reviewRpc();
+    const cancelled = [
+      cancelledOrder('order-1'),
+      cancelledOrder('order-2'),
+      cancelledOrder('order-3'),
+    ];
     const from = vi
       .fn()
       .mockReturnValueOnce(selectQuery([]))
@@ -178,13 +183,8 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
           payment('pay-stalled-3', 'order-3', 'merchant-3'),
         ])
       )
-      .mockReturnValueOnce(
-        selectQuery([
-          cancelledOrder('order-1'),
-          cancelledOrder('order-2'),
-          cancelledOrder('order-3'),
-        ])
-      );
+      .mockReturnValueOnce(selectQuery(cancelled))
+      .mockReturnValueOnce(selectQuery(cancelled));
     const supabase = { from, rpc } as unknown as SupabaseClient;
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
@@ -245,24 +245,42 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it('withholds stalled matches on active orders from the cancellation queue', async () => {
+  it('files stalled matches on active orders into the non-cancellation queue', async () => {
     const rpc = reviewRpc();
+    const active = [
+      {
+        cancelled_at: null,
+        id: 'order-9',
+        order_number: 'ORD-9',
+        shipping_status: 'processing',
+      },
+    ];
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
     const from = vi
       .fn()
       .mockReturnValueOnce(selectQuery([]))
       .mockReturnValueOnce(
         selectQuery([payment('pay-stalled', 'order-9', 'merchant-9')])
       )
-      .mockReturnValueOnce(
-        selectQuery([
-          { cancelled_at: null, id: 'order-9', shipping_status: 'processing' },
-        ])
-      );
+      .mockReturnValueOnce(selectQuery(active))
+      .mockReturnValueOnce(selectQuery(active))
+      .mockReturnValueOnce({ insert: reviewInsert });
     const supabase = { from, rpc } as unknown as SupabaseClient;
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
+    // Withheld from the cancellation queue so it cannot absorb a future
+    // genuine cancellation's evidence — but retained for operations, or
+    // a later charge recovery could mark the refunded order paid.
     expect(rpc).not.toHaveBeenCalled();
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'provider_refund_outside_cancellation',
+        merchant_id: 'merchant-9',
+        order_id: 'order-9',
+        metadata: expect.objectContaining({ provider_refund_id: 202 }),
+      })
+    );
     expect(mocks.loggerInfo).toHaveBeenCalledWith(
       expect.objectContaining({ refundId: 202 })
     );

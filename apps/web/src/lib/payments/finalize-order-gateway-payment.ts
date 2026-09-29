@@ -33,6 +33,7 @@ export async function finalizeOrderGatewayPayment({
   actor,
   scheduleAfter,
   signal,
+  fallbackDeadlineMs,
 }: FinalizeOrderGatewayPaymentArgs): Promise<FinalizeOrderGatewayPaymentOutcome> {
   const result = await resolveOrderGatewayCompletion({
     actor,
@@ -208,6 +209,7 @@ export async function finalizeOrderGatewayPayment({
   const sideEffectArgs = {
     actor,
     externalGatewayReference: reference,
+    fallbackDeadlineMs,
     gatewayResponse,
     order: richOrder,
     scheduleAfter,

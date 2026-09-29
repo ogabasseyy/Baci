@@ -28,6 +28,7 @@ import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airpo
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
+import { validateRedvaultLivePilotOrder } from '@/lib/checkout/redvault-live-pilot';
 import { redvaultOrderDraftFulfillment } from '@/lib/checkout/redvault-order-draft-fulfillment';
 import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
 import { revalidateOrderProductCaches } from '@/lib/checkout/revalidate-order-product-caches';
@@ -1574,6 +1575,39 @@ export async function POST(request: NextRequest) {
             error: 'No eligible REDVAULT items are in this order',
           },
           { status: 400 }
+        );
+      }
+    }
+
+    if (
+      redvaultRequested &&
+      redvaultQuote &&
+      process.env.REDVAULT_LIVE_PILOT_ENABLED === 'true'
+    ) {
+      if (
+        !validateRedvaultLivePilotOrder({
+          userId: resolvedUserId,
+          merchantId: merchant_id,
+          currency: merchantResolvedCurrency,
+          items: redvaultQuote.lines,
+          subtotalKobo: redvaultQuote.productSubtotalKobo,
+          discountKobo: redvaultQuote.discountKobo,
+          shippingFee: shippingFeeValue,
+          assuranceAmount: orderItemsPayload.reduce(
+            (sum, item) => sum + item.assurance_fee,
+            0
+          ),
+          wrappingFee: giftWrappingFeeValue,
+          walletAmount: Number(use_wallet_credit ? wallet_amount : 0),
+          savingsAmount: Number(use_savings_credit ? savings_amount : 0),
+        })
+      ) {
+        return NextResponse.json(
+          {
+            code: 'REDVAULT_PILOT_UNAVAILABLE',
+            error: 'REDVAULT is unavailable',
+          },
+          { status: 409, headers: { 'Cache-Control': 'no-store' } }
         );
       }
     }

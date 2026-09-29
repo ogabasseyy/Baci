@@ -51,7 +51,7 @@ function renderChoice(
 describe('RedvaultPaymentChoice', () => {
   it.each([
     19_999_999, 20_000_000, 20_000_001,
-  ])('shows both MOU tiers without deriving a discount from eligible subtotal %s', (eligibleSubtotalKobo) => {
+  ])('shows fixed 5% savings without deriving a discount from eligible subtotal %s', (eligibleSubtotalKobo) => {
     renderChoice({
       summary: {
         ...summary,
@@ -62,22 +62,15 @@ describe('RedvaultPaymentChoice', () => {
       },
     });
 
-    expect(
-      screen.getByText(
-        '10% off when the eligible pre-discount subtotal is below ₦200,000; 5% at ₦200,000 or more. Excluded products and fees do not count toward this threshold.'
-      )
-    ).toBeTruthy();
+    expect(screen.getByText('Save 5% on eligible items only.')).toBeTruthy();
     expect(screen.getByText('-₦123.45')).toBeTruthy();
     expect(screen.getByText('₦543,210.00')).toBeTruthy();
-    expect(screen.queryByText('Save 5% on eligible items only.')).toBeNull();
   });
 
-  it('explains the threshold before a server quote exists', () => {
+  it('explains the fixed discount before a server quote exists', () => {
     renderChoice({ summary: undefined });
 
-    expect(
-      screen.getByText(/10% off when the eligible pre-discount subtotal/)
-    ).toBeTruthy();
+    expect(screen.getByText('Save 5% on eligible items only.')).toBeTruthy();
     expect(screen.queryByText('-₦50,000.00')).toBeNull();
   });
 

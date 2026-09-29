@@ -5,20 +5,33 @@ import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
 
 type AvailabilityResponse = { available: boolean; reason: string };
 
-export function useRedvaultPaymentAvailability(merchantId?: string | null) {
-  const [availability, setAvailability] = useState<AvailabilityResponse>({
-    available: false,
-    reason: 'unavailable',
+export function useRedvaultPaymentAvailability(
+  merchantId?: string | null,
+  productId?: string | null,
+  authKey?: string | null
+) {
+  const requestKey = `${merchantId ?? ''}:${productId ?? ''}:${authKey ?? ''}`;
+  const [availability, setAvailability] = useState<{
+    key: string;
+    value: AvailabilityResponse;
+  }>({
+    key: '',
+    value: { available: false, reason: 'unavailable' },
   });
 
   useEffect(() => {
     if (merchantId !== OGABASSEY_MERCHANT_ID) {
-      setAvailability({ available: false, reason: 'merchant_unavailable' });
+      setAvailability({
+        key: requestKey,
+        value: { available: false, reason: 'merchant_unavailable' },
+      });
       return;
     }
 
     const controller = new AbortController();
-    fetch(`/api/payments/redvault/availability?merchant_id=${merchantId}`, {
+    const query = new URLSearchParams({ merchant_id: merchantId });
+    if (productId) query.set('product_id', productId);
+    fetch(`/api/payments/redvault/availability?${query}`, {
       cache: 'no-store',
       signal: controller.signal,
     })
@@ -37,18 +50,25 @@ export function useRedvaultPaymentAvailability(merchantId?: string | null) {
         return body as AvailabilityResponse;
       })
       .then((result) => {
-        if (!controller.signal.aborted) setAvailability(result);
+        if (!controller.signal.aborted) {
+          setAvailability({ key: requestKey, value: result });
+        }
       })
       .catch(() => {
         if (!controller.signal.aborted) {
-          setAvailability({ available: false, reason: 'unavailable' });
+          setAvailability({
+            key: requestKey,
+            value: { available: false, reason: 'unavailable' },
+          });
         }
       });
 
     return () => controller.abort();
-  }, [merchantId]);
+  }, [merchantId, productId, authKey, requestKey]);
 
   return merchantId === OGABASSEY_MERCHANT_ID
-    ? availability
+    ? availability.key === requestKey
+      ? availability.value
+      : { available: false, reason: 'unavailable' }
     : { available: false, reason: 'merchant_unavailable' };
 }

@@ -56,6 +56,27 @@ describe('getRedvaultPaymentAvailability', () => {
     );
   });
 
+  it('includes the single cart product in the availability query when supplied', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ available: true, reason: 'private_live_pilot' }),
+    } as Response);
+    const { getRedvaultPaymentAvailability } = await import('./redvault');
+
+    await expect(
+      getRedvaultPaymentAvailability(
+        merchantId,
+        '11111111-1111-4111-8111-111111111111'
+      )
+    ).resolves.toBe(true);
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        search: `?merchant_id=${merchantId}&product_id=11111111-1111-4111-8111-111111111111`,
+      }),
+      expect.anything()
+    );
+  });
+
   it('fails closed when the availability request errors', async () => {
     mockFetch.mockRejectedValue(new Error('offline'));
     const { getRedvaultPaymentAvailability } = await import('./redvault');

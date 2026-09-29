@@ -34,7 +34,7 @@ describe('calculateRedvaultPricing', () => {
       },
     ]);
 
-    expect(result.discountKobo).toBe(20_001);
+    expect(result.discountKobo).toBe(10_001);
   });
 
   it('rejects colliding normalized attribute keys', () => {
@@ -45,7 +45,7 @@ describe('calculateRedvaultPricing', () => {
     ).toThrow('variantAttributes contains duplicate normalized keys');
   });
 
-  it('prices a mixed NGN 100,000 eligible and NGN 50,000 excluded basket at NGN 10,000 off', () => {
+  it('prices a mixed NGN 100,000 eligible and NGN 50,000 excluded basket at NGN 5,000 off', () => {
     const result = calculateRedvaultPricing([
       eligible,
       {
@@ -58,14 +58,14 @@ describe('calculateRedvaultPricing', () => {
 
     expect(result.productSubtotalKobo).toBe(15_000_000);
     expect(result.eligibleSubtotalKobo).toBe(10_000_000);
-    expect(result.discountKobo).toBe(1_000_000);
+    expect(result.discountKobo).toBe(500_000);
     expect(result.allocations).toMatchObject([
       {
-        discountKobo: 1_000_000,
+        discountKobo: 500_000,
         eligible: true,
         itemId: 'item-1',
-        unitDiscountsKobo: [1_000_000],
-        unitNetAmountsKobo: [9_000_000],
+        unitDiscountsKobo: [500_000],
+        unitNetAmountsKobo: [9_500_000],
       },
       {
         discountKobo: 0,
@@ -87,8 +87,8 @@ describe('calculateRedvaultPricing', () => {
   });
 
   it.each([
-    [100_004, 10_000],
-    [100_005, 10_001],
+    [100_004, 5_000],
+    [100_005, 5_000],
   ])('rounds a canonical eligible group of %i kobo half-up to %i kobo', (subtotal, discount) => {
     const result = calculateRedvaultPricing([
       { ...eligible, unitPriceKobo: subtotal },
@@ -111,7 +111,7 @@ describe('calculateRedvaultPricing', () => {
       { ...eligible, quantity: 2, unitPriceKobo: 100_005 },
     ]);
 
-    expect(split.discountKobo).toBe(20_001);
+    expect(split.discountKobo).toBe(10_001);
     expect(split.discountKobo).toBe(combined.discountKobo);
     expect(split.allocations.map((allocation) => allocation.itemId)).toEqual([
       'item-1',
@@ -119,7 +119,7 @@ describe('calculateRedvaultPricing', () => {
     ]);
     expect(
       split.allocations.map((allocation) => allocation.unitDiscountsKobo)
-    ).toEqual([[10_001], [10_000]]);
+    ).toEqual([[5_001], [5_000]]);
   });
 
   it('keeps distinct variant, condition, and VAT identities in separate rounding groups', () => {
@@ -148,14 +148,12 @@ describe('calculateRedvaultPricing', () => {
       },
     ]);
 
-    expect(result.discountKobo).toBe(40_004);
+    expect(result.discountKobo).toBe(20_000);
   });
 
   it.each([
-    [19_999_999, 2_000_000],
-    [20_000_000, 1_000_000],
-    [20_000_001, 1_000_000],
-  ])('selects the tier from eligible subtotal %i before discount', (subtotal, discount) => {
+    19_999_999, 20_000_000, 20_000_001,
+  ])('applies fixed 5%% to eligible subtotal %i before discount', (subtotal) => {
     const result = calculateRedvaultPricing([
       { ...eligible, unitPriceKobo: subtotal },
       {
@@ -165,7 +163,7 @@ describe('calculateRedvaultPricing', () => {
         unitPriceKobo: 30_000_000,
       },
     ]);
-    expect(result.discountKobo).toBe(discount);
+    expect(result.discountKobo).toBe(Math.floor((subtotal * 5 + 50) / 100));
     expect(
       result.allocations.find((allocation) => allocation.itemId === 'excluded')
         ?.discountKobo
@@ -181,6 +179,16 @@ describe('calculateRedvaultPricing', () => {
     expect(
       result.allocations.map((allocation) => allocation.discountKobo)
     ).toEqual([500_000, 500_000]);
+  });
+
+  it('discounts an eligible NGN 100 item by exactly 500 kobo', () => {
+    const result = calculateRedvaultPricing([
+      { ...eligible, unitPriceKobo: 10_000 },
+    ]);
+
+    expect(result.eligibleSubtotalKobo).toBe(10_000);
+    expect(result.discountKobo).toBe(500);
+    expect(result.allocations[0]?.unitDiscountsKobo).toEqual([500]);
   });
 
   it('rejects malformed and overflow-prone monetary or quantity inputs', () => {

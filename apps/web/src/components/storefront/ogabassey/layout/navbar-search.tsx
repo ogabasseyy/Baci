@@ -28,15 +28,24 @@ const NAVBAR_SEARCH_MAX_LENGTH = STOREFRONT_SEARCH_MAX_QUERY_LENGTH;
  * navigate back to the misspelled search. Reads the route inside its own
  * Suspense boundary so static prerenders never touch useSearchParams.
  */
-function SearchRouteQuerySync({ onSync }: { onSync: (query: string) => void }) {
+function SearchRouteQuerySync({
+  basePath,
+  onSync,
+}: {
+  basePath: string;
+  onSync: (query: string) => void;
+}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   // The value mirrors the route parser exactly: repeated or missing `q`
   // params yield the same empty query the results page renders (instead of
   // the first raw value), and the result is normalized to the navbar
-  // limit so the displayed term always equals the submitted term.
+  // limit so the displayed term always equals the submitted term. The
+  // route check is an exact match on `${basePath}/search`: a suffix match
+  // would misclassify non-results URLs that also end in `/search` (e.g.
+  // `/products/search`) and erase the persistent input on those pages.
   const routeQueries =
-    pathname !== null && pathname.endsWith('/search')
+    pathname !== null && pathname === `${basePath}/search`
       ? searchParams.getAll('q')
       : null;
   const routeQuery =
@@ -236,7 +245,7 @@ export function NavbarSearch({
   return (
     <>
       <Suspense>
-        <SearchRouteQuerySync onSync={setSearchQuery} />
+        <SearchRouteQuerySync basePath={basePath} onSync={setSearchQuery} />
       </Suspense>
       {searchContent}
     </>

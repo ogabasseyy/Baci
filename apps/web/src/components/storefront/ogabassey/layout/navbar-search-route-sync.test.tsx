@@ -187,4 +187,21 @@ describe('NavbarSearch search-route query sync', () => {
 
     expect(searchInput().value).toBe('misspelled edit');
   });
+
+  it('ignores non-results URLs that also end in /search', () => {
+    // A PDP-style path like /products/search has no `q` param: the sync
+    // must not misclassify it as the results route and erase the
+    // persistent input. Navigating back must not restore anything either.
+    const { rerender } = renderNavbar();
+    expect(searchInput().value).toBe('misspelled');
+
+    mocks.pathname = '/ogabassey/products/search';
+    mocks.queryString = '';
+    rerenderNavbar(rerender);
+    expect(searchInput().value).toBe('misspelled');
+
+    mocks.pathname = '/ogabassey/search';
+    rerenderNavbar(rerender);
+    expect(searchInput().value).toBe('');
+  });
 });

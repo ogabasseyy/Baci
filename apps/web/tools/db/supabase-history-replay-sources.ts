@@ -246,6 +246,7 @@ const PENDING_SOURCES = [
   'd63b68779deb8ba96ad65b5820f710aad57f2ec0bc955c1bf7c6bf137e2cb434 20260927151000_abandoned_attempt_evidence_mismatch_review_type.sql',
   '8743fbc87d7c4faac46005e521d61536e539f4f9bd9be9115996039350f460f5 20260927151100_merge_abandoned_attempt_evidence_mismatch.sql',
   '79455e50f027225a5e103ffd29727c78e7b20f117f400273ec55ca5c822f360c 20260927151200_stamp_abandoned_sweep_resolution.sql',
+  '1736ba86b9c54d1369f556ea144613be91373252aca81bb48709b7edc383bf36 20260927151300_reject_settlement_for_cancelled_orders.sql',
   PENDING_SOURCES_HEAD,
   STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_CLUSTER_GUIDE_PENDING_SOURCES,

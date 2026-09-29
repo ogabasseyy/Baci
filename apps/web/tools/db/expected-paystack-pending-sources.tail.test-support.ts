@@ -159,4 +159,9 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
       'supabase/migrations/20260927151200_stamp_abandoned_sweep_resolution.sql',
     sha256: '79455e50f027225a5e103ffd29727c78e7b20f117f400273ec55ca5c822f360c',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260927151300_reject_settlement_for_cancelled_orders.sql',
+    sha256: '1736ba86b9c54d1369f556ea144613be91373252aca81bb48709b7edc383bf36',
+  },
 ];

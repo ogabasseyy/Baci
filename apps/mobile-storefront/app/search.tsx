@@ -7,45 +7,13 @@ import Colors from '@/constants/Colors';
 import { MIN_SEARCH_QUERY_LENGTH } from '@/constants/search';
 import { useCategories, useProductBrands, useProducts } from '@/hooks';
 import { useNetworkState } from '@/hooks/use-network-state';
+import {
+  parseRouteSearchQuery,
+  useSearchRouteQuerySync,
+} from '@/hooks/use-search-route-query-sync';
 import { useSearchStorage } from '@/hooks/use-search-storage';
 import { resolveSelectedCategoryId } from '@/lib/product-filter-options';
 import type { Product } from '@/types/product';
-
-/**
- * Validates the Expo Router `q` parameter before use. Repeated parameters
- * arrive as arrays and are ambiguous, so only a single string of at least
- * the search threshold is accepted.
- */
-function parseRouteSearchQuery(
-  param: string | string[] | undefined
-): string | null {
-  if (typeof param !== 'string') {
-    return null;
-  }
-
-  const trimmed = param.trim();
-  return trimmed.length >= MIN_SEARCH_QUERY_LENGTH ? trimmed : null;
-}
-
-/**
- * Compares raw route params by value (arrays element-wise). A repeated
- * param and its joined string form are NOT equal: one is ambiguous and
- * rejected, the other is a searchable query.
- */
-function isSameRouteParam(
-  a: string | string[] | undefined,
-  b: string | string[] | undefined
-): boolean {
-  if (Array.isArray(a) || Array.isArray(b)) {
-    return (
-      Array.isArray(a) &&
-      Array.isArray(b) &&
-      a.length === b.length &&
-      a.every((value, index) => value === b[index])
-    );
-  }
-  return a === b;
-}
 
 export default function SearchScreen() {
   const colors = Colors[useColorScheme() ?? 'light'];
@@ -84,19 +52,8 @@ export default function SearchScreen() {
     };
   }, [activeQuery]);
 
-  // Applies a newly arrived route query to an already-mounted screen and
-  // records each submitted route query in history exactly once. A transition
-  // to a missing or invalid route param clears the search state so stale
-  // results never linger — keyed off the raw param transition, not just the
-  // last applied query, so locally entered searches also clear when an
-  // invalid param arrives on a parameterless-opened screen. In-screen edits
-  // never change the route param, so typing after navigation is safe.
-  const appliedRouteQueryRef = useRef<string | null>(null);
-  // The raw param behind the last effect run. Initialized to the mount
-  // value so the first run never counts as a transition.
-  const prevRouteQueryParamRef = useRef<string | string[] | undefined>(
-    routeQueryParam
-  );
+  // Route-owned query application: each submitted route query lands in
+  // history exactly once. The sync hook below drives these callbacks.
   const applyRouteQuery = useEffectEvent((nextQuery: string) => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -114,29 +71,11 @@ export default function SearchScreen() {
     setQuery('');
     setDebouncedQuery('');
   });
-  useEffect(() => {
-    const nextRouteQuery = parseRouteSearchQuery(routeQueryParam);
-    const rawParamChanged = !isSameRouteParam(
-      prevRouteQueryParamRef.current,
-      routeQueryParam
-    );
-    prevRouteQueryParamRef.current = routeQueryParam;
-    if (nextRouteQuery) {
-      if (appliedRouteQueryRef.current !== nextRouteQuery) {
-        appliedRouteQueryRef.current = nextRouteQuery;
-        applyRouteQuery(nextRouteQuery);
-      }
-      return;
-    }
-    // Missing or invalid route query: clear on a genuine raw transition
-    // (or a previously applied route query) so a locally entered search
-    // never lingers after a deep-link update arrives on a screen that was
-    // opened parameterless. The mount run is never a transition.
-    if (rawParamChanged || appliedRouteQueryRef.current !== null) {
-      appliedRouteQueryRef.current = null;
-      clearRouteQuery();
-    }
-  }, [routeQueryParam]);
+  useSearchRouteQuerySync({
+    routeQueryParam,
+    onApplyRouteQuery: applyRouteQuery,
+    onClearRouteQuery: clearRouteQuery,
+  });
 
   const commitSearchQuery = (value: string) => {
     const trimmedValue = value.trim();

@@ -10,31 +10,11 @@ vi.mock('@/lib/orders/quarantine-order-cancellation-refund', () => ({
 
 import { DeliveryUncertainError } from '@/lib/orders/run-order-cancellation-side-effect';
 import { resolveContradictoryRefundFailure } from './resolve-contradictory-refund-failure';
-
-const row = {
-  created_at: '2026-09-27T12:00:00Z',
-  merchant_id: 'merchant-1',
-  order_id: 'order-1',
-};
-
-const order = {
-  currency: 'NGN',
-  id: 'order-1',
-  merchant_id: 'merchant-1',
-  order_number: 'ORD-1',
-};
-
-function chain(
-  result: { data: unknown; error: unknown },
-  terminal: 'in' | 'limit'
-) {
-  const query: Record<string, ReturnType<typeof vi.fn>> = {};
-  for (const method of ['select', 'eq', 'gt', 'in', 'order', 'limit']) {
-    query[method] =
-      method === terminal ? vi.fn(async () => result) : vi.fn(() => query);
-  }
-  return query;
-}
+import {
+  chain,
+  order,
+  row,
+} from './resolve-contradictory-refund-failure.test-support';
 
 describe('resolveContradictoryRefundFailure', () => {
   beforeEach(() => {

@@ -162,6 +162,50 @@ describe('gatePartiallyPaidAbandonedCapture routing', () => {
     expect(h.hold).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      amount: 1000,
+      name: 'shortfall',
+      total: 10.01,
+      paid: 0,
+      held: 'partial_balance_short',
+    },
+    {
+      amount: 1001,
+      name: 'surplus',
+      total: 10,
+      paid: 0,
+      held: null,
+    },
+  ])('routes a one-kobo $name to review instead of exact completion', async ({
+    amount,
+    total,
+    paid,
+    held,
+  }) => {
+    const plainAttempt = { ...attempt, metadata: {} };
+    const db = ordersClient({ amount_paid: paid, total });
+    const h = harness();
+
+    const gate = await gatePartiallyPaidAbandonedCapture({
+      ...h,
+      attempt: plainAttempt,
+      providerData: { ...providerData, amount },
+      supabase: db as never,
+    });
+
+    // A float tolerance would read both as exact; integer kobo keeps
+    // the shortfall held and files the surplus as a duplicate.
+    expect(gate).toBe('done');
+    if (held) {
+      expect(h.hold).toHaveBeenCalledWith(held);
+      expect(mocks.fileDuplicatePaymentCapture).not.toHaveBeenCalled();
+    } else {
+      expect(mocks.fileDuplicatePaymentCapture).toHaveBeenCalled();
+      expect(h.summary.reviewsFiled).toEqual(['attempt-1']);
+    }
+  });
+
   it('holds a non-invoice underpayment without failing the sweep', async () => {
     const plainAttempt = { ...attempt, metadata: {} };
     const db = ordersClient({ amount_paid: 30, total: 100 });

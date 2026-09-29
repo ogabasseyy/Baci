@@ -96,6 +96,8 @@ BEGIN
   PERFORM public.close_verified_cancellation_refund_reviews_v1(
     p_order_id, p_merchant_id
   );
+  -- Flag legs refunded above their payment amount (transition still runs).
+  PERFORM public.flag_paystack_cancellation_over_refunds_v1(p_order_id, p_merchant_id);
 END;
 $$;
 REVOKE ALL ON FUNCTION public.finalize_refunded_cancellation_order_v1(uuid, uuid, uuid)
@@ -181,10 +183,9 @@ BEGIN
   -- cancellation description the pending worker requires, leaving them
   -- selected by neither worker.
   IF v_refund.status = 'failed' AND v_status <> 'processed' THEN RETURN 'already_failed'; END IF;
-  -- Repeat verdicts are not new evidence: polling rechecks the same
-  -- nonterminal refund every cycle, so only a status transition (or a
-  -- first failure) reaches the alert insert below. Still rotate the row
-  -- so reviewed rows cannot pin the workers' oldest-25 batch.
+  -- Repeat verdicts are not new evidence: only a status transition (or
+  -- a first failure) reaches the alert insert. Still rotate the row so
+  -- reviewed rows cannot pin the workers' oldest-25 batch.
   IF v_status IN ('failed', 'needs-attention')
     AND v_refund.metadata->>'provider_refund_status' = v_status THEN
     UPDATE public.transactions SET updated_at = now() WHERE id = v_refund.id;
@@ -203,8 +204,7 @@ BEGIN
   IF v_status IN ('failed', 'needs-attention') THEN
     -- A later failure on another leg (or a contradictory failure after
     -- the order became refunded) must re-alert: reset a settled row to
-    -- claimable with a fresh retry budget. Queued rows already
-    -- guarantee a covering alert; repeat verdicts return early above.
+    -- claimable. Queued rows already guarantee a covering alert.
     INSERT INTO public.paystack_cancellation_refund_notifications
       (order_id, merchant_id, event_type)
     VALUES (v_order.id, v_order.merchant_id, 'failed_merchant_push')

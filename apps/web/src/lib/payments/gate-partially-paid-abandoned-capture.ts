@@ -215,16 +215,19 @@ async function gateNonInvoicePartialCapture(
   }
   // A concurrent completion between this read and the finalizer resolves
   // through the atomic completion result (capturedOnPaidOrder files the
-  // duplicate review). The 1-kobo tolerance mirrors the RPC's exactness:
-  // only an exact-balance capture proceeds. A known overpayment is
-  // definitively excess money — the outstanding balance can only shrink
-  // before the finalizer runs — and the finalizer would promote the
-  // order to paid without the duplicate review, so file it here.
-  const captureNgn = captureMinor / 100;
-  if (Math.abs(captureNgn - outstanding) <= 0.01) {
+  // duplicate review). Compare in integer kobo: a floating-point
+  // tolerance would admit genuine one-kobo shortfalls (promoting to
+  // paid and fulfilling) and surpluses (bypassing the duplicate
+  // review). Only an exact-balance capture proceeds. A known
+  // overpayment is definitively excess money — the outstanding balance
+  // can only shrink before the finalizer runs — and the finalizer
+  // would promote the order to paid without the duplicate review, so
+  // file it here.
+  const outstandingMinor = Math.round(outstanding * 100);
+  if (captureMinor === outstandingMinor) {
     return 'proceed';
   }
-  if (captureNgn > outstanding) {
+  if (captureMinor > outstandingMinor) {
     return await fileOverpaymentDuplicate(context);
   }
   await hold('partial_balance_short');

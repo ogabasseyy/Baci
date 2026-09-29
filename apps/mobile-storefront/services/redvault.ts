@@ -40,12 +40,16 @@ export async function getCheckoutAuthorizationHeaders() {
   return auth.authorizationHeaders;
 }
 
-export async function getRedvaultPaymentAvailability(merchantId: string) {
+export async function getRedvaultPaymentAvailability(
+  merchantId: string,
+  productId?: string
+) {
   try {
     if (merchantId !== '6b5cb8a4-5575-456c-b936-8cdfae30db74') return false;
     const authorizationHeaders = await getCheckoutAuthorizationHeaders();
     const url = new URL('/api/payments/redvault/availability', API_URL);
     url.searchParams.set('merchant_id', merchantId);
+    if (productId) url.searchParams.set('product_id', productId);
     const response = await fetch(url, {
       headers: authorizationHeaders,
       cache: 'no-store',

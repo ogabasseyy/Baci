@@ -58,10 +58,23 @@ export function useCheckoutPaymentController({
   );
   const [availability, setAvailability] = useState<{
     merchantId: string;
+    requestKey: string;
     available: boolean;
   } | null>(null);
+  const pilotCartProductId =
+    items.length === 1 && items[0]?.quantity === 1 && !items[0]?.variant_id
+      ? items[0].product_id
+      : undefined;
+  const cartFingerprint = items
+    .map(
+      ({ id, product_id, quantity, variant_id }) =>
+        `${id}:${product_id}:${quantity}:${variant_id ?? ''}`
+    )
+    .join('|');
+  const availabilityRequestKey = `${merchantId}:${pilotCartProductId ?? ''}:${isAuthenticated}:${customerId ?? ''}:${cartFingerprint}`;
   const redvaultAvailable =
-    availability?.merchantId === merchantId && availability.available;
+    availability?.requestKey === availabilityRequestKey &&
+    availability.available;
   const availablePaymentMethods: PaymentMethodType[] = Array.from(
     new Set<PaymentMethodType>([
       ...enabledPaymentMethods,
@@ -104,17 +117,27 @@ export function useCheckoutPaymentController({
 
   useEffect(() => {
     let active = true;
-    void getRedvaultPaymentAvailability(merchantId)
+    void getRedvaultPaymentAvailability(merchantId, pilotCartProductId)
       .then((available) => {
-        if (active) setAvailability({ merchantId, available });
+        if (active)
+          setAvailability({
+            merchantId,
+            requestKey: availabilityRequestKey,
+            available,
+          });
       })
       .catch(() => {
-        if (active) setAvailability({ merchantId, available: false });
+        if (active)
+          setAvailability({
+            merchantId,
+            requestKey: availabilityRequestKey,
+            available: false,
+          });
       });
     return () => {
       active = false;
     };
-  }, [merchantId]);
+  }, [merchantId, pilotCartProductId, availabilityRequestKey]);
 
   const resetPaymentSelection = () => {
     setSelectedPaymentState(null);

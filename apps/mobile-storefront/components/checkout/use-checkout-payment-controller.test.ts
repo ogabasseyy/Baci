@@ -141,6 +141,82 @@ describe('useCheckoutPaymentController selection', () => {
     expect(result.current.selectedPayment).toBeNull();
   });
 
+  it('passes only a single nonvariant quantity-one product and hides stale results on cart changes', async () => {
+    let resolveAvailability: (value: boolean) => void = () => {};
+    mockGetRedvaultPaymentAvailability.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveAvailability = resolve;
+        })
+    );
+    const { result, rerender } = renderHook<
+      ReturnType<typeof useCheckoutPaymentController>,
+      { items: typeof items }
+    >(
+      ({ items: cartItems }) =>
+        useCheckoutPaymentController({
+          assuranceFee: 0,
+          deliveryFee: 0,
+          isAuthenticated: false,
+          items: cartItems,
+          merchantId: 'merchant-1',
+          merchantSlug: 'ogabassey',
+          step: 'payment',
+          subtotal: 500000,
+        }),
+      { initialProps: { items } }
+    );
+    expect(mockGetRedvaultPaymentAvailability).toHaveBeenCalledWith(
+      'merchant-1',
+      'product-1'
+    );
+    resolveAvailability(true);
+    await act(async () => undefined);
+    expect(result.current.redvaultAvailable).toBe(true);
+
+    const firstItem = items[0];
+    if (!firstItem) throw new Error('Expected a cart fixture');
+    rerender({
+      items: [
+        ...items,
+        { ...firstItem, id: 'line-2', product_id: 'product-2' },
+      ],
+    });
+    expect(result.current.redvaultAvailable).toBe(false);
+    expect(mockGetRedvaultPaymentAvailability).toHaveBeenLastCalledWith(
+      'merchant-1',
+      undefined
+    );
+  });
+
+  it('hides stale availability immediately when the authenticated customer changes', async () => {
+    mockGetRedvaultPaymentAvailability.mockResolvedValueOnce(true);
+    const { result, rerender } = renderHook(
+      ({ customerId }: { customerId: string }) =>
+        useCheckoutPaymentController({
+          assuranceFee: 0,
+          customerId,
+          deliveryFee: 0,
+          isAuthenticated: true,
+          items,
+          merchantId: 'merchant-1',
+          merchantSlug: 'ogabassey',
+          step: 'payment',
+          subtotal: 500000,
+        }),
+      { initialProps: { customerId: 'customer-a' } }
+    );
+    await act(async () => undefined);
+    expect(result.current.redvaultAvailable).toBe(true);
+
+    rerender({ customerId: 'customer-b' });
+    expect(result.current.redvaultAvailable).toBe(false);
+    expect(mockGetRedvaultPaymentAvailability).toHaveBeenLastCalledWith(
+      'merchant-1',
+      'product-1'
+    );
+  });
+
   it('fails closed when availability rejects', async () => {
     mockGetRedvaultPaymentAvailability.mockRejectedValueOnce(
       new Error('offline')

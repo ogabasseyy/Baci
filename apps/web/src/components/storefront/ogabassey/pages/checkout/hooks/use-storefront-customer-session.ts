@@ -63,6 +63,7 @@ async function loadSessionAuthenticated(
 
 export interface StorefrontCustomerSession {
   status: StorefrontCustomerSessionStatus;
+  revision: number;
   /** Derived convenience flag — false while `loading`. */
   isAuthenticated: boolean;
   /**
@@ -97,13 +98,21 @@ export function useStorefrontCustomerSession(
   const [status, setStatus] = useState<StorefrontCustomerSessionStatus>(
     merchantSlug ? 'loading' : 'guest'
   );
+  const [revision, setRevision] = useState(0);
+  const revisionRef = useRef(0);
   // Latest in-flight (or settled) resolution promise. A checkout submit that
   // fires before the session resolves awaits THIS instead of racing the initial
   // `loading` state down the guest branch.
   const pendingRef = useRef<Promise<boolean>>(Promise.resolve(false));
 
   useEffect(() => {
+    const advanceRevision = () => {
+      revisionRef.current += 1;
+      setRevision(revisionRef.current);
+    };
+
     if (!merchantSlug) {
+      advanceRevision();
       pendingRef.current = Promise.resolve(false);
       setStatus('guest');
       return;
@@ -117,6 +126,7 @@ export function useStorefrontCustomerSession(
       activeController?.abort();
       const controller = new AbortController();
       activeController = controller;
+      advanceRevision();
       setStatus('loading');
       const pending = loadSessionAuthenticated(merchantSlug, controller.signal);
       pendingRef.current = pending;
@@ -154,6 +164,7 @@ export function useStorefrontCustomerSession(
 
   return {
     status,
+    revision,
     isAuthenticated: status === 'authenticated',
     waitForResolvedAuthenticated,
   };

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useRedvaultPaymentAvailability } from './use-redvault-payment-availability';
 
 const merchant = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
+const product = '11111111-1111-4111-8111-111111111111';
 afterEach(() => vi.unstubAllGlobals());
 describe('REDVAULT availability', () => {
   it('hides immediately when the merchant changes', async () => {
@@ -24,6 +25,59 @@ describe('REDVAULT availability', () => {
       expect.any(String),
       expect.objectContaining({ cache: 'no-store' })
     );
+  });
+  it('hides stale pilot availability while the cart product changes', async () => {
+    const request = vi.fn().mockResolvedValue(
+      Response.json({ available: true, reason: 'private_live_pilot' })
+    );
+    vi.stubGlobal('fetch', request);
+    const { result, rerender } = renderHook(
+      ({ productId }: { productId: string | undefined }) =>
+        useRedvaultPaymentAvailability(merchant, productId),
+      { initialProps: { productId: product as string | undefined } }
+    );
+    await waitFor(() => expect(result.current.available).toBe(true));
+    rerender({ productId: undefined });
+    expect(result.current.available).toBe(false);
+    expect(request).toHaveBeenLastCalledWith(
+      expect.stringContaining(`merchant_id=${merchant}`),
+      expect.objectContaining({ cache: 'no-store' })
+    );
+  });
+  it('hides prior pilot visibility when auth revision changes while status stays authenticated', async () => {
+    let resolveSecondRequest: ((response: Response) => void) | undefined;
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ available: true, reason: 'private_live_pilot' })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveSecondRequest = resolve;
+          })
+      );
+    vi.stubGlobal('fetch', request);
+    const { result, rerender } = renderHook(
+      ({ revision }: { revision: number }) =>
+        useRedvaultPaymentAvailability(
+          merchant,
+          product,
+          `authenticated:${revision}`
+        ),
+      { initialProps: { revision: 1 } }
+    );
+
+    await waitFor(() => expect(result.current.available).toBe(true));
+    rerender({ revision: 2 });
+    expect(result.current.available).toBe(false);
+
+    await act(async () => {
+      resolveSecondRequest?.(
+        Response.json({ available: true, reason: 'private_live_pilot' })
+      );
+    });
+    await waitFor(() => expect(result.current.available).toBe(true));
   });
   it.each([
     'network',

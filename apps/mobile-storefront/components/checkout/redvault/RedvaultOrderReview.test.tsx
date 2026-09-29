@@ -7,6 +7,7 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 import { router } from 'expo-router';
+import type { ReactNode } from 'react';
 import { createOrder } from '@/services/orders';
 import { getRedvaultPaymentAvailability } from '@/services/redvault';
 import { RedvaultOrderReview } from './RedvaultOrderReview';
@@ -17,6 +18,15 @@ import {
 
 jest.mock('expo-router', () => ({
   router: { push: jest.fn(), replace: jest.fn() },
+}));
+jest.mock('@/components/ui/ModalSheet', () => ({
+  ModalSheet: ({
+    children,
+    visible,
+  }: {
+    children: ReactNode;
+    visible: boolean;
+  }) => (visible ? children : null),
 }));
 jest.mock('@/services/orders-auth', () => ({
   resolveCheckoutAuth: async () => ({

@@ -163,6 +163,28 @@ describe('useStorefrontCustomerSession', () => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
+    it('advances the revision when an auth transition settles to the same status', async () => {
+      const fetchMock = stubFetch({ body: { authenticated: true } });
+      const { result } = renderHook(() =>
+        useStorefrontCustomerSession('test-store')
+      );
+
+      await waitFor(() => {
+        expect(result.current.status).toBe('authenticated');
+      });
+      const firstRevision = result.current.revision;
+
+      act(() => {
+        emitAuthChange('SIGNED_IN');
+      });
+
+      await waitFor(() => {
+        expect(result.current.status).toBe('authenticated');
+        expect(result.current.revision).toBeGreaterThan(firstRevision);
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
     it('stays guest when the post-login refresh fails (fail-closed)', async () => {
       // Arrange: guest load succeeds, then the refresh fetch rejects.
       const fetchMock = vi

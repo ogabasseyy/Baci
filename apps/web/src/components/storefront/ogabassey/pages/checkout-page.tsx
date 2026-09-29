@@ -135,7 +135,6 @@ export const CheckoutPage: React.FC = () => {
   const { cart, clearCart, isHydrated, removeFromCart } = useCart();
   const merchantContext = useMerchantSafe();
   const merchant = merchantContext?.merchant;
-  const redvaultAvailability = useRedvaultPaymentAvailability(merchant?.id);
 
   // Address-form country: the merchant's own market (ISO-2, upper-case), NG as
   // the pilot default when unset. Drives the state list source, the Places
@@ -403,8 +402,20 @@ export const CheckoutPage: React.FC = () => {
   // is null here even for a signed-in customer. The wallet-funded gate must read
   // the cookie session directly (same source as the storefront header) or the
   // dark-launch flow would never activate for real customers.
-  const { waitForResolvedAuthenticated: waitForResolvedStorefrontCustomerAuth } =
-    useStorefrontCustomerSession(merchant?.slug ?? undefined);
+  const storefrontCustomerSession = useStorefrontCustomerSession(merchant?.slug ?? undefined);
+  const pilotCartProductId =
+    cart.length === 1 && cart[0]?.quantity === 1 && !cart[0]?.variantId
+      ? cart[0].id
+      : undefined;
+  const redvaultCartKey = cart
+    .map(({ id, quantity, variantId }) => `${id}:${quantity}:${variantId ?? ''}`)
+    .join('|');
+  const redvaultAvailability = useRedvaultPaymentAvailability(
+    merchant?.id,
+    pilotCartProductId,
+    `${user?.id ?? ''}:${storefrontCustomerSession.status}:${storefrontCustomerSession.revision}:${redvaultCartKey}`
+  );
+  const { waitForResolvedAuthenticated: waitForResolvedStorefrontCustomerAuth } = storefrontCustomerSession;
 
   // Wallet-funded bank transfer (P4a, dark-launched). Signed-in customers of an
   // auto-debit-enabled merchant fund the order through their STANDING wallet

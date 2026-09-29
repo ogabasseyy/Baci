@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const routeMocks = vi.hoisted(() => ({
   authenticateApiRequest: vi.fn(),
   getRedvaultPaymentAvailability: vi.fn(),
+  getRedvaultLivePilotPolicy: vi.fn(),
+  getRedvaultCheckoutSummary: vi.fn(),
 }));
 
 vi.mock('@/env', () => ({
@@ -25,6 +27,15 @@ vi.mock('@/lib/api-auth', () => ({
 
 vi.mock('@/lib/checkout/redvault-payment-availability', () => ({
   getRedvaultPaymentAvailability: routeMocks.getRedvaultPaymentAvailability,
+}));
+
+vi.mock('@/lib/checkout/redvault-live-pilot', () => ({
+  getRedvaultLivePilotPolicy: routeMocks.getRedvaultLivePilotPolicy,
+  REDVAULT_PILOT_USER_ID: '70261bce-d358-45a4-9ede-8b9d71fb3bd9',
+}));
+
+vi.mock('@/lib/checkout/get-redvault-checkout-summary', () => ({
+  getRedvaultCheckoutSummary: routeMocks.getRedvaultCheckoutSummary,
 }));
 
 // Juicyway mocks
@@ -385,6 +396,78 @@ describe('POST /api/payments/initialize', () => {
       expect(json.code).toBe('REDVAULT_UNAVAILABLE');
       expect(mockInitializePaystack).not.toHaveBeenCalled();
       expect(rpcCalls).toEqual([]);
+    });
+
+    it.each([
+      null,
+      { id: '11111111-1111-4111-8111-111111111111' },
+    ])('rejects a private pilot payment for an unauthorized identity %j before provider access', async (user) => {
+      routeMocks.getRedvaultPaymentAvailability.mockReturnValue({
+        available: true,
+        reason: 'private_live_pilot',
+      });
+      routeMocks.authenticateApiRequest.mockResolvedValue({ user });
+      const response = await POST(
+        makeRequest({ ...validBody, payment_method: 'uba_redvault' })
+      );
+      expect(response.status).toBe(409);
+      expect((await response.json()).code).toBe('REDVAULT_UNAVAILABLE');
+      expect(mockInitializePaystack).not.toHaveBeenCalled();
+      expect(rpcCalls).toEqual([]);
+    });
+
+    it.each([
+      'wallet',
+      'savings',
+    ])('rejects persisted %s funding for the private pilot', async (funding) => {
+      routeMocks.getRedvaultPaymentAvailability.mockReturnValue({
+        available: true,
+        reason: 'private_live_pilot',
+      });
+      routeMocks.authenticateApiRequest.mockResolvedValue({
+        user: { id: '70261bce-d358-45a4-9ede-8b9d71fb3bd9' },
+      });
+      routeMocks.getRedvaultLivePilotPolicy.mockReturnValue({
+        merchantId: MERCHANT_ID,
+      });
+      routeMocks.getRedvaultCheckoutSummary.mockResolvedValue({
+        order: { currency: 'NGN', total: 95 },
+        quote: {
+          product_subtotal_kobo: 10000,
+          eligible_subtotal_kobo: 10000,
+          ineligible_subtotal_kobo: 0,
+          discount_kobo: 500,
+          assurance_fee_kobo: 0,
+          shipping_kobo: 0,
+          gift_wrapping_kobo: 0,
+          mixed_basket: false,
+        },
+      });
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            payment_method: 'uba_redvault',
+            total: 95,
+            wallet_amount_used: funding === 'wallet' ? 1 : 0,
+          },
+        ],
+        error: null,
+      };
+      if (funding === 'savings')
+        savingsRedemptionsResult = { data: [{ amount: 1 }], error: null };
+      const response = await POST(
+        makeRequest({ ...validBody, payment_method: 'uba_redvault' })
+      );
+      expect(response.status).toBe(409);
+      expect((await response.json()).code).toBe('REDVAULT_UNAVAILABLE');
+      expect(mockInitializePaystack).not.toHaveBeenCalled();
+      expect(
+        rpcCalls.some(
+          (call) =>
+            call.name === 'reserve_storefront_redvault_payment_attempt_v3'
+        )
+      ).toBe(false);
     });
 
     it('rejects an alternate gateway instead of silently switching a REDVAULT request to Paystack', async () => {

@@ -126,4 +126,24 @@ export const EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES = [
       'supabase/migrations/20260911200000_probe_storefront_order_idempotency_hash.sql',
     sha256: '2e7f253690d3f5b6671934792f502c734e8bb14a914bff74cfcfec86adcba7b2',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260927120000_order_storefront_claim_loop_by_product.sql',
+    sha256: '41460115912c449203fb60be94c0343bf0363e106fc8f61e353be84801382b97',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260927130000_order_chat_claim_loop_by_product.sql',
+    sha256: 'cd46796a9b9b186a7bc66e319c19b441e08dcb80b577ff98b94d02718ffb72e6',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260927140000_order_claim_loops_by_product_variant.sql',
+    sha256: 'd61fc4879a6352fc8fe636b1dd3c7b72c45f2d6683d5bcee589ba89fa26f2734',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260927150000_order_unit_cursors_by_product_variant.sql',
+    sha256: 'f3c32ea83a9cd520286dc5328581f3a5b1b3656206f69f4533c585c17bd6f20c',
+  },
 ];

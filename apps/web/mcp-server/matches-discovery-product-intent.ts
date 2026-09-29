@@ -41,7 +41,8 @@ const knownDeviceFamilyWords = new Set([
 const modelQualifiers = new Set(['max', 'mini', 'plus', 'pro', 'ultra']);
 
 function words(value: string): string[] {
-  return value.normalize('NFKC').toLocaleLowerCase('en').match(/[a-z0-9]+/g) ?? [];
+  return value.normalize('NFKC').replace(/(\d),(?=\d{3}(?:\D|$))/g, '$1')
+    .toLocaleLowerCase('en').match(/[a-z0-9]+/g) ?? [];
 }
 
 function matchesWord(textWords: string[], term: string): boolean {
@@ -97,7 +98,7 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
   const identityWords = words([product.name, product.brand].filter(Boolean).join(' '));
   const descriptionWords = words(product.description?.slice(0, 300) ?? '');
   const descriptionBoundary = descriptionWords.findIndex((word) =>
-    ['for', 'compatible', 'supports', 'fits', 'works', 'includes', 'included', 'sold'].includes(word)
+    ['for', 'with', 'compatible', 'supports', 'fits', 'works', 'includes', 'included', 'sold'].includes(word)
   );
   const descriptionLead = descriptionBoundary < 0 ? descriptionWords : descriptionWords.slice(0, descriptionBoundary);
   const descriptionIdentifiesType = itemType && matchesWord(descriptionLead, itemType);
@@ -132,7 +133,11 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
   const compatibilityWords = words([product.name, product.description].filter(Boolean).join(' '));
   if (requestedBrands.some((brand) => !matchesWord(identityWords, brand))) return false;
   const compatibilityIndex = coreWords.indexOf('for', itemWords.length);
-  const compatibilityTerms = compatibilityIndex < 0 ? [] : coreWords.slice(compatibilityIndex + 1)
+  const compatibilityEnd = coreWords.findIndex((word, index) => index > compatibilityIndex && detailBoundary.has(word));
+  const compatibilityTerms = compatibilityIndex < 0 ? [] : coreWords.slice(
+    compatibilityIndex + 1,
+    compatibilityEnd < 0 ? coreWords.length : compatibilityEnd
+  )
     .filter((word) => !['a', 'an', 'the', 'phone', 'phones', 'device', 'devices'].includes(word));
   if (compatibilityTerms.some((term) => knownBrandWords.has(term) || knownDeviceFamilyWords.has(term))) {
     if (!hasConsecutiveWords(compatibilityWords, compatibilityTerms)) return false;
@@ -165,9 +170,22 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
   }
 
   const productSpecWords = words([product.name, product.brand, product.category, product.description].filter(Boolean).join(' '));
-  for (const token of coreWords) {
+  for (const [coreIndex, token] of coreWords.entries()) {
     if (/^\d+(?:gb|tb|mb|mah|w|hz|mp|ram)$/.test(token)) {
       if (!matchesProductToken(productSpecWords, token)) return false;
+      const nextToken = coreWords[coreIndex + 1];
+      const requestedContext = nextToken === 'ram' || nextToken === 'memory' || nextToken === 'storage'
+        ? nextToken
+        : undefined;
+      if (requestedContext) {
+        const matchingContext = productSpecWords.some((word, tokenIndex) => {
+          if (!matchesWord([word], token)) return false;
+          const forwardWords = productSpecWords.slice(tokenIndex + 1, tokenIndex + 3);
+          const reverseWords = productSpecWords.slice(Math.max(0, tokenIndex - 2), tokenIndex);
+          return matchesWord(forwardWords, requestedContext) || matchesWord(reverseWords, requestedContext);
+        });
+        if (!matchingContext) return false;
+      }
       continue;
     }
     const index = itemWords.indexOf(token);

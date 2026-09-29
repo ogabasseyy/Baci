@@ -114,11 +114,28 @@ describe('discovery product intent', () => {
       description: 'A compact 20,000mAh power bank for phones.',
     }, 'power bank')).toBe(true);
     expect(matchesDiscoveryProductIntent({
+      name: 'Riversong Vision 20S 20000mAh', category: 'Accessories',
+      description: 'A compact power banks for phones.',
+    }, 'power banks')).toBe(true);
+    expect(matchesDiscoveryProductIntent({
       name: 'Dell Latitude 5420', category: 'Laptops', description: 'Laptop with 8GB RAM.',
     }, 'laptop with 16GB RAM')).toBe(false);
     expect(matchesDiscoveryProductIntent({
+      name: 'Dell Latitude 5420', category: 'Laptops', description: '16GB storage.',
+    }, 'laptop with 16GB RAM')).toBe(false);
+    expect(matchesDiscoveryProductIntent({
+      name: 'Dell Latitude 5420', category: 'Laptops', description: '8GB storage, 16GB RAM.',
+    }, 'laptop with 16GB RAM')).toBe(true);
+    expect(matchesDiscoveryProductIntent({
+      name: 'Riversong Power Bank', category: 'Accessories', description: 'Capacity 30,000mAh.',
+    }, 'power bank 30,000mAh')).toBe(true);
+    expect(matchesDiscoveryProductIntent({
       name: 'Riversong Vision 20S', category: 'Accessories',
       description: 'Ideal for phones and includes a free phone case.',
+    }, 'phone case')).toBe(false);
+    expect(matchesDiscoveryProductIntent({
+      name: 'Riversong Vision 20S', category: 'Accessories',
+      description: 'Compact item with free phone case.',
     }, 'phone case')).toBe(false);
   });
 
@@ -135,8 +152,15 @@ describe('discovery product intent', () => {
     expect(matchesDiscoveryProductIntent({ name: 'iPhone 15', category: 'Smartphones' }, 'phone accessories')).toBe(false);
     expect(matchesDiscoveryProductIntent({ name: 'Samsung Galaxy Case', category: 'Accessories' }, 'case for iPhone')).toBe(false);
     expect(matchesDiscoveryProductIntent({ name: 'Generic Case for iPhone', category: 'Accessories' }, 'case for iPhone')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Samsung Galaxy Case', category: 'Accessories' }, 'case for AirPods')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'Generic Case for AirPods', category: 'Accessories' }, 'case for AirPods')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'iPhone Case', category: 'Accessories' }, 'case for Galaxy')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'Samsung Galaxy Case', category: 'Accessories' }, 'case for Galaxy')).toBe(true);
     expect(matchesDiscoveryProductIntent({ name: 'Case for iPhone 15 Pro Max', category: 'Accessories' }, 'case for iPhone 15 Pro')).toBe(false);
     expect(matchesDiscoveryProductIntent({ name: 'Case for iPhone 15 Pro', category: 'Accessories' }, 'case for iPhone 15 Pro')).toBe(true);
+    expect(matchesDiscoveryProductIntent({
+      name: 'Protective Case for iPhone, MagSafe compatible', category: 'Accessories',
+    }, 'case for iPhone with MagSafe')).toBe(true);
   });
 
   it('retains compound product types and ignores generic trailing nouns without dropping explicit intent', () => {

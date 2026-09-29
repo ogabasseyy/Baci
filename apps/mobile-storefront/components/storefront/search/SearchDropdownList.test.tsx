@@ -142,6 +142,34 @@ describe('SearchDropdownList', () => {
     expect(screen.queryByLabelText(/see all results/i)).toBeNull();
   });
 
+  it('shows the hint and hides see-all for punctuation-only input', () => {
+    // "!!" passes the length check but normalizes to nothing, so the
+    // submit gate rejects it: the hint must explain why instead of leaving
+    // a visible button that does nothing when pressed.
+    render(
+      <SearchDropdownList
+        categories={[]}
+        colors={Colors.light}
+        currentQuery="!!"
+        isLoading={false}
+        onCategoryPress={() => {}}
+        onClearHistory={() => {}}
+        onProductPress={() => {}}
+        onSeeAllResults={() => {}}
+        onSuggestionPress={() => {}}
+        products={[]}
+        query=""
+        recentSearches={[]}
+        showMinLengthHint
+      />
+    );
+
+    expect(
+      screen.getByLabelText('Type at least 2 characters to search')
+    ).toBeTruthy();
+    expect(screen.queryByLabelText(/see all results/i)).toBeNull();
+  });
+
   it('hides the minimum-length hint once the input is long enough', () => {
     render(
       <SearchDropdownList

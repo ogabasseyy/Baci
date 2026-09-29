@@ -5,6 +5,7 @@ import type Colors from '@/constants/Colors';
 import { BRAND } from '@/constants/Colors';
 import { MIN_SEARCH_QUERY_LENGTH } from '@/constants/search';
 import type { Category } from '@/hooks';
+import { isSearchableQuery } from '@/hooks/is-searchable-query';
 import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import { formatPrice, type Product } from '@/types/product';
 import { searchDropdownStyles as styles } from './SearchDropdown.styles';
@@ -51,12 +52,16 @@ export function SearchDropdownList({
 }: SearchDropdownListProps) {
   const hasQuery = query.length >= MIN_SEARCH_QUERY_LENGTH;
   const trimmedCurrentQuery = currentQuery.trim();
+  // Mirrors the submit gate exactly (length AND searchable): punctuation-only
+  // input like "!!" passes the length check but normalizes to nothing, so
+  // the action must hide and the hint must show — otherwise the button does
+  // nothing when pressed without explaining why.
+  const isCurrentQuerySubmittable =
+    trimmedCurrentQuery.length >= MIN_SEARCH_QUERY_LENGTH &&
+    isSearchableQuery(trimmedCurrentQuery);
   const showSeeAllResults =
-    onSeeAllResults !== undefined &&
-    trimmedCurrentQuery.length >= MIN_SEARCH_QUERY_LENGTH;
-  const showHint =
-    showMinLengthHint === true &&
-    trimmedCurrentQuery.length < MIN_SEARCH_QUERY_LENGTH;
+    onSeeAllResults !== undefined && isCurrentQuerySubmittable;
+  const showHint = showMinLengthHint === true && !isCurrentQuerySubmittable;
   const seeAllButton =
     showSeeAllResults && onSeeAllResults ? (
       <SeeAllResultsButton

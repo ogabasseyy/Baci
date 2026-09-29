@@ -149,7 +149,7 @@ describe('reconcileAbandonedPaystackAttempts', () => {
     'pending',
     'success',
   ])('preserves an attempt when Paystack reports %s', async (status) => {
-    const { client, update } = createClient();
+    const { client, lookup, update } = createClient();
     const verify = vi.fn().mockResolvedValue({
       success: true,
       data: { reference: 'BAC-OLD', status, amount: 10000, currency: 'NGN' },
@@ -165,6 +165,11 @@ describe('reconcileAbandonedPaystackAttempts', () => {
     expect(update).toHaveBeenCalledWith({
       updated_at: expect.any(String),
     });
+    const rotatedAt = (
+      update.mock.calls as unknown as [{ updated_at: string }][]
+    )[0]?.[0].updated_at;
+    const cutoff = lookup.lt.mock.calls[0]?.[1] as string;
+    expect(Date.parse(rotatedAt)).toBe(Date.parse(cutoff) - 1);
   });
 
   it('fails closed when provider verification is unavailable or mismatched', async () => {

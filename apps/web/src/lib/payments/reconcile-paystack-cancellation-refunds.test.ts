@@ -22,7 +22,7 @@ const refund = {
     payment_transaction_id: 'payment-1',
     provider_payment_transaction_id: 123,
   },
-  status: 'pending',
+  status: 'refund_pending',
 };
 
 function database() {
@@ -61,7 +61,7 @@ describe('Paystack cancellation refund reconciliation', () => {
     });
     provider.verifyTransaction.mockResolvedValue({
       success: true,
-      data: { id: 123, reference: 'PSK-1', currency: 'NGN' },
+      data: { id: 123, reference: 'PSK-1', amount: 10000, currency: 'NGN' },
     });
   });
 
@@ -111,6 +111,19 @@ describe('Paystack cancellation refund reconciliation', () => {
         status: 'processed',
       },
     });
+    await expect(
+      reconcilePaystackCancellationRefund(db as never, refund)
+    ).rejects.toThrow('paystack_refund_evidence_mismatch');
+    expect(db.rpc).not.toHaveBeenCalled();
+  });
+
+  it('does not complete a refund when the original capture amount differs', async () => {
+    const db = database();
+    provider.verifyTransaction.mockResolvedValueOnce({
+      success: true,
+      data: { id: 123, reference: 'PSK-1', amount: 9000, currency: 'NGN' },
+    });
+
     await expect(
       reconcilePaystackCancellationRefund(db as never, refund)
     ).rejects.toThrow('paystack_refund_evidence_mismatch');

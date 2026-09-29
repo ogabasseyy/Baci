@@ -41,6 +41,9 @@ export async function reconcileAbandonedPaystackAttempts({
     retired: [],
   };
   const cutoff = new Date(Date.now() - olderThanMinutes * 60_000).toISOString();
+  // Move held candidates behind older eligible rows without making them wait
+  // another full eligibility window after a transient provider failure.
+  const rotatedAt = new Date(Date.parse(cutoff) - 1).toISOString();
   const { data: attempts, error: lookupError } = await supabase
     .from('transactions')
     .select(
@@ -67,7 +70,7 @@ export async function reconcileAbandonedPaystackAttempts({
     const guardAttempt = () =>
       supabase
         .from('transactions')
-        .update({ updated_at: new Date().toISOString() })
+        .update({ updated_at: rotatedAt })
         .eq('id', attempt.id)
         .eq('order_id', attempt.order_id)
         .eq('merchant_id', attempt.merchant_id)

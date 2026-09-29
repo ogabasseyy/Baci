@@ -595,7 +595,7 @@ export async function initiateRefund(
   PaystackResult<{
     id: number;
     status: string;
-    transaction: { id: number; reference: string };
+    transaction: number | { id: number; reference: string };
   }>
 > {
   // Validate transaction reference format
@@ -618,7 +618,7 @@ export async function initiateRefund(
   const result = await paystackRequest<{
     id: number;
     status: string;
-    transaction: { id: number; reference: string };
+    transaction: number | { id: number; reference: string };
   }>('/refund', {
     method: 'POST',
     body: JSON.stringify(payload),

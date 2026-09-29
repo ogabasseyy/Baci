@@ -288,6 +288,16 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   {
     repositoryPath:
+      'supabase/migrations/20260927150300_paystack_abandoned_attempt_candidates_idx.sql',
+    sha256: '0cd541085b710ecadb72bd3376b042f76bdd77ddc6097a503c736c301a43785d',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260927150400_paystack_cancellation_refund_pending_status.sql',
+    sha256: 'd9ef1be090addca546a2081274c66d314fb6d9a5101851dc37d379c6e88099cf',
+  },
+  {
+    repositoryPath:
       'supabase/migrations/20260928080000_product_discovery_embeddings.sql',
     sha256: '2d3dc25857186965c6bdafc8874b57d0ea64452b2ecba5fa14e13bc802272add',
   },

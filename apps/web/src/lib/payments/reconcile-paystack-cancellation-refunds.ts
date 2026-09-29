@@ -125,6 +125,7 @@ export async function reconcilePaystackCancellationRefund(
     current.id !== refundId ||
     current.transaction !== original.id ||
     original.reference !== payment.gateway_reference ||
+    original.amount !== Math.round(Number(payment.amount) * 100) ||
     current.amount !== Math.round(Number(refund.amount) * 100) ||
     current.currency.toUpperCase() !== refund.currency.toUpperCase() ||
     original.currency.toUpperCase() !== refund.currency.toUpperCase() ||
@@ -202,7 +203,7 @@ export async function reconcilePaystackRefundEvent(
       .eq('metadata->>payment_transaction_id', payment.id)
       // A new signed provider event may resolve a held refund. Only polling
       // excludes review holds; the provider read still verifies all evidence.
-      .in('status', ['pending', 'failed'])
+      .in('status', ['refund_pending', 'pending', 'failed'])
       .limit(10);
     if (error) throw new Error('refund_event_lookup_failed');
     for (const refund of refunds ?? []) {
@@ -235,7 +236,7 @@ export async function reconcilePendingPaystackCancellationRefunds(
     )
     .eq('transaction_type', 'refund')
     .eq('gateway', 'paystack')
-    .eq('status', 'pending')
+    .in('status', ['refund_pending', 'pending'])
     .not('metadata->>payment_transaction_id', 'is', null)
     .is('metadata->>refund_reconciliation_hold', null)
     .order('updated_at', { ascending: true })
@@ -259,7 +260,7 @@ export async function reconcilePendingPaystackCancellationRefunds(
         .from('transactions')
         .update({ updated_at: new Date().toISOString() })
         .eq('id', refund.id)
-        .eq('status', 'pending');
+        .in('status', ['refund_pending', 'pending']);
       if (rotationError) throw new Error('pending_refund_rotation_failed');
       if (isDeterministicRefundError(reason)) {
         await fileRefundEvidenceReview(

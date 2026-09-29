@@ -89,7 +89,9 @@ describe('processCancellationDrain', () => {
     expect(response.status).toBe(200);
     expect(mocks.drainFailedOrderCancellationSideEffects).toHaveBeenCalledWith(
       expect.objectContaining({
-        deadlineMs: expect.any(Number),
+        // Side-effect work ends 150s before the shared deadline so the
+        // notification reserve holds in time, not just arithmetically.
+        deadlineMs: 1_120_000,
         // Four steps fit after the margin and the reserved notification
         // share; the remainder retries on the next invocation.
         limit: 4,
@@ -165,7 +167,7 @@ describe('processCancellationDrain', () => {
         mocks.drainFailedOrderCancellationSideEffects
       ).toHaveBeenCalledWith(
         expect.objectContaining({
-          deadlineMs: 1_270_000,
+          deadlineMs: 1_120_000,
           limit: 0,
           sendCancellationEmail: mocks.sendEmail,
         })

@@ -169,8 +169,11 @@ describe('reconcileWedgedGatewayOrders', () => {
     expect(builder.or).toHaveBeenCalledWith(
       'status.eq.completed,and(status.eq.pending,gateway.eq.juicyway),and(status.eq.pending,metadata->>guest_provider_confirmed.eq.true)'
     );
+    // The cron never claims the flip even for pending rows: a concurrent
+    // webhook may complete the row first, and flip ownership must come
+    // from the completion RPC result rather than the stale snapshot.
     expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledWith(
-      expect.objectContaining({ wonTransactionFlip: true })
+      expect.objectContaining({ wonTransactionFlip: false })
     );
     expect(summary).toMatchObject({
       checked: 1,

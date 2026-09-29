@@ -81,7 +81,13 @@ export async function finalizeVerifiedWedge({
         order_id: candidate.order_id,
         platform_fee: candidate.platform_fee,
       },
-      wonTransactionFlip: candidate.status !== 'completed',
+      // The cron never claims the flip: a concurrent webhook may complete
+      // this row first, so classification must come from the completion
+      // RPC result (order_updated/already_completed) rather than the
+      // stale candidate snapshot. Passing true would misclassify such a
+      // replay as a new capture on an already-paid order and skip the
+      // normal side effects without recovery markers.
+      wonTransactionFlip: false,
     }),
     deadlineMs
   );

@@ -1,9 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { isBroadIntentDiscoveryWord } from './broad-intent-discovery-word';
 import { DISCOVERY_PRODUCT_PROJECTION } from './discovery-product-projection';
 import { inferSmartphoneCategory } from './infer-smartphone-category';
 import { hydrateSearchProductAvailability } from './search-product-availability';
 import { matchesDiscoveryProductIntent } from './matches-discovery-product-intent';
+import { productTypes } from './matches-discovery-product-intent-vocab';
 import { loadMcpSearchProducts } from './search-products-query';
+import { matchesSingleWordDiscoveryQuery } from './search-products-relevance';
 import { singleWordDiscoveryTerm } from './single-word-discovery-term';
 import {
   matchesMcpPostHydrationFilters,
@@ -62,6 +65,13 @@ export async function discoverMcpProducts({
     (singleWordDiscoveryTerm(loaded.sanitizedQuery) || isBroadUseCaseQuery(loaded.sanitizedQuery)) &&
     !explicitCatalogFilter &&
     !inferSmartphoneCategory(loaded.sanitizedQuery, args.category);
+  // Single-word brand queries ("iPhone" with a Smartphones filter) enable
+  // semantic search, but the intent predicate passes them through, so gate
+  // semantic candidates on the whole-word check. Generic type words and
+  // broad use-case words keep the category filter as their only gate.
+  const semanticSingleTerm = singleWordDiscoveryTerm(loaded.sanitizedQuery);
+  const needsSemanticSingleWordGuard = semanticSingleTerm !== undefined &&
+    !productTypes.has(semanticSingleTerm) && !isBroadIntentDiscoveryWord(semanticSingleTerm);
   if (semanticSearch && loaded.sanitizedQuery && !ambiguousQuery &&
     selectSearchProductsByPrice(matchingProducts, args, limit).length < limit) {
     try {
@@ -91,7 +101,9 @@ export async function discoverMcpProducts({
             }));
           semanticProducts.push(...(await hydrateSearchProductAvailability(
             candidates, supabase, merchantId, args.condition
-          )).filter(({ product }) => matchesDiscoveryProductIntent(product, loaded.sanitizedQuery)));
+          )).filter(({ product }) => matchesDiscoveryProductIntent(product, loaded.sanitizedQuery) &&
+            (!needsSemanticSingleWordGuard ||
+              matchesSingleWordDiscoveryQuery(product, loaded.sanitizedQuery, undefined))));
         }
         if (pageIds.length < 40 ||
           (args.sort !== 'newest' && args.sort !== 'price_asc' && args.sort !== 'price_desc' &&

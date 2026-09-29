@@ -170,4 +170,38 @@ describe('discovery product intent', () => {
     expect(matchesDiscoveryProductIntent({ name: 'Samsung Galaxy S24', brand: 'Samsung', category: 'Smartphones' }, 'Android phones')).toBe(true);
     expect(matchesDiscoveryProductIntent({ name: 'iPhone 15', category: 'Smartphones' }, 'Android phones')).toBe(false);
   });
+
+  it('validates device families in typed searches', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'iPhone 15 Case', category: 'Accessories' }, 'iPhone case')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Samsung Galaxy Case', category: 'Accessories' }, 'iPhone case')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'MacBook Air', category: 'Laptops' }, 'MacBook laptop')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', category: 'Laptops' }, 'MacBook laptop')).toBe(false);
+  });
+
+  it('validates feature words after detail boundaries', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'Dell XPS 13', category: 'Laptops', description: 'Touchscreen laptop' }, 'laptop with touchscreen')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', category: 'Laptops' }, 'laptop with touchscreen')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Precision', category: 'Laptops', description: 'Built for video editing' }, 'laptop for video editing')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', category: 'Laptops' }, 'laptop for video editing')).toBe(false);
+  });
+
+  it('enforces resolution and network generation tokens', () => {
+    expect(matchesDiscoveryProductIntent({ name: '4K TV', category: 'Televisions' }, '4K TV')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: '1080p TV', category: 'Televisions' }, '4K TV')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: '5G Phone', category: 'Smartphones' }, '5G phone')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: '4G Phone', category: 'Smartphones' }, '5G phone')).toBe(false);
+  });
+
+  it('matches any compatibility alternative independently', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'iPhone 15 Case', category: 'Accessories' }, 'case for iPhone or Samsung')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Samsung Galaxy Case', category: 'Accessories' }, 'case for iPhone or Samsung')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Pixel Case', category: 'Accessories' }, 'case for iPhone or Samsung')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'Galaxy S24 Case', category: 'Accessories' }, 'case for iPhone 15 or Galaxy S24')).toBe(true);
+  });
+
+  it('strips standalone leading determiners', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', brand: 'Dell', category: 'Laptops' }, 'the Dell laptop')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Office Laptop', category: 'Laptops' }, 'an office laptop')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Google Pixel Buds Pro', category: 'Earbuds', description: 'Wireless earbuds' }, 'some wireless earbuds')).toBe(true);
+  });
 });

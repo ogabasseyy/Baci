@@ -206,6 +206,30 @@ describe('gated semantic discovery', () => {
     expect(result.selectedProducts.map(({ product }) => product.id)).toEqual(['laptop']);
   });
 
+  it('gates single-word semantic candidates on the whole-word check', async () => {
+    const rows = [
+      { id: 'iphone', name: 'iPhone 15', brand: 'Apple', category: 'Smartphones', price: 900000, manage_stock: false },
+      { id: 'samsung', name: 'Samsung Galaxy S24', brand: 'Samsung', category: 'Smartphones', price: 850000, manage_stock: false },
+    ];
+    const query = {
+      eq: vi.fn(() => query),
+      in: vi.fn(async (_column: string, ids: string[]) => ({
+        data: rows.filter((row) => ids.includes(row.id)), error: null,
+      })),
+    };
+    const supabase = {
+      from: vi.fn(() => ({ select: vi.fn(() => query) })),
+      rpc: vi.fn(async () => ({ data: [], error: null })),
+    } as unknown as SupabaseClient;
+    const result = await discoverMcpProducts({
+      args: { query: 'iPhone', category: 'Smartphones' },
+      merchantId: 'merchant-1', sanitizeString: (input) => input,
+      semanticSearch: async () => ['iphone', 'samsung'],
+      supabase,
+    });
+    expect(result.selectedProducts.map(({ product }) => product.id)).toEqual(['iphone']);
+  });
+
   it.each([false, true])('orders semantic candidates by newest date and then ID (equal dates: %s)', async (sameCreatedAt) => {
     const { supabase } = discoveryClient(sameCreatedAt);
     vi.mocked(supabase.rpc).mockResolvedValueOnce({

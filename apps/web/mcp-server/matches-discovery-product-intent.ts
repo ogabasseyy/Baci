@@ -1,3 +1,17 @@
+import { isBroadIntentDiscoveryWord } from './broad-intent-discovery-word';
+import { matchesCompatibilityClause } from './matches-discovery-product-intent-compat';
+import {
+  type IntentBranch,
+  type IntentWordScope,
+  isModelNumberPrefix,
+  matchesAlternativeBranch,
+  matchesIdentityTerms,
+  matchesModelSpecTokens,
+  matchesRequestedDevice,
+  matchesWord,
+  type ProductText,
+  words,
+} from './matches-discovery-product-intent-words';
 import {
   accessoryHeadTypes,
   detailBoundary,
@@ -5,24 +19,13 @@ import {
   genericItemModifiers,
   genericPhoneModifiers,
   genericTypes,
-  hasConsecutiveWords,
-  type IntentBranch,
-  type IntentWordScope,
-  isModelNumberPrefix,
   knownBrandWords,
   knownDeviceFamilyWords,
-  matchesAlternativeBranch,
-  matchesIdentityTerms,
-  matchesModelSpecTokens,
-  matchesRequestedDevice,
-  matchesWord,
   modelQualifiers,
   phoneAccessoryTypes,
-  type ProductText,
   productTypes,
   specUnitWords,
-  words,
-} from './matches-discovery-product-intent-words';
+} from './matches-discovery-product-intent-vocab';
 
 /** Keep the requested item type and explicit model attached to search results.
  * Embeddings alone can otherwise return a phone for a request for its case. */
@@ -30,7 +33,8 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
   if (!query) return true;
   const rawQuery = query.normalize('NFKC').toLocaleLowerCase('en').trim();
   const normalized = rawQuery
-    .replace(/^\s*(?:(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?(?:show|find|search|buy|get|recommend|suggest)(?:\s+me)?(?:\s+for)?|(?:looking|searching|shopping)\s+for|i\s+(?:want|need))(?:\s+(?:a|an|some|the))?\s+/i, '');
+    .replace(/^\s*(?:(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?(?:show|find|search|buy|get|recommend|suggest)(?:\s+me)?(?:\s+for)?|(?:looking|searching|shopping)\s+for|i\s+(?:want|need))(?:\s+(?:a|an|some|the))?\s+/i, '')
+    .replace(/^(?:(?:a|an|any|some|the)\s+)+/i, '');
   const queryWords = words(normalized);
   if (queryWords.filter((word) => /^[a-z]+$/.test(word)).length < 2 &&
     !queryWords.some((word) => /\d/.test(word)) && normalized === rawQuery) return true;
@@ -179,16 +183,16 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
       /^[a-z]{2,}$/.test(word)
     )
     : itemPrefixWords.filter((word, index) =>
-      !productTypes.has(word) && !genericItemModifiers.has(word) && !specUnitWords.has(word) &&
-      !knownDeviceFamilyWords.has(word) && !modelQualifiers.has(word) && !/\d/.test(word) &&
+      (!productTypes.has(word) || knownDeviceFamilyWords.has(word)) && !genericItemModifiers.has(word) &&
+      !specUnitWords.has(word) && !modelQualifiers.has(word) && !/\d/.test(word) &&
       !isModelNumberPrefix(itemPrefixWords, index) && /^[a-z]{2,}$/.test(word)
     );
   // Identity terms can also trail the type ("laptop from Samsung"); "from" and
   // "by" are markers rather than terms. Alternatives validate per branch.
   const itemSuffixWords = itemTypeIndex < 0 ? [] : itemWords.slice(itemTypeIndex + 1);
   const trailingIdentityTerms = itemSuffixWords.filter((word, index) =>
-    word !== 'from' && word !== 'by' && !productTypes.has(word) && !genericItemModifiers.has(word) &&
-    !specUnitWords.has(word) && !knownDeviceFamilyWords.has(word) && !modelQualifiers.has(word) &&
+    word !== 'from' && word !== 'by' && (!productTypes.has(word) || knownDeviceFamilyWords.has(word)) &&
+    !genericItemModifiers.has(word) && !specUnitWords.has(word) && !modelQualifiers.has(word) &&
     !/\d/.test(word) && !isModelNumberPrefix(itemSuffixWords, index) && /^[a-z]{2,}$/.test(word)
   );
   const compatibilityWords = words([product.name, product.description].filter(Boolean).join(' '));
@@ -207,44 +211,10 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
     ? matchedBranches.flatMap((branch) => branch.phraseWords)
     : itemWords;
   if (qualifierWords.some((word) => modelQualifiers.has(word) && !matchesWord(identityWords, word))) return false;
-  // Compatibility targets follow "for", "compatible with", or "fits".
-  const compatibilityIntroducers = new Set(['for', 'compatible', 'fits']);
-  let compatibilityIndex = -1;
-  for (let index = itemWords.length; index < coreWords.length; index += 1) {
-    if (compatibilityIntroducers.has(coreWords[index] ?? '')) {
-      compatibilityIndex = index;
-      break;
-    }
-  }
-  let compatibilityStart = compatibilityIndex < 0 ? 0 : compatibilityIndex + 1;
-  if (coreWords[compatibilityIndex] === 'compatible' && coreWords[compatibilityStart] === 'with') {
-    compatibilityStart += 1;
-  }
-  const compatibilityEnd = compatibilityIndex < 0 ? 0 : coreWords.findIndex((word, index) =>
-    index >= compatibilityStart && detailBoundary.has(word));
-  const compatibilityTerms = compatibilityIndex < 0 ? [] : coreWords.slice(
-    compatibilityStart,
-    compatibilityEnd < 0 ? coreWords.length : compatibilityEnd
-  )
-    .filter((word) => !['a', 'an', 'the', 'phone', 'phones', 'device', 'devices'].includes(word));
-  if (compatibilityTerms.some((term) => knownBrandWords.has(term) || knownDeviceFamilyWords.has(term))) {
-    if (!hasConsecutiveWords(compatibilityWords, compatibilityTerms)) return false;
-    const compatibilityAnchor = compatibilityTerms.findIndex((word) => /\d/.test(word));
-    if (compatibilityAnchor >= 0) {
-      const productAnchor = compatibilityWords.findIndex((word, index) =>
-        matchesWord([word], compatibilityTerms[compatibilityAnchor] ?? '') &&
-        hasConsecutiveWords(compatibilityWords.slice(index), compatibilityTerms.slice(compatibilityAnchor))
-      );
-      if (productAnchor >= 0) {
-        const queryQualifiers = compatibilityTerms.slice(compatibilityAnchor + 1).filter((word) => modelQualifiers.has(word));
-        const productQualifiers: string[] = [];
-        for (let next = productAnchor + 1; modelQualifiers.has(compatibilityWords[next] ?? ''); next += 1) {
-          productQualifiers.push(compatibilityWords[next] ?? '');
-        }
-        if (productQualifiers.some((qualifier) => !queryQualifiers.includes(qualifier))) return false;
-      }
-    }
-  }
+  // Brands after a compatibility introducer describe the target device (for
+  // example, a case for Samsung), rather than the accessory's manufacturer.
+  const compatibility = matchesCompatibilityClause({ compatibilityWords, coreWords, itemWords });
+  if (!compatibility.matched) return false;
 
   // "Phone pouch" describes an accessory, even if its description mentions
   // phones. A handset must be catalogued or named as the actual item.
@@ -258,8 +228,21 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
   }
 
   const productSpecWords = words([product.name, product.brand, product.category, product.description].filter(Boolean).join(' '));
+  // Feature words after a detail boundary ("touchscreen" in "laptop with
+  // touchscreen") must appear in the product text. Compatibility targets,
+  // specs, and broad use-case words are validated by their own checks.
+  const featureWords = coreWords.slice(itemWords.length).filter((word, offset) => {
+    // Compatibility targets are validated by their own clause, including
+    // unmatched "or" branches, so they never count as required features.
+    const index = itemWords.length + offset;
+    if (index >= compatibility.start && index < compatibility.end) return false;
+    return !detailBoundary.has(word) && !genericItemModifiers.has(word) && !genericTypes.has(word) &&
+      !specUnitWords.has(word) && !['a', 'an', 'the', 'phone', 'phones', 'device', 'devices'].includes(word) &&
+      !/\d/.test(word) && !isBroadIntentDiscoveryWord(word) && /^[a-z]{2,}$/.test(word);
+  });
+  if (featureWords.some((term) => !matchesWord(productSpecWords, term))) return false;
   return matchesModelSpecTokens({
-    coreWords, hasAlternativeItemTypes, identityWords, itemText, itemWords,
+    coreWords, hasAlternativeItemTypes, identityWords, itemText, itemType, itemWords,
     matchedBranchPhrases: matchedBranches.map((branch) => branch.phraseWords), productSpecWords,
   });
 }

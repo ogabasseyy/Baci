@@ -5,67 +5,22 @@ export type ProductText = {
   name?: string | null;
 };
 
-export const genericTypes = new Set([
-  'device', 'devices', 'gadget', 'gadgets', 'item', 'items',
-  'product', 'products', 'thing', 'things',
-]);
-export const detailBoundary = new Set(['under', 'below', 'between', 'with', 'for', 'at', 'in', 'priced', 'costing', 'compatible', 'fits']);
-export const modelAnchorStopwords = new Set(['a', 'an', 'the', 'model', 'version', 'size', 'of', 'for', 'with']);
-export const genericPhoneModifiers = new Set([
-  'android', 'budget', 'cheap', 'fast', 'good', 'latest', 'mobile', 'new',
-  'refurbished', 'smart', 'unlocked', 'used',
-]);
-export const genericItemModifiers = new Set([
-  ...genericPhoneModifiers, 'and', 'or', 'affordable', 'anything', 'compact', 'gaming', 'home', 'office', 'portable',
-  'power', 'security', 'something', 'that',
-]);
-export const phoneAccessoryTypes = new Set([
-  'cable', 'cables', 'case', 'cases', 'charger', 'chargers', 'cover', 'covers', 'earbud', 'earbuds',
-  'holder', 'holders', 'lens', 'lenses', 'mount', 'mounts', 'pouch', 'pouches', 'protector', 'protectors',
-  'stand', 'stands', 'tripod', 'tripods', 'wallet', 'wallets',
-]);
-export const productTypes = new Set([
-  ...phoneAccessoryTypes, 'accessory', 'accessories', 'adapter', 'adapters', 'bank', 'banks',
-  'camera', 'cameras', 'diffuser', 'diffusers', 'earbud', 'earbuds', 'earphone', 'earphones',
-  'headphone', 'headphones', 'keyboard', 'keyboards', 'laptop', 'laptops', 'macbook', 'macbooks',
-  'monitor', 'monitors', 'mouse', 'mice', 'phone', 'phones', 'printer', 'printers', 'speaker', 'speakers',
-  'smartphone', 'smartphones', 'stylus', 'styluses', 'tablet', 'tablets', 'television', 'televisions',
-  'tv', 'tvs', 'watch', 'watches',
-]);
-export const accessoryHeadTypes = new Set([
-  'case', 'cases', 'cover', 'covers', 'holder', 'holders', 'mount', 'mounts', 'pouch', 'pouches',
-  'protector', 'protectors', 'stand', 'stands', 'tripod', 'tripods', 'wallet', 'wallets',
-]);
-export const knownBrandWords = new Set([
-  'apple', 'asus', 'dell', 'google', 'hp', 'huawei', 'infinix', 'itel', 'jbl',
-  'lenovo', 'lg', 'msi', 'nokia', 'oppo', 'pixel', 'realme', 'redmi', 'riversong',
-  'samsung', 'sony', 'tecno', 'vivo', 'xiaomi',
-]);
-export const knownDeviceFamilyWords = new Set([
-  'airpod', 'airpods', 'galaxy', 'ipad', 'iphone', 'iphones', 'macbook', 'pixel', 'pixels',
-]);
-export const deviceQualifierAliases = new Map<string, string[]>([
-  ['phone', ['phone', 'smartphone', 'iphone']],
-  ['phones', ['phone', 'smartphone', 'iphone']],
-  ['smartphone', ['phone', 'smartphone', 'iphone']],
-  ['smartphones', ['phone', 'smartphone', 'iphone']],
-  ['laptop', ['laptop', 'macbook', 'notebook']],
-  ['laptops', ['laptop', 'macbook', 'notebook']],
-  ['camera', ['camera']],
-  ['cameras', ['camera']],
-  ['tablet', ['tablet', 'ipad']],
-  ['tablets', ['tablet', 'ipad']],
-]);
-export const modelQualifiers = new Set(['max', 'mini', 'plus', 'pro', 'ultra']);
-
-const irregularPlurals = new Map([
-  ['lenses', 'lens'], ['mice', 'mouse'], ['pouches', 'pouch'], ['styluses', 'stylus'], ['watches', 'watch']]);
-const irregularSingulars = new Map([
-  ['lens', 'lenses'], ['mouse', 'mice'], ['pouch', 'pouches'], ['stylus', 'styluses'], ['watch', 'watches']]);
-const equivalentTerms = new Map([
-  ['mouse', ['mice']], ['mice', ['mouse']], ['tv', ['television', 'televisions']], ['tvs', ['television', 'televisions']],
-  ['television', ['tv', 'tvs']], ['televisions', ['tv', 'tvs']]]);
-export const specUnitWords = new Set(['gb', 'tb', 'mb', 'mah', 'w', 'hz', 'mp']);
+import {
+  accessoryHeadTypes,
+  deviceQualifierAliases,
+  displayItemTypes,
+  equivalentTerms,
+  genericItemModifiers,
+  irregularPlurals,
+  irregularSingulars,
+  knownBrandWords,
+  knownDeviceFamilyWords,
+  modelAnchorStopwords,
+  modelQualifiers,
+  phoneAccessoryTypes,
+  productTypes,
+  specUnitWords,
+} from './matches-discovery-product-intent-vocab';
 
 export function words(value: string): string[] {
   return value.normalize('NFKC').replace(/(\d),(?=\d{3}(?:\D|$))/g, '$1')
@@ -179,15 +134,22 @@ export function matchesAlternativeBranch(
   const requestedDeviceForBranch = prefixWords.findLast((word) => deviceQualifierAliases.has(word));
   if (!matchesRequestedDevice(requestedDeviceForBranch, scope)) return false;
   const requestedTerms = prefixWords.filter((word, index) =>
-    !productTypes.has(word) && !genericItemModifiers.has(word) && !specUnitWords.has(word) &&
-    !knownDeviceFamilyWords.has(word) && !modelQualifiers.has(word) && !/\d/.test(word) &&
+    (!productTypes.has(word) || knownDeviceFamilyWords.has(word)) && !genericItemModifiers.has(word) &&
+    !specUnitWords.has(word) && !modelQualifiers.has(word) && !/\d/.test(word) &&
     !isModelNumberPrefix(prefixWords, index) && /^[a-z]{2,}$/.test(word)
   );
   if (!matchesIdentityTerms(requestedTerms, scope)) return false;
   // A branch matches only when its own model/spec numbers fit the candidate,
   // so "iPhone 15 case or iPhone 14 case" narrows to one branch per product.
   for (const [position, token] of prefixWords.entries()) {
-    if (!/\d/.test(token) || token.length > 10 || /^[0-9][gk]$/.test(token)) continue;
+    if (!/\d/.test(token) || token.length > 10) continue;
+    // Network generations ("5g") always constrain; resolutions ("4k") only
+    // constrain display items, since bare "4k" can also mean a price. Version
+    // fragments ("4g" in "2.4g") never constrain on their own.
+    const branchGeneration = /^[0-9]([gk])$/.exec(token)?.[1];
+    const branchVersionFragment = /^\d/.test(prefixWords[position - 1] ?? '');
+    if (branchGeneration && (branchVersionFragment ||
+      (branchGeneration === 'k' && !displayItemTypes.has(type)))) continue;
     if (token.length < 2) {
       const neighbors = [prefixWords[position - 1], prefixWords[position + 1]];
       const attachedToFamily = neighbors.some((word) => word &&
@@ -221,6 +183,7 @@ export type ModelSpecScope = {
   hasAlternativeItemTypes: boolean;
   identityWords: string[];
   itemText: string[];
+  itemType: string | undefined;
   itemWords: string[];
   matchedBranchPhrases: string[][];
   productSpecWords: string[];
@@ -258,7 +221,11 @@ export function matchesModelSpecTokens(scope: ModelSpecScope): boolean {
       continue;
     }
     const index = scope.itemWords.indexOf(token);
-    if (index < 0 || !/\d/.test(token) || token.length > 10 || /^[0-9][gk]$/.test(token)) continue;
+    if (index < 0 || !/\d/.test(token) || token.length > 10) continue;
+    const generation = /^[0-9]([gk])$/.exec(token)?.[1];
+    const versionFragment = /^\d/.test(scope.coreWords[coreIndex - 1] ?? '');
+    if (generation && (versionFragment ||
+      (generation === 'k' && !(scope.itemType && displayItemTypes.has(scope.itemType))))) continue;
     if (token.length < 2) {
       // Single digits constrain only family-attached models ("Pixel 9"), never
       // incidental quantities ("2 in 1", "2 pack").

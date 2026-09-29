@@ -78,6 +78,45 @@ describe('useHomeSearchControls', () => {
     });
   });
 
+  it('bounds a pasted query through submit and back navigation', () => {
+    const { result, rerender } = setup();
+    const pastedQuery = 'a'.repeat(150);
+    const boundedQuery = 'a'.repeat(100);
+
+    // Paste: acceptance bounds the controlled state itself, so the input,
+    // dropdown suggestions, and see-all label never see the excess.
+    act(() => {
+      result.current.handleSearch();
+      result.current.handleSearchQueryChange(pastedQuery);
+    });
+    expect(result.current.searchQuery).toBe(boundedQuery);
+
+    // Submit: the route param matches the displayed term.
+    act(() => {
+      result.current.handleSearchSubmit();
+    });
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/search',
+      params: { q: boundedQuery },
+    });
+
+    // Return: back navigation re-arms submission and keeps displaying the
+    // same bounded term — never the original over-long paste.
+    rerender({ isFocused: false, onSearchOpen: jest.fn() });
+    rerender({ isFocused: true, onSearchOpen: jest.fn() });
+    expect(result.current.searchQuery).toBe(boundedQuery);
+
+    act(() => {
+      result.current.handleSearch();
+      result.current.handleSearchSubmit();
+    });
+    expect(mockRouterPush).toHaveBeenCalledTimes(2);
+    expect(mockRouterPush).toHaveBeenLastCalledWith({
+      pathname: '/search',
+      params: { q: boundedQuery },
+    });
+  });
+
   it('keeps short queries in the input with a minimum-length hint', () => {
     const { result } = setup();
 

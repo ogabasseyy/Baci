@@ -70,10 +70,15 @@ export function useHomeSearchControls({
   };
 
   const handleSearchQueryChange = (text: string) => {
-    setSearchQuery(text);
+    // Bound at acceptance so the controlled state — input display,
+    // dropdown suggestions, see-all label, submitted route param — can
+    // never exceed the shared maximum, even for over-long pastes. The
+    // submit path keeps its own slice for direct suggestion strings.
+    const boundedQuery = text.slice(0, MAX_SEARCH_QUERY_LENGTH);
+    setSearchQuery(boundedQuery);
     if (
       showSearchMinLengthHint &&
-      text.trim().length >= MIN_SEARCH_QUERY_LENGTH
+      boundedQuery.trim().length >= MIN_SEARCH_QUERY_LENGTH
     ) {
       setShowSearchMinLengthHint(false);
     }

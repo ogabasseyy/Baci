@@ -281,6 +281,108 @@ describe('Paystack cancellation refund mismatch evidence', () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
+  it('files a review when a cancelled payment has no local refund row', async () => {
+    const paymentCandidates = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({
+        data: [
+          {
+            id: 'payment-1',
+            order_id: 'order-1',
+            merchant_id: 'merchant-1',
+            amount: 100,
+            currency: 'NGN',
+            cancel_order: {
+              cancelled_at: '2026-09-27T00:00:00Z',
+              shipping_status: 'cancelled',
+            },
+          },
+        ],
+        error: null,
+      }),
+    };
+    const refundCandidates = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+    };
+    const settledCandidates = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+    };
+    const review = { insert: vi.fn().mockResolvedValue({ error: null }) };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(paymentCandidates)
+      .mockReturnValueOnce(refundCandidates)
+      .mockReturnValueOnce(settledCandidates)
+      .mockReturnValueOnce(review);
+    const rpc = vi.fn();
+
+    await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
+
+    // Polling can never rediscover a provider refund with no local row,
+    // so the signed event fails closed instead of acknowledging silently.
+    expect(review.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'order_cancellation_refund_requires_review',
+        order_id: 'order-1',
+        txn_id: 'payment-1',
+      })
+    );
+  });
+
+  it('stays silent when a completed row already reconciled the payment', async () => {
+    const paymentCandidates = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({
+        data: [
+          {
+            id: 'payment-1',
+            order_id: 'order-1',
+            merchant_id: 'merchant-1',
+            amount: 100,
+            currency: 'NGN',
+            cancel_order: {
+              cancelled_at: '2026-09-27T00:00:00Z',
+              shipping_status: 'cancelled',
+            },
+          },
+        ],
+        error: null,
+      }),
+    };
+    const refundCandidates = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+    };
+    const settledCandidates = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({
+        data: [{ id: 'refund-9' }],
+        error: null,
+      }),
+    };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(paymentCandidates)
+      .mockReturnValueOnce(refundCandidates)
+      .mockReturnValueOnce(settledCandidates);
+    const rpc = vi.fn();
+
+    await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
+
+    expect(from).toHaveBeenCalledTimes(3);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it('ignores references outside the shared alphabet', async () => {
     const from = vi.fn();
     const rpc = vi.fn();

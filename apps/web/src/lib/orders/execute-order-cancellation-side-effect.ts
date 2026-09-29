@@ -63,9 +63,17 @@ export async function executeOrderCancellationSideEffect({
   if (!transactions.length) {
     throw new Error('No completed gateway payment transaction found');
   }
+  // In-flight non-Paystack legs (e.g. PayPal flips the payment row itself
+  // while its provider refund is pending) are not unsupported: their
+  // provider refund resolves on its own, so they must reach the
+  // provider-awaiting deferral below instead of quarantining terminally
+  // and stranding the remaining Paystack legs. Reference-less legs still
+  // quarantine — with nothing to track they can never resolve by waiting.
   const unsupportedLegs = transactions.filter(
     (transaction) =>
-      transaction.gateway !== 'paystack' || !transaction.gateway_reference
+      !transaction.gateway_reference ||
+      (transaction.gateway !== 'paystack' &&
+        transaction.status !== 'refund_pending')
   );
   if (unsupportedLegs.length > 0) {
     const unsupportedReasons = unsupportedRefundReasons(unsupportedLegs);

@@ -6,13 +6,18 @@ import {
 } from './search-products-ranking';
 import { loadMcpSearchProducts } from './search-products-query';
 
-function createRankedSearchSupabase(category?: string) {
+function createRankedSearchSupabase(
+  category?: string,
+  nameForId?: (id: string) => string,
+  descriptionForId?: (id: string) => string
+) {
   const inMock = vi.fn(async (_column: string, productIds: string[]) => ({
     data: productIds.map((id) => ({
       brand: 'Samsung',
       category,
+      description: descriptionForId?.(id),
       id,
-      name: `Product ${id}`,
+      name: nameForId?.(id) ?? `Product ${id}`,
     })),
     error: null,
   }));
@@ -22,10 +27,10 @@ function createRankedSearchSupabase(category?: string) {
   };
   const select = vi.fn(() => query);
   const rpc = vi.fn(
-    async (_functionName: string, args: { result_offset?: number }) => {
+    async (_functionName: string, args: { result_limit?: number; result_offset?: number }) => {
       const offset = args.result_offset ?? 0;
       const rows = Array.from(
-        { length: POST_FILTER_RESULT_PAGE_SIZE },
+        { length: args.result_limit ?? POST_FILTER_RESULT_PAGE_SIZE },
         (_, index) => ({
           product_id: `ranked-${offset + index}`,
           total_count: 10_000,
@@ -81,6 +86,61 @@ function createCatalogSearchSupabase(rowCount = POST_FILTER_RESULT_PAGE_SIZE) {
 }
 
 describe('loadMcpSearchProducts', () => {
+  it('selects descriptions and retains a description-only whole-word match', async () => {
+    const { select, supabase } = createRankedSearchSupabase(
+      'Accessories', () => 'Aroma Machine', () => 'Fragrance diffuser for rooms'
+    );
+    const result = await loadMcpSearchProducts({
+      args: { query: 'diffuser', limit: 1 }, merchantId: 'merchant-1',
+      sanitizeString: (input) => input, supabase,
+    });
+    expect(select).toHaveBeenCalledWith(expect.stringContaining('description'));
+    expect(result.products[0]?.name).toBe('Aroma Machine');
+  });
+
+  it('drops description-only matches for a broad use-case word', async () => {
+    const { supabase } = createRankedSearchSupabase(
+      'Furniture', () => 'Ergonomic Chair', () => 'Perfect for work and study'
+    );
+    const result = await loadMcpSearchProducts({
+      args: { query: 'work', limit: 1 }, merchantId: 'merchant-1',
+      sanitizeString: (input) => input, supabase,
+    });
+    expect(result.products).toEqual([]);
+  });
+
+  it('filters a punctuated one-word query like its unpunctuated form', async () => {
+    const { rpc, supabase } = createRankedSearchSupabase('Accessories', (id) =>
+      id === 'ranked-150' ? 'Work Laptop' : 'DreamWorks Dragons Toy'
+    );
+    const result = await loadMcpSearchProducts({
+      args: { query: 'work?', limit: 1 }, merchantId: 'merchant-1',
+      sanitizeString: (input) => input, supabase,
+    });
+    expect(result.products.map((product) => product.name)).toEqual(['Work Laptop']);
+    expect(rpc.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      result_limit: POST_FILTER_RESULT_PAGE_SIZE,
+    }));
+  });
+
+  it('skips a DreamWorks substring match and scans for a whole-word work product', async () => {
+    const { rpc, supabase } = createRankedSearchSupabase('Accessories', (id) =>
+      id === 'ranked-150' ? 'Work Laptop' : 'DreamWorks Dragons Toy'
+    );
+    const result = await loadMcpSearchProducts({
+      args: { query: 'work', limit: 1 },
+      merchantId: 'merchant-1',
+      sanitizeString: (input) => input,
+      supabase,
+    });
+    expect(result.products.map((product) => product.name)).toEqual(['Work Laptop']);
+    expect(rpc.mock.calls.length).toBeGreaterThan(1);
+    expect(rpc.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      result_limit: POST_FILTER_RESULT_PAGE_SIZE,
+      result_offset: 0,
+    }));
+  });
+
   it('loads a bounded ranked candidate pool without parent-price filters or ordering', async () => {
     const { rpc, supabase } = createRankedSearchSupabase('Smartphones');
     const result = await loadMcpSearchProducts({

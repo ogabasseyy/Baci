@@ -6,12 +6,9 @@ const params = () => ({
   resumeMerchantSlug: 'ogabassey',
   resumeTrackingToken: 'token-1',
   resumeLookupEmail: null,
-  preferredGateway: 'credit_direct' as const,
   setIsLoadingResumedOrder: vi.fn(),
   setResumedOrder: vi.fn(),
   setCheckoutFields: vi.fn(),
-  setPaymentTab: vi.fn(),
-  setPaymentMethod: vi.fn(),
   setResumeOrderError: vi.fn(),
 });
 afterEach(() => {
@@ -19,7 +16,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it('hydrates contact details and keeps a resumed BNPL order on the installments tab', async () => {
+it('hydrates contact details from the resumed order', async () => {
   const fetch = vi.fn().mockResolvedValue(
     Response.json({
       id: 'order-1',
@@ -41,8 +38,6 @@ it('hydrates contact details and keeps a resumed BNPL order on the installments 
       currentStep: 'payment',
     })
   );
-  expect(updates.setPaymentTab).toHaveBeenCalledWith('installments');
-  expect(updates.setPaymentMethod).toHaveBeenCalledWith('credit_direct');
   expect(updates.setIsLoadingResumedOrder).toHaveBeenLastCalledWith(false);
 });
 

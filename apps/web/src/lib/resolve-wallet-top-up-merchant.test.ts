@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { resolveWalletTopUpMerchant } from '@/lib/resolve-wallet-top-up-merchant';
 
+vi.mock('@/lib/slug-alias-cache', () => ({
+  getCurrentSlugForAlias: vi.fn(async () => null),
+}));
+
 type Row = { id: string; slug: string };
 type QueryError = { message: string };
 type SupabaseTestDouble = Parameters<typeof resolveWalletTopUpMerchant>[0] & {

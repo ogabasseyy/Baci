@@ -38,6 +38,7 @@ export async function loadShippingStates({
     setShippingStates(
       getSubdivisions(merchantCountry).map((subdivision) => subdivision.name)
     );
+    setIsLoadingLocations(false);
     return;
   }
 
@@ -92,8 +93,12 @@ export async function loadWalletBalance({
       `/api/storefront/customer/wallet?merchant=${merchantSlug}`,
       { signal }
     );
+    if (signal.aborted) return;
     if (response.ok) {
       const data = await response.json();
+      // Some test/custom fetch implementations may resolve after abort.
+      // Do not let an older merchant session overwrite the current wallet.
+      if (signal.aborted) return;
       const balance = Number(data.balance) || 0;
       setWalletBalance(balance);
       // Auto-apply wallet credit if balance > 0 (Shopify 2025 pattern)
@@ -103,7 +108,11 @@ export async function loadWalletBalance({
     }
   } catch (error) {
     // Ignore abort errors (component unmounted)
-    if (error instanceof Error && error.name !== 'AbortError') {
+    if (
+      !signal.aborted &&
+      error instanceof Error &&
+      error.name !== 'AbortError'
+    ) {
       console.error('Failed to fetch wallet balance:', error);
     }
   } finally {

@@ -133,7 +133,6 @@ describe('MCP streamable HTTP probe compatibility', () => {
       'get_brands',
       'get_product',
       'get_product_variants',
-      'get_recommendations',
       'get_shipping_quote',
       'get_store_info',
       'search_products',

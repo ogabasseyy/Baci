@@ -138,23 +138,51 @@ test('resumed order shows server totals and contact details with an empty cart',
   page,
 }) => {
   await seedCheckout(page, { emptyCart: true });
-  let lookups = 0;
-  await page.route('**/api/storefront/orders/**', (route) => {
-    lookups++;
-    const url = new URL(route.request().url());
-    expect(url.searchParams.get('merchant_slug')).toBe('ogabassey');
-    expect(url.searchParams.get('token')).toBe(order.tracking_token);
-    return route.fulfill({ json: order });
+  let resumeLookupRequests = 0;
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (
+      request.method() === 'GET' &&
+      url.pathname === `/api/storefront/orders/${order.id}` &&
+      url.searchParams.get('merchant_slug') === 'ogabassey' &&
+      url.searchParams.get('token') === order.tracking_token
+    ) {
+      resumeLookupRequests += 1;
+    }
+  });
+  const resumeLookup = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      url.pathname === `/api/storefront/orders/${order.id}` &&
+      url.searchParams.get('merchant_slug') === 'ogabassey' &&
+      url.searchParams.get('token') === order.tracking_token
+    );
   });
   await page.goto(
     `/checkout?orderId=${order.id}&trackingToken=${order.tracking_token}`
   );
+  expect((await resumeLookup).status()).toBe(200);
   await expect(
     page.getByRole('heading', { name: 'Order Summary' })
   ).toBeVisible();
   await expect(
-    page.getByText('₦107,500', { exact: true }).filter({ visible: true })
-  ).toBeVisible();
+    page
+      .getByText('Subtotal', { exact: true })
+      .filter({ visible: true })
+      .locator('..')
+  ).toContainText('₦100,000');
+  await expect(
+    page
+      .getByText('Tax', { exact: true })
+      .filter({ visible: true })
+      .locator('..')
+  ).toContainText('₦7,500');
+  await expect(
+    page
+      .getByText('Total', { exact: true })
+      .filter({ visible: true })
+      .locator('..')
+  ).toContainText('₦107,500');
   await expect(
     page
       .getByText('Checkout test phone', { exact: true })
@@ -169,7 +197,67 @@ test('resumed order shows server totals and contact details with an empty cart',
   await page.getByRole('button', { name: 'Contact Information' }).click();
   await page.getByRole('textbox', { name: 'First Name' }).fill('Grace');
   await page.getByRole('button', { name: 'Continue to Delivery' }).click();
-  expect(lookups).toBe(1);
+  await expect(
+    page.getByRole('button', { name: 'Contact Information' })
+  ).toHaveAccessibleDescription('Grace Okon · +2348031234567');
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      })
+  );
+  expect(resumeLookupRequests).toBe(1);
+});
+
+test('resumed summary keeps stamped shipping and discount in the canonical due', async ({
+  page,
+}) => {
+  await seedCheckout(page, { emptyCart: true });
+  const adjustedOrder = {
+    ...order,
+    tax_amount: 5_000,
+    shipping_fee: 12_500,
+    gift_wrapping_fee: 1_000,
+    discount_amount: 5_000,
+    total: 113_500,
+  };
+  await page.route('**/api/storefront/orders/**', (route) =>
+    route.fulfill({ json: adjustedOrder })
+  );
+  await page.goto(
+    `/checkout?orderId=${order.id}&trackingToken=${order.tracking_token}`
+  );
+
+  await expect(
+    page
+      .getByText('Subtotal', { exact: true })
+      .filter({ visible: true })
+      .locator('..')
+  ).toContainText('₦100,000');
+  await expect(
+    page
+      .getByText('Delivery', { exact: true })
+      .filter({ visible: true })
+      .locator('..')
+  ).toContainText('₦12,500');
+  await expect(
+    page
+      .getByText('Tax', { exact: true })
+      .filter({ visible: true })
+      .locator('..')
+  ).toContainText('₦5,000');
+  await expect(
+    page
+      .getByText('Discount', { exact: true })
+      .filter({ visible: true })
+      .locator('..')
+  ).toContainText('-₦5,000');
+  await expect(
+    page
+      .getByText('Total', { exact: true })
+      .filter({ visible: true })
+      .locator('..')
+  ).toContainText('₦113,500');
 });
 
 test('manual QA scenario controls are opt-in and reset local checkout state', async ({

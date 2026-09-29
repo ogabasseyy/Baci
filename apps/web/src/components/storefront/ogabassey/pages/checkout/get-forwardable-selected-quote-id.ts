@@ -6,7 +6,7 @@ import { getMerchantRateId } from './get-merchant-rate-id';
  * `selected_quote_id`.
  *
  * Returns `undefined` (i.e. "send nothing") when:
- *   - the method has no third-party quote (pickup/airport), or
+ *   - the method has no third-party quote (pickup or an unmatched airport quote), or
  *   - the selection is a merchant rate. Merchant rates carry a synthetic
  *     `mrate_<uuid>` id that is NOT a persisted quote row — the server
  *     recomputes their fee from `shipping_rate_id` instead. Both the reuse
@@ -18,7 +18,11 @@ import { getMerchantRateId } from './get-merchant-rate-id';
 export function getForwardableSelectedQuoteId(
   deliveryMethod: DeliveryMethod,
   selectedQuoteId: string,
+  airportQuoteMatchesMethod = false,
 ): string | undefined {
+  if (deliveryMethod === 'airport') {
+    return airportQuoteMatchesMethod ? selectedQuoteId || undefined : undefined;
+  }
   if (deliveryMethod !== 'door' && deliveryMethod !== 'pickup_station') {
     return undefined;
   }

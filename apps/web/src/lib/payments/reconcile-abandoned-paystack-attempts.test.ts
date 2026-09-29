@@ -11,6 +11,7 @@ describe('reconcileAbandonedPaystackAttempts', () => {
   it.each([
     'abandoned',
     'failed',
+    'reversed',
   ])('retires a provider-confirmed %s attempt linked to one order', async (status) => {
     const {
       client,

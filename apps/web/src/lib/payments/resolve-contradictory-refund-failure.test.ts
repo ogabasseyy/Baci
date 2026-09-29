@@ -44,12 +44,39 @@ describe('resolveContradictoryRefundFailure', () => {
     );
   });
 
-  it('suppresses the alert when a replacement refund postdates the failure', async () => {
+  it('suppresses the alert when a replacement refund covers the failed leg', async () => {
+    const failedRows = [
+      {
+        amount: 100,
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: 'RFD-1',
+        id: 'refund-1',
+        metadata: {
+          payment_transaction_id: 'payment-1',
+          provider_refund_status: 'failed',
+        },
+      },
+    ];
     const replacement = chain(
-      { data: [{ id: 'refund-2' }], error: null },
+      {
+        data: [
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'paystack',
+            id: 'refund-2',
+            metadata: { payment_transaction_id: 'payment-1' },
+          },
+        ],
+        error: null,
+      },
       'limit'
     );
-    const from = vi.fn().mockReturnValue(replacement);
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(chain({ data: failedRows, error: null }, 'limit'))
+      .mockReturnValueOnce(replacement);
 
     await expect(
       resolveContradictoryRefundFailure({ from } as never, row, order)
@@ -59,6 +86,65 @@ describe('resolveContradictoryRefundFailure', () => {
       '2026-09-27T12:00:00Z'
     );
     expect(mocks.quarantineRefund).not.toHaveBeenCalled();
+  });
+
+  it('files when the only replacement covers a different payment leg', async () => {
+    const failedRows = [
+      {
+        amount: 100,
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: 'RFD-1',
+        id: 'refund-1',
+        metadata: {
+          payment_transaction_id: 'payment-1',
+          provider_refund_status: 'failed',
+        },
+      },
+    ];
+    const legs = [
+      {
+        amount: 100,
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: 'PSK-1',
+        id: 'payment-1',
+      },
+    ];
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(chain({ data: failedRows, error: null }, 'limit'))
+      .mockReturnValueOnce(
+        chain(
+          {
+            data: [
+              {
+                amount: 200,
+                currency: 'NGN',
+                gateway: 'paystack',
+                id: 'refund-2',
+                metadata: { payment_transaction_id: 'payment-2' },
+              },
+            ],
+            error: null,
+          },
+          'limit'
+        )
+      )
+      .mockReturnValueOnce(chain({ data: legs, error: null }, 'in'));
+
+    await expect(
+      resolveContradictoryRefundFailure({ from } as never, row, order)
+    ).resolves.toBe(false);
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          contradictory_refund_failure: true,
+          failed_payment_transaction_ids: ['payment-1'],
+          failed_refund_ids: ['refund-1'],
+        }),
+      })
+    );
   });
 
   it('files a falsely-refunded review when the failure is the latest evidence', async () => {
@@ -86,8 +172,8 @@ describe('resolveContradictoryRefundFailure', () => {
     ];
     const from = vi
       .fn()
-      .mockReturnValueOnce(chain({ data: [], error: null }, 'limit'))
       .mockReturnValueOnce(chain({ data: failedRows, error: null }, 'limit'))
+      .mockReturnValueOnce(chain({ data: [], error: null }, 'limit'))
       .mockReturnValueOnce(chain({ data: legs, error: null }, 'in'));
 
     await expect(

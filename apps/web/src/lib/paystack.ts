@@ -27,7 +27,15 @@ const PLATFORM_FEE_CAP_KOBO = PLATFORM_FEE_CAP_NAIRA * 100;
 // Type Definitions
 // =============================================================================
 
-const PAYMENT_STATUSES = ['success', 'failed', 'abandoned', 'pending'] as const;
+// Paystack also reports provider-reversed transactions; the wallet
+// top-up confirm flow already treats `reversed` as terminal.
+const PAYMENT_STATUSES = [
+  'success',
+  'failed',
+  'abandoned',
+  'pending',
+  'reversed',
+] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
 const PAYMENT_CHANNELS = [

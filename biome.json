@@ -58,7 +58,7 @@
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CheckoutPaymentOverlays.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CheckoutPaymentOverlays.test.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-clipboard-feedback.ts",
-      "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-clipboard-feedback.test.tsx",
+      "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-clipboard-feedback.test.ts",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/PaymentStepAccessibility.test.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CheckoutAccountFields.test.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CheckoutAccountFields.tsx",

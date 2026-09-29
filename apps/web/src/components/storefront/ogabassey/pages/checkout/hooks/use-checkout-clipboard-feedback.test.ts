@@ -1,20 +1,29 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { createElement, Fragment } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { useCheckoutClipboardFeedback } from './use-checkout-clipboard-feedback';
 
 function ClipboardButton() {
   const { copiedText, copyToClipboard } = useCheckoutClipboardFeedback();
-  return (
-    <>
-      <button type="button" onClick={() => void copyToClipboard('account-1')}>
-        Copy first
-      </button>
-      <button type="button" onClick={() => void copyToClipboard('account-2')}>
-        Copy second
-      </button>
-      <output>{copiedText}</output>
-    </>
+  return createElement(
+    Fragment,
+    null,
+    createElement(
+      'button',
+      { type: 'button', onClick: () => void copyToClipboard('account-1') },
+      'Copy first'
+    ),
+    createElement(
+      'button',
+      { type: 'button', onClick: () => void copyToClipboard('account-2') },
+      'Copy second'
+    ),
+    createElement('output', null, copiedText)
   );
+}
+
+function renderClipboardButton() {
+  return render(createElement(ClipboardButton));
 }
 
 function deferredWrite() {
@@ -34,7 +43,7 @@ it('replaces the previous value and clears copied feedback after two seconds', a
   vi.useFakeTimers();
   const writeText = vi.fn().mockResolvedValue(undefined);
   vi.stubGlobal('navigator', { clipboard: { writeText } });
-  render(<ClipboardButton />);
+  renderClipboardButton();
 
   await act(async () =>
     fireEvent.click(screen.getByRole('button', { name: 'Copy first' }))
@@ -58,7 +67,7 @@ it('clears the pending feedback timer when its owner unmounts', async () => {
   vi.stubGlobal('navigator', {
     clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
   });
-  const { unmount } = render(<ClipboardButton />);
+  const { unmount } = renderClipboardButton();
 
   await act(async () =>
     fireEvent.click(screen.getByRole('button', { name: 'Copy first' }))
@@ -74,7 +83,7 @@ it('ignores late clipboard completions after unmount', async () => {
   vi.stubGlobal('navigator', {
     clipboard: { writeText: vi.fn(() => write.promise) },
   });
-  const { unmount } = render(<ClipboardButton />);
+  const { unmount } = renderClipboardButton();
 
   fireEvent.click(screen.getByRole('button', { name: 'Copy first' }));
   unmount();
@@ -91,7 +100,7 @@ it('lets the most recently requested copy own feedback when promises settle out 
     .mockReturnValueOnce(first.promise)
     .mockReturnValueOnce(second.promise);
   vi.stubGlobal('navigator', { clipboard: { writeText } });
-  render(<ClipboardButton />);
+  renderClipboardButton();
 
   fireEvent.click(screen.getByRole('button', { name: 'Copy first' }));
   fireEvent.click(screen.getByRole('button', { name: 'Copy second' }));
@@ -111,7 +120,7 @@ it('keeps the prior success expiry when a later clipboard write fails', async ()
     .mockRejectedValueOnce(new Error('clipboard unavailable'));
   vi.stubGlobal('navigator', { clipboard: { writeText } });
   const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-  render(<ClipboardButton />);
+  renderClipboardButton();
 
   await act(async () =>
     fireEvent.click(screen.getByRole('button', { name: 'Copy first' }))

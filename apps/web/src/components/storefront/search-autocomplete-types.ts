@@ -33,8 +33,16 @@ export interface SearchAutocompleteProps {
    */
   onSubmitSearch?: (query: string) => void;
   /**
+   * Submit eligibility for the current input. Defaults to non-blank.
+   * Consumers whose route sanitizes the query (e.g. the navbar's results
+   * route stripping "<>()") pass the same parser so sanitized-empty input
+   * hides the "See all results" action and Enter stays put instead of
+   * advertising — then silently dropping — a no-op submission.
+   */
+  isSearchSubmittable?: (query: string) => boolean;
+  /**
    * Maximum input length. Submit-wired consumers that truncate the route
-   * query (e.g. the navbar's 100-character cap) pass the same limit so
+   * query (e.g. the navbar's shared limit) pass the same limit so
    * the displayed value can never disagree with the submitted query.
    */
   maxLength?: number;

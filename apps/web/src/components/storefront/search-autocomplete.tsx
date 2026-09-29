@@ -20,6 +20,7 @@ export function SearchAutocomplete({
   onChange,
   onSelectProduct,
   onSubmitSearch,
+  isSearchSubmittable,
   maxLength,
   placeholder = 'Search products...',
   className,
@@ -71,8 +72,16 @@ export function SearchAutocomplete({
     prepareNavigation();
     onSelectProduct?.(url);
   };
+  // Submit eligibility follows the consumer's validator when provided
+  // (defaulting to non-blank): the action, the popup gate below, and the
+  // Enter path all agree, so an ineligible query is never advertised.
+  const isSubmittableQuery =
+    isSearchSubmittable ?? ((text: string) => text.trim().length > 0);
   const handleSubmitSearch = onSubmitSearch
     ? (query: string) => {
+        if (!isSubmittableQuery(query)) {
+          return;
+        }
         prepareNavigation();
         onSubmitSearch(query);
       }
@@ -80,6 +89,7 @@ export function SearchAutocomplete({
 
   const handleKeyDown = createAutocompleteKeyDownHandler({
     highlightedIndex,
+    isSubmittableQuery,
     onChange,
     onClose: () => setIsOpen(false),
     onHighlight: setHighlightedIndex,
@@ -113,10 +123,10 @@ export function SearchAutocomplete({
   const listboxId = `search-listbox-${merchantId}`;
   const resultsCount = suggestions.length + popularSearches.length;
   const trimmedValue = value.trim();
-  // The explicit "See all results" action is available for any nonblank query
-  // whenever the consumer wires full-search submission — including when the
-  // suggestion fetch returned nothing.
-  const canSubmitSearch = Boolean(onSubmitSearch) && trimmedValue.length > 0;
+  // The explicit "See all results" action is available for any submittable
+  // query whenever the consumer wires full-search submission — including
+  // when the suggestion fetch returned nothing.
+  const canSubmitSearch = Boolean(onSubmitSearch) && isSubmittableQuery(value);
   const showPopup = isOpen && (hasResults || canSubmitSearch);
   // The empty-state message and its screen-reader announcement share one
   // gate: only a settled successful response may claim there are no

@@ -224,4 +224,28 @@ describe('NavbarSearch', () => {
       '/ogabassey/blog?search=flash%20sale'
     );
   });
+
+  it('clamps blog searches to the 100-character listing limit', () => {
+    // The listing lookup discards everything past 100 characters, so the
+    // blog branch must not use the 200-character product limit.
+    render(
+      <NavbarSearch
+        basePath="/ogabassey"
+        isBlogPage={true}
+        merchantId="merchant-1"
+      />
+    );
+
+    const input = screen.getByRole('searchbox', {
+      name: /search blog posts/i,
+    }) as HTMLInputElement;
+    expect(input.maxLength).toBe(100);
+
+    fireEvent.change(input, { target: { value: 'a'.repeat(150) } });
+    fireEvent.submit(input.closest('form') as HTMLFormElement);
+
+    expect(mocks.push).toHaveBeenCalledWith(
+      `/ogabassey/blog?search=${'a'.repeat(100)}`
+    );
+  });
 });

@@ -194,7 +194,7 @@ export function SearchAutocompletePopup({
             onSubmitSearch(value);
             onClose();
           }}
-          className="mt-1 flex w-full items-center justify-center gap-2 border-t border-gray-100 bg-gray-50 px-4 py-2.5 text-sm font-semibold text-store-primary transition-colors hover:bg-store-primary/10 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-store-primary"
+          className="mt-1 flex w-full items-center justify-center gap-2 border-t border-store-border bg-store-secondary px-4 py-2.5 text-sm font-semibold text-store-primary transition-colors hover:bg-store-primary/10 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-store-primary"
         >
           <Search className="size-4" aria-hidden="true" />
           <span className="truncate">See all results for “{trimmedValue}”</span>

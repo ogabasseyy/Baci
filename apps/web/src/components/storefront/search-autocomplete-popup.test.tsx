@@ -173,4 +173,14 @@ describe('SearchAutocompletePopup', () => {
 
     expect(screen.getByText('Searching…')).toBeInTheDocument();
   });
+
+  it('themes the full-search action with storefront variables', () => {
+    // Fixed grays would not adapt to dark merchant palettes.
+    renderPopup({ canSubmitSearch: true });
+
+    const action = screen.getByRole('button', { name: /see all results/i });
+    expect(action).toHaveClass('border-store-border');
+    expect(action).toHaveClass('bg-store-secondary');
+    expect(action.className).not.toContain('gray-');
+  });
 });

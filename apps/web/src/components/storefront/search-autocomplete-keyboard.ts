@@ -7,6 +7,7 @@ import type {
 
 interface AutocompleteKeyDownInput {
   highlightedIndex: number;
+  isSubmittableQuery?: (query: string) => boolean;
   onChange: (value: string) => void;
   onClose: () => void;
   onHighlight: (updater: (prev: number) => number) => void;
@@ -24,6 +25,7 @@ interface AutocompleteKeyDownInput {
  */
 export function createAutocompleteKeyDownHandler({
   highlightedIndex,
+  isSubmittableQuery,
   onChange,
   onClose,
   onHighlight,
@@ -68,10 +70,12 @@ export function createAutocompleteKeyDownHandler({
     } else if (e.key === 'Enter' && !hasHighlight) {
       // With an explicit submit handler, Enter always submits the typed
       // query as a browsable search — even when product suggestions exist.
-      // Blank queries stay on the current page. Without the handler, keep
-      // the legacy behavior of opening the first product suggestion.
+      // Blank or validator-rejected queries stay put with the popup open
+      // (no submit, no close) instead of dropping a no-op submission.
+      // Without the handler, keep the legacy behavior of opening the
+      // first product suggestion.
       if (onSubmitSearch) {
-        if (value.trim()) {
+        if (value.trim() && (isSubmittableQuery?.(value) ?? true)) {
           e.preventDefault();
           onSubmitSearch(value);
           onClose();

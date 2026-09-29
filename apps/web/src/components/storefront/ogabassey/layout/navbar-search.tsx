@@ -10,6 +10,7 @@ import {
   parseStorefrontSearchQueryParam,
   STOREFRONT_SEARCH_MAX_QUERY_LENGTH,
 } from '@/lib/storefront-search-params';
+import { MAX_BLOG_SEARCH_QUERY_LENGTH } from '@/lib/storefront-slug-safety';
 
 /**
  * Maximum query the navbar accepts and submits. Shared with the results
@@ -113,7 +114,15 @@ export function NavbarSearch({
   }
 
   const pushSearchRoute = (query: string) => {
-    const trimmedQuery = query.trim().slice(0, NAVBAR_SEARCH_MAX_LENGTH);
+    // The blog branch keeps its own 100-character limit: the listing
+    // lookup discards everything past it, so submitting the 200-character
+    // product limit would display and encode a query the results ignore.
+    const trimmedQuery = query
+      .trim()
+      .slice(
+        0,
+        isBlogPage ? MAX_BLOG_SEARCH_QUERY_LENGTH : NAVBAR_SEARCH_MAX_LENGTH
+      );
     if (!trimmedQuery) {
       return;
     }
@@ -193,7 +202,7 @@ export function NavbarSearch({
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
           placeholder="Search blog posts..."
-          maxLength={NAVBAR_SEARCH_MAX_LENGTH}
+          maxLength={MAX_BLOG_SEARCH_QUERY_LENGTH}
           aria-label="Search blog posts"
           id="blog-search-input"
           name="search"
@@ -210,6 +219,16 @@ export function NavbarSearch({
         onChange={setSearchQuery}
         onSelectProduct={handleProductSelect}
         onSubmitSearch={pushSearchRoute}
+        // Mirrors the product branch of pushSearchRoute exactly so
+        // sanitized-empty input (e.g. "<>()") hides the action instead of
+        // advertising a submission the route guard would drop.
+        isSearchSubmittable={(query) =>
+          Boolean(
+            parseStorefrontSearchQueryParam(
+              query.trim().slice(0, NAVBAR_SEARCH_MAX_LENGTH)
+            )
+          )
+        }
         // Match the shared navbar limit (and the fallback input below)
         // so the persistent value can never exceed the submitted query.
         maxLength={NAVBAR_SEARCH_MAX_LENGTH}

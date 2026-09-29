@@ -9,13 +9,13 @@ import { STOREFRONT_PRODUCTS_PER_PAGE } from '@/lib/storefront-pagination';
 import type { StorefrontSearchProductsPage } from '@/lib/storefront-search';
 import { STOREFRONT_SEARCH_MAX_PAGE } from '@/lib/storefront-search-params';
 import { ProductIndexCard } from '../products/product-index-card';
+import { loadSearchPageData } from './search-page-data';
+import { SearchPageErrorPanel } from './search-page-error-panel';
+import { SearchPageForm } from './search-page-form';
 import {
   buildSearchHref,
   buildSearchSubmissionHref,
-  loadSearchPageData,
-} from './search-page-data';
-import { SearchPageErrorPanel } from './search-page-error-panel';
-import { SearchPageForm } from './search-page-form';
+} from './search-page-hrefs';
 import { SearchPageNoResultsPanel } from './search-page-no-results-panel';
 import { getPriceFormatter } from './search-page-price';
 import { buildSearchPageSchemas } from './search-page-schema';

@@ -6,7 +6,6 @@ import {
 } from '@/lib/cached-data';
 import { buildRequestScopedStoreUrl } from '@/lib/store-url';
 import {
-  buildStorefrontPageHref,
   parseStorefrontPageParam,
   STOREFRONT_PRODUCTS_PER_PAGE,
 } from '@/lib/storefront-pagination';
@@ -20,6 +19,7 @@ import {
   STOREFRONT_SEARCH_MAX_PAGE,
 } from '@/lib/storefront-search-params';
 import { isValidMerchantIdentifier } from '@/lib/validation';
+import { buildSearchHref } from './search-page-hrefs';
 
 export interface SearchPageDataInput {
   params: Promise<{ slug: string }>;
@@ -39,36 +39,6 @@ export interface SearchPageData {
   searchFailed: boolean;
   searchResult: StorefrontSearchProductsPage | null;
   storeUrl: string;
-}
-
-/**
- * Submission entries (search form, navbar, see-all, did-you-mean) never
- * carry a page parameter; only their renders count as new searches.
- */
-export function buildSearchSubmissionHref(
-  searchBasePath: string,
-  targetQuery: string
-): string {
-  return `${searchBasePath}?q=${encodeURIComponent(targetQuery)}`;
-}
-
-/**
- * Navigational search URLs (redirect targets, pagination links).
- * Page-1 targets carry an explicit page parameter so landing on them never
- * counts as a fresh search submission the way a submission entry does.
- */
-export function buildSearchHref(
-  searchBasePath: string,
-  targetQuery: string,
-  targetPage: number
-): string {
-  const pageOneHref = targetQuery
-    ? buildSearchSubmissionHref(searchBasePath, targetQuery)
-    : searchBasePath;
-  if (targetQuery && targetPage <= 1) {
-    return `${pageOneHref}&page=1`;
-  }
-  return buildStorefrontPageHref(pageOneHref, targetPage);
 }
 
 /**

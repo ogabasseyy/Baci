@@ -102,7 +102,7 @@ describe('verified paystack cancellation refund migration', () => {
     const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
 
     expect(migrationSql).toContain(
-      "AND settlement.source_id = v_order.id AND settlement.status IN ('pending', 'processing', 'settled')"
+      "AND settlement.source_id = p_order_id AND settlement.status IN ('pending', 'processing', 'settled')"
     );
     expect(migrationSql).not.toContain("settlement.gateway = 'paystack'");
     expect(migrationSql).toContain(
@@ -117,20 +117,29 @@ describe('verified paystack cancellation refund migration', () => {
     expect(migrationSql).toContain('IF NOT v_direct_split THEN');
   });
 
-  it('keeps orphan provider evidence open until a local refund row matches it', () => {
+  it('requeues the failure alert when a newer failure lands on a settled row', () => {
     expect(existsSync(migrationPath)).toBe(true);
     if (!existsSync(migrationPath)) return;
 
     const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
 
     expect(migrationSql).toContain(
-      "review.metadata->>'audit_record_failed' IS DISTINCT FROM 'true'"
+      'ON CONFLICT (order_id, event_type) DO UPDATE SET'
     );
+    expect(migrationSql).toContain("status = 'pending', attempts = 0");
     expect(migrationSql).toContain(
-      "r.gateway_reference = review.metadata->>'provider_refund_id'"
+      "paystack_cancellation_refund_notifications.status IN ('sent', 'failed', 'delivery_uncertain')"
     );
+  });
+
+  it('alerts only on failure transitions, not repeat polling verdicts', () => {
+    expect(existsSync(migrationPath)).toBe(true);
+    if (!existsSync(migrationPath)) return;
+
+    const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
+
     expect(migrationSql).toContain(
-      "r.gateway_reference = split_part(e.key, ':', 2)"
+      "v_refund.metadata->>'provider_refund_status' = v_status"
     );
   });
 });

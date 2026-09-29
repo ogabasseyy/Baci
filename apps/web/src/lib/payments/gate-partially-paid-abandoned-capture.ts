@@ -3,11 +3,10 @@ import { logger } from '@/lib/logger';
 import { calculatePlatformFee } from '@/lib/paystack';
 import { merchantInvoicePartialPaymentCompletionSchema } from '@/schemas/merchant-invoice-partial-payment-completion';
 import { fileDuplicatePaymentCapture } from './file-duplicate-payment-capture';
+import { fileConflictAndRetire } from './gate-partially-paid-abandoned-capture-conflict';
 import { extractVerifiedGatewayFeeNgn } from './verified-gateway-fee';
 
 const INVOICE_PARTIAL_ALLOCATION = 'merchant_invoice_partial';
-const CONFLICT_RESOLUTION = 'merchant_invoice_partial_conflict_reviewed';
-const POSTGRES_UNIQUE_VIOLATION = '23505';
 
 interface GateAttempt {
   amount: number;
@@ -25,80 +24,6 @@ interface GateContext {
   providerData: Record<string, unknown>;
   summary: { completed: string[]; failed: boolean; reviewsFiled: string[] };
   supabase: SupabaseClient;
-}
-
-async function fileConflictReview(
-  supabase: SupabaseClient,
-  {
-    attempt,
-    errorCode,
-    reason,
-  }: { attempt: GateAttempt; errorCode: string; reason: string }
-): Promise<boolean> {
-  const { error } = await supabase.from('reconciliation_review').insert({
-    candidates: null,
-    issue_type: 'merchant_invoice_partial_payment_conflict',
-    metadata: { error_code: errorCode },
-    order_id: attempt.order_id,
-    paystack_ref: attempt.gateway_reference,
-    reason,
-    txn_id: attempt.id,
-  });
-  if (!error) return true;
-  // This issue type dedupes per transfer (txn/ref), not per order, so a
-  // conflict means this same capture was already filed — a second capture
-  // files its own row. Redelivery is success; nothing merges.
-  if ((error as { code?: string }).code === POSTGRES_UNIQUE_VIOLATION) {
-    return true;
-  }
-  logger.error({
-    error,
-    message: 'Failed to file merchant invoice payment review',
-    orderId: attempt.order_id,
-    reference: attempt.gateway_reference,
-    transactionId: attempt.id,
-  });
-  return false;
-}
-
-async function stampConflictResolution(
-  supabase: SupabaseClient,
-  attempt: GateAttempt
-): Promise<boolean> {
-  const { data: stamped, error: stampError } = await supabase.rpc(
-    'stamp_abandoned_sweep_resolution_v1',
-    {
-      p_transaction_id: attempt.id,
-      p_expected_reference: attempt.gateway_reference,
-      p_resolution: CONFLICT_RESOLUTION,
-    }
-  );
-  return !stampError && stamped === true;
-}
-
-async function fileConflictAndRetire(
-  context: GateContext,
-  { errorCode, reason }: { errorCode: string; reason: string }
-): Promise<'done'> {
-  const { attempt, hold, summary, supabase } = context;
-  const filed = await fileConflictReview(supabase, {
-    attempt,
-    errorCode,
-    reason,
-  });
-  if (!filed) {
-    summary.failed = true;
-    await hold('partial_conflict_review_failed');
-    return 'done';
-  }
-  const stamped = await stampConflictResolution(supabase, attempt);
-  if (!stamped) {
-    summary.failed = true;
-    await hold('partial_conflict_stamp_failed');
-    return 'done';
-  }
-  summary.reviewsFiled.push(attempt.id);
-  return 'done';
 }
 
 async function fileOverpaymentDuplicate(context: GateContext): Promise<'done'> {
@@ -290,10 +215,17 @@ async function gateNonInvoicePartialCapture(
   }
   // A concurrent completion between this read and the finalizer resolves
   // through the atomic completion result (capturedOnPaidOrder files the
-  // duplicate review), so the only unsafe direction is promoting on a
-  // known-short balance. The 1-kobo tolerance mirrors the RPC's exactness.
-  if (captureMinor / 100 + 0.01 >= outstanding) {
+  // duplicate review). The 1-kobo tolerance mirrors the RPC's exactness:
+  // only an exact-balance capture proceeds. A known overpayment is
+  // definitively excess money — the outstanding balance can only shrink
+  // before the finalizer runs — and the finalizer would promote the
+  // order to paid without the duplicate review, so file it here.
+  const captureNgn = captureMinor / 100;
+  if (Math.abs(captureNgn - outstanding) <= 0.01) {
     return 'proceed';
+  }
+  if (captureNgn > outstanding) {
+    return await fileOverpaymentDuplicate(context);
   }
   await hold('partial_balance_short');
   return 'done';

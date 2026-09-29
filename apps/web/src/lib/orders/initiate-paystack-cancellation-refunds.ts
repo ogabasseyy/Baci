@@ -83,8 +83,9 @@ export async function initiatePaystackCancellationRefunds({
             failed_payment_transaction_id: transaction.id,
             // An ambiguous later failure may still have created a provider
             // refund: mark it so the completion gate never auto-closes the
-            // review on other legs' evidence.
-            ...(isAmbiguousFailure ? { ambiguous_initiation: true } : {}),
+            // review on other legs' evidence. Recorded explicitly either
+            // way so lone failed-leg IDs never read as legacy ambiguity.
+            ambiguous_initiation: isAmbiguousFailure,
           },
           order,
           reason:
@@ -102,7 +103,10 @@ export async function initiatePaystackCancellationRefunds({
         await quarantineRefund({
           metadata: {
             failed_payment_transaction_id: transaction.id,
-            ...(isAmbiguousFailure ? { ambiguous_initiation: true } : {}),
+            // Explicit either way: a deterministic rejection must
+            // auto-close on replacement coverage, not read as legacy
+            // ambiguity.
+            ambiguous_initiation: isAmbiguousFailure,
           },
           order,
           reason: isAmbiguousFailure
@@ -119,6 +123,9 @@ export async function initiatePaystackCancellationRefunds({
                 ? { accepted_refund_ids: refundIds }
                 : {}),
               failed_payment_transaction_id: transaction.id,
+              // A 429 is a definite rejection: explicit false so the
+              // completion gate auto-closes on replacement coverage.
+              ambiguous_initiation: false,
               rate_limit_exhausted: true,
             },
             order,

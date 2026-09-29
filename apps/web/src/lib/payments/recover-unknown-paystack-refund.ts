@@ -5,6 +5,7 @@ import { fetchPaystackPaymentById } from './fetch-paystack-payment-by-id';
 import { fetchRefund } from './fetch-paystack-refund';
 import { fileCancelledPaystackRefundCandidateReviews } from './file-cancelled-paystack-refund-candidate-reviews';
 import { filePaystackRefundRecoveryReview } from './file-paystack-refund-recovery-review';
+import { fileProviderRefundOutsideCancellationReview } from './file-provider-refund-outside-cancellation-review';
 import { fileRefundEvidenceReview } from './file-refund-evidence-review';
 import { fileStalledPaystackRefundReviews } from './file-stalled-paystack-refund-reviews';
 import { holdPaystackRefundForReview } from './hold-paystack-refund-for-review';
@@ -59,8 +60,9 @@ async function reconcileRecoveredRow(
  * are re-verified with Paystack, the payment must be the order's single
  * completed leg on a cancelled order, and only then is a local audit row
  * recorded and reconciled through the standard transition. Events that
- * cannot be verified throw so Paystack can redeliver; unrelated verified
- * payments are acknowledged without touching existing rows.
+ * cannot be verified throw so Paystack can redeliver; verified refunds
+ * on active orders are filed for operations, since polling can never
+ * rediscover a provider-only refund after acknowledgement.
  */
 export async function recoverUnknownPaystackRefund(
   supabase: SupabaseClient,
@@ -188,14 +190,34 @@ export async function recoverUnknownPaystackRefund(
     .eq('id', payment.order_id)
     .maybeSingle();
   if (orderError) throw new Error('refund_event_order_lookup_failed');
+  if (!order) {
+    logger.info({
+      message: 'Unknown Paystack refund event payment has no order',
+      refundId,
+    });
+    return;
+  }
   if (
-    !order ||
     order.cancelled_at == null ||
     (order.shipping_status !== 'cancelled' &&
       order.shipping_status !== 'canceled')
   ) {
+    // Verified refund on an active order: file for operations (polling
+    // can never rediscover it). Write failures throw for redelivery.
+    await fileProviderRefundOutsideCancellationReview(supabase, {
+      amount: current.amount / 100,
+      currency: current.currency,
+      merchantId: payment.merchant_id,
+      orderId: payment.order_id,
+      orderNumber: order.order_number,
+      paymentId: payment.id,
+      paymentReference: payment.gateway_reference,
+      providerPaymentTransactionId: evidence.providerPaymentTransactionId,
+      providerRefundId: refundId,
+      providerRefundStatus: current.status,
+    });
     logger.info({
-      message: 'Unknown Paystack refund event is not for a cancelled order',
+      message: 'Unknown Paystack refund event filed for an active order',
       refundId,
     });
     return;

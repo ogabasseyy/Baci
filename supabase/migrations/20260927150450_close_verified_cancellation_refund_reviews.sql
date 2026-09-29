@@ -45,16 +45,17 @@ BEGIN
       -- Ambiguous initiation evidence is never auto-resolved: the
       -- original request may have created a provider refund no audit
       -- row records, and closing on a replacement's coverage would hide
-      -- the undiscovered duplicate. New filings mark it explicitly;
-      -- legacy ambiguous filings carry only
-      -- failed_payment_transaction_id (accepted legs prove a partial
-      -- deterministic failure instead); merged legs carry it under
-      -- their leg key. Only operations (or a future provider-evidence
-      -- check) resolves that uncertainty.
+      -- the undiscovered duplicate. New filings record the verdict
+      -- explicitly; only legacy ambiguous filings carry a lone
+      -- failed_payment_transaction_id with no marker at all (accepted
+      -- legs prove a partial deterministic failure instead); merged
+      -- legs carry it under their leg key. Only operations (or a future
+      -- provider-evidence check) resolves that uncertainty.
       AND coalesce((review.metadata->>'ambiguous_initiation')::boolean, false) IS NOT TRUE
       AND (
         review.metadata->>'failed_payment_transaction_id' IS NULL
         OR review.metadata ? 'accepted_refund_ids'
+        OR (review.metadata->>'ambiguous_initiation')::boolean IS FALSE
       )
       AND NOT EXISTS (
         SELECT 1

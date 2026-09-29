@@ -17,6 +17,7 @@ type RefundEmailSender = (message: {
   emailType: 'orders' | 'notifications';
   fromName?: string;
   signal?: AbortSignal;
+  fallbackDeadlineMs?: number;
   auditContext: {
     merchantId: string;
     orderId: string;
@@ -135,6 +136,9 @@ export async function drainPaystackRefundNotifications(
               signal: AbortSignal.timeout(
                 Math.max(1, deadlineMs - Date.now() - 10_000)
               ),
+              // Match the signal's 10s buffer: the platform-sender
+              // fallback declines unless its full retry loop fits.
+              fallbackDeadlineMs: deadlineMs - 10_000,
             }),
             to: order.customer_email,
             toName: order.customer_name ?? undefined,
@@ -227,6 +231,9 @@ export async function drainPaystackRefundNotifications(
                   signal: AbortSignal.timeout(
                     Math.max(1, deadlineMs - Date.now() - 10_000)
                   ),
+                  // Match the signal's 10s buffer: the platform-sender
+                  // fallback declines unless its full retry loop fits.
+                  fallbackDeadlineMs: deadlineMs - 10_000,
                 }),
                 to: merchant.email,
                 subject: `${title}: order #${orderNumber}`,

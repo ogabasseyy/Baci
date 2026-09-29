@@ -193,9 +193,9 @@ describe('initiatePaystackCancellationRefunds failures', () => {
         reason: expect.stringContaining('rejected'),
       })
     );
-    expect(
-      mocks.quarantineRefund.mock.calls[0]?.[0].metadata
-    ).not.toHaveProperty('ambiguous_initiation');
+    expect(mocks.quarantineRefund.mock.calls[0]?.[0].metadata).toMatchObject({
+      ambiguous_initiation: false,
+    });
   });
 
   it('still quarantines an ambiguous later leg after an accepted leg', async () => {

@@ -181,6 +181,13 @@ BEGIN
   -- cancellation description the pending worker requires, leaving them
   -- selected by neither worker.
   IF v_refund.status = 'failed' AND v_status <> 'processed' THEN RETURN 'already_failed'; END IF;
+  -- Repeat verdicts are not new evidence: polling rechecks the same
+  -- nonterminal refund every cycle, so only a status transition (or a
+  -- first failure) reaches the alert insert below.
+  IF v_status IN ('failed', 'needs-attention')
+    AND v_refund.metadata->>'provider_refund_status' = v_status THEN
+    RETURN v_status;
+  END IF;
   UPDATE public.transactions SET
     status = CASE WHEN v_status = 'processed' THEN 'completed'
                   WHEN v_status = 'failed' THEN 'failed'
@@ -192,10 +199,23 @@ BEGIN
   WHERE id = v_refund.id;
 
   IF v_status IN ('failed', 'needs-attention') THEN
+    -- A later failure on another leg (or a contradictory failure after
+    -- the order became refunded) must re-alert: reset a settled row to
+    -- claimable with a fresh retry budget. Queued rows already
+    -- guarantee a covering alert; repeat verdicts return early above.
     INSERT INTO public.paystack_cancellation_refund_notifications
       (order_id, merchant_id, event_type)
     VALUES (v_order.id, v_order.merchant_id, 'failed_merchant_push')
-    ON CONFLICT (order_id, event_type) DO NOTHING;
+    ON CONFLICT (order_id, event_type) DO UPDATE SET
+      status = 'pending',
+      attempts = 0,
+      claimed_at = NULL,
+      claim_token = NULL,
+      last_error = NULL,
+      sent_at = NULL,
+      created_at = now()
+    WHERE paystack_cancellation_refund_notifications.status IN
+      ('sent', 'failed', 'delivery_uncertain');
     RETURN v_status;
   END IF;
   IF v_status <> 'processed' THEN RETURN v_status; END IF;

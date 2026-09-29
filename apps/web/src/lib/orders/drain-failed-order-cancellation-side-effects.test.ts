@@ -238,6 +238,44 @@ describe('drainFailedOrderCancellationSideEffects', () => {
     );
   });
 
+  it('runs the oldest candidate across the failed and deferred queues', async () => {
+    const failed = {
+      attempts: 1,
+      claimed_at: '2026-07-22T00:00:00Z',
+      order_id: 'order-new',
+      step: 'refund',
+    };
+    const deferred = {
+      attempts: 0,
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-old',
+      step: 'refund',
+    };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(terminalQuery([failed]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([deferred]))
+      .mockReturnValueOnce(
+        terminalQuery({ id: 'order-old', merchant_id: 'merchant-1' })
+      )
+      .mockReturnValueOnce(terminalQuery({ id: 'merchant-1' }));
+
+    const summary = await drainFailedOrderCancellationSideEffects({
+      limit: 1,
+      sendCancellationEmail: vi.fn(),
+      supabase: { from } as never,
+    });
+
+    // A full failure backlog must not starve older deferred rows: the
+    // single slot goes to the oldest candidate regardless of queue.
+    expect(mocks.run).toHaveBeenCalledTimes(1);
+    expect(mocks.run).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: 'order-old' })
+    );
+    expect(summary.drained).toEqual([{ orderId: 'order-old', step: 'refund' }]);
+  });
+
   it('never marks deferred rows as the last attempt', async () => {
     const deferred = {
       attempts: 4,

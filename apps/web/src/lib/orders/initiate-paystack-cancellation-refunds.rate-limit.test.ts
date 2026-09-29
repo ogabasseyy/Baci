@@ -61,6 +61,7 @@ describe('initiatePaystackCancellationRefunds rate-limit exhaustion', () => {
     expect(mocks.quarantineRefund).toHaveBeenCalledWith(
       expect.objectContaining({
         metadata: expect.objectContaining({
+          ambiguous_initiation: false,
           failed_payment_transaction_id: 'tx-1',
           rate_limit_exhausted: true,
         }),

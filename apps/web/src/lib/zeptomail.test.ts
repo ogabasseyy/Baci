@@ -514,6 +514,64 @@ describe('zeptomail audit logging', () => {
     });
   });
 
+  it('skips the platform fallback when the remaining budget cannot fit it', async () => {
+    getActiveMerchantSendingDomainMock.mockResolvedValue('ogabassey.com');
+    // Non-retryable rejection for the custom sender; the platform sender
+    // would succeed, but the fallback must not start on a short budget.
+    sendMailMock.mockImplementation((args: { from?: { address?: string } }) => {
+      if (args.from?.address === 'orders@ogabassey.com') {
+        return Promise.reject({
+          error: { code: 'TM_3201', message: 'Invalid sender domain' },
+        });
+      }
+      return Promise.resolve({ request_id: 'zepto-fellback' });
+    });
+    const { sendEmail } = await import('./zeptomail');
+
+    const result = await sendEmail({
+      to: 'customer@example.com',
+      subject: 'Order Confirmation',
+      htmlContent: '<p>Hello</p>',
+      emailType: 'orders',
+      auditContext: { merchantId: 'merchant-1', orderId: 'order-1' },
+      fallbackDeadlineMs: Date.now() + 60_000,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result).toMatchObject({ errorCode: 'TM_3201' });
+    expect(sendMailMock.mock.calls.map((c) => c[0]?.from?.address)).toEqual([
+      'orders@ogabassey.com',
+    ]);
+  });
+
+  it('runs the platform fallback when the remaining budget fits it', async () => {
+    getActiveMerchantSendingDomainMock.mockResolvedValue('ogabassey.com');
+    sendMailMock.mockImplementation((args: { from?: { address?: string } }) => {
+      if (args.from?.address === 'orders@ogabassey.com') {
+        return Promise.reject({
+          error: { code: 'TM_3201', message: 'Invalid sender domain' },
+        });
+      }
+      return Promise.resolve({ request_id: 'zepto-fellback' });
+    });
+    const { sendEmail } = await import('./zeptomail');
+
+    const result = await sendEmail({
+      to: 'customer@example.com',
+      subject: 'Order Confirmation',
+      htmlContent: '<p>Hello</p>',
+      emailType: 'orders',
+      auditContext: { merchantId: 'merchant-1', orderId: 'order-1' },
+      fallbackDeadlineMs: Date.now() + 200_000,
+    });
+
+    expect(result).toEqual({ success: true, messageId: 'zepto-fellback' });
+    expect(sendMailMock.mock.calls.map((c) => c[0]?.from?.address)).toEqual([
+      'orders@ogabassey.com',
+      'orders@usebaci.com',
+    ]);
+  });
+
   it('does not try a platform fallback after an ambiguous custom-domain send', async () => {
     getActiveMerchantSendingDomainMock.mockResolvedValue('ogabassey.com');
     sendMailMock.mockRejectedValueOnce(

@@ -287,4 +287,25 @@ describe('discovery product intent', () => {
     expect(matchesDiscoveryProductIntent({ name: 'Smart Watch', category: 'Watches' }, 'smart watch')).toBe(true);
     expect(matchesDiscoveryProductIntent({ name: 'Drawing Styluses', category: 'Accessories' }, 'drawing stylus')).toBe(true);
   });
+
+  it('keeps descriptive conjunctions in one intent but splits type lists', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'Wireless Earbuds', category: 'Accessories' }, 'noise cancelling and wireless earbuds')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'Noise Cancelling Wireless Earbuds', category: 'Accessories' }, 'noise cancelling and wireless earbuds')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'iPhone 15', category: 'Smartphones' }, 'phones and tablets')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'iPad Air', category: 'Tablets' }, 'phones and tablets')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', category: 'Laptops' }, 'phones and tablets')).toBe(false);
+  });
+
+  it('validates each alternative against its own model numbers', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'iPhone 15 Case', category: 'Accessories' }, 'iPhone 15 case or iPhone 14 case')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'iPhone 14 Case', category: 'Accessories' }, 'iPhone 15 case or iPhone 14 case')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'iPhone 13 Case', category: 'Accessories' }, 'iPhone 15 case or iPhone 14 case')).toBe(false);
+  });
+
+  it('enforces the remaining term when no product type is recognized', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'iPhone 15', category: 'Smartphones' }, 'find iPhone')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'HP Printer', category: 'Printers' }, 'find iPhone')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell XPS 13', brand: 'Dell', category: 'Laptops' }, 'dell xps')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', brand: 'Dell', category: 'Laptops' }, 'dell xps')).toBe(false);
+  });
 });

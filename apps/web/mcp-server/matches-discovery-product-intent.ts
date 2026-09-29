@@ -48,17 +48,35 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
   const itemWords = detailIndex < 0 ? [...coreWords] : coreWords.slice(0, detailIndex);
   while (genericTypes.has(itemWords.at(-1) ?? '')) itemWords.pop();
   if (itemWords.length === 0) return true;
+  // "or" always separates alternatives, but "and" only splits genuine
+  // product-type lists ("phones and tablets"): descriptive conjunctions
+  // ("noise cancelling and wireless earbuds") stay one intent.
+  const splitConjunction = (phrase: string[]): string[][] => {
+    const parts: string[][] = [];
+    let current: string[] = [];
+    for (const word of phrase) {
+      if (word === 'and') {
+        if (current.length > 0) parts.push(current);
+        current = [];
+      } else {
+        current.push(word);
+      }
+    }
+    if (current.length > 0) parts.push(current);
+    const typedParts = parts.filter((part) => part.some((word) => productTypes.has(word)));
+    return typedParts.length > 1 ? parts : [phrase.filter((word) => word !== 'and')];
+  };
   const alternativePhrases: string[][] = [];
   let currentPhrase: string[] = [];
   for (const word of itemWords) {
-    if (word === 'and' || word === 'or') {
-      if (currentPhrase.length > 0) alternativePhrases.push(currentPhrase);
+    if (word === 'or') {
+      if (currentPhrase.length > 0) alternativePhrases.push(...splitConjunction(currentPhrase));
       currentPhrase = [];
     } else {
       currentPhrase.push(word);
     }
   }
-  if (currentPhrase.length > 0) alternativePhrases.push(currentPhrase);
+  if (currentPhrase.length > 0) alternativePhrases.push(...splitConjunction(currentPhrase));
   // A shared noun ("Dell or ASUS laptop") types every coordinated phrase, so a
   // phrase without its own type inherits the nearest one, trailing first.
   const phraseTypeIndexes = alternativePhrases.map((phrase) =>
@@ -146,10 +164,15 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
 
   // Brands after "for" describe compatibility (for example, a case for
   // Samsung), rather than the accessory's manufacturer.
+  // Without a product type, every meaningful word constrains the candidate,
+  // including device families ("iphone" in "find iPhone" or "galaxy s24").
   const requestedIdentityTerms = hasAlternativeItemTypes
     ? []
     : itemTypeIndex < 0
-    ? itemWords.filter((word) => knownBrandWords.has(word))
+    ? itemWords.filter((word) =>
+      !productTypes.has(word) && !genericItemModifiers.has(word) &&
+      !modelQualifiers.has(word) && !/\d/.test(word) && /^[a-z]{2,}$/.test(word)
+    )
     : itemPrefixWords.filter((word) =>
       !productTypes.has(word) && !genericItemModifiers.has(word) &&
       !knownDeviceFamilyWords.has(word) && !modelQualifiers.has(word) && !/\d/.test(word) &&

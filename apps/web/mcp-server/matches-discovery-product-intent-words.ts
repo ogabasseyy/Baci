@@ -16,8 +16,8 @@ export const genericPhoneModifiers = new Set([
   'refurbished', 'smart', 'unlocked', 'used',
 ]);
 export const genericItemModifiers = new Set([
-  ...genericPhoneModifiers, 'and', 'or', 'affordable', 'c', 'compact', 'gaming', 'home', 'office', 'portable', 'power',
-  'security', 'usb', 'wireless',
+  ...genericPhoneModifiers, 'and', 'or', 'affordable', 'anything', 'c', 'compact', 'gaming', 'home', 'office', 'portable',
+  'power', 'security', 'something', 'usb', 'wireless',
 ]);
 export const phoneAccessoryTypes = new Set([
   'cable', 'cables', 'case', 'cases', 'charger', 'chargers', 'cover', 'covers',
@@ -169,6 +169,15 @@ export function matchesAlternativeBranch(
     /^[a-z]{2,}$/.test(word)
   );
   if (requestedTerms.some((term) => !matchesWord(scope.identityScope, term))) return false;
+  // A branch matches only when its own model/spec numbers fit the candidate,
+  // so "iPhone 15 case or iPhone 14 case" narrows to one branch per product.
+  for (const [position, token] of prefixWords.entries()) {
+    if (!/\d/.test(token) || token.length < 2 || token.length > 10 || /^[0-9][gk]$/.test(token)) continue;
+    const spec = joinSpecToken(token, prefixWords[position + 1]);
+    if (spec) {
+      if (!matchesProductToken(scope.identityScope, spec)) return false;
+    } else if (!matchesProductToken(scope.itemText, token)) return false;
+  }
   const handsetType = type === 'phone' || type === 'phones' || type === 'smartphone' || type === 'smartphones';
   if (handsetType && !scope.isHandsetCategory && !matchesWord(scope.nameWords.slice(-1), 'phone')) return false;
   if (phoneAccessoryTypes.has(type) && scope.isHandsetCategory) return false;

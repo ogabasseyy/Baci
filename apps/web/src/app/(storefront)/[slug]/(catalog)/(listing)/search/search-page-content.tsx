@@ -1,29 +1,19 @@
-import { headers } from 'next/headers';
 import Link from 'next/link';
-import { notFound, redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import type { BreadcrumbList, CollectionPage, WithContext } from 'schema-dts';
 import { JsonLd } from '@/components/seo/json-ld';
 import { StorefrontPagination } from '@/components/storefront/ogabassey/components/StorefrontPagination';
-import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { asRoute } from '@/lib/routes';
-import { buildRequestScopedStoreUrl } from '@/lib/store-url';
-import {
-  buildStorefrontPageHref,
-  parseStorefrontPageParam,
-  STOREFRONT_PRODUCTS_PER_PAGE,
-} from '@/lib/storefront-pagination';
-import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
-import {
-  getStorefrontSearchProducts,
-  type StorefrontSearchProductsPage,
-} from '@/lib/storefront-search';
-import {
-  parseStorefrontSearchQueryParam,
-  STOREFRONT_SEARCH_MAX_PAGE,
-} from '@/lib/storefront-search-params';
-import { isValidMerchantIdentifier } from '@/lib/validation';
+import { STOREFRONT_PRODUCTS_PER_PAGE } from '@/lib/storefront-pagination';
+import type { StorefrontSearchProductsPage } from '@/lib/storefront-search';
+import { STOREFRONT_SEARCH_MAX_PAGE } from '@/lib/storefront-search-params';
 import { ProductIndexCard } from '../products/product-index-card';
+import {
+  buildSearchHref,
+  buildSearchSubmissionHref,
+  loadSearchPageData,
+} from './search-page-data';
 import { SearchPageErrorPanel } from './search-page-error-panel';
 import { SearchPageForm } from './search-page-form';
 import { SearchPageNoResultsPanel } from './search-page-no-results-panel';
@@ -52,121 +42,18 @@ export async function SearchPageContent({
   params,
   searchParams,
 }: SearchPageProps) {
-  const { slug } = await params;
-  const { q: rawQuery, page: rawPage } = await searchParams;
-  const query = parseStorefrontSearchQueryParam(rawQuery);
-  const requestedPage = parseStorefrontPageParam(rawPage);
+  const {
+    merchant,
+    page,
+    pathPrefix,
+    query,
+    redirectHref,
+    searchBasePath,
+    searchFailed,
+    searchResult,
+    storeUrl,
+  } = await loadSearchPageData({ params, searchParams });
 
-  if (!isValidMerchantIdentifier(slug)) {
-    notFound();
-  }
-
-  const merchant = await getRequestScopedMerchant(slug);
-
-  if (!merchant) {
-    notFound();
-  }
-
-  const headersList = await headers();
-  const pathPrefix = getStorefrontPathPrefix(headersList, merchant);
-  const searchBasePath = `${pathPrefix}/search`;
-  // Submission entries (search form, navbar, see-all, did-you-mean) never
-  // carry a page parameter; only their renders count as new searches.
-  const buildSubmissionHref = (targetQuery: string) =>
-    `${searchBasePath}?q=${encodeURIComponent(targetQuery)}`;
-  const buildSearchHref = (targetQuery: string, targetPage: number) => {
-    const pageOneHref = targetQuery
-      ? buildSubmissionHref(targetQuery)
-      : searchBasePath;
-    if (targetQuery && targetPage <= 1) {
-      // Navigational page-1 targets (redirects, pagination) carry an
-      // explicit page parameter so landing on them never counts as a fresh
-      // search submission the way a submission entry does.
-      return `${pageOneHref}&page=1`;
-    }
-    return buildStorefrontPageHref(pageOneHref, targetPage);
-  };
-
-  // Validate before searching: malformed or repeated page parameters redirect
-  // to a valid page, and a page without a query collapses to the plain route.
-  if (!query) {
-    if (requestedPage === null || requestedPage !== 1) {
-      redirect(asRoute(buildSearchHref('', 1)));
-    }
-  } else if (requestedPage === null) {
-    redirect(asRoute(buildSearchHref(query, 1)));
-  }
-  const page = requestedPage ?? 1;
-
-  let searchResult: StorefrontSearchProductsPage | null = null;
-  let searchFailed = false;
-  let redirectHref: string | null = null;
-
-  if (query) {
-    const fetchSearchPage = (offset: number, trackAnalytics: boolean) =>
-      getStorefrontSearchProducts({
-        merchantId: merchant.id,
-        query,
-        limit: STOREFRONT_PRODUCTS_PER_PAGE,
-        offset,
-        trackAnalytics,
-      });
-
-    try {
-      if (page > STOREFRONT_SEARCH_MAX_PAGE) {
-        // Bounded offset: resolve the true last page through a first-page
-        // probe instead of issuing a giant-offset query.
-        const probe = await fetchSearchPage(0, false);
-        if (probe.count === 0) {
-          redirectHref = buildSearchHref(query, 1);
-        } else {
-          const lastPage = Math.ceil(
-            probe.count / STOREFRONT_PRODUCTS_PER_PAGE
-          );
-          redirectHref = buildSearchHref(
-            query,
-            Math.min(Math.max(lastPage, 1), STOREFRONT_SEARCH_MAX_PAGE)
-          );
-        }
-      } else {
-        // Only an explicit search-submission entry counts as a new search:
-        // submission URLs never carry a page parameter, while every
-        // pagination link and page-1 redirect target does. Inferring from
-        // the page number would recount page 1 after paging forward and
-        // back; deeper page views and recovery probes stay untracked.
-        searchResult = await fetchSearchPage(
-          (page - 1) * STOREFRONT_PRODUCTS_PER_PAGE,
-          rawPage === undefined
-        );
-        if (page > 1 && searchResult.products.length === 0) {
-          // The RPC reports its total only on returned rows, so an empty
-          // non-first page needs a first-page probe to distinguish a genuine
-          // no-results state from an invalid page.
-          const probe = await fetchSearchPage(0, false);
-          if (probe.count === 0) {
-            // A page beyond the first of an empty result set is not a
-            // distinct page: normalize to the explicit first-page URL so
-            // unbounded ?page=N variants never render duplicate empties
-            // (and the landing never counts as a fresh submission).
-            redirectHref = buildSearchHref(query, 1);
-          } else {
-            const lastPage = Math.max(
-              1,
-              Math.ceil(probe.count / STOREFRONT_PRODUCTS_PER_PAGE)
-            );
-            // The target always steps back from the requested page so a
-            // pathological probe can never redirect to the same URL in a loop.
-            redirectHref = buildSearchHref(query, Math.min(lastPage, page - 1));
-          }
-        }
-      }
-    } catch {
-      searchFailed = true;
-    }
-  }
-
-  // redirect() throws, so it runs outside the try/catch above: a failed
-  // search renders the error panel instead of being swallowed here.
   if (redirectHref) {
     redirect(asRoute(redirectHref));
   }
@@ -181,9 +68,8 @@ export async function SearchPageContent({
   // A did-you-mean follow is a fresh submission, so it keeps the
   // page-less submission URL (and its render is tracked as one).
   const didYouMeanHref = effectiveResult.didYouMean
-    ? buildSubmissionHref(effectiveResult.didYouMean)
+    ? buildSearchSubmissionHref(searchBasePath, effectiveResult.didYouMean)
     : null;
-  const storeUrl = buildRequestScopedStoreUrl(merchant, headersList);
   const pageUrl = searchQuery
     ? `${storeUrl}/search?q=${encodeURIComponent(searchQuery)}${page > 1 ? `&page=${page}` : ''}`
     : `${storeUrl}/search`;
@@ -287,7 +173,7 @@ export async function SearchPageContent({
                 </div>
                 <StorefrontPagination
                   ariaLabel="Search results pagination"
-                  basePath={buildSearchHref(searchQuery, 1)}
+                  basePath={buildSearchHref(searchBasePath, searchQuery, 1)}
                   currentPage={page}
                   totalPages={totalPages}
                 />

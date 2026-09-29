@@ -1800,7 +1800,7 @@ describe('SearchAutocomplete', () => {
     });
   });
 
-  it('resets the highlight when the controlled value changes externally', async () => {
+  it('drops stale options when the controlled value changes externally', async () => {
     vi.useRealTimers();
     const onSelectProduct = vi.fn();
     const onSubmitSearch = vi.fn();
@@ -1846,10 +1846,9 @@ describe('SearchAutocomplete', () => {
     );
 
     // An external replacement (e.g. the navbar route sync after a
-    // did-you-mean navigation) bypasses the input's keystroke reset: the
-    // highlight must still drop so Enter cannot select the previous
-    // query's option. Retained options stay until the new fetch resolves,
-    // matching live-update typing.
+    // did-you-mean navigation) is a wholesale context switch: the previous
+    // query's options and highlight must go so neither Enter nor a pointer
+    // tap can reach a product unrelated to the new query.
     rerender(
       <SearchAutocomplete
         merchantId="merchant-1"
@@ -1860,13 +1859,26 @@ describe('SearchAutocomplete', () => {
       />
     );
 
-    expect(screen.getByRole('option', { name: /iphone 16/i })).toHaveAttribute(
-      'aria-selected',
-      'false'
-    );
+    expect(
+      screen.queryByRole('option', { name: /iphone 16/i })
+    ).not.toBeInTheDocument();
 
     fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Enter' });
     expect(onSubmitSearch).toHaveBeenCalledWith('galaxy');
     expect(onSelectProduct).not.toHaveBeenCalled();
+
+    // The debounce fetch for the new value repopulates immediately after.
+    const autocompleteCalls = () =>
+      vi
+        .mocked(fetchMock)
+        .mock.calls.filter(
+          ([url]) =>
+            typeof url === 'string' &&
+            url.startsWith('/api/search/autocomplete')
+        );
+    await waitFor(() => {
+      expect(autocompleteCalls()).toHaveLength(2);
+    });
+    expect(autocompleteCalls()[1]?.[0]).toContain('q=galaxy');
   });
 });

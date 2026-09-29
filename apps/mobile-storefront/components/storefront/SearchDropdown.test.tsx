@@ -46,6 +46,41 @@ describe('SearchDropdown', () => {
     expect(queryByLabelText('Close search')).toBeNull();
   });
 
+  it('disables the product query while hidden even with a retained query', () => {
+    // Hooks run before the visibility early-return: after a home submit the
+    // dropdown stays mounted behind /search with its query retained, so the
+    // query itself must be gated to stop fetching/observing there.
+    render(
+      <SearchDropdown
+        isVisible={false}
+        onClose={() => {}}
+        onQueryChange={() => {}}
+        query="iphone"
+        topOffset={72}
+      />
+    );
+
+    expect(mockUseProducts).toHaveBeenCalledWith(
+      expect.objectContaining({ search: 'iphone', enabled: false })
+    );
+  });
+
+  it('enables the product query while visible', () => {
+    render(
+      <SearchDropdown
+        isVisible
+        onClose={() => {}}
+        onQueryChange={() => {}}
+        query="iphone"
+        topOffset={72}
+      />
+    );
+
+    expect(mockUseProducts).toHaveBeenCalledWith(
+      expect.objectContaining({ search: 'iphone', enabled: true })
+    );
+  });
+
   it('renders search controls when visible', () => {
     render(<SearchDropdown isVisible onClose={() => {}} topOffset={72} />);
 

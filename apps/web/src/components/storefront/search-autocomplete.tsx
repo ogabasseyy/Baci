@@ -32,6 +32,13 @@ export function SearchAutocomplete({
 }: SearchAutocompleteProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  // The value produced by the latest keystroke in this input (if the parent
+  // applied it), so the render-time adjustment below can tell live-update
+  // typing (keep old options until the new fetch resolves) from external
+  // replacements (wholesale context switch: drop them). Keyed by value —
+  // never a bare flag — so an unapplied keystroke cannot misclassify a
+  // later external change.
+  const keystrokeValueRef = useRef<string | null>(null);
   // Set by navigation-closing submissions (full-search submit, product
   // select): the submitted value can reach the debounce after navigation
   // and start a request that did not exist when the pending one was
@@ -143,6 +150,8 @@ export function SearchAutocomplete({
   // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
   const [prevValue, setPrevValue] = useState(value);
   if (value !== prevValue) {
+    const fromKeystroke = keystrokeValueRef.current === value;
+    keystrokeValueRef.current = null;
     setPrevValue(value);
     if (value.length < 2) {
       clearSuggestions();
@@ -169,12 +178,17 @@ export function SearchAutocomplete({
       // clear from the short-input reset above.
       setRefetchToken((token) => token + 1);
       setClearedQuery(null);
-    } else {
-      // Any other external value change (e.g. the navbar route sync
-      // replacing the query after a did-you-mean navigation) bypasses the
-      // input's keystroke reset: the highlight still belongs to the
-      // previous text's options, so drop it. Retained options stay visible
-      // until the new fetch resolves, matching live-update typing.
+    } else if (!fromKeystroke) {
+      // An external value change (e.g. the navbar route sync replacing the
+      // query after a did-you-mean navigation) bypasses the input's
+      // keystroke path: the stored options and highlight still belong to
+      // the previous query, so drop them entirely — a navigation is a
+      // wholesale context switch, and leaving the old options
+      // pointer-active would navigate to a product unrelated to the new
+      // query. Keystroke-driven changes keep live-update behavior (the
+      // handler above already reset the highlight). The debounce fetch for
+      // the new value repopulates immediately after.
+      clearSuggestions();
       setHighlightedIndex(-1);
     }
   }
@@ -277,6 +291,7 @@ export function SearchAutocomplete({
             // A genuine edit re-arms result-driven opening after a
             // navigation-closing submission suppressed it.
             suppressReopenRef.current = false;
+            keystrokeValueRef.current = e.target.value;
             const nextValue = e.target.value;
             // When the popup is closed (dismissed via Escape or an outside
             // click), the retained arrays still belong to the previous

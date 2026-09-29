@@ -66,12 +66,17 @@ export function SearchDropdown({
     onExternalQueryChange,
   });
   const { recentSearches, saveSearch, clearHistory } = useSearchStorage();
+  // Hooks run before the visibility early-return below, so the query must
+  // be gated here explicitly: a hidden dropdown (e.g. home behind /search
+  // after submit, with its query retained) must not keep fetching or
+  // observing alongside the results screen's separate query.
   const { products, isLoading } = useProducts({
     search:
       effectiveQuery.length >= MIN_SEARCH_QUERY_LENGTH
         ? effectiveQuery
         : undefined,
     limit: MAX_RESULTS,
+    enabled: isVisible,
   });
   const { data: categories = [] } = useCategories();
 

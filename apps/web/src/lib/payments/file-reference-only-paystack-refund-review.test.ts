@@ -1,39 +1,10 @@
-import type { Mock } from 'vitest';
 import { describe, expect, it, vi } from 'vitest';
 import { fileReferenceOnlyPaystackRefundReview } from './file-reference-only-paystack-refund-review';
-
-function listQuery(data: unknown, error: unknown = null) {
-  const builder: Record<string, unknown> = {
-    limit: vi.fn().mockResolvedValue({ data, error }),
-    // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are awaited thenables.
-    then: (resolve: (result: unknown) => void) => resolve({ data, error }),
-  };
-  for (const key of ['eq', 'gt', 'is', 'not', 'select']) {
-    builder[key] = vi.fn().mockReturnValue(builder);
-  }
-  return builder as unknown as {
-    eq: Mock;
-    gt: Mock;
-    is: Mock;
-    limit: Mock;
-    not: Mock;
-    select: Mock;
-  };
-}
-
-const reviewInput = {
-  amount: 100,
-  currency: 'NGN',
-  merchantId: 'merchant-1',
-  orderId: 'order-1',
-  paymentId: 'payment-1',
-  paymentReference: 'PSK-1',
-};
-
-const multiLegPayments = [
-  { amount: 100, gateway: 'paystack' },
-  { amount: 50, gateway: 'korapay' },
-];
+import {
+  listQuery,
+  multiLegPayments,
+  reviewInput,
+} from './file-reference-only-paystack-refund-review.test-support';
 
 describe('fileReferenceOnlyPaystackRefundReview', () => {
   it('files a durable review when no completed linked row exists', async () => {

@@ -126,9 +126,11 @@ describe('abandoned Paystack attempt operational failures', () => {
     expect(summary.retired).toEqual([]);
   });
 
+  // HTTP_400 and other deterministic client rejections file a durable
+  // review instead of holding (see the invalid-reference suite); a
+  // missing non-DVA reference still holds for the next sweep.
   it.each([
     'HTTP_404',
-    'HTTP_400',
   ])('holds without failing on a genuine provider verdict (%s)', async (code) => {
     const { client } = createClient();
 

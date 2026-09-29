@@ -77,7 +77,15 @@ describe('storefront compare production fast path', () => {
     ).resolves.toEqual({ kind: 'renderable-or-unknown' });
 
     expect(fetchImpl).not.toHaveBeenCalled();
-    expect(console.info).not.toHaveBeenCalled();
+    expect(console.info).toHaveBeenCalledTimes(1);
+    expect(console.info).toHaveBeenCalledWith(
+      '[storefront-preflight-rpc] attempt',
+      expect.objectContaining({
+        outcome: 'empty-result',
+        rpc_name: 'resolve_storefront_auth_merchant',
+        surface: 'compare-page-status',
+      })
+    );
     expect(console.warn).not.toHaveBeenCalledWith(
       '[storefront-internal-preflight] fail-open',
       expect.objectContaining({ reason: 'parse' })

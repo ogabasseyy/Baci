@@ -142,4 +142,44 @@ describe('deriveCheckoutDisplayModel', () => {
       mobileSummaryCart: [],
     });
   });
+
+  it('derives a missing resumed subtotal from persisted order adjustments', () => {
+    const model = deriveCheckoutDisplayModel({
+      checkoutCart: [],
+      checkoutCartTotal: 0,
+      currencyCode: 'NGN',
+      itemSubtotal: 0,
+      resumedOrder: resumedOrder({
+        subtotal: undefined,
+        total: 12_750,
+        shipping_cost: 1_000,
+        tax_amount: 750,
+        discount_amount: 500,
+        gift_wrapping_fee: 1_500,
+      }),
+    });
+
+    expect(model.effectiveCheckoutCartTotal).toBe(12_750);
+    expect(model.summarySubtotal).toBe(10_000);
+    expect(model.effectiveItemSubtotal).toBe(10_000);
+  });
+
+  it('clamps a negative resumed subtotal fallback to zero', () => {
+    const model = deriveCheckoutDisplayModel({
+      checkoutCart: [],
+      checkoutCartTotal: 0,
+      currencyCode: 'NGN',
+      itemSubtotal: 0,
+      resumedOrder: resumedOrder({
+        subtotal: undefined,
+        total: 100,
+        shipping_cost: 200,
+        tax_amount: 0,
+        discount_amount: 0,
+      }),
+    });
+
+    expect(model.summarySubtotal).toBe(0);
+    expect(model.effectiveItemSubtotal).toBe(0);
+  });
 });

@@ -52,18 +52,29 @@ export function deriveCheckoutDisplayModel({
     hasCheckoutCartItems,
     resumedOrder,
   });
+  const resumedSubtotal = resumedOrder
+    ? (resumedOrder.subtotal ??
+      Math.max(
+        0,
+        resumedOrder.total -
+          resumedOrder.shipping_cost -
+          (resumedOrder.tax_amount ?? 0) -
+          (resumedOrder.gift_wrapping_fee ?? 0) +
+          (resumedOrder.discount_amount ?? 0)
+      ))
+    : undefined;
   // Resumed total is all-in; the summary's subtotal must remain the stamped
   // item subtotal so tax, delivery, and other order adjustments aren't added twice.
   const summarySubtotal = hasCheckoutCartItems
     ? effectiveCheckoutCartTotal
-    : (resumedOrder?.subtotal ?? effectiveCheckoutCartTotal);
+    : (resumedSubtotal ?? effectiveCheckoutCartTotal);
 
   return {
     displayItems,
     effectiveCheckoutCartTotal,
     effectiveItemSubtotal: hasCheckoutCartItems
       ? itemSubtotal
-      : resumedOrder?.subtotal || 0,
+      : (resumedSubtotal ?? 0),
     summarySubtotal,
     hasCheckoutCartItems,
     summaryOrder: hasCheckoutCartItems ? null : resumedOrder,

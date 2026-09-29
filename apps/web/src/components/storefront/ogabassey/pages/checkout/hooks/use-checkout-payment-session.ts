@@ -24,6 +24,7 @@ interface UseCheckoutPaymentSessionOptions {
   discountSubtotal: number;
   hasAuthenticatedUser: boolean;
   hasCheckoutCartItems: boolean;
+  isHydrated: boolean;
   isOrderInFlightRef: { current: boolean };
   merchantSlug?: string;
   pendingCheckoutOrder: PendingCheckoutOrderSnapshot | null;
@@ -45,6 +46,7 @@ export function useCheckoutPaymentSession({
   discountSubtotal,
   hasAuthenticatedUser,
   hasCheckoutCartItems,
+  isHydrated,
   isOrderInFlightRef,
   merchantSlug,
   pendingCheckoutOrder,
@@ -103,6 +105,10 @@ export function useCheckoutPaymentSession({
 
   useLoadResumedOrder({
     ...resumeOrder,
+    // Once the persisted cart is authoritative, resume data must not overwrite
+    // the active checkout's fields. Wait for hydration before deciding.
+    resumeOrderId:
+      isHydrated && !hasCheckoutCartItems ? resumeOrder.resumeOrderId : null,
     setPaymentTab: setTab,
     setPaymentMethod: selectMethod,
   });

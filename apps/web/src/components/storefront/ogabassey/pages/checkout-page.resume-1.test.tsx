@@ -1,6 +1,5 @@
 import { resumedOrderPayload } from './checkout-page-bnpl.test-support';
 import {
-  act,
   CheckoutPage,
   expect,
   it,
@@ -67,7 +66,7 @@ it('shows the canonical due amount without wallet credit for a resumed order', a
   }
 });
 
-it('keeps an active cart on its fresh payment path when a resume gateway is present', async () => {
+it('does not hydrate resumed fields over an authoritative active cart', async () => {
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams({
       gateway: 'credpal',
@@ -89,42 +88,25 @@ it('keeps an active cart on its fresh payment path when a resume gateway is pres
     clearCart: vi.fn(),
     isHydrated: true,
   } as unknown as ReturnType<typeof useCart>);
-  let resolveResumeLookup!: (response: Response) => void;
-  const resumeLookup = new Promise<Response>((resolve) => {
-    resolveResumeLookup = resolve;
-  });
   const fetchMock = vi
     .spyOn(globalThis, 'fetch')
-    .mockImplementation((input) => {
-      if (String(input).startsWith('/api/storefront/orders/ord-1')) {
-        return resumeLookup;
-      }
-      return Promise.resolve({ ok: true, json: async () => ({}) } as Response);
-    });
+    .mockResolvedValue({ ok: true, json: async () => ({}) } as Response);
 
   try {
     render(<CheckoutPage />);
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining('/api/storefront/orders/ord-1'),
-        expect.any(Object)
-      )
-    );
-    await act(async () => {
-      resolveResumeLookup({
-        ok: true,
-        json: async () => resumedOrderPayload('NGN'),
-      } as Response);
-      await resumeLookup;
-    });
     await waitFor(() => expect(mockMobileOrderSummary).toHaveBeenCalled());
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes('/api/storefront/orders/ord-1')
+      )
+    ).toBe(false);
     expect(openCredPalCheckout).not.toHaveBeenCalled();
   } finally {
     fetchMock.mockRestore();
   }
 });
 
-it('keeps active-cart checkout visible while the resume lookup is pending', async () => {
+it('keeps active-cart checkout visible without starting resume lookup', async () => {
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams({
       orderId: 'ord-1',
@@ -145,22 +127,19 @@ it('keeps active-cart checkout visible while the resume lookup is pending', asyn
     clearCart: vi.fn(),
     isHydrated: true,
   } as unknown as ReturnType<typeof useCart>);
-  const fetchMock = vi
-    .spyOn(globalThis, 'fetch')
-    .mockImplementation((input) => {
-      if (String(input).startsWith('/api/storefront/orders/ord-1')) {
-        return new Promise<Response>(() => {});
-      }
-      return Promise.resolve({ ok: true, json: async () => ({}) } as Response);
-    });
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+    ok: true,
+    json: async () => ({}),
+  } as Response);
 
   try {
     render(<CheckoutPage />);
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining('/api/storefront/orders/ord-1'),
-        expect.any(Object)
-      );
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).includes('/api/storefront/orders/ord-1')
+        )
+      ).toBe(false);
       expect(mockMobileOrderSummary).toHaveBeenCalled();
       expect(screen.queryByText('Loading order...')).not.toBeInTheDocument();
     });
@@ -169,7 +148,7 @@ it('keeps active-cart checkout visible while the resume lookup is pending', asyn
   }
 });
 
-it('keeps active-cart checkout visible when the resume lookup fails', async () => {
+it('keeps active-cart checkout visible without a resume error state', async () => {
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams({
       orderId: 'ord-1',
@@ -190,32 +169,19 @@ it('keeps active-cart checkout visible when the resume lookup fails', async () =
     clearCart: vi.fn(),
     isHydrated: true,
   } as unknown as ReturnType<typeof useCart>);
-  let resolveResumeLookup!: (response: Response) => void;
-  const resumeLookup = new Promise<Response>((resolve) => {
-    resolveResumeLookup = resolve;
-  });
-  const fetchMock = vi
-    .spyOn(globalThis, 'fetch')
-    .mockImplementation((input) => {
-      if (String(input).startsWith('/api/storefront/orders/ord-1')) {
-        return resumeLookup;
-      }
-      return Promise.resolve({ ok: true, json: async () => ({}) } as Response);
-    });
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+    ok: true,
+    json: async () => ({}),
+  } as Response);
 
   try {
     render(<CheckoutPage />);
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining('/api/storefront/orders/ord-1'),
-        expect.any(Object)
-      )
-    );
-    await act(async () => {
-      resolveResumeLookup({ ok: false, json: async () => ({}) } as Response);
-      await resumeLookup;
-    });
     await waitFor(() => expect(mockMobileOrderSummary).toHaveBeenCalled());
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes('/api/storefront/orders/ord-1')
+      )
+    ).toBe(false);
     expect(
       vi.mocked(mockMobileOrderSummary).mock.calls.at(-1)?.[0].cart
     ).toEqual(

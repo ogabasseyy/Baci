@@ -541,6 +541,7 @@ export const CheckoutPage: React.FC = () => {
     discountSubtotal: effectiveCheckoutCartTotal,
     hasAuthenticatedUser: Boolean(user),
     hasCheckoutCartItems,
+    isHydrated,
     isOrderInFlightRef,
     merchantSlug: merchant?.slug ?? undefined,
     pendingCheckoutOrder,

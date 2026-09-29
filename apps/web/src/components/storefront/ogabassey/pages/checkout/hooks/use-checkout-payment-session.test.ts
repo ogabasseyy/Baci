@@ -11,6 +11,7 @@ function options(overrides: Record<string, unknown> = {}) {
     discountSubtotal: 10_000,
     hasAuthenticatedUser: false,
     hasCheckoutCartItems: false,
+    isHydrated: true,
     isOrderInFlightRef: { current: false },
     merchantSlug: undefined,
     pendingCheckoutOrder: null,

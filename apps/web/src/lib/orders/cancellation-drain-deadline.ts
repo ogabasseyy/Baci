@@ -10,18 +10,29 @@ const SAFETY_MARGIN_MS = 30_000;
 // reserve holds in time, not just arithmetically. Shared with
 // notification-drain-limit PER_SEND_WORST_MS: keep both identical.
 const NOTIFICATION_RESERVE_MS = 150_000;
+// The deadline only gates starting work: a refund step started just
+// before it (plus the order/merchant lookups behind the check) can still
+// overrun the boundary, and the notification drain behind this phase
+// computes a zero limit unless its full 150s send budget remains. End
+// the phase one step-equivalent early so the final step's estimate-sized
+// tail lands before the notification threshold instead of eating the
+// reserve on every invocation under a sustained backlog. Shared with
+// cancellation-side-effect-drain-limit HANDOFF_SLACK_MS: keep identical.
+const HANDOFF_SLACK_MS = 30_000;
 
 /**
  * Absolute epoch-ms deadline for cancellation side-effect work started at
- * `startedAtMs`: the invocation budget minus the safety margin and the
- * notification reserve. Steps and provider calls check the remaining time
- * against this instead of trusting the fixed per-step estimate.
+ * `startedAtMs`: the invocation budget minus the safety margin, the
+ * notification reserve, and the handoff slack. Steps and provider calls
+ * check the remaining time against this instead of trusting the fixed
+ * per-step estimate.
  */
 export function cancellationDrainDeadlineMs(startedAtMs: number): number {
   return (
     startedAtMs +
     INVOCATION_BUDGET_MS -
     SAFETY_MARGIN_MS -
-    NOTIFICATION_RESERVE_MS
+    NOTIFICATION_RESERVE_MS -
+    HANDOFF_SLACK_MS
   );
 }

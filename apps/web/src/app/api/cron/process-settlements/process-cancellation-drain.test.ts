@@ -89,12 +89,14 @@ describe('processCancellationDrain', () => {
     expect(response.status).toBe(200);
     expect(mocks.drainFailedOrderCancellationSideEffects).toHaveBeenCalledWith(
       expect.objectContaining({
-        // Side-effect work ends 150s before the shared deadline so the
-        // notification reserve holds in time, not just arithmetically.
-        deadlineMs: 1_120_000,
-        // Four steps fit after the margin and the reserved notification
-        // share; the remainder retries on the next invocation.
-        limit: 4,
+        // Side-effect work ends 180s before the shared deadline: the
+        // 150s notification reserve plus the 30s handoff slack, so the
+        // final step's tail lands before the notification threshold.
+        deadlineMs: 1_090_000,
+        // Three steps fit after the margin, the reserved notification
+        // share, and the handoff slack; the remainder retries on the
+        // next invocation.
+        limit: 3,
         sendCancellationEmail: mocks.sendEmail,
       })
     );
@@ -167,7 +169,7 @@ describe('processCancellationDrain', () => {
         mocks.drainFailedOrderCancellationSideEffects
       ).toHaveBeenCalledWith(
         expect.objectContaining({
-          deadlineMs: 1_120_000,
+          deadlineMs: 1_090_000,
           limit: 0,
           sendCancellationEmail: mocks.sendEmail,
         })

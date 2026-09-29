@@ -19,8 +19,8 @@ import {
 } from '@/lib/klump-checkout';
 import { isStoreCreditCompatiblePayment } from '@/lib/store-credit-compatible-payment';
 import type { WalletSelection } from '@/lib/wallet-payment-helpers';
-import { getRedvaultPaymentAvailability } from '@/services/redvault';
 import type { useCartStore } from '@/stores/cart-store';
+import { useRedvaultAvailability } from './use-redvault-availability';
 
 type CartItems = ReturnType<typeof useCartStore.getState>['items'];
 
@@ -56,25 +56,12 @@ export function useCheckoutPaymentController({
       paymentSettings.wallet_paystack_dva_enabled &&
       paymentSettings.wallet_order_auto_debit_enabled
   );
-  const [availability, setAvailability] = useState<{
-    merchantId: string;
-    requestKey: string;
-    available: boolean;
-  } | null>(null);
-  const pilotCartProductId =
-    items.length === 1 && items[0]?.quantity === 1 && !items[0]?.variant_id
-      ? items[0].product_id
-      : undefined;
-  const cartFingerprint = items
-    .map(
-      ({ id, product_id, quantity, variant_id }) =>
-        `${id}:${product_id}:${quantity}:${variant_id ?? ''}`
-    )
-    .join('|');
-  const availabilityRequestKey = `${merchantId}:${pilotCartProductId ?? ''}:${isAuthenticated}:${customerId ?? ''}:${cartFingerprint}`;
-  const redvaultAvailable =
-    availability?.requestKey === availabilityRequestKey &&
-    availability.available;
+  const redvaultAvailable = useRedvaultAvailability({
+    customerId,
+    isAuthenticated,
+    items,
+    merchantId,
+  });
   const availablePaymentMethods: PaymentMethodType[] = Array.from(
     new Set<PaymentMethodType>([
       ...enabledPaymentMethods,
@@ -114,30 +101,6 @@ export function useCheckoutPaymentController({
     setSelectedPaymentState(method);
     setPaymentTab(getPaymentTabForMethod(method));
   };
-
-  useEffect(() => {
-    let active = true;
-    void getRedvaultPaymentAvailability(merchantId, pilotCartProductId)
-      .then((available) => {
-        if (active)
-          setAvailability({
-            merchantId,
-            requestKey: availabilityRequestKey,
-            available,
-          });
-      })
-      .catch(() => {
-        if (active)
-          setAvailability({
-            merchantId,
-            requestKey: availabilityRequestKey,
-            available: false,
-          });
-      });
-    return () => {
-      active = false;
-    };
-  }, [merchantId, pilotCartProductId, availabilityRequestKey]);
 
   const resetPaymentSelection = () => {
     setSelectedPaymentState(null);

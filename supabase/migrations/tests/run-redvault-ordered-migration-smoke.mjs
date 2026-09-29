@@ -375,6 +375,12 @@ try {
   );
   sql(
     readFileSync(
+      resolve(migrations, '20260928105900_uba_redvault_existing_binding_five_percent.sql'),
+      'utf8'
+    )
+  );
+  sql(
+    readFileSync(
       resolve(migrations, '20260928110000_uba_redvault_fixed_five_percent.sql'),
       'utf8'
     )

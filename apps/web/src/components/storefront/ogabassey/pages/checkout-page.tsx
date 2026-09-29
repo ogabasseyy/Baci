@@ -81,13 +81,12 @@ import { useCheckoutSubmissionState } from './checkout/hooks/use-checkout-submis
 import { executeResumedDirectPayment } from './checkout/handlers/direct-payment';
 import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import { PaymentStep } from './checkout/components/PaymentStep';
-import { useRedvaultPaymentAvailability } from './checkout/hooks/use-redvault-payment-availability';
 import {
   inferAddressLocationFromInput,
 } from './checkout/utils';
 import { useCheckoutOrderSubmission } from './checkout/hooks/use-checkout-order-submission';
 import { useWalletFundedBankTransfer } from './checkout/hooks/use-wallet-funded-bank-transfer';
-import { useStorefrontCustomerSession } from './checkout/hooks/use-storefront-customer-session';
+import { useCheckoutRedvaultAvailability } from './checkout/hooks/use-checkout-redvault-availability';
 import {
   useResumedCheckoutStartFunnel,
 } from './checkout/hooks/use-resumed-checkout-start-funnel';
@@ -402,20 +401,15 @@ export const CheckoutPage: React.FC = () => {
   // is null here even for a signed-in customer. The wallet-funded gate must read
   // the cookie session directly (same source as the storefront header) or the
   // dark-launch flow would never activate for real customers.
-  const storefrontCustomerSession = useStorefrontCustomerSession(merchant?.slug ?? undefined);
-  const pilotCartProductId =
-    cart.length === 1 && cart[0]?.quantity === 1 && !cart[0]?.variantId
-      ? cart[0].id
-      : undefined;
-  const redvaultCartKey = cart
-    .map(({ id, quantity, variantId }) => `${id}:${quantity}:${variantId ?? ''}`)
-    .join('|');
-  const redvaultAvailability = useRedvaultPaymentAvailability(
-    merchant?.id,
-    pilotCartProductId,
-    `${user?.id ?? ''}:${storefrontCustomerSession.status}:${storefrontCustomerSession.revision}:${redvaultCartKey}`
-  );
-  const { waitForResolvedAuthenticated: waitForResolvedStorefrontCustomerAuth } = storefrontCustomerSession;
+  const {
+    availability: redvaultAvailability,
+    waitForResolvedAuthenticated: waitForResolvedStorefrontCustomerAuth,
+  } = useCheckoutRedvaultAvailability({
+    cartItems: cart,
+    merchantId: merchant?.id,
+    merchantSlug: merchant?.slug ?? undefined,
+    userId: user?.id,
+  });
 
   // Wallet-funded bank transfer (P4a, dark-launched). Signed-in customers of an
   // auto-debit-enabled merchant fund the order through their STANDING wallet

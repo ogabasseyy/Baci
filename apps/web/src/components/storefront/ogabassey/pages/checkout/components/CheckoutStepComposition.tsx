@@ -50,16 +50,16 @@ export function CheckoutStepComposition({
   return (
     <div className="lg:col-span-8 space-y-6">
       {!flow.signedIn && flow.currentStep === 'contact' && (
-        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-500">
+        <div className="bg-store-primary/5 border border-store-primary/20 rounded-2xl p-4 flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-500">
           <div className="flex items-center gap-3">
-            <div className="size-10 bg-white rounded-xl flex items-center justify-center shadow-sm">
-              <User size={20} className="text-blue-600" />
+            <div className="size-10 bg-store-background rounded-xl flex items-center justify-center shadow-sm">
+              <User size={20} className="text-store-primary" />
             </div>
             <div>
-              <h4 className="text-sm font-bold text-gray-900">
+              <h4 className="text-sm font-bold text-store-background-text">
                 Already have an account?
               </h4>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-store-background-text/65">
                 Sign in to use your saved addresses and track orders.
               </p>
             </div>
@@ -67,7 +67,7 @@ export function CheckoutStepComposition({
           <button
             type="button"
             onClick={onSignIn}
-            className="px-4 py-2 bg-white text-blue-600 font-bold text-xs rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors shadow-sm active:scale-95"
+            className="px-4 py-2 bg-store-background text-store-primary font-bold text-xs rounded-lg border border-store-primary/20 hover:bg-store-primary/5 transition-colors shadow-sm active:scale-95"
           >
             Sign In
           </button>

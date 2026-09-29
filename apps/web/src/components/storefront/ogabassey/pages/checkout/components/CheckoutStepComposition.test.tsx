@@ -8,11 +8,12 @@ import type { PaymentStep } from './PaymentStep';
 
 vi.mock('./ContactStep', () => ({
   ContactStep: ({ active, completed }: ComponentProps<typeof ContactStep>) => (
-    <div
-      data-testid="contact-step"
-      data-active={active}
-      data-completed={completed}
-    />
+    <section
+      aria-current={active ? 'step' : undefined}
+      aria-label="Contact details"
+    >
+      {completed ? 'Contact details complete' : 'Contact details incomplete'}
+    </section>
   ),
 }));
 
@@ -22,18 +23,21 @@ vi.mock('./CheckoutDeliveryStep', () => ({
     completed,
     disabled,
   }: ComponentProps<typeof CheckoutDeliveryStep>) => (
-    <div
-      data-testid="delivery-step"
-      data-active={active}
-      data-completed={completed}
-      data-disabled={disabled}
-    />
+    <section
+      aria-current={active ? 'step' : undefined}
+      aria-label="Delivery details"
+    >
+      {completed ? 'Delivery details complete' : 'Delivery details incomplete'}
+      <button type="button" disabled={disabled}>
+        Continue to delivery
+      </button>
+    </section>
   ),
 }));
 
 vi.mock('./PaymentStep', () => ({
   PaymentStep: ({ currentStep }: ComponentProps<typeof PaymentStep>) => (
-    <div data-testid="payment-step" data-current-step={currentStep} />
+    <section aria-label="Payment">Current checkout step: {currentStep}</section>
   ),
 }));
 
@@ -59,26 +63,26 @@ describe('CheckoutStepComposition', () => {
       />
     );
 
-    expect(screen.getByText('Already have an account?')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Already have an account?' })
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
     expect(onSignIn).toHaveBeenCalledOnce();
 
-    const panelOrder = Array.from(
-      document.querySelectorAll('[data-testid$="-step"]')
-    ).map((panel) => panel.getAttribute('data-testid'));
+    const panelOrder = screen
+      .getAllByRole('region')
+      .map((panel) => panel.getAttribute('aria-label'));
     expect(panelOrder).toEqual([
-      'contact-step',
-      'delivery-step',
-      'payment-step',
+      'Contact details',
+      'Delivery details',
+      'Payment',
     ]);
-    expect(screen.getByTestId('contact-step')).toHaveAttribute(
-      'data-active',
-      'true'
-    );
-    expect(screen.getByTestId('delivery-step')).toHaveAttribute(
-      'data-disabled',
-      'true'
-    );
+    expect(
+      screen.getByRole('region', { name: 'Contact details' })
+    ).toHaveAttribute('aria-current', 'step');
+    expect(
+      screen.getByRole('button', { name: 'Continue to delivery' })
+    ).toBeDisabled();
 
     rerender(
       <CheckoutStepComposition
@@ -96,23 +100,19 @@ describe('CheckoutStepComposition', () => {
     );
 
     expect(
-      screen.queryByText('Already have an account?')
+      screen.queryByRole('heading', { name: 'Already have an account?' })
     ).not.toBeInTheDocument();
-    expect(screen.getByTestId('contact-step')).toHaveAttribute(
-      'data-completed',
-      'true'
-    );
-    expect(screen.getByTestId('delivery-step')).toHaveAttribute(
-      'data-active',
-      'true'
-    );
-    expect(screen.getByTestId('delivery-step')).toHaveAttribute(
-      'data-disabled',
-      'false'
-    );
-    expect(screen.getByTestId('payment-step')).toHaveAttribute(
-      'data-current-step',
-      'delivery'
-    );
+    expect(
+      screen.getByRole('region', { name: 'Contact details' })
+    ).toHaveTextContent('Contact details complete');
+    expect(
+      screen.getByRole('region', { name: 'Delivery details' })
+    ).toHaveAttribute('aria-current', 'step');
+    expect(
+      screen.getByRole('button', { name: 'Continue to delivery' })
+    ).toBeEnabled();
+    expect(
+      screen.getByText('Current checkout step: delivery')
+    ).toBeInTheDocument();
   });
 });

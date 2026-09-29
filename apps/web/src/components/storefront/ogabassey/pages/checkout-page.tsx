@@ -71,8 +71,6 @@ import {
   CHECKOUT_PENDING_ORDER_STORAGE_KEY,
   type PendingCheckoutOrderSnapshot,
 } from './checkout/pending-checkout-order';
-import { clearCheckoutIdempotencyKey } from './checkout/checkout-idempotency';
-import { captureCheckoutPaymentCompleted } from './checkout/capture-checkout-payment-completed';
 import { useCheckoutSubmissionState } from './checkout/hooks/use-checkout-submission-state';
 import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import { useRedvaultPaymentAvailability } from './checkout/hooks/use-redvault-payment-availability';
@@ -81,6 +79,7 @@ import {
 } from './checkout/utils';
 import { useCheckoutOrderSubmission } from './checkout/hooks/use-checkout-order-submission';
 import { useWalletFundedBankTransfer } from './checkout/hooks/use-wallet-funded-bank-transfer';
+import { useWalletFundedOrderCompletion } from './checkout/hooks/use-wallet-funded-order-completion';
 import { useStorefrontCustomerSession } from './checkout/hooks/use-storefront-customer-session';
 import {
   useResumedCheckoutStartFunnel,
@@ -402,41 +401,6 @@ export const CheckoutPage: React.FC = () => {
   const { waitForResolvedAuthenticated: waitForResolvedStorefrontCustomerAuth } =
     useStorefrontCustomerSession(merchant?.slug ?? undefined);
 
-  // Wallet-funded bank transfer (P4a, dark-launched). Signed-in customers of an
-  // auto-debit-enabled merchant fund the order through their STANDING wallet
-  // account number; the webhook credits the wallet and the order auto-debits.
-  // Everything this declines falls back to the legacy order-DVA path below.
-  const walletFundedTransfer = useWalletFundedBankTransfer({
-    merchantId: merchant?.id,
-    merchantSlug: merchant?.slug ?? undefined,
-    onOrderPaid: ({ checkoutFingerprint, currency, intentId, orderId, orderNumber, total, trackingToken }) => {
-      // The intent reached server-confirmed `completed`: record the paid
-      // conversion before redirecting, or the funnel stalls at the start
-      // stage for every auto-debited transfer.
-      captureCheckoutPaymentCompleted({
-        currency,
-        orderId,
-        // Preserve the omit-when-empty contract: the compactor drops
-        // undefined but keeps '', so only forward a real order number.
-        ...(orderNumber ? { orderNumber } : {}),
-        paymentMethod,
-        reference: intentId,
-        total,
-      });
-      clearPendingCheckoutOrder();
-      void clearCheckoutIdempotencyKey(checkoutFingerprint);
-      clearCheckoutSession();
-      const successQuery = new URLSearchParams({ orderId, wallet: 'true' });
-      if (trackingToken) {
-        successQuery.set('trackingToken', trackingToken);
-      }
-      router.push(
-        asRoute(getHref(`/order-success?${successQuery.toString()}`))
-      );
-      setTimeout(clearCart, 500);
-    },
-  });
-
   // Chain/currency compatibility
   const cryptoChainSupport: Record<'USDT' | 'USDC', Array<'TRX' | 'ETH' | 'MATIC' | 'AVAXC'>> = {
     USDT: ['TRX', 'ETH'],
@@ -581,6 +545,22 @@ export const CheckoutPage: React.FC = () => {
   const walletAmountUsed = paymentSession.wallet.amountUsed;
   const remainingAmount = paymentSession.wallet.remainingAmount;
   const total = paymentSession.total;
+
+  const completeWalletFundedOrder = useWalletFundedOrderCompletion({
+    clearCart,
+    clearCheckoutSession,
+    clearPendingCheckoutOrder,
+    getHref,
+    paymentMethod,
+  });
+  // Wallet-funded bank transfer (P4a, dark-launched). Signed-in customers of
+  // an auto-debit-enabled merchant fund the order through their standing
+  // wallet account; the webhook credits it and the order auto-debits.
+  const walletFundedTransfer = useWalletFundedBankTransfer({
+    merchantId: merchant?.id,
+    merchantSlug: merchant?.slug ?? undefined,
+    onOrderPaid: completeWalletFundedOrder,
+  });
 
   useEffect(() => {
     if (

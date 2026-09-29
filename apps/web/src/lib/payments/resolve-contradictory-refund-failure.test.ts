@@ -1,0 +1,148 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  quarantineRefund: vi.fn(),
+}));
+
+vi.mock('@/lib/orders/quarantine-order-cancellation-refund', () => ({
+  quarantineRefund: mocks.quarantineRefund,
+}));
+
+import { DeliveryUncertainError } from '@/lib/orders/run-order-cancellation-side-effect';
+import { resolveContradictoryRefundFailure } from './resolve-contradictory-refund-failure';
+
+const row = {
+  created_at: '2026-09-27T12:00:00Z',
+  merchant_id: 'merchant-1',
+  order_id: 'order-1',
+};
+
+const order = {
+  currency: 'NGN',
+  id: 'order-1',
+  merchant_id: 'merchant-1',
+  order_number: 'ORD-1',
+};
+
+function chain(
+  result: { data: unknown; error: unknown },
+  terminal: 'in' | 'limit'
+) {
+  const query: Record<string, ReturnType<typeof vi.fn>> = {};
+  for (const method of ['select', 'eq', 'gt', 'in', 'order', 'limit']) {
+    query[method] =
+      method === terminal ? vi.fn(async () => result) : vi.fn(() => query);
+  }
+  return query;
+}
+
+describe('resolveContradictoryRefundFailure', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.quarantineRefund.mockRejectedValue(
+      new DeliveryUncertainError('quarantined')
+    );
+  });
+
+  it('suppresses the alert when a replacement refund postdates the failure', async () => {
+    const replacement = chain(
+      { data: [{ id: 'refund-2' }], error: null },
+      'limit'
+    );
+    const from = vi.fn().mockReturnValue(replacement);
+
+    await expect(
+      resolveContradictoryRefundFailure({ from } as never, row, order)
+    ).resolves.toBe(true);
+    expect(replacement.gt).toHaveBeenCalledWith(
+      'created_at',
+      '2026-09-27T12:00:00Z'
+    );
+    expect(mocks.quarantineRefund).not.toHaveBeenCalled();
+  });
+
+  it('files a falsely-refunded review when the failure is the latest evidence', async () => {
+    const failedRows = [
+      {
+        amount: 100,
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: 'RFD-1',
+        id: 'refund-1',
+        metadata: {
+          payment_transaction_id: 'payment-1',
+          provider_refund_status: 'failed',
+        },
+      },
+    ];
+    const legs = [
+      {
+        amount: 100,
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: 'PSK-1',
+        id: 'payment-1',
+      },
+    ];
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(chain({ data: [], error: null }, 'limit'))
+      .mockReturnValueOnce(chain({ data: failedRows, error: null }, 'limit'))
+      .mockReturnValueOnce(chain({ data: legs, error: null }, 'in'));
+
+    await expect(
+      resolveContradictoryRefundFailure({ from } as never, row, order)
+    ).resolves.toBe(false);
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          contradictory_refund_failure: true,
+          failed_payment_transaction_ids: ['payment-1'],
+          failed_refund_ids: ['refund-1'],
+        }),
+        reason: expect.stringContaining('still marked refunded'),
+        transactions: legs,
+      })
+    );
+  });
+
+  it('files even when no failed rows remain to attach', async () => {
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(chain({ data: [], error: null }, 'limit'))
+      .mockReturnValueOnce(chain({ data: [], error: null }, 'limit'));
+
+    await expect(
+      resolveContradictoryRefundFailure({ from } as never, row, order)
+    ).resolves.toBe(false);
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({ transactions: [] })
+    );
+    expect(from).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries when the replacement lookup fails', async () => {
+    const from = vi
+      .fn()
+      .mockReturnValue(
+        chain({ data: null, error: new Error('db down') }, 'limit')
+      );
+
+    await expect(
+      resolveContradictoryRefundFailure({ from } as never, row, order)
+    ).rejects.toThrow('refund_notification_replacement_lookup_failed');
+    expect(mocks.quarantineRefund).not.toHaveBeenCalled();
+  });
+
+  it('retries when the contradiction review cannot be filed', async () => {
+    mocks.quarantineRefund.mockRejectedValue(new Error('review write failed'));
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(chain({ data: [], error: null }, 'limit'))
+      .mockReturnValueOnce(chain({ data: [], error: null }, 'limit'));
+
+    await expect(
+      resolveContradictoryRefundFailure({ from } as never, row, order)
+    ).rejects.toThrow('review write failed');
+  });
+});

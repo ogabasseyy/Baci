@@ -1,4 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  resolveContradictoryRefundFailure: vi.fn(),
+}));
+
+vi.mock('./resolve-contradictory-refund-failure', () => ({
+  resolveContradictoryRefundFailure: mocks.resolveContradictoryRefundFailure,
+}));
+
 import { drainPaystackRefundNotifications } from './drain-paystack-refund-notifications';
 import { database } from './drain-paystack-refund-notifications.test-support';
 
@@ -114,6 +123,40 @@ describe('merchant refund app notification', () => {
     expect(sendEmail).not.toHaveBeenCalled();
     expect(db.finish.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'delivery_uncertain' })
+    );
+  });
+
+  it('suppresses a failure alert superseded by a replacement refund', async () => {
+    const db = database('failed_merchant_push', 'refunded');
+    mocks.resolveContradictoryRefundFailure.mockResolvedValue(true);
+    sendPush.mockResolvedValue({ sent: 1, failed: 0, errors: [] });
+
+    await expect(
+      drainPaystackRefundNotifications(db as never, sendEmail, 1, sendPush)
+    ).resolves.toEqual({ claimed: 1, sent: 1, failed: 0, exhausted: 0 });
+
+    expect(sendPush).not.toHaveBeenCalled();
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(db.finish.update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'sent' })
+    );
+  });
+
+  it('alerts the merchant when the failure contradicts the refunded state', async () => {
+    const db = database('failed_merchant_push', 'refunded');
+    mocks.resolveContradictoryRefundFailure.mockResolvedValue(false);
+    sendPush.mockResolvedValue({ sent: 1, failed: 0, errors: [] });
+
+    await expect(
+      drainPaystackRefundNotifications(db as never, sendEmail, 1, sendPush)
+    ).resolves.toEqual({ claimed: 1, sent: 1, failed: 0, exhausted: 0 });
+
+    expect(sendPush).toHaveBeenCalledWith(
+      'merchant-1',
+      'Refund needs attention',
+      expect.any(String),
+      expect.any(Object),
+      'payments'
     );
   });
 });

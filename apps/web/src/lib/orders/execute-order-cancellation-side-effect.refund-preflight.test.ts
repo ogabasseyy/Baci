@@ -68,6 +68,7 @@ describe('cancellation refund preflight quarantine', () => {
     const from = vi
       .fn()
       .mockReturnValueOnce(paymentQuery)
+      .mockReturnValueOnce(transactionQuery([]))
       .mockReturnValueOnce({ insert: reviewInsert });
 
     await expect(
@@ -149,6 +150,7 @@ describe('cancellation refund preflight quarantine', () => {
     const from = vi
       .fn()
       .mockReturnValueOnce(paymentQuery)
+      .mockReturnValueOnce(transactionQuery([]))
       .mockReturnValueOnce({ insert: reviewInsert });
 
     await expect(
@@ -184,6 +186,7 @@ describe('cancellation refund preflight quarantine', () => {
     const from = vi
       .fn()
       .mockReturnValueOnce(paymentQuery)
+      .mockReturnValueOnce(transactionQuery([]))
       .mockReturnValueOnce({ insert: reviewInsert });
 
     const error = await executeOrderCancellationSideEffect({
@@ -196,5 +199,70 @@ describe('cancellation refund preflight quarantine', () => {
     expect(error).toBeInstanceOf(Error);
     expect(error).not.toBeInstanceOf(DeliveryUncertainError);
     expect(mocks.initiateRefund).not.toHaveBeenCalled();
+  });
+
+  it('initiates the uncovered leg when the unsupported leg is already refunded', async () => {
+    const auditInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 60,
+            currency: 'NGN',
+            gateway: 'paystack',
+            gateway_reference: 'PSK-1',
+            id: 'payment-p',
+            status: 'completed',
+          },
+          {
+            amount: 40,
+            currency: 'NGN',
+            gateway: 'korapay',
+            gateway_reference: 'KORA-1',
+            id: 'payment-k',
+            status: 'completed',
+          },
+        ])
+      )
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 40,
+            currency: 'NGN',
+            gateway: 'korapay',
+            metadata: { payment_transaction_id: 'payment-k' },
+            status: 'completed',
+          },
+        ])
+      )
+      .mockReturnValueOnce({ insert: auditInsert });
+    mocks.initiateRefund.mockResolvedValue({
+      data: {
+        id: 101,
+        status: 'queued',
+        transaction: { id: 55, reference: 'PSK-1' },
+      },
+      success: true,
+    });
+
+    const result = await executeOrderCancellationSideEffect({
+      merchant,
+      order,
+      step: 'refund',
+      supabase: { from } as never,
+    });
+
+    // The korapay leg needs no further action, so it must not
+    // terminalize the row and strand the uncovered Paystack leg.
+    expect(result).toEqual({ refundIds: [101] });
+    expect(mocks.initiateRefund).toHaveBeenCalledTimes(1);
+    expect(mocks.initiateRefund).toHaveBeenCalledWith(
+      'PSK-1',
+      6000,
+      expect.any(String),
+      undefined
+    );
+    expect(from).toHaveBeenCalledTimes(3);
   });
 });

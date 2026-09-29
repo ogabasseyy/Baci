@@ -1361,4 +1361,89 @@ describe('SearchAutocomplete', () => {
       screen.queryByRole('option', { name: /late arrival/i })
     ).not.toBeInTheDocument();
   });
+
+  it('restarts the request when the same query returns after transient short input', async () => {
+    vi.useRealTimers();
+    const onChange = vi.fn();
+    let resolveJson: (value: unknown) => void = () => undefined;
+    const jsonPromise = new Promise((resolve) => {
+      resolveJson = resolve;
+    });
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => jsonPromise })
+    ) as unknown as typeof fetch;
+    globalThis.fetch = fetchMock;
+
+    const { rerender } = render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="iphone"
+        onChange={onChange}
+        onSubmitSearch={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(vi.mocked(fetchMock)).toHaveBeenCalledTimes(1);
+    });
+    const firstSignal = vi.mocked(fetchMock).mock.calls[0]?.[1]?.signal as
+      | AbortSignal
+      | undefined;
+
+    // Briefly shortening below two characters aborts and clears the
+    // pending request...
+    fireEvent.change(screen.getByRole('searchbox'), {
+      target: { value: 'i' },
+    });
+    rerender(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="i"
+        onChange={onChange}
+        onSubmitSearch={vi.fn()}
+      />
+    );
+    expect(firstSignal?.aborted).toBe(true);
+
+    // ...and restoring the same query within the debounce window never
+    // changes the debounced value, so the request must restart anyway.
+    fireEvent.change(screen.getByRole('searchbox'), {
+      target: { value: 'iphone' },
+    });
+    rerender(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="iphone"
+        onChange={onChange}
+        onSubmitSearch={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(vi.mocked(fetchMock)).toHaveBeenCalledTimes(2);
+    });
+
+    await act(async () => {
+      resolveJson({
+        suggestions: [
+          {
+            id: 'product-1',
+            name: 'iPhone 16',
+            slug: 'iphone-16',
+            category: 'Smartphones',
+            price: 900_000,
+            image_small: '',
+          },
+        ],
+        popularSearches: [],
+      });
+      await jsonPromise;
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', { name: /iphone 16/i })
+      ).toBeInTheDocument();
+    });
+  });
 });

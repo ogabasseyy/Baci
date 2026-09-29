@@ -11,9 +11,16 @@ interface UseAutocompleteSuggestionsInput {
   /**
    * Runs after a fetch resolves with fresh results (open the popup, reset
    * the highlight). Read through a ref so the fetch effect only depends on
-   * the debounced query and merchant.
+   * the debounced query, the merchant, and the refetch token.
    */
   onResultsReceived: () => void;
+  /**
+   * Bumped when the same fetchable query is restored after a transient
+   * short input aborted its request (e.g. "iphone" -> "i" -> "iphone"
+   * within the debounce window): the debounced value never changes, so
+   * without this the fetch effect would not reissue the request.
+   */
+  refetchToken: number;
 }
 
 /**
@@ -26,6 +33,7 @@ export function useAutocompleteSuggestions({
   debouncedValue,
   merchantId,
   onResultsReceived,
+  refetchToken,
 }: UseAutocompleteSuggestionsInput) {
   const [suggestions, setSuggestions] = useState<AutocompleteProduct[]>([]);
   const [popularSearches, setPopularSearches] = useState<
@@ -138,7 +146,7 @@ export function useAutocompleteSuggestions({
         inFlightControllerRef.current = null;
       }
     };
-  }, [debouncedValue, merchantId]);
+  }, [debouncedValue, merchantId, refetchToken]);
 
   return {
     clearSuggestions,

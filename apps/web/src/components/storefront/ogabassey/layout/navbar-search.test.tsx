@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -286,5 +292,29 @@ describe('NavbarSearch search-route query sync', () => {
     renderNavbar();
 
     expect(searchInput().value).toBe('');
+  });
+
+  it('preserves edits when autocomplete loads after the edit', async () => {
+    // On /search the fallback input syncs the route query, then the user
+    // edits it — starting the lazy autocomplete load. When the chunk
+    // resolves and React swaps branches, the shared sync instance must
+    // not remount and overwrite the edit with the unchanged route query.
+    renderNavbar();
+    expect(searchInput().value).toBe('misspelled');
+
+    fireEvent.change(searchInput(), { target: { value: 'misspelled edit' } });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: /select product/i })
+      ).toBeInTheDocument();
+    });
+
+    // Flush mount effects from the swapped branch: a per-branch sync
+    // instance would remount here and overwrite the edit with the
+    // unchanged route query.
+    await act(async () => {});
+
+    expect(searchInput().value).toBe('misspelled edit');
   });
 });

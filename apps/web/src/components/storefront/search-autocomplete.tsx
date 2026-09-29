@@ -32,6 +32,10 @@ export function SearchAutocomplete({
 }: SearchAutocompleteProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  // Restarted-request generation (see the render-time restore detection
+  // below): reissues a request aborted by transient short input when the
+  // same fetchable query comes back within the debounce window.
+  const [refetchToken, setRefetchToken] = useState(0);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   // 200ms sits at the responsive end of the 200-400ms typeahead debounce range;
@@ -64,6 +68,7 @@ export function SearchAutocomplete({
       setIsOpen(true);
       setHighlightedIndex(-1);
     },
+    refetchToken,
   });
 
   // Navigation-closing activations (full-search submit, product select)
@@ -120,6 +125,7 @@ export function SearchAutocomplete({
   // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
   const [prevValue, setPrevValue] = useState(value);
   if (value !== prevValue) {
+    const wasShort = prevValue.length < 2;
     setPrevValue(value);
     if (value.length < 2) {
       clearSuggestions();
@@ -129,6 +135,14 @@ export function SearchAutocomplete({
       if (!isPopupLength(value)) {
         setIsOpen(false);
       }
+    } else if (wasShort && value === debouncedValue) {
+      // Restoring the same fetchable query after transient short input
+      // ("iphone" -> "i" -> "iphone" within the debounce window): the
+      // reset above aborted its request but the debounced value never
+      // changed, so restart the request explicitly. Normal typing never
+      // matches — the debounce cannot have committed a value that only
+      // just became fetchable — so this fires on a genuine restore.
+      setRefetchToken((token) => token + 1);
     }
   }
 

@@ -26,6 +26,7 @@ describe('useAutocompleteSuggestions', () => {
         debouncedValue: 'iph',
         merchantId: 'm1',
         onResultsReceived,
+        refetchToken: 0,
       })
     );
 
@@ -51,6 +52,7 @@ describe('useAutocompleteSuggestions', () => {
         debouncedValue: 'i',
         merchantId: 'm1',
         onResultsReceived,
+        refetchToken: 0,
       })
     );
 
@@ -71,6 +73,7 @@ describe('useAutocompleteSuggestions', () => {
         debouncedValue: 'iph',
         merchantId: 'm1',
         onResultsReceived,
+        refetchToken: 0,
       })
     );
 
@@ -97,6 +100,7 @@ describe('useAutocompleteSuggestions', () => {
         debouncedValue: 'iph',
         merchantId: 'm1',
         onResultsReceived,
+        refetchToken: 0,
       })
     );
 
@@ -149,6 +153,7 @@ describe('useAutocompleteSuggestions', () => {
           debouncedValue,
           merchantId: 'm1',
           onResultsReceived,
+          refetchToken: 0,
         }),
       { initialProps: { debouncedValue: 'aa' } }
     );
@@ -189,6 +194,7 @@ describe('useAutocompleteSuggestions', () => {
         debouncedValue: 'iph',
         merchantId: 'm1',
         onResultsReceived,
+        refetchToken: 0,
       })
     );
 
@@ -230,6 +236,7 @@ describe('useAutocompleteSuggestions', () => {
           debouncedValue,
           merchantId: 'm1',
           onResultsReceived,
+          refetchToken: 0,
         }),
       { initialProps: { debouncedValue: 'iph' } }
     );
@@ -265,6 +272,7 @@ describe('useAutocompleteSuggestions', () => {
         debouncedValue: 'iph',
         merchantId: 'm1',
         onResultsReceived,
+        refetchToken: 0,
       })
     );
 

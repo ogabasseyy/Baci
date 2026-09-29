@@ -156,12 +156,16 @@ export function NavbarSearch({
     });
   };
 
+  // The route-query sync stays mounted ABOVE the branch selection: when
+  // the lazy autocomplete chunk resolves, React swaps the fallback form
+  // for the autocomplete tree, and a per-branch sync instance would
+  // remount there — its mount effect would overwrite an in-progress edit
+  // with the unchanged route query. One shared instance only ever syncs
+  // on an actual navigation.
+  let searchContent: React.ReactNode;
   if (isBlogPage) {
-    return (
+    searchContent = (
       <form onSubmit={handleSubmit} className="ogabassey-navbar-search">
-        <Suspense>
-          <SearchRouteQuerySync onSync={setSearchQuery} />
-        </Suspense>
         <Input
           type="search"
           value={searchQuery}
@@ -176,16 +180,10 @@ export function NavbarSearch({
         <Search className="ogabassey-navbar-search__icon" aria-hidden="true" />
       </form>
     );
-  }
-
-  if (SearchAutocompleteComponent) {
-    return (
-      <>
-        <Suspense>
-          <SearchRouteQuerySync onSync={setSearchQuery} />
-        </Suspense>
-        <SearchAutocompleteComponent
-          merchantId={merchantId}
+  } else if (SearchAutocompleteComponent) {
+    searchContent = (
+      <SearchAutocompleteComponent
+        merchantId={merchantId}
         value={searchQuery}
         onChange={setSearchQuery}
         onSelectProduct={handleProductSelect}
@@ -196,33 +194,38 @@ export function NavbarSearch({
         placeholder="Search products, brands and categories"
         className={SEARCH_INPUT_CLASS_NAME}
         autoFocus={shouldAutoFocusAutocomplete}
+      />
+    );
+  } else {
+    searchContent = (
+      <form onSubmit={handleSubmit} className="ogabassey-navbar-search">
+        <Search className="ogabassey-navbar-search__icon" aria-hidden="true" />
+        <Input
+          type="search"
+          value={searchQuery}
+          onChange={(event) => {
+            setSearchQuery(event.target.value);
+            activateAutocomplete(false);
+          }}
+          onFocus={() => activateAutocomplete(true)}
+          onPointerDown={() => activateAutocomplete(false)}
+          placeholder="Search products, brands and categories"
+          maxLength={NAVBAR_SEARCH_MAX_LENGTH}
+          aria-label="Search products"
+          id="search-input"
+          name="q"
+          className="ogabassey-navbar-search__input"
         />
-      </>
+      </form>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="ogabassey-navbar-search">
+    <>
       <Suspense>
         <SearchRouteQuerySync onSync={setSearchQuery} />
       </Suspense>
-      <Search className="ogabassey-navbar-search__icon" aria-hidden="true" />
-      <Input
-        type="search"
-        value={searchQuery}
-        onChange={(event) => {
-          setSearchQuery(event.target.value);
-          activateAutocomplete(false);
-        }}
-        onFocus={() => activateAutocomplete(true)}
-        onPointerDown={() => activateAutocomplete(false)}
-        placeholder="Search products, brands and categories"
-        maxLength={NAVBAR_SEARCH_MAX_LENGTH}
-        aria-label="Search products"
-        id="search-input"
-        name="q"
-        className="ogabassey-navbar-search__input"
-      />
-    </form>
+      {searchContent}
+    </>
   );
 }

@@ -28,7 +28,8 @@ describe('gated semantic discovery', () => {
         id: `printer-${index}`, name: `HP Wireless Printer ${index}`,
         category: 'Printers', price: 10000, manage_stock: false,
       })),
-      { id: 'earbuds', name: 'Google Pixel Buds Pro', category: 'Earbuds', price: 20000, manage_stock: false },
+      { id: 'earbuds', name: 'Google Pixel Buds Pro', category: 'Earbuds', price: 20000, manage_stock: false,
+        description: 'Wireless earbuds with noise cancelling' },
     ];
     const query = {
       eq: vi.fn(() => query),

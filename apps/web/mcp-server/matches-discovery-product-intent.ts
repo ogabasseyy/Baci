@@ -8,18 +8,19 @@ import {
   hasConsecutiveWords,
   type IntentBranch,
   type IntentWordScope,
-  joinSpecToken,
+  isModelNumberPrefix,
   knownBrandWords,
   knownDeviceFamilyWords,
   matchesAlternativeBranch,
-  matchesProductToken,
+  matchesIdentityTerms,
+  matchesModelSpecTokens,
   matchesRequestedDevice,
   matchesWord,
-  modelAnchorStopwords,
   modelQualifiers,
   phoneAccessoryTypes,
   type ProductText,
   productTypes,
+  specUnitWords,
   words,
 } from './matches-discovery-product-intent-words';
 
@@ -64,7 +65,12 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
     }
     if (current.length > 0) parts.push(current);
     const typedParts = parts.filter((part) => part.some((word) => productTypes.has(word)));
-    return typedParts.length > 1 ? parts : [phrase.filter((word) => word !== 'and')];
+    // A shared trailing noun also splits brand-led conjunctions ("Dell and
+    // ASUS laptops"); purely descriptive conjunctions stay one intent.
+    const splittable = (part: string[]) => part.some((word) =>
+      productTypes.has(word) || knownBrandWords.has(word) || knownDeviceFamilyWords.has(word));
+    const split = parts.length > 1 && typedParts.length >= 1 && parts.every(splittable);
+    return split ? parts : [phrase.filter((word) => word !== 'and')];
   };
   const alternativePhrases: string[][] = [];
   let currentPhrase: string[] = [];
@@ -125,7 +131,7 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
   const identityScope = [...identityWords, ...categoryWords, ...descriptionLead];
   const isHandsetCategory = categoryWords.includes('smartphones') ||
     (categoryWords.some((word) => matchesWord([word], 'phone')) &&
-      !categoryWords.some((word) => ['accessory', 'accessories', 'case', 'cases'].includes(word)));
+      !categoryWords.some((word) => word.includes('accessor') || phoneAccessoryTypes.has(word)));
   const scope: IntentWordScope = {
     categoryWords, descriptionLead, deviceIdentityText, identityScope, identityWords,
     isHandsetCategory, itemText, nameWords,
@@ -145,8 +151,6 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
     ? alternativeBranches.filter((branch) => matchesAlternativeBranch(branch, scope))
     : [];
   if (hasAlternativeItemTypes && matchedBranches.length === 0) return false;
-  const tokenInMatchedBranch = (token: string) =>
-    matchedBranches.some((branch) => branch.phraseWords.includes(token));
 
   // A description can identify an otherwise untitled item, but it must not
   // override a different product type stated in the title.
@@ -169,26 +173,33 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
   const requestedIdentityTerms = hasAlternativeItemTypes
     ? []
     : itemTypeIndex < 0
-    ? itemWords.filter((word) =>
-      !productTypes.has(word) && !genericItemModifiers.has(word) &&
-      !modelQualifiers.has(word) && !/\d/.test(word) && /^[a-z]{2,}$/.test(word)
-    )
-    : itemPrefixWords.filter((word) =>
-      !productTypes.has(word) && !genericItemModifiers.has(word) &&
-      !knownDeviceFamilyWords.has(word) && !modelQualifiers.has(word) && !/\d/.test(word) &&
+    ? itemWords.filter((word, index) =>
+      !productTypes.has(word) && !genericItemModifiers.has(word) && !specUnitWords.has(word) &&
+      !modelQualifiers.has(word) && !/\d/.test(word) && !isModelNumberPrefix(itemWords, index) &&
       /^[a-z]{2,}$/.test(word)
+    )
+    : itemPrefixWords.filter((word, index) =>
+      !productTypes.has(word) && !genericItemModifiers.has(word) && !specUnitWords.has(word) &&
+      !knownDeviceFamilyWords.has(word) && !modelQualifiers.has(word) && !/\d/.test(word) &&
+      !isModelNumberPrefix(itemPrefixWords, index) && /^[a-z]{2,}$/.test(word)
     );
   // Identity terms can also trail the type ("laptop from Samsung"); "from" and
   // "by" are markers rather than terms. Alternatives validate per branch.
   const itemSuffixWords = itemTypeIndex < 0 ? [] : itemWords.slice(itemTypeIndex + 1);
-  const trailingIdentityTerms = itemSuffixWords.filter((word) =>
+  const trailingIdentityTerms = itemSuffixWords.filter((word, index) =>
     word !== 'from' && word !== 'by' && !productTypes.has(word) && !genericItemModifiers.has(word) &&
-    !knownDeviceFamilyWords.has(word) && !modelQualifiers.has(word) && !/\d/.test(word) &&
-    /^[a-z]{2,}$/.test(word)
+    !specUnitWords.has(word) && !knownDeviceFamilyWords.has(word) && !modelQualifiers.has(word) &&
+    !/\d/.test(word) && !isModelNumberPrefix(itemSuffixWords, index) && /^[a-z]{2,}$/.test(word)
   );
   const compatibilityWords = words([product.name, product.description].filter(Boolean).join(' '));
-  if (requestedIdentityTerms.some((term) => !matchesWord(identityScope, term))) return false;
-  if (trailingIdentityTerms.some((term) => !matchesWord(identityScope, term))) return false;
+  if (!matchesIdentityTerms(requestedIdentityTerms, scope)) return false;
+  if (!matchesIdentityTerms(trailingIdentityTerms, scope)) return false;
+  // Model qualifiers constrain the candidate even without a numeric anchor
+  // ("MacBook Pro" is not a MacBook Air); alternatives scope them per branch.
+  const qualifierWords = hasAlternativeItemTypes
+    ? matchedBranches.flatMap((branch) => branch.phraseWords)
+    : itemWords;
+  if (qualifierWords.some((word) => modelQualifiers.has(word) && !matchesWord(identityWords, word))) return false;
   const compatibilityIndex = coreWords.indexOf('for', itemWords.length);
   const compatibilityEnd = coreWords.findIndex((word, index) => index > compatibilityIndex && detailBoundary.has(word));
   const compatibilityTerms = compatibilityIndex < 0 ? [] : coreWords.slice(
@@ -227,49 +238,8 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
   }
 
   const productSpecWords = words([product.name, product.brand, product.category, product.description].filter(Boolean).join(' '));
-  for (const [coreIndex, token] of coreWords.entries()) {
-    const nextWord = coreWords[coreIndex + 1];
-    const specToken = joinSpecToken(token, nextWord);
-    if (specToken) {
-      // A number from one alternative must not constrain another branch's match.
-      if (hasAlternativeItemTypes && itemWords.includes(token) && !tokenInMatchedBranch(token)) continue;
-      if (!matchesProductToken(productSpecWords, specToken)) return false;
-      const contextWord = specToken === token ? nextWord : coreWords[coreIndex + 2];
-      const requestedContext = contextWord === 'ram' || contextWord === 'memory' || contextWord === 'storage'
-        ? contextWord
-        : undefined;
-      if (requestedContext) {
-        const specParts = /^(\d+)([a-z]+)$/.exec(specToken);
-        const matchingContext = productSpecWords.some((word, tokenIndex) => {
-          const atSpecAnchor = matchesWord([word], specToken) ||
-            Boolean(specParts && word === specParts[1] && productSpecWords[tokenIndex + 1] === specParts[2]);
-          if (!atSpecAnchor) return false;
-          const forwardWords = productSpecWords.slice(tokenIndex + 1, tokenIndex + 4);
-          const reverseWords = productSpecWords.slice(Math.max(0, tokenIndex - 2), tokenIndex);
-          return matchesWord(forwardWords, requestedContext) || matchesWord(reverseWords, requestedContext);
-        });
-        if (!matchingContext) return false;
-      }
-      continue;
-    }
-    const index = itemWords.indexOf(token);
-    if (index < 0 || !/\d/.test(token) || token.length < 2 || token.length > 10 || /^[0-9][gk]$/.test(token)) continue;
-    if (hasAlternativeItemTypes && !tokenInMatchedBranch(token)) continue;
-    if (!matchesProductToken(itemText, token)) return false;
-    const preceding = coreWords[index - 1];
-    if (preceding && /^[a-z]+$/.test(preceding) && !modelAnchorStopwords.has(preceding) &&
-      !matchesWord(itemText, preceding)) return false;
-    for (let next = index + 1; modelQualifiers.has(coreWords[next]); next += 1) {
-      if (!matchesWord(identityWords, coreWords[next])) return false;
-    }
-    const productAnchorIndex = identityWords.findIndex((word) => word === token);
-    if (productAnchorIndex >= 0) {
-      const queryQualifiers: string[] = [];
-      for (let next = index + 1; modelQualifiers.has(coreWords[next]); next += 1) queryQualifiers.push(coreWords[next]);
-      const productQualifiers: string[] = [];
-      for (let next = productAnchorIndex + 1; modelQualifiers.has(identityWords[next]); next += 1) productQualifiers.push(identityWords[next]);
-      if (productQualifiers.some((qualifier) => !queryQualifiers.includes(qualifier))) return false;
-    }
-  }
-  return true;
+  return matchesModelSpecTokens({
+    coreWords, hasAlternativeItemTypes, identityWords, itemText, itemWords,
+    matchedBranchPhrases: matchedBranches.map((branch) => branch.phraseWords), productSpecWords,
+  });
 }

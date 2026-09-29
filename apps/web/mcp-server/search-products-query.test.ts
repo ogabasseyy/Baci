@@ -101,7 +101,8 @@ describe('loadMcpSearchProducts', () => {
 
   it('backfills lexical candidates after intent filtering rejects the first ranked page', async () => {
     const { rpc, supabase } = createRankedSearchSupabase('Printers', (id) =>
-      id === 'ranked-100' ? 'Google Pixel Buds Pro' : 'HP Wireless Printer'
+      id === 'ranked-100' ? 'Google Pixel Buds Pro' : 'HP Wireless Printer',
+      (id) => id === 'ranked-100' ? 'Wireless earbuds with noise cancelling' : ''
     );
     const result = await loadMcpSearchProducts({
       args: { query: 'wireless earbuds', limit: 1 }, merchantId: 'merchant-1',

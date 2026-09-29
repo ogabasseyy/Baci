@@ -66,6 +66,41 @@ describe('abandoned Paystack attempts with invalid references', () => {
     );
   });
 
+  it('files a durable review when Paystack deterministically rejects the reference', async () => {
+    const { client } = createClient();
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    withReviewTable(client, reviewInsert);
+    Object.assign(client, { rpc });
+    const verify = vi.fn().mockResolvedValue({
+      code: 'HTTP_400',
+      error: 'Bad request',
+      success: false,
+    });
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify,
+    });
+
+    // A 400 will never succeed on retry: holding it as an outage would
+    // rotate updated_at forever while the pending row blocks merchant
+    // cancellation and the cron reports success.
+    expect(summary.reviewsFiled).toEqual(['attempt-1']);
+    expect(summary.held).toEqual([]);
+    expect(summary.failed).toBe(false);
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'abandoned_attempt_evidence_mismatch',
+        reason: expect.stringContaining('HTTP_400'),
+      })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
+      expect.objectContaining({ p_transaction_id: 'attempt-1' })
+    );
+  });
+
   it('fails the sweep when the invalid-reference review cannot be filed', async () => {
     const { client } = createClient([invalidCandidate()]);
     const reviewInsert = vi

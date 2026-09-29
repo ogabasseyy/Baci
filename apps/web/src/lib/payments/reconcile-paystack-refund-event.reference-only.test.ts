@@ -54,6 +54,46 @@ describe('Paystack reference-only refund events', () => {
     );
   });
 
+  it('paginates past the first page of payments sharing a reference', async () => {
+    const skipped = Array.from({ length: 10 }, (_, index) =>
+      cancelledPaymentRow({
+        cancel_order: { cancelled_at: null, shipping_status: 'processing' },
+        id: `payment-skip-${index}`,
+        order_id: `order-skip-${index}`,
+      })
+    );
+    const page1 = buildPaymentCandidates(skipped);
+    const page2 = buildPaymentCandidates([cancelledPaymentRow()]);
+    const refunds = buildRefundCandidates([]);
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(page1)
+      .mockReturnValueOnce(page2)
+      .mockReturnValueOnce(refunds)
+      .mockReturnValueOnce(
+        buildSettledCandidates([
+          {
+            amount: 100,
+            currency: 'NGN',
+            metadata: { provider_refund_status: 'processed' },
+          },
+        ])
+      );
+    const rpc = vi.fn();
+
+    await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
+
+    expect(page1.range).toHaveBeenCalledWith(0, 9);
+    expect(page2.range).toHaveBeenCalledWith(10, 19);
+    // The cancelled payment on page 2 was reached, not truncated away
+    // before the caller acknowledged the event.
+    expect(refunds.eq).toHaveBeenCalledWith(
+      'metadata->>payment_transaction_id',
+      'payment-1'
+    );
+    expect(from).toHaveBeenCalledTimes(4);
+  });
+
   it('stays silent when a completed row already reconciled the payment', async () => {
     const from = vi
       .fn()

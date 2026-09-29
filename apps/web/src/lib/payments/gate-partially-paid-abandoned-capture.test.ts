@@ -138,6 +138,30 @@ describe('gatePartiallyPaidAbandonedCapture routing', () => {
     expect(h.hold).not.toHaveBeenCalled();
   });
 
+  it('files a duplicate review for a non-invoice overpayment', async () => {
+    const plainAttempt = { ...attempt, metadata: {} };
+    const db = ordersClient({ amount_paid: 30, total: 100 });
+    const h = harness();
+
+    const gate = await gatePartiallyPaidAbandonedCapture({
+      ...h,
+      attempt: plainAttempt,
+      providerData: { ...providerData, amount: 10000 },
+      supabase: db as never,
+    });
+
+    // 100 against 70 owing: excess money the finalizer would silently
+    // promote to paid, so it owes the duplicate review directly.
+    expect(gate).toBe('done');
+    expect(mocks.fileDuplicatePaymentCapture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attempt: expect.objectContaining({ id: 'attempt-1' }),
+      })
+    );
+    expect(h.summary.reviewsFiled).toEqual(['attempt-1']);
+    expect(h.hold).not.toHaveBeenCalled();
+  });
+
   it('holds a non-invoice underpayment without failing the sweep', async () => {
     const plainAttempt = { ...attempt, metadata: {} };
     const db = ordersClient({ amount_paid: 30, total: 100 });

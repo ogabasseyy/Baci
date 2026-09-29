@@ -127,19 +127,24 @@ export async function drainFailedOrderCancellationSideEffects({
   >();
   // Only failed rows burn the attempts budget: a deferred row reselects
   // uncapped, so its attempt count must never trigger last-attempt
-  // evidence filing.
-  for (const row of (failedRows ?? []) as CandidateRow[]) {
-    candidates.set(`${row.order_id}:${row.step}`, {
+  // evidence filing. Merge both queues by age (ISO claimed_at sorts
+  // lexicographically): filling the batch from failed rows first would
+  // starve provider-awaiting refunds whenever the failure backlog stays
+  // above the limit.
+  const merged: Array<CandidateRow & { isLastAttempt: boolean }> = [
+    ...((failedRows ?? []) as CandidateRow[]).map((row) => ({
       ...row,
       isLastAttempt: row.attempts >= MAX_ATTEMPTS - 1,
-    });
-    if (candidates.size >= limit) break;
-  }
-  for (const row of (deferredRows ?? []) as CandidateRow[]) {
-    candidates.set(`${row.order_id}:${row.step}`, {
+    })),
+    ...((deferredRows ?? []) as CandidateRow[]).map((row) => ({
       ...row,
       isLastAttempt: false,
-    });
+    })),
+  ].sort((a, b) =>
+    a.claimed_at < b.claimed_at ? -1 : a.claimed_at > b.claimed_at ? 1 : 0
+  );
+  for (const row of merged) {
+    candidates.set(`${row.order_id}:${row.step}`, row);
     if (candidates.size >= limit) break;
   }
 

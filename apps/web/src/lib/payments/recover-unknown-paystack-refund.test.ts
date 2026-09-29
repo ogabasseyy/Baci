@@ -172,14 +172,48 @@ describe('recoverUnknownPaystackRefund', () => {
     );
   });
 
-  it('acknowledges refunds for orders that are not cancelled', async () => {
+  it('files a review for refunds on orders that are not cancelled', async () => {
     const { insert, supabase } = database({
       orderRow: { ...order, cancelled_at: null },
     });
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
-    expect(insert).not.toHaveBeenCalled();
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'provider_refund_outside_cancellation',
+        merchant_id: 'merchant-1',
+        order_id: 'order-1',
+        paystack_ref: '202',
+        metadata: expect.objectContaining({
+          payment_transaction_id: 'pay-1',
+          provider_payment_transaction_id: 555,
+          provider_refund_id: 202,
+        }),
+      })
+    );
+    expect(mocks.reconcilePaystackCancellationRefund).not.toHaveBeenCalled();
+  });
+
+  it('throws for redelivery when the active-order review cannot be filed', async () => {
+    const { supabase } = database({
+      insertError: new Error('db down'),
+      orderRow: { ...order, cancelled_at: null },
+    });
+
+    await expect(
+      recoverUnknownPaystackRefund(supabase, 202, 'PSK-1')
+    ).rejects.toThrow('active_order_refund_review_failed');
+  });
+
+  it('treats a redelivered active-order refund as already filed', async () => {
+    const { supabase } = database({
+      insertError: { code: '23505' },
+      orderRow: { ...order, cancelled_at: null },
+    });
+
+    await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
+
     expect(mocks.reconcilePaystackCancellationRefund).not.toHaveBeenCalled();
   });
 

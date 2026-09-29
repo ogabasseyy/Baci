@@ -143,6 +143,12 @@ interface SendEmailParams {
   clientReference?: string;
   beforeTransportDispatch?: () => Promise<void>;
   resetTransportDispatch?: () => Promise<void>;
+  // Absolute epoch-ms cutoff for the platform-sender fallback: when set
+  // and the remaining budget cannot fit another full retry loop, the
+  // fallback is skipped and the primary failure is returned, so a cron
+  // drain keeps a retryable row instead of stranding it mid-send as
+  // permanently delivery_uncertain.
+  fallbackDeadlineMs?: number;
 }
 
 interface EmailAttachment {
@@ -367,6 +373,9 @@ const RETRY_CONFIG = {
   baseDelayMs: 1000,
   retryableCodes: ['TM_5001', 'TM_5002', 'TM_5003'], // Server errors
 };
+// Worst case for one sender's retry loop: four 30-second transport
+// attempts plus 1s/2s/4s backoff, rounded up with audit-write headroom.
+const SINGLE_SENDER_WORST_MS = 135_000;
 
 /**
  * Check if error is retryable
@@ -398,6 +407,7 @@ export async function sendEmail({
   clientReference,
   beforeTransportDispatch,
   resetTransportDispatch,
+  fallbackDeadlineMs,
 }: SendEmailParams): Promise<EmailResult> {
   const sender = await resolveSenderAddress(
     emailType,
@@ -578,8 +588,23 @@ export async function sendEmail({
   // Fail-open: a merchant custom sender may be rejected by ZeptoMail (stale or
   // not-yet-verified domain, restricted sender). Order confirmations must not be
   // lost to that, so retry once from the platform domain — mirroring the
-  // auth-email hook, which also falls back to the platform sender.
-  if (sender.isCustomDomain && !deliveryOutcomeUnknown) {
+  // auth-email hook, which also falls back to the platform sender. When the
+  // caller passes a fallback deadline, skip the second loop unless it fits:
+  // starting it on an exhausted budget aborts mid-send and strands the row
+  // as delivery_uncertain instead of a clean retryable failure.
+  const fallbackBudgetMs =
+    fallbackDeadlineMs === undefined
+      ? undefined
+      : fallbackDeadlineMs - Date.now();
+  const fallbackFits =
+    fallbackBudgetMs === undefined ||
+    fallbackBudgetMs >= SINGLE_SENDER_WORST_MS;
+  if (fallbackBudgetMs !== undefined && !fallbackFits) {
+    console.warn(
+      `ZeptoMail skipping platform-sender fallback: ${String(fallbackBudgetMs)}ms remain, ${String(SINGLE_SENDER_WORST_MS)}ms required`
+    );
+  }
+  if (sender.isCustomDomain && !deliveryOutcomeUnknown && fallbackFits) {
     await resetTransportDispatch?.();
     transportDispatchMarked = false;
     const platformSender = getSenderAddress(emailType, fromName);

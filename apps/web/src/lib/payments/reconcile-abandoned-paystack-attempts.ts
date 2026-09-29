@@ -49,6 +49,21 @@ function isVerificationUnavailable(code: string | undefined): boolean {
   return status === 401 || status === 403 || status === 429 || status >= 500;
 }
 
+// Client errors other than auth/rate-limit/missing mean Paystack
+// deterministically rejects this reference: it will never verify on
+// retry, so review it instead of holding it as an outage forever.
+function isDefinitiveProviderRejection(code: string | undefined): boolean {
+  const status = Number(/^HTTP_(\d{3})$/.exec(code ?? '')?.[1]);
+  return (
+    status >= 400 &&
+    status < 500 &&
+    status !== 401 &&
+    status !== 403 &&
+    status !== 404 &&
+    status !== 429
+  );
+}
+
 /** Clear old, superseded attempts only after checking their current Paystack status. */
 export async function reconcileAbandonedPaystackAttempts({
   supabase,
@@ -188,13 +203,22 @@ export async function reconcileAbandonedPaystackAttempts({
       continue;
     }
     if (!result.success) {
-      if (result.code === 'VALIDATION_ERROR') {
-        // The stored reference itself is malformed: provider verification
-        // rejects it deterministically, so file a durable review and stamp
-        // the row instead of rotating it on every sweep.
+      if (
+        result.code === 'VALIDATION_ERROR' ||
+        isDefinitiveProviderRejection(result.code)
+      ) {
+        // The stored reference itself is malformed, or Paystack
+        // deterministically rejects it (e.g. HTTP_400 on a stale card
+        // reference): either way verification will never succeed on
+        // retry, so file a durable review and stamp the row instead of
+        // rotating it on every sweep.
+        const reason =
+          result.code === undefined || result.code === 'VALIDATION_ERROR'
+            ? result.error
+            : result.code;
         const filed = await fileInvalidAttemptReference({
           attempt,
-          reason: result.error,
+          reason,
           supabase,
         });
         if (filed) {

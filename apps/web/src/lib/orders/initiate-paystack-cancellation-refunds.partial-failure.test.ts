@@ -101,8 +101,8 @@ describe('initiatePaystackCancellationRefunds partial failure', () => {
 
     expect(metadata).toMatchObject({
       accepted_refund_ids: [101],
+      ambiguous_initiation: false,
       failed_payment_transaction_id: 'tx-2',
     });
-    expect(metadata).not.toHaveProperty('ambiguous_initiation');
   });
 });

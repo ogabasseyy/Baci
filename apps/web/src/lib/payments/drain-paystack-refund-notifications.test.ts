@@ -49,6 +49,23 @@ describe('Paystack refund notifications', () => {
     );
   });
 
+  it('threads the mail fallback deadline from the drain deadline', async () => {
+    const db = database('processed_customer_email');
+    const deadlineMs = Date.now() + 200_000;
+
+    await drainPaystackRefundNotifications(
+      db as never,
+      mocks.sendEmail,
+      20,
+      undefined,
+      deadlineMs
+    );
+
+    expect(mocks.sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ fallbackDeadlineMs: deadlineMs - 10_000 })
+    );
+  });
+
   it('does not email before every payment leg is refunded', async () => {
     const db = database('processed_customer_email', 'paid');
     await drainPaystackRefundNotifications(db as never, mocks.sendEmail);

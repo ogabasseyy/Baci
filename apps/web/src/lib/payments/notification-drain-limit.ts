@@ -7,8 +7,11 @@
 // Shared with notification-drain-deadline: keep both budgets identical.
 const INVOCATION_BUDGET_MS = 5 * 60_000;
 const SAFETY_MARGIN_MS = 30_000;
-// Allow for ZeptoMail's four 30-second attempts and backoff, plus database
-// reads and the outcome write. The per-row deadline still stops a slower send.
+// Allow for one sender's four 30-second attempts and backoff, plus
+// database reads and the outcome write. The platform-sender fallback
+// declines unless its own loop fits the remaining budget, so it never
+// extends a send past this worst case. The per-row deadline still stops
+// a slower send.
 const PER_SEND_WORST_MS = 150_000;
 const MAX_DRAIN_LIMIT = 20;
 

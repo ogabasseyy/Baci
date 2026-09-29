@@ -38,6 +38,7 @@ export async function loadShippingStates({
     setShippingStates(
       getSubdivisions(merchantCountry).map((subdivision) => subdivision.name)
     );
+    setIsLoadingLocations(false);
     return;
   }
 

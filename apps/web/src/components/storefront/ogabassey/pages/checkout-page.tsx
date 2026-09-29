@@ -51,7 +51,6 @@ import type {
   ResumedOrder,
 } from './checkout/types';
 import { mapApiOrderToResumedOrder } from './checkout/map-api-order-to-resumed-order';
-import { loadShippingStates } from './checkout/checkout-page-data-loaders';
 import {
   usePersistedState,
 } from '@/hooks/use-persisted-state';
@@ -504,7 +503,6 @@ export const CheckoutPage: React.FC = () => {
     cost: deliveryCost,
   } = delivery;
   const { addresses, selectedId: selectedAddressId, isNewMode: isNewAddressMode } = deliveryAddress;
-  const { setIsLoadingLocations, setShippingStates } = deliveryAddress;
   const {
     items: shippingQuotes,
     selectedId: selectedQuoteId,
@@ -567,25 +565,6 @@ export const CheckoutPage: React.FC = () => {
     orderTotals,
     resumedOrder,
   });
-
-  // Load the address state list. NG hits /api/shipping/locations (rich data);
-  // non-NG markets derive their states from the subdivision vocabulary. Keyed
-  // on merchantCountry so it settles correctly once the merchant resolves.
-  // (try/finally hoisted to module scope for the compiler.)
-  useEffect(() => {
-    const controller = new AbortController();
-    loadShippingStates({
-      merchantCountry,
-      signal: controller.signal,
-      setIsLoadingLocations,
-      setShippingStates,
-    });
-    return () => {
-      controller.abort();
-    };
-  }, [merchantCountry]);
-
-
 
   // Note: currentStep and completedSteps are now part of checkoutForm (persisted)
 

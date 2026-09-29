@@ -69,4 +69,46 @@ describe('buildEmailExecutor abort signal', () => {
       expect.objectContaining({ signal })
     );
   });
+
+  it('persists an aborted send as terminal instead of retryable', async () => {
+    mocks.sendEmail.mockResolvedValue({
+      deliveryOutcome: 'unknown',
+      error: 'aborted after dispatch',
+      success: false,
+    });
+
+    const result = await buildEmailExecutor({
+      actor: 'cron:reconcile-gateway-paid-orders:drain',
+      merchantDetails,
+      merchantFetchError: null,
+      order,
+      signal: AbortSignal.timeout(1000),
+    })(null as unknown as StepContext);
+
+    // The send may have reached the customer: throwing would mark the
+    // step failed and the next drain would retry it, potentially sending
+    // a duplicate confirmation. Returning records the step completed
+    // with the indeterminate outcome instead.
+    expect(result).toEqual({
+      delivery_uncertain: true,
+      error: 'aborted after dispatch',
+    });
+  });
+
+  it('still fails retryably when the provider rejects the send', async () => {
+    mocks.sendEmail.mockResolvedValue({
+      error: 'rejected',
+      errorCode: 'TM_400',
+      success: false,
+    });
+
+    await expect(
+      buildEmailExecutor({
+        actor: 'cron:reconcile-gateway-paid-orders:drain',
+        merchantDetails,
+        merchantFetchError: null,
+        order,
+      })(null as unknown as StepContext)
+    ).rejects.toThrow('rejected');
+  });
 });

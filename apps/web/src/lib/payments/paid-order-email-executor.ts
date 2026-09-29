@@ -165,6 +165,17 @@ export function buildEmailExecutor({
       toName: validatedOrder.customer_name ?? undefined,
     });
     if (!result.success) {
+      if (result.deliveryOutcome === 'unknown') {
+        // The send may have reached ZeptoMail (e.g. the pass deadline
+        // aborted it after dispatch): retrying could duplicate the order
+        // confirmation, so persist the indeterminate outcome as terminal
+        // instead of a retryable failure. The ZeptoMail audit trail
+        // (client_reference order:<id>:paid_email) is the source of truth.
+        return {
+          delivery_uncertain: true,
+          error: result.error || result.errorCode || 'email_failed',
+        };
+      }
       throw new Error(result.error || result.errorCode || 'email_failed');
     }
     return { messageId: result.messageId };

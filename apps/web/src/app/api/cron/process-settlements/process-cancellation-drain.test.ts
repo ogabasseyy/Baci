@@ -90,7 +90,9 @@ describe('processCancellationDrain', () => {
     expect(mocks.drainFailedOrderCancellationSideEffects).toHaveBeenCalledWith(
       expect.objectContaining({
         deadlineMs: expect.any(Number),
-        limit: 9,
+        // Four steps fit after the margin and the reserved notification
+        // share; the remainder retries on the next invocation.
+        limit: 4,
         sendCancellationEmail: mocks.sendEmail,
       })
     );

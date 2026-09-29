@@ -170,6 +170,52 @@ describe('discovery product intent', () => {
     expect(matchesDiscoveryProductIntent({ name: 'HP LaserJet Printer', category: 'Printers' }, 'Samsung phone products')).toBe(false);
   });
 
+  it('filters additional catalog product types and unlisted laptop brands', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'Wireless Mouse', category: 'Accessories' }, 'wireless keyboard')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'Logitech Wireless Keyboard', category: 'Accessories' }, 'wireless keyboard')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude Laptop', brand: 'Dell', category: 'Laptops' }, 'ASUS laptop')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'ROG Strix G16', brand: 'ASUS', category: 'Laptops' }, 'ASUS laptop')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'MSI Katana', brand: 'MSI', category: 'Laptops' }, 'MSI laptop')).toBe(true);
+  });
+
+  it('keeps one-word model and specification queries attached to their candidates', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'iPhone 14', category: 'Smartphones' }, 'iPhone 15')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'MacBook Air M2', category: 'Laptops' }, 'MacBook M3')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'MacBook Air M3', category: 'Laptops' }, 'MacBook M3')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: '30W USB-C Charger', category: 'Accessories' }, '20w charger')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: '20W USB-C Charger', category: 'Accessories' }, '20w charger')).toBe(true);
+  });
+
+  it('checks device nouns that qualify an accessory type', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'Camera Case', category: 'Accessories' }, 'phone case')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'Camera Case', category: 'Accessories', description: 'Compatible with iPhone' }, 'phone case')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'iPhone 15 Case', category: 'Accessories' }, 'phone case')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'USB-C Phone Charger', category: 'Phone Accessories' }, 'laptop charger')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'USB-C Laptop Charger', category: 'Accessories' }, 'laptop charger')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'iPhone Lens', category: 'Accessories' }, 'camera lens')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'Sony Camera Lens', category: 'Camera Accessories' }, 'camera lens')).toBe(true);
+  });
+
+  it('accepts candidates matching any explicitly joined product type', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'iPhone 15', category: 'Smartphones' }, 'phone or laptop')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', category: 'Laptops' }, 'phone or laptop')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'iPhone Case', category: 'Accessories' }, 'phone or laptop')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'iPad Air', category: 'Tablets' }, 'phone or laptop')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'Phone Case', category: 'Accessories' }, 'phone case or charger')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'USB-C Charger', category: 'Accessories' }, 'phone case or charger')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'iPhone Case', category: 'Accessories' }, 'phone case or charger')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Samsung Galaxy S24', category: 'Smartphones' }, 'Samsung phone or Dell laptop')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', category: 'Laptops' }, 'Samsung phone or Dell laptop')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'ASUS Zenbook', category: 'Laptops' }, 'Samsung phone or Dell laptop')).toBe(false);
+  });
+
+  it('matches mouse and television aliases in both directions', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'Mice', category: 'Accessories' }, 'wireless mouse')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Wireless Mouse', category: 'Accessories' }, 'wireless mice')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: '4K TV', category: 'Televisions' }, 'television')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: '4K Television', category: 'Electronics' }, 'TV')).toBe(true);
+  });
+
   it.each([
     ['pouches', 'Phone Pouch'], ['watches', 'Smart Watch'],
     ['lenses', 'Camera Lens'], ['mice', 'Wireless Mouse'],

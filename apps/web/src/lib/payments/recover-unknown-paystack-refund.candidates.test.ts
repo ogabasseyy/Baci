@@ -75,6 +75,16 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
 
   it('files ambiguous reviews only for cancelled orders', async () => {
     const rpc = reviewRpc();
+    const orders = [
+      cancelledOrder('order-1'),
+      cancelledOrder('order-2'),
+      {
+        cancelled_at: null,
+        id: 'order-9',
+        shipping_status: 'processing',
+      },
+    ];
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
     const from = vi
       .fn()
       .mockReturnValueOnce(
@@ -84,17 +94,9 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
           payment('pay-9', 'order-9', 'merchant-9'),
         ])
       )
-      .mockReturnValueOnce(
-        selectQuery([
-          cancelledOrder('order-1'),
-          cancelledOrder('order-2'),
-          {
-            cancelled_at: null,
-            id: 'order-9',
-            shipping_status: 'processing',
-          },
-        ])
-      );
+      .mockReturnValueOnce(selectQuery(orders))
+      .mockReturnValueOnce(selectQuery(orders))
+      .mockReturnValueOnce({ insert: reviewInsert });
     const supabase = { from, rpc } as unknown as SupabaseClient;
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
@@ -112,6 +114,15 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
       'file_paystack_refund_recovery_review_v1',
       expect.objectContaining({ p_order_id: 'order-9' })
     );
+    // The active match stays out of the cancellation queue but files
+    // into the non-cancellation queue instead of being discarded.
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'provider_refund_outside_cancellation',
+        order_id: 'order-9',
+        metadata: expect.objectContaining({ provider_refund_id: 202 }),
+      })
+    );
   });
 
   it('files one review per order when three payments share the reference', async () => {
@@ -125,6 +136,14 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
           payment('pay-3', 'order-3', 'merchant-3'),
         ])
       )
+      .mockReturnValueOnce(
+        selectQuery([
+          cancelledOrder('order-1'),
+          cancelledOrder('order-2'),
+          cancelledOrder('order-3'),
+        ])
+      )
+      // Active-candidate partition finds no active orders to file.
       .mockReturnValueOnce(
         selectQuery([
           cancelledOrder('order-1'),

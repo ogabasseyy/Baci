@@ -69,12 +69,12 @@ function replacementCoversFailedLeg(
 
 /**
  * Decide a failure alert on an order still marked refunded. Returns true
- * only when a completed refund row postdates the failure AND covers the
- * same failed payment leg — durable evidence that a later successful
- * replacement refund superseded it. Otherwise the failure is fresh
- * contradiction: file a falsely-refunded review and return false so the
- * caller still sends the merchant alert. Throws on lookup/file failures
- * so the notification retries instead of silently dropping the
+ * only when every failed refund row has a postdating completed refund
+ * covering its own payment leg — durable evidence that later successful
+ * replacement refunds superseded them all. Otherwise the failure is
+ * fresh contradiction: file a falsely-refunded review and return false
+ * so the caller still sends the merchant alert. Throws on lookup/file
+ * failures so the notification retries instead of silently dropping the
  * contradiction.
  */
 export async function resolveContradictoryRefundFailure(
@@ -113,13 +113,18 @@ export async function resolveContradictoryRefundFailure(
   if (replacementError) {
     throw new Error('refund_notification_replacement_lookup_failed');
   }
-  const legMatched = ((replacements ?? []) as ReplacementRefundRow[]).some(
-    (replacement) =>
-      failedRows.some((failed) =>
+  // Every failed leg needs its own later coverage: suppressing on any
+  // single match would mark the order-level notification sent without
+  // delivery while other failed legs get neither alert nor review.
+  const replacementsList = (replacements ?? []) as ReplacementRefundRow[];
+  const allLegsCovered =
+    failedRows.length > 0 &&
+    failedRows.every((failed) =>
+      replacementsList.some((replacement) =>
         replacementCoversFailedLeg(replacement, failed)
       )
-  );
-  if (legMatched) return true;
+    );
+  if (allLegsCovered) return true;
 
   const failedPaymentIds = [
     ...new Set(

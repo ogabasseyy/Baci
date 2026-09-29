@@ -4,7 +4,10 @@ const mocks = vi.hoisted(() => ({
   sendEmail: vi.fn(),
 }));
 
-vi.mock('@/lib/zeptomail', () => ({ sendEmail: mocks.sendEmail }));
+vi.mock('@/lib/zeptomail', () => ({
+  sendEmail: mocks.sendEmail,
+  zeptomailSendAdmissionBudgetMs: () => 48_000,
+}));
 vi.mock('@/lib/orders/build-order-cancellation-email-message', () => ({
   buildOrderCancellationEmailMessage: vi.fn(() => ({
     to: 'buyer@example.com',
@@ -74,9 +77,10 @@ describe('executeOrderCancellationSideEffect customer email', () => {
 
   it('propagates the cron deadline into the email transport', async () => {
     mocks.sendEmail.mockResolvedValue({ success: true, messageId: 'msg-1' });
+    const deadlineMs = Date.now() + 60_000;
 
     await executeOrderCancellationSideEffect({
-      deadlineMs: Date.now() + 60_000,
+      deadlineMs,
       merchant,
       order,
       sendCancellationEmail: mocks.sendEmail,
@@ -85,8 +89,29 @@ describe('executeOrderCancellationSideEffect customer email', () => {
     });
 
     expect(mocks.sendEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ signal: expect.any(AbortSignal) })
+      expect.objectContaining({
+        fallbackDeadlineMs: deadlineMs - 10_000,
+        maxAttemptsPerSender: 1,
+        signal: expect.any(AbortSignal),
+      })
     );
+  });
+
+  it('refuses the send when a full attempt loop cannot fit', async () => {
+    // 40s clears the old 20s floor but not the capped single-attempt
+    // loop plus abort buffer: starting would risk stranding the row
+    // delivery_uncertain instead of retrying on the next tick.
+    await expect(
+      executeOrderCancellationSideEffect({
+        deadlineMs: Date.now() + 40_000,
+        merchant,
+        order,
+        sendCancellationEmail: mocks.sendEmail,
+        step: 'customer_email',
+        supabase: { from: vi.fn() } as never,
+      })
+    ).rejects.toThrow('refund_notification_deadline_before_send');
+    expect(mocks.sendEmail).not.toHaveBeenCalled();
   });
 
   it('treats a timed-out cancellation email as delivery-uncertain', async () => {
@@ -95,7 +120,7 @@ describe('executeOrderCancellationSideEffect customer email', () => {
       mocks.sendEmail.mockReturnValue(new Promise(() => {}));
 
       const outcome = executeOrderCancellationSideEffect({
-        deadlineMs: Date.now() + 30_000,
+        deadlineMs: Date.now() + 100_000,
         merchant,
         order,
         sendCancellationEmail: mocks.sendEmail,
@@ -105,7 +130,7 @@ describe('executeOrderCancellationSideEffect customer email', () => {
       const assertion = expect(outcome).rejects.toBeInstanceOf(
         DeliveryUncertainError
       );
-      await vi.advanceTimersByTimeAsync(25_000);
+      await vi.advanceTimersByTimeAsync(95_000);
       await assertion;
     } finally {
       vi.useRealTimers();

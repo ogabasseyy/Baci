@@ -2,9 +2,9 @@
 -- are not cancelled (e.g. a dashboard-issued refund): the cancellation
 -- recovery path cannot record them, but acknowledging without a trace
 -- would leave the order paid and fulfillable after the customer was
--- refunded. Each provider refund files its own row, deduped by
--- paystack_ref: redelivery of the same refund conflicts and reads as
--- already filed, while a second refund on the same order files anew.
+-- refunded. One open review per order: redelivery and later refunds
+-- merge provider-keyed evidence into it, so concurrent webhooks cannot
+-- clobber each other.
 
 ALTER TABLE public.reconciliation_review
   DROP CONSTRAINT IF EXISTS reconciliation_review_issue_type_check;
@@ -41,21 +41,3 @@ ALTER TABLE public.reconciliation_review
 
 ALTER TABLE public.reconciliation_review
   VALIDATE CONSTRAINT reconciliation_review_issue_type_check;
-
--- A provider refund outside cancellation describes one refund transfer.
--- Keep order_id for navigation while deduplicating independently by
--- paystack_ref, like the other captured-payment review types.
-DROP INDEX IF EXISTS public.reconciliation_review_open_by_order_idx;
-
-CREATE UNIQUE INDEX reconciliation_review_open_by_order_idx
-  ON public.reconciliation_review (issue_type, order_id)
-  WHERE resolved_at IS NULL
-    AND order_id IS NOT NULL
-    AND issue_type NOT IN (
-      'payment_received_after_cancellation',
-      'payment_received_after_refund',
-      'merchant_settlement_failed',
-      'gateway_payment_wedge_requires_review',
-      'merchant_invoice_partial_payment_conflict',
-      'provider_refund_outside_cancellation'
-    );

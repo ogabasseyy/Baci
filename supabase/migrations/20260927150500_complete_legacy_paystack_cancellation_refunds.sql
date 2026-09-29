@@ -183,9 +183,11 @@ BEGIN
   IF v_refund.status = 'failed' AND v_status <> 'processed' THEN RETURN 'already_failed'; END IF;
   -- Repeat verdicts are not new evidence: polling rechecks the same
   -- nonterminal refund every cycle, so only a status transition (or a
-  -- first failure) reaches the alert insert below.
+  -- first failure) reaches the alert insert below. Still rotate the row
+  -- so reviewed rows cannot pin the workers' oldest-25 batch.
   IF v_status IN ('failed', 'needs-attention')
     AND v_refund.metadata->>'provider_refund_status' = v_status THEN
+    UPDATE public.transactions SET updated_at = now() WHERE id = v_refund.id;
     RETURN v_status;
   END IF;
   UPDATE public.transactions SET

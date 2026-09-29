@@ -149,6 +149,10 @@ interface SendEmailParams {
   // drain keeps a retryable row instead of stranding it mid-send as
   // permanently delivery_uncertain.
   fallbackDeadlineMs?: number;
+  // Cap transport attempts per sender (default: full retry loop). Tight
+  // cron phases pass 1 and let the next tick retry instead of burning
+  // the phase on in-process retries.
+  maxAttemptsPerSender?: number;
 }
 
 interface EmailAttachment {
@@ -373,9 +377,40 @@ const RETRY_CONFIG = {
   baseDelayMs: 1000,
   retryableCodes: ['TM_5001', 'TM_5002', 'TM_5003'], // Server errors
 };
-// Worst case for one sender's retry loop: four 30-second transport
-// attempts plus 1s/2s/4s backoff, rounded up with audit-write headroom.
-const SINGLE_SENDER_WORST_MS = 135_000;
+// One transport attempt worst case: mirrors ZEPTOMAIL_REQUEST_TIMEOUT_MS
+// in zeptomail-transport.ts; keep identical.
+const TRANSPORT_ATTEMPT_WORST_MS = 30_000;
+const AUDIT_WRITE_MARGIN_MS = 8_000;
+// Callers abort the send 10s before their deadline (signal + deadline
+// race); admission budgets must leave that buffer on top of the loop.
+const SEND_CUTOFF_BUFFER_MS = 10_000;
+
+function senderLoopWorstMs(maxAttempts: number): number {
+  const attempts = Math.max(
+    1,
+    Math.min(maxAttempts, RETRY_CONFIG.maxRetries + 1)
+  );
+  let backoffMs = 0;
+  for (let i = 0; i < attempts - 1; i++) {
+    backoffMs += RETRY_CONFIG.baseDelayMs * 2 ** i;
+  }
+  return (
+    attempts * TRANSPORT_ATTEMPT_WORST_MS + backoffMs + AUDIT_WRITE_MARGIN_MS
+  );
+}
+
+/**
+ * Budget a send must start with to guarantee completion before its
+ * cutoff: the primary sender's worst retry loop plus the 10s abort
+ * buffer. The platform-sender fallback needs no extra reservation — it
+ * declines unless its own loop fits the remaining budget, so a send
+ * admitted with this budget always finishes before the cutoff.
+ */
+export function zeptomailSendAdmissionBudgetMs(
+  maxAttemptsPerSender: number = RETRY_CONFIG.maxRetries + 1
+): number {
+  return senderLoopWorstMs(maxAttemptsPerSender) + SEND_CUTOFF_BUFFER_MS;
+}
 
 /**
  * Check if error is retryable
@@ -408,6 +443,7 @@ export async function sendEmail({
   beforeTransportDispatch,
   resetTransportDispatch,
   fallbackDeadlineMs,
+  maxAttemptsPerSender = RETRY_CONFIG.maxRetries + 1,
 }: SendEmailParams): Promise<EmailResult> {
   const sender = await resolveSenderAddress(
     emailType,
@@ -487,6 +523,10 @@ export async function sendEmail({
 
   // Run the retry loop for a single From identity. Returns the success result,
   // or the parsed failure when all attempts for this sender were exhausted.
+  const attemptsPerSender = Math.max(
+    1,
+    Math.min(maxAttemptsPerSender, RETRY_CONFIG.maxRetries + 1)
+  );
   const dispatch = async (
     activeSender: { address: string; name: string },
     attemptOffset: number
@@ -495,7 +535,7 @@ export async function sendEmail({
   > => {
     let failure: SendFailure = { message: 'Unknown error' };
     let attemptsMade = 0;
-    for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
+    for (let attempt = 0; attempt < attemptsPerSender; attempt++) {
       attemptsMade = attempt + 1;
       try {
         const token = getRequiredToken();
@@ -553,17 +593,14 @@ export async function sendEmail({
         failure = parseError(error);
 
         // Only retry on retryable errors
-        if (
-          attempt < RETRY_CONFIG.maxRetries &&
-          isRetryableError(failure.code)
-        ) {
+        if (attempt + 1 < attemptsPerSender && isRetryableError(failure.code)) {
           if (resetTransportDispatch) {
             await resetTransportDispatch();
             transportDispatchMarked = false;
           }
           const delay = RETRY_CONFIG.baseDelayMs * 2 ** attempt;
           console.warn(
-            `ZeptoMail retry ${attempt + 1}/${RETRY_CONFIG.maxRetries} after ${delay}ms: ${failure.message}`
+            `ZeptoMail retry ${attempt + 1}/${attemptsPerSender - 1} after ${delay}ms: ${failure.message}`
           );
           await sleep(delay);
           continue;
@@ -592,16 +629,16 @@ export async function sendEmail({
   // caller passes a fallback deadline, skip the second loop unless it fits:
   // starting it on an exhausted budget aborts mid-send and strands the row
   // as delivery_uncertain instead of a clean retryable failure.
+  const fallbackWorstMs = senderLoopWorstMs(attemptsPerSender);
   const fallbackBudgetMs =
     fallbackDeadlineMs === undefined
       ? undefined
       : fallbackDeadlineMs - Date.now();
   const fallbackFits =
-    fallbackBudgetMs === undefined ||
-    fallbackBudgetMs >= SINGLE_SENDER_WORST_MS;
+    fallbackBudgetMs === undefined || fallbackBudgetMs >= fallbackWorstMs;
   if (fallbackBudgetMs !== undefined && !fallbackFits) {
     console.warn(
-      `ZeptoMail skipping platform-sender fallback: ${String(fallbackBudgetMs)}ms remain, ${String(SINGLE_SENDER_WORST_MS)}ms required`
+      `ZeptoMail skipping platform-sender fallback: ${String(fallbackBudgetMs)}ms remain, ${String(fallbackWorstMs)}ms required`
     );
   }
   if (sender.isCustomDomain && !deliveryOutcomeUnknown && fallbackFits) {

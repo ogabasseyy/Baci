@@ -30,7 +30,9 @@ async function resolveLinkedPayment(
     .eq('gateway', 'paystack')
     .eq('status', 'completed')
     .maybeSingle();
-  if (error) throw new Error('refund_payment_link_mismatch');
+  // A failed read is an outage, not evidence: classifying it as a
+  // mismatch would hold a valid refund out of polling permanently.
+  if (error) throw new Error('refund_event_lookup_failed');
   return payment;
 }
 
@@ -49,7 +51,7 @@ async function resolveSoleLegacyPayment(
     .eq('transaction_type', 'payment')
     .eq('status', 'completed')
     .gt('amount', 0);
-  if (error) throw new Error('refund_payment_link_mismatch');
+  if (error) throw new Error('refund_event_lookup_failed');
   const candidates = (data ?? []).filter(
     (payment) =>
       !EXTERNAL_PAYMENT_GATEWAYS_EXCLUSION.has(

@@ -41,9 +41,76 @@ vi.mock('./PaymentStep', () => ({
   ),
 }));
 
-const emptyContactProps = {} as ComponentProps<typeof ContactStep>;
-const emptyDeliveryProps = {} as ComponentProps<typeof CheckoutDeliveryStep>;
-const emptyPaymentProps = {} as ComponentProps<typeof PaymentStep>;
+const emptyContactProps = {
+  values: {
+    firstName: '',
+    lastName: '',
+    customerEmail: '',
+    customerPhone: '',
+  },
+  onChange: vi.fn(),
+  account: { createAccount: false, password: '' },
+  onAccountChange: vi.fn(),
+  onOpen: vi.fn(),
+  onComplete: vi.fn(),
+} satisfies Omit<
+  ComponentProps<typeof ContactStep>,
+  'active' | 'completed' | 'focusOnActivate' | 'signedIn'
+>;
+
+const emptyDeliveryProps = {
+  addressFields: {
+    signedIn: false,
+    addresses: [],
+    isNewAddressMode: true,
+    selectedAddressId: null,
+    newAddressStreet: '',
+    newAddressCity: '',
+    newAddressState: '',
+    merchantCountry: 'NG',
+    addressReady: false,
+    onToggleAddressMode: vi.fn(),
+    onSelectAddress: vi.fn(),
+    onStreetChange: vi.fn(),
+    onSelectPlace: vi.fn(),
+  },
+  deliveryOptions: null,
+  isDeliveryValid: false,
+  onContinue: vi.fn(),
+  onOpen: vi.fn(),
+  summary: '',
+} satisfies Omit<
+  ComponentProps<typeof CheckoutDeliveryStep>,
+  'active' | 'completed' | 'disabled' | 'focusOnActivate'
+>;
+
+const emptyPaymentProps = {
+  paymentTab: 'full',
+  setPaymentTab: vi.fn(),
+  paymentMethod: '',
+  setPaymentMethod: vi.fn(),
+  isProcessing: false,
+  isPayForMeValid: false,
+  isDeliveryValid: false,
+  payForMeDetails: { name: '', contact: '', note: '' },
+  setPayForMeDetails: vi.fn(),
+  dva: { isInitializingDva: false },
+  newsletterOptIn: false,
+  setNewsletterOptIn: vi.fn(),
+  handlePlaceOrder: vi.fn(),
+  setCurrentStep: vi.fn(),
+  merchant: null,
+  user: null,
+  remainingAmount: 0,
+  orderAmount: 0,
+  redvaultAvailable: false,
+  redvaultStatus: 'idle',
+  redvaultSummary: null,
+  redvaultOrderReady: false,
+} satisfies Omit<
+  ComponentProps<typeof PaymentStep>,
+  'completedSteps' | 'currentStep' | 'focusOnActivate'
+>;
 
 describe('CheckoutStepComposition', () => {
   it('orders the panels and gates sign-in and delivery from checkout flow state', () => {

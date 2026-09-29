@@ -209,6 +209,101 @@ describe('refundNotificationLedgerAmount', () => {
     ).rejects.toThrow('refund_notification_ledger_lookup_failed');
   });
 
+  it('matches an unlinked legacy refund beside a linked refund-pending leg', async () => {
+    const { supabase } = database({
+      payments: [
+        {
+          amount: 60,
+          currency: 'NGN',
+          gateway: 'paystack',
+          id: 'pay-1',
+          status: 'completed',
+        },
+        {
+          amount: 40,
+          currency: 'NGN',
+          gateway: 'paystack',
+          id: 'pay-2',
+          status: 'refund_pending',
+        },
+      ],
+      refunds: [
+        {
+          amount: 60,
+          currency: 'NGN',
+          gateway: 'paystack',
+          metadata: { provider_refund_status: 'processed' },
+        },
+        {
+          amount: 40,
+          currency: 'NGN',
+          gateway: 'paystack',
+          metadata: {
+            payment_transaction_id: 'pay-2',
+            provider_refund_status: 'processed',
+          },
+        },
+      ],
+    });
+
+    // Mirrors the completion RPC: the legacy fallback counts completed
+    // legs only, so the pending leg's explicit link must not make the
+    // legacy row ambiguous.
+    const amount = await refundNotificationLedgerAmount({
+      merchantId: 'merchant-1',
+      order,
+      supabase,
+    });
+
+    expect(amount).toContain('100');
+  });
+
+  it('still rejects an unlinked refund across two completed legs', async () => {
+    const { supabase } = database({
+      payments: [
+        {
+          amount: 60,
+          currency: 'NGN',
+          gateway: 'paystack',
+          id: 'pay-1',
+          status: 'completed',
+        },
+        {
+          amount: 40,
+          currency: 'NGN',
+          gateway: 'paystack',
+          id: 'pay-2',
+          status: 'completed',
+        },
+      ],
+      refunds: [
+        {
+          amount: 60,
+          currency: 'NGN',
+          gateway: 'paystack',
+          metadata: { provider_refund_status: 'processed' },
+        },
+        {
+          amount: 40,
+          currency: 'NGN',
+          gateway: 'paystack',
+          metadata: {
+            payment_transaction_id: 'pay-2',
+            provider_refund_status: 'processed',
+          },
+        },
+      ],
+    });
+
+    await expect(
+      refundNotificationLedgerAmount({
+        merchantId: 'merchant-1',
+        order,
+        supabase,
+      })
+    ).rejects.toThrow('refund_notification_ledger_mismatch');
+  });
+
   it('throws when the payment lookup fails', async () => {
     const { supabase } = database({
       payments: [],

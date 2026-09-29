@@ -17,6 +17,12 @@ const MAX_DRAIN_LIMIT = 10;
 // already-queued refund emails and pushes indefinitely. Shared with
 // notification-drain-limit PER_SEND_WORST_MS: keep both identical.
 const NOTIFICATION_RESERVE_MS = 150_000;
+// End the phase one step-equivalent before the notification threshold:
+// the last started step (plus its order/merchant lookups) can overrun
+// the boundary, and any overrun past it zeroes the notification limit.
+// Shared with cancellation-drain-deadline HANDOFF_SLACK_MS: keep
+// identical.
+const HANDOFF_SLACK_MS = 30_000;
 
 /** How many serial cancellation side-effect steps fit in the remaining cron budget. */
 export function cancellationSideEffectDrainLimit(elapsedMs: number): number {
@@ -24,7 +30,8 @@ export function cancellationSideEffectDrainLimit(elapsedMs: number): number {
     INVOCATION_BUDGET_MS -
     elapsedMs -
     SAFETY_MARGIN_MS -
-    NOTIFICATION_RESERVE_MS;
+    NOTIFICATION_RESERVE_MS -
+    HANDOFF_SLACK_MS;
   return Math.max(
     0,
     Math.min(MAX_DRAIN_LIMIT, Math.floor(remaining / PER_STEP_WORST_MS))

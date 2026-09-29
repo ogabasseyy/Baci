@@ -63,7 +63,14 @@ export async function refundNotificationLedgerAmount({
     throw new Error('refund_notification_ledger_lookup_failed');
   }
   const refunds = refundLegs ?? [];
-  const linkableLegs = externalLegs.filter((leg) => leg.status !== 'refunded');
+  // Unlinked legacy refunds mirror the completion RPC: they match only
+  // the order's sole COMPLETED external payment. A refund_pending leg
+  // must validate through its explicit link — counting it here would
+  // reject a legacy row the RPC already accepted and dead-letter a
+  // notification for a successfully finalized order.
+  const completedLegs = externalLegs.filter(
+    (leg) => leg.status === 'completed'
+  );
   const linkedRefunds = externalLegs.map((leg) => {
     if (leg.status === 'refunded') {
       return { amount: leg.amount, currency: leg.currency };
@@ -89,7 +96,12 @@ export async function refundNotificationLedgerAmount({
         )
           return false;
         const link = metadata?.payment_transaction_id;
-        return link === leg.id || (link == null && linkableLegs.length === 1);
+        return (
+          link === leg.id ||
+          (link == null &&
+            leg.status === 'completed' &&
+            completedLegs.length === 1)
+        );
       })
       .reduce(
         (sum, refund) => sum + Math.round(Number(refund.amount) * 100),

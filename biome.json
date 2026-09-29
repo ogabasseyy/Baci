@@ -48,6 +48,7 @@
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-delivery-address-handlers*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-delivery-options*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CheckoutDeliveryStep*",
+      "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CheckoutResumeStatus*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/PaymentStep.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CryptoPaymentModal.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CryptoPaymentModal.test.tsx",

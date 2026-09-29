@@ -4,9 +4,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  * Files an evidence-mismatch review for a stale attempt whose local
  * reference provider verification rejects outright (malformed or overlong),
  * then stamps the row so the sweep never reselects it. Returns true when
- * the row is durably resolved. A conflicting open review (23505) still
- * retries the stamp: without it the attempt would rotate forever, since
- * every later sweep hits the same conflict.
+ * the row is durably resolved. A conflicting open review (23505) merges
+ * this attempt's evidence into the existing order review before stamping:
+ * the stamp prevents reselection while the transaction remains pending, so
+ * unmerged evidence would strand an unidentified row.
  */
 export async function fileInvalidAttemptReference({
   attempt,
@@ -40,6 +41,19 @@ export async function fileInvalidAttemptReference({
     });
   if (reviewError && (reviewError as { code?: string }).code !== '23505') {
     return false;
+  }
+  if (reviewError) {
+    const { data: merged, error: mergeError } = await supabase.rpc(
+      'merge_abandoned_attempt_evidence_mismatch_v1',
+      {
+        p_order_id: attempt.order_id,
+        p_merchant_id: attempt.merchant_id,
+        p_transaction_id: attempt.id,
+        p_gateway_reference: attempt.gateway_reference,
+        p_reason: `invalid reference rejected by verification (${reason})`,
+      }
+    );
+    if (mergeError || merged !== true) return false;
   }
   const { error: stampError } = await supabase
     .from('transactions')

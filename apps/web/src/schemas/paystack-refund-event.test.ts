@@ -70,6 +70,18 @@ describe('paystackRefundEventSchema', () => {
     expect(paystackRefundEventSchema.safeParse(payload).success).toBe(false);
   });
 
+  it('accepts a malformed nested reference when the flat reference is usable', () => {
+    expect(
+      paystackRefundEventSchema.safeParse({
+        data: {
+          transaction: { reference: 'has space' },
+          transaction_reference: 'PAYMENT-1',
+        },
+        event: 'refund.processed',
+      }).success
+    ).toBe(true);
+  });
+
   it('accepts an ID-keyed event even when its reference is noisy', () => {
     expect(
       paystackRefundEventSchema.safeParse({

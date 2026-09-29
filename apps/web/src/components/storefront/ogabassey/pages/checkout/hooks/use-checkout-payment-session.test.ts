@@ -51,6 +51,30 @@ describe('useCheckoutPaymentSession', () => {
     expect(result.current.method).toBe('paystack');
   });
 
+  it('does not apply a resumed gateway over an active cart selection', async () => {
+    const input = options({
+      preferredGateway: 'credpal',
+      resumedOrder: { id: 'resumed-order' },
+    });
+    const { result, rerender } = renderHook(
+      ({ currentOptions }: { currentOptions: ReturnType<typeof options> }) =>
+        useCheckoutPaymentSession(currentOptions as never),
+      { initialProps: { currentOptions: input } }
+    );
+    await waitFor(() => expect(result.current.method).toBe('credpal'));
+    act(() => result.current.selectMethod('paystack'));
+
+    rerender({
+      currentOptions: {
+        ...input,
+        hasCheckoutCartItems: true,
+        preferredGateway: 'credit_direct',
+      },
+    });
+
+    expect(result.current.method).toBe('paystack');
+  });
+
   it('preserves a persisted Redvault fence when switching away from Redvault', () => {
     const clearPendingCheckoutOrder = vi.fn();
     const input = options({
@@ -130,7 +154,7 @@ describe('useCheckoutPaymentSession', () => {
     expect(result.current.method).toBe('uba_redvault');
   });
 
-  it('auto-applies a positive wallet balance and ignores an aborted stale response', async () => {
+  it('reloads wallet state when customer identity changes and ignores stale responses', async () => {
     const requests: Array<(response: Response) => void> = [];
     const signals: AbortSignal[] = [];
     vi.mocked(fetch).mockImplementation(((_url, init) => {
@@ -138,19 +162,19 @@ describe('useCheckoutPaymentSession', () => {
       return new Promise<Response>((resolve) => requests.push(resolve));
     }) as typeof fetch);
     const { result, rerender } = renderHook(
-      ({ merchantSlug }: { merchantSlug: string }) =>
+      ({ customerId }: { customerId: string }) =>
         useCheckoutPaymentSession(
           options({
             hasAuthenticatedUser: true,
-            walletSessionUserId: 'customer-1',
-            merchantSlug,
+            walletSessionUserId: customerId,
+            merchantSlug: 'store',
           }) as never
         ),
-      { initialProps: { merchantSlug: 'old-store' } }
+      { initialProps: { customerId: 'old-customer' } }
     );
     await waitFor(() => expect(requests).toHaveLength(1));
 
-    rerender({ merchantSlug: 'new-store' });
+    rerender({ customerId: 'new-customer' });
     await waitFor(() => expect(requests).toHaveLength(2));
     expect(signals[0]?.aborted).toBe(true);
 

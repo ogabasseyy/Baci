@@ -99,10 +99,10 @@ export function useCheckoutPaymentSession({
     selectMethod(preferredGateway);
   });
   useEffect(() => {
-    if (resumedOrder && preferredGateway) {
+    if (resumedOrder && preferredGateway && !hasCheckoutCartItems) {
       selectResumedPaymentMethod();
     }
-  }, [preferredGateway, resumedOrder]);
+  }, [hasCheckoutCartItems, preferredGateway, resumedOrder]);
 
   useEffect(() => {
     if (!hasAuthenticatedUser || !merchantSlug || !walletSessionUserId) {

@@ -12,7 +12,6 @@ const {
   findEffectiveExcessRelease,
   findEffectiveReserveUpdate,
   hasOnlyUnitIdPredicate,
-  strictShortagePrecedesSuccess,
 } = serializedInventoryClaim;
 
 test('serialized claims keep counts item-scoped and reserve each selected unit', () => {
@@ -196,6 +195,16 @@ test('serialized claims keep counts item-scoped and reserve each selected unit',
     ),
     undefined
   );
+  assert.equal(
+    findEffectiveReserveUpdate(
+      claim.replace(
+        /UPDATE\s+public\.variant_inventory\s+SET\s+status\s*=\s*'reserved',[\s\S]*?WHERE\s+id\s*=\s*v_unit\.id;/i,
+        (update) =>
+          `${update}\nUPDATE public.variant_inventory SET status = 'reserved', updated_at = now() WHERE status = 'available';`
+      )
+    ),
+    undefined
+  );
   const whereOnlyAssignments = [
     ..."UPDATE variant_inventory SET updated_at = now() WHERE id = v_unit.id AND status = 'reserved' AND order_id = p_order_id AND order_item_id = p_order_item_id;".matchAll(
       reserveUnitUpdate
@@ -216,79 +225,5 @@ test('serialized claims keep counts item-scoped and reserve each selected unit',
     literalAssignments !== undefined &&
       /\bstatus\s*=\s*'reserved'/i.test(literalAssignments[1]),
     false
-  );
-});
-
-test('serialized claims authorize callers and fail strict shortages before success', () => {
-  const publicClaim = latestFunctionBody(
-    'public.claim_variant_inventory_units_for_order_item(uuid, uuid, uuid)'
-  );
-  const executablePublicClaim = maskSqlLiterals(publicClaim, {
-    preserveStrings: true,
-  });
-  const authorization =
-    /IF\s+COALESCE\s*\(\s*\(\s*SELECT\s+auth\.role\(\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\.has_merchant_access\(p_merchant_id\)\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]forbidden['"](?:(?!\bEND\s+IF\b)[\s\S])*?END\s+IF\s*;/i.exec(
-      executablePublicClaim
-    );
-  const delegation =
-    /RETURN\s+private\.claim_variant_inventory_units_for_order_item_internal\s*\(\s*p_merchant_id\s*,\s*p_order_id\s*,\s*p_order_item_id\s*\)\s*;/i.exec(
-      executablePublicClaim
-    );
-  assert.ok(authorization, 'public claims must authorize the merchant');
-  assert.ok(delegation, 'public claims must delegate to the internal claim');
-  assert.equal(
-    serializedInventoryControlFlow.dominatesControlFlow(
-      executablePublicClaim,
-      authorization.index,
-      delegation.index
-    ),
-    true
-  );
-  assert.doesNotMatch(
-    executablePublicClaim.replace(
-      /(RETURN\s+private\.claim_variant_inventory_units_for_order_item_internal[\s\S]*?)p_order_item_id/i,
-      '$1p_order_id'
-    ),
-    /RETURN\s+private\.claim_variant_inventory_units_for_order_item_internal\s*\(\s*p_merchant_id\s*,\s*p_order_id\s*,\s*p_order_item_id\s*\)\s*;/i
-  );
-  const decoyClaim = maskSqlLiterals(
-    publicClaim.replace(
-      authorization[0],
-      `PERFORM $decoy$${authorization[0]}$decoy$;`
-    ),
-    { preserveStrings: true }
-  );
-  assert.doesNotMatch(decoyClaim, /RAISE\s+EXCEPTION\s+['"]forbidden['"]/i);
-
-  const claim = latestFunctionBody(
-    'private.claim_variant_inventory_units_for_order_item_internal(uuid, uuid, uuid)'
-  );
-  const shortage =
-    /IF\s+v_effective_policy\s*=\s*'serialized_strict'\s+AND\s+(?:\(\s*)?v_reserved_count\s*\+\s*v_claimed_count\s*(?:\s*\))?\s*<\s*v_qty\s+THEN(?:(?!\bEND\s+IF\b)[\s\S])*?RAISE\s+EXCEPTION\s+['"]serialized_inventory_unavailable['"]/i.exec(
-      claim
-    );
-  const success = /RETURN\s+v_fulfillment_data\s*;/i.exec(claim);
-  assert.ok(shortage);
-  assert.ok(success);
-  assert.equal(strictShortagePrecedesSuccess(claim), true);
-  assert.equal(
-    strictShortagePrecedesSuccess(
-      claim.replace(shortage[0], `IF false THEN\n${shortage[0]}\nEND IF;`)
-    ),
-    false
-  );
-  assert.equal(
-    strictShortagePrecedesSuccess(
-      claim.replace(
-        /RAISE\s+EXCEPTION\s+'serialized_inventory_unavailable'[^;]*;/i,
-        (raise) => `CASE WHEN false THEN ${raise} END CASE;`
-      )
-    ),
-    false
-  );
-  const relocated = `${claim.replace(shortage[0], '')}\n${shortage[0]}`;
-  assert.ok(
-    relocated.lastIndexOf(shortage[0]) >
-      /RETURN\s+v_fulfillment_data\s*;/i.exec(relocated).index
   );
 });

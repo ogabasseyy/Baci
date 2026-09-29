@@ -1,4 +1,5 @@
 import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
+import { serializedInventoryDefinitionPatches } from './serialized_variant_inventory_concurrency_contract_definition_patches.mjs';
 import { serializedInventoryPrivilegeExecution } from './serialized_variant_inventory_concurrency_contract_privilege_execution.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
@@ -84,11 +85,18 @@ function effectiveSecurityMode(sourceOrSources, signature) {
   const createMode = /\bSECURITY\s+(DEFINER|INVOKER)\b/i.exec(
     serializedInventorySqlParser.maskSqlLiterals(body)
   );
-  const definitionSourceIndex = normalizedSources.findLastIndex((source) =>
-    source.includes(body)
+  const staticBody =
+    serializedInventoryDefinitionPatches.stripDefinitionPatches(
+      signature,
+      body
+    );
+  const definitionSourceIndex = normalizedSources.findLastIndex(
+    (source) => source.includes(body) || source.includes(staticBody)
   );
-  const definitionIndex =
-    normalizedSources[definitionSourceIndex].lastIndexOf(body);
+  const definitionSource = normalizedSources[definitionSourceIndex];
+  const definitionIndex = definitionSource.includes(body)
+    ? definitionSource.lastIndexOf(body)
+    : definitionSource.lastIndexOf(staticBody);
   const alterationPattern = new RegExp(
     `ALTER\\s+(?:FUNCTION|ROUTINE)\\s+${functionReferencePattern(signature)}\\s+(?:(?!SECURITY\\b)[^;])*?SECURITY\\s+(DEFINER|INVOKER)\\b[^;]*;`,
     'gi'

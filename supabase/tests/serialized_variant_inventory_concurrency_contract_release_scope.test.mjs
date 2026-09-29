@@ -18,4 +18,11 @@ test('release scope stays fixed after merchant authorization', () => {
   );
   assert.notEqual(reassigned, release);
   assert.equal(hasTargetStatusWhitelist(reassigned), false);
+
+  const selectInto = release.replace(
+    /(RAISE\s+EXCEPTION\s+'forbidden'[^;]*;\s*END\s+IF\s*;)/i,
+    `$1\n\n  SELECT merchant_id, id INTO p_merchant_id, p_order_id FROM public.orders WHERE id = p_order_id;`
+  );
+  assert.notEqual(selectInto, release);
+  assert.equal(hasTargetStatusWhitelist(selectInto), false);
 });

@@ -1,9 +1,12 @@
+import { serializedInventoryDynamicTaint } from './serialized_variant_inventory_concurrency_contract_dynamic_ddl_taint.mjs';
 import { serializedInventoryDynamicRender } from './serialized_variant_inventory_concurrency_contract_dynamic_render.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const { dollarQuoteAt, escapeRegex, maskSqlLiterals } =
   serializedInventorySqlParser;
 const { renderFormatInvocation } = serializedInventoryDynamicRender;
+const { assignedExecutePayloads, executesUntracedDefinitionTransform } =
+  serializedInventoryDynamicTaint;
 
 function identifierPattern(identifier) {
   return identifier
@@ -163,33 +166,6 @@ function normalizedExecutePayload(payload) {
   };
 }
 
-function assignedExecutePayloads(source, executeIndex, payload) {
-  const variable = /^\s*\(?\s*([a-z_][a-z0-9_]*)\s*\)?\s*$/i.exec(payload);
-  if (!variable) return [];
-  const before = source.slice(0, executeIndex);
-  const collect = (pattern, flags) =>
-    [...before.matchAll(new RegExp(pattern, flags))].map((match) => ({
-      index: match.index,
-      text: match[1],
-    }));
-  return [
-    ...collect(
-      `\\b${escapeRegex(variable[1])}(?:\\s+[a-z_][a-z0-9_.]*(?:\\s*\\([^;]*\\))?)?\\s*:=\\s*([^;]+)`,
-      'gi'
-    ),
-    ...collect(
-      `\\bSELECT\\b((?:(?!\\bINTO\\b)[^;])*?)\\bINTO\\s+(?:STRICT\\s+)?[^;]*?\\b${escapeRegex(variable[1])}\\b`,
-      'gi'
-    ),
-    ...collect(
-      `(?:^|[;]|\\bTHEN\\b|\\bELSE\\b|\\bLOOP\\b|\\bBEGIN\\b)\\s*${escapeRegex(variable[1])}\\s*=(?![=>])\\s*([^;]+)`,
-      'gim'
-    ),
-  ]
-    .sort((left, right) => left.index - right.index)
-    .map(({ text }) => text);
-}
-
 function hasDynamicFunctionDdl(source, functionSignature) {
   const masked = serializedInventorySqlParser.maskSqlLiterals(source);
   const ddl = dynamicDdlPattern(functionSignature);
@@ -222,6 +198,16 @@ function hasDynamicFunctionDdl(source, functionSignature) {
     if (
       normalized.hasUnknownArguments &&
       dynamicDdlOperationPattern.test(normalized.operationText)
+    ) {
+      return true;
+    }
+    if (
+      executesUntracedDefinitionTransform(
+        source,
+        execute.index,
+        payload,
+        functionSignature
+      )
     ) {
       return true;
     }
@@ -262,6 +248,16 @@ function hasDynamicPrivilegeDdl(source, functionSignature) {
     if (
       normalized.hasUnknownArguments &&
       dynamicPrivilegeOperationPattern.test(normalized.operationText)
+    ) {
+      return true;
+    }
+    if (
+      executesUntracedDefinitionTransform(
+        source,
+        execute.index,
+        payload,
+        functionSignature
+      )
     ) {
       return true;
     }

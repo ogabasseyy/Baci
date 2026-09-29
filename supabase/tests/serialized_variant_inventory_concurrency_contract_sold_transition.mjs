@@ -1,8 +1,59 @@
 import { serializedInventoryBranches } from './serialized_variant_inventory_concurrency_contract_branches.mjs';
 import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
+import { serializedInventoryExceptionHandlers } from './serialized_variant_inventory_concurrency_contract_exception_handlers.mjs';
+import { serializedInventorySelectInto } from './serialized_variant_inventory_concurrency_contract_select_into.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
-const { maskSqlLiterals, stripSqlComments } = serializedInventorySqlParser;
+const { maskSqlLiterals, splitTopLevelList, stripSqlComments } =
+  serializedInventorySqlParser;
+
+const allowedSoldAssignments = new Set([
+  "status = 'sold'",
+  'sold_at = now()',
+  'updated_at = now()',
+]);
+
+const allowedSoldPredicates = new Set([
+  'id = v_unit.id',
+  "status = 'reserved'",
+]);
+
+function normalizeSoldFragment(fragment) {
+  let normalized = fragment
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/\s*=\s*/g, ' = ')
+    .replace(/\(\s+/g, '(')
+    .replace(/\s+\)/g, ')')
+    .trim();
+  while (
+    normalized.startsWith('(') &&
+    normalized.endsWith(')') &&
+    normalized.length > 2
+  ) {
+    normalized = normalized.slice(1, -1).trim();
+  }
+  return normalized;
+}
+
+function isExactSoldTransition(setClause, whereClause) {
+  const assignments = splitTopLevelList(setClause).map(normalizeSoldFragment);
+  if (
+    assignments.length === 0 ||
+    !assignments.includes("status = 'sold'") ||
+    !assignments.every((assignment) => allowedSoldAssignments.has(assignment))
+  ) {
+    return false;
+  }
+  const predicates = whereClause
+    .split(/\bAND\b/i)
+    .map(normalizeSoldFragment)
+    .filter(Boolean);
+  return (
+    predicates.length === allowedSoldPredicates.size &&
+    predicates.every((predicate) => allowedSoldPredicates.has(predicate))
+  );
+}
 
 function soldTransitionInLockedLoop(source) {
   const cleanSource = maskSqlLiterals(stripSqlComments(source), {
@@ -12,18 +63,31 @@ function soldTransitionInLockedLoop(source) {
   if (!loop) return false;
   const bodyStart = loop.index + loop[0].length;
   const transition =
-    /UPDATE\s+(?:public\s*\.\s*)?variant_inventory\s+SET\s+[^;]*?\bstatus\s*=\s*'sold'[^;]*?\bWHERE\b[^;]*?\bid\s*=\s*v_unit\s*\.\s*id\b[^;]*?;/i.exec(
+    /UPDATE\s+(?:public\s*\.\s*)?variant_inventory\s+SET\s+([\s\S]*?)\s+WHERE\s+([\s\S]*?);/i.exec(
       cleanSource.slice(bodyStart)
     );
+  if (transition && !isExactSoldTransition(transition[1], transition[2])) {
+    return false;
+  }
   if (!transition) return false;
   const transitionIndex = bodyStart + transition.index;
+  const guard = soldGuardPattern.exec(cleanSource);
   return (
     serializedInventoryControlFlow.sharesInnermostLoop(
       cleanSource,
       bodyStart,
       transitionIndex
     ) &&
-    serializedInventoryControlFlow.isReachable(cleanSource, transitionIndex)
+    serializedInventoryControlFlow.isReachable(cleanSource, transitionIndex) &&
+    !serializedInventoryExceptionHandlers.indexInExceptionHandler(
+      cleanSource,
+      transitionIndex
+    ) &&
+    (!guard ||
+      !serializedInventoryExceptionHandlers.enclosingAuthorizationHandler(
+        cleanSource,
+        guard.index
+      ))
   );
 }
 
@@ -50,12 +114,24 @@ function soldGuardDominatesUnits(source) {
   });
   const guard = soldGuardPattern.exec(cleanSource);
   const selector = /FOR\s+v_unit\s+IN\b/i.exec(cleanSource);
-  const scopeReassignment =
+  const scopeWindow =
     guard && selector && guard.index < selector.index
-      ? /(?:^|[;\n])\s*p_(?:merchant_id|order_id)\s*(?::=|=(?!=))/im.test(
-          cleanSource.slice(guard.index, selector.index)
-        )
-      : true;
+      ? cleanSource.slice(guard.index, selector.index)
+      : null;
+  const scopeReassignment =
+    scopeWindow === null
+      ? true
+      : /(?:^|[;\n])\s*p_(?:merchant_id|order_id)\s*(?::=|=(?!=))/im.test(
+          scopeWindow
+        ) ||
+        serializedInventorySelectInto.selectIntoWritesVariable(
+          scopeWindow,
+          'p_merchant_id'
+        ) ||
+        serializedInventorySelectInto.selectIntoWritesVariable(
+          scopeWindow,
+          'p_order_id'
+        );
   let arms;
   try {
     arms = serializedInventoryBranches.extractIfArms(
@@ -71,6 +147,10 @@ function soldGuardDominatesUnits(source) {
       guard.index < selector.index &&
       unauthorizedArmAborts(arms.thenBranch) &&
       !scopeReassignment &&
+      !serializedInventoryExceptionHandlers.enclosingAuthorizationHandler(
+        cleanSource,
+        guard.index
+      ) &&
       serializedInventoryControlFlow.dominatesControlFlow(
         cleanSource,
         guard.index,

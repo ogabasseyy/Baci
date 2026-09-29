@@ -4,6 +4,7 @@ import path from 'node:path';
 import { serializedInventoryAvailability } from './serialized_variant_inventory_concurrency_contract_availability.mjs';
 import { serializedInventoryBranches } from './serialized_variant_inventory_concurrency_contract_branches.mjs';
 import { serializedInventoryDecrements } from './serialized_variant_inventory_concurrency_contract_decrements.mjs';
+import { serializedInventoryDefinitionPatches } from './serialized_variant_inventory_concurrency_contract_definition_patches.mjs';
 import { serializedInventoryDynamicDdl } from './serialized_variant_inventory_concurrency_contract_dynamic_ddl.mjs';
 import { serializedInventoryLocks } from './serialized_variant_inventory_concurrency_contract_locks.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
@@ -26,6 +27,7 @@ const {
   stripSqlComments,
 } = serializedInventorySqlParser;
 const { extractIfBranches } = serializedInventoryBranches;
+const { applyDefinitionPatches } = serializedInventoryDefinitionPatches;
 function identifierPattern(identifier) {
   return identifier
     .split('.')
@@ -270,7 +272,7 @@ function latestFunctionBody(functionName, sources = migrationSources) {
     }
   }
   assert.ok(latestBody, `missing ${functionName} in migrations`);
-  return latestBody;
+  return applyDefinitionPatches(functionName, latestBody);
 }
 const {
   legacyDecrementHasCompareAndSetGuard,

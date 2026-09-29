@@ -48,6 +48,10 @@ docker exec -e PGPASSWORD="$postgres_password" -i "$container" \
 
 docker exec -e PGPASSWORD="$postgres_password" -i "$container" \
   psql -X -v ON_ERROR_STOP=1 -U postgres -h 127.0.0.1 \
+  < "$repo_root/supabase/migrations/20260927150000_order_unit_cursors_by_product_variant.sql"
+
+docker exec -e PGPASSWORD="$postgres_password" -i "$container" \
+  psql -X -v ON_ERROR_STOP=1 -U postgres -h 127.0.0.1 \
   -v DATABASE_URL="postgresql://postgres:${postgres_password}@127.0.0.1:5432/postgres" \
   < "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_fixture_assertions.sql"
 

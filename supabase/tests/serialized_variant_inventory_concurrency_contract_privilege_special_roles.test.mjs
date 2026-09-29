@@ -112,7 +112,7 @@ test('resolves special roles for reassign destinations', () => {
   );
 });
 
-test('ignores qualified revokes of schema-wide grants', () => {
+test('applies matching-grantor revokes of schema-wide grants', () => {
   const signature = 'private.fixture(uuid)';
   const source = [
     `CREATE FUNCTION ${signature} RETURNS void SECURITY DEFINER LANGUAGE plpgsql AS $$ BEGIN NULL; END; $$;`,
@@ -125,6 +125,6 @@ test('ignores qualified revokes of schema-wide grants', () => {
       source,
       signature
     ),
-    true
+    false
   );
 });

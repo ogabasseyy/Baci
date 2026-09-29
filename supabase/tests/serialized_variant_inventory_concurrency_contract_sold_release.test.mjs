@@ -15,7 +15,7 @@ const soldUnitScopes = [
 ];
 
 function soldUnitWhereClause(sold) {
-  return /FROM\s+public\s*\.\s*variant_inventory\s+vi[\s\S]*?WHERE\s+([\s\S]*?)ORDER\s+BY\s+pv\s*\.\s*product_id\s*,\s*vi\s*\.\s*id\s+FOR\s+UPDATE\s+OF\s+vi/i.exec(
+  return /FROM\s+public\s*\.\s*variant_inventory\s+vi[\s\S]*?WHERE\s+([\s\S]*?)ORDER\s+BY\s+pv\s*\.\s*product_id\s*,\s*vi\s*\.\s*variant_id\s*,\s*vi\s*\.\s*id\s+FOR\s+UPDATE\s+OF\s+vi/i.exec(
     sold
   );
 }
@@ -113,6 +113,15 @@ test('sale scope stays fixed after merchant authorization', () => {
     serializedInventorySoldTransition.soldGuardDominatesUnits(reassigned),
     false
   );
+  const selectInto = sold.replace(
+    /(RAISE\s+EXCEPTION\s+'forbidden'[^;]*;\s*END\s+IF\s*;)/i,
+    `$1\n\n  SELECT merchant_id, id INTO p_merchant_id, p_order_id FROM public.orders WHERE id = p_order_id;`
+  );
+  assert.notEqual(selectInto, sold);
+  assert.equal(
+    serializedInventorySoldTransition.soldGuardDominatesUnits(selectInto),
+    false
+  );
 });
 
 test('sale lock contract rejects an unscoped or unordered transition', () => {
@@ -134,12 +143,13 @@ test('sale lock contract rejects an unscoped or unordered transition', () => {
   );
 
   const unordered = sold.replace(
-    /ORDER\s+BY\s+pv\s*\.\s*product_id\s*,\s*vi\s*\.\s*id\s*/i,
+    /ORDER\s+BY\s+pv\s*\.\s*product_id\s*,\s*vi\s*\.\s*variant_id\s*,\s*vi\s*\.\s*id\s*/i,
     ''
   );
+  assert.notEqual(unordered, sold);
   assert.doesNotMatch(
     unordered,
-    /ORDER\s+BY\s+pv\s*\.\s*product_id\s*,\s*vi\s*\.\s*id\s+FOR\s+UPDATE\s+OF\s+vi/i
+    /ORDER\s+BY\s+pv\s*\.\s*product_id\s*,\s*vi\s*\.\s*variant_id\s*,\s*vi\s*\.\s*id\s+FOR\s+UPDATE\s+OF\s+vi/i
   );
 });
 
@@ -160,6 +170,20 @@ test('sale transitions reach sold status inside the locked-unit loop', () => {
     (update) => `IF false THEN\n${update}\nEND IF;`
   );
   assert.equal(soldTransitionInLockedLoop(guarded), false);
+
+  const widened = sold.replace(
+    /WHERE\s+id\s*=\s*v_unit\s*\.\s*id\s+AND\s+status\s*=\s*'reserved'/i,
+    'WHERE id = v_unit.id OR TRUE'
+  );
+  assert.notEqual(widened, sold);
+  assert.equal(soldTransitionInLockedLoop(widened), false);
+
+  const rescoped = sold.replace(
+    /SET\s+status\s*=\s*'sold',\s*sold_at\s*=\s*now\(\),\s*updated_at\s*=\s*now\(\)/i,
+    "SET status = 'sold', order_id = NULL"
+  );
+  assert.notEqual(rescoped, sold);
+  assert.equal(soldTransitionInLockedLoop(rescoped), false);
 });
 
 test('sale transitions require merchant authorization over the units', () => {
@@ -186,4 +210,18 @@ test('sale transitions require merchant authorization over the units', () => {
     "BEGIN RAISE EXCEPTION 'forbidden'; EXCEPTION WHEN OTHERS THEN NULL; END;"
   );
   assert.equal(soldGuardDominatesUnits(caught), false);
+
+  const swallowed = sold.replace(
+    /END;\s*$/,
+    `EXCEPTION WHEN insufficient_privilege THEN
+    UPDATE public.variant_inventory SET status = 'sold' WHERE order_id = p_order_id;
+    RETURN jsonb_build_object('success', true);
+  END;`
+  );
+  assert.notEqual(swallowed, sold);
+  assert.equal(soldGuardDominatesUnits(swallowed), false);
+  assert.equal(
+    serializedInventorySoldTransition.soldTransitionInLockedLoop(swallowed),
+    false
+  );
 });

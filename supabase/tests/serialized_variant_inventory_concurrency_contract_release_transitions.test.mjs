@@ -61,6 +61,25 @@ test('release transitions stay inside the reserved-unit loop', () => {
     ),
     false
   );
+  assert.equal(
+    serializedInventoryReleaseTransitions.releaseTransition(
+      branches.thenBranch,
+      'available'
+    ),
+    true
+  );
+  const widened = branches.thenBranch.replace(
+    /(UPDATE\s+public\.variant_inventory[\s\S]*?WHERE\s+id\s*=\s*v_unit\.id;)/i,
+    `$1\nUPDATE public.variant_inventory SET status = 'available', order_id = NULL, order_item_id = NULL WHERE TRUE;`
+  );
+  assert.notEqual(widened, branches.thenBranch);
+  assert.equal(
+    serializedInventoryReleaseTransitions.releaseTransition(
+      widened,
+      'available'
+    ),
+    false
+  );
 });
 
 test('release preserves fulfillment for items without released units', () => {
@@ -201,11 +220,23 @@ test('release reconciliation synchronizes products in a deterministic order', ()
   );
   assert.match(
     release,
-    /FROM\s+public\.order_items\s+oi[\s\S]*?WHERE\s+oi\.order_id\s*=\s*p_order_id\s+ORDER\s+BY\s+oi\.product_id\s*,\s*oi\.id\s+FOR\s+UPDATE/i
+    /FROM\s+public\.order_items\s+oi[\s\S]*?WHERE\s+oi\.order_id\s*=\s*p_order_id\s+ORDER\s+BY\s+oi\.product_id\s*,\s*oi\.variant_id\s*,\s*oi\.id\s+FOR\s+UPDATE/i
   );
   assert.equal(
     serializedInventoryReleaseTransitions.releaseReconciliationMatches(
-      release.replace(/\s+ORDER\s+BY\s+oi\.product_id\s*,\s*oi\.id/i, '')
+      release.replace(
+        /\s+ORDER\s+BY\s+oi\.product_id\s*,\s*oi\.variant_id\s*,\s*oi\.id/i,
+        ''
+      )
+    ),
+    false
+  );
+  assert.equal(
+    serializedInventoryReleaseTransitions.releaseReconciliationMatches(
+      release.replace(
+        'ORDER BY oi.product_id, oi.variant_id, oi.id',
+        'ORDER BY oi.product_id, oi.id'
+      )
     ),
     false
   );

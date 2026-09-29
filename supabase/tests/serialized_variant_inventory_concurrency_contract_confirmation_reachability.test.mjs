@@ -153,12 +153,16 @@ test('confirmation item locks require ascending product/id order', () => {
   const ordered = `
     SELECT oi.id FROM order_items oi
     WHERE oi.order_id = p_order_id
-    ORDER BY oi.product_id, oi.id
+    ORDER BY oi.product_id, oi.variant_id, oi.id
     FOR UPDATE;
   `;
   const descending = ordered.replace(
-    'ORDER BY oi.product_id, oi.id',
+    'ORDER BY oi.product_id, oi.variant_id, oi.id',
     'ORDER BY oi.product_id DESC, oi.id DESC'
+  );
+  const obsolete = ordered.replace(
+    'ORDER BY oi.product_id, oi.variant_id, oi.id',
+    'ORDER BY oi.product_id, oi.id'
   );
 
   assert.equal(
@@ -170,6 +174,10 @@ test('confirmation item locks require ascending product/id order', () => {
     confirmationItemOrderIsDeterministic(
       findConfirmationLocks(descending).item
     ),
+    false
+  );
+  assert.equal(
+    confirmationItemOrderIsDeterministic(findConfirmationLocks(obsolete).item),
     false
   );
 });

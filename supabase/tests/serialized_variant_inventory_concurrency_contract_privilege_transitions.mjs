@@ -19,6 +19,7 @@ export function createPrivilegeState() {
     grantSources: new Map(),
     defaultGrants: new Map(),
     memberships: new Map(),
+    membershipSources: new Map(),
     currentRole: 'postgres',
     sessionUser: 'postgres',
     localRole: null,
@@ -127,23 +128,31 @@ function applyDefaultEvent(state, event) {
 
 function applyMembershipEvent(state, event) {
   const usable = event.inheritable !== false || event.settable !== false;
+  const grantor =
+    event.grantor === undefined || event.grantor === null
+      ? state.currentRole
+      : resolveActiveRole(
+          serializedInventoryPrivilegeRoles.normalizeRoleName(event.grantor),
+          state
+        );
   for (const member of event.members) {
     const resolvedMember = resolveActiveRole(member, state);
-    const roles = state.memberships.get(resolvedMember) ?? [];
+    const sources = state.membershipSources.get(resolvedMember) ?? new Map();
     for (const role of event.roles) {
       const resolvedRole = resolveActiveRole(role, state);
-      const roleIndex = roles.indexOf(resolvedRole);
-      if (event.operation === 'GRANT' && usable && roleIndex === -1)
-        roles.push(resolvedRole);
-      if (
-        (event.operation === 'REVOKE' ||
-          (event.operation === 'GRANT' && !usable)) &&
-        roleIndex !== -1
-      )
-        roles.splice(roleIndex, 1);
+      const grantors = sources.get(resolvedRole) ?? new Set();
+      if (event.operation === 'GRANT' && usable) grantors.add(grantor);
+      else grantors.delete(grantor);
+      if (grantors.size > 0) sources.set(resolvedRole, grantors);
+      else sources.delete(resolvedRole);
     }
-    if (roles.length > 0) state.memberships.set(resolvedMember, roles);
-    else state.memberships.delete(resolvedMember);
+    if (sources.size > 0) {
+      state.membershipSources.set(resolvedMember, sources);
+      state.memberships.set(resolvedMember, [...sources.keys()]);
+    } else {
+      state.membershipSources.delete(resolvedMember);
+      state.memberships.delete(resolvedMember);
+    }
   }
 }
 
@@ -183,6 +192,12 @@ export function applyPrivilegeEvent(state, event) {
     const references = event.roles.map((reference) =>
       resolveActiveRole(reference, state)
     );
+    for (const role of references) {
+      state.grants.delete(role);
+      state.grantSources.delete(role);
+      state.memberships.delete(role);
+      state.membershipSources.delete(role);
+    }
     if (state.owner === undefined || references.includes(state.owner)) {
       applyInvalidateEvent(state);
     }

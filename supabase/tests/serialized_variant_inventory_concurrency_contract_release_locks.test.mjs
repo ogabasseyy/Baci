@@ -48,6 +48,36 @@ test('release authorization rejects a raw-auth-role mutation', () => {
   );
 });
 
+test('release authorization rejects handlers that swallow forbidden failures', () => {
+  const release = serializedInventoryContract.latestFunctionBody(
+    'private.release_order_inventory_units(uuid, uuid, text)'
+  );
+  assert.equal(
+    serializedInventoryReleaseLocks.hasMerchantAuthorizationGuard(release),
+    true
+  );
+  const swallowed = release.replace(
+    /END;\s*$/,
+    `EXCEPTION WHEN OTHERS THEN RETURN '{}';\nEND;`
+  );
+  assert.notEqual(swallowed, release);
+  assert.equal(
+    serializedInventoryReleaseLocks.hasMerchantAuthorizationGuard(swallowed),
+    false
+  );
+  const swallowedPrivilege = release.replace(
+    /END;\s*$/,
+    `EXCEPTION WHEN insufficient_privilege THEN RETURN '{}';\nEND;`
+  );
+  assert.notEqual(swallowedPrivilege, release);
+  assert.equal(
+    serializedInventoryReleaseLocks.hasMerchantAuthorizationGuard(
+      swallowedPrivilege
+    ),
+    false
+  );
+});
+
 test('release authorization rejects an unreachable forbidden exception', () => {
   const release = serializedInventoryContract.latestFunctionBody(
     'private.release_order_inventory_units(uuid, uuid, text)'
@@ -133,9 +163,15 @@ test('requires release selectors to lock inventory rows only', () => {
   );
   assert.equal(
     serializedInventoryReleaseLocks.releaseLockMatches(
-      `${selector} ORDER BY pv.product_id, vi.id FOR UPDATE OF vi`
+      `${selector} ORDER BY pv.product_id, vi.variant_id, vi.id FOR UPDATE OF vi`
     ),
     true
+  );
+  assert.equal(
+    serializedInventoryReleaseLocks.releaseLockMatches(
+      `${selector} ORDER BY pv.product_id, vi.id FOR UPDATE OF vi`
+    ),
+    false
   );
 });
 
@@ -148,7 +184,7 @@ test('requires deterministic product and unit ordering for both release selector
     /^\s*IF\s+v_target_status\s*=\s*'available'\s+THEN\b/i
   );
   const ordering =
-    /ORDER\s+BY\s+pv\s*\.\s*product_id\s*,\s*vi\s*\.\s*id\s+FOR\s+UPDATE\s+OF\s+vi\b/i;
+    /ORDER\s+BY\s+pv\s*\.\s*product_id\s*,\s*vi\s*\.\s*variant_id\s*,\s*vi\s*\.\s*id\s+FOR\s+UPDATE\s+OF\s+vi\b/i;
   assert.match(branches.thenBranch, ordering);
   assert.match(branches.elseBranch, ordering);
   assert.equal(

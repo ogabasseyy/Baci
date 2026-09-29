@@ -9,10 +9,11 @@ function releaseTransition(branch, targetStatus) {
       preserveStrings: true,
     }
   );
-  const update =
-    /UPDATE\s+(?:public\s*\.\s*)?variant_inventory\s+SET\s+([\s\S]*?)\s+WHERE\s+([\s\S]*?);/i.exec(
-      searchableBranch
-    );
+  const updates = [
+    ...searchableBranch.matchAll(
+      /UPDATE\s+(?:public\s*\.\s*)?variant_inventory\s+SET\s+([\s\S]*?)\s+WHERE\s+([\s\S]*?);/gi
+    ),
+  ];
   const counters = [
     ...searchableBranch.matchAll(/\bv_count\s*:=\s*v_count\s*\+\s*1\b/gi),
   ];
@@ -20,32 +21,23 @@ function releaseTransition(branch, targetStatus) {
     searchableBranch,
     targetStatus
   );
-  if (
-    !update ||
-    counters.length !== 1 ||
-    !event ||
-    !serializedInventoryControlFlow.dominatesControlFlow(
-      searchableBranch,
-      update.index,
-      counters[0].index
-    ) ||
-    !serializedInventoryControlFlow.dominatesControlFlow(
-      searchableBranch,
-      event.index,
-      counters[0].index
-    ) ||
-    !serializedInventoryControlFlow.sharesInnermostLoop(
-      searchableBranch,
-      update.index,
-      event.index,
-      counters[0].index
-    ) ||
-    !new RegExp(`\\bstatus\\s*=\\s*'${targetStatus}'`, 'i').test(update[1])
-  ) {
+  if (!updates.length || counters.length !== 1 || !event) {
     return false;
   }
-  const clearsOwnership =
-    targetStatus === 'available'
+  const isScopedLifecycle = (update) =>
+    serializedInventoryControlFlow.dominatesControlFlow(
+      searchableBranch,
+      update.index,
+      counters[0].index
+    ) &&
+    serializedInventoryControlFlow.sharesInnermostLoop(
+      searchableBranch,
+      update.index,
+      event.index,
+      counters[0].index
+    ) &&
+    new RegExp(`\\bstatus\\s*=\\s*'${targetStatus}'`, 'i').test(update[1]) &&
+    (targetStatus === 'available'
       ? [
           'order_id',
           'order_item_id',
@@ -54,12 +46,16 @@ function releaseTransition(branch, targetStatus) {
         ].every((column) =>
           new RegExp(`\\b${column}\\s*=\\s*NULL\\b`, 'i').test(update[1])
         )
-      : !/\b(?:order_id|order_item_id)\s*=/i.test(update[1]);
-  return (
-    clearsOwnership &&
+      : !/\b(?:order_id|order_item_id)\s*=/i.test(update[1])) &&
     /^(?:\s*\(\s*)*(?:[a-z_][a-z0-9_]*\s*\.\s*)?id\s*=\s*v_unit\s*\.\s*id(?:\s*\)\s*)*$/i.test(
       update[2]
-    )
+    );
+  return (
+    serializedInventoryControlFlow.dominatesControlFlow(
+      searchableBranch,
+      event.index,
+      counters[0].index
+    ) && updates.every(isScopedLifecycle)
   );
 }
 
@@ -97,7 +93,7 @@ function releaseReconciliationMatches(source) {
   if (dispatchEnd === undefined) return false;
   const afterDispatch = executable.slice(dispatchEnd);
   const loop =
-    /FOR\s+v_item\s+IN\s+SELECT\s+(?:oi\s*\.\s*\*|oi\s*\.\s*id\s*,\s*oi\s*\.\s*product_id\s*,\s*oi\s*\.\s*quantity)[\s\S]*?FROM\s+(?:public\s*\.\s*)?order_items\s+oi[\s\S]*?WHERE\s+oi\s*\.\s*order_id\s*=\s*p_order_id\s*ORDER\s+BY\s+oi\s*\.\s*product_id\s*,\s*oi\s*\.\s*id[\s\S]*?FOR\s+UPDATE[\s\S]*?LOOP\b([\s\S]*?)END\s+LOOP\s*;/i.exec(
+    /FOR\s+v_item\s+IN\s+SELECT\s+(?:oi\s*\.\s*\*|oi\s*\.\s*id\s*,\s*oi\s*\.\s*product_id\s*,\s*oi\s*\.\s*quantity)[\s\S]*?FROM\s+(?:public\s*\.\s*)?order_items\s+oi[\s\S]*?WHERE\s+oi\s*\.\s*order_id\s*=\s*p_order_id\s*ORDER\s+BY\s+oi\s*\.\s*product_id\s*,\s*oi\s*\.\s*variant_id\s*,\s*oi\s*\.\s*id[\s\S]*?FOR\s+UPDATE[\s\S]*?LOOP\b([\s\S]*?)END\s+LOOP\s*;/i.exec(
       afterDispatch
     );
   if (!loop) return false;

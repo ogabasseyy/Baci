@@ -1,6 +1,8 @@
 import { serializedInventoryBranches } from './serialized_variant_inventory_concurrency_contract_branches.mjs';
 import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
+import { serializedInventoryExceptionHandlers } from './serialized_variant_inventory_concurrency_contract_exception_handlers.mjs';
 import { serializedInventoryNestedQueries } from './serialized_variant_inventory_concurrency_contract_nested_queries.mjs';
+import { serializedInventorySelectInto } from './serialized_variant_inventory_concurrency_contract_select_into.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 function releaseLockMatches(source) {
@@ -10,13 +12,13 @@ function releaseLockMatches(source) {
     })
   );
   const query =
-    /FROM\s+(?:public\s*\.\s*)?variant_inventory\s+(?:AS\s+)?vi[\s\S]*?WHERE\s+([\s\S]*?)(?:ORDER\s+BY\s+pv\s*\.\s*product_id\s*,\s*vi\s*\.\s*id\s+)?FOR\s+UPDATE\s+OF\s+vi\b(?!\s+(?:OF\b|SKIP\s+LOCKED\b|NOWAIT\b))/i.exec(
+    /FROM\s+(?:public\s*\.\s*)?variant_inventory\s+(?:AS\s+)?vi[\s\S]*?WHERE\s+([\s\S]*?)(?:ORDER\s+BY\s+pv\s*\.\s*product_id\s*,\s*vi\s*\.\s*variant_id\s*,\s*vi\s*\.\s*id\s+)?FOR\s+UPDATE\s+OF\s+vi\b(?!\s+(?:OF\b|SKIP\s+LOCKED\b|NOWAIT\b))/i.exec(
       searchableSource
     );
   if (
     !query ||
     /\b(?:LIMIT|OFFSET|FETCH|FALSE)\b|\bNOT\s+TRUE\b/i.test(query[1]) ||
-    !/ORDER\s+BY\s+pv\s*\.\s*product_id\s*,\s*vi\s*\.\s*id\s+FOR\s+UPDATE\s+OF\s+vi\b/i.test(
+    !/ORDER\s+BY\s+pv\s*\.\s*product_id\s*,\s*vi\s*\.\s*variant_id\s*,\s*vi\s*\.\s*id\s+FOR\s+UPDATE\s+OF\s+vi\b/i.test(
       query[0]
     )
   )
@@ -151,12 +153,24 @@ function hasTargetStatusWhitelist(source) {
           executable.slice(guardEnd, dispatch.index)
         )
       : true;
-  const scopeReassignment =
+  const scopeWindow =
     guard && dispatch && guardEnd < dispatch.index
-      ? /(?:^|[;\n])\s*p_(?:merchant_id|order_id)\s*(?::=|=(?!=))/i.test(
-          executable.slice(scopeStart, dispatch.index)
-        )
-      : true;
+      ? executable.slice(scopeStart, dispatch.index)
+      : null;
+  const scopeReassignment =
+    scopeWindow === null
+      ? true
+      : /(?:^|[;\n])\s*p_(?:merchant_id|order_id)\s*(?::=|=(?!=))/i.test(
+          scopeWindow
+        ) ||
+        serializedInventorySelectInto.selectIntoWritesVariable(
+          scopeWindow,
+          'p_merchant_id'
+        ) ||
+        serializedInventorySelectInto.selectIntoWritesVariable(
+          scopeWindow,
+          'p_order_id'
+        );
   return Boolean(
     defaultStatus &&
       guard &&
@@ -213,6 +227,10 @@ function hasMerchantAuthorizationGuard(source) {
     return (
       hasTopLevelException(branches.thenBranch) &&
       /RAISE\s+EXCEPTION\s+['"]forbidden['"]/i.test(branches.thenBranch) &&
+      !serializedInventoryExceptionHandlers.enclosingAuthorizationHandler(
+        executable,
+        guard.index
+      ) &&
       orderLock !== null &&
       dispatch !== null &&
       serializedInventoryControlFlow.dominatesControlFlow(

@@ -32,6 +32,40 @@ function splitFunctionPrivilegeTargets(source) {
   return splitTopLevelList(source);
 }
 
+const doOpenerPattern =
+  /\bDO\b(?:\s+LANGUAGE\s+(?:"[^"]+"|[a-z_][a-z0-9_]*))?\s*(\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$)/gi;
+
+function blankSpan(output, start, end) {
+  output.fill(' ', start, end);
+}
+
+function unwrapDoBlocks(executable) {
+  const output = executable.split('');
+  doOpenerPattern.lastIndex = 0;
+  for (const opener of executable.matchAll(doOpenerPattern)) {
+    const closer = executable.indexOf(
+      opener[1],
+      opener.index + opener[0].length
+    );
+    if (closer === -1) continue;
+    blankSpan(output, opener.index, opener.index + opener[0].length);
+    const body = executable.slice(opener.index + opener[0].length, closer);
+    const begin = /\bBEGIN\b/i.exec(body);
+    if (begin) {
+      const beginIndex = opener.index + opener[0].length + begin.index;
+      blankSpan(output, beginIndex, beginIndex + begin[0].length);
+    }
+    const ends = [...body.matchAll(/\bEND\b(?!\s+(?:IF|LOOP|CASE)\b)/gi)];
+    if (ends.length > 0) {
+      const last = ends.at(-1);
+      const endIndex = opener.index + opener[0].length + last.index;
+      blankSpan(output, endIndex, endIndex + last[0].length);
+    }
+    blankSpan(output, closer, closer + opener[1].length);
+  }
+  return output.join('');
+}
+
 const authenticatedExecutionCache = new Map();
 
 function authenticatedCanExecute(source, signature) {
@@ -58,6 +92,7 @@ function computeAuthenticatedCanExecute(sourceOrSources, signature) {
   ).map(maskSqlStringLiterals);
   const targetSchema = schemaNameFromSignature(signature);
   const events = executableSources
+    .map(unwrapDoBlocks)
     .flatMap((executable, sourceIndex) =>
       serializedInventorySqlParser
         .splitSqlStatements(executable)

@@ -3,6 +3,8 @@ import test from 'node:test';
 import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
 import { serializedInventoryBranches } from './serialized_variant_inventory_concurrency_contract_branches.mjs';
 import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
+import { serializedInventoryExceptionHandlers } from './serialized_variant_inventory_concurrency_contract_exception_handlers.mjs';
+import { serializedInventorySelectInto } from './serialized_variant_inventory_concurrency_contract_select_into.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const wrappers = [
@@ -41,16 +43,11 @@ function hasTopLevelException(source) {
   return false;
 }
 
-function catchesAuthorizationFailure(executable) {
-  const blocks = executable.split(/(?<!\bRAISE\s+)EXCEPTION\b/i).slice(1);
-  return blocks.some((block) => {
-    const handlers = block.split(/\bEND\b/i)[0];
-    return (
-      /\binsufficient_privilege\b/i.test(handlers) ||
-      /\bOTHERS\b/i.test(handlers) ||
-      /\bSQLSTATE\s+'42501'/i.test(handlers)
-    );
-  });
+function catchesAuthorizationFailure(executable, guardIndex) {
+  return serializedInventoryExceptionHandlers.enclosingAuthorizationHandler(
+    executable,
+    guardIndex
+  );
 }
 
 function publicWrapperPreservesMerchantParameter(source, delegatePattern) {
@@ -93,8 +90,11 @@ function publicWrapperPreservesMerchantParameter(source, delegatePattern) {
   );
   return (
     !/\bp_merchant_id\s*(?::=|=)/i.test(between) &&
-    !/\bINTO\s+(?:STRICT\s+)?p_merchant_id\b/i.test(between) &&
-    !catchesAuthorizationFailure(executable) &&
+    !serializedInventorySelectInto.selectIntoWritesVariable(
+      between,
+      'p_merchant_id'
+    ) &&
+    !catchesAuthorizationFailure(executable, authorization.index) &&
     serializedInventoryControlFlow.dominatesControlFlow(
       executable,
       authorization.index,
@@ -132,6 +132,16 @@ test('public inventory wrappers preserve the authorized merchant parameter', () 
     assert.equal(
       publicWrapperPreservesMerchantParameter(strictInto, delegatePattern),
       false
+    );
+
+    const multiTargetInto = source.replace(
+      delegation[0],
+      `SELECT id, merchant_id INTO p_order_id, p_merchant_id FROM public.orders WHERE id = p_order_id;\n${delegation[0]}`
+    );
+    assert.equal(
+      publicWrapperPreservesMerchantParameter(multiTargetInto, delegatePattern),
+      false,
+      `${signature} must reject multi-target INTO rewrites of p_merchant_id`
     );
 
     const wrongDelegate = source.replace(

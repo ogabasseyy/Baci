@@ -1,6 +1,7 @@
 import { serializedInventoryAvailability } from './serialized_variant_inventory_concurrency_contract_availability.mjs';
 import { serializedInventoryBranches } from './serialized_variant_inventory_concurrency_contract_branches.mjs';
 import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
+import { serializedInventoryExceptionHandlers } from './serialized_variant_inventory_concurrency_contract_exception_handlers.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
 const { maskSqlLiterals } = serializedInventorySqlParser;
@@ -28,27 +29,34 @@ function findEffectiveReserveUpdate(source) {
     (assignment) => assignment.index > counter.index
   );
   if (overwritten) return undefined;
-  return [...masked.matchAll(updatePattern)].find(
+  const isScopedReservation = (update) =>
+    /\bstatus\s*=\s*'reserved'/i.test(update[1]) &&
+    /\border_id\s*=\s*p_order_id\b/i.test(update[1]) &&
+    /\border_item_id\s*=\s*p_order_item_id\b/i.test(update[1]) &&
+    /\bbranch_id\s*=\s*v_unit_branch_id\b/i.test(update[1]) &&
+    /\breservation_expires_at\s*=\s*CASE\s+WHEN\s+v_is_confirmed_hold\s+THEN\s+NULL\s+ELSE\s+now\(\)\s*\+\s*interval\s+'2 hours'\s+END\b/i.test(
+      update[1]
+    ) &&
+    serializedInventoryControlFlow.dominatesControlFlow(
+      masked,
+      update.index,
+      counter.index
+    ) &&
+    serializedInventoryControlFlow.sharesInnermostLoop(
+      masked,
+      selector.index,
+      update.index,
+      counter.index
+    );
+  const updates = [...masked.matchAll(updatePattern)];
+  const effective = updates.find(isScopedReservation);
+  if (!effective) return undefined;
+  const unscoped = updates.some(
     (update) =>
       /\bstatus\s*=\s*'reserved'/i.test(update[1]) &&
-      /\border_id\s*=\s*p_order_id\b/i.test(update[1]) &&
-      /\border_item_id\s*=\s*p_order_item_id\b/i.test(update[1]) &&
-      /\bbranch_id\s*=\s*v_unit_branch_id\b/i.test(update[1]) &&
-      /\breservation_expires_at\s*=\s*CASE\s+WHEN\s+v_is_confirmed_hold\s+THEN\s+NULL\s+ELSE\s+now\(\)\s*\+\s*interval\s+'2 hours'\s+END\b/i.test(
-        update[1]
-      ) &&
-      serializedInventoryControlFlow.dominatesControlFlow(
-        masked,
-        update.index,
-        counter.index
-      ) &&
-      serializedInventoryControlFlow.sharesInnermostLoop(
-        masked,
-        selector.index,
-        update.index,
-        counter.index
-      )
+      !isScopedReservation(update)
   );
+  return unscoped ? undefined : effective;
 }
 
 function claimedIncrementCount(source) {
@@ -147,7 +155,11 @@ function strictShortagePrecedesSuccess(source) {
     const raiseIndex = branchStart + raiseOffset;
     return (
       raiseIndex < success.index &&
-      serializedInventoryControlFlow.isReachable(executable, raiseIndex)
+      serializedInventoryControlFlow.isReachable(executable, raiseIndex) &&
+      !serializedInventoryExceptionHandlers.enclosingShortageHandler(
+        executable,
+        raiseIndex
+      )
     );
   } catch {
     return false;

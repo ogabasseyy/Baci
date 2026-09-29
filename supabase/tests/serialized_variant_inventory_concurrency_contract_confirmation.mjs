@@ -229,7 +229,7 @@ function confirmationItemOrderIsDeterministic(lock) {
     ? `(?:${lock.alias}\\s*\\.\\s*)?`
     : '(?:(?:[a-z_][a-z0-9_]*)\\s*\\.\\s*)?';
   return new RegExp(
-    `^\\s*${qualifier}product_id(?:\\s+ASC)?\\s*,\\s*${qualifier}id(?:\\s+ASC)?\\s*$`,
+    `^\\s*${qualifier}product_id(?:\\s+ASC)?\\s*,\\s*${qualifier}variant_id(?:\\s+ASC)?\\s*,\\s*${qualifier}id(?:\\s+ASC)?\\s*$`,
     'i'
   ).test(lock.orderBy);
 }

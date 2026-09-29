@@ -126,6 +126,26 @@ describe('runPaidOrderSideEffects', () => {
     );
   });
 
+  it('forwards the email attempt cap to the paid-email send', async () => {
+    const supabase = createSupabase();
+
+    await runPaidOrderSideEffects({
+      actor: 'cron:reconcile-gateway-paid-orders:drain',
+      emailMaxAttemptsPerSender: 1,
+      externalGatewayReference: 'PSK_REF_1',
+      gatewayResponse: {},
+      order: richOrder,
+      scheduleAfter: vi.fn(),
+      settlementGateway: 'paystack',
+      supabase: supabase as never,
+      transaction,
+    });
+
+    expect(mockSendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ maxAttemptsPerSender: 1 })
+    );
+  });
+
   it('schedules ad tracking after the response path instead of inside the outbox', async () => {
     const supabase = createSupabase();
     const scheduleAfter = vi.fn((job: () => Promise<void>) => job());

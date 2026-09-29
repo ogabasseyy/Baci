@@ -265,6 +265,22 @@ describe('finalizeOrderGatewayPayment', () => {
     );
   });
 
+  it('forwards the email attempt cap to the paid-order side effects', async () => {
+    mocks.completeOrderGatewayPayment.mockResolvedValue(completion());
+    mocks.ensurePaidOrderInventoryConfirmed.mockResolvedValue(undefined);
+
+    const outcome = await finalizeOrderGatewayPayment(
+      baseArgs(buildSupabase({ data: richOrderRow }), {
+        emailMaxAttemptsPerSender: 1,
+      })
+    );
+
+    expect(outcome).toMatchObject({ kind: 'completed' });
+    expect(mocks.runPaidOrderSideEffects).toHaveBeenCalledWith(
+      expect.objectContaining({ emailMaxAttemptsPerSender: 1 })
+    );
+  });
+
   it('flags a heal when the transaction was completed earlier', async () => {
     mocks.completeOrderGatewayPayment.mockResolvedValue(
       completion({ already_completed: true })

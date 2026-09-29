@@ -89,6 +89,41 @@ describe('recoverUnknownPaystackRefund', () => {
     expect(mocks.fileRefundEvidenceReview).not.toHaveBeenCalled();
   });
 
+  it('omits a failure verdict from the audit row so the transition applies', async () => {
+    mocks.fetchRefund.mockResolvedValue({
+      data: {
+        amount: 10000,
+        currency: 'NGN',
+        id: 202,
+        status: 'failed',
+        transaction: 555,
+      },
+      success: true,
+    });
+    const { insert, supabase } = database();
+
+    await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
+
+    // Pre-populating the verdict would trip the record RPC's repeat
+    // guard: the row would stay refund_pending, no failure
+    // notification would queue, and the side effect would sit deferred
+    // while every poll no-ops.
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: {
+          payment_transaction_id: 'pay-1',
+          provider_payment_transaction_id: 555,
+          recovered_from_provider_event: true,
+        },
+        status: 'refund_pending',
+      })
+    );
+    expect(mocks.reconcilePaystackCancellationRefund).toHaveBeenCalledWith(
+      supabase,
+      expect.objectContaining({ gateway_reference: '202' })
+    );
+  });
+
   it('derives the reference from a provider payment for an ID-only event', async () => {
     const { insert, supabase } = database();
 

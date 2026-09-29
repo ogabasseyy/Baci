@@ -101,13 +101,15 @@ describe('processCancellationDrain', () => {
       })
     );
     // Both workers share the bounded 60s reconcile phase so the serial
-    // drains behind them keep their share of the invocation budget.
+    // drains behind them keep their share of the invocation budget;
+    // the row-start gate sits one 8s provider timeout inside it so
+    // the final row's overrun still ends the phase within budget.
     expect(
       mocks.reconcilePendingPaystackCancellationRefunds
-    ).toHaveBeenCalledWith(supabase, 25, 1_060_000);
+    ).toHaveBeenCalledWith(supabase, 25, 1_052_000);
     expect(
       mocks.reconcileCompletedPaystackCancellationRefunds
-    ).toHaveBeenCalledWith(supabase, 25, 1_060_000);
+    ).toHaveBeenCalledWith(supabase, 25, 1_052_000);
     expect(mocks.drainPaystackRefundNotifications).toHaveBeenCalledWith(
       supabase,
       mocks.sendEmail,

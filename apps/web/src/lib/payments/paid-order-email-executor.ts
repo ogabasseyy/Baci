@@ -85,6 +85,7 @@ function validateRichPaidOrder(order: RichPaidOrder) {
 
 export function buildEmailExecutor({
   actor,
+  emailMaxAttemptsPerSender,
   fallbackDeadlineMs,
   merchantDetails,
   merchantFetchError,
@@ -92,6 +93,7 @@ export function buildEmailExecutor({
   signal,
 }: {
   actor: string;
+  emailMaxAttemptsPerSender?: number;
   fallbackDeadlineMs?: number;
   merchantDetails: MerchantDetails | null;
   merchantFetchError: { code?: string; message?: string } | null;
@@ -154,6 +156,11 @@ export function buildEmailExecutor({
       },
       clientReference: `order:${validatedOrder.id}:paid_email`,
       emailType: 'orders',
+      // Short passes cap the loop so the send fits their budget; unset
+      // keeps the default four attempts and the next sweep retries.
+      ...(emailMaxAttemptsPerSender !== undefined && {
+        maxAttemptsPerSender: emailMaxAttemptsPerSender,
+      }),
       fallbackDeadlineMs,
       fromName: getFromName(validatedMerchantDetails),
       htmlContent: generateOrderConfirmationEmail(emailData),

@@ -113,6 +113,7 @@ export async function runPaidOrderSideEffects(
       }),
       paid_email: buildEmailExecutor({
         actor: args.actor,
+        emailMaxAttemptsPerSender: args.emailMaxAttemptsPerSender,
         fallbackDeadlineMs: args.fallbackDeadlineMs,
         merchantDetails: merchant.data,
         merchantFetchError: merchant.error,

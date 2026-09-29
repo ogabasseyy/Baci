@@ -17,6 +17,9 @@ export interface FinalizeOrderGatewayPaymentArgs {
   // Bounds the paid-email platform-sender fallback to the pass deadline
   // so it declines unless its own attempt fits; unset when unbounded.
   fallbackDeadlineMs?: number;
+  // Caps paid-email attempts per sender for short passes that cannot fit
+  // the full retry loop; unset keeps the default four attempts.
+  emailMaxAttemptsPerSender?: number;
 }
 
 export type FinalizeOrderGatewayPaymentOutcome =

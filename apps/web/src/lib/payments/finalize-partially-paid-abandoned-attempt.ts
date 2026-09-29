@@ -6,6 +6,10 @@ import { fileDuplicatePaymentCapture } from './file-duplicate-payment-capture';
 import type { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
 import { gatePartiallyPaidAbandonedCapture } from './gate-partially-paid-abandoned-capture';
 
+// One attempt per sender: pass 0's 90s share cannot fit the default
+// four-attempt loop, and the paid side-effect queue retries failures.
+const PARTIAL_CAPTURE_EMAIL_ATTEMPTS = 1;
+
 /**
  * Complete a verified capture on a partially paid order. The balance gate
  * runs first: invoice legs record strict underpayments through the atomic
@@ -64,17 +68,16 @@ export async function finalizePartiallyPaidAbandonedAttempt({
       return;
     }
   }
-  // Reserve the full paid-email retry budget before starting finalize:
-  // verification may have consumed the pass, and the default 20s check
-  // would admit a pass too short for the uncapped four-attempt sender
-  // loop — the finalize signal would then abort mid-send and strand
-  // the customer confirmation as completed-unknown instead of holding
-  // the row for the next sweep. The held row retries without failing
-  // this one.
+  // This path runs in pass 0, whose 90s share can never fit the
+  // default four-attempt sender budget: admit on a single attempt per
+  // sender instead, and pass the same cap into finalize so the send
+  // loop actually fits. A failed send retries through the paid
+  // side-effect queue on a later pass. The held row retries without
+  // failing this one.
   try {
     assertRefundNotificationSendTime(
       deadlineMs,
-      zeptomailSendAdmissionBudgetMs()
+      zeptomailSendAdmissionBudgetMs(PARTIAL_CAPTURE_EMAIL_ATTEMPTS)
     );
   } catch {
     await hold('finalize_budget_exhausted');
@@ -108,6 +111,7 @@ export async function finalizePartiallyPaidAbandonedAttempt({
     outcome = await awaitRefundNotificationDeadline(
       finalizePayment({
         actor: 'cron:reconcile-gateway-paid-orders',
+        emailMaxAttemptsPerSender: PARTIAL_CAPTURE_EMAIL_ATTEMPTS,
         // Match the signal's 10s buffer: the platform-sender fallback
         // declines unless its own attempt fits before the cutoff.
         ...(deadlineMs !== undefined && {

@@ -9,6 +9,7 @@ import { notificationDrainDeadlineMs } from '@/lib/payments/notification-drain-d
 import { notificationDrainLimit } from '@/lib/payments/notification-drain-limit';
 import { reconcileCompletedPaystackCancellationRefunds } from '@/lib/payments/reconcile-completed-paystack-cancellation-refunds';
 import { reconcilePendingPaystackCancellationRefunds } from '@/lib/payments/reconcile-pending-paystack-cancellation-refunds';
+import { reconcileWorkerDeadlineMs } from '@/lib/payments/reconcile-worker-deadline';
 import type { createServiceClient } from '@/lib/supabase/service';
 import type { sendEmail } from '@/lib/zeptomail';
 
@@ -32,9 +33,16 @@ export async function processCancellationDrain(
   sendMerchantPush: MerchantRefundPushSender
 ) {
   const workersStartedAt = Date.now();
+  // Bound the parallel reconcile phase so the serial drains behind it keep
+  // a guaranteed share of the invocation instead of computing zero limits.
+  const workerDeadlineMs = reconcileWorkerDeadlineMs(workersStartedAt);
   const [refundResult, legacyRefundResult] = await Promise.allSettled([
-    reconcilePendingPaystackCancellationRefunds(supabase),
-    reconcileCompletedPaystackCancellationRefunds(supabase),
+    reconcilePendingPaystackCancellationRefunds(supabase, 25, workerDeadlineMs),
+    reconcileCompletedPaystackCancellationRefunds(
+      supabase,
+      25,
+      workerDeadlineMs
+    ),
   ]);
   // Budget the serial side-effect drain from the remaining invocation
   // time: an aborted step strands its row as claimed, which the next

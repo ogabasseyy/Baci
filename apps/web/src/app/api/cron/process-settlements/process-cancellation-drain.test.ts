@@ -94,12 +94,14 @@ describe('processCancellationDrain', () => {
         sendCancellationEmail: mocks.sendEmail,
       })
     );
+    // Both workers share the bounded 60s reconcile phase so the serial
+    // drains behind them keep their share of the invocation budget.
     expect(
       mocks.reconcilePendingPaystackCancellationRefunds
-    ).toHaveBeenCalledWith(supabase);
+    ).toHaveBeenCalledWith(supabase, 25, 1_060_000);
     expect(
       mocks.reconcileCompletedPaystackCancellationRefunds
-    ).toHaveBeenCalledWith(supabase);
+    ).toHaveBeenCalledWith(supabase, 25, 1_060_000);
     expect(mocks.drainPaystackRefundNotifications).toHaveBeenCalledWith(
       supabase,
       mocks.sendEmail,

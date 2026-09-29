@@ -19,6 +19,7 @@ type VerifiedCapture = Extract<
  */
 export async function resolveVerifiedAbandonedAttemptCapture({
   attempt,
+  deadlineMs,
   finalizePayment,
   hold,
   mismatchKind,
@@ -39,6 +40,7 @@ export async function resolveVerifiedAbandonedAttemptCapture({
     platform_fee: number | null;
     status: 'pending' | 'processing';
   };
+  deadlineMs?: number;
   finalizePayment?: typeof finalizeOrderGatewayPayment;
   hold: (reason: string) => Promise<void>;
   mismatchKind: string | null;
@@ -56,6 +58,7 @@ export async function resolveVerifiedAbandonedAttemptCapture({
     }
     await finalizePartiallyPaidAbandonedAttempt({
       attempt,
+      deadlineMs,
       finalizePayment,
       hold,
       providerData: result.data as unknown as Record<string, unknown>,

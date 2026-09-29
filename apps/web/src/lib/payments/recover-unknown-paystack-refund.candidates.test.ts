@@ -173,6 +173,59 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
     expect(rpc).toHaveBeenCalledTimes(3);
   });
 
+  it('files mismatched refund evidence for review and throws for redelivery', async () => {
+    mocks.fetchRefund.mockResolvedValue({
+      data: {
+        amount: 10000,
+        currency: 'NGN',
+        id: 203,
+        status: 'processed',
+        transaction: 555,
+      },
+      success: true,
+    });
+    const rpc = reviewRpc();
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        selectQuery([payment('pay-1', 'order-1', 'merchant-1')])
+      )
+      .mockReturnValueOnce(selectQuery([cancelledOrder('order-1')]));
+    const supabase = { from, rpc } as unknown as SupabaseClient;
+
+    await expect(
+      recoverUnknownPaystackRefund(supabase, 202, 'PSK-1')
+    ).rejects.toThrow('paystack_refund_evidence_invalid');
+
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith(
+      'file_paystack_refund_recovery_review_v1',
+      expect.objectContaining({ p_order_id: 'order-1' })
+    );
+  });
+
+  it('throws when malformed evidence matches no local payment', async () => {
+    mocks.fetchRefund.mockResolvedValue({
+      data: {
+        amount: 12.5,
+        currency: 'NGN',
+        id: 202,
+        status: 'processed',
+        transaction: 555,
+      },
+      success: true,
+    });
+    const rpc = reviewRpc();
+    const from = vi.fn().mockReturnValueOnce(selectQuery([]));
+    const supabase = { from, rpc } as unknown as SupabaseClient;
+
+    await expect(
+      recoverUnknownPaystackRefund(supabase, 202, 'PSK-1')
+    ).rejects.toThrow('paystack_refund_evidence_unmatched');
+
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it('withholds stalled matches on active orders from the cancellation queue', async () => {
     const rpc = reviewRpc();
     const from = vi

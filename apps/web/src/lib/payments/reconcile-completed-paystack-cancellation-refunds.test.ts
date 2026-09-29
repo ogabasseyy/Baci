@@ -52,6 +52,23 @@ describe('legacy completed Paystack cancellation refunds', () => {
     fileReview.mockResolvedValue(undefined);
   });
 
+  it('stops before the deadline so later phases keep their share', async () => {
+    const from = vi
+      .fn()
+      .mockReturnValue({ select: vi.fn(() => selectQuery([legacyRefund])) });
+    const supabase = { from } as never;
+
+    await expect(
+      reconcileCompletedPaystackCancellationRefunds(
+        supabase,
+        25,
+        Date.now() - 1
+      )
+    ).resolves.toEqual({ checked: 0, failed: 0 });
+
+    expect(reconcile).not.toHaveBeenCalled();
+  });
+
   it('re-verifies completed rows only for cancelled orders still awaiting a refund transition', async () => {
     const refund = {
       id: 'refund-1',

@@ -41,6 +41,7 @@ const order = {
 function transactionQuery(data: unknown) {
   return {
     eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
     not: vi.fn().mockReturnThis(),
     order: vi.fn().mockResolvedValue({ data, error: null }),
     select: vi.fn().mockReturnThis(),
@@ -81,6 +82,55 @@ describe('cancellation refund preflight quarantine', () => {
         merchant_id: 'merchant-1',
         order_id: 'order-1',
         txn_id: 'payment-2',
+      })
+    );
+  });
+
+  it('quarantines a mixed order whose other leg is refund-pending', async () => {
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const paymentQuery = transactionQuery([
+      {
+        amount: 100,
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: 'PSK-1',
+        id: 'payment-1',
+        status: 'completed',
+      },
+      {
+        amount: 50,
+        currency: 'NGN',
+        gateway: 'paypal',
+        gateway_reference: 'PP-1',
+        id: 'payment-2',
+        status: 'refund_pending',
+      },
+    ]);
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(paymentQuery)
+      .mockReturnValueOnce({ insert: reviewInsert });
+
+    await expect(
+      executeOrderCancellationSideEffect({
+        merchant,
+        order,
+        step: 'refund',
+        supabase: { from } as never,
+      })
+    ).rejects.toBeInstanceOf(DeliveryUncertainError);
+    // The leg scan mirrors the completion gate: refund-state legs must be
+    // visible so they quarantine instead of slipping to false completion.
+    expect(paymentQuery.in).toHaveBeenCalledWith('status', [
+      'completed',
+      'refund_pending',
+    ]);
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'order_cancellation_refund_requires_review',
+        order_id: 'order-1',
+        reason: expect.stringContaining('paypal'),
       })
     );
   });

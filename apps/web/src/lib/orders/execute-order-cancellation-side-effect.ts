@@ -42,13 +42,17 @@ export async function executeOrderCancellationSideEffect({
     });
   }
 
+  // Mirror the completion gate's funded-leg statuses: refund-state legs
+  // (e.g. PayPal flips the payment row itself while its provider refund
+  // is pending) must stay visible so they quarantine or defer instead of
+  // slipping to false completion.
   const { data: transactionRows, error: transactionError } = await supabase
     .from('transactions')
-    .select('id, amount, currency, gateway, gateway_reference')
+    .select('id, amount, currency, gateway, gateway_reference, status')
     .eq('order_id', order.id)
     .eq('merchant_id', order.merchant_id)
     .eq('transaction_type', 'payment')
-    .eq('status', 'completed')
+    .in('status', ['completed', 'refund_pending'])
     .order('created_at', { ascending: true });
   if (transactionError || !transactionRows?.length) {
     throw new Error('No completed payment transaction found');
@@ -205,9 +209,13 @@ export async function executeOrderCancellationSideEffect({
       transactions: pendingTransactions,
     });
   }
+  // A leg stuck in refund_pending has its provider refund in flight
+  // without a separate audit row: defer it like an accepted row so the
+  // step waits instead of initiating a duplicate.
   const awaitingTransactions = transactions.filter(
     (transaction) =>
-      awaitingRefundPaymentIds.has(transaction.id) &&
+      (awaitingRefundPaymentIds.has(transaction.id) ||
+        transaction.status === 'refund_pending') &&
       !refundedPaymentIds.has(transaction.id)
   );
   // Legs whose only completed rows are still unverified wait for the

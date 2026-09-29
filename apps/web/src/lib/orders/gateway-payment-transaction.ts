@@ -4,4 +4,5 @@ export interface GatewayPaymentTransaction {
   gateway: string | null;
   gateway_reference: string | null;
   id: string;
+  status?: string;
 }

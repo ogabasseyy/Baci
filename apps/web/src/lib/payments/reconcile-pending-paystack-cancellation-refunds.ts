@@ -5,10 +5,15 @@ import { holdPaystackRefundForReview } from './hold-paystack-refund-for-review';
 import { isDeterministicRefundError } from './is-deterministic-paystack-refund-error';
 import type { RefundRow } from './paystack-cancellation-refund-row';
 import { reconcilePaystackCancellationRefund } from './reconcile-paystack-cancellation-refund';
+import {
+  NO_RECONCILE_DEADLINE,
+  shouldYieldReconcileWorker,
+} from './reconcile-worker-deadline';
 
 export async function reconcilePendingPaystackCancellationRefunds(
   supabase: SupabaseClient,
-  limit = 25
+  limit = 25,
+  deadlineMs: number = NO_RECONCILE_DEADLINE
 ): Promise<{ checked: number; failed: number }> {
   const { data, error } = await supabase
     .from('transactions')
@@ -29,7 +34,12 @@ export async function reconcilePendingPaystackCancellationRefunds(
     .limit(limit);
   if (error) throw new Error('pending_refund_lookup_failed');
   let failed = 0;
+  let checked = 0;
   for (const refund of data ?? []) {
+    // Stop before the pass deadline so flushRefunds and the settlement
+    // sweep keep their share of the cron budget instead of timing out.
+    if (shouldYieldReconcileWorker(deadlineMs)) break;
+    checked++;
     try {
       await reconcilePaystackCancellationRefund(supabase, refund as RefundRow);
     } catch (reason) {
@@ -58,5 +68,5 @@ export async function reconcilePendingPaystackCancellationRefunds(
       }
     }
   }
-  return { checked: data?.length ?? 0, failed };
+  return { checked, failed };
 }

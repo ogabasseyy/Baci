@@ -23,7 +23,10 @@ UPDATE public.order_cancellation_side_effects AS side_effect
       WHERE payment.order_id = side_effect.order_id
         AND payment.merchant_id = side_effect.merchant_id
         AND payment.transaction_type = 'payment'
-        AND payment.status = 'completed'
+        -- Mirror the completion gate's funded-leg statuses (see the claim
+        -- predicate): refund-state legs without a separate refund row
+        -- must also requeue their falsely completed side effect.
+        AND payment.status IN ('completed', 'refund_pending')
         AND payment.amount > 0
         AND COALESCE(payment.gateway, '') NOT IN (
           'wallet', 'savings', 'store_credit', 'cash', 'manual', 'pay_on_delivery'

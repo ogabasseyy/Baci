@@ -67,6 +67,7 @@ function completedRefund(
 function transactionQuery(data: unknown) {
   return {
     eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
     order: vi.fn().mockResolvedValue({ data, error: null }),
     select: vi.fn().mockReturnThis(),
   };

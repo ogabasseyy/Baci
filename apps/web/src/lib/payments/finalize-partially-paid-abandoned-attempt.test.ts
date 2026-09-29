@@ -153,6 +153,75 @@ describe('finalizePartiallyPaidAbandonedAttempt', () => {
     expect(h.summary.failed).toBe(false);
   });
 
+  it('declines to start finalize without sufficient reserve', async () => {
+    const h = harness();
+    finalize.mockResolvedValue({ kind: 'completed' });
+
+    await finalizePartiallyPaidAbandonedAttempt({
+      ...h,
+      attempt,
+      deadlineMs: Date.now() + 10_000,
+      providerData: {},
+    });
+
+    // Starting finalize 10s before the pass deadline would spend the
+    // paid-email retry budget past it and starve the later passes. The
+    // held row retries on the next sweep without failing it.
+    expect(finalize).not.toHaveBeenCalled();
+    expect(h.hold).toHaveBeenCalledWith('finalize_budget_exhausted');
+    expect(h.summary.failed).toBe(false);
+    expect(h.summary.completed).toEqual([]);
+  });
+
+  it('forwards the remaining deadline to the finalizer', async () => {
+    const h = harness();
+    finalize.mockResolvedValue({
+      healed: false,
+      kind: 'completed',
+      orderNumber: 'ORD-1',
+    });
+
+    await finalizePartiallyPaidAbandonedAttempt({
+      ...h,
+      attempt,
+      deadlineMs: Date.now() + 60_000,
+      providerData: {},
+    });
+
+    expect(finalize).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    );
+    expect(h.summary.completed).toEqual(['attempt-1']);
+  });
+
+  it('holds quietly when finalize overruns the pass deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_100_000);
+      const h = harness();
+      finalize.mockReturnValue(
+        new Promise(() => {
+          // Never settles: the race must stop waiting at the deadline
+          // instead of reaching the route limit with claimed work in flight.
+        })
+      );
+
+      const pending = finalizePartiallyPaidAbandonedAttempt({
+        ...h,
+        attempt,
+        deadlineMs: 1_121_000,
+        providerData: {},
+      });
+      await vi.advanceTimersByTimeAsync(11_000);
+      await pending;
+
+      expect(h.hold).toHaveBeenCalledWith('finalize_deadline_exceeded');
+      expect(h.summary.failed).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('fails the sweep when admitting a processing attempt errors', async () => {
     const h = harness();
     const { from } = admittingClient(null, new Error('database unavailable'));

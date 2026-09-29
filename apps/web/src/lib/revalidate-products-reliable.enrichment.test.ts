@@ -103,6 +103,37 @@ describe('revalidateProductsReliable enrichment path', () => {
       'ogabassey',
       [{ slug: 'iphone-15', categorySegment: 'smartphones' }]
     );
+    // Rejected enrichment leaves the article set unknown: escalate to the
+    // hostname fallback instead of purging only product URLs.
+    expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
+      'ogabassey'
+    );
+  });
+
+  it('escalates to hostname when enrichment reports a partial article set', async () => {
+    const supabase = { from: vi.fn() };
+    const products = [{ id: 'product-id', slug: 'iphone-15' }];
+    mockEnrichProductPurgeEntries.mockResolvedValue({
+      entries: [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      resolvedSlugs: ['iphone-15'],
+      blogPostSlugs: ['known-guide'],
+      blogPostSlugsIncomplete: true,
+    });
+
+    await revalidateProductsReliable('merchant-1', {
+      merchantSlug: 'ogabassey',
+      products,
+      supabase: supabase as never,
+    });
+
+    expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
+      'ogabassey',
+      [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      { blogPostSlugs: ['known-guide'] }
+    );
+    expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
+      'ogabassey'
+    );
   });
 
   it('skips product and article enrichment for hostname-wide purges', async () => {

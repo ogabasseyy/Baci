@@ -189,9 +189,10 @@ export async function POST(request: NextRequest) {
           // The shared scheduler switches to a bounded hostname purge above its
           // distinct-entry threshold, so it still evicts every affected PDP.
           if (blogPostSlugsIncomplete) {
-            // The article lookup totally failed: the affected article URLs
-            // are unknown, so evict the hostname (a superset of the product
-            // purge) rather than leaving linked rails stale until TTL.
+            // The article set may be incomplete (lookup failed, partially
+            // failed, or ran without authoritative inputs): evict the
+            // hostname (a superset of the product purge) rather than
+            // leaving linked rails stale until TTL.
             scheduleStorefrontHostnamePurge(merchantSlug);
           } else if (blogPostSlugs.length > 0) {
             scheduleStorefrontProductPurge(merchantSlug, entries, {

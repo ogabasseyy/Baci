@@ -65,6 +65,35 @@ export async function POST(
 
     const supabase = auth.supabase;
 
+    // Snapshot the item product ids BEFORE the RPC commits: order items are
+    // immutable across cancellation, so a failed post-cancel reread can
+    // still purge exact targets instead of escaping unqueued. Best-effort —
+    // a failed snapshot must not block the cancellation itself.
+    let preCancelItemIds: string[] | null = null;
+    try {
+      const { data: preCancelItems, error: preCancelItemsError } =
+        await supabase
+          .from('order_items')
+          .select('product_id')
+          .eq('order_id', id);
+      if (!preCancelItemsError) {
+        preCancelItemIds = Array.from(
+          new Set(
+            (preCancelItems ?? [])
+              .map((item) => item.product_id)
+              .filter(
+                (productId): productId is string =>
+                  typeof productId === 'string' && productId.trim().length > 0
+              )
+              .map((productId) => productId.trim())
+          )
+        );
+      }
+    } catch {
+      // Fall through without a snapshot; the post-cancel path below keeps
+      // its existing best-effort behavior.
+    }
+
     const { data: cancellationPerformed, error: cancellationError } =
       await supabase.rpc('cancel_order_as_merchant', {
         p_order_id: id,
@@ -98,11 +127,28 @@ export async function POST(
 
     productCacheRevalidation.revalidateDashboard(merchantId);
     try {
-      const { data: orderItems, error: orderItemsError } = await supabase
-        .from('order_items')
-        .select('product_id, variant_id')
-        .eq('order_id', id);
-      if (orderItemsError) throw orderItemsError;
+      let orderItems: Array<{ product_id?: unknown }> | null = null;
+      try {
+        const { data, error } = await supabase
+          .from('order_items')
+          .select('product_id, variant_id')
+          .eq('order_id', id);
+        if (error) throw error;
+        orderItems = data;
+      } catch (itemsError) {
+        // The restock already committed: fall back to the pre-cancellation
+        // snapshot so the purge still runs with exact targets instead of
+        // escaping to the broad-tags-only catch below.
+        if (!preCancelItemIds) throw itemsError;
+        logger.warn({
+          message:
+            'Cancelled order items reread failed; purging from pre-cancellation snapshot',
+          orderId: id,
+          merchantId,
+          error: itemsError,
+        });
+        orderItems = preCancelItemIds.map((product_id) => ({ product_id }));
+      }
       const productIds = Array.from(
         new Set(
           (orderItems ?? [])

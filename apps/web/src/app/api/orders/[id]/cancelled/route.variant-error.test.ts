@@ -159,4 +159,84 @@ describe('merchant cancellation variant policy fallback', () => {
       })
     );
   });
+
+  it('purges from the pre-cancellation snapshot when the items reread rejects', async () => {
+    const { supabase } = createSupabase();
+    const itemRows = {
+      data: [
+        { product_id: 'product-1', variant_id: 'variant-1' },
+        { product_id: 'product-2', variant_id: 'variant-2' },
+      ],
+      error: null,
+    };
+    // First order_items read (pre-RPC snapshot) succeeds; the post-cancel
+    // reread rejects at the transport layer.
+    const itemsEq = vi
+      .fn()
+      .mockResolvedValueOnce(itemRows)
+      .mockRejectedValueOnce(new Error('transport down'));
+    supabase.from = vi.fn((table: string) => {
+      if (table === 'order_items') {
+        return { select: vi.fn(() => ({ eq: itemsEq })) };
+      }
+      if (table === 'product_variants') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              in: vi.fn().mockResolvedValue({ data: [], error: null }),
+            })),
+          })),
+        };
+      }
+      if (table === 'products') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              in: vi.fn().mockResolvedValue({
+                data: [
+                  {
+                    id: 'product-1',
+                    slug: 'managed-phone',
+                    manage_stock: true,
+                  },
+                  {
+                    id: 'product-2',
+                    slug: 'managed-tablet',
+                    manage_stock: true,
+                  },
+                ],
+                error: null,
+              }),
+            })),
+          })),
+        };
+      }
+      throw new Error(`Unexpected table ${table}`);
+    });
+    mocks.authenticate.mockResolvedValue({
+      error: null,
+      supabase,
+      user: { id: 'user-1' },
+    });
+    const { logger } = await import('@/lib/logger');
+
+    const response = await POST(request(), {
+      params: Promise.resolve({ id: 'order-1' }),
+    });
+
+    expect(response.status).toBe(202);
+    expect(mocks.schedule).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchantId: 'merchant-1',
+        productIds: ['product-1', 'product-2'],
+        supabase,
+      })
+    );
+    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message:
+          'Cancelled order items reread failed; purging from pre-cancellation snapshot',
+      })
+    );
+  });
 });

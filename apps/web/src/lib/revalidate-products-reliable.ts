@@ -99,6 +99,7 @@ export async function revalidateProductsReliable(
             : [];
       let purgeEntries = buildInternalProductPurgeEntries(products ?? []);
       let blogPostSlugs: string[] = [];
+      let blogPostSlugsIncomplete = false;
 
       if (
         supabase &&
@@ -117,7 +118,12 @@ export async function revalidateProductsReliable(
           );
           purgeEntries = enriched.entries;
           blogPostSlugs = enriched.blogPostSlugs;
+          blogPostSlugsIncomplete = enriched.blogPostSlugsIncomplete;
         } catch (error) {
+          // A rejected enrichment leaves the article set unknown: flag it so
+          // the edge operation below escalates instead of purging only the
+          // product URLs while linked articles keep stale data.
+          blogPostSlugsIncomplete = true;
           console.warn(
             'Failed to enrich in-process product purge (continuing with caller hints)',
             { merchantId, error }
@@ -146,6 +152,12 @@ export async function revalidateProductsReliable(
           });
         } else {
           scheduleStorefrontProductPurge(merchantSlug, purgeEntries);
+        }
+        if (blogPostSlugsIncomplete) {
+          // The known article URLs were purged above, but the set is
+          // partial: evict the hostname (a superset) so the unknown
+          // remainder cannot keep pre-mutation data until TTL.
+          scheduleStorefrontHostnamePurge(merchantSlug);
         }
       }
     }

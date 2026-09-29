@@ -4,7 +4,6 @@ import type { Database } from '@/types/supabase';
 import type { QuizSweepWatermarks } from './quiz-sweep-watermarks';
 
 const QUIZ_CACHE_TARGET_BATCH_LIMIT = 1000;
-const QUIZ_EVENT_ID_CHUNK_SIZE = 100;
 /**
  * Merchants purged concurrently per delivery chunk. Each purge can spend up
  * to ~5s in the standalone-worker HTTP fallback, and the deployed worker is
@@ -26,6 +25,7 @@ interface QuizEventCacheRow {
 interface QuizAwardCacheRow {
   event_id?: unknown;
   product_id?: unknown;
+  quiz_events?: { merchant_id?: unknown } | null;
 }
 
 interface QuizReservationCacheRow {
@@ -173,11 +173,14 @@ export async function invalidateQuizProductCaches(
 
   let awardRows: QuizAwardCacheRow[] = [];
   try {
+    // The merchant rides with the award rows via the event FK: a separate
+    // owner lookup could fail while the awards are known, leaving an
+    // award-only run with zero merchant targets and nothing to escalate.
     const awardPage = await collectQuizCacheTargetRows<QuizAwardCacheRow>(
       (from, to) =>
         client
           .from('quiz_awards')
-          .select('event_id, product_id')
+          .select('event_id, product_id, quiz_events!inner(merchant_id)')
           .not('expired_at', 'is', null)
           .gte('expired_at', watermarks.awards)
           .order('expired_at', { ascending: true })
@@ -190,66 +193,21 @@ export async function invalidateQuizProductCaches(
     // The quiz RPC already completed; cache expiry remains best effort.
     sweepIncomplete = true;
   }
-  const expiredEventIds = Array.from(
-    new Set(
-      awardRows
-        .map((row) => row.event_id)
-        .filter((eventId): eventId is string => typeof eventId === 'string')
-    )
-  );
-  if (expiredEventIds.length > 0) {
-    // The paginated award sweep can now exceed one batch; keep the
-    // PostgREST `.in(...)` URL bounded with id chunks.
-    for (
-      let start = 0;
-      start < expiredEventIds.length;
-      start += QUIZ_EVENT_ID_CHUNK_SIZE
-    ) {
-      // Expired awards are absent from the `updated_at` event sweep (the
-      // expiry RPC touches quiz_awards only), so an unmapped owner chunk
-      // would drop its awards forever once the watermarks advance. Retry
-      // once, then mark the run incomplete so collected merchants still
-      // escalate to the hostname fallback.
-      let ownerRows: QuizEventCacheRow[] | null = null;
-      for (let attempt = 0; attempt < 2 && !ownerRows; attempt += 1) {
-        try {
-          const expiredEventResult = await client
-            .from('quiz_events')
-            .select('id, merchant_id')
-            .in(
-              'id',
-              expiredEventIds.slice(start, start + QUIZ_EVENT_ID_CHUNK_SIZE)
-            );
-          if (!expiredEventResult.error) {
-            ownerRows = (expiredEventResult.data ?? []) as QuizEventCacheRow[];
-          }
-        } catch {
-          // Retried below; a persistent failure marks the run incomplete.
-        }
-      }
-      if (!ownerRows) {
-        sweepIncomplete = true;
-        continue;
-      }
-      for (const row of ownerRows) {
-        if (
-          typeof row.id === 'string' &&
-          row.id.trim().length > 0 &&
-          typeof row.merchant_id === 'string' &&
-          row.merchant_id.trim().length > 0
-        ) {
-          eventMerchantIds.set(row.id.trim(), row.merchant_id.trim());
-        }
-      }
-    }
-  }
 
   for (const award of awardRows) {
+    const embeddedMerchant =
+      award.quiz_events &&
+      typeof award.quiz_events === 'object' &&
+      !Array.isArray(award.quiz_events)
+        ? award.quiz_events.merchant_id
+        : null;
     addProductId(
       productIdsByMerchant,
-      typeof award.event_id === 'string'
-        ? eventMerchantIds.get(award.event_id.trim())
-        : null,
+      typeof embeddedMerchant === 'string'
+        ? embeddedMerchant
+        : typeof award.event_id === 'string'
+          ? eventMerchantIds.get(award.event_id.trim())
+          : null,
       award.product_id
     );
   }

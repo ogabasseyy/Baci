@@ -32,10 +32,10 @@ export interface AuthoritativeProductPurgeEnrichment {
   /** Published article slugs whose related-product rail embeds these products. */
   blogPostSlugs: string[];
   /**
-   * True when the article lookup totally failed and `blogPostSlugs` is
-   * empty for that reason (not because no articles link the products).
-   * Callers that can evict by hostname should do so instead of trusting
-   * the empty set.
+   * True when the article set may be incomplete: the lookup totally or
+   * partially failed, or an upstream product/category resolution failed so
+   * the lookup ran without authoritative segments. Callers that can evict
+   * by hostname should do so instead of trusting the set as complete.
    */
   blogPostSlugsIncomplete: boolean;
 }
@@ -67,6 +67,10 @@ export async function enrichProductPurgeEntries(
     .filter((id): id is string => Boolean(id));
   const authoritativeSegmentsById = new Map<string, string | null>();
   const authoritativeSlugsById = new Map<string, string>();
+  // Upstream resolution failures leave the LOOKUP inputs incomplete (caller
+  // hints instead of authoritative segments), so the article set below is
+  // flagged even though these promises resolve normally.
+  let upstreamResolutionFailed = false;
   if (idsToResolve.length > 0) {
     const { data: productRows, error: productRowsError } = await supabase
       .from('products')
@@ -78,6 +82,7 @@ export async function enrichProductPurgeEntries(
     if (productRowsError) {
       // Fail-open: log and fall through — with no authoritative rows the purge
       // still fires from the caller's flat category hints below.
+      upstreamResolutionFailed = true;
       console.error(
         'Failed to resolve authoritative product rows for Cloudflare product purge (continuing with caller hints):',
         { merchantId, error: productRowsError }
@@ -118,8 +123,9 @@ export async function enrichProductPurgeEntries(
       .in('id', previousCategoryIds);
     if (categoryRowsError) {
       // Fail-open: log and continue — an unresolved old segment simply skips the
-      // OLD-location purge; the CURRENT-location purge still fires and the stale
-      // old page self-heals on its TTL.
+      // OLD-location purge; the CURRENT-location purge still fires. The old
+      // category's articles cannot be enumerated, so the set is incomplete.
+      upstreamResolutionFailed = true;
       console.error(
         'Failed to resolve previous category slugs for Cloudflare product purge (continuing without old-segment purge):',
         { merchantId, error: categoryRowsError }
@@ -163,8 +169,10 @@ export async function enrichProductPurgeEntries(
       blogPostSlugs = linkedPosts.slugs;
       // A partial page/chunk failure preserves known URLs but omits the
       // rest: flag the set so callers escalate to the hostname fallback
-      // instead of purging only the known articles.
-      blogPostSlugsIncomplete = linkedPosts.incomplete;
+      // instead of purging only the known articles. Upstream resolution
+      // failures count too — the lookup ran without authoritative inputs.
+      blogPostSlugsIncomplete =
+        linkedPosts.incomplete || upstreamResolutionFailed;
     } catch (error) {
       // Fail-open, but say so: the lookup throws only when it preserved
       // zero rows, so an empty set here is unknown — not "no articles".

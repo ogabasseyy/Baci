@@ -171,12 +171,25 @@ export async function POST(
   // churn product or article caches a second time.
   if (didCancel) {
     try {
-      const { data: cancelledOrder, error: cancelledOrderError } =
-        await auth.supabase
+      let cancelledOrder: {
+        merchant_id?: string | null;
+        order_items?: unknown;
+      } | null = null;
+      let cancelledOrderError: unknown = null;
+      try {
+        const reread = await auth.supabase
           .from('orders')
           .select('merchant_id, order_items(product_id, variant_id)')
           .eq('id', id)
           .maybeSingle();
+        cancelledOrder = reread.data;
+        cancelledOrderError = reread.error;
+      } catch (rereadError) {
+        // A rejected reread preserves the snapshot exactly like a resolved
+        // `{ error }`: the restock already committed, so the purge still
+        // runs from pre-cancellation data instead of escaping unqueued.
+        cancelledOrderError = rereadError;
+      }
       // The restock already committed: fall back to the pre-cancellation
       // snapshot when the reread fails so the purge still runs.
       const effectiveOrder = cancelledOrder ?? preCancelSnapshot;

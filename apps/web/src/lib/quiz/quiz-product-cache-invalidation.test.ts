@@ -14,7 +14,6 @@ function createClient(
   reservationRows: unknown[] = [],
   options: {
     failReservationsAfterFirstPage?: boolean;
-    expiredEventsError?: unknown;
   } = {}
 ) {
   const eventRows = [
@@ -29,11 +28,18 @@ function createClient(
       settings: { title: 'Trivia only' },
     },
   ];
-  const awardRows = [{ event_id: 'event-2', product_id: 'product-2' }];
-  const expiredEventRows = [{ id: 'event-2', merchant_id: 'merchant-2' }];
+  const awardRows = [
+    {
+      event_id: 'event-2',
+      product_id: 'product-2',
+      quiz_events: { merchant_id: 'merchant-2' },
+    },
+  ];
   const orderCalls: Array<{ column: unknown; table: string }> = [];
+  const inCalls: Array<{ column: unknown; table: string }> = [];
   return {
     orderCalls,
+    inCalls,
     from: vi.fn((table: string) => {
       const rows: unknown[] =
         table === 'quiz_events'
@@ -73,13 +79,8 @@ function createClient(
           return builder;
         }),
         not: vi.fn(() => builder),
-        in: vi.fn(() => {
-          if (options.expiredEventsError && table === 'quiz_events') {
-            builder.data = null;
-            builder.error = options.expiredEventsError;
-          } else {
-            builder.data = table === 'quiz_events' ? expiredEventRows : rows;
-          }
+        in: vi.fn((column: unknown) => {
+          inCalls.push({ table, column });
           return builder;
         }),
       };
@@ -235,39 +236,27 @@ describe('invalidateQuizProductCaches', () => {
     }
   });
 
-  it('marks the run incomplete when the award owner lookup keeps failing', async () => {
-    const warnSpy = vi
-      .spyOn(console, 'warn')
-      .mockImplementation(() => undefined);
-    try {
-      const client = createClient([], {
-        expiredEventsError: { message: 'owner lookup down' },
-      });
+  it('attributes expired awards from the embedded merchant without an owner query', async () => {
+    const client = createClient([]);
 
-      await invalidateQuizProductCaches(client as never, {
-        events: '2026-09-01T00:00:00Z',
-        reservations: '2026-09-01T00:00:00Z',
-        awards: '2026-09-01T00:00:00Z',
-      });
+    await invalidateQuizProductCaches(client as never, {
+      events: '2026-09-01T00:00:00Z',
+      reservations: '2026-09-01T00:00:00Z',
+      awards: '2026-09-01T00:00:00Z',
+    });
 
-      // The unmapped awards cannot be attributed, so the collected
-      // merchants escalate to the conservative hostname fallback.
-      expect(mockScheduleOrderProductBlogPurge).toHaveBeenCalledWith(
-        expect.objectContaining({ targetSweepIncomplete: true })
-      );
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('sweep incomplete'),
-        expect.objectContaining({
-          watermarks: {
-            events: '2026-09-01T00:00:00Z',
-            reservations: '2026-09-01T00:00:00Z',
-            awards: '2026-09-01T00:00:00Z',
-          },
-        })
-      );
-    } finally {
-      warnSpy.mockRestore();
-    }
+    // The award-only merchant is invalidated from the embedded event
+    // merchant riding with the award rows: no separate owner lookup can
+    // fail and strand the awards with zero targets.
+    expect(mockScheduleOrderProductBlogPurge).toHaveBeenCalledWith({
+      merchantId: 'merchant-2',
+      productIds: ['product-2'],
+      supabase: client,
+    });
+    expect(mockScheduleOrderProductBlogPurge).not.toHaveBeenCalledWith(
+      expect.objectContaining({ targetSweepIncomplete: true })
+    );
+    expect(client.inCalls).toEqual([]);
   });
 
   it('orders every sweep by a unique id tie-breaker', async () => {

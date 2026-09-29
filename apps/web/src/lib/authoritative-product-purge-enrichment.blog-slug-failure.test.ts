@@ -56,4 +56,66 @@ describe('enrichProductPurgeEntries blog slug lookup failure', () => {
       mockLookup.mockResolvedValue({ slugs: [], incomplete: false });
     }
   });
+
+  it('flags incomplete when the product-row lookup resolves with an error', async () => {
+    // The article lookup itself reports complete: only the upstream
+    // resolution failure may set the flag.
+    mockLookup.mockResolvedValueOnce({ slugs: [], incomplete: false });
+    const supabase = {
+      from: (table: string) => ({
+        select: () => ({
+          eq: () => ({
+            in: () =>
+              Promise.resolve(
+                table === 'products'
+                  ? { data: null, error: { message: 'rows unavailable' } }
+                  : { data: [], error: null }
+              ),
+          }),
+        }),
+      }),
+    } as unknown as SupabaseClient;
+    const errorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      const result = await enrichProductPurgeEntries(supabase, 'merchant-1', [
+        { id: 'prod-1' },
+      ]);
+
+      expect(result.blogPostSlugsIncomplete).toBe(true);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('flags incomplete when the previous-category lookup resolves with an error', async () => {
+    mockLookup.mockResolvedValueOnce({ slugs: [], incomplete: false });
+    const supabase = {
+      from: (table: string) => ({
+        select: () => ({
+          eq: () => ({
+            in: () =>
+              Promise.resolve(
+                table === 'categories'
+                  ? { data: null, error: { message: 'rows unavailable' } }
+                  : { data: [], error: null }
+              ),
+          }),
+        }),
+      }),
+    } as unknown as SupabaseClient;
+    const errorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      const result = await enrichProductPurgeEntries(supabase, 'merchant-1', [
+        { id: 'prod-1', slug: 'buds-pro', previousCategoryId: 'cat-old' },
+      ]);
+
+      expect(result.blogPostSlugsIncomplete).toBe(true);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });

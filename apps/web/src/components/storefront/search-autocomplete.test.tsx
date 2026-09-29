@@ -1073,6 +1073,49 @@ describe('SearchAutocomplete', () => {
     expect(onSubmitSearch).toHaveBeenCalledWith('x');
   });
 
+  it('withholds the empty message while typing a new query after an empty settle', async () => {
+    vi.useRealTimers();
+    const onChange = vi.fn();
+    const onSubmitSearch = vi.fn();
+
+    const { container, rerender } = render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="aa"
+        onChange={onChange}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    // The default mock resolves empty: the genuine message appears.
+    await waitFor(() => {
+      expect(screen.getByText(/no suggestions for/i)).toBeInTheDocument();
+    });
+
+    // Typing a new query leaves the debounced value on A for 200ms. The
+    // popup must not report "No suggestions" for B before B is requested,
+    // visually or via the live region — but the action stays available.
+    fireEvent.change(screen.getByRole('searchbox'), {
+      target: { value: 'bb' },
+    });
+    rerender(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="bb"
+        onChange={onChange}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    expect(screen.queryByText(/no suggestions for/i)).not.toBeInTheDocument();
+    expect(
+      container.querySelector('.sr-only')?.textContent ?? ''
+    ).not.toContain('No results found');
+    expect(
+      screen.getByRole('button', { name: /see all results for “bb”/i })
+    ).toBeInTheDocument();
+  });
+
   it('drops stale options when editing after dismissing the popup', async () => {
     vi.useRealTimers();
     const onChange = vi.fn();

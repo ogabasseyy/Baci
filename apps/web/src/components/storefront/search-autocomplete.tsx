@@ -141,8 +141,12 @@ export function SearchAutocomplete({
   // The empty-state message and its screen-reader announcement share one
   // gate: only a settled successful response may claim there are no
   // suggestions — never the debounce window, a pending request, or a
-  // failure. Queries that never fetch (e.g. one character) stay silent.
-  const hasSuggestionsResponse = settledQuery === debouncedValue;
+  // failure. The settled query must match the RAW input, not just the
+  // debounced one: after A settles empty, typing B leaves debouncedValue
+  // on A for 200ms, and comparing against it would report "No
+  // suggestions" for B before B is even requested. Queries that never
+  // fetch (e.g. one character) stay silent.
+  const hasSuggestionsResponse = settledQuery === value;
 
   useEffect(() => {
     if (!autoFocus) {

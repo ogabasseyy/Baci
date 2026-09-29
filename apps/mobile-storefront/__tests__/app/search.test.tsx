@@ -192,6 +192,62 @@ describe('SearchScreen route', () => {
     );
   });
 
+  it('clears a local search when an invalid route query arrives on a parameterless screen', () => {
+    mockUseLocalSearchParams.mockReturnValue({});
+
+    const { rerender } = render(<SearchScreen />);
+
+    // A locally entered and committed search with no route query behind it.
+    act(() => {
+      mockViewProps.current?.onQueryChange('shoes');
+    });
+    act(() => {
+      jest.advanceTimersByTime(250);
+    });
+    expect(mockViewProps.current).toMatchObject({
+      query: 'shoes',
+      committedQuery: 'shoes',
+    });
+    expect(mockUseProducts).toHaveBeenLastCalledWith(
+      expect.objectContaining({ search: 'shoes', enabled: true })
+    );
+
+    // A deep-link update to a short (invalid) query must clear the local
+    // search even though no route query was ever applied.
+    mockUseLocalSearchParams.mockReturnValue({ q: 'i' });
+    rerender(<SearchScreen />);
+
+    expect(mockViewProps.current).toMatchObject({
+      query: '',
+      committedQuery: '',
+      hasSearchQuery: false,
+    });
+    expect(mockUseProducts).toHaveBeenLastCalledWith(
+      expect.objectContaining({ search: undefined, enabled: false })
+    );
+
+    // Same for a repeated (ambiguous) param after searching locally again.
+    act(() => {
+      mockViewProps.current?.onQueryChange('shoes');
+    });
+    act(() => {
+      jest.advanceTimersByTime(250);
+    });
+    expect(mockViewProps.current).toMatchObject({ committedQuery: 'shoes' });
+
+    mockUseLocalSearchParams.mockReturnValue({ q: ['shoes', 'bags'] });
+    rerender(<SearchScreen />);
+
+    expect(mockViewProps.current).toMatchObject({
+      query: '',
+      committedQuery: '',
+      hasSearchQuery: false,
+    });
+    expect(mockUseProducts).toHaveBeenLastCalledWith(
+      expect.objectContaining({ search: undefined, enabled: false })
+    );
+  });
+
   it('guards the list end event against duplicate fetches', () => {
     const loadMore = jest.fn();
     mockUseLocalSearchParams.mockReturnValue({ q: 'iphone' });

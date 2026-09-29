@@ -27,6 +27,26 @@ function parseRouteSearchQuery(
   return trimmed.length >= MIN_SEARCH_QUERY_LENGTH ? trimmed : null;
 }
 
+/**
+ * Compares raw route params by value (arrays element-wise). A repeated
+ * param and its joined string form are NOT equal: one is ambiguous and
+ * rejected, the other is a searchable query.
+ */
+function isSameRouteParam(
+  a: string | string[] | undefined,
+  b: string | string[] | undefined
+): boolean {
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return (
+      Array.isArray(a) &&
+      Array.isArray(b) &&
+      a.length === b.length &&
+      a.every((value, index) => value === b[index])
+    );
+  }
+  return a === b;
+}
+
 export default function SearchScreen() {
   const colors = Colors[useColorScheme() ?? 'light'];
   const { isOnline } = useNetworkState();
@@ -66,10 +86,17 @@ export default function SearchScreen() {
 
   // Applies a newly arrived route query to an already-mounted screen and
   // records each submitted route query in history exactly once. A transition
-  // to a missing or invalid route param clears the route-owned search state
-  // so stale results never linger on a parameterless route. In-screen edits
+  // to a missing or invalid route param clears the search state so stale
+  // results never linger — keyed off the raw param transition, not just the
+  // last applied query, so locally entered searches also clear when an
+  // invalid param arrives on a parameterless-opened screen. In-screen edits
   // never change the route param, so typing after navigation is safe.
   const appliedRouteQueryRef = useRef<string | null>(null);
+  // The raw param behind the last effect run. Initialized to the mount
+  // value so the first run never counts as a transition.
+  const prevRouteQueryParamRef = useRef<string | string[] | undefined>(
+    routeQueryParam
+  );
   const applyRouteQuery = useEffectEvent((nextQuery: string) => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -89,6 +116,11 @@ export default function SearchScreen() {
   });
   useEffect(() => {
     const nextRouteQuery = parseRouteSearchQuery(routeQueryParam);
+    const rawParamChanged = !isSameRouteParam(
+      prevRouteQueryParamRef.current,
+      routeQueryParam
+    );
+    prevRouteQueryParamRef.current = routeQueryParam;
     if (nextRouteQuery) {
       if (appliedRouteQueryRef.current !== nextRouteQuery) {
         appliedRouteQueryRef.current = nextRouteQuery;
@@ -96,7 +128,11 @@ export default function SearchScreen() {
       }
       return;
     }
-    if (appliedRouteQueryRef.current !== null) {
+    // Missing or invalid route query: clear on a genuine raw transition
+    // (or a previously applied route query) so a locally entered search
+    // never lingers after a deep-link update arrives on a screen that was
+    // opened parameterless. The mount run is never a transition.
+    if (rawParamChanged || appliedRouteQueryRef.current !== null) {
       appliedRouteQueryRef.current = null;
       clearRouteQuery();
     }

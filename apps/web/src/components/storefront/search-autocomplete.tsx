@@ -32,10 +32,22 @@ export function SearchAutocomplete({
 }: SearchAutocompleteProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  // Set by navigation-closing submissions (full-search submit, product
+  // select): the submitted value can reach the debounce after navigation
+  // and start a request that did not exist when the pending one was
+  // cancelled — its results must not reopen the popup over the
+  // destination page. Cleared when the shopper focuses or edits again.
+  const suppressReopenRef = useRef(false);
   // Restarted-request generation (see the render-time restore detection
   // below): reissues a request aborted by transient short input when the
   // same fetchable query comes back within the debounce window.
   const [refetchToken, setRefetchToken] = useState(0);
+  // The fetchable debounced query whose request the short-input reset most
+  // recently aborted (if any). Survives multi-keystroke restorations
+  // ("i" -> "ip" -> ... -> "iphone") that never reproduce the original
+  // transition in a single step; cleared once the query is restored or the
+  // debounced value moves on (a normal fetch then takes over).
+  const [clearedQuery, setClearedQuery] = useState<string | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   // 200ms sits at the responsive end of the 200-400ms typeahead debounce range;
@@ -65,24 +77,30 @@ export function SearchAutocomplete({
     debouncedValue,
     merchantId,
     onResultsReceived: () => {
-      setIsOpen(true);
       setHighlightedIndex(-1);
+      if (!suppressReopenRef.current) {
+        setIsOpen(true);
+      }
     },
     refetchToken,
   });
 
   // Navigation-closing activations (full-search submit, product select)
-  // also cancel the pending suggestion request: persistent consumers (e.g.
-  // the navbar) stay mounted across the navigation, and a late response
-  // would otherwise reopen the popup over the destination page via
-  // onResultsReceived. Dismissals (Escape, outside click) keep close-only
-  // behavior so refocusing restores the retained results.
+  // also cancel the pending suggestion request and suppress result-driven
+  // reopening: persistent consumers (e.g. the navbar) stay mounted across
+  // the navigation, and both a late in-flight response and a fresh
+  // post-submit debounce request (after the submitted value syncs back
+  // into the input) would otherwise reopen the popup over the destination
+  // page via onResultsReceived. Dismissals (Escape, outside click) keep
+  // close-only behavior so refocusing restores the retained results.
   const handleSelectProduct = (url: string) => {
+    suppressReopenRef.current = true;
     clearSuggestions();
     onSelectProduct?.(url);
   };
   const handleSubmitSearch = onSubmitSearch
     ? (query: string) => {
+        suppressReopenRef.current = true;
         clearSuggestions();
         onSubmitSearch(query);
       }
@@ -125,24 +143,31 @@ export function SearchAutocomplete({
   // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
   const [prevValue, setPrevValue] = useState(value);
   if (value !== prevValue) {
-    const wasShort = prevValue.length < 2;
     setPrevValue(value);
     if (value.length < 2) {
       clearSuggestions();
       // The highlight must not outlive its options: the submit popup can
       // stay open for a one-character query after the arrays clear.
       setHighlightedIndex(-1);
+      // Remember which fetchable query lost its request (if any) so its
+      // restoration can restart it (see below).
+      setClearedQuery(debouncedValue.length >= 2 ? debouncedValue : null);
       if (!isPopupLength(value)) {
         setIsOpen(false);
       }
-    } else if (wasShort && value === debouncedValue) {
-      // Restoring the same fetchable query after transient short input
-      // ("iphone" -> "i" -> "iphone" within the debounce window): the
-      // reset above aborted its request but the debounced value never
-      // changed, so restart the request explicitly. Normal typing never
-      // matches — the debounce cannot have committed a value that only
-      // just became fetchable — so this fires on a genuine restore.
+    } else if (
+      clearedQuery !== null &&
+      value === debouncedValue &&
+      debouncedValue === clearedQuery
+    ) {
+      // Restoring the query aborted above ("iphone" -> "i" -> "iphone",
+      // directly or over several keystrokes within the debounce window):
+      // the debounced value never changed, so restart the request
+      // explicitly. Unrelated typing never matches — the value must equal
+      // both the live debounced query and the recorded cleared one — so
+      // this fires only on a genuine restore.
       setRefetchToken((token) => token + 1);
+      setClearedQuery(null);
     }
   }
 
@@ -151,6 +176,9 @@ export function SearchAutocomplete({
   const [prevDebouncedValue, setPrevDebouncedValue] = useState(debouncedValue);
   if (debouncedValue !== prevDebouncedValue) {
     setPrevDebouncedValue(debouncedValue);
+    // The debounced query moved on, so a normal fetch takes over: any
+    // recorded cleared query is stale (its restoration window closed).
+    setClearedQuery(null);
     if (debouncedValue.length < 2) {
       clearSuggestions();
       setHighlightedIndex(-1);
@@ -238,6 +266,9 @@ export function SearchAutocomplete({
           maxLength={maxLength}
           value={value}
           onChange={(e) => {
+            // A genuine edit re-arms result-driven opening after a
+            // navigation-closing submission suppressed it.
+            suppressReopenRef.current = false;
             const nextValue = e.target.value;
             // When the popup is closed (dismissed via Escape or an outside
             // click), the retained arrays still belong to the previous
@@ -262,6 +293,9 @@ export function SearchAutocomplete({
           }}
           onKeyDown={handleKeyDown}
           onFocus={() => {
+            // Refocusing re-arms result-driven opening (and restores any
+            // retained results) after a navigation-closing submission.
+            suppressReopenRef.current = false;
             if (isPopupLength(value)) {
               setIsOpen(true);
             }

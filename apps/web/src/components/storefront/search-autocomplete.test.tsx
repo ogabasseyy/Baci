@@ -1446,4 +1446,288 @@ describe('SearchAutocomplete', () => {
       ).toBeInTheDocument();
     });
   });
+
+  it('restarts the request after a multi-keystroke query restoration', async () => {
+    vi.useRealTimers();
+    const onChange = vi.fn();
+    let resolveJson: (value: unknown) => void = () => undefined;
+    const jsonPromise = new Promise((resolve) => {
+      resolveJson = resolve;
+    });
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => jsonPromise })
+    ) as unknown as typeof fetch;
+    globalThis.fetch = fetchMock;
+
+    const { rerender } = render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="abcd"
+        onChange={onChange}
+        onSubmitSearch={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(vi.mocked(fetchMock)).toHaveBeenCalledTimes(1);
+    });
+
+    // Shorten below two characters (aborts the request), then restore the
+    // same query over several keystrokes without leaving the debounce
+    // window: the debounced value never changes, so only the recorded
+    // cleared query can restart the request.
+    const restoreThrough = (nextValue: string) => {
+      fireEvent.change(screen.getByRole('searchbox'), {
+        target: { value: nextValue },
+      });
+      rerender(
+        <SearchAutocomplete
+          merchantId="merchant-1"
+          value={nextValue}
+          onChange={onChange}
+          onSubmitSearch={vi.fn()}
+        />
+      );
+    };
+    restoreThrough('a');
+    restoreThrough('ab');
+    restoreThrough('abc');
+    restoreThrough('abcd');
+
+    await waitFor(() => {
+      expect(vi.mocked(fetchMock)).toHaveBeenCalledTimes(2);
+    });
+
+    await act(async () => {
+      resolveJson({
+        suggestions: [
+          {
+            id: 'product-1',
+            name: 'Abcd gadget',
+            slug: 'abcd-gadget',
+            category: 'Gadgets',
+            price: 100,
+            image_small: '',
+          },
+        ],
+        popularSearches: [],
+      });
+      await jsonPromise;
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', { name: /abcd gadget/i })
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('keeps a submitted popular term from reopening autocomplete (pointer)', async () => {
+    vi.useRealTimers();
+    const onChange = vi.fn();
+    const onSubmitSearch = vi.fn();
+    let resolveSecond: (value: unknown) => void = () => undefined;
+    const secondJson = new Promise((resolve) => {
+      resolveSecond = resolve;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              suggestions: [],
+              popularSearches: [
+                { search_query: 'galaxy s25', search_count: 42 },
+              ],
+            }),
+        })
+      )
+      .mockImplementation(() =>
+        Promise.resolve({ ok: true, json: () => secondJson })
+      ) as unknown as typeof fetch;
+    globalThis.fetch = fetchMock;
+
+    const { rerender } = render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="iph"
+        onChange={onChange}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', { name: /galaxy s25/i })
+      ).toBeInTheDocument();
+    });
+
+    // Activating the popular option syncs the input, submits (navigating
+    // away on persistent consumers), and closes the popup.
+    fireEvent.click(screen.getByRole('option', { name: /galaxy s25/i }));
+    expect(onChange).toHaveBeenCalledWith('galaxy s25');
+    expect(onSubmitSearch).toHaveBeenCalledWith('galaxy s25');
+    rerender(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="galaxy s25"
+        onChange={onChange}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+    expect(
+      screen.queryByRole('option', { name: /galaxy s25/i })
+    ).not.toBeInTheDocument();
+
+    // The submitted value reaches the debounce after navigation and starts
+    // a request that did not exist when the pending one was cancelled: its
+    // results must not reopen the popup over the destination page.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+    // Successful suggestion fetches also emit an analytics POST, so count
+    // only the autocomplete requests.
+    const autocompleteCalls = () =>
+      vi
+        .mocked(fetchMock)
+        .mock.calls.filter(
+          ([url]) =>
+            typeof url === 'string' &&
+            url.startsWith('/api/search/autocomplete')
+        );
+    await waitFor(() => {
+      expect(autocompleteCalls()).toHaveLength(2);
+    });
+    await act(async () => {
+      resolveSecond({
+        suggestions: [
+          {
+            id: 'product-2',
+            name: 'Galaxy S25',
+            slug: 'galaxy-s25',
+            category: 'Smartphones',
+            price: 800_000,
+            image_small: '',
+          },
+        ],
+        popularSearches: [],
+      });
+      await secondJson;
+    });
+
+    expect(
+      screen.queryByRole('option', { name: /galaxy s25/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /see all results/i })
+    ).not.toBeInTheDocument();
+
+    // Refocusing re-arms opening and shows the stored results.
+    fireEvent.focus(screen.getByRole('searchbox'));
+    expect(
+      screen.getByRole('option', { name: /galaxy s25/i })
+    ).toBeInTheDocument();
+  });
+
+  it('keeps a submitted popular term from reopening autocomplete (keyboard)', async () => {
+    vi.useRealTimers();
+    const onChange = vi.fn();
+    const onSubmitSearch = vi.fn();
+    let resolveSecond: (value: unknown) => void = () => undefined;
+    const secondJson = new Promise((resolve) => {
+      resolveSecond = resolve;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              suggestions: [],
+              popularSearches: [
+                { search_query: 'galaxy s25', search_count: 42 },
+              ],
+            }),
+        })
+      )
+      .mockImplementation(() =>
+        Promise.resolve({ ok: true, json: () => secondJson })
+      ) as unknown as typeof fetch;
+    globalThis.fetch = fetchMock;
+
+    const { rerender } = render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="iph"
+        onChange={onChange}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    const input = screen.getByRole('searchbox');
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', { name: /galaxy s25/i })
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onChange).toHaveBeenCalledWith('galaxy s25');
+    expect(onSubmitSearch).toHaveBeenCalledWith('galaxy s25');
+    rerender(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="galaxy s25"
+        onChange={onChange}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+    expect(
+      screen.queryByRole('option', { name: /galaxy s25/i })
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+    // Successful suggestion fetches also emit an analytics POST, so count
+    // only the autocomplete requests.
+    const autocompleteCalls = () =>
+      vi
+        .mocked(fetchMock)
+        .mock.calls.filter(
+          ([url]) =>
+            typeof url === 'string' &&
+            url.startsWith('/api/search/autocomplete')
+        );
+    await waitFor(() => {
+      expect(autocompleteCalls()).toHaveLength(2);
+    });
+    await act(async () => {
+      resolveSecond({
+        suggestions: [
+          {
+            id: 'product-2',
+            name: 'Galaxy S25',
+            slug: 'galaxy-s25',
+            category: 'Smartphones',
+            price: 800_000,
+            image_small: '',
+          },
+        ],
+        popularSearches: [],
+      });
+      await secondJson;
+    });
+
+    expect(
+      screen.queryByRole('option', { name: /galaxy s25/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /see all results/i })
+    ).not.toBeInTheDocument();
+  });
 });

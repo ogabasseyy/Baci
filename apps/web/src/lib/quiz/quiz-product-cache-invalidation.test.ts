@@ -8,7 +8,10 @@ vi.mock('@/lib/schedule-order-product-blog-purge', () => ({
   scheduleOrderProductBlogPurge: mockScheduleOrderProductBlogPurge,
 }));
 
-import { invalidateQuizProductCaches } from './quiz-product-cache-invalidation';
+import {
+  invalidateQuizProductCaches,
+  resolveQuizSweepWatermarks,
+} from './quiz-product-cache-invalidation';
 
 function createClient(
   reservationRows: unknown[] = [],
@@ -96,7 +99,11 @@ describe('invalidateQuizProductCaches', () => {
   it('schedules linked article purges for changed prize events and expired awards', async () => {
     const client = createClient();
 
-    await invalidateQuizProductCaches(client as never, '2026-09-01T00:00:00Z');
+    await invalidateQuizProductCaches(client as never, {
+      events: '2026-09-01T00:00:00Z',
+      reservations: '2026-09-01T00:00:00Z',
+      awards: '2026-09-01T00:00:00Z',
+    });
 
     expect(mockScheduleOrderProductBlogPurge).toHaveBeenCalledWith({
       merchantId: 'merchant-1',
@@ -116,7 +123,11 @@ describe('invalidateQuizProductCaches', () => {
       { merchant_id: 'merchant-3', product_id: 'product-3' },
     ]);
 
-    await invalidateQuizProductCaches(client as never, '2026-09-01T00:00:00Z');
+    await invalidateQuizProductCaches(client as never, {
+      events: '2026-09-01T00:00:00Z',
+      reservations: '2026-09-01T00:00:00Z',
+      awards: '2026-09-01T00:00:00Z',
+    });
 
     expect(mockScheduleOrderProductBlogPurge).toHaveBeenCalledWith({
       merchantId: 'merchant-3',
@@ -150,7 +161,11 @@ describe('invalidateQuizProductCaches', () => {
       }),
     })) as never;
 
-    await invalidateQuizProductCaches(client as never, '2026-09-01T00:00:00Z');
+    await invalidateQuizProductCaches(client as never, {
+      events: '2026-09-01T00:00:00Z',
+      reservations: '2026-09-01T00:00:00Z',
+      awards: '2026-09-01T00:00:00Z',
+    });
 
     expect(mockScheduleOrderProductBlogPurge).not.toHaveBeenCalled();
   });
@@ -162,7 +177,11 @@ describe('invalidateQuizProductCaches', () => {
     }));
     const client = createClient(reservationRows);
 
-    await invalidateQuizProductCaches(client as never, '2026-09-01T00:00:00Z');
+    await invalidateQuizProductCaches(client as never, {
+      events: '2026-09-01T00:00:00Z',
+      reservations: '2026-09-01T00:00:00Z',
+      awards: '2026-09-01T00:00:00Z',
+    });
 
     const merchantCall = mockScheduleOrderProductBlogPurge.mock.calls.find(
       ([input]) =>
@@ -188,10 +207,11 @@ describe('invalidateQuizProductCaches', () => {
         failReservationsAfterFirstPage: true,
       });
 
-      await invalidateQuizProductCaches(
-        client as never,
-        '2026-09-01T00:00:00Z'
-      );
+      await invalidateQuizProductCaches(client as never, {
+        events: '2026-09-01T00:00:00Z',
+        reservations: '2026-09-01T00:00:00Z',
+        awards: '2026-09-01T00:00:00Z',
+      });
 
       const expectedIds = Array.from(
         { length: 1000 },
@@ -205,7 +225,13 @@ describe('invalidateQuizProductCaches', () => {
       });
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('sweep incomplete'),
-        expect.objectContaining({ changedAfter: '2026-09-01T00:00:00Z' })
+        expect.objectContaining({
+          watermarks: {
+            events: '2026-09-01T00:00:00Z',
+            reservations: '2026-09-01T00:00:00Z',
+            awards: '2026-09-01T00:00:00Z',
+          },
+        })
       );
     } finally {
       warnSpy.mockRestore();
@@ -221,10 +247,11 @@ describe('invalidateQuizProductCaches', () => {
         expiredEventsError: { message: 'owner lookup down' },
       });
 
-      await invalidateQuizProductCaches(
-        client as never,
-        '2026-09-01T00:00:00Z'
-      );
+      await invalidateQuizProductCaches(client as never, {
+        events: '2026-09-01T00:00:00Z',
+        reservations: '2026-09-01T00:00:00Z',
+        awards: '2026-09-01T00:00:00Z',
+      });
 
       // The unmapped awards cannot be attributed, so the collected
       // merchants escalate to the conservative hostname fallback.
@@ -233,7 +260,13 @@ describe('invalidateQuizProductCaches', () => {
       );
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('sweep incomplete'),
-        expect.objectContaining({ changedAfter: '2026-09-01T00:00:00Z' })
+        expect.objectContaining({
+          watermarks: {
+            events: '2026-09-01T00:00:00Z',
+            reservations: '2026-09-01T00:00:00Z',
+            awards: '2026-09-01T00:00:00Z',
+          },
+        })
       );
     } finally {
       warnSpy.mockRestore();
@@ -251,7 +284,11 @@ describe('invalidateQuizProductCaches', () => {
     }));
     const client = createClient(reservationRows);
 
-    await invalidateQuizProductCaches(client as never, '2026-09-01T00:00:00Z');
+    await invalidateQuizProductCaches(client as never, {
+      events: '2026-09-01T00:00:00Z',
+      reservations: '2026-09-01T00:00:00Z',
+      awards: '2026-09-01T00:00:00Z',
+    });
 
     for (const table of [
       'quiz_events',
@@ -269,5 +306,135 @@ describe('invalidateQuizProductCaches', () => {
     expect(
       (merchantCall?.[0] as { productIds?: string[] })?.productIds
     ).toHaveLength(1001);
+  });
+
+  it('delivers merchant purges in bounded-concurrency chunks', async () => {
+    // Six merchants, five per chunk: the first chunk must all be in flight
+    // before any of them resolves (no serial 5s-each delivery under the
+    // worker SIGTERM budget), and the sixth waits for the next chunk.
+    const reservationRows = Array.from({ length: 4 }, (_, index) => ({
+      merchant_id: `merchant-${index + 3}`,
+      product_id: `product-${index + 3}`,
+    }));
+    const client = createClient(reservationRows);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mockScheduleOrderProductBlogPurge.mockImplementation(() => gate);
+    try {
+      const run = invalidateQuizProductCaches(client as never, {
+        events: '2026-09-01T00:00:00Z',
+        reservations: '2026-09-01T00:00:00Z',
+        awards: '2026-09-01T00:00:00Z',
+      });
+
+      await vi.waitFor(() =>
+        expect(mockScheduleOrderProductBlogPurge).toHaveBeenCalledTimes(5)
+      );
+      // Chunk two has not started while chunk one is still in flight.
+      expect(mockScheduleOrderProductBlogPurge).toHaveBeenCalledTimes(5);
+      release();
+      await run;
+      expect(mockScheduleOrderProductBlogPurge).toHaveBeenCalledTimes(6);
+    } finally {
+      mockScheduleOrderProductBlogPurge.mockReset();
+    }
+  });
+});
+
+describe('resolveQuizSweepWatermarks', () => {
+  function probeClient(
+    maxima: Partial<
+      Record<
+        'quiz_awards' | 'quiz_events' | 'quiz_prize_reservations',
+        string | null
+      >
+    >
+  ) {
+    return {
+      from: vi.fn((table: string) => {
+        const builder: Record<string, unknown> = {};
+        builder.select = vi.fn(() => builder);
+        builder.not = vi.fn(() => builder);
+        builder.order = vi.fn(() => builder);
+        builder.limit = vi.fn(() => {
+          const max = maxima[table as keyof typeof maxima] ?? null;
+          return Promise.resolve({
+            data:
+              max === null || max === undefined
+                ? []
+                : [
+                    {
+                      updated_at: max,
+                      expired_at: max,
+                    },
+                  ],
+            error: null,
+          });
+        });
+        return builder;
+      }),
+    };
+  }
+
+  it('takes each floor from the database clock, not the worker clock', async () => {
+    // Database behind the worker: rows the RPCs just wrote carry
+    // timestamps older than worker-now. A worker-derived watermark would
+    // silently skip them; the probed maxima keep them covered.
+    const client = probeClient({
+      quiz_events: '2026-09-01T00:00:00Z',
+      quiz_prize_reservations: '2026-09-01T00:00:01Z',
+      quiz_awards: '2026-09-01T00:00:02Z',
+    });
+
+    const watermarks = await resolveQuizSweepWatermarks(
+      client as never,
+      '2026-09-01T00:05:00Z'
+    );
+
+    expect(watermarks).toEqual({
+      events: '2026-09-01T00:00:00Z',
+      reservations: '2026-09-01T00:00:01Z',
+      awards: '2026-09-01T00:00:02Z',
+    });
+  });
+
+  it('falls back to an overlapped worker floor when probes fail or are empty', async () => {
+    const failing = {
+      from: vi.fn(() => {
+        throw new Error('probe down');
+      }),
+    };
+
+    const watermarks = await resolveQuizSweepWatermarks(
+      failing as never,
+      '2026-09-01T00:05:00Z'
+    );
+
+    // Worker start minus the 2-minute skew margin: bounded over-sweep
+    // instead of a silent skip.
+    expect(watermarks).toEqual({
+      events: '2026-09-01T00:03:00.000Z',
+      reservations: '2026-09-01T00:03:00.000Z',
+      awards: '2026-09-01T00:03:00.000Z',
+    });
+  });
+
+  it('falls back per table, keeping successful probes exact', async () => {
+    const client = probeClient({
+      quiz_events: '2026-09-01T00:00:00Z',
+    });
+
+    const watermarks = await resolveQuizSweepWatermarks(
+      client as never,
+      '2026-09-01T00:05:00Z'
+    );
+
+    expect(watermarks).toEqual({
+      events: '2026-09-01T00:00:00Z',
+      reservations: '2026-09-01T00:03:00.000Z',
+      awards: '2026-09-01T00:03:00.000Z',
+    });
   });
 });

@@ -5,8 +5,10 @@ const mockScheduleStorefrontProductPurge = vi.fn();
 const mockScheduleStorefrontHostnamePurge = vi.fn();
 const mockExpireProductBlogCacheReliable = vi.fn().mockResolvedValue(true);
 const mockRevalidateSlugs = vi.fn();
+const mockRevalidateProducts = vi.fn();
 vi.mock('@/lib/cache-revalidation', () => ({
   revalidateProductSlugs: (...args: unknown[]) => mockRevalidateSlugs(...args),
+  revalidateProducts: (...args: unknown[]) => mockRevalidateProducts(...args),
 }));
 
 vi.mock('@/lib/authoritative-product-purge-enrichment', () => ({
@@ -90,6 +92,9 @@ describe('scheduleOrderProductBlogPurge', () => {
       'merchant-1',
       { productSlugs: ['iphone-15'] }
     );
+    // Resolved slugs get exact scoped busts; the broad hard-expire is
+    // reserved for the unknown-slug rejection path.
+    expect(mockRevalidateProducts).not.toHaveBeenCalled();
   });
 
   it('resolves the merchant slug before purging when the caller has no slug', async () => {
@@ -198,6 +203,15 @@ describe('scheduleOrderProductBlogPurge', () => {
       expect(mockRevalidateSlugs).toHaveBeenCalledWith(
         'merchant-1',
         ['product-1'],
+        { expireImmediately: true }
+      );
+      // The canonical slugs are unknown, so the id-scoped bust above cannot
+      // reach the slug-tagged outer PDP entries: the broad merchant tags
+      // (incl. `product-details`) are hard-expired so the first post-purge
+      // request cannot refill the edge from a stale snapshot.
+      expect(mockRevalidateProducts).toHaveBeenCalledWith(
+        'merchant-1',
+        undefined,
         { expireImmediately: true }
       );
       expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();

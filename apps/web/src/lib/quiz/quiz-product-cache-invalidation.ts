@@ -4,8 +4,95 @@ import type { Database } from '@/types/supabase';
 
 const QUIZ_CACHE_TARGET_BATCH_LIMIT = 1000;
 const QUIZ_EVENT_ID_CHUNK_SIZE = 100;
+/**
+ * Merchants purged concurrently per delivery chunk. Each purge can spend up
+ * to ~5s in the standalone-worker HTTP fallback, and the deployed worker is
+ * SIGTERMed after 50s with no delivery cursor — serial delivery would let
+ * ten slow merchants kill the run before later merchants are visited, and
+ * the next run's fresh watermarks would never revisit them. Five-way chunks
+ * bound ten slow merchants to ~10s while keeping DB/HTTP fan-out modest.
+ */
+const QUIZ_PURGE_MERCHANT_CONCURRENCY = 5;
+/**
+ * Overlap applied when a watermark probe fails: the worker and database
+ * clocks can disagree, so a worker-derived fallback floor looks this far
+ * back to avoid skipping rows the failed probe would have covered.
+ */
+const QUIZ_SWEEP_CLOCK_SKEW_MARGIN_MS = 2 * 60 * 1000;
 
 type QuizClient = SupabaseClient<Database>;
+
+/** Per-table sweep floors, all in the database clock domain when probed. */
+export interface QuizSweepWatermarks {
+  /** `quiz_events.updated_at` sweep floor. */
+  events: string;
+  /** `quiz_prize_reservations.updated_at` sweep floor. */
+  reservations: string;
+  /** `quiz_awards.expired_at` sweep floor. */
+  awards: string;
+}
+
+async function probeTableMaxTimestamp(
+  client: QuizClient,
+  table: 'quiz_awards' | 'quiz_events' | 'quiz_prize_reservations',
+  column: 'expired_at' | 'updated_at'
+): Promise<string | null> {
+  try {
+    // Dynamic table/column union the generated types cannot express; the
+    // result is validated below and any miss falls back to the overlapped
+    // worker floor.
+    const loose = client as unknown as SupabaseClient;
+    let query = loose.from(table).select(column);
+    if (column === 'expired_at') {
+      query = query.not(column, 'is', null);
+    }
+    const { data, error } = await query
+      .order(column, { ascending: false })
+      .limit(1);
+    if (error) return null;
+    const rows = (data ?? []) as Record<string, unknown>[];
+    const value = rows[0]?.[column];
+    if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) {
+      return null;
+    }
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve per-table sweep watermarks from the database clock. The worker
+ * clock can run ahead of the database clock, in which case a worker-derived
+ * watermark is newer than the `clock_timestamp()` values the finalization
+ * RPCs just wrote — the `.gte()` sweeps would omit this run's rows, and the
+ * next run's even newer watermark would never revisit them. Probing each
+ * table's current maximum keeps every watermark in the same clock domain as
+ * the column it filters (a separate floor per table also avoids one quiet
+ * table dragging the shared floor into a full re-sweep). A failed or empty
+ * probe falls back to the worker start minus an overlap margin: bounded
+ * over-invalidation instead of a silent skip.
+ */
+export async function resolveQuizSweepWatermarks(
+  client: QuizClient,
+  fallbackBaseIso: string
+): Promise<QuizSweepWatermarks> {
+  const fallbackBase = Date.parse(fallbackBaseIso);
+  const fallback = new Date(
+    (Number.isNaN(fallbackBase) ? Date.now() : fallbackBase) -
+      QUIZ_SWEEP_CLOCK_SKEW_MARGIN_MS
+  ).toISOString();
+  const [events, reservations, awards] = await Promise.all([
+    probeTableMaxTimestamp(client, 'quiz_events', 'updated_at'),
+    probeTableMaxTimestamp(client, 'quiz_prize_reservations', 'updated_at'),
+    probeTableMaxTimestamp(client, 'quiz_awards', 'expired_at'),
+  ]);
+  return {
+    events: events ?? fallback,
+    reservations: reservations ?? fallback,
+    awards: awards ?? fallback,
+  };
+}
 
 interface QuizEventCacheRow {
   id?: unknown;
@@ -62,11 +149,11 @@ interface QuizCacheTargetPage<T> {
 
 /**
  * Drain a bounded target sweep across pages. The next worker iteration uses
- * a new `changedAfter` timestamp, so rows truncated by a single limited
- * query would never be revisited; pagination keeps every changed row
- * covered. A mid-sweep failure keeps the pages already collected but flags
- * the sweep incomplete — the run must conservatively invalidate instead of
- * treating the partial set as complete.
+ * new watermark floors, so rows truncated by a single limited query would
+ * never be revisited; pagination keeps every changed row covered. A
+ * mid-sweep failure keeps the pages already collected but flags the sweep
+ * incomplete — the run must conservatively invalidate instead of treating
+ * the partial set as complete.
  */
 async function collectQuizCacheTargetRows<T>(
   fetchPage: (from: number, to: number) => PromiseLike<QuizCacheTargetPage<T>>
@@ -101,7 +188,7 @@ async function collectQuizCacheTargetRows<T>(
  */
 export async function invalidateQuizProductCaches(
   client: QuizClient,
-  changedAfter: string
+  watermarks: QuizSweepWatermarks
 ): Promise<void> {
   if (typeof (client as { from?: unknown }).from !== 'function') return;
 
@@ -115,7 +202,7 @@ export async function invalidateQuizProductCaches(
         client
           .from('quiz_events')
           .select('id, merchant_id, settings')
-          .gte('updated_at', changedAfter)
+          .gte('updated_at', watermarks.events)
           .order('updated_at', { ascending: true })
           .order('id', { ascending: true })
           .range(from, to)
@@ -147,7 +234,7 @@ export async function invalidateQuizProductCaches(
         client
           .from('quiz_prize_reservations')
           .select('merchant_id, product_id')
-          .gte('updated_at', changedAfter)
+          .gte('updated_at', watermarks.reservations)
           .order('updated_at', { ascending: true })
           .order('id', { ascending: true })
           .range(from, to)
@@ -169,7 +256,7 @@ export async function invalidateQuizProductCaches(
           .from('quiz_awards')
           .select('event_id, product_id')
           .not('expired_at', 'is', null)
-          .gte('expired_at', changedAfter)
+          .gte('expired_at', watermarks.awards)
           .order('expired_at', { ascending: true })
           .order('id', { ascending: true })
           .range(from, to)
@@ -197,7 +284,7 @@ export async function invalidateQuizProductCaches(
     ) {
       // Expired awards are absent from the `updated_at` event sweep (the
       // expiry RPC touches quiz_awards only), so an unmapped owner chunk
-      // would drop its awards forever once `changedAfter` advances. Retry
+      // would drop its awards forever once the watermarks advance. Retry
       // once, then mark the run incomplete so collected merchants still
       // escalate to the hostname fallback.
       let ownerRows: QuizEventCacheRow[] | null = null;
@@ -251,19 +338,34 @@ export async function invalidateQuizProductCaches(
     // hostname fallback instead of purging a partial product set.
     console.warn(
       'Quiz product cache sweep incomplete; escalating collected merchants to hostname purge',
-      { changedAfter }
+      { watermarks }
     );
   }
-  for (const [merchantId, productIds] of productIdsByMerchant) {
-    try {
-      await scheduleOrderProductBlogPurge({
-        merchantId,
-        productIds: Array.from(productIds),
-        supabase: client,
-        ...(sweepIncomplete ? { targetSweepIncomplete: true } : {}),
-      });
-    } catch {
-      // The quiz RPC already completed; edge eviction remains best effort.
-    }
+  // Deliver in bounded-concurrency chunks: the worker has a 50s SIGTERM
+  // budget and no delivery cursor, so serial per-merchant purges could die
+  // with later merchants permanently unvisited. Each merchant is still
+  // individually best-effort — a rejection never fails its chunk-mates.
+  const merchantTargets = Array.from(productIdsByMerchant);
+  for (
+    let start = 0;
+    start < merchantTargets.length;
+    start += QUIZ_PURGE_MERCHANT_CONCURRENCY
+  ) {
+    await Promise.all(
+      merchantTargets
+        .slice(start, start + QUIZ_PURGE_MERCHANT_CONCURRENCY)
+        .map(async ([merchantId, productIds]) => {
+          try {
+            await scheduleOrderProductBlogPurge({
+              merchantId,
+              productIds: Array.from(productIds),
+              supabase: client,
+              ...(sweepIncomplete ? { targetSweepIncomplete: true } : {}),
+            });
+          } catch {
+            // The quiz RPC already completed; edge eviction stays best effort.
+          }
+        })
+    );
   }
 }

@@ -1,6 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { enrichProductPurgeEntries } from '@/lib/authoritative-product-purge-enrichment';
-import { revalidateProductSlugs } from '@/lib/cache-revalidation';
+import {
+  revalidateProductSlugs,
+  revalidateProducts,
+} from '@/lib/cache-revalidation';
 import { expireProductBlogCacheReliable } from '@/lib/expire-product-blog-cache-reliable';
 import {
   buildInternalProductPurgeEntries,
@@ -76,6 +79,11 @@ export async function scheduleOrderProductBlogPurge({
     // a broken client): the caller-supplied ids still name the affected
     // products, so continue with hint entries and unknown purge scope — the
     // hostname fallback below covers the unresolved article/product URLs.
+    // The canonical slugs are unknown here, so the id-scoped hard-expiry at
+    // the call below cannot reach the slug-tagged outer PDP entries: hard-
+    // expire the broad merchant product tags (incl. `product-details`) so
+    // the first post-purge request cannot refill the edge from a stale
+    // snapshot that preceding callers only stale-while-revalidated.
     console.warn(
       'Order-related product enrichment failed; continuing with caller hints',
       { merchantId, error }
@@ -84,6 +92,7 @@ export async function scheduleOrderProductBlogPurge({
     blogPostSlugs = [];
     blogPostSlugsIncomplete = true;
     slugs = collectResolvedProductSlugs(products);
+    revalidateProducts(merchantId, undefined, { expireImmediately: true });
   }
   if (entries.length === 0) {
     return;

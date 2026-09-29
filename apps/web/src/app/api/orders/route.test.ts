@@ -3748,6 +3748,34 @@ describe('POST /api/orders — product cache revalidation after order creation',
   });
 
   it('revalidates the merchant product caches once after a successful order', async () => {
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(() => {
+      const supabase = buildMockSupabase();
+      const originalFrom = supabase.from;
+      supabase.from = vi.fn((table: string) => {
+        const original = originalFrom(table);
+        if (table !== 'products') {
+          return original;
+        }
+        // Success path: the enrichment lookup resolves (no rows), so the
+        // rejection-only broad hard-expire below must not fire.
+        const enrichmentOutcome = Promise.resolve({
+          data: [],
+          error: null,
+        });
+        const select = vi.fn((columns: string) => {
+          if (columns.startsWith('id, slug, name')) {
+            return {
+              eq: vi.fn(() => ({ in: vi.fn(() => enrichmentOutcome) })),
+            };
+          }
+          return original.select(columns);
+        });
+        return { ...original, select };
+      });
+      return supabase as unknown as never;
+    });
+
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
@@ -3796,18 +3824,32 @@ describe('POST /api/orders — product cache revalidation after order creation',
         // The cache-revalidation lookup selects the compact id/slug/policy
         // projection; the pre-existing tax/negotiation product lookup selects
         // other columns and must keep resolving via the default chain.
-        const select = vi.fn((columns: string) =>
-          columns.startsWith('id, slug, manage_stock')
-            ? {
-                eq: vi.fn().mockReturnThis(),
-                in: vi.fn().mockReturnThis(),
-                returns: vi.fn().mockResolvedValue({
-                  data: null,
-                  error: { message: 'db down' },
-                }),
-              }
-            : original.select(columns)
-        );
+        // The enrichment lookup (long projection) fails the same way — a db
+        // outage affects both reads — so it resolves a realistic `{ error }`
+        // instead of the default chain's bare-await undefined: enrichment
+        // fails open to caller hints without rejecting.
+        const enrichmentOutcome = Promise.resolve({
+          data: null,
+          error: { message: 'db down' },
+        });
+        const select = vi.fn((columns: string) => {
+          if (columns.startsWith('id, slug, manage_stock')) {
+            return {
+              eq: vi.fn().mockReturnThis(),
+              in: vi.fn().mockReturnThis(),
+              returns: vi.fn().mockResolvedValue({
+                data: null,
+                error: { message: 'db down' },
+              }),
+            };
+          }
+          if (columns.startsWith('id, slug, name')) {
+            return {
+              eq: vi.fn(() => ({ in: vi.fn(() => enrichmentOutcome) })),
+            };
+          }
+          return original.select(columns);
+        });
         return { ...original, select };
       });
       return supabase as unknown as never;

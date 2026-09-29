@@ -34,6 +34,13 @@ vi.mock('@/lib/supabase/public', () => ({
   createClient: (...args: unknown[]) => mockCreatePublicClient(...args),
 }));
 
+// The article-URL lookup has its own suite; these route tests pin the purge
+// scheduling around it, so resolve an empty complete set here.
+vi.mock('@/lib/get-published-blog-post-slugs-for-products', () => ({
+  getPublishedBlogPostSlugsForProducts: () =>
+    Promise.resolve({ slugs: [], incomplete: false }),
+}));
+
 import { POST } from './route';
 
 /**

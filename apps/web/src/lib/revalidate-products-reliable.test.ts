@@ -198,11 +198,13 @@ describe('revalidateProductsReliable', () => {
     });
 
     // Per-slug invalidation for the caller-resolved slug + id (no store client
-    // here to resolve authoritative rows).
-    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith('merchant-1', [
-      'iphone-15',
-      'prod-1',
-    ]);
+    // here to resolve authoritative rows), hard-expired because the in-process
+    // edge purge follows and SWR must not re-seed it.
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      ['iphone-15', 'prod-1'],
+      { expireImmediately: true }
+    );
     // Ordering: the Next per-slug tags are busted before the edge purge is
     // scheduled, so a CF MISS cannot refill from stale Next data.
     expect(mockRevalidateProductSlugs.mock.invocationCallOrder[0]).toBeLessThan(

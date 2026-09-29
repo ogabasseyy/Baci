@@ -3822,7 +3822,14 @@ describe('POST /api/orders — product cache revalidation after order creation',
 
     expect(response.status).toBe(201);
     expect(mockRevalidateProducts).toHaveBeenCalledExactlyOnceWith(MERCHANT_ID);
-    expect(mockRevalidateProductSlugs).not.toHaveBeenCalled();
+    // Fail-closed: the route-level slug lookup failed, but the known-ids blog
+    // purge fallback still hard-expires the per-slug Next tags from the caller
+    // hints so a later edge purge cannot refill from stale snapshots.
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledExactlyOnceWith(
+      MERCHANT_ID,
+      ['p-1'],
+      { expireImmediately: true }
+    );
     expect(logger.error).toHaveBeenCalledWith(
       expect.objectContaining({
         message: 'Failed to resolve product slugs for PDP cache revalidation',

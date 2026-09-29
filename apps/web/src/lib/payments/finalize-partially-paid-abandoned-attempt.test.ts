@@ -171,13 +171,9 @@ describe('finalizePartiallyPaidAbandonedAttempt', () => {
     expect(h.summary.completed).toEqual([]);
   });
 
-  it('forwards the remaining deadline to the finalizer', async () => {
+  it('holds when only part of the sender budget remains', async () => {
     const h = harness();
-    finalize.mockResolvedValue({
-      healed: false,
-      kind: 'completed',
-      orderNumber: 'ORD-1',
-    });
+    finalize.mockResolvedValue({ kind: 'completed' });
 
     await finalizePartiallyPaidAbandonedAttempt({
       ...h,
@@ -186,8 +182,37 @@ describe('finalizePartiallyPaidAbandonedAttempt', () => {
       providerData: {},
     });
 
+    // 60s clears the old 20s check but not the full 135s four-attempt
+    // sender budget: starting finalize would abort mid-send into a
+    // completed-unknown email instead of holding for the next sweep.
+    expect(finalize).not.toHaveBeenCalled();
+    expect(h.hold).toHaveBeenCalledWith('finalize_budget_exhausted');
+    expect(h.summary.failed).toBe(false);
+  });
+
+  it('forwards the remaining deadline to the finalizer', async () => {
+    const h = harness();
+    finalize.mockResolvedValue({
+      healed: false,
+      kind: 'completed',
+      orderNumber: 'ORD-1',
+    });
+    const deadlineMs = Date.now() + 200_000;
+
+    await finalizePartiallyPaidAbandonedAttempt({
+      ...h,
+      attempt,
+      deadlineMs,
+      providerData: {},
+    });
+
+    // 200s clears the full 135s four-attempt sender budget; the
+    // platform-sender fallback shares the signal's 10s buffer.
     expect(finalize).toHaveBeenCalledWith(
-      expect.objectContaining({ signal: expect.any(AbortSignal) })
+      expect.objectContaining({
+        fallbackDeadlineMs: deadlineMs - 10_000,
+        signal: expect.any(AbortSignal),
+      })
     );
     expect(h.summary.completed).toEqual(['attempt-1']);
   });
@@ -204,13 +229,15 @@ describe('finalizePartiallyPaidAbandonedAttempt', () => {
         })
       );
 
+      // 150s clears the full 135s sender budget, so the
+      // never-settling finalize is what the race must stop waiting for.
       const pending = finalizePartiallyPaidAbandonedAttempt({
         ...h,
         attempt,
-        deadlineMs: 1_121_000,
+        deadlineMs: 1_250_000,
         providerData: {},
       });
-      await vi.advanceTimersByTimeAsync(11_000);
+      await vi.advanceTimersByTimeAsync(151_000);
       await pending;
 
       expect(h.hold).toHaveBeenCalledWith('finalize_deadline_exceeded');

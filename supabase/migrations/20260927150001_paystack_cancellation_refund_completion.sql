@@ -17,6 +17,10 @@ CREATE TABLE public.paystack_cancellation_refund_notifications (
   last_error text,
   created_at timestamptz NOT NULL DEFAULT now(),
   sent_at timestamptz,
+  -- Contradiction generation: a failure recorded while a worker holds
+  -- this row bumps it, so the worker's finish detects the fresh
+  -- evidence and requeues instead of concluding on a stale read.
+  generation integer NOT NULL DEFAULT 0,
   UNIQUE (order_id, event_type)
 );
 

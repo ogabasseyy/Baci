@@ -1,4 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  resolveContradictoryRefundFailure: vi.fn(),
+}));
+
+vi.mock('./resolve-contradictory-refund-failure', () => ({
+  resolveContradictoryRefundFailure: mocks.resolveContradictoryRefundFailure,
+}));
+
 import { drainPaystackRefundNotifications } from './drain-paystack-refund-notifications';
 import { database } from './drain-paystack-refund-notifications.test-support';
 
@@ -74,6 +83,58 @@ describe('refund notification cron deadline', () => {
         status: 'failed',
       })
     );
+  });
+
+  it('requeues cleanly when a failure lands mid-claim', async () => {
+    mocks.resolveContradictoryRefundFailure.mockResolvedValue(false);
+    const db = database('failed_merchant_push');
+    const sendEmail = vi.fn().mockResolvedValue({ success: true });
+    const sendPush = vi.fn().mockResolvedValue({
+      errors: [],
+      failed: 0,
+      sent: 1,
+    });
+    // The finish misses (a concurrent failure bumped the generation
+    // after this worker concluded); the requeue lands.
+    db.finish.maybeSingle
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({ data: { id: 'notification-1' }, error: null });
+
+    const result = await drainPaystackRefundNotifications(
+      db as never,
+      sendEmail,
+      1,
+      sendPush
+    );
+
+    // The stale conclusion is discarded without counting a failure:
+    // the next sweep re-evaluates with the fresh contradiction.
+    expect(result).toEqual({ claimed: 1, sent: 0, failed: 0, exhausted: 0 });
+    expect(db.finish.update).toHaveBeenCalledTimes(2);
+    expect(db.finish.update).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        claim_token: null,
+        last_error: null,
+        status: 'pending',
+      })
+    );
+  });
+
+  it('counts a failure when neither finish nor requeue lands', async () => {
+    const db = database('processed_customer_email');
+    const sendEmail = vi.fn().mockResolvedValue({ success: true });
+    db.finish.maybeSingle.mockResolvedValue({ data: null, error: null });
+
+    const result = await drainPaystackRefundNotifications(
+      db as never,
+      sendEmail,
+      1,
+      undefined
+    );
+
+    expect(result).toEqual({ claimed: 1, sent: 0, failed: 1, exhausted: 0 });
+    expect(db.finish.update).toHaveBeenCalledTimes(2);
   });
 
   it('refuses the merchant-email fallback after push consumed the sender budget', async () => {

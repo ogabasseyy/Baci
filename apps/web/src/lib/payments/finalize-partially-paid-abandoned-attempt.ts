@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail';
 import { assertRefundNotificationSendTime } from './assert-refund-notification-send-time';
 import { awaitRefundNotificationDeadline } from './await-refund-notification-deadline';
 import { fileDuplicatePaymentCapture } from './file-duplicate-payment-capture';
@@ -63,12 +64,18 @@ export async function finalizePartiallyPaidAbandonedAttempt({
       return;
     }
   }
-  // Reserve budget before starting finalize: verification may have
-  // consumed the pass, and finalize would spend the paid-email retry
-  // budget past the deadline, starving the later passes. The held row
-  // retries on the next sweep without failing this one.
+  // Reserve the full paid-email retry budget before starting finalize:
+  // verification may have consumed the pass, and the default 20s check
+  // would admit a pass too short for the uncapped four-attempt sender
+  // loop — the finalize signal would then abort mid-send and strand
+  // the customer confirmation as completed-unknown instead of holding
+  // the row for the next sweep. The held row retries without failing
+  // this one.
   try {
-    assertRefundNotificationSendTime(deadlineMs);
+    assertRefundNotificationSendTime(
+      deadlineMs,
+      zeptomailSendAdmissionBudgetMs()
+    );
   } catch {
     await hold('finalize_budget_exhausted');
     return;
@@ -101,6 +108,11 @@ export async function finalizePartiallyPaidAbandonedAttempt({
     outcome = await awaitRefundNotificationDeadline(
       finalizePayment({
         actor: 'cron:reconcile-gateway-paid-orders',
+        // Match the signal's 10s buffer: the platform-sender fallback
+        // declines unless its own attempt fits before the cutoff.
+        ...(deadlineMs !== undefined && {
+          fallbackDeadlineMs: deadlineMs - 10_000,
+        }),
         gateway: 'paystack',
         gatewayResponse: providerData,
         orderId: attempt.order_id,

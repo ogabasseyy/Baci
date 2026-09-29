@@ -48,7 +48,10 @@ describe('resolveContradictoryRefundFailure', () => {
             currency: 'NGN',
             gateway: 'paystack',
             id: 'refund-2',
-            metadata: { payment_transaction_id: 'payment-1' },
+            metadata: {
+              payment_transaction_id: 'payment-1',
+              provider_refund_status: 'processed',
+            },
           },
         ],
         error: null,
@@ -108,7 +111,10 @@ describe('resolveContradictoryRefundFailure', () => {
                 currency: 'NGN',
                 gateway: 'paystack',
                 id: 'refund-2',
-                metadata: { payment_transaction_id: 'payment-2' },
+                metadata: {
+                  payment_transaction_id: 'payment-2',
+                  provider_refund_status: 'processed',
+                },
               },
             ],
             error: null,
@@ -188,7 +194,10 @@ describe('resolveContradictoryRefundFailure', () => {
                 currency: 'NGN',
                 gateway: 'paystack',
                 id: 'refund-2',
-                metadata: { payment_transaction_id: 'payment-1' },
+                metadata: {
+                  payment_transaction_id: 'payment-1',
+                  provider_refund_status: 'processed',
+                },
               },
             ],
             error: null,
@@ -270,6 +279,125 @@ describe('resolveContradictoryRefundFailure', () => {
       expect.objectContaining({ transactions: [] })
     );
     expect(from).toHaveBeenCalledTimes(2);
+  });
+
+  it('files when the only replacement is not provider-verified', async () => {
+    const failedRows = [
+      {
+        amount: 100,
+        created_at: '2026-09-27T12:00:00Z',
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: 'RFD-1',
+        id: 'refund-1',
+        metadata: {
+          payment_transaction_id: 'payment-1',
+          provider_refund_status: 'failed',
+        },
+      },
+    ];
+    const legs = [
+      {
+        amount: 100,
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: 'PSK-1',
+        id: 'payment-1',
+      },
+    ];
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(chain({ data: failedRows, error: null }, 'limit'))
+      .mockReturnValueOnce(
+        chain(
+          {
+            data: [
+              {
+                amount: 100,
+                created_at: '2026-09-27T13:00:00Z',
+                currency: 'NGN',
+                gateway: 'paystack',
+                id: 'refund-2',
+                // Locally completed but never provider-verified:
+                // Paystack may yet reject it, so it cannot suppress
+                // the failure alert.
+                metadata: { payment_transaction_id: 'payment-1' },
+              },
+            ],
+            error: null,
+          },
+          'limit'
+        )
+      )
+      .mockReturnValueOnce(chain({ data: legs, error: null }, 'in'));
+
+    await expect(
+      resolveContradictoryRefundFailure({ from } as never, row, order)
+    ).resolves.toBe(false);
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          contradictory_refund_failure: true,
+        }),
+      })
+    );
+  });
+
+  it('scans past the first page before declaring every leg covered', async () => {
+    const page1 = Array.from({ length: 50 }, (_, index) => ({
+      amount: 10,
+      created_at: '2026-09-27T10:00:00Z',
+      currency: 'NGN',
+      gateway: 'paystack',
+      gateway_reference: `RFD-P1-${index}`,
+      id: `refund-p1-${String(index).padStart(2, '0')}`,
+      metadata: {
+        payment_transaction_id: 'payment-9',
+        provider_refund_status: 'processed',
+      },
+    }));
+    const uncovered = {
+      amount: 100,
+      created_at: '2026-09-27T12:00:00Z',
+      currency: 'NGN',
+      gateway: 'paystack',
+      gateway_reference: 'RFD-99',
+      id: 'refund-99',
+      metadata: {
+        payment_transaction_id: 'payment-1',
+        provider_refund_status: 'failed',
+      },
+    };
+    const legs = [
+      {
+        amount: 100,
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: 'PSK-1',
+        id: 'payment-1',
+      },
+    ];
+    const refundsPage2 = chain({ data: [uncovered], error: null }, 'limit');
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(chain({ data: page1, error: null }, 'limit'))
+      .mockReturnValueOnce(refundsPage2)
+      .mockReturnValueOnce(chain({ data: [], error: null }, 'limit'))
+      .mockReturnValueOnce(chain({ data: legs, error: null }, 'in'));
+
+    await expect(
+      resolveContradictoryRefundFailure({ from } as never, row, order)
+    ).resolves.toBe(false);
+    // A newest-N cap would omit the older uncovered failure while the
+    // included rows all look settled; the keyset scan reaches it.
+    expect(refundsPage2.gt).toHaveBeenCalledWith('id', 'refund-p1-49');
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          failed_refund_ids: ['refund-99'],
+        }),
+      })
+    );
   });
 
   it('retries when the replacement lookup fails', async () => {

@@ -2,10 +2,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { DISCOVERY_PRODUCT_PROJECTION } from './discovery-product-projection';
 import { inferSmartphoneCategory } from './infer-smartphone-category';
 import { hydrateSearchProductAvailability } from './search-product-availability';
+import { matchesDiscoveryProductIntent } from './matches-discovery-product-intent';
 import { loadMcpSearchProducts } from './search-products-query';
 import { singleWordDiscoveryTerm } from './single-word-discovery-term';
 import {
   matchesMcpPostHydrationFilters,
+  type McpSearchProductRow,
   toMcpSearchProductRows,
 } from './search-products-query-helpers';
 import { selectSearchProductsByPrice } from './select-search-products-by-price';
@@ -52,6 +54,8 @@ export async function discoverMcpProducts({
       products.slice(offset, offset + 100), supabase, merchantId, args.condition
     ));
   }
+  const matchingProducts = hydratedProducts.filter(({ product }) =>
+    matchesDiscoveryProductIntent(product, loaded.sanitizedQuery));
   const explicitCatalogFilter = [args.category, args.brand, args.condition]
     .some((value) => Boolean(value && sanitizeString(value, 50).trim()));
   const ambiguousQuery = loaded.sanitizedQuery &&
@@ -59,7 +63,7 @@ export async function discoverMcpProducts({
     !explicitCatalogFilter &&
     !inferSmartphoneCategory(loaded.sanitizedQuery, args.category);
   if (semanticSearch && loaded.sanitizedQuery && !ambiguousQuery &&
-    selectSearchProductsByPrice(hydratedProducts, args, limit).length < limit) {
+    selectSearchProductsByPrice(matchingProducts, args, limit).length < limit) {
     try {
       const seenIds = new Set(products.map((product) => product.id));
       const semanticProducts: typeof hydratedProducts = [];
@@ -82,31 +86,31 @@ export async function discoverMcpProducts({
           const condition = args.condition ? sanitizeString(args.condition, 50) : undefined;
           const candidates = semanticIds
             .map((id) => byId.get(id))
-            .filter((product) => product && matchesMcpPostHydrationFilters(product, {
+            .filter((product): product is McpSearchProductRow => product !== undefined && matchesMcpPostHydrationFilters(product, {
               brand, category, condition,
             }));
-          semanticProducts.push(...await hydrateSearchProductAvailability(
+          semanticProducts.push(...(await hydrateSearchProductAvailability(
             candidates, supabase, merchantId, args.condition
-          ));
+          )).filter(({ product }) => matchesDiscoveryProductIntent(product, loaded.sanitizedQuery)));
         }
         if (pageIds.length < 40 ||
           (args.sort !== 'newest' && args.sort !== 'price_asc' && args.sort !== 'price_desc' &&
-            selectSearchProductsByPrice([...hydratedProducts, ...semanticProducts], args, limit).length >= limit)) break;
+            selectSearchProductsByPrice([...matchingProducts, ...semanticProducts], args, limit).length >= limit)) break;
       }
-      hydratedProducts.push(...semanticProducts);
+      matchingProducts.push(...semanticProducts);
     } catch {
       // Semantic discovery is optional. The catalog's lexical results remain usable.
       console.error('Semantic discovery unavailable; using catalog search only');
     }
   }
   if (args.sort === 'newest') {
-    hydratedProducts.sort((a, b) =>
+    matchingProducts.sort((a, b) =>
       (b.product.created_at ?? '').localeCompare(a.product.created_at ?? '') ||
       a.product.id.localeCompare(b.product.id)
     );
   }
   return {
     ...loaded,
-    selectedProducts: selectSearchProductsByPrice(hydratedProducts, args, limit),
+    selectedProducts: selectSearchProductsByPrice(matchingProducts, args, limit),
   };
 }

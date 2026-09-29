@@ -22,6 +22,71 @@ function discoveryClient(sameCreatedAt = false) {
 }
 
 describe('gated semantic discovery', () => {
+  it('uses semantic candidates when a full lexical page only matches a modifier', async () => {
+    const rows = [
+      ...Array.from({ length: 10 }, (_, index) => ({
+        id: `printer-${index}`, name: `HP Wireless Printer ${index}`,
+        category: 'Printers', price: 10000, manage_stock: false,
+      })),
+      { id: 'earbuds', name: 'Google Pixel Buds Pro', category: 'Earbuds', price: 20000, manage_stock: false },
+    ];
+    const query = {
+      eq: vi.fn(() => query),
+      in: vi.fn(async (_column: string, ids: string[]) => ({
+        data: rows.filter((product) => ids.includes(product.id)), error: null,
+      })),
+    };
+    const supabase = {
+      from: vi.fn(() => ({ select: vi.fn(() => query) })),
+      rpc: vi.fn(async () => ({
+        data: rows.slice(0, 10).map((product) => ({ product_id: product.id, total_count: 10 })),
+        error: null,
+      })),
+    } as unknown as SupabaseClient;
+    const semanticSearch = vi.fn(async () => ['earbuds']);
+
+    const result = await discoverMcpProducts({
+      args: { query: 'wireless earbuds', limit: 10 }, merchantId: 'merchant-1',
+      sanitizeString: (input) => input, semanticSearch, supabase,
+    });
+
+    expect(semanticSearch).toHaveBeenCalledWith('wireless earbuds', 0);
+    expect(result.selectedProducts.map(({ product }) => product.id)).toEqual(['earbuds']);
+  });
+
+  it('does not offer phones or an unrelated camera pouch for an iPhone 15 pouch', async () => {
+    const rows = [
+      ...Array.from({ length: 10 }, (_, index) => ({
+        id: `phone-${index}`, name: `iPhone 15 variant ${index}`,
+        category: 'Smartphones', price: 10000, manage_stock: false,
+      })),
+      { id: 'camera-pouch', name: 'FUJIFILM instax mini 12 Camera Pouch',
+        category: 'Camera Accessories', price: 20000, manage_stock: false },
+    ];
+    const query = {
+      eq: vi.fn(() => query),
+      in: vi.fn(async (_column: string, ids: string[]) => ({
+        data: rows.filter((product) => ids.includes(product.id)), error: null,
+      })),
+    };
+    const supabase = {
+      from: vi.fn(() => ({ select: vi.fn(() => query) })),
+      rpc: vi.fn(async () => ({
+        data: rows.slice(0, 10).map((product) => ({ product_id: product.id, total_count: 10 })),
+        error: null,
+      })),
+    } as unknown as SupabaseClient;
+    const semanticSearch = vi.fn(async () => ['camera-pouch']);
+
+    const result = await discoverMcpProducts({
+      args: { query: 'iPhone 15 pouch', limit: 10 }, merchantId: 'merchant-1',
+      sanitizeString: (input) => input, semanticSearch, supabase,
+    });
+
+    expect(semanticSearch).toHaveBeenCalledWith('iPhone 15 pouch', 0);
+    expect(result.selectedProducts).toEqual([]);
+  });
+
   it('uses semantic candidates only after merchant, active, category, and price checks', async () => {
     const { supabase } = discoveryClient();
     const semanticSearch = vi.fn(async () => ['camera', 'laptop']);

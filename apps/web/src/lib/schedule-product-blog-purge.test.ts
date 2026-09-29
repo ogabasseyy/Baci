@@ -42,11 +42,14 @@ function makeBlogPostIdSupabase(rows: unknown[], error: unknown = null) {
 describe('scheduleProductBlogPurge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockLookup.mockResolvedValue([]);
+    mockLookup.mockResolvedValue({ slugs: [], incomplete: false });
   });
 
   it('looks up linked articles and schedules them with category fallbacks', async () => {
-    mockLookup.mockResolvedValue(['Pixel-Guide', 'pixel-guide']);
+    mockLookup.mockResolvedValue({
+      slugs: ['Pixel-Guide', 'pixel-guide'],
+      incomplete: false,
+    });
 
     await scheduleProductBlogPurge({
       supabase,
@@ -124,7 +127,10 @@ describe('scheduleProductBlogPurge', () => {
   });
 
   it('merges a pre-delete snapshot with post-delete category fallback posts', async () => {
-    mockLookup.mockResolvedValue(['category-guide']);
+    mockLookup.mockResolvedValue({
+      slugs: ['category-guide'],
+      incomplete: false,
+    });
 
     await scheduleProductBlogPurge({
       supabase,
@@ -192,7 +198,7 @@ describe('scheduleProductBlogPurge', () => {
   });
 
   it('schedules only blog URLs when the core product purge already ran', async () => {
-    mockLookup.mockResolvedValue(['pixel-guide']);
+    mockLookup.mockResolvedValue({ slugs: ['pixel-guide'], incomplete: false });
 
     await scheduleProductBlogPurge({
       supabase,

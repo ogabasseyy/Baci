@@ -51,7 +51,8 @@ describe('getPublishedBlogPostSlugsForProducts', () => {
       ]
     );
 
-    expect(result).toEqual(['phone-guide']);
+    expect(result.slugs).toEqual(['phone-guide']);
+    expect(result.incomplete).toBe(false);
     expect(inSpy).toHaveBeenCalledWith('product_id', [
       '123e4567-e89b-12d3-a456-426614174000',
       '123e4567-e89b-12d3-a456-426614174001',
@@ -65,7 +66,7 @@ describe('getPublishedBlogPostSlugsForProducts', () => {
       getPublishedBlogPostSlugsForProducts(supabase as never, 'merchant-1', [
         ' ',
       ])
-    ).resolves.toEqual([]);
+    ).resolves.toEqual({ slugs: [], incomplete: false });
     expect(supabase.from).not.toHaveBeenCalled();
   });
 
@@ -137,7 +138,8 @@ describe('getPublishedBlogPostSlugsForProducts', () => {
       ['smartphones']
     );
 
-    expect(result).toEqual(['linked-guide', 'fallback-guide']);
+    expect(result.slugs).toEqual(['linked-guide', 'fallback-guide']);
+    expect(result.incomplete).toBe(false);
     expect(inSpy).toHaveBeenCalledWith('product_id', [
       '123e4567-e89b-12d3-a456-426614174000',
     ]);
@@ -161,7 +163,7 @@ describe('getPublishedBlogPostSlugsForProducts', () => {
         [],
         ["women's-fashion"]
       )
-    ).resolves.toEqual([]);
+    ).resolves.toEqual({ slugs: [], incomplete: false });
 
     expect(categoryInSpy).toHaveBeenCalledWith('category', [
       "women's-fashion",
@@ -194,7 +196,8 @@ describe('getPublishedBlogPostSlugsForProducts', () => {
       ['product-news']
     );
 
-    expect(result).toEqual(['product-news-guide']);
+    expect(result.slugs).toEqual(['product-news-guide']);
+    expect(result.incomplete).toBe(false);
     expect(categoryOrSpy.mock.calls[0]?.[0]).toContain(
       'category.ilike.*product*news*'
     );
@@ -224,7 +227,8 @@ describe('getPublishedBlogPostSlugsForProducts', () => {
       ['womens-fashion']
     );
 
-    expect(result).toEqual(['womens-fashion-guide']);
+    expect(result.slugs).toEqual(['womens-fashion-guide']);
+    expect(result.incomplete).toBe(false);
     expect(categoryOrSpy.mock.calls[0]?.[0]).toContain(
       'category.ilike.*w*o*m*e*n*s*f*a*s*h*i*o*n*'
     );
@@ -254,7 +258,8 @@ describe('getPublishedBlogPostSlugsForProducts', () => {
       ['womens-childrens-fashion']
     );
 
-    expect(result).toEqual(['womens-childrens-fashion-guide']);
+    expect(result.slugs).toEqual(['womens-childrens-fashion-guide']);
+    expect(result.incomplete).toBe(false);
     expect(categoryOrSpy.mock.calls[0]?.[0]).toContain(
       'category.ilike.*w*o*m*e*n*s*c*h*i*l*d*r*e*n*s*f*a*s*h*i*o*n*'
     );
@@ -295,6 +300,7 @@ describe('getPublishedBlogPostSlugsForProducts', () => {
       ['smartphones']
     );
 
-    expect(result).toContain('tied-guide-256');
+    expect(result.slugs).toContain('tied-guide-256');
+    expect(result.incomplete).toBe(false);
   });
 });

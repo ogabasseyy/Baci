@@ -52,7 +52,9 @@ vi.mock('@/lib/storefront-product-purge', () => ({
     mockScheduleStorefrontProductPurge(...args),
 }));
 
-const mockGetPublishedBlogPostSlugsForProducts = vi.fn().mockResolvedValue([]);
+const mockGetPublishedBlogPostSlugsForProducts = vi
+  .fn()
+  .mockResolvedValue({ slugs: [], incomplete: false });
 vi.mock('@/lib/get-published-blog-post-slugs-for-products', () => ({
   getPublishedBlogPostSlugsForProducts: (...args: unknown[]) =>
     mockGetPublishedBlogPostSlugsForProducts(...args),

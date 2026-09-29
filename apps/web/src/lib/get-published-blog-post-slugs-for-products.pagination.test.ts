@@ -38,8 +38,9 @@ describe('getPublishedBlogPostSlugsForProducts pagination', () => {
       ['123e4567-e89b-12d3-a456-426614174000']
     );
 
-    expect(result).toContain('newest-linked');
-    expect(result).toContain('oldest-linked');
+    expect(result.slugs).toContain('newest-linked');
+    expect(result.slugs).toContain('oldest-linked');
+    expect(result.incomplete).toBe(false);
     expect(linkedRangeSpy).toHaveBeenCalledWith(256, 511);
   });
 
@@ -74,8 +75,9 @@ describe('getPublishedBlogPostSlugsForProducts pagination', () => {
       ['smartphones']
     );
 
-    expect(result).toContain('newest-fallback');
-    expect(result).toContain('oldest-fallback');
+    expect(result.slugs).toContain('newest-fallback');
+    expect(result.slugs).toContain('oldest-fallback');
+    expect(result.incomplete).toBe(false);
     expect(categoryRangeSpy).toHaveBeenCalledWith(256, 511);
   });
 
@@ -102,6 +104,7 @@ describe('getPublishedBlogPostSlugsForProducts pagination', () => {
       ['smartphones']
     );
 
-    expect(result).toContain('fetched-before-error');
+    expect(result.slugs).toContain('fetched-before-error');
+    expect(result.incomplete).toBe(true);
   });
 });

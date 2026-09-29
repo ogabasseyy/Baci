@@ -136,24 +136,15 @@ export async function POST(
         // so resolve policies by product_id (including the anchor) instead
         // of trusting the stored variant ids.
         if (productsNeedingVariantLookup.size > 0) {
-          const { data: variants, error: variantsError } = await supabase
-            .from('product_variants')
-            .select('id, product_id, inventory_tracking_policy')
-            .eq('merchant_id', merchantId)
-            .in('product_id', Array.from(productsNeedingVariantLookup));
-          if (variantsError) {
-            variantPolicyLookupFailed = true;
-            // A variant projection failure must not suppress cache invalidation
-            // for the parent product. The parent policy is still authoritative;
-            // serialized child coverage is best-effort for this side effect.
-            logger.error({
-              error: variantsError,
-              merchantId,
-              orderId: id,
-              message:
-                'Failed to resolve variant inventory policies after cancellation',
-            });
-          } else {
+          try {
+            const { data: variants, error: variantsError } = await supabase
+              .from('product_variants')
+              .select('id, product_id, inventory_tracking_policy')
+              .eq('merchant_id', merchantId)
+              .in('product_id', Array.from(productsNeedingVariantLookup));
+            if (variantsError) {
+              throw variantsError;
+            }
             for (const variant of variants ?? []) {
               if (
                 isInventoryTrackedProduct(
@@ -164,6 +155,20 @@ export async function POST(
                 serializedVariantProductIds.add(variant.product_id);
               }
             }
+          } catch (lookupError) {
+            // A rejected variant read preserves the candidate ids exactly
+            // like an `{ error }` result: the products stay in the purge set
+            // below instead of escaping to the outer catch with no blog purge
+            // scheduled. A variant projection failure must not suppress cache
+            // invalidation for the parent product.
+            variantPolicyLookupFailed = true;
+            logger.error({
+              error: lookupError,
+              merchantId,
+              orderId: id,
+              message:
+                'Failed to resolve variant inventory policies after cancellation',
+            });
           }
         }
         const trackedProducts = (products ?? []).filter((product) =>

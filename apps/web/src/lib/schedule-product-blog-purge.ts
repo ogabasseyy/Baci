@@ -123,50 +123,53 @@ export async function scheduleProductBlogPurge({
         typeof categorySlug === 'string' && categorySlug.trim().length > 0
     );
     let linkedSlugs: string[];
+    let linkedSlugsIncomplete = false;
     if (blogPostIds !== undefined) {
       linkedSlugs = normalizeBlogPostSlugs(
         await getPublishedBlogPostSlugsByIds(supabase, merchantId, blogPostIds)
       );
       if (normalizedCategorySlugs.length > 0) {
-        const categoryFallbackSlugs =
-          await getPublishedBlogPostSlugsForProducts(
+        const categoryFallback = await getPublishedBlogPostSlugsForProducts(
+          supabase,
+          merchantId,
+          [],
+          normalizedCategorySlugs
+        );
+        linkedSlugsIncomplete = categoryFallback.incomplete;
+        linkedSlugs = normalizeBlogPostSlugs([
+          ...linkedSlugs,
+          ...categoryFallback.slugs,
+        ]);
+      }
+    } else if (blogPostSlugs === undefined) {
+      const linked = await getPublishedBlogPostSlugsForProducts(
+        supabase,
+        merchantId,
+        productIds,
+        normalizedCategorySlugs
+      );
+      linkedSlugsIncomplete = linked.incomplete;
+      linkedSlugs = normalizeBlogPostSlugs(linked.slugs);
+    } else {
+      linkedSlugs = normalizeBlogPostSlugs(blogPostSlugs);
+      if (normalizedCategorySlugs.length > 0) {
+        try {
+          const categoryFallback = await getPublishedBlogPostSlugsForProducts(
             supabase,
             merchantId,
             [],
             normalizedCategorySlugs
           );
-        linkedSlugs = normalizeBlogPostSlugs([
-          ...linkedSlugs,
-          ...categoryFallbackSlugs,
-        ]);
-      }
-    } else if (blogPostSlugs === undefined) {
-      linkedSlugs = normalizeBlogPostSlugs(
-        await getPublishedBlogPostSlugsForProducts(
-          supabase,
-          merchantId,
-          productIds,
-          normalizedCategorySlugs
-        )
-      );
-    } else {
-      linkedSlugs = normalizeBlogPostSlugs(blogPostSlugs);
-      if (normalizedCategorySlugs.length > 0) {
-        try {
-          const categoryFallbackSlugs =
-            await getPublishedBlogPostSlugsForProducts(
-              supabase,
-              merchantId,
-              [],
-              normalizedCategorySlugs
-            );
+          linkedSlugsIncomplete = categoryFallback.incomplete;
           linkedSlugs = normalizeBlogPostSlugs([
             ...linkedSlugs,
-            ...categoryFallbackSlugs,
+            ...categoryFallback.slugs,
           ]);
         } catch (error) {
           // A pre-delete snapshot is still useful if the post-delete category
-          // fallback read fails; do not lose those direct article targets.
+          // fallback read fails; do not lose those direct article targets —
+          // but the category remainder is unknown, so escalate below.
+          linkedSlugsIncomplete = true;
           console.warn(
             'Falling back to pre-delete product blog slugs after category lookup failed',
             { merchantId, error }
@@ -185,6 +188,14 @@ export async function scheduleProductBlogPurge({
       );
     } else if (!skipWhenNoLinkedPosts && !skipProductPurge) {
       scheduleStorefrontProductPurge(normalizedMerchantSlug, entries);
+    }
+    if (linkedSlugsIncomplete && !(skipProductPurge && skipWhenNoLinkedPosts)) {
+      // A partial page/chunk failure preserved the known article URLs above
+      // but omitted the rest: evict the hostname (a superset) so the unknown
+      // remainder cannot stay stale until TTL. Callers combining
+      // skipProductPurge with skipWhenNoLinkedPosts opt out of this fallback
+      // and stay best-effort.
+      scheduleStorefrontHostnamePurge(normalizedMerchantSlug);
     }
   } catch (error) {
     console.warn('Skipped product blog purge scheduling', {

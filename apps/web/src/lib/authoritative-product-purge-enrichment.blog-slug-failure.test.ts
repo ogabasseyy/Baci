@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 
-const mockLookup = vi.fn().mockResolvedValue([]);
+const mockLookup = vi.fn().mockResolvedValue({ slugs: [], incomplete: false });
 
 vi.mock('@/lib/get-published-blog-post-slugs-for-products', () => ({
   getPublishedBlogPostSlugsForProducts: (...args: unknown[]) =>
@@ -34,6 +34,26 @@ describe('enrichProductPurgeEntries blog slug lookup failure', () => {
       );
     } finally {
       warnSpy.mockRestore();
+    }
+  });
+
+  it('flags partial article sets so callers escalate to the hostname fallback', async () => {
+    mockLookup.mockResolvedValueOnce({
+      slugs: ['known-guide'],
+      incomplete: true,
+    });
+    try {
+      const result = await enrichProductPurgeEntries(
+        {} as unknown as SupabaseClient,
+        'merchant-1',
+        [{ slug: 'buds-pro', category: 'Audio' }]
+      );
+
+      expect(result.blogPostSlugs).toEqual(['known-guide']);
+      expect(result.blogPostSlugsIncomplete).toBe(true);
+    } finally {
+      mockLookup.mockReset();
+      mockLookup.mockResolvedValue({ slugs: [], incomplete: false });
     }
   });
 });

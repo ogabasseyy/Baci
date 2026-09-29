@@ -111,6 +111,18 @@ async function fetchCategoryFallbackRows(
   return { error: null, rows };
 }
 
+export interface PublishedBlogPostSlugs {
+  /** Deduplicated published article slugs resolved before any page failure. */
+  slugs: string[];
+  /**
+   * True when a later page/chunk failed and `slugs` may omit affected
+   * articles. Callers must escalate (hostname purge) rather than trusting
+   * the set as complete — purging only these URLs would leave the omitted
+   * Cloudflare-cached articles stale until TTL.
+   */
+  incomplete: boolean;
+}
+
 /**
  * Find published storefront blog posts whose related-product rail can be
  * affected by the changed products. Explicit product relationships are joined
@@ -123,14 +135,16 @@ async function fetchCategoryFallbackRows(
  * Callers catch that and fall back to their slug-independent purge so a
  * product mutation never fails on best-effort CDN invalidation. Partial
  * page failures (result errors and rejections alike) resolve with the rows
- * already fetched.
+ * already fetched plus `incomplete: true` so callers purge the known URLs
+ * and escalate for the unknown remainder instead of treating the partial
+ * set as complete.
  */
 export async function getPublishedBlogPostSlugsForProducts(
   supabase: SupabaseClient,
   merchantId: string,
   productIds: readonly string[],
   categorySlugs: readonly string[] = []
-): Promise<string[]> {
+): Promise<PublishedBlogPostSlugs> {
   const normalizedMerchantId = merchantId.trim();
   const normalizedProductIds = Array.from(
     new Set(
@@ -149,10 +163,11 @@ export async function getPublishedBlogPostSlugsForProducts(
     !normalizedMerchantId ||
     (normalizedProductIds.length === 0 && categoryCandidates.length === 0)
   ) {
-    return [];
+    return { slugs: [], incomplete: false };
   }
 
   const slugs = new Set<string>();
+  let incomplete = false;
 
   if (normalizedProductIds.length > 0) {
     // Page rejections are converted to partial results inside the fetcher;
@@ -178,6 +193,7 @@ export async function getPublishedBlogPostSlugsForProducts(
       );
     }
     if (lastError) {
+      incomplete = true;
       console.warn(
         'Resolved a partial published-blog-post set for product purge (continuing with rows already fetched):',
         { merchantId: normalizedMerchantId, error: lastError }
@@ -234,6 +250,9 @@ export async function getPublishedBlogPostSlugsForProducts(
         }
       }
     } catch (error) {
+      // A filter rejection also leaves the set partial: record it so the
+      // result below is flagged instead of reading as complete.
+      categoryError ??= error;
       console.error(
         'Failed to resolve category-fallback blog posts for product purge (continuing without category article purge):',
         { merchantId: normalizedMerchantId, error }
@@ -254,6 +273,7 @@ export async function getPublishedBlogPostSlugsForProducts(
       );
     }
     if (categoryError) {
+      incomplete = true;
       console.warn(
         'Resolved a partial category-fallback blog-post set for product purge (continuing with rows already fetched):',
         { merchantId: normalizedMerchantId, error: categoryError }
@@ -261,5 +281,5 @@ export async function getPublishedBlogPostSlugsForProducts(
     }
   }
 
-  return Array.from(slugs);
+  return { slugs: Array.from(slugs), incomplete };
 }

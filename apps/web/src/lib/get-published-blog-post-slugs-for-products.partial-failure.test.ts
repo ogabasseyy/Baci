@@ -60,8 +60,9 @@ describe('getPublishedBlogPostSlugsForProducts partial page failure', () => {
         ['123e4567-e89b-12d3-a456-426614174000']
       );
 
-      expect(result).toHaveLength(PAGE_SIZE);
-      expect(result).toContain('guide-0');
+      expect(result.slugs).toHaveLength(PAGE_SIZE);
+      expect(result.slugs).toContain('guide-0');
+      expect(result.incomplete).toBe(true);
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('partial published-blog-post set'),
         expect.objectContaining({ merchantId: 'merchant-1', error: pageError })
@@ -174,7 +175,8 @@ describe('getPublishedBlogPostSlugsForProducts partial page failure', () => {
         [PRODUCT_ID]
       );
 
-      expect(result).toHaveLength(PAGE_SIZE);
+      expect(result.slugs).toHaveLength(PAGE_SIZE);
+      expect(result.incomplete).toBe(true);
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('partial published-blog-post set'),
         expect.objectContaining({ merchantId: 'merchant-1', error: failure })
@@ -204,7 +206,8 @@ describe('getPublishedBlogPostSlugsForProducts partial page failure', () => {
         ['smartphones']
       );
 
-      expect(result).toEqual(['linked-guide']);
+      expect(result.slugs).toEqual(['linked-guide']);
+      expect(result.incomplete).toBe(true);
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('partial category-fallback'),
         expect.objectContaining({ merchantId: 'merchant-1' })

@@ -82,4 +82,45 @@ describe('scheduleProductBlogPurge lookup failure', () => {
       warnSpy.mockRestore();
     }
   });
+
+  it('purges known articles and escalates to hostname on a partial set', async () => {
+    mockLookup.mockResolvedValueOnce({
+      slugs: ['known-guide'],
+      incomplete: true,
+    });
+    await scheduleProductBlogPurge({
+      supabase,
+      merchantId: 'merchant-1',
+      merchantSlug: 'store',
+      productIds: ['product-1'],
+      entries,
+    });
+
+    expect(mockSchedule).toHaveBeenCalledWith('store', entries, {
+      blogPostSlugs: ['known-guide'],
+    });
+    expect(mockHostnamePurge).toHaveBeenCalledWith('store');
+  });
+
+  it('stays best-effort on a partial set when the caller opted out', async () => {
+    mockLookup.mockResolvedValueOnce({
+      slugs: ['known-guide'],
+      incomplete: true,
+    });
+    await scheduleProductBlogPurge({
+      supabase,
+      merchantId: 'merchant-1',
+      merchantSlug: 'store',
+      productIds: ['product-1'],
+      entries,
+      skipProductPurge: true,
+      skipWhenNoLinkedPosts: true,
+    });
+
+    expect(mockSchedule).toHaveBeenCalledWith('store', entries, {
+      blogPostSlugs: ['known-guide'],
+      blogPostsOnly: true,
+    });
+    expect(mockHostnamePurge).not.toHaveBeenCalled();
+  });
 });

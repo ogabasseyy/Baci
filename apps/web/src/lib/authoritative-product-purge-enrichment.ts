@@ -152,7 +152,7 @@ export async function enrichProductPurgeEntries(
   let blogPostSlugsIncomplete = false;
   if (idsToResolve.length > 0 || entries.length > 0) {
     try {
-      blogPostSlugs = await getPublishedBlogPostSlugsForProducts(
+      const linkedPosts = await getPublishedBlogPostSlugsForProducts(
         supabase,
         merchantId,
         idsToResolve,
@@ -160,6 +160,11 @@ export async function enrichProductPurgeEntries(
           .map((entry) => entry.categorySegment)
           .filter((segment): segment is string => Boolean(segment))
       );
+      blogPostSlugs = linkedPosts.slugs;
+      // A partial page/chunk failure preserves known URLs but omits the
+      // rest: flag the set so callers escalate to the hostname fallback
+      // instead of purging only the known articles.
+      blogPostSlugsIncomplete = linkedPosts.incomplete;
     } catch (error) {
       // Fail-open, but say so: the lookup throws only when it preserved
       // zero rows, so an empty set here is unknown — not "no articles".

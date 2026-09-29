@@ -1,9 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ after: vi.fn(), purge: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  after: vi.fn(),
+  purge: vi.fn(),
+  hostnamePurge: vi.fn(),
+}));
 vi.mock('next/server', () => ({ after: mocks.after }));
 vi.mock('./schedule-order-product-blog-purge', () => ({
   scheduleOrderProductBlogPurge: mocks.purge,
+}));
+vi.mock('./storefront-product-purge-hostnames', () => ({
+  scheduleStorefrontHostnamePurge: mocks.hostnamePurge,
 }));
 
 import { scheduleReservationProductPurge } from './schedule-reservation-product-purge';
@@ -53,5 +60,66 @@ describe('scheduleReservationProductPurge', () => {
     });
     await expect(mocks.after.mock.calls[0][0]()).resolves.toBeUndefined();
     expect(mocks.purge).not.toHaveBeenCalled();
+  });
+  it('evicts the merchant hostname when the prize-target read rejects', async () => {
+    const merchantsQuery = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      maybeSingle: vi
+        .fn()
+        .mockResolvedValue({ data: { slug: 'quiz-store' }, error: null }),
+    };
+    merchantsQuery.select.mockReturnValue(merchantsQuery);
+    merchantsQuery.eq.mockReturnValue(merchantsQuery);
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === 'merchants') return merchantsQuery;
+        throw new Error('quiz_events unavailable');
+      }),
+    };
+    scheduleReservationProductPurge({
+      source: 'quiz',
+      sourceId: 'q1',
+      merchantId: 'm1',
+      supabase: supabase as never,
+    });
+    await mocks.after.mock.calls[0][0]();
+    expect(mocks.purge).not.toHaveBeenCalled();
+    expect(mocks.hostnamePurge).toHaveBeenCalledWith('quiz-store');
+  });
+  it('warns without a fallback when the merchant slug is also unresolvable', async () => {
+    const merchantsQuery = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+    };
+    merchantsQuery.select.mockReturnValue(merchantsQuery);
+    merchantsQuery.eq.mockReturnValue(merchantsQuery);
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === 'merchants') return merchantsQuery;
+        throw new Error('quiz_events unavailable');
+      }),
+    };
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      scheduleReservationProductPurge({
+        source: 'quiz',
+        sourceId: 'q1',
+        merchantId: 'm1',
+        supabase: supabase as never,
+      });
+      await mocks.after.mock.calls[0][0]();
+      expect(mocks.purge).not.toHaveBeenCalled();
+      expect(mocks.hostnamePurge).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Reservation cache purge skipped; no fallback available',
+        expect.objectContaining({ merchantId: 'm1' })
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

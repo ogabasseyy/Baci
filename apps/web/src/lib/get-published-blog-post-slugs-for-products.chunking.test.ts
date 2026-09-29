@@ -35,7 +35,8 @@ describe('getPublishedBlogPostSlugsForProducts product-id chunking', () => {
       Array.from({ length: 1000 }, (_, index) => UUID(index))
     );
 
-    expect(result).toEqual(['linked-guide']);
+    expect(result.slugs).toEqual(['linked-guide']);
+    expect(result.incomplete).toBe(false);
     expect(inCalls).toHaveLength(10);
     expect(inCalls.every((values) => values.length <= 100)).toBe(true);
     expect(inCalls[0]).toHaveLength(100);
@@ -76,7 +77,8 @@ describe('getPublishedBlogPostSlugsForProducts product-id chunking', () => {
       Array.from({ length: 300 }, (_, index) => UUID(index))
     );
 
-    expect(result).toEqual(['later-linked-guide']);
+    expect(result.slugs).toEqual(['later-linked-guide']);
+    expect(result.incomplete).toBe(true);
     expect(rangeCalls).toBe(3);
   });
 });

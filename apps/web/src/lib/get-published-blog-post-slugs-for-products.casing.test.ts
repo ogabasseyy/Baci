@@ -21,6 +21,6 @@ describe('getPublishedBlogPostSlugsForProducts slug casing', () => {
       getPublishedBlogPostSlugsForProducts(supabase as never, 'merchant-1', [
         '123e4567-e89b-12d3-a456-426614174000',
       ])
-    ).resolves.toEqual(['Best-Phones-2026']);
+    ).resolves.toEqual({ slugs: ['Best-Phones-2026'], incomplete: false });
   });
 });

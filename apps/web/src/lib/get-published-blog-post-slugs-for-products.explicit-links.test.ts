@@ -35,6 +35,6 @@ describe('getPublishedBlogPostSlugsForProducts category fallback', () => {
         [],
         ['smartphones']
       )
-    ).resolves.toEqual([]);
+    ).resolves.toEqual({ slugs: [], incomplete: false });
   });
 });

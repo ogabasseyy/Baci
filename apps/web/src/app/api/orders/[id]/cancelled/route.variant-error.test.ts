@@ -125,4 +125,38 @@ describe('merchant cancellation variant policy fallback', () => {
       })
     );
   });
+
+  it('preserves purge candidates when the variant policy read rejects', async () => {
+    const { supabase, variantIn } = createSupabase();
+    variantIn.mockRejectedValueOnce(new Error('transport down'));
+    mocks.authenticate.mockResolvedValue({
+      error: null,
+      supabase,
+      user: { id: 'user-1' },
+    });
+    const { logger } = await import('@/lib/logger');
+
+    const response = await POST(request(), {
+      params: Promise.resolve({ id: 'order-1' }),
+    });
+
+    expect(response.status).toBe(202);
+    expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith('merchant-1', [
+      'managed-phone',
+      'unlimited-phone',
+    ]);
+    expect(mocks.schedule).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchantId: 'merchant-1',
+        productIds: ['product-1', 'product-2'],
+        supabase,
+      })
+    );
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message:
+          'Failed to resolve variant inventory policies after cancellation',
+      })
+    );
+  });
 });

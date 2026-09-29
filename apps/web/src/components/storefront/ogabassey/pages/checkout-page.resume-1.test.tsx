@@ -2,6 +2,7 @@ import { resumedOrderPayload } from './checkout-page-bnpl.test-support';
 import {
   CheckoutPage,
   expect,
+  fireEvent,
   it,
   mockMobileOrderSummary,
   openCredPalCheckout,
@@ -10,6 +11,7 @@ import {
   useAuthSafe,
   useCart,
   usePersistedState,
+  useRouter,
   useSearchParams,
   vi,
   waitFor,
@@ -196,6 +198,12 @@ it('keeps active-cart checkout visible without a resume error state', async () =
 });
 
 it('wraps the resume-error state in the OgaBassey checkout scope', async () => {
+  const push = vi.fn();
+  vi.mocked(useRouter).mockReturnValue({
+    push,
+    back: vi.fn(),
+    replace: vi.fn(),
+  } as unknown as ReturnType<typeof useRouter>);
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams({
       gateway: 'credpal',
@@ -211,11 +219,21 @@ it('wraps the resume-error state in the OgaBassey checkout scope', async () => {
   try {
     render(<CheckoutPage />);
 
-    const errorRoot = await screen
-      .findByText(/something went wrong/i)
-      .then((node) => node.closest('.ogabassey-checkout-page'));
+    const errorRoot = await screen.findByRole('heading', {
+      name: 'Something Went Wrong',
+    });
 
     expect(errorRoot).toBeInTheDocument();
+    expect(errorRoot.closest('.ogabassey-checkout-page')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Order not found. It may have been completed or expired.'
+      )
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Go to Homepage' }));
+    fireEvent.click(screen.getByRole('button', { name: 'contact support' }));
+    expect(push).toHaveBeenNthCalledWith(1, '/ogabassey');
+    expect(push).toHaveBeenNthCalledWith(2, '/ogabassey/contact');
   } finally {
     fetchMock.mockRestore();
   }

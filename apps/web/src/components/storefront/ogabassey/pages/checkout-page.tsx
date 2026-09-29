@@ -28,18 +28,13 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
 import { useCheckoutFormState } from './checkout/hooks/use-checkout-form-state';
 import { useCheckoutStepState } from './checkout/hooks/use-checkout-step-state';
-import {
-  useJuicywayPayment,
-  type JuicywayPendingOrder,
-} from './checkout/hooks/use-juicyway-payment';
+import { useCheckoutCryptoSession } from './checkout/hooks/use-checkout-crypto-session';
 import { usePaymentReturnReset } from './checkout/use-payment-return-reset';
 import { useEffect, useState } from 'react';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { useCurrency } from '@/hooks/use-currency';
 import type {
-  CryptoChain,
-  CryptoCurrency,
   DvaData,
   PendingCryptoOrder,
 } from './checkout/types';
@@ -276,40 +271,6 @@ export const CheckoutPage: React.FC = () => {
       setDvaData,
     });
 
-  // Crypto selection state (before payment is initialized)
-  const [showCryptoSelector, setShowCryptoSelector] = useState(false);
-  const [selectedCryptoChain, setSelectedCryptoChain] = useState<CryptoChain>('TRX');
-  const [selectedCryptoCurrency, setSelectedCryptoCurrency] = useState<CryptoCurrency>('USDT');
-  const [pendingCryptoOrder, setPendingCryptoOrder] =
-    useState<JuicywayPendingOrder | null>(null);
-
-  // Juicyway deposit lifecycle (initialization, verification polling,
-  // completion/failure analytics, cleanup, navigation).
-  const {
-    cryptoPaymentData,
-    setCryptoPaymentData,
-    isVerifyingCrypto,
-    cryptoVerificationStatus,
-    isInitializingCrypto,
-    initializeCryptoPayment,
-    verifyCryptoPayment,
-    dismissCryptoModal,
-    cancelCryptoInitialization,
-  } = useJuicywayPayment({
-    merchantId: merchant?.id,
-    pendingCryptoOrder,
-    selectedCryptoChain,
-    selectedCryptoCurrency,
-    setShowCryptoSelector,
-    clearCheckoutSession,
-    clearPendingCheckoutOrder,
-    clearCart,
-    routerPush: (url: string) => {
-      router.push(asRoute(url));
-    },
-    getHref,
-  });
-
   // Mobile app order resume state
   // When opening from mobile app with ?orderId=xxx&gateway=credpal, we resume that order
   const {
@@ -332,6 +293,30 @@ export const CheckoutPage: React.FC = () => {
     releaseSubmission,
     handleSubmissionError,
   } = useCheckoutSubmissionState({ setCurrentStep, setCompletedSteps });
+  const crypto = useCheckoutCryptoSession({
+    merchantId: merchant?.id,
+    clearCheckoutSession,
+    clearPendingCheckoutOrder,
+    clearCart,
+    getHref,
+    isOrderInFlightRef,
+  });
+  const {
+    cryptoPaymentData,
+    setCryptoPaymentData,
+    isVerifyingCrypto,
+    cryptoVerificationStatus,
+    isInitializingCrypto,
+    initializeCryptoPayment,
+    verifyCryptoPayment,
+    dismissCryptoModal,
+    pendingCryptoOrder,
+    setPendingCryptoOrder,
+    showCryptoSelector,
+    setShowCryptoSelector,
+    selectedCryptoChain,
+    selectedCryptoCurrency,
+  } = crypto;
   const { resumedOrder, isLoadingResumedOrder, resumeOrderError } =
     useCheckoutResumeLifecycle({
       resumeOrderId,
@@ -400,22 +385,6 @@ export const CheckoutPage: React.FC = () => {
   // dark-launch flow would never activate for real customers.
   const { waitForResolvedAuthenticated: waitForResolvedStorefrontCustomerAuth } =
     useStorefrontCustomerSession(merchant?.slug ?? undefined);
-
-  // Chain/currency compatibility
-  const cryptoChainSupport: Record<'USDT' | 'USDC', Array<'TRX' | 'ETH' | 'MATIC' | 'AVAXC'>> = {
-    USDT: ['TRX', 'ETH'],
-    USDC: ['ETH', 'MATIC', 'AVAXC'],
-  };
-
-  // When currency changes, ensure chain is compatible
-  const handleCryptoCurrencyChange = (currency: 'USDT' | 'USDC') => {
-    setSelectedCryptoCurrency(currency);
-    const supportedChains = cryptoChainSupport[currency];
-    if (!supportedChains.includes(selectedCryptoChain)) {
-      setSelectedCryptoChain(supportedChains[0]);
-    }
-  };
-
 
   // Prefer the persisted fee on resume (deep-link URLs omit giftWrappingCost).
   const giftWrappingCost =
@@ -731,23 +700,12 @@ export const CheckoutPage: React.FC = () => {
         cryptoSelector={showCryptoSelector ? {
           selectedCryptoCurrency,
           selectedCryptoChain,
-          supportedChains: cryptoChainSupport[selectedCryptoCurrency],
+          supportedChains: crypto.supportedChains,
           isInitializingCrypto,
-          onCurrencyChange: (currency) => {
-            cancelCryptoInitialization();
-            handleCryptoCurrencyChange(currency);
-          },
-          onChainChange: (chain) => {
-            cancelCryptoInitialization();
-            setSelectedCryptoChain(chain);
-          },
+          onCurrencyChange: crypto.changeCurrency,
+          onChainChange: crypto.changeChain,
           onInitialize: initializeCryptoPayment,
-          onClose: () => {
-            cancelCryptoInitialization();
-            setShowCryptoSelector(false);
-            setPendingCryptoOrder(null);
-            isOrderInFlightRef.current = false;
-          },
+          onClose: crypto.closeSelector,
         } : undefined}
         cryptoPayment={cryptoPaymentData ? {
           data: cryptoPaymentData,

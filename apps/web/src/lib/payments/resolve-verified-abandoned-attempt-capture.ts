@@ -71,9 +71,10 @@ export async function resolveVerifiedAbandonedAttemptCapture({
   const filed = await fileDuplicatePaymentCapture({
     attempt,
     evidence: {
+      gateway: 'paystack',
       providerAmount: result.data.amount,
       providerCurrency: result.data.currency,
-      providerReference: result.data.reference,
+      providerReference: String(result.data.id),
       providerStatus: result.data.status,
       ...(mismatchKind
         ? {

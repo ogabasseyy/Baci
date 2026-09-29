@@ -59,7 +59,14 @@ describe('Paystack reference-only refund events', () => {
       .fn()
       .mockReturnValueOnce(buildPaymentCandidates([cancelledPaymentRow()]))
       .mockReturnValueOnce(buildRefundCandidates([]))
-      .mockReturnValueOnce(buildSettledCandidates([{ id: 'refund-9' }]));
+      .mockReturnValueOnce(
+        buildSettledCandidates([
+          {
+            currency: 'NGN',
+            metadata: { provider_refund_status: 'processed' },
+          },
+        ])
+      );
     const rpc = vi.fn();
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');

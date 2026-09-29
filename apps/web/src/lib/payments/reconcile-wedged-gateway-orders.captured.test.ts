@@ -61,7 +61,12 @@ describe('reconcileWedgedGatewayOrders late outcomes', () => {
   it('files a duplicate review when the order filled before finalization', async () => {
     const supabase = buildSupabase({ data: [wedgedCandidate] });
     mocks.verifyPaystackPayment.mockResolvedValue({
-      data: { amount: 5829060, currency: 'NGN', status: 'success' },
+      data: {
+        amount: 5829060,
+        currency: 'NGN',
+        id: 123456789,
+        status: 'success',
+      },
       success: true,
     });
     mocks.finalizeOrderGatewayPayment.mockResolvedValue({
@@ -83,9 +88,10 @@ describe('reconcileWedgedGatewayOrders late outcomes', () => {
     expect(mocks.fileDuplicatePaymentCapture).toHaveBeenCalledWith(
       expect.objectContaining({
         evidence: {
+          gateway: 'paystack',
           providerAmount: 5829060,
           providerCurrency: 'NGN',
-          providerReference: '100004260711172450165090811595',
+          providerReference: '123456789',
           providerStatus: 'success',
         },
       })
@@ -106,7 +112,12 @@ describe('reconcileWedgedGatewayOrders late outcomes', () => {
   it('retries the wedge when the late duplicate review cannot be filed', async () => {
     const supabase = buildSupabase({ data: [wedgedCandidate] });
     mocks.verifyPaystackPayment.mockResolvedValue({
-      data: { amount: 5829060, currency: 'NGN', status: 'success' },
+      data: {
+        amount: 5829060,
+        currency: 'NGN',
+        id: 123456789,
+        status: 'success',
+      },
       success: true,
     });
     mocks.finalizeOrderGatewayPayment.mockResolvedValue({
@@ -163,5 +174,88 @@ describe('reconcileWedgedGatewayOrders late outcomes', () => {
       { orderId: 'order-2', orderNumber: 'ORD-2' },
     ]);
     expect(summary.checked).toBe(2);
+  });
+
+  it('files gateway-native evidence for a Juicyway late duplicate', async () => {
+    const juicywayCandidate = {
+      ...wedgedCandidate,
+      currency: 'USDT',
+      gateway: 'juicyway',
+      gateway_reference: 'BAC-JUICY',
+      metadata: {
+        juicyway_expected_amount: 50_000,
+        juicyway_expected_currency: 'USDT',
+        session_id: 'session-1',
+      },
+      status: 'pending',
+    };
+    const supabase = buildSupabase({ data: [juicywayCandidate] });
+    mocks.getJuicywaySession.mockResolvedValue({
+      data: {
+        id: 'session-1',
+        payment: {
+          amount: 50_000,
+          currency: 'USDT',
+          id: 'payment-1',
+          status: 'succeeded',
+        },
+        status: 'succeeded',
+      },
+      success: true,
+    });
+    mocks.finalizeOrderGatewayPayment.mockResolvedValue({
+      capturedOnPaidOrder: true,
+      healed: false,
+      kind: 'completed',
+      orderNumber: 'ORD-1',
+    });
+    mocks.fileDuplicatePaymentCapture.mockResolvedValue(true);
+
+    const summary = await reconcileWedgedGatewayOrders({
+      scheduleAfter,
+      supabase,
+    });
+
+    // Stablecoin captures have no minor units: the review carries the
+    // settled total verbatim, not a 100x re-scaling.
+    expect(mocks.fileDuplicatePaymentCapture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evidence: {
+          gateway: 'juicyway',
+          providerAmount: 50_000,
+          providerCurrency: 'USDT',
+          providerReference: 'payment-1',
+          providerStatus: 'succeeded',
+        },
+      })
+    );
+    expect(summary.reviewsFiled).toEqual([
+      { orderId: 'order-1', transactionId: 'txn-1' },
+    ]);
+  });
+
+  it('fails closed when the verification response cannot identify the charge', async () => {
+    const supabase = buildSupabase({ data: [wedgedCandidate] });
+    mocks.verifyPaystackPayment.mockResolvedValue({
+      data: { amount: 5829060, currency: 'NGN', status: 'success' },
+      success: true,
+    });
+    mocks.finalizeOrderGatewayPayment.mockResolvedValue({
+      capturedOnPaidOrder: true,
+      healed: false,
+      kind: 'completed',
+      orderNumber: 'ORD-1',
+    });
+
+    const summary = await reconcileWedgedGatewayOrders({
+      scheduleAfter,
+      supabase,
+    });
+
+    expect(mocks.fileDuplicatePaymentCapture).not.toHaveBeenCalled();
+    expect(summary.failed).toEqual([
+      { reason: 'duplicate_capture_evidence_invalid', transactionId: 'txn-1' },
+    ]);
+    expect(supabase.stampUpdate).not.toHaveBeenCalled();
   });
 });

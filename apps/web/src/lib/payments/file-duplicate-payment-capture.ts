@@ -1,20 +1,31 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export interface DuplicateCaptureEvidence {
+  /** Capture gateway: names the review and selects the reference column. */
+  gateway: string;
   mismatchDetail?: string;
   mismatchKind?: string;
+  /**
+   * Gateway-native verified charge total: Paystack kobo, Korapay/Juicyway
+   * major. Never re-scaled from the normalized amount — stablecoin
+   * captures have no minor units.
+   */
   providerAmount: number;
   providerCurrency: string;
+  /** Verification charge id: Paystack id, Korapay reference, Juicyway payment id. */
   providerReference: string;
+  /** The gateway's own status vocabulary, verbatim. */
   providerStatus: string;
 }
 
 /**
- * Files a duplicate-capture review for a stale attempt Paystack verified as
- * captured, merging into the open review on conflict, then stamps the row so
- * the sweep never reselects it. Returns true when the evidence is durable.
- * The stamp merges database-side: spreading the stale in-memory metadata
- * snapshot would clobber a concurrent charge.success completion.
+ * Files a duplicate-capture review for a stale attempt a gateway verified
+ * as captured, merging into the open review on conflict, then stamps the
+ * row so the sweep never reselects it. Returns true when the evidence is
+ * durable. Only Paystack references occupy paystack_ref; other gateways
+ * identify their charge in metadata so the column never misattributes a
+ * capture. The stamp merges database-side: spreading the stale in-memory
+ * metadata snapshot would clobber a concurrent charge.success completion.
  */
 export async function fileDuplicatePaymentCapture({
   attempt,
@@ -41,12 +52,15 @@ export async function fileDuplicatePaymentCapture({
       order_id: attempt.order_id,
       merchant_id: attempt.merchant_id,
       txn_id: attempt.id,
-      paystack_ref: attempt.gateway_reference,
-      reason: `Stale Paystack attempt ${attempt.gateway_reference} verified as captured while the order is already paid; possible duplicate charge${detail}`,
+      paystack_ref:
+        evidence.gateway === 'paystack' ? attempt.gateway_reference : null,
+      reason: `Stale ${evidence.gateway} attempt ${attempt.gateway_reference} verified as captured while the order is already paid; possible duplicate charge${detail}`,
       metadata: {
+        gateway: evidence.gateway,
         payment_transaction_id: attempt.id,
-        provider_status: evidence.providerStatus,
+        gateway_reference: attempt.gateway_reference,
         provider_reference: evidence.providerReference,
+        provider_status: evidence.providerStatus,
         provider_amount: evidence.providerAmount,
         provider_currency: evidence.providerCurrency,
         ...(evidence.mismatchKind
@@ -67,6 +81,8 @@ export async function fileDuplicatePaymentCapture({
         p_merchant_id: attempt.merchant_id,
         p_transaction_id: attempt.id,
         p_gateway_reference: attempt.gateway_reference,
+        p_gateway: evidence.gateway,
+        p_charge_id: evidence.providerReference,
         p_reason: `Stale attempt ${attempt.gateway_reference} verified as captured${detail}`,
       }
     );

@@ -264,4 +264,30 @@ describe('processCancellationDrain', () => {
       expect.objectContaining({ cancellationFailed: true })
     );
   });
+
+  it('returns 503 when notifications dead-lettered even with zero send failures', async () => {
+    mocks.drainPaystackRefundNotifications.mockResolvedValueOnce({
+      claimed: 0,
+      exhausted: 2,
+      failed: 0,
+      sent: 0,
+    });
+    const response = await processCancellationDrain(
+      supabase,
+      mocks.sendEmail,
+      mocks.notifyMerchant
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(payload).toEqual({
+      error: 'Cancellation and refund background work incomplete',
+    });
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        notificationExhausted: 2,
+        notificationFailed: true,
+      })
+    );
+  });
 });

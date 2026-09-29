@@ -8,6 +8,10 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { sendEmail } from '@/lib/zeptomail';
 import { processSettlementsQuerySchema } from '@/schemas/process-settlements-query';
 import { processCancellationDrain } from './process-cancellation-drain';
+import {
+  settlementDrainDeadlineMs,
+  settlementDrainLimit,
+} from './settlement-drain-budget';
 
 /**
  * POST /api/cron/process-settlements
@@ -25,6 +29,7 @@ import { processCancellationDrain } from './process-cancellation-drain';
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
+  const invocationStartedAt = Date.now();
   try {
     // Verify cron secret
     const authHeader = request.headers.get('Authorization');
@@ -210,11 +215,21 @@ export async function POST(request: Request) {
       }
     }
 
+    // The settlement RPC and notification emails above burned through the
+    // shared 300s cron budget: bound the drain by what remains so provider
+    // refund calls stop before the platform abort, and skip it outright
+    // once the margin is gone rather than stranding an accepted refund
+    // without its audit row.
+    const drainLimit = settlementDrainLimit(Date.now() - invocationStartedAt);
     const cancellationSideEffectDrain =
-      await drainFailedOrderCancellationSideEffects({
-        sendCancellationEmail: sendEmail,
-        supabase,
-      });
+      drainLimit > 0
+        ? await drainFailedOrderCancellationSideEffects({
+            deadlineMs: settlementDrainDeadlineMs(invocationStartedAt),
+            limit: drainLimit,
+            sendCancellationEmail: sendEmail,
+            supabase,
+          })
+        : { drained: [], failed: [], skipped: [] };
     return NextResponse.json({
       success: true,
       cancellationSideEffectDrain,

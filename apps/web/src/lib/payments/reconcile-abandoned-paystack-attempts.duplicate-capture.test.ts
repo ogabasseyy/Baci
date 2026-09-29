@@ -25,6 +25,7 @@ function verifiedSuccess(overrides: Record<string, unknown> = {}) {
       status: 'success',
       amount: 10000,
       currency: 'NGN',
+      id: 111222333,
       ...overrides,
     },
   });
@@ -91,6 +92,8 @@ describe('abandoned Paystack attempt duplicate captures', () => {
     expect(rpc).toHaveBeenCalledWith(
       'merge_duplicate_payment_capture_evidence_v1',
       expect.objectContaining({
+        p_charge_id: '111222333',
+        p_gateway: 'paystack',
         p_gateway_reference: 'BAC-OLD',
         p_merchant_id: 'merchant-1',
         p_order_id: 'order-1',

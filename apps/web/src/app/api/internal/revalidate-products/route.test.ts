@@ -8,7 +8,7 @@ const mockScheduleStorefrontProductPurge = vi.fn();
 const mockScheduleStorefrontHostnamePurge = vi.fn();
 const mockCreatePublicClient = vi.fn();
 const mockMerchantLookup = vi.fn();
-
+const mockExpireProductBlogCache = vi.fn();
 vi.mock('@/env', () => ({
   getInternalApiSecret: () => mockGetInternalApiSecret(),
 }));
@@ -21,6 +21,10 @@ vi.mock('@/lib/storefront-product-purge', () => ({
   scheduleStorefrontProductPurge: (...args: unknown[]) =>
     mockScheduleStorefrontProductPurge(...args),
 }));
+vi.mock('@/lib/expire-product-blog-cache', () => ({
+  expireProductBlogCache: (...args: unknown[]) =>
+    mockExpireProductBlogCache(...args),
+}));
 vi.mock('@/lib/storefront-product-purge-hostnames', () => ({
   scheduleStorefrontHostnamePurge: (...args: unknown[]) =>
     mockScheduleStorefrontHostnamePurge(...args),
@@ -28,6 +32,13 @@ vi.mock('@/lib/storefront-product-purge-hostnames', () => ({
 vi.mock('@/lib/supabase/public', () => ({
   createPublicClient: (...args: unknown[]) => mockCreatePublicClient(...args),
   createClient: (...args: unknown[]) => mockCreatePublicClient(...args),
+}));
+
+// The article-URL lookup has its own suite; these route tests pin the purge
+// scheduling around it, so resolve an empty complete set here.
+vi.mock('@/lib/get-published-blog-post-slugs-for-products', () => ({
+  getPublishedBlogPostSlugsForProducts: () =>
+    Promise.resolve({ slugs: [], incomplete: false }),
 }));
 
 import { POST } from './route';
@@ -87,7 +98,6 @@ function request(body: unknown, authHeader?: string): NextRequest {
     }
   );
 }
-
 describe('POST /api/internal/revalidate-products', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -104,13 +114,11 @@ describe('POST /api/internal/revalidate-products', () => {
     expect(await res.json()).toEqual({ ok: true });
     expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
   });
-
   it('does NOT schedule a purge for a merchantId-only body', async () => {
     await POST(request({ merchantId: MERCHANT_ID }, `Bearer ${SECRET}`));
 
     expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
   });
-
   it('resolves the canonical merchant slug before scheduling a whole-storefront purge', async () => {
     const res = await POST(
       request(
@@ -129,9 +137,9 @@ describe('POST /api/internal/revalidate-products', () => {
     expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
       'ogabassey'
     );
+    expect(mockExpireProductBlogCache).toHaveBeenCalledWith(MERCHANT_ID);
     expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
   });
-
   it('schedules a purge when merchantSlug and products are present', async () => {
     const res = await POST(
       request(
@@ -150,6 +158,7 @@ describe('POST /api/internal/revalidate-products', () => {
       'ogabassey',
       [{ slug: 'iphone-15', categorySegment: 'smartphones' }]
     );
+    expect(mockExpireProductBlogCache).toHaveBeenCalledWith(MERCHANT_ID);
   });
 
   it('rejects a mismatched merchantSlug before scheduling a product purge', async () => {
@@ -209,12 +218,13 @@ describe('POST /api/internal/revalidate-products', () => {
       'ogabassey',
       [{ slug: 'iphone-15', categorySegment: 'smartphones' }]
     );
-    // Per-slug Next caches busted for the authoritative slug + id, BEFORE the
-    // edge purge is scheduled.
-    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(MERCHANT_ID, [
-      'iphone-15',
-      'prod-1',
-    ]);
+    // Per-slug Next caches hard-expired for the authoritative slug + id,
+    // BEFORE the edge purge is scheduled.
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      ['iphone-15', 'prod-1'],
+      { expireImmediately: true }
+    );
     expect(mockRevalidateProductSlugs.mock.invocationCallOrder[0]).toBeLessThan(
       mockScheduleStorefrontProductPurge.mock.invocationCallOrder[0]
     );

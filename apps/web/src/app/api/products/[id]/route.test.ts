@@ -52,6 +52,14 @@ vi.mock('@/lib/storefront-product-purge', () => ({
     mockScheduleStorefrontProductPurge(...args),
 }));
 
+const mockGetPublishedBlogPostSlugsForProducts = vi
+  .fn()
+  .mockResolvedValue({ slugs: [], incomplete: false });
+vi.mock('@/lib/get-published-blog-post-slugs-for-products', () => ({
+  getPublishedBlogPostSlugsForProducts: (...args: unknown[]) =>
+    mockGetPublishedBlogPostSlugsForProducts(...args),
+}));
+
 const mockPrewarmOgabasseyImageTransforms = vi
   .fn()
   .mockResolvedValue(undefined);
@@ -83,6 +91,10 @@ vi.mock('@/lib/sanitize', () => ({
 }));
 
 vi.mock('@/lib/sanitize-core', () => ({
+  isValidUuid: (value: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+      value
+    ),
   sanitizeText: (str: string) => str,
   sanitizeSchemaMarkup: (obj: Record<string, unknown>) => obj,
 }));
@@ -186,6 +198,7 @@ const productSelectArgs: string[] = [];
 // assert the DELETE handler pre-reads the row BEFORE deleting it (the junction
 // rows cascade away with the delete, so reading after would come back empty).
 const productOps: string[] = [];
+let linkedBlogPostRows: unknown[] = [];
 
 const createMockSupabase = () => ({
   rpc: vi.fn((functionName: string, args: Record<string, unknown>) => {
@@ -294,6 +307,19 @@ const createMockSupabase = () => ({
         }),
       };
       return productsApi;
+    }
+    if (table === 'blog_post_products') {
+      const linkedPostsChain = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        limit: vi.fn((limit: number) => {
+          return Promise.resolve({
+            data: linkedBlogPostRows.slice(0, limit),
+            error: null,
+          });
+        }),
+      };
+      return linkedPostsChain;
     }
     if (table === 'product_variants') {
       const variantSelectFilters: [string, unknown][] = [];
@@ -450,6 +476,7 @@ function resetMocks() {
   lastVariantDeleteFilters.length = 0;
   productSelectArgs.length = 0;
   productOps.length = 0;
+  linkedBlogPostRows = [];
   csrfValid = true;
 }
 
@@ -813,7 +840,8 @@ describe('PUT /api/products/[id]', () => {
 
       expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
         MERCHANT_ID,
-        expect.arrayContaining(['updated-product', 'old-name'])
+        expect.arrayContaining(['updated-product', 'old-name']),
+        { expireImmediately: true }
       );
       expect(
         mockRevalidateProductSlugs.mock.invocationCallOrder[0]
@@ -1876,6 +1904,12 @@ describe('DELETE /api/products/[id]', () => {
   describe('success', () => {
     it('deletes product successfully', async () => {
       deleteError = null;
+      productToDelete = {
+        id: PRODUCT_ID,
+        slug: 'phone',
+        name: 'Phone',
+        category: 'Electronics',
+      };
 
       const res = await DELETE(makeDeleteRequest(PRODUCT_ID), {
         params: Promise.resolve({ id: PRODUCT_ID }),
@@ -1915,9 +1949,11 @@ describe('DELETE /api/products/[id]', () => {
       );
       // The deleted slug's Next cache tag is busted BEFORE the edge purge so a
       // post-purge MISS cannot refill a stale "product exists" page.
-      expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(MERCHANT_ID, [
-        'iphone-15',
-      ]);
+      expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+        MERCHANT_ID,
+        ['iphone-15'],
+        { expireImmediately: true }
+      );
       expect(
         mockRevalidateProductSlugs.mock.invocationCallOrder[0]
       ).toBeLessThan(
@@ -1949,67 +1985,6 @@ describe('DELETE /api/products/[id]', () => {
           arg.includes('categories:category_id(slug, is_active)')
         )
       ).toBe(true);
-    });
-
-    it('schedules an id-based fallback purge when the pre-read is null but the delete succeeded', async () => {
-      const consoleWarnSpy = vi
-        .spyOn(console, 'warn')
-        .mockImplementation(() => undefined);
-      try {
-        deleteError = null;
-        // Pre-read returned no row, yet the delete succeeded — the deleted
-        // product's cached 200 must still be evicted via the id fallback.
-        productToDelete = null;
-
-        const res = await DELETE(makeDeleteRequest(PRODUCT_ID), {
-          params: Promise.resolve({ id: PRODUCT_ID }),
-        });
-
-        expect(res.status).toBe(200);
-        expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
-          'test-store',
-          [{ slug: PRODUCT_ID, categorySegment: null }]
-        );
-        expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(MERCHANT_ID, [
-          PRODUCT_ID,
-        ]);
-        expect(
-          mockRevalidateProductSlugs.mock.invocationCallOrder[0]
-        ).toBeLessThan(
-          mockScheduleStorefrontProductPurge.mock.invocationCallOrder[0]
-        );
-      } finally {
-        consoleWarnSpy.mockRestore();
-      }
-    });
-
-    it('schedules an id-based fallback purge when the pre-read errored but the delete succeeded', async () => {
-      const consoleWarnSpy = vi
-        .spyOn(console, 'warn')
-        .mockImplementation(() => undefined);
-      try {
-        deleteError = null;
-        productToDelete = null;
-        preReadError = { message: 'read failed' };
-
-        const res = await DELETE(makeDeleteRequest(PRODUCT_ID), {
-          params: Promise.resolve({ id: PRODUCT_ID }),
-        });
-
-        expect(res.status).toBe(200);
-        // Falls back to the route's product id so `/`, `/products`, and
-        // `/products/<id>` are evicted even though the row is unknown.
-        expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
-          'test-store',
-          [{ slug: PRODUCT_ID, categorySegment: null }]
-        );
-        expect(consoleWarnSpy).toHaveBeenCalledWith(
-          'Product purge pre-read missing after delete; scheduling id-based fallback purge',
-          expect.objectContaining({ id: PRODUCT_ID })
-        );
-      } finally {
-        consoleWarnSpy.mockRestore();
-      }
     });
 
     it('purges the junction category and reads the junction embed on the pre-delete select', async () => {

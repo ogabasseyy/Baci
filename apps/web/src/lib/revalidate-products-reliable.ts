@@ -1,13 +1,17 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { getAppUrl, getInternalApiSecret } from '@/env';
+import { enrichProductPurgeEntries } from '@/lib/authoritative-product-purge-enrichment';
 import {
   revalidateProductSlugs,
   revalidateProducts,
 } from '@/lib/cache-revalidation';
+import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
 import {
   buildInternalProductPurgeEntries,
   collectResolvedProductSlugs,
 } from '@/lib/internal-product-purge-entries';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
+import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
 import type { InternalRevalidateProductEntry } from '@/schemas/internal-revalidate-products-route';
 
 interface RevalidateProductsReliableOptions {
@@ -28,7 +32,15 @@ interface RevalidateProductsReliableOptions {
   merchantSlug?: string;
   /** Products whose public URLs should also be evicted from Cloudflare. */
   products?: readonly InternalRevalidateProductEntry[];
+  /** Every product slug whose per-slug Next cache must be invalidated. */
+  nextProductSlugs?: readonly string[];
+  /** Optional merchant-scoped client for linked blog purge enrichment. */
+  supabase?: SupabaseClient;
+  /** Evict every public storefront document for structural/high-cardinality changes. */
+  purgeWholeStorefront?: boolean;
 }
+
+const INTERNAL_REVALIDATION_PRODUCT_SLUG_LIMIT = 10_000;
 
 /**
  * Revalidate a merchant's product caches reliably from ANY execution context.
@@ -50,23 +62,113 @@ export async function revalidateProductsReliable(
   merchantId: string,
   options: RevalidateProductsReliableOptions = {}
 ): Promise<void> {
-  const { merchantSlug, products } = options;
-  const shouldPurge = Boolean(merchantSlug && products && products.length > 0);
+  const {
+    merchantSlug,
+    products,
+    nextProductSlugs: requestedNextProductSlugs,
+    supabase,
+    purgeWholeStorefront,
+  } = options;
+  const nextProductSlugs = Array.from(
+    new Set(
+      (requestedNextProductSlugs ?? [])
+        .map((slug) => slug.trim())
+        .filter((slug) => slug.length > 0)
+    )
+  );
+  const shouldPurgeProducts = Boolean(
+    merchantSlug && !purgeWholeStorefront && products && products.length > 0
+  );
 
   try {
-    revalidateProducts(merchantId);
+    if (revalidateProducts(merchantId) === false) {
+      throw new Error('Product cache revalidation requires a request context');
+    }
     // In-process revalidation succeeded (we had a Next store context), so the
     // Cloudflare purge can be scheduled in-process too (scheduleStorefrontProductPurge
     // is guarded and never throws). Return before the HTTP fallback.
     // Per-slug Next cache busting needs only merchantId — run it for every
     // products-carrying call, decoupled from the merchant-slug-gated Cloudflare
     // purge (a failed slug lookup must not skip the Next-layer bust).
-    if (products && products.length > 0) {
-      revalidateProductSlugs(merchantId, collectResolvedProductSlugs(products));
+    if ((products && products.length > 0) || nextProductSlugs.length > 0) {
+      let resolvedSlugs =
+        nextProductSlugs.length > 0
+          ? nextProductSlugs
+          : products
+            ? collectResolvedProductSlugs(products)
+            : [];
+      let purgeEntries = buildInternalProductPurgeEntries(products ?? []);
+      let blogPostSlugs: string[] = [];
+      let blogPostSlugsIncomplete = false;
+
+      if (
+        supabase &&
+        products &&
+        products.length > 0 &&
+        !purgeWholeStorefront
+      ) {
+        try {
+          const enriched = await enrichProductPurgeEntries(
+            supabase,
+            merchantId,
+            products
+          );
+          resolvedSlugs = Array.from(
+            new Set([...resolvedSlugs, ...enriched.resolvedSlugs])
+          );
+          purgeEntries = enriched.entries;
+          blogPostSlugs = enriched.blogPostSlugs;
+          blogPostSlugsIncomplete = enriched.blogPostSlugsIncomplete;
+        } catch (error) {
+          // A rejected enrichment leaves the article set unknown: flag it so
+          // the edge operation below escalates instead of purging only the
+          // product URLs while linked articles keep stale data.
+          blogPostSlugsIncomplete = true;
+          console.warn(
+            'Failed to enrich in-process product purge (continuing with caller hints)',
+            { merchantId, error }
+          );
+        }
+      }
+
+      // Hard-expire when an edge purge follows in-process (product purge or
+      // whole-storefront hostname purge): SWR would serve the pre-mutation
+      // snapshot to the first post-purge request and re-seed the edge.
+      if ((shouldPurgeProducts || purgeWholeStorefront) && merchantSlug) {
+        revalidateProductSlugs(merchantId, resolvedSlugs, {
+          expireImmediately: true,
+        });
+      } else {
+        revalidateProductSlugs(merchantId, resolvedSlugs);
+      }
+
+      if (shouldPurgeProducts && merchantSlug) {
+        // Expire the merchant-scoped related-blog enrichment before the edge
+        // purge so a MISS cannot repopulate an article with stale product data.
+        expireProductBlogCache(merchantId);
+        if (blogPostSlugs.length > 0) {
+          scheduleStorefrontProductPurge(merchantSlug, purgeEntries, {
+            blogPostSlugs,
+          });
+        } else {
+          scheduleStorefrontProductPurge(merchantSlug, purgeEntries);
+        }
+        if (blogPostSlugsIncomplete) {
+          // The known article URLs were purged above, but the set is
+          // partial: evict the hostname (a superset) so the unknown
+          // remainder cannot keep pre-mutation data until TTL.
+          scheduleStorefrontHostnamePurge(merchantSlug);
+        }
+      }
     }
-    if (shouldPurge && merchantSlug && products) {
-      const purgeEntries = buildInternalProductPurgeEntries(products);
-      scheduleStorefrontProductPurge(merchantSlug, purgeEntries);
+
+    if (purgeWholeStorefront && merchantSlug) {
+      // Hostname-wide purges can immediately refill any cached article rail.
+      // Hard-expire the merchant-scoped enrichment first, just as the
+      // per-product path does, so structural/import purges cannot re-seed the
+      // edge with a stale product snapshot.
+      expireProductBlogCache(merchantId);
+      scheduleStorefrontHostnamePurge(merchantSlug);
     }
     return;
   } catch {
@@ -91,29 +193,98 @@ export async function revalidateProductsReliable(
   }
 
   try {
-    const response = await (options.fetchImpl ?? fetch)(
-      new URL('/api/internal/revalidate-products', baseUrl),
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${secret}`,
-          'Content-Type': 'application/json',
-        },
-        // Forward `products` whenever available — even without a resolved
-        // merchantSlug — so the route can still bust the per-slug Next caches;
-        // the route gates only the Cloudflare purge on merchantSlug.
-        body: JSON.stringify({
-          merchantId,
-          ...(merchantSlug ? { merchantSlug } : {}),
-          ...(products && products.length > 0 ? { products } : {}),
-        }),
-        signal: AbortSignal.timeout(options.timeoutMs ?? 5000),
+    const slugChunks: readonly (readonly string[] | undefined)[] =
+      nextProductSlugs.length > 0
+        ? Array.from(
+            {
+              length: Math.ceil(
+                nextProductSlugs.length /
+                  INTERNAL_REVALIDATION_PRODUCT_SLUG_LIMIT
+              ),
+            },
+            (_, index) =>
+              nextProductSlugs.slice(
+                index * INTERNAL_REVALIDATION_PRODUCT_SLUG_LIMIT,
+                (index + 1) * INTERNAL_REVALIDATION_PRODUCT_SLUG_LIMIT
+              )
+          )
+        : [undefined];
+
+    // Control metadata (products/merchantSlug/whole-storefront flag) rides on
+    // the LAST chunk, and only when every chunk so far succeeded: the
+    // endpoint schedules the edge purge as soon as it sees the flag, so
+    // sending it on an early chunk would let the purge precede the remaining
+    // slug invalidations and refill the edge from not-yet-busted Next
+    // entries. When any chunk fails the purge is suppressed (loud error
+    // below) rather than scheduled over partial invalidation state.
+    let priorChunkFailed = false;
+    const lastChunkIndex = slugChunks.length - 1;
+    for (const [chunkIndex, productSlugChunk] of slugChunks.entries()) {
+      // A rejected/timed-out chunk must not skip the remaining chunks: the
+      // database writes already committed, and the merchant-wide tag does not
+      // clear per-slug PDP entries, so every chunk is submitted independently.
+      const chunkCarriesControlMetadata =
+        chunkIndex === lastChunkIndex && !priorChunkFailed;
+      let response: Response;
+      try {
+        response = await (options.fetchImpl ?? fetch)(
+          new URL('/api/internal/revalidate-products', baseUrl),
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${secret}`,
+              'Content-Type': 'application/json',
+            },
+            // The endpoint accepts at most 10,000 slugs. Keep products,
+            // merchantSlug, and the whole-storefront flag on the last
+            // request (all-success path) so earlier chunks only perform
+            // per-slug invalidation and the edge purge cannot precede them.
+            body: JSON.stringify({
+              merchantId,
+              ...(chunkCarriesControlMetadata && merchantSlug
+                ? { merchantSlug }
+                : {}),
+              ...(chunkCarriesControlMetadata && products && products.length > 0
+                ? { products }
+                : {}),
+              ...(productSlugChunk && productSlugChunk.length > 0
+                ? { productSlugs: productSlugChunk }
+                : {}),
+              ...(chunkCarriesControlMetadata && purgeWholeStorefront
+                ? { purgeWholeStorefront: true }
+                : {}),
+            }),
+            signal: AbortSignal.timeout(options.timeoutMs ?? 5000),
+          }
+        );
+      } catch (error) {
+        priorChunkFailed = true;
+        console.error(
+          'Internal product revalidation chunk failed; continuing with remaining chunks',
+          { merchantId, chunkIndex, error }
+        );
+        continue;
       }
-    );
-    if (!response.ok) {
+      if (!response.ok) {
+        priorChunkFailed = true;
+        console.error(
+          'Internal product revalidation endpoint returned non-2xx; relying on cacheLife self-heal',
+          { merchantId, status: response.status }
+        );
+      }
+    }
+    if (
+      priorChunkFailed &&
+      (merchantSlug ||
+        (products && products.length > 0) ||
+        purgeWholeStorefront)
+    ) {
+      // The edge purge was deliberately withheld: scheduling it now would
+      // refill Cloudflare from the un-invalidated chunks' stale tags.
+      // Operators re-run the import to converge; TTL bounds the staleness.
       console.error(
-        'Internal product revalidation endpoint returned non-2xx; relying on cacheLife self-heal',
-        { merchantId, status: response.status }
+        'Internal product revalidation completed with failed chunks; edge purge suppressed to avoid refilling from un-invalidated tags',
+        { merchantId }
       );
     }
   } catch (error) {

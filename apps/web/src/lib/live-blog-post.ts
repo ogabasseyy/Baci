@@ -1,4 +1,5 @@
 import { getMerchantSafe } from '@/lib/cached-data';
+import { hydrateRelatedBlogProductAvailability } from '@/lib/hydrate-related-blog-product-availability';
 import { normalizeStorefrontCategoryValue } from '@/lib/normalize-storefront-category-value';
 import { getOrderedBlogPostProductLinks } from '@/lib/ordered-blog-post-product-links';
 import {
@@ -11,6 +12,7 @@ import {
   normalizeRelatedBlogProducts,
   RELATED_BLOG_PRODUCTS_SELECT,
 } from '@/lib/related-blog-products';
+import { selectBlogCatalogProducts } from '@/lib/select-blog-catalog-products';
 import { STOREFRONT_BLOG_POST_SELECT } from '@/lib/storefront-blog-post-select';
 import { createPublicClient } from '@/lib/supabase/anon';
 
@@ -99,9 +101,16 @@ export async function getLiveBlogPost(
     );
   }
 
+  // Mirror the cached path: keep the eight display cards plus any linked
+  // product the article body references, so an inline catalog token past the
+  // eighth link still resolves instead of falling back to "Check current
+  // price" (the truncation must happen before availability hydration).
   let normalizedRelatedProducts = linkedProductsError
     ? []
-    : normalizeRelatedBlogProductLinks(linkedProducts).slice(0, 8);
+    : selectBlogCatalogProducts(
+        normalizeRelatedBlogProductLinks(linkedProducts),
+        post.content
+      );
 
   const normalizedCategorySlug = normalizeStorefrontCategoryValue(
     post.category
@@ -130,6 +139,12 @@ export async function getLiveBlogPost(
       : normalizeRelatedBlogProducts(relatedProducts);
   }
 
+  normalizedRelatedProducts = await hydrateRelatedBlogProductAvailability(
+    supabase,
+    normalizedRelatedProducts,
+    { merchantId: merchant.id }
+  );
+
   return {
     merchant: {
       id: merchant.id,
@@ -138,6 +153,7 @@ export async function getLiveBlogPost(
       logo_url: merchant.logo_url,
       custom_domain: merchant.custom_domain,
       country: merchant.country,
+      payout_currency: merchant.payout_currency,
       social_media: merchant.social_media,
     },
     post,

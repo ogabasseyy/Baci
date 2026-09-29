@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mockRevalidateProducts = vi.fn();
 const mockRevalidateProductSlugs = vi.fn();
 const mockScheduleStorefrontProductPurge = vi.fn();
+const mockScheduleStorefrontHostnamePurge = vi.fn();
+const mockEnrichProductPurgeEntries = vi.fn();
+const mockExpireProductBlogCache = vi.fn();
 
 vi.mock('@/lib/cache-revalidation', () => ({
   revalidateProducts: (...args: unknown[]) => mockRevalidateProducts(...args),
@@ -12,6 +15,18 @@ vi.mock('@/lib/cache-revalidation', () => ({
 vi.mock('@/lib/storefront-product-purge', () => ({
   scheduleStorefrontProductPurge: (...args: unknown[]) =>
     mockScheduleStorefrontProductPurge(...args),
+}));
+vi.mock('@/lib/expire-product-blog-cache', () => ({
+  expireProductBlogCache: (...args: unknown[]) =>
+    mockExpireProductBlogCache(...args),
+}));
+vi.mock('@/lib/storefront-product-purge-hostnames', () => ({
+  scheduleStorefrontHostnamePurge: (...args: unknown[]) =>
+    mockScheduleStorefrontHostnamePurge(...args),
+}));
+vi.mock('@/lib/authoritative-product-purge-enrichment', () => ({
+  enrichProductPurgeEntries: (...args: unknown[]) =>
+    mockEnrichProductPurgeEntries(...args),
 }));
 vi.mock('@/env', () => ({
   getAppUrl: () => 'https://app.usebaci.com',
@@ -64,6 +79,22 @@ describe('revalidateProductsReliable', () => {
 
     expect(mockRevalidateProducts).toHaveBeenCalledWith('merchant-1');
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('uses the remote route when local revalidation returns false', async () => {
+    mockRevalidateProducts.mockReturnValue(false);
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true });
+    await revalidateProductsReliable('merchant-1', {
+      fetchImpl,
+      merchantSlug: 'ogabassey',
+      products: [{ id: 'product-1', slug: 'phone' }],
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toMatchObject({
+      products: [{ id: 'product-1', slug: 'phone' }],
+      merchantSlug: 'ogabassey',
+    });
   });
 
   it('falls back to the internal Bearer endpoint when in-process revalidation throws (no store context)', async () => {
@@ -153,6 +184,7 @@ describe('revalidateProductsReliable', () => {
       'ogabassey',
       [{ slug: 'iphone-15', categorySegment: 'smartphones' }]
     );
+    expect(mockExpireProductBlogCache).toHaveBeenCalledWith('merchant-1');
   });
 
   it('busts the per-slug Next product caches BEFORE scheduling the in-process purge (F3 parity)', async () => {
@@ -166,11 +198,13 @@ describe('revalidateProductsReliable', () => {
     });
 
     // Per-slug invalidation for the caller-resolved slug + id (no store client
-    // here to resolve authoritative rows).
-    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith('merchant-1', [
-      'iphone-15',
-      'prod-1',
-    ]);
+    // here to resolve authoritative rows), hard-expired because the in-process
+    // edge purge follows and SWR must not re-seed it.
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      ['iphone-15', 'prod-1'],
+      { expireImmediately: true }
+    );
     // Ordering: the Next per-slug tags are busted before the edge purge is
     // scheduled, so a CF MISS cannot refill from stale Next data.
     expect(mockRevalidateProductSlugs.mock.invocationCallOrder[0]).toBeLessThan(
@@ -204,50 +238,34 @@ describe('revalidateProductsReliable', () => {
     );
   });
 
-  it('forwards merchantSlug + products in the HTTP fallback body', async () => {
+  it('continues submitting later slug chunks when a middle chunk rejects', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
     mockRevalidateProducts.mockImplementation(() => {
       throw new Error('no store');
     });
-    const fetchImpl = vi.fn().mockResolvedValue({ ok: true } as Response);
-    const products = [{ slug: 'iphone-15', category: 'Smartphones' }];
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true } as Response)
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockResolvedValueOnce({ ok: true } as Response);
+    const nextProductSlugs = Array.from(
+      { length: 20_001 },
+      (_, index) => `slug-${index}`
+    );
 
     await revalidateProductsReliable('merchant-1', {
       fetchImpl: fetchImpl as unknown as typeof fetch,
-      merchantSlug: 'ogabassey',
-      products,
+      nextProductSlugs,
     });
 
-    const [, init] = fetchImpl.mock.calls[0];
-    expect((init as RequestInit).body).toBe(
-      JSON.stringify({
-        merchantId: 'merchant-1',
-        merchantSlug: 'ogabassey',
-        products,
-      })
+    // All three chunks are submitted: the rejected middle chunk must not
+    // skip the final chunk's per-slug PDP invalidation.
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    const bodies = fetchImpl.mock.calls.map(([, init]) =>
+      JSON.parse((init as RequestInit).body as string)
     );
-    // The HTTP route schedules the purge, not the in-process helper.
-    expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
-  });
-
-  it('forwards products WITHOUT merchantSlug in the HTTP fallback body', async () => {
-    mockRevalidateProducts.mockImplementation(() => {
-      throw new Error('no store');
-    });
-    const fetchImpl = vi.fn().mockResolvedValue({ ok: true } as Response);
-    const products = [{ slug: 'iphone-15', category: 'Smartphones' }];
-
-    // Merchant-slug lookup failed upstream: the fallback must still forward the
-    // product entries so the internal route can bust the per-slug Next caches
-    // (the route gates only the Cloudflare purge on merchantSlug).
-    await revalidateProductsReliable('merchant-1', {
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-      products,
-    });
-
-    const [, init] = fetchImpl.mock.calls[0];
-    expect((init as RequestInit).body).toBe(
-      JSON.stringify({ merchantId: 'merchant-1', products })
-    );
+    expect(bodies[0].productSlugs).toHaveLength(10_000);
+    expect(bodies[2].productSlugs).toHaveLength(1);
   });
 
   it('does not fetch (no secret leak) when the revalidation target is unavailable', async () => {

@@ -32,6 +32,12 @@ describe('Paystack reference-only refund events', () => {
       .mockReturnValueOnce(buildPaymentCandidates([cancelledPaymentRow()]))
       .mockReturnValueOnce(buildRefundCandidates([]))
       .mockReturnValueOnce(buildSettledCandidates([]))
+      .mockReturnValueOnce(
+        buildSettledCandidates([
+          { amount: 100, gateway: 'paystack' },
+          { amount: 50, gateway: 'korapay' },
+        ])
+      )
       .mockReturnValueOnce(review);
     const rpc = vi.fn();
 

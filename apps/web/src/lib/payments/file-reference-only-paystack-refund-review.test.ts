@@ -1,11 +1,23 @@
+import type { Mock } from 'vitest';
 import { describe, expect, it, vi } from 'vitest';
 import { fileReferenceOnlyPaystackRefundReview } from './file-reference-only-paystack-refund-review';
 
-function settledQuery(data: unknown, error: unknown = null) {
-  return {
-    eq: vi.fn().mockReturnThis(),
+function listQuery(data: unknown, error: unknown = null) {
+  const builder: Record<string, unknown> = {
     limit: vi.fn().mockResolvedValue({ data, error }),
-    select: vi.fn().mockReturnThis(),
+    // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are awaited thenables.
+    then: (resolve: (result: unknown) => void) => resolve({ data, error }),
+  };
+  for (const key of ['eq', 'gt', 'is', 'not', 'select']) {
+    builder[key] = vi.fn().mockReturnValue(builder);
+  }
+  return builder as unknown as {
+    eq: Mock;
+    gt: Mock;
+    is: Mock;
+    limit: Mock;
+    not: Mock;
+    select: Mock;
   };
 }
 
@@ -18,12 +30,18 @@ const reviewInput = {
   paymentReference: 'PSK-1',
 };
 
+const multiLegPayments = [
+  { amount: 100, gateway: 'paystack' },
+  { amount: 50, gateway: 'korapay' },
+];
+
 describe('fileReferenceOnlyPaystackRefundReview', () => {
   it('files a durable review when no completed linked row exists', async () => {
     const insert = vi.fn().mockResolvedValue({ error: null });
     const from = vi
       .fn()
-      .mockReturnValueOnce(settledQuery([]))
+      .mockReturnValueOnce(listQuery([]))
+      .mockReturnValueOnce(listQuery(multiLegPayments))
       .mockReturnValueOnce({ insert });
     const rpc = vi.fn();
 
@@ -54,7 +72,7 @@ describe('fileReferenceOnlyPaystackRefundReview', () => {
     const insert = vi.fn();
     const from = vi
       .fn()
-      .mockReturnValueOnce(settledQuery([{ id: 'refund-9' }]))
+      .mockReturnValueOnce(listQuery([{ id: 'refund-9' }]))
       .mockReturnValueOnce({ insert });
     const rpc = vi.fn();
 
@@ -67,11 +85,68 @@ describe('fileReferenceOnlyPaystackRefundReview', () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
+  it('stays silent when a sole legacy refund already covered the payment', async () => {
+    const insert = vi.fn();
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(listQuery([]))
+      .mockReturnValueOnce(listQuery([{ amount: 100, gateway: 'paystack' }]))
+      .mockReturnValueOnce(listQuery([{ amount: 100 }]))
+      .mockReturnValueOnce({ insert });
+    const rpc = vi.fn();
+
+    await fileReferenceOnlyPaystackRefundReview(
+      { from, rpc } as never,
+      reviewInput
+    );
+
+    expect(insert).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('files when legacy refunds only partially cover the sole payment', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(listQuery([]))
+      .mockReturnValueOnce(listQuery([{ amount: 100, gateway: 'paystack' }]))
+      .mockReturnValueOnce(listQuery([{ amount: 40 }]))
+      .mockReturnValueOnce({ insert });
+
+    await fileReferenceOnlyPaystackRefundReview(
+      { from, rpc: vi.fn() } as never,
+      reviewInput
+    );
+
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'order_cancellation_refund_requires_review',
+      })
+    );
+  });
+
+  it('files when the sole external payment is not a Paystack leg', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(listQuery([]))
+      .mockReturnValueOnce(listQuery([{ amount: 100, gateway: 'korapay' }]))
+      .mockReturnValueOnce({ insert });
+
+    await fileReferenceOnlyPaystackRefundReview(
+      { from, rpc: vi.fn() } as never,
+      reviewInput
+    );
+
+    expect(insert).toHaveBeenCalled();
+  });
+
   it('merges into the open review on redelivery instead of duplicating', async () => {
     const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
     const from = vi
       .fn()
-      .mockReturnValueOnce(settledQuery([]))
+      .mockReturnValueOnce(listQuery([]))
+      .mockReturnValueOnce(listQuery(multiLegPayments))
       .mockReturnValueOnce({ insert });
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
 
@@ -95,7 +170,8 @@ describe('fileReferenceOnlyPaystackRefundReview', () => {
     const insert = vi.fn().mockResolvedValue({ error: { code: 'ECONNRESET' } });
     const from = vi
       .fn()
-      .mockReturnValueOnce(settledQuery([]))
+      .mockReturnValueOnce(listQuery([]))
+      .mockReturnValueOnce(listQuery(multiLegPayments))
       .mockReturnValueOnce({ insert });
 
     await expect(
@@ -109,7 +185,7 @@ describe('fileReferenceOnlyPaystackRefundReview', () => {
   it('fails the webhook when the settled-row lookup fails', async () => {
     const from = vi
       .fn()
-      .mockReturnValueOnce(settledQuery(null, new Error('db down')));
+      .mockReturnValueOnce(listQuery(null, new Error('db down')));
 
     await expect(
       fileReferenceOnlyPaystackRefundReview(

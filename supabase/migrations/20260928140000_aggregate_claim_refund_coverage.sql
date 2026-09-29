@@ -42,12 +42,15 @@ BEGIN
      WHERE t.order_id = p_order_id
        AND t.merchant_id = v_order.merchant_id
        AND t.transaction_type = 'payment'
-       -- Same funded-leg statuses as the coverage scan below: when every
-       -- external leg sits in refund_pending (e.g. a PayPal-only
-       -- cancellation awaiting provider completion), the side effect
-       -- must still be reclaimable so the drain resumes it instead of
-       -- 503ing on refund_not_required every five minutes.
-       AND t.status IN ('completed', 'refund_pending')
+       -- Funded legs plus self-terminal refunds: when every external leg
+       -- sits in refund_pending (e.g. a PayPal-only cancellation awaiting
+       -- provider completion), the side effect must still be reclaimable
+       -- so the drain resumes it instead of 503ing on
+       -- refund_not_required every five minutes. Fully refunded legs
+       -- (PayPal terminalizes the payment row itself) also pass: the
+       -- executor finds no actionable legs and completes the row instead
+       -- of stranding it behind a rejection.
+       AND t.status IN ('completed', 'refund_pending', 'refunded')
        AND t.amount > 0
        AND COALESCE(t.gateway, '') NOT IN (
          'wallet', 'savings', 'store_credit', 'cash', 'manual', 'pay_on_delivery'

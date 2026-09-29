@@ -77,7 +77,10 @@ describe('processCancellationDrain', () => {
 
     expect(response.status).toBe(200);
     expect(mocks.drainFailedOrderCancellationSideEffects).toHaveBeenCalledWith(
-      expect.objectContaining({ sendCancellationEmail: mocks.sendEmail })
+      expect.objectContaining({
+        limit: 9,
+        sendCancellationEmail: mocks.sendEmail,
+      })
     );
     expect(
       mocks.reconcilePendingPaystackCancellationRefunds
@@ -113,6 +116,34 @@ describe('processCancellationDrain', () => {
       expect(mocks.loggerWarn).toHaveBeenCalledWith(
         expect.objectContaining({
           message: expect.stringContaining('cron budget exhausted'),
+        })
+      );
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('skips the side-effect drain when the workers exhausted the cron budget', async () => {
+    const now = vi.spyOn(Date, 'now');
+    now
+      .mockReturnValueOnce(1_000_000)
+      .mockReturnValueOnce(1_290_000)
+      .mockReturnValue(1_290_000);
+    try {
+      const response = await processCancellationDrain(supabase);
+
+      expect(response.status).toBe(200);
+      expect(
+        mocks.drainFailedOrderCancellationSideEffects
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          limit: 0,
+          sendCancellationEmail: mocks.sendEmail,
+        })
+      );
+      expect(mocks.loggerWarn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('side-effect drain'),
         })
       );
     } finally {

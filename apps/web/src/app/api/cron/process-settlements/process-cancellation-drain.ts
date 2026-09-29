@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
+import { cancellationSideEffectDrainLimit } from '@/lib/orders/cancellation-side-effect-drain-limit';
 import { drainFailedOrderCancellationSideEffects } from '@/lib/orders/drain-failed-order-cancellation-side-effects';
 import { drainPaystackRefundNotifications } from '@/lib/payments/drain-paystack-refund-notifications';
 import { notificationDrainLimit } from '@/lib/payments/notification-drain-limit';
@@ -13,8 +14,9 @@ type ServiceClient = ReturnType<typeof createServiceClient>;
 /**
  * Run the cancellation/refund worker batch: reconcile pending and completed
  * Paystack cancellation refunds first, then retry failed cancellation side
- * effects against the settled refund state, then drain refund notifications
- * within the remaining cron budget. The side-effect drain must observe
+ * effects against the settled refund state within the remaining cron
+ * budget, then drain refund notifications within what is left after that.
+ * The side-effect drain must observe
  * completed refunds: running it in parallel lets it read a refund as
  * nonterminal, then file a preflight review and record delivery_uncertain
  * after the pending-refund worker already completed it. Workers report
@@ -27,8 +29,22 @@ export async function processCancellationDrain(supabase: ServiceClient) {
     reconcilePendingPaystackCancellationRefunds(supabase),
     reconcileCompletedPaystackCancellationRefunds(supabase),
   ]);
+  // Budget the serial side-effect drain from the remaining invocation
+  // time: an aborted step strands its row as claimed, which the next
+  // drain converts to permanently non-retryable delivery_uncertain.
+  // Skipped rows stay failed for the next invocation.
+  const sideEffectLimit = cancellationSideEffectDrainLimit(
+    Date.now() - workersStartedAt
+  );
+  if (sideEffectLimit <= 0) {
+    logger.warn({
+      message: 'Skipping cancellation side-effect drain: cron budget exhausted',
+      elapsedMs: Date.now() - workersStartedAt,
+    });
+  }
   const [cancellationResult] = await Promise.allSettled([
     drainFailedOrderCancellationSideEffects({
+      limit: sideEffectLimit,
       sendCancellationEmail: sendEmail,
       supabase,
     }),

@@ -4,6 +4,7 @@ import {
   MAX_POST_FILTER_RESULT_PAGES,
   POST_FILTER_RESULT_PAGE_SIZE,
 } from './search-products-ranking';
+import { inferSmartphoneCategory } from './infer-smartphone-category';
 import { loadMcpSearchProducts } from './search-products-query';
 
 function createRankedSearchSupabase(
@@ -96,6 +97,20 @@ describe('loadMcpSearchProducts', () => {
     });
     expect(select).toHaveBeenCalledWith(expect.stringContaining('description'));
     expect(result.products[0]?.name).toBe('Aroma Machine');
+  });
+
+  it('backfills lexical candidates after intent filtering rejects the first ranked page', async () => {
+    const { rpc, supabase } = createRankedSearchSupabase('Printers', (id) =>
+      id === 'ranked-100' ? 'Google Pixel Buds Pro' : 'HP Wireless Printer'
+    );
+    const result = await loadMcpSearchProducts({
+      args: { query: 'wireless earbuds', limit: 1 }, merchantId: 'merchant-1',
+      sanitizeString: (input) => input, supabase,
+    });
+
+    expect(result.products.map((product) => product.name)).toEqual(['Google Pixel Buds Pro']);
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc.mock.calls.map(([, args]) => args.result_offset)).toEqual([0, POST_FILTER_RESULT_PAGE_SIZE]);
   });
 
   it('drops description-only matches for a broad use-case word', async () => {
@@ -244,16 +259,9 @@ describe('loadMcpSearchProducts', () => {
     expect(result.products).toHaveLength(2);
   });
 
-  it('does not force phone accessories into the Smartphones category', async () => {
+  it('does not force phone accessories into the Smartphones category', () => {
     for (const query of ['phone screen protector', 'phone stand', 'phone mount', 'phone holder', 'phone tripod', 'iPhone 15 stand', 'iPhone 15 holder', 'iPhone 15 lens', 'iPhone 15 pouch', 'iPhone 15 wallet', 'iPhone 15 earbuds', 'case for iPhone 15', 'case for Samsung Galaxy Z Fold 7 phone', 'case for Google Pixel Fold phone', 'charger for phone', 'case iPhone 15', 'charger phone', 'screen protector iPhone 15']) {
-      const { supabase } = createRankedSearchSupabase('Accessories');
-      const result = await loadMcpSearchProducts({
-        args: { query, limit: 2 },
-        merchantId: 'merchant-1',
-        sanitizeString: (input) => input,
-        supabase,
-      });
-      expect(result.products).toHaveLength(2);
+      expect(inferSmartphoneCategory(query, undefined)).toBeUndefined();
     }
   });
 

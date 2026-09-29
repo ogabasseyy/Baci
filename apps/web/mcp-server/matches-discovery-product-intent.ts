@@ -21,8 +21,8 @@ const phoneAccessoryTypes = new Set([
   'protector', 'protectors', 'stand', 'stands', 'wallet', 'wallets',
 ]);
 const productTypes = new Set([
-  ...phoneAccessoryTypes, 'bank', 'banks', 'camera', 'cameras', 'diffuser', 'diffusers',
-  'earphone', 'earphones', 'headphone', 'headphones', 'laptop', 'laptops',
+  ...phoneAccessoryTypes, 'accessory', 'accessories', 'bank', 'banks', 'camera', 'cameras', 'diffuser', 'diffusers',
+  'earbud', 'earbuds', 'earphone', 'earphones', 'headphone', 'headphones', 'laptop', 'laptops',
   'mouse', 'mice', 'phone', 'phones', 'printer', 'printers', 'speaker', 'speakers',
   'smartphone', 'smartphones', 'tablet', 'tablets', 'watch', 'watches',
 ]);
@@ -34,6 +34,9 @@ const knownBrandWords = new Set([
   'apple', 'dell', 'google', 'hp', 'huawei', 'infinix', 'itel', 'jbl',
   'lenovo', 'lg', 'nokia', 'oppo', 'pixel', 'realme', 'redmi', 'riversong',
   'samsung', 'sony', 'tecno', 'vivo', 'xiaomi',
+]);
+const knownDeviceFamilyWords = new Set([
+  'airpod', 'airpods', 'galaxy', 'ipad', 'iphone', 'iphones', 'macbook', 'pixel', 'pixels',
 ]);
 const modelQualifiers = new Set(['max', 'mini', 'plus', 'pro', 'ultra']);
 
@@ -62,30 +65,42 @@ function matchesProductToken(textWords: string[], token: string): boolean {
     word === compactUnit[1] && textWords[index + 1] === compactUnit[2]));
 }
 
+function hasConsecutiveWords(textWords: string[], expectedWords: string[]): boolean {
+  return textWords.some((_, start) => expectedWords.every((word, offset) =>
+    matchesWord([textWords[start + offset] ?? ''], word)
+  ));
+}
+
 /** Keep the requested item type and explicit model attached to search results.
  * Embeddings alone can otherwise return a phone for a request for its case. */
 export function matchesDiscoveryProductIntent(product: ProductText, query: string | undefined): boolean {
   if (!query) return true;
-  const normalized = query.normalize('NFKC').toLocaleLowerCase('en')
-    .replace(/^\s*(?:(?:looking|searching|shopping)\s+for|(?:show|find|search|buy)(?:\s+me)?(?:\s+for)?|i\s+(?:want|need))\s+(?:(?:a|an|some)\s+)?/i, '');
+  const rawQuery = query.normalize('NFKC').toLocaleLowerCase('en').trim();
+  const normalized = rawQuery
+    .replace(/^\s*(?:(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?(?:show|find|search|buy|get|recommend|suggest)(?:\s+me)?(?:\s+for)?|(?:looking|searching|shopping)\s+for|i\s+(?:want|need))(?:\s+(?:a|an|some|the))?\s+/i, '');
   const queryWords = words(normalized);
-  if (queryWords.filter((word) => /^[a-z]+$/.test(word)).length < 2) return true;
+  if (queryWords.filter((word) => /^[a-z]+$/.test(word)).length < 2 && normalized === rawQuery) return true;
 
   const priceBoundary = queryWords.findIndex((word) => word === 'under' || word === 'below' || word === 'between');
   const coreWords = priceBoundary < 0 ? queryWords : queryWords.slice(0, priceBoundary);
-  const detailIndex = coreWords.findIndex((word) => detailBoundary.has(word));
-  const itemWords = detailIndex < 0 ? coreWords : coreWords.slice(0, detailIndex);
-  const lastWord = itemWords.at(-1);
-  if (!lastWord || genericTypes.has(lastWord)) return true;
+  const detailIndex = coreWords.findIndex((word, index) =>
+    detailBoundary.has(word) && !(word === 'in' && (coreWords[index - 1] === 'all' || /^\d+$/.test(coreWords[index - 1] ?? '')))
+  );
+  const itemWords = detailIndex < 0 ? [...coreWords] : coreWords.slice(0, detailIndex);
+  while (genericTypes.has(itemWords.at(-1) ?? '')) itemWords.pop();
+  if (itemWords.length === 0) return true;
   const itemType = itemWords.findLast((word) => productTypes.has(word));
 
   // The lead describes the item itself; later boilerplate often mentions
   // compatible cases, chargers, phones, and other unrelated products.
   const itemText = words([product.name, product.brand, product.category].filter(Boolean).join(' '));
   const identityWords = words([product.name, product.brand].filter(Boolean).join(' '));
-  const descriptionIdentifiesType = itemType && new RegExp(
-    `\\bis\\s+(?:a|an)\\s+(?:[a-z0-9-]+\\s+){0,3}${itemType}\\b`, 'i'
-  ).test(product.description?.slice(0, 300) ?? '');
+  const descriptionWords = words(product.description?.slice(0, 300) ?? '');
+  const descriptionBoundary = descriptionWords.findIndex((word) =>
+    ['for', 'compatible', 'supports', 'fits', 'works', 'includes', 'included', 'sold'].includes(word)
+  );
+  const descriptionLead = descriptionBoundary < 0 ? descriptionWords : descriptionWords.slice(0, descriptionBoundary);
+  const descriptionIdentifiesType = itemType && matchesWord(descriptionLead, itemType);
   if (itemType && !matchesWord(itemText, itemType) && !descriptionIdentifiesType) return false;
   const categoryWords = words(product.category ?? '');
   const nameWords = words(product.name ?? '');
@@ -93,6 +108,9 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
     (categoryWords.some((word) => matchesWord([word], 'phone')) &&
       !categoryWords.some((word) => ['accessory', 'accessories', 'case', 'cases'].includes(word)));
   if (itemType && phoneAccessoryTypes.has(itemType) && isHandsetCategory) return false;
+  const accessoryIntent = itemType === 'accessory' || itemType === 'accessories';
+  if (accessoryIntent && !categoryWords.some((word) => word.includes('accessor')) &&
+    !nameWords.some((word) => word.includes('accessor') || phoneAccessoryTypes.has(word) || accessoryHeadTypes.has(word))) return false;
 
   // A description can identify an otherwise untitled item, but it must not
   // override a different product type stated in the title.
@@ -105,7 +123,7 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
 
   // Category and compatibility text may mention the requested device, but an
   // accessory title still describes the thing being sold.
-  if (itemType && !phoneAccessoryTypes.has(itemType) &&
+  if (itemType && !accessoryIntent && !phoneAccessoryTypes.has(itemType) &&
     nameWords.some((word) => accessoryHeadTypes.has(word))) return false;
 
   // Brands after "for" describe compatibility (for example, a case for
@@ -113,8 +131,27 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
   const requestedBrands = itemWords.filter((word) => knownBrandWords.has(word));
   const compatibilityWords = words([product.name, product.description].filter(Boolean).join(' '));
   if (requestedBrands.some((brand) => !matchesWord(identityWords, brand))) return false;
-  const compatibilityBrands = coreWords.slice(itemWords.length).filter((word) => knownBrandWords.has(word));
-  if (compatibilityBrands.some((brand) => !matchesWord(compatibilityWords, brand))) return false;
+  const compatibilityIndex = coreWords.indexOf('for', itemWords.length);
+  const compatibilityTerms = compatibilityIndex < 0 ? [] : coreWords.slice(compatibilityIndex + 1)
+    .filter((word) => !['a', 'an', 'the', 'phone', 'phones', 'device', 'devices'].includes(word));
+  if (compatibilityTerms.some((term) => knownBrandWords.has(term) || knownDeviceFamilyWords.has(term))) {
+    if (!hasConsecutiveWords(compatibilityWords, compatibilityTerms)) return false;
+    const compatibilityAnchor = compatibilityTerms.findIndex((word) => /\d/.test(word));
+    if (compatibilityAnchor >= 0) {
+      const productAnchor = compatibilityWords.findIndex((word, index) =>
+        matchesWord([word], compatibilityTerms[compatibilityAnchor] ?? '') &&
+        hasConsecutiveWords(compatibilityWords.slice(index), compatibilityTerms.slice(compatibilityAnchor))
+      );
+      if (productAnchor >= 0) {
+        const queryQualifiers = compatibilityTerms.slice(compatibilityAnchor + 1).filter((word) => modelQualifiers.has(word));
+        const productQualifiers: string[] = [];
+        for (let next = productAnchor + 1; modelQualifiers.has(compatibilityWords[next] ?? ''); next += 1) {
+          productQualifiers.push(compatibilityWords[next] ?? '');
+        }
+        if (productQualifiers.some((qualifier) => !queryQualifiers.includes(qualifier))) return false;
+      }
+    }
+  }
 
   // "Phone pouch" describes an accessory, even if its description mentions
   // phones. A handset must be catalogued or named as the actual item.
@@ -127,8 +164,14 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
       !matchesWord(itemText, modifier)) return false;
   }
 
-  for (const [index, token] of coreWords.entries()) {
-    if (!/\d/.test(token) || token.length < 2 || token.length > 10 || /^[0-9][gk]$/.test(token)) continue;
+  const productSpecWords = words([product.name, product.brand, product.category, product.description].filter(Boolean).join(' '));
+  for (const token of coreWords) {
+    if (/^\d+(?:gb|tb|mb|mah|w|hz|mp|ram)$/.test(token)) {
+      if (!matchesProductToken(productSpecWords, token)) return false;
+      continue;
+    }
+    const index = itemWords.indexOf(token);
+    if (index < 0 || !/\d/.test(token) || token.length < 2 || token.length > 10 || /^[0-9][gk]$/.test(token)) continue;
     if (!matchesProductToken(itemText, token)) return false;
     const preceding = coreWords[index - 1];
     if (preceding && /^[a-z]+$/.test(preceding) && !modelAnchorStopwords.has(preceding) &&

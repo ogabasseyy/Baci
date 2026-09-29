@@ -105,6 +105,47 @@ describe('discovery product intent', () => {
     }, 'case for Samsung phone')).toBe(true);
   });
 
+  it('keeps specification numbers out of model matching and recognizes ordinary description wording', () => {
+    expect(matchesDiscoveryProductIntent({
+      name: 'Dell Latitude 5420', category: 'Laptops', description: 'Laptop with 16GB RAM.',
+    }, 'laptop with 16GB RAM')).toBe(true);
+    expect(matchesDiscoveryProductIntent({
+      name: 'Riversong Vision 20S 20000mAh', category: 'Accessories',
+      description: 'A compact 20,000mAh power bank for phones.',
+    }, 'power bank')).toBe(true);
+    expect(matchesDiscoveryProductIntent({
+      name: 'Dell Latitude 5420', category: 'Laptops', description: 'Laptop with 8GB RAM.',
+    }, 'laptop with 16GB RAM')).toBe(false);
+    expect(matchesDiscoveryProductIntent({
+      name: 'Riversong Vision 20S', category: 'Accessories',
+      description: 'Ideal for phones and includes a free phone case.',
+    }, 'phone case')).toBe(false);
+  });
+
+  it.each(['please show me Samsung phones', 'could you find a Samsung phone'])('strips polite request lead-in from %s', (query) => {
+    expect(matchesDiscoveryProductIntent({ name: 'Samsung Galaxy A55', category: 'Smartphones' }, query)).toBe(true);
+  });
+  it.each(['please show me phones', 'could you find a phone'])('retains handset intent after stripping %s', (query) => {
+    expect(matchesDiscoveryProductIntent({ name: 'HP LaserJet Printer', category: 'Printers' }, query)).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'Samsung Galaxy A55', category: 'Smartphones' }, query)).toBe(true);
+  });
+
+  it('honors explicit phone accessories intent and compatibility device families', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'Protective Phone Case', category: 'Accessories' }, 'phone accessories')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'iPhone 15', category: 'Smartphones' }, 'phone accessories')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'Samsung Galaxy Case', category: 'Accessories' }, 'case for iPhone')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'Generic Case for iPhone', category: 'Accessories' }, 'case for iPhone')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Case for iPhone 15 Pro Max', category: 'Accessories' }, 'case for iPhone 15 Pro')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'Case for iPhone 15 Pro', category: 'Accessories' }, 'case for iPhone 15 Pro')).toBe(true);
+  });
+
+  it('retains compound product types and ignores generic trailing nouns without dropping explicit intent', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'HP All-in-One Printer', category: 'Printers' }, 'all in one printer')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Lenovo Yoga 2-in-1 Laptop', category: 'Laptops' }, '2 in 1 laptop')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'HP LaserJet Printer', category: 'Printers' }, 'iPhone 15 device')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'HP LaserJet Printer', category: 'Printers' }, 'Samsung phone products')).toBe(false);
+  });
+
   it.each([
     ['pouches', 'Phone Pouch'], ['watches', 'Smart Watch'],
     ['lenses', 'Camera Lens'], ['mice', 'Wireless Mouse'],

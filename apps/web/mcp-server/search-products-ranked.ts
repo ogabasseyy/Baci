@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { DISCOVERY_PRODUCT_PROJECTION } from './discovery-product-projection';
 import { matchesSingleWordDiscoveryQuery } from './search-products-relevance';
+import { matchesDiscoveryProductIntent } from './matches-discovery-product-intent';
 import {
   buildSearchProductsV2RpcArgs,
   MAX_POST_FILTER_RESULT_PAGES,
@@ -54,7 +55,9 @@ export async function loadRankedMcpProducts({
   const candidateLimit = priceSensitive
     ? MAX_POST_FILTER_RESULT_PAGES * POST_FILTER_RESULT_PAGE_SIZE
     : limit;
-  const needsCandidateScan = hasPostHydrationFilters || priceSensitive;
+  const queryWords = sanitizedQuery.normalize('NFKC').toLocaleLowerCase('en').match(/[a-z0-9]+/g) ?? [];
+  const needsIntentScan = queryWords.filter((word) => /^[a-z]+$/.test(word)).length >= 2;
+  const needsCandidateScan = hasPostHydrationFilters || priceSensitive || needsIntentScan;
   let pageOffset = 0;
   let totalRankedMatches = Number.POSITIVE_INFINITY;
   let sawRankedRows = false;
@@ -120,13 +123,14 @@ export async function loadRankedMcpProducts({
       rankedProductIds
     );
 
-    if (hasPostHydrationFilters) {
+    if (hasPostHydrationFilters || needsIntentScan) {
       pageProducts = pageProducts.filter((product) =>
         matchesMcpPostHydrationFilters(product, {
           brand: sanitizedBrand,
           category: sanitizedCategory,
           condition: sanitizedCondition,
-        }) && matchesSingleWordDiscoveryQuery(product, sanitizedQuery, sanitizedCategory)
+        }) && matchesSingleWordDiscoveryQuery(product, sanitizedQuery, sanitizedCategory) &&
+        matchesDiscoveryProductIntent(product, sanitizedQuery)
       );
     }
 

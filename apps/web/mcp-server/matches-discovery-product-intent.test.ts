@@ -266,6 +266,25 @@ describe('discovery product intent', () => {
     expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', category: 'Laptops' }, 'laptop over 500000')).toBe(true);
     expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', category: 'Laptops' }, 'laptop above 500000')).toBe(true);
     expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', category: 'Laptops' }, 'laptop from 500000')).toBe(true);
-    expect(matchesDiscoveryProductIntent({ name: 'USB-C Charger', category: 'Accessories' }, 'charger from Samsung')).toBe(true);
+  });
+
+  it('validates identity terms placed after the product type', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'Samsung USB-C Charger', brand: 'Samsung', category: 'Accessories' }, 'charger from Samsung')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'USB-C Charger', category: 'Accessories' }, 'charger from Samsung')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'Galaxy S24', brand: 'Samsung', category: 'Smartphones' }, 'phone Samsung')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'iPhone 15', category: 'Smartphones' }, 'phone Samsung')).toBe(false);
+  });
+
+  it('shares a trailing noun across coordinated phrases', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', brand: 'Dell', category: 'Laptops' }, 'Dell or ASUS laptop')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'ROG Strix G16', brand: 'ASUS', category: 'Laptops' }, 'Dell or ASUS laptop')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Acer Aspire', brand: 'Acer', category: 'Laptops' }, 'Dell or ASUS laptop')).toBe(false);
+  });
+
+  it('matches singular queries against plural catalog wording', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'Camera Lenses', category: 'Accessories' }, 'camera lens')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Phone Pouches', category: 'Accessories' }, 'phone pouch')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Smart Watch', category: 'Watches' }, 'smart watch')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Drawing Styluses', category: 'Accessories' }, 'drawing stylus')).toBe(true);
   });
 });

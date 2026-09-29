@@ -59,7 +59,10 @@ export const deviceQualifierAliases = new Map<string, string[]>([
 export const modelQualifiers = new Set(['max', 'mini', 'plus', 'pro', 'ultra']);
 
 const irregularPlurals = new Map([
-  ['lenses', 'lens'], ['mice', 'mouse'], ['pouches', 'pouch'], ['watches', 'watch'],
+  ['lenses', 'lens'], ['mice', 'mouse'], ['pouches', 'pouch'], ['styluses', 'stylus'], ['watches', 'watch'],
+]);
+const irregularSingulars = new Map([
+  ['lens', 'lenses'], ['mouse', 'mice'], ['pouch', 'pouches'], ['stylus', 'styluses'], ['watch', 'watches'],
 ]);
 const equivalentTerms = new Map([
   ['mouse', ['mice']], ['mice', ['mouse']],
@@ -74,12 +77,16 @@ export function words(value: string): string[] {
 }
 
 export function matchesWord(textWords: string[], term: string): boolean {
-  const singular = irregularPlurals.get(term) ?? (term.endsWith('ies')
-    ? `${term.slice(0, -3)}y`
-    : term.replace(/s$/, ''));
+  // Known singulars keep their trailing "s" ("lens" is not "len" + "s").
+  const singular = irregularSingulars.has(term)
+    ? term
+    : irregularPlurals.get(term) ?? (term.endsWith('ies')
+      ? `${term.slice(0, -3)}y`
+      : term.replace(/s$/, ''));
+  const plural = irregularSingulars.get(singular) ?? `${singular}s`;
   const equivalents = equivalentTerms.get(term) ?? [];
   return textWords.some((word) =>
-    word === term || word === singular || word === `${singular}s` ||
+    word === term || word === singular || word === plural ||
     equivalents.includes(word) ||
     (singular === 'phone' && (word === 'smartphone' || word === 'smartphones')) ||
     (singular === 'earbud' && (word === 'bud' || word === 'buds'))

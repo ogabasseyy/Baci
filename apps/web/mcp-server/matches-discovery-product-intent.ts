@@ -59,12 +59,29 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
     }
   }
   if (currentPhrase.length > 0) alternativePhrases.push(currentPhrase);
+  // A shared noun ("Dell or ASUS laptop") types every coordinated phrase, so a
+  // phrase without its own type inherits the nearest one, trailing first.
+  const phraseTypeIndexes = alternativePhrases.map((phrase) =>
+    phrase.findLastIndex((word) => productTypes.has(word)));
+  const sharedTypeFor = (phraseIndex: number): string | undefined => {
+    const indexes = [...Array(alternativePhrases.length).keys()]
+      .filter((index) => index !== phraseIndex)
+      .sort((a, b) =>
+        Math.abs(a - phraseIndex) - Math.abs(b - phraseIndex) || b - a);
+    for (const index of indexes) {
+      const typeIndex = phraseTypeIndexes[index] ?? -1;
+      if (typeIndex >= 0) return alternativePhrases[index]?.[typeIndex];
+    }
+    return undefined;
+  };
   const alternativeBranches: IntentBranch[] = alternativePhrases.length > 1
-    ? alternativePhrases.flatMap((phrase) => {
-      const typeIndex = phrase.findLastIndex((word) => productTypes.has(word));
-      return typeIndex < 0
-        ? []
-        : [{ type: phrase[typeIndex] ?? '', prefixWords: phrase.slice(0, typeIndex), phraseWords: phrase }];
+    ? alternativePhrases.flatMap((phrase, phraseIndex) => {
+      const typeIndex = phraseTypeIndexes[phraseIndex] ?? -1;
+      if (typeIndex >= 0) {
+        return [{ type: phrase[typeIndex] ?? '', prefixWords: phrase.slice(0, typeIndex), phraseWords: phrase }];
+      }
+      const sharedType = sharedTypeFor(phraseIndex);
+      return sharedType ? [{ type: sharedType, prefixWords: phrase, phraseWords: phrase }] : [];
     })
     : [];
   const hasAlternativeItemTypes = alternativeBranches.length > 1;
@@ -138,8 +155,17 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
       !knownDeviceFamilyWords.has(word) && !modelQualifiers.has(word) && !/\d/.test(word) &&
       /^[a-z]{2,}$/.test(word)
     );
+  // Identity terms can also trail the type ("laptop from Samsung"); "from" and
+  // "by" are markers rather than terms. Alternatives validate per branch.
+  const itemSuffixWords = itemTypeIndex < 0 ? [] : itemWords.slice(itemTypeIndex + 1);
+  const trailingIdentityTerms = itemSuffixWords.filter((word) =>
+    word !== 'from' && word !== 'by' && !productTypes.has(word) && !genericItemModifiers.has(word) &&
+    !knownDeviceFamilyWords.has(word) && !modelQualifiers.has(word) && !/\d/.test(word) &&
+    /^[a-z]{2,}$/.test(word)
+  );
   const compatibilityWords = words([product.name, product.description].filter(Boolean).join(' '));
   if (requestedIdentityTerms.some((term) => !matchesWord(identityScope, term))) return false;
+  if (trailingIdentityTerms.some((term) => !matchesWord(identityScope, term))) return false;
   const compatibilityIndex = coreWords.indexOf('for', itemWords.length);
   const compatibilityEnd = coreWords.findIndex((word, index) => index > compatibilityIndex && detailBoundary.has(word));
   const compatibilityTerms = compatibilityIndex < 0 ? [] : coreWords.slice(

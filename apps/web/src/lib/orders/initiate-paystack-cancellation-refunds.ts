@@ -76,18 +76,22 @@ export async function initiatePaystackCancellationRefunds({
           supabase,
           transactions: [transaction],
         });
-      } else if (isAmbiguousFailure) {
-        // No local refund row exists and the provider may still have accepted
-        // this first attempt, so file the affected leg for operations before
-        // quarantining; otherwise no reconciler could ever discover it.
+      } else if (!isDefiniteTransientFailure) {
+        // No accepted legs yet and the provider will not take this leg on
+        // retry: an ambiguous failure may still have created a provider
+        // refund no reconciler could discover, while a deterministic
+        // rejection (bad reference, invalid amount) would only burn the
+        // five-attempt budget and strand the customer unrefunded without
+        // a review. File the leg for operations either way.
         await quarantineRefund({
           metadata: {
-            ambiguous_initiation: true,
             failed_payment_transaction_id: transaction.id,
+            ...(isAmbiguousFailure ? { ambiguous_initiation: true } : {}),
           },
           order,
-          reason:
-            'Paystack refund initiation failed ambiguously and may already exist for this payment leg',
+          reason: isAmbiguousFailure
+            ? 'Paystack refund initiation failed ambiguously and may already exist for this payment leg'
+            : 'Paystack refund initiation was rejected for this payment leg',
           supabase,
           transactions: [transaction],
         });

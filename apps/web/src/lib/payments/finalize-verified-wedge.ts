@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { assertRefundNotificationSendTime } from '@/lib/payments/assert-refund-notification-send-time';
 import { awaitRefundNotificationDeadline } from '@/lib/payments/await-refund-notification-deadline';
+import { fileDuplicatePaymentCapture } from '@/lib/payments/file-duplicate-payment-capture';
 import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
 import type {
   WedgedCandidate,
@@ -93,6 +94,49 @@ export async function finalizeVerifiedWedge({
   );
 
   if (outcome.kind === 'completed') {
+    if (outcome.capturedOnPaidOrder) {
+      // Another transaction paid the order after the wedge query: this
+      // capture is extra money, so classify from the atomic completion
+      // result and file the duplicate review used by the
+      // abandoned-attempt path instead of recording a heal.
+      const filed = await fileDuplicatePaymentCapture({
+        attempt: {
+          gateway_reference: candidate.gateway_reference,
+          id: candidate.id,
+          merchant_id: candidate.merchant_id,
+          metadata: candidate.metadata,
+          order_id: candidate.order_id,
+        },
+        evidence: {
+          providerAmount: Math.round(verification.amount * 100),
+          providerCurrency:
+            verification.currency ?? candidate.currency ?? 'NGN',
+          providerReference: candidate.gateway_reference,
+          // Verification confirms capture before finalization; only the
+          // success vocabulary differs by gateway.
+          providerStatus:
+            candidate.gateway === 'juicyway' ? 'succeeded' : 'success',
+        },
+        supabase,
+      });
+      if (filed) {
+        summary.reviewsFiled.push({
+          orderId: candidate.order_id,
+          transactionId: candidate.id,
+        });
+        await stampWedgeResolution(
+          supabase,
+          candidate,
+          'duplicate_capture_reviewed'
+        );
+        return 'finalized';
+      }
+      summary.failed.push({
+        reason: 'duplicate_capture_review_failed',
+        transactionId: candidate.id,
+      });
+      return 'finalized';
+    }
     logger.warn({
       healed: outcome.healed,
       message: 'Sweep healed a wedged gateway order payment',

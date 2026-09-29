@@ -1,8 +1,8 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { reconcileWedgedGatewayOrders } from '@/lib/payments/reconcile-wedged-gateway-orders';
 
 const mocks = vi.hoisted(() => ({
+  fileDuplicatePaymentCapture: vi.fn(),
   finalizeOrderGatewayPayment: vi.fn(),
   getJuicywaySession: vi.fn(),
   handlePaymentForCancelledOrder: vi.fn(),
@@ -22,6 +22,9 @@ vi.mock('@/lib/korapay', () => ({
 vi.mock('@/lib/payments/finalize-order-gateway-payment', () => ({
   finalizeOrderGatewayPayment: mocks.finalizeOrderGatewayPayment,
 }));
+vi.mock('@/lib/payments/file-duplicate-payment-capture', () => ({
+  fileDuplicatePaymentCapture: mocks.fileDuplicatePaymentCapture,
+}));
 vi.mock(
   '@/lib/payments/handle-payment-for-cancelled-order',
   async (importOriginal) => ({
@@ -30,50 +33,11 @@ vi.mock(
   })
 );
 
-const wedgedCandidate = {
-  amount: '58290.60',
-  created_at: '2026-07-01T00:00:00.000Z',
-  currency: 'NGN',
-  gateway: 'paystack',
-  gateway_reference: '100004260711172450165090811595',
-  id: 'txn-1',
-  merchant_id: 'merchant-1',
-  metadata: null,
-  order_id: 'order-1',
-  orders: { cancelled_at: null, id: 'order-1', payment_status: 'pending' },
-  status: 'completed',
-};
-
-function buildSupabase(result: { data?: unknown[]; error?: unknown }) {
-  const stampUpdate = vi.fn().mockReturnValue({
-    eq: vi.fn().mockResolvedValue({ error: null }),
-  });
-  const builder: Record<string, unknown> = {
-    update: stampUpdate,
-  };
-  const select = vi.fn().mockReturnValue(builder);
-  builder.select = select;
-  for (const method of ['eq', 'neq', 'not', 'lt', 'is', 'or', 'order']) {
-    builder[method] = vi.fn().mockReturnValue(builder);
-  }
-  // `.limit()` is the terminal call in the sweep's candidate query chain;
-  // resolution stamps go through `.update().eq()` on the same builder.
-  builder.limit = vi
-    .fn()
-    .mockResolvedValue({ data: null, error: null, ...result });
-  return {
-    from: vi.fn().mockReturnValue(builder),
-    select,
-    stampUpdate,
-  } as unknown as SupabaseClient & {
-    select: ReturnType<typeof vi.fn>;
-    stampUpdate: ReturnType<typeof vi.fn>;
-  };
-}
-
-const scheduleAfter = (task: () => Promise<void>) => {
-  void task();
-};
+import {
+  buildSupabase,
+  scheduleAfter,
+  wedgedCandidate,
+} from './reconcile-wedged-gateway-orders.test-helpers';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -239,56 +203,5 @@ describe('reconcileWedgedGatewayOrders', () => {
         }),
       })
     );
-  });
-
-  it('does not retire a wedged row when its review cannot be filed', async () => {
-    const supabase = buildSupabase({
-      data: [{ ...wedgedCandidate, gateway: 'klump' }],
-    });
-    mocks.handlePaymentForCancelledOrder.mockResolvedValue(false);
-
-    await reconcileWedgedGatewayOrders({ scheduleAfter, supabase });
-
-    // Without a durable ops row the payment must stay visible to the sweep.
-    expect(supabase.stampUpdate).not.toHaveBeenCalled();
-  });
-
-  it('records finalizer failures without aborting the run', async () => {
-    const second = {
-      ...wedgedCandidate,
-      gateway: 'korapay',
-      gateway_reference: 'BAC-KORA',
-      id: 'txn-2',
-      order_id: 'order-2',
-    };
-    const supabase = buildSupabase({ data: [wedgedCandidate, second] });
-    mocks.verifyPaystackPayment.mockResolvedValue({
-      data: { amount: 5829060, currency: 'NGN', status: 'success' },
-      success: true,
-    });
-    mocks.verifyKorapayPayment.mockResolvedValue({
-      data: { amount: 58290.6, currency: 'NGN', status: 'success' },
-      success: true,
-    });
-    mocks.finalizeOrderGatewayPayment
-      .mockResolvedValueOnce({ error: 'x', kind: 'completion_failed' })
-      .mockResolvedValueOnce({
-        healed: true,
-        kind: 'completed',
-        orderNumber: 'ORD-2',
-      });
-
-    const summary = await reconcileWedgedGatewayOrders({
-      scheduleAfter,
-      supabase,
-    });
-
-    expect(summary.failed).toEqual([
-      { reason: 'completion_failed', transactionId: 'txn-1' },
-    ]);
-    expect(summary.healed).toEqual([
-      { orderId: 'order-2', orderNumber: 'ORD-2' },
-    ]);
-    expect(summary.checked).toBe(2);
   });
 });

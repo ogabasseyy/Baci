@@ -83,6 +83,7 @@ describe('fileReferenceOnlyPaystackRefundReview', () => {
     expect(rpc).toHaveBeenCalledWith(
       'merge_paystack_cancellation_refund_leg_evidence_v1',
       expect.objectContaining({
+        p_ambiguous: true,
         p_merchant_id: 'merchant-1',
         p_order_id: 'order-1',
         p_payment_transaction_id: 'payment-1',

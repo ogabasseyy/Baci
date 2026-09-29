@@ -148,6 +148,20 @@ export async function drainFailedOrderCancellationSideEffects({
     a.claimed_at < b.claimed_at ? -1 : a.claimed_at > b.claimed_at ? 1 : 0
   );
   for (const row of merged) {
+    // Budget-ineligible emails must not occupy a slot: with one slot
+    // left and 30s on the clock, an old email row would be selected,
+    // skipped unclaimed below, and starve every later refund row on
+    // every invocation. Filter here so replacement candidates fill the
+    // batch; the per-row guard below stays as the backstop since time
+    // keeps burning while the batch runs.
+    if (
+      row.step === 'customer_email' &&
+      deadlineMs !== undefined &&
+      deadlineMs - Date.now() <
+        zeptomailSendAdmissionBudgetMs(EMAIL_ATTEMPTS_PER_SENDER)
+    ) {
+      continue;
+    }
     candidates.set(`${row.order_id}:${row.step}`, row);
     if (candidates.size >= limit) break;
   }

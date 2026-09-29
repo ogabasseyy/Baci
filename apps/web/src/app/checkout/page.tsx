@@ -47,6 +47,10 @@ import {
 } from '@/components/ui/form';
 import { PhoneInput } from '@/components/ui/phone-input';
 import { useCart } from '@/hooks/use-cart';
+import {
+  type CheckoutCustomerData,
+  useCheckoutCustomerLifecycle,
+} from '@/hooks/use-checkout-customer-lifecycle';
 import { useCurrency } from '@/hooks/use-currency';
 import { MerchantProvider, useMerchant } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
@@ -97,24 +101,6 @@ const otpAuthSchema = z.object({
 
 type OtpAuthFormValues = z.infer<typeof otpAuthSchema>;
 
-// Customer data interface for pre-filling form
-interface CustomerData {
-  first_name: string;
-  last_name: string;
-  email: string;
-  phone?: string;
-  saved_addresses?: Array<{
-    first_name: string;
-    last_name: string;
-    full_name?: string;
-    phone: string;
-    address: string;
-    city: string;
-    state: string;
-    is_default?: boolean;
-  }>;
-}
-
 // Module-scope network helpers keep the try/catch/finally + throw control
 // flow out of the component body so React Compiler can memoize Step0_Auth.
 type SendOtpResult = { ok: true } | { ok: false; message: string };
@@ -136,11 +122,11 @@ async function sendOtpCode(
 }
 
 type VerifyOtpResult =
-  | { ok: true; user: SupabaseUser; customer?: CustomerData }
+  | { ok: true; user: SupabaseUser; customer?: CheckoutCustomerData }
   | { ok: false; message: string };
 
 interface VerifyOtpResponse {
-  customer?: CustomerData;
+  customer?: CheckoutCustomerData;
 }
 
 async function verifyOtpCode(
@@ -462,7 +448,10 @@ function Step0_Auth({
   onGuestCheckout,
   merchantSlug,
 }: {
-  onAuthSuccess: (user: SupabaseUser, customerData?: CustomerData) => void;
+  onAuthSuccess: (
+    user: SupabaseUser,
+    customerData?: CheckoutCustomerData
+  ) => void;
   onGuestCheckout: () => void;
   merchantSlug: string;
 }) {
@@ -1146,12 +1135,7 @@ function CheckoutPageContent() {
   const { clearCart, cart, cartCount, cartTotal, merchantSlug } = useCart();
   const { merchant, basePath } = useMerchant();
   const { currencyCode, formatCurrency } = useCurrency();
-  const [step, setStep] = useState(0); // 0: Auth, 1: Shipping, 2: Payment
-  const [pageLoading, setPageLoading] = useState(true);
   const [formIsLoading, setFormIsLoading] = useState(false);
-  const [user, setUser] = useState<SupabaseUser | null>(null);
-  const [customerData, setCustomerData] = useState<CustomerData | null>(null);
-  const [_isGuestCheckout, setIsGuestCheckout] = useState(false);
   const [shippingFee, setShippingFee] = useState<number | null>(null);
   const [selectedShippingQuote, setSelectedShippingQuote] =
     useState<ShippingQuote | null>(null);
@@ -1165,7 +1149,6 @@ function CheckoutPageContent() {
     'paystack' | 'korapay' | 'pod' | 'credit_direct'
   >('paystack');
   const totalSteps = 2;
-  const supabase = createClient();
 
   // Load Credit Direct script when BNPL is enabled. The injected <script> tag
   // is the source of truth for "already loaded" — guarding on its presence in
@@ -1210,34 +1193,6 @@ function CheckoutPageContent() {
 
   // Calculate loyalty points (1 point per 100 NGN spent)
   const _loyaltyPointsEarned = Math.floor((cartTotal - discountAmount) / 100);
-
-  useEffect(() => {
-    const checkUser = async () => {
-      const { data } = await supabase.auth.getUser();
-      if (data.user) {
-        setUser(data.user);
-
-        // Also fetch customer data for this merchant if logged in
-        if (merchantSlug) {
-          try {
-            const response = await fetch(
-              `/api/storefront/auth/session?merchantSlug=${encodeURIComponent(merchantSlug)}`
-            );
-            const sessionData = await response.json();
-            if (sessionData.authenticated && sessionData.customer) {
-              setCustomerData(sessionData.customer);
-            }
-          } catch (err) {
-            console.error('Failed to fetch customer data:', err);
-          }
-        }
-
-        setStep(1); // User is logged in, skip to shipping
-      }
-      setPageLoading(false);
-    };
-    checkUser();
-  }, [supabase.auth, merchantSlug]);
 
   // Fetch payment gateway settings
   useEffect(() => {
@@ -1289,7 +1244,7 @@ function CheckoutPageContent() {
     defaultValues: {
       firstName: '',
       lastName: '',
-      email: user?.email || '',
+      email: '',
       phone: '',
       address: '',
       city: '',
@@ -1298,123 +1253,8 @@ function CheckoutPageContent() {
     mode: 'onSubmit', // Only validate on submit - best practice for checkout
   });
 
-  useEffect(() => {
-    // If user changes, autofill email and name fields from user metadata or customer data
-    if (user) {
-      shippingForm.setValue('email', user.email || '', {
-        shouldValidate: true,
-        shouldDirty: true,
-      });
-
-      // First, try to fill from customer data (more up-to-date)
-      if (customerData) {
-        if (customerData.first_name) {
-          shippingForm.setValue('firstName', customerData.first_name, {
-            shouldValidate: true,
-            shouldDirty: true,
-          });
-        }
-        if (customerData.last_name) {
-          shippingForm.setValue('lastName', customerData.last_name, {
-            shouldValidate: true,
-            shouldDirty: true,
-          });
-        }
-        if (customerData.phone) {
-          shippingForm.setValue('phone', customerData.phone, {
-            shouldValidate: true,
-            shouldDirty: true,
-          });
-        }
-
-        // Use default saved address if available
-        const defaultAddress = customerData.saved_addresses?.find(
-          (a) => a.is_default
-        );
-        if (defaultAddress) {
-          shippingForm.setValue('address', defaultAddress.address, {
-            shouldValidate: true,
-            shouldDirty: true,
-          });
-          shippingForm.setValue('city', defaultAddress.city, {
-            shouldValidate: true,
-            shouldDirty: true,
-          });
-          shippingForm.setValue('state', defaultAddress.state, {
-            shouldValidate: true,
-            shouldDirty: true,
-          });
-          if (defaultAddress.phone) {
-            shippingForm.setValue('phone', defaultAddress.phone, {
-              shouldValidate: true,
-              shouldDirty: true,
-            });
-          }
-          // Override name with address name if different
-          if (defaultAddress.full_name) {
-            const nameParts = defaultAddress.full_name.split(' ');
-            if (nameParts.length > 0) {
-              shippingForm.setValue('firstName', nameParts[0], {
-                shouldValidate: true,
-                shouldDirty: true,
-              });
-              if (nameParts.length > 1) {
-                shippingForm.setValue(
-                  'lastName',
-                  nameParts.slice(1).join(' '),
-                  { shouldValidate: true, shouldDirty: true }
-                );
-              }
-            }
-          }
-        }
-      } else {
-        // Fall back to user metadata
-        const metadata = user.user_metadata;
-        if (metadata) {
-          if (metadata.first_name) {
-            shippingForm.setValue('firstName', metadata.first_name, {
-              shouldValidate: true,
-              shouldDirty: true,
-            });
-          } else if (metadata.full_name) {
-            // Try to split full_name if first_name is not available
-            const nameParts = metadata.full_name.split(' ');
-            if (nameParts.length > 0) {
-              shippingForm.setValue('firstName', nameParts[0], {
-                shouldValidate: true,
-                shouldDirty: true,
-              });
-              if (nameParts.length > 1) {
-                shippingForm.setValue(
-                  'lastName',
-                  nameParts.slice(1).join(' '),
-                  { shouldValidate: true, shouldDirty: true }
-                );
-              }
-            }
-          } else if (metadata.name) {
-            const parts = metadata.name.split(' ');
-            shippingForm.setValue('firstName', parts[0] || '', {
-              shouldValidate: true,
-              shouldDirty: true,
-            });
-            shippingForm.setValue('lastName', parts.slice(1).join(' ') || '', {
-              shouldValidate: true,
-              shouldDirty: true,
-            });
-          }
-
-          if (metadata.last_name) {
-            shippingForm.setValue('lastName', metadata.last_name, {
-              shouldValidate: true,
-              shouldDirty: true,
-            });
-          }
-        }
-      }
-    }
-  }, [user, customerData, shippingForm]);
+  const { handleAuthSuccess, handleGuestCheckout, pageLoading, setStep, step } =
+    useCheckoutCustomerLifecycle(merchantSlug, shippingForm.setValue);
 
   useEffect(() => {
     // Redirect if cart is empty after initial load
@@ -1422,23 +1262,6 @@ function CheckoutPageContent() {
       router.replace('/');
     }
   }, [cartCount, pageLoading, router]);
-
-  const handleAuthSuccess = (
-    authedUser: SupabaseUser,
-    customer?: CustomerData
-  ) => {
-    setUser(authedUser);
-    if (customer) {
-      setCustomerData(customer);
-    }
-    setIsGuestCheckout(false);
-    setStep(1);
-  };
-
-  const handleGuestCheckout = () => {
-    setIsGuestCheckout(true);
-    setStep(1);
-  };
 
   const handleNext = async () => {
     const isValid = await shippingForm.trigger();
@@ -1667,7 +1490,11 @@ function CheckoutPageContent() {
 
   if (pageLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div
+        aria-label="Loading checkout"
+        className="flex min-h-screen items-center justify-center bg-background"
+        role="status"
+      >
         <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     );

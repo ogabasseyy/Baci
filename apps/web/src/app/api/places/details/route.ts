@@ -4,6 +4,7 @@
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
+import { fetchLegacyPlacesJson } from '../legacy-places';
 
 const GOOGLE_API_KEY =
   process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
@@ -51,33 +52,6 @@ function getUpstreamStatusCode(status: string): number {
       return 429;
     default:
       return 502;
-  }
-}
-
-async function fetchWithRetry(
-  url: string,
-  retries = 2,
-  delay = 500
-): Promise<Response> {
-  try {
-    return await fetch(url, {
-      // Legacy Places requires the API key in the query string. Keep the
-      // credential-bearing URL out of exported fetch spans.
-      opentelemetry: { ignore: true },
-    });
-  } catch (error: unknown) {
-    const isRetryable =
-      error instanceof Error &&
-      (error.message.includes('ECONNRESET') ||
-        error.message.includes('fetch failed') ||
-        error.message.includes('socket'));
-
-    if (isRetryable && retries > 0) {
-      console.warn(`[Places API] Fetch failed, retrying... (${retries} left)`);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-      return fetchWithRetry(url, retries - 1, delay * 2);
-    }
-    throw error;
   }
 }
 
@@ -134,20 +108,22 @@ export async function GET(request: NextRequest) {
       detailsUrl.searchParams.set('sessiontoken', sessionToken);
     }
 
-    const response = await fetchWithRetry(detailsUrl.toString());
+    const fetched = await fetchLegacyPlacesJson<LegacyPlaceDetailsResponse>(
+      detailsUrl.toString()
+    );
 
-    if (!response.ok) {
-      console.error('[Places API] Details HTTP error:', response.status);
+    if (!fetched.ok) {
+      console.error('[Places API] Details HTTP error:', fetched.status);
       return NextResponse.json(
         {
           error: 'Failed to fetch place details',
           code: 'PLACES_DETAILS_HTTP_ERROR',
         },
-        { status: response.status === 429 ? 429 : 502 }
+        { status: fetched.status === 429 ? 429 : 502 }
       );
     }
 
-    const data = (await response.json()) as LegacyPlaceDetailsResponse;
+    const data = fetched.data;
     if (data.status !== 'OK' || !data.result) {
       const upstreamStatus = data.status || 'UNKNOWN_ERROR';
       console.error('[Places API] Details returned:', upstreamStatus);

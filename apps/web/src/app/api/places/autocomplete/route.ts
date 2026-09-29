@@ -4,6 +4,7 @@
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
+import { fetchLegacyPlacesJson } from '../legacy-places';
 
 const GOOGLE_API_KEY =
   process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
@@ -35,33 +36,6 @@ function getUpstreamStatusCode(status: string): number {
       return 429;
     default:
       return 502;
-  }
-}
-
-async function fetchWithRetry(
-  url: string,
-  retries = 2,
-  delay = 500
-): Promise<Response> {
-  try {
-    return await fetch(url, {
-      // Legacy Places requires the API key in the query string. Keep the
-      // credential-bearing URL out of exported fetch spans.
-      opentelemetry: { ignore: true },
-    });
-  } catch (error: unknown) {
-    const isRetryable =
-      error instanceof Error &&
-      (error.message.includes('ECONNRESET') ||
-        error.message.includes('fetch failed') ||
-        error.message.includes('socket'));
-
-    if (isRetryable && retries > 0) {
-      console.warn(`[Places API] Fetch failed, retrying... (${retries} left)`);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-      return fetchWithRetry(url, retries - 1, delay * 2);
-    }
-    throw error;
   }
 }
 
@@ -108,20 +82,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const response = await fetchWithRetry(autocompleteUrl.toString());
+    const result = await fetchLegacyPlacesJson<LegacyAutocompleteResponse>(
+      autocompleteUrl.toString()
+    );
 
-    if (!response.ok) {
-      console.error('[Places API] Autocomplete HTTP error:', response.status);
+    if (!result.ok) {
+      console.error('[Places API] Autocomplete HTTP error:', result.status);
       return NextResponse.json(
         {
           error: 'Failed to fetch predictions',
           code: 'PLACES_AUTOCOMPLETE_HTTP_ERROR',
         },
-        { status: response.status === 429 ? 429 : 502 }
+        { status: result.status === 429 ? 429 : 502 }
       );
     }
 
-    const data = (await response.json()) as LegacyAutocompleteResponse;
+    const data = result.data;
 
     if (data.status === 'ZERO_RESULTS') {
       return NextResponse.json({ predictions: [] });

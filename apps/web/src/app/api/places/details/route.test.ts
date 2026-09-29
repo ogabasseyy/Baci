@@ -176,6 +176,57 @@ describe('GET /api/places/details', () => {
     });
   });
 
+  it('retries a transient UNKNOWN_ERROR response and succeeds', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'UNKNOWN_ERROR' }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: 'OK',
+          result: {
+            place_id: 'ChIJ1234',
+            formatted_address: 'Lagos, Nigeria',
+            address_components: [],
+          },
+        }),
+      } as Response);
+
+    const response = await GET(makeRequest({ placeId: 'ChIJ1234' }));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.details).toEqual(
+      expect.objectContaining({ placeId: 'places/ChIJ1234' })
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(2); // Initial + 1 retry
+  });
+
+  it('returns 502 when UNKNOWN_ERROR persists through retries', async () => {
+    const unknownError = {
+      ok: true,
+      json: async () => ({ status: 'UNKNOWN_ERROR' }),
+    } as Response;
+
+    // Will retry twice (total 3 attempts)
+    mockFetch
+      .mockResolvedValueOnce(unknownError)
+      .mockResolvedValueOnce(unknownError)
+      .mockResolvedValueOnce(unknownError);
+
+    const response = await GET(makeRequest({ placeId: 'ChIJ1234' }));
+    const data = await response.json();
+
+    expect(response.status).toBe(502);
+    expect(data).toEqual({
+      error: 'Failed to fetch place details',
+      code: 'PLACES_DETAILS_UPSTREAM_ERROR',
+    });
+    expect(mockFetch).toHaveBeenCalledTimes(3); // Initial + 2 retries
+  });
+
   it('returns 404 when Legacy Place Details has no result for the place ID', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,

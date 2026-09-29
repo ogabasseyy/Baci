@@ -49,16 +49,27 @@ export async function refundNotificationLedgerAmount({
     .eq('merchant_id', merchantId)
     .eq('transaction_type', 'refund')
     .eq('status', 'completed');
-  if (refundLegError || !refundLegs?.length) {
+  if (refundLegError) {
     throw new Error('refund_notification_ledger_lookup_failed');
   }
+  // Self-terminal legs (e.g. a PayPal-only cancellation flips the
+  // payment row itself to refunded) carry their own evidence without a
+  // separate refund transaction: an empty refund-row set is valid when
+  // every external leg is self-terminal.
+  if (
+    !refundLegs?.length &&
+    externalLegs.some((leg) => leg.status !== 'refunded')
+  ) {
+    throw new Error('refund_notification_ledger_lookup_failed');
+  }
+  const refunds = refundLegs ?? [];
   const linkableLegs = externalLegs.filter((leg) => leg.status !== 'refunded');
   const linkedRefunds = externalLegs.map((leg) => {
     if (leg.status === 'refunded') {
       return { amount: leg.amount, currency: leg.currency };
     }
     const legCurrency = String(leg.currency ?? '').toUpperCase();
-    const matchedKobo = refundLegs
+    const matchedKobo = refunds
       .filter((refund) => {
         if (refund.gateway !== leg.gateway) return false;
         const metadata = refund.metadata as {

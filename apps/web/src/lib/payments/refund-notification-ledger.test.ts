@@ -54,6 +54,29 @@ describe('refundNotificationLedgerAmount', () => {
     expect(amount).toContain('100');
   });
 
+  it('totals self-terminal legs with no refund rows at all', async () => {
+    const { supabase } = database({
+      payments: [
+        {
+          amount: 40,
+          currency: 'NGN',
+          gateway: 'paypal',
+          id: 'pay-2',
+          status: 'refunded',
+        },
+      ],
+      refunds: [],
+    });
+
+    const amount = await refundNotificationLedgerAmount({
+      merchantId: 'merchant-1',
+      order,
+      supabase,
+    });
+
+    expect(amount).toContain('40');
+  });
+
   it('lets self-terminal refunded legs contribute without a refund row', async () => {
     const { supabase } = database({
       payments: [
@@ -161,6 +184,29 @@ describe('refundNotificationLedgerAmount', () => {
         supabase,
       })
     ).rejects.toThrow('refund_notification_ledger_mismatch');
+  });
+
+  it('throws when no refund rows back a non-self-terminal leg', async () => {
+    const { supabase } = database({
+      payments: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'paystack',
+          id: 'pay-1',
+          status: 'completed',
+        },
+      ],
+      refunds: [],
+    });
+
+    await expect(
+      refundNotificationLedgerAmount({
+        merchantId: 'merchant-1',
+        order,
+        supabase,
+      })
+    ).rejects.toThrow('refund_notification_ledger_lookup_failed');
   });
 
   it('throws when the payment lookup fails', async () => {

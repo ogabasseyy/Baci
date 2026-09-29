@@ -285,48 +285,96 @@ export async function drainPaystackRefundNotifications(
         error instanceof Error ? error.message : 'refund_notification_failed';
       if (outcome !== 'delivery_uncertain') outcome = 'failed';
     }
-    const { data: finished, error: finishError } = await supabase
-      .from('paystack_cancellation_refund_notifications')
-      .update({
-        status: outcome,
-        last_error: lastError,
-        sent_at: outcome === 'sent' ? new Date().toISOString() : null,
-      })
-      .eq('id', row.id)
-      .eq('claim_token', row.claim_token)
-      .eq('status', 'processing')
-      // A failure recorded mid-claim bumps the generation: concluding
-      // on the stale read would lose the fresh contradiction, so the
-      // finish must fail and the row requeue instead.
-      .eq('generation', row.generation)
-      .select('id')
-      .maybeSingle();
-    if (finishError || !finished) {
-      // The claim may still be ours with a newer generation (a failure
-      // landed mid-flight): requeue it for the next sweep rather than
-      // counting a failure. Terminalized or landed rows match nothing
-      // and keep the failure below.
-      const { data: requeued, error: requeueError } = await supabase
+    // A failure recorded mid-claim bumps the generation: concluding
+    // on the stale read would lose the fresh contradiction, so the
+    // finish is generation-pinned and a miss requeues instead.
+    const persistFinish = () =>
+      supabase
         .from('paystack_cancellation_refund_notifications')
         .update({
-          status: 'pending',
-          claimed_at: null,
-          claim_token: null,
-          last_error: null,
+          status: outcome,
+          last_error: lastError,
+          sent_at: outcome === 'sent' ? new Date().toISOString() : null,
+        })
+        .eq('id', row.id)
+        .eq('claim_token', row.claim_token)
+        .eq('status', 'processing')
+        .eq('generation', row.generation)
+        .select('id')
+        .maybeSingle();
+    const parkUncertain = () =>
+      supabase
+        .from('paystack_cancellation_refund_notifications')
+        .update({
+          status: 'delivery_uncertain',
+          last_error: 'refund_notification_finish_unconfirmed',
         })
         .eq('id', row.id)
         .eq('claim_token', row.claim_token)
         .eq('status', 'processing')
         .select('id')
         .maybeSingle();
-      if (!requeueError && requeued) {
-        logger.info({
-          message:
-            'Refund notification requeued: fresh failures arrived during its claim',
-          notificationId: row.id,
-        });
-        continue;
+    let finish = await persistFinish();
+    if (finish.error) {
+      // A database error is not a generation mismatch: the attempt
+      // may have persisted unseen, so retry the known outcome once
+      // instead of requeueing (a requeue would double-send).
+      finish = await persistFinish();
+    }
+    if (finish.error || !finish.data) {
+      if (!finish.error) {
+        // No error, no row: the generation predicate rejected the
+        // write. Re-read the row and requeue only on a proven race
+        // — our claim still held with a strictly newer generation.
+        const { data: refetched, error: refetchError } = await supabase
+          .from('paystack_cancellation_refund_notifications')
+          .select('status, claim_token, generation')
+          .eq('id', row.id)
+          .maybeSingle();
+        const current = (refetched ?? null) as {
+          claim_token?: unknown;
+          generation?: unknown;
+          status?: unknown;
+        } | null;
+        const raceProven =
+          !refetchError &&
+          current?.status === 'processing' &&
+          current?.claim_token === row.claim_token &&
+          typeof current?.generation === 'number' &&
+          current.generation > row.generation;
+        if (raceProven) {
+          const { data: requeued, error: requeueError } = await supabase
+            .from('paystack_cancellation_refund_notifications')
+            .update({
+              status: 'pending',
+              claimed_at: null,
+              claim_token: null,
+              last_error: null,
+            })
+            .eq('id', row.id)
+            .eq('claim_token', row.claim_token)
+            .eq('status', 'processing')
+            // Bind the requeue to the proven bump: a concurrent
+            // finisher concluding on the newer generation must not be
+            // resurrected into pending.
+            .gt('generation', row.generation)
+            .select('id')
+            .maybeSingle();
+          if (!requeueError && requeued) {
+            logger.info({
+              message:
+                'Refund notification requeued: fresh failures arrived during its claim',
+              notificationId: row.id,
+            });
+            continue;
+          }
+        }
       }
+      // Unproven race or failed retry: never requeue — the finish
+      // may have persisted unseen, and a second sweep would re-send.
+      // Park an owned row as delivery_uncertain instead: the status
+      // guard leaves a persisted finish untouched.
+      await parkUncertain();
       logger.error({
         message: 'Refund notification delivery outcome could not be persisted',
         notificationId: row.id,

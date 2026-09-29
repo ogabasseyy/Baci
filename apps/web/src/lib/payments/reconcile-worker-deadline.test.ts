@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cancellationSideEffectDrainLimit } from '../orders/cancellation-side-effect-drain-limit';
 import {
   NO_RECONCILE_DEADLINE,
   reconcileWorkerDeadlineMs,
@@ -7,7 +8,19 @@ import {
 
 describe('reconcileWorkerDeadlineMs', () => {
   it('bounds the reconciliation phase so later drains keep their share', () => {
-    expect(reconcileWorkerDeadlineMs(1_000_000)).toBe(1_060_000);
+    expect(reconcileWorkerDeadlineMs(1_000_000)).toBe(1_052_000);
+  });
+
+  it('stops row starts early enough that the worst-case overrun keeps the reserved step', () => {
+    // The last started row may run one 8s provider timeout past the
+    // row-start gate: at that worst-case phase end the side-effect
+    // drain must still admit its sole reserved step.
+    const rowStartDeadline = reconcileWorkerDeadlineMs(1_000_000);
+    const worstCaseElapsed = rowStartDeadline + 8_000 - 1_000_000;
+    expect(worstCaseElapsed).toBe(60_000);
+    expect(
+      cancellationSideEffectDrainLimit(worstCaseElapsed)
+    ).toBeGreaterThanOrEqual(1);
   });
 });
 

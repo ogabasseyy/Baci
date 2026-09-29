@@ -34,6 +34,7 @@ export async function finalizeOrderGatewayPayment({
   scheduleAfter,
   signal,
   fallbackDeadlineMs,
+  emailMaxAttemptsPerSender,
 }: FinalizeOrderGatewayPaymentArgs): Promise<FinalizeOrderGatewayPaymentOutcome> {
   const result = await resolveOrderGatewayCompletion({
     actor,
@@ -219,6 +220,7 @@ export async function finalizeOrderGatewayPayment({
 
   const sideEffectArgs = {
     actor,
+    emailMaxAttemptsPerSender,
     externalGatewayReference: reference,
     fallbackDeadlineMs,
     gatewayResponse,

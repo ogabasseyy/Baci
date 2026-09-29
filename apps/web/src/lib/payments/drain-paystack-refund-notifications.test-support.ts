@@ -54,6 +54,7 @@ export function database(
     update: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     select: vi.fn().mockReturnThis(),
+    gt: vi.fn().mockReturnThis(),
     gte: vi.fn().mockReturnThis(),
     lt: vi.fn().mockReturnThis(),
     limit: vi.fn().mockResolvedValue({ data: [], count: 0, error: null }),

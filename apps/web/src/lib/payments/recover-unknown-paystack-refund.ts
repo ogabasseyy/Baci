@@ -236,6 +236,15 @@ export async function recoverUnknownPaystackRefund(
   // A concurrent event (or the in-flight initiation) may record the row
   // first: on conflict, reconcile the winning row instead of failing.
   const refundRowId = crypto.randomUUID();
+  const providerVerdict = current.status.toLowerCase();
+  // A failed/needs-attention verdict must NOT be pre-populated: the
+  // record RPC treats an equal metadata verdict as a repeat and returns
+  // before transitioning the row or queuing the failure notification,
+  // stranding the side effect deferred while every poll no-ops. Leave
+  // it unset so the first reconcile applies the transition; later polls
+  // repeat no-op correctly once the RPC has persisted it.
+  const failedVerdict =
+    providerVerdict === 'failed' || providerVerdict === 'needs-attention';
   const { error: insertError } = await supabase.from('transactions').insert({
     id: refundRowId,
     order_id: payment.order_id,
@@ -250,7 +259,7 @@ export async function recoverUnknownPaystackRefund(
     metadata: {
       payment_transaction_id: payment.id,
       provider_payment_transaction_id: evidence.providerPaymentTransactionId,
-      provider_refund_status: current.status.toLowerCase(),
+      ...(failedVerdict ? {} : { provider_refund_status: providerVerdict }),
       recovered_from_provider_event: true,
     },
   });
@@ -304,7 +313,7 @@ export async function recoverUnknownPaystackRefund(
     metadata: {
       payment_transaction_id: payment.id,
       provider_payment_transaction_id: evidence.providerPaymentTransactionId,
-      provider_refund_status: current.status.toLowerCase(),
+      ...(failedVerdict ? {} : { provider_refund_status: providerVerdict }),
       recovered_from_provider_event: true,
     },
     status: 'refund_pending',

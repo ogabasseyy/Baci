@@ -171,18 +171,18 @@ describe('finalizePartiallyPaidAbandonedAttempt', () => {
     expect(h.summary.completed).toEqual([]);
   });
 
-  it('holds when only part of the sender budget remains', async () => {
+  it('holds when only part of the single-attempt sender budget remains', async () => {
     const h = harness();
     finalize.mockResolvedValue({ kind: 'completed' });
 
     await finalizePartiallyPaidAbandonedAttempt({
       ...h,
       attempt,
-      deadlineMs: Date.now() + 60_000,
+      deadlineMs: Date.now() + 30_000,
       providerData: {},
     });
 
-    // 60s clears the old 20s check but not the full 135s four-attempt
+    // 30s clears the old 20s check but not the 48s single-attempt
     // sender budget: starting finalize would abort mid-send into a
     // completed-unknown email instead of holding for the next sweep.
     expect(finalize).not.toHaveBeenCalled();
@@ -206,10 +206,12 @@ describe('finalizePartiallyPaidAbandonedAttempt', () => {
       providerData: {},
     });
 
-    // 200s clears the full 135s four-attempt sender budget; the
-    // platform-sender fallback shares the signal's 10s buffer.
+    // Pass 0 caps the send at one attempt per sender so its 90s
+    // share fits the 48s budget; the platform-sender fallback shares
+    // the signal's 10s buffer.
     expect(finalize).toHaveBeenCalledWith(
       expect.objectContaining({
+        emailMaxAttemptsPerSender: 1,
         fallbackDeadlineMs: deadlineMs - 10_000,
         signal: expect.any(AbortSignal),
       })

@@ -75,6 +75,9 @@ export interface RunPaidOrderSideEffectsArgs {
   // Bounds the paid-email platform-sender fallback to the pass deadline
   // so it declines unless its own attempt fits; unset when unbounded.
   fallbackDeadlineMs?: number;
+  // Caps paid-email attempts per sender for short passes; unset keeps
+  // the default loop.
+  emailMaxAttemptsPerSender?: number;
   supabase: ServiceRoleClient;
   transaction: PaidOrderSideEffectTransaction;
 }

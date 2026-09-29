@@ -94,10 +94,18 @@ describe('refund notification cron deadline', () => {
       failed: 0,
       sent: 1,
     });
-    // The finish misses (a concurrent failure bumped the generation
-    // after this worker concluded); the requeue lands.
+    // The finish misses; the refetch proves the race (our claim
+    // still held with a bumped generation); the requeue lands.
     db.finish.maybeSingle
       .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({
+        data: {
+          claim_token: 'claim-1',
+          generation: 1,
+          status: 'processing',
+        },
+        error: null,
+      })
       .mockResolvedValueOnce({ data: { id: 'notification-1' }, error: null });
 
     const result = await drainPaystackRefundNotifications(
@@ -119,6 +127,48 @@ describe('refund notification cron deadline', () => {
         status: 'pending',
       })
     );
+    expect(db.finish.gt).toHaveBeenCalledWith('generation', 0);
+  });
+
+  it('parks the row instead of requeueing when the race is unproven', async () => {
+    const db = database('processed_customer_email');
+    const sendEmail = vi.fn().mockResolvedValue({ success: true });
+    // The finish misses but the refetch shows our own claim with the
+    // same generation: an ambiguous write, not a mid-claim failure.
+    db.finish.maybeSingle
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({
+        data: {
+          claim_token: 'claim-1',
+          generation: 0,
+          status: 'processing',
+        },
+        error: null,
+      })
+      .mockResolvedValue({ data: null, error: null });
+
+    const result = await drainPaystackRefundNotifications(
+      db as never,
+      sendEmail,
+      1,
+      undefined
+    );
+
+    // No requeue: a second sweep could re-send an email the lost
+    // finish already concluded. The row parks as delivery_uncertain
+    // and the failure surfaces once.
+    expect(result).toEqual({ claimed: 1, sent: 0, failed: 1, exhausted: 0 });
+    expect(db.finish.update).toHaveBeenCalledTimes(2);
+    expect(db.finish.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'pending' })
+    );
+    expect(db.finish.update).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        last_error: 'refund_notification_finish_unconfirmed',
+        status: 'delivery_uncertain',
+      })
+    );
   });
 
   it('counts a failure when neither finish nor requeue lands', async () => {
@@ -135,6 +185,71 @@ describe('refund notification cron deadline', () => {
 
     expect(result).toEqual({ claimed: 1, sent: 0, failed: 1, exhausted: 0 });
     expect(db.finish.update).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries the known outcome after a finish write error', async () => {
+    const db = database('processed_customer_email');
+    const sendEmail = vi.fn().mockResolvedValue({ success: true });
+    // The first finish errors (the write may still have persisted
+    // unseen); the retry lands, so the known outcome counts with no
+    // requeue and no second send.
+    db.finish.maybeSingle.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'connection reset' },
+    });
+
+    const result = await drainPaystackRefundNotifications(
+      db as never,
+      sendEmail,
+      1,
+      undefined
+    );
+
+    expect(result).toEqual({ claimed: 1, sent: 1, failed: 0, exhausted: 0 });
+    expect(sendEmail).toHaveBeenCalledOnce();
+    expect(db.finish.update).toHaveBeenCalledTimes(2);
+    expect(db.finish.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'pending' })
+    );
+  });
+
+  it('parks the row when the finish retry also errors', async () => {
+    const db = database('processed_customer_email');
+    const sendEmail = vi.fn().mockResolvedValue({ success: true });
+    // Both finish attempts error: the outcome may have persisted
+    // unseen, so the row parks as delivery_uncertain instead of
+    // requeueing into a second send.
+    db.finish.maybeSingle
+      .mockResolvedValueOnce({
+        data: null,
+        error: { message: 'connection reset' },
+      })
+      .mockResolvedValueOnce({
+        data: null,
+        error: { message: 'connection reset' },
+      })
+      .mockResolvedValue({ data: null, error: null });
+
+    const result = await drainPaystackRefundNotifications(
+      db as never,
+      sendEmail,
+      1,
+      undefined
+    );
+
+    expect(result).toEqual({ claimed: 1, sent: 0, failed: 1, exhausted: 0 });
+    expect(sendEmail).toHaveBeenCalledOnce();
+    expect(db.finish.update).toHaveBeenCalledTimes(3);
+    expect(db.finish.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'pending' })
+    );
+    expect(db.finish.update).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        last_error: 'refund_notification_finish_unconfirmed',
+        status: 'delivery_uncertain',
+      })
+    );
   });
 
   it('refuses the merchant-email fallback after push consumed the sender budget', async () => {

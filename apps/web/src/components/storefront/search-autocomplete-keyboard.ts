@@ -82,6 +82,11 @@ export function createAutocompleteKeyDownHandler({
         onClose();
       }
     } else if (e.key === 'Escape') {
+      // Dismissing hides the popup: the highlight must go with it, or a
+      // later Enter would follow the invisible option instead of
+      // submitting the typed query. Retained options stay so refocusing
+      // restores them.
+      onHighlight(() => -1);
       onClose();
     }
   };

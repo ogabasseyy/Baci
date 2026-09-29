@@ -1881,4 +1881,57 @@ describe('SearchAutocomplete', () => {
     });
     expect(autocompleteCalls()[1]?.[0]).toContain('q=galaxy');
   });
+
+  it('submits the typed query when Enter follows an Escape dismissal', async () => {
+    vi.useRealTimers();
+    const onSelectProduct = vi.fn();
+    const onSubmitSearch = vi.fn();
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        suggestions: [
+          {
+            id: 'product-1',
+            name: 'iPhone 16',
+            slug: 'iphone-16',
+            category: 'Smartphones',
+            price: 900_000,
+            image_small: '',
+          },
+        ],
+        popularSearches: [],
+      }),
+    } as Response);
+
+    render(
+      <SearchAutocomplete
+        merchantId="merchant-1"
+        value="iphone"
+        onChange={vi.fn()}
+        onSelectProduct={onSelectProduct}
+        onSubmitSearch={onSubmitSearch}
+      />
+    );
+
+    const input = screen.getByRole('searchbox');
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', { name: /iphone 16/i })
+      ).toBeInTheDocument();
+    });
+
+    // Highlighting then dismissing hides the popup; the highlight must go
+    // with it so a later Enter submits the typed query instead of
+    // following the now-hidden option.
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(
+      screen.queryByRole('option', { name: /iphone 16/i })
+    ).not.toBeInTheDocument();
+
+    fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Enter' });
+    expect(onSubmitSearch).toHaveBeenCalledWith('iphone');
+    expect(onSelectProduct).not.toHaveBeenCalled();
+  });
 });

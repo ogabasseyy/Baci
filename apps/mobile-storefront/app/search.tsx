@@ -4,7 +4,10 @@ import { Keyboard } from 'react-native';
 import SearchScreenView from '@/components/search/SearchScreenView';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
-import { MIN_SEARCH_QUERY_LENGTH } from '@/constants/search';
+import {
+  MAX_SEARCH_QUERY_LENGTH,
+  MIN_SEARCH_QUERY_LENGTH,
+} from '@/constants/search';
 import { useCategories, useProductBrands, useProducts } from '@/hooks';
 import { useNetworkState } from '@/hooks/use-network-state';
 import {
@@ -77,8 +80,14 @@ export default function SearchScreen() {
     onClearRouteQuery: clearRouteQuery,
   });
 
+  // Bound at acceptance so over-long pastes can never reach the debounced
+  // auto-commit, history, or the search RPC from this screen either.
+  const handleResultsQueryChange = (value: string) => {
+    setQuery(value.slice(0, MAX_SEARCH_QUERY_LENGTH));
+  };
+
   const commitSearchQuery = (value: string) => {
-    const trimmedValue = value.trim();
+    const trimmedValue = value.trim().slice(0, MAX_SEARCH_QUERY_LENGTH);
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
@@ -217,10 +226,11 @@ export default function SearchScreen() {
           setMaxPrice(maximum);
         }}
         onProductPress={handleProductPress}
-        onQueryChange={setQuery}
+        onQueryChange={handleResultsQueryChange}
         onRecentSearch={(search) => {
-          setQuery(search);
-          saveToHistory(search);
+          const boundedSearch = search.slice(0, MAX_SEARCH_QUERY_LENGTH);
+          setQuery(boundedSearch);
+          saveToHistory(boundedSearch);
           Keyboard.dismiss();
         }}
         onRetry={handleRetry}

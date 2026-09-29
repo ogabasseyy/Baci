@@ -133,4 +133,21 @@ describe('createAutocompleteKeyDownHandler', () => {
 
     expect(handlers.onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('resets the highlight when Escape dismisses the popup', () => {
+    const onHighlight = vi.fn();
+    const { handlers, press } = setup({
+      highlightedIndex: 0,
+      onHighlight,
+    });
+
+    press('Escape');
+
+    // A later Enter must submit the typed query, not follow the hidden
+    // option.
+    expect(onHighlight).toHaveBeenCalledTimes(1);
+    const updater = onHighlight.mock.calls[0][0] as (prev: number) => number;
+    expect(updater(0)).toBe(-1);
+    expect(handlers.onClose).toHaveBeenCalledTimes(1);
+  });
 });

@@ -192,6 +192,47 @@ describe('SearchScreen route', () => {
     );
   });
 
+  it('bounds an over-long pasted query at acceptance on the results screen', () => {
+    mockUseLocalSearchParams.mockReturnValue({});
+    mockUseProducts.mockReturnValue(mockProductState());
+
+    render(<SearchScreen />);
+
+    const boundedQuery = 'a'.repeat(100);
+    act(() => {
+      mockViewProps.current?.onQueryChange('a'.repeat(150));
+    });
+
+    // The controlled state itself is capped, so the debounced auto-commit,
+    // history, and the search RPC never see the excess.
+    expect(mockViewProps.current).toMatchObject({ query: boundedQuery });
+
+    act(() => {
+      jest.advanceTimersByTime(250);
+    });
+    expect(mockViewProps.current).toMatchObject({
+      committedQuery: boundedQuery,
+    });
+    expect(mockUseProducts).toHaveBeenLastCalledWith(
+      expect.objectContaining({ search: boundedQuery, enabled: true })
+    );
+
+    act(() => {
+      mockViewProps.current?.onSubmitQuery();
+    });
+    const { syncStorage } = jest.requireMock('@/lib/storage') as {
+      syncStorage: { setItem: jest.Mock };
+    };
+    expect(syncStorage.setItem).toHaveBeenCalledWith(
+      'search_history',
+      expect.stringContaining(boundedQuery)
+    );
+    expect(syncStorage.setItem).not.toHaveBeenCalledWith(
+      'search_history',
+      expect.stringContaining('a'.repeat(150))
+    );
+  });
+
   it('clears a local search when an invalid route query arrives on a parameterless screen', () => {
     mockUseLocalSearchParams.mockReturnValue({});
 

@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   } | null,
   pathname: '/ogabassey',
   push: vi.fn(),
+  // Active search-route query for the navbar's route-query sync reader.
+  routeQuery: '',
   setIsCartOpen: vi.fn(),
 }));
 
@@ -56,6 +58,7 @@ vi.mock('next/navigation', () => ({
     back: vi.fn(),
     replace: vi.fn(),
   })),
+  useSearchParams: () => new URLSearchParams({ q: mocks.routeQuery }),
 }));
 
 vi.mock('next/dynamic', async () => {

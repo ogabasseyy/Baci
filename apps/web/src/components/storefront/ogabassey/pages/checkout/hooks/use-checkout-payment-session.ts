@@ -1,21 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import type { DiscountResult } from '@/components/storefront/checkout/discount-code-input';
-import type { RedvaultQuoteSummary } from '../components/redvault/RedvaultPaymentOption';
 import { loadWalletBalance } from '../checkout-page-data-loaders';
-import { useLoadResumedOrder } from './use-load-resumed-order';
-import type { LoadResumedCheckoutOrderParams } from '../load-resumed-checkout-order';
-import type { PendingCheckoutOrderSnapshot } from '../pending-checkout-order';
-import type {
-  PaymentMethod,
-  PaymentTab,
-} from '../types';
+import type { RedvaultQuoteSummary } from '../components/redvault/RedvaultPaymentOption';
 import type {
   RedvaultPreparedOrder,
   RedvaultStatus,
 } from '../handlers/redvault-prepared-order-submit';
+import type { PendingCheckoutOrderSnapshot } from '../pending-checkout-order';
 import { getRedvaultCompatibleCheckoutValues } from '../redvault-compatible-checkout-values';
+import type { PaymentMethod, PaymentTab } from '../types';
 
 interface UseCheckoutPaymentSessionOptions {
   baseTotal: number;
@@ -24,18 +19,13 @@ interface UseCheckoutPaymentSessionOptions {
   discountSubtotal: number;
   hasAuthenticatedUser: boolean;
   hasCheckoutCartItems: boolean;
-  isHydrated: boolean;
   isOrderInFlightRef: { current: boolean };
   merchantSlug?: string;
   pendingCheckoutOrder: PendingCheckoutOrderSnapshot | null;
-  walletSessionIdentity: unknown;
-  resumeOrder: Omit<
-    LoadResumedCheckoutOrderParams,
-    'signal' | 'setPaymentTab' | 'setPaymentMethod' | 'resumeOrderId' | 'resumeMerchantSlug'
-  > & {
-    resumeOrderId: string | null;
-    resumeMerchantSlug: string | null;
-  };
+  walletSessionUserId?: string;
+  resumeOrderId: string | null;
+  preferredGateway: 'credpal' | 'credit_direct' | null;
+  resumedOrder: { id: string } | null;
 }
 
 /** Own payment selection/fencing, customer wallet state, and payable totals. */
@@ -46,33 +36,33 @@ export function useCheckoutPaymentSession({
   discountSubtotal,
   hasAuthenticatedUser,
   hasCheckoutCartItems,
-  isHydrated,
   isOrderInFlightRef,
   merchantSlug,
   pendingCheckoutOrder,
-  resumeOrder,
-  walletSessionIdentity,
+  preferredGateway,
+  resumeOrderId,
+  resumedOrder,
+  walletSessionUserId,
 }: UseCheckoutPaymentSessionOptions) {
   const [tab, setTab] = useState<PaymentTab>('full');
   const [method, setMethod] = useState<PaymentMethod>('');
   const [redvaultSummary, setRedvaultSummary] =
     useState<RedvaultQuoteSummary | null>(null);
-  const [redvaultStatus, setRedvaultStatus] =
-    useState<RedvaultStatus>('idle');
+  const [redvaultStatus, setRedvaultStatus] = useState<RedvaultStatus>('idle');
   const [redvaultOrderReady, setRedvaultOrderReady] =
     useState<RedvaultPreparedOrder | null>(null);
   const [walletBalance, setWalletBalance] = useState(0);
   const [walletLoading, setWalletLoading] = useState(false);
   const [payWithWallet, setPayWithWallet] = useState(false);
-  const [appliedDiscount, setAppliedDiscount] =
-    useState<DiscountResult | null>(null);
+  const [appliedDiscount, setAppliedDiscount] = useState<DiscountResult | null>(
+    null
+  );
   const [payForMeDetails, setPayForMeDetails] = useState({
     name: '',
     contact: '',
     note: '',
   });
-  const walletRedemptionAllowed =
-    hasCheckoutCartItems || !resumeOrder.resumeOrderId;
+  const walletRedemptionAllowed = hasCheckoutCartItems || !resumeOrderId;
   const updatePayWithWallet = (nextValue: boolean) => {
     if (walletRedemptionAllowed || !nextValue) {
       setPayWithWallet(nextValue);
@@ -103,18 +93,19 @@ export function useCheckoutPaymentSession({
     setMethod(nextMethod);
   };
 
-  useLoadResumedOrder({
-    ...resumeOrder,
-    // Once the persisted cart is authoritative, resume data must not overwrite
-    // the active checkout's fields. Wait for hydration before deciding.
-    resumeOrderId:
-      isHydrated && !hasCheckoutCartItems ? resumeOrder.resumeOrderId : null,
-    setPaymentTab: setTab,
-    setPaymentMethod: selectMethod,
+  const selectResumedPaymentMethod = useEffectEvent(() => {
+    if (!preferredGateway) return;
+    setTab('installments');
+    selectMethod(preferredGateway);
   });
+  useEffect(() => {
+    if (resumedOrder && preferredGateway && !hasCheckoutCartItems) {
+      selectResumedPaymentMethod();
+    }
+  }, [hasCheckoutCartItems, preferredGateway, resumedOrder]);
 
   useEffect(() => {
-    if (!hasAuthenticatedUser || !merchantSlug) {
+    if (!hasAuthenticatedUser || !merchantSlug || !walletSessionUserId) {
       setWalletLoading(false);
       return;
     }
@@ -125,10 +116,19 @@ export function useCheckoutPaymentSession({
       signal: controller.signal,
       setWalletLoading,
       setWalletBalance,
-      setPayWithWallet: updatePayWithWallet,
+      setPayWithWallet: (nextValue) => {
+        if (walletRedemptionAllowed || !nextValue) {
+          setPayWithWallet(nextValue);
+        }
+      },
     });
     return () => controller.abort();
-  }, [hasAuthenticatedUser, merchantSlug, walletRedemptionAllowed, walletSessionIdentity]);
+  }, [
+    hasAuthenticatedUser,
+    merchantSlug,
+    walletRedemptionAllowed,
+    walletSessionUserId,
+  ]);
 
   useEffect(() => {
     if (!walletRedemptionAllowed) {
@@ -140,15 +140,16 @@ export function useCheckoutPaymentSession({
   // checkout can render while the resume request is pending, so ignore any
   // discount entered during that brief loading window once resume is known.
   const resumedOrderSuppliesPaymentBase =
-    Boolean(resumeOrder.resumeOrderId) && !hasCheckoutCartItems;
-  const discountAmount = appliedDiscount && !resumedOrderSuppliesPaymentBase
-    ? (appliedDiscount.discount_amount ??
-      (appliedDiscount.discount_type === 'percentage'
-        ? Math.round(
-            discountSubtotal * (appliedDiscount.discount_value / 100)
-          )
-        : Math.min(appliedDiscount.discount_value, discountSubtotal)))
-    : 0;
+    Boolean(resumeOrderId) && !hasCheckoutCartItems;
+  const discountAmount =
+    appliedDiscount && !resumedOrderSuppliesPaymentBase
+      ? (appliedDiscount.discount_amount ??
+        (appliedDiscount.discount_type === 'percentage'
+          ? Math.round(
+              discountSubtotal * (appliedDiscount.discount_value / 100)
+            )
+          : Math.min(appliedDiscount.discount_value, discountSubtotal)))
+      : 0;
   const checkoutValues = getRedvaultCompatibleCheckoutValues({
     baseTotal,
     discountAmount,

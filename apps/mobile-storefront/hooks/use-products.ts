@@ -80,15 +80,23 @@ export function useProducts(options: UseProductsOptions = {}) {
 
     if (pendingLoadMoreRef.current && !isFetching && !isFetchingNextPage) {
       pendingLoadMoreRef.current = false;
-      fetchLockedNextPage(
-        nextPageLocksRef.current,
-        nextPageQueryKey,
-        fetchNextPage
-      );
+      // A failed background refetch drops the queued signal instead of
+      // draining it: firing fetchNextPage now could succeed and clear the
+      // generic error while the retained pages were never refreshed,
+      // hiding stale results and bypassing the refresh-retry path. Fresh
+      // intent (scroll or footer retry) drives the next fetch instead.
+      if (!isError) {
+        fetchLockedNextPage(
+          nextPageLocksRef.current,
+          nextPageQueryKey,
+          fetchNextPage
+        );
+      }
     }
   }, [
     fetchNextPage,
     hasNextPage,
+    isError,
     isFetching,
     isFetchingNextPage,
     nextPageQueryKey,

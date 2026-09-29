@@ -405,6 +405,79 @@ describe('useProducts', () => {
     );
   });
 
+  it('drops the queued next page when the background refetch fails', async () => {
+    mockFetchProductsPage.mockResolvedValueOnce({
+      products: [createProduct('prod-1')],
+      nextOffset: 1,
+      total: 5,
+    });
+    const queryClient = createQueryClient();
+
+    const { result } = renderHook(() => useProducts({ limit: 1 }), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(result.current.hasMore).toBe(true));
+
+    let rejectRefetch: (() => void) | undefined;
+    mockFetchProductsPage.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        rejectRefetch = () => reject(new Error('reconnect refetch failed'));
+      })
+    );
+    act(() => {
+      void result.current.refetch();
+    });
+    await waitFor(() => expect(result.current.isFetching).toBe(true));
+
+    act(() => {
+      result.current.loadMore();
+    });
+
+    await act(async () => {
+      rejectRefetch?.();
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    await waitFor(() => expect(result.current.isFetching).toBe(false));
+
+    // The queued end signal dies with the failed request: no next-page
+    // fetch fires, so the retained pages stay visibly stale behind the
+    // refresh-retry path instead of being silently papered over.
+    expect(
+      mockFetchProductsPage.mock.calls.filter((call) => call[2] === 1)
+    ).toHaveLength(0);
+    expect(result.current.error).toBe('reconnect refetch failed');
+
+    // Fresh intent still works: a footer retry refetches, and a later
+    // scroll loads the next page.
+    mockFetchProductsPage.mockResolvedValueOnce({
+      products: [createProduct('prod-1')],
+      nextOffset: 1,
+      total: 5,
+    });
+    await act(async () => {
+      await result.current.refetch();
+    });
+    await waitFor(() => expect(result.current.isError).toBe(false));
+    expect(
+      mockFetchProductsPage.mock.calls.filter((call) => call[2] === 1)
+    ).toHaveLength(0);
+
+    mockFetchProductsPage.mockResolvedValueOnce({
+      products: [createProduct('prod-2')],
+      nextOffset: null,
+      total: 5,
+    });
+    act(() => {
+      result.current.loadMore();
+    });
+    await waitFor(() => {
+      expect(
+        mockFetchProductsPage.mock.calls.filter((call) => call[2] === 1)
+      ).toHaveLength(1);
+    });
+  });
+
   it('surfaces fetch errors and exposes an empty product list', async () => {
     mockFetchProductsPage.mockRejectedValueOnce(new Error('network down'));
     const queryClient = createQueryClient();

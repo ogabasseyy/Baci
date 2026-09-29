@@ -167,6 +167,24 @@ describe('handlePaystackCancellationRefundEvent', () => {
     expect(response.status).toBe(200);
   });
 
+  it('falls back to the flat reference when the nested value is unusable', async () => {
+    const db = database(null);
+
+    const response = await handlePaystackCancellationRefundEvent(db, {
+      data: {
+        transaction: { reference: 'has space' },
+        transaction_reference: 'PAYMENT-1',
+      },
+      event: 'refund.processed',
+    });
+
+    expect(mocks.reconcilePaystackRefundEvent).toHaveBeenCalledWith(
+      db,
+      'PAYMENT-1'
+    );
+    expect(response.status).toBe(200);
+  });
+
   it('acknowledges events without any usable reference', async () => {
     const response = await handlePaystackCancellationRefundEvent(supabase, {
       data: {},

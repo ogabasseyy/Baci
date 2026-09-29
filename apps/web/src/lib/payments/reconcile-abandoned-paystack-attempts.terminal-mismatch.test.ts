@@ -63,7 +63,9 @@ describe('abandoned Paystack attempt terminal mismatches', () => {
     const reviewInsert = vi
       .fn()
       .mockResolvedValue({ error: { code: '23505' } });
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
     withReviewTable(client, reviewInsert);
+    Object.assign(client, { rpc });
     const verify = vi.fn().mockResolvedValue({
       success: true,
       data: {

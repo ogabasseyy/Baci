@@ -294,4 +294,9 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES = [
       'supabase/migrations/20260927151000_abandoned_attempt_evidence_mismatch_review_type.sql',
     sha256: 'd63b68779deb8ba96ad65b5820f710aad57f2ec0bc955c1bf7c6bf137e2cb434',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260927151100_merge_abandoned_attempt_evidence_mismatch.sql',
+    sha256: '8743fbc87d7c4faac46005e521d61536e539f4f9bd9be9115996039350f460f5',
+  },
 ];

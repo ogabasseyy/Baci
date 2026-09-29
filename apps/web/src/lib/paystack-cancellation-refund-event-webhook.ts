@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { reconcilePaystackCancellationRefund } from '@/lib/payments/reconcile-paystack-cancellation-refund';
 import { reconcilePaystackRefundEvent } from '@/lib/payments/reconcile-paystack-refund-event';
+import { selectPaystackRefundReference } from '@/lib/select-paystack-refund-reference';
 
 export async function handlePaystackCancellationRefundEvent(
   supabase: SupabaseClient,
@@ -76,19 +77,19 @@ export async function handlePaystackCancellationRefundEvent(
     }
   }
   // Fallback: the original payment reference, nested per the refund
-  // resource shape with the flat field retained for compatibility.
+  // resource shape with the flat field retained for compatibility. The
+  // nested value wins only when the reconciler can consume it; an
+  // unusable nested string must not shadow a usable flat one.
   const transaction = data?.transaction;
   const nestedReference =
     transaction && typeof transaction === 'object'
       ? (transaction as Record<string, unknown>).reference
       : undefined;
   const flatReference = data?.transaction_reference;
-  const paymentReference =
-    typeof nestedReference === 'string'
-      ? nestedReference
-      : typeof flatReference === 'string'
-        ? flatReference
-        : undefined;
+  const paymentReference = selectPaystackRefundReference(
+    nestedReference,
+    flatReference
+  );
   if (paymentReference !== undefined) {
     try {
       await reconcilePaystackRefundEvent(supabase, paymentReference);

@@ -155,19 +155,24 @@ export default function SearchScreen() {
 
   // Guards the list end event against duplicate fetches; the hook queues a
   // bottom-reached signal that arrives mid-refetch instead of dropping it.
-  // A failed background refetch retains products with a generic error.
-  // Appending a page would succeed and clear that error while the retained
-  // pages stay stale — and the error footer changing the layout can itself
-  // emit an end event — so pagination stays gated until refetch recovers.
-  const hasRefreshError =
-    hasSearchQuery && productsError !== null && !productsNextPageError;
+  // Pagination stays gated while ANY request error stands — refresh or
+  // next-page. A failed background refetch retains products with a generic
+  // error, and appending a page would succeed and clear that error while
+  // the retained pages stay stale; and the error footer appearing can
+  // itself emit an end event, so ungated next-page errors would fire
+  // automatic retries without the shopper pressing anything. Recovery is
+  // explicit: onRetry (refetch) for refresh failures, onRetryNextPage
+  // (loadMore) for next-page failures. Transient blips never reach this
+  // gate — TanStack already retries them internally (retry: 2) — so a
+  // standing error means recovery genuinely needs shopper intent.
+  const hasProductsError = hasSearchQuery && productsError !== null;
   const handleEndReached = () => {
     if (
       hasSearchQuery &&
       hasMore &&
       !isLoading &&
       !isLoadingMore &&
-      !hasRefreshError
+      !hasProductsError
     ) {
       loadMore();
     }

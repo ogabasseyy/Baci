@@ -1,19 +1,22 @@
 import { resumedOrderPayload } from './checkout-page-bnpl.test-support';
 import {
+  act,
   CheckoutPage,
   expect,
   it,
   mockMobileOrderSummary,
+  openCredPalCheckout,
   render,
   screen,
   useAuthSafe,
+  useCart,
   usePersistedState,
   useSearchParams,
   vi,
   waitFor,
 } from './checkout-page-test-support';
 
-it('shows the wallet-adjusted due amount in a resumed mobile summary', async () => {
+it('shows the canonical due amount without wallet credit for a resumed order', async () => {
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams({
       orderId: 'ord-1',
@@ -55,8 +58,172 @@ it('shows the wallet-adjusted due amount in a resumed mobile summary', async () 
     render(<CheckoutPage />);
     await waitFor(() => {
       const calls = vi.mocked(mockMobileOrderSummary).mock.calls;
-      expect(calls.at(-1)?.[0].remainingAmount).toBe(4_750);
+      expect(calls.at(-1)?.[0].remainingAmount).toBe(5_750);
+      expect(calls.at(-1)?.[0].walletAmountUsed).toBe(0);
+      expect(calls.at(-1)?.[0].payWithWallet).toBe(false);
     });
+  } finally {
+    fetchMock.mockRestore();
+  }
+});
+
+it('keeps an active cart on its fresh payment path when a resume gateway is present', async () => {
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams({
+      gateway: 'credpal',
+      orderId: 'ord-1',
+      trackingToken: 'tok-123',
+    }) as unknown as ReturnType<typeof useSearchParams>
+  );
+  vi.mocked(useCart).mockReturnValue({
+    cart: [
+      {
+        id: 'active-cart-item',
+        cartItemId: 'active-cart-item',
+        name: 'Active cart item',
+        price: 10_000,
+        quantity: 1,
+      },
+    ],
+    cartTotal: 10_000,
+    clearCart: vi.fn(),
+    isHydrated: true,
+  } as unknown as ReturnType<typeof useCart>);
+  let resolveResumeLookup!: (response: Response) => void;
+  const resumeLookup = new Promise<Response>((resolve) => {
+    resolveResumeLookup = resolve;
+  });
+  const fetchMock = vi
+    .spyOn(globalThis, 'fetch')
+    .mockImplementation((input) => {
+      if (String(input).startsWith('/api/storefront/orders/ord-1')) {
+        return resumeLookup;
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) } as Response);
+    });
+
+  try {
+    render(<CheckoutPage />);
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/api/storefront/orders/ord-1'),
+        expect.any(Object)
+      )
+    );
+    await act(async () => {
+      resolveResumeLookup({
+        ok: true,
+        json: async () => resumedOrderPayload('NGN'),
+      } as Response);
+      await resumeLookup;
+    });
+    await waitFor(() => expect(mockMobileOrderSummary).toHaveBeenCalled());
+    expect(openCredPalCheckout).not.toHaveBeenCalled();
+  } finally {
+    fetchMock.mockRestore();
+  }
+});
+
+it('keeps active-cart checkout visible while the resume lookup is pending', async () => {
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams({
+      orderId: 'ord-1',
+      trackingToken: 'tok-123',
+    }) as unknown as ReturnType<typeof useSearchParams>
+  );
+  vi.mocked(useCart).mockReturnValue({
+    cart: [
+      {
+        id: 'active-cart-item',
+        cartItemId: 'active-cart-item',
+        name: 'Active cart item',
+        price: 10_000,
+        quantity: 1,
+      },
+    ],
+    cartTotal: 10_000,
+    clearCart: vi.fn(),
+    isHydrated: true,
+  } as unknown as ReturnType<typeof useCart>);
+  const fetchMock = vi
+    .spyOn(globalThis, 'fetch')
+    .mockImplementation((input) => {
+      if (String(input).startsWith('/api/storefront/orders/ord-1')) {
+        return new Promise<Response>(() => {});
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) } as Response);
+    });
+
+  try {
+    render(<CheckoutPage />);
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/api/storefront/orders/ord-1'),
+        expect.any(Object)
+      );
+      expect(mockMobileOrderSummary).toHaveBeenCalled();
+      expect(screen.queryByText('Loading order...')).not.toBeInTheDocument();
+    });
+  } finally {
+    fetchMock.mockRestore();
+  }
+});
+
+it('keeps active-cart checkout visible when the resume lookup fails', async () => {
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams({
+      orderId: 'ord-1',
+      trackingToken: 'tok-123',
+    }) as unknown as ReturnType<typeof useSearchParams>
+  );
+  vi.mocked(useCart).mockReturnValue({
+    cart: [
+      {
+        id: 'active-cart-item',
+        cartItemId: 'active-cart-item',
+        name: 'Active cart item',
+        price: 10_000,
+        quantity: 1,
+      },
+    ],
+    cartTotal: 10_000,
+    clearCart: vi.fn(),
+    isHydrated: true,
+  } as unknown as ReturnType<typeof useCart>);
+  let resolveResumeLookup!: (response: Response) => void;
+  const resumeLookup = new Promise<Response>((resolve) => {
+    resolveResumeLookup = resolve;
+  });
+  const fetchMock = vi
+    .spyOn(globalThis, 'fetch')
+    .mockImplementation((input) => {
+      if (String(input).startsWith('/api/storefront/orders/ord-1')) {
+        return resumeLookup;
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) } as Response);
+    });
+
+  try {
+    render(<CheckoutPage />);
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/api/storefront/orders/ord-1'),
+        expect.any(Object)
+      )
+    );
+    await act(async () => {
+      resolveResumeLookup({ ok: false, json: async () => ({}) } as Response);
+      await resumeLookup;
+    });
+    await waitFor(() => expect(mockMobileOrderSummary).toHaveBeenCalled());
+    expect(
+      vi.mocked(mockMobileOrderSummary).mock.calls.at(-1)?.[0].cart
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'active-cart-item' }),
+      ])
+    );
+    expect(screen.queryByText(/something went wrong/i)).not.toBeInTheDocument();
   } finally {
     fetchMock.mockRestore();
   }

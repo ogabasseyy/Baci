@@ -663,11 +663,18 @@ export const CheckoutPage: React.FC = () => {
 
   // Auto-trigger payment for resumed orders
   useEffect(() => {
-    if (resumedOrder && preferredGateway && !autoTriggerRef.current && !isProcessing) {
+    if (
+      isHydrated &&
+      checkoutCart.length === 0 &&
+      resumedOrder &&
+      preferredGateway &&
+      !autoTriggerRef.current &&
+      !isProcessing
+    ) {
       autoTriggerRef.current = true;
       executeDirectPayment();
     }
-  }, [resumedOrder, preferredGateway]);
+  }, [checkoutCart.length, isHydrated, isProcessing, preferredGateway, resumedOrder]);
 
   useEffect(() => {
     if (
@@ -761,9 +768,17 @@ export const CheckoutPage: React.FC = () => {
 
   // Loading state (Initial fetch OR waiting for auto-trigger)
   // This prevents the form from flashing briefly before the payment widget opens
-  const isAutoTriggerProcessing = resumedOrder && !!preferredGateway && !isProcessing;
+  const isAutoTriggerProcessing =
+    isHydrated &&
+    checkoutCart.length === 0 &&
+    resumedOrder &&
+    !!preferredGateway &&
+    !isProcessing;
 
-  if (isLoadingResumedOrder || isAutoTriggerProcessing) {
+  if (
+    (checkoutCart.length === 0 && isLoadingResumedOrder) ||
+    isAutoTriggerProcessing
+  ) {
     return (
       <div className="ogabassey-checkout-page min-h-screen bg-gray-50/50 flex items-center justify-center pb-20">
         <div className="flex flex-col items-center gap-4">
@@ -777,7 +792,7 @@ export const CheckoutPage: React.FC = () => {
   }
 
   // Error state for order resumption
-  if (resumeOrderId && resumeOrderError) {
+  if (checkoutCart.length === 0 && resumeOrderId && resumeOrderError) {
     return (
       <div className="ogabassey-checkout-page min-h-screen bg-gray-50/50 flex items-center justify-center pb-20">
         <div className="text-center max-w-md mx-auto px-4">

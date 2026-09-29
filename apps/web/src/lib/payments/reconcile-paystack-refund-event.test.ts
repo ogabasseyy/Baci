@@ -17,6 +17,7 @@ import {
   buildPaymentLookup,
   buildRefundCandidates,
   buildReviewInsert,
+  buildSettledCandidates,
   cancelledPaymentRow,
   REFUND_FIXTURE,
 } from './reconcile-paystack-refund-event.test-helpers';
@@ -167,9 +168,42 @@ describe('Paystack cancellation refund mismatch evidence', () => {
       shipping_status: 'delivered',
     },
     null,
-  ])('skips payments whose order is not cancelled (%s)', async (cancelOrder) => {
+  ])('files non-cancellation evidence for payments whose order is not cancelled (%s)', async (cancelOrder) => {
+    const review = buildReviewInsert();
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        buildPaymentCandidates([
+          cancelledPaymentRow({ cancel_order: cancelOrder }),
+        ])
+      )
+      .mockReturnValueOnce(buildSettledCandidates([]))
+      .mockReturnValueOnce(
+        buildSettledCandidates([
+          { amount: 100, gateway: 'paystack' },
+          { amount: 50, gateway: 'korapay' },
+        ])
+      )
+      .mockReturnValueOnce(review);
+    const rpc = vi.fn();
+
+    await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
+
+    // The customer may have been refunded while the order stays paid
+    // and fulfillable: acknowledging silently would lose the only
+    // evidence polling can never rediscover.
+    expect(review.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'provider_refund_outside_cancellation',
+        order_id: 'order-1',
+        txn_id: null,
+      })
+    );
+  });
+
+  it('stays silent for payments with no order at all', async () => {
     const paymentCandidates = buildPaymentCandidates([
-      cancelledPaymentRow({ cancel_order: cancelOrder }),
+      cancelledPaymentRow({ order_id: null }),
     ]);
     const from = vi.fn().mockReturnValueOnce(paymentCandidates);
     const rpc = vi.fn();

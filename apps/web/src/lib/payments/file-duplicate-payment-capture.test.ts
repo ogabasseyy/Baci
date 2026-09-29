@@ -133,6 +133,12 @@ describe('fileDuplicatePaymentCapture', () => {
         p_gateway: 'paystack',
         p_gateway_reference: 'BAC-OLD',
         p_transaction_id: 'attempt-1',
+        // Merged captures are stamped and never reselected: without
+        // the provider evidence operations cannot reconcile a later
+        // charge that differs from the local transaction.
+        p_provider_amount: 10000,
+        p_provider_currency: 'NGN',
+        p_provider_status: 'success',
       })
     );
   });

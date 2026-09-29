@@ -76,10 +76,21 @@ export async function finalizeOrderGatewayPayment({
       kind: 'completion_failed',
     };
   }
+  // A same-transaction replay must not read as a new capture: when the
+  // outbox names THIS transaction as the payer, the order was paid by
+  // this row and a pending snapshot that set wonTransactionFlip is
+  // stale (a concurrent writer completed it first). Gate only on the
+  // payer evidence — not already_completed, which also holds for
+  // redelivered fresh captures that still owe settlement.
+  const sameTransactionReplay =
+    outboxState?.hasRows === true &&
+    outboxState?.payerTransactionId === transaction.id;
   const capturedOnAlreadyPaidOrder =
     Boolean(completion.order_already_paid) &&
     !completion.order_updated &&
-    ((!result.redvaultDuplicate && wonTransactionFlip) ||
+    ((!result.redvaultDuplicate &&
+      wonTransactionFlip &&
+      !sameTransactionReplay) ||
       (Boolean(outboxState?.hasRows) &&
         outboxState?.payerTransactionId !== transaction.id));
   const legacyPaidReplay =

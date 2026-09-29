@@ -133,11 +133,12 @@ describe('reconcileWedgedGatewayOrders', () => {
     expect(builder.or).toHaveBeenCalledWith(
       'status.eq.completed,and(status.eq.pending,gateway.eq.juicyway),and(status.eq.pending,metadata->>guest_provider_confirmed.eq.true)'
     );
-    // The cron never claims the flip even for pending rows: a concurrent
-    // webhook may complete the row first, and flip ownership must come
-    // from the completion RPC result rather than the stale snapshot.
+    // The pending candidate keeps its fresh-capture signal: forcing
+    // false would misclassify a real capture on a legacy paid order as
+    // a replay. A concurrent webhook that completed the row first is
+    // distinguished downstream by the outbox payer evidence.
     expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledWith(
-      expect.objectContaining({ wonTransactionFlip: false })
+      expect.objectContaining({ wonTransactionFlip: true })
     );
     expect(summary).toMatchObject({
       checked: 1,

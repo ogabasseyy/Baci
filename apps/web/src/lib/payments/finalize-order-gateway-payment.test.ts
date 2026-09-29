@@ -339,6 +339,74 @@ describe('finalizeOrderGatewayPayment', () => {
     expect(mocks.runPaidOrderSideEffects).toHaveBeenCalledTimes(1);
   });
 
+  it('ignores a stale pending flip when the outbox names this transaction the payer', async () => {
+    mocks.completeOrderGatewayPayment.mockResolvedValue(
+      completion({
+        already_completed: true,
+        order_already_paid: true,
+        order_updated: false,
+      })
+    );
+    mocks.ensurePaidOrderInventoryConfirmed.mockResolvedValue(undefined);
+
+    const outcome = await finalizeOrderGatewayPayment(
+      baseArgs(
+        buildSupabase(
+          { data: richOrderRow },
+          {
+            outboxRows: [
+              {
+                error: 'rpc_seed_pending_drain',
+                status: 'failed',
+                step: 'merchant_settlement',
+                transaction_id: 'txn-1',
+              },
+            ],
+          }
+        ),
+        // A concurrent writer completed this row after the caller
+        // snapshotted it as pending: the payer evidence proves this is
+        // a same-transaction replay, not a new capture.
+        { wonTransactionFlip: true }
+      )
+    );
+
+    expect(outcome).toMatchObject({
+      capturedOnPaidOrder: false,
+      kind: 'completed',
+    });
+    expect(mocks.settleCapturedOrderPayment).not.toHaveBeenCalled();
+    expect(mocks.notifyPaymentReceived).toHaveBeenCalled();
+    expect(mocks.runPaidOrderSideEffects).toHaveBeenCalledTimes(1);
+  });
+
+  it('settles a pending-row capture on a legacy paid order with no outbox history', async () => {
+    mocks.completeOrderGatewayPayment.mockResolvedValue(
+      completion({
+        already_completed: false,
+        order_already_paid: true,
+        order_updated: false,
+      })
+    );
+    mocks.ensurePaidOrderInventoryConfirmed.mockResolvedValue(undefined);
+
+    const outcome = await finalizeOrderGatewayPayment(
+      baseArgs(buildSupabase({ data: richOrderRow }, { outboxRows: [] }), {
+        wonTransactionFlip: true,
+      })
+    );
+
+    // Another payment won the order race and no outbox row names a
+    // payer: the pending flip is the only fresh-capture signal, so the
+    // capture settles instead of misclassifying as a legacy replay.
+    expect(outcome).toMatchObject({
+      capturedOnPaidOrder: true,
+      kind: 'completed',
+    });
+    expect(mocks.settleCapturedOrderPayment).toHaveBeenCalledTimes(1);
+    expect(mocks.runPaidOrderSideEffects).not.toHaveBeenCalled();
+  });
+
   it('skips the drain on a pure replay with no outbox history (legacy completion)', async () => {
     mocks.completeOrderGatewayPayment.mockResolvedValue(
       completion({

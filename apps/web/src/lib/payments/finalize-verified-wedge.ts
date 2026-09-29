@@ -94,13 +94,14 @@ export async function finalizeVerifiedWedge({
         order_id: candidate.order_id,
         platform_fee: candidate.platform_fee,
       },
-      // The cron never claims the flip: a concurrent webhook may complete
-      // this row first, so classification must come from the completion
-      // RPC result (order_updated/already_completed) rather than the
-      // stale candidate snapshot. Passing true would misclassify such a
-      // replay as a new capture on an already-paid order and skip the
-      // normal side effects without recovery markers.
-      wonTransactionFlip: false,
+      // Preserve the pending-candidate signal: forcing false loses the
+      // only fresh-capture evidence when another payment won the order
+      // race on a legacy order with no outbox rows, misclassifying real
+      // captured funds as a legacy replay. A concurrent webhook may
+      // still complete this row first, but that same-transaction replay
+      // is distinguished downstream by the outbox payer evidence, not
+      // by dropping the signal here.
+      wonTransactionFlip: candidate.status === 'pending',
     }),
     deadlineMs
   );

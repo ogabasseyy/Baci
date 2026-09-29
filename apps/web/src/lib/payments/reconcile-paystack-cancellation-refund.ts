@@ -114,6 +114,22 @@ export async function reconcilePaystackCancellationRefund(
     verifyTransaction(payment.gateway_reference, AbortSignal.timeout(8_000)),
   ]);
   if (!providerRefund.success || !providerPayment.success) {
+    // A definitive provider rejection (unknown refund or payment ID)
+    // will never heal on retry: surface it as deterministic evidence
+    // so the worker files and holds instead of rotating the row
+    // forever as merely unavailable. Network, rate-limit, 5xx, and
+    // auth outages stay retryable below.
+    const failed = [providerRefund, providerPayment].filter(
+      (result): result is { code?: string; error: string; success: false } =>
+        !result.success
+    );
+    if (
+      failed.some(
+        (result) => result.code === 'HTTP_400' || result.code === 'HTTP_404'
+      )
+    ) {
+      throw new Error('paystack_refund_lookup_rejected');
+    }
     throw new Error('paystack_refund_verification_unavailable');
   }
   const current = providerRefund.data;

@@ -190,12 +190,43 @@ describe('initiatePaystackCancellationRefunds failures', () => {
         metadata: expect.objectContaining({
           failed_payment_transaction_id: 'tx-1',
         }),
+        // Nothing was accepted, so a transient review-write failure
+        // must stay retryable instead of terminalizing the step.
+        preflight: true,
         reason: expect.stringContaining('rejected'),
       })
     );
     expect(mocks.quarantineRefund.mock.calls[0]?.[0].metadata).toMatchObject({
       ambiguous_initiation: false,
     });
+  });
+
+  it('keeps an ambiguous first-leg failure terminal even when the review write fails', async () => {
+    mocks.initiatePaystackRefund.mockResolvedValue({
+      code: 'HTTP_503',
+      error: 'upstream down',
+      success: false,
+    });
+    mocks.quarantineRefund.mockRejectedValue(
+      new DeliveryUncertainError('quarantined')
+    );
+
+    await expect(
+      initiatePaystackCancellationRefunds({
+        order,
+        refundedPaymentIds: new Set(),
+        supabase,
+        transactions: [transaction],
+      })
+    ).rejects.toBeInstanceOf(DeliveryUncertainError);
+    // The provider may have accepted despite the outage: retrying the
+    // initiation could double-refund, so no preflight escape.
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preflight: false,
+        reason: expect.stringContaining('ambiguously'),
+      })
+    );
   });
 
   it('still quarantines an ambiguous later leg after an accepted leg', async () => {

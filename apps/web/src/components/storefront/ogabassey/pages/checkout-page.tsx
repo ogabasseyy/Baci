@@ -17,10 +17,10 @@ import {
   buildCheckoutFunnelProperties,
   getCheckoutPaymentIntent,
 } from '@baci/shared/contracts';
-import { ChevronRight, ShieldCheck, User } from 'lucide-react';
+import { ChevronRight, ShieldCheck } from 'lucide-react';
 import { DvaModal } from './checkout/components/DvaModal';
 import { CryptoPaymentModal } from './checkout/components/CryptoPaymentModal';
-import { CheckoutDeliveryStep } from './checkout/components/CheckoutDeliveryStep';
+import { CheckoutStepComposition } from './checkout/components/CheckoutStepComposition';
 import {
   DiscountCodeInput,
 } from '@/components/storefront/checkout/discount-code-input';
@@ -70,7 +70,6 @@ import {
   isPaystackCheckoutAvailable,
 } from '@/lib/checkout/payment-gateway-availability';
 import { isNgnChargeCurrency } from './checkout/components/payment-step-availability';
-import { ContactStep } from './checkout/components/ContactStep';
 import {
   CHECKOUT_PENDING_ORDER_STORAGE_KEY,
   type PendingCheckoutOrderSnapshot,
@@ -80,7 +79,6 @@ import { captureCheckoutPaymentCompleted } from './checkout/capture-checkout-pay
 import { useCheckoutSubmissionState } from './checkout/hooks/use-checkout-submission-state';
 import { executeResumedDirectPayment } from './checkout/handlers/direct-payment';
 import { captureClientEvent } from '@/lib/posthog/capture-client-event';
-import { PaymentStep } from './checkout/components/PaymentStep';
 import { useRedvaultPaymentAvailability } from './checkout/hooks/use-redvault-payment-availability';
 import {
   inferAddressLocationFromInput,
@@ -922,50 +920,30 @@ export const CheckoutPage: React.FC = () => {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
-          {/* LEFT COLUMN: Accordion Steps */}
-          <div className="lg:col-span-8 space-y-6">
-
-            {/* Auth Banner for Guests (2026 Best Practice) */}
-            {!user && currentStep === 'contact' && (
-              <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-500">
-                <div className="flex items-center gap-3">
-                  <div className="size-10 bg-white rounded-xl flex items-center justify-center shadow-sm">
-                    <User size={20} className="text-blue-600" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-gray-900">Already have an account?</h4>
-                    <p className="text-xs text-gray-500">Sign in to use your saved addresses and track orders.</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsAuthModalOpen(true)}
-                  className="px-4 py-2 bg-white text-blue-600 font-bold text-xs rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors shadow-sm active:scale-95"
-                >
-                  Sign In
-                </button>
-              </div>
-            )}
-
-            <ContactStep
-              focusOnActivate={focusActiveStep}
-              active={currentStep === 'contact'}
-              completed={completedSteps.contact}
-              values={{ firstName, lastName, customerEmail, customerPhone }}
-              onChange={setCheckoutField}
-              account={{ createAccount, password: accountPassword }}
-              onAccountChange={({ createAccount: nextCreateAccount, password }) => {
+          <CheckoutStepComposition
+            flow={{
+              currentStep,
+              completedSteps,
+              focusOnActivate: focusActiveStep,
+              signedIn: Boolean(user),
+            }}
+            onSignIn={() => setIsAuthModalOpen(true)}
+            contact={{
+              values: { firstName, lastName, customerEmail, customerPhone },
+              onChange: setCheckoutField,
+              account: { createAccount, password: accountPassword },
+              onAccountChange: ({
+                createAccount: nextCreateAccount,
+                password,
+              }) => {
                 setCreateAccount(nextCreateAccount);
                 setAccountPassword(password);
-              }}
-              signedIn={Boolean(user)}
-              onOpen={() => setCurrentStep('contact')}
-              onComplete={completeContact}
-            />
-
-            <CheckoutDeliveryStep
-              active={currentStep === 'delivery'}
-              addressFields={{
+              },
+              onOpen: () => setCurrentStep('contact'),
+              onComplete: completeContact,
+            }}
+            delivery={{
+              addressFields: {
                 signedIn: Boolean(user),
                 addresses,
                 isNewAddressMode,
@@ -980,13 +958,10 @@ export const CheckoutPage: React.FC = () => {
                 onSelectAddress: deliveryAddressHandlers.onSelectAddress,
                 onStreetChange: deliveryAddressHandlers.onStreetChange,
                 onSelectPlace: deliveryAddressHandlers.onSelectPlace,
-              }}
-              completed={completedSteps.delivery}
-              deliveryOptions={deliveryOptions}
-              disabled={!completedSteps.contact}
-              focusOnActivate={focusActiveStep}
-              isDeliveryValid={isDeliveryValid}
-              onContinue={() => {
+              },
+              deliveryOptions,
+              isDeliveryValid,
+              onContinue: () => {
                 captureClientEvent(
                   CHECKOUT_FUNNEL_EVENTS.checkoutStepCompleted,
                   buildCheckoutFunnelProperties({
@@ -997,50 +972,43 @@ export const CheckoutPage: React.FC = () => {
                 );
                 setCompletedSteps((prev) => ({ ...prev, delivery: true }));
                 setCurrentStep('payment');
-              }}
-              onOpen={() => setCurrentStep('delivery')}
-              summary={
+              },
+              onOpen: () => setCurrentStep('delivery'),
+              summary:
                 deliveryMethod === 'door'
                   ? `By Road${newAddressCity ? ` · ${newAddressCity}` : ''}`
                   : deliveryMethod === 'pickup_station'
                     ? 'Pickup Station'
                     : deliveryMethod === 'pickup'
                       ? 'Store Pickup'
-                      : 'By Air'
-              }
-            />
-
-            {/* Step 3: Payment Method */}
-            <PaymentStep
-              focusOnActivate={focusActiveStep}
-              currentStep={currentStep}
-              completedSteps={completedSteps}
-              paymentTab={paymentSession.tab}
-              setPaymentTab={paymentSession.setTab}
-              paymentMethod={paymentMethod}
-              setPaymentMethod={paymentSession.selectMethod}
-              isProcessing={isProcessing}
-              isPayForMeValid={isPayForMeValid}
-              isDeliveryValid={isDeliveryValid}
-              payForMeDetails={paymentSession.payForMe.details}
-              setPayForMeDetails={paymentSession.payForMe.setDetails}
-              dva={{ isInitializingDva }}
-              newsletterOptIn={newsletterOptIn}
-              setNewsletterOptIn={setNewsletterOptIn}
-              handlePlaceOrder={handlePlaceOrder}
-              setCurrentStep={setCurrentStep}
-              merchant={merchant}
-              user={user}
-              remainingAmount={remainingAmount}
-              orderAmount={total}
-              currency={currencyCode}
-              redvaultAvailable={redvaultAvailability.available}
-              redvaultStatus={redvaultStatus}
-              redvaultSummary={paymentSession.redvault.summary}
-              redvaultOrderReady={Boolean(redvaultOrderReady)}
-            />
-
-          </div>
+                      : 'By Air',
+            }}
+            payment={{
+              paymentTab: paymentSession.tab,
+              setPaymentTab: paymentSession.setTab,
+              paymentMethod,
+              setPaymentMethod: paymentSession.selectMethod,
+              isProcessing,
+              isPayForMeValid,
+              isDeliveryValid,
+              payForMeDetails: paymentSession.payForMe.details,
+              setPayForMeDetails: paymentSession.payForMe.setDetails,
+              dva: { isInitializingDva },
+              newsletterOptIn,
+              setNewsletterOptIn,
+              handlePlaceOrder,
+              setCurrentStep,
+              merchant,
+              user,
+              remainingAmount,
+              orderAmount: total,
+              currency: currencyCode,
+              redvaultAvailable: redvaultAvailability.available,
+              redvaultStatus,
+              redvaultSummary: paymentSession.redvault.summary,
+              redvaultOrderReady: Boolean(redvaultOrderReady),
+            }}
+          />
 
           <DesktopOrderSummary
             displayItems={displayItems}

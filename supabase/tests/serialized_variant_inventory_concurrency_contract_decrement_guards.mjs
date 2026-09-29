@@ -1,0 +1,287 @@
+import { serializedInventoryBranches } from './serialized_variant_inventory_concurrency_contract_branches.mjs';
+import { serializedInventoryControlFlow } from './serialized_variant_inventory_concurrency_contract_control_flow.mjs';
+import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
+
+const { escapeRegex, isRequiredConjunct, maskSqlLiterals } =
+  serializedInventorySqlParser;
+
+function hasTopLevelBareReturn(arm) {
+  const masked = maskSqlLiterals(arm);
+  let depth = 0;
+  let caseDepth = 0;
+  for (const token of masked.matchAll(
+    /\bEND\s+IF\b|\bEND\s+CASE\b|\bEND\b(?!\s+(?:IF|CASE|LOOP)\b)|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bCASE\b|\bRETURN\s*;|\bRAISE\s+EXCEPTION\b/gi
+  )) {
+    if (/^END\s+IF/i.test(token[0])) depth = Math.max(0, depth - 1);
+    else if (/^END\s+CASE/i.test(token[0]))
+      caseDepth = Math.max(0, caseDepth - 1);
+    else if (/^END\b/i.test(token[0])) caseDepth = Math.max(0, caseDepth - 1);
+    else if (/^IF\b/i.test(token[0])) depth += 1;
+    else if (/^CASE$/i.test(token[0])) caseDepth += 1;
+    else if (depth === 0 && caseDepth === 0) return /^RETURN/i.test(token[0]);
+  }
+  return false;
+}
+
+function hasPositiveQuantityGuard(source) {
+  const executable = serializedInventorySqlParser.maskSqlLiterals(source, {
+    preserveStrings: true,
+  });
+  const guardPattern =
+    /^\s*IF\s+quantity_param\s+IS\s+NULL\s+OR\s+quantity_param\s*<=\s*0\s+THEN\b/im;
+  const guard = guardPattern.exec(executable);
+  let thenBranch;
+  try {
+    thenBranch = guard
+      ? serializedInventoryBranches.extractIfArms(executable, guardPattern)
+          .thenBranch
+      : undefined;
+  } catch {
+    return false;
+  }
+  const protectedOperations = [
+    ...executable.matchAll(
+      /SELECT\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?stock_quantity\s+INTO[\s\S]*?\bFOR\s+UPDATE\b|UPDATE\s+(?:public\s*\.\s*)?(?:products|product_variants)\b/gi
+    ),
+  ];
+  const validatedWindow = guard ? executable.slice(guard.index) : '';
+  const reassignedQuantity =
+    /(?:^|[;\n])\s*quantity_param\s*(?::=|=(?!=))/im.test(validatedWindow) ||
+    /\bINTO\b(?:(?!\bFROM\b)[^;])*?\bquantity_param\b/i.test(validatedWindow);
+  return Boolean(
+    guard &&
+      thenBranch &&
+      hasTopLevelBareReturn(thenBranch) &&
+      protectedOperations.length > 0 &&
+      !reassignedQuantity &&
+      protectedOperations.every((operation) =>
+        serializedInventoryControlFlow.dominatesControlFlow(
+          executable,
+          guard.index,
+          operation.index
+        )
+      )
+  );
+}
+
+function targetMerchantLookup(source, beforeIndex) {
+  const targetParameter = /\bvariant_id_param\b/i.test(source)
+    ? 'variant_id_param'
+    : 'product_id_param';
+  const assignments = [
+    ...source.matchAll(
+      /SELECT\s+[^;]*\bmerchant_id\b[^;]*\bINTO\s+v_merchant_id\b[^;]*;/gi
+    ),
+  ].filter(({ index }) => index < beforeIndex);
+  const latestAssignment = assignments.at(-1);
+  if (!latestAssignment) return null;
+  const assignment = latestAssignment[0];
+  if (targetParameter === 'product_id_param') {
+    const productWhere =
+      /\bFROM\s+(?:public\s*\.\s*)?products\b[^;]*\bWHERE\s+([^;]*);/i.exec(
+        assignment
+      )?.[1] ?? '';
+    return isRequiredConjunct(productWhere, /\bid\s*=\s*product_id_param\b/i)
+      ? latestAssignment
+      : null;
+  }
+
+  const variantLookup =
+    /\bFROM\s+(?:public\s*\.\s*)?products\b\s+(?:AS\s+)?([a-z_][a-z0-9_]*)\s+JOIN\s+(?:public\s*\.\s*)?product_variants\b\s+(?:AS\s+)?([a-z_][a-z0-9_]*)\s+ON\s+([\s\S]*?)\s+WHERE\s+([\s\S]*?)\s*;/i.exec(
+      assignment
+    );
+  if (!variantLookup) return null;
+  const [, productAlias, variantAlias, joinCondition, whereClause] =
+    variantLookup;
+  const productIdJoin = new RegExp(
+    `(?:${escapeRegex(variantAlias)}\\s*\\.\\s*product_id\\s*=\\s*${escapeRegex(productAlias)}\\s*\\.\\s*id|${escapeRegex(productAlias)}\\s*\\.\\s*id\\s*=\\s*${escapeRegex(variantAlias)}\\s*\\.\\s*product_id)`,
+    'i'
+  );
+  const variantIdFilter = new RegExp(
+    `(?:${escapeRegex(variantAlias)}\\s*\\.\\s*id\\s*=\\s*variant_id_param|variant_id_param\\s*=\\s*${escapeRegex(variantAlias)}\\s*\\.\\s*id)`,
+    'i'
+  );
+  return isRequiredConjunct(joinCondition, productIdJoin) &&
+    isRequiredConjunct(whereClause, variantIdFilter)
+    ? latestAssignment
+    : null;
+}
+
+function hasTopLevelReturn(source) {
+  const masked = serializedInventorySqlParser.maskSqlLiterals(source);
+  let depth = 0;
+  let caseDepth = 0;
+  for (const token of masked.matchAll(
+    /\bEND\s+IF\b|\bEND\s+CASE\b|\bEND\b|\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bCASE\b|\bRETURN\s*;/gi
+  )) {
+    if (/^END\s+IF/i.test(token[0])) depth = Math.max(0, depth - 1);
+    else if (/^END\s+CASE/i.test(token[0]))
+      caseDepth = Math.max(0, caseDepth - 1);
+    else if (/^END$/i.test(token[0])) caseDepth = Math.max(0, caseDepth - 1);
+    else if (/^IF\b/i.test(token[0])) depth += 1;
+    else if (/^CASE$/i.test(token[0])) caseDepth += 1;
+    else if (depth === 0 && caseDepth === 0) return true;
+  }
+  return false;
+}
+
+function hasMerchantAuthorizationGuard(source) {
+  const executable = serializedInventorySqlParser.maskSqlLiterals(source, {
+    preserveStrings: true,
+  });
+  const guardPattern =
+    /IF\s+COALESCE\s*\(\s*\(\s*SELECT\s+auth\s*\.\s*role\s*\(\s*\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\s*\.\s*has_merchant_access\s*\(\s*v_merchant_id\s*\)\s+THEN\b/i;
+  const guard = guardPattern.exec(executable);
+  let guardArms;
+  try {
+    guardArms = guard
+      ? serializedInventoryBranches.extractIfArms(executable, guardPattern)
+      : undefined;
+  } catch {
+    return false;
+  }
+  const protectedOperation =
+    /(?:SELECT\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?stock_quantity\s+INTO[\s\S]*?\bFOR\s+UPDATE\b|UPDATE\s+(?:public\s*\.\s*)?(?:products|product_variants)\b)/i.exec(
+      executable
+    );
+  const merchantLookup = targetMerchantLookup(executable, guard?.index ?? -1);
+  const protectedOperations = [
+    ...executable.matchAll(
+      /(?:SELECT\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?stock_quantity\s+INTO[\s\S]*?\bFOR\s+UPDATE\b|UPDATE\s+(?:public\s*\.\s*)?(?:products|product_variants)\b)/gi
+    ),
+  ];
+  const lastOperation = protectedOperations.at(-1);
+  const authorizedWindow =
+    merchantLookup && lastOperation
+      ? executable.slice(
+          merchantLookup.index,
+          lastOperation.index + lastOperation[0].length
+        )
+      : '';
+  const reassignedTarget =
+    authorizedWindow === '' ||
+    /(?:^|[;\n])\s*(?:product_id_param|variant_id_param)\s*(?::=|=(?!=))/im.test(
+      authorizedWindow
+    ) ||
+    /\bINTO\b(?:(?!\bFROM\b)[^;])*?\b(?:product_id_param|variant_id_param)\b/i.test(
+      authorizedWindow
+    );
+  return Boolean(
+    guard &&
+      guardArms &&
+      hasTopLevelReturn(guardArms.thenBranch) &&
+      merchantLookup &&
+      protectedOperation &&
+      !reassignedTarget &&
+      serializedInventoryControlFlow.dominatesControlFlow(
+        executable,
+        merchantLookup.index,
+        guard.index
+      ) &&
+      serializedInventoryControlFlow.dominatesControlFlow(
+        executable,
+        guard.index,
+        protectedOperation.index
+      )
+  );
+}
+
+function hasUnlimitedStockReturn(source) {
+  const executable = serializedInventorySqlParser.maskSqlLiterals(source, {
+    preserveStrings: true,
+  });
+  const guardPattern =
+    /IF\s+NOT\s+COALESCE\s*\(\s*v_manage_stock\s*,\s*false\s*\)\s+THEN\b/i;
+  const guard = guardPattern.exec(executable);
+  let guardArms;
+  try {
+    guardArms = guard
+      ? serializedInventoryBranches.extractIfArms(executable, guardPattern)
+      : undefined;
+  } catch {
+    return false;
+  }
+  const protectedOperation =
+    /(?:SELECT\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?stock_quantity\s+INTO[\s\S]*?\bFOR\s+UPDATE\b|UPDATE\s+(?:public\s*\.\s*)?(?:products|product_variants)\b)/i.exec(
+      executable
+    );
+  return Boolean(
+    guard &&
+      guardArms &&
+      hasTopLevelBareReturn(guardArms.thenBranch) &&
+      protectedOperation &&
+      serializedInventoryControlFlow.dominatesControlFlow(
+        executable,
+        guard.index,
+        protectedOperation.index
+      )
+  );
+}
+
+function decrementsRequestedQuantity(source) {
+  const executable = serializedInventorySqlParser.maskSqlLiterals(source, {
+    preserveStrings: true,
+  });
+  return /\bstock_quantity\s*=\s*(?:[a-z_][a-z0-9_]*\s*\.\s*)?stock_quantity\s*-\s*quantity_param\b(?!\s*[*/+%-])/i.test(
+    executable
+  );
+}
+
+function failureReturnsUseNullSentinel(source) {
+  const executable = serializedInventorySqlParser.maskSqlLiterals(source, {
+    preserveStrings: true,
+  });
+  return !/RETURN\s+QUERY\s+SELECT\s+FALSE\s*,\s*0\s*,/i.test(executable);
+}
+
+function notFoundArmEnd(executable, armIndex) {
+  const opening =
+    /\bIF\s+NOT\s+FOUND\s+THEN\b/i.exec(executable.slice(armIndex))?.[0] ?? '';
+  let depth = 0;
+  for (const token of executable
+    .slice(armIndex + opening.length)
+    .matchAll(/\bIF\b(?:(?!\bTHEN\b)[\s\S])*?\bTHEN\b|\bEND\s+IF\b/gi)) {
+    if (/^END/i.test(token[0])) {
+      if (depth === 0) return armIndex + opening.length + token.index;
+      depth -= 1;
+    } else {
+      depth += 1;
+    }
+  }
+  return -1;
+}
+
+function missingResourceResponsesRequireServiceRole(source) {
+  const executable = serializedInventorySqlParser.maskSqlLiterals(source, {
+    preserveStrings: true,
+  });
+  const guard =
+    /IF\s+COALESCE\s*\(\s*\(\s*SELECT\s+auth\s*\.\s*role\s*\(\s*\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\s*\.\s*has_merchant_access\s*\(\s*v_merchant_id\s*\)\s+THEN\b/i.exec(
+      executable
+    );
+  const guardIndex = guard ? guard.index : -1;
+  const notFoundArms = [
+    ...executable.matchAll(/\bIF\s+NOT\s+FOUND\s+THEN\b/gi),
+  ].map((match) => match.index);
+  for (const armIndex of notFoundArms) {
+    if (guardIndex >= 0 && armIndex > guardIndex) continue;
+    const armEnd = notFoundArmEnd(executable, armIndex);
+    if (armEnd < 0) return false;
+    const armText = executable.slice(armIndex, armEnd);
+    for (const statement of armText.matchAll(/\bRETURN\b/gi)) {
+      if (!/\bservice_role\b/i.test(armText.slice(0, statement.index))) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+export const serializedInventoryDecrementGuards = {
+  decrementsRequestedQuantity,
+  failureReturnsUseNullSentinel,
+  hasMerchantAuthorizationGuard,
+  hasPositiveQuantityGuard,
+  hasUnlimitedStockReturn,
+  missingResourceResponsesRequireServiceRole,
+};

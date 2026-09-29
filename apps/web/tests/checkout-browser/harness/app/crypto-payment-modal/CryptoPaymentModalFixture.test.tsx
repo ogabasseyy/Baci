@@ -64,7 +64,7 @@ it('closes from the header without invoking confirmation', () => {
 
   expect(confirm).not.toHaveBeenCalled();
   expect(screen.getByRole('status')).toHaveTextContent(
-    'Modal closed from header.'
+    'Crypto payment modal closed.'
   );
 });
 
@@ -88,7 +88,7 @@ it('keeps the modal open when footer confirmation is canceled and closes when ac
   expect(confirm).toHaveBeenCalledTimes(2);
   expect(screen.queryByRole('heading', { name: 'Pay with Crypto' })).toBeNull();
   expect(screen.getByRole('status')).toHaveTextContent(
-    'Modal closed from order status.'
+    'Crypto payment modal closed.'
   );
 });
 
@@ -100,6 +100,7 @@ it('copies the synthetic recipient address through the browser clipboard API', a
     configurable: true,
     value: { writeText },
   });
+  vi.spyOn(console, 'error').mockImplementation(() => {});
   render(<CryptoPaymentModalFixture />);
   fireEvent.click(
     screen.getByRole('button', { name: 'Open crypto payment modal' })
@@ -140,7 +141,7 @@ it('keeps the fixture usable when the browser clipboard rejects a copy', async (
     screen.getByRole('button', { name: 'Close crypto payment modal' })
   );
   expect(screen.getByRole('status')).toHaveTextContent(
-    'Modal closed from header.'
+    'Crypto payment modal closed.'
   );
   fireEvent.click(
     screen.getByRole('button', { name: 'Open crypto payment modal' })

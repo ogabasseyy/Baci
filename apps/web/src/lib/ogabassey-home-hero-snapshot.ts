@@ -4,13 +4,30 @@ import { OGABASSEY_HOME_HERO_SNAPSHOT_MANIFEST } from '@/config/ogabassey-home-h
 import { OGABASSEY_HOME_HERO_SNAPSHOT_TENANT } from '@/config/ogabassey-home-hero-snapshot-tenant';
 import type { OgabasseyHomeHeroSnapshot } from './ogabassey-home-hero-snapshot-types';
 
+// Mirrors MANAGED_FILE_PATTERN in
+// scripts/lib/ogabassey-hero-snapshot-config.mjs: bake output names only.
+const MANAGED_SNAPSHOT_FILE_PATTERN = /^[0-9a-f]{12}-\d+\.avif$/;
+
 function isValidSnapshotPath(value: string): boolean {
-  return (
-    value.startsWith('/_hero/') &&
-    !value.includes('..') &&
-    !value.includes('\\') &&
-    !/[<>"\s]/.test(value)
-  );
+  // Generator-authored paths are plain ASCII with no escapes, so anything
+  // percent-encoded is not bake output. Reject before interpreting: a raw
+  // `..` substring search would miss `/%2e%2e/` (and double-encoded
+  // `/%252e%2e/`), which URL parsers normalize into traversal after this
+  // check runs.
+  if (value.includes('%') || value.includes('\\')) {
+    return false;
+  }
+  const prefix = `/_hero/${OGABASSEY_HOME_HERO_SNAPSHOT_TENANT}/`;
+  if (!value.startsWith(prefix)) {
+    return false;
+  }
+  // The remainder must be exactly one managed filename — no subpaths, so
+  // traversal is structurally impossible rather than substring-filtered.
+  const fileName = value.slice(prefix.length);
+  if (fileName.includes('/') || /[<>"\s]/.test(fileName)) {
+    return false;
+  }
+  return MANAGED_SNAPSHOT_FILE_PATTERN.test(fileName);
 }
 
 /**

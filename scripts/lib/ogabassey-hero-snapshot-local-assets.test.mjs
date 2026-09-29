@@ -111,6 +111,26 @@ describe('verifySnapshotLocalAssets', () => {
         outDir,
         urls: [URL],
       })
-    ).toThrow(/not a same-origin snapshot path/);
+    ).toThrow(/not a snapshot path in/);
+  });
+
+  it('fails on encoded traversal, deep paths, and slug mismatches', () => {
+    const outDir = setup();
+    const good = seedAsset(outDir, 640, Buffer.from('bytes-640'));
+    const fileName = good.split('/').pop();
+    for (const badHref of [
+      `/_hero/ogabassey/%2e%2e/${fileName}`,
+      `/_hero/ogabassey/%252e%252e-640.avif`,
+      `/_hero/ogabassey/../ogabassey/${fileName}`,
+      `/_hero/other/${fileName}`,
+    ]) {
+      expect(() =>
+        verifySnapshotLocalAssets({
+          entries: { [URL]: { href: badHref, srcSet: `${good} 640w` } },
+          outDir,
+          urls: [URL],
+        })
+      ).toThrow(/not a (same-origin snapshot|snapshot path in)/);
+    }
   });
 });

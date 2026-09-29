@@ -8,7 +8,7 @@
 
 import { createHash } from 'node:crypto';
 import { lstatSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 import { MANAGED_FILE_PATTERN } from './ogabassey-hero-snapshot-config.mjs';
 import { HeroSnapshotError } from './ogabassey-hero-snapshot-errors.mjs';
 
@@ -24,10 +24,27 @@ function referencedFiles(entry) {
 }
 
 function checkOneFile({ descriptor, fromSrcSet, outDir, path }) {
-  if (typeof path !== 'string' || !path.startsWith('/_hero/')) {
+  // Generator-authored paths are plain ASCII with no escapes: reject
+  // percent-encoding before interpreting, so `/%2e%2e/` (and double-encoded
+  // `/%252e%2e/`) can never validate a basename here while browsers
+  // normalize the rendered URL somewhere else.
+  if (typeof path !== 'string' || path.includes('%')) {
     return `${path}: not a same-origin snapshot path`;
   }
-  const fileName = path.split('/').pop();
+  // The reference must name exactly the directory being verified —
+  // `/_hero/<slug>/<file>` with no subpaths — so traversal is structural,
+  // and a slug-mismatched ref cannot pass against the wrong directory.
+  const segments = path.split('/');
+  const expectedDir = basename(outDir);
+  if (
+    segments.length !== 4 ||
+    segments[0] !== '' ||
+    segments[1] !== '_hero' ||
+    segments[2] !== expectedDir
+  ) {
+    return `${path}: not a snapshot path in /_hero/${expectedDir}/`;
+  }
+  const fileName = segments[3];
   const match = MANAGED_FILE_PATTERN.exec(fileName ?? '');
   if (!match?.groups) {
     return `${path}: not a pipeline-managed asset name`;

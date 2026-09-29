@@ -20,6 +20,9 @@ on:
       # The orchestrator filename is plural `snapshots` (no trailing dash),
       # so the glob above does not match it.
       - "scripts/lib/ogabassey-hero-snapshots.mjs"
+      # A PR that only deletes, truncates, or replaces a checked-in AVIF
+      # must still run the job: local-asset verification is what catches it.
+      - "apps/web/public/_hero/**"
       - "apps/web/src/config/ogabassey-home-hero-snapshot-manifest.ts"
       - "apps/web/src/lib/ogabassey-home-hero-snapshot.ts"
       - ".github/workflows/ogabassey-hero-snapshot-freshness.yml"

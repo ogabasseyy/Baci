@@ -21,7 +21,7 @@ export function matchesCompatibilityClause({ compatibilityWords, coreWords, item
   const introducers = new Set(['for', 'compatible', 'fits']);
   let introducerIndex = -1;
   for (let index = itemWords.length; index < coreWords.length; index += 1) {
-    if (introducers.has(coreWords[index] ?? '')) {
+    if (introducers.has(coreWords[index] ?? '') || (index === 0 && coreWords[index] === 'with')) {
       introducerIndex = index;
       break;
     }

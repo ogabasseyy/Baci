@@ -220,7 +220,7 @@ export function matchesModelSpecTokens(scope: ModelSpecScope): boolean {
       }
       continue;
     }
-    const index = scope.itemWords.indexOf(token);
+    const index = coreIndex < scope.itemWords.length ? coreIndex : -1;
     if (index < 0 || !/\d/.test(token) || token.length > 10) continue;
     const generation = /^[0-9]([gk])$/.exec(token)?.[1];
     const versionFragment = /^\d/.test(scope.coreWords[coreIndex - 1] ?? '');

@@ -1,10 +1,8 @@
 import { isBroadIntentDiscoveryWord } from './broad-intent-discovery-word';
 import { matchesCompatibilityClause } from './matches-discovery-product-intent-compat';
 import {
-  type IntentBranch,
   type IntentWordScope,
   isModelNumberPrefix,
-  matchesAlternativeBranch,
   matchesIdentityTerms,
   matchesModelSpecTokens,
   matchesRequestedDevice,
@@ -29,14 +27,16 @@ import {
 
 /** Keep the requested item type and explicit model attached to search results.
  * Embeddings alone can otherwise return a phone for a request for its case. */
-export function matchesDiscoveryProductIntent(product: ProductText, query: string | undefined): boolean {
+export function matchesDiscoveryProductIntent(
+  product: ProductText, query: string | undefined, enforceIntent = false
+): boolean {
   if (!query) return true;
   const rawQuery = query.normalize('NFKC').toLocaleLowerCase('en').trim();
   const normalized = rawQuery
     .replace(/^\s*(?:(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?(?:show|find|search|buy|get|recommend|suggest)(?:\s+me)?(?:\s+for)?|(?:looking|searching|shopping)\s+for|i\s+(?:want|need))(?:\s+(?:a|an|some|the))?\s+/i, '')
     .replace(/^(?:(?:a|an|any|some|the)\s+)+/i, '');
   const queryWords = words(normalized);
-  if (queryWords.filter((word) => /^[a-z]+$/.test(word)).length < 2 &&
+  if (!enforceIntent && queryWords.filter((word) => /^[a-z]+$/.test(word)).length < 2 &&
     !queryWords.some((word) => /\d/.test(word)) && normalized === rawQuery) return true;
 
   // Lower-bound phrases ("over 500000") end the product-intent portion just
@@ -52,7 +52,6 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
   );
   const itemWords = detailIndex < 0 ? [...coreWords] : coreWords.slice(0, detailIndex);
   while (genericTypes.has(itemWords.at(-1) ?? '')) itemWords.pop();
-  if (itemWords.length === 0) return true;
   // "or" always separates alternatives, but "and" only splits genuine
   // product-type lists ("phones and tablets"): descriptive conjunctions
   // ("noise cancelling and wireless earbuds") stay one intent.
@@ -102,19 +101,25 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
     }
     return undefined;
   };
-  const alternativeBranches: IntentBranch[] = alternativePhrases.length > 1
-    ? alternativePhrases.flatMap((phrase, phraseIndex) => {
-      const typeIndex = phraseTypeIndexes[phraseIndex] ?? -1;
-      if (typeIndex >= 0) {
-        return [{ type: phrase[typeIndex] ?? '', prefixWords: phrase.slice(0, typeIndex), phraseWords: phrase }];
-      }
-      const sharedType = sharedTypeFor(phraseIndex);
-      return sharedType ? [{ type: sharedType, prefixWords: phrase, phraseWords: phrase }] : [];
-    })
-    : [];
-  const hasAlternativeItemTypes = alternativeBranches.length > 1;
+  if (alternativePhrases.length > 1) {
+    // Evaluate the complete intent independently for each alternative. Shared
+    // types and detail clauses still apply, but models, qualifiers and platform
+    // restrictions from a different branch cannot constrain this one.
+    const details = detailIndex < 0 ? [] : coreWords.slice(detailIndex);
+    return alternativePhrases.some((phrase, phraseIndex) => {
+      const sharedType = phraseTypeIndexes[phraseIndex] < 0 ? sharedTypeFor(phraseIndex) : undefined;
+      const previous = alternativePhrases.slice(0, phraseIndex).findLast((candidate) =>
+        candidate.findIndex((word) => /\d/.test(word)) > 0) ?? [];
+      const modelIndex = previous.findIndex((word) => /\d/.test(word));
+      const abbreviatedModel = /\d/.test(phrase[0] ?? '') && phrase.every((word) =>
+        /\d/.test(word) || modelQualifiers.has(word) || productTypes.has(word));
+      const inheritedIdentity = abbreviatedModel && modelIndex > 0 ? previous.slice(0, modelIndex) : [];
+      const branchWords = [...inheritedIdentity, ...phrase, ...(sharedType ? [sharedType] : [])];
+      return matchesDiscoveryProductIntent(product, [...branchWords, ...details].join(' '), true);
+    });
+  }
   const itemTypeIndexes = itemWords.flatMap((word, index) => productTypes.has(word) ? [index] : []);
-  const itemTypeIndex = hasAlternativeItemTypes ? -1 : itemTypeIndexes.at(-1) ?? -1;
+  const itemTypeIndex = itemTypeIndexes.at(-1) ?? -1;
   const itemType = itemTypeIndex >= 0 ? itemWords[itemTypeIndex] : undefined;
 
   // The lead describes the item itself; later boilerplate often mentions
@@ -141,9 +146,7 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
     isHandsetCategory, itemText, nameWords,
   };
   const itemPrefixWords = itemTypeIndex < 0 ? itemWords : itemWords.slice(0, itemTypeIndex);
-  const requestedDevice = hasAlternativeItemTypes
-    ? undefined
-    : itemPrefixWords.findLast((word) => deviceQualifierAliases.has(word));
+  const requestedDevice = itemPrefixWords.findLast((word) => deviceQualifierAliases.has(word));
   if (!matchesRequestedDevice(requestedDevice, scope)) return false;
   const descriptionIdentifiesType = itemType && matchesWord(descriptionLead, itemType);
   if (itemType && !matchesWord(itemText, itemType) && !descriptionIdentifiesType) return false;
@@ -151,11 +154,6 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
   const accessoryIntent = itemType === 'accessory' || itemType === 'accessories';
   if (accessoryIntent && !categoryWords.some((word) => word.includes('accessor')) &&
     !nameWords.some((word) => word.includes('accessor') || phoneAccessoryTypes.has(word) || accessoryHeadTypes.has(word))) return false;
-  const matchedBranches = hasAlternativeItemTypes
-    ? alternativeBranches.filter((branch) => matchesAlternativeBranch(branch, scope))
-    : [];
-  if (hasAlternativeItemTypes && matchedBranches.length === 0) return false;
-
   // A description can identify an otherwise untitled item, but it must not
   // override a different product type stated in the title.
   if (itemType && !matchesWord([...nameWords, ...categoryWords], itemType) &&
@@ -174,9 +172,7 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
   // Samsung), rather than the accessory's manufacturer.
   // Without a product type, every meaningful word constrains the candidate,
   // including device families ("iphone" in "find iPhone" or "galaxy s24").
-  const requestedIdentityTerms = hasAlternativeItemTypes
-    ? []
-    : itemTypeIndex < 0
+  const requestedIdentityTerms = itemTypeIndex < 0
     ? itemWords.filter((word, index) =>
       !productTypes.has(word) && !genericItemModifiers.has(word) && !specUnitWords.has(word) &&
       !modelQualifiers.has(word) && !/\d/.test(word) && !isModelNumberPrefix(itemWords, index) &&
@@ -207,9 +203,7 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
     word === 'apple' || word === 'iphone' || word === 'iphones' || word === 'ios')) return false;
   // Model qualifiers constrain the candidate even without a numeric anchor
   // ("MacBook Pro" is not a MacBook Air); alternatives scope them per branch.
-  const qualifierWords = hasAlternativeItemTypes
-    ? matchedBranches.flatMap((branch) => branch.phraseWords)
-    : itemWords;
+  const qualifierWords = itemWords;
   if (qualifierWords.some((word) => modelQualifiers.has(word) && !matchesWord(identityWords, word))) return false;
   // Brands after a compatibility introducer describe the target device (for
   // example, a case for Samsung), rather than the accessory's manufacturer.
@@ -242,7 +236,7 @@ export function matchesDiscoveryProductIntent(product: ProductText, query: strin
   });
   if (featureWords.some((term) => !matchesWord(productSpecWords, term))) return false;
   return matchesModelSpecTokens({
-    coreWords, hasAlternativeItemTypes, identityWords, itemText, itemType, itemWords,
-    matchedBranchPhrases: matchedBranches.map((branch) => branch.phraseWords), productSpecWords,
+    coreWords, hasAlternativeItemTypes: false, identityWords, itemText, itemType, itemWords,
+    matchedBranchPhrases: [], productSpecWords,
   });
 }

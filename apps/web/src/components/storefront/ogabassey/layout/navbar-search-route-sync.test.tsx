@@ -127,14 +127,25 @@ describe('NavbarSearch search-route query sync', () => {
     expect(searchInput().value).toBe('typed');
   });
 
-  it('truncates an over-limit route query to the navbar maximum', () => {
-    // The search page accepts up to 200 characters; the navbar submits at
-    // most 100, so the synced input must show what Enter would submit.
-    const longQuery = 'a'.repeat(200);
+  it('truncates an over-limit route query to the shared maximum', () => {
+    // Both entry points share the 200-character route limit, so the
+    // synced input must show what Enter would submit.
+    const longQuery = 'a'.repeat(250);
     mocks.queryString = `q=${longQuery}`;
     renderNavbar();
 
-    expect(searchInput().value).toBe('a'.repeat(100));
+    expect(searchInput().value).toBe('a'.repeat(200));
+  });
+
+  it('displays a long route query in full instead of truncating it', () => {
+    // A 101-200 character query submitted through the results form (or
+    // opened directly) is searched in full: the persistent navbar must
+    // show it completely so Enter resubmits the identical query.
+    const longQuery = 'a'.repeat(150);
+    mocks.queryString = `q=${longQuery}`;
+    renderNavbar();
+
+    expect(searchInput().value).toBe(longQuery);
   });
 
   it('syncs an empty query when q is repeated, matching the route parser', () => {

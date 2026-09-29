@@ -6,15 +6,19 @@ import type React from 'react';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import type { SearchAutocompleteProps } from '@/components/storefront/search-autocomplete';
-import { parseStorefrontSearchQueryParam } from '@/lib/storefront-search-params';
+import {
+  parseStorefrontSearchQueryParam,
+  STOREFRONT_SEARCH_MAX_QUERY_LENGTH,
+} from '@/lib/storefront-search-params';
 
 /**
- * Maximum query the navbar accepts and submits. The search page itself
- * accepts up to 200 characters, so route-synced queries are normalized to
- * this limit: the input must never display a longer term than Enter would
+ * Maximum query the navbar accepts and submits. Shared with the results
+ * form and the route parser so the persistent input always displays the
+ * full active query: route-synced queries are normalized to this limit
+ * because the input must never display a longer term than Enter would
  * submit (HTML maxLength does not truncate programmatic assignments).
  */
-const NAVBAR_SEARCH_MAX_LENGTH = 100;
+const NAVBAR_SEARCH_MAX_LENGTH = STOREFRONT_SEARCH_MAX_QUERY_LENGTH;
 
 /**
  * Syncs the persistent navbar input when the active search route's query

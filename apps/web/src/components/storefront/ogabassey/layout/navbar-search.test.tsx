@@ -118,12 +118,12 @@ describe('NavbarSearch', () => {
       ).toBeInTheDocument();
     });
 
-    // pushSearchRoute truncates to 100 characters: the input carries the
-    // same cap so the persistent value can never exceed the submitted
-    // query after a long paste.
+    // pushSearchRoute truncates to the shared route limit: the input
+    // carries the same cap so the persistent value can never exceed the
+    // submitted query after a long paste.
     expect(
       screen.getByRole('searchbox', { name: /search products/i })
-    ).toHaveAttribute('maxlength', '100');
+    ).toHaveAttribute('maxlength', '200');
   });
 
   it('routes loaded-autocomplete submissions to the encoded search page', async () => {

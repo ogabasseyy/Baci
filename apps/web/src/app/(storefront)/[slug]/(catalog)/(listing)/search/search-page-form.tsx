@@ -1,3 +1,5 @@
+import { STOREFRONT_SEARCH_MAX_QUERY_LENGTH } from '@/lib/storefront-search-params';
+
 interface SearchPageFormProps {
   action: string;
   defaultQuery: string;
@@ -24,7 +26,7 @@ export function SearchPageForm({ action, defaultQuery }: SearchPageFormProps) {
         type="search"
         defaultValue={defaultQuery}
         placeholder="Search products…"
-        maxLength={200}
+        maxLength={STOREFRONT_SEARCH_MAX_QUERY_LENGTH}
         autoComplete="off"
         className="min-w-0 flex-1 rounded-xl border border-store-background-text/15 bg-store-background px-4 py-2.5 text-sm text-store-background-text placeholder:text-store-background-text/40 focus:border-store-primary focus:outline-hidden"
       />

@@ -16,6 +16,10 @@
     font-size: 11px;
     padding: 8px;
   }
+
+  .products-grid--single .product-card {
+    display: block;
+  }
 }
 
 @media (max-width: 400px) {
@@ -35,10 +39,6 @@
   .product-actions {
     flex-direction: column;
     gap: 6px;
-  }
-
-  .mode-inline .products-grid--single .product-card {
-    display: block;
   }
 
   .brand-text p {

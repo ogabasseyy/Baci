@@ -6,6 +6,8 @@ CREATE FUNCTION public.merge_duplicate_payment_capture_evidence_v1(
   p_merchant_id uuid,
   p_transaction_id uuid,
   p_gateway_reference text,
+  p_gateway text,
+  p_charge_id text,
   p_reason text
 ) RETURNS boolean
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
@@ -18,14 +20,20 @@ BEGIN
   IF p_order_id IS NULL OR p_merchant_id IS NULL
     OR p_transaction_id IS NULL
     OR nullif(btrim(coalesce(p_gateway_reference, '')), '') IS NULL
+    OR nullif(btrim(coalesce(p_gateway, '')), '') IS NULL
+    OR nullif(btrim(coalesce(p_charge_id, '')), '') IS NULL
     OR nullif(btrim(p_reason), '') IS NULL THEN
     RETURN false;
   END IF;
+  -- The wedge sweep files duplicate captures for every healable gateway,
+  -- so the merge must accept each of them: restricting this to Paystack
+  -- would fail every merged Korapay/Juicyway capture even though the
+  -- review row already exists.
   IF NOT EXISTS (
     SELECT 1 FROM public.transactions
     WHERE id = p_transaction_id AND order_id = p_order_id
       AND merchant_id = p_merchant_id AND transaction_type = 'payment'
-      AND gateway = 'paystack'
+      AND gateway = p_gateway
   ) THEN
     RETURN false;
   END IF;
@@ -46,6 +54,8 @@ BEGIN
           p_transaction_id::text,
           jsonb_build_object(
             'gateway_reference', left(p_gateway_reference, 120),
+            'gateway', left(p_gateway, 40),
+            'charge_id', left(p_charge_id, 120),
             'reason', left(p_reason, 120),
             'observed_at', now()
           )
@@ -56,7 +66,7 @@ BEGIN
   RETURN true;
 END;
 $$;
-REVOKE ALL ON FUNCTION public.merge_duplicate_payment_capture_evidence_v1(uuid,uuid,uuid,text,text)
+REVOKE ALL ON FUNCTION public.merge_duplicate_payment_capture_evidence_v1(uuid,uuid,uuid,text,text,text,text)
   FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.merge_duplicate_payment_capture_evidence_v1(uuid,uuid,uuid,text,text)
+GRANT EXECUTE ON FUNCTION public.merge_duplicate_payment_capture_evidence_v1(uuid,uuid,uuid,text,text,text,text)
   TO service_role;

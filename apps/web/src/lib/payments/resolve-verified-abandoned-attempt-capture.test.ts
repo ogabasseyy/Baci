@@ -30,6 +30,7 @@ describe('resolveVerifiedAbandonedAttemptCapture', () => {
   const captureData = {
     amount: 10000,
     currency: 'NGN',
+    id: 987654321,
     reference: 'BAC-OLD',
     status: 'success',
   };
@@ -97,7 +98,11 @@ describe('resolveVerifiedAbandonedAttemptCapture', () => {
     expect(mocks.finalizePartiallyPaidAbandonedAttempt).not.toHaveBeenCalled();
     expect(mocks.fileDuplicatePaymentCapture).toHaveBeenCalledWith(
       expect.objectContaining({
-        evidence: expect.objectContaining({ providerStatus: 'success' }),
+        evidence: expect.objectContaining({
+          gateway: 'paystack',
+          providerReference: '987654321',
+          providerStatus: 'success',
+        }),
       })
     );
     expect(s.reviewsFiled).toEqual(['attempt-1']);

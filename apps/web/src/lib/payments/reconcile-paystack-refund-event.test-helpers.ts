@@ -47,14 +47,16 @@ export function buildRefundCandidates(data: unknown) {
 }
 
 export function buildSettledCandidates(data: unknown) {
-  return {
-    select: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    gt: vi.fn().mockReturnThis(),
-    is: vi.fn().mockReturnThis(),
-    not: vi.fn().mockReturnThis(),
+  const builder: Record<string, unknown> = {
     limit: vi.fn().mockResolvedValue({ data, error: null }),
+    // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are awaited thenables.
+    then: (resolve: (result: unknown) => void) =>
+      resolve({ data, error: null }),
   };
+  for (const key of ['eq', 'gt', 'is', 'not', 'select']) {
+    builder[key] = vi.fn().mockReturnValue(builder);
+  }
+  return builder;
 }
 
 export function buildPaymentLookup() {

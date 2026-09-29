@@ -10,9 +10,10 @@ const attempt = {
 };
 
 const evidence = {
+  gateway: 'paystack',
   providerAmount: 10000,
   providerCurrency: 'NGN',
-  providerReference: 'BAC-OLD',
+  providerReference: '123456789',
   providerStatus: 'success',
 };
 
@@ -35,7 +36,14 @@ describe('fileDuplicatePaymentCapture', () => {
     expect(insert).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_type: 'duplicate_payment_capture_requires_review',
+        paystack_ref: 'BAC-OLD',
+        reason: expect.stringContaining('Stale paystack attempt BAC-OLD'),
         txn_id: 'attempt-1',
+        metadata: expect.objectContaining({
+          gateway: 'paystack',
+          gateway_reference: 'BAC-OLD',
+          provider_reference: '123456789',
+        }),
       })
     );
     expect(rpc).toHaveBeenCalledWith(
@@ -44,6 +52,43 @@ describe('fileDuplicatePaymentCapture', () => {
         p_expected_reference: 'BAC-OLD',
         p_resolution: 'verified_success_captured',
         p_transaction_id: 'attempt-1',
+      })
+    );
+  });
+
+  it('keeps non-Paystack references out of paystack_ref', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    const db = {
+      from: vi.fn(() => ({ insert })),
+      rpc,
+    };
+
+    await expect(
+      fileDuplicatePaymentCapture({
+        attempt: { ...attempt, gateway_reference: 'BAC-JUICY' },
+        evidence: {
+          gateway: 'juicyway',
+          providerAmount: 12.5,
+          providerCurrency: 'USDC',
+          providerReference: 'payment-1',
+          providerStatus: 'Succeeded',
+        },
+        supabase: db as never,
+      })
+    ).resolves.toBe(true);
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paystack_ref: null,
+        reason: expect.stringContaining('Stale juicyway attempt BAC-JUICY'),
+        metadata: expect.objectContaining({
+          gateway: 'juicyway',
+          gateway_reference: 'BAC-JUICY',
+          provider_amount: 12.5,
+          provider_currency: 'USDC',
+          provider_reference: 'payment-1',
+          provider_status: 'Succeeded',
+        }),
       })
     );
   });
@@ -69,7 +114,12 @@ describe('fileDuplicatePaymentCapture', () => {
     ).resolves.toBe(true);
     expect(rpc).toHaveBeenCalledWith(
       'merge_duplicate_payment_capture_evidence_v1',
-      expect.objectContaining({ p_transaction_id: 'attempt-1' })
+      expect.objectContaining({
+        p_charge_id: '123456789',
+        p_gateway: 'paystack',
+        p_gateway_reference: 'BAC-OLD',
+        p_transaction_id: 'attempt-1',
+      })
     );
   });
 

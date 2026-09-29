@@ -220,6 +220,7 @@ describe('finalizePartiallyPaidAbandonedAttempt', () => {
       providerData: {
         amount: 10000,
         currency: 'NGN',
+        id: 555666777,
         reference: 'BAC-OLD',
         status: 'success',
       },
@@ -231,9 +232,10 @@ describe('finalizePartiallyPaidAbandonedAttempt', () => {
     expect(fileDuplicate).toHaveBeenCalledWith(
       expect.objectContaining({
         evidence: {
+          gateway: 'paystack',
           providerAmount: 10000,
           providerCurrency: 'NGN',
-          providerReference: 'BAC-OLD',
+          providerReference: '555666777',
           providerStatus: 'success',
         },
       })

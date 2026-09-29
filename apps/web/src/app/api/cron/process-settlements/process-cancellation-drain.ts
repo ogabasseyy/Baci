@@ -25,7 +25,9 @@ type ServiceClient = ReturnType<typeof createServiceClient>;
  * nonterminal, then file a preflight review and record delivery_uncertain
  * after the pending-refund worker already completed it. Workers report
  * per-row failure counts instead of throwing, so both rejections and
- * reported failures surface as a 503.
+ * reported failures surface as a 503. Dead-lettered notifications count
+ * as failures too: a 200 with exhausted rows would present unreconciled
+ * money as success and never page operations.
  */
 export async function processCancellationDrain(
   supabase: ServiceClient,
@@ -101,6 +103,10 @@ export async function processCancellationDrain(
     notificationResult[0].status === 'fulfilled'
       ? notificationResult[0].value.failed
       : 0;
+  const notificationExhausted =
+    notificationResult[0].status === 'fulfilled'
+      ? notificationResult[0].value.exhausted
+      : 0;
   if (
     cancellationResult.status === 'rejected' ||
     refundResult.status === 'rejected' ||
@@ -109,7 +115,8 @@ export async function processCancellationDrain(
     cancellationFailures > 0 ||
     refundFailures > 0 ||
     legacyRefundFailures > 0 ||
-    notificationFailures > 0
+    notificationFailures > 0 ||
+    notificationExhausted > 0
   ) {
     logger.error({
       message: 'Cancellation and refund background work partially failed',
@@ -119,7 +126,10 @@ export async function processCancellationDrain(
       legacyRefundFailed:
         legacyRefundResult.status === 'rejected' || legacyRefundFailures > 0,
       notificationFailed:
-        notificationResult[0].status === 'rejected' || notificationFailures > 0,
+        notificationResult[0].status === 'rejected' ||
+        notificationFailures > 0 ||
+        notificationExhausted > 0,
+      notificationExhausted,
     });
     return NextResponse.json(
       { error: 'Cancellation and refund background work incomplete' },

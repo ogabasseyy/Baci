@@ -265,4 +265,46 @@ describe('POST /api/cron/process-settlements', () => {
     expect(mocks.sendEmail).not.toHaveBeenCalled();
     expect(mocks.update).not.toHaveBeenCalled();
   });
+
+  it('bounds the cancellation drain by the remaining route budget', async () => {
+    const now = vi
+      .spyOn(Date, 'now')
+      .mockReturnValueOnce(1_000_000)
+      .mockReturnValueOnce(1_120_000);
+    try {
+      const response = await POST(makeCronRequest());
+
+      expect(response.status).toBe(200);
+      expect(
+        mocks.drainFailedOrderCancellationSideEffects
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({ deadlineMs: 1_270_000, limit: 5 })
+      );
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('skips the cancellation drain once the abort margin is gone', async () => {
+    const now = vi
+      .spyOn(Date, 'now')
+      .mockReturnValueOnce(1_000_000)
+      .mockReturnValueOnce(1_300_000);
+    try {
+      const response = await POST(makeCronRequest());
+      const payload = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(
+        mocks.drainFailedOrderCancellationSideEffects
+      ).not.toHaveBeenCalled();
+      expect(payload.cancellationSideEffectDrain).toEqual({
+        drained: [],
+        failed: [],
+        skipped: [],
+      });
+    } finally {
+      now.mockRestore();
+    }
+  });
 });

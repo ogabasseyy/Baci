@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { assertRefundNotificationSendTime } from '@/lib/payments/assert-refund-notification-send-time';
 import { awaitRefundNotificationDeadline } from '@/lib/payments/await-refund-notification-deadline';
+import { extractDuplicateCaptureEvidence } from '@/lib/payments/extract-duplicate-capture-evidence';
 import { fileDuplicatePaymentCapture } from '@/lib/payments/file-duplicate-payment-capture';
 import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
 import type {
@@ -98,7 +99,21 @@ export async function finalizeVerifiedWedge({
       // Another transaction paid the order after the wedge query: this
       // capture is extra money, so classify from the atomic completion
       // result and file the duplicate review used by the
-      // abandoned-attempt path instead of recording a heal.
+      // abandoned-attempt path instead of recording a heal. Evidence
+      // comes from the verification response — never re-scaled from the
+      // normalized amount — so the review carries the gateway's own
+      // charge total, charge id, and status vocabulary.
+      const responseEvidence = extractDuplicateCaptureEvidence(
+        candidate.gateway,
+        verification.response
+      );
+      if (!responseEvidence) {
+        summary.failed.push({
+          reason: 'duplicate_capture_evidence_invalid',
+          transactionId: candidate.id,
+        });
+        return 'finalized';
+      }
       const filed = await fileDuplicatePaymentCapture({
         attempt: {
           gateway_reference: candidate.gateway_reference,
@@ -108,14 +123,10 @@ export async function finalizeVerifiedWedge({
           order_id: candidate.order_id,
         },
         evidence: {
-          providerAmount: Math.round(verification.amount * 100),
+          gateway: candidate.gateway,
           providerCurrency:
             verification.currency ?? candidate.currency ?? 'NGN',
-          providerReference: candidate.gateway_reference,
-          // Verification confirms capture before finalization; only the
-          // success vocabulary differs by gateway.
-          providerStatus:
-            candidate.gateway === 'juicyway' ? 'succeeded' : 'success',
+          ...responseEvidence,
         },
         supabase,
       });

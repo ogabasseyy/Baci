@@ -122,6 +122,14 @@ BEGIN
           HAVING coalesce(sum(refund.amount), 0) >= payment.amount
        )
   ) THEN
+    -- Every funded leg has terminal refund evidence, but the last leg may
+    -- have landed through a silent self-terminal refund no worker
+    -- observes: run the aggregate finalization (order transition,
+    -- settlement reversal, notifications, review close) before
+    -- completing the row, or the order stays paid permanently.
+    PERFORM public.finalize_refunded_cancellation_order_v1(
+      p_order_id, v_order.merchant_id, NULL
+    );
     INSERT INTO public.order_cancellation_side_effects AS side_effect (
       order_id, merchant_id, step, status, claim_token, completed_at, attempts
     ) VALUES (

@@ -131,6 +131,7 @@ export async function finalizePartiallyPaidAbandonedAttempt({
       const capture = providerData as unknown as {
         amount: number;
         currency: string;
+        id: number;
         reference: string;
         status: string;
       };
@@ -145,9 +146,10 @@ export async function finalizePartiallyPaidAbandonedAttempt({
           order_id: attempt.order_id,
         },
         evidence: {
+          gateway: 'paystack',
           providerAmount: capture.amount,
           providerCurrency: capture.currency,
-          providerReference: capture.reference,
+          providerReference: String(capture.id),
           providerStatus: capture.status,
         },
         supabase,

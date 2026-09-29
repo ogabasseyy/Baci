@@ -1,5 +1,10 @@
 import { DEFAULT_ROOT_DOMAIN } from '@/lib/default-root-domain';
 import type { StorefrontSlugSafetyReason } from '@/lib/storefront-slug-safety';
+import {
+  getRpcAttemptProperties,
+  type StorefrontPreflightRpcAttempt,
+  type StorefrontPreflightRpcAttemptProperties,
+} from './storefront-preflight-rpc-telemetry';
 
 export type StorefrontInternalPreflightFailOpenReason =
   | 'no-secret'
@@ -22,25 +27,8 @@ export type StorefrontInternalPreflightSurface =
   | 'product-canonical'
   | 'product-slug';
 
-export type StorefrontPreflightRpcOutcome =
-  | 'success'
-  | 'empty-result'
-  | 'client-timeout'
-  | 'database-timeout'
-  | 'fetch-error'
-  | 'rpc-error'
-  | 'parse-error';
-
-export interface StorefrontPreflightRpcAttempt {
-  attemptId: string;
-  deadlineMs: number;
-  elapsedMs: number;
-  outcome: StorefrontPreflightRpcOutcome;
-  rpcName: string;
-  surface: StorefrontInternalPreflightSurface;
-}
-
-interface StorefrontInternalPreflightContext {
+interface StorefrontInternalPreflightContext
+  extends StorefrontPreflightRpcAttemptProperties {
   surface: StorefrontInternalPreflightSurface;
   identifier: string;
   slug: string;
@@ -52,11 +40,6 @@ interface StorefrontInternalPreflightContext {
    * spread; captureFailOpen forwards it as a PostHog property.
    */
   detail?: string;
-  attemptId?: string;
-  deadlineMs?: number;
-  elapsedMs?: number;
-  outcome?: StorefrontPreflightRpcOutcome;
-  rpcName?: string;
 }
 
 /**
@@ -168,6 +151,15 @@ function resolveBaseUrl(origin: string): string | null {
   return null;
 }
 
+function warnRpcFailOpen(
+  context: Omit<StorefrontInternalPreflightContext, 'reason'>,
+  attempt: StorefrontPreflightRpcAttempt,
+  reason: StorefrontInternalPreflightFailOpenReason,
+  detail?: string
+) {
+  warnFailOpen({ ...context, ...attempt, reason, detail });
+}
+
 function warnFailOpen(context: StorefrontInternalPreflightContext) {
   console.warn('[storefront-internal-preflight] fail-open', {
     ...context,
@@ -180,38 +172,6 @@ function warnFailOpen(context: StorefrontInternalPreflightContext) {
   // and this trailing catch guarantees the fire-and-forget promise can never
   // reject into the request lifecycle.
   void captureFailOpen(context).catch(() => false);
-}
-
-/** Logs one completed RPC attempt with no merchant or URL identifiers. */
-function logRpcAttempt(attempt: StorefrontPreflightRpcAttempt): void {
-  try {
-    console.info('[storefront-preflight-rpc] attempt', {
-      attempt_id: attempt.attemptId,
-      deadline_ms: attempt.deadlineMs,
-      elapsed_ms: attempt.elapsedMs,
-      outcome: attempt.outcome,
-      rpc_name: attempt.rpcName,
-      surface: attempt.surface,
-    });
-  } catch {
-    // Telemetry must never change the fail-open or navigation behavior.
-  }
-}
-
-function getRpcAttemptProperties(
-  context: StorefrontInternalPreflightContext
-): Record<string, unknown> {
-  return {
-    ...(context.attemptId ? { attempt_id: context.attemptId } : {}),
-    ...(context.deadlineMs === undefined
-      ? {}
-      : { deadline_ms: context.deadlineMs }),
-    ...(context.elapsedMs === undefined
-      ? {}
-      : { elapsed_ms: context.elapsedMs }),
-    ...(context.outcome ? { outcome: context.outcome } : {}),
-    ...(context.rpcName ? { rpc_name: context.rpcName } : {}),
-  };
 }
 
 /**
@@ -331,9 +291,9 @@ export const storefrontInternalPreflight = {
   getFetchErrorReason,
   captureFailOpen,
   isLoopbackOrigin,
-  logRpcAttempt,
   readJsonResponse,
   resolveBaseUrl,
   warnFailOpen,
+  warnRpcFailOpen,
   warnSkip,
 };

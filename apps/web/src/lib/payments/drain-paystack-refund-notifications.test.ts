@@ -253,27 +253,23 @@ describe('Paystack refund notifications', () => {
     );
   });
 
-  it('reports notifications that exhausted their retries', async () => {
+  it('folds dead-lettered rows into the exhausted failure signal', async () => {
     const db = database('processed_customer_email');
-    db.finish.limit.mockResolvedValueOnce({
-      data: [{ event_type: 'processed_customer_email', order_id: 'order-9' }],
-      count: 1,
-      error: null,
-    });
+    db.finish.limit
+      .mockResolvedValueOnce({ data: [], count: 0, error: null })
+      .mockResolvedValueOnce({
+        data: [{ event_type: 'processed_customer_email', order_id: 'order-7' }],
+        count: 2,
+        error: null,
+      });
 
     const summary = await drainPaystackRefundNotifications(
       db as never,
       mocks.sendEmail
     );
 
-    expect(summary.exhausted).toBe(1);
-    expect(db.finish.select).toHaveBeenCalledWith(
-      'order_id, event_type',
-      expect.objectContaining({ count: 'exact' })
-    );
-    expect(db.finish.gte).toHaveBeenCalledWith('attempts', 5);
-    expect(mocks.loggerError).toHaveBeenCalledWith(
-      expect.objectContaining({ exhausted: 1 })
-    );
+    // Stale worker claims terminalize inside the claim call; the only
+    // operational signal is this preflight count reaching the route.
+    expect(summary.exhausted).toBe(2);
   });
 });

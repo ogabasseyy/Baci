@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { escapeHtmlText } from '@/lib/sanitize';
 import { assertRefundNotificationSendTime } from './assert-refund-notification-send-time';
 import { awaitRefundNotificationDeadline } from './await-refund-notification-deadline';
+import { countDeadLetteredPaystackRefundNotifications } from './count-dead-lettered-paystack-refund-notifications';
 import { refundNotificationLedgerAmount } from './refund-notification-ledger';
 
 type RefundEmailSender = (message: {
@@ -64,28 +65,7 @@ export async function drainPaystackRefundNotifications(
   let failed = 0;
   let exhausted = 0;
   if (limit > 0) {
-    // Rows that burned all five attempts are dead-lettered by the first
-    // claim below. Count them first so the terminal transition is
-    // reported instead of happening silently.
-    const {
-      data,
-      count,
-      error: exhaustedError,
-    } = await supabase
-      .from('paystack_cancellation_refund_notifications')
-      .select('order_id, event_type', { count: 'exact' })
-      .eq('status', 'failed')
-      .gte('attempts', 5)
-      .limit(10);
-    if (exhaustedError) throw new Error('refund_notification_claim_failed');
-    exhausted = count ?? 0;
-    if (exhausted > 0) {
-      logger.error({
-        message: 'Paystack cancellation refund notifications exhausted retries',
-        exhausted,
-        sample: data ?? [],
-      });
-    }
+    exhausted = await countDeadLetteredPaystackRefundNotifications(supabase);
   }
   // Claim serially so a route timeout cannot strand an unsent batch.
   for (let remaining = limit; remaining > 0; remaining -= 1) {

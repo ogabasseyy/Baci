@@ -2,7 +2,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { initiateRefund as initiatePaystackRefund } from '@/lib/initiate-paystack-refund';
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
-import { DeliveryUncertainError } from '@/lib/orders/run-order-cancellation-side-effect';
+import {
+  DeferredError,
+  DeliveryUncertainError,
+} from '@/lib/orders/run-order-cancellation-side-effect';
 
 /**
  * Initiate a Paystack refund for every gateway leg that has no recorded
@@ -12,6 +15,7 @@ import { DeliveryUncertainError } from '@/lib/orders/run-order-cancellation-side
  */
 export async function initiatePaystackCancellationRefunds({
   deadlineMs,
+  isLastAttempt,
   order,
   reason,
   refundedPaymentIds,
@@ -19,6 +23,12 @@ export async function initiatePaystackCancellationRefunds({
   transactions,
 }: {
   deadlineMs?: number;
+  /**
+   * Set when this run consumes the final retry attempt: a rate-limited
+   * leg must file durable evidence instead of throwing retryable, since
+   * the drain never reselects attempts-capped rows.
+   */
+  isLastAttempt?: boolean;
   order: {
     currency: string | null;
     id: string;
@@ -60,6 +70,12 @@ export async function initiatePaystackCancellationRefunds({
       // settled legs skipped. Ambiguous and deterministic failures still
       // quarantine below: the provider may have accepted, or never will.
       const isDefiniteTransientFailure = paystackRefund.code === 'HTTP_429';
+      // Rate-limited legs stay review-free while retries remain — but the
+      // drain never reselects attempts-capped rows, so a 429 on the last
+      // attempt must file durable evidence instead of stranding the leg
+      // while cron reports success.
+      const isExhaustedTransientFailure =
+        isDefiniteTransientFailure && isLastAttempt === true;
       if (refundIds.length > 0 && !isDefiniteTransientFailure) {
         await quarantineRefund({
           metadata: {
@@ -95,6 +111,42 @@ export async function initiatePaystackCancellationRefunds({
           supabase,
           transactions: [transaction],
         });
+      } else if (isExhaustedTransientFailure) {
+        try {
+          await quarantineRefund({
+            metadata: {
+              ...(refundIds.length > 0
+                ? { accepted_refund_ids: refundIds }
+                : {}),
+              failed_payment_transaction_id: transaction.id,
+              rate_limit_exhausted: true,
+            },
+            order,
+            // The provider rejected every attempt, so a replacement
+            // refund can still proceed: no ambiguous-initiation marker,
+            // letting the completion gate auto-close this review on
+            // coverage. Preflight stays set even with accepted legs —
+            // they are audited before any later leg runs, so a deferred
+            // retry observes them via the awaiting-provider check
+            // instead of re-initiating.
+            preflight: true,
+            reason:
+              refundIds.length > 0
+                ? 'Some payment legs were accepted for refund, but a later leg was rate limited on every retry'
+                : 'Paystack refund initiation was rate limited on every retry for this payment leg',
+            supabase,
+            transactions: [transaction],
+          });
+        } catch (error) {
+          if (error instanceof DeliveryUncertainError) throw error;
+          // The review write or merge failed on the last attempt: a
+          // plain retryable error would strand the leg without evidence
+          // since the budget is spent, so defer instead — deferred rows
+          // reselect without the attempts cap until the review lands.
+          throw new DeferredError(
+            error instanceof Error ? error.message : String(error)
+          );
+        }
       }
       const RefundError = isAmbiguousFailure ? DeliveryUncertainError : Error;
       throw new RefundError(paystackRefund.error);

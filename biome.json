@@ -38,6 +38,8 @@
       "apps/web/src/components/storefront/ogabassey/pages/checkout/build-checkout-order-request*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/prepare-checkout-order-identity*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-load-resumed-order*",
+      "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-resume-lifecycle*",
+      "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-payment-session*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-order-totals*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-step-state*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-shipping-quotes*",

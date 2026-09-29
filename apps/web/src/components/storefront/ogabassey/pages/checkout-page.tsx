@@ -1,6 +1,7 @@
 'use client';
 import { useCheckoutAddressInference } from './checkout/hooks/use-checkout-address-inference';
 import { useCheckoutPaymentSession } from './checkout/hooks/use-checkout-payment-session';
+import { useCheckoutResumeLifecycle } from './checkout/hooks/use-checkout-resume-lifecycle';
 import { useOrderTotals } from './checkout/hooks/use-order-totals';
 import { resolveCheckoutResumeContext } from './checkout/resolve-checkout-resume-context';
 
@@ -34,7 +35,7 @@ import {
   type JuicywayPendingOrder,
 } from './checkout/hooks/use-juicyway-payment';
 import { usePaymentReturnReset } from './checkout/use-payment-return-reset';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { useCurrency } from '@/hooks/use-currency';
@@ -43,9 +44,7 @@ import type {
   CryptoCurrency,
   DvaData,
   PendingCryptoOrder,
-  ResumedOrder,
 } from './checkout/types';
-import { mapApiOrderToResumedOrder } from './checkout/map-api-order-to-resumed-order';
 import {
   usePersistedState,
 } from '@/hooks/use-persisted-state';
@@ -77,7 +76,6 @@ import {
 import { clearCheckoutIdempotencyKey } from './checkout/checkout-idempotency';
 import { captureCheckoutPaymentCompleted } from './checkout/capture-checkout-payment-completed';
 import { useCheckoutSubmissionState } from './checkout/hooks/use-checkout-submission-state';
-import { executeResumedDirectPayment } from './checkout/handlers/direct-payment';
 import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import { useRedvaultPaymentAvailability } from './checkout/hooks/use-redvault-payment-availability';
 import {
@@ -345,9 +343,32 @@ export const CheckoutPage: React.FC = () => {
     merchantId: merchant?.id,
     merchantSlug: merchant?.slug,
   });
-  const [resumedOrder, setResumedOrder] = useState<ResumedOrder | null>(null);
-  const [isLoadingResumedOrder, setIsLoadingResumedOrder] = useState(!!resumeOrderId);
-  const [resumeOrderError, setResumeOrderError] = useState<string | null>(null);
+  const {
+    isProcessing,
+    setIsProcessing,
+    isOrderInFlightRef,
+    tryBeginSubmission,
+    releaseSubmission,
+    handleSubmissionError,
+  } = useCheckoutSubmissionState({ setCurrentStep, setCompletedSteps });
+  const { resumedOrder, isLoadingResumedOrder, resumeOrderError } =
+    useCheckoutResumeLifecycle({
+      resumeOrderId,
+      resumeTrackingToken,
+      resumeLookupEmail,
+      resumeMerchantSlug,
+      preferredGateway,
+      isHydrated,
+      hasCheckoutCartItems: checkoutCart.length > 0,
+      setCheckoutFields,
+      merchantSlug: merchant?.slug,
+      merchantChargeCurrency: currencyCode,
+      isProcessing,
+      setIsProcessing,
+      clearCheckoutSession,
+      routerPush: (url: string) => router.push(asRoute(url)),
+      getHref,
+    });
 
   const {
     displayItems,
@@ -389,11 +410,6 @@ export const CheckoutPage: React.FC = () => {
     resumedOrder,
   });
 
-  const autoTriggerRef = useRef(false);
-  const {
-    isProcessing, setIsProcessing, isOrderInFlightRef,
-    tryBeginSubmission, releaseSubmission, handleSubmissionError,
-  } = useCheckoutSubmissionState({ setCurrentStep, setCompletedSteps });
   usePaymentReturnReset(releaseSubmission);
 
   // Storefront customer sign-in state. The `(commerce)` checkout route mounts
@@ -508,9 +524,8 @@ export const CheckoutPage: React.FC = () => {
   // Note: newAddressState, newAddressCity, newAddressStreet are now part of checkoutForm (persisted)
 
 
-  // Payment State (declared before the resumed-order effect below, which
-  // pre-selects the tab/method for BNPL deep links — React Compiler requires
-  // declaration before first access)
+  // Payment state derives from resumed-order amounts; the payment-session hook
+  // selects the requested BNPL method after the resume lookup succeeds.
   const taxRate = merchant?.vat_registration_status === 'registered'
     ? (merchant.vat_rate ?? 7.5) / 100
     : 0;
@@ -533,22 +548,13 @@ export const CheckoutPage: React.FC = () => {
     discountSubtotal: effectiveCheckoutCartTotal,
     hasAuthenticatedUser: Boolean(user),
     hasCheckoutCartItems,
-    isHydrated,
     isOrderInFlightRef,
     merchantSlug: merchant?.slug ?? undefined,
     pendingCheckoutOrder,
-    walletSessionIdentity: user,
-    resumeOrder: {
-      resumeOrderId,
-      resumeMerchantSlug,
-      resumeTrackingToken,
-      resumeLookupEmail,
-      preferredGateway,
-      setIsLoadingResumedOrder,
-      setResumedOrder,
-      setCheckoutFields,
-      setResumeOrderError,
-    },
+    walletSessionUserId: user?.id,
+    resumeOrderId,
+    preferredGateway,
+    resumedOrder,
   });
   const summaryAmounts = deriveCheckoutSummaryAmounts({
     deliveryCost,
@@ -593,41 +599,6 @@ export const CheckoutPage: React.FC = () => {
   const walletAmountUsed = paymentSession.wallet.amountUsed;
   const remainingAmount = paymentSession.wallet.remainingAmount;
   const total = paymentSession.total;
-
-
-  // Thin caller: the resumed BNPL flow lives in the direct-payment
-  // handler (Boy Scout extraction); this just binds component state.
-  const executeDirectPayment = async () => {
-    await executeResumedDirectPayment({
-      resumedOrder,
-      preferredGateway,
-      merchantSlug: merchant?.slug,
-      merchantChargeCurrency: currencyCode,
-      resumeTrackingToken,
-      resumeMerchantSlug,
-      setIsProcessing,
-      clearCheckoutSession,
-      routerPush: (url: string) => {
-        router.push(asRoute(url));
-      },
-      getHref,
-    });
-  };
-
-  // Auto-trigger payment for resumed orders
-  useEffect(() => {
-    if (
-      isHydrated &&
-      checkoutCart.length === 0 &&
-      resumedOrder &&
-      preferredGateway &&
-      !autoTriggerRef.current &&
-      !isProcessing
-    ) {
-      autoTriggerRef.current = true;
-      executeDirectPayment();
-    }
-  }, [checkoutCart.length, isHydrated, isProcessing, preferredGateway, resumedOrder]);
 
   useEffect(() => {
     if (

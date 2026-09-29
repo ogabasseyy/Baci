@@ -6,7 +6,7 @@ import {
 
 type RequestFields = Pick<
   LoadResumedCheckoutOrderParams,
-  'resumeTrackingToken' | 'resumeLookupEmail' | 'preferredGateway'
+  'resumeTrackingToken' | 'resumeLookupEmail'
 > & {
   resumeOrderId: string | null;
   resumeMerchantSlug: string | null;
@@ -23,7 +23,6 @@ export function useLoadResumedOrder({
   resumeMerchantSlug,
   resumeTrackingToken,
   resumeLookupEmail,
-  preferredGateway,
   ...callbacks
 }: RequestFields & Callbacks) {
   const onLoad = useEffectEvent(
@@ -46,7 +45,6 @@ export function useLoadResumedOrder({
       resumeMerchantSlug,
       resumeTrackingToken,
       resumeLookupEmail,
-      preferredGateway,
       signal: controller.signal,
     });
     return () => controller.abort();
@@ -55,6 +53,5 @@ export function useLoadResumedOrder({
     resumeMerchantSlug,
     resumeTrackingToken,
     resumeLookupEmail,
-    preferredGateway,
   ]);
 }

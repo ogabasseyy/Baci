@@ -1,18 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import {
-  buildSearchHref,
-  buildSearchSubmissionHref,
-} from './search-page-hrefs';
+import { buildSearchHref } from './search-page-href';
 
 const BASE_PATH = '/ogabassey/search';
-
-describe('buildSearchSubmissionHref', () => {
-  it('builds a page-less submission URL with an encoded query', () => {
-    expect(buildSearchSubmissionHref(BASE_PATH, 'iphone 16')).toBe(
-      '/ogabassey/search?q=iphone%2016'
-    );
-  });
-});
 
 describe('buildSearchHref', () => {
   it('marks navigational page-1 targets with an explicit page parameter', () => {

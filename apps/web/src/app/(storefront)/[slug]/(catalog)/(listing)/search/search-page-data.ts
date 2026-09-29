@@ -19,7 +19,7 @@ import {
   STOREFRONT_SEARCH_MAX_PAGE,
 } from '@/lib/storefront-search-params';
 import { isValidMerchantIdentifier } from '@/lib/validation';
-import { buildSearchHref } from './search-page-hrefs';
+import { buildSearchHref } from './search-page-href';
 
 export interface SearchPageDataInput {
   params: Promise<{ slug: string }>;

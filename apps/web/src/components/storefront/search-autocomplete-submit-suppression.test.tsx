@@ -1,10 +1,4 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import {
   afterAll,
@@ -63,7 +57,7 @@ describe('SearchAutocomplete', () => {
   });
 
   it('keeps a submitted popular term from reopening autocomplete (pointer)', async () => {
-    vi.useRealTimers();
+    vi.useFakeTimers();
     const onChange = vi.fn();
     const onSubmitSearch = vi.fn();
     let resolveSecond: (value: unknown) => void = () => undefined;
@@ -98,11 +92,14 @@ describe('SearchAutocomplete', () => {
       />
     );
 
-    await waitFor(() => {
-      expect(
-        screen.getByRole('option', { name: /galaxy s25/i })
-      ).toBeInTheDocument();
+    // Flush the mount fetch deterministically: the async advance yields
+    // to the promise chain without crossing the 200ms debounce.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
     });
+    expect(
+      screen.getByRole('option', { name: /galaxy s25/i })
+    ).toBeInTheDocument();
 
     // Activating the popular option syncs the input, submits (navigating
     // away on persistent consumers), and closes the popup.
@@ -123,9 +120,10 @@ describe('SearchAutocomplete', () => {
 
     // The submitted value reaches the debounce after navigation and starts
     // a request that did not exist when the pending one was cancelled: its
-    // results must not reopen the popup over the destination page.
+    // results must not reopen the popup over the destination page. Cross
+    // the 200ms debounce on the fake clock instead of sleeping.
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await vi.advanceTimersByTimeAsync(300);
     });
     // Successful suggestion fetches also emit an analytics POST, so count
     // only the autocomplete requests.
@@ -137,9 +135,7 @@ describe('SearchAutocomplete', () => {
             typeof url === 'string' &&
             url.startsWith('/api/search/autocomplete')
         );
-    await waitFor(() => {
-      expect(autocompleteCalls()).toHaveLength(2);
-    });
+    expect(autocompleteCalls()).toHaveLength(2);
     await act(async () => {
       resolveSecond({
         suggestions: [
@@ -172,7 +168,7 @@ describe('SearchAutocomplete', () => {
   });
 
   it('keeps a submitted popular term from reopening autocomplete (keyboard)', async () => {
-    vi.useRealTimers();
+    vi.useFakeTimers();
     const onChange = vi.fn();
     const onSubmitSearch = vi.fn();
     let resolveSecond: (value: unknown) => void = () => undefined;
@@ -208,11 +204,14 @@ describe('SearchAutocomplete', () => {
     );
 
     const input = screen.getByRole('searchbox');
-    await waitFor(() => {
-      expect(
-        screen.getByRole('option', { name: /galaxy s25/i })
-      ).toBeInTheDocument();
+    // Flush the mount fetch deterministically: the async advance yields
+    // to the promise chain without crossing the 200ms debounce.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
     });
+    expect(
+      screen.getByRole('option', { name: /galaxy s25/i })
+    ).toBeInTheDocument();
 
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     fireEvent.keyDown(input, { key: 'Enter' });
@@ -230,8 +229,9 @@ describe('SearchAutocomplete', () => {
       screen.queryByRole('option', { name: /galaxy s25/i })
     ).not.toBeInTheDocument();
 
+    // Cross the 200ms debounce on the fake clock instead of sleeping.
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await vi.advanceTimersByTimeAsync(300);
     });
     // Successful suggestion fetches also emit an analytics POST, so count
     // only the autocomplete requests.
@@ -243,9 +243,7 @@ describe('SearchAutocomplete', () => {
             typeof url === 'string' &&
             url.startsWith('/api/search/autocomplete')
         );
-    await waitFor(() => {
-      expect(autocompleteCalls()).toHaveLength(2);
-    });
+    expect(autocompleteCalls()).toHaveLength(2);
     await act(async () => {
       resolveSecond({
         suggestions: [

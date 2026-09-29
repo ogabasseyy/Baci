@@ -12,14 +12,12 @@ import { ProductIndexCard } from '../products/product-index-card';
 import { loadSearchPageData } from './search-page-data';
 import { SearchPageErrorPanel } from './search-page-error-panel';
 import { SearchPageForm } from './search-page-form';
-import {
-  buildSearchHref,
-  buildSearchSubmissionHref,
-} from './search-page-hrefs';
+import { buildSearchHref } from './search-page-href';
 import { SearchPageNoResultsPanel } from './search-page-no-results-panel';
 import { getPriceFormatter } from './search-page-price';
 import { buildSearchPageSchemas } from './search-page-schema';
 import { SearchPageStartPanel } from './search-page-start-panel';
+import { buildSearchSubmissionHref } from './search-page-submission-href';
 import { formatSearchSummary } from './search-page-summary';
 
 export interface SearchPageProps {

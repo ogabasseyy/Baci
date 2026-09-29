@@ -1,15 +1,5 @@
 import { buildStorefrontPageHref } from '@/lib/storefront-pagination';
-
-/**
- * Submission entries (search form, navbar, see-all, did-you-mean) never
- * carry a page parameter; only their renders count as new searches.
- */
-export function buildSearchSubmissionHref(
-  searchBasePath: string,
-  targetQuery: string
-): string {
-  return `${searchBasePath}?q=${encodeURIComponent(targetQuery)}`;
-}
+import { buildSearchSubmissionHref } from './search-page-submission-href';
 
 /**
  * Navigational search URLs (redirect targets, pagination links).

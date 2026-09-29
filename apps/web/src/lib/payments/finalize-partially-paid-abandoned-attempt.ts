@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { assertRefundNotificationSendTime } from './assert-refund-notification-send-time';
+import { awaitRefundNotificationDeadline } from './await-refund-notification-deadline';
 import type { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
 
 /**
@@ -9,6 +11,7 @@ import type { finalizeOrderGatewayPayment } from './finalize-order-gateway-payme
  */
 export async function finalizePartiallyPaidAbandonedAttempt({
   attempt,
+  deadlineMs,
   finalizePayment,
   hold,
   providerData,
@@ -25,6 +28,7 @@ export async function finalizePartiallyPaidAbandonedAttempt({
     platform_fee: number | null;
     status: 'pending' | 'processing';
   };
+  deadlineMs?: number;
   finalizePayment: typeof finalizeOrderGatewayPayment;
   hold: (reason: string) => Promise<void>;
   providerData: Record<string, unknown>;
@@ -54,29 +58,69 @@ export async function finalizePartiallyPaidAbandonedAttempt({
       return;
     }
   }
-  const outcome = await finalizePayment({
-    actor: 'cron:reconcile-gateway-paid-orders',
-    gateway: 'paystack',
-    gatewayResponse: providerData,
-    orderId: attempt.order_id,
-    reference: attempt.gateway_reference,
-    scheduleAfter,
-    supabase,
-    transaction: {
-      amount: attempt.amount,
-      gateway_reference: attempt.gateway_reference,
-      id: attempt.id,
-      merchant_id: attempt.merchant_id,
-      order_id: attempt.order_id,
-      platform_fee: attempt.platform_fee,
-    },
-    // The cron never claims the flip: a concurrent webhook may complete
-    // this row first, so classification must come from the completion
-    // RPC result (order_updated/already_completed) rather than the
-    // stale candidate snapshot. Passing true would misclassify such a
-    // replay as a new capture on an already-paid order.
-    wonTransactionFlip: false,
-  });
+  // Reserve budget before starting finalize: verification may have
+  // consumed the pass, and finalize would spend the paid-email retry
+  // budget past the deadline, starving the later passes. The held row
+  // retries on the next sweep without failing this one.
+  try {
+    assertRefundNotificationSendTime(deadlineMs);
+  } catch {
+    await hold('finalize_budget_exhausted');
+    return;
+  }
+  // Cancel the finalize itself — not just this wait — when the pass
+  // budget runs out: the signal aborts the in-flight paid-email send
+  // (ZeptoMail treats aborts as terminal, never retried), so an
+  // overrunning finalize fails its step instead of delivering email
+  // after the caller gave up. It shares the race's 10s buffer so the
+  // orphan has time to persist its own failure.
+  const finalizeSignal =
+    deadlineMs === undefined
+      ? undefined
+      : AbortSignal.timeout(Math.max(1, deadlineMs - Date.now() - 10_000));
+  let outcome: Awaited<ReturnType<typeof finalizePayment>>;
+  try {
+    outcome = await awaitRefundNotificationDeadline(
+      finalizePayment({
+        actor: 'cron:reconcile-gateway-paid-orders',
+        gateway: 'paystack',
+        gatewayResponse: providerData,
+        orderId: attempt.order_id,
+        reference: attempt.gateway_reference,
+        scheduleAfter,
+        signal: finalizeSignal,
+        supabase,
+        transaction: {
+          amount: attempt.amount,
+          gateway_reference: attempt.gateway_reference,
+          id: attempt.id,
+          merchant_id: attempt.merchant_id,
+          order_id: attempt.order_id,
+          platform_fee: attempt.platform_fee,
+        },
+        // The cron never claims the flip: a concurrent webhook may complete
+        // this row first, so classification must come from the completion
+        // RPC result (order_updated/already_completed) rather than the
+        // stale candidate snapshot. Passing true would misclassify such a
+        // replay as a new capture on an already-paid order.
+        wonTransactionFlip: false,
+      }),
+      deadlineMs
+    );
+  } catch (finalizeError) {
+    // The finalize deadline race fired: the finalize may still be running,
+    // so hold the row for the next sweep instead of failing it.
+    // finalizePayment never throws this message itself — it is pinned by
+    // the deadline helper's own suite.
+    if (
+      finalizeError instanceof Error &&
+      finalizeError.message === 'refund_notification_delivery_deadline'
+    ) {
+      await hold('finalize_deadline_exceeded');
+      return;
+    }
+    throw finalizeError;
+  }
   if (outcome.kind === 'completed') {
     summary.completed.push(attempt.id);
     return;

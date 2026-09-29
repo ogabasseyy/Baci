@@ -232,6 +232,7 @@ export async function reconcileAbandonedPaystackAttempts({
     if (result.success && result.data.status === 'success') {
       await resolveVerifiedAbandonedAttemptCapture({
         attempt,
+        deadlineMs,
         finalizePayment,
         hold,
         mismatchKind,

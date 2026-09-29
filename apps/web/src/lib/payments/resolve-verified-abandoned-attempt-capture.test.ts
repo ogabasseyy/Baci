@@ -58,6 +58,7 @@ describe('resolveVerifiedAbandonedAttemptCapture', () => {
 
     await resolveVerifiedAbandonedAttemptCapture({
       attempt,
+      deadlineMs: 1_180_000,
       hold,
       mismatchKind: null,
       paidOrderStatus: 'partially_paid',
@@ -69,7 +70,11 @@ describe('resolveVerifiedAbandonedAttemptCapture', () => {
     });
 
     expect(mocks.finalizePartiallyPaidAbandonedAttempt).toHaveBeenCalledWith(
-      expect.objectContaining({ attempt, providerData: captureData })
+      expect.objectContaining({
+        attempt,
+        deadlineMs: 1_180_000,
+        providerData: captureData,
+      })
     );
     expect(mocks.fileDuplicatePaymentCapture).not.toHaveBeenCalled();
     expect(hold).not.toHaveBeenCalled();

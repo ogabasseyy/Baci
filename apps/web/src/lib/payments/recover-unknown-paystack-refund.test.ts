@@ -203,25 +203,6 @@ describe('recoverUnknownPaystackRefund', () => {
     expect(mocks.reconcilePaystackCancellationRefund).not.toHaveBeenCalled();
   });
 
-  it('acknowledges events whose refund echo does not match the request', async () => {
-    mocks.fetchRefund.mockResolvedValue({
-      data: {
-        amount: 10000,
-        currency: 'NGN',
-        id: 203,
-        status: 'processed',
-        transaction: 555,
-      },
-      success: true,
-    });
-    const { insert, supabase } = database();
-
-    await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
-
-    expect(insert).not.toHaveBeenCalled();
-    expect(mocks.reconcilePaystackCancellationRefund).not.toHaveBeenCalled();
-  });
-
   it('throws retryably when provider verification is unavailable', async () => {
     mocks.fetchRefund.mockResolvedValue({
       code: 'NETWORK_ERROR',

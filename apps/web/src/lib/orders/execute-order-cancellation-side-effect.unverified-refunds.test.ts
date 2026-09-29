@@ -39,13 +39,19 @@ const order = {
   total: 100,
 };
 
-function payment(id: string, amount: number, reference: string) {
+function payment(
+  id: string,
+  amount: number,
+  reference: string,
+  status = 'completed'
+) {
   return {
     amount,
     currency: 'NGN',
     gateway: 'paystack',
     gateway_reference: reference,
     id,
+    status,
   };
 }
 
@@ -73,6 +79,7 @@ function completedRefund(
 function transactionQuery(data: unknown) {
   return {
     eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
     order: vi.fn().mockResolvedValue({ data, error: null }),
     select: vi.fn().mockReturnThis(),
   };
@@ -122,6 +129,19 @@ describe('cancellation unverified refunds', () => {
 
     expect(error).toBeInstanceOf(Error);
     expect(error).not.toBeInstanceOf(DeliveryUncertainError);
+    expect((error as Error).message).toBe(
+      'cancellation_refund_awaiting_provider_completion'
+    );
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+  });
+
+  it('defers a paystack leg stuck in refund-pending without initiating', async () => {
+    const { error } = await runWithRefunds(
+      [payment('payment-1', 100, 'paystack-ref', 'refund_pending')],
+      []
+    );
+
+    expect(error).toBeInstanceOf(DeferredError);
     expect((error as Error).message).toBe(
       'cancellation_refund_awaiting_provider_completion'
     );

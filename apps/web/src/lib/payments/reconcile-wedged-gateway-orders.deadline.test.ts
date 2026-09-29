@@ -71,6 +71,103 @@ describe('reconcileWedgedGatewayOrders pass deadline', () => {
     }
   });
 
+  it('declines to start finalize without sufficient reserve', async () => {
+    const supabase = buildSupabase({ data: [wedgedCandidate] });
+    mocks.verifyPaystackPayment.mockResolvedValue({
+      data: { amount: 5829060, currency: 'NGN', status: 'success' },
+      success: true,
+    });
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_170_000);
+
+    try {
+      const summary = await reconcileWedgedGatewayOrders({
+        deadlineMs: 1_180_000,
+        scheduleAfter,
+        supabase,
+      });
+
+      // Verification succeeded 10s before the deadline: starting finalize
+      // would spend the paid-email retry budget past it and starve the
+      // failed-side-effect pass. The unstamped row retries next sweep.
+      expect(mocks.verifyPaystackPayment).toHaveBeenCalled();
+      expect(mocks.finalizeOrderGatewayPayment).not.toHaveBeenCalled();
+      expect(summary).toMatchObject({
+        checked: 1,
+        failed: [],
+        healed: [],
+        skipped: [],
+      });
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('forwards the remaining deadline to the finalizer', async () => {
+    const supabase = buildSupabase({ data: [wedgedCandidate] });
+    mocks.verifyPaystackPayment.mockResolvedValue({
+      data: { amount: 5829060, currency: 'NGN', status: 'success' },
+      success: true,
+    });
+    mocks.finalizeOrderGatewayPayment.mockResolvedValue({
+      healed: true,
+      kind: 'completed',
+      orderNumber: 'ORD-1',
+    });
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_100_000);
+
+    try {
+      const summary = await reconcileWedgedGatewayOrders({
+        deadlineMs: 1_180_000,
+        scheduleAfter,
+        supabase,
+      });
+
+      expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledWith(
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
+      expect(summary.healed).toEqual([
+        { orderId: 'order-1', orderNumber: 'ORD-1' },
+      ]);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('stops waiting for an overrunning finalize at the pass deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_100_000);
+      const supabase = buildSupabase({ data: [wedgedCandidate] });
+      mocks.verifyPaystackPayment.mockResolvedValue({
+        data: { amount: 5829060, currency: 'NGN', status: 'success' },
+        success: true,
+      });
+      mocks.finalizeOrderGatewayPayment.mockReturnValue(
+        new Promise(() => {
+          // Never settles: the sweep must stop waiting at the deadline
+          // instead of reaching the route limit with claimed work in flight.
+        })
+      );
+
+      const pending = reconcileWedgedGatewayOrders({
+        deadlineMs: 1_121_000,
+        scheduleAfter,
+        supabase,
+      });
+      await vi.advanceTimersByTimeAsync(11_000);
+      const summary = await pending;
+
+      expect(summary.failed).toEqual([
+        {
+          reason: 'refund_notification_delivery_deadline',
+          transactionId: 'txn-1',
+        },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('bounds in-flight verification to the remaining pass share', async () => {
     const supabase = buildSupabase({ data: [wedgedCandidate] });
     mocks.verifyPaystackPayment.mockResolvedValue({

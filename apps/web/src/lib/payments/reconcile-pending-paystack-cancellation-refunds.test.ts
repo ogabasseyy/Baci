@@ -100,4 +100,30 @@ describe('pending Paystack cancellation refund reconciliation', () => {
       expect.objectContaining({ p_provider_status: 'processing' })
     );
   });
+
+  it('stops before the deadline so later phases keep their share', async () => {
+    const candidates = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
+      not: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
+      like: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi
+        .fn()
+        .mockResolvedValue({ data: [{ id: 'refund-1' }], error: null }),
+    };
+    const from = vi.fn().mockReturnValueOnce(candidates);
+
+    await expect(
+      reconcilePendingPaystackCancellationRefunds(
+        { from } as never,
+        25,
+        Date.now() - 1
+      )
+    ).resolves.toEqual({ checked: 0, failed: 0 });
+
+    expect(provider.fetchRefund).not.toHaveBeenCalled();
+  });
 });

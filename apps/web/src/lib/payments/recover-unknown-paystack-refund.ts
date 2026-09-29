@@ -111,20 +111,6 @@ export async function recoverUnknownPaystackRefund(
   ) {
     throw new Error('paystack_refund_payment_reference_invalid');
   }
-  const original = fetchedPayment.data;
-  if (
-    current.id !== refundId ||
-    !Number.isSafeInteger(current.amount) ||
-    current.amount <= 0 ||
-    typeof current.currency !== 'string' ||
-    typeof current.status !== 'string'
-  ) {
-    logger.info({
-      message: 'Unknown Paystack refund event does not match its payment',
-      refundId,
-    });
-    return;
-  }
   // Fetch every completed match (no LIMIT): the ambiguity branch files
   // one review per order, so truncating here would silently drop orders
   // from a corrupt/ambiguous reference shared across payments.
@@ -139,10 +125,33 @@ export async function recoverUnknownPaystackRefund(
   const candidates = (payments ?? []) as RecoveryPayment[];
   const payment = candidates[0];
   const evidence = {
-    providerPaymentTransactionId: original.id,
+    providerPaymentTransactionId: fetchedPayment.data.id,
     providerRefundId: refundId,
     reference: resolvedPaymentReference,
   };
+  if (
+    current.id !== refundId ||
+    !Number.isSafeInteger(current.amount) ||
+    current.amount <= 0 ||
+    typeof current.currency !== 'string' ||
+    typeof current.status !== 'string'
+  ) {
+    // The provider answered but its evidence is unusable: acknowledging
+    // would drop the refund permanently (polling cannot rediscover an
+    // unknown refund), so file it against the resolved payment's orders
+    // and throw for redelivery instead. Merges are idempotent, so a
+    // transient provider glitch recovers on redelivery while a
+    // permanently malformed shape stays visible for operations.
+    if (candidates.length === 0)
+      throw new Error('paystack_refund_evidence_unmatched');
+    await fileCancelledPaystackRefundCandidateReviews(
+      supabase,
+      candidates,
+      evidence,
+      `Paystack refund ${refundId} returned unusable provider evidence for reference ${resolvedPaymentReference}`
+    );
+    throw new Error('paystack_refund_evidence_invalid');
+  }
   if (candidates.length > 1) {
     // The reference resolves to completed payments on different orders and
     // redelivery cannot disambiguate them: persist one review per
@@ -207,7 +216,7 @@ export async function recoverUnknownPaystackRefund(
     description: `Refund for cancelled order #${order.order_number || order.id.slice(0, 8)}`,
     metadata: {
       payment_transaction_id: payment.id,
-      provider_payment_transaction_id: original.id,
+      provider_payment_transaction_id: evidence.providerPaymentTransactionId,
       provider_refund_status: current.status.toLowerCase(),
       recovered_from_provider_event: true,
     },
@@ -234,7 +243,8 @@ export async function recoverUnknownPaystackRefund(
         merchantId: payment.merchant_id,
         metadata: {
           provider_refund_id: refundId,
-          provider_payment_transaction_id: original.id,
+          provider_payment_transaction_id:
+            evidence.providerPaymentTransactionId,
           payment_transaction_id: payment.id,
           audit_record_failed: true,
           recovered_from_provider_event: true,
@@ -260,7 +270,7 @@ export async function recoverUnknownPaystackRefund(
     currency: current.currency,
     metadata: {
       payment_transaction_id: payment.id,
-      provider_payment_transaction_id: original.id,
+      provider_payment_transaction_id: evidence.providerPaymentTransactionId,
       provider_refund_status: current.status.toLowerCase(),
       recovered_from_provider_event: true,
     },

@@ -13,6 +13,7 @@ it('records Paystack numeric transaction IDs for later provider verification', a
   const transactionQuery = (data: unknown) => ({
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
     order: vi.fn().mockResolvedValue({ data, error: null }),
   });
   const from = vi

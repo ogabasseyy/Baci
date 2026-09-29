@@ -65,7 +65,13 @@ BEGIN
      WHERE payment.order_id = p_order_id
        AND payment.merchant_id = v_order.merchant_id
        AND payment.transaction_type = 'payment'
-       AND payment.status = 'completed'
+       -- Mirror the completion gate's funded-leg statuses: refund-state
+       -- legs (e.g. PayPal flips the payment row itself to refund_pending
+       -- while its provider refund is pending) have no separate refund
+       -- row yet, so scanning only completed legs would complete the
+       -- side effect while the order stays paid with no worker resuming
+       -- the outstanding refund.
+       AND payment.status IN ('completed', 'refund_pending')
        AND payment.amount > 0
        AND COALESCE(payment.gateway, '') NOT IN (
          'wallet', 'savings', 'store_credit', 'cash', 'manual', 'pay_on_delivery'

@@ -84,6 +84,12 @@ assert_eq "seen-dedupes" "2" "${#MUSE_CANDIDATES[@]}"
 seen_reset
 assert_eq "seen-reset" "0" "${#MUSE_CANDIDATES[@]}"
 
+# --- trust_base ---
+assert_eq "trust-default" "true" "$(trust_base "main" "main" "true")"
+assert_eq "trust-stacked" "false" "$(trust_base "feature" "main" "true")"
+assert_eq "trust-nobase" "false" "$(trust_base "main" "main" "false")"
+assert_eq "trust-unknown-default" "false" "$(trust_base "main" "" "true")"
+
 # --- ranges.pl ---
 diff_fix="$(mktemp)"
 printf 'diff --git "a/foo\\tb.ts" "b/foo\\tb.ts"\n+++ "b/foo\\tb.ts"\n@@ -1,3 +1,4 @@ ctx\n+x\ndiff --git a/p.ts b/p.ts\n+++ b/p.ts\n@@ -10 +12,2 @@\n+y\n+z\ndiff --git a/d.ts b/d.ts\n+++ /dev/null\n@@ -1 +0,0 @@\n-gone\n' > "${diff_fix}"
@@ -112,6 +118,16 @@ jq -f "${SCRIPT_DIR}/clean.jq" "${find_fix}" > "${find_fix}.clean" && mv "${find
 assert_eq "clean-keeps-4" "4" "$(jq -r '.findings | length' "${find_fix}")"
 got="$(jq --slurpfile ranges "${ranges_fix}" --slurpfile files "${files_fix}" -f "${SCRIPT_DIR}/validate.jq" "${find_fix}" | jq -c '{v:[.valid[].title],s:[.summary_only[]|{t:.title,o:(.orphaned//false)}]}')"
 assert_eq "validate-split" '{"v":["T1"],"s":[{"t":"T3","o":false},{"t":"T2","o":false},{"t":"T4","o":true}]}' "${got}"
+cat > "${find_fix}" <<'EOF'
+{"verdict":"v","findings":[
+ {"path":"a.ts","line":5,"severity":"low","title":42,"body":"B"},
+ {"path":"a.ts","line":6,"severity":"low","title":"T","body":{"x":1}},
+ {"path":"a.ts","line":7,"severity":"low","body":"B"}
+],"next_steps":["ok",7,{"x":1},null]}
+EOF
+jq -f "${SCRIPT_DIR}/clean.jq" "${find_fix}" > "${find_fix}.clean" && mv "${find_fix}.clean" "${find_fix}"
+assert_eq "clean-drops-nonstrings" '["T-less"]' "$(jq -c '[.findings[] | (.title // "T-less")]' "${find_fix}")"
+assert_eq "clean-next-steps" '["ok"]' "$(jq -c '.next_steps' "${find_fix}")"
 rm -f "${find_fix}" "${ranges_fix}" "${files_fix}"
 
 # --- dedupe.jq ---

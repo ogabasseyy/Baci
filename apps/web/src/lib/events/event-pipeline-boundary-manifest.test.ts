@@ -71,7 +71,7 @@ describe('event pipeline authority manifest', () => {
       'apps/web/src/app/api/analytics/tiktok/route.ts':
         '4d59510f6a72ae25dd45c8cc8ea6762a709bf745286140a7a9e1aa4b64ee942e',
       'apps/web/src/app/api/platform/events/route.ts':
-        '646432088daff8e54f56fbab06453be789dc67d7b974398cc7f4b0d06842b9ca',
+        '0e62bed087fd29cb290af99f39dbc8589f9739ff06adde55598045945df7b7b1',
       'apps/web/src/app/api/orders/route.ts':
         '09b39ce08dff5a8bf34b83a7516c92534fb5122a5bfd84641db19f3d0c789ad7',
       'apps/web/src/app/api/payments/juicyway/webhook/route.ts':

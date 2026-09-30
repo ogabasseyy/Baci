@@ -132,6 +132,8 @@ got="$(printf '%s' 'ref ![a][b] tag <img alt="dia" src="https://e.example/x"> ba
 assert_eq "images-ref-html" "ref a tag dia bare " "${got}"
 got="$(printf '%s' 'paren ![p](https://g.example/u(1).png) squote <img alt='"'"'sq'"'"' src="https://h.example/y">' | strip_images)"
 assert_eq "images-edge" "paren p squote sq" "${got}"
+got="$(printf '%s' $'see ![pixel]\n\n[pixel]: https://a.example/p and [kept](https://d.example/x)' | strip_images)"
+assert_eq "images-shortcut-ref" $'see [pixel]\n\n[pixel]: https://a.example/p and [kept](https://d.example/x)' "${got}"
 assert_eq "redact-assign" 'api_key="[REDACTED]"' "$(redact 'api_key="abcDEF1234567890"')"
 assert_eq "redact-token-colon" 'token: [REDACTED]' "$(redact 'token: abcDEF1234567890')"
 assert_eq "redact-prose-kept" "no token here" "$(redact 'no token here')"
@@ -160,9 +162,9 @@ assert_eq "trust-unknown-default" "false" "$(trust_base "main" "" "true")"
 
 # --- ranges.pl ---
 diff_fix="$(mktemp)"
-printf 'diff --git "a/foo\\tb.ts" "b/foo\\tb.ts"\n--- "a/foo\\tb.ts"\n+++ "b/foo\\tb.ts"\n@@ -1,3 +1,4 @@ ctx\n+x\n+++ b/forged.ts\n+y\ndiff --git a/p.ts b/p.ts\n--- a/p.ts\n+++ b/p.ts\n@@ -10 +12,2 @@\n+y\n+z\ndiff --git a/d.ts b/d.ts\n--- a/d.ts\n+++ /dev/null\n@@ -1 +0,0 @@\n-gone\ndiff --git a/my file.ts b/my file.ts\n--- "a/my file.ts"\t\n+++ "b/my file.ts"\t\n@@ -2 +2 @@\n+z\n' > "${diff_fix}"
+printf 'diff --git "a/foo\\tb.ts" "b/foo\\tb.ts"\n--- "a/foo\\tb.ts"\n+++ "b/foo\\tb.ts"\n@@ -1,3 +1,4 @@ ctx\n+x\n+++ b/forged.ts\n+y\ndiff --git a/p.ts b/p.ts\n--- a/p.ts\n+++ b/p.ts\n@@ -10 +12,2 @@\n+y\n+z\n--- b/victim.ts\n+++ b/other.ts\n@@ -20 +22,2 @@\n+q\n+r\ndiff --git a/d.ts b/d.ts\n--- a/d.ts\n+++ /dev/null\n@@ -1 +0,0 @@\n-gone\ndiff --git a/my file.ts b/my file.ts\n--- "a/my file.ts"\t\n+++ "b/my file.ts"\t\n@@ -2 +2 @@\n+z\n' > "${diff_fix}"
 got="$(perl "${SCRIPT_DIR}/ranges.pl" "${diff_fix}")"
-assert_eq "ranges-json" '[{"path":"foo\u0009b.ts","start":1,"end":4},{"path":"p.ts","start":12,"end":13},{"path":"my file.ts","start":2,"end":2}]' "${got}"
+assert_eq "ranges-json" '[{"path":"foo\u0009b.ts","start":1,"end":4},{"path":"p.ts","start":12,"end":13},{"path":"p.ts","start":22,"end":23},{"path":"my file.ts","start":2,"end":2}]' "${got}"
 if printf '%s' "${got}" | jq empty 2>/dev/null; then got_jq="yes"; else got_jq="no"; fi
 assert_eq "ranges-valid-json" "yes" "${got_jq}"
 assert_eq "ranges-missing-file" "[]" "$(perl "${SCRIPT_DIR}/ranges.pl" "/nonexistent-muse-test-$$")"
@@ -174,6 +176,7 @@ cat > "${find_fix}" <<'EOF'
 {"verdict":"v","findings":[
  {"path":"a.ts","line":12,"severity":"high","title":"T1","body":"B1"},
  {"path":"a.ts","line":99,"severity":"low","title":"T2","body":"B2"},
+ {"path":"b.ts","line":5,"severity":"low","title":"T5","body":"B5"},
  {"path":"a.ts","line":0,"severity":"low","title":"T3","body":"B3"},
  {"path":"nope.ts","line":0,"severity":"low","title":"T4","body":"B4"},
  {"path":"a.ts","line":"x","severity":"low","title":"BAD","body":"B"},
@@ -183,9 +186,9 @@ EOF
 printf '[{"path":"a.ts","start":10,"end":15}]' > "${ranges_fix}"
 printf '[{"filename":"a.ts"}]' > "${files_fix}"
 jq -f "${SCRIPT_DIR}/clean.jq" "${find_fix}" > "${find_fix}.clean" && mv "${find_fix}.clean" "${find_fix}"
-assert_eq "clean-keeps-4" "4" "$(jq -r '.findings | length' "${find_fix}")"
+assert_eq "clean-keeps-5" "5" "$(jq -r '.findings | length' "${find_fix}")"
 got="$(jq --slurpfile ranges "${ranges_fix}" --slurpfile files "${files_fix}" -f "${SCRIPT_DIR}/validate.jq" "${find_fix}" | jq -c '{v:[.valid[].title],s:[.summary_only[]|{t:.title,o:(.orphaned//false)}]}')"
-assert_eq "validate-split" '{"v":["T1"],"s":[{"t":"T3","o":false},{"t":"T2","o":false},{"t":"T4","o":true}]}' "${got}"
+assert_eq "validate-split" '{"v":["T1"],"s":[{"t":"T3","o":false},{"t":"T2","o":true},{"t":"T5","o":true},{"t":"T4","o":true}]}' "${got}"
 cat > "${find_fix}" <<'EOF'
 {"verdict":"v","findings":[
  {"path":"a.ts","line":5,"severity":"low","title":42,"body":"B"},

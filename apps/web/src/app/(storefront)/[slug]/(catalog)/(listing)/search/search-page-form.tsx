@@ -28,6 +28,11 @@ export function SearchPageForm({ action, defaultQuery }: SearchPageFormProps) {
     }
   };
 
+  // The owner keys this form by the route query: client-side navigation
+  // (did-you-mean links, the persistent navbar) remounts the whole form,
+  // resetting both the uncontrolled input (defaultValue alone would keep
+  // showing the previous query) and any validation error. A key here
+  // would NOT reset this component's own state.
   return (
     <div className="mt-6 max-w-xl">
       <form
@@ -41,10 +46,6 @@ export function SearchPageForm({ action, defaultQuery }: SearchPageFormProps) {
           Search products
         </label>
         <input
-          // Remount per route query: client-side navigation (did-you-mean
-          // links, the persistent navbar) reuses this uncontrolled input,
-          // and defaultValue alone would keep showing the previous query.
-          key={defaultQuery}
           id="search-page-input"
           name="q"
           type="search"

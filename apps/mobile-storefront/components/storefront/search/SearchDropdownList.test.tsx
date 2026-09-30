@@ -142,10 +142,14 @@ describe('SearchDropdownList', () => {
     expect(screen.queryByLabelText(/see all results/i)).toBeNull();
   });
 
-  it('shows the hint and hides see-all for punctuation-only input', () => {
+  it.each([
+    ['settled debounced query', '!!'],
+    ['unsettled debounce', ''],
+  ])('shows the hint and hides see-all for punctuation-only input (%s)', (_label, query) => {
     // "!!" passes the length check but normalizes to nothing, so the
-    // submit gate rejects it: the hint must explain why instead of leaving
-    // a visible button that does nothing when pressed.
+    // submit gate rejects it: the hint must explain why instead of
+    // leaving a visible button that does nothing when pressed — both
+    // before the debounce settles and after.
     render(
       <SearchDropdownList
         categories={[]}
@@ -158,7 +162,7 @@ describe('SearchDropdownList', () => {
         onSeeAllResults={() => {}}
         onSuggestionPress={() => {}}
         products={[]}
-        query=""
+        query={query}
         recentSearches={[]}
         showMinLengthHint
       />
@@ -168,6 +172,7 @@ describe('SearchDropdownList', () => {
       screen.getByLabelText('Type at least 2 characters to search')
     ).toBeTruthy();
     expect(screen.queryByLabelText(/see all results/i)).toBeNull();
+    expect(screen.queryByText(/no results for/i)).toBeNull();
   });
 
   it('hides the minimum-length hint once the input is long enough', () => {

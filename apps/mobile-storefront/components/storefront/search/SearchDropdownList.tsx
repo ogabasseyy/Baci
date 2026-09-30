@@ -50,7 +50,12 @@ export function SearchDropdownList({
   recentSearches,
   showMinLengthHint = false,
 }: SearchDropdownListProps) {
-  const hasQuery = query.length >= MIN_SEARCH_QUERY_LENGTH;
+  // Searchability, not just length: once the debounce settles on
+  // punctuation-only input like "!!", there is no actionable query, so
+  // the idle branch (hint + recents) renders instead of a bare
+  // `No results for "!!"` without validation guidance.
+  const hasQuery =
+    query.length >= MIN_SEARCH_QUERY_LENGTH && isSearchableQuery(query);
   const trimmedCurrentQuery = currentQuery.trim();
   // Mirrors the submit gate exactly (length AND searchable): punctuation-only
   // input like "!!" passes the length check but normalizes to nothing, so

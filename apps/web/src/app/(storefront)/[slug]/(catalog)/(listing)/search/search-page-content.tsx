@@ -136,7 +136,14 @@ export async function SearchPageContent({
             </p>
           </div>
 
-          <SearchPageForm action={searchBasePath} defaultQuery={query} />
+          {/* Keyed by route query so client-side navigation remounts the
+          form, resetting the uncontrolled input and any validation
+          error for the new results. */}
+          <SearchPageForm
+            key={query}
+            action={searchBasePath}
+            defaultQuery={query}
+          />
 
           {!searchFailed && effectiveResult.didYouMean && didYouMeanHref && (
             <p className="mt-4 text-sm text-store-background-text/55">

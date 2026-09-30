@@ -200,6 +200,8 @@ cat > "${dup_fix}" <<'EOF'
 EOF
 got="$(jq -s --arg marker '<!-- muse-code-review sha:AAA base:BBB -->' -f "${SCRIPT_DIR}/dedupe.jq" "${dup_fix}")"
 assert_eq "dedupe-real-only" "1" "${got}"
+got="$(jq -s --arg marker '<!-- muse-code-review sha:AAA base:BBB -->' -f "${SCRIPT_DIR}/fallback.jq" "${dup_fix}")"
+assert_eq "dedupe-fallback-only" "1" "${got}"
 rm -f "${dup_fix}"
 
 # --- schema.json ---

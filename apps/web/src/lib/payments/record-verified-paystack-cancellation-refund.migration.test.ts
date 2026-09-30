@@ -53,6 +53,20 @@ describe('verified paystack cancellation refund migration', () => {
     );
   });
 
+  it('restricts the unlinked fallback to the completed leg', () => {
+    expect(existsSync(migrationPath)).toBe(true);
+    if (!existsSync(migrationPath)) return;
+
+    const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
+
+    // A refund_pending leg is mid-flight with its own outstanding
+    // refund: without the completed-leg condition the same verified
+    // refund would satisfy both legs and retire the order early.
+    expect(migrationSql).toContain(
+      "r.metadata->>'payment_transaction_id' IS NULL -- The unlinked legacy refund attributes to the sole -- completed leg only: a refund_pending leg is mid-flight -- with its own outstanding refund, so the same completed -- refund must not also satisfy it (or one verified -- refund would retire two legs while the second provider -- refund is still pending). AND p.status = 'completed' AND 1 = ("
+    );
+  });
+
   it('requires matching currencies for every refunded payment leg', () => {
     expect(existsSync(migrationPath)).toBe(true);
     if (!existsSync(migrationPath)) return;

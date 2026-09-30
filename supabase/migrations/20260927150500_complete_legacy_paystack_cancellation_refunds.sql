@@ -264,6 +264,13 @@ BEGIN
             r.metadata->>'payment_transaction_id' = p.id::text
             OR (
               r.metadata->>'payment_transaction_id' IS NULL
+              -- The unlinked legacy refund attributes to the sole
+              -- completed leg only: a refund_pending leg is mid-flight
+              -- with its own outstanding refund, so the same completed
+              -- refund must not also satisfy it (or one verified
+              -- refund would retire two legs while the second provider
+              -- refund is still pending).
+              AND p.status = 'completed'
               AND 1 = (
                 SELECT count(*) FROM public.transactions only_payment
                  WHERE only_payment.order_id = v_order.id

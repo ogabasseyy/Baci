@@ -1,5 +1,6 @@
 .findings |= (map(select(type == "object"
   and (.path | type) == "string"
+  and (.path | length) > 0
   and ((.line | tostring) | test("^[0-9]+$"))
   and ((.line | tonumber?) // -1) >= 0
   and ((.title // "") | type) == "string"

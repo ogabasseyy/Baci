@@ -48,7 +48,7 @@ vi.mock('@/lib/logger', () => ({
 
 import { createPublicClient } from '@/lib/supabase/public';
 import { createClient } from '@/lib/supabase/server';
-import { getStorefrontSearchProducts } from './storefront-search';
+import { getStorefrontSearchProducts } from './storefront-search-products';
 
 describe('getStorefrontSearchProducts submission tracking', () => {
   beforeEach(() => {

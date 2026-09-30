@@ -44,7 +44,7 @@ function buildPresentation(
       setPayWithWallet: vi.fn(),
       amountUsed: 100,
       remainingAmount: 1_200,
-      checkoutPayWithWallet: true,
+      checkoutPayWithWallet: false,
     },
     hasUser: true,
     currencySymbol: '₦',
@@ -75,6 +75,7 @@ describe('deriveCheckoutOrderSummaryPresentation', () => {
       taxAmount: 100,
       discountAmount: 50,
       remainingAmount: 1_200,
+      payWithWallet: false,
     });
     expect(model.desktop).toMatchObject({
       displayItems: display.displayItems,
@@ -82,6 +83,8 @@ describe('deriveCheckoutOrderSummaryPresentation', () => {
       orderTotals: { total: 1_300, taxAmount: 100 },
       taxLabel: 'Tax',
       remainingAmount: 1_200,
+      payWithWallet: true,
+      checkoutPayWithWallet: false,
     });
     expect(model.discount).toMatchObject({
       visible: false,

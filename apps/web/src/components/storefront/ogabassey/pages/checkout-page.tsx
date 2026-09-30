@@ -22,7 +22,7 @@ import { CheckoutStepComposition } from './checkout/components/CheckoutStepCompo
 import {
   DiscountCodeInput,
 } from '@/components/storefront/checkout/discount-code-input';
-import { MobileOrderSummary } from '../components/MobileOrderSummary';
+import { MobileOrderSummary } from '../components/MobileCheckoutComponents';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
 import { useCheckoutFormState } from './checkout/hooks/use-checkout-form-state';
@@ -308,9 +308,7 @@ export const CheckoutPage: React.FC = () => {
     displayItems,
     effectiveCheckoutCartTotal,
     effectiveItemSubtotal,
-    summarySubtotal,
     hasCheckoutCartItems,
-    mobileSummaryCart,
     summaryOrder,
   } = checkoutDisplay;
 

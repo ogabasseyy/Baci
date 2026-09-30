@@ -64,4 +64,28 @@ describe('discoverMcpProducts structured routing', () => {
       supabase,
     }));
   });
+
+  it('sanitizes and trims catalog filters and omits a blank condition', async () => {
+    const sanitizeString = vi.fn((value: string) => value.replaceAll('<unsafe>', ''));
+    discoverStructuredProducts.mockResolvedValue({ selectedProducts: [], sanitizedQuery: undefined, priceScanComplete: true });
+
+    await discoverMcpProducts({
+      args: {
+        intent: validIntent,
+        brand: ' <unsafe> Apple  ',
+        category: '  Smartphones <unsafe> ',
+        condition: '   ',
+      },
+      merchantId: 'merchant',
+      sanitizeString,
+      supabase,
+    });
+
+    expect(discoverStructuredProducts).toHaveBeenCalledWith(expect.objectContaining({
+      args: expect.objectContaining({ brand: 'Apple', category: 'Smartphones', condition: undefined }),
+    }));
+    expect(sanitizeString).toHaveBeenNthCalledWith(1, ' <unsafe> Apple  ', 50);
+    expect(sanitizeString).toHaveBeenNthCalledWith(2, '  Smartphones <unsafe> ', 50);
+    expect(sanitizeString).toHaveBeenNthCalledWith(3, '   ', 50);
+  });
 });

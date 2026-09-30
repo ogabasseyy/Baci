@@ -81,7 +81,14 @@ async function loadSemanticIds(
     ids.push(...page);
     if (page.length < SEMANTIC_PAGE_SIZE) break;
   }
-  return { ids: uniqueIds(ids), truncated: ids.length >= MAX_SEMANTIC_CANDIDATES };
+  if (ids.length < MAX_SEMANTIC_CANDIDATES) return { ids: uniqueIds(ids), truncated: false, probeFailed: false };
+  try {
+    const next = await semanticSearch(query, MAX_SEMANTIC_CANDIDATES);
+    return { ids: uniqueIds(ids), truncated: next.length > 0, probeFailed: false };
+  } catch {
+    // Keep confirmed candidates, but do not claim the source was exhausted.
+    return { ids: uniqueIds(ids), truncated: true, probeFailed: true };
+  }
 }
 
 async function loadBrowseRows(merchantId: string, supabase: SupabaseClient) {
@@ -140,7 +147,7 @@ export async function loadStructuredDiscoveryCandidates({
   const lexicalPromise = loadLexicalIds(query, merchantId, supabase);
   const semanticPromise = semanticSearch
     ? loadSemanticIds(query, semanticSearch).then(
-      (value) => ({ value, unavailable: false }),
+      (value) => ({ value, unavailable: value.probeFailed }),
       () => ({ value: { ids: [], truncated: false }, unavailable: true })
     )
     : Promise.resolve({ value: { ids: [], truncated: false }, unavailable: false });

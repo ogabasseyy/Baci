@@ -17,6 +17,8 @@ export function canonicalizeDiscoveryProductType(value: string) {
     security_cameras: 'security_camera',
     fragrance_diffusers: 'fragrance_diffuser',
   };
-  if (publicPluralAliases[canonical]) return publicPluralAliases[canonical];
+  if (Object.hasOwn(publicPluralAliases, canonical)) {
+    return publicPluralAliases[canonical];
+  }
   return canonical;
 }

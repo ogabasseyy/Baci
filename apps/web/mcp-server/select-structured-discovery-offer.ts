@@ -155,7 +155,9 @@ export function selectStructuredDiscoveryOffer(
           : null;
       addCandidate({ kind: 'variant', attributes: normalizeDiscoveryOptionAttributes(record(variant.attributes)),
         condition: normalizeCanonicalProductCondition(variantCondition) || baseCondition,
-        price, compareAtPrice: null, stockQuantity: variant.stock_quantity, sourceOption: rawVariant });
+        price, compareAtPrice: price === finitePrice(product.price)
+          ? finitePrice(product.compare_at_price) ?? null : null,
+        stockQuantity: variant.stock_quantity, sourceOption: rawVariant });
     }
   }
 
@@ -170,10 +172,11 @@ export function selectStructuredDiscoveryOffer(
       stockQuantity: offer.stock_quantity, sourceOption: rawOffer });
   }
 
-  const match = candidates
+  const matches = candidates
     .filter((candidate) => intent.alternatives.some((alternative) =>
       matchesAlternative(product, candidate, discovery, alternative, excludedTypes)))
-    .sort((left, right) => left.price - right.price)[0];
+    .sort((left, right) => left.price - right.price);
+  const match = matches[0];
   if (!match) return undefined;
 
   const stockSummary = getMcpProductStockSummary({
@@ -186,9 +189,9 @@ export function selectStructuredDiscoveryOffer(
 
   return {
     ...row,
-    availableVariants: match.kind === 'variant' && match.sourceOption
-      ? [match.sourceOption as (typeof row.availableVariants)[number]]
-      : [],
+    availableVariants: matches.flatMap((candidate) =>
+      candidate.kind === 'variant' && candidate.sourceOption
+        ? [candidate.sourceOption as (typeof row.availableVariants)[number]] : []),
     displayPrice: match.price,
     displayCondition: match.condition,
     displayCompareAtPrice: match.compareAtPrice,

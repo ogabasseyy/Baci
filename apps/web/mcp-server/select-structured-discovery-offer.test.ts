@@ -178,3 +178,39 @@ it.each(['smartphone', 'Smartphones', 'phone'])('matches stored %s metadata with
   const row = makeRow({ discovery_metadata: { product_type: productType } });
   expect(selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone' }))?.displayPrice).toBe(500);
 });
+
+
+it('shows all matching purchasable variants while keeping one headline option', () => {
+  const row = makeRow({ has_variants: true, manage_stock: true });
+  row.availableVariants = [
+    { id: 'blue', product_id: 'phone', attributes: { Storage: '256GB', Colour: 'Blue' }, price_override: 400, stock_quantity: 2 },
+    { id: 'red', product_id: 'phone', attributes: { Storage: '256GB', Colour: 'Red' }, price_override: 450, stock_quantity: 1 },
+    { id: 'wrong-storage', product_id: 'phone', attributes: { Storage: '128GB' }, price_override: 300, stock_quantity: 2 },
+    { id: 'sold-out', product_id: 'phone', attributes: { Storage: '256GB' }, price_override: 350, stock_quantity: 0 },
+    { id: 'over-budget', product_id: 'phone', attributes: { Storage: '256GB' }, price_override: 600, stock_quantity: 2 },
+  ] as typeof row.availableVariants;
+  const selected = selectStructuredDiscoveryOffer(row, intent({ attributes: [
+    { key: 'storage_gb', operator: 'gte', value: 256 },
+  ] }), { max_price: 500 });
+  expect(selected?.displayPrice).toBe(400);
+  expect(selected?.selectedOption).toMatchObject({ option_id: 'blue', price: 400 });
+  expect(selected?.availableVariants.map((variant) => variant.id)).toEqual(['blue', 'red']);
+});
+
+it('does not claim an unknown product type satisfies an explicit exclusion', () => {
+  const row = makeRow({ category: 'Accessories', discovery_metadata: {} });
+  expect(selectStructuredDiscoveryOffer(row, {
+    alternatives: [{}], excluded_product_types: ['charger'],
+  })).toBeUndefined();
+});
+
+
+it('retains the base comparison price for variants that inherit the product price', () => {
+  const row = makeRow({ has_variants: true });
+  row.availableVariants = [{id: 'blue', product_id: 'phone', attributes: { color: 'blue' }, stock_quantity: 0}] as typeof row.availableVariants;
+  const selected = selectStructuredDiscoveryOffer(row, intent({}));
+  expect(selected?.displayPrice).toBe(500);
+  expect(selected?.displayCompareAtPrice).toBe(600);
+  row.availableVariants = [{id: 'blue', product_id: 'phone', attributes: { color: 'blue' }, stock_quantity: 0, price_override: 400}] as typeof row.availableVariants;
+  expect(selectStructuredDiscoveryOffer(row, intent({}))?.displayCompareAtPrice).toBeNull();
+});

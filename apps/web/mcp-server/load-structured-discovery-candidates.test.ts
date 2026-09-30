@@ -37,6 +37,31 @@ const ranked = (ids: string[], total = ids.length) => ids.map((product_id) => ({
 const productRows = (ids: string[]) => ids.map((id) => ({ id, name: id }));
 
 describe('loadStructuredDiscoveryCandidates', () => {
+  it('preserves collected semantic candidates when the final coverage probe fails', async () => {
+    const ids = Array.from({length: 200}, (_, index) => `s-${index}`);
+    const fixture = setup({lexicalPages: [[]], products: productRows(ids)});
+    const semanticSearch = async (_query: string, offset: number) => {
+      if (offset === 200) throw new Error('probe unavailable');
+      return ids.slice(offset, offset + 40);
+    };
+    const result = await loadStructuredDiscoveryCandidates({
+      query: 'camera', merchantId: 'merchant-1', supabase: fixture.supabase, semanticSearch,
+    });
+    expect(result.products.map(({id}) => id)).toEqual(ids);
+    expect(result).toMatchObject({truncated: true, semanticUnavailable: true});
+  });
+
+  it.each([200, 201])('checks whether a %s-result semantic scan is actually truncated', async (count) => {
+    const ids = Array.from({length: count}, (_, index) => `s-${index}`);
+    const fixture = setup({lexicalPages: [[]], products: []});
+    const semanticSearch = vi.fn(async (_query: string, offset: number) => ids.slice(offset, offset + 40));
+    const result = await loadStructuredDiscoveryCandidates({
+      query: 'camera', merchantId: 'merchant-1', supabase: fixture.supabase, semanticSearch,
+    });
+    expect(result.truncated).toBe(count > 200);
+    expect(semanticSearch.mock.calls.at(-1)?.[1]).toBe(200);
+  });
+
   it.each([500, 501])('distinguishes an exact-cap %s-product catalog from truncation', async (count) => {
     const rows = productRows(Array.from({length: count}, (_, index) => `p-${index}`));
     const ranges: number[][] = [];
@@ -130,7 +155,7 @@ describe('loadStructuredDiscoveryCandidates', () => {
     });
 
     expect(rpc).toHaveBeenCalledTimes(5);
-    expect(semanticSearch.mock.calls.map(([ , offset ]) => offset)).toEqual([0, 40, 80, 120, 160]);
+    expect(semanticSearch.mock.calls.map(([ , offset ]) => offset)).toEqual([0, 40, 80, 120, 160, 200]);
     expect(result.truncated).toBe(true);
   });
 

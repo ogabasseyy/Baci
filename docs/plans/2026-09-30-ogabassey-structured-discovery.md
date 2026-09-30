@@ -52,3 +52,12 @@ Numeric attribute keys use canonical units, not formatted strings. Variant attri
 `PUT /api/products/discovery-metadata` replaces the entire facts document. Callers must send every fact they intend to retain; omitted fields are removed. This is not a partial PATCH or server-side merge. Validated JSON must fit the database's 16 KiB UTF-8 limit.
 
 The candidate cap is 500 keyword IDs plus 200 semantic IDs (deduplicated), followed by at most seven 100-product hydration batches. Each batch may load applicable variants and offers. Empty-query browsing is capped at 500 products. These are request bounds, not a measured production throughput guarantee. Do not trim candidates to the requested result limit before constraints and same-option budgets are applied: that would hide qualifying products. Validate query latency and database load against the live catalog before enabling the semantic flag; reduce the candidate budget only with relevance evaluation. Truncated price ranges/orderings and failed required option lookups return an incomplete result, preventing an apparently exhaustive price answer. Broad non-price discovery may return a disclosed partial selection.
+
+
+## Reviewed contract decisions
+
+Mandatory intent is the owner-approved contract for this new MCP integration; no independent query-only production consumer was found. An unconstrained browse uses `alternatives: [{}]`. Do not restore the retired sentence parser as a fallback.
+
+Explicit exclusions also require verified product type: an unknown type cannot prove that an item is not a charger. Populate verified catalog facts before production rollout rather than silently weakening shopper constraints. Custom product types outside the advertised alias vocabulary must use the same canonical identifier on metadata writes and intent inputs; arbitrary plural guessing is not performed.
+
+Variant display retains all purchasable variants satisfying the complete intent and price range, while `matched_option` identifies the single option supplying the headline price. Unmatched, sold-out, or over-budget variants are not advertised as matching options.

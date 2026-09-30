@@ -27,6 +27,11 @@ function safeQuery(args: DiscoveryArgs, sanitizeString: DiscoveryInput['sanitize
   return query || undefined;
 }
 
+function safeFilter(value: string | undefined, sanitizeString: DiscoveryInput['sanitizeString']): string | undefined {
+  const normalized = value ? sanitizeString(value, 50).trim() : '';
+  return normalized || undefined;
+}
+
 export async function discoverMcpProducts({
   args,
   merchantId,
@@ -58,7 +63,12 @@ export async function discoverMcpProducts({
 
   return discoverStructuredProducts({
     intent: parsed.data,
-    args,
+    args: {
+      ...args,
+      brand: safeFilter(args.brand, sanitizeString),
+      category: safeFilter(args.category, sanitizeString),
+      condition: safeFilter(args.condition, sanitizeString),
+    },
     merchantId,
     supabase,
     semanticSearch,

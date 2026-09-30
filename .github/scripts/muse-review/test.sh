@@ -133,6 +133,9 @@ seen_add "apps/web/AGENTS.md"
 assert_eq "seen-keeps-both" "2" "${#MUSE_CANDIDATES[@]}"
 seen_add "apps/web/AGENTS.md"
 assert_eq "seen-dedupes" "2" "${#MUSE_CANDIDATES[@]}"
+seen_add "my dir/AGENTS.md"
+seen_add "my dir/AGENTS.md"
+assert_eq "seen-spaces-dedupe" "3" "${#MUSE_CANDIDATES[@]}"
 seen_reset
 assert_eq "seen-reset" "0" "${#MUSE_CANDIDATES[@]}"
 

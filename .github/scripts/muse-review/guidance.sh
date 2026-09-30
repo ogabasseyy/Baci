@@ -64,37 +64,39 @@ emit_guidance() {
     content="$(bound_untrusted "${content}" "${guidance_cap}")"
     trunc_note=" [TRUNCATED at ${guidance_cap} bytes]"
   fi
-  content_len="$(printf '%s' "${content}" | wc -c)"
-  if (( guidance_bytes + content_len > guidance_budget )); then
-    guidance_capped=true
-    printf '\n(Guidance budget exhausted at %s bytes; %s and any further scoped files omitted.)\n' \
-      "${guidance_budget}" "${candidate}" >> "${guidance_file}"
-    return 0
-  fi
-  guidance_bytes=$(( guidance_bytes + content_len ))
   # Candidate paths from changed files are submitter-controlled: flatten
   # newlines for display and omit the path from the block attribute (a quote
   # in the path would break out of it). The 300-char cut is a display label,
   # not a byte budget, so char-based slicing is correct here.
   safe_candidate="$(printf '%s' "${candidate}" | tr '\n' '_' | neutralize_tags)"
   safe_candidate="${safe_candidate:0:300}"
-  {
-    if [[ "${source}" == UNTRUSTED* ]]; then
-      # Submitter-controlled content AND label: the candidate path derives
-      # from changed files, so an instruction-like directory name would
-      # otherwise place steering text beside guidance as a plain heading.
-      # Keep the label inside the untrusted block with the content.
-      printf '<untrusted_guidance>\n### %s (%s)%s\n\n' \
-        "${safe_candidate}" "${source}" "${trunc_note}"
+  # Budget the whole rendered block (heading, label, wrapper), not just
+  # the content: hundreds of short files under long paths could otherwise
+  # overshoot the aggregate budget severalfold with no warning.
+  if [[ "${source}" == UNTRUSTED* ]]; then
+    # Submitter-controlled content AND label: the candidate path derives
+    # from changed files, so an instruction-like directory name would
+    # otherwise place steering text beside guidance as a plain heading.
+    # Keep the label inside the untrusted block with the content.
+    block="$(printf '<untrusted_guidance>\n### %s (%s)%s\n\n' \
+      "${safe_candidate}" "${source}" "${trunc_note}"
       printf '%s' "${content}" | iconv -c -f UTF-8 -t UTF-8 2>/dev/null \
         | neutralize_tags || true
-      printf '\n</untrusted_guidance>\n'
-    else
-      printf '\n### %s (%s)%s\n\n' "${safe_candidate}" "${source}" "${trunc_note}"
+      printf '\n</untrusted_guidance>')"
+  else
+    block="$(printf '\n### %s (%s)%s\n\n' "${safe_candidate}" "${source}" "${trunc_note}"
       printf '%s' "${content}" | iconv -c -f UTF-8 -t UTF-8 2>/dev/null || true
-      printf '\n'
-    fi
-  } >> "${guidance_file}"
+      printf '\n')"
+  fi
+  block_len="$(printf '%s' "${block}" | wc -c)"
+  if (( guidance_bytes + block_len > guidance_budget )); then
+    guidance_capped=true
+    printf '\n(Guidance budget exhausted at %s bytes; %s and any further scoped files omitted.)\n' \
+      "${guidance_budget}" "${candidate}" >> "${guidance_file}"
+    return 0
+  fi
+  guidance_bytes=$(( guidance_bytes + block_len ))
+  printf '%s\n' "${block}" >> "${guidance_file}"
 }
 seen_reset
 for candidate in AGENTS.md CLAUDE.md CONTRIBUTING.md .github/copilot-instructions.md; do

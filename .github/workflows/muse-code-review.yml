@@ -145,6 +145,9 @@ jobs:
       - name: Collect PR diff and build prompt
         id: diff
         if: steps.prereq.outputs.should_run == 'true'
+        # Advisory: a failed collection (or timeout) posts a fallback note
+        # instead of failing the job (Post handles DIFF_OUTCOME).
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -230,17 +233,20 @@ jobs:
       - name: Post Muse review
         if: >-
           steps.prereq.outputs.should_run == 'true' &&
-          steps.diff.outputs.should_review == 'true' &&
           steps.diff.outputs.duplicate != 'true' &&
-          steps.guard.outputs.fresh != 'false'
+          steps.guard.outputs.fresh != 'false' &&
+          (steps.diff.outputs.should_review == 'true' || steps.diff.outcome != 'success')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ steps.diff.outputs.head_sha }}
           BASE_SHA: ${{ steps.diff.outputs.base_sha }}
+          HEAD_SHA_EVENT: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA_EVENT: ${{ github.event.pull_request.base.sha }}
           MUSE_OUTCOME: ${{ steps.muse.outcome }}
           DIFF_FAILED: ${{ steps.diff.outputs.diff_failed }}
+          DIFF_OUTCOME: ${{ steps.diff.outcome }}
           REVIEW_FILE: ${{ steps.muse.outputs.review_file }}
           SCRIPT_DIR: ${{ steps.scriptdir.outputs.dir }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

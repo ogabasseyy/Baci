@@ -11,8 +11,6 @@ import {
 } from './checkout/hooks/use-dva-confirm-transfer';
 
 import {
-  CHECKOUT_FUNNEL_EVENTS,
-  buildCheckoutFunnelProperties,
   getCheckoutPaymentIntent,
 } from '@baci/shared/contracts';
 import { CheckoutPaymentSessionOverlays } from './checkout/components/CheckoutPaymentSessionOverlays';
@@ -60,7 +58,6 @@ import {
   type PendingCheckoutOrderSnapshot,
 } from './checkout/pending-checkout-order';
 import { useCheckoutSubmissionState } from './checkout/hooks/use-checkout-submission-state';
-import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import { useRedvaultPaymentAvailability } from './checkout/hooks/use-redvault-payment-availability';
 import {
   inferAddressLocationFromInput,
@@ -379,22 +376,12 @@ export const CheckoutPage: React.FC = () => {
     lastName,
     customerEmail,
   });
-  const {
-    address: deliveryAddress,
-    method: deliverySelection,
-    quotes: deliveryQuotes,
-    options: deliveryOptions,
-    validation: { isValid: isDeliveryValid },
-    cost: deliveryCost,
-  } = delivery;
-  const { addresses, selectedId: selectedAddressId, isNewMode: isNewAddressMode } = deliveryAddress;
+  const { quotes: deliveryQuotes, cost: deliveryCost } = delivery;
   const {
     items: shippingQuotes,
     selectedId: selectedQuoteId,
     matchesSelectedMethod: selectedQuoteMatchesDeliveryMethod,
   } = deliveryQuotes;
-  const { isNewDeliveryAddressReady } = deliveryAddress;
-  const deliveryAddressHandlers = deliveryAddress.handlers;
 
   // Note: newAddressState, newAddressCity, newAddressStreet are now part of checkoutForm (persisted)
 
@@ -450,11 +437,9 @@ export const CheckoutPage: React.FC = () => {
   };
 
   const paymentMethod = paymentSession.method;
-  const redvaultStatus = paymentSession.redvault.status;
   const redvaultOrderReady = paymentSession.redvault.orderReady;
   const walletAmountUsed = paymentSession.wallet.amountUsed;
   const remainingAmount = paymentSession.wallet.remainingAmount;
-  const total = paymentSession.total;
 
   const completeWalletFundedOrder = useWalletFundedOrderCompletion({
     clearCart,
@@ -686,92 +671,51 @@ export const CheckoutPage: React.FC = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
           <CheckoutStepComposition
-            flow={{
-              currentStep,
-              completedSteps,
-              focusOnActivate: focusActiveStep,
-              signedIn: Boolean(user),
-            }}
-            onSignIn={() => setIsAuthModalOpen(true)}
-            contact={{
-              values: { firstName, lastName, customerEmail, customerPhone },
-              onChange: setCheckoutField,
-              account: { createAccount, password: accountPassword },
-              onAccountChange: ({
-                createAccount: nextCreateAccount,
-                password,
-              }) => {
-                setCreateAccount(nextCreateAccount);
-                setAccountPassword(password);
-              },
-              onOpen: () => setCurrentStep('contact'),
-              onComplete: completeContact,
-            }}
-            delivery={{
-              addressFields: {
+            session={{
+              flow: {
+                currentStep,
+                completedSteps,
+                focusOnActivate: focusActiveStep,
                 signedIn: Boolean(user),
-                addresses,
-                isNewAddressMode,
-                selectedAddressId,
-                newAddressStreet,
-                newAddressCity,
-                newAddressState,
-                merchantCountry,
-                addressReady: isHydrated && isNewDeliveryAddressReady,
-                onToggleAddressMode: () =>
-                  deliveryAddress.setIsNewMode(!isNewAddressMode),
-                onSelectAddress: deliveryAddressHandlers.onSelectAddress,
-                onStreetChange: deliveryAddressHandlers.onStreetChange,
-                onSelectPlace: deliveryAddressHandlers.onSelectPlace,
+                setCurrentStep,
+                setCompletedSteps,
               },
-              deliveryOptions,
-              isDeliveryValid,
-              onContinue: () => {
-                captureClientEvent(
-                  CHECKOUT_FUNNEL_EVENTS.checkoutStepCompleted,
-                  buildCheckoutFunnelProperties({
-                    channel: 'web',
-                    checkoutStep: 'shipping_info',
-                    source: 'web_checkout',
-                  })
-                );
-                setCompletedSteps((prev) => ({ ...prev, delivery: true }));
-                setCurrentStep('payment');
+              onSignIn: () => setIsAuthModalOpen(true),
+              contact: {
+                values: { firstName, lastName, customerEmail, customerPhone },
+                onChange: setCheckoutField,
+                onComplete: completeContact,
+                account: {
+                  createAccount,
+                  password: accountPassword,
+                  setCreateAccount,
+                  setPassword: setAccountPassword,
+                },
               },
-              onOpen: () => setCurrentStep('delivery'),
-              summary:
-                deliveryMethod === 'door'
-                  ? `By Road${newAddressCity ? ` · ${newAddressCity}` : ''}`
-                  : deliveryMethod === 'pickup_station'
-                    ? 'Pickup Station'
-                    : deliveryMethod === 'pickup'
-                      ? 'Store Pickup'
-                      : 'By Air',
-            }}
-            payment={{
-              paymentTab: paymentSession.tab,
-              setPaymentTab: paymentSession.setTab,
-              paymentMethod,
-              setPaymentMethod: paymentSession.selectMethod,
-              isProcessing,
-              isPayForMeValid,
-              isDeliveryValid,
-              payForMeDetails: paymentSession.payForMe.details,
-              setPayForMeDetails: paymentSession.payForMe.setDetails,
-              dva: { isInitializingDva },
-              newsletterOptIn,
-              setNewsletterOptIn,
-              handlePlaceOrder,
-              setCurrentStep,
-              merchant,
-              user,
-              remainingAmount,
-              orderAmount: total,
-              currency: currencyCode,
-              redvaultAvailable: redvaultAvailability.available,
-              redvaultStatus,
-              redvaultSummary: paymentSession.redvault.summary,
-              redvaultOrderReady: Boolean(redvaultOrderReady),
+              delivery: {
+                session: delivery,
+                address: {
+                  street: newAddressStreet,
+                  city: newAddressCity,
+                  state: newAddressState,
+                  merchantCountry,
+                  isHydrated,
+                },
+              },
+              payment: {
+                session: paymentSession,
+                isProcessing,
+                isPayForMeValid,
+                isInitializingDva,
+                newsletterOptIn,
+                setNewsletterOptIn,
+                handlePlaceOrder,
+                merchant,
+                user,
+                currency: currencyCode,
+                redvaultAvailable: redvaultAvailability.available,
+                redvaultOrderReady: Boolean(redvaultOrderReady),
+              },
             }}
           />
 

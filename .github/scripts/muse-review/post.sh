@@ -2,9 +2,21 @@
 # Validate the agent output, render the summary plus inline threads, and post.
 #
 # Env in: GH_TOKEN, GITHUB_REPOSITORY, PR_NUMBER, HEAD_SHA, BASE_SHA,
-#   MUSE_OUTCOME, DIFF_FAILED, REVIEW_FILE, RUN_URL, RUNNER_TEMP, SCRIPT_DIR.
+#   HEAD_SHA_EVENT, BASE_SHA_EVENT, MUSE_OUTCOME, DIFF_FAILED, DIFF_OUTCOME,
+#   REVIEW_FILE, RUN_URL, RUNNER_TEMP, SCRIPT_DIR.
 # Advisory to the end: a failed POST warns, never fails the job.
 set -euo pipefail
+
+# Event-SHA fallback: when evidence collection itself failed, the step
+# outputs are unset, but the marker and commit_id still need values.
+# Remaining step outputs default fail-closed (unset reads would die under
+# set -u exactly when the fallback path needs them most).
+: "${HEAD_SHA:=${HEAD_SHA_EVENT}}"
+: "${BASE_SHA:=${BASE_SHA_EVENT}}"
+: "${REVIEW_FILE:=}"
+: "${DIFF_FAILED:=false}"
+: "${MUSE_OUTCOME:=skipped}"
+: "${DIFF_OUTCOME:=failure}"
 
 # shellcheck disable=SC1091  # SCRIPT_DIR is set by the workflow step
 . "${SCRIPT_DIR}/lib.sh"
@@ -40,7 +52,22 @@ is_fallback=false
 if [[ -f "${REVIEW_FILE}" ]]; then
   raw_output="$(cat "${REVIEW_FILE}")"
 fi
-if [[ "${DIFF_FAILED}" == "true" ]]; then
+if [[ "${DIFF_OUTCOME}" != "success" ]]; then
+  is_fallback=true
+  review="## Verdict
+
+Muse did not review this PR: evidence collection failed (step outcome:
+\`${DIFF_OUTCOME}\`), so there was nothing to review.
+
+## Findings
+
+- low: No review was attempted because evidence collection failed —
+  check the workflow logs.
+
+## Suggested next steps
+
+Re-run the workflow, or inspect the logs."
+elif [[ "${DIFF_FAILED}" == "true" ]]; then
   is_fallback=true
   review="## Verdict
 
@@ -233,8 +260,24 @@ jq -n \
     else { body: $body, event: "COMMENT", commit_id: $sha, comments: $comments } end' > "${payload_file}"
 
 # Advisory to the end: a failed POST must warn, never fail the job.
+# The reviews endpoint is all-or-nothing: one invalid inline comment (stale
+# line, decoded path mismatch) rejects the summary too, so retry once as
+# summary-only with an explicit note rather than losing the whole review.
+post_resp="${RUNNER_TEMP}/muse-post-resp.txt"
 if ! gh api --method POST \
   "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" \
-  --input "${payload_file}" >/dev/null; then
-  echo "::warning::Failed to post Muse review; see previous logs."
+  --input "${payload_file}" > "${post_resp}" 2>&1; then
+  echo "::warning::Review POST failed: $(head -c 300 "${post_resp}" 2>/dev/null || true)"
+  if [[ "${inline_payload}" != "[]" ]]; then
+    echo "::warning::Retrying as summary-only."
+    jq '.body += "\n\n<sub>Inline threads were rejected by the API; showing summary only.</sub>" | del(.comments)' \
+      "${payload_file}" > "${payload_file}.summary"
+    if ! gh api --method POST \
+      "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" \
+      --input "${payload_file}.summary" >/dev/null 2>&1; then
+      echo "::warning::Failed to post Muse review; see previous logs."
+    fi
+  else
+    echo "::warning::Failed to post Muse review; see previous logs."
+  fi
 fi

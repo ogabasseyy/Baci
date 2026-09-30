@@ -64,6 +64,51 @@ describe('initiatePaystackCancellationRefunds', () => {
     );
   });
 
+  it.each([
+    'failed',
+    'needs-attention',
+  ])('omits an immediate %s verdict from the audit row', async (status) => {
+    acceptedRefund({ status });
+
+    const refundIds = await initiatePaystackCancellationRefunds({
+      order,
+      refundedPaymentIds: new Set(),
+      supabase,
+      transactions: [transaction],
+    });
+
+    // Pre-populating the failure verdict would make the record RPC's
+    // repeat guard return before transitioning the row or queuing the
+    // merchant failure notification; the first reconcile applies it.
+    expect(refundIds).toEqual([101]);
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.not.objectContaining({
+          provider_refund_status: expect.anything(),
+        }),
+      })
+    );
+  });
+
+  it('keeps a non-terminal provider status on the audit row', async () => {
+    acceptedRefund({ status: 'queued' });
+
+    await initiatePaystackCancellationRefunds({
+      order,
+      refundedPaymentIds: new Set(),
+      supabase,
+      transactions: [transaction],
+    });
+
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          provider_refund_status: 'queued',
+        }),
+      })
+    );
+  });
+
   it('skips legs already recorded as refunded', async () => {
     acceptedRefund();
 

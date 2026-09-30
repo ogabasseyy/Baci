@@ -17,8 +17,9 @@ export async function countDeadLetteredPaystackRefundNotifications(
   supabase: Pick<SupabaseClient, 'from'>
 ): Promise<number> {
   // Rows that burned all five attempts are dead-lettered by the first
-  // claim below. Count them first so the terminal transition is
-  // reported instead of happening silently.
+  // claim below — in either claimable status, exactly as the RPC's
+  // exhausted-CTE matches them. Count them first so the terminal
+  // transition is reported instead of happening silently.
   const {
     data,
     count,
@@ -26,7 +27,7 @@ export async function countDeadLetteredPaystackRefundNotifications(
   } = await supabase
     .from('paystack_cancellation_refund_notifications')
     .select('order_id, event_type', { count: 'exact' })
-    .eq('status', 'failed')
+    .in('status', ['pending', 'failed'])
     .gte('attempts', 5)
     .limit(10);
   if (exhaustedError) throw new Error('refund_notification_claim_failed');

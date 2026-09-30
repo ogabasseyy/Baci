@@ -169,6 +169,15 @@ export async function initiatePaystackCancellationRefunds({
     const providerStatus = String(paystackRefund.data.status ?? '')
       .trim()
       .toLowerCase();
+    // A failed/needs-attention verdict must NOT be pre-populated: the
+    // record RPC treats an equal metadata verdict as a repeat and
+    // returns before transitioning the row or queuing the failure
+    // notification — and the side effect has already completed, so
+    // polling would only rotate the permanently pending row. Leave it
+    // unset so the first reconcile applies the transition; later polls
+    // repeat no-op correctly once the RPC has persisted it.
+    const failedVerdict =
+      providerStatus === 'failed' || providerStatus === 'needs-attention';
     const providerTransaction = paystackRefund.data.transaction;
     const providerPaymentId =
       typeof providerTransaction === 'number'
@@ -205,7 +214,9 @@ export async function initiatePaystackCancellationRefunds({
                 Number.isSafeInteger(providerPaymentId) && providerPaymentId > 0
                   ? providerPaymentId
                   : null,
-              provider_refund_status: providerStatus,
+              ...(failedVerdict
+                ? {}
+                : { provider_refund_status: providerStatus }),
               // Deliberately unheld: if the quarantine review below fails
               // transiently, the polling reconciler must still discover
               // this row, re-verify it, and file the review itself.
@@ -257,7 +268,7 @@ export async function initiatePaystackCancellationRefunds({
           cancellation_reason: reason ?? null,
           payment_transaction_id: transaction.id,
           provider_payment_transaction_id: providerPaymentId,
-          provider_refund_status: providerStatus,
+          ...(failedVerdict ? {} : { provider_refund_status: providerStatus }),
         },
       });
     if (insertTxError) {

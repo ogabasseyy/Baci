@@ -82,11 +82,12 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       (github.event.action != 'edited' || github.event.changes.base != null)
     runs-on: ubuntu-latest
-    # Budget: install 5 + run 10 + post 5 = 20, inside the 30-min job cap so
-    # a hung install/run still leaves time for the fallback post. The
-    # collect-phase `timeout` caps below are fail-fast kill-caps for hung
-    # network calls (steps have no timeout-minutes), not expected durations.
-    timeout-minutes: 30
+    # Budget (worst-case caps must sum below this): collect 10 + install 5
+    # + run 10 + post 5 = 30, inside the 35-min job cap, so the fallback
+    # post always retains its window plus step-overhead headroom. Phase
+    # `timeout` caps are fail-fast kill-caps for hung calls (steps have no
+    # timeout-minutes), not expected durations.
+    timeout-minutes: 35
     env:
       MUSE_MODEL_RESOLVED: ${{ vars.MUSE_MODEL != '' && vars.MUSE_MODEL || '' }}
       MUSE_EFFORT_RESOLVED: ${{ vars.MUSE_REASONING_EFFORT != '' && vars.MUSE_REASONING_EFFORT || 'medium' }}
@@ -158,12 +159,11 @@ jobs:
           set -euo pipefail
           # One phase per script (each under 300 lines); later phases exit
           # quietly when collect.sh records MUSE_STOP=1 (stale/closed PR).
-          # Only collect.sh does slow network (git deepen); the rest are
-          # fast API/local calls, so tighter caps fail faster on hangs.
-          timeout 10m bash "${SCRIPT_DIR}/collect.sh" \
-            && timeout 5m bash "${SCRIPT_DIR}/diff.sh" \
-            && timeout 5m bash "${SCRIPT_DIR}/guidance.sh" \
-            && timeout 5m bash "${SCRIPT_DIR}/prompt.sh"
+          # Phase caps sum to 10 (5+1+2+2); see the job budget above.
+          timeout 5m bash "${SCRIPT_DIR}/collect.sh" \
+            && timeout 1m bash "${SCRIPT_DIR}/diff.sh" \
+            && timeout 2m bash "${SCRIPT_DIR}/guidance.sh" \
+            && timeout 2m bash "${SCRIPT_DIR}/prompt.sh"
 
       - name: Verify head fresh
         id: guard

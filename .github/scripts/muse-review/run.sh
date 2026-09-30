@@ -31,6 +31,15 @@ if [[ -n "${MUSE_MODEL}" ]]; then
   model_args+=(--model "${MUSE_MODEL}")
 fi
 
+# Residual risk (accepted, documented): the agent holds META_API_KEY with
+# web tools ON and this runner has no egress firewall, so a prompt-injected
+# model could exfiltrate the key over the network despite --disable-shell /
+# --disable-write (those stop local writes, and the symlink sweep above
+# stops filesystem-read exfil, but neither constrains fetch). Mitigations in
+# place: the prompt forbids transmitting secrets, output is redacted before
+# posting, and the key should be minimally scoped and rotated on any
+# suspicious review output. Full containment would need runner-level egress
+# filtering, which stock GitHub-hosted runners do not offer.
 set +e
 env -u GITHUB_TOKEN -u GH_TOKEN "${HOME}/.local/bin/muse" exec \
   --prompt-file "${PROMPT_FILE}" \
@@ -42,7 +51,7 @@ env -u GITHUB_TOKEN -u GH_TOKEN "${HOME}/.local/bin/muse" exec \
   --disable-shell \
   --no-session-log \
   --output-schema "${SCRIPT_DIR}/schema.json" \
-  ${model_args[@]+"${model_args[@]}"} </dev/null > "${review_file}" 2>"${RUNNER_TEMP}/muse-stderr.log"
+  "${model_args[@]}" </dev/null > "${review_file}" 2>"${RUNNER_TEMP}/muse-stderr.log"
 muse_rc=$?
 set -e
 

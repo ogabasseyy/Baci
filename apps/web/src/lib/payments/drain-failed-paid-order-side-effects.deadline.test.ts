@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { drainFailedPaidOrderSideEffects } from '@/lib/payments/drain-failed-paid-order-side-effects';
 import { drainFailedPaidOrderSideEffectsTestKit } from '@/lib/payments/drain-failed-paid-order-side-effects.test-helpers';
+import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail';
 
 const mocks = vi.hoisted(() => ({
   finalizeOrderGatewayPayment: vi.fn(),
@@ -173,7 +174,7 @@ describe('drainFailedPaidOrderSideEffects finalize deadline', () => {
     expect(summary.failed).toEqual([]);
   });
 
-  it('stops the drain when only part of the sender budget remains', async () => {
+  it('stops the drain when only part of the single-attempt budget remains', async () => {
     const supabase = buildSupabase({ data: [failedRow] });
     mocks.finalizeOrderGatewayPayment.mockResolvedValue({
       healed: false,
@@ -181,12 +182,11 @@ describe('drainFailedPaidOrderSideEffects finalize deadline', () => {
       orderNumber: 'ORD-1',
     });
 
-    // 60s clears the old 20s check but not the full 135s four-attempt
-    // sender budget: starting finalize would abort mid-send into
-    // delivery_uncertain, marking the email completed instead of
-    // leaving the row failed for the next drain.
+    // Just under the single-attempt budget: starting finalize would
+    // abort mid-send into delivery_uncertain, marking the email
+    // completed instead of leaving the row failed for the next drain.
     const summary = await drainFailedPaidOrderSideEffects({
-      deadlineMs: Date.now() + 60_000,
+      deadlineMs: Date.now() + zeptomailSendAdmissionBudgetMs(1) - 1000,
       finalizePayment: mocks.finalizeOrderGatewayPayment,
       fileWedgeReview: vi.fn(),
       scheduleAfter,
@@ -195,6 +195,33 @@ describe('drainFailedPaidOrderSideEffects finalize deadline', () => {
 
     expect(mocks.finalizeOrderGatewayPayment).not.toHaveBeenCalled();
     expect(summary.drained).toEqual([]);
+    expect(summary.failed).toEqual([]);
+  });
+
+  it('drains a 90s pass share with the single-attempt cap', async () => {
+    const supabase = buildSupabase({ data: [failedRow] });
+    mocks.finalizeOrderGatewayPayment.mockResolvedValue({
+      healed: false,
+      kind: 'completed',
+      orderNumber: 'ORD-1',
+    });
+
+    // The default four-attempt budget can never fit pass 2's 90s
+    // incremental share; the capped send must, and the cap must reach
+    // finalize so the send loop actually fits.
+    expect(zeptomailSendAdmissionBudgetMs()).toBeGreaterThan(90_000);
+    const summary = await drainFailedPaidOrderSideEffects({
+      deadlineMs: Date.now() + 90_000,
+      finalizePayment: mocks.finalizeOrderGatewayPayment,
+      fileWedgeReview: vi.fn(),
+      scheduleAfter,
+      supabase,
+    });
+
+    expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledWith(
+      expect.objectContaining({ emailMaxAttemptsPerSender: 1 })
+    );
+    expect(summary.drained).toEqual([{ orderId: 'order-1' }]);
     expect(summary.failed).toEqual([]);
   });
 });

@@ -18,6 +18,11 @@ import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail';
 
 type VerifiedCharge = Extract<GatewayChargeVerification, { ok: true }>;
 
+// One attempt per sender: pass 1's 90s incremental share cannot fit
+// the default four-attempt loop, and the paid side-effect queue
+// retries failures.
+const VERIFIED_WEDGE_EMAIL_ATTEMPTS = 1;
+
 /**
  * Finalize a provider-verified wedge through the atomic order finalizer.
  * Declines to start without enough pass budget left (`stop`: later rows
@@ -43,16 +48,16 @@ export async function finalizeVerifiedWedge({
   supabase: SupabaseClient;
   verification: VerifiedCharge;
 }): Promise<'finalized' | 'stop'> {
-  // Reserve the full paid-email retry budget before starting finalize:
-  // verification may have consumed the pass, and the default 20s check
-  // would admit a pass too short for the uncapped four-attempt sender
-  // loop — the finalize signal would then abort mid-send and strand the
-  // step delivery_uncertain instead of retrying next sweep. Rows we
-  // never start stay unstamped for the next sweep.
+  // This path runs in pass 1, whose 90s incremental share can never
+  // fit the default four-attempt sender budget: admit on a single
+  // attempt per sender instead, and pass the same cap into finalize
+  // so the send loop actually fits. A failed send retries through the
+  // paid side-effect queue on a later pass. Rows we never start stay
+  // unstamped for the next sweep.
   try {
     assertRefundNotificationSendTime(
       deadlineMs,
-      zeptomailSendAdmissionBudgetMs()
+      zeptomailSendAdmissionBudgetMs(VERIFIED_WEDGE_EMAIL_ATTEMPTS)
     );
   } catch {
     logger.info({
@@ -74,6 +79,7 @@ export async function finalizeVerifiedWedge({
   const outcome = await awaitRefundNotificationDeadline(
     finalizeOrderGatewayPayment({
       actor: 'cron:reconcile-gateway-paid-orders',
+      emailMaxAttemptsPerSender: VERIFIED_WEDGE_EMAIL_ATTEMPTS,
       // Match the signal's 10s buffer: the platform-sender fallback
       // declines unless its own attempt fits before the cutoff.
       ...(deadlineMs !== undefined && {

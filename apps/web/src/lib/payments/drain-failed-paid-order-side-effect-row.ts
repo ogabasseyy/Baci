@@ -13,6 +13,11 @@ import {
 } from '@/lib/payments/verify-gateway-charge';
 import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail';
 
+// One attempt per sender: pass 2's 90s incremental share cannot fit
+// the default four-attempt loop, and the drain retries failures on
+// the next invocation.
+const PAID_DRAIN_EMAIL_ATTEMPTS = 1;
+
 export type DrainCandidateRow = {
   order_id: string;
   transaction_id: string | null;
@@ -145,16 +150,15 @@ export async function drainFailedPaidOrderSideEffectRow({
       gatewayResponse = verification.response;
     }
 
-    // Reserve the full paid-email retry budget before starting
-    // finalize: the default 20s check would admit a pass too short for
-    // the uncapped four-attempt sender loop, and the finalize signal
-    // would then abort mid-send into delivery_uncertain — marking the
-    // email completed instead of leaving the row failed for the next
-    // drain. Rows we never start stay failed for the next drain.
+    // This path runs in pass 2, whose 90s incremental share can never
+    // fit the default four-attempt sender budget: admit on a single
+    // attempt per sender instead, and pass the same cap into finalize
+    // so the send loop actually fits. A failed send retries on the
+    // next drain. Rows we never start stay failed for the next drain.
     try {
       assertRefundNotificationSendTime(
         deadlineMs,
-        zeptomailSendAdmissionBudgetMs()
+        zeptomailSendAdmissionBudgetMs(PAID_DRAIN_EMAIL_ATTEMPTS)
       );
     } catch {
       logger.info({
@@ -177,6 +181,7 @@ export async function drainFailedPaidOrderSideEffectRow({
     const outcome = await awaitRefundNotificationDeadline(
       finalizePayment({
         actor: 'cron:reconcile-gateway-paid-orders:drain',
+        emailMaxAttemptsPerSender: PAID_DRAIN_EMAIL_ATTEMPTS,
         // Match the signal's 10s buffer: the platform-sender fallback
         // declines unless its own attempt fits before the cutoff.
         ...(deadlineMs !== undefined && {

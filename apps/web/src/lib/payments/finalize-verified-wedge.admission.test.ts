@@ -49,13 +49,10 @@ describe('finalizeVerifiedWedge email budget admission', () => {
     });
   });
 
-  it('stops without starting when the pass cannot fit the full email retry budget', async () => {
-    const fullBudget = zeptomailSendAdmissionBudgetMs();
-    // The old 20s default would admit this pass; the full-loop budget
-    // must not, or the finalize signal aborts mid-send and strands the
-    // step delivery_uncertain instead of retrying next sweep.
-    expect(fullBudget - 1000).toBeGreaterThan(20_000);
-    const deadlineMs = Date.now() + fullBudget - 1000;
+  it('stops without starting when the pass cannot fit the single-attempt email budget', async () => {
+    const singleAttemptBudget = zeptomailSendAdmissionBudgetMs(1);
+    expect(singleAttemptBudget - 1000).toBeGreaterThan(20_000);
+    const deadlineMs = Date.now() + singleAttemptBudget - 1000;
 
     const result = await finalizeVerifiedWedge({
       candidate: { ...candidate },
@@ -72,9 +69,12 @@ describe('finalizeVerifiedWedge email budget admission', () => {
     expect(mocks.finalizeOrderGatewayPayment).not.toHaveBeenCalled();
   });
 
-  it('bounds the sender fallback to the pass deadline when budget fits', async () => {
-    const fullBudget = zeptomailSendAdmissionBudgetMs();
-    const deadlineMs = Date.now() + fullBudget + 120_000;
+  it('admits a 90s pass share with the single-attempt cap', async () => {
+    // The default four-attempt budget can never fit pass 1's 90s
+    // incremental share; the capped send must.
+    expect(zeptomailSendAdmissionBudgetMs()).toBeGreaterThan(90_000);
+    expect(zeptomailSendAdmissionBudgetMs(1)).toBeLessThanOrEqual(90_000);
+    const deadlineMs = Date.now() + 90_000;
 
     const result = await finalizeVerifiedWedge({
       candidate: { ...candidate },
@@ -90,6 +90,7 @@ describe('finalizeVerifiedWedge email budget admission', () => {
     expect(result).toBe('finalized');
     expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledWith(
       expect.objectContaining({
+        emailMaxAttemptsPerSender: 1,
         fallbackDeadlineMs: deadlineMs - 10_000,
       })
     );

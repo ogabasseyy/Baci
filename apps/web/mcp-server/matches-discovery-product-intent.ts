@@ -37,7 +37,7 @@ export function matchesDiscoveryProductIntent(
     .replace(/^(?:(?:a|an|any|some|the)\s+)+/i, '');
   const queryWords = words(normalized);
   if (!enforceIntent && queryWords.filter((word) => /^[a-z]+$/.test(word)).length < 2 &&
-    !queryWords.some((word) => /\d/.test(word)) && normalized === rawQuery) return true;
+    !queryWords.some((word) => /\d/.test(word) || productTypes.has(word)) && normalized === rawQuery) return true;
 
   // Lower-bound phrases ("over 500000") end the product-intent portion just
   // like upper bounds do, but only when a number follows: "from Samsung"
@@ -165,8 +165,12 @@ export function matchesDiscoveryProductIntent(
 
   // Category and compatibility text may mention the requested device, but an
   // accessory title still describes the thing being sold.
+  const nameBoundary = nameWords.findIndex((word) =>
+    ['for', 'with', 'compatible', 'fits', 'includes'].includes(word));
+  const nameHeadWords = nameBoundary < 0 ? nameWords : nameWords.slice(0, nameBoundary);
   if (itemType && !accessoryIntent && !phoneAccessoryTypes.has(itemType) &&
-    nameWords.some((word) => accessoryHeadTypes.has(word))) return false;
+    nameHeadWords.some((word) => (accessoryHeadTypes.has(word) || phoneAccessoryTypes.has(word)) &&
+      !matchesWord([word], itemType))) return false;
 
   // Brands after "for" describe compatibility (for example, a case for
   // Samsung), rather than the accessory's manufacturer.

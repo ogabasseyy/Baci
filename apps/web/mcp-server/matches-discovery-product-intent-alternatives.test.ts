@@ -46,4 +46,18 @@ describe('independent discovery alternatives and leading compatibility', () => {
       expect(matchesDiscoveryProductIntent({ name: 'Dell Laptop' }, query)).toBe(false);
     }
   );
+  it.each(['laptop', 'Dell laptop', 'laptop or phone'])(
+    'rejects laptop accessories for %s', (query) => {
+      expect(matchesDiscoveryProductIntent({ name: 'Dell Laptop Charger', category: 'Accessories' }, query)).toBe(false);
+      expect(matchesDiscoveryProductIntent({ name: 'Dell Laptop Cable', category: 'Accessories' }, query)).toBe(false);
+      expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude Laptop', category: 'Laptops' }, query)).toBe(true);
+      expect(matchesDiscoveryProductIntent({ name: 'Dell Laptop with Charger', category: 'Laptops' }, query)).toBe(true);
+    }
+  );
+
+  it('keeps explicit laptop accessory requests available', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Laptop Charger', category: 'Accessories' }, 'laptop charger')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Laptop Cable', category: 'Accessories' }, 'laptop cable')).toBe(true);
+  });
+
 });

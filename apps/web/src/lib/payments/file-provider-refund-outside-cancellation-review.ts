@@ -8,6 +8,14 @@ export interface ActiveOrderPaystackRefundReview {
   orderNumber: string | null;
   paymentId: string;
   paymentReference: string | null;
+  /**
+   * Further candidate payments on the same order: the durable review
+   * must retain every possible match, not just the primary leg.
+   */
+  additionalPayments?: Array<{
+    gateway_reference: string | null;
+    id: string;
+  }>;
   providerPaymentTransactionId: number;
   providerRefundId: number;
   providerRefundStatus: string;
@@ -27,6 +35,17 @@ function evidenceOf(review: ActiveOrderPaystackRefundReview) {
   return {
     [`provider:${review.providerRefundId}`]: {
       payment_transaction_id: review.paymentId,
+      // Multi-leg ambiguity: the primary leg stays first-class for
+      // existing readers, with every candidate retained alongside.
+      ...(review.additionalPayments !== undefined &&
+      review.additionalPayments.length > 0
+        ? {
+            candidate_payment_transaction_ids: [
+              review.paymentId,
+              ...review.additionalPayments.map((payment) => payment.id),
+            ],
+          }
+        : {}),
       provider_payment_transaction_id: review.providerPaymentTransactionId,
       provider_refund_status: review.providerRefundStatus,
       refund_amount: review.amount,
@@ -62,6 +81,12 @@ export async function fileProviderRefundOutsideCancellationReview(
       amount: review.amount,
       gateway_reference: review.paymentReference,
     },
+    ...(review.additionalPayments ?? []).map((payment) => ({
+      payment_transaction_id: payment.id,
+      order_id: review.orderId,
+      amount: review.amount,
+      gateway_reference: payment.gateway_reference,
+    })),
   ];
   const { error } = await supabase.from('reconciliation_review').insert({
     issue_type: 'provider_refund_outside_cancellation',
@@ -149,19 +174,38 @@ export async function fileActiveOrderPaystackRefundCandidateReviews(
       }
     }
   }
+  // Group by order: several candidate payments can share one active
+  // order, and every leg must reach the durable review — filing per
+  // candidate and deleting the order after the first would silently
+  // drop the rest while the webhook is acknowledged.
+  const byOrder = new Map<string, RefundCandidate[]>();
   for (const candidate of candidates) {
     if (!candidate.order_id || !active.has(candidate.order_id)) continue;
-    const orderNumber = active.get(candidate.order_id);
+    const group = byOrder.get(candidate.order_id) ?? [];
+    group.push(candidate);
+    byOrder.set(candidate.order_id, group);
+  }
+  for (const [orderId, group] of byOrder) {
+    const orderNumber = active.get(orderId);
     if (orderNumber === undefined) continue;
-    active.delete(candidate.order_id);
+    const [primary, ...rest] = group;
+    if (!primary) continue;
     await fileProviderRefundOutsideCancellationReview(supabase, {
       amount: refund.amount,
       currency: refund.currency,
-      merchantId: candidate.merchant_id,
-      orderId: candidate.order_id,
+      merchantId: primary.merchant_id,
+      orderId,
       orderNumber,
-      paymentId: candidate.id,
-      paymentReference: candidate.gateway_reference,
+      paymentId: primary.id,
+      paymentReference: primary.gateway_reference,
+      ...(rest.length > 0
+        ? {
+            additionalPayments: rest.map((payment) => ({
+              gateway_reference: payment.gateway_reference,
+              id: payment.id,
+            })),
+          }
+        : {}),
       providerPaymentTransactionId: evidence.providerPaymentTransactionId,
       providerRefundId: evidence.providerRefundId,
       providerRefundStatus: refund.status,

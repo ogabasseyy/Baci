@@ -338,4 +338,55 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
       expect.objectContaining({ refundId: 202 })
     );
   });
+
+  it('keeps every payment leg when one active order has several candidates', async () => {
+    const rpc = reviewRpc();
+    const active = [
+      {
+        cancelled_at: null,
+        id: 'order-9',
+        order_number: 'ORD-9',
+        shipping_status: 'processing',
+      },
+    ];
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        selectQuery([
+          payment('pay-1', 'order-9', 'merchant-9'),
+          payment('pay-2', 'order-9', 'merchant-9'),
+        ])
+      )
+      .mockReturnValueOnce(selectQuery(active))
+      .mockReturnValueOnce(selectQuery(active))
+      .mockReturnValueOnce({ insert: reviewInsert });
+    const supabase = { from, rpc } as unknown as SupabaseClient;
+
+    await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
+
+    // One review for the order, but both candidate legs retained: the
+    // webhook is acknowledged, so a dropped leg would vanish from the
+    // evidence ops uses to route the verified refund.
+    expect(rpc).not.toHaveBeenCalled();
+    expect(reviewInsert).toHaveBeenCalledTimes(1);
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'provider_refund_outside_cancellation',
+        order_id: 'order-9',
+        candidates: [
+          expect.objectContaining({ payment_transaction_id: 'pay-1' }),
+          expect.objectContaining({ payment_transaction_id: 'pay-2' }),
+        ],
+        metadata: expect.objectContaining({
+          provider_refund_id: 202,
+          refund_evidence: expect.objectContaining({
+            'provider:202': expect.objectContaining({
+              candidate_payment_transaction_ids: ['pay-1', 'pay-2'],
+            }),
+          }),
+        }),
+      })
+    );
+  });
 });

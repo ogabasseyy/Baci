@@ -68,10 +68,12 @@ trunc_bytes() {
 sanitize_mentions() {
   # \xE2\x80\x8B is U+200B ZERO WIDTH SPACE as raw bytes: breaks mention
   # parsing while rendering invisibly, with no wide-char warnings. The
-  # anchor covers start/whitespace plus bracket/quote contexts — (@u),
-  # "[@u]" — which GitHub still linkifies; mid-word @ (emails,
-  # decorators) is left alone.
-  perl -pe 's/(^|[\s\[\(>"'"'"'])@([A-Za-z0-9_])/$1\@\xE2\x80\x8B$2/g'
+  # anchor mirrors GitHub's own mention boundary: @ linkifies unless
+  # preceded by a word char, so the guard breaks @ after anything else —
+  # punctuation contexts like (@u), ":@u", or `/@u` included — instead of
+  # enumerating punctuation that always misses one more char. Mid-word @
+  # (emails, decorators) is left alone.
+  perl -pe 's/(?<![A-Za-z0-9_])@([A-Za-z0-9_])/\@\xE2\x80\x8B$1/g'
 }
 
 # Remove every symlink under a workspace root (except .git and the trusted
@@ -91,12 +93,18 @@ sweep_workspace_symlinks() {
 }
 
 # True when a head-tree candidate is safe to read: a regular file, not a
-# symlink itself, with no symlinked ancestor directory. Checking only the
-# final path would let a PR-added symlink farm (e.g. docs/ -> /etc) smuggle
-# runner files into the prompt via docs/AGENTS.md. Pure bash (no
+# symlink itself, with no symlinked ancestor directory, and contained in
+# the workspace. Checking only the final path would let a PR-added symlink
+# farm (e.g. docs/ -> /etc) smuggle runner files into the prompt via
+# docs/AGENTS.md. Containment is enforced without realpath (macOS lacks
+# realpath -e): relative-only plus no .. segment means the path cannot
+# resolve outside the checkout the caller runs in. Pure bash (no
 # realpath/readlink -f) for macOS/Linux portability.
 head_readable() {
   local _p="$1" _d
+  case "${_p}" in
+    /*|..|../*|*/..|*/../*) return 1 ;;
+  esac
   [[ -f "${_p}" && ! -L "${_p}" ]] || return 1
   _d="${_p}"
   while [[ "${_d}" == */* ]]; do

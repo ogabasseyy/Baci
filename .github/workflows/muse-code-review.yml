@@ -636,10 +636,12 @@ jobs:
           # head before spending a Muse invocation. Stale runs exit quietly
           # with no post (the Post step revalidates again before posting).
           # Fail closed: an unreadable head is a skip, never a proceed.
-          # The token is scoped to this one call and scrubbed before Muse
+          # The token is expression-scoped to this one call (the runner does
+          # NOT export GITHUB_TOKEN to step env, so ${GITHUB_TOKEN} would be
+          # unset under set -u and kill every run) and scrubbed before Muse
           # launches: the agent needs only META_API_KEY, so the write-capable
           # job token must never reach its environment.
-          if ! live_head="$(GH_TOKEN="${GITHUB_TOKEN}" gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.head.sha' 2>/dev/null)" \
+          if ! live_head="$(GH_TOKEN="${{ secrets.GITHUB_TOKEN }}" gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.head.sha' 2>/dev/null)" \
             || [[ -z "${live_head}" ]]; then
             echo "::warning::Head revalidation lookup failed; skipping run to avoid reviewing a stale head."
             exit 0

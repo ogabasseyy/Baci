@@ -1,0 +1,299 @@
+# Muse Code PR reviewer (advisory only, never blocks merges).
+#
+# Runs automatically on every same-repo pull request. It collects the PR diff,
+# runs `muse exec` headless with the repo checked out, and posts the result as
+# a PR review comment.
+#
+# Billing: whatever credential is stored in the META_API_KEY secret. That can
+# be the subscription-linked key from `muse login` onboarding (flat monthly
+# rate, subject to plan prompt limits) or a pay-as-you-go Meta Model API key.
+# The workflow cannot tell the difference; verify billing on dev.meta.ai.
+#
+# Key hygiene (the agent holds this key with web tools on; see run.sh):
+#   - minimum scope: a key that can only run model prompts, nothing else.
+#   - rotation trigger: rotate immediately if any posted review looks
+#     tampered with, exfiltrated, or off-mission; treat odd output as compromise.
+#   - spending cap: set plan/prompt limits or spend alerts on dev.meta.ai so
+#     one malicious same-repo PR cannot silently burn quota.
+#
+# Recency: web tools are ON so every review verifies against current
+# official docs instead of training memory. The agent determines the repo's
+# stack/versions from manifests, checks for deprecated APIs and better modern
+# alternatives, and cites sources. A redaction step scrubs common secret
+# patterns from the review body before posting (defense in depth, since web
+# access widens prompt-injection exfil options).
+#
+# Quota safety: subscription plans cap prompts per rolling window, so this
+# workflow stays cheap and advisory:
+#   - concurrency cancel-in-progress: only the latest push per PR is reviewed
+#   - bounded prompt (diff + repo guidance; the agent reads full files itself)
+#   - --max-model-steps cap + job timeout
+#   - never fails the build and never posts a commit status gate
+#
+# Forked PRs are skipped by the job `if` below (head repo must equal this
+# repo): pull_request_target WOULD expose secrets to forks, so that check
+# is load-bearing — never relax it without a credential boundary rethink.
+#
+# Layout: this file only orchestrates steps; every shell program lives in
+# .github/scripts/muse-review/ (each file under 300 lines per repo rules):
+#   lib.sh       shared pure helpers (redact, truncate, dedupe, neutralize)
+#   collect.sh   PR metadata, changed files, manifest, inter-phase vars
+#   diff.sh      unified diff + removed-lines supplement
+#   guidance.sh  repo guidance (trusted base first, head labeled UNTRUSTED)
+#   prompt.sh    prompt assembly + pre-run dedupe check
+#   guard.sh     pre-invocation head-freshness check (owns the GitHub token)
+#   install.sh   pinned Muse CLI install with SHA256 verification
+#   run.sh       headless agent invocation (no GitHub token in env)
+#   post.sh      staleness re-check, render, inline threads, post
+#   ranges.pl    diff-range extractor (JSON, escape-safe)
+#   clean.jq / validate.jq / dedupe.jq / fallback.jq   finding/dedupe filters
+#   schema.json  agent output contract
+#   test.sh      regression suite (runs in muse-review-selftest.yml)
+#
+# Prerequisites per repo:
+#   - Secret META_API_KEY (repo Settings -> Secrets and variables -> Actions)
+#   - Optional repo variables: MUSE_MODEL, MUSE_REASONING_EFFORT
+name: Muse Code Review
+
+on:
+  # pull_request_target (not pull_request): the orchestration below runs
+  # with secrets, so it must come from the trusted BASE revision — a
+  # same-repo PR that edits this file could otherwise replace these steps
+  # and exfiltrate META_API_KEY / GITHUB_TOKEN before any script-level
+  # protection engages. The PR head is checked out explicitly as review
+  # DATA only (see Checkout repository). Workflow edits take effect after
+  # merge; the selftest workflow still validates them pre-merge.
+  pull_request_target:
+    # edited: only base retargets run (see job if below); title/body edits
+    # would otherwise burn quota for an unchanged diff.
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  # Attempt-suffixed group: first attempts share the PR group (new pushes
+  # cancel superseded runs, saving quota), while manual reruns land in a
+  # separate group where they can neither cancel nor queue-replace a newer
+  # head's in-flight review — the rerun's own head-SHA check skips it.
+  # Ignored title/body edits get their own lane: GitHub replaces a pending
+  # run when another queues in the same group regardless of
+  # cancel-in-progress, so a no-op edit must never share the live group and
+  # evict a pending synchronize review.
+  group: >-
+    muse-code-review-${{ github.event.pull_request.number }}-attempt-${{ github.run_attempt }}${{ github.event.action == 'edited' && github.event.changes.base == null && '-ignored' || '' }}
+  cancel-in-progress: ${{ github.run_attempt == 1 && (github.event.action != 'edited' || github.event.changes.base != null) }}
+
+jobs:
+  muse-review:
+    name: Muse review
+    # pull-requests: write posts the advisory review; contents: read checks out
+    # the PR head. Scoped to this job so later jobs start least-privilege.
+    permissions:
+      contents: read
+      pull-requests: write
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.action != 'edited' || github.event.changes.base != null)
+    runs-on: ubuntu-latest
+    # Budget (worst-case caps must sum below this): collect 10 + install 5
+    # + run 10 + post 5 = 30, inside the 35-min job cap, so the fallback
+    # post always retains its window plus step-overhead headroom. Phase
+    # `timeout` caps are fail-fast kill-caps for hung calls (steps have no
+    # timeout-minutes), not expected durations.
+    timeout-minutes: 35
+    env:
+      MUSE_MODEL_RESOLVED: ${{ vars.MUSE_MODEL != '' && vars.MUSE_MODEL || '' }}
+      MUSE_EFFORT_RESOLVED: ${{ vars.MUSE_REASONING_EFFORT != '' && vars.MUSE_REASONING_EFFORT || 'medium' }}
+
+    steps:
+      - name: Check prerequisites
+        id: prereq
+        env:
+          HAS_KEY: ${{ secrets.META_API_KEY != '' }}
+        run: |
+          set -euo pipefail
+          if [[ "${HAS_KEY}" != "true" ]]; then
+            echo "should_run=false" >> "${GITHUB_OUTPUT}"
+            echo "::notice::Skipping Muse review: META_API_KEY secret is not set."
+            exit 0
+          fi
+          echo "should_run=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout repository
+        if: steps.prereq.outputs.should_run == 'true'
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          # Check out the PR head so the agent reads full files from the
+          # working tree. PR code is only read into the prompt, never executed.
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+
+      - name: Clear trusted-scripts collision
+        id: collision
+        if: steps.prereq.outputs.should_run == 'true'
+        run: |
+          set -euo pipefail
+          # The trusted checkout below lands at trusted-scripts/ inside the
+          # PR workspace: if the PR itself tracks that path, remove the
+          # workspace copy first so the sparse checkout lands cleanly
+          # instead of merging with (or failing on) submitter-controlled
+          # files. Evidence is preserved — diff, manifest, and git objects
+          # still carry the PR's versions; only working-tree full-file
+          # reads of exactly the planted paths degrade to diff context.
+          # This also keeps the symlink sweep sound: the surviving
+          # trusted-scripts/ tree is always the default-branch checkout,
+          # so pruning it from the sweep stays correct.
+          if git -C "${GITHUB_WORKSPACE}" cat-file -e "HEAD:trusted-scripts" 2>/dev/null; then
+            rm -rf "${GITHUB_WORKSPACE}/trusted-scripts"
+            echo "::warning::PR tracks trusted-scripts/; workspace copy removed before trusted checkout."
+          fi
+
+      - name: Checkout trusted review scripts
+        if: steps.prereq.outputs.should_run == 'true'
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          # Scripts run with GH_TOKEN, so they come from the DEFAULT branch
+          # (reviewed, merged code) — never the PR head or base, which are
+          # submitter-controlled on stacked/custom-base PRs. Sparse: only
+          # the scripts directory. Helper PRs are still validated by the
+          # selftest workflow, which runs the head copy's test suite.
+          ref: ${{ github.event.repository.default_branch }}
+          path: trusted-scripts
+          fetch-depth: 1
+          sparse-checkout: .github/scripts/muse-review
+
+      - name: Resolve script directory
+        id: scriptdir
+        if: steps.prereq.outputs.should_run == 'true'
+        run: |
+          set -euo pipefail
+          if [[ -f "${GITHUB_WORKSPACE}/trusted-scripts/.github/scripts/muse-review/lib.sh" ]]; then
+            echo "dir=${GITHUB_WORKSPACE}/trusted-scripts/.github/scripts/muse-review" >> "${GITHUB_OUTPUT}"
+          else
+            # Default branch predates the scripts (first-merge bootstrap
+            # only): fall back to the head copy. Afterwards the default
+            # branch always provides them.
+            echo "dir=${GITHUB_WORKSPACE}/.github/scripts/muse-review" >> "${GITHUB_OUTPUT}"
+            echo "::warning::Default branch lacks review scripts; running head copy (first-merge bootstrap)."
+          fi
+
+      - name: Collect PR diff and build prompt
+        id: diff
+        if: steps.prereq.outputs.should_run == 'true'
+        # Advisory: a failed collection (or timeout) posts a fallback note
+        # instead of failing the job (Post handles DIFF_OUTCOME).
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA_EVENT: ${{ github.event.pull_request.head.sha }}
+          SCRIPT_DIR: ${{ steps.scriptdir.outputs.dir }}
+        run: |
+          set -euo pipefail
+          # One phase per script (each under 300 lines); later phases exit
+          # quietly when collect.sh records MUSE_STOP=1 (stale/closed PR).
+          # Phase caps sum to 10 (5+1+2+2); see the job budget above.
+          timeout 5m bash "${SCRIPT_DIR}/collect.sh" \
+            && timeout 1m bash "${SCRIPT_DIR}/diff.sh" \
+            && timeout 2m bash "${SCRIPT_DIR}/guidance.sh" \
+            && timeout 2m bash "${SCRIPT_DIR}/prompt.sh"
+
+      - name: Verify head fresh
+        id: guard
+        if: >-
+          steps.prereq.outputs.should_run == 'true' &&
+          steps.diff.outputs.should_review == 'true' &&
+          steps.diff.outputs.diff_failed != 'true' &&
+          steps.diff.outputs.duplicate != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ steps.diff.outputs.head_sha }}
+          BASE_SHA: ${{ steps.diff.outputs.base_sha }}
+          SCRIPT_DIR: ${{ steps.scriptdir.outputs.dir }}
+        run: |
+          set -euo pipefail
+          # Dedicated step so the GitHub token never shares an environment
+          # with the third-party agent process (see run.sh).
+          bash "${SCRIPT_DIR}/guard.sh"
+
+      - name: Install Muse Code
+        id: install
+        if: >-
+          steps.prereq.outputs.should_run == 'true' &&
+          steps.diff.outputs.should_review == 'true' &&
+          steps.diff.outputs.diff_failed != 'true' &&
+          steps.diff.outputs.duplicate != 'true' &&
+          steps.guard.outputs.fresh == 'true'
+        # Advisory: an installer outage must not fail the build; the Post step
+        # still runs and leaves the fallback note.
+        continue-on-error: true
+        # Shorter than the job timeout so a hung installer still leaves time
+        # for the fallback-posting step below.
+        timeout-minutes: 5
+        env:
+          SCRIPT_DIR: ${{ steps.scriptdir.outputs.dir }}
+        run: |
+          set -euo pipefail
+          # Pinned versioned artifact + SHA256 check (see install.sh).
+          bash "${SCRIPT_DIR}/install.sh"
+
+      - name: Run Muse review
+        id: muse
+        if: >-
+          steps.prereq.outputs.should_run == 'true' &&
+          steps.diff.outputs.should_review == 'true' &&
+          steps.diff.outputs.diff_failed != 'true' &&
+          steps.diff.outputs.duplicate != 'true' &&
+          steps.guard.outputs.fresh == 'true' &&
+          steps.install.outcome == 'success'
+        # Advisory: a failed/quota-exhausted run posts a fallback note instead
+        # of failing the build, so subscription limits can never block merges.
+        continue-on-error: true
+        # Shorter than the job timeout so a hung run still leaves time for the
+        # fallback-posting step below.
+        timeout-minutes: 10
+        env:
+          # No GH_TOKEN/GITHUB_TOKEN here by design: the agent authenticates
+          # only via META_API_KEY (run.sh scrubs token vars regardless).
+          META_API_KEY: ${{ secrets.META_API_KEY }}
+          PROMPT_FILE: ${{ steps.diff.outputs.prompt_file }}
+          MUSE_MODEL: ${{ env.MUSE_MODEL_RESOLVED }}
+          MUSE_EFFORT: ${{ env.MUSE_EFFORT_RESOLVED }}
+          SCRIPT_DIR: ${{ steps.scriptdir.outputs.dir }}
+        run: |
+          set -euo pipefail
+          bash "${SCRIPT_DIR}/run.sh"
+
+      - name: Post Muse review
+        # Advisory to the end: a posting failure (timeout, jq/filesystem
+        # error) must warn, never fail the job or block the merge.
+        continue-on-error: true
+        if: >-
+          steps.prereq.outputs.should_run == 'true' &&
+          steps.diff.outputs.duplicate != 'true' &&
+          steps.guard.outputs.fresh != 'false' &&
+          (steps.diff.outputs.should_review == 'true' || steps.diff.outcome != 'success')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ steps.diff.outputs.head_sha }}
+          BASE_SHA: ${{ steps.diff.outputs.base_sha }}
+          HEAD_SHA_EVENT: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA_EVENT: ${{ github.event.pull_request.base.sha }}
+          MUSE_OUTCOME: ${{ steps.muse.outcome }}
+          DIFF_FAILED: ${{ steps.diff.outputs.diff_failed }}
+          DIFF_OUTCOME: ${{ steps.diff.outcome }}
+          REVIEW_FILE: ${{ steps.muse.outputs.review_file }}
+          SCRIPT_DIR: ${{ steps.scriptdir.outputs.dir }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          timeout 5m bash "${SCRIPT_DIR}/post.sh"

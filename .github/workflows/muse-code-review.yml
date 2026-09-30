@@ -178,6 +178,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ steps.diff.outputs.head_sha }}
           BASE_SHA: ${{ steps.diff.outputs.base_sha }}
+          SCRIPT_DIR: ${{ steps.scriptdir.outputs.dir }}
         run: |
           set -euo pipefail
           # Dedicated step so the GitHub token never shares an environment
@@ -198,6 +199,8 @@ jobs:
         # Shorter than the job timeout so a hung installer still leaves time
         # for the fallback-posting step below.
         timeout-minutes: 5
+        env:
+          SCRIPT_DIR: ${{ steps.scriptdir.outputs.dir }}
         run: |
           set -euo pipefail
           # Pinned versioned artifact + SHA256 check (see install.sh).

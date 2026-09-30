@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   holdPaystackRefundForReview: vi.fn(),
   reconcilePaystackCancellationRefund: vi.fn(),
   reconcilePaystackRefundEvent: vi.fn(),
+  recoverUnknownPaystackRefund: vi.fn(),
 }));
 
 vi.mock('@/lib/payments/reconcile-paystack-cancellation-refund', () => ({
@@ -21,6 +22,9 @@ vi.mock('@/lib/payments/file-refund-evidence-review', () => ({
 }));
 vi.mock('@/lib/payments/hold-paystack-refund-for-review', () => ({
   holdPaystackRefundForReview: mocks.holdPaystackRefundForReview,
+}));
+vi.mock('@/lib/payments/recover-unknown-paystack-refund', () => ({
+  recoverUnknownPaystackRefund: mocks.recoverUnknownPaystackRefund,
 }));
 
 describe('handlePaystackCancellationRefundEvent', () => {
@@ -129,19 +133,48 @@ describe('handlePaystackCancellationRefundEvent', () => {
         id: 'refund-1',
       },
     ],
-  ])('acknowledges a non-cancellation refund row (%s) without reconciling', async (_label, refund) => {
+  ])('recovers a non-cancellation refund row (%s) through provider verification', async (_label, refund) => {
     const db = database(refund);
+
+    const response = await handlePaystackCancellationRefundEvent(db, {
+      data: { id: 42, transaction_reference: 'PSK-1' },
+      event: 'refund.processed',
+    });
+
+    // Pollers only select cancelled orders: acknowledging here without
+    // durable evidence would strand a refunded-but-paid order once
+    // Paystack stops redelivering, so the event verifies and files
+    // the active-order review instead.
+    expect(mocks.reconcilePaystackCancellationRefund).not.toHaveBeenCalled();
+    expect(mocks.reconcilePaystackRefundEvent).not.toHaveBeenCalled();
+    expect(mocks.recoverUnknownPaystackRefund).toHaveBeenCalledWith(
+      db,
+      42,
+      'PSK-1'
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      message: 'Refund event reconciled',
+    });
+  });
+
+  it('fails retryably when active-order recovery throws', async () => {
+    const db = database({
+      cancel_order: { cancelled_at: null, shipping_status: 'cancelled' },
+      id: 'refund-1',
+    });
+    mocks.recoverUnknownPaystackRefund.mockRejectedValue(
+      new Error('provider down')
+    );
 
     const response = await handlePaystackCancellationRefundEvent(db, {
       data: { id: 42 },
       event: 'refund.processed',
     });
 
-    expect(mocks.reconcilePaystackCancellationRefund).not.toHaveBeenCalled();
-    expect(mocks.reconcilePaystackRefundEvent).not.toHaveBeenCalled();
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual({
-      message: 'Refund event acknowledged',
+      error: 'Refund reconciliation unavailable',
     });
   });
 

@@ -23,6 +23,20 @@ export async function handlePaystackCancellationRefundEvent(
   // cannot reach and held rows polling skips.
   const refundId = data?.id;
   let unknownRefundId: number | undefined;
+  // Fallback: the original payment reference, nested per the refund
+  // resource shape with the flat field retained for compatibility. The
+  // nested value wins only when the reconciler can consume it; an
+  // unusable nested string must not shadow a usable flat one.
+  const transaction = data?.transaction;
+  const nestedReference =
+    transaction && typeof transaction === 'object'
+      ? (transaction as Record<string, unknown>).reference
+      : undefined;
+  const flatReference = data?.transaction_reference;
+  const paymentReference = selectPaystackRefundReference(
+    nestedReference,
+    flatReference
+  );
   // Nonpositive IDs can never match a provider refund: fall through to the
   // reference path instead of 503ing on a validation failure every delivery.
   if (
@@ -67,11 +81,31 @@ export async function handlePaystackCancellationRefundEvent(
         (cancelOrder.shipping_status !== 'cancelled' &&
           cancelOrder.shipping_status !== 'canceled')
       ) {
-        logger.info({
-          message: 'Paystack refund event is not for a cancelled order',
-          refundId,
-        });
-        return NextResponse.json({ message: 'Refund event acknowledged' });
+        // The row exists but its order is not cancelled: the
+        // pending/completed pollers only select cancelled orders, so
+        // acknowledging without durable evidence would strand a
+        // refunded-but-paid order once Paystack stops redelivering.
+        // Verify with the provider and file the active-order review
+        // instead; persistence failures 503 for redelivery like the
+        // unknown-refund path. A concurrent cancellation that lands
+        // first reconciles the winning row through the same recovery.
+        try {
+          await recoverUnknownPaystackRefund(
+            supabase,
+            refundId,
+            paymentReference
+          );
+        } catch (error) {
+          logger.error({
+            message: 'Paystack refund recovery for active order failed',
+            error,
+          });
+          return NextResponse.json(
+            { error: 'Refund reconciliation unavailable' },
+            { status: 503 }
+          );
+        }
+        return NextResponse.json({ message: 'Refund event reconciled' });
       }
       try {
         await reconcilePaystackCancellationRefund(supabase, refund);
@@ -121,20 +155,6 @@ export async function handlePaystackCancellationRefundEvent(
     // the ID and rechecking only stale local rows.
     unknownRefundId = refundId;
   }
-  // Fallback: the original payment reference, nested per the refund
-  // resource shape with the flat field retained for compatibility. The
-  // nested value wins only when the reconciler can consume it; an
-  // unusable nested string must not shadow a usable flat one.
-  const transaction = data?.transaction;
-  const nestedReference =
-    transaction && typeof transaction === 'object'
-      ? (transaction as Record<string, unknown>).reference
-      : undefined;
-  const flatReference = data?.transaction_reference;
-  const paymentReference = selectPaystackRefundReference(
-    nestedReference,
-    flatReference
-  );
   if (unknownRefundId !== undefined) {
     try {
       await recoverUnknownPaystackRefund(

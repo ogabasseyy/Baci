@@ -15,10 +15,18 @@ my @out;
 my $f;
 
 if (defined $diff and open(my $fh, '<', $diff)) {
+  my $prev = "";
   while (my $line = <$fh>) {
-    if ($line =~ /^\+\+\+ (.*)$/) {
+    # A +++ line is a file header only right after a --- line: added file
+    # content (e.g. a line whose text is "++ b/x") can otherwise forge a
+    # header and poison every range. The --- check comes first so $1 still
+    # holds the +++ capture (each match resets captures).
+    if ($prev =~ /^--- / and $line =~ /^\+\+\+ (.*)$/) {
       $f = $1;
       chomp $f;
+      # Git appends a TAB after +++ paths containing spaces (also inside
+      # quotes): strip it before unquoting or the path never matches.
+      $f =~ s/\t$//;
       $f =~ s/^"(.*)"$/$1/;
       $f =~ s{^b/}{};
       $f =~ s/\\([0-7]{3}|[abtnfvr"\\])/length($1)==3?chr(oct($1)):($1 eq "a"?"\a":$1 eq "b"?"\b":$1 eq "t"?"\t":$1 eq "n"?"\n":$1 eq "v"?chr(11):$1 eq "f"?"\f":$1 eq "r"?"\r":$1)/ge;
@@ -34,6 +42,7 @@ if (defined $diff and open(my $fh, '<', $diff)) {
         push @out, "{\"path\":\"$j\",\"start\":$s,\"end\":$e}";
       }
     }
+    $prev = $line;
   }
   close $fh;
 }

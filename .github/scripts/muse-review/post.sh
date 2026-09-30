@@ -242,8 +242,8 @@ EOF
   printf '\n%s\n' "${review}"
 } > "${body_file}"
 
-# Fallback dedupe at POST time (a pre-run skip would kill reruns that go
-# on to succeed): identical fallbacks for one SHA post only once.
+# Post-time fallback dedupe (pre-run would kill succeeding reruns):
+# same-SHA posts once; any fallback in the last 24h suppresses repeats.
 if [[ "${is_fallback}" == "true" ]] \
   && gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" --paginate \
     > "${RUNNER_TEMP}/muse-reviews.json" 2>/dev/null; then

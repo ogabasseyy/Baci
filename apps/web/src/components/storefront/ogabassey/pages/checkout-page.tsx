@@ -1,8 +1,6 @@
 'use client';
 import { useCheckoutAddressInference } from './checkout/hooks/use-checkout-address-inference';
-import { useCheckoutPaymentSession } from './checkout/hooks/use-checkout-payment-session';
 import { useCheckoutResumeLifecycle } from './checkout/hooks/use-checkout-resume-lifecycle';
-import { useOrderTotals } from './checkout/hooks/use-order-totals';
 import { resolveCheckoutResumeContext } from './checkout/resolve-checkout-resume-context';
 
 import { useCheckoutDeliverySession } from './checkout/hooks/use-checkout-delivery-session';
@@ -80,8 +78,7 @@ import {
   useResumedCheckoutStartFunnel,
 } from './checkout/hooks/use-resumed-checkout-start-funnel';
 import { deriveCheckoutDisplayModel } from './checkout/derive-checkout-display-model';
-import { deriveCheckoutSummaryAmounts } from './checkout/derive-checkout-summary-amounts';
-import { deriveCheckoutPaymentBaseTotal } from './checkout/derive-checkout-payment-base-total';
+import { useCheckoutFinancialSession } from './checkout/hooks/use-checkout-financial-session';
 import { readCheckoutAttemptGeneration } from './checkout/checkout-attempt-generation';
 import { CheckoutResumeStatus } from './checkout/components/CheckoutResumeStatus';
 import {
@@ -439,47 +436,28 @@ export const CheckoutPage: React.FC = () => {
   // Note: newAddressState, newAddressCity, newAddressStreet are now part of checkoutForm (persisted)
 
 
-  // Payment state derives from resumed-order amounts; the payment-session hook
-  // selects the requested BNPL method after the resume lookup succeeds.
-  const taxRate = merchant?.vat_registration_status === 'registered'
-    ? (merchant.vat_rate ?? 7.5) / 100
-    : 0;
-  const orderTotals = useOrderTotals({
-    cartTotal: effectiveItemSubtotal,
-    deliveryCost,
-    taxRate,
-  });
-  const paymentSession = useCheckoutPaymentSession({
-    baseTotal: deriveCheckoutPaymentBaseTotal({
+  // Live and resumed amount arithmetic feeds the payment session and summary.
+  const { orderTotals, paymentSession, summaryAmounts } =
+    useCheckoutFinancialSession({
+      merchant,
+      effectiveItemSubtotal,
       effectiveCheckoutCartTotal,
       deliveryCost,
+      deliveryMethod,
       giftWrappingCost,
       hasCheckoutCartItems,
-      taxAmount: orderTotals?.taxAmount ?? 0,
-      resumedOrderTotal: summaryOrder?.total ?? null,
-    }),
-    clearPendingCheckoutOrder,
-    currencyCode,
-    discountSubtotal: effectiveCheckoutCartTotal,
-    hasAuthenticatedUser: Boolean(user),
-    hasCheckoutCartItems,
-    isOrderInFlightRef,
-    merchantSlug: merchant?.slug ?? undefined,
-    pendingCheckoutOrder,
-    walletSessionUserId: user?.id,
-    resumeOrderId,
-    preferredGateway,
-    resumedOrder,
-  });
-  const summaryAmounts = deriveCheckoutSummaryAmounts({
-    deliveryCost,
-    deliveryMethod,
-    discountAmount: paymentSession.checkoutValues.discountAmount,
-    giftWrappingCost,
-    hasCheckoutCartItems,
-    orderTotals,
-    resumedOrder,
-  });
+      resumedOrder: summaryOrder,
+      clearPendingCheckoutOrder,
+      currencyCode,
+      discountSubtotal: effectiveCheckoutCartTotal,
+      hasAuthenticatedUser: Boolean(user),
+      isOrderInFlightRef,
+      merchantSlug: merchant?.slug ?? undefined,
+      pendingCheckoutOrder,
+      walletSessionUserId: user?.id,
+      resumeOrderId,
+      preferredGateway,
+    });
 
   // Note: currentStep and completedSteps are now part of checkoutForm (persisted)
 

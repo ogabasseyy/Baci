@@ -309,6 +309,65 @@ describe('useCheckoutDvaSession', () => {
     expect(result.current.isVerifyingDva).toBe(false);
   });
 
+  it('ignores a retired request rejection while replacement verification is pending', async () => {
+    let rejectOldFetch!: (reason?: unknown) => void;
+    (global.fetch as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        rejectOldFetch = reject;
+      })
+    );
+    let resolveNewFetch!: (value: {
+      ok: boolean;
+      json: () => Promise<unknown>;
+    }) => void;
+    (global.fetch as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveNewFetch = resolve;
+      })
+    );
+    const deps = baseDeps();
+    const { result } = renderSession(deps);
+
+    act(() => result.current.handleDvaConfirmTransfer());
+    act(() =>
+      result.current.setDvaData({
+        ...dvaData,
+        orderId: 'replacement-order',
+        reference: 'REF-REPLACEMENT',
+      })
+    );
+    act(() => result.current.handleDvaConfirmTransfer());
+    expect(result.current.isVerifyingDva).toBe(true);
+
+    await act(async () => {
+      rejectOldFetch(new Error('Retired request failed'));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(toast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Could not verify transfer' })
+    );
+    expect(result.current.dvaData?.orderId).toBe('replacement-order');
+    expect(result.current.isVerifyingDva).toBe(true);
+    expect(deps.clearPendingCheckoutOrder).not.toHaveBeenCalled();
+    expect(deps.clearCheckoutSession).not.toHaveBeenCalled();
+    expect(deps.clearCart).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveNewFetch({
+        ok: true,
+        json: async () => ({ order: { payment_status: 'pending' } }),
+      });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Transfer not detected yet' })
+    );
+    expect(result.current.dvaData?.orderId).toBe('replacement-order');
+    expect(result.current.isVerifyingDva).toBe(false);
+  });
+
   it('skips routing and cart effects when the modal closes during idempotency cleanup', async () => {
     mockPaidTrackOrder();
     let resolveCleanup!: (value: undefined) => void;

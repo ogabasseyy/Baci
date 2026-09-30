@@ -203,6 +203,9 @@ export function useCheckoutDvaSession({
         );
       })
       .catch(() => {
+        if (confirmAttempt !== dvaConfirmAttemptRef.current) {
+          return;
+        }
         toast({
           title: 'Could not verify transfer',
           description: 'Please check your connection and try again.',

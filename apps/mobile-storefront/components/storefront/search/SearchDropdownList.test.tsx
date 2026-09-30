@@ -175,6 +175,36 @@ describe('SearchDropdownList', () => {
     expect(screen.queryByText(/no results for/i)).toBeNull();
   });
 
+  it('hides stale settled results when the current input is rejected before the debounce settles', () => {
+    // Valid `iphone` results have settled, then the shopper replaces the
+    // input with `!!` and submits before the 300 ms debounce completes:
+    // the hint must explain the rejection immediately instead of leaving
+    // the stale, tappable iPhone results on screen.
+    render(
+      <SearchDropdownList
+        categories={[]}
+        colors={Colors.light}
+        currentQuery="!!"
+        isLoading={false}
+        onCategoryPress={() => {}}
+        onClearHistory={() => {}}
+        onProductPress={() => {}}
+        onSeeAllResults={() => {}}
+        onSuggestionPress={() => {}}
+        products={products}
+        query="iphone"
+        recentSearches={[]}
+        showMinLengthHint
+      />
+    );
+
+    expect(
+      screen.getByLabelText('Type at least 2 characters to search')
+    ).toBeTruthy();
+    expect(screen.queryByLabelText(/iPhone 14 Pro/i)).toBeNull();
+    expect(screen.queryByLabelText(/see all results/i)).toBeNull();
+  });
+
   it('hides the minimum-length hint once the input is long enough', () => {
     render(
       <SearchDropdownList

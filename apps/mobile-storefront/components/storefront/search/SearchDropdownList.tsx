@@ -50,12 +50,6 @@ export function SearchDropdownList({
   recentSearches,
   showMinLengthHint = false,
 }: SearchDropdownListProps) {
-  // Searchability, not just length: once the debounce settles on
-  // punctuation-only input like "!!", there is no actionable query, so
-  // the idle branch (hint + recents) renders instead of a bare
-  // `No results for "!!"` without validation guidance.
-  const hasQuery =
-    query.length >= MIN_SEARCH_QUERY_LENGTH && isSearchableQuery(query);
   const trimmedCurrentQuery = currentQuery.trim();
   // Mirrors the submit gate exactly (length AND searchable): punctuation-only
   // input like "!!" passes the length check but normalizes to nothing, so
@@ -67,6 +61,17 @@ export function SearchDropdownList({
   const showSeeAllResults =
     onSeeAllResults !== undefined && isCurrentQuerySubmittable;
   const showHint = showMinLengthHint === true && !isCurrentQuerySubmittable;
+  // Current-input validation wins over the debounced snapshot: after a
+  // rejected commit (e.g. `!!` typed over settled `iphone` results), the
+  // debounce still reflects the old query until it settles, so the stale
+  // result branches must hide and the hint must explain the rejection
+  // immediately. Searchability, not just length: once the debounce
+  // settles on punctuation-only input, the idle branch (hint + recents)
+  // renders instead of a bare `No results for "!!"` without guidance.
+  const hasQuery =
+    query.length >= MIN_SEARCH_QUERY_LENGTH &&
+    isSearchableQuery(query) &&
+    !showHint;
   const seeAllButton =
     showSeeAllResults && onSeeAllResults ? (
       <SeeAllResultsButton

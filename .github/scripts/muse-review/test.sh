@@ -67,6 +67,10 @@ pem='-----BEGIN TEST PRIVATE KEY-----FAKEFAKEFAKE-----END TEST PRIVATE KEY-----'
 assert_eq "redact-pem" "[REDACTED-PRIVATE-KEY]" "$(redact "a ${pem} b" | sed 's/^a //; s/ b$//')"
 assert_eq "redact-ghp" "[REDACTED]" "$(redact 'key ghp_abc123 rest' | awk '{print $2}')"
 assert_eq "redact-akid" "[REDACTED]" "$(redact 'x AKIAIOSFODNN7EXAMPLE y' | awk '{print $2}')"
+assert_eq "redact-ghs" "[REDACTED]" "$(redact 'tok ghs_faketoken1 y' | awk '{print $2}')"
+assert_eq "redact-ghu" "[REDACTED]" "$(redact 'tok ghu_faketoken1 y' | awk '{print $2}')"
+assert_eq "redact-ghr" "[REDACTED]" "$(redact 'tok ghr_faketoken1 y' | awk '{print $2}')"
+assert_eq "redact-xoxr" "[REDACTED]" "$(redact 'tok xoxr-fake1 y' | awk '{print $2}')"
 assert_eq "redact-assign" 'api_key="[REDACTED]"' "$(redact 'api_key="abcDEF1234567890"')"
 assert_eq "redact-token-colon" 'token: [REDACTED]' "$(redact 'token: abcDEF1234567890')"
 assert_eq "redact-prose-kept" "no token here" "$(redact 'no token here')"
@@ -122,7 +126,8 @@ cat > "${find_fix}" <<'EOF'
 {"verdict":"v","findings":[
  {"path":"a.ts","line":5,"severity":"low","title":42,"body":"B"},
  {"path":"a.ts","line":6,"severity":"low","title":"T","body":{"x":1}},
- {"path":"a.ts","line":7,"severity":"low","body":"B"}
+ {"path":"a.ts","line":7,"severity":"low","body":"B"},
+ {"path":"","line":8,"severity":"low","title":"EMPTY","body":"B"}
 ],"next_steps":["ok",7,{"x":1},null]}
 EOF
 jq -f "${SCRIPT_DIR}/clean.jq" "${find_fix}" > "${find_fix}.clean" && mv "${find_fix}.clean" "${find_fix}"

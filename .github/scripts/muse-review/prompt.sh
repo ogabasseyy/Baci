@@ -126,13 +126,19 @@ echo "prompt_file=${prompt_file}" >> "${GITHUB_OUTPUT}"
 # the tag.
 marker="<!-- muse-code-review sha:${MUSE_HEAD_SHA} base:${MUSE_BASE_SHA_FULL:0:10} -->"
 dup_reviews="${RUNNER_TEMP}/muse-existing-reviews.json"
-gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" > "${dup_reviews}" 2>/dev/null \
-  || echo '[]' > "${dup_reviews}"
-real_count="$(jq -s --arg marker "${marker}" -f "${SCRIPT_DIR}/dedupe.jq" \
-  "${dup_reviews}" 2>/dev/null || echo 0)"
+# Fail closed on lookup failure: treating an unknown state as "no review"
+# would burn another billable run and post a duplicate. A skipped run is
+# advisory-safe — the next event retries.
 duplicate=false
-if [[ "${real_count}" =~ [1-9] ]]; then
+if gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" > "${dup_reviews}" 2>/dev/null; then
+  real_count="$(jq -s --arg marker "${marker}" -f "${SCRIPT_DIR}/dedupe.jq" \
+    "${dup_reviews}" 2>/dev/null || echo 0)"
+  if [[ "${real_count}" =~ [1-9] ]]; then
+    duplicate=true
+    echo "::notice::Muse review for ${MUSE_HEAD_SHA} already posted; skipping duplicate run."
+  fi
+else
   duplicate=true
-  echo "::notice::Muse review for ${MUSE_HEAD_SHA} already posted; skipping duplicate run."
+  echo "::warning::Dedupe lookup failed; skipping run to avoid a duplicate billed review."
 fi
 echo "duplicate=${duplicate}" >> "${GITHUB_OUTPUT}"

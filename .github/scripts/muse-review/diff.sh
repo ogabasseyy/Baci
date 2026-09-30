@@ -35,7 +35,9 @@ echo "diff_failed=${diff_failed}" >> "${GITHUB_OUTPUT}"
 removed_file="${RUNNER_TEMP}/muse-removed.txt"
 removed_note=""
 if [[ "${diff_failed}" != "true" ]]; then
-  awk '/^diff --git / {print ""} /^\+\+\+ / {print} /^-/ && !/^--- / {print}' \
+  # Keep the diff --git and --- headers: whole-file deletions show +++
+  # /dev/null, so without them removed lines lose their original path.
+  awk '/^diff --git / {print} /^--- / {print} /^\+\+\+ / {print} /^-/ && !/^--- / {print}' \
     "${diff_file}" 2>/dev/null > "${removed_file}" || : > "${removed_file}"
   if (( $(wc -c < "${removed_file}") > 24576 )); then
     cap_file "${removed_file}" 24576

@@ -103,9 +103,9 @@ assert_eq "trust-unknown-default" "false" "$(trust_base "main" "" "true")"
 
 # --- ranges.pl ---
 diff_fix="$(mktemp)"
-printf 'diff --git "a/foo\\tb.ts" "b/foo\\tb.ts"\n+++ "b/foo\\tb.ts"\n@@ -1,3 +1,4 @@ ctx\n+x\ndiff --git a/p.ts b/p.ts\n+++ b/p.ts\n@@ -10 +12,2 @@\n+y\n+z\ndiff --git a/d.ts b/d.ts\n+++ /dev/null\n@@ -1 +0,0 @@\n-gone\n' > "${diff_fix}"
+printf 'diff --git "a/foo\\tb.ts" "b/foo\\tb.ts"\n--- "a/foo\\tb.ts"\n+++ "b/foo\\tb.ts"\n@@ -1,3 +1,4 @@ ctx\n+x\n+++ b/forged.ts\n+y\ndiff --git a/p.ts b/p.ts\n--- a/p.ts\n+++ b/p.ts\n@@ -10 +12,2 @@\n+y\n+z\ndiff --git a/d.ts b/d.ts\n--- a/d.ts\n+++ /dev/null\n@@ -1 +0,0 @@\n-gone\ndiff --git a/my file.ts b/my file.ts\n--- "a/my file.ts"\t\n+++ "b/my file.ts"\t\n@@ -2 +2 @@\n+z\n' > "${diff_fix}"
 got="$(perl "${SCRIPT_DIR}/ranges.pl" "${diff_fix}")"
-assert_eq "ranges-json" '[{"path":"foo\u0009b.ts","start":1,"end":4},{"path":"p.ts","start":12,"end":13}]' "${got}"
+assert_eq "ranges-json" '[{"path":"foo\u0009b.ts","start":1,"end":4},{"path":"p.ts","start":12,"end":13},{"path":"my file.ts","start":2,"end":2}]' "${got}"
 if printf '%s' "${got}" | jq empty 2>/dev/null; then got_jq="yes"; else got_jq="no"; fi
 assert_eq "ranges-valid-json" "yes" "${got_jq}"
 assert_eq "ranges-missing-file" "[]" "$(perl "${SCRIPT_DIR}/ranges.pl" "/nonexistent-muse-test-$$")"

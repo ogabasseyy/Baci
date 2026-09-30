@@ -10,7 +10,7 @@ import type { useCheckoutPaymentSession } from './use-checkout-payment-session';
 import type { useCheckoutSubmissionState } from './use-checkout-submission-state';
 import type { useCheckoutStepState } from './use-checkout-step-state';
 import type { useStorefrontCustomerSession } from './use-storefront-customer-session';
-import type { DvaModalData } from './use-dva-confirm-transfer';
+import type { DvaModalData } from './use-checkout-dva-session';
 import type { PendingCheckoutOrderSnapshot } from '../pending-checkout-order';
 import type { ResumedOrder } from '../types';
 
@@ -63,7 +63,6 @@ export interface CheckoutOrderSubmissionContext {
     setOrderCreated: (value: boolean) => void;
     clearCheckoutSession: () => void;
     setDvaData: (value: DvaModalData | null) => void;
-    setDvaCountdown: (value: number) => void;
     setIsInitializingDva: (value: boolean) => void;
     setPendingCryptoOrder: (value: JuicywayPendingOrder | null) => void;
     setShowCryptoSelector: (value: boolean) => void;

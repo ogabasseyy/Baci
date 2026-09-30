@@ -139,7 +139,7 @@ Re-run the workflow, or inspect the logs."
     fi
     while IFS=$'\t' read -r sev title path line; do
       printf '%s\n' "- ${sev}: ${title} in ${path}:${line} (see inline)"
-    done < <(jq -r '.valid[]? | [(.severity // "low" | gsub("\t"; " ")), (.title // "" | gsub("\t"; " ")), (.path // "" | gsub("\t"; " ")), (.line // 0)] | @tsv' "${validated_json}")
+    done < <(jq -r '.valid[]? | [(.severity // "low" | gsub("\t"; " ")), (.title // "" | gsub("\t"; " ")), (.path // "" | gsub("\t"; " ") | gsub("\n"; " ")), (.line // 0)] | @tsv' "${validated_json}")
     while IFS=$'\t' read -r sev title path line body orphaned; do
       if [[ "${orphaned}" == "true" ]]; then
         printf '%s\n' "- ${sev}: ${title} in ${path}:${line} (path not in changed files — unverified)"
@@ -147,7 +147,7 @@ Re-run the workflow, or inspect the logs."
         printf '%s\n' "- ${sev}: ${title} in ${path}:${line}"
       fi
       printf '  %s\n' "${body}"
-    done < <(jq -r '.summary_only[]? | [(.severity // "low" | gsub("\t"; " ")), (.title // "" | gsub("\t"; " ")), (.path // "" | gsub("\t"; " ")), (.line // 0), ((.body // "") | gsub("\n"; " ") | gsub("\t"; " ")), (.orphaned // false)] | @tsv' "${validated_json}")
+    done < <(jq -r '.summary_only[]? | [(.severity // "low" | gsub("\t"; " ")), (.title // "" | gsub("\t"; " ")), (.path // "" | gsub("\t"; " ") | gsub("\n"; " ")), (.line // 0), ((.body // "") | gsub("\n"; " ") | gsub("\t"; " ")), (.orphaned // false)] | @tsv' "${validated_json}")
     printf '\n## Suggested next steps\n\n'
     jq -r '.next_steps[]?' "${findings_json}" 2>/dev/null | while IFS= read -r step; do
       printf '%s\n' "- ${step}"
@@ -283,7 +283,7 @@ if ! gh api --method POST \
     # UTF-8-safe) back under the API body limit.
     jq '.body |= gsub(" \\(see inline\\)"; "") |
         .body += "\n\n<sub>Inline threads were rejected by the API; findings inlined below.</sub>\n\n" +
-          ([.comments[]? | "### \(.path):\(.line)\n\n\(.body | gsub("\\n\\n<sub>Useful\\?.*"; ""))"] | join("\n\n---\n\n")) |
+          ([.comments[]? | "### \(.path | gsub("\\n"; " ") | gsub("!\\[[^\\]]*\\]\\([^\\)]*\\)"; "") | gsub("(?<![A-Za-z0-9_])@(?=[A-Za-z0-9_])"; "@\u200b")):\(.line)\n\n\(.body | gsub("\\n\\n<sub>Useful\\?.*"; "") | if length > 2000 then .[0:2000] + "\n\n[...explanation truncated for length...]" else . end)"] | join("\n\n---\n\n")) |
         .body |= .[0:60000] |
         del(.comments)' \
       "${payload_file}" > "${payload_file}.summary"

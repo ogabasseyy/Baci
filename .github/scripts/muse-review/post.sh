@@ -270,7 +270,17 @@ if ! gh api --method POST \
   echo "::warning::Review POST failed: $(head -c 300 "${post_resp}" 2>/dev/null || true)"
   if [[ "${inline_payload}" != "[]" ]]; then
     echo "::warning::Retrying as summary-only."
-    jq '.body += "\n\n<sub>Inline threads were rejected by the API; showing summary only.</sub>" | del(.comments)' \
+    # Inline bodies were already redacted, mention-sanitized, and bounded
+    # when built, so the retry inlines them from the rejected payload
+    # itself (stripping each thread's react footer) and removes the
+    # now-dangling "(see inline)" pointers — the summary alone would point
+    # at nonexistent threads and omit every why/how. Char-sliced (jq is
+    # UTF-8-safe) back under the API body limit.
+    jq '.body |= gsub(" \\(see inline\\)"; "") |
+        .body += "\n\n<sub>Inline threads were rejected by the API; findings inlined below.</sub>\n\n" +
+          ([.comments[]? | "### \(.path):\(.line)\n\n\(.body | gsub("\\n\\n<sub>Useful\\?.*"; ""))"] | join("\n\n---\n\n")) |
+        .body |= .[0:60000] |
+        del(.comments)' \
       "${payload_file}" > "${payload_file}.summary"
     if ! gh api --method POST \
       "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" \

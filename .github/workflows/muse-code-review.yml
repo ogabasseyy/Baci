@@ -30,8 +30,9 @@
 #   - --max-model-steps cap + job timeout
 #   - never fails the build and never posts a commit status gate
 #
-# Forked PRs are skipped: the pull_request event withholds secrets from forks,
-# so there is no credential to review with.
+# Forked PRs are skipped by the job `if` below (head repo must equal this
+# repo): pull_request_target WOULD expose secrets to forks, so that check
+# is load-bearing — never relax it without a credential boundary rethink.
 #
 # Layout: this file only orchestrates steps; every shell program lives in
 # .github/scripts/muse-review/ (each file under 300 lines per repo rules):
@@ -55,7 +56,14 @@
 name: Muse Code Review
 
 on:
-  pull_request:
+  # pull_request_target (not pull_request): the orchestration below runs
+  # with secrets, so it must come from the trusted BASE revision — a
+  # same-repo PR that edits this file could otherwise replace these steps
+  # and exfiltrate META_API_KEY / GITHUB_TOKEN before any script-level
+  # protection engages. The PR head is checked out explicitly as review
+  # DATA only (see Checkout repository). Workflow edits take effect after
+  # merge; the selftest workflow still validates them pre-merge.
+  pull_request_target:
     # edited: only base retargets run (see job if below); title/body edits
     # would otherwise burn quota for an unchanged diff.
     types: [opened, synchronize, reopened, ready_for_review, edited]

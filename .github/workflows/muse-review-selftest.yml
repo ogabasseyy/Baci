@@ -1,7 +1,8 @@
 # Self-test for the Muse review workflow's scripts.
 #
 # Runs the regression suite plus static checks whenever the review scripts or
-# either workflow file changes. Fast (<2 min), no secrets, no network.
+# either workflow file changes. Fast (<2 min), no secrets, no network — except
+# the scheduled pin-freshness job, which queries the stable channel manifest.
 name: Muse Review Selftest
 
 on:
@@ -16,6 +17,9 @@ on:
       - '.github/scripts/muse-review/**'
       - '.github/workflows/muse-code-review.yml'
       - '.github/workflows/muse-review-selftest.yml'
+  schedule:
+    # Weekly bump signal so the pinned CLI cannot go silently stale.
+    - cron: '17 9 * * 1'
 
 permissions:
   contents: read
@@ -64,3 +68,37 @@ jobs:
           fi
           tar -xzf "${tmpdir}/actionlint.tar.gz" -C "${tmpdir}"
           "${tmpdir}/actionlint" .github/workflows/muse-code-review.yml .github/workflows/muse-review-selftest.yml
+
+  pin-freshness:
+    name: Muse pin freshness
+    # Scheduled runs only: push/PR selftest stays offline and flake-free.
+    if: github.event_name == 'schedule'
+    # Advisory: a channel outage or a deliberate lag must never red the gate.
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compare pin to stable channel
+        run: |
+          set -euo pipefail
+          pinned="$(grep -oE '^MUSE_VERSION="[^"]+"' .github/scripts/muse-review/install.sh | cut -d'"' -f2 || true)"
+          if [[ -z "${pinned}" ]]; then
+            echo "::warning::Pin-freshness check: MUSE_VERSION not found in install.sh; skipping."
+            exit 0
+          fi
+          channel="$(curl --proto '=https' --tlsv1.2 --retry 3 --connect-timeout 15 \
+            --max-time 60 -fsSL 'https://api.meta.ai/muse-code/channels/muse-stable' || true)"
+          latest="$(printf '%s' "${channel}" | jq -r '.version // empty' 2>/dev/null || true)"
+          if [[ -z "${latest}" ]]; then
+            echo "::warning::Pin-freshness check: channel manifest unreadable; skipping."
+            exit 0
+          fi
+          if [[ "${pinned}" != "${latest}" ]]; then
+            echo "::warning::Muse pin ${pinned} lags stable ${latest}; bump MUSE_VERSION + checksums (see install.sh)."
+          else
+            echo "Muse pin ${pinned} matches stable."
+          fi

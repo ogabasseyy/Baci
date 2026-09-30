@@ -67,8 +67,27 @@ trunc_bytes() {
 # designed. Apply after redact(), before byte-bounding (it adds characters).
 sanitize_mentions() {
   # \xE2\x80\x8B is U+200B ZERO WIDTH SPACE as raw bytes: breaks mention
-  # parsing while rendering invisibly, with no wide-char warnings.
-  perl -pe 's/(^|\s)@([A-Za-z0-9_])/$1\@\xE2\x80\x8B$2/g'
+  # parsing while rendering invisibly, with no wide-char warnings. The
+  # anchor covers start/whitespace plus bracket/quote contexts — (@u),
+  # "[@u]" — which GitHub still linkifies; mid-word @ (emails,
+  # decorators) is left alone.
+  perl -pe 's/(^|[\s\[\(>"'"'"'])@([A-Za-z0-9_])/$1\@\xE2\x80\x8B$2/g'
+}
+
+# True when a head-tree candidate is safe to read: a regular file, not a
+# symlink itself, with no symlinked ancestor directory. Checking only the
+# final path would let a PR-added symlink farm (e.g. docs/ -> /etc) smuggle
+# runner files into the prompt via docs/AGENTS.md. Pure bash (no
+# realpath/readlink -f) for macOS/Linux portability.
+head_readable() {
+  local _p="$1" _d
+  [[ -f "${_p}" && ! -L "${_p}" ]] || return 1
+  _d="${_p}"
+  while [[ "${_d}" == */* ]]; do
+    _d="${_d%/*}"
+    [[ -L "${_d}" ]] && return 1
+  done
+  return 0
 }
 
 # Scrub secret patterns from review text before it is posted publicly.

@@ -84,7 +84,7 @@ sanitize_mentions() {
 # forms go. Alt text is kept so model intent stays readable. Apply with
 # sanitize_mentions(), before byte-bounding.
 strip_images() {
-  perl -pe 's/!\[([^\]]*)\]\([^)]*\)/$1/g; s/!\[([^\]]*)\]\[[^\]]*\]/$1/g; s{<\s*img\b[^>]*\balt\s*=\s*"([^"]*)"[^>]*>}{$1}gi; s{<\s*img\b[^>]*>}{}gi'
+  perl -pe 's/!\[([^\]]*)\]\((?:[^()]*|\([^()]*\))*\)/$1/g; s/!\[([^\]]*)\]\[[^\]]*\]/$1/g; s{<\s*img\b[^>]*\balt\s*=\s*"([^"]*)"[^>]*>}{$1}gi; s{<\s*img\b[^>]*\balt\s*=\s*'"'"'([^'"'"']*)'"'"'[^>]*>}{$1}gi; s{<\s*img\b[^>]*>}{}gi'
 }
 
 # Remove every symlink under a workspace root (except .git and the trusted
@@ -128,8 +128,11 @@ head_readable() {
 # Scrub secret patterns from review text before it is posted publicly.
 # Private keys redact as full header-to-footer blocks; provider prefixes,
 # JWTs, and key-assignment pairs (api_key="...", token: ...) redact by
-# value. Always redact BEFORE truncating: cutting first could remove a PEM
-# footer and defeat the full-block match.
+# value. The assignment pattern is case-insensitive, so META_API_KEY=<val>
+# echoes are already caught; a bare echoed value in an unknown format is
+# unmatchable by static pattern — the live secret is deliberately never
+# piped into this step to match it. Always redact BEFORE truncating:
+# cutting first could remove a PEM footer and defeat the full-block match.
 redact() {
   printf '%s' "$1" | perl -0777 -pe 's/-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----/[REDACTED-PRIVATE-KEY]/gs; s/\b(sk-|rk-|ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|xox[A-Za-z]-|AKIA)[A-Za-z0-9_\-]+/[REDACTED]/g; s/\bAIza[0-9A-Za-z_\-]{35}/[REDACTED]/g; s/eyJ[A-Za-z0-9_\-]{10,}\.eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]+/[REDACTED-JWT]/g; s/((?:api[_-]?key|secret|token|password)\s*[:=]\s*["'"'"']?)[A-Za-z0-9_\-.\/+]{12,}/${1}[REDACTED]/gi'
 }

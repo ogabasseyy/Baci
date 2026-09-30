@@ -144,10 +144,10 @@ Re-run the workflow, or inspect the logs."
     # Redact-then-bound for BOTH title and body: truncating first would cut
     # PEM footers and defeat the full-block regex.
     f_title="$(redact "${f_title}")"
-    f_title="$(printf '%s' "${f_title}" | trunc_bytes 300)"
+    f_title="$(printf '%s' "${f_title}" | sanitize_mentions | trunc_bytes 300)"
     thread_body="$(printf '**[%s] %s**\n\n%s\n\n<sub>Useful? React with 👍 / 👎.</sub>' "${f_sev}" "${f_title}" "${f_body}")"
     thread_body="$(redact "${thread_body}")"
-    thread_body="$(printf '%s' "${thread_body}" | trunc_bytes 6000)"
+    thread_body="$(printf '%s' "${thread_body}" | sanitize_mentions | trunc_bytes 6000)"
     jq -n --arg path "${f_path}" --argjson line "${f_line}" --arg body "${thread_body}" \
       '{path: $path, line: $line, side: "RIGHT", body: $body}' >> "${inline_jsonl}"
   done < <(jq -c '.valid[]?' "${validated_json}")
@@ -168,8 +168,24 @@ Muse did not return a review (step outcome: \`${MUSE_OUTCOME}\`).
 
 Re-run the workflow, or inspect the logs."
 else
-  # Legacy fallback: agent returned markdown instead of JSON.
-  review="${raw_output}"
+  # The output schema constrains the agent to JSON; markdown here means the
+  # model ignored it. Post an explicit fallback rather than unvalidated
+  # prose (a prompt-injected model could otherwise force this path to
+  # publish unvalidated claims and file/line references).
+  is_fallback=true
+  review="## Verdict
+
+Muse returned markdown instead of the required JSON findings object, so no
+review is posted as fact. See the workflow logs.
+
+## Findings
+
+- low: Model output failed finding-shape validation — check the
+  workflow logs.
+
+## Suggested next steps
+
+Re-run the workflow, or inspect the logs."
 fi
 
 # Defense in depth: the agent has web access and the prompt is partly
@@ -177,8 +193,10 @@ fi
 # before posting it publicly. Private keys redact as full header-to-footer
 # blocks, not just the header line. (Inline thread bodies were already
 # redacted when built.) Redact BEFORE truncating: cutting first could remove
-# a PEM footer and defeat the full-block match.
+# a PEM footer and defeat the full-block match. Mentions break after
+# redaction (sanitizing adds characters, so it precedes the byte bound).
 review="$(redact "${review}")"
+review="$(printf '%s' "${review}" | sanitize_mentions)"
 
 # Bound the posted body: GitHub rejects review bodies past 65536 chars, which
 # would lose the whole review and fail the workflow.

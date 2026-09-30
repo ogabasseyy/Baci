@@ -21,12 +21,8 @@ set -euo pipefail
 # shellcheck disable=SC1091  # SCRIPT_DIR is set by the workflow step
 . "${SCRIPT_DIR}/lib.sh"
 
-# Second staleness gate (see guard.sh): a push that landed while Muse was
-# working means this review targets an old head — posting it would
-# misattribute inline lines, so exit quietly. The captured base is checked
-# too: evidence was collected against it, and findings may no longer match
-# the current diff once it advances (the next event re-reviews). Fail closed:
-# an unreadable lookup is a skip, never a post.
+# Second staleness gate (see guard.sh): skip quietly when head or base
+# moved mid-run (findings would misattribute), or the lookup fails.
 if ! live_shas="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '[.head.sha, .base.sha] | @tsv' 2>/dev/null)" \
   || [[ -z "${live_shas}" ]]; then
   echo "::warning::Head revalidation lookup failed; skipping post to avoid publishing a stale review."
@@ -215,13 +211,9 @@ review is posted as fact. See the workflow logs.
 Re-run the workflow, or inspect the logs."
 fi
 
-# Defense in depth: the agent has web access and the prompt is partly
-# attacker-controlled, so scrub common secret patterns from the review body
-# before posting it publicly. Private keys redact as full header-to-footer
-# blocks, not just the header line. (Inline thread bodies were already
-# redacted when built.) Redact BEFORE truncating: cutting first could remove
-# a PEM footer and defeat the full-block match. Mentions break after
-# redaction (sanitizing adds characters, so it precedes the byte bound).
+# Scrub secrets from the review body before posting (prompt is partly
+# attacker-controlled; see lib.sh redact). Redact BEFORE truncating and
+# sanitizing (both can defeat the full-block match or add characters).
 review="$(redact "${review}")"
 review="$(printf '%s' "${review}" | sanitize_mentions)"
 
@@ -249,6 +241,19 @@ Workflow: ${RUN_URL}
 EOF
   printf '\n%s\n' "${review}"
 } > "${body_file}"
+
+# Fallback dedupe at POST time (a pre-run skip would kill reruns that go
+# on to succeed): identical fallbacks for one SHA post only once.
+if [[ "${is_fallback}" == "true" ]] \
+  && gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" --paginate \
+    > "${RUNNER_TEMP}/muse-reviews.json" 2>/dev/null; then
+  if (( $(jq -s --arg marker "${marker}" -f "${SCRIPT_DIR}/fallback.jq" "${RUNNER_TEMP}/muse-reviews.json" 2>/dev/null || echo 0) > 0 )); then
+    echo "::notice::Fallback already posted for ${HEAD_SHA:0:10}; skipping duplicate."
+    exit 0
+  fi
+elif [[ "${is_fallback}" == "true" ]]; then
+  echo "::warning::Fallback-dedupe lookup failed; posting anyway."
+fi
 
 payload_file="${RUNNER_TEMP}/muse-review-payload.json"
 # shellcheck disable=SC2016  # $body / $sha / $comments are jq variables, not shell

@@ -141,32 +141,54 @@ function replacementMatchesFailedLeg(
 }
 
 /**
- * A failed leg is covered only when its matching postdating replacements
- * sum to at least the failed refund's amount: a failed 100-unit refund
- * replaced by two completed 50-unit refunds on the same leg is fully
- * superseded. Malformed amounts fail closed.
+ * Every failed row is covered only when the matching postdating
+ * replacements allocated to it sum to at least its amount — and each
+ * replacement is spent once, oldest failure first. Without allocation,
+ * one 50-unit replacement postdating two failed 50-unit rows on the
+ * same leg would cover each of them against the full pool while only
+ * half the leg was actually refunded, suppressing a live
+ * contradiction. A failed 100-unit refund replaced by two completed
+ * 50-unit refunds on the same leg is fully superseded. Malformed
+ * amounts fail closed.
  */
-function failedLegCoveredByReplacements(
-  failed: FailedRefundRow,
+function allFailedLegsCoveredByReplacements(
+  failedRows: FailedRefundRow[],
   replacements: ReplacementRefundRow[]
 ): boolean {
-  const failedAmount = Number(failed.amount);
-  if (!Number.isFinite(failedAmount)) return false;
-  let covered = 0;
-  for (const replacement of replacements) {
-    if (!replacementMatchesFailedLeg(replacement, failed)) continue;
-    const replacementAmount = Number(replacement.amount);
-    if (!Number.isFinite(replacementAmount)) return false;
-    covered += replacementAmount;
+  if (failedRows.length === 0) return false;
+  const ordered = [...failedRows].sort(
+    (a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)
+  );
+  // Replacement index to its unconsumed amount; entries materialize on
+  // first match so an unrelated malformed row cannot fail the scan.
+  const remaining = new Map<number, number>();
+  for (const failed of ordered) {
+    const failedAmount = Number(failed.amount);
+    if (!Number.isFinite(failedAmount)) return false;
+    let need = failedAmount;
+    for (let i = 0; i < replacements.length && need > 0; i++) {
+      const replacement = replacements[i] as ReplacementRefundRow;
+      if (!replacementMatchesFailedLeg(replacement, failed)) continue;
+      let left = remaining.get(i);
+      if (left === undefined) {
+        left = Number(replacement.amount);
+        if (!Number.isFinite(left)) return false;
+      }
+      const take = Math.min(Math.max(left, 0), need);
+      need -= take;
+      remaining.set(i, left - take);
+    }
+    if (need > 0) return false;
   }
-  return covered >= failedAmount;
+  return true;
 }
 
 /**
  * Decide a failure alert on an order still marked refunded. Returns true
- * only when every failed refund row has a postdating provider-verified
- * completed refund covering its own payment leg — durable evidence that
- * later successful replacement refunds superseded them all. Otherwise
+ * only when every failed refund row has postdating provider-verified
+ * completed refunds covering its own payment leg, each replacement
+ * spent once — durable evidence that later successful replacement
+ * refunds superseded them all. Otherwise
  * the failure is fresh contradiction: file a falsely-refunded review
  * and return false so the caller still sends the merchant alert. Throws
  * on lookup/file failures so the notification retries instead of
@@ -200,14 +222,15 @@ export async function resolveContradictoryRefundFailure(
     merchantId: row.merchant_id,
     orderId: row.order_id,
   })) as unknown as ReplacementRefundRow[];
-  // Every failed leg needs its own later coverage: suppressing on any
-  // single match would mark the order-level notification sent without
-  // delivery while other failed legs get neither alert nor review.
-  const allLegsCovered =
-    failedRows.length > 0 &&
-    failedRows.every((failed) =>
-      failedLegCoveredByReplacements(failed, replacementsList)
-    );
+  // Every failed leg needs its own later coverage, and each
+  // replacement is spent once: suppressing on any single match — or
+  // reusing one replacement across two failed rows — would mark the
+  // order-level notification sent without delivery while other failed
+  // legs get neither alert nor review.
+  const allLegsCovered = allFailedLegsCoveredByReplacements(
+    failedRows,
+    replacementsList
+  );
   if (allLegsCovered) return true;
 
   const failedPaymentIds = [

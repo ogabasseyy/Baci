@@ -221,6 +221,98 @@ describe('resolveContradictoryRefundFailure aggregate coverage', () => {
     expect(mocks.quarantineRefund).toHaveBeenCalled();
   });
 
+  it('files when one replacement would have to cover two failed rows', async () => {
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        chain(
+          {
+            data: [
+              failedRow({ amount: 50, id: 'refund-1' }),
+              failedRow({
+                amount: 50,
+                created_at: '2026-09-27T12:30:00Z',
+                id: 'refund-9',
+              }),
+            ],
+            error: null,
+          },
+          'limit'
+        )
+      )
+      .mockReturnValueOnce(
+        chain(
+          {
+            data: [
+              replacement({
+                amount: 50,
+                created_at: '2026-09-27T13:00:00Z',
+                id: 'refund-2',
+              }),
+            ],
+            error: null,
+          },
+          'limit'
+        )
+      )
+      .mockReturnValueOnce(chain({ data: [], error: null }, 'in'));
+
+    // The single 50-unit replacement postdates both failures but can
+    // only refund half the 100-unit leg: reusing it for each row would
+    // suppress a live contradiction.
+    await expect(
+      resolveContradictoryRefundFailure({ from } as never, row, order)
+    ).resolves.toBe(false);
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          failed_refund_ids: ['refund-1', 'refund-9'],
+        }),
+      })
+    );
+  });
+
+  it('spends one large replacement across two failed rows on the same leg', async () => {
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        chain(
+          {
+            data: [
+              failedRow({ amount: 50, id: 'refund-1' }),
+              failedRow({
+                amount: 50,
+                created_at: '2026-09-27T12:30:00Z',
+                id: 'refund-9',
+              }),
+            ],
+            error: null,
+          },
+          'limit'
+        )
+      )
+      .mockReturnValueOnce(
+        chain(
+          {
+            data: [
+              replacement({
+                amount: 100,
+                created_at: '2026-09-27T13:00:00Z',
+                id: 'refund-2',
+              }),
+            ],
+            error: null,
+          },
+          'limit'
+        )
+      );
+
+    await expect(
+      resolveContradictoryRefundFailure({ from } as never, row, order)
+    ).resolves.toBe(true);
+    expect(mocks.quarantineRefund).not.toHaveBeenCalled();
+  });
+
   it('fails closed when a matching replacement amount is malformed', async () => {
     const from = vi
       .fn()

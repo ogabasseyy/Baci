@@ -25,6 +25,7 @@ function notificationQueries(
   const query = {
     eq: vi.fn().mockReturnThis(),
     gte: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
     lt: vi.fn().mockReturnThis(),
     limit,
     select: vi.fn().mockReturnThis(),
@@ -47,6 +48,10 @@ describe('countDeadLetteredPaystackRefundNotifications', () => {
     await expect(
       countDeadLetteredPaystackRefundNotifications({ from } as never)
     ).resolves.toBe(0);
+    // Mirror the claim RPC's exhausted-CTE exactly: it dead-letters
+    // attempts-exhausted rows in both claimable statuses, so counting
+    // only failed rows would let a pending loss report success.
+    expect(query.in).toHaveBeenCalledWith('status', ['pending', 'failed']);
     expect(query.gte).toHaveBeenCalledWith('attempts', 5);
     expect(mocks.loggerError).not.toHaveBeenCalled();
   });
@@ -105,6 +110,7 @@ describe('countDeadLetteredPaystackRefundNotifications', () => {
     const query = {
       eq: vi.fn().mockReturnThis(),
       gte: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
       lt: vi.fn().mockReturnThis(),
       limit,
       select: vi.fn().mockReturnThis(),

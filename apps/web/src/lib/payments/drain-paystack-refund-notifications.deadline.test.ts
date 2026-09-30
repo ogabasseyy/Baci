@@ -125,6 +125,10 @@ describe('refund notification cron deadline', () => {
         claim_token: null,
         last_error: null,
         status: 'pending',
+        // The fresh generation restarts the retry budget: without the
+        // reset the claim RPC would dead-letter a fifth-claim requeue
+        // instead of delivering the new failure alert.
+        attempts: 0,
       })
     );
     expect(db.finish.gt).toHaveBeenCalledWith('generation', 0);

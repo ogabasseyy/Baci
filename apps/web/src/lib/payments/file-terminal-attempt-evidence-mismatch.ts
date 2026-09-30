@@ -11,8 +11,8 @@ export interface TerminalAttemptMismatchEvidence {
 
 /**
  * Files an evidence-mismatch review for a stale attempt Paystack reports as
- * terminal (abandoned/failed) with evidence that does not match the local
- * row, then stamps the row so the sweep never reselects it. Returns true
+ * terminal (abandoned/failed/reversed) with evidence that does not match
+ * the local row, then stamps the row so the sweep never reselects it. Returns true
  * when the row is durably resolved. A conflicting open review (23505)
  * merges this attempt's evidence into the existing order review before
  * stamping: the stamp prevents reselection while the transaction remains

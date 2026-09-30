@@ -44,6 +44,7 @@ describe('resolveAbandonedAttemptMismatch', () => {
   it.each([
     'abandoned',
     'failed',
+    'reversed',
   ])('files a %s mismatch and records the review', async (status) => {
     const reviewsFiled: string[] = [];
 

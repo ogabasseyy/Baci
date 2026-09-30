@@ -68,6 +68,23 @@ got="$(printf '%s' 'hi @octocat, ping @a-b and mail a@b.com' | sanitize_mentions
 assert_eq "mentions-zwsp" "hi @${zwsp}octocat, ping @${zwsp}a-b and mail a@b.com" "${got}"
 got="$(printf '%s' '@lead starts here' | sanitize_mentions)"
 assert_eq "mentions-start" "@${zwsp}lead starts here" "${got}"
+got="$(printf '%s' 'say (@octo) and "[@root]" ok' | sanitize_mentions)"
+assert_eq "mentions-bracket-quote" "say (@${zwsp}octo) and \"[@${zwsp}root]\" ok" "${got}"
+
+# --- head_readable ---
+linkdir="$(mktemp -d)"
+mkdir -p "${linkdir}/real" && printf 'x' > "${linkdir}/real/AGENTS.md"
+ln -s /etc "${linkdir}/farm"
+ln -s "${linkdir}/real/AGENTS.md" "${linkdir}/filelink"
+if (cd "${linkdir}" && head_readable "real/AGENTS.md"); then got_hr="yes"; else got_hr="no"; fi
+assert_eq "readable-regular" "yes" "${got_hr}"
+if (cd "${linkdir}" && head_readable "farm/AGENTS.md"); then got_hr="yes"; else got_hr="no"; fi
+assert_eq "readable-symlinked-parent" "no" "${got_hr}"
+if (cd "${linkdir}" && head_readable "filelink"); then got_hr="yes"; else got_hr="no"; fi
+assert_eq "readable-symlinked-file" "no" "${got_hr}"
+if (cd "${linkdir}" && head_readable "missing/AGENTS.md"); then got_hr="yes"; else got_hr="no"; fi
+assert_eq "readable-missing" "no" "${got_hr}"
+rm -rf "${linkdir}"
 
 # --- redact ---
 pem='-----BEGIN TEST PRIVATE KEY-----FAKEFAKEFAKE-----END TEST PRIVATE KEY-----'

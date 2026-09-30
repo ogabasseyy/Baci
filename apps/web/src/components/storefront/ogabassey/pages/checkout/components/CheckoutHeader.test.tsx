@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { CheckoutHeader, CheckoutPageHeading } from './CheckoutHeader';
+import { CheckoutHeader } from './CheckoutHeader';
 
 describe('CheckoutHeader', () => {
   it('renders the secure navigation and sends Return to Cart through its callback', () => {
@@ -15,14 +15,5 @@ describe('CheckoutHeader', () => {
     fireEvent.click(returnButton);
 
     expect(onReturnToCart).toHaveBeenCalledOnce();
-  });
-
-  it('renders an accessible checkout page heading and encryption status', () => {
-    render(<CheckoutPageHeading />);
-
-    expect(
-      screen.getByRole('heading', { level: 1, name: 'Secure Checkout' })
-    ).toBeInTheDocument();
-    expect(screen.getByText('SSL Encrypted')).toBeInTheDocument();
   });
 });

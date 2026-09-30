@@ -16,10 +16,8 @@ import {
   getCheckoutPaymentIntent,
 } from '@baci/shared/contracts';
 import { CheckoutPaymentOverlays } from './checkout/components/CheckoutPaymentOverlays';
-import {
-  CheckoutHeader,
-  CheckoutPageHeading,
-} from './checkout/components/CheckoutHeader';
+import { CheckoutHeader } from './checkout/components/CheckoutHeader';
+import { CheckoutPageHeading } from './checkout/components/CheckoutPageHeading';
 import { CheckoutStepComposition } from './checkout/components/CheckoutStepComposition';
 import {
   DiscountCodeInput,

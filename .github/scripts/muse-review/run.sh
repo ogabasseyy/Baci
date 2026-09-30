@@ -11,6 +11,9 @@
 # stays truthful (the step uses continue-on-error; Post renders a fallback).
 set -euo pipefail
 
+# shellcheck disable=SC1091  # SCRIPT_DIR is set by the workflow step
+. "${SCRIPT_DIR}/lib.sh"
+
 review_file="${RUNNER_TEMP}/muse-review-body.md"
 : > "${review_file}"
 
@@ -38,6 +41,8 @@ echo "review_file=${review_file}" >> "${GITHUB_OUTPUT}"
 
 if (( muse_rc != 0 )); then
   echo "::warning::muse exec exited ${muse_rc}; stderr tail follows"
-  tail -c 4000 "${RUNNER_TEMP}/muse-stderr.log" || true
+  # Redact-then-truncate like review bodies: the raw tail could carry
+  # secrets a misbehaving model echoed to stderr.
+  redact "$(cat "${RUNNER_TEMP}/muse-stderr.log" 2>/dev/null || true)" | tail -c 4000
   exit "${muse_rc}"
 fi

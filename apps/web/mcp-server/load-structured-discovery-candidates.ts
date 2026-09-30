@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { loadDiscoveryFactCandidates } from './load-discovery-fact-candidates';
 import { DISCOVERY_PRODUCT_PROJECTION } from './discovery-product-projection';
 import { buildSearchProductsV2RpcArgs } from './search-products-ranking';
 import {
@@ -112,17 +113,16 @@ async function loadBrowseRows(merchantId: string, supabase: SupabaseClient) {
     .eq('status', 'active')
     .order('id', { ascending: true })
     .range(MAX_LEXICAL_CANDIDATES, MAX_LEXICAL_CANDIDATES);
-  if (error) throw error;
+  if (error) return { products, truncated: true };
   return { products, truncated: Array.isArray(next) && next.length > 0 };
 }
 
-function reciprocalRankFusion(lexicalIds: string[], semanticIds: string[]) {
+function reciprocalRankFusion(...sources: string[][]) {
   const scores = new Map<string, number>();
-  for (const [rank, id] of lexicalIds.entries()) {
-    scores.set(id, (scores.get(id) ?? 0) + 1 / (60 + rank + 1));
-  }
-  for (const [rank, id] of semanticIds.entries()) {
-    scores.set(id, (scores.get(id) ?? 0) + 1 / (60 + rank + 1));
+  for (const ids of sources) {
+    for (const [rank, id] of ids.entries()) {
+      scores.set(id, (scores.get(id) ?? 0) + 1 / (60 + rank + 1));
+    }
   }
   return [...scores].sort(([idA, scoreA], [idB, scoreB]) =>
     scoreB - scoreA || idA.localeCompare(idB)
@@ -148,11 +148,13 @@ export async function loadStructuredDiscoveryCandidates({
   const semanticPromise = semanticSearch
     ? loadSemanticIds(query, semanticSearch).then(
       (value) => ({ value, unavailable: value.probeFailed }),
-      () => ({ value: { ids: [], truncated: false }, unavailable: true })
+      () => ({ value: { ids: [], truncated: true }, unavailable: true })
     )
     : Promise.resolve({ value: { ids: [], truncated: false }, unavailable: false });
-  const [lexical, semantic] = await Promise.all([lexicalPromise, semanticPromise]);
-  const rankedIds = reciprocalRankFusion(lexical.ids, semantic.value.ids);
+  const [lexical, semantic, facts] = await Promise.all([
+    lexicalPromise, semanticPromise, loadDiscoveryFactCandidates(query, merchantId, supabase),
+  ]);
+  const rankedIds = reciprocalRankFusion(lexical.ids, semantic.value.ids, facts.ids);
   const products: McpSearchProductRow[] = [];
 
   for (let offset = 0; offset < rankedIds.length; offset += LEXICAL_PAGE_SIZE) {
@@ -173,7 +175,7 @@ export async function loadStructuredDiscoveryCandidates({
 
   return {
     products,
-    truncated: lexical.truncated || semantic.value.truncated,
+    truncated: lexical.truncated || semantic.value.truncated || facts.truncated,
     semanticUnavailable: semantic.unavailable,
   };
 }

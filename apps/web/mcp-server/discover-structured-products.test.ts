@@ -6,6 +6,7 @@ import { discoverStructuredProducts } from './discover-structured-products';
 type Fixture = {
   products: Array<Record<string, unknown>>;
   lexicalIds?: string[];
+  factIds?: string[];
   lexicalTotal?: number;
   variants?: Array<Record<string, unknown>>;
   offers?: Array<Record<string, unknown>>;
@@ -17,6 +18,7 @@ type Fixture = {
 function client(fixture: Fixture) {
   let lexicalCalls = 0;
   const rpc = vi.fn(async (name: string, args?: Record<string, unknown>) => {
+    if (name === 'search_product_discovery_facts') return { data: (fixture.factIds ?? []).map(product_id => ({product_id, total_count: fixture.factIds?.length})), error: null };
     if (name === 'search_products_v2') {
       if (fixture.lexicalError) return { data: null, error: fixture.lexicalError };
       const offset = Number(args?.result_offset ?? 0);
@@ -97,6 +99,24 @@ const input = (supabase: SupabaseClient, discoveryIntent: McpDiscoveryIntent, ov
 });
 
 describe('discoverStructuredProducts', () => {
+  it('selects a verified model retrieved only from the facts index', async () => {
+    const row = product('generic-item', {product_type: 'laptop', model: 'ZX-42'});
+    const fixture = client({products: [row], lexicalIds: [], factIds: ['generic-item']});
+    const result = await discoverStructuredProducts(input(fixture.supabase, intent({product_type: 'laptop', model: 'ZX-42'}), {query: 'ZX-42'}));
+    expect(result.selectedProducts.map(({product}) => product.id)).toEqual(['generic-item']);
+    expect(result.coverage).toBe('complete');
+  });
+
+  it.each([{max_price: 1000}, {sort: 'price_asc'}])('marks initial semantic failures incomplete for price-sensitive searches %s', async (args) => {
+    const fixture = client({products: [product('confirmed', {})]});
+    const result = await discoverStructuredProducts(input(fixture.supabase, intent({}), {
+      args, semanticSearch: async () => { throw new Error('provider unavailable'); },
+    }));
+    expect(result.coverage).toBe('partial');
+    expect(result.priceScanComplete).toBe(false);
+    expect(result.semanticUnavailable).toBe(true);
+  });
+
   it('merges independent lexical and semantic retrieval and bypasses sentence grammar', async () => {
     const wiredCharger = product('wired-charger', {
       product_type: 'charger', compatible_with: ['iPhone'], attributes: { power_w: 30 },

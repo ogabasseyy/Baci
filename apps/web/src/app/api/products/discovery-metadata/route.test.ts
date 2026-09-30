@@ -134,6 +134,27 @@ describe('product discovery metadata API', () => {
     expect(mocks.eq).toHaveBeenCalledWith('id', productId);
   });
 
+  it('maps only the metadata storage constraint to a safe client error', async () => {
+    mocks.maybeSingle.mockResolvedValueOnce({
+      data: null,
+      error: {
+        code: '23514',
+        message:
+          'violates check constraint "products_discovery_metadata_object"; private row detail',
+      },
+    });
+    const response = await PUT(request(JSON.stringify(validBody)));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: 'Discovery facts exceed the supported storage limit',
+    });
+    mocks.maybeSingle.mockResolvedValueOnce({
+      data: null,
+      error: { code: '23514', message: 'unrelated constraint' },
+    });
+    expect((await PUT(request(JSON.stringify(validBody)))).status).toBe(500);
+  });
+
   it('returns the updated product ID with no-store caching', async () => {
     const response = await PUT(request(JSON.stringify(validBody)));
     expect(response.status).toBe(200);

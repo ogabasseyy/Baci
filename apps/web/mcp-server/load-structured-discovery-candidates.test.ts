@@ -7,7 +7,7 @@ function setup({ lexicalPages, products }: {
   products: Array<Record<string, unknown>>;
 }) {
   let rpcPage = 0;
-  const rpc = vi.fn(async () => ({ data: lexicalPages[rpcPage++] ?? [], error: null }));
+  const rpc = vi.fn(async (name: string) => ({ data: name === 'search_product_discovery_facts' ? [] : lexicalPages[rpcPage++] ?? [], error: null }));
   const queryCalls: Array<{ table: string; calls: unknown[][] }> = [];
   const from = vi.fn((table: string) => {
     const calls: unknown[][] = [];
@@ -83,6 +83,43 @@ describe('loadStructuredDiscoveryCandidates', () => {
     expect(ranges.at(-1)).toEqual([500, 500]);
   });
 
+  it('preserves 500 confirmed browse products when the final cap probe fails', async () => {
+    const rows = productRows(Array.from({ length: 500 }, (_, index) => `p-${index}`));
+    const ranges: number[][] = [];
+    const from = () => {
+      const builder = {
+        select: () => builder, eq: () => builder, order: () => builder,
+        range: (start: number, end: number) => {
+          ranges.push([start, end]);
+          if (start === 500) return Promise.resolve({ data: null, error: new Error('probe failed') });
+          return Promise.resolve({ data: rows.slice(start, end + 1), error: null });
+        },
+      };
+      return builder;
+    };
+
+    const result = await loadStructuredDiscoveryCandidates({
+      merchantId: 'merchant-1', supabase: { from } as unknown as SupabaseClient,
+    });
+
+    expect(result.products).toHaveLength(500);
+    expect(result.truncated).toBe(true);
+    expect(ranges.at(-1)).toEqual([500, 500]);
+  });
+
+  it('retrieves verified-fact-only matches independently of marketing and embeddings', async () => {
+    const fixture = setup({ lexicalPages: [[]], products: productRows(['facts-only']) });
+    fixture.rpc.mockImplementation(async (name: string) => ({
+      data: name === 'search_product_discovery_facts' ? ranked(['facts-only']) : [], error: null,
+    }));
+    const result = await loadStructuredDiscoveryCandidates({query: 'ZX-42', merchantId: 'merchant-1', supabase: fixture.supabase});
+    expect(result.products.map(({id}) => id)).toEqual(['facts-only']);
+    expect(result.truncated).toBe(false);
+    expect(fixture.rpc).toHaveBeenCalledWith('search_product_discovery_facts', {
+      merchant_id_param: 'merchant-1', query_text: 'ZX-42', result_limit: 100, result_offset: 0,
+    });
+  });
+
   it('fuses overlapping lexical and semantic candidates and hydrates in fusion order', async () => {
     const { supabase } = setup({
       lexicalPages: [ranked(['lexical-first', 'overlap', 'lexical-third'])],
@@ -110,7 +147,7 @@ describe('loadStructuredDiscoveryCandidates', () => {
     });
 
     expect(semanticSearch).toHaveBeenCalledWith('structured query', 0);
-    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc.mock.calls.filter(([name]) => name === 'search_products_v2')).toHaveLength(1);
   });
 
   it('isolates semantic errors while propagating lexical errors', async () => {
@@ -119,7 +156,7 @@ describe('loadStructuredDiscoveryCandidates', () => {
       query: 'query', merchantId: 'merchant-1', supabase,
       semanticSearch: async () => { throw new Error('embedding lookup failed'); },
     });
-    expect(result.semanticUnavailable).toBe(true);
+    expect(result).toMatchObject({ truncated: true, semanticUnavailable: true });
     expect(result.products.map(({ id }) => id)).toEqual(['lexical']);
 
     const lexicalError = new Error('lexical RPC failed');
@@ -154,7 +191,7 @@ describe('loadStructuredDiscoveryCandidates', () => {
       query: 'query', merchantId: 'merchant-1', supabase, semanticSearch,
     });
 
-    expect(rpc).toHaveBeenCalledTimes(5);
+    expect(rpc.mock.calls.filter(([name]) => name === 'search_products_v2')).toHaveLength(5);
     expect(semanticSearch.mock.calls.map(([ , offset ]) => offset)).toEqual([0, 40, 80, 120, 160, 200]);
     expect(result.truncated).toBe(true);
   });

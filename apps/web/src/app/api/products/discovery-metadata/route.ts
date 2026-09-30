@@ -46,6 +46,14 @@ export async function PUT(request: NextRequest) {
     .eq('id', parsed.data.productId)
     .select('id')
     .maybeSingle();
+  if (
+    error?.code === '23514' &&
+    error.message?.includes('products_discovery_metadata_object')
+  )
+    return NextResponse.json(
+      { error: 'Discovery facts exceed the supported storage limit' },
+      { status: 400 }
+    );
   if (error)
     return NextResponse.json(
       { error: 'Could not update discovery facts' },

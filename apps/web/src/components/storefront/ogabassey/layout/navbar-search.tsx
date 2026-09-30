@@ -104,6 +104,10 @@ export function NavbarSearch({
   const isMountedRef = useRef(true);
 
   useEffect(() => {
+    // Re-arm on every setup: Strict Mode mounts, cleans up, and remounts
+    // in development, and the cleanup below would otherwise leave the
+    // guard permanently tripped so the lazy chunk never swaps in.
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
     };

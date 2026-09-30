@@ -4,6 +4,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -99,6 +100,29 @@ describe('NavbarSearch', () => {
     fireEvent.click(screen.getByRole('button', { name: /select product/i }));
 
     expect(mocks.push).toHaveBeenCalledWith('/ogabassey/products/iphone');
+  });
+
+  it('loads autocomplete under Strict Mode remounting', async () => {
+    // Strict Mode mounts, cleans up, and remounts effects in development:
+    // without re-arming the mount guard on setup, the cleanup leaves it
+    // permanently tripped and the lazy chunk is discarded on resolve.
+    render(
+      <StrictMode>
+        <NavbarSearch
+          basePath="/ogabassey"
+          isBlogPage={false}
+          merchantId="merchant-1"
+        />
+      </StrictMode>
+    );
+
+    fireEvent.focus(screen.getByRole('searchbox', { name: /search products/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: /select product/i })
+      ).toBeInTheDocument();
+    });
   });
 
   it('caps the loaded autocomplete input at the route truncation limit', async () => {

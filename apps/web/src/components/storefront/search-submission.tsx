@@ -3,6 +3,7 @@
 import {
   recordSearchSubmission,
   SEARCH_SUBMISSION_QUERY_MAX_LENGTH,
+  truncateSearchSubmissionQuery,
 } from '@/lib/search-submission';
 
 interface SearchSubmissionFormProps {
@@ -17,7 +18,7 @@ export function SearchSubmissionForm({
 }: SearchSubmissionFormProps) {
   // Clamp the retained value to the shared limit so the displayed, navigated,
   // and recorded queries are always identical (sanitizeSearchQuery allows 200).
-  const initialQuery = query.slice(0, SEARCH_SUBMISSION_QUERY_MAX_LENGTH);
+  const initialQuery = truncateSearchSubmissionQuery(query);
   return (
     <form
       action={`${pathPrefix}/search`}

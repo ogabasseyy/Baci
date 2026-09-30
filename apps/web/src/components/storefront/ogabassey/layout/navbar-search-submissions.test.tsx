@@ -17,10 +17,13 @@ function submissionCalls() {
     ([url]) => url === '/api/search/submissions'
   );
 }
-async function loadAutocomplete(suggestions: unknown[] = []) {
+async function loadAutocomplete(
+  suggestions: unknown[] = [],
+  popularSearches: unknown[] = []
+) {
   mocks.fetch.mockImplementation(async () => ({
     ok: true,
-    json: async () => ({ suggestions, popularSearches: [] }),
+    json: async () => ({ suggestions, popularSearches }),
   }));
   render(
     <NavbarSearch
@@ -85,6 +88,31 @@ describe('mounted navbar submission paths', () => {
     expect(screen.getByRole('combobox')).toHaveAttribute(
       'aria-expanded',
       'true'
+    );
+  });
+
+  it('records popular-search activation from click and keyboard', async () => {
+    await loadAutocomplete([], [
+      { search_query: 'phone case', search_count: 42 },
+    ]);
+    const option = await screen.findByRole('option', { name: /phone case/i });
+    expect(submissionCalls()).toHaveLength(0);
+    fireEvent.click(option);
+    expect(submissionCalls()).toHaveLength(1);
+    expect(JSON.parse(submissionCalls()[0][1].body)).toEqual({
+      query: 'phone case',
+      pathPrefix: '/ogabassey',
+      source: 'popular-search',
+    });
+    fireEvent.change(screen.getByRole('searchbox'), {
+      target: { value: 'phone cover' },
+    });
+    await screen.findByRole('option', { name: /phone case/i });
+    fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'ArrowDown' });
+    fireEvent.keyDown(screen.getByRole('searchbox'), { key: 'Enter' });
+    expect(submissionCalls()).toHaveLength(2);
+    expect(JSON.parse(submissionCalls()[1][1].body).source).toBe(
+      'popular-search'
     );
   });
 

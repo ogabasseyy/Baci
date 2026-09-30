@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { useDebounce } from '@/hooks/use-debounce';
 import { trackEvent } from '@/lib/event-tracking';
 import { getProductUrl } from '@/lib/product-url';
+import { recordSearchSubmission } from '@/lib/search-submission';
 import { cn } from '@/lib/utils';
 import {
   type AutocompleteProduct,
@@ -181,6 +182,12 @@ export function SearchAutocomplete({
       } else {
         const searchIndex = highlightedIndex - suggestions.length;
         const search = popularSearches[searchIndex];
+        // Keyboard picks are explicit search actions too (see panel onClick).
+        recordSearchSubmission(
+          search.search_query,
+          searchPathPrefix ?? '',
+          'popular-search'
+        );
         onChange(search.search_query);
         setIsOpen(false);
       }

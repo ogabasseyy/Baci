@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import {
   recordSearchSubmission,
   SEARCH_SUBMISSION_QUERY_MAX_LENGTH,
+  truncateSearchSubmissionQuery,
 } from '@/lib/search-submission';
 
 type SearchAutocompleteComponent = React.ComponentType<SearchAutocompleteProps>;
@@ -59,9 +60,7 @@ export function NavbarSearch({
   }
 
   const pushSearchRoute = (query: string) => {
-    const trimmedQuery = query
-      .trim()
-      .slice(0, SEARCH_SUBMISSION_QUERY_MAX_LENGTH);
+    const trimmedQuery = truncateSearchSubmissionQuery(query);
     if (!trimmedQuery) {
       return;
     }

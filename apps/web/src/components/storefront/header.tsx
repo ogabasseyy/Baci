@@ -94,6 +94,7 @@ export function StorefrontHeader() {
         <div className="flex-1 flex justify-center px-4">
           <SearchAutocomplete
             merchantId={merchant.id}
+            searchPathPrefix={basePath}
             value={searchQuery}
             onChange={setSearchQuery}
             onSelectProduct={handleProductSelect}

@@ -15,6 +15,7 @@ export const SEARCH_SUBMISSION_SOURCES = [
   'results-form',
   'see-all',
   'did-you-mean',
+  'popular-search',
 ] as const;
 
 export type SearchSubmissionSource = (typeof SEARCH_SUBMISSION_SOURCES)[number];
@@ -27,15 +28,25 @@ export const SEARCH_SUBMISSION_LINK_SOURCES = [
 export type SearchSubmissionLinkSource =
   (typeof SEARCH_SUBMISSION_LINK_SOURCES)[number];
 
+/**
+ * Trim and clamp a query to the shared limit without splitting surrogate
+ * pairs: a slice boundary inside an emoji/astral character would leave an
+ * unpaired surrogate and crash encodeURIComponent during render.
+ */
+export function truncateSearchSubmissionQuery(query: string): string {
+  return query
+    .trim()
+    .slice(0, SEARCH_SUBMISSION_QUERY_MAX_LENGTH)
+    .replace(/[\uD800-\uDBFF]$/, '');
+}
+
 /** Called only by submission handlers. Never await or retry telemetry navigation. */
 export function recordSearchSubmission(
   query: string,
   pathPrefix: string,
   source: SearchSubmissionSource
 ): void {
-  const trimmedQuery = query
-    .trim()
-    .slice(0, SEARCH_SUBMISSION_QUERY_MAX_LENGTH);
+  const trimmedQuery = truncateSearchSubmissionQuery(query);
   if (!trimmedQuery) return;
   try {
     void fetch('/api/search/submissions', {

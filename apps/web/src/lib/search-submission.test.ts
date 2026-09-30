@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { recordSearchSubmission } from './search-submission';
+import {
+  recordSearchSubmission,
+  truncateSearchSubmissionQuery,
+} from './search-submission';
 
 const fetchMock = vi.fn();
 describe('recordSearchSubmission', () => {
@@ -22,6 +25,15 @@ describe('recordSearchSubmission', () => {
         }),
         keepalive: true,
       }
+    );
+  });
+
+  it('drops a trailing lone surrogate instead of splitting an astral character', () => {
+    expect(truncateSearchSubmissionQuery(`${'a'.repeat(99)}😀`)).toBe(
+      'a'.repeat(99)
+    );
+    expect(truncateSearchSubmissionQuery(`  ${'b'.repeat(100)}  `)).toBe(
+      'b'.repeat(100)
     );
   });
 

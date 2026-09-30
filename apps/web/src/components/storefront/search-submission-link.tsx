@@ -3,8 +3,8 @@
 import type { ReactNode } from 'react';
 import {
   recordSearchSubmission,
-  SEARCH_SUBMISSION_QUERY_MAX_LENGTH,
   type SearchSubmissionLinkSource,
+  truncateSearchSubmissionQuery,
 } from '@/lib/search-submission';
 
 interface SearchSubmissionLinkProps {
@@ -25,7 +25,7 @@ export function SearchSubmissionLink({
 }: SearchSubmissionLinkProps) {
   return (
     <a
-      href={`${pathPrefix}/search?q=${encodeURIComponent(query.trim().slice(0, SEARCH_SUBMISSION_QUERY_MAX_LENGTH))}`}
+      href={`${pathPrefix}/search?q=${encodeURIComponent(truncateSearchSubmissionQuery(query))}`}
       className={className}
       onClick={() => recordSearchSubmission(query, pathPrefix, source)}
       onAuxClick={(event) => {

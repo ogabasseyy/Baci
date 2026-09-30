@@ -4,6 +4,7 @@ import { Search, TrendingUp } from 'lucide-react';
 import Image from 'next/image';
 import { useCurrencyWithCountry } from '@/hooks/use-currency';
 import { getProductUrl } from '@/lib/product-url';
+import { recordSearchSubmission } from '@/lib/search-submission';
 import { cn } from '@/lib/utils';
 import { SearchSubmissionLink } from './search-submission-link';
 
@@ -158,6 +159,13 @@ export function SearchAutocompletePanel({
                     role="option"
                     aria-selected={highlightedIndex === optionIndex}
                     onClick={() => {
+                      // A popular-search pick is an explicit search action even
+                      // in live-filter headers with no enclosing submit form.
+                      recordSearchSubmission(
+                        search.search_query,
+                        searchPathPrefix ?? '',
+                        'popular-search'
+                      );
                       onSelectPopularSearch(search.search_query);
                       onClose();
                     }}

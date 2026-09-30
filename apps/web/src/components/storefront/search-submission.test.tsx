@@ -65,6 +65,22 @@ describe('search submission controls', () => {
     });
   });
 
+  it('truncates astral characters without splitting surrogate pairs', () => {
+    const query = `${'a'.repeat(99)}😀extra`;
+    render(
+      <SearchSubmissionLink pathPrefix="" query={query} source="see-all">
+        See all results
+      </SearchSubmissionLink>
+    );
+    const link = screen.getByRole('link');
+    expect(link).toHaveAttribute('href', `/search?q=${'a'.repeat(99)}`);
+    link.addEventListener('click', (event) => event.preventDefault());
+    fireEvent.click(link);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).query).toBe(
+      'a'.repeat(99)
+    );
+  });
+
   it('records middle-button link activation without counting other auxiliary clicks', () => {
     render(
       <SearchSubmissionLink pathPrefix="" query="phone" source="see-all">

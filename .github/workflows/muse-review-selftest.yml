@@ -40,9 +40,11 @@ jobs:
             bash -n "${f}"
           done
           perl -c .github/scripts/muse-review/ranges.pl
-          for f in .github/scripts/muse-review/*.jq .github/scripts/muse-review/schema.json; do
-            jq empty "${f}"
-          done
+          # schema.json is data (validate it); the .jq files are programs, and
+          # `jq empty` would misparse them as JSON input — they are executed
+          # against fixtures by test.sh instead, so a syntax error there fails
+          # the suite above.
+          jq empty .github/scripts/muse-review/schema.json
 
       - name: Workflow lint
         # Pinned actionlint binary, SHA256-verified like the Muse install.

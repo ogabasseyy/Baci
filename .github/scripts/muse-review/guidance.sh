@@ -113,11 +113,18 @@ while IFS= read -r -d '' changed; do
     break
   fi
   if [[ "${changed}" == */* ]]; then dir="${changed%/*}"; else dir="."; fi
-  while [[ "${dir}" != "." && "${dir}" != "/" ]]; do
+  # Cap enforced inside the traversal too: a single deeply nested path
+  # would otherwise append two candidates per ancestor without rechecking.
+  while [[ "${dir}" != "." && "${dir}" != "/" ]] && (( ${#MUSE_CANDIDATES[@]} < candidate_cap )); do
     seen_add "${dir}/AGENTS.md"
     seen_add "${dir}/CLAUDE.md"
     if [[ "${dir}" == */* ]]; then dir="${dir%/*}"; else dir="."; fi
   done
+  if (( ${#MUSE_CANDIDATES[@]} >= candidate_cap )); then
+    guidance_cap_hit=true
+    echo "::notice::Guidance candidate cap (${candidate_cap}) reached; deeper scoped files omitted."
+    break
+  fi
 done < <(jq -j '[.[] | .filename, (.previous_filename // empty)] | map(select(length > 0))[] + "\u0000"' "${RUNNER_TEMP}/muse-files.json" 2>/dev/null)
 # Three phases: trusted base guidance first, then head versions, then
 # custom-base versions — so PR-authored content can never exhaust the byte

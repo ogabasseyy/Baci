@@ -1,7 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import type Colors from '@/constants/Colors';
-import { MIN_SEARCH_QUERY_LENGTH } from '@/constants/search';
+import { getSearchHintLabel } from '@/hooks/is-searchable-query';
 import styles from './search-screen.styles';
 
 interface SearchResultsHeaderProps {
@@ -14,8 +14,6 @@ interface SearchResultsHeaderProps {
   showMinLengthHint?: boolean;
 }
 
-const MIN_LENGTH_HINT_LABEL = `Type at least ${MIN_SEARCH_QUERY_LENGTH} characters to search`;
-
 export default function SearchResultsHeader({
   colors,
   onBack,
@@ -25,6 +23,10 @@ export default function SearchResultsHeader({
   query,
   showMinLengthHint = false,
 }: SearchResultsHeaderProps) {
+  // The rejection reason depends on the current input: normalization-empty
+  // input like "!!" already satisfies the length rule, so the length-only
+  // message would tell the shopper to type characters they already typed.
+  const hintLabel = getSearchHintLabel(query.trim());
   return (
     <View>
       <View style={styles.header}>
@@ -70,10 +72,10 @@ export default function SearchResultsHeader({
         <View
           style={styles.hintContainer}
           accessibilityLiveRegion="polite"
-          accessibilityLabel={MIN_LENGTH_HINT_LABEL}
+          accessibilityLabel={hintLabel}
         >
           <Text style={[styles.hintText, { color: colors.textSecondary }]}>
-            {MIN_LENGTH_HINT_LABEL}
+            {hintLabel}
           </Text>
         </View>
       ) : null}

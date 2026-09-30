@@ -48,6 +48,30 @@ describe('useSearchStorage', () => {
     expect(result.current.recentSearches).toEqual(['iphone', 'galaxy']);
   });
 
+  it('drops normalization-empty entries persisted by older length-only builds', () => {
+    mockStorageData.search_history = JSON.stringify([
+      'iphone',
+      '!!',
+      '()',
+      'galaxy',
+    ]);
+
+    const { result } = renderHook(() => useSearchStorage());
+
+    expect(result.current.recentSearches).toEqual(['iphone', 'galaxy']);
+  });
+
+  it('refuses to persist punctuation-only terms', () => {
+    const { result } = renderHook(() => useSearchStorage());
+
+    act(() => {
+      result.current.saveSearch('!!');
+    });
+
+    expect(result.current.recentSearches).not.toContain('!!');
+    expect(mockStorageData.search_history ?? '').not.toContain('!!');
+  });
+
   it('saves searches to the front with case-insensitive dedupe', () => {
     const { result } = renderHook(() => useSearchStorage());
 

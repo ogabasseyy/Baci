@@ -50,8 +50,19 @@ describe('SearchResultsHeader', () => {
     expect(screen.queryByLabelText('Clear search')).toBeNull();
   });
 
-  it('shows the minimum-length hint after a rejected commit', () => {
+  it('shows searchable-term guidance when the rejected input already meets the length rule', () => {
     renderHeader({ query: '!!', showMinLengthHint: true });
+
+    expect(
+      screen.getByLabelText('Type letters or numbers to search')
+    ).toBeTruthy();
+    expect(
+      screen.queryByLabelText('Type at least 2 characters to search')
+    ).toBeNull();
+  });
+
+  it('shows length guidance when the rejected input is too short', () => {
+    renderHeader({ query: 'i', showMinLengthHint: true });
 
     expect(
       screen.getByLabelText('Type at least 2 characters to search')

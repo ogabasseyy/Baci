@@ -136,6 +136,14 @@ export function useAutocompleteQuerySync({
       // query. Keystroke-driven changes keep live-update behavior (the
       // handler above already reset the highlight). The debounce fetch for
       // the new value repopulates immediately after.
+      //
+      // Result-driven reopening stays suppressed until the shopper focuses
+      // or edits again: without this, the replacement query's fetch
+      // resolves into onResultsReceived and pops suggestions open over
+      // the destination page even though the dismissed navbar was never
+      // focused. Focus and edit handlers re-arm opening, so suppression
+      // lifts on the next genuine interaction.
+      suppressReopenRef.current = true;
       clearSuggestions();
       onHighlightReset();
       if (value === debouncedValue) {

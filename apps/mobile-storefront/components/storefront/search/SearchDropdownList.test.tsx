@@ -169,7 +169,7 @@ describe('SearchDropdownList', () => {
     );
 
     expect(
-      screen.getByLabelText('Type at least 2 characters to search')
+      screen.getByLabelText('Type letters or numbers to search')
     ).toBeTruthy();
     expect(screen.queryByLabelText(/see all results/i)).toBeNull();
     expect(screen.queryByText(/no results for/i)).toBeNull();
@@ -199,7 +199,7 @@ describe('SearchDropdownList', () => {
     );
 
     expect(
-      screen.getByLabelText('Type at least 2 characters to search')
+      screen.getByLabelText('Type letters or numbers to search')
     ).toBeTruthy();
     expect(screen.queryByLabelText(/iPhone 14 Pro/i)).toBeNull();
     expect(screen.queryByLabelText(/see all results/i)).toBeNull();

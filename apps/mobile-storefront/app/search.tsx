@@ -271,6 +271,8 @@ export default function SearchScreen() {
         onRecentSearch={(search) => {
           const boundedSearch = search.slice(0, MAX_SEARCH_QUERY_LENGTH);
           setQuery(boundedSearch);
+          // Clear-on-valid like typing, or valid results keep a stale warning.
+          noteQueryChange(boundedSearch);
           saveToHistory(boundedSearch);
           Keyboard.dismiss();
         }}

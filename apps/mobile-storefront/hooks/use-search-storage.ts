@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react';
 import { MIN_SEARCH_QUERY_LENGTH } from '@/constants/search';
 import { syncStorage as storage } from '@/lib/storage'; // Assuming this is the correct import based on search.tsx analysis
+import { isSearchableQuery } from './is-searchable-query';
 
 const SEARCH_HISTORY_KEY = 'search_history';
 const MAX_SEARCH_HISTORY = 10;
@@ -37,8 +38,10 @@ const DEFAULT_SEARCHES = [
 
 /**
  * Read persisted search history synchronously, normalizing defensively:
- * blank and case-duplicate entries are dropped so every reader starts from
- * the same clean list. Returns null when nothing valid is persisted.
+ * blank, normalization-empty (e.g. "!!" persisted by older builds that
+ * only length-checked), and case-duplicate entries are dropped so every
+ * reader starts from the same clean, submittable list. Returns null when
+ * nothing valid is persisted.
  */
 function readPersistedSearchHistory(): string[] | null {
   try {
@@ -54,7 +57,11 @@ function readPersistedSearchHistory(): string[] | null {
       const seen = new Set<string>();
       return parsed.filter((item) => {
         const normalized = item.trim().toLowerCase();
-        if (!normalized || seen.has(normalized)) {
+        if (
+          !normalized ||
+          seen.has(normalized) ||
+          !isSearchableQuery(item.trim())
+        ) {
           return false;
         }
         seen.add(normalized);
@@ -96,7 +103,14 @@ export function useSearchStorage() {
   }, []);
 
   const saveSearch = (searchTerm: string) => {
-    if (!searchTerm.trim() || searchTerm.length < MIN_SEARCH_QUERY_LENGTH)
+    // Mirror the submit gate exactly (length AND searchable): older
+    // callers length-checked only, so punctuation-only input like "!!"
+    // would persist as a chip that can never produce results.
+    if (
+      !searchTerm.trim() ||
+      searchTerm.length < MIN_SEARCH_QUERY_LENGTH ||
+      !isSearchableQuery(searchTerm.trim())
+    )
       return;
 
     // Compute eagerly (not in a state updater) so persistence lands before

@@ -142,6 +142,32 @@ describe('useAutocompleteQuerySync', () => {
     expect(onHighlightReset).toHaveBeenCalledTimes(1);
   });
 
+  it('suppresses result-driven reopening after an external value change', async () => {
+    mockFetch(SUGGESTION_PAYLOAD);
+
+    const { initialProps, onHighlightReset, onOpenChange, rerender, result } =
+      setup();
+
+    await waitFor(() => {
+      expect(result.current.suggestions).toHaveLength(1);
+    });
+    onHighlightReset.mockClear();
+    onOpenChange.mockClear();
+
+    // A route-sync replacement (e.g. did-you-mean navigation into a page
+    // whose navbar was dismissed) must not pop suggestions open without
+    // focus: the replacement fetch repopulates silently, and opening
+    // re-arms only on the next focus or edit.
+    rerender({ ...initialProps, value: 'galaxy case' });
+
+    await waitFor(() => {
+      expect(result.current.suggestions).toHaveLength(1);
+    });
+    expect(result.current.settledQuery).toBe('galaxy case');
+    expect(onHighlightReset).toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
   it('restarts the request when an external change returns to the debounced query', async () => {
     mockFetch(SUGGESTION_PAYLOAD);
 

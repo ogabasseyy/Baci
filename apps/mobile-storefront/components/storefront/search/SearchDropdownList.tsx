@@ -5,7 +5,10 @@ import type Colors from '@/constants/Colors';
 import { BRAND } from '@/constants/Colors';
 import { MIN_SEARCH_QUERY_LENGTH } from '@/constants/search';
 import type { Category } from '@/hooks';
-import { isSearchableQuery } from '@/hooks/is-searchable-query';
+import {
+  getSearchHintLabel,
+  isSearchableQuery,
+} from '@/hooks/is-searchable-query';
 import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import { formatPrice, type Product } from '@/types/product';
 import { searchDropdownStyles as styles } from './SearchDropdown.styles';
@@ -80,6 +83,10 @@ export function SearchDropdownList({
         onSeeAllResults={onSeeAllResults}
       />
     ) : null;
+  // Same rejection-aware copy as the results header: normalization-empty
+  // input already meets the length rule, so it needs searchable-term
+  // guidance instead of the length message.
+  const hintLabel = getSearchHintLabel(trimmedCurrentQuery);
   if (!hasQuery) {
     return (
       <>
@@ -87,10 +94,10 @@ export function SearchDropdownList({
           <View
             style={styles.hintContainer}
             accessibilityLiveRegion="polite"
-            accessibilityLabel={`Type at least ${MIN_SEARCH_QUERY_LENGTH} characters to search`}
+            accessibilityLabel={hintLabel}
           >
             <Text style={[styles.hintText, { color: colors.textSecondary }]}>
-              Type at least {MIN_SEARCH_QUERY_LENGTH} characters to search
+              {hintLabel}
             </Text>
           </View>
         ) : null}

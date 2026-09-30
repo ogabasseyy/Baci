@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Collect repo guidance: root candidates plus scoped AGENTS.md/CLAUDE.md from
 # each changed file's ancestor dirs. Default-branch base versions are
-# trusted; every other base (stacked PRs, custom branches) and all head
-# fallbacks are labeled UNTRUSTED in the prompt.
+# trusted; custom-base versions (stacked PRs, custom branches) are emitted
+# from the captured base SHA labeled UNTRUSTED, as are all head fallbacks.
 #
 # Env in: RUNNER_TEMP, SCRIPT_DIR. Reads muse-vars.env, muse-files.json.
 # Files out: muse-guidance.md. Must run from the checked-out PR head: head
@@ -35,6 +35,18 @@ emit_guidance() {
     # SHA, not the branch name: branch names are submitter-controlled and
     # this label prints outside any untrusted block.
     source="trusted (base ${MUSE_BASE_SHA_FULL:0:10})"
+  elif [[ "${phase}" == "xbase" ]] \
+    && content="$(git show "${MUSE_BASE_SHA_FULL}:${candidate}" 2>/dev/null)"; then
+    # Custom-base content from the captured SHA (never the branch name, and
+    # the classifier already verified the base is available). Skip when the
+    # head carries identical content — the head emission covers it — but
+    # keep it when head deleted or changed the file: those base-side rules
+    # still governed the change under review.
+    if head_readable "${candidate}" \
+      && [[ "$(cat -- "${candidate}")" == "${content}" ]]; then
+      return 0
+    fi
+    source="UNTRUSTED (custom base ${MUSE_BASE_SHA_FULL:0:10})"
   elif [[ "${phase}" == "head" ]] && head_readable "${candidate}"; then
     # Refuse symlinks: a PR-added symlink (e.g. to /proc/self/environ, or a
     # symlinked parent dir) would otherwise embed runner secrets into the
@@ -91,8 +103,10 @@ done
 # processes before the byte budget matters. Root candidates above are always
 # included; the cap only trims deep scoped discovery.
 candidate_cap=500
+guidance_cap_hit=false
 while IFS= read -r -d '' changed; do
   if (( ${#MUSE_CANDIDATES[@]} >= candidate_cap )); then
+    guidance_cap_hit=true
     echo "::notice::Guidance candidate cap (${candidate_cap}) reached; deeper scoped files omitted."
     break
   fi
@@ -103,27 +117,46 @@ while IFS= read -r -d '' changed; do
     if [[ "${dir}" == */* ]]; then dir="${dir%/*}"; else dir="."; fi
   done
 done < <(jq -j '[.[] | .filename, (.previous_filename // empty)] | map(select(length > 0))[] + "\u0000"' "${RUNNER_TEMP}/muse-files.json" 2>/dev/null)
-# Two phases: trusted base-backed guidance first, head-only files second —
-# so PR-authored content can never exhaust the byte budget before applicable
-# trusted rules are collected. Classified in one pass (one git show each).
+# Three phases: trusted base guidance first, then head versions, then
+# custom-base versions — so PR-authored content can never exhaust the byte
+# budget before applicable trusted rules are collected, and operative head
+# rules precede superseded base context. Classified in one pass.
 base_list=()
+xbase_list=()
 head_list=()
-for candidate in ${MUSE_CANDIDATES[@]+"${MUSE_CANDIDATES[@]}"}; do
+for candidate in "${MUSE_CANDIDATES[@]+"${MUSE_CANDIDATES[@]}"}"; do
   # Explicit base SHA, never bare FETCH_HEAD: later deepens append the head
   # to FETCH_HEAD, so the bare ref could resolve to the wrong commit.
   if [[ "${trust_base_flag}" == "true" ]] \
     && git show "${MUSE_BASE_SHA_FULL}:${candidate}" >/dev/null 2>&1; then
     base_list+=("${candidate}")
   else
+    # Custom base with available content: emit its version as UNTRUSTED
+    # too, so base-side rules that the PR deleted or changed are still
+    # visible (emit skips it when head content is identical).
+    if [[ "${MUSE_BASE_AVAILABLE:-}" == "true" && -n "${MUSE_BASE_SHA_FULL:-}" ]] \
+      && git show "${MUSE_BASE_SHA_FULL}:${candidate}" >/dev/null 2>&1; then
+      xbase_list+=("${candidate}")
+    fi
     head_list+=("${candidate}")
   fi
 done
-for candidate in ${base_list[@]+"${base_list[@]}"}; do
+for candidate in "${base_list[@]+"${base_list[@]}"}"; do
   emit_guidance "${candidate}" base
 done
-for candidate in ${head_list[@]+"${head_list[@]}"}; do
+for candidate in "${head_list[@]+"${head_list[@]}"}"; do
   emit_guidance "${candidate}" head
 done
+for candidate in "${xbase_list[@]+"${xbase_list[@]}"}"; do
+  emit_guidance "${candidate}" xbase
+done
+if [[ "${guidance_cap_hit}" == "true" ]]; then
+  # The log notice alone is invisible to the reviewer: record the partial
+  # scope in the prompt input itself so the verdict cannot silently claim
+  # full coverage when scoped files were never collected.
+  printf '\n(Partial scope: guidance discovery hit the %s-candidate cap; scoped files for later changed paths were omitted.)\n' \
+    "${candidate_cap}" >> "${guidance_file}"
+fi
 if [[ ! -s "${guidance_file}" ]]; then
   printf '(No AGENTS.md, CLAUDE.md, CONTRIBUTING.md, or copilot instructions found in this repo.)\n' > "${guidance_file}"
 fi

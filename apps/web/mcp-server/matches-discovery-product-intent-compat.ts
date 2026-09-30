@@ -55,7 +55,8 @@ export function matchesCompatibilityClause({ compatibilityWords, coreWords, item
       if (!matchesWord([text[start] ?? ''], target[0] ?? '')) return false;
       let position = start + 1;
       for (const term of target.slice(1)) {
-        while (position < text.length && knownDeviceFamilyWords.has(text[position] ?? '')) position += 1;
+        while (position < text.length && knownDeviceFamilyWords.has(text[position] ?? '') &&
+          !matchesWord([text[position] ?? ''], term)) position += 1;
         if (!matchesWord([text[position] ?? ''], term)) return false;
         position += 1;
       }

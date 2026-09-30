@@ -13,4 +13,10 @@ describe('discovery compatibility targets', () => {
     expect(matchesDiscoveryProductIntent({ name: 'S24 Case', category: 'Accessories', description: 'Compatible with Samsung Galaxy S24' }, 'case for Samsung S24')).toBe(true);
     expect(matchesDiscoveryProductIntent({ name: 'iPhone 15 Case', category: 'Accessories', description: 'Compatible with iPhone 15' }, 'case for Samsung S24')).toBe(false);
   });
+
+  it('preserves explicitly requested family words', () => {
+    const product = { name: 'S24 Case', category: 'Accessories', description: 'Compatible with Samsung Galaxy S24' };
+    expect(matchesDiscoveryProductIntent(product, 'case for Samsung Galaxy S24')).toBe(true);
+    expect(matchesDiscoveryProductIntent(product, 'case for Samsung Galaxy A55')).toBe(false);
+  });
 });

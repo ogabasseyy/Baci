@@ -1,3 +1,4 @@
+import { knownBrandWords } from './matches-discovery-product-intent-vocab';
 import { isBroadIntentDiscoveryWord } from './broad-intent-discovery-word';
 import { singleWordDiscoveryTerm } from './single-word-discovery-term';
 
@@ -10,7 +11,7 @@ export function matchesSingleWordDiscoveryQuery(
   category: string | undefined
 ): boolean {
   const term = singleWordDiscoveryTerm(query);
-  if (!term || category) return true;
+  if (!term || (category && !knownBrandWords.has(term))) return true;
   const fields = [product.name, product.brand, product.category, product.description]
     .map((value) => typeof value === 'string'
       ? value.toLocaleLowerCase('en').match(/[a-z0-9]+/g) ?? []
@@ -18,7 +19,8 @@ export function matchesSingleWordDiscoveryQuery(
   // Broad use-case words appear in marketing copy for unrelated products, so
   // only identifying fields can match them. Product-type words keep matching
   // descriptions, e.g. "diffuser" for a fragrance machine.
-  const matchableFields = isBroadIntentDiscoveryWord(term) ? fields.slice(0, 3) : fields;
+  const matchableFields = knownBrandWords.has(term) ? fields.slice(0, 2)
+    : isBroadIntentDiscoveryWord(term) ? fields.slice(0, 3) : fields;
   const words = matchableFields.flat();
   const matchesTerm = (word: string) => word === term || word === `${term}s` || `${word}s` === term ||
     (term.endsWith('y') && word === `${term.slice(0, -1)}ies`) ||

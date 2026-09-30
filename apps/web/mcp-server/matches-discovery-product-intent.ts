@@ -37,7 +37,7 @@ export function matchesDiscoveryProductIntent(
     .replace(/^(?:(?:a|an|any|some|the|my|your|his|her|its|our|their)\s+)+/i, '');
   const queryWords = words(normalized);
   if (!enforceIntent && queryWords.filter((word) => /^[a-z]+$/.test(word)).length < 2 &&
-    !queryWords.some((word) => /\d/.test(word) || productTypes.has(word)) && normalized === rawQuery) return true;
+    !queryWords.some((word) => /\d/.test(word) || productTypes.has(word) || knownBrandWords.has(word)) && normalized === rawQuery) return true;
 
   // Lower-bound phrases ("over 500000") end the product-intent portion just
   // like upper bounds do, but only when a number follows: "from Samsung"
@@ -121,6 +121,10 @@ export function matchesDiscoveryProductIntent(
     }
   }
   if (currentPhrase.length > 0) alternativePhrases.push(...splitConjunction(currentPhrase));
+  const trailingPhrase = alternativePhrases.at(-1) ?? [];
+  const trailingIdentityIndex = trailingPhrase.findIndex((word) =>
+    knownBrandWords.has(word) || knownDeviceFamilyWords.has(word) || /\d/.test(word));
+  const sharedTrailingIdentity = trailingIdentityIndex > 0 ? trailingPhrase.slice(trailingIdentityIndex) : [];
   // A shared noun ("Dell or ASUS laptop") types every coordinated phrase, so a
   // phrase without its own type inherits the nearest one, trailing first.
   const phraseTypeIndexes = alternativePhrases.map((phrase) =>
@@ -143,13 +147,19 @@ export function matchesDiscoveryProductIntent(
     const details = detailIndex < 0 ? [] : coreWords.slice(detailIndex);
     return alternativePhrases.some((phrase, phraseIndex) => {
       const sharedType = phraseTypeIndexes[phraseIndex] < 0 ? sharedTypeFor(phraseIndex) : undefined;
+      const hasBranchIdentity = phrase.some((word) =>
+        knownBrandWords.has(word) || knownDeviceFamilyWords.has(word) || /\d/.test(word));
+      const inheritedTrailingIdentity = phraseIndex < alternativePhrases.length - 1 &&
+        !hasBranchIdentity && !phrase.some((word) => productTypes.has(word)) ? sharedTrailingIdentity : [];
       const previous = alternativePhrases.slice(0, phraseIndex).findLast((candidate) =>
         candidate.findIndex((word) => /\d/.test(word)) > 0) ?? [];
       const modelIndex = previous.findIndex((word) => /\d/.test(word));
       const abbreviatedModel = /\d/.test(phrase[0] ?? '') && phrase.every((word) =>
         /\d/.test(word) || modelQualifiers.has(word) || productTypes.has(word));
       const inheritedIdentity = abbreviatedModel && modelIndex > 0 ? previous.slice(0, modelIndex) : [];
-      const branchWords = [...inheritedIdentity, ...phrase, ...(sharedType ? [sharedType] : [])];
+      const branchWords = [...new Set([
+        ...inheritedIdentity, ...phrase, ...inheritedTrailingIdentity, ...(sharedType ? [sharedType] : []),
+      ])];
       return matchesDiscoveryProductIntent(product, [...branchWords, ...details].join(' '), true);
     });
   }

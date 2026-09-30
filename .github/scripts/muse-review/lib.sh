@@ -68,6 +68,19 @@ redact() {
   printf '%s' "$1" | perl -0777 -pe 's/-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----/[REDACTED-PRIVATE-KEY]/gs; s/\b(sk-|rk-|ghp_|gho_|github_pat_|xox[bap]-|AKIA)[A-Za-z0-9_\-]+/[REDACTED]/g; s/eyJ[A-Za-z0-9_\-]{10,}\.eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]+/[REDACTED-JWT]/g; s/((?:api[_-]?key|secret|token|password)\s*[:=]\s*["'"'"']?)[A-Za-z0-9_\-.\/+]{12,}/${1}[REDACTED]/gi'
 }
 
+# Guidance trust: a PR base branch is contributor-controlled unless it is the
+# repo default branch, so only default-branch base content earns "trusted"
+# status; stacked-PR and custom bases stay isolated as UNTRUSTED. Prints
+# true/false. Fails closed on unknown default branch.
+trust_base() {
+  local _base_ref="$1" _default="$2" _available="$3"
+  if [[ "${_available}" == "true" && -n "${_default}" && "${_base_ref}" == "${_default}" ]]; then
+    printf 'true'
+  else
+    printf 'false'
+  fi
+}
+
 # Candidate identity without newline mangling. Newline-delimited seen-files
 # break when a directory contains a newline (one candidate becomes several
 # apparent lines and can suppress a real later candidate), so identity lives

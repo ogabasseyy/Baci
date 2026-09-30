@@ -49,6 +49,7 @@ import { resolveMcpPaystackDvaAccess } from './mcp-paystack-dva-access';
 import { registerAgenticUcpTools } from './agentic-ucp-tools';
 import { resolveMcpSearchProductCondition } from './product-condition-filter';
 import { discoverMcpProducts } from './discover-products';
+import { mcpDiscoveryIntentSchema } from '../src/schemas/mcp-discovery-intent';
 import { embedDiscoveryText } from './gemini-discovery-embedding';
 import { loadSemanticDiscoveryCandidateIds } from './semantic-discovery-candidates';
 import { getMcpOfferAvailability } from './product-offer-availability';
@@ -1213,13 +1214,14 @@ function createOgabasseyServer() {
       title: 'Search Products',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
-        'Use this when a buyer wants to find real Ogabassey products. Search by product name, brand, category, condition, and price. For a broad use case such as work, gaming, or photography, ask which product type they want before searching if it is unclear. Set an explicit category when the buyer names one (Smartphones, Tablets, Laptops, or Accessories). Do not present unrelated catalog items as recommendations. Returns listed prices, options, and reported availability; it does not reserve stock.',
+        'Use this when a buyer wants to find real Ogabassey products. Supply intent with explicit shopper constraints and query with retrieval keywords. Search by product name, brand, category, condition, and price. For a broad use case such as work, gaming, or photography, ask which product type they want before searching if it is unclear. Set an explicit category when the buyer names one (Smartphones, Tablets, Laptops, or Accessories). Do not present unrelated catalog items as recommendations. Returns listed prices, matching options, and reported availability; it does not reserve stock. When coverage is partial, explain that other matches may exist and never claim the globally cheapest product.',
       inputSchema: {
+        intent: mcpDiscoveryIntentSchema.optional().describe('Supply structured intent for shopper searches. alternatives are OR; each branch is AND. Use singular canonical product types phone/laptop/tablet/charger/cable/security_camera/fragrance_diffuser. Brand means manufacturer, compatible_with means supported device model. Attributes use canonical units (storage_gb/ram_gb in GB, power_w in watts) and eq/gte/lte. Use an empty alternative for broad discovery; never invent unspecified constraints. Unknown catalog facts cannot satisfy explicit constraints.'),
         query: z
           .string()
           .max(100)
           .optional()
-          .describe('Search query (product name, brand, or keywords)'),
+          .describe('Retrieval keywords only: product name, model, or use case. Put hard constraints in intent and price fields; do not encode a whole sentence grammar in query.'),
         condition: z
           .enum(['new', 'used', 'open_box', 'refurbished'])
           .optional()
@@ -1251,8 +1253,7 @@ function createOgabasseyServer() {
         const semanticApiKey = process.env.GEMINI_API_KEY;
         let queryEmbedding: Promise<number[]> | undefined;
 
-        const { priceScanComplete, sanitizedQuery, selectedProducts } =
-          await discoverMcpProducts({
+        const discovery = await discoverMcpProducts({
             args,
             merchantId,
             sanitizeString,
@@ -1269,6 +1270,8 @@ function createOgabasseyServer() {
             supabase,
           });
 
+        const { priceScanComplete, sanitizedQuery, selectedProducts } = discovery;
+        const coverage = 'coverage' in discovery ? discovery.coverage : undefined;
         if (!priceScanComplete) {
           const message = 'This price search has too many matching products to check accurately. Add a category, brand, or more specific product name and try again.';
           return {
@@ -1277,7 +1280,7 @@ function createOgabasseyServer() {
           };
         }
 
-        const formatted = selectedProducts.map(({ product: p, displayPrice, displayCondition, displayCompareAtPrice, stockSummary, availableVariants: variants }) => {
+        const formatted = selectedProducts.map(({ product: p, displayPrice, displayCondition, displayCompareAtPrice, stockSummary, availableVariants: variants, ...selection }) => {
           // A compare-at price indicates a listed discount, not a price trend.
           const isDiscounted = typeof displayPrice === 'number' &&
             displayCompareAtPrice && displayCompareAtPrice > displayPrice;
@@ -1294,13 +1297,17 @@ function createOgabasseyServer() {
             .map(([key, vals]) => `${key}: ${Array.from(vals).join(', ')}`)
             .join(' | ');
 
+          const firstImage: unknown = Array.isArray(p.images) ? p.images[0] : undefined;
+          const imageInput = typeof firstImage === 'string' ? firstImage :
+            firstImage && typeof firstImage === 'object' && 'url' in firstImage && typeof firstImage.url === 'string'
+              ? firstImage.url : undefined;
           return {
             id: p.id,
             name: p.name,
             slug: p.slug,
             price: displayPrice,
             compare_at_price: displayCompareAtPrice,
-            image: getSafeCatalogImageUrl(p.images?.[0]?.url || p.images?.[0]),
+            image: getSafeCatalogImageUrl(imageInput),
             condition: displayCondition || resolveMcpSearchProductCondition(p, args.condition),
             brand: p.brand,
             category: p.category,
@@ -1310,6 +1317,7 @@ function createOgabasseyServer() {
             stock_level: stockSummary.level,
             stock_confidence: stockSummary.confidence,
             price_status: isDiscounted ? 'discounted' : 'regular',
+            matched_option: 'selectedOption' in selection ? selection.selectedOption : undefined,
             available_variants: availableOptions || 'Standard',
             last_updated: p.updated_at,
           };
@@ -1325,11 +1333,12 @@ function createOgabasseyServer() {
                 text: `No clear catalog match for "${sanitizedQuery || 'your criteria'}". Specify a product type, brand, or model and try again.`,
               },
             ],
-            structuredContent: { products: [], status: 'empty' },
+            structuredContent: { products: [], status: 'empty', coverage },
           };
         }
         const resultText = [
           `Found ${count} Ogabassey products. Prices are listed in NGN; confirm availability before checkout.`,
+          ...(coverage === 'partial' ? ['This is a partial selection; other products may match.'] : []),
           ...formatted.map((product) =>
             `${product.name} — ₦${Number(product.price).toLocaleString('en-NG')} (${product.stock_level}); ${product.available_variants}.`
           ),
@@ -1340,6 +1349,9 @@ function createOgabasseyServer() {
           structuredContent: {
             status: 'success',
             products: formatted,
+            coverage,
+            search_mode: args.intent ? 'structured' : 'legacy',
+            semantic_unavailable: 'semanticUnavailable' in discovery ? discovery.semanticUnavailable : undefined,
             meta: { total: count, query: sanitizedQuery },
           },
           _meta: {

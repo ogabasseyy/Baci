@@ -75,7 +75,7 @@ describe('hydrateSearchProductAvailability', () => {
 
     expect(used.stockSummary).toMatchObject({ inStock: false, level: 'Out of Stock' });
     expect(used.availableVariants).toEqual([]);
-    expect(offerQuery.select).toHaveBeenCalledWith('product_id, condition, price, stock_quantity');
+    expect(offerQuery.select).toHaveBeenCalledWith('id, product_id, condition, price, stock_quantity');
   });
 
   it('uses stocked child variants and offers instead of zero parent stock', async () => {

@@ -4,6 +4,7 @@ import type { McpSearchProductRow } from './search-products-query-helpers';
 import { getMcpProductStockSummary } from './product-stock-summary';
 
 interface ProductVariant {
+  id?: string;
   attributes: Record<string, unknown> | null;
   condition?: string | null;
   price_override?: number | null;
@@ -12,6 +13,7 @@ interface ProductVariant {
 }
 
 interface ProductOffer {
+  id?: string;
   condition: string | null;
   price: number | null;
   stock_quantity: number | null;
@@ -50,7 +52,7 @@ export async function hydrateSearchProductAvailability(
   const offerIds = products.filter((product) => product.has_condition_offers).map((product) => product.id);
   if (offerIds.length > 0) {
     const { data, error } = await supabase.from('product_offers')
-      .select('product_id, condition, price, stock_quantity')
+      .select('id, product_id, condition, price, stock_quantity')
       .eq('merchant_id', merchantId)
       .eq('status', 'active')
       .in('product_id', offerIds);
@@ -90,7 +92,7 @@ export async function hydrateSearchProductAvailability(
         .map((offer) => ({ price: offer.price,
           condition: normalizeCanonicalProductCondition(offer.condition) || baseCondition })),
       ...(basePurchasable ? [{ price: product.price, condition: baseCondition }] : []),
-    ].filter((option): option is { price: number; condition: string } =>
+    ].filter((option): option is { price: number; condition: typeof baseCondition } =>
       typeof option.price === 'number' && Number.isFinite(option.price) && option.price >= 0);
     const cheapestOption = pricedOptions.reduce<(typeof pricedOptions)[number] | undefined>(
       (cheapest, option) => !cheapest || option.price < cheapest.price ? option : cheapest,
@@ -115,6 +117,10 @@ export async function hydrateSearchProductAvailability(
         product.has_variants && variantLookupSucceeded ? variants : undefined,
         product.has_condition_offers ? offersMap.get(product.id) : undefined
       ),
+      availableOffers: offers.filter((offer) =>
+        product.manage_stock !== true || Number(offer.stock_quantity ?? 0) > 0
+      ),
+      basePurchasable,
       availableVariants: variants.filter((variant) =>
         product.manage_stock !== true || Number(variant.stock_quantity ?? 0) > 0
       ),

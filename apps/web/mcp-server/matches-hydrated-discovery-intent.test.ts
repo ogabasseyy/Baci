@@ -6,7 +6,7 @@ import type { hydrateSearchProductAvailability } from './search-product-availabi
 type HydratedProduct = Awaited<ReturnType<typeof hydrateSearchProductAvailability>>[number];
 function fixture(variants = true): HydratedProduct {
   const product = { id: 'phone', name: 'iPhone 15', brand: 'Apple', category: 'Smartphones', price: 100, has_variants: variants, manage_stock: true };
-  return { product, stockSummary: getMcpProductStockSummary(product), displayPrice: 100,
+  return { product, availableOffers: [], basePurchasable: false, stockSummary: getMcpProductStockSummary(product), displayPrice: 100,
     displayCondition: 'new', displayCompareAtPrice: null,
     availableVariants: [
       { product_id: 'phone', attributes: { storage: '256GB', color: 'Blue' }, stock_quantity: 2 },

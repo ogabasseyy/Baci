@@ -1,9 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { mcpDiscoveryIntentSchema, type McpDiscoveryIntent } from '../src/schemas/mcp-discovery-intent';
+import { discoverStructuredProducts } from './discover-structured-products';
 import { isBroadIntentDiscoveryWord } from './broad-intent-discovery-word';
 import { DISCOVERY_PRODUCT_PROJECTION } from './discovery-product-projection';
 import { inferSmartphoneCategory } from './infer-smartphone-category';
 import { hydrateSearchProductAvailability } from './search-product-availability';
-import { matchesHydratedDiscoveryIntent } from './matches-hydrated-discovery-intent';
+import { selectHydratedDiscoveryIntent } from './select-hydrated-discovery-intent';
 import { productTypes } from './matches-discovery-product-intent-vocab';
 import { loadMcpSearchProducts } from './search-products-query';
 import { matchesSingleWordDiscoveryQuery } from './search-products-relevance';
@@ -16,6 +18,7 @@ import {
 import { selectSearchProductsByPrice } from './select-search-products-by-price';
 
 type DiscoveryArgs = {
+  intent?: McpDiscoveryIntent;
   brand?: string;
   category?: string;
   condition?: string;
@@ -46,6 +49,11 @@ export async function discoverMcpProducts({
   semanticSearch,
   supabase,
 }: DiscoveryInput) {
+  if (args.intent !== undefined) {
+    const intent = mcpDiscoveryIntentSchema.parse(args.intent);
+    return discoverStructuredProducts({ intent, args, merchantId, supabase, semanticSearch,
+      query: args.query ? sanitizeString(args.query, 100) : undefined });
+  }
   const loaded = await loadMcpSearchProducts({ args, merchantId, sanitizeString, supabase });
   const { products, limit } = loaded;
   if (!loaded.priceScanComplete) {
@@ -59,8 +67,10 @@ export async function discoverMcpProducts({
       uncachedProducts.slice(offset, offset + 100), supabase, merchantId, args.condition
     ));
   }
-  const matchingProducts = hydratedProducts.filter((row) =>
-    matchesHydratedDiscoveryIntent(row, loaded.sanitizedQuery));
+  const matchingProducts = hydratedProducts.flatMap((row) => {
+    const selected = selectHydratedDiscoveryIntent(row, loaded.sanitizedQuery);
+    return selected ? [selected] : [];
+  });
   const explicitCatalogFilter = [args.category, args.brand, args.condition]
     .some((value) => Boolean(value && sanitizeString(value, 50).trim()));
   const ambiguousQuery = loaded.sanitizedQuery &&
@@ -103,9 +113,11 @@ export async function discoverMcpProducts({
             }));
           semanticProducts.push(...(await hydrateSearchProductAvailability(
             candidates, supabase, merchantId, args.condition
-          )).filter((row) => matchesHydratedDiscoveryIntent(row, loaded.sanitizedQuery) &&
-            (!needsSemanticSingleWordGuard ||
-              matchesSingleWordDiscoveryQuery(row.product, loaded.sanitizedQuery, undefined))));
+          )).flatMap((row) => {
+            const selected = selectHydratedDiscoveryIntent(row, loaded.sanitizedQuery);
+            return selected && (!needsSemanticSingleWordGuard ||
+              matchesSingleWordDiscoveryQuery(row.product, loaded.sanitizedQuery, undefined)) ? [selected] : [];
+          }));
         }
         if (pageIds.length < 40 ||
           (args.sort !== 'newest' && args.sort !== 'price_asc' && args.sort !== 'price_desc' &&

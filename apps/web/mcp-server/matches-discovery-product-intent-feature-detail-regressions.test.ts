@@ -28,6 +28,34 @@ describe('discovery product intent feature and detail regressions', () => {
   it('treats "at least" as a spec marker and retains the requested capacity context', () => {
     expect(matchesDiscoveryProductIntent({ name: 'Dell Laptop', category: 'Laptops', description: '16GB RAM.' }, 'laptop with at least 16GB RAM')).toBe(true);
     expect(matchesDiscoveryProductIntent({ name: 'Dell Laptop', category: 'Laptops', description: '16GB storage.' }, 'laptop with at least 16GB RAM')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Laptop', category: 'Laptops', description: '32GB RAM.' }, 'laptop with at least 16GB RAM')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Laptop', category: 'Laptops', description: '8GB RAM.' }, 'laptop with at least 16GB RAM')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Laptop', category: 'Laptops', description: '1TB RAM.' }, 'laptop with at least 16GB RAM')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Laptop', category: 'Laptops', description: '16GB storage.' }, 'laptop with at least 16GB RAM')).toBe(false);
+  });
+
+  it('matches numeric technology generations after detail boundaries', () => {
+    const wifi6 = { name: 'Dell Laptop', category: 'Laptops', description: 'WiFi 6.' };
+    const wifi5 = { name: 'Dell Laptop', category: 'Laptops', description: 'WiFi 5.' };
+    const ddr5 = { name: 'Dell Laptop', category: 'Laptops', description: 'DDR5 RAM.' };
+    const ddr4 = { name: 'Dell Laptop', category: 'Laptops', description: 'DDR4 RAM.' };
+
+    expect(matchesDiscoveryProductIntent(wifi6, 'laptop with WiFi 6')).toBe(true);
+    expect(matchesDiscoveryProductIntent(wifi5, 'laptop with WiFi 6')).toBe(false);
+    expect(matchesDiscoveryProductIntent(ddr5, 'laptop with DDR5 RAM')).toBe(true);
+    expect(matchesDiscoveryProductIntent(ddr4, 'laptop with DDR5 RAM')).toBe(false);
+  });
+
+  it('accepts a compatible base-model occurrence after a Pro model mention', () => {
+    expect(matchesDiscoveryProductIntent({
+      name: 'Screen Protector for iPhone 15 Pro and iPhone 15', category: 'Phone Accessories',
+    }, 'iPhone 15 protector')).toBe(true);
+    expect(matchesDiscoveryProductIntent({
+      name: 'Screen Protector for iPhone 15 Pro', category: 'Phone Accessories',
+    }, 'iPhone 15 Pro protector')).toBe(true);
+    expect(matchesDiscoveryProductIntent({
+      name: 'Screen Protector for iPhone 15 Pro', category: 'Phone Accessories',
+    }, 'iPhone 15 protector')).toBe(false);
   });
 
   it('treats by/from as identity markers for untyped device searches', () => {
@@ -50,4 +78,10 @@ it('evaluates each complete capacity alternative once', () => {
     expect(matchesDiscoveryProductIntent({ name: 'Dell Laptop', category: 'Laptops', description: `${capacity}GB RAM` }, query)).toBe(true);
   }
   expect(matchesDiscoveryProductIntent({ name: 'Dell Laptop', category: 'Laptops', description: '8GB RAM' }, query)).toBe(false);
+});
+
+it('checks lower-bound context without borrowing adjacent capacities', () => {
+  const product = { name: 'Dell Laptop', category: 'Laptops', description: '16GB RAM, 512GB SSD' };
+  expect(matchesDiscoveryProductIntent(product, 'laptop with at least 32GB RAM')).toBe(false);
+  expect(matchesDiscoveryProductIntent({ ...product, description: '16GB SSD, 32GB RAM' }, 'laptop with at least 16GB RAM')).toBe(true);
 });

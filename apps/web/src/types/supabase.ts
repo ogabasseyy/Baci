@@ -10902,6 +10902,7 @@ export type Database = {
           cost_price: number | null;
           created_at: string | null;
           default_variant_id: string | null;
+          discovery_metadata: Json | null;
           description: string | null;
           description_digital_source_type: string | null;
           description_provenance_sha256: string | null;
@@ -10983,6 +10984,7 @@ export type Database = {
           cost_price?: number | null;
           created_at?: string | null;
           default_variant_id?: string | null;
+          discovery_metadata?: Json | null;
           description?: string | null;
           description_digital_source_type?: string | null;
           description_provenance_sha256?: string | null;
@@ -11064,6 +11066,7 @@ export type Database = {
           cost_price?: number | null;
           created_at?: string | null;
           default_variant_id?: string | null;
+          discovery_metadata?: Json | null;
           description?: string | null;
           description_digital_source_type?: string | null;
           description_provenance_sha256?: string | null;

@@ -1,0 +1,49 @@
+# Ogabassey structured discovery
+
+## Approved objective
+Replace expanding query-sentence guards with explicit, validated intent for the ChatGPT search tool. Preserve useful PR #3557 fixes and legacy callers. Keep semantic production search disabled pending relevance evaluation and owner authorization for its private environment flag.
+
+## Contract
+ChatGPT supplies query text for retrieval and a structured intent consisting of OR alternatives. Each alternative contains conjunctive product type, manufacturer brands, model, compatibility target and attribute comparisons. Exclusions apply to every alternative. Server-owned merchant, active status, option price, condition and availability remain authoritative. Unknown catalog facts cannot satisfy an explicit hard constraint.
+
+Catalog discovery metadata is optional validated JSON on products, independent of merchandising category. It stores product type, model, compatibility targets and canonical attributes (numeric storage_gb, ram_gb, power_w and string colour/connector). Variants override only their own attributes. Metadata is maintained through an authenticated merchant-scoped route; no invented enrichment or service-role writes. Existing category-to-type mappings may be used only for unambiguous Smartphones/Laptops/Tablets categories.
+
+## Retrieval and selection
+Structured calls bypass the legacy sentence grammar. Lexical and optional semantic candidates are retrieved independently, deduplicated and combined with reciprocal rank fusion. Candidate loading is bounded and reports incomplete coverage. Each candidate is evaluated as actual base/variant/offer records. Price ranges are applied to matching options before choosing the headline option. Return selected option evidence with the matching price and condition. Unmanaged inventory is eligible without positive quantity, while managed inventory requires positive quantity. Missing option lookups never manufacture prices.
+
+Legacy calls retain the existing tested behavior during migration. Tool descriptions direct ChatGPT to supply structured intent, avoiding a second paid LLM query solely to interpret ChatGPT's request. Exact identifiers retain lexical weight; exploratory retrieval can use semantic candidates.
+
+## Execution plan
+1. Preserve staged review fixes; add schemas and catalog metadata migration/merchant mutation contract.
+2. Implement bounded hybrid candidate retrieval and structured option selection in focused modules.
+3. Wire structured intent into the existing search tool and return matching option/coverage evidence.
+4. Validate schemas, permissions, option correctness, independent lookup failure and hybrid fallback.
+5. Run a separate curated shopper benchmark across alternatives, budget, compatibility, unmanaged stock and paraphrased tool calls. Report candidate recall limits and metadata gaps.
+6. Run full MCP tests, affected web lint/typecheck, CodeRabbit and exact-head PR review/CI. Deploy only through authorized flow after gates; audit catalog metadata and live relevance before enabling semantics. Complete ChatGPT/cart QA before submission approval.
+
+## Acceptance and limitations
+No price/condition/attribute mixing across variants. No budget violations. No unmanaged zero-stock exclusion. No accessory/handset confusion when product type is specified. Unknown facts stay unknown. Lexical-only search remains usable if semantic provider fails. A bounded candidate scan cannot guarantee global cheapest ordering; expose coverage rather than claim completeness. Production catalog metadata migration/audit and browser QA remain release gates.
+
+## Catalog preparation and release sequence
+Apply the appended `20260930150000_product_discovery_metadata.sql` migration before deploying code that projects the new column. It inherits existing product row visibility and merchant write policies. Update public facts through `PUT /api/products/discovery-metadata` with an authenticated merchant session and the existing CSRF contract. The body contains `productId` and `metadata`; it cannot choose the tenant. Review facts against supplier specifications and the merchant's own catalog before saving them. Do not populate model/compatibility by guessing from descriptions. No paid LLM fact-enrichment job is enabled by this change.
+
+Example public metadata:
+
+```json
+{
+  "product_type": "charger",
+  "model": "Fast Charger 20W",
+  "compatible_with": ["iPhone 15"],
+  "attributes": { "power_w": 20, "connector": "usb-c" }
+}
+```
+
+Numeric attribute keys use canonical units, not formatted strings. Variant attributes with existing explicit Storage/RAM/Colour keys are normalized to the same units during option selection. A malformed variant override clears the inherited fact rather than borrowing the base specification. Merchandising categories such as Accessories remain unchanged. Missing metadata may be acceptable for a broad request but cannot satisfy an explicit model, product-type or compatibility constraint. Audit coverage before directing all live searches through structured constraints.
+
+## Verification record
+`discover-structured-products.test.ts` is a deterministic fixture benchmark, not evidence of live ChatGPT interpretation or live catalog relevance. Its independent scenarios cover hybrid candidate merging, same-option attributes/budget, base/offer condition, unmanaged variants, partial coverage, semantic failure, manufacturer versus compatibility, alternative brands and accessory product types. `server-structured-search.test.ts` exercises the actual MCP tool contract and response. Retain the legacy tests as regression coverage during migration. Live shopper-query evaluation and catalog fact coverage are additional release gates.
+
+## Research references
+- OpenAI explicit tool contracts: https://developers.openai.com/plugins/plan/tools
+- Supabase full-text/vector RRF: https://supabase.com/docs/guides/ai/hybrid-search
+- Ecommerce query understanding and retrieval routing: https://www.elastic.co/search-labs/blog/ecommerce-search-governance-improve-retrieval

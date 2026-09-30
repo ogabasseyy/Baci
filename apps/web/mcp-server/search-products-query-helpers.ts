@@ -3,6 +3,8 @@ import { storefrontProductFilters } from '../src/lib/storefront-product-filters'
 
 export type McpSearchProductRow = {
   id: string;
+  discovery_metadata?: unknown;
+  description?: string | null;
   available_conditions?: unknown;
   brand?: string | null;
   category?: string | null;

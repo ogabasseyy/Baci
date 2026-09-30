@@ -7,7 +7,8 @@ import { type ProductText } from './matches-discovery-product-intent-product-tex
 import { matchesRequestedDevice } from './matches-discovery-product-intent-requested-device';
 import { matchesWord } from './matches-discovery-product-intent-word-match';
 import { type IntentWordScope } from './matches-discovery-product-intent-word-scope';
-import { words } from './matches-discovery-product-intent-words';
+import { intentWords } from './discovery-intent-words';
+import { discoveryDetailAlternatives } from './discovery-detail-alternatives';
 import {
   accessoryHeadTypes,
   detailBoundary,
@@ -35,7 +36,7 @@ export function matchesDiscoveryProductIntent(
   const normalized = rawQuery
     .replace(/^\s*(?:(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?(?:show|find|search|buy|get|recommend|suggest)(?:\s+me)?(?:\s+for)?|(?:i(?:['\u2019]m|\s+am)\s+)?(?:looking|searching|shopping)\s+for|i\s+(?:want|need))(?:\s+(?:a|an|some|the))?\s+/i, '')
     .replace(/^(?:(?:a|an|any|some|the|my|your|his|her|its|our|their)\s+)+/i, '');
-  const queryWords = words(normalized);
+  const queryWords = intentWords(normalized);
   if (!enforceIntent && queryWords.filter((word) => /^[a-z]+$/.test(word)).length < 2 &&
     !queryWords.some((word) => /\d/.test(word) || productTypes.has(word) || knownBrandWords.has(word)) && normalized === rawQuery) return true;
 
@@ -62,30 +63,10 @@ export function matchesDiscoveryProductIntent(
   );
   const itemWords = detailIndex < 0 ? [...coreWords] : coreWords.slice(0, detailIndex);
   while (genericTypes.has(itemWords.at(-1) ?? '')) itemWords.pop();
-  // A list of complete memory/storage specifications is an OR constraint.
-  // Carry a trailing context (RAM, SSD, etc.) to both branches so each branch
-  // is validated as a complete specification.
   if (detailIndex >= 0) {
-    const detailWords = coreWords.slice(detailIndex + 1);
-    const orIndex = detailWords.indexOf('or');
-    const capacityContext = ['ram', 'memory', 'storage', 'ssd', 'hdd'];
-    if (orIndex > 0 && orIndex < detailWords.length - 1) {
-      const leftSpec = detailWords.slice(0, orIndex);
-      const rightSpec = detailWords.slice(orIndex + 1);
-      const rightContextIndex = rightSpec.findIndex((word) => capacityContext.includes(word));
-      const nextAlternativeIndex = rightSpec.indexOf('or', rightContextIndex);
-      const rightContext = rightContextIndex >= 0
-        ? rightSpec.slice(rightContextIndex, nextAlternativeIndex < 0 ? undefined : nextAlternativeIndex) : [];
-      const leftHasContext = leftSpec.some((word) => capacityContext.includes(word));
-      const hasNumericSpec = (phrase: string[]) => phrase.some((word) => /\d/.test(word));
-      if (hasNumericSpec(leftSpec) && hasNumericSpec(rightSpec) && rightContext.length > 0) {
-        const leftBranch = leftHasContext ? leftSpec : [...leftSpec, ...rightContext];
-        const rightBranch = rightSpec;
-        const prefix = coreWords.slice(0, detailIndex);
-        return [leftBranch, rightBranch].some((branch) =>
-          matchesDiscoveryProductIntent(product, [...prefix, coreWords[detailIndex], ...branch].join(' '), true));
-      }
-    }
+    const branches = discoveryDetailAlternatives(coreWords.slice(detailIndex + 1));
+    if (branches) return branches.some((branch) => matchesDiscoveryProductIntent(product,
+      [...coreWords.slice(0, detailIndex + 1), ...branch].join(' '), true));
   }
   // "or" always separates alternatives, but "and" only splits genuine
   // product-type lists ("phones and tablets"): descriptive conjunctions
@@ -125,6 +106,8 @@ export function matchesDiscoveryProductIntent(
   const trailingIdentityIndex = trailingPhrase.findIndex((word) =>
     knownBrandWords.has(word) || knownDeviceFamilyWords.has(word) || /\d/.test(word));
   const sharedTrailingIdentity = trailingIdentityIndex > 0 ? trailingPhrase.slice(trailingIdentityIndex) : [];
+  const sharedLeadingIdentity = (alternativePhrases[0] ?? []).filter((word) =>
+    knownBrandWords.has(word) || knownDeviceFamilyWords.has(word));
   // A shared noun ("Dell or ASUS laptop") types every coordinated phrase, so a
   // phrase without its own type inherits the nearest one, trailing first.
   const phraseTypeIndexes = alternativePhrases.map((phrase) =>
@@ -151,6 +134,8 @@ export function matchesDiscoveryProductIntent(
         knownBrandWords.has(word) || knownDeviceFamilyWords.has(word) || /\d/.test(word));
       const inheritedTrailingIdentity = phraseIndex < alternativePhrases.length - 1 &&
         !hasBranchIdentity && !phrase.some((word) => productTypes.has(word)) ? sharedTrailingIdentity : [];
+      const inheritedLeadingIdentity = phraseIndex > 0 && !hasBranchIdentity && sharedTrailingIdentity.length === 0
+        ? sharedLeadingIdentity : [];
       const previous = alternativePhrases.slice(0, phraseIndex).findLast((candidate) =>
         candidate.findIndex((word) => /\d/.test(word)) > 0) ?? [];
       const modelIndex = previous.findIndex((word) => /\d/.test(word));
@@ -158,7 +143,8 @@ export function matchesDiscoveryProductIntent(
         /\d/.test(word) || modelQualifiers.has(word) || productTypes.has(word));
       const inheritedIdentity = abbreviatedModel && modelIndex > 0 ? previous.slice(0, modelIndex) : [];
       const branchWords = [...new Set([
-        ...inheritedIdentity, ...phrase, ...inheritedTrailingIdentity, ...(sharedType ? [sharedType] : []),
+        ...inheritedLeadingIdentity, ...inheritedIdentity, ...phrase, ...inheritedTrailingIdentity,
+        ...(sharedType ? [sharedType] : []),
       ])];
       return matchesDiscoveryProductIntent(product, [...branchWords, ...details].join(' '), true);
     });
@@ -169,12 +155,12 @@ export function matchesDiscoveryProductIntent(
 
   // The lead describes the item itself; later boilerplate often mentions
   // compatible cases, chargers, phones, and other unrelated products.
-  const itemText = words([product.name, product.brand, product.category].filter(Boolean).join(' '));
-  const identityWords = words([product.name, product.brand].filter(Boolean).join(' '));
-  const nameWords = words(product.name ?? '');
-  const categoryWords = words(product.category ?? '');
-  const deviceIdentityText = words([product.name, product.category].filter(Boolean).join(' '));
-  const descriptionWords = words(product.description?.slice(0, 300) ?? '');
+  const itemText = intentWords([product.name, product.brand, product.category].filter(Boolean).join(' '));
+  const identityWords = intentWords([product.name, product.brand].filter(Boolean).join(' '));
+  const nameWords = intentWords(product.name ?? '');
+  const categoryWords = intentWords(product.category ?? '');
+  const deviceIdentityText = intentWords([product.name, product.category].filter(Boolean).join(' '));
+  const descriptionWords = intentWords(product.description?.slice(0, 300) ?? '');
   const descriptionBoundary = descriptionWords.findIndex((word) =>
     ['for', 'with', 'compatible', 'supports', 'fits', 'works', 'includes', 'included', 'sold'].includes(word)
   );
@@ -243,7 +229,7 @@ export function matchesDiscoveryProductIntent(
     !genericItemModifiers.has(word) && !specUnitWords.has(word) && !modelQualifiers.has(word) &&
     !/\d/.test(word) && !isModelNumberPrefix(itemSuffixWords, index) && /^[a-z]{2,}$/.test(word)
   );
-  const compatibilityWords = words([product.name, product.description].filter(Boolean).join(' '));
+  const compatibilityWords = intentWords([product.name, product.description].filter(Boolean).join(' '));
   if (!matchesIdentityTerms(requestedIdentityTerms, scope)) return false;
   if (!matchesIdentityTerms(trailingIdentityTerms, scope)) return false;
   // "Android" constrains the platform for handset-seeking queries: Apple
@@ -273,7 +259,7 @@ export function matchesDiscoveryProductIntent(
       !matchesWord(itemText, modifier)) return false;
   }
 
-  const productSpecWords = words([product.name, product.brand, product.category, product.description].filter(Boolean).join(' '));
+  const productSpecWords = intentWords([product.name, product.brand, product.category, product.description].filter(Boolean).join(' '));
   const requestedFeatureModifiers = itemPrefixWords.filter((word) => featureModifierWords.has(word));
   if (requestedFeatureModifiers.some((term) => !matchesWord(productSpecWords, term))) return false;
   // Feature words after a detail boundary ("touchscreen" in "laptop with

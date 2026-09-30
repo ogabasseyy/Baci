@@ -2,7 +2,7 @@ import { productTypes } from './matches-discovery-product-intent-vocab';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { DISCOVERY_PRODUCT_PROJECTION } from './discovery-product-projection';
 import { matchesSingleWordDiscoveryQuery } from './search-products-relevance';
-import { matchesHydratedDiscoveryIntent } from './matches-hydrated-discovery-intent';
+import { selectHydratedDiscoveryIntent } from './select-hydrated-discovery-intent';
 import { hydrateSearchProductAvailability } from './search-product-availability';
 import {
   buildSearchProductsV2RpcArgs,
@@ -138,7 +138,10 @@ export async function loadRankedMcpProducts({
         }) && matchesSingleWordDiscoveryQuery(product, sanitizedQuery, sanitizedCategory)
       );
       const hydrated = await hydrateSearchProductAvailability(pageProducts, supabase, merchantId, sanitizedCondition);
-      const matched = hydrated.filter((row) => matchesHydratedDiscoveryIntent(row, sanitizedQuery));
+      const matched = hydrated.flatMap((row) => {
+        const selected = selectHydratedDiscoveryIntent(row, sanitizedQuery);
+        return selected ? [selected] : [];
+      });
       pageProducts = matched.map(({ product }) => product);
       hydratedProducts.push(...matched);
     }

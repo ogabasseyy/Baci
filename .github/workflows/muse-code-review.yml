@@ -9,6 +9,13 @@
 # rate, subject to plan prompt limits) or a pay-as-you-go Meta Model API key.
 # The workflow cannot tell the difference; verify billing on dev.meta.ai.
 #
+# Key hygiene (the agent holds this key with web tools on; see run.sh):
+#   - minimum scope: a key that can only run model prompts, nothing else.
+#   - rotation trigger: rotate immediately if any posted review looks
+#     tampered with, exfiltrated, or off-mission; treat odd output as compromise.
+#   - spending cap: set plan/prompt limits or spend alerts on dev.meta.ai so
+#     one malicious same-repo PR cannot silently burn quota.
+#
 # Recency: web tools are ON so every review verifies against current
 # official docs instead of training memory. The agent determines the repo's
 # stack/versions from manifests, checks for deprecated APIs and better modern
@@ -38,7 +45,7 @@
 #   run.sh       headless agent invocation (no GitHub token in env)
 #   post.sh      staleness re-check, render, inline threads, post
 #   ranges.pl    diff-range extractor (JSON, escape-safe)
-#   clean.jq / validate.jq / dedupe.jq   finding/dedupe filters
+#   clean.jq / validate.jq / dedupe.jq / fallback.jq   finding/dedupe filters
 #   schema.json  agent output contract
 #   test.sh      regression suite (runs in muse-review-selftest.yml)
 #

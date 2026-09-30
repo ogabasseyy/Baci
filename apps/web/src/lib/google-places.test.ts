@@ -47,7 +47,7 @@ describe('google places client helpers', () => {
     ).resolves.toEqual(predictions);
 
     expect(mockApiGet).toHaveBeenCalledWith(
-      '/api/places/autocomplete?input=Baci+Street&sessionToken=session-123&country=ng'
+      '/api/places/autocomplete?input=Baci+Street&fallback=geoapify&sessionToken=session-123&country=ng'
     );
   });
 

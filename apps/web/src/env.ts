@@ -263,6 +263,9 @@ const serverSchema = z
     GEMINI_API_KEY: z.string().optional(),
     GOOGLE_MAPS_API_KEY: optionalTrimmedStringSchema,
     GOOGLE_PLACES_API_KEY: optionalTrimmedStringSchema,
+    GEOAPIFY_API_KEY: optionalTrimmedStringSchema,
+    ADDRESS_AUTOCOMPLETE_REDIS_REST_URL: optionalTrimmedUrlSchema,
+    ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN: optionalTrimmedStringSchema,
     AI_CHAT_MODEL: z.string().default('gemma4:e4b'),
     AI_CHAT_PROVIDER: aiChatProviderSchema,
 

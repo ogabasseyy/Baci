@@ -6,6 +6,11 @@ import {
   mockFetch,
 } from './route.test-helpers';
 
+vi.mock('../provider-budget', () => ({
+  reserveGooglePlacesRequest: vi.fn(async () => true),
+  reserveGeoapifyRequest: vi.fn(async () => true),
+}));
+
 describe('GET /api/places/autocomplete errors', () => {
   beforeEach(() => {
     vi.clearAllMocks();

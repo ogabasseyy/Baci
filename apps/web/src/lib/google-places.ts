@@ -10,6 +10,9 @@ export interface PlacePrediction {
   mainText: string;
   secondaryText: string;
   fullText: string;
+  provider?: 'google' | 'geoapify';
+  /** Geoapify includes address fields in the prediction; no Details call. */
+  details?: GooglePlaceDetails;
 }
 
 export interface GooglePlaceDetails {
@@ -46,6 +49,8 @@ export async function getPlacePredictions(
   // failure state — e.g. reveal a manual address fallback — instead of
   // silently rendering an empty dropdown that looks identical to "no matches".
   const params = new URLSearchParams({ input });
+  // Older native clients cannot render Geoapify attribution or inline details.
+  params.append('fallback', 'geoapify');
   if (sessionToken) params.append('sessionToken', sessionToken);
   if (country) params.append('country', country);
 

@@ -3,6 +3,7 @@ import { vi } from 'vitest';
 
 // Set environment variable BEFORE importing the route
 vi.stubEnv('GOOGLE_MAPS_API_KEY', 'test-api-key');
+vi.stubEnv('GEOAPIFY_API_KEY', '');
 
 // Mock global fetch
 export const mockFetch = vi.fn();

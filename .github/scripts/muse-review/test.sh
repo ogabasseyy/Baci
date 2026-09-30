@@ -62,6 +62,13 @@ rm -f "${t1}" "${t2}"
 if cap_file "/nonexistent-muse-test-$$" 4 2>/dev/null; then got_rc=0; else got_rc=1; fi
 assert_eq "capfile-missing-rc" "1" "${got_rc}"
 
+# --- sanitize_mentions ---
+zwsp=$'\xe2\x80\x8b'
+got="$(printf '%s' 'hi @octocat, ping @a-b and mail a@b.com' | sanitize_mentions)"
+assert_eq "mentions-zwsp" "hi @${zwsp}octocat, ping @${zwsp}a-b and mail a@b.com" "${got}"
+got="$(printf '%s' '@lead starts here' | sanitize_mentions)"
+assert_eq "mentions-start" "@${zwsp}lead starts here" "${got}"
+
 # --- redact ---
 pem='-----BEGIN TEST PRIVATE KEY-----FAKEFAKEFAKE-----END TEST PRIVATE KEY-----'
 assert_eq "redact-pem" "[REDACTED-PRIVATE-KEY]" "$(redact "a ${pem} b" | sed 's/^a //; s/ b$//')"

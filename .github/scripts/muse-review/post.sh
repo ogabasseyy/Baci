@@ -94,18 +94,24 @@ Muse did not return a review (step outcome: \`${MUSE_OUTCOME}\`).
 ## Suggested next steps
 
 Re-run the workflow, or inspect the logs."
-elif printf '%s' "${raw_output}" | jq -e 'has("verdict") and has("findings")' >/dev/null 2>&1; then
-  # Structured path: summary review plus Codex-style inline threads.
+elif printf '%s' "${raw_output}" | jq -e '(.verdict | type) == "string" and (.findings | type) == "array" and ((.next_steps // []) | type) == "array"' >/dev/null 2>&1; then
+  # Structured path. Shape enforced (not presence): mistyped findings
+  # would otherwise sail through cleanup and post a false "no issues".
   findings_json="${RUNNER_TEMP}/muse-findings.json"
   printf '%s' "${raw_output}" > "${findings_json}"
   # Normalize: keep only well-formed finding objects. If the model returned
   # findings but none are usable, fall back explicitly instead of posting a
   # false "no issues" review.
   raw_finding_count="$(jq -r '(.findings // []) | length' "${findings_json}")"
-  jq -f "${SCRIPT_DIR}/clean.jq" \
-    "${findings_json}" > "${findings_json}.clean" \
-    && mv "${findings_json}.clean" "${findings_json}"
-  clean_finding_count="$(jq -r '(.findings // []) | length' "${findings_json}")"
+  # Cleanup failure keeps NO findings, never the uncleaned original.
+  if jq -f "${SCRIPT_DIR}/clean.jq" \
+    "${findings_json}" > "${findings_json}.clean" 2>/dev/null; then
+    mv "${findings_json}.clean" "${findings_json}"
+    clean_finding_count="$(jq -r '(.findings // []) | length' "${findings_json}")"
+  else
+    rm -f "${findings_json}.clean"
+    clean_finding_count=0
+  fi
   if (( raw_finding_count > 0 && clean_finding_count == 0 )); then
     is_fallback=true
     review="## Verdict
@@ -264,10 +270,8 @@ jq -n \
   'if ($comments | length) == 0 then { body: $body, event: "COMMENT", commit_id: $sha }
     else { body: $body, event: "COMMENT", commit_id: $sha, comments: $comments } end' > "${payload_file}"
 
-# Advisory to the end: a failed POST must warn, never fail the job.
-# The reviews endpoint is all-or-nothing: one invalid inline comment (stale
-# line, decoded path mismatch) rejects the summary too, so retry once as
-# summary-only with an explicit note rather than losing the whole review.
+# Advisory: a failed POST warns, never fails. The endpoint is
+# all-or-nothing, so retry once summary-only rather than lose the review.
 post_resp="${RUNNER_TEMP}/muse-post-resp.txt"
 if ! gh api --method POST \
   "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" \
@@ -275,12 +279,9 @@ if ! gh api --method POST \
   echo "::warning::Review POST failed: $(head -c 300 "${post_resp}" 2>/dev/null || true)"
   if [[ "${inline_payload}" != "[]" ]]; then
     echo "::warning::Retrying as summary-only."
-    # Inline bodies were already redacted, mention-sanitized, and bounded
-    # when built, so the retry inlines them from the rejected payload
-    # itself (stripping each thread's react footer) and removes the
-    # now-dangling "(see inline)" pointers — the summary alone would point
-    # at nonexistent threads and omit every why/how. Char-sliced (jq is
-    # UTF-8-safe) back under the API body limit.
+    # Reuse the rejected payload's already-sanitized bodies (paths
+    # re-sanitized here, bodies capped with markers), minus dangling
+    # "(see inline)" pointers; char-sliced back under the body limit.
     jq '.body |= gsub(" \\(see inline\\)"; "") |
         .body += "\n\n<sub>Inline threads were rejected by the API; findings inlined below.</sub>\n\n" +
           ([.comments[]? | "### \(.path | gsub("\\n"; " ") | gsub("!\\[[^\\]]*\\]\\([^\\)]*\\)"; "") | gsub("(?<![A-Za-z0-9_])@(?=[A-Za-z0-9_])"; "@\u200b")):\(.line)\n\n\(.body | gsub("\\n\\n<sub>Useful\\?.*"; "") | if length > 2000 then .[0:2000] + "\n\n[...explanation truncated for length...]" else . end)"] | join("\n\n---\n\n")) |

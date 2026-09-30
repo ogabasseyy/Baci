@@ -35,11 +35,11 @@ emit_guidance() {
     # SHA, not the branch name: branch names are submitter-controlled and
     # this label prints outside any untrusted block.
     source="trusted (base ${MUSE_BASE_SHA_FULL:0:10})"
-  elif [[ "${phase}" == "head" && -f "${candidate}" && ! -L "${candidate}" ]]; then
-    # Refuse symlinks: a PR-added symlink (e.g. to /proc/self/environ)
-    # would otherwise embed runner secrets into the prompt. The -- keeps
-    # option-like paths (e.g. --help/AGENTS.md) from parsing as flags and
-    # aborting the step under set -e.
+  elif [[ "${phase}" == "head" ]] && head_readable "${candidate}"; then
+    # Refuse symlinks: a PR-added symlink (e.g. to /proc/self/environ, or a
+    # symlinked parent dir) would otherwise embed runner secrets into the
+    # prompt. The -- keeps option-like paths (e.g. --help/AGENTS.md) from
+    # parsing as flags and aborting the step under set -e.
     content="$(cat -- "${candidate}")"
     source="UNTRUSTED (PR head)"
   else

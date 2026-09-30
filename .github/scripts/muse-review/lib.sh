@@ -2,8 +2,8 @@
 # shellcheck shell=bash
 #
 # Sourced (never executed) by collect.sh, diff.sh, guidance.sh, prompt.sh,
-# post.sh, and test.sh. Portable to bash 3.2 (macOS) and bash 5 (runner):
-# no associative arrays, no mapfile, no namerefs.
+# run.sh, post.sh, and test.sh. Portable to bash 3.2 (macOS) and bash 5
+# (runner): no associative arrays, no mapfile, no namerefs.
 #
 # Every function here is pure (stdin/stdout/args only, no network, no repo
 # state) so test.sh can exercise each one deterministically.
@@ -57,6 +57,18 @@ trunc_bytes() {
   cat > "${tmp}"
   head -c "${bytes}" "${tmp}" | iconv -c -f UTF-8 -t UTF-8 2>/dev/null || true
   rm -f "${tmp}"
+}
+
+# Break @-mentions so a prompt-injected model cannot spam notifications via
+# text posted as github-actions[bot]. A zero-width space after a
+# start/whitespace-anchored @ keeps the text readable while defeating
+# mention parsing; mid-word @ (emails, decorators) is left alone. Links are
+# intentionally kept: doc citations are the recency feature working as
+# designed. Apply after redact(), before byte-bounding (it adds characters).
+sanitize_mentions() {
+  # \xE2\x80\x8B is U+200B ZERO WIDTH SPACE as raw bytes: breaks mention
+  # parsing while rendering invisibly, with no wide-char warnings.
+  perl -pe 's/(^|\s)@([A-Za-z0-9_])/$1\@\xE2\x80\x8B$2/g'
 }
 
 # Scrub secret patterns from review text before it is posted publicly.

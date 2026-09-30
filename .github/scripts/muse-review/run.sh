@@ -17,6 +17,15 @@ set -euo pipefail
 review_file="${RUNNER_TEMP}/muse-review-body.md"
 : > "${review_file}"
 
+# Materialize a symlink-free workspace BEFORE the key is exposed: the agent
+# inherits META_API_KEY and reads changed files, so any PR-added symlink
+# (e.g. to /proc/self/environ) must already be gone. Count is logged; the
+# agent simply finds those paths missing.
+swept="$(sweep_workspace_symlinks "${GITHUB_WORKSPACE}")"
+if (( swept > 0 )); then
+  echo "::notice::Removed ${swept} workspace symlink(s) before the agent run."
+fi
+
 model_args=()
 if [[ -n "${MUSE_MODEL}" ]]; then
   model_args+=(--model "${MUSE_MODEL}")

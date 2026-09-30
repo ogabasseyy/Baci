@@ -109,6 +109,7 @@ export function useCheckoutDvaSession({
   const setDvaData = (data: DvaModalData | null) => {
     dvaConfirmAttemptRef.current += 1;
     setDvaDataState(data);
+    setIsVerifyingDva(false);
   };
 
   const closeDvaModal = () => {
@@ -209,7 +210,9 @@ export function useCheckoutDvaSession({
         });
       })
       .finally(() => {
-        setIsVerifyingDva(false);
+        if (confirmAttempt === dvaConfirmAttemptRef.current) {
+          setIsVerifyingDva(false);
+        }
       });
   };
 

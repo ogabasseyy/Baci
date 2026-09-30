@@ -246,14 +246,23 @@ describe('useCheckoutDvaSession', () => {
     expect(result.current.dvaData).toBeNull();
   });
 
-  it('retires an in-flight confirmation when the provisioned account is replaced', async () => {
-    let resolveFetch!: (value: {
+  it('keeps replacement verification active when a retired request resolves late', async () => {
+    let resolveOldFetch!: (value: {
       ok: boolean;
       json: () => Promise<unknown>;
     }) => void;
     (global.fetch as ReturnType<typeof vi.fn>).mockReturnValueOnce(
       new Promise((resolve) => {
-        resolveFetch = resolve;
+        resolveOldFetch = resolve;
+      })
+    );
+    let resolveNewFetch!: (value: {
+      ok: boolean;
+      json: () => Promise<unknown>;
+    }) => void;
+    (global.fetch as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveNewFetch = resolve;
       })
     );
     const deps = baseDeps();
@@ -267,8 +276,12 @@ describe('useCheckoutDvaSession', () => {
         reference: 'REF-REPLACEMENT',
       })
     );
+    expect(result.current.isVerifyingDva).toBe(false);
+    act(() => result.current.handleDvaConfirmTransfer());
+    expect(result.current.isVerifyingDva).toBe(true);
+
     await act(async () => {
-      resolveFetch({
+      resolveOldFetch({
         ok: true,
         json: async () => ({
           order: { id: 'order-123', payment_status: 'paid' },
@@ -278,11 +291,22 @@ describe('useCheckoutDvaSession', () => {
     });
 
     expect(result.current.dvaData?.orderId).toBe('replacement-order');
+    expect(result.current.isVerifyingDva).toBe(true);
     expect(mockCaptureCheckoutPaymentCompleted).not.toHaveBeenCalled();
     expect(deps.clearPendingCheckoutOrder).not.toHaveBeenCalled();
     expect(deps.clearCheckoutSession).not.toHaveBeenCalled();
     expect(deps.clearCart).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveNewFetch({
+        ok: true,
+        json: async () => ({ order: { payment_status: 'pending' } }),
+      });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.dvaData?.orderId).toBe('replacement-order');
+    expect(result.current.isVerifyingDva).toBe(false);
   });
 
   it('skips routing and cart effects when the modal closes during idempotency cleanup', async () => {

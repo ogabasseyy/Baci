@@ -1272,6 +1272,13 @@ function createOgabasseyServer() {
 
         const { priceScanComplete, sanitizedQuery, selectedProducts } = discovery;
         const coverage = 'coverage' in discovery ? discovery.coverage : undefined;
+        if ('invalidIntentMessage' in discovery && discovery.invalidIntentMessage) {
+          const message = discovery.invalidIntentMessage;
+          return {
+            content: [{ type: 'text', text: message }],
+            structuredContent: { products: [], status: 'error', message },
+          };
+        }
         if (!priceScanComplete) {
           const message = 'This price search has too many matching products to check accurately. Add a category, brand, or more specific product name and try again.';
           return {

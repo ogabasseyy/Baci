@@ -32,7 +32,10 @@ export async function discoverStructuredProducts({ intent, query, args, merchant
   return {
     selectedProducts: selectSearchProductsByPrice(selected, args, Math.min(20, Math.max(1, args.limit ?? 10))),
     sanitizedQuery: query,
-    // Results satisfy constraints even if candidate coverage is bounded.
+    // Every returned offer was evaluated, so the price scan itself is
+    // complete. Bounded candidate coverage is a separate axis reported via
+    // `coverage` (surfaced in structuredContent and the result text), not via
+    // priceScanComplete, which means "prices could not be checked accurately".
     priceScanComplete: true,
     coverage: candidates.truncated ? 'partial' as const : 'complete' as const,
     semanticUnavailable: candidates.semanticUnavailable,

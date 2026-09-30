@@ -50,8 +50,21 @@ export async function discoverMcpProducts({
   supabase,
 }: DiscoveryInput) {
   if (args.intent !== undefined) {
-    const intent = mcpDiscoveryIntentSchema.parse(args.intent);
-    return discoverStructuredProducts({ intent, args, merchantId, supabase, semanticSearch,
+    const parsed = mcpDiscoveryIntentSchema.safeParse(args.intent);
+    if (!parsed.success) {
+      // A model-supplied intent with an unexpected field fails validation
+      // here so the tool reports it, instead of throwing into the generic
+      // degraded-service catch-all.
+      const details = parsed.error.issues.map((issue) =>
+        issue.path.length > 0 ? `${issue.path.join('.')}: ${issue.message}` : issue.message).join('; ');
+      return {
+        selectedProducts: [],
+        sanitizedQuery: args.query ? sanitizeString(args.query, 100) : undefined,
+        priceScanComplete: true,
+        invalidIntentMessage: `Invalid search intent: ${details || 'intent rejected by schema'}`,
+      };
+    }
+    return discoverStructuredProducts({ intent: parsed.data, args, merchantId, supabase, semanticSearch,
       query: args.query ? sanitizeString(args.query, 100) : undefined });
   }
   const loaded = await loadMcpSearchProducts({ args, merchantId, sanitizeString, supabase });

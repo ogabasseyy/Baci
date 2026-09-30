@@ -28,7 +28,7 @@ emit_guidance() {
   content=""
   source=""
   if [[ "${trust_base_flag}" == "true" ]] \
-    && content="$(git show "FETCH_HEAD:${candidate}" 2>/dev/null)"; then
+    && content="$(git show "${MUSE_BASE_SHA_FULL}:${candidate}" 2>/dev/null)"; then
     # SHA, not the branch name: branch names are submitter-controlled and
     # this label prints outside any untrusted block.
     source="trusted (base ${MUSE_BASE_SHA_FULL:0:10})"
@@ -96,8 +96,10 @@ done < <(jq -j '[.[] | .filename, (.previous_filename // empty)] | map(select(le
 # trusted rules are collected.
 for phase in base head; do
   for candidate in ${MUSE_CANDIDATES[@]+"${MUSE_CANDIDATES[@]}"}; do
+    # Explicit base SHA, never bare FETCH_HEAD: later deepens append the
+    # head to FETCH_HEAD, so the bare ref could resolve to the wrong commit.
     if [[ "${trust_base_flag}" == "true" ]] \
-      && git show "FETCH_HEAD:${candidate}" >/dev/null 2>&1; then
+      && git show "${MUSE_BASE_SHA_FULL}:${candidate}" >/dev/null 2>&1; then
       is_base=true
     else
       is_base=false

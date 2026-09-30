@@ -11,15 +11,22 @@ set -euo pipefail
 
 # Second staleness gate (see guard.sh): a push that landed while Muse was
 # working means this review targets an old head — posting it would
-# misattribute inline lines, so exit quietly. Fail closed: an unreadable
-# head is a skip, never a post.
-if ! live_head="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.head.sha' 2>/dev/null)" \
-  || [[ -z "${live_head}" ]]; then
+# misattribute inline lines, so exit quietly. The captured base is checked
+# too: evidence was collected against it, and findings may no longer match
+# the current diff once it advances (the next event re-reviews). Fail closed:
+# an unreadable lookup is a skip, never a post.
+if ! live_shas="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '[.head.sha, .base.sha] | @tsv' 2>/dev/null)" \
+  || [[ -z "${live_shas}" ]]; then
   echo "::warning::Head revalidation lookup failed; skipping post to avoid publishing a stale review."
   exit 0
 fi
+live_head="${live_shas%%$'\t'*}"; live_base="${live_shas#*$'\t'}"
 if [[ "${live_head}" != "${HEAD_SHA}" ]]; then
   echo "::notice::PR head moved during review (${HEAD_SHA:0:10} -> ${live_head:0:10}); skipping stale post."
+  exit 0
+fi
+if [[ "${live_base}" != "${BASE_SHA}" ]]; then
+  echo "::notice::PR base moved during review (${BASE_SHA:0:10} -> ${live_base:0:10}); skipping stale post."
   exit 0
 fi
 

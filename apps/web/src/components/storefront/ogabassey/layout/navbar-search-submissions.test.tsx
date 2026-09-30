@@ -79,6 +79,15 @@ describe('mounted navbar submission paths', () => {
     });
   });
 
+  it('announces the see-all popup as expanded when no results render', async () => {
+    await loadAutocomplete();
+    await screen.findByRole('link', { name: /see all results/i });
+    expect(screen.getByRole('combobox')).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
+  });
+
   it('preserves Enter-to-product selection without recording a search submission', async () => {
     await loadAutocomplete([
       { id: 'p1', name: 'Phone', slug: 'phone', price: 100, image_small: '' },

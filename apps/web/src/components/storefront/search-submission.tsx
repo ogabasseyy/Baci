@@ -1,15 +1,23 @@
 'use client';
 
-import type { ReactNode } from 'react';
-import { recordSearchSubmission } from '@/lib/search-submission';
+import {
+  recordSearchSubmission,
+  SEARCH_SUBMISSION_QUERY_MAX_LENGTH,
+} from '@/lib/search-submission';
 
-interface SearchProps {
+interface SearchSubmissionFormProps {
   pathPrefix: string;
   query: string;
 }
 
 /** Native GET navigation also works before hydration or with JavaScript disabled. */
-export function SearchSubmissionForm({ pathPrefix, query }: SearchProps) {
+export function SearchSubmissionForm({
+  pathPrefix,
+  query,
+}: SearchSubmissionFormProps) {
+  // Clamp the retained value to the shared limit so the displayed, navigated,
+  // and recorded queries are always identical (sanitizeSearchQuery allows 200).
+  const initialQuery = query.slice(0, SEARCH_SUBMISSION_QUERY_MAX_LENGTH);
   return (
     <form
       action={`${pathPrefix}/search`}
@@ -25,8 +33,8 @@ export function SearchSubmissionForm({ pathPrefix, query }: SearchProps) {
         type="search"
         name="q"
         aria-label="Search products"
-        defaultValue={query}
-        maxLength={100}
+        defaultValue={initialQuery}
+        maxLength={SEARCH_SUBMISSION_QUERY_MAX_LENGTH}
         className="min-w-0 flex-1 rounded-md border border-store-background-text/15 bg-store-background px-3 py-2 text-store-background-text"
       />
       <button
@@ -36,32 +44,5 @@ export function SearchSubmissionForm({ pathPrefix, query }: SearchProps) {
         Search
       </button>
     </form>
-  );
-}
-
-/** A plain anchor has no framework prefetch; only activation records a submission. */
-export function SearchSubmissionLink({
-  pathPrefix,
-  query,
-  source,
-  children,
-  className,
-}: SearchProps & {
-  source: 'see-all' | 'did-you-mean';
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <a
-      href={`${pathPrefix}/search?q=${encodeURIComponent(query.trim().slice(0, 100))}`}
-      className={className}
-      onClick={() => recordSearchSubmission(query, pathPrefix, source)}
-      onAuxClick={(event) => {
-        if (event.button === 1)
-          recordSearchSubmission(query, pathPrefix, source);
-      }}
-    >
-      {children}
-    </a>
   );
 }

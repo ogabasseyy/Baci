@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
+import type { CachedMerchant } from '@/lib/cached-data';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import {
@@ -23,7 +24,20 @@ function unavailable() {
   );
 }
 
-/** Public, best-effort telemetry. The proxy applies the dedicated per-IP budget. */
+/**
+ * Public, best-effort telemetry. The proxy applies the dedicated per-IP budget.
+ *
+ * No double-submit CSRF token by design: this endpoint is unauthenticated
+ * public analytics in the same class as /api/platform/events (exempt in
+ * checkCsrfProtection), and storefront pages do not mint CSRF cookies
+ * (CsrfInitializer mounts only in admin/dashboard/builder), so token
+ * enforcement would reject every legitimate submission. Cross-site forgery is
+ * instead blocked by the strict same-Origin check below — browsers always send
+ * Origin on fetch/form POSTs, and a missing or mismatched Origin is a 403 —
+ * plus bot-UA filtering, a bounded body, Zod validation, and the per-IP
+ * budget. The worst case for a forged same-shape request is a polluted
+ * analytics count; no privileged state is reachable here.
+ */
 export async function POST(request: NextRequest) {
   const origin = request.headers.get('origin');
   const requestHost = request.headers.get('host') || request.nextUrl.host;
@@ -83,13 +97,19 @@ export async function POST(request: NextRequest) {
           ? ''
           : subdomain
         : host.replace(/^www\./, '');
-    if (!identifier) {
-      return NextResponse.json(
-        { error: 'Unknown storefront' },
-        { status: 404 }
-      );
+    // Mirror proxy apex-then-exact resolution (getSlugForOriginCustomDomain):
+    // a merchant registered only under the full www hostname must still
+    // resolve when the apex lookup misses.
+    const identifiers =
+      !isPlatformHost(host) && !subdomain && identifier !== host
+        ? [identifier, host]
+        : [identifier];
+    let merchant: CachedMerchant | null = null;
+    for (const candidate of identifiers) {
+      if (!candidate) continue;
+      merchant = await getRequestScopedMerchant(candidate);
+      if (merchant) break;
     }
-    const merchant = await getRequestScopedMerchant(identifier);
     if (!merchant) {
       return NextResponse.json(
         { error: 'Unknown storefront' },

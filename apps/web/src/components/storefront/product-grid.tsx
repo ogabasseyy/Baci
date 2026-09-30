@@ -7,6 +7,7 @@ import { useDebounce } from '@/hooks/use-debounce';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { apiGet } from '@/lib/api-client';
 import { getSampleProductsForBusinessType, type Product } from '@/lib/products';
+import { recordSearchSubmission } from '@/lib/search-submission';
 import { DidYouMeanBanner } from './did-you-mean-banner';
 import { ProductGridCategoryPills } from './product-grid-category-pills';
 import { ProductGridEmptyState } from './product-grid-empty-state';
@@ -253,6 +254,13 @@ export function StorefrontProductGrid({
             originalQuery={searchQuery}
             suggestion={didYouMean}
             onSuggestionClick={(suggestion) => {
+              // An explicit correction: record it through the submission path
+              // while the follow-up /api/search read stays untracked.
+              recordSearchSubmission(
+                suggestion,
+                merchantContext?.basePath ?? '',
+                'did-you-mean'
+              );
               handleSetSearchQuery(suggestion);
             }}
           />

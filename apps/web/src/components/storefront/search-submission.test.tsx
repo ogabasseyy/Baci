@@ -1,10 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  SearchSubmissionForm,
-  SearchSubmissionLink,
-} from './search-submission';
+import { SearchSubmissionForm } from './search-submission';
+import { SearchSubmissionLink } from './search-submission-link';
 
 const fetchMock = vi.fn();
 describe('search submission controls', () => {
@@ -101,6 +99,25 @@ describe('search submission controls', () => {
     await Promise.resolve();
     expect(secondEvent.defaultPrevented).toBe(false);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('clamps a retained over-long query so displayed, navigated, and recorded values match', () => {
+    render(
+      <SearchSubmissionForm pathPrefix="/ogabassey" query={'q'.repeat(150)} />
+    );
+    const input = screen.getByRole('searchbox', { name: 'Search products' });
+    expect(input).toHaveValue('q'.repeat(100));
+    fireEvent.submit(input.closest('form') as HTMLFormElement);
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+      '/api/search/submissions',
+      expect.objectContaining({
+        body: JSON.stringify({
+          query: 'q'.repeat(100),
+          pathPrefix: '/ogabassey',
+          source: 'results-form',
+        }),
+      })
+    );
   });
 
   it('does not emit for an empty form submission', () => {

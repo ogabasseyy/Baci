@@ -117,6 +117,27 @@ describe('explicit search submissions', () => {
     expect(mocks.merchant).toHaveBeenCalledWith('ogabassey');
   });
 
+  it('falls back to the exact www hostname when only it is registered', async () => {
+    mocks.merchant.mockImplementation(async (identifier: string) =>
+      identifier === 'www.shop.example.com'
+        ? { id: merchantId, slug: 'shop' }
+        : null
+    );
+    const response = await POST(
+      request(
+        { query: 'phone', pathPrefix: '', source: 'navbar' },
+        {},
+        'https://www.shop.example.com/api/search/submissions'
+      )
+    );
+    expect(response.status).toBe(204);
+    expect(mocks.merchant).toHaveBeenCalledWith('shop.example.com');
+    expect(mocks.merchant).toHaveBeenCalledWith('www.shop.example.com');
+    expect(mocks.insert).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ merchant_id: merchantId })
+    );
+  });
+
   it('does not accept a merchant supplied from a reserved platform subdomain', async () => {
     const response = await POST(
       request(

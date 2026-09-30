@@ -3,10 +3,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { BreadcrumbList, CollectionPage, WithContext } from 'schema-dts';
 import { JsonLd } from '@/components/seo/json-ld';
-import {
-  SearchSubmissionForm,
-  SearchSubmissionLink,
-} from '@/components/storefront/search-submission';
+import { SearchSubmissionForm } from '@/components/storefront/search-submission';
+import { SearchSubmissionLink } from '@/components/storefront/search-submission-link';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { asRoute } from '@/lib/routes';

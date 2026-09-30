@@ -202,7 +202,9 @@ describe('CheckoutPaymentSessionOverlays', () => {
       await screen.findByText(/Ogabassey will create a permanent bank account/)
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/could not reach the server to check this transfer/)
+      await screen.findByText(
+        /could not reach the server to check this transfer/
+      )
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Create my account' }));
     fireEvent.click(screen.getByRole('button', { name: /Not now/ }));

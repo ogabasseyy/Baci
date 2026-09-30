@@ -3,6 +3,10 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { BreadcrumbList, CollectionPage, WithContext } from 'schema-dts';
 import { JsonLd } from '@/components/seo/json-ld';
+import {
+  SearchSubmissionForm,
+  SearchSubmissionLink,
+} from '@/components/storefront/search-submission';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { asRoute } from '@/lib/routes';
@@ -100,9 +104,6 @@ export async function SearchPageContent({
   const pathPrefix = getStorefrontPathPrefix(headersList, merchant);
   const allProductsHref = `${pathPrefix}/products`;
   const contactHref = `${pathPrefix}/contact`;
-  const didYouMeanHref = searchResult.didYouMean
-    ? `${pathPrefix}/search?q=${encodeURIComponent(searchResult.didYouMean)}`
-    : null;
   const storeUrl = buildRequestScopedStoreUrl(merchant, headersList);
   const pageUrl = searchQuery
     ? `${storeUrl}/search?q=${encodeURIComponent(searchQuery)}`
@@ -184,15 +185,23 @@ export async function SearchPageContent({
             </p>
           </div>
 
-          {searchResult.didYouMean && didYouMeanHref && (
+          <SearchSubmissionForm
+            key={searchQuery}
+            pathPrefix={pathPrefix}
+            query={searchQuery}
+          />
+
+          {searchResult.didYouMean && (
             <p className="mt-4 text-sm text-store-background-text/55">
               Did you mean{' '}
-              <Link
-                href={asRoute(didYouMeanHref)}
+              <SearchSubmissionLink
+                pathPrefix={pathPrefix}
+                query={searchResult.didYouMean}
+                source="did-you-mean"
                 className="font-medium text-store-primary underline-offset-4 hover:underline"
               >
                 {searchResult.didYouMean}
-              </Link>
+              </SearchSubmissionLink>
               ?
             </p>
           )}

@@ -4,18 +4,20 @@ import { Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { Input } from '@/components/ui/input';
 import type { SearchAutocompleteProps } from '@/components/storefront/search-autocomplete';
+import { Input } from '@/components/ui/input';
+import { recordSearchSubmission } from '@/lib/search-submission';
 
 type SearchAutocompleteComponent = React.ComponentType<SearchAutocompleteProps>;
 
-let searchAutocompleteLoader: Promise<SearchAutocompleteComponent> | null = null;
+let searchAutocompleteLoader: Promise<SearchAutocompleteComponent> | null =
+  null;
 
 function loadSearchAutocomplete() {
   if (!searchAutocompleteLoader) {
-    searchAutocompleteLoader = import('@/components/storefront/search-autocomplete').then(
-      (mod) => mod.SearchAutocomplete
-    );
+    searchAutocompleteLoader = import(
+      '@/components/storefront/search-autocomplete'
+    ).then((mod) => mod.SearchAutocomplete);
   }
 
   return searchAutocompleteLoader;
@@ -66,6 +68,7 @@ export function NavbarSearch({
       return;
     }
 
+    recordSearchSubmission(trimmedQuery, basePath, 'navbar');
     router.push(
       `${basePath}/search?q=${encodeURIComponent(trimmedQuery)}` as `/${string}`
     );
@@ -131,20 +134,28 @@ export function NavbarSearch({
 
   if (SearchAutocompleteComponent) {
     return (
-      <SearchAutocompleteComponent
-        merchantId={merchantId}
-        value={searchQuery}
-        onChange={setSearchQuery}
-        onSelectProduct={handleProductSelect}
-        placeholder="Search products, brands and categories"
-        className={SEARCH_INPUT_CLASS_NAME}
-        autoFocus={shouldAutoFocusAutocomplete}
-      />
+      <form action={`${basePath}/search`} method="get" onSubmit={handleSubmit}>
+        <SearchAutocompleteComponent
+          searchPathPrefix={basePath}
+          merchantId={merchantId}
+          value={searchQuery}
+          onChange={setSearchQuery}
+          onSelectProduct={handleProductSelect}
+          placeholder="Search products, brands and categories"
+          className={SEARCH_INPUT_CLASS_NAME}
+          autoFocus={shouldAutoFocusAutocomplete}
+        />
+      </form>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="ogabassey-navbar-search">
+    <form
+      action={`${basePath}/search`}
+      method="get"
+      onSubmit={handleSubmit}
+      className="ogabassey-navbar-search"
+    >
       <Search className="ogabassey-navbar-search__icon" aria-hidden="true" />
       <Input
         type="search"

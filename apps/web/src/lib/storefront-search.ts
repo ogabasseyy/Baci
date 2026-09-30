@@ -3,8 +3,6 @@ import {
   getProductSearchTotalCount,
 } from '@baci/shared';
 import { cookies } from 'next/headers';
-import { after } from 'next/server';
-import { logger } from './logger';
 import { type NormalizedProduct, normalizeProduct } from './normalize-product';
 import { isValidUuid, sanitizeSearchQuery } from './sanitize-core';
 import { storefrontProductFilters } from './storefront-product-filters';
@@ -28,12 +26,6 @@ export interface StorefrontSearchSupabase {
     data: unknown;
     error: { message: string } | null;
   }>;
-}
-
-interface StorefrontSearchAnalyticsSupabase {
-  from: (table: string) => {
-    insert: (value: Record<string, unknown>) => PromiseLike<{ error: unknown }>;
-  };
 }
 
 export type StorefrontSearchSort =
@@ -60,7 +52,6 @@ export interface StorefrontSearchFilters {
 
 interface SearchStorefrontProductsArgs {
   supabase: StorefrontSearchSupabase;
-  analyticsSupabase?: StorefrontSearchAnalyticsSupabase;
   filters?: StorefrontSearchFilters;
   includeDidYouMean?: boolean;
   merchantId: string;
@@ -68,7 +59,6 @@ interface SearchStorefrontProductsArgs {
   limit: number;
   offset?: number;
   sort?: StorefrontSearchSort;
-  trackAnalytics?: boolean;
 }
 
 export interface StorefrontSearchResult {
@@ -88,18 +78,6 @@ const MAX_SEARCH_LIMIT = 100;
 // through the full ranked result set before post-filtering so filtered products
 // beyond the first RPC page are not silently omitted.
 const RANKED_FILTER_PAGE_SIZE = MAX_SEARCH_LIMIT;
-
-function isAfterOutsideRequestScopeError(error: unknown) {
-  return (
-    error instanceof Error && error.message.includes('outside a request scope')
-  );
-}
-
-function createSearchAnalyticsClient() {
-  return createPublicClient({
-    clientInfo: 'baci-storefront-search-analytics',
-  });
-}
 
 function clampSearchLimit(limit: number) {
   return Math.min(Math.max(Math.trunc(limit || 20), 1), MAX_SEARCH_LIMIT);
@@ -125,78 +103,8 @@ export function toStorefrontSearchSort(
   return sort ? (sortMap[sort] ?? 'relevance') : 'relevance';
 }
 
-function runSearchAnalyticsAfterResponse(callback: () => Promise<void>) {
-  try {
-    after(callback);
-  } catch (error) {
-    if (!isAfterOutsideRequestScopeError(error)) {
-      throw error;
-    }
-
-    // `after()` is available only inside a Next request/render lifecycle. Keep
-    // analytics non-blocking for plain unit tests and non-request callers.
-    void callback();
-  }
-}
-
-async function insertSearchAnalytics({
-  supabase,
-  merchantId,
-  query,
-  resultsCount,
-}: {
-  supabase: StorefrontSearchAnalyticsSupabase;
-  merchantId: string;
-  query: string;
-  resultsCount: number;
-}) {
-  try {
-    const { error: analyticsError } = await supabase
-      .from('search_analytics')
-      .insert({
-        merchant_id: merchantId,
-        search_query: query,
-        results_count: resultsCount,
-        search_method: 'server',
-      });
-
-    if (analyticsError) {
-      logger.warn({
-        message: 'Storefront search analytics insert failed',
-        error: analyticsError,
-        merchantId,
-        query,
-      });
-    }
-  } catch (analyticsError) {
-    logger.warn({
-      message: 'Storefront search analytics insert failed',
-      error: analyticsError,
-      merchantId,
-      query,
-    });
-  }
-}
-
-function scheduleSearchAnalyticsInsert(args: {
-  supabase?: StorefrontSearchAnalyticsSupabase;
-  merchantId: string;
-  query: string;
-  resultsCount: number;
-}) {
-  const supabase = args.supabase ?? createSearchAnalyticsClient();
-
-  runSearchAnalyticsAfterResponse(() =>
-    insertSearchAnalytics({
-      ...args,
-      supabase,
-    })
-  );
-}
-
 export async function searchStorefrontProducts({
   supabase,
-  analyticsSupabase,
   filters,
   includeDidYouMean = true,
   merchantId,
@@ -204,7 +112,6 @@ export async function searchStorefrontProducts({
   limit,
   offset,
   sort = 'relevance',
-  trackAnalytics = true,
 }: SearchStorefrontProductsArgs): Promise<StorefrontSearchResult> {
   if (!isValidUuid(merchantId)) {
     throw new InvalidMerchantIdError();
@@ -242,15 +149,6 @@ export async function searchStorefrontProducts({
   const productIds = extractProductSearchIds(rankedResults);
   const count = getProductSearchTotalCount(rankedResults);
 
-  if (trackAnalytics) {
-    scheduleSearchAnalyticsInsert({
-      supabase: analyticsSupabase,
-      merchantId,
-      query: sanitizedQuery,
-      resultsCount: count,
-    });
-  }
-
   const didYouMean =
     includeDidYouMean && productIds.length === 0
       ? await findStorefrontSearchDidYouMean({
@@ -280,13 +178,12 @@ export interface RankedSearchCandidates {
  * Pages through `search_products_v2` and accumulates ranked product IDs. Used
  * when storefront family filters must be applied in memory: the RPC caps each
  * page at 100 rows, so a single page would silently drop matches ranked past row
- * 100. Analytics is recorded once (first page) per search. Callers may pass
+ * 100. Callers may pass
  * maxCandidates for explicit best-effort prefetches; omit it when post-filtered
  * counts must be exact.
  */
 export async function collectRankedSearchProductIds(args: {
   supabase: StorefrontSearchSupabase;
-  analyticsSupabase?: StorefrontSearchAnalyticsSupabase;
   merchantId: string;
   query: string;
   filters?: StorefrontSearchFilters;
@@ -307,14 +204,12 @@ export async function collectRankedSearchProductIds(args: {
   ) {
     const page = await searchStorefrontProducts({
       supabase: args.supabase,
-      analyticsSupabase: args.analyticsSupabase,
       merchantId: args.merchantId,
       query: args.query,
       filters: args.filters,
       sort: args.sort,
       limit: RANKED_FILTER_PAGE_SIZE,
       offset: pageOffset,
-      trackAnalytics: pageOffset === 0,
     });
 
     total = page.count;

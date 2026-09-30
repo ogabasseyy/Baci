@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
+  fetch: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -40,6 +41,8 @@ import { NavbarSearch } from './navbar-search';
 describe('NavbarSearch', () => {
   beforeEach(() => {
     mocks.push.mockClear();
+    mocks.fetch.mockClear();
+    vi.stubGlobal('fetch', mocks.fetch);
   });
 
   it('submits the fallback product search form before autocomplete is loaded', () => {
@@ -56,6 +59,23 @@ describe('NavbarSearch', () => {
     fireEvent.submit(input.closest('form') as HTMLFormElement);
 
     expect(mocks.push).toHaveBeenCalledWith('/ogabassey/search?q=iphone');
+    expect(mocks.fetch).toHaveBeenCalledWith(
+      '/api/search/submissions',
+      expect.objectContaining({
+        method: 'POST',
+        keepalive: true,
+        body: JSON.stringify({
+          query: 'iphone',
+          pathPrefix: '/ogabassey',
+          source: 'navbar',
+        }),
+      })
+    );
+    expect(input.closest('form')).toHaveAttribute(
+      'action',
+      '/ogabassey/search'
+    );
+    expect(input.closest('form')).toHaveAttribute('method', 'get');
   });
 
   it('loads autocomplete on focus and routes selected products through the store base path', async () => {
@@ -67,7 +87,9 @@ describe('NavbarSearch', () => {
       />
     );
 
-    fireEvent.focus(screen.getByRole('searchbox', { name: /search products/i }));
+    fireEvent.focus(
+      screen.getByRole('searchbox', { name: /search products/i })
+    );
 
     await waitFor(() => {
       expect(
@@ -98,5 +120,6 @@ describe('NavbarSearch', () => {
     expect(mocks.push).toHaveBeenCalledWith(
       '/ogabassey/blog?search=flash%20sale'
     );
+    expect(mocks.fetch).not.toHaveBeenCalled();
   });
 });

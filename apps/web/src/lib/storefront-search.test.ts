@@ -65,6 +65,7 @@ import {
 describe('searchStorefrontProducts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(createPublicClient).mockReset();
     mockAnalyticsInsert.mockResolvedValue({ error: null });
     vi.mocked(createPublicClient).mockReturnValue(
       mockAnalyticsSupabase as never
@@ -114,16 +115,8 @@ describe('searchStorefrontProducts', () => {
       productIds: ['prod-1'],
       query: 'iphone',
     });
-    expect(createPublicClient).toHaveBeenCalledWith({
-      clientInfo: 'baci-storefront-search-analytics',
-    });
-    expect(mockAnalyticsSupabase.from).toHaveBeenCalledWith('search_analytics');
-    expect(mockAnalyticsInsert).toHaveBeenCalledWith({
-      merchant_id: '123e4567-e89b-12d3-a456-426614174000',
-      search_query: 'iphone',
-      results_count: 2,
-      search_method: 'server',
-    });
+    expect(mockAnalyticsInsert).not.toHaveBeenCalled();
+    expect(createPublicClient).not.toHaveBeenCalled();
   });
 
   it('throws InvalidMerchantIdError for invalid merchant ids', async () => {
@@ -234,7 +227,7 @@ describe('searchStorefrontProducts', () => {
     );
   });
 
-  it('can disable analytics for autocomplete-style callers', async () => {
+  it('keeps autocomplete-style reads free of analytics', async () => {
     mockSupabase.rpc.mockResolvedValueOnce({
       data: [{ product_id: 'prod-1', total_count: 1 }],
       error: null,
@@ -245,7 +238,6 @@ describe('searchStorefrontProducts', () => {
       merchantId: '123e4567-e89b-12d3-a456-426614174000',
       query: 'iphone',
       limit: 10,
-      trackAnalytics: false,
     });
 
     expect(createPublicClient).not.toHaveBeenCalledWith({
@@ -260,6 +252,7 @@ describe('searchStorefrontProducts', () => {
 describe('getStorefrontSearchProducts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(createPublicClient).mockReset();
     mockCookies.mockResolvedValue({});
     mockAnalyticsInsert.mockResolvedValue({ error: null });
     vi.mocked(createPublicClient).mockReturnValue(
@@ -317,6 +310,7 @@ describe('getStorefrontSearchProducts', () => {
       limit: 20,
     });
 
+    expect(mockAnalyticsInsert).not.toHaveBeenCalled();
     expect(result.products).toHaveLength(2);
     expect(result.products.map((product) => product.id)).toEqual([
       'product-2',
@@ -406,6 +400,7 @@ describe('getStorefrontSearchProducts', () => {
     expect(result.products.map((product) => product.id)).toEqual(['product-1']);
     expect(result.productIds).toEqual(['product-1']);
     expect(result.count).toBe(1);
+    expect(mockAnalyticsInsert).not.toHaveBeenCalled();
   });
 
   it('accumulates ranked candidates across pages so condition-family counts are not capped at one page', async () => {

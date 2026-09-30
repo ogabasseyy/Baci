@@ -36,6 +36,14 @@ base_ref="$(jq -r '.base.ref' "${pr_file}")"
 base_sha_full="$(jq -r '.base.sha' "${pr_file}")"
 base_sha="${base_sha_full}"
 echo "base_sha=${base_sha_full}" >> "${GITHUB_OUTPUT}"
+# Default branch decides guidance trust (see trust_base in lib.sh): a PR base
+# is contributor-controlled unless it is the default branch. Prefer the repo
+# object embedded in the PR payload; fall back to one metadata call. Empty on
+# failure fails closed (all guidance UNTRUSTED, still reviewed).
+default_branch="$(jq -r '.base.repo.default_branch // ""' "${pr_file}")"
+if [[ -z "${default_branch}" ]]; then
+  default_branch="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.default_branch' 2>/dev/null || true)"
+fi
 
 # Best-effort base fetch up front: the file list, diff ranges, and trusted
 # guidance all derive from it. Fetches the captured base SHA (not the live
@@ -217,5 +225,6 @@ fi
   printf 'MUSE_FILES_NOTE=%q\n' "${files_note}"
   printf 'MUSE_MANIFEST_NOTE=%q\n' "${manifest_note}"
   printf 'MUSE_BASE_AVAILABLE=%q\n' "${base_available}"
+  printf 'MUSE_DEFAULT_BRANCH=%q\n' "${default_branch}"
   printf 'MUSE_FILES_FAILED=%q\n' "${files_failed}"
 } > "${RUNNER_TEMP}/muse-vars.env"

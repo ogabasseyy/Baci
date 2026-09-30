@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { hydrateSearchProductAvailability } from './search-product-availability';
 import { inferSmartphoneCategory } from './infer-smartphone-category';
 import { singleWordDiscoveryTerm } from './single-word-discovery-term';
 import { loadRankedMcpProducts, type SearchProductsArgs } from './search-products-ranked';
@@ -23,6 +24,7 @@ type LoadMcpSearchProductsInput = {
 };
 
 export type LoadMcpSearchProductsResult = {
+  hydratedProducts?: Awaited<ReturnType<typeof hydrateSearchProductAvailability>>;
   limit: number;
   priceScanComplete: boolean;
   products: McpSearchProductRow[];

@@ -40,10 +40,20 @@ export function matchesDiscoveryProductIntent(
   // Lower-bound phrases ("over 500000") end the product-intent portion just
   // like upper bounds do, but only when a number follows: "from Samsung"
   // still describes the item rather than a price.
-  const priceBoundary = queryWords.findIndex((word, index) =>
-    word === 'under' || word === 'below' || word === 'between' ||
-    ((word === 'over' || word === 'above' || word === 'from') && /^\d/.test(queryWords[index + 1] ?? ''))
-  );
+  const isMoneyAmount = (word: string | undefined) => Boolean(word && /^\d[\d,.]*(?:k|m)?$/i.test(word));
+  const isPriceBoundary = (word: string, index: number) => {
+    if (word === 'between') {
+      return isMoneyAmount(queryWords[index + 1]) && queryWords[index + 2] === 'and' &&
+        isMoneyAmount(queryWords[index + 3]);
+    }
+    if (word === 'under' || word === 'below' || word === 'over' || word === 'above' || word === 'from') {
+      const amount = queryWords[index + 1];
+      // Capacities and other product specs are not price limits.
+      return isMoneyAmount(amount) && !/\d(?:gb|tb|mb|mah|mp|hz|w)$/i.test(amount ?? '');
+    }
+    return false;
+  };
+  const priceBoundary = queryWords.findIndex(isPriceBoundary);
   const coreWords = priceBoundary < 0 ? queryWords : queryWords.slice(0, priceBoundary);
   const detailIndex = coreWords.findIndex((word, index) =>
     detailBoundary.has(word) && !(word === 'in' && (coreWords[index - 1] === 'all' || /^\d+$/.test(coreWords[index - 1] ?? '')))

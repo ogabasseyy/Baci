@@ -39,6 +39,15 @@ describe('discovery product intent', () => {
     expect(matchesDiscoveryProductIntent({ name: 'Samsung Galaxy S24 Ultra', category: 'Smartphones' }, 'Samsung Galaxy S24 Ultra phone')).toBe(true);
   });
 
+  it('treats under, below, and between as price boundaries only with monetary amounts', () => {
+    const monitorMount = { name: 'Desk Monitor Mount', category: 'Monitor Accessories' };
+    expect(matchesDiscoveryProductIntent(monitorMount, 'under desk monitor mount')).toBe(true);
+    expect(matchesDiscoveryProductIntent(monitorMount, 'below desk monitor mount')).toBe(true);
+    expect(matchesDiscoveryProductIntent(monitorMount, 'between desk monitor mount')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Redmi 15', category: 'Smartphones' }, 'Redmi 15 phone under 300000')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Redmi 15', category: 'Smartphones' }, 'Redmi 15 phone between 200000 and 300000')).toBe(true);
+  });
+
   it('keeps brand-specific phone searches and excludes phone accessories', () => {
     const samsung = { name: 'Samsung Galaxy A55', category: 'Smartphones', brand: 'Samsung' };
     const redmi = { name: 'Redmi 15', category: 'Smartphones', brand: 'Xiaomi' };
@@ -127,6 +136,12 @@ describe('discovery product intent', () => {
       name: 'Dell Latitude 5420', category: 'Laptops', description: '8GB storage, 16GB RAM.',
     }, 'laptop with 16GB RAM')).toBe(true);
     expect(matchesDiscoveryProductIntent({
+      name: 'Dell Latitude 5420', category: 'Laptops', description: '16GB SSD.',
+    }, 'laptop with 16GB RAM')).toBe(false);
+    expect(matchesDiscoveryProductIntent({
+      name: 'Dell Latitude 5420', category: 'Laptops', description: '16GB RAM, 512GB SSD.',
+    }, 'laptop with 16GB RAM512GBSSD')).toBe(true);
+    expect(matchesDiscoveryProductIntent({
       name: 'Riversong Power Bank', category: 'Accessories', description: 'Capacity 30,000mAh.',
     }, 'power bank 30,000mAh')).toBe(true);
     expect(matchesDiscoveryProductIntent({
@@ -184,6 +199,42 @@ describe('discovery product intent', () => {
     expect(matchesDiscoveryProductIntent({ name: 'MacBook Air M3', category: 'Laptops' }, 'MacBook M3')).toBe(true);
     expect(matchesDiscoveryProductIntent({ name: '30W USB-C Charger', category: 'Accessories' }, '20w charger')).toBe(false);
     expect(matchesDiscoveryProductIntent({ name: '20W USB-C Charger', category: 'Accessories' }, '20w charger')).toBe(true);
+  });
+
+  it('treats USB-C and USBC as equivalent identity spellings', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'USBC Laptop Charger', category: 'Accessories' }, 'USB-C laptop charger')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'USB-C Laptop Charger', category: 'Accessories' }, 'USBC laptop charger')).toBe(true);
+  });
+
+  it('never borrows the capacity of an adjacent different medium', () => {
+    const laptop = { name: 'Dell Laptop', category: 'Laptops', description: '16GB RAM, 512GB SSD' };
+    expect(matchesDiscoveryProductIntent(laptop, 'laptop with 16GB SSD')).toBe(false);
+    expect(matchesDiscoveryProductIntent(laptop, 'laptop with 512GB SSD')).toBe(true);
+    expect(matchesDiscoveryProductIntent(laptop, 'laptop with 16GB RAM')).toBe(true);
+    expect(matchesDiscoveryProductIntent(laptop, 'laptop with 512GB RAM')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ ...laptop, description: '16 GB RAM, 512 GB SSD' }, 'laptop with 16 GB SSD')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ ...laptop, description: '16 GB RAM, 512 GB SSD' }, 'laptop with 512 GB RAM')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ ...laptop, description: 'RAM 512GB' }, 'laptop with 512GB RAM')).toBe(true);
+  });
+
+  it('does not treat an ordinary word beginning with ram as a memory context', () => {
+    expect(matchesDiscoveryProductIntent({ name: '16GB Ramp', category: 'Accessories' }, '16GB ramp')).toBe(true);
+  });
+
+  it('permits memory technology qualifiers without crossing another capacity', () => {
+    for (const technology of ['DDR4', 'DDR5', 'LPDDR5']) {
+      const laptop = { name: 'Dell Laptop', category: 'Laptops', description: `16GB ${technology} RAM, 512GB SSD` };
+      expect(matchesDiscoveryProductIntent(laptop, 'laptop with 16GB RAM')).toBe(true);
+      expect(matchesDiscoveryProductIntent(laptop, 'laptop with 16GB SSD')).toBe(false);
+    }
+  });
+
+  it('keeps laptop accessory intents distinct from bare laptops', () => {
+    const laptop = { name: 'Dell Latitude 5420', category: 'Laptops' };
+    for (const accessory of ['bag', 'sleeve', 'dock', 'hub']) {
+      expect(matchesDiscoveryProductIntent(laptop, `laptop ${accessory}`)).toBe(false);
+      expect(matchesDiscoveryProductIntent({ name: `Universal Laptop ${accessory}`, category: 'Laptop Accessories' }, `laptop ${accessory}`)).toBe(true);
+    }
   });
 
   it('checks device nouns that qualify an accessory type', () => {

@@ -21,14 +21,14 @@ export const phoneAccessoryTypes = new Set([
 ]);
 export const productTypes = new Set([
   ...phoneAccessoryTypes, 'accessory', 'accessories', 'adapter', 'adapters', 'bank', 'banks',
-  'camera', 'cameras', 'diffuser', 'diffusers', 'earbud', 'earbuds', 'earphone', 'earphones',
+  'bag', 'bags', 'camera', 'cameras', 'diffuser', 'diffusers', 'dock', 'docks', 'earbud', 'earbuds', 'earphone', 'earphones',
   'headphone', 'headphones', 'keyboard', 'keyboards', 'laptop', 'laptops', 'macbook', 'macbooks',
-  'monitor', 'monitors', 'mouse', 'mice', 'phone', 'phones', 'printer', 'printers', 'speaker', 'speakers',
+  'hub', 'hubs', 'monitor', 'monitors', 'mouse', 'mice', 'phone', 'phones', 'printer', 'printers', 'sleeve', 'sleeves', 'speaker', 'speakers',
   'smartphone', 'smartphones', 'stylus', 'styluses', 'tablet', 'tablets', 'television', 'televisions',
   'tv', 'tvs', 'watch', 'watches',
 ]);
 export const accessoryHeadTypes = new Set([
-  'case', 'cases', 'cover', 'covers', 'holder', 'holders', 'mount', 'mounts', 'pouch', 'pouches',
+  'bag', 'bags', 'case', 'cases', 'cover', 'covers', 'dock', 'docks', 'holder', 'holders', 'hub', 'hubs', 'mount', 'mounts', 'pouch', 'pouches', 'sleeve', 'sleeves',
   'protector', 'protectors', 'stand', 'stands', 'tripod', 'tripods', 'wallet', 'wallets',
 ]);
 export const knownBrandWords = new Set([

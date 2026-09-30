@@ -3,7 +3,7 @@ import { isBroadIntentDiscoveryWord } from './broad-intent-discovery-word';
 import { DISCOVERY_PRODUCT_PROJECTION } from './discovery-product-projection';
 import { inferSmartphoneCategory } from './infer-smartphone-category';
 import { hydrateSearchProductAvailability } from './search-product-availability';
-import { matchesDiscoveryProductIntent } from './matches-discovery-product-intent';
+import { matchesHydratedDiscoveryIntent } from './matches-hydrated-discovery-intent';
 import { productTypes } from './matches-discovery-product-intent-vocab';
 import { loadMcpSearchProducts } from './search-products-query';
 import { matchesSingleWordDiscoveryQuery } from './search-products-relevance';
@@ -51,14 +51,16 @@ export async function discoverMcpProducts({
   if (!loaded.priceScanComplete) {
     return { ...loaded, selectedProducts: [] as Awaited<ReturnType<typeof hydrateSearchProductAvailability>> };
   }
-  const hydratedProducts: Awaited<ReturnType<typeof hydrateSearchProductAvailability>> = [];
-  for (let offset = 0; offset < products.length; offset += 100) {
+  const hydratedProducts: Awaited<ReturnType<typeof hydrateSearchProductAvailability>> = [...(loaded.hydratedProducts ?? [])];
+  const hydratedIds = new Set(hydratedProducts.map((row) => row.product.id));
+  const uncachedProducts = products.filter((product) => !hydratedIds.has(product.id));
+  for (let offset = 0; offset < uncachedProducts.length; offset += 100) {
     hydratedProducts.push(...await hydrateSearchProductAvailability(
-      products.slice(offset, offset + 100), supabase, merchantId, args.condition
+      uncachedProducts.slice(offset, offset + 100), supabase, merchantId, args.condition
     ));
   }
-  const matchingProducts = hydratedProducts.filter(({ product }) =>
-    matchesDiscoveryProductIntent(product, loaded.sanitizedQuery));
+  const matchingProducts = hydratedProducts.filter((row) =>
+    matchesHydratedDiscoveryIntent(row, loaded.sanitizedQuery));
   const explicitCatalogFilter = [args.category, args.brand, args.condition]
     .some((value) => Boolean(value && sanitizeString(value, 50).trim()));
   const ambiguousQuery = loaded.sanitizedQuery &&
@@ -101,9 +103,9 @@ export async function discoverMcpProducts({
             }));
           semanticProducts.push(...(await hydrateSearchProductAvailability(
             candidates, supabase, merchantId, args.condition
-          )).filter(({ product }) => matchesDiscoveryProductIntent(product, loaded.sanitizedQuery) &&
+          )).filter((row) => matchesHydratedDiscoveryIntent(row, loaded.sanitizedQuery) &&
             (!needsSemanticSingleWordGuard ||
-              matchesSingleWordDiscoveryQuery(product, loaded.sanitizedQuery, undefined))));
+              matchesSingleWordDiscoveryQuery(row.product, loaded.sanitizedQuery, undefined))));
         }
         if (pageIds.length < 40 ||
           (args.sort !== 'newest' && args.sort !== 'price_asc' && args.sort !== 'price_desc' &&

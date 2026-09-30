@@ -1,7 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { DISCOVERY_PRODUCT_PROJECTION } from './discovery-product-projection';
 import { matchesSingleWordDiscoveryQuery } from './search-products-relevance';
-import { matchesDiscoveryProductIntent } from './matches-discovery-product-intent';
+import { matchesHydratedDiscoveryIntent } from './matches-hydrated-discovery-intent';
+import { hydrateSearchProductAvailability } from './search-product-availability';
 import {
   buildSearchProductsV2RpcArgs,
   MAX_POST_FILTER_RESULT_PAGES,
@@ -52,6 +53,7 @@ export async function loadRankedMcpProducts({
   supabase: SupabaseClient;
 }) {
   const products: McpSearchProductRow[] = [];
+  const hydratedProducts: Awaited<ReturnType<typeof hydrateSearchProductAvailability>> = [];
   const candidateLimit = priceSensitive
     ? MAX_POST_FILTER_RESULT_PAGES * POST_FILTER_RESULT_PAGE_SIZE
     : limit;
@@ -132,9 +134,12 @@ export async function loadRankedMcpProducts({
           brand: sanitizedBrand,
           category: sanitizedCategory,
           condition: sanitizedCondition,
-        }) && matchesSingleWordDiscoveryQuery(product, sanitizedQuery, sanitizedCategory) &&
-        matchesDiscoveryProductIntent(product, sanitizedQuery)
+        }) && matchesSingleWordDiscoveryQuery(product, sanitizedQuery, sanitizedCategory)
       );
+      const hydrated = await hydrateSearchProductAvailability(pageProducts, supabase, merchantId, sanitizedCondition);
+      const matched = hydrated.filter((row) => matchesHydratedDiscoveryIntent(row, sanitizedQuery));
+      pageProducts = matched.map(({ product }) => product);
+      hydratedProducts.push(...matched);
     }
 
     products.push(...pageProducts);
@@ -148,6 +153,7 @@ export async function loadRankedMcpProducts({
 
   return {
     products: products.slice(0, candidateLimit),
+    hydratedProducts: hydratedProducts.slice(0, candidateLimit),
     priceScanComplete: !priceSensitive || scanExhausted || pagesRead < MAX_POST_FILTER_RESULT_PAGES,
     sawRankedRows,
   };

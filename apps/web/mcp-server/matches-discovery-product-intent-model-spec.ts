@@ -34,17 +34,24 @@ export function matchesModelSpecTokens(scope: ModelSpecScope): boolean {
       if (scope.hasAlternativeItemTypes && scope.itemWords.includes(token) && !tokenInMatchedBranch(token)) continue;
       if (!matchesProductToken(scope.productSpecWords, specToken)) return false;
       const contextWord = specToken === token ? nextWord : scope.coreWords[coreIndex + 2];
-      const requestedContext = contextWord === 'ram' || contextWord === 'memory' || contextWord === 'storage'
-        ? contextWord
-        : undefined;
+      const requestedContext = ['ram', 'memory', 'storage', 'ssd', 'hdd'].find((context) =>
+        contextWord === context || (contextWord?.startsWith(context) && /^\d/.test(contextWord.slice(context.length))));
       if (requestedContext) {
         const specParts = /^(\d+)([a-z]+)$/.exec(specToken);
         const matchingContext = scope.productSpecWords.some((word, tokenIndex) => {
           const atSpecAnchor = matchesWord([word], specToken) ||
             Boolean(specParts && word === specParts[1] && scope.productSpecWords[tokenIndex + 1] === specParts[2]);
           if (!atSpecAnchor) return false;
-          const forwardWords = scope.productSpecWords.slice(tokenIndex + 1, tokenIndex + 4);
-          const reverseWords = scope.productSpecWords.slice(Math.max(0, tokenIndex - 2), tokenIndex);
+          const contextIndex = tokenIndex + (specParts && word === specParts[1] ? 2 : 1);
+          let nextContext = contextIndex;
+          while (/^(?:lp)?ddr\d+x?$/.test(scope.productSpecWords[nextContext] ?? '')) nextContext += 1;
+          const forwardWords = scope.productSpecWords.slice(nextContext, nextContext + 1);
+          let previousContext = tokenIndex - 1;
+          while (/^(?:lp)?ddr\d+x?$/.test(scope.productSpecWords[previousContext] ?? '')) previousContext -= 1;
+          const previousCapacity = scope.productSpecWords[previousContext - 1] ?? '';
+          const reverseWords = /^\d+(?:gb|tb|mb)$/.test(previousCapacity) ||
+            (['gb', 'tb', 'mb'].includes(previousCapacity) && /^\d+$/.test(scope.productSpecWords[previousContext - 2] ?? ''))
+            ? [] : scope.productSpecWords.slice(Math.max(0, previousContext), previousContext + 1);
           return matchesWord(forwardWords, requestedContext) || matchesWord(reverseWords, requestedContext);
         });
         if (!matchingContext) return false;

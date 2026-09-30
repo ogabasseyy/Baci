@@ -6,7 +6,10 @@ import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import type { SearchAutocompleteProps } from '@/components/storefront/search-autocomplete';
 import { Input } from '@/components/ui/input';
-import { recordSearchSubmission } from '@/lib/search-submission';
+import {
+  recordSearchSubmission,
+  SEARCH_SUBMISSION_QUERY_MAX_LENGTH,
+} from '@/lib/search-submission';
 
 type SearchAutocompleteComponent = React.ComponentType<SearchAutocompleteProps>;
 
@@ -56,7 +59,9 @@ export function NavbarSearch({
   }
 
   const pushSearchRoute = (query: string) => {
-    const trimmedQuery = query.trim().slice(0, 100);
+    const trimmedQuery = query
+      .trim()
+      .slice(0, SEARCH_SUBMISSION_QUERY_MAX_LENGTH);
     if (!trimmedQuery) {
       return;
     }
@@ -121,7 +126,7 @@ export function NavbarSearch({
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
           placeholder="Search blog posts..."
-          maxLength={100}
+          maxLength={SEARCH_SUBMISSION_QUERY_MAX_LENGTH}
           aria-label="Search blog posts"
           id="blog-search-input"
           name="search"
@@ -167,7 +172,7 @@ export function NavbarSearch({
         onFocus={() => activateAutocomplete(true)}
         onPointerDown={() => activateAutocomplete(false)}
         placeholder="Search products, brands and categories"
-        maxLength={100}
+        maxLength={SEARCH_SUBMISSION_QUERY_MAX_LENGTH}
         aria-label="Search products"
         id="search-input"
         name="q"

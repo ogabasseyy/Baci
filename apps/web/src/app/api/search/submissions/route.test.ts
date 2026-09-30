@@ -196,6 +196,29 @@ describe('explicit search submissions', () => {
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'Application/JSON',
+    'application/json; charset=utf-8',
+    ' Application/JSON ; charset=UTF-8 ',
+  ])('accepts equivalent JSON media types: %s', async (contentType) => {
+    expect(
+      (await POST(request(undefined, { 'content-type': contentType }))).status
+    ).toBe(204);
+    expect(mocks.insert).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects lookalike media types at the content gate', async () => {
+    expect(
+      (
+        await POST(
+          request(undefined, { 'content-type': 'application/json-malicious' })
+        )
+      ).status
+    ).toBe(415);
+    expect(mocks.merchant).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
   it('rejects an oversized body before parsing or data access', async () => {
     expect((await POST(request(' '.repeat(2049)))).status).toBe(413);
     expect(mocks.merchant).not.toHaveBeenCalled();

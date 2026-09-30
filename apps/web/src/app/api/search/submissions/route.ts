@@ -68,7 +68,15 @@ export async function POST(request: NextRequest) {
     return new NextResponse(null, { status: 204 });
   }
 
-  if (!request.headers.get('content-type')?.includes('application/json')) {
+  // Compare only the media type, case-insensitively: parameters (e.g.
+  // charset) must not affect the gate, and lookalikes such as
+  // application/json-malicious must not pass it.
+  const mediaType = request.headers
+    .get('content-type')
+    ?.split(';')[0]
+    ?.trim()
+    .toLowerCase();
+  if (mediaType !== 'application/json') {
     return NextResponse.json({ error: 'Expected JSON' }, { status: 415 });
   }
   const bodyResult = await readBoundedJsonBody(request, 2048);

@@ -42,3 +42,10 @@ changes or worker activation. A receipt refresh does not renew this exception.
 At expiry, remove the privileged edge or obtain a new explicit owner decision;
 do not silently extend the date. The durable worker replacement still requires
 the validation and rollout gates in [the pipeline runbook](../ops/durable-event-pipeline.md).
+
+## Retirement status
+
+PR #3568 removes the platform route's direct privileged forwarding edge after
+its recorded expiry (pending merge and validation). The route continues to persist accepted events through
+its existing ingress path. The restricted worker adapter remains available,
+but this change does not activate delivery or establish production cutover.

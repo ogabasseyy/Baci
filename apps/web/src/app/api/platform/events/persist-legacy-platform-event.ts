@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { PlatformEventRequestInput } from '@/schemas/platform-event';
-import type { PlatformEventType } from './platform-event-forwarding';
+
+type PlatformEventType = PlatformEventRequestInput['event_type'];
 
 export async function persistLegacyPlatformEvent(
   supabase: SupabaseClient,

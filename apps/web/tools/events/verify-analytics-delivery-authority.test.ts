@@ -20,11 +20,39 @@ describe('analytics delivery authority verifier', () => {
     ]);
   });
 
+  it('accepts the historical expiry only after the platform edge is retired', () => {
+    expect(
+      analyzeTemporaryAuthorityExpiry(
+        new Date('2026-09-30T00:00:00.000Z'),
+        false,
+        false
+      )
+    ).toEqual([]);
+    expect(
+      analyzeTemporaryAuthorityExpiry(
+        new Date('2026-09-30T00:00:00.000Z'),
+        false,
+        true
+      )
+    ).toContain(
+      'temporary event-pipeline analytics authority expired at 2026-09-30T00:00:00.000Z'
+    );
+  });
+
   it('fails closed as soon as queue-only delivery is activated', () => {
     expect(
       analyzeTemporaryAuthorityExpiry(
         new Date('2026-07-18T00:00:00.000Z'),
         true
+      )
+    ).toEqual([
+      'temporary event-pipeline analytics authority expired because queue-only delivery is active',
+    ]);
+    expect(
+      analyzeTemporaryAuthorityExpiry(
+        new Date('2026-07-18T00:00:00.000Z'),
+        true,
+        false
       )
     ).toEqual([
       'temporary event-pipeline analytics authority expired because queue-only delivery is active',

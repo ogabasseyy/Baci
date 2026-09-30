@@ -6,8 +6,6 @@ const events = 'apps/web/src/app/api/events/route.ts';
 const wrapper =
   'apps/web/src/lib/analytics/trusted-server-ad-platform-fanout.ts';
 const config = 'apps/web/src/lib/analytics/fetch-analytics-platform-config.ts';
-const platformHelper =
-  'apps/web/src/app/api/platform/events/platform-event-forwarding.ts';
 const platformRoute = 'apps/web/src/app/api/platform/events/route.ts';
 const imports =
   "import { createServiceClient } from '@/lib/supabase/service'; import { trustedServerAdPlatformFanout as fanout } from '@/lib/analytics/trusted-server-ad-platform-fanout'; import { resolveConversionRouteMerchantContext } from './conversion-route-merchant-context';";
@@ -27,8 +25,7 @@ function validSources() {
       "import 'server-only'; import { fetchAnalyticsPlatformConfig } from './fetch-analytics-platform-config'; fetchAnalyticsPlatformConfig(client, id);",
     ],
     [config, 'export const fetchAnalyticsPlatformConfig = () => null;'],
-    [platformHelper, 'export const forwardToPlatformAnalytics = () => null;'],
-    [platformRoute, "import './platform-event-forwarding';"],
+    [platformRoute, 'export const POST = () => null;'],
   ]);
 }
 
@@ -42,6 +39,27 @@ describe('analytics authority review regressions', () => {
     );
     expect(analyzeAnalyticsDeliveryAuthoritySources(sources)).toContain(
       `${fourth}: unauthorized trusted wrapper importer`
+    );
+  });
+
+  it('rejects reintroduced direct platform forwarding imports and helper files', () => {
+    const sources = validSources();
+    sources.set(
+      platformRoute,
+      "import { forwardToPlatformAnalytics } from './platform-event-forwarding';"
+    );
+    expect(analyzeAnalyticsDeliveryAuthoritySources(sources)).toContain(
+      `${platformRoute}: retired platform authority helper importer`
+    );
+    sources.set(platformRoute, 'export const POST = () => null;');
+    const helper =
+      'apps/web/src/app/api/platform/events/platform-event-forwarding.ts';
+    sources.set(
+      helper,
+      'export const forwardToPlatformAnalytics = () => null;'
+    );
+    expect(analyzeAnalyticsDeliveryAuthoritySources(sources)).toContain(
+      `${helper}: retired platform authority helper is present`
     );
   });
 

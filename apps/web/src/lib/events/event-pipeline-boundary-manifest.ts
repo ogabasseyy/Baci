@@ -166,7 +166,7 @@ const serviceSentinels: Readonly<Record<string, string>> = {
     'shipping-quote-booking-economics',
 };
 // biome-ignore format: exact construction allowlist preserves the 300-line verifier gate.
-const privilegedRouteAdminConstructors = ['apps/web/src/app/api/platform/events/platform-event-forwarding.ts'] as const;
+const privilegedRouteAdminConstructors = [] as const;
 // biome-ignore format: compact signature preserves the 300-line verifier gate.
 export function authorityFindings(path: string, sourceFile: ts.SourceFile): string[] {
   const findings: string[] = [];

@@ -209,6 +209,29 @@ describe('SearchScreen route', () => {
     );
   });
 
+  it('clears the validation hint when a valid recent search is selected', () => {
+    render(<SearchScreen />);
+
+    // Reject a normalization-empty commit so the hint explains itself.
+    act(() => {
+      mockViewProps.current?.onQueryChange('!!');
+    });
+    act(() => {
+      mockViewProps.current?.onSubmitQuery();
+    });
+    expect(mockViewProps.current).toMatchObject({ showMinLengthHint: true });
+
+    // Selecting a valid recent term resolves that rejection: the hint must
+    // clear instead of lingering over the incoming valid results.
+    act(() => {
+      mockViewProps.current?.onRecentSearch('iPhone 15 Pro');
+    });
+    expect(mockViewProps.current).toMatchObject({
+      query: 'iPhone 15 Pro',
+      showMinLengthHint: false,
+    });
+  });
+
   it('clears a local search when an invalid route query arrives on a parameterless screen', () => {
     mockUseLocalSearchParams.mockReturnValue({});
 

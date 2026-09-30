@@ -26,6 +26,16 @@ const selectedProducts = [{
 }] as unknown as Parameters<typeof formatSearchProductsResponse>[0]['selectedProducts'];
 
 describe('formatSearchProductsResponse', () => {
+  it('discloses incomplete coverage even when no candidate matches', () => {
+    const response = formatSearchProductsResponse({
+      selectedProducts: [], sanitizedQuery: 'camera', coverage: 'partial',
+      searchMode: 'structured', semanticUnavailable: false,
+      requestedCondition: undefined, getSafeCatalogImageUrl: () => undefined,
+    });
+    expect(response.content[0].text).toContain('This is a partial selection; other products may match.');
+    expect(response.structuredContent).toMatchObject({status: 'empty', coverage: 'partial'});
+  });
+
   it('preserves the MCP text, structured product, coverage, and widget metadata contract', () => {
     const getSafeCatalogImageUrl = vi.fn((url: string | null | undefined) => url ? `https://mcp.example/images?url=${encodeURIComponent(url)}` : undefined);
     const response = formatSearchProductsResponse({
@@ -83,7 +93,7 @@ describe('formatSearchProductsResponse', () => {
       selectedProducts: [],
       sanitizedQuery: undefined,
       coverage: 'complete',
-      searchMode: 'legacy',
+      searchMode: 'structured',
       semanticUnavailable: undefined,
       requestedCondition: 'used',
       getSafeCatalogImageUrl: () => undefined,

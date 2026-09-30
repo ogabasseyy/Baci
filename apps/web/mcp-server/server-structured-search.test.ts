@@ -7,7 +7,13 @@ it('advertises structured intent and returns the matching offer evidence through
   const server = await startMcpServerWithPostgrest({});
   try {
     const tools = getResultTools(await postMcpJsonRpc(server.baseUrl, { id: 901, method: 'tools/list', params: {} }));
-    expect(tools.find((tool) => tool.name === 'search_products')?.inputSchema.properties.intent).toBeDefined();
+    const schema = tools.find((tool) => tool.name === 'search_products')?.inputSchema;
+    expect(schema?.properties.intent).toBeDefined();
+    expect(schema?.required).toContain('intent');
+    const missing = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+      id: 900, method: 'tools/call', params: { name: 'search_products', arguments: { query: 'phone' } },
+    }));
+    expect(missing.isError).toBe(true);
     const result = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
       id: 902, method: 'tools/call', params: { name: 'search_products', arguments: {
         intent: { alternatives: [{}] }, max_price: 100000, sort: 'price_asc', limit: 2,

@@ -18,7 +18,7 @@ export function formatSearchProductsResponse({
   selectedProducts: SelectedProduct[];
   sanitizedQuery: string | undefined;
   coverage: 'complete' | 'partial' | undefined;
-  searchMode: 'structured' | 'legacy';
+  searchMode: 'structured';
   semanticUnavailable: boolean | undefined;
   requestedCondition: string | undefined;
   getSafeCatalogImageUrl: (imageUrl: string | null | undefined) => string | undefined;
@@ -75,7 +75,9 @@ export function formatSearchProductsResponse({
     return {
       content: [{
         type: 'text' as const,
-        text: `No clear catalog match for "${sanitizedQuery || 'your criteria'}". Specify a product type, brand, or model and try again.`,
+        text: [`No clear catalog match for "${sanitizedQuery || 'your criteria'}". Specify a product type, brand, or model and try again.`,
+          ...(coverage === 'partial' ? ['This is a partial selection; other products may match.'] : []),
+        ].join('\n'),
       }],
       structuredContent: { products: [], status: 'empty', coverage },
     };

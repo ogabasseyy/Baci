@@ -37,6 +37,27 @@ const ranked = (ids: string[], total = ids.length) => ids.map((product_id) => ({
 const productRows = (ids: string[]) => ids.map((id) => ({ id, name: id }));
 
 describe('loadStructuredDiscoveryCandidates', () => {
+  it.each([500, 501])('distinguishes an exact-cap %s-product catalog from truncation', async (count) => {
+    const rows = productRows(Array.from({length: count}, (_, index) => `p-${index}`));
+    const ranges: number[][] = [];
+    const from = () => {
+      const builder = {
+        select: () => builder, eq: () => builder, order: () => builder,
+        range: (start: number, end: number) => {
+          ranges.push([start, end]);
+          return Promise.resolve({data: rows.slice(start, end + 1), error: null});
+        },
+      };
+      return builder;
+    };
+    const result = await loadStructuredDiscoveryCandidates({
+      merchantId: 'merchant-1', supabase: {from} as unknown as SupabaseClient,
+    });
+    expect(result.products).toHaveLength(500);
+    expect(result.truncated).toBe(count > 500);
+    expect(ranges.at(-1)).toEqual([500, 500]);
+  });
+
   it('fuses overlapping lexical and semantic candidates and hydrates in fusion order', async () => {
     const { supabase } = setup({
       lexicalPages: [ranked(['lexical-first', 'overlap', 'lexical-third'])],

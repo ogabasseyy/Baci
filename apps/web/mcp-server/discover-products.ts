@@ -1,21 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { mcpDiscoveryIntentSchema, type McpDiscoveryIntent } from '../src/schemas/mcp-discovery-intent';
 import { discoverStructuredProducts } from './discover-structured-products';
-import { isBroadIntentDiscoveryWord } from './broad-intent-discovery-word';
-import { DISCOVERY_PRODUCT_PROJECTION } from './discovery-product-projection';
-import { inferSmartphoneCategory } from './infer-smartphone-category';
-import { hydrateSearchProductAvailability } from './search-product-availability';
-import { selectHydratedDiscoveryIntent } from './select-hydrated-discovery-intent';
-import { productTypes } from './matches-discovery-product-intent-vocab';
-import { loadMcpSearchProducts } from './search-products-query';
-import { matchesSingleWordDiscoveryQuery } from './search-products-relevance';
-import { singleWordDiscoveryTerm } from './single-word-discovery-term';
-import {
-  matchesMcpPostHydrationFilters,
-  type McpSearchProductRow,
-  toMcpSearchProductRows,
-} from './search-products-query-helpers';
-import { selectSearchProductsByPrice } from './select-search-products-by-price';
 
 type DiscoveryArgs = {
   intent?: McpDiscoveryIntent;
@@ -37,9 +22,9 @@ type DiscoveryInput = {
   supabase: SupabaseClient;
 };
 
-function isBroadUseCaseQuery(query: string | undefined): boolean {
-  const normalized = query?.normalize('NFKC').toLocaleLowerCase('en').match(/[a-z0-9]+/g)?.join(' ') ?? '';
-  return /^(?:(?:something|anything|products?|items?|gadgets?|best|recommendations?)\s+)?(?:for|to help with)\s+[a-z ]+$/.test(normalized);
+function safeQuery(args: DiscoveryArgs, sanitizeString: DiscoveryInput['sanitizeString']): string | undefined {
+  const query = args.query ? sanitizeString(args.query, 100).trim() : '';
+  return query || undefined;
 }
 
 export async function discoverMcpProducts({
@@ -49,107 +34,34 @@ export async function discoverMcpProducts({
   semanticSearch,
   supabase,
 }: DiscoveryInput) {
-  if (args.intent !== undefined) {
-    const parsed = mcpDiscoveryIntentSchema.safeParse(args.intent);
-    if (!parsed.success) {
-      // A model-supplied intent with an unexpected field fails validation
-      // here so the tool reports it, instead of throwing into the generic
-      // degraded-service catch-all.
-      const details = parsed.error.issues.map((issue) =>
-        issue.path.length > 0 ? `${issue.path.join('.')}: ${issue.message}` : issue.message).join('; ');
-      return {
-        selectedProducts: [],
-        sanitizedQuery: args.query ? sanitizeString(args.query, 100) : undefined,
-        priceScanComplete: true,
-        invalidIntentMessage: `Invalid search intent: ${details || 'intent rejected by schema'}`,
-      };
-    }
-    return discoverStructuredProducts({ intent: parsed.data, args, merchantId, supabase, semanticSearch,
-      query: args.query ? sanitizeString(args.query, 100) : undefined });
+  const query = safeQuery(args, sanitizeString);
+  if (args.intent === undefined) {
+    return {
+      selectedProducts: [],
+      sanitizedQuery: query,
+      priceScanComplete: true,
+      invalidIntentMessage: 'Search intent is required. Specify the product type, brand or model, and any product specifications to search.',
+    };
   }
-  const loaded = await loadMcpSearchProducts({ args, merchantId, sanitizeString, supabase });
-  const { products, limit } = loaded;
-  if (!loaded.priceScanComplete) {
-    return { ...loaded, selectedProducts: [] as Awaited<ReturnType<typeof hydrateSearchProductAvailability>> };
+
+  const parsed = mcpDiscoveryIntentSchema.safeParse(args.intent);
+  if (!parsed.success) {
+    const details = parsed.error.issues.map((issue) =>
+      issue.path.length > 0 ? `${issue.path.join('.')}: ${issue.message}` : issue.message).join('; ');
+    return {
+      selectedProducts: [],
+      sanitizedQuery: query,
+      priceScanComplete: true,
+      invalidIntentMessage: `Invalid search intent: ${details || 'intent rejected by schema'}`,
+    };
   }
-  const hydratedProducts: Awaited<ReturnType<typeof hydrateSearchProductAvailability>> = [...(loaded.hydratedProducts ?? [])];
-  const hydratedIds = new Set(hydratedProducts.map((row) => row.product.id));
-  const uncachedProducts = products.filter((product) => !hydratedIds.has(product.id));
-  for (let offset = 0; offset < uncachedProducts.length; offset += 100) {
-    hydratedProducts.push(...await hydrateSearchProductAvailability(
-      uncachedProducts.slice(offset, offset + 100), supabase, merchantId, args.condition
-    ));
-  }
-  const matchingProducts = hydratedProducts.flatMap((row) => {
-    const selected = selectHydratedDiscoveryIntent(row, loaded.sanitizedQuery);
-    return selected ? [selected] : [];
+
+  return discoverStructuredProducts({
+    intent: parsed.data,
+    args,
+    merchantId,
+    supabase,
+    semanticSearch,
+    query,
   });
-  const explicitCatalogFilter = [args.category, args.brand, args.condition]
-    .some((value) => Boolean(value && sanitizeString(value, 50).trim()));
-  const ambiguousQuery = loaded.sanitizedQuery &&
-    (singleWordDiscoveryTerm(loaded.sanitizedQuery) || isBroadUseCaseQuery(loaded.sanitizedQuery)) &&
-    !explicitCatalogFilter &&
-    !inferSmartphoneCategory(loaded.sanitizedQuery, args.category);
-  // Single-word brand queries ("iPhone" with a Smartphones filter) enable
-  // semantic search, but the intent predicate passes them through, so gate
-  // semantic candidates on the whole-word check. Generic type words and
-  // broad use-case words keep the category filter as their only gate.
-  const semanticSingleTerm = singleWordDiscoveryTerm(loaded.sanitizedQuery);
-  const needsSemanticSingleWordGuard = semanticSingleTerm !== undefined &&
-    !productTypes.has(semanticSingleTerm) && !isBroadIntentDiscoveryWord(semanticSingleTerm);
-  if (semanticSearch && loaded.sanitizedQuery && !ambiguousQuery &&
-    selectSearchProductsByPrice(matchingProducts, args, limit).length < limit) {
-    try {
-      const seenIds = new Set(products.map((product) => product.id));
-      const semanticProducts: typeof hydratedProducts = [];
-      for (let offset = 0; offset < 200; offset += 40) {
-        const pageIds = await semanticSearch(loaded.sanitizedQuery, offset);
-        const semanticIds = pageIds.filter((id) => !seenIds.has(id));
-        semanticIds.forEach((id) => seenIds.add(id));
-        if (semanticIds.length > 0) {
-          const { data, error } = await supabase.from('products')
-            .select(DISCOVERY_PRODUCT_PROJECTION)
-            .eq('merchant_id', merchantId)
-            .eq('status', 'active')
-            .in('id', semanticIds);
-          if (error) throw error;
-          const byId = new Map(toMcpSearchProductRows(data).map((product) => [product.id, product]));
-          const category = args.category
-            ? sanitizeString(args.category, 50)
-            : inferSmartphoneCategory(loaded.sanitizedQuery, args.category);
-          const brand = args.brand ? sanitizeString(args.brand, 50) : undefined;
-          const condition = args.condition ? sanitizeString(args.condition, 50) : undefined;
-          const candidates = semanticIds
-            .map((id) => byId.get(id))
-            .filter((product): product is McpSearchProductRow => product !== undefined && matchesMcpPostHydrationFilters(product, {
-              brand, category, condition,
-            }));
-          semanticProducts.push(...(await hydrateSearchProductAvailability(
-            candidates, supabase, merchantId, args.condition
-          )).flatMap((row) => {
-            const selected = selectHydratedDiscoveryIntent(row, loaded.sanitizedQuery);
-            return selected && (!needsSemanticSingleWordGuard ||
-              matchesSingleWordDiscoveryQuery(row.product, loaded.sanitizedQuery, undefined)) ? [selected] : [];
-          }));
-        }
-        if (pageIds.length < 40 ||
-          (args.sort !== 'newest' && args.sort !== 'price_asc' && args.sort !== 'price_desc' &&
-            selectSearchProductsByPrice([...matchingProducts, ...semanticProducts], args, limit).length >= limit)) break;
-      }
-      matchingProducts.push(...semanticProducts);
-    } catch {
-      // Semantic discovery is optional. The catalog's lexical results remain usable.
-      console.error('Semantic discovery unavailable; using catalog search only');
-    }
-  }
-  if (args.sort === 'newest') {
-    matchingProducts.sort((a, b) =>
-      (b.product.created_at ?? '').localeCompare(a.product.created_at ?? '') ||
-      a.product.id.localeCompare(b.product.id)
-    );
-  }
-  return {
-    ...loaded,
-    selectedProducts: selectSearchProductsByPrice(matchingProducts, args, limit),
-  };
 }

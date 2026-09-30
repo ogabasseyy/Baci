@@ -1214,9 +1214,9 @@ function createOgabasseyServer() {
       title: 'Search Products',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
-        'Use this when a buyer wants to find real Ogabassey products. Supply intent with explicit shopper constraints and query with retrieval keywords. Search by product name, brand, category, condition, and price. For a broad use case such as work, gaming, or photography, ask which product type they want before searching if it is unclear. Set an explicit category when the buyer names one (Smartphones, Tablets, Laptops, or Accessories). Do not present unrelated catalog items as recommendations. Returns listed prices, matching options, and reported availability; it does not reserve stock. When coverage is partial, explain that other matches may exist and never claim the globally cheapest product.',
+        'Use this when a buyer wants to find real Ogabassey products. Always supply intent with explicit shopper constraints and query with retrieval keywords. Use alternatives: [{}] for an unconstrained catalog browse. If the requested product type or constraints are unclear, ask the buyer to clarify before calling this tool. Search by product name, brand, category, condition, and price. For a broad use case such as work, gaming, or photography, ask which product type they want before searching if it is unclear. Set an explicit category when the buyer names one (Smartphones, Tablets, Laptops, or Accessories). Do not present unrelated catalog items as recommendations. Returns listed prices, matching options, and reported availability; it does not reserve stock. When coverage is partial, explain that other matches may exist and never claim the globally cheapest product.',
       inputSchema: {
-        intent: mcpDiscoveryIntentSchema.optional().describe('Supply structured intent for shopper searches. alternatives are OR; each branch is AND. Use singular canonical product types phone/laptop/tablet/charger/cable/security_camera/fragrance_diffuser. Brand means manufacturer, compatible_with means supported device model. Attributes use canonical units (storage_gb/ram_gb in GB, power_w in watts) and eq/gte/lte. Use an empty alternative for broad discovery; never invent unspecified constraints. Unknown catalog facts cannot satisfy explicit constraints.'),
+        intent: mcpDiscoveryIntentSchema.describe('Supply structured intent for shopper searches. alternatives are OR; each branch is AND. Use singular canonical product types phone/laptop/tablet/charger/cable/security_camera/fragrance_diffuser. Brand means manufacturer, compatible_with means supported device model. Attributes use canonical units (storage_gb/ram_gb in GB, power_w in watts) and eq/gte/lte. Use an empty alternative for broad discovery; never invent unspecified constraints. Unknown catalog facts cannot satisfy explicit constraints.'),
         query: z
           .string()
           .max(100)
@@ -1293,7 +1293,7 @@ function createOgabasseyServer() {
           selectedProducts,
           sanitizedQuery,
           coverage,
-          searchMode: args.intent ? 'structured' : 'legacy',
+          searchMode: 'structured',
           semanticUnavailable: 'semanticUnavailable' in discovery ? discovery.semanticUnavailable : undefined,
           requestedCondition: args.condition,
           getSafeCatalogImageUrl,

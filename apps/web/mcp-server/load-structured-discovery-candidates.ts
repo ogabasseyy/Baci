@@ -99,7 +99,14 @@ async function loadBrowseRows(merchantId: string, supabase: SupabaseClient) {
     products.push(...rows);
     if (rows.length < LEXICAL_PAGE_SIZE) return { products, truncated: false };
   }
-  return { products, truncated: true };
+  const { data: next, error } = await supabase.from('products')
+    .select('id')
+    .eq('merchant_id', merchantId)
+    .eq('status', 'active')
+    .order('id', { ascending: true })
+    .range(MAX_LEXICAL_CANDIDATES, MAX_LEXICAL_CANDIDATES);
+  if (error) throw error;
+  return { products, truncated: Array.isArray(next) && next.length > 0 };
 }
 
 function reciprocalRankFusion(lexicalIds: string[], semanticIds: string[]) {

@@ -9,6 +9,10 @@ describe('canonicalizeDiscoveryProductType', () => {
     ['Laptops', 'laptop'],
     ['Tablets', 'tablet'],
     ['Security Camera', 'security_camera'],
+    ['Chargers', 'charger'],
+    ['Cables', 'cable'],
+    ['Security Cameras', 'security_camera'],
+    ['Fragrance Diffusers', 'fragrance_diffuser'],
   ])('canonicalizes %s to %s', (input, expected) => {
     expect(canonicalizeDiscoveryProductType(input)).toBe(expected);
   });

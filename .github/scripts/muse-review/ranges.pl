@@ -16,12 +16,19 @@ my $f;
 
 if (defined $diff and open(my $fh, '<', $diff)) {
   my $prev = "";
+  my $in_hunk = 0;
   while (my $line = <$fh>) {
-    # A +++ line is a file header only right after a --- line: added file
-    # content (e.g. a line whose text is "++ b/x") can otherwise forge a
-    # header and poison every range. The --- check comes first so $1 still
-    # holds the +++ capture (each match resets captures).
-    if ($prev =~ /^--- / and $line =~ /^\+\+\+ (.*)$/) {
+    # Hunk state first: a removed "-- x" / added "++ y" content pair renders
+    # as adjacent "--- x" / "+++ y" lines INSIDE the hunk, which the pair
+    # check below would otherwise mistake for file headers and misattribute
+    # every later hunk. Headers only occur outside hunks.
+    if ($line =~ /^diff --git /) { $in_hunk = 0; }
+    elsif ($line =~ /^@@ /) { $in_hunk = 1; }
+    # A +++ line is a file header only right after a --- line and outside
+    # a hunk: added file content (e.g. a line whose text is "++ b/x") can
+    # otherwise forge a header and poison every range. The --- check comes
+    # first so $1 still holds the +++ capture (each match resets captures).
+    if (!$in_hunk and $prev =~ /^--- / and $line =~ /^\+\+\+ (.*)$/) {
       $f = $1;
       chomp $f;
       # Git appends a TAB after +++ paths containing spaces (also inside

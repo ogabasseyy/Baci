@@ -121,10 +121,12 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-          # Scripts run with GH_TOKEN, so they come from the trusted BASE
-          # revision — never the PR head, whose content is
-          # submitter-controlled. Sparse: only the scripts directory.
-          ref: ${{ github.event.pull_request.base.sha }}
+          # Scripts run with GH_TOKEN, so they come from the DEFAULT branch
+          # (reviewed, merged code) — never the PR head or base, which are
+          # submitter-controlled on stacked/custom-base PRs. Sparse: only
+          # the scripts directory. Helper PRs are still validated by the
+          # selftest workflow, which runs the head copy's test suite.
+          ref: ${{ github.event.repository.default_branch }}
           path: trusted-scripts
           fetch-depth: 1
           sparse-checkout: .github/scripts/muse-review
@@ -137,10 +139,11 @@ jobs:
           if [[ -f "${GITHUB_WORKSPACE}/trusted-scripts/.github/scripts/muse-review/lib.sh" ]]; then
             echo "dir=${GITHUB_WORKSPACE}/trusted-scripts/.github/scripts/muse-review" >> "${GITHUB_OUTPUT}"
           else
-            # Base predates the scripts (first-merge bootstrap only): fall
-            # back to the head copy. Afterwards the base always provides them.
+            # Default branch predates the scripts (first-merge bootstrap
+            # only): fall back to the head copy. Afterwards the default
+            # branch always provides them.
             echo "dir=${GITHUB_WORKSPACE}/.github/scripts/muse-review" >> "${GITHUB_OUTPUT}"
-            echo "::warning::Base lacks review scripts; running head copy (first-merge bootstrap)."
+            echo "::warning::Default branch lacks review scripts; running head copy (first-merge bootstrap)."
           fi
 
       - name: Collect PR diff and build prompt

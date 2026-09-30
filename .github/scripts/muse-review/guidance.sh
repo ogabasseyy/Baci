@@ -79,16 +79,18 @@ emit_guidance() {
   safe_candidate="$(printf '%s' "${candidate}" | tr '\n' '_' | neutralize_tags)"
   safe_candidate="${safe_candidate:0:300}"
   {
-    printf '\n### %s (%s)%s\n\n' "${safe_candidate}" "${source}" "${trunc_note}"
     if [[ "${source}" == UNTRUSTED* ]]; then
-      # Head-only guidance is submitter-controlled: neutralize
-      # block-closing tags and isolate it in an explicit untrusted block
-      # instead of appending it raw after the contract.
-      printf '<untrusted_guidance>\n'
+      # Submitter-controlled content AND label: the candidate path derives
+      # from changed files, so an instruction-like directory name would
+      # otherwise place steering text beside guidance as a plain heading.
+      # Keep the label inside the untrusted block with the content.
+      printf '<untrusted_guidance>\n### %s (%s)%s\n\n' \
+        "${safe_candidate}" "${source}" "${trunc_note}"
       printf '%s' "${content}" | iconv -c -f UTF-8 -t UTF-8 2>/dev/null \
         | neutralize_tags || true
       printf '\n</untrusted_guidance>\n'
     else
+      printf '\n### %s (%s)%s\n\n' "${safe_candidate}" "${source}" "${trunc_note}"
       printf '%s' "${content}" | iconv -c -f UTF-8 -t UTF-8 2>/dev/null || true
       printf '\n'
     fi

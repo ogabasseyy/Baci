@@ -3,4 +3,4 @@
 | ([.findings[]? | select(.line == 0 and (.path as $p | $paths | index($p) != null))]) as $filelevel
 | ([.findings[]? | select(.line == 0 and (.path as $p | $paths | index($p) == null))]) as $orphaned
 | ([$lined[] | select(. as $f | any($r[]; .path==$f.path and $f.line >= .start and $f.line <= .end))]) as $ok
-| {valid: $ok[0:20], summary_only: ($filelevel + ($lined - $ok) + $ok[20:] + ($orphaned | map(. + {orphaned: true})))}
+| {valid: $ok[0:20], summary_only: ($filelevel + (($lined - $ok) | map(. + {orphaned: true})) + $ok[20:] + ($orphaned | map(. + {orphaned: true})))}

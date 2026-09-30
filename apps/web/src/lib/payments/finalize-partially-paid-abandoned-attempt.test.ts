@@ -41,7 +41,7 @@ describe('finalizePartiallyPaidAbandonedAttempt', () => {
     expect(finalize).not.toHaveBeenCalled();
   });
 
-  it('records a completed order without claiming the transaction flip', async () => {
+  it('records a completed order with the pending-capture flip preserved', async () => {
     const h = harness();
     finalize.mockResolvedValue({
       healed: false,
@@ -55,13 +55,17 @@ describe('finalizePartiallyPaidAbandonedAttempt', () => {
       providerData: { reference: 'BAC-OLD' },
     });
 
+    // The pending row is fresh-capture evidence: forcing false would
+    // let a concurrently-paid order with no outbox rows misclassify
+    // the capture as a legacy replay, skipping settlement and the
+    // duplicate review.
     expect(finalize).toHaveBeenCalledWith(
       expect.objectContaining({
         actor: 'cron:reconcile-gateway-paid-orders',
         gateway: 'paystack',
         orderId: 'order-1',
         reference: 'BAC-OLD',
-        wonTransactionFlip: false,
+        wonTransactionFlip: true,
       })
     );
     expect(h.summary.completed).toEqual(['attempt-1']);

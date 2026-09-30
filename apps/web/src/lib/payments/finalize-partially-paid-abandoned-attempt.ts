@@ -132,12 +132,16 @@ export async function finalizePartiallyPaidAbandonedAttempt({
           order_id: attempt.order_id,
           platform_fee: attempt.platform_fee,
         },
-        // The cron never claims the flip: a concurrent webhook may complete
-        // this row first, so classification must come from the completion
-        // RPC result (order_updated/already_completed) rather than the
-        // stale candidate snapshot. Passing true would misclassify such a
-        // replay as a new capture on an already-paid order.
-        wonTransactionFlip: false,
+        // Preserve the pending-capture signal: every row reaching this
+        // finalizer is pending (processing rows normalize above), so
+        // forcing false loses the only fresh-capture evidence when
+        // another payment won the order race on an order with no outbox
+        // rows, misclassifying real captured funds as a legacy replay
+        // that skips settlement and the duplicate review. A concurrent
+        // webhook may still complete this row first, but that
+        // same-transaction replay is distinguished downstream by the
+        // outbox payer evidence, not by dropping the signal here.
+        wonTransactionFlip: true,
       }),
       deadlineMs
     );

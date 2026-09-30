@@ -103,6 +103,11 @@ BEGIN
               refund.metadata->>'payment_transaction_id' = payment.id::text
               OR (
                 refund.metadata->>'payment_transaction_id' IS NULL
+                -- As in the completion gate: the unlinked refund
+                -- attributes to the sole completed leg only, never to a
+                -- refund_pending leg whose own provider refund is still
+                -- outstanding.
+                AND payment.status = 'completed'
                 AND 1 = (
                   SELECT count(*) FROM public.transactions only_payment
                    WHERE only_payment.order_id = p_order_id

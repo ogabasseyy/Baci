@@ -123,12 +123,15 @@ assert_eq "redact-xoxo" "[REDACTED]" "$(redact 'tok xoxo-fake2 y' | awk '{print 
 assert_eq "redact-xoxe" "[REDACTED]" "$(redact 'tok xoxe-fake3 y' | awk '{print $2}')"
 assert_eq "redact-aiza" "[REDACTED]" "$(redact 'key AIza0123456789AbCdEfGhIjKlMnOpQrStUvWXY end' | awk '{print $2}')"
 assert_eq "redact-aiza-short" "AIzaShort" "$(redact 'tok AIzaShort y' | awk '{print $2}')"
+assert_eq "redact-meta-assign" "META_API_KEY=[REDACTED]!" "$(redact 'leak META_API_KEY=hunter2hunter2hunter2!' | awk '{print $2}')"
 
 # --- strip_images ---
 got="$(printf '%s' 'see ![pixel](https://a.example/p?d=1) and [docs](https://d.example/x) ok' | strip_images)"
 assert_eq "images-inline" "see pixel and [docs](https://d.example/x) ok" "${got}"
 got="$(printf '%s' 'ref ![a][b] tag <img alt="dia" src="https://e.example/x"> bare <img src="https://f.example/y">' | strip_images)"
 assert_eq "images-ref-html" "ref a tag dia bare " "${got}"
+got="$(printf '%s' 'paren ![p](https://g.example/u(1).png) squote <img alt='"'"'sq'"'"' src="https://h.example/y">' | strip_images)"
+assert_eq "images-edge" "paren p squote sq" "${got}"
 assert_eq "redact-assign" 'api_key="[REDACTED]"' "$(redact 'api_key="abcDEF1234567890"')"
 assert_eq "redact-token-colon" 'token: [REDACTED]' "$(redact 'token: abcDEF1234567890')"
 assert_eq "redact-prose-kept" "no token here" "$(redact 'no token here')"
@@ -188,13 +191,15 @@ cat > "${find_fix}" <<'EOF'
  {"path":"a.ts","line":5,"severity":"low","title":42,"body":"B"},
  {"path":"a.ts","line":6,"severity":"low","title":"T","body":{"x":1}},
  {"path":"a.ts","line":7,"severity":"low","body":"B"},
+ {"path":"a.ts","line":71,"severity":"low","title":"","body":"B"},
+ {"path":"a.ts","line":72,"severity":"low","title":"T","body":""},
  {"path":"","line":8,"severity":"low","title":"EMPTY","body":"B"},
  {"path":"a.ts","line":9,"severity":{"x":1},"title":"S1","body":"B"},
  {"path":"a.ts","line":10,"severity":"Bogus","title":"S2","body":"B"}
 ],"next_steps":["ok",7,{"x":1},null]}
 EOF
 jq -f "${SCRIPT_DIR}/clean.jq" "${find_fix}" > "${find_fix}.clean" && mv "${find_fix}.clean" "${find_fix}"
-assert_eq "clean-drops-nonstrings" '["T-less"]' "$(jq -c '[.findings[] | select(.line == 7) | (.title // "T-less")]' "${find_fix}")"
+assert_eq "clean-drops-untitled" '[]' "$(jq -c '[.findings[] | select(.line == 7 or .line == 71 or .line == 72)]' "${find_fix}")"
 assert_eq "clean-next-steps" '["ok"]' "$(jq -c '.next_steps' "${find_fix}")"
 assert_eq "clean-severity-coerce" '["low","low"]' "$(jq -c '[.findings[] | select(.line == 9 or .line == 10) | .severity]' "${find_fix}")"
 rm -f "${find_fix}" "${ranges_fix}" "${files_fix}"

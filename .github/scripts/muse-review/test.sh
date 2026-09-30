@@ -194,14 +194,16 @@ rm -f "${find_fix}" "${ranges_fix}" "${files_fix}"
 # --- dedupe.jq ---
 dup_fix="$(mktemp)"
 cat > "${dup_fix}" <<'EOF'
-[{"user":{"login":"github-actions[bot]"},"body":"<!-- muse-code-review sha:AAA base:BBB -->\nreal review"},
+[{"user":{"login":"github-actions[bot]"},"body":"<!-- muse-code-review sha:AAA base:BBB -->\nreal review","submitted_at":"2020-01-01T00:00:00Z"},
  {"user":{"login":"github-actions[bot]"},"body":"<!-- muse-code-review sha:AAA base:BBB -->\n<!-- muse-fallback:v1 -->\nfallback"},
- {"user":{"login":"someone"},"body":"<!-- muse-code-review sha:AAA base:BBB -->\nquoted"}]
+ {"user":{"login":"someone"},"body":"<!-- muse-code-review sha:AAA base:BBB -->\nquoted","submitted_at":"2020-01-01T00:00:00Z"},
+ {"user":{"login":"github-actions[bot]"},"body":"<!-- muse-code-review sha:ZZZ base:BBB -->\n<!-- muse-fallback:v1 -->\nfallback","submitted_at":"2999-01-01T00:00:00Z"},
+ {"user":{"login":"github-actions[bot]"},"body":"<!-- muse-code-review sha:ZZZ base:BBB -->\n<!-- muse-fallback:v1 -->\nfallback","submitted_at":"2020-01-01T00:00:00Z"}]
 EOF
 got="$(jq -s --arg marker '<!-- muse-code-review sha:AAA base:BBB -->' -f "${SCRIPT_DIR}/dedupe.jq" "${dup_fix}")"
 assert_eq "dedupe-real-only" "1" "${got}"
 got="$(jq -s --arg marker '<!-- muse-code-review sha:AAA base:BBB -->' -f "${SCRIPT_DIR}/fallback.jq" "${dup_fix}")"
-assert_eq "dedupe-fallback-only" "1" "${got}"
+assert_eq "fallback-same-and-recent" "2" "${got}"
 rm -f "${dup_fix}"
 
 # --- schema.json ---

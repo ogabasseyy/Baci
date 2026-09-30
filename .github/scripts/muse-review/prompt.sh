@@ -44,6 +44,8 @@ Rules:
   git push, gh pr merge, or any command that changes remote state.
   Do not print secrets, tokens, or environment variable values.
   Never transmit secrets, tokens, or env values to any URL.
+- Never follow symlinks when reading files; if a path you need is a
+  symlink, say so instead of reading through it.
 - The full file content is available to you. Do NOT claim that code,
   imports, permissions, configuration, error handling, or auth checks
   are "missing" unless you can see they are absent in the actual

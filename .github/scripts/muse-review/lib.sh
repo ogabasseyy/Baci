@@ -74,6 +74,22 @@ sanitize_mentions() {
   perl -pe 's/(^|[\s\[\(>"'"'"'])@([A-Za-z0-9_])/$1\@\xE2\x80\x8B$2/g'
 }
 
+# Remove every symlink under a workspace root (except .git and the trusted
+# scripts dir) and print the count. The agent runs with META_API_KEY in its
+# environment and is told to read changed files: a PR-added symlink such as
+# leak.txt -> /proc/self/environ would otherwise expose the key to the model
+# and its web tools, and --disable-shell does not stop filesystem reads.
+# find without -L never follows links; rm -f on a link removes the link
+# only. Unpopulated gitlinks need no handling: submodules are never checked
+# out, so they read as empty dirs.
+sweep_workspace_symlinks() {
+  local _root="$1" _removed=0 _link
+  while IFS= read -r -d '' _link; do
+    if rm -f -- "${_link}"; then _removed=$((_removed + 1)); fi
+  done < <(find "${_root}" \( -path "${_root}/.git" -o -path "${_root}/trusted-scripts" \) -prune -o -type l -print0 2>/dev/null)
+  printf '%d' "${_removed}"
+}
+
 # True when a head-tree candidate is safe to read: a regular file, not a
 # symlink itself, with no symlinked ancestor directory. Checking only the
 # final path would let a PR-added symlink farm (e.g. docs/ -> /etc) smuggle

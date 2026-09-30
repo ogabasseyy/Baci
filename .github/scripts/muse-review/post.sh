@@ -139,7 +139,7 @@ Re-run the workflow, or inspect the logs."
     fi
     while IFS=$'\t' read -r sev title path line; do
       printf '%s\n' "- ${sev}: ${title} in ${path}:${line} (see inline)"
-    done < <(jq -r '.valid[]? | [.severity // "low", .title // "", .path // "", (.line // 0)] | @tsv' "${validated_json}")
+    done < <(jq -r '.valid[]? | [(.severity // "low" | gsub("\t"; " ")), (.title // "" | gsub("\t"; " ")), (.path // "" | gsub("\t"; " ")), (.line // 0)] | @tsv' "${validated_json}")
     while IFS=$'\t' read -r sev title path line body orphaned; do
       if [[ "${orphaned}" == "true" ]]; then
         printf '%s\n' "- ${sev}: ${title} in ${path}:${line} (path not in changed files — unverified)"
@@ -147,7 +147,7 @@ Re-run the workflow, or inspect the logs."
         printf '%s\n' "- ${sev}: ${title} in ${path}:${line}"
       fi
       printf '  %s\n' "${body}"
-    done < <(jq -r '.summary_only[]? | [.severity // "low", .title // "", .path // "", (.line // 0), ((.body // "") | gsub("\n"; " ")), (.orphaned // false)] | @tsv' "${validated_json}")
+    done < <(jq -r '.summary_only[]? | [(.severity // "low" | gsub("\t"; " ")), (.title // "" | gsub("\t"; " ")), (.path // "" | gsub("\t"; " ")), (.line // 0), ((.body // "") | gsub("\n"; " ") | gsub("\t"; " ")), (.orphaned // false)] | @tsv' "${validated_json}")
     printf '\n## Suggested next steps\n\n'
     jq -r '.next_steps[]?' "${findings_json}" 2>/dev/null | while IFS= read -r step; do
       printf '%s\n' "- ${step}"
@@ -167,10 +167,10 @@ Re-run the workflow, or inspect the logs."
     # Redact-then-bound for BOTH title and body: truncating first would cut
     # PEM footers and defeat the full-block regex.
     f_title="$(redact "${f_title}")"
-    f_title="$(printf '%s' "${f_title}" | sanitize_mentions | trunc_bytes 300)"
+    f_title="$(printf '%s' "${f_title}" | strip_images | sanitize_mentions | trunc_bytes 300)"
     thread_body="$(printf '**[%s] %s**\n\n%s\n\n<sub>Useful? React with 👍 / 👎.</sub>' "${f_sev}" "${f_title}" "${f_body}")"
     thread_body="$(redact "${thread_body}")"
-    thread_body="$(printf '%s' "${thread_body}" | sanitize_mentions | trunc_bytes 6000)"
+    thread_body="$(printf '%s' "${thread_body}" | strip_images | sanitize_mentions | trunc_bytes 6000)"
     jq -n --arg path "${f_path}" --argjson line "${f_line}" --arg body "${thread_body}" \
       '{path: $path, line: $line, side: "RIGHT", body: $body}' >> "${inline_jsonl}"
   done < <(jq -c '.valid[]?' "${validated_json}")
@@ -215,7 +215,7 @@ fi
 # attacker-controlled; see lib.sh redact). Redact BEFORE truncating and
 # sanitizing (both can defeat the full-block match or add characters).
 review="$(redact "${review}")"
-review="$(printf '%s' "${review}" | sanitize_mentions)"
+review="$(printf '%s' "${review}" | strip_images | sanitize_mentions)"
 
 # Bound the posted body: GitHub rejects review bodies past 65536 chars, which
 # would lose the whole review and fail the workflow.

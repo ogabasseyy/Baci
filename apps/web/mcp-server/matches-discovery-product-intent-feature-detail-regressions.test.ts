@@ -34,6 +34,26 @@ describe('discovery product intent feature and detail regressions', () => {
     expect(matchesDiscoveryProductIntent({ name: 'Dell Laptop', category: 'Laptops', description: '16GB storage.' }, 'laptop with at least 16GB RAM')).toBe(false);
   });
 
+  it('compares at-least power and refresh-rate specifications within their own units', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Laptop', category: 'Laptops', description: '30W charging.' }, 'laptop with at least 20W')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Laptop', category: 'Laptops', description: '15W charging.' }, 'laptop with at least 20W')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Laptop', category: 'Laptops', description: '144Hz display.' }, 'laptop with at least 120Hz')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Laptop', category: 'Laptops', description: '60Hz display.' }, 'laptop with at least 120Hz')).toBe(false);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Laptop', category: 'Laptops', description: '120Hz display.' }, 'laptop with at least 20W')).toBe(false);
+  });
+
+  it('treats additional handset makers as single-word identity constraints', () => {
+    for (const [brand, productName] of [
+      ['Motorola', 'Motorola Edge 50'],
+      ['OnePlus', 'OnePlus 13'],
+      ['Nothing', 'Nothing Phone 3'],
+      ['Honor', 'Honor Magic 7'],
+    ]) {
+      expect(matchesDiscoveryProductIntent({ name: productName, category: 'Smartphones', brand }, brand)).toBe(true);
+      expect(matchesDiscoveryProductIntent({ name: 'Samsung Galaxy S25', category: 'Smartphones' }, brand)).toBe(false);
+    }
+  });
+
   it('matches numeric technology generations after detail boundaries', () => {
     const wifi6 = { name: 'Dell Laptop', category: 'Laptops', description: 'WiFi 6.' };
     const wifi5 = { name: 'Dell Laptop', category: 'Laptops', description: 'WiFi 5.' };

@@ -83,7 +83,7 @@ it('applies stock eligibility and budget before selecting the cheapest matching 
 });
 
 it('allows unmanaged base stock and rejects a managed base option with zero quantity', () => {
-  const query = intent({ product_type: 'smartphone' });
+  const query = intent({ product_type: 'phone' });
   expect(selectStructuredDiscoveryOffer(makeRow(), query)?.selectedOption.kind).toBe('base');
   expect(selectStructuredDiscoveryOffer(makeRow({ manage_stock: true }), query)).toBeUndefined();
   expect(selectStructuredDiscoveryOffer(makeRow({ manage_stock: true, stock_quantity: 1 }), query)?.displayPrice).toBe(500);
@@ -93,10 +93,10 @@ it('uses hydrated base eligibility and the base condition rather than the cheape
   const row = makeRow({ condition: 'open_box', basePurchasable: true });
   row.displayCondition = 'used';
   row.availableOffers = [{ price: 450, condition: 'used', stock_quantity: 4 }];
-  const selected = selectStructuredDiscoveryOffer(row, intent({ product_type: 'smartphone' }), { min_price: 500 });
+  const selected = selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone' }), { min_price: 500 });
   expect(selected?.displayPrice).toBe(500);
   expect(selected?.displayCondition).toBe('open_box');
-  expect(selectStructuredDiscoveryOffer(makeRow({ basePurchasable: false }), intent({ product_type: 'smartphone' }))).toBeUndefined();
+  expect(selectStructuredDiscoveryOffer(makeRow({ basePurchasable: false }), intent({ product_type: 'phone' }))).toBeUndefined();
 });
 
 it('reports stock for the matched offer instead of unrelated parent or offer inventory', () => {
@@ -111,12 +111,12 @@ it('matches alternatives as complete branches and excludes explicit product type
   const selected = selectStructuredDiscoveryOffer(row, {
     alternatives: [
       { product_type: 'tablet' },
-      { product_type: 'smartphone', model: 'A1' },
+      { product_type: 'phone', model: 'A1' },
     ],
   });
   expect(selected?.selectedOption.kind).toBe('base');
-  expect(selectStructuredDiscoveryOffer(row, { alternatives: [{ product_type: 'smartphone' }],
-    excluded_product_types: ['smartphone'] })).toBeUndefined();
+  expect(selectStructuredDiscoveryOffer(row, { alternatives: [{ product_type: 'phone' }],
+    excluded_product_types: ['phone'] })).toBeUndefined();
 });
 
 it('keeps brand identity separate from compatibility and compares exact normalized text', () => {
@@ -149,4 +149,9 @@ it('uses only the explicit narrow category fallback when product type metadata i
   expect(selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone' }))).toBeDefined();
   expect(selectStructuredDiscoveryOffer(makeRow({ category: 'Mobile Devices', discovery_metadata: {} }),
     intent({ product_type: 'phone' }))).toBeUndefined();
+});
+
+it.each(['smartphone', 'Smartphones', 'phone'])('matches stored %s metadata with canonical phone intent', (productType) => {
+  const row = makeRow({ discovery_metadata: { product_type: productType } });
+  expect(selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone' }))?.displayPrice).toBe(500);
 });

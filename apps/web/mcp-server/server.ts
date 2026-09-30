@@ -47,8 +47,8 @@ import {
 } from './agentic-checkout-client';
 import { resolveMcpPaystackDvaAccess } from './mcp-paystack-dva-access';
 import { registerAgenticUcpTools } from './agentic-ucp-tools';
-import { resolveMcpSearchProductCondition } from './product-condition-filter';
 import { discoverMcpProducts } from './discover-products';
+import { formatSearchProductsResponse } from './format-search-products-response';
 import { mcpDiscoveryIntentSchema } from '../src/schemas/mcp-discovery-intent';
 import { embedDiscoveryText } from './gemini-discovery-embedding';
 import { loadSemanticDiscoveryCandidateIds } from './semantic-discovery-candidates';
@@ -1287,85 +1287,15 @@ function createOgabasseyServer() {
           };
         }
 
-        const formatted = selectedProducts.map(({ product: p, displayPrice, displayCondition, displayCompareAtPrice, stockSummary, availableVariants: variants, ...selection }) => {
-          // A compare-at price indicates a listed discount, not a price trend.
-          const isDiscounted = typeof displayPrice === 'number' &&
-            displayCompareAtPrice && displayCompareAtPrice > displayPrice;
-
-          // Variant Summary (e.g., "Available in: Black, White")
-          const variantOptions: Record<string, Set<string>> = {};
-          variants.forEach((v) => {
-            Object.entries(v.attributes || {}).forEach(([key, val]) => {
-              if (!variantOptions[key]) variantOptions[key] = new Set();
-              variantOptions[key].add(String(val));
-            });
-          });
-          const availableOptions = Object.entries(variantOptions)
-            .map(([key, vals]) => `${key}: ${Array.from(vals).join(', ')}`)
-            .join(' | ');
-
-          const firstImage: unknown = Array.isArray(p.images) ? p.images[0] : undefined;
-          const imageInput = typeof firstImage === 'string' ? firstImage :
-            firstImage && typeof firstImage === 'object' && 'url' in firstImage && typeof firstImage.url === 'string'
-              ? firstImage.url : undefined;
-          return {
-            id: p.id,
-            name: p.name,
-            slug: p.slug,
-            price: displayPrice,
-            compare_at_price: displayCompareAtPrice,
-            image: getSafeCatalogImageUrl(imageInput),
-            condition: displayCondition || resolveMcpSearchProductCondition(p, args.condition),
-            brand: p.brand,
-            category: p.category,
-            in_stock: stockSummary.inStock,
-
-            // New Intelligence Fields
-            stock_level: stockSummary.level,
-            stock_confidence: stockSummary.confidence,
-            price_status: isDiscounted ? 'discounted' : 'regular',
-            matched_option: 'selectedOption' in selection ? selection.selectedOption : undefined,
-            available_variants: availableOptions || 'Standard',
-            last_updated: p.updated_at,
-          };
+        return formatSearchProductsResponse({
+          selectedProducts,
+          sanitizedQuery,
+          coverage,
+          searchMode: args.intent ? 'structured' : 'legacy',
+          semanticUnavailable: 'semanticUnavailable' in discovery ? discovery.semanticUnavailable : undefined,
+          requestedCondition: args.condition,
+          getSafeCatalogImageUrl,
         });
-
-        // 4. Construct Response
-        const count = formatted.length;
-        if (count === 0) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `No clear catalog match for "${sanitizedQuery || 'your criteria'}". Specify a product type, brand, or model and try again.`,
-              },
-            ],
-            structuredContent: { products: [], status: 'empty', coverage },
-          };
-        }
-        const resultText = [
-          `Found ${count} Ogabassey products. Prices are listed in NGN; confirm availability before checkout.`,
-          ...(coverage === 'partial' ? ['This is a partial selection; other products may match.'] : []),
-          ...formatted.map((product) =>
-            `${product.name} — ₦${Number(product.price).toLocaleString('en-NG')} (${product.stock_level}); ${product.available_variants}.`
-          ),
-        ].join('\n');
-
-        return {
-          content: [{ type: 'text', text: resultText }],
-          structuredContent: {
-            status: 'success',
-            products: formatted,
-            coverage,
-            search_mode: args.intent ? 'structured' : 'legacy',
-            semantic_unavailable: 'semanticUnavailable' in discovery ? discovery.semanticUnavailable : undefined,
-            meta: { total: count, query: sanitizedQuery },
-          },
-          _meta: {
-            'openai/outputTemplate': STORE_WIDGET_URI,
-            'openai/widgetPrefersBorder': true,
-          },
-        };
       } catch (err: any) {
         console.error('Search Critical Error:', err);
         // Graceful Degradation (Unbreakable)

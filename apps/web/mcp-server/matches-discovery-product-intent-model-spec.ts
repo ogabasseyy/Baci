@@ -21,27 +21,35 @@ export type ModelSpecScope = {
 };
 
 const memoryTechnologyWords = new Set(['ddr', 'ddr4', 'ddr5', 'lpddr4', 'lpddr5']);
-const capacityUnitsInMegabytes: Record<string, number> = { mb: 1, gb: 1024, tb: 1024 * 1024 };
+const specUnits: Record<string, { dimension: string; multiplier: number }> = {
+  mb: { dimension: 'capacity', multiplier: 1 },
+  gb: { dimension: 'capacity', multiplier: 1024 },
+  tb: { dimension: 'capacity', multiplier: 1024 * 1024 },
+  w: { dimension: 'power', multiplier: 1 },
+  hz: { dimension: 'frequency', multiplier: 1 },
+};
 
 function meetsCapacityLowerBound(
   productWords: string[],
   requestedSpec: string,
   requestedContext: string | undefined
 ): boolean {
-  const requested = /^(\d+(?:\.\d+)?)(mb|gb|tb)$/.exec(requestedSpec);
+  const requested = /^(\d+(?:\.\d+)?)(mb|gb|tb|w|hz)$/.exec(requestedSpec);
   if (!requested) return false;
-  const requestedAmount = Number(requested[1]) * (capacityUnitsInMegabytes[requested[2] ?? ''] ?? 0);
+  const requestedUnit = specUnits[requested[2] ?? ''];
+  if (!requestedUnit) return false;
+  const requestedAmount = Number(requested[1]) * requestedUnit.multiplier;
   if (!requestedAmount) return false;
 
   return productWords.some((word, index) => {
     let amount: string | undefined;
     let unit: string | undefined;
     let unitIndex = index;
-    const compact = /^(\d+(?:\.\d+)?)(mb|gb|tb)$/.exec(word);
+    const compact = /^(\d+(?:\.\d+)?)(mb|gb|tb|w|hz)$/.exec(word);
     if (compact) {
       amount = compact[1];
       unit = compact[2];
-    } else if (/^\d+(?:\.\d+)?$/.test(word) && ['mb', 'gb', 'tb'].includes(productWords[index + 1] ?? '')) {
+    } else if (/^\d+(?:\.\d+)?$/.test(word) && specUnits[productWords[index + 1] ?? '']) {
       amount = word;
       unit = productWords[index + 1];
       unitIndex += 1;
@@ -54,13 +62,15 @@ function meetsCapacityLowerBound(
     let beforeAmount = index - 1;
     while (memoryTechnologyWords.has(productWords[beforeAmount] ?? '')) beforeAmount -= 1;
     const priorCapacity = productWords[beforeAmount - 1] ?? '';
-    const reverseContext = /^\d+(?:\.\d+)?(?:mb|gb|tb)$/.test(priorCapacity) ||
-      (['mb', 'gb', 'tb'].includes(priorCapacity) && /^\d+(?:\.\d+)?$/.test(productWords[beforeAmount - 2] ?? ''))
+    const reverseContext = /^\d+(?:\.\d+)?(?:mb|gb|tb|w|hz)$/.test(priorCapacity) ||
+      (specUnits[priorCapacity] && /^\d+(?:\.\d+)?$/.test(productWords[beforeAmount - 2] ?? ''))
       ? undefined : productWords[beforeAmount];
     const contextMatches = !requestedContext ||
       forwardContext === requestedContext || reverseContext === requestedContext;
+    const candidateUnit = specUnits[unit];
+    if (!candidateUnit || candidateUnit.dimension !== requestedUnit.dimension) return false;
     return contextMatches &&
-      Number(amount) * (capacityUnitsInMegabytes[unit] ?? 0) >= requestedAmount;
+      Number(amount) * candidateUnit.multiplier >= requestedAmount;
   });
 }
 

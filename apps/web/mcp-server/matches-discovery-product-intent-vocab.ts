@@ -32,9 +32,9 @@ export const accessoryHeadTypes = new Set([
   'protector', 'protectors', 'stand', 'stands', 'tripod', 'tripods', 'wallet', 'wallets',
 ]);
 export const knownBrandWords = new Set([
-  'apple', 'asus', 'dell', 'google', 'hp', 'huawei', 'infinix', 'itel', 'jbl',
+  'apple', 'asus', 'dell', 'google', 'honor', 'hp', 'huawei', 'infinix', 'itel', 'jbl',
   'lenovo', 'lg', 'msi', 'nokia', 'oppo', 'pixel', 'realme', 'redmi', 'riversong',
-  'samsung', 'sony', 'tecno', 'vivo', 'xiaomi',
+  'motorola', 'nothing', 'oneplus', 'samsung', 'sony', 'tecno', 'vivo', 'xiaomi',
 ]);
 export const knownDeviceFamilyWords = new Set([
   'airpod', 'airpods', 'galaxy', 'ipad', 'iphone', 'iphones', 'macbook', 'macbooks', 'pixel', 'pixels',

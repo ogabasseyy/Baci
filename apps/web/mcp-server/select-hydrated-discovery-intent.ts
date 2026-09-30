@@ -2,6 +2,7 @@ import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
 import { matchesDiscoveryProductIntent } from './matches-discovery-product-intent';
 import type { hydrateSearchProductAvailability } from './search-product-availability';
 import { words } from './matches-discovery-product-intent-words';
+import { getMcpProductStockSummary } from './product-stock-summary';
 
 type HydratedProduct = Awaited<ReturnType<typeof hydrateSearchProductAvailability>>[number];
 
@@ -32,7 +33,9 @@ export function selectHydratedDiscoveryIntent(row: HydratedProduct, query: strin
   })).filter((option): option is { price: number; condition: typeof row.displayCondition } =>
     typeof option.price === 'number' && Number.isFinite(option.price) && option.price >= 0)
     .sort((left, right) => left.price - right.price)[0];
-  return { ...row, availableVariants: matchingVariants, displayPrice: cheapest?.price ?? null,
+  return { ...row, availableVariants: matchingVariants,
+    stockSummary: getMcpProductStockSummary(product, matchingVariants, []),
+    displayPrice: cheapest?.price ?? null,
     displayCondition: cheapest?.condition ?? row.displayCondition,
     displayCompareAtPrice: cheapest?.price === product.price ? product.compare_at_price : null };
 }

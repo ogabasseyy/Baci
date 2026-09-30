@@ -19,6 +19,17 @@ it('prices only the available variant that satisfies the requested attributes', 
   expect(selected?.displayCondition).toBe('used');
   expect(selected?.availableVariants).toHaveLength(1);
 });
+it('summarizes stock only for variants satisfying the requested attributes', () => {
+  const product = row();
+  product.product.manage_stock = true;
+  product.availableVariants[0]!.stock_quantity = 11;
+  product.availableVariants[1]!.stock_quantity = 1;
+
+  const selected = selectHydratedDiscoveryIntent(product, 'iPhone 15 256GB');
+
+  expect(selected?.availableVariants).toHaveLength(1);
+  expect(selected?.stockSummary).toEqual({ confidence: 'low', inStock: true, level: 'Last Units' });
+});
 it('retains general product pricing when the query does not constrain options', () => {
   expect(selectHydratedDiscoveryIntent(row(), 'iPhone 15')?.displayPrice).toBe(100);
 });

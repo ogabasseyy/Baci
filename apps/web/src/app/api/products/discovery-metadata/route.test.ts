@@ -68,7 +68,11 @@ describe('product discovery metadata API', () => {
 
   afterEach(() => vi.restoreAllMocks());
 
-  it('requires CSRF validation and an authenticated user before processing', async () => {
+  it('authenticates before CSRF validation and rejects invalid CSRF before input processing', async () => {
+    mocks.getUser.mockResolvedValueOnce({ data: { user: null }, error: null });
+    expect((await PUT(request(JSON.stringify(validBody)))).status).toBe(401);
+    expect(mocks.csrf).not.toHaveBeenCalled();
+
     mocks.csrf.mockResolvedValueOnce({
       valid: false,
       response: NextResponse.json(
@@ -77,10 +81,7 @@ describe('product discovery metadata API', () => {
       ),
     });
     expect((await PUT(request(JSON.stringify(validBody)))).status).toBe(403);
-    expect(mocks.getUser).not.toHaveBeenCalled();
-
-    mocks.getUser.mockResolvedValueOnce({ data: { user: null }, error: null });
-    expect((await PUT(request(JSON.stringify(validBody)))).status).toBe(401);
+    expect(mocks.getUser).toHaveBeenCalledTimes(2);
   });
 
   it('rejects invalid JSON, schema-invalid input, and a body-selected merchant', async () => {
@@ -127,7 +128,7 @@ describe('product discovery metadata API', () => {
     mocks.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
     expect((await PUT(request(JSON.stringify(validBody)))).status).toBe(404);
     expect(mocks.update).toHaveBeenCalledWith({
-      discovery_metadata: validBody.metadata,
+      discovery_metadata: { ...validBody.metadata, product_type: 'laptop' },
     });
     expect(mocks.eq).toHaveBeenCalledWith('merchant_id', merchantId);
     expect(mocks.eq).toHaveBeenCalledWith('id', productId);

@@ -13,6 +13,37 @@ describe('productDiscoveryMetadataSchema', () => {
     ).toBe(true);
   });
 
+  it('canonicalizes advertised product type aliases while preserving extensible types', () => {
+    for (const type of ['smartphone', 'Smartphones', 'Phones']) {
+      expect(
+        productDiscoveryMetadataSchema.parse({ product_type: type })
+          .product_type
+      ).toBe('phone');
+    }
+    expect(
+      productDiscoveryMetadataSchema.parse({ product_type: 'Security Camera' })
+        .product_type
+    ).toBe('security_camera');
+  });
+
+  it('requires canonical numeric and text attributes to keep their declared value types', () => {
+    for (const attributes of [
+      { storage_gb: '256' },
+      { ram_gb: '16GB' },
+      { color: 12 },
+      { connector: 3 },
+    ]) {
+      expect(
+        productDiscoveryMetadataSchema.safeParse({ attributes }).success
+      ).toBe(false);
+    }
+    expect(
+      productDiscoveryMetadataSchema.safeParse({
+        attributes: { vendor_model_code: 'X-15', supplier_rating: 4 },
+      }).success
+    ).toBe(true);
+  });
+
   it('rejects unknown fields, malformed attribute keys, and invalid numeric values', () => {
     for (const value of [
       { arbitrary: 'value' },

@@ -11,12 +11,6 @@ import { updateProductDiscoveryMetadataSchema } from '@/schemas/update-product-d
 
 /** Save merchant-verified public search facts; never accept a body-selected tenant. */
 export async function PUT(request: NextRequest) {
-  const csrf = await checkCsrfProtection(request);
-  if (!csrf.valid)
-    return (
-      csrf.response ??
-      NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
-    );
   const supabase = createClient(await cookies());
   const {
     data: { user },
@@ -24,6 +18,12 @@ export async function PUT(request: NextRequest) {
   } = await supabase.auth.getUser();
   if (authError || !user)
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const csrf = await checkCsrfProtection(request);
+  if (!csrf.valid)
+    return (
+      csrf.response ??
+      NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
+    );
   let body: unknown;
   try {
     body = await request.json();

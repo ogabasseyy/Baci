@@ -24,15 +24,18 @@ guidance_cap=32000
 guidance_capped=false
 emit_guidance() {
   candidate="$1"
+  phase="$2"
   if [[ "${guidance_capped}" == "true" ]]; then return 0; fi
   content=""
   source=""
-  if [[ "${trust_base_flag}" == "true" ]] \
+  # Phase is pre-classified by the caller (one git show per candidate), so
+  # emit only reads from its assigned source instead of probing again.
+  if [[ "${phase}" == "base" ]] \
     && content="$(git show "${MUSE_BASE_SHA_FULL}:${candidate}" 2>/dev/null)"; then
     # SHA, not the branch name: branch names are submitter-controlled and
     # this label prints outside any untrusted block.
     source="trusted (base ${MUSE_BASE_SHA_FULL:0:10})"
-  elif [[ -f "${candidate}" && ! -L "${candidate}" ]]; then
+  elif [[ "${phase}" == "head" && -f "${candidate}" && ! -L "${candidate}" ]]; then
     # Refuse symlinks: a PR-added symlink (e.g. to /proc/self/environ)
     # would otherwise embed runner secrets into the prompt. The -- keeps
     # option-like paths (e.g. --help/AGENTS.md) from parsing as flags and
@@ -83,31 +86,43 @@ seen_reset
 for candidate in AGENTS.md CLAUDE.md CONTRIBUTING.md .github/copilot-instructions.md; do
   seen_add "${candidate}"
 done
+# Ancestor walk with zero subprocesses (bash prefix removal, not dirname)
+# and a candidate cap: giant PRs could otherwise start tens of thousands of
+# processes before the byte budget matters. Root candidates above are always
+# included; the cap only trims deep scoped discovery.
+candidate_cap=500
 while IFS= read -r -d '' changed; do
-  dir="$(dirname -- "${changed}")"
+  if (( ${#MUSE_CANDIDATES[@]} >= candidate_cap )); then
+    echo "::notice::Guidance candidate cap (${candidate_cap}) reached; deeper scoped files omitted."
+    break
+  fi
+  if [[ "${changed}" == */* ]]; then dir="${changed%/*}"; else dir="."; fi
   while [[ "${dir}" != "." && "${dir}" != "/" ]]; do
     seen_add "${dir}/AGENTS.md"
     seen_add "${dir}/CLAUDE.md"
-    dir="$(dirname -- "${dir}")"
+    if [[ "${dir}" == */* ]]; then dir="${dir%/*}"; else dir="."; fi
   done
 done < <(jq -j '[.[] | .filename, (.previous_filename // empty)] | map(select(length > 0))[] + "\u0000"' "${RUNNER_TEMP}/muse-files.json" 2>/dev/null)
 # Two phases: trusted base-backed guidance first, head-only files second —
 # so PR-authored content can never exhaust the byte budget before applicable
-# trusted rules are collected.
-for phase in base head; do
-  for candidate in ${MUSE_CANDIDATES[@]+"${MUSE_CANDIDATES[@]}"}; do
-    # Explicit base SHA, never bare FETCH_HEAD: later deepens append the
-    # head to FETCH_HEAD, so the bare ref could resolve to the wrong commit.
-    if [[ "${trust_base_flag}" == "true" ]] \
-      && git show "${MUSE_BASE_SHA_FULL}:${candidate}" >/dev/null 2>&1; then
-      is_base=true
-    else
-      is_base=false
-    fi
-    if [[ "${phase}" == "base" && "${is_base}" != "true" ]]; then continue; fi
-    if [[ "${phase}" == "head" && "${is_base}" == "true" ]]; then continue; fi
-    emit_guidance "${candidate}"
-  done
+# trusted rules are collected. Classified in one pass (one git show each).
+base_list=()
+head_list=()
+for candidate in ${MUSE_CANDIDATES[@]+"${MUSE_CANDIDATES[@]}"}; do
+  # Explicit base SHA, never bare FETCH_HEAD: later deepens append the head
+  # to FETCH_HEAD, so the bare ref could resolve to the wrong commit.
+  if [[ "${trust_base_flag}" == "true" ]] \
+    && git show "${MUSE_BASE_SHA_FULL}:${candidate}" >/dev/null 2>&1; then
+    base_list+=("${candidate}")
+  else
+    head_list+=("${candidate}")
+  fi
+done
+for candidate in ${base_list[@]+"${base_list[@]}"}; do
+  emit_guidance "${candidate}" base
+done
+for candidate in ${head_list[@]+"${head_list[@]}"}; do
+  emit_guidance "${candidate}" head
 done
 if [[ ! -s "${guidance_file}" ]]; then
   printf '(No AGENTS.md, CLAUDE.md, CONTRIBUTING.md, or copilot instructions found in this repo.)\n' > "${guidance_file}"

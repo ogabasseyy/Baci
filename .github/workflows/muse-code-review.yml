@@ -123,25 +123,28 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1
 
-      - name: Check trusted-scripts collision
+      - name: Clear trusted-scripts collision
         id: collision
         if: steps.prereq.outputs.should_run == 'true'
         run: |
           set -euo pipefail
           # The trusted checkout below lands at trusted-scripts/ inside the
-          # PR workspace: if the PR itself tracks that path, the sparse
-          # checkout would replace or obscure the submitter's files and the
-          # agent could not read them at their manifest paths. Detect it
-          # first and skip the trusted checkout instead of clobbering.
+          # PR workspace: if the PR itself tracks that path, remove the
+          # workspace copy first so the sparse checkout lands cleanly
+          # instead of merging with (or failing on) submitter-controlled
+          # files. Evidence is preserved — diff, manifest, and git objects
+          # still carry the PR's versions; only working-tree full-file
+          # reads of exactly the planted paths degrade to diff context.
+          # This also keeps the symlink sweep sound: the surviving
+          # trusted-scripts/ tree is always the default-branch checkout,
+          # so pruning it from the sweep stays correct.
           if git -C "${GITHUB_WORKSPACE}" cat-file -e "HEAD:trusted-scripts" 2>/dev/null; then
-            echo "hit=true" >> "${GITHUB_OUTPUT}"
-            echo "::warning::PR tracks trusted-scripts/; skipping trusted checkout to avoid replacing PR files."
-          else
-            echo "hit=false" >> "${GITHUB_OUTPUT}"
+            rm -rf "${GITHUB_WORKSPACE}/trusted-scripts"
+            echo "::warning::PR tracks trusted-scripts/; workspace copy removed before trusted checkout."
           fi
 
       - name: Checkout trusted review scripts
-        if: steps.prereq.outputs.should_run == 'true' && steps.collision.outputs.hit != 'true'
+        if: steps.prereq.outputs.should_run == 'true'
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
@@ -158,17 +161,10 @@ jobs:
       - name: Resolve script directory
         id: scriptdir
         if: steps.prereq.outputs.should_run == 'true'
-        env:
-          HIT: ${{ steps.collision.outputs.hit }}
         run: |
           set -euo pipefail
           if [[ -f "${GITHUB_WORKSPACE}/trusted-scripts/.github/scripts/muse-review/lib.sh" ]]; then
             echo "dir=${GITHUB_WORKSPACE}/trusted-scripts/.github/scripts/muse-review" >> "${GITHUB_OUTPUT}"
-          elif [[ "${HIT}" == "true" ]]; then
-            # Collision with PR-tracked trusted-scripts/ (see prior step):
-            # same head-copy fallback as bootstrap, likewise warned.
-            echo "dir=${GITHUB_WORKSPACE}/.github/scripts/muse-review" >> "${GITHUB_OUTPUT}"
-            echo "::warning::Trusted checkout skipped (PR path collision); running head copy."
           else
             # Default branch predates the scripts (first-merge bootstrap
             # only): fall back to the head copy. Afterwards the default
@@ -268,6 +264,9 @@ jobs:
           bash "${SCRIPT_DIR}/run.sh"
 
       - name: Post Muse review
+        # Advisory to the end: a posting failure (timeout, jq/filesystem
+        # error) must warn, never fail the job or block the merge.
+        continue-on-error: true
         if: >-
           steps.prereq.outputs.should_run == 'true' &&
           steps.diff.outputs.duplicate != 'true' &&

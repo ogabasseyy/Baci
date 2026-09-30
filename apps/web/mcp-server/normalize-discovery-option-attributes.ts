@@ -26,10 +26,13 @@ export function normalizeDiscoveryOptionAttributes(attributes: Record<string, un
       continue;
     }
     if (typeof rawValue !== 'string') continue;
-    const match = /^\s*(\d+(?:\.\d+)?)\s*(gb|tb|mb|w|hz|inches?|in)?\s*$/i.exec(rawValue);
+    const match = /^\s*(?:ram\s*)?(\d+(?:\.\d+)?)\s*(gb|tb|mb|w|hz|inches?|in)?(?:\s+(ram|memory))?\s*$/i.exec(rawValue);
     if (!match) continue;
+    if (/^\s*ram\b/i.test(rawValue) && key !== 'ram_gb') continue;
     const value = Number(match[1]);
     const unit = match[2]?.toLowerCase();
+    const label = match[3]?.toLowerCase();
+    if (label && key !== 'ram_gb') continue;
     if (key.endsWith('_gb')) {
       if (unit && !['gb', 'tb', 'mb'].includes(unit)) continue;
       result[key] = value * (unit === 'tb' ? 1024 : unit === 'mb' ? 1 / 1024 : 1);

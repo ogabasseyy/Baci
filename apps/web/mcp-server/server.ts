@@ -1280,10 +1280,12 @@ function createOgabasseyServer() {
           };
         }
         if (!priceScanComplete) {
-          const message = 'This price search has too many matching products to check accurately. Add a category, brand, or more specific product name and try again.';
+          const message = 'incompleteReason' in discovery && discovery.incompleteReason === 'option_lookup_failed'
+            ? 'Product options are temporarily unavailable, so this search could not check all matching prices. Please try again.'
+            : 'This price search has too many matching products to check accurately. Add a category, brand, or more specific product name and try again.';
           return {
             content: [{ type: 'text', text: message }],
-            structuredContent: { products: [], status: 'incomplete', message },
+            structuredContent: { products: [], status: 'incomplete', coverage: 'partial', message },
           };
         }
 

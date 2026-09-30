@@ -75,7 +75,65 @@ describe('hydrateSearchProductAvailability', () => {
 
     expect(used.stockSummary).toMatchObject({ inStock: false, level: 'Out of Stock' });
     expect(used.availableVariants).toEqual([]);
-    expect(offerQuery.select).toHaveBeenCalledWith('id, product_id, condition, price, stock_quantity');
+    expect(offerQuery.select).toHaveBeenCalledWith('id, product_id, condition, price, compare_at_price, stock_quantity');
+  });
+
+  it('hydrates public offer compare-at price and explicit lookup status', async () => {
+    const offerQuery = {
+      select: vi.fn(), eq: vi.fn(), in: vi.fn(),
+      then: (resolve: (value: { data: Array<{ product_id: string; condition: string; price: number; compare_at_price: number; stock_quantity: number }>; error: null }) => unknown) =>
+        Promise.resolve({ data: [
+          { product_id: 'offer-phone', condition: 'used', price: 80000, compare_at_price: 95000, stock_quantity: 2 },
+        ], error: null }).then(resolve),
+    };
+    offerQuery.select.mockReturnValue(offerQuery);
+    offerQuery.eq.mockReturnValue(offerQuery);
+    offerQuery.in.mockReturnValue(offerQuery);
+    const result = await hydrateSearchProductAvailability([
+      { id: 'offer-phone', condition: 'new', price: 100000, manage_stock: true,
+        has_condition_offers: true, stock_quantity: 0 },
+    ], { from: vi.fn(() => offerQuery) } as unknown as SupabaseClient, 'merchant-1', 'used');
+
+    expect(result[0]).toMatchObject({
+      displayPrice: 80000,
+      availableOffers: [{ price: 80000, compare_at_price: 95000 }],
+      optionsLookupFailed: false,
+      offerLookupStatus: 'available',
+      variantLookupStatus: 'not_required',
+    });
+  });
+
+  it('reports each failed option source without discarding a successful source', async () => {
+    const failedOffers = {
+      select: vi.fn(), eq: vi.fn(), in: vi.fn(),
+      then: (resolve: (value: { data: null; error: { message: string } }) => unknown) =>
+        Promise.resolve({ data: null, error: { message: 'offer lookup failed' } }).then(resolve),
+    };
+    failedOffers.select.mockReturnValue(failedOffers);
+    failedOffers.eq.mockReturnValue(failedOffers);
+    failedOffers.in.mockReturnValue(failedOffers);
+    const rpc = vi.fn(async () => ({ data: [
+      { product_id: 'mixed-options', id: 'variant-1', attributes: { storage: '256GB' }, stock_quantity: 2 },
+    ], error: null }));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const [result] = await hydrateSearchProductAvailability([
+        { id: 'mixed-options', price: 100, manage_stock: true, has_variants: true,
+          has_condition_offers: true, stock_quantity: 0 },
+      ], { rpc, from: vi.fn(() => failedOffers) } as unknown as SupabaseClient, 'merchant-1');
+
+      expect(result.optionsLookupFailed).toBe(true);
+      expect(result.variantLookupFailed).toBe(false);
+      expect(result.offerLookupFailed).toBe(true);
+      expect(result.variantLookupStatus).toBe('available');
+      expect(result.offerLookupStatus).toBe('failed');
+      expect(result.availableVariants).toEqual([
+        { product_id: 'mixed-options', id: 'variant-1', attributes: { storage: '256GB' }, stock_quantity: 2 },
+      ]);
+      expect(result.availableOffers).toEqual([]);
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it('uses stocked child variants and offers instead of zero parent stock', async () => {

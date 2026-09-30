@@ -47,3 +47,8 @@ Numeric attribute keys use canonical units, not formatted strings. Variant attri
 - OpenAI explicit tool contracts: https://developers.openai.com/plugins/plan/tools
 - Supabase full-text/vector RRF: https://supabase.com/docs/guides/ai/hybrid-search
 - Ecommerce query understanding and retrieval routing: https://www.elastic.co/search-labs/blog/ecommerce-search-governance-improve-retrieval
+
+## Operational bounds and update semantics
+`PUT /api/products/discovery-metadata` replaces the entire facts document. Callers must send every fact they intend to retain; omitted fields are removed. This is not a partial PATCH or server-side merge. Validated JSON must fit the database's 16 KiB UTF-8 limit.
+
+The candidate cap is 500 keyword IDs plus 200 semantic IDs (deduplicated), followed by at most seven 100-product hydration batches. Each batch may load applicable variants and offers. Empty-query browsing is capped at 500 products. These are request bounds, not a measured production throughput guarantee. Do not trim candidates to the requested result limit before constraints and same-option budgets are applied: that would hide qualifying products. Validate query latency and database load against the live catalog before enabling the semantic flag; reduce the candidate budget only with relevance evaluation. Truncated price ranges/orderings and failed required option lookups return an incomplete result, preventing an apparently exhaustive price answer. Broad non-price discovery may return a disclosed partial selection.

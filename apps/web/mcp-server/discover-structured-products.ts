@@ -19,9 +19,11 @@ type Input = {
 export async function discoverStructuredProducts({ intent, query, args, merchantId, supabase, semanticSearch }: Input) {
   const candidates = await loadStructuredDiscoveryCandidates({ query, merchantId, supabase, semanticSearch });
   const selected = [];
+  let optionsLookupFailed = false;
   for (let offset = 0; offset < candidates.products.length; offset += 100) {
     const hydrated = await hydrateSearchProductAvailability(candidates.products.slice(offset, offset + 100)
       .filter((product) => matchesMcpPostHydrationFilters(product, args)), supabase, merchantId, args.condition);
+    optionsLookupFailed ||= hydrated.some((row) => row.optionsLookupFailed);
     for (const row of hydrated) {
       const match = selectStructuredDiscoveryOffer(row, intent, args);
       if (match) selected.push(match);
@@ -29,15 +31,15 @@ export async function discoverStructuredProducts({ intent, query, args, merchant
   }
   if (args.sort === 'newest') selected.sort((a, b) =>
     (b.product.created_at ?? '').localeCompare(a.product.created_at ?? '') || a.product.id.localeCompare(b.product.id));
+  const priceCoverageIncomplete = candidates.truncated &&
+    (args.min_price !== undefined || args.max_price !== undefined || args.sort === 'price_asc' || args.sort === 'price_desc');
   return {
     selectedProducts: selectSearchProductsByPrice(selected, args, Math.min(20, Math.max(1, args.limit ?? 10))),
     sanitizedQuery: query,
-    // Every returned offer was evaluated, so the price scan itself is
-    // complete. Bounded candidate coverage is a separate axis reported via
-    // `coverage` (surfaced in structuredContent and the result text), not via
-    // priceScanComplete, which means "prices could not be checked accurately".
-    priceScanComplete: true,
-    coverage: candidates.truncated ? 'partial' as const : 'complete' as const,
+    priceScanComplete: !optionsLookupFailed && !priceCoverageIncomplete,
+    incompleteReason: optionsLookupFailed ? 'option_lookup_failed' as const :
+      priceCoverageIncomplete ? 'candidate_limit' as const : undefined,
+    coverage: candidates.truncated || optionsLookupFailed ? 'partial' as const : 'complete' as const,
     semanticUnavailable: candidates.semanticUnavailable,
   };
 }

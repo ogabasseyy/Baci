@@ -166,7 +166,8 @@ export function selectStructuredDiscoveryOffer(
     if (price === undefined) continue;
     addCandidate({ kind: 'offer', attributes: {},
       condition: normalizeCanonicalProductCondition(typeof offer.condition === 'string' ? offer.condition : null) || baseCondition,
-      price, compareAtPrice: null, stockQuantity: offer.stock_quantity, sourceOption: rawOffer });
+      price, compareAtPrice: finitePrice(offer.compare_at_price) ?? null,
+      stockQuantity: offer.stock_quantity, sourceOption: rawOffer });
   }
 
   const match = candidates

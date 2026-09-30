@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mcpDiscoveryIntentSchema } from './mcp-discovery-intent';
+import { productDiscoveryMetadataSchema } from './product-discovery-metadata';
 
 describe('mcpDiscoveryIntentSchema', () => {
   it('accepts numeric specification comparisons and text equality alternatives', () => {
@@ -19,6 +20,24 @@ describe('mcpDiscoveryIntentSchema', () => {
         excluded_product_types: ['Desktop'],
       }).success
     ).toBe(true);
+  });
+
+  it('uses metadata product type canonicalization for alternatives and exclusions', () => {
+    const parsed = mcpDiscoveryIntentSchema.parse({
+      alternatives: [
+        { product_type: 'Smartphones' },
+        { product_type: 'Security Camera' },
+      ],
+      excluded_product_types: ['Phones', 'Laptop'],
+    });
+    expect(
+      parsed.alternatives.map((alternative) => alternative.product_type)
+    ).toEqual(['phone', 'security_camera']);
+    expect(parsed.excluded_product_types).toEqual(['phone', 'laptop']);
+    const metadata = productDiscoveryMetadataSchema.parse({
+      product_type: 'Smartphones',
+    });
+    expect(parsed.alternatives[0]?.product_type).toBe(metadata.product_type);
   });
 
   it('rejects incorrect value types and text comparison operators', () => {

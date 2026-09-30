@@ -26,6 +26,37 @@ describe('productDiscoveryMetadataSchema', () => {
     ).toBe('security_camera');
   });
 
+  it('bounds serialized metadata by UTF-8 bytes for localized values', () => {
+    const localizedMetadata = {
+      compatible_with: Array.from({ length: 50 }, () => '漢'.repeat(100)),
+    };
+    const serialized = JSON.stringify(localizedMetadata);
+    expect(new TextEncoder().encode(serialized).byteLength).toBeLessThan(
+      16_384
+    );
+    expect(
+      productDiscoveryMetadataSchema.safeParse(localizedMetadata).success
+    ).toBe(true);
+
+    const oversizedLocalizedMetadata = {
+      ...localizedMetadata,
+      attributes: Object.fromEntries(
+        Array.from({ length: 10 }, (_, index) => [
+          `supplier_note_${index}`,
+          '語'.repeat(100),
+        ])
+      ),
+    };
+    expect(
+      new TextEncoder().encode(JSON.stringify(oversizedLocalizedMetadata))
+        .byteLength
+    ).toBeGreaterThan(16_384);
+    expect(
+      productDiscoveryMetadataSchema.safeParse(oversizedLocalizedMetadata)
+        .success
+    ).toBe(false);
+  });
+
   it('requires canonical numeric and text attributes to keep their declared value types', () => {
     for (const attributes of [
       { storage_gb: '256' },
@@ -62,5 +93,21 @@ describe('productDiscoveryMetadataSchema', () => {
         false
       );
     }
+  });
+  it('includes PostgreSQL separator and exponent expansion in the storage bound', () => {
+    const value = {
+      compatible_with: Array.from({ length: 50 }, () => '語'.repeat(100)),
+      attributes: Object.fromEntries(
+        Array.from({ length: 50 }, (_, index) => [`capacity_${index}`, 1e100])
+      ),
+    };
+    expect(
+      new TextEncoder().encode(JSON.stringify(value)).byteLength
+    ).toBeLessThan(16_384);
+    expect(productDiscoveryMetadataSchema.safeParse(value).success).toBe(false);
+    expect(
+      productDiscoveryMetadataSchema.safeParse({ model: 'bad\u0000model' })
+        .success
+    ).toBe(false);
   });
 });

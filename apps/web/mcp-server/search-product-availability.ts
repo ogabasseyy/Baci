@@ -16,6 +16,7 @@ interface ProductOffer {
   id?: string;
   condition: string | null;
   price: number | null;
+  compare_at_price?: number | null;
   stock_quantity: number | null;
 }
 
@@ -50,15 +51,17 @@ export async function hydrateSearchProductAvailability(
 
   const offersMap = new Map<string, ProductOffer[]>();
   const offerIds = products.filter((product) => product.has_condition_offers).map((product) => product.id);
+  let offerLookupSucceeded = offerIds.length === 0;
   if (offerIds.length > 0) {
     const { data, error } = await supabase.from('product_offers')
-      .select('id, product_id, condition, price, stock_quantity')
+      .select('id, product_id, condition, price, compare_at_price, stock_quantity')
       .eq('merchant_id', merchantId)
       .eq('status', 'active')
       .in('product_id', offerIds);
     if (error) {
       console.error('Failed to fetch product offers for search:', error);
     } else {
+      offerLookupSucceeded = true;
       for (const offer of data ?? []) {
         if (condition && normalizeCanonicalProductCondition(offer.condition) !== condition) continue;
         offersMap.set(offer.product_id, [...(offersMap.get(offer.product_id) ?? []), offer]);
@@ -101,6 +104,12 @@ export async function hydrateSearchProductAvailability(
     const optionPriceLookupFailed =
       (product.has_variants && !variantLookupSucceeded) ||
       (product.has_condition_offers && !offersMap.has(product.id));
+    const variantLookupStatus = !product.has_variants
+      ? 'not_required' as const
+      : variantLookupSucceeded ? 'available' as const : 'failed' as const;
+    const offerLookupStatus = !product.has_condition_offers
+      ? 'not_required' as const
+      : offerLookupSucceeded ? 'available' as const : 'failed' as const;
     const displayPrice = cheapestOption
       ? cheapestOption.price
       : optionPriceLookupFailed && !basePurchasable ? null : product.price;
@@ -120,6 +129,11 @@ export async function hydrateSearchProductAvailability(
       availableOffers: offers.filter((offer) =>
         product.manage_stock !== true || Number(offer.stock_quantity ?? 0) > 0
       ),
+      optionsLookupFailed: optionPriceLookupFailed,
+      variantLookupFailed: variantLookupStatus === 'failed',
+      offerLookupFailed: offerLookupStatus === 'failed',
+      variantLookupStatus,
+      offerLookupStatus,
       basePurchasable,
       availableVariants: variants.filter((variant) =>
         product.manage_stock !== true || Number(variant.stock_quantity ?? 0) > 0

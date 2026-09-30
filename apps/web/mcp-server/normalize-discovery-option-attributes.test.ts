@@ -9,3 +9,11 @@ it('invalid overrides clear inherited facts and incompatible units remain unknow
   expect(normalizeDiscoveryOptionAttributes({ storage: 'up to 128GB', ram: '20W', color: null }))
     .toEqual({ storage_gb: null, ram_gb: null, color: null });
 });
+
+it('normalizes storefront RAM and memory suffix labels while rejecting unrelated suffixes', () => {
+  expect(normalizeDiscoveryOptionAttributes({ ram: '64GB RAM' })).toEqual({ ram_gb: 64 });
+  expect(normalizeDiscoveryOptionAttributes({ memory: '32 GB memory' })).toEqual({ ram_gb: 32 });
+  expect(normalizeDiscoveryOptionAttributes({ ram: 'RAM 64GB' })).toEqual({ ram_gb: 64 });
+  expect(normalizeDiscoveryOptionAttributes({ ram: '64GB SSD', storage: '64GB RAM', power: '20W RAM' }))
+    .toEqual({ ram_gb: null, storage_gb: null, power_w: null });
+});

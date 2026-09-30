@@ -10,6 +10,8 @@ type Fixture = {
   variants?: Array<Record<string, unknown>>;
   offers?: Array<Record<string, unknown>>;
   lexicalError?: Error;
+  variantError?: Error;
+  offerError?: Error;
 };
 
 function client(fixture: Fixture) {
@@ -27,6 +29,7 @@ function client(fixture: Fixture) {
       };
     }
     if (name === 'get_storefront_product_variants') {
+      if (fixture.variantError) return { data: null, error: fixture.variantError };
       const ids = args?.p_product_ids as string[];
       return { data: (fixture.variants ?? []).filter((row) => ids.includes(String(row.product_id))), error: null };
     }
@@ -42,6 +45,7 @@ function client(fixture: Fixture) {
       order: vi.fn(() => builder),
       range: vi.fn(() => builder),
       then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => {
+        if (table === 'product_offers' && fixture.offerError) return Promise.resolve({ data: null, error: fixture.offerError }).then(resolve, reject);
         let rows = table === 'products' ? fixture.products : fixture.offers ?? [];
         for (const [kind, column, value] of filters) {
           if (kind === 'eq') rows = rows.filter((row) => row[column] === value);
@@ -181,6 +185,7 @@ describe('discoverStructuredProducts', () => {
 
     expect(result.coverage).toBe('partial');
     expect(result.priceScanComplete).toBe(true);
+    expect(result.incompleteReason).toBeUndefined();
     expect(result.selectedProducts).toHaveLength(2);
     expect(fixture.lexicalCalls()).toBe(5);
   });
@@ -239,4 +244,22 @@ describe('discoverStructuredProducts', () => {
     ));
     expect(result.selectedProducts.map(({ product: selected }) => selected.id)).toEqual(['holdout']);
   });
+  it('marks a truncated price-sorted structured search incomplete', async () => {
+    const ids = Array.from({ length: 500 }, (_, index) => `p-${index}`);
+    const fixture = client({ products: ids.map((id) => product(id, { product_type: 'security_camera' })), lexicalIds: ids, lexicalTotal: 501 });
+    const result = await discoverStructuredProducts(input(fixture.supabase,
+      intent({ product_type: 'security_camera' }), { query: 'camera', args: { sort: 'price_asc', limit: 2 } }));
+    expect(result).toMatchObject({ priceScanComplete: false, coverage: 'partial', incompleteReason: 'candidate_limit' });
+  });
+
+  it.each(['variant', 'offer'])('marks failed %s hydration incomplete instead of claiming no match', async (source) => {
+    const p = product('options', { product_type: 'phone' }, {
+      manage_stock: true, stock_quantity: 0, has_variants: source === 'variant', has_condition_offers: source === 'offer',
+    });
+    const fixture = client({ products: [p], variantError: source === 'variant' ? new Error('offline') : undefined,
+      offerError: source === 'offer' ? new Error('offline') : undefined });
+    const result = await discoverStructuredProducts(input(fixture.supabase, intent({ product_type: 'phone' })));
+    expect(result).toMatchObject({ priceScanComplete: false, coverage: 'partial', incompleteReason: 'option_lookup_failed' });
+  });
+
 });

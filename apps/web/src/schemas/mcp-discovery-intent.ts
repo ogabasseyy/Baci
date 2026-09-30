@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { canonicalizeDiscoveryProductType } from './canonical-discovery-product-type';
 
 const text = z.string().trim().min(1).max(100);
 const attribute = z
@@ -41,7 +42,9 @@ export const mcpDiscoveryIntentSchema = z.strictObject({
   alternatives: z
     .array(
       z.strictObject({
-        product_type: text.optional(),
+        product_type: text
+          .transform(canonicalizeDiscoveryProductType)
+          .optional(),
         brands: z.array(text).min(1).max(10).optional(),
         model: text.optional(),
         compatible_with: text.optional(),
@@ -50,7 +53,10 @@ export const mcpDiscoveryIntentSchema = z.strictObject({
     )
     .min(1)
     .max(5),
-  excluded_product_types: z.array(text).max(10).optional(),
+  excluded_product_types: z
+    .array(text.transform(canonicalizeDiscoveryProductType))
+    .max(10)
+    .optional(),
 });
 
 export type McpDiscoveryIntent = z.infer<typeof mcpDiscoveryIntentSchema>;

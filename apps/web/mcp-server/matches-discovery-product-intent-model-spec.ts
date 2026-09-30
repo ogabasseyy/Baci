@@ -25,16 +25,18 @@ const specUnits: Record<string, { dimension: string; multiplier: number }> = {
   mb: { dimension: 'capacity', multiplier: 1 },
   gb: { dimension: 'capacity', multiplier: 1024 },
   tb: { dimension: 'capacity', multiplier: 1024 * 1024 },
+  mah: { dimension: 'battery-capacity', multiplier: 1 },
   w: { dimension: 'power', multiplier: 1 },
   hz: { dimension: 'frequency', multiplier: 1 },
+  mp: { dimension: 'resolution', multiplier: 1 },
 };
 
-function meetsCapacityLowerBound(
+function meetsSpecLowerBound(
   productWords: string[],
   requestedSpec: string,
   requestedContext: string | undefined
 ): boolean {
-  const requested = /^(\d+(?:\.\d+)?)(mb|gb|tb|w|hz)$/.exec(requestedSpec);
+  const requested = /^(\d+(?:\.\d+)?)(mb|gb|tb|mah|w|hz|mp)$/.exec(requestedSpec);
   if (!requested) return false;
   const requestedUnit = specUnits[requested[2] ?? ''];
   if (!requestedUnit) return false;
@@ -45,7 +47,7 @@ function meetsCapacityLowerBound(
     let amount: string | undefined;
     let unit: string | undefined;
     let unitIndex = index;
-    const compact = /^(\d+(?:\.\d+)?)(mb|gb|tb|w|hz)$/.exec(word);
+    const compact = /^(\d+(?:\.\d+)?)(mb|gb|tb|mah|w|hz|mp)$/.exec(word);
     if (compact) {
       amount = compact[1];
       unit = compact[2];
@@ -62,7 +64,7 @@ function meetsCapacityLowerBound(
     let beforeAmount = index - 1;
     while (memoryTechnologyWords.has(productWords[beforeAmount] ?? '')) beforeAmount -= 1;
     const priorCapacity = productWords[beforeAmount - 1] ?? '';
-    const reverseContext = /^\d+(?:\.\d+)?(?:mb|gb|tb|w|hz)$/.test(priorCapacity) ||
+    const reverseContext = /^\d+(?:\.\d+)?(?:mb|gb|tb|mah|w|hz|mp)$/.test(priorCapacity) ||
       (specUnits[priorCapacity] && /^\d+(?:\.\d+)?$/.test(productWords[beforeAmount - 2] ?? ''))
       ? undefined : productWords[beforeAmount];
     const contextMatches = !requestedContext ||
@@ -93,7 +95,7 @@ export function matchesModelSpecTokens(scope: ModelSpecScope): boolean {
       const isLowerBound = scope.coreWords[coreIndex - 1] === 'least' &&
         scope.coreWords[coreIndex - 2] === 'at';
       const exactSpecMatch = matchesProductToken(scope.productSpecWords, specToken);
-      if (isLowerBound ? !meetsCapacityLowerBound(scope.productSpecWords, specToken, requestedContext) : !exactSpecMatch) return false;
+      if (isLowerBound ? !meetsSpecLowerBound(scope.productSpecWords, specToken, requestedContext) : !exactSpecMatch) return false;
       if (requestedContext && exactSpecMatch && !isLowerBound) {
         const specParts = /^(\d+)([a-z]+)$/.exec(specToken);
         const matchingContext = scope.productSpecWords.some((word, tokenIndex) => {

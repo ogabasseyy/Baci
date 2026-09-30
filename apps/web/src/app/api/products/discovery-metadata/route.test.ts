@@ -140,4 +140,21 @@ describe('product discovery metadata API', () => {
     expect(await response.json()).toEqual({ success: true, productId });
     expect(response.headers.get('cache-control')).toBe('no-store');
   });
+  it('replaces the whole metadata document on PUT rather than merging omitted facts', async () => {
+    const body = {
+      productId: validBody.productId,
+      metadata: { product_type: 'phone' },
+    };
+    const response = await PUT(request(JSON.stringify(body)));
+    expect(response.status).toBe(200);
+    expect(mocks.update).toHaveBeenCalledWith({
+      discovery_metadata: { product_type: 'phone' },
+    });
+    expect(mocks.update.mock.calls[0][0].discovery_metadata).not.toHaveProperty(
+      'model'
+    );
+    expect(mocks.update.mock.calls[0][0].discovery_metadata).not.toHaveProperty(
+      'attributes'
+    );
+  });
 });

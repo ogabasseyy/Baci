@@ -90,7 +90,6 @@ jobs:
     env:
       MUSE_MODEL_RESOLVED: ${{ vars.MUSE_MODEL != '' && vars.MUSE_MODEL || '' }}
       MUSE_EFFORT_RESOLVED: ${{ vars.MUSE_REASONING_EFFORT != '' && vars.MUSE_REASONING_EFFORT || 'medium' }}
-      SCRIPT_DIR: ${{ github.workspace }}/.github/scripts/muse-review
 
     steps:
       - name: Check prerequisites
@@ -116,6 +115,33 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1
 
+      - name: Checkout trusted review scripts
+        if: steps.prereq.outputs.should_run == 'true'
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          # Scripts run with GH_TOKEN, so they come from the trusted BASE
+          # revision — never the PR head, whose content is
+          # submitter-controlled. Sparse: only the scripts directory.
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted-scripts
+          fetch-depth: 1
+          sparse-checkout: .github/scripts/muse-review
+
+      - name: Resolve script directory
+        id: scriptdir
+        if: steps.prereq.outputs.should_run == 'true'
+        run: |
+          set -euo pipefail
+          if [[ -f "${GITHUB_WORKSPACE}/trusted-scripts/.github/scripts/muse-review/lib.sh" ]]; then
+            echo "dir=${GITHUB_WORKSPACE}/trusted-scripts/.github/scripts/muse-review" >> "${GITHUB_OUTPUT}"
+          else
+            # Base predates the scripts (first-merge bootstrap only): fall
+            # back to the head copy. Afterwards the base always provides them.
+            echo "dir=${GITHUB_WORKSPACE}/.github/scripts/muse-review" >> "${GITHUB_OUTPUT}"
+            echo "::warning::Base lacks review scripts; running head copy (first-merge bootstrap)."
+          fi
+
       - name: Collect PR diff and build prompt
         id: diff
         if: steps.prereq.outputs.should_run == 'true'
@@ -124,6 +150,7 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA_EVENT: ${{ github.event.pull_request.head.sha }}
+          SCRIPT_DIR: ${{ steps.scriptdir.outputs.dir }}
         run: |
           set -euo pipefail
           # One phase per script (each under 300 lines); later phases exit
@@ -195,6 +222,7 @@ jobs:
           PROMPT_FILE: ${{ steps.diff.outputs.prompt_file }}
           MUSE_MODEL: ${{ env.MUSE_MODEL_RESOLVED }}
           MUSE_EFFORT: ${{ env.MUSE_EFFORT_RESOLVED }}
+          SCRIPT_DIR: ${{ steps.scriptdir.outputs.dir }}
         run: |
           set -euo pipefail
           bash "${SCRIPT_DIR}/run.sh"
@@ -214,6 +242,7 @@ jobs:
           MUSE_OUTCOME: ${{ steps.muse.outcome }}
           DIFF_FAILED: ${{ steps.diff.outputs.diff_failed }}
           REVIEW_FILE: ${{ steps.muse.outputs.review_file }}
+          SCRIPT_DIR: ${{ steps.scriptdir.outputs.dir }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail

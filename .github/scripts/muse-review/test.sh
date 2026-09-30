@@ -86,6 +86,22 @@ if (cd "${linkdir}" && head_readable "missing/AGENTS.md"); then got_hr="yes"; el
 assert_eq "readable-missing" "no" "${got_hr}"
 rm -rf "${linkdir}"
 
+# --- sweep_workspace_symlinks ---
+sweepdir="$(mktemp -d)"
+mkdir -p "${sweepdir}/.git" "${sweepdir}/trusted-scripts" "${sweepdir}/sub"
+printf 'x' > "${sweepdir}/real.txt"
+ln -s /etc "${sweepdir}/leak.txt"
+ln -s /tmp "${sweepdir}/sub/dirlink"
+ln -s /etc/hostname "${sweepdir}/.git/keeper"
+ln -s /etc/hostname "${sweepdir}/trusted-scripts/keeper"
+got="$(sweep_workspace_symlinks "${sweepdir}")"
+assert_eq "sweep-count" "2" "${got}"
+if [[ -e "${sweepdir}/leak.txt" || -e "${sweepdir}/sub/dirlink" ]]; then got_left="yes"; else got_left="no"; fi
+assert_eq "sweep-removed" "no" "${got_left}"
+if [[ -L "${sweepdir}/.git/keeper" && -L "${sweepdir}/trusted-scripts/keeper" && -f "${sweepdir}/real.txt" ]]; then got_kept="yes"; else got_kept="no"; fi
+assert_eq "sweep-prunes" "yes" "${got_kept}"
+rm -rf "${sweepdir}"
+
 # --- redact ---
 pem='-----BEGIN TEST PRIVATE KEY-----FAKEFAKEFAKE-----END TEST PRIVATE KEY-----'
 assert_eq "redact-pem" "[REDACTED-PRIVATE-KEY]" "$(redact "a ${pem} b" | sed 's/^a //; s/ b$//')"
@@ -151,12 +167,15 @@ cat > "${find_fix}" <<'EOF'
  {"path":"a.ts","line":5,"severity":"low","title":42,"body":"B"},
  {"path":"a.ts","line":6,"severity":"low","title":"T","body":{"x":1}},
  {"path":"a.ts","line":7,"severity":"low","body":"B"},
- {"path":"","line":8,"severity":"low","title":"EMPTY","body":"B"}
+ {"path":"","line":8,"severity":"low","title":"EMPTY","body":"B"},
+ {"path":"a.ts","line":9,"severity":{"x":1},"title":"S1","body":"B"},
+ {"path":"a.ts","line":10,"severity":"Bogus","title":"S2","body":"B"}
 ],"next_steps":["ok",7,{"x":1},null]}
 EOF
 jq -f "${SCRIPT_DIR}/clean.jq" "${find_fix}" > "${find_fix}.clean" && mv "${find_fix}.clean" "${find_fix}"
-assert_eq "clean-drops-nonstrings" '["T-less"]' "$(jq -c '[.findings[] | (.title // "T-less")]' "${find_fix}")"
+assert_eq "clean-drops-nonstrings" '["T-less"]' "$(jq -c '[.findings[] | select(.line == 7) | (.title // "T-less")]' "${find_fix}")"
 assert_eq "clean-next-steps" '["ok"]' "$(jq -c '.next_steps' "${find_fix}")"
+assert_eq "clean-severity-coerce" '["low","low"]' "$(jq -c '[.findings[] | select(.line == 9 or .line == 10) | .severity]' "${find_fix}")"
 rm -f "${find_fix}" "${ranges_fix}" "${files_fix}"
 
 # --- dedupe.jq ---

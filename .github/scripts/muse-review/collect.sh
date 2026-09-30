@@ -116,7 +116,7 @@ if [[ "${local_diff}" == "true" ]]; then
     while IFS= read -r -d '' st <&3; do
       IFS= read -r -d '' p1 <&3 || { join_ok=false; break; }
       prev=""
-      if [[ "${st}" == R* ]]; then
+      if [[ "${st}" == [RC]* ]]; then
         IFS= read -r -d '' p2 <&3 || { join_ok=false; break; }
         path="${p2}"
         prev="${p1}"
@@ -124,9 +124,10 @@ if [[ "${local_diff}" == "true" ]]; then
         path="${p1}"
       fi
       IFS= read -r -d '' numrec <&4 || { join_ok=false; break; }
-      # numstat -z emits rename preimage/postimage as two extra NUL records
-      # after the counts; consume them to stay aligned.
-      if [[ "${st}" == R* ]]; then
+      # numstat -z emits rename/copy preimage/postimage as two extra NUL
+      # records after the counts; consume them to stay aligned. Copies
+      # only occur with --find-copies (currently off — latent hardening).
+      if [[ "${st}" == [RC]* ]]; then
         IFS= read -r -d '' _ns_old <&4 || { join_ok=false; break; }
         IFS= read -r -d '' _ns_new <&4 || { join_ok=false; break; }
       fi
@@ -134,7 +135,7 @@ if [[ "${local_diff}" == "true" ]]; then
       if ! [[ "${add}" =~ ^[0-9]+$ ]]; then add=0; fi
       if ! [[ "${del}" =~ ^[0-9]+$ ]]; then del=0; fi
       case "${st}" in
-        A*) s="added";; D*) s="removed";; R*) s="renamed";; *) s="modified";;
+        A*) s="added";; D*) s="removed";; R*) s="renamed";; C*) s="copied";; *) s="modified";;
       esac
       jq -n --arg f "${path}" --arg s "${s}" --argjson a "${add:-0}" --argjson d "${del:-0}" --arg prev "${prev}" \
         '{filename:$f,status:$s,additions:$a,deletions:$d,previous_filename:$prev}' >> "${files_file}.jsonl"
@@ -181,7 +182,7 @@ if [[ -z "${files_summary}" ]]; then
 fi
 files_note=""
 if [[ "${files_source}" == "compare" ]] && (( total_files >= 300 )); then
-  files_note=" (file list may be truncated at 300 by the compare API)"
+  files_note=" (PARTIAL SCOPE: file list capped at 300 by the compare API — manifest, guidance, and verdict may miss files)"
 fi
 if (( total_files > 200 )); then
   files_note="${files_note} ($(( total_files - 200 )) more files omitted from summary)"

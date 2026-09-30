@@ -5,6 +5,7 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
 import { fetchLegacyPlacesJson } from '../legacy-places';
+import { reserveGooglePlacesRequest } from '../provider-budget';
 
 const GOOGLE_API_KEY =
   process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
@@ -85,6 +86,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    if (placeId.startsWith('geoapify:')) {
+      return NextResponse.json(
+        { error: 'Geoapify selections do not require place details' },
+        { status: 400 }
+      );
+    }
+
     const cleanPlaceId = placeId.startsWith('places/')
       ? placeId.slice('places/'.length)
       : placeId;
@@ -109,7 +117,8 @@ export async function GET(request: NextRequest) {
     }
 
     const fetched = await fetchLegacyPlacesJson<LegacyPlaceDetailsResponse>(
-      detailsUrl.toString()
+      detailsUrl.toString(),
+      () => reserveGooglePlacesRequest('details')
     );
 
     if (!fetched.ok) {

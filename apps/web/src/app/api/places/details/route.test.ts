@@ -2,6 +2,9 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.stubEnv('GOOGLE_MAPS_API_KEY', 'test-api-key');
+vi.mock('../provider-budget', () => ({
+  reserveGooglePlacesRequest: vi.fn(async () => true),
+}));
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
@@ -82,9 +85,12 @@ describe('GET /api/places/details', () => {
     );
     expect(requestUrl.searchParams.get('sessiontoken')).toBe('session-123');
     expect(requestUrl.searchParams.get('key')).toBe('test-api-key');
-    expect(mockFetch).toHaveBeenCalledWith(expect.any(String), {
-      opentelemetry: { ignore: true },
-    });
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        opentelemetry: { ignore: true },
+      })
+    );
   });
 
   it('returns 400 for malformed placeId', async () => {

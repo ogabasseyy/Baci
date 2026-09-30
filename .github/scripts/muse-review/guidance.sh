@@ -91,8 +91,10 @@ emit_guidance() {
   block_len="$(printf '%s' "${block}" | wc -c)"
   if (( guidance_bytes + block_len > guidance_budget )); then
     guidance_capped=true
+    # The candidate label is submitter-controlled: reuse the sanitized,
+    # capped display form so the system notice cannot carry steering text.
     printf '\n(Guidance budget exhausted at %s bytes; %s and any further scoped files omitted.)\n' \
-      "${guidance_budget}" "${candidate}" >> "${guidance_file}"
+      "${guidance_budget}" "${safe_candidate}" >> "${guidance_file}"
     return 0
   fi
   guidance_bytes=$(( guidance_bytes + block_len ))

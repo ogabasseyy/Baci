@@ -70,6 +70,10 @@ got="$(printf '%s' '@lead starts here' | sanitize_mentions)"
 assert_eq "mentions-start" "@${zwsp}lead starts here" "${got}"
 got="$(printf '%s' 'say (@octo) and "[@root]" ok' | sanitize_mentions)"
 assert_eq "mentions-bracket-quote" "say (@${zwsp}octo) and \"[@${zwsp}root]\" ok" "${got}"
+got="$(printf '%s' 'mail,@a cc:@b path/@c `{@d}` ;@e' | sanitize_mentions)"
+assert_eq "mentions-punct" "mail,@${zwsp}a cc:@${zwsp}b path/@${zwsp}c \`{@${zwsp}d}\` ;@${zwsp}e" "${got}"
+got="$(printf '%s' '@@double hunk @@ -1 +1 @@' | sanitize_mentions)"
+assert_eq "mentions-adjacent" "@@${zwsp}double hunk @@ -1 +1 @@" "${got}"
 
 # --- head_readable ---
 linkdir="$(mktemp -d)"
@@ -84,6 +88,10 @@ if (cd "${linkdir}" && head_readable "filelink"); then got_hr="yes"; else got_hr
 assert_eq "readable-symlinked-file" "no" "${got_hr}"
 if (cd "${linkdir}" && head_readable "missing/AGENTS.md"); then got_hr="yes"; else got_hr="no"; fi
 assert_eq "readable-missing" "no" "${got_hr}"
+if (cd "${linkdir}" && head_readable "real/../real/AGENTS.md"); then got_hr="yes"; else got_hr="no"; fi
+assert_eq "readable-dotdot" "no" "${got_hr}"
+if (cd "${linkdir}" && head_readable "${linkdir}/real/AGENTS.md"); then got_hr="yes"; else got_hr="no"; fi
+assert_eq "readable-absolute" "no" "${got_hr}"
 rm -rf "${linkdir}"
 
 # --- sweep_workspace_symlinks ---

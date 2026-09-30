@@ -115,15 +115,8 @@ describe('searchStorefrontProducts', () => {
       productIds: ['prod-1'],
       query: 'iphone',
     });
-    // First-page reads track render analytics by default.
-    expect(mockAnalyticsInsert).toHaveBeenCalledTimes(1);
-    expect(mockAnalyticsInsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        merchant_id: '123e4567-e89b-12d3-a456-426614174000',
-        search_query: 'iphone',
-        results_count: 2,
-      })
-    );
+    // Reads are silent by default; only explicit submissions write rows.
+    expect(mockAnalyticsInsert).not.toHaveBeenCalled();
   });
 
   it('throws InvalidMerchantIdError for invalid merchant ids', async () => {
@@ -319,7 +312,8 @@ describe('getStorefrontSearchProducts', () => {
     });
 
     // First-page assembly tracks its render by default.
-    expect(mockAnalyticsInsert).toHaveBeenCalledTimes(1);
+    // Reads are silent by default; only explicit submissions write rows.
+    expect(mockAnalyticsInsert).not.toHaveBeenCalled();
     expect(result.products).toHaveLength(2);
     expect(result.products.map((product) => product.id)).toEqual([
       'product-2',
@@ -409,8 +403,8 @@ describe('getStorefrontSearchProducts', () => {
     expect(result.products.map((product) => product.id)).toEqual(['product-1']);
     expect(result.productIds).toEqual(['product-1']);
     expect(result.count).toBe(1);
-    // First-page assembly tracks its render by default.
-    expect(mockAnalyticsInsert).toHaveBeenCalledTimes(1);
+    // Reads are silent by default; only explicit submissions write rows.
+    expect(mockAnalyticsInsert).not.toHaveBeenCalled();
   });
 
   it('accumulates ranked candidates across pages so condition-family counts are not capped at one page', async () => {

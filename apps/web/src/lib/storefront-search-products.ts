@@ -51,11 +51,11 @@ export async function getStorefrontSearchProducts(args: {
   offset?: number;
   sort?: StorefrontSearchSort;
   /**
-   * Record this call as a new submission in `search_analytics`, but only
+   * Opt into recording this call as a new submission in `search_analytics`.
+   * Reads are silent by default; when opted in, recording happens only
    * after the search fully succeeds (ranked call plus hydration): partial
    * failures stay untracked so a retry records the submission exactly
-   * once. Page views past the first page and internal recovery queries
-   * pass `false` so refinement navigation never inflates submission counts.
+   * once.
    */
   trackAnalytics?: boolean;
 }): Promise<StorefrontSearchProductsPage> {
@@ -76,7 +76,10 @@ export async function getStorefrontSearchProducts(args: {
   // did-you-mean/hydration steps would record partial failures — and a retry
   // would then recount the same submission. Counts reflect the returned
   // page (post-filter matches on the family path: what the shopper sees).
-  const shouldTrackSearch = args.trackAnalytics ?? true;
+  // Reads are silent by default: only explicit submissions (via the
+  // submissions endpoint) write analytics. Callers opt into render
+  // tracking explicitly where a first-page view counts as a submission.
+  const shouldTrackSearch = args.trackAnalytics ?? false;
   const trackSearchSubmission = (result: { count: number; query: string }) => {
     if (shouldTrackSearch) {
       scheduleSearchAnalyticsInsert({

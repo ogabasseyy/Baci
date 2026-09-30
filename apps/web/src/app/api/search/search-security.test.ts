@@ -162,17 +162,9 @@ describe('Search API Security', () => {
         sanitizeSearchQuery(maliciousQuery)
       );
       await flushAfterCallbacks();
-      // A direct read tracks its own server render row, but never an
-      // explicit client submission row.
-      expect(mockAnalyticsChainable.insert).toHaveBeenCalledTimes(1);
-      expect(mockAnalyticsChainable.insert).toHaveBeenCalledWith(
-        expect.objectContaining({ search_method: 'server' })
-      );
-      expect(
-        mockAnalyticsChainable.insert.mock.calls.some(
-          ([row]) => row.search_method === 'client'
-        )
-      ).toBe(false);
+      // Reads are silent: no render row and no explicit submission row.
+      expect(mockAnalyticsChainable.insert).not.toHaveBeenCalled();
+      expect(afterCallbacks).toHaveLength(0);
     });
 
     it('should validate merchant_id UUID', async () => {

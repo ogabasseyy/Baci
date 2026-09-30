@@ -60,7 +60,7 @@ describe('getStorefrontSearchProducts submission tracking', () => {
     );
   });
 
-  it('records one submission after a fully successful search', async () => {
+  it('records one submission when tracking is explicitly opted in', async () => {
     vi.mocked(createClient).mockReturnValue({
       rpc: vi.fn().mockResolvedValue({
         data: [{ product_id: 'product-1', total_count: 45 }],
@@ -99,6 +99,7 @@ describe('getStorefrontSearchProducts submission tracking', () => {
       merchantId: '123e4567-e89b-12d3-a456-426614174000',
       query: 'phone',
       limit: 20,
+      trackAnalytics: true,
     });
 
     expect(result.products).toHaveLength(1);
@@ -158,7 +159,7 @@ describe('getStorefrontSearchProducts submission tracking', () => {
     expect(mockAnalyticsInsert).not.toHaveBeenCalled();
   });
 
-  it('skips the analytics insert when page views opt out of submission tracking', async () => {
+  it('leaves analytics untracked by default without an explicit opt-in', async () => {
     vi.mocked(createClient).mockReturnValue({
       rpc: vi.fn().mockResolvedValue({
         data: [{ product_id: 'product-1', total_count: 45 }],
@@ -196,7 +197,6 @@ describe('getStorefrontSearchProducts submission tracking', () => {
       query: 'phone',
       limit: 20,
       offset: 20,
-      trackAnalytics: false,
     });
 
     expect(result.products).toHaveLength(1);

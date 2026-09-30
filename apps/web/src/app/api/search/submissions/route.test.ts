@@ -50,8 +50,8 @@ describe('explicit search submissions', () => {
   it.each([
     'navbar',
     'results-form',
-    'see-all',
     'did-you-mean',
+    'popular-search',
   ])('records %s with a server-derived count and host-derived merchant', async (source) => {
     const response = await POST(
       request({ query: ' iphone ', pathPrefix: '/other-merchant', source })

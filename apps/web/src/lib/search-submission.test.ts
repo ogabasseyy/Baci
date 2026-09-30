@@ -50,7 +50,7 @@ describe('recordSearchSubmission', () => {
 
   it('absorbs a failed HTTP response without retrying', async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 429 });
-    recordSearchSubmission('phone', '', 'see-all');
+    recordSearchSubmission('phone', '', 'did-you-mean');
     await Promise.resolve();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

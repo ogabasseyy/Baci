@@ -115,7 +115,7 @@ export async function searchStorefrontProducts({
   limit,
   offset,
   sort = 'relevance',
-  trackAnalytics = true,
+  trackAnalytics = false,
 }: SearchStorefrontProductsArgs): Promise<StorefrontSearchResult> {
   if (!isValidUuid(merchantId)) {
     throw new InvalidMerchantIdError();
@@ -191,7 +191,9 @@ export interface RankedSearchCandidates {
  * Pages through `search_products_v2` and accumulates ranked product IDs. Used
  * when storefront family filters must be applied in memory: the RPC caps each
  * page at 100 rows, so a single page would silently drop matches ranked past row
- * 100. Analytics is recorded once (first page) per search. Callers may pass
+ * 100. Analytics stays silent unless a caller opts in with trackAnalytics:
+ * reads never write on their own; only explicit submissions (via the
+ * submissions endpoint) record rows. Callers may pass
  * maxCandidates for explicit best-effort prefetches; omit it when post-filtered
  * counts must be exact.
  */
@@ -224,7 +226,7 @@ export async function collectRankedSearchProductIds(args: {
       sort: args.sort,
       limit: RANKED_FILTER_PAGE_SIZE,
       offset: pageOffset,
-      trackAnalytics: pageOffset === 0 && (args.trackAnalytics ?? true),
+      trackAnalytics: pageOffset === 0 && (args.trackAnalytics ?? false),
     });
 
     total = page.count;

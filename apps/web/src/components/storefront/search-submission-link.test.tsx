@@ -10,10 +10,8 @@ describe('search submission link', () => {
     vi.stubGlobal('fetch', fetchMock);
   });
 
-  it.each([
-    'see-all',
-    'did-you-mean',
-  ] as const)('retains a native link for %s and emits only on activation', (source) => {
+  it('retains a native link and emits only on activation', () => {
+    const source = 'did-you-mean' as const;
     const props = {
       pathPrefix: '',
       query: 'phone & case',
@@ -44,7 +42,7 @@ describe('search submission link', () => {
   it('truncates astral characters without splitting surrogate pairs', () => {
     const query = `${'a'.repeat(199)}😀extra`;
     render(
-      <SearchSubmissionLink pathPrefix="" query={query} source="see-all">
+      <SearchSubmissionLink pathPrefix="" query={query} source="did-you-mean">
         See all results
       </SearchSubmissionLink>
     );
@@ -59,7 +57,7 @@ describe('search submission link', () => {
 
   it('records middle-button link activation without counting other auxiliary clicks', () => {
     render(
-      <SearchSubmissionLink pathPrefix="" query="phone" source="see-all">
+      <SearchSubmissionLink pathPrefix="" query="phone" source="did-you-mean">
         See all results
       </SearchSubmissionLink>
     );
@@ -68,12 +66,14 @@ describe('search submission link', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     fireEvent(link, new MouseEvent('auxclick', { bubbles: true, button: 1 }));
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body).source).toBe('see-all');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).source).toBe(
+      'did-you-mean'
+    );
   });
 
   it('does not block navigation when tracking throws or rejects', async () => {
     render(
-      <SearchSubmissionLink pathPrefix="" query="phone" source="see-all">
+      <SearchSubmissionLink pathPrefix="" query="phone" source="did-you-mean">
         See all results
       </SearchSubmissionLink>
     );

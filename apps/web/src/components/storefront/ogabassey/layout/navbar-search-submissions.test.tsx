@@ -77,7 +77,7 @@ describe('mounted navbar submission paths', () => {
     expect(submissionCalls()).toHaveLength(2); // identical intentional re-submission counts
   });
 
-  it('records see-all activation once with the current typed query', async () => {
+  it('records see-all button activation once as a navbar submission', async () => {
     await loadAutocomplete();
     fireEvent.change(screen.getByRole('searchbox'), {
       target: { value: 'phone case' },

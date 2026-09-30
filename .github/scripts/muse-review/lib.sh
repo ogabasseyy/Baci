@@ -81,10 +81,12 @@ sanitize_mentions() {
 # carrying review content) that every PR viewer silently fetches.
 # Regular links are intentionally preserved — doc citations are the
 # recency feature working as designed; only the fetch-on-render image
-# forms go. Alt text is kept so model intent stays readable. Apply with
+# forms go. Alt text is kept so model intent stays readable. Shortcut
+# reference images (`![label]` + `[label]: url`) degrade to plain links:
+# no auto-fetch, still readable, same as any citation. Apply with
 # sanitize_mentions(), before byte-bounding.
 strip_images() {
-  perl -pe 's/!\[([^\]]*)\]\((?:[^()]*|\([^()]*\))*\)/$1/g; s/!\[([^\]]*)\]\[[^\]]*\]/$1/g; s{<\s*img\b[^>]*\balt\s*=\s*"([^"]*)"[^>]*>}{$1}gi; s{<\s*img\b[^>]*\balt\s*=\s*'"'"'([^'"'"']*)'"'"'[^>]*>}{$1}gi; s{<\s*img\b[^>]*>}{}gi'
+  perl -pe 's/!\[([^\]]*)\]\((?:[^()]*|\([^()]*\))*\)/$1/g; s/!\[([^\]]*)\]\[[^\]]*\]/$1/g; s/!(\[[^\]]+\])(?!\()/$1/g; s{<\s*img\b[^>]*\balt\s*=\s*"([^"]*)"[^>]*>}{$1}gi; s{<\s*img\b[^>]*\balt\s*=\s*'"'"'([^'"'"']*)'"'"'[^>]*>}{$1}gi; s{<\s*img\b[^>]*>}{}gi'
 }
 
 # Remove every symlink under a workspace root (except .git and the trusted

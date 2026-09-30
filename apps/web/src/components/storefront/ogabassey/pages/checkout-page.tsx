@@ -49,12 +49,6 @@ import { getSubdivisions } from '@/lib/shipping/merchant-rates/subdivisions';
 import { toast } from '@/hooks/use-toast';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import {
-  calculateCartCatalogSubtotal,
-  calculateCartItemSubtotal,
-  calculateCartTotal,
-  sanitizeCartItems,
-} from '@/lib/checkout/cart-entitlement-sanitizer';
-import {
   isBankTransferCheckoutAvailable,
   isKorapayCheckoutAvailable,
   isPaystackCheckoutAvailable,
@@ -78,6 +72,7 @@ import {
   useResumedCheckoutStartFunnel,
 } from './checkout/hooks/use-resumed-checkout-start-funnel';
 import { deriveCheckoutDisplayModel } from './checkout/derive-checkout-display-model';
+import { deriveCheckoutCartModel } from './checkout/derive-checkout-cart-model';
 import { useCheckoutFinancialSession } from './checkout/hooks/use-checkout-financial-session';
 import { readCheckoutAttemptGeneration } from './checkout/checkout-attempt-generation';
 import { CheckoutResumeStatus } from './checkout/components/CheckoutResumeStatus';
@@ -132,34 +127,13 @@ export const CheckoutPage: React.FC = () => {
   const { formatCurrencyAuto, currencySymbol, currencyCode } = useCurrency();
 
   const hasPriceNegotiation = hasStorefrontPriceNegotiation(merchant);
-
-  const checkoutCart = sanitizeCartItems(cart, hasPriceNegotiation);
-  const quoteItemsFingerprint = checkoutCart
-    .map(
-      ({ id, negotiatedPrice, price, quantity }) =>
-        `${id}:${quantity}:${negotiatedPrice ?? price}`
-    )
-    .join('|');
-
-  const checkoutCartTotal = calculateCartTotal(
+  const {
     checkoutCart,
-    hasPriceNegotiation
-  );
-
-  // Catalog (pre-negotiation) subtotal sent to the quotes API. The order-time
-  // merchant-rate fee guard verifies free-over / price-tier thresholds against
-  // the canonical CATALOG subtotal, so quoting with the negotiated
-  // `checkoutCartTotal` could select a different tier and fail-closed 400 a
-  // legitimate checkout. See `calculateCartCatalogSubtotal`.
-  const checkoutCartCatalogSubtotal = calculateCartCatalogSubtotal(
-    checkoutCart,
-    hasPriceNegotiation
-  );
-
-  const itemSubtotal = calculateCartItemSubtotal(
-    checkoutCart,
-    hasPriceNegotiation
-  );
+    checkoutCartCatalogSubtotal,
+    checkoutCartTotal,
+    itemSubtotal,
+    quoteItemsFingerprint,
+  } = deriveCheckoutCartModel(cart, hasPriceNegotiation);
 
   // Paystack (and its DVA-backed bank transfer) settle NGN only — mirror the
   // PaymentStep gating so a non-NGN checkout never renders rails the

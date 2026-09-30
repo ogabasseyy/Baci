@@ -1,16 +1,73 @@
 'use client';
 
 import { Search } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
-import type { SearchAutocompleteProps } from '@/components/storefront/search-autocomplete';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
+import type { SearchAutocompleteProps } from '@/components/storefront/search-autocomplete';
+import { recordSearchSubmission } from '@/lib/search-submission';
+import { truncateSearchSubmissionQuery } from '@/lib/search-submission';
 import {
-  recordSearchSubmission,
-  SEARCH_SUBMISSION_QUERY_MAX_LENGTH,
-  truncateSearchSubmissionQuery,
-} from '@/lib/search-submission';
+  parseStorefrontSearchQueryParam,
+  STOREFRONT_SEARCH_MAX_QUERY_LENGTH,
+} from '@/lib/storefront-search-params';
+import { MAX_BLOG_SEARCH_QUERY_LENGTH } from '@/lib/storefront-slug-safety';
+
+/**
+ * Maximum query the navbar accepts and submits. Shared with the results
+ * form and the route parser so the persistent input always displays the
+ * full active query: route-synced queries are normalized to this limit
+ * because the input must never display a longer term than Enter would
+ * submit (HTML maxLength does not truncate programmatic assignments).
+ */
+const NAVBAR_SEARCH_MAX_LENGTH = STOREFRONT_SEARCH_MAX_QUERY_LENGTH;
+
+/**
+ * Syncs the persistent navbar input when the active search route's query
+ * changes underneath it (e.g. following a "Did you mean" link): the
+ * shared layout keeps NavbarSearch mounted across that navigation, so
+ * without this the input would keep showing the old term and Enter would
+ * navigate back to the misspelled search. Reads the route inside its own
+ * Suspense boundary so static prerenders never touch useSearchParams.
+ */
+function SearchRouteQuerySync({
+  basePath,
+  onSync,
+}: {
+  basePath: string;
+  onSync: (query: string) => void;
+}) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  // The value mirrors the route parser exactly: repeated or missing `q`
+  // params yield the same empty query the results page renders (instead of
+  // the first raw value), and the result is normalized to the navbar
+  // limit so the displayed term always equals the submitted term. The
+  // route check is an exact match on `${basePath}/search`: a suffix match
+  // would misclassify non-results URLs that also end in `/search` (e.g.
+  // `/products/search`) and erase the persistent input on those pages.
+  const routeQueries =
+    pathname !== null && pathname === `${basePath}/search`
+      ? searchParams.getAll('q')
+      : null;
+  const routeQuery =
+    routeQueries === null
+      ? null
+      : parseStorefrontSearchQueryParam(
+          routeQueries.length === 1 ? (routeQueries[0] ?? '') : undefined
+        ).slice(0, NAVBAR_SEARCH_MAX_LENGTH);
+
+  useEffect(() => {
+    // Runs only when the route query changes, so in-progress edits are
+    // preserved while the route is unchanged; navigation always wins.
+    if (routeQuery !== null) {
+      onSync(routeQuery);
+    }
+  }, [routeQuery, onSync]);
+
+  return null;
+}
 
 type SearchAutocompleteComponent = React.ComponentType<SearchAutocompleteProps>;
 
@@ -50,6 +107,10 @@ export function NavbarSearch({
   const isMountedRef = useRef(true);
 
   useEffect(() => {
+    // Re-arm on every setup: Strict Mode mounts, cleans up, and remounts
+    // in development, and the cleanup below would otherwise leave the
+    // guard permanently tripped so the lazy chunk never swaps in.
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
     };
@@ -60,8 +121,25 @@ export function NavbarSearch({
   }
 
   const pushSearchRoute = (query: string) => {
-    const trimmedQuery = truncateSearchSubmissionQuery(query);
+    // The blog branch keeps its own 100-character limit: the listing
+    // lookup discards everything past it, so submitting the 200-character
+    // product limit would display and encode a query the results ignore.
+    // Truncation is surrogate-safe so an emoji at the boundary cannot
+    // crash encodeURIComponent below.
+    const trimmedQuery = truncateSearchSubmissionQuery(
+      query,
+      isBlogPage ? MAX_BLOG_SEARCH_QUERY_LENGTH : NAVBAR_SEARCH_MAX_LENGTH
+    );
     if (!trimmedQuery) {
+      return;
+    }
+
+    // The results route sanitizes `q` (stripping e.g. "<>()"), so a
+    // non-blank value made entirely of stripped characters would parse to
+    // an empty query there: gate on the same parser so submitting it stays
+    // put instead of navigating to the blank search-start state (which
+    // would then clear the navbar through the route sync).
+    if (!isBlogPage && !parseStorefrontSearchQueryParam(trimmedQuery)) {
       return;
     }
 
@@ -117,15 +195,22 @@ export function NavbarSearch({
     });
   };
 
+  // The route-query sync stays mounted ABOVE the branch selection: when
+  // the lazy autocomplete chunk resolves, React swaps the fallback form
+  // for the autocomplete tree, and a per-branch sync instance would
+  // remount there — its mount effect would overwrite an in-progress edit
+  // with the unchanged route query. One shared instance only ever syncs
+  // on an actual navigation.
+  let searchContent: React.ReactNode;
   if (isBlogPage) {
-    return (
+    searchContent = (
       <form onSubmit={handleSubmit} className="ogabassey-navbar-search">
         <Input
           type="search"
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
           placeholder="Search blog posts..."
-          maxLength={SEARCH_SUBMISSION_QUERY_MAX_LENGTH}
+          maxLength={MAX_BLOG_SEARCH_QUERY_LENGTH}
           aria-label="Search blog posts"
           id="blog-search-input"
           name="search"
@@ -134,49 +219,62 @@ export function NavbarSearch({
         <Search className="ogabassey-navbar-search__icon" aria-hidden="true" />
       </form>
     );
-  }
-
-  if (SearchAutocompleteComponent) {
-    return (
-      <form action={`${basePath}/search`} method="get" onSubmit={handleSubmit}>
-        <SearchAutocompleteComponent
-          searchPathPrefix={basePath}
-          merchantId={merchantId}
+  } else if (SearchAutocompleteComponent) {
+    searchContent = (
+      <SearchAutocompleteComponent
+        merchantId={merchantId}
+        value={searchQuery}
+        onChange={setSearchQuery}
+        onSelectProduct={handleProductSelect}
+        onSubmitSearch={pushSearchRoute}
+        // Mirrors the product branch of pushSearchRoute exactly so
+        // sanitized-empty input (e.g. "<>()") hides the action instead of
+        // advertising a submission the route guard would drop.
+        isSearchSubmittable={(query) =>
+          Boolean(
+            parseStorefrontSearchQueryParam(
+              query.trim().slice(0, NAVBAR_SEARCH_MAX_LENGTH)
+            )
+          )
+        }
+        // Match the shared navbar limit (and the fallback input below)
+        // so the persistent value can never exceed the submitted query.
+        maxLength={NAVBAR_SEARCH_MAX_LENGTH}
+        placeholder="Search products, brands and categories"
+        className={SEARCH_INPUT_CLASS_NAME}
+        autoFocus={shouldAutoFocusAutocomplete}
+      />
+    );
+  } else {
+    searchContent = (
+      <form onSubmit={handleSubmit} className="ogabassey-navbar-search">
+        <Search className="ogabassey-navbar-search__icon" aria-hidden="true" />
+        <Input
+          type="search"
           value={searchQuery}
-          onChange={setSearchQuery}
-          onSelectProduct={handleProductSelect}
+          onChange={(event) => {
+            setSearchQuery(event.target.value);
+            activateAutocomplete(false);
+          }}
+          onFocus={() => activateAutocomplete(true)}
+          onPointerDown={() => activateAutocomplete(false)}
           placeholder="Search products, brands and categories"
-          className={SEARCH_INPUT_CLASS_NAME}
-          autoFocus={shouldAutoFocusAutocomplete}
+          maxLength={NAVBAR_SEARCH_MAX_LENGTH}
+          aria-label="Search products"
+          id="search-input"
+          name="q"
+          className="ogabassey-navbar-search__input"
         />
       </form>
     );
   }
 
   return (
-    <form
-      action={`${basePath}/search`}
-      method="get"
-      onSubmit={handleSubmit}
-      className="ogabassey-navbar-search"
-    >
-      <Search className="ogabassey-navbar-search__icon" aria-hidden="true" />
-      <Input
-        type="search"
-        value={searchQuery}
-        onChange={(event) => {
-          setSearchQuery(event.target.value);
-          activateAutocomplete(false);
-        }}
-        onFocus={() => activateAutocomplete(true)}
-        onPointerDown={() => activateAutocomplete(false)}
-        placeholder="Search products, brands and categories"
-        maxLength={SEARCH_SUBMISSION_QUERY_MAX_LENGTH}
-        aria-label="Search products"
-        id="search-input"
-        name="q"
-        className="ogabassey-navbar-search__input"
-      />
-    </form>
+    <>
+      <Suspense>
+        <SearchRouteQuerySync basePath={basePath} onSync={setSearchQuery} />
+      </Suspense>
+      {searchContent}
+    </>
   );
 }

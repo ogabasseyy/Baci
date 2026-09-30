@@ -20,7 +20,7 @@ describe('search submission validation', () => {
     '',
     '  ',
     ';',
-    'x'.repeat(101),
+    'x'.repeat(201),
   ])('rejects an empty or oversized effective query: %j', (query) => {
     expect(
       searchSubmissionSchema.safeParse({

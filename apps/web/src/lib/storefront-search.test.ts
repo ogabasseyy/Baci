@@ -115,8 +115,15 @@ describe('searchStorefrontProducts', () => {
       productIds: ['prod-1'],
       query: 'iphone',
     });
-    expect(mockAnalyticsInsert).not.toHaveBeenCalled();
-    expect(createPublicClient).not.toHaveBeenCalled();
+    // First-page reads track render analytics by default.
+    expect(mockAnalyticsInsert).toHaveBeenCalledTimes(1);
+    expect(mockAnalyticsInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchant_id: '123e4567-e89b-12d3-a456-426614174000',
+        search_query: 'iphone',
+        results_count: 2,
+      })
+    );
   });
 
   it('throws InvalidMerchantIdError for invalid merchant ids', async () => {
@@ -238,6 +245,7 @@ describe('searchStorefrontProducts', () => {
       merchantId: '123e4567-e89b-12d3-a456-426614174000',
       query: 'iphone',
       limit: 10,
+      trackAnalytics: false,
     });
 
     expect(createPublicClient).not.toHaveBeenCalledWith({
@@ -310,7 +318,8 @@ describe('getStorefrontSearchProducts', () => {
       limit: 20,
     });
 
-    expect(mockAnalyticsInsert).not.toHaveBeenCalled();
+    // First-page assembly tracks its render by default.
+    expect(mockAnalyticsInsert).toHaveBeenCalledTimes(1);
     expect(result.products).toHaveLength(2);
     expect(result.products.map((product) => product.id)).toEqual([
       'product-2',
@@ -400,7 +409,8 @@ describe('getStorefrontSearchProducts', () => {
     expect(result.products.map((product) => product.id)).toEqual(['product-1']);
     expect(result.productIds).toEqual(['product-1']);
     expect(result.count).toBe(1);
-    expect(mockAnalyticsInsert).not.toHaveBeenCalled();
+    // First-page assembly tracks its render by default.
+    expect(mockAnalyticsInsert).toHaveBeenCalledTimes(1);
   });
 
   it('accumulates ranked candidates across pages so condition-family counts are not capped at one page', async () => {

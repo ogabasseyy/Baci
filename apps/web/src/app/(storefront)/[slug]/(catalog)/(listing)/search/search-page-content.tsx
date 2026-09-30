@@ -1,150 +1,108 @@
-import { headers } from 'next/headers';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import type { BreadcrumbList, CollectionPage, WithContext } from 'schema-dts';
 import { JsonLd } from '@/components/seo/json-ld';
-import { SearchSubmissionForm } from '@/components/storefront/search-submission';
+import { StorefrontPagination } from '@/components/storefront/ogabassey/components/StorefrontPagination';
 import { SearchSubmissionLink } from '@/components/storefront/search-submission-link';
-import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { asRoute } from '@/lib/routes';
-import { sanitizeSearchQuery } from '@/lib/sanitize-core';
-import { generateBreadcrumbSchema, getProductUrl } from '@/lib/seo-utils';
-import { buildRequestScopedStoreUrl } from '@/lib/store-url';
-import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
-import { getStorefrontSearchProducts } from '@/lib/storefront-search';
-import { isValidMerchantIdentifier } from '@/lib/validation';
+import { STOREFRONT_PRODUCTS_PER_PAGE } from '@/lib/storefront-pagination';
+import type { StorefrontSearchProductsPage } from '@/lib/storefront-search';
+import { STOREFRONT_SEARCH_MAX_PAGE } from '@/lib/storefront-search-params';
 import { ProductIndexCard } from '../products/product-index-card';
+import { loadSearchPageData } from './search-page-data';
+import { SearchPageErrorPanel } from './search-page-error-panel';
+import { SearchPageForm } from './search-page-form';
+import { buildSearchHref } from './search-page-href';
+import { SearchPageNoResultsPanel } from './search-page-no-results-panel';
+import { getPriceFormatter } from './search-page-price';
+import { buildSearchPageSchemas } from './search-page-schema';
+import { SearchPageStartPanel } from './search-page-start-panel';
+import { buildSearchSubmissionHref } from './search-page-submission-href';
+import { formatSearchSummary } from './search-page-summary';
 
 export interface SearchPageProps {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ q?: string; page?: string }>;
+  searchParams: Promise<{
+    q?: string | string[];
+    page?: string | string[];
+  }>;
 }
 
-const RESULT_COUNT_FORMATTER = new Intl.NumberFormat('en-NG');
-
-const priceFormatterCache = new Map<string, Intl.NumberFormat>();
-
-function getPriceFormatter(currency: string): Intl.NumberFormat {
-  let formatter = priceFormatterCache.get(currency);
-  if (!formatter) {
-    formatter = new Intl.NumberFormat('en-NG', {
-      style: 'currency',
-      currency,
-      maximumFractionDigits: 0,
-    });
-    priceFormatterCache.set(currency, formatter);
-  }
-  return formatter;
-}
-
-function formatResultCount(count: number) {
-  return RESULT_COUNT_FORMATTER.format(count);
-}
-
-function formatSearchSummary({
-  query,
-  totalCount,
-  visibleCount,
-}: {
-  query: string;
-  totalCount: number;
-  visibleCount: number;
-}) {
-  if (!query) {
-    return 'Enter a search term to browse matching products.';
-  }
-
-  if (totalCount === 0) {
-    return `No results found for “${query}”`;
-  }
-
-  if (totalCount > visibleCount) {
-    return `Showing first ${formatResultCount(visibleCount)} of ${formatResultCount(totalCount)} results for “${query}”`;
-  }
-
-  return `${formatResultCount(totalCount)} result${totalCount === 1 ? '' : 's'} for “${query}”`;
-}
+const EMPTY_SEARCH_RESULT: StorefrontSearchProductsPage = {
+  count: 0,
+  didYouMean: null,
+  productIds: [],
+  products: [],
+  query: '',
+};
 
 export async function SearchPageContent({
   params,
   searchParams,
 }: SearchPageProps) {
-  const { slug } = await params;
-  const { q } = await searchParams;
-  const query = sanitizeSearchQuery(q || '');
+  const {
+    merchant,
+    page,
+    pathPrefix,
+    query,
+    redirectHref,
+    searchBasePath,
+    searchFailed,
+    searchResult,
+    storeUrl,
+  } = await loadSearchPageData({ params, searchParams });
 
-  if (!isValidMerchantIdentifier(slug)) {
-    notFound();
+  if (redirectHref) {
+    redirect(asRoute(redirectHref));
   }
 
-  const merchant = await getRequestScopedMerchant(slug);
+  const effectiveResult = searchResult ?? EMPTY_SEARCH_RESULT;
+  // The adapter echoes the sanitized query; fall back to the validated input
+  // when the search failed so the form and error copy keep the submission.
+  const searchQuery = searchResult ? searchResult.query : query;
 
-  if (!merchant) {
-    notFound();
-  }
-
-  const searchResult = query
-    ? await getStorefrontSearchProducts({
-        merchantId: merchant.id,
-        query,
-        limit: 20,
-      })
-    : {
-        count: 0,
-        didYouMean: null,
-        products: [],
-        query: '',
-      };
-  const searchQuery = searchResult.query;
-
-  const headersList = await headers();
-  const pathPrefix = getStorefrontPathPrefix(headersList, merchant);
   const allProductsHref = `${pathPrefix}/products`;
   const contactHref = `${pathPrefix}/contact`;
-  const storeUrl = buildRequestScopedStoreUrl(merchant, headersList);
+  // A did-you-mean follow is a fresh submission, so it keeps the
+  // page-less submission URL (and its render is tracked as one).
+  const didYouMeanHref = effectiveResult.didYouMean
+    ? buildSearchSubmissionHref(searchBasePath, effectiveResult.didYouMean)
+    : null;
   const pageUrl = searchQuery
-    ? `${storeUrl}/search?q=${encodeURIComponent(searchQuery)}`
+    ? `${storeUrl}/search?q=${encodeURIComponent(searchQuery)}${page > 1 ? `&page=${page}` : ''}`
     : `${storeUrl}/search`;
   const merchantCurrency = resolveMerchantCurrencyConfig(merchant).code;
   const priceFormatter = getPriceFormatter(merchantCurrency);
-  const visibleCount = searchResult.products.length;
-  const breadcrumbSchema = generateBreadcrumbSchema([
-    { name: merchant.business_name, url: storeUrl },
-    { name: 'Search Results', url: pageUrl },
-  ]);
-  const searchResultsSchema = {
-    '@context': 'https://schema.org',
-    '@type': 'CollectionPage',
-    name: searchQuery
-      ? `Search results for ${searchQuery}`
-      : `Search results | ${merchant.business_name}`,
-    url: pageUrl,
-    mainEntity: {
-      '@type': 'ItemList',
-      itemListElement: searchResult.products.map((product, index) => {
-        const productUrl = `${storeUrl}${getProductUrl(product)}`;
+  const visibleCount = searchFailed ? 0 : effectiveResult.products.length;
+  // Pagination never advertises pages the bounded offset cannot serve.
+  const totalPages =
+    searchFailed || effectiveResult.count <= 0
+      ? 0
+      : Math.min(
+          Math.ceil(effectiveResult.count / STOREFRONT_PRODUCTS_PER_PAGE),
+          STOREFRONT_SEARCH_MAX_PAGE
+        );
+  const { breadcrumbSchema, searchResultsSchema } = buildSearchPageSchemas({
+    businessName: merchant.business_name,
+    merchantCurrency,
+    page,
+    pageUrl,
+    products: effectiveResult.products,
+    searchFailed,
+    searchQuery,
+    storeUrl,
+    visibleCount,
+  });
 
-        return {
-          '@type': 'ListItem',
-          position: index + 1,
-          item: {
-            '@type': 'Product',
-            name: product.name,
-            url: productUrl || undefined,
-            image: product.imageLarge || product.image || undefined,
-            offers: {
-              '@type': 'Offer',
-              price: product.price,
-              priceCurrency: merchantCurrency,
-              url: productUrl || undefined,
-            },
-          },
-        };
-      }),
-    },
-    numberOfItems: searchResult.products.length,
-  };
+  const summaryText = searchFailed
+    ? `We couldn't load results for “${query}”.`
+    : formatSearchSummary({
+        query: searchQuery,
+        totalCount: effectiveResult.count,
+        visibleCount,
+        page,
+      });
 
   return (
     <>
@@ -175,82 +133,69 @@ export async function SearchPageContent({
               Search Results
             </h1>
             <p className="max-w-2xl text-sm text-store-background-text/60 md:text-base">
-              {formatSearchSummary({
-                query,
-                totalCount: searchResult.count,
-                visibleCount,
-              })}
+              {summaryText}
             </p>
           </div>
 
-          <SearchSubmissionForm
-            key={searchQuery}
+          {/* Keyed by route query so client-side navigation remounts the
+          form, resetting the uncontrolled input and any validation
+          error for the new results. */}
+          <SearchPageForm
+            key={query}
+            action={searchBasePath}
+            defaultQuery={query}
             pathPrefix={pathPrefix}
-            query={searchQuery}
           />
 
-          {searchResult.didYouMean && (
+          {!searchFailed && effectiveResult.didYouMean && didYouMeanHref && (
             <p className="mt-4 text-sm text-store-background-text/55">
               Did you mean{' '}
               <SearchSubmissionLink
                 pathPrefix={pathPrefix}
-                query={searchResult.didYouMean}
+                query={effectiveResult.didYouMean}
                 source="did-you-mean"
                 className="font-medium text-store-primary underline-offset-4 hover:underline"
               >
-                {searchResult.didYouMean}
+                {effectiveResult.didYouMean}
               </SearchSubmissionLink>
               ?
             </p>
           )}
 
-          {searchQuery ? (
-            searchResult.products.length > 0 ? (
-              <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
-                {searchResult.products.map((product) => (
-                  <ProductIndexCard
-                    key={product.id}
-                    formattedPrice={priceFormatter.format(product.price)}
-                    pathPrefix={pathPrefix}
-                    product={product}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="mt-10 rounded-3xl border border-store-background-text/10 bg-store-background px-6 py-16 text-center shadow-sm">
-                <h2 className="text-xl font-semibold text-store-background-text">
-                  No products found
-                </h2>
-                <p className="mt-2 text-sm text-store-background-text/55">
-                  We could not find any products matching “{searchQuery}”.
-                </p>
-                <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-                  <Link
-                    href={asRoute(allProductsHref)}
-                    prefetch={false}
-                    className="rounded-md bg-store-primary px-4 py-2 text-sm font-semibold text-store-primary-text transition hover:opacity-90"
-                  >
-                    View all products
-                  </Link>
-                  <Link
-                    href={asRoute(contactHref)}
-                    prefetch={false}
-                    className="rounded-md border border-store-background-text/15 px-4 py-2 text-sm font-semibold text-store-background-text transition hover:border-store-primary hover:text-store-primary"
-                  >
-                    Contact support
-                  </Link>
+          {searchFailed ? (
+            <SearchPageErrorPanel
+              allProductsHref={allProductsHref}
+              query={query}
+            />
+          ) : searchQuery ? (
+            effectiveResult.products.length > 0 ? (
+              <>
+                <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+                  {effectiveResult.products.map((product) => (
+                    <ProductIndexCard
+                      key={product.id}
+                      formattedPrice={priceFormatter.format(product.price)}
+                      pathPrefix={pathPrefix}
+                      product={product}
+                    />
+                  ))}
                 </div>
-              </div>
+                <StorefrontPagination
+                  ariaLabel="Search results pagination"
+                  basePath={buildSearchHref(searchBasePath, searchQuery, 1)}
+                  currentPage={page}
+                  totalPages={totalPages}
+                />
+              </>
+            ) : (
+              <SearchPageNoResultsPanel
+                allProductsHref={allProductsHref}
+                contactHref={contactHref}
+                searchQuery={searchQuery}
+              />
             )
           ) : (
-            <div className="mt-10 rounded-3xl border border-store-background-text/10 bg-store-background px-6 py-16 text-center shadow-sm">
-              <h2 className="text-xl font-semibold text-store-background-text">
-                Start a search
-              </h2>
-              <p className="mt-2 text-sm text-store-background-text/55">
-                Enter a product name or keyword to see matching items.
-              </p>
-            </div>
+            <SearchPageStartPanel />
           )}
         </div>
       </div>

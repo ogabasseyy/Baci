@@ -131,6 +131,9 @@ export async function POST(request: NextRequest) {
       query: parsed.data.query,
       limit: 1,
       includeDidYouMean: false,
+      // This endpoint writes its own explicit-submission row below; never
+      // emit the render-analytics row for the same lookup.
+      trackAnalytics: false,
     });
     const { error } = await supabase.from('search_analytics').insert({
       merchant_id: merchant.id,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Keyboard } from 'react-native';
 import * as Reanimated from 'react-native-reanimated';
 import { getHomeContentBottomPadding } from '@/constants/layout';
 import {
@@ -10,6 +11,8 @@ import {
   mockInvalidateQueries,
   mockRecordPerformanceSurface,
   mockResetQueries,
+  mockRouterPush,
+  mockSearchDropdown,
   mockUseIsFocused,
   setupHomeScreenTestState,
 } from '../../../test-support/(tabs)/index.test-utils';
@@ -125,6 +128,84 @@ describe('HomeScreen', () => {
     scrollHomeFeed(120);
 
     expect(withTimingSpy.mock.calls.map(([target]) => target)).toEqual([0, 1]);
+  });
+
+  it('submits the header query to the search screen and closes the dropdown', () => {
+    const dismissSpy = jest.spyOn(Keyboard, 'dismiss');
+    render(<HomeScreen />);
+
+    fireEvent.press(screen.getByTestId('mock-header-search'));
+    fireEvent.press(screen.getByTestId('mock-header-query-type'));
+    fireEvent.press(screen.getByTestId('mock-header-submit'));
+
+    expect(mockRouterPush).toHaveBeenCalledTimes(1);
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/search',
+      params: { q: 'iphone' },
+    });
+    expect(mockSearchDropdown.mock.calls.at(-1)?.[0]).toMatchObject({
+      isVisible: false,
+    });
+    expect(dismissSpy).toHaveBeenCalled();
+    dismissSpy.mockRestore();
+  });
+
+  it('routes the dropdown "See all results" action to the search screen', () => {
+    render(<HomeScreen />);
+
+    fireEvent.press(screen.getByTestId('mock-header-search'));
+    fireEvent.press(screen.getByTestId('mock-header-query-type'));
+
+    const onSeeAllResults =
+      mockSearchDropdown.mock.calls.at(-1)?.[0]?.onSeeAllResults;
+    expect(onSeeAllResults).toEqual(expect.any(Function));
+
+    act(() => {
+      onSeeAllResults?.('galaxy s24');
+    });
+
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/search',
+      params: { q: 'galaxy s24' },
+    });
+  });
+
+  it('keeps short queries in the input with a minimum-length hint', () => {
+    render(<HomeScreen />);
+
+    fireEvent.press(screen.getByTestId('mock-header-search'));
+    fireEvent.press(screen.getByTestId('mock-header-query-type-short'));
+    fireEvent.press(screen.getByTestId('mock-header-submit'));
+
+    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(screen.getByTestId('mock-header-query')).toHaveTextContent('i');
+    expect(mockSearchDropdown.mock.calls.at(-1)?.[0]).toMatchObject({
+      isVisible: true,
+      showMinLengthHint: true,
+    });
+  });
+
+  it('prevents a second search push while navigation is in flight', () => {
+    const { rerender } = render(<HomeScreen />);
+
+    fireEvent.press(screen.getByTestId('mock-header-search'));
+    fireEvent.press(screen.getByTestId('mock-header-query-type'));
+    fireEvent.press(screen.getByTestId('mock-header-submit'));
+    fireEvent.press(screen.getByTestId('mock-header-submit'));
+
+    expect(mockRouterPush).toHaveBeenCalledTimes(1);
+
+    // Returning focus to home re-arms submission.
+    mockUseIsFocused.mockReturnValue(false);
+    rerender(<HomeScreen />);
+    mockUseIsFocused.mockReturnValue(true);
+    rerender(<HomeScreen />);
+
+    fireEvent.press(screen.getByTestId('mock-header-search'));
+    fireEvent.press(screen.getByTestId('mock-header-query-type'));
+    fireEvent.press(screen.getByTestId('mock-header-submit'));
+
+    expect(mockRouterPush).toHaveBeenCalledTimes(2);
   });
 
   it('resets the products query and invalidates categories on pull-to-refresh', async () => {

@@ -12,14 +12,14 @@ describe('recordSearchSubmission', () => {
   });
 
   it('bounds and trims the current query before sending navigation-safe telemetry', () => {
-    recordSearchSubmission(`  ${'a'.repeat(101)}  `, '/ogabassey', 'navbar');
+    recordSearchSubmission(`  ${'a'.repeat(201)}  `, '/ogabassey', 'navbar');
     expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
       '/api/search/submissions',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query: 'a'.repeat(100),
+          query: 'a'.repeat(200),
           pathPrefix: '/ogabassey',
           source: 'navbar',
         }),
@@ -29,11 +29,11 @@ describe('recordSearchSubmission', () => {
   });
 
   it('drops a trailing lone surrogate instead of splitting an astral character', () => {
-    expect(truncateSearchSubmissionQuery(`${'a'.repeat(99)}😀`)).toBe(
-      'a'.repeat(99)
+    expect(truncateSearchSubmissionQuery(`${'a'.repeat(199)}😀`)).toBe(
+      'a'.repeat(199)
     );
-    expect(truncateSearchSubmissionQuery(`  ${'b'.repeat(100)}  `)).toBe(
-      'b'.repeat(100)
+    expect(truncateSearchSubmissionQuery(`  ${'b'.repeat(200)}  `)).toBe(
+      'b'.repeat(200)
     );
   });
 

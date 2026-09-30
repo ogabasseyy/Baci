@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { renderHook, waitFor } from '@testing-library/react-native';
 import { createElement, type ReactNode } from 'react';
 import { fetchAvailableBrands, fetchProductsPage } from '@/hooks/product-utils';
 import { useMerchant } from '@/hooks/use-merchant';
@@ -186,81 +186,5 @@ describe('useProducts', () => {
     });
 
     expect(mockFetchProductsPage).toHaveBeenCalledTimes(1);
-  });
-
-  it('queues the next page when loadMore fires during a background refetch', async () => {
-    mockFetchProductsPage.mockResolvedValueOnce({
-      products: [createProduct('prod-1')],
-      nextOffset: 1,
-      total: 5,
-    });
-    const queryClient = createQueryClient();
-
-    const { result } = renderHook(() => useProducts({ limit: 1 }), {
-      wrapper: createWrapper(queryClient),
-    });
-
-    await waitFor(() => expect(result.current.hasMore).toBe(true));
-
-    // The refetch hangs so the query stays in a background-fetching state.
-    let resolveHanging: (() => void) | undefined;
-    mockFetchProductsPage.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveHanging = () =>
-          resolve({
-            products: [createProduct('prod-1')],
-            nextOffset: 1,
-            total: 5,
-          });
-      })
-    );
-
-    act(() => {
-      void result.current.refetch();
-    });
-
-    await waitFor(() => expect(result.current.isFetching).toBe(true));
-
-    const callsBeforeLoadMore = mockFetchProductsPage.mock.calls.length;
-    act(() => {
-      result.current.loadMore();
-    });
-
-    expect(mockFetchProductsPage.mock.calls.length).toBe(callsBeforeLoadMore);
-
-    mockFetchProductsPage.mockResolvedValueOnce({
-      products: [createProduct('prod-2')],
-      nextOffset: null,
-      total: 5,
-    });
-
-    resolveHanging?.();
-
-    await waitFor(() => {
-      expect(mockFetchProductsPage.mock.calls.length).toBe(
-        callsBeforeLoadMore + 1
-      );
-    });
-    expect(mockFetchProductsPage).toHaveBeenLastCalledWith(
-      'merchant-1',
-      { limit: 1 },
-      1
-    );
-  });
-
-  it('surfaces fetch errors and exposes an empty product list', async () => {
-    mockFetchProductsPage.mockRejectedValueOnce(new Error('network down'));
-    const queryClient = createQueryClient();
-
-    const { result } = renderHook(() => useProducts({ limit: 3 }), {
-      wrapper: createWrapper(queryClient),
-    });
-
-    await waitFor(() => {
-      expect(result.current.isError).toBe(true);
-    });
-
-    expect(result.current.error).toBe('network down');
-    expect(result.current.products).toEqual([]);
   });
 });

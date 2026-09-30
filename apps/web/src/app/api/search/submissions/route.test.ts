@@ -186,7 +186,7 @@ describe('explicit search submissions', () => {
   it.each([
     '{',
     { query: ' ', pathPrefix: '', source: 'navbar' },
-    { query: 'x'.repeat(101), pathPrefix: '', source: 'navbar' },
+    { query: 'x'.repeat(201), pathPrefix: '', source: 'navbar' },
     { query: 'phone', pathPrefix: '//evil.test', source: 'navbar' },
     { query: 'phone', pathPrefix: '', source: 'render' },
     { query: 'phone', pathPrefix: '', source: 'navbar', resultsCount: 999 },

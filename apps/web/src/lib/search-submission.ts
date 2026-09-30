@@ -1,9 +1,10 @@
 /**
- * Single source of truth for the tracked/navigated query length. The results
- * form, navbar, see-all links, and this helper must all agree so the endpoint
- * derives a result count for the exact query the user searched.
+ * Single source of truth for the tracked/navigated query length. Matches the
+ * entry-point limit (STOREFRONT_SEARCH_MAX_QUERY_LENGTH) so telemetry always
+ * covers the exact query the user searched — a lower cap here would silently
+ * record a prefix of long navigated queries.
  */
-export const SEARCH_SUBMISSION_QUERY_MAX_LENGTH = 100;
+export const SEARCH_SUBMISSION_QUERY_MAX_LENGTH = 200;
 
 /**
  * Allowed submission sources, defined once. The Zod schema and every client
@@ -33,10 +34,13 @@ export type SearchSubmissionLinkSource =
  * pairs: a slice boundary inside an emoji/astral character would leave an
  * unpaired surrogate and crash encodeURIComponent during render.
  */
-export function truncateSearchSubmissionQuery(query: string): string {
+export function truncateSearchSubmissionQuery(
+  query: string,
+  maxLength: number = SEARCH_SUBMISSION_QUERY_MAX_LENGTH
+): string {
   return query
     .trim()
-    .slice(0, SEARCH_SUBMISSION_QUERY_MAX_LENGTH)
+    .slice(0, maxLength)
     .replace(/[\uD800-\uDBFF]$/, '');
 }
 

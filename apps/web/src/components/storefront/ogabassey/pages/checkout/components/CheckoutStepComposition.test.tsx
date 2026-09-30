@@ -6,11 +6,9 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { captureClientEvent } from '@/lib/posthog/capture-client-event';
-import type { useCheckoutDeliverySession } from '../hooks/use-checkout-delivery-session';
-import type { useCheckoutPaymentSession } from '../hooks/use-checkout-payment-session';
 import type { CheckoutDeliveryStep } from './CheckoutDeliveryStep';
-import type { CheckoutStepCompositionSession } from './CheckoutStepComposition';
 import { CheckoutStepComposition } from './CheckoutStepComposition';
+import { createCheckoutStepSession } from './CheckoutStepComposition.fixtures';
 import type { ContactStep } from './ContactStep';
 import type { PaymentStep } from './PaymentStep';
 
@@ -73,7 +71,10 @@ vi.mock('./PaymentStep', () => ({
     redvaultOrderReady,
     setCurrentStep,
   }: ComponentProps<typeof PaymentStep>) => (
-    <section aria-label="Payment">
+    <section
+      aria-current={currentStep === 'payment' ? 'step' : undefined}
+      aria-label="Payment"
+    >
       Current checkout step: {currentStep}
       <span>Newsletter opt-in: {newsletterOptIn ? 'on' : 'off'}</span>
       <span>
@@ -93,110 +94,20 @@ vi.mock('./PaymentStep', () => ({
   ),
 }));
 
-function createSession(isDeliveryValid = false) {
-  const setCurrentStep = vi.fn();
-  const setCompletedSteps = vi.fn();
-  const setCreateAccount = vi.fn();
-  const setPassword = vi.fn();
-  const setNewsletterOptIn = vi.fn();
-  const session = {
-    flow: {
-      currentStep: 'contact',
-      completedSteps: { contact: true, delivery: false },
-      focusOnActivate: false,
-      signedIn: false,
-      setCurrentStep,
-      setCompletedSteps,
-    },
-    onSignIn: vi.fn(),
-    contact: {
-      values: {
-        firstName: 'Ada',
-        lastName: 'Lovelace',
-        customerEmail: 'ada@example.test',
-        customerPhone: '+2348000000000',
-      },
-      onChange: vi.fn(),
-      onComplete: vi.fn(),
-      account: {
-        createAccount: false,
-        password: '',
-        setCreateAccount,
-        setPassword,
-      },
-    },
-    delivery: {
-      session: {
-        address: {
-          addresses: [],
-          selectedId: null,
-          isNewMode: true,
-          setIsNewMode: vi.fn(),
-          isNewDeliveryAddressReady: true,
-          handlers: {
-            onSelectAddress: vi.fn(),
-            onStreetChange: vi.fn(),
-            onSelectPlace: vi.fn(),
-          },
-        },
-        method: { selected: 'door' },
-        options: null,
-        validation: { isValid: isDeliveryValid },
-      } as unknown as ReturnType<typeof useCheckoutDeliverySession>,
-      address: {
-        street: '1 Main Street',
-        city: 'Lagos',
-        state: 'Lagos',
-        merchantCountry: 'NG',
-        isHydrated: true,
-      },
-    },
-    payment: {
-      session: {
-        tab: 'full',
-        method: 'paystack',
-        setTab: vi.fn(),
-        selectMethod: vi.fn(),
-        payForMe: {
-          isValid: false,
-          details: { name: '', contact: '', note: '' },
-          setDetails: vi.fn(),
-        },
-        wallet: { remainingAmount: 1_000 },
-        total: 1_000,
-        redvault: {
-          status: 'idle',
-          summary: null,
-        },
-      } as unknown as ReturnType<typeof useCheckoutPaymentSession>,
-      isProcessing: false,
-      isPayForMeValid: false,
-      isInitializingDva: false,
-      newsletterOptIn: false,
-      setNewsletterOptIn,
-      handlePlaceOrder: vi.fn(),
-      merchant: null,
-      user: null,
-      currency: 'NGN',
-      redvaultAvailable: true,
-      redvaultOrderReady: false,
-    },
-  } satisfies CheckoutStepCompositionSession;
-
-  return {
-    session,
-    setCurrentStep,
-    setCompletedSteps,
-    setCreateAccount,
-    setPassword,
-    setNewsletterOptIn,
-  };
+function expectCurrentStep(name: string) {
+  const currentSteps = screen
+    .getAllByRole('region')
+    .filter((region) => region.getAttribute('aria-current') === 'step');
+  expect(currentSteps).toHaveLength(1);
+  expect(currentSteps[0]).toHaveAccessibleName(name);
 }
 
 describe('CheckoutStepComposition', () => {
   it('composes ordered steps, sign-in, account, newsletter, and Redvault session state', () => {
-    const model = createSession();
-    render(<CheckoutStepComposition session={model.session} />);
+    const model = createCheckoutStepSession();
+    const { rerender } = render(
+      <CheckoutStepComposition session={model.session} />
+    );
 
     expect(
       screen.getByRole('heading', { name: 'Already have an account?' })
@@ -229,10 +140,24 @@ describe('CheckoutStepComposition', () => {
     expect(model.setNewsletterOptIn).toHaveBeenCalledWith(true);
     fireEvent.click(screen.getByRole('button', { name: 'Return to delivery' }));
     expect(model.setCurrentStep).toHaveBeenCalledWith('delivery');
+
+    const incompleteContact = createCheckoutStepSession({
+      contactComplete: false,
+    });
+    rerender(<CheckoutStepComposition session={incompleteContact.session} />);
+    expect(
+      screen.getByRole('button', { name: 'Delivery Method' })
+    ).toBeDisabled();
+
+    const signedIn = createCheckoutStepSession({ signedIn: true });
+    rerender(<CheckoutStepComposition session={signedIn.session} />);
+    expect(
+      screen.queryByRole('heading', { name: 'Already have an account?' })
+    ).not.toBeInTheDocument();
   });
 
   it('captures delivery completion and advances only after validation passes', () => {
-    const model = createSession();
+    const model = createCheckoutStepSession();
     const { rerender } = render(
       <CheckoutStepComposition session={model.session} />
     );
@@ -241,7 +166,7 @@ describe('CheckoutStepComposition', () => {
     });
     expect(continueButton).toBeDisabled();
 
-    const readyModel = createSession(true);
+    const readyModel = createCheckoutStepSession({ isDeliveryValid: true });
     rerender(<CheckoutStepComposition session={readyModel.session} />);
     fireEvent.click(
       screen.getByRole('button', { name: 'Continue to Payment' })
@@ -262,5 +187,27 @@ describe('CheckoutStepComposition', () => {
       delivery: true,
     });
     expect(readyModel.setCurrentStep).toHaveBeenCalledWith('payment');
+  });
+
+  it('marks only the selected checkout step as current when the session changes', () => {
+    const { rerender } = render(
+      <CheckoutStepComposition session={createCheckoutStepSession().session} />
+    );
+
+    expectCurrentStep('Contact details');
+
+    rerender(
+      <CheckoutStepComposition
+        session={createCheckoutStepSession({ currentStep: 'delivery' }).session}
+      />
+    );
+    expectCurrentStep('Delivery details');
+
+    rerender(
+      <CheckoutStepComposition
+        session={createCheckoutStepSession({ currentStep: 'payment' }).session}
+      />
+    );
+    expectCurrentStep('Payment');
   });
 });

@@ -17,8 +17,33 @@ import { PaymentStep } from './PaymentStep';
 type CheckoutStepName = ComponentProps<typeof PaymentStep>['currentStep'];
 type CompletedSteps = ComponentProps<typeof PaymentStep>['completedSteps'];
 type ContactValues = ComponentProps<typeof ContactStep>['values'];
-type DeliverySession = ReturnType<typeof useCheckoutDeliverySession>;
-type PaymentSession = ReturnType<typeof useCheckoutPaymentSession>;
+type FullDeliverySession = ReturnType<typeof useCheckoutDeliverySession>;
+type DeliverySession = Pick<FullDeliverySession, 'options'> & {
+  address: Pick<
+    FullDeliverySession['address'],
+    | 'addresses'
+    | 'isNewDeliveryAddressReady'
+    | 'isNewMode'
+    | 'selectedId'
+    | 'setIsNewMode'
+  > & {
+    handlers: Pick<
+      FullDeliverySession['address']['handlers'],
+      'onSelectAddress' | 'onSelectPlace' | 'onStreetChange'
+    >;
+  };
+  method: Pick<FullDeliverySession['method'], 'selected'>;
+  validation: Pick<FullDeliverySession['validation'], 'isValid'>;
+};
+type FullPaymentSession = ReturnType<typeof useCheckoutPaymentSession>;
+type PaymentSession = Pick<
+  FullPaymentSession,
+  'method' | 'selectMethod' | 'setTab' | 'tab' | 'total'
+> & {
+  payForMe: Pick<FullPaymentSession['payForMe'], 'details' | 'setDetails'>;
+  redvault: Pick<FullPaymentSession['redvault'], 'status' | 'summary'>;
+  wallet: Pick<FullPaymentSession['wallet'], 'remainingAmount'>;
+};
 type CheckoutFlowSetters = Pick<
   ReturnType<typeof useCheckoutStepState>,
   'setCurrentStep' | 'setCompletedSteps'

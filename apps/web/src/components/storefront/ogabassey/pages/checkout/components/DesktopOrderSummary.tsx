@@ -12,7 +12,7 @@ export type CheckoutItem =
   | ({ kind: 'cart' } & CartItem)
   | ({ kind: 'resumed' } & ResumedOrder['items'][number]);
 
-interface DesktopOrderSummaryProps {
+export interface DesktopOrderSummaryProps {
   displayItems: CheckoutItem[];
   formatCurrencyAuto: (amount: number) => string;
   summarySubtotal: number;

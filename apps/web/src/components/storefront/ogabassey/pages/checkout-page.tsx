@@ -74,12 +74,11 @@ import {
 } from './checkout/hooks/use-resumed-checkout-start-funnel';
 import { deriveCheckoutDisplayModel } from './checkout/derive-checkout-display-model';
 import { deriveCheckoutCartModel } from './checkout/derive-checkout-cart-model';
+import { deriveCheckoutOrderSummaryPresentation } from './checkout/derive-checkout-order-summary-presentation';
 import { useCheckoutFinancialSession } from './checkout/hooks/use-checkout-financial-session';
 import { readCheckoutAttemptGeneration } from './checkout/checkout-attempt-generation';
 import { CheckoutResumeStatus } from './checkout/components/CheckoutResumeStatus';
-import {
-  DesktopOrderSummary,
-} from './checkout/components/DesktopOrderSummary';
+import { DesktopOrderSummary } from './checkout/components/DesktopOrderSummary';
 
 
 /**
@@ -298,21 +297,20 @@ export const CheckoutPage: React.FC = () => {
       getHref,
     });
 
-  const {
-    displayItems,
-    effectiveCheckoutCartTotal,
-    effectiveItemSubtotal,
-    summarySubtotal,
-    hasCheckoutCartItems,
-    mobileSummaryCart,
-    summaryOrder,
-  } = deriveCheckoutDisplayModel({
+  const checkoutDisplay = deriveCheckoutDisplayModel({
     checkoutCart,
     checkoutCartTotal,
     currencyCode,
     itemSubtotal,
     resumedOrder,
   });
+  const {
+    displayItems,
+    effectiveCheckoutCartTotal,
+    effectiveItemSubtotal,
+    hasCheckoutCartItems,
+    summaryOrder,
+  } = checkoutDisplay;
 
   // Set once an order is created for this attempt: post-creation rerenders
   // (pending-order persist, widget state) must not re-emit checkout_started
@@ -563,6 +561,38 @@ export const CheckoutPage: React.FC = () => {
   });
 
   const isPayForMeValid = paymentSession.payForMe.isValid;
+  const orderSummaryPresentation = deriveCheckoutOrderSummaryPresentation({
+    display: checkoutDisplay,
+    amounts: summaryAmounts,
+    formatCurrencyAuto,
+    paymentMethod,
+    selectedQuoteId,
+    wallet: {
+      currencySupported: paymentSession.wallet.currencySupported,
+      redemptionAllowed: paymentSession.wallet.redemptionAllowed,
+      loading: paymentSession.wallet.loading,
+      balance: paymentSession.wallet.balance,
+      payWithWallet: paymentSession.wallet.payWithWallet,
+      setPayWithWallet: paymentSession.wallet.setPayWithWallet,
+      amountUsed: walletAmountUsed,
+      remainingAmount,
+      checkoutPayWithWallet: paymentSession.checkoutValues.payWithWallet,
+    },
+    hasUser: Boolean(user),
+    currencySymbol,
+    redvaultSummary: paymentSession.redvault.summary,
+    newsletterOptIn,
+    setNewsletterOptIn,
+    handlePlaceOrder,
+    isProcessing,
+    isPayForMeValid,
+    merchantId: merchant?.id || '',
+    merchantCountry: merchant?.country ?? 'NG',
+    payoutCurrency: merchant?.payout_currency ?? null,
+    productIds: checkoutCart.map((item) => item.id),
+    resumeOrderId,
+    hasResumedOrder: Boolean(resumedOrder),
+  });
 
   // Loading state (Initial fetch OR waiting for auto-trigger)
   // This prevents the form from flashing briefly before the payment widget opens
@@ -632,31 +662,21 @@ export const CheckoutPage: React.FC = () => {
 
         {/* MOBILE ORDER SUMMARY (Collapsible) */}
         {/* MOBILE ORDER SUMMARY (Collapsible) */}
-        {paymentMethod !== 'uba_redvault' && <MobileOrderSummary
-          cart={mobileSummaryCart}
-          cartTotal={summarySubtotal}
-          deliveryCost={summaryAmounts.summaryDeliveryCost}
-          taxAmount={summaryAmounts.summaryTaxAmount}
-          discountAmount={summaryAmounts.summaryDiscountAmount}
-          deliveryMethod={summaryAmounts.summaryDeliveryMethod}
-          giftWrappingCost={summaryAmounts.summaryGiftWrappingCost}
-          walletBalance={paymentSession.wallet.balance}
-          payWithWallet={paymentSession.checkoutValues.payWithWallet}
-          walletAmountUsed={walletAmountUsed}
-          remainingAmount={remainingAmount}
-        />}
+        {orderSummaryPresentation.showMobile && (
+          <MobileOrderSummary {...orderSummaryPresentation.mobile} />
+        )}
 
         {/* Resumed-order-only checkout uses its persisted total and skips order
             creation, so local discounts must not change its displayed due. An
             active cart remains the pricing source when both are present. */}
-        {(hasCheckoutCartItems || (!resumeOrderId && !resumedOrder)) && (
+        {orderSummaryPresentation.discount.visible && (
           <div className="mt-4">
             <DiscountCodeInput
-              merchantId={merchant?.id || ''}
-              cartTotal={effectiveCheckoutCartTotal}
-              currencyCountryCode={merchant?.country ?? 'NG'}
-              payoutCurrency={merchant?.payout_currency ?? null}
-              productIds={checkoutCart.map((item) => item.id)}
+              merchantId={orderSummaryPresentation.discount.merchantId}
+              cartTotal={orderSummaryPresentation.discount.cartTotal}
+              currencyCountryCode={orderSummaryPresentation.discount.currencyCountryCode}
+              payoutCurrency={orderSummaryPresentation.discount.payoutCurrency}
+              productIds={orderSummaryPresentation.discount.productIds}
               appliedDiscount={paymentSession.discount.applied}
               onApply={paymentSession.discount.setApplied}
               onRemove={() => paymentSession.discount.setApplied(null)}
@@ -755,36 +775,7 @@ export const CheckoutPage: React.FC = () => {
             }}
           />
 
-          <DesktopOrderSummary
-            displayItems={displayItems}
-            formatCurrencyAuto={formatCurrencyAuto}
-            summarySubtotal={summarySubtotal}
-            orderTotals={summaryAmounts.summaryOrderTotals}
-            taxLabel={summaryAmounts.summaryTaxLabel}
-            deliveryCost={summaryAmounts.summaryDeliveryCost}
-            deliveryMethod={summaryAmounts.summaryDeliveryMethod}
-            discountAmount={summaryAmounts.summaryDiscountAmount}
-            selectedQuoteId={selectedQuoteId}
-            giftWrappingCost={summaryAmounts.summaryGiftWrappingCost}
-            paymentMethod={paymentMethod}
-            walletCurrencySupported={paymentSession.wallet.currencySupported}
-            walletRedemptionAllowed={paymentSession.wallet.redemptionAllowed}
-            walletLoading={paymentSession.wallet.loading}
-            walletBalance={paymentSession.wallet.balance}
-            hasUser={Boolean(user)}
-            currencySymbol={currencySymbol}
-            payWithWallet={paymentSession.wallet.payWithWallet}
-            setPayWithWallet={paymentSession.wallet.setPayWithWallet}
-            walletAmountUsed={walletAmountUsed}
-            remainingAmount={remainingAmount}
-            checkoutPayWithWallet={paymentSession.checkoutValues.payWithWallet}
-            redvaultSummary={paymentSession.redvault.summary}
-            newsletterOptIn={newsletterOptIn}
-            setNewsletterOptIn={setNewsletterOptIn}
-            handlePlaceOrder={handlePlaceOrder}
-            isProcessing={isProcessing}
-            isPayForMeValid={isPayForMeValid}
-          />
+          <DesktopOrderSummary {...orderSummaryPresentation.desktop} />
         </div>
       </div>
 

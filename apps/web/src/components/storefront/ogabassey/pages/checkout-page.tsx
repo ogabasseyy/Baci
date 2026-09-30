@@ -15,7 +15,7 @@ import {
   buildCheckoutFunnelProperties,
   getCheckoutPaymentIntent,
 } from '@baci/shared/contracts';
-import { CheckoutPaymentOverlays } from './checkout/components/CheckoutPaymentOverlays';
+import { CheckoutPaymentSessionOverlays } from './checkout/components/CheckoutPaymentSessionOverlays';
 import { CheckoutHeader } from './checkout/components/CheckoutHeader';
 import { CheckoutPageHeading } from './checkout/components/CheckoutPageHeading';
 import { CheckoutStepComposition } from './checkout/components/CheckoutStepComposition';
@@ -274,20 +274,10 @@ export const CheckoutPage: React.FC = () => {
     isOrderInFlightRef,
   });
   const {
-    cryptoPaymentData,
     setCryptoPaymentData,
-    isVerifyingCrypto,
-    cryptoVerificationStatus,
-    isInitializingCrypto,
-    initializeCryptoPayment,
-    verifyCryptoPayment,
-    dismissCryptoModal,
     pendingCryptoOrder,
     setPendingCryptoOrder,
-    showCryptoSelector,
     setShowCryptoSelector,
-    selectedCryptoChain,
-    selectedCryptoCurrency,
   } = crypto;
   const { resumedOrder, isLoadingResumedOrder, resumeOrderError } =
     useCheckoutResumeLifecycle({
@@ -624,47 +614,17 @@ export const CheckoutPage: React.FC = () => {
         onSuccess={() => setIsAuthModalOpen(false)}
       />}
 
-      <CheckoutPaymentOverlays
-        cryptoSelector={showCryptoSelector ? {
-          selectedCryptoCurrency,
-          selectedCryptoChain,
-          supportedChains: crypto.supportedChains,
-          isInitializingCrypto,
-          onCurrencyChange: crypto.changeCurrency,
-          onChainChange: crypto.changeChain,
-          onInitialize: initializeCryptoPayment,
-          onClose: crypto.closeSelector,
-        } : undefined}
-        cryptoPayment={cryptoPaymentData ? {
-          data: cryptoPaymentData,
-          verificationStatus: cryptoVerificationStatus,
-          isVerifying: isVerifyingCrypto,
-          onVerify: verifyCryptoPayment,
-          onClose: dismissCryptoModal,
-        } : undefined}
-        walletTransfer={{
-          consent: walletFundedTransfer.consentRequested ? {
-            merchantName: merchant?.business_name || 'This store',
-            onAccept: walletFundedTransfer.acceptConsent,
-            onDecline: walletFundedTransfer.declineConsent,
-          } : undefined,
-          funding: walletFundedTransfer.account && walletFundedTransfer.intent ? {
-            account: walletFundedTransfer.account,
-            error: walletFundedTransfer.error,
-            formatCurrency: formatCurrencyAuto,
-            intent: walletFundedTransfer.intent,
-            isChecking: walletFundedTransfer.isChecking,
-            onCheckNow: walletFundedTransfer.checkNow,
-            onClose: walletFundedTransfer.close,
-          } : undefined,
-        }}
-        dva={dvaData ? {
+      <CheckoutPaymentSessionOverlays
+        crypto={crypto}
+        walletFundedTransfer={walletFundedTransfer}
+        dva={{
           data: dvaData,
-          formatCurrency: formatCurrencyAuto,
           isVerifying: isVerifyingDva,
           onClose: closeDvaModal,
           onConfirmTransfer: handleDvaConfirmTransfer,
-        } : undefined}
+        }}
+        merchantName={merchant?.business_name}
+        formatCurrency={formatCurrencyAuto}
       />
 
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">

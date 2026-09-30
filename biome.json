@@ -34,6 +34,8 @@
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CheckoutHeader.test.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CheckoutPageHeading.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CheckoutPageHeading.test.tsx",
+      "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CheckoutPaymentSessionOverlays.tsx",
+      "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CheckoutPaymentSessionOverlays.test.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/load-resumed-checkout-order.ts",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/resolve-checkout-resume-context.ts",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/resolve-checkout-resume-context.test.ts",

@@ -15,8 +15,11 @@ import {
   buildCheckoutFunnelProperties,
   getCheckoutPaymentIntent,
 } from '@baci/shared/contracts';
-import { ChevronRight, ShieldCheck } from 'lucide-react';
 import { CheckoutPaymentOverlays } from './checkout/components/CheckoutPaymentOverlays';
+import {
+  CheckoutHeader,
+  CheckoutPageHeading,
+} from './checkout/components/CheckoutHeader';
 import { CheckoutStepComposition } from './checkout/components/CheckoutStepComposition';
 import {
   DiscountCodeInput,
@@ -614,34 +617,9 @@ export const CheckoutPage: React.FC = () => {
 
   return (
     <div className="ogabassey-checkout-page min-h-screen bg-gray-50/50 pb-20 flex flex-col">
-      {/* Checkout Navbar */}
-      <div className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-200/50 shadow-sm supports-[backdrop-filter]:bg-white/60">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <button type="button"
-            onClick={() => router.push(asRoute(getHref('/cart')))}
-            className="group flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-store-primary transition-colors"
-          >
-            <div className="size-8 rounded-full bg-gray-100 flex items-center justify-center group-hover:bg-store-primary/5 transition-colors">
-              <ChevronRight className="size-4 rotate-180 group-hover:text-store-primary transition-colors" />
-            </div>
-            <span className="max-sm:hidden sm:inline">Return to Cart</span>
-          </button>
-
-          <div className="flex flex-col items-center">
-            <div className="font-bold text-gray-900 tracking-tight flex items-center gap-2">
-              <ShieldCheck className="size-4 text-green-600" />
-              <span>Secure Checkout</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="max-sm:hidden sm:flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 text-xs font-medium rounded-full border border-green-100">
-              <div className="size-1.5 rounded-full bg-green-500 animate-pulse" />
-              Encrypted
-            </div>
-          </div>
-        </div>
-      </div>
+      <CheckoutHeader
+        onReturnToCart={() => router.push(asRoute(getHref('/cart')))}
+      />
       {isAuthModalOpen && <CheckoutAuthModal
         isOpen={isAuthModalOpen}
         onOpenChange={setIsAuthModalOpen}
@@ -692,19 +670,7 @@ export const CheckoutPage: React.FC = () => {
       />
 
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-black text-gray-900 flex items-center gap-3">
-            <span className="size-10 bg-store-primary text-white rounded-xl flex items-center justify-center shadow-store-primary/20 shadow-lg">
-              <ShieldCheck size={20} />
-            </span>
-            Secure Checkout
-          </h1>
-          <div className="flex items-center gap-2 text-sm text-gray-500 bg-white px-3 py-1.5 rounded-full border border-gray-100 shadow-sm">
-            <div className="size-2 rounded-full bg-green-500 animate-pulse" />
-            SSL Encrypted
-          </div>
-        </div>
+        <CheckoutPageHeading />
 
         {/* MOBILE ORDER SUMMARY (Collapsible) */}
         {/* MOBILE ORDER SUMMARY (Collapsible) */}

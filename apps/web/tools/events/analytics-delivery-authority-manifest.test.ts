@@ -22,8 +22,6 @@ describe('analytics delivery authority manifest', () => {
         '8747272f15477bffc36d4bd8b18fa046338f1dbc6e1234bcd2400e11694057e2',
       'apps/web/src/app/api/events/route.ts':
         '3e758b45f0809b919f1a058251bb1acd85e6df6de93df2b63f45f6766be67aab',
-      'apps/web/src/app/api/platform/events/platform-event-forwarding.ts':
-        '78fd66f814bdff4621771fad58965bb9fad5e70d6da1012fa0450faf305bacf6',
       'apps/web/src/lib/analytics/fetch-analytics-platform-config.ts':
         '95cc62af2d374bfed4b9b89b5b745e2dbd4c34ada1f3a25cf0c398e3cb376c1e',
       'apps/web/src/lib/analytics/trusted-server-ad-platform-fanout.ts':
@@ -33,12 +31,12 @@ describe('analytics delivery authority manifest', () => {
     });
   });
 
-  it('records exactly two trusted route importers and the platform helper edge', () => {
+  it('records exactly two trusted route importers and the retired platform helper path', () => {
     expect(manifest.trustedWrapperImporters).toEqual([
       'apps/web/src/app/api/analytics/conversion/route.ts',
       'apps/web/src/app/api/events/route.ts',
     ]);
-    expect(manifest.platformAuthority).toEqual({
+    expect(manifest.retiredPlatformAuthority).toEqual({
       helper:
         'apps/web/src/app/api/platform/events/platform-event-forwarding.ts',
       route: 'apps/web/src/app/api/platform/events/route.ts',
@@ -55,7 +53,7 @@ describe('analytics delivery authority manifest', () => {
     expect(manifest.platformRouteHash).toEqual({
       path: 'apps/web/src/app/api/platform/events/route.ts',
       sha256:
-        '646432088daff8e54f56fbab06453be789dc67d7b974398cc7f4b0d06842b9ca',
+        '0e62bed087fd29cb290af99f39dbc8589f9739ff06adde55598045945df7b7b1',
     });
   });
 

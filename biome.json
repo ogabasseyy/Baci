@@ -64,6 +64,8 @@
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-wallet-funded-order-completion.test.ts",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-crypto-session.ts",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-crypto-session.test.ts",
+      "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-financial-session.ts",
+      "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-financial-session.test.ts",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/PaymentStepAccessibility.test.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CheckoutAccountFields.test.tsx",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/components/CheckoutAccountFields.tsx",

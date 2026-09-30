@@ -211,9 +211,6 @@ export const EVENT_PIPELINE_BOUNDARY = {
   projectionAuthorities: {
     'apps/web/src/app/api/analytics/conversion/conversion-route-merchant-context.ts':
       ['identity'],
-    'apps/web/src/app/api/platform/events/platform-event-forwarding.ts': [
-      'platformProviderConfig',
-    ],
     'apps/web/src/lib/analytics/fetch-analytics-platform-config.ts': [
       'merchantFeatureProviderConfig',
       'merchantProviderConfig',

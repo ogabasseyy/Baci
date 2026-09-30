@@ -13,7 +13,6 @@ import { readGitSourceSnapshot } from './event-pipeline-git-source-snapshot';
 import { eventPipelineSourceFilePolicy } from './event-pipeline-source-file-policy';
 import { isTestSourcePath } from './event-pipeline-source-path';
 
-const wrapperSpecifier = '@/lib/analytics/trusted-server-ad-platform-fanout';
 const sourceExtension = '(cjs|cts|js|jsx|mjs|mts|ts|tsx)';
 function colocatedTestPath(path: string): string {
   return path.replace(
@@ -92,13 +91,15 @@ export function analyzeChangedRuntimeContracts(
 
 export function analyzeTemporaryAuthorityExpiry(
   now: Date,
-  queueOnlyDeliveryActivated: boolean
+  queueOnlyDeliveryActivated: boolean,
+  platformEdgePresent = true
 ): string[] {
   if (queueOnlyDeliveryActivated) {
     return [
       'temporary event-pipeline analytics authority expired because queue-only delivery is active',
     ];
   }
+  if (!platformEdgePresent) return [];
   return now.getTime() >= Date.parse(manifest.temporaryAuthorityExpiresAt)
     ? [
         `temporary event-pipeline analytics authority expired at ${manifest.temporaryAuthorityExpiresAt}`,
@@ -210,7 +211,11 @@ function sourceViewFindings(sources: ReadonlyMap<string, string>, paths: readonl
     ),
     ...(queueOnlyDeliveryActivated === undefined
       ? [`${cutoverPath}: queue-only authority cutover marker is unresolved`]
-      : analyzeTemporaryAuthorityExpiry(now, queueOnlyDeliveryActivated)),
+      : analyzeTemporaryAuthorityExpiry(
+          now,
+          queueOnlyDeliveryActivated,
+          sources.has(manifest.retiredPlatformAuthority.helper)
+        )),
   ];
   const hashes = {
     ...manifest.authorityClosureHashes,
@@ -228,17 +233,9 @@ function sourceViewFindings(sources: ReadonlyMap<string, string>, paths: readonl
     if (actual !== expected)
       findings.push(`${path}: frozen route hash ${actual}`);
   }
-  const platformSource = sources.get(manifest.platformAuthority.helper) ?? '';
-  if (
-    !/createAdminClient\(\s*['"]event-pipeline['"]\s*\)/.test(platformSource)
-  ) {
+  if (sources.has(manifest.retiredPlatformAuthority.helper)) {
     findings.push(
-      `${manifest.platformAuthority.helper}: platform admin edge drift`
-    );
-  }
-  if (platformSource.includes(wrapperSpecifier)) {
-    findings.push(
-      `${manifest.platformAuthority.helper}: platform helper imports trusted wrapper`
+      `${manifest.retiredPlatformAuthority.helper}: retired platform authority helper is present`
     );
   }
   return findings;

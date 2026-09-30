@@ -18,13 +18,18 @@ const FROZEN_EVENT_PIPELINE_AUTHORITY_BYTE_BASE_SHA =
   'cc3557aa5556db17131b0b66f72087e10794791b';
 const FROZEN_PATH_INVENTORY_SHA256 =
   '8a0f0b5e61d39fe46144e0114a41c7e25a8501e756ce1b819cca5fb793c6d0dc';
-const explicitlyHashedAuthorityPaths = new Set([
+const retiredPlatformAuthorityHelperPath =
+  analyticsDeliveryAuthorityManifest.retiredPlatformAuthority.helper;
+const explicitlyGuardedAuthorityPaths = new Set([
   ...Object.keys(analyticsDeliveryAuthorityManifest.authorityClosureHashes),
   ...Object.keys(analyticsDeliveryAuthorityManifest.callerScopedRouteHashes),
   ...Object.keys(
     analyticsDeliveryAuthorityManifest.verifiedContextHelperHashes
   ),
   analyticsDeliveryAuthorityManifest.platformRouteHash.path,
+  // The retired helper is excluded from inherited byte freezing only because
+  // analytics authority checks require it and its importers to remain absent.
+  retiredPlatformAuthorityHelperPath,
 ]);
 
 function repoRoot(): string {
@@ -118,7 +123,8 @@ function collect(
 export const eventPipelineGovernedPaths = {
   authorityByteBaseSha: FROZEN_EVENT_PIPELINE_AUTHORITY_BYTE_BASE_SHA,
   collect,
-  explicitlyHashedAuthorityPaths,
+  explicitlyGuardedAuthorityPaths,
+  retiredPlatformAuthorityHelperPath,
   repoRoot,
   sourcePaths,
 } as const;

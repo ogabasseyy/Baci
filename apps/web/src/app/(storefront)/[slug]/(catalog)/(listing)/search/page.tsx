@@ -2,9 +2,9 @@ import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
-import { sanitizeSearchQuery } from '@/lib/sanitize-core';
 import { buildRequestScopedStoreUrl } from '@/lib/store-url';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
+import { parseStorefrontSearchQueryParam } from '@/lib/storefront-search-params';
 import { isValidMerchantIdentifier } from '@/lib/validation';
 import { SearchPageContent, type SearchPageProps } from './search-page-content';
 
@@ -25,7 +25,7 @@ export async function generateMetadata({
   }
 
   const { q } = await searchParams;
-  const sanitizedQuery = sanitizeSearchQuery(q || '');
+  const sanitizedQuery = parseStorefrontSearchQueryParam(q);
   const baseUrl = buildRequestScopedStoreUrl(merchant, await headers());
 
   const { metadataTitle } = buildStorefrontMetadataTitle({

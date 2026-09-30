@@ -179,3 +179,25 @@ describe('fetchProductsPage catalog variant hydration', () => {
     expect(result.products).toEqual([productRow]);
   });
 });
+
+describe('fetchProductsPage normalized-empty search', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryResult.count = 0;
+    queryResult.data = [];
+    queryResult.error = null;
+    mockRpc.mockResolvedValue({ data: [], error: null });
+  });
+
+  it('returns an empty page instead of the catalog for punctuation-only queries', async () => {
+    const result = await fetchProductsPage(
+      'merchant-1',
+      { limit: 20, search: '!!' },
+      0
+    );
+
+    expect(result).toEqual({ nextOffset: null, products: [], total: 0 });
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+});

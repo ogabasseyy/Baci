@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import type { CheckoutDeliveryStep } from './CheckoutDeliveryStep';
 import { CheckoutStepComposition } from './CheckoutStepComposition';
-import { createCheckoutStepSession } from './CheckoutStepComposition.fixtures';
+import { createCheckoutStepSession } from './CheckoutStepComposition.test-fixtures';
 import type { ContactStep } from './ContactStep';
 import type { PaymentStep } from './PaymentStep';
 

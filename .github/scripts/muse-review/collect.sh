@@ -228,4 +228,8 @@ fi
   printf 'MUSE_BASE_AVAILABLE=%q\n' "${base_available}"
   printf 'MUSE_DEFAULT_BRANCH=%q\n' "${default_branch}"
   printf 'MUSE_FILES_FAILED=%q\n' "${files_failed}"
+  printf 'MUSE_MERGE_BASE=%q\n' "${merge_base}"
+  capped=false
+  if [[ "${files_source}" == "compare" ]] && (( total_files >= 300 )); then capped=true; fi
+  printf 'MUSE_FILES_CAPPED=%q\n' "${capped}"
 } > "${RUNNER_TEMP}/muse-vars.env"

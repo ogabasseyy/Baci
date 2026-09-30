@@ -1,0 +1,64 @@
+# Self-test for the Muse review workflow's scripts.
+#
+# Runs the regression suite plus static checks whenever the review scripts or
+# either workflow file changes. Fast (<2 min), no secrets, no network.
+name: Muse Review Selftest
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/scripts/muse-review/**'
+      - '.github/workflows/muse-code-review.yml'
+      - '.github/workflows/muse-review-selftest.yml'
+  pull_request:
+    paths:
+      - '.github/scripts/muse-review/**'
+      - '.github/workflows/muse-code-review.yml'
+      - '.github/workflows/muse-review-selftest.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    name: Muse review selftest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Regression suite
+        run: bash .github/scripts/muse-review/test.sh
+
+      - name: Shell syntax
+        run: |
+          set -euo pipefail
+          for f in .github/scripts/muse-review/*.sh; do
+            bash -n "${f}"
+          done
+          perl -c .github/scripts/muse-review/ranges.pl
+          for f in .github/scripts/muse-review/*.jq .github/scripts/muse-review/schema.json; do
+            jq empty "${f}"
+          done
+
+      - name: Workflow lint
+        # Pinned actionlint binary, SHA256-verified like the Muse install.
+        # Scoped to these two files so unrelated workflows can't red this gate.
+        run: |
+          set -euo pipefail
+          want_sha="8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "${tmpdir}"' EXIT
+          curl --proto '=https' --tlsv1.2 --retry 3 --connect-timeout 15 \
+            --max-time 120 -fsSL -o "${tmpdir}/actionlint.tar.gz" \
+            "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz"
+          got_sha="$(sha256sum "${tmpdir}/actionlint.tar.gz" | awk '{print $1}')"
+          if [[ "${got_sha}" != "${want_sha}" ]]; then
+            echo "::error::actionlint checksum mismatch; refusing to run." >&2
+            exit 1
+          fi
+          tar -xzf "${tmpdir}/actionlint.tar.gz" -C "${tmpdir}"
+          "${tmpdir}/actionlint" .github/workflows/muse-code-review.yml .github/workflows/muse-review-selftest.yml

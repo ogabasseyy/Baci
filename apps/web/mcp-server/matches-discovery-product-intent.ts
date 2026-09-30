@@ -23,6 +23,8 @@ import {
   specUnitWords,
 } from './matches-discovery-product-intent-vocab';
 
+const featureModifierWords = new Set(['cancelling', 'noise']);
+
 /** Keep the requested item type and explicit model attached to search results.
  * Embeddings alone can otherwise return a phone for a request for its case. */
 export function matchesDiscoveryProductIntent(
@@ -56,10 +58,35 @@ export function matchesDiscoveryProductIntent(
   const priceBoundary = queryWords.findIndex(isPriceBoundary);
   const coreWords = priceBoundary < 0 ? queryWords : queryWords.slice(0, priceBoundary);
   const detailIndex = coreWords.findIndex((word, index) =>
-    detailBoundary.has(word) && !(word === 'in' && (coreWords[index - 1] === 'all' || /^\d+$/.test(coreWords[index - 1] ?? '')))
+    detailBoundary.has(word) && !(word === 'in' && (coreWords[index + 1] === 'ear' || coreWords[index - 1] === 'all' || /^\d+$/.test(coreWords[index - 1] ?? '')))
   );
   const itemWords = detailIndex < 0 ? [...coreWords] : coreWords.slice(0, detailIndex);
   while (genericTypes.has(itemWords.at(-1) ?? '')) itemWords.pop();
+  // A list of complete memory/storage specifications is an OR constraint.
+  // Carry a trailing context (RAM, SSD, etc.) to both branches so each branch
+  // is validated as a complete specification.
+  if (detailIndex >= 0) {
+    const detailWords = coreWords.slice(detailIndex + 1);
+    const orIndex = detailWords.indexOf('or');
+    const capacityContext = ['ram', 'memory', 'storage', 'ssd', 'hdd'];
+    if (orIndex > 0 && orIndex < detailWords.length - 1) {
+      const leftSpec = detailWords.slice(0, orIndex);
+      const rightSpec = detailWords.slice(orIndex + 1);
+      const rightContextIndex = rightSpec.findIndex((word) => capacityContext.includes(word));
+      const nextAlternativeIndex = rightSpec.indexOf('or', rightContextIndex);
+      const rightContext = rightContextIndex >= 0
+        ? rightSpec.slice(rightContextIndex, nextAlternativeIndex < 0 ? undefined : nextAlternativeIndex) : [];
+      const leftHasContext = leftSpec.some((word) => capacityContext.includes(word));
+      const hasNumericSpec = (phrase: string[]) => phrase.some((word) => /\d/.test(word));
+      if (hasNumericSpec(leftSpec) && hasNumericSpec(rightSpec) && rightContext.length > 0) {
+        const leftBranch = leftHasContext ? leftSpec : [...leftSpec, ...rightContext];
+        const rightBranch = rightSpec;
+        const prefix = coreWords.slice(0, detailIndex);
+        return [leftBranch, rightBranch].some((branch) =>
+          matchesDiscoveryProductIntent(product, [...prefix, coreWords[detailIndex], ...branch].join(' '), true));
+      }
+    }
+  }
   // "or" always separates alternatives, but "and" only splits genuine
   // product-type lists ("phones and tablets"): descriptive conjunctions
   // ("noise cancelling and wireless earbuds") stay one intent.
@@ -165,7 +192,7 @@ export function matchesDiscoveryProductIntent(
   // A description can identify an otherwise untitled item, but it must not
   // override a different product type stated in the title.
   if (itemType && !matchesWord([...nameWords, ...categoryWords], itemType) &&
-    nameWords.some((word) => productTypes.has(word))) return false;
+    [...nameWords, ...categoryWords.filter((word) => word !== 'accessory' && word !== 'accessories')].some((word) => productTypes.has(word))) return false;
 
   // A compatible-item mention cannot turn an accessory into the item itself.
   if (itemType && !categoryWords.some((word) => matchesWord([word], itemType)) &&
@@ -187,11 +214,14 @@ export function matchesDiscoveryProductIntent(
   const requestedIdentityTerms = itemTypeIndex < 0
     ? itemWords.filter((word, index) =>
       !productTypes.has(word) && !genericItemModifiers.has(word) && !specUnitWords.has(word) &&
+      !featureModifierWords.has(word) &&
+      word !== 'from' && word !== 'by' &&
       !modelQualifiers.has(word) && !/\d/.test(word) && !isModelNumberPrefix(itemWords, index) &&
       /^[a-z]{2,}$/.test(word)
     )
     : itemPrefixWords.filter((word, index) =>
       (!productTypes.has(word) || knownDeviceFamilyWords.has(word)) && !genericItemModifiers.has(word) &&
+      !featureModifierWords.has(word) &&
       !specUnitWords.has(word) && !modelQualifiers.has(word) && !/\d/.test(word) &&
       !isModelNumberPrefix(itemPrefixWords, index) && /^[a-z]{2,}$/.test(word)
     );
@@ -234,6 +264,8 @@ export function matchesDiscoveryProductIntent(
   }
 
   const productSpecWords = words([product.name, product.brand, product.category, product.description].filter(Boolean).join(' '));
+  const requestedFeatureModifiers = itemPrefixWords.filter((word) => featureModifierWords.has(word));
+  if (requestedFeatureModifiers.some((term) => !matchesWord(productSpecWords, term))) return false;
   // Feature words after a detail boundary ("touchscreen" in "laptop with
   // touchscreen") must appear in the product text. Compatibility targets,
   // specs, and broad use-case words are validated by their own checks.
@@ -242,11 +274,13 @@ export function matchesDiscoveryProductIntent(
     // unmatched "or" branches, so they never count as required features.
     const index = itemWords.length + offset;
     if (index >= compatibility.start && index < compatibility.end) return false;
-    return !detailBoundary.has(word) && !genericItemModifiers.has(word) && !genericTypes.has(word) &&
+    return !detailBoundary.has(word) && !genericItemModifiers.has(word) && !genericTypes.has(word) && word !== 'least' &&
       !specUnitWords.has(word) && !['a', 'an', 'the', 'phone', 'phones', 'device', 'devices'].includes(word) &&
       !/\d/.test(word) && !isBroadIntentDiscoveryWord(word) && /^[a-z]{2,}$/.test(word);
   });
   if (featureWords.some((term) => !matchesWord(productSpecWords, term))) return false;
+  const requestsInEar = itemWords.some((word, index) => word === 'in' && itemWords[index + 1] === 'ear');
+  if (requestsInEar && !productSpecWords.some((word, index) => word === 'in' && productSpecWords[index + 1] === 'ear')) return false;
   return matchesModelSpecTokens({
     coreWords, hasAlternativeItemTypes: false, identityWords, itemText, itemType, itemWords,
     matchedBranchPhrases: [], productSpecWords,

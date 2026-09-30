@@ -4,7 +4,7 @@ import { specUnitWords } from './matches-discovery-product-intent-vocab';
  * Returns the token itself when it is already compact, or undefined when the
  * token carries no specification. "ram" stays a context word, not a unit. */
 export function joinSpecToken(token: string, nextWord: string | undefined): string | undefined {
-  if (/^\d+(?:gb|tb|mb|mah|w|hz|mp|ram)$/.test(token)) return token;
-  if (/^\d+$/.test(token) && nextWord && specUnitWords.has(nextWord)) return `${token}${nextWord}`;
+  if (/^\d+(?:\.\d+)?(?:gb|tb|mb|mah|w|hz|mp|ram)$/.test(token)) return token;
+  if (/^\d+(?:\.\d+)?$/.test(token) && nextWord && specUnitWords.has(nextWord)) return `${token}${nextWord}`;
   return undefined;
 }

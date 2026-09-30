@@ -33,7 +33,7 @@ describe('discovery product intent', () => {
   it('leaves single-word and untyped model searches to their existing guards', () => {
     expect(matchesDiscoveryProductIntent({ name: 'iPhone 15' }, 'iPhone 15')).toBe(true);
     expect(matchesDiscoveryProductIntent({ name: 'Office Laptop' }, 'work')).toBe(true);
-    expect(matchesDiscoveryProductIntent({ name: 'Logitech Wireless Mouse' }, '2.4G wireless mouse')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Logitech Wireless Mouse' }, '2.4G wireless mouse')).toBe(false);
     expect(matchesDiscoveryProductIntent({ name: 'Office Laptop' }, 'something for work')).toBe(true);
     expect(matchesDiscoveryProductIntent({ name: 'Protective Phone Case', category: 'Phone Accessories' }, 'phone case')).toBe(true);
     expect(matchesDiscoveryProductIntent({ name: 'Phone Accessories Bundle', category: 'Phone Accessories' }, 'cheap phone')).toBe(false);

@@ -1,10 +1,10 @@
 import {
   detailBoundary,
+  deviceQualifierAliases,
   knownBrandWords,
   knownDeviceFamilyWords,
   modelQualifiers,
 } from './matches-discovery-product-intent-vocab';
-import { hasConsecutiveWords } from './matches-discovery-product-intent-consecutive-words';
 import { matchesWord } from './matches-discovery-product-intent-word-match';
 
 /** Validate "for", "compatible with", and "fits" device targets. Brands after
@@ -30,7 +30,7 @@ export function matchesCompatibilityClause({ compatibilityWords, coreWords, item
   const end = coreWords.findIndex((word, index) => index >= start && detailBoundary.has(word));
   const spanEnd = end < 0 ? coreWords.length : end;
   const terms = coreWords.slice(start, spanEnd)
-    .filter((word) => !['a', 'an', 'the', 'phone', 'phones', 'device', 'devices'].includes(word));
+    .filter((word) => !['a', 'an', 'the'].includes(word));
   const branches: string[][] = [];
   let current: string[] = [];
   for (const word of terms) {
@@ -46,7 +46,7 @@ export function matchesCompatibilityClause({ compatibilityWords, coreWords, item
   // word but still identify the device, so they activate their branch.
   const active = branches.filter((branch) =>
     branch.some((term) =>
-      knownBrandWords.has(term) || knownDeviceFamilyWords.has(term) || /\d/.test(term)));
+      deviceQualifierAliases.has(term) || knownBrandWords.has(term) || knownDeviceFamilyWords.has(term) || /\d/.test(term)));
   const span = active.length > 0 ? { end: spanEnd, start } : { end: 0, start: 0 };
   // A target branch matches when its terms appear in order, tolerating
   // recognized family words ("Galaxy") between the brand and the model.
@@ -60,22 +60,27 @@ export function matchesCompatibilityClause({ compatibilityWords, coreWords, item
         if (!matchesWord([text[position] ?? ''], term)) return false;
         position += 1;
       }
+      if (target.some((term) => /\d/.test(term))) {
+        const requestedQualifiers = target.filter((term) => modelQualifiers.has(term));
+        for (let next = position; modelQualifiers.has(text[next] ?? ''); next += 1) {
+          if (!requestedQualifiers.includes(text[next] ?? '')) return false;
+        }
+      }
       return true;
     });
   const matched = active.length === 0 || active.some((branch) => {
-    if (!matchesTargetBranch(compatibilityWords, branch)) return false;
-    const anchor = branch.findIndex((word) => /\d/.test(word));
-    if (anchor < 0) return true;
-    const productAnchor = compatibilityWords.findIndex((word, index) =>
-      matchesWord([word], branch[anchor] ?? '') &&
-      hasConsecutiveWords(compatibilityWords.slice(index), branch.slice(anchor)));
-    if (productAnchor < 0) return true;
-    const queryQualifiers = branch.slice(anchor + 1).filter((word) => modelQualifiers.has(word));
-    const productQualifiers: string[] = [];
-    for (let next = productAnchor + 1; modelQualifiers.has(compatibilityWords[next] ?? ''); next += 1) {
-      productQualifiers.push(compatibilityWords[next] ?? '');
+    const genericDevices = branch.filter((word) => deviceQualifierAliases.has(word));
+    for (const device of genericDevices) {
+      const aliases = deviceQualifierAliases.get(device) ?? [];
+      const requested = aliases.some((alias) => matchesWord(compatibilityWords, alias));
+      const conflicting = [...deviceQualifierAliases.values()].some((other) =>
+        !aliases.some((alias) => other.includes(alias)) &&
+        other.some((alias) => matchesWord(compatibilityWords, alias)));
+      if (conflicting && !requested) return false;
     }
-    return !productQualifiers.some((qualifier) => !queryQualifiers.includes(qualifier));
+    const identityTarget = branch.filter((word) => !deviceQualifierAliases.has(word));
+    if (identityTarget.length > 0 && !matchesTargetBranch(compatibilityWords, identityTarget)) return false;
+    return true;
   });
   return { ...span, matched };
 }

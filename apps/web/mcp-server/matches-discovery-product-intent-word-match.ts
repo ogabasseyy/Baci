@@ -11,7 +11,8 @@ export function matchesWord(textWords: string[], term: string): boolean {
     : irregularPlurals.get(term) ?? (term.endsWith('ies')
       ? `${term.slice(0, -3)}y`
       : term.replace(/s$/, ''));
-  const plural = irregularSingulars.get(singular) ?? `${singular}s`;
+  const plural = irregularSingulars.get(singular) ??
+    (/[^aeiou]y$/.test(singular) ? `${singular.slice(0, -1)}ies` : `${singular}s`);
   const equivalents = equivalentTerms.get(term) ?? [];
   return textWords.some((word, index) =>
     word === term || word === singular || word === plural ||

@@ -7,7 +7,7 @@ function setup({ lexicalPages, products }: {
   products: Array<Record<string, unknown>>;
 }) {
   let rpcPage = 0;
-  const rpc = vi.fn(async (name: string) => ({ data: name === 'search_product_discovery_facts' ? [] : lexicalPages[rpcPage++] ?? [], error: null }));
+  const rpc = vi.fn(async (name: string) => ({ data: name === 'search_product_discovery_facts' ? [] : lexicalPages[rpcPage++] ?? [], error: null as Error | null }));
   const queryCalls: Array<{ table: string; calls: unknown[][] }> = [];
   const from = vi.fn((table: string) => {
     const calls: unknown[][] = [];
@@ -150,7 +150,7 @@ describe('loadStructuredDiscoveryCandidates', () => {
     expect(rpc.mock.calls.filter(([name]) => name === 'search_products_v2')).toHaveLength(1);
   });
 
-  it('isolates semantic errors while propagating lexical errors', async () => {
+  it('isolates source failures and preserves independently retrieved candidates', async () => {
     const { supabase } = setup({ lexicalPages: [ranked(['lexical'])], products: productRows(['lexical']) });
     const result = await loadStructuredDiscoveryCandidates({
       query: 'query', merchantId: 'merchant-1', supabase,
@@ -160,11 +160,38 @@ describe('loadStructuredDiscoveryCandidates', () => {
     expect(result.products.map(({ id }) => id)).toEqual(['lexical']);
 
     const lexicalError = new Error('lexical RPC failed');
-    const broken = { rpc: async () => ({ data: null, error: lexicalError }) } as unknown as SupabaseClient;
-    await expect(loadStructuredDiscoveryCandidates({
-      query: 'query', merchantId: 'merchant-1', supabase: broken,
-      semanticSearch: async () => [],
-    })).rejects.toBe(lexicalError);
+    const fixture = setup({lexicalPages: [], products: productRows(['semantic', 'fact'])});
+    fixture.rpc.mockImplementation(async (name: string) => name === 'search_products_v2'
+      ? {data: [], error: lexicalError} : {data: ranked(['fact']), error: null});
+    const degraded = await loadStructuredDiscoveryCandidates({
+      query: 'query', merchantId: 'merchant-1', supabase: fixture.supabase,
+      semanticSearch: async () => ['semantic'],
+    });
+    expect(degraded.products.map(({id}) => id)).toEqual(['fact', 'semantic']);
+    expect(degraded.truncated).toBe(true);
+  });
+
+  it('preserves semantic pages already fetched when a later page rejects', async () => {
+    const ids = Array.from({length: 40}, (_, i) => `s-${i}`);
+    const fixture = setup({lexicalPages: [[]], products: productRows(ids)});
+    const result = await loadStructuredDiscoveryCandidates({query: 'query', merchantId: 'merchant-1', supabase: fixture.supabase,
+      semanticSearch: async (_query, offset) => {if (offset > 0) throw new Error('network failure'); return ids;},
+    });
+    expect(result.products.map(({id}) => id)).toEqual(ids);
+    expect(result).toMatchObject({truncated: true, semanticUnavailable: true});
+  });
+
+  it('preserves lexical pages already fetched when a later page rejects', async () => {
+    const ids = Array.from({length: 100}, (_, i) => `p-${i}`);
+    const fixture = setup({lexicalPages: [], products: productRows(ids)});
+    fixture.rpc.mockImplementation(async (name: string, ..._args: unknown[]) => {
+      if (name === 'search_product_discovery_facts') return {data: [], error: null};
+      if (fixture.rpc.mock.calls.filter(([rpcName]) => rpcName === name).length > 1) throw new Error('network failure');
+      return {data: ranked(ids, 200), error: null};
+    });
+    const result = await loadStructuredDiscoveryCandidates({query: 'query', merchantId: 'merchant-1', supabase: fixture.supabase});
+    expect(result.products.map(({id}) => id)).toEqual(ids);
+    expect(result.truncated).toBe(true);
   });
 
   it('scopes hydration to the requested merchant and active products', async () => {

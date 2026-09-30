@@ -35,29 +35,33 @@ async function loadLexicalIds(
   let totalIsAuthoritative = false;
   let truncated = false;
 
-  while ((!totalIsAuthoritative || offset < total) && offset < MAX_LEXICAL_CANDIDATES) {
-    const { data, error } = await supabase.rpc(
-      'search_products_v2',
-      buildSearchProductsV2RpcArgs({
-        args: { sort: 'relevance' } satisfies SearchProductsArgs,
-        forcePostFilterBuffer: true,
-        limit: LEXICAL_PAGE_SIZE,
-        merchantId,
-        offset,
-        sanitizedQuery: query,
-      })
-    );
-    if (error) throw error;
+  try {
+    while ((!totalIsAuthoritative || offset < total) && offset < MAX_LEXICAL_CANDIDATES) {
+      const { data, error } = await supabase.rpc(
+        'search_products_v2',
+        buildSearchProductsV2RpcArgs({
+          args: { sort: 'relevance' } satisfies SearchProductsArgs,
+          forcePostFilterBuffer: true,
+          limit: LEXICAL_PAGE_SIZE,
+          merchantId,
+          offset,
+          sanitizedQuery: query,
+        })
+      );
+      if (error) throw error;
 
-    const rows = toRankedSearchProductRows(data);
-    const pageIds = extractRankedProductIds(rows);
-    const reportedTotal = getRankedProductTotal(rows);
-    const hasReportedTotal = rows[0]?.total_count !== undefined && rows[0]?.total_count !== null;
-    totalIsAuthoritative = hasReportedTotal;
-    total = hasReportedTotal ? reportedTotal : offset + pageIds.length;
-    ids.push(...pageIds);
-    if (pageIds.length < LEXICAL_PAGE_SIZE) break;
-    offset += LEXICAL_PAGE_SIZE;
+      const rows = toRankedSearchProductRows(data);
+      const pageIds = extractRankedProductIds(rows);
+      const reportedTotal = getRankedProductTotal(rows);
+      const hasReportedTotal = rows[0]?.total_count !== undefined && rows[0]?.total_count !== null;
+      totalIsAuthoritative = hasReportedTotal;
+      total = hasReportedTotal ? reportedTotal : offset + pageIds.length;
+      ids.push(...pageIds);
+      if (pageIds.length < LEXICAL_PAGE_SIZE) break;
+      offset += LEXICAL_PAGE_SIZE;
+    }
+  } catch {
+    return { ids: uniqueIds(ids), truncated: true };
   }
 
   if (ids.length >= MAX_LEXICAL_CANDIDATES) {
@@ -77,10 +81,14 @@ async function loadSemanticIds(
   semanticSearch: NonNullable<LoadStructuredDiscoveryCandidatesInput['semanticSearch']>
 ) {
   const ids: string[] = [];
-  for (let offset = 0; offset < MAX_SEMANTIC_CANDIDATES; offset += SEMANTIC_PAGE_SIZE) {
-    const page = await semanticSearch(query, offset);
-    ids.push(...page);
-    if (page.length < SEMANTIC_PAGE_SIZE) break;
+  try {
+    for (let offset = 0; offset < MAX_SEMANTIC_CANDIDATES; offset += SEMANTIC_PAGE_SIZE) {
+      const page = await semanticSearch(query, offset);
+      ids.push(...page);
+      if (page.length < SEMANTIC_PAGE_SIZE) break;
+    }
+  } catch {
+    return { ids: uniqueIds(ids), truncated: true, probeFailed: true };
   }
   if (ids.length < MAX_SEMANTIC_CANDIDATES) return { ids: uniqueIds(ids), truncated: false, probeFailed: false };
   try {

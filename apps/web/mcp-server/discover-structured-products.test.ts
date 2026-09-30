@@ -99,6 +99,15 @@ const input = (supabase: SupabaseClient, discoveryIntent: McpDiscoveryIntent, ov
 });
 
 describe('discoverStructuredProducts', () => {
+  it('returns fact-source matches with incomplete price coverage when lexical retrieval fails', async () => {
+    const row = product('facts-only', {product_type: 'laptop', model: 'ZX-42'});
+    const fixture = client({products: [row], factIds: ['facts-only'], lexicalError: new Error('lexical offline')});
+    const result = await discoverStructuredProducts(input(fixture.supabase, intent({product_type: 'laptop', model: 'ZX-42'}), {query: 'ZX-42', args: {sort: 'price_asc'}}));
+    expect(result.selectedProducts.map(({product}) => product.id)).toEqual(['facts-only']);
+    expect(result.coverage).toBe('partial');
+    expect(result.priceScanComplete).toBe(false);
+  });
+
   it('selects a verified model retrieved only from the facts index', async () => {
     const row = product('generic-item', {product_type: 'laptop', model: 'ZX-42'});
     const fixture = client({products: [row], lexicalIds: [], factIds: ['generic-item']});

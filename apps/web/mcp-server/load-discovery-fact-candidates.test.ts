@@ -10,6 +10,14 @@ describe('verified fact retrieval', () => {
     expect(result.truncated).toBe(total > 500);
     expect(rpc).toHaveBeenCalledTimes(5);
   });
+  it('retains confirmed fact IDs when the next RPC promise rejects', async () => {
+    const rpc = vi.fn().mockResolvedValueOnce({data: Array.from({length: 100}, (_, i) => ({product_id: String(i), total_count: 120})), error: null})
+      .mockRejectedValueOnce(new Error('network unavailable'));
+    const result = await loadDiscoveryFactCandidates('ZX-42', 'merchant', {rpc} as unknown as SupabaseClient);
+    expect(result.ids).toHaveLength(100);
+    expect(result.truncated).toBe(true);
+  });
+
   it('retains confirmed IDs and marks partial coverage when a facts page fails', async () => {
     const rpc = vi.fn().mockResolvedValueOnce({data: Array.from({length: 100}, (_, i) => ({product_id: String(i), total_count: 120})), error: null})
       .mockResolvedValueOnce({data: null, error: {code: 'unavailable'}});

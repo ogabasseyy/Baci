@@ -115,17 +115,6 @@ jest.mock('@/components/storefront/SearchDropdown', () => {
   };
 });
 
-jest.mock('@/components/ui/Skeleton', () => {
-  const { Text } = jest.requireActual(
-    'react-native'
-  ) as typeof import('react-native');
-
-  return {
-    HeroSkeleton: () => <Text>Hero skeleton</Text>,
-    ProductGridSkeleton: () => <Text>Grid skeleton</Text>,
-  };
-});
-
 jest.mock('@/components/ui/SnowEffect', () => {
   const { Text } = jest.requireActual(
     'react-native'
@@ -184,41 +173,19 @@ describe('HomeScreenView', () => {
     mockColorScheme = 'light';
   });
 
-  it('renders the loading shell while initial content loads', () => {
-    render(<HomeScreenView {...createProps()} isConfigLoading={true} />);
-
-    expect(screen.getByText('Header')).toBeTruthy();
-    expect(screen.getByText('Hero skeleton')).toBeTruthy();
-    expect(screen.getByText('Grid skeleton')).toBeTruthy();
-    expect(screen.queryByTestId('home-feed-list')).toBeNull();
-  });
-
-  it('renders home blocks and delegates header and refresh interactions', () => {
-    const onSearch = jest.fn();
-    const onRefresh = jest.fn(async () => undefined);
+  it('delegates closing the visible search overlay', () => {
+    const onSearchCancel = jest.fn();
 
     render(
       <HomeScreenView
         {...createProps()}
-        onRefresh={onRefresh}
-        onSearch={onSearch}
+        onSearchCancel={onSearchCancel}
+        searchVisible={true}
       />
     );
 
-    expect(screen.getByText('Block CategoryRail')).toBeTruthy();
-    expect(screen.getByText('Services')).toBeTruthy();
-    expect(screen.getByText('Block ProductGrid')).toBeTruthy();
+    fireEvent.press(screen.getByText('Search results'));
 
-    fireEvent.press(screen.getByText('Header'));
-    expect(onSearch).toHaveBeenCalledTimes(1);
-
-    fireEvent.press(screen.getByTestId('home-feed-refresh'));
-    expect(onRefresh).toHaveBeenCalledTimes(1);
-  });
-
-  it('uses the active merchant theme color for decorative and refresh affordances', () => {
-    render(<HomeScreenView {...createProps()} primaryColor="#22c55e" />);
-
-    expect(screen.getByText('Gadget pattern #22c55e light')).toBeTruthy();
+    expect(onSearchCancel).toHaveBeenCalledTimes(1);
   });
 });

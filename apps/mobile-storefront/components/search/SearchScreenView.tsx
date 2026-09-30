@@ -64,6 +64,7 @@ interface SearchScreenViewProps {
   /** Non-null when the committed search failed to load. */
   searchError: string | null;
   selectedBrand: string;
+  showMinLengthHint?: boolean;
   selectedCategory: string;
   selectedCondition: string;
   /** Total matches reported by the search backend. */
@@ -109,6 +110,7 @@ export default function SearchScreenView({
   selectedBrand,
   selectedCategory,
   selectedCondition,
+  showMinLengthHint = false,
   totalCount,
   viewMode,
 }: SearchScreenViewProps) {
@@ -270,6 +272,7 @@ export default function SearchScreenView({
         onQueryChange={onQueryChange}
         onSubmitQuery={onSubmitQuery}
         query={query}
+        showMinLengthHint={showMinLengthHint}
       />
       {hasSearchQuery && (
         <FilterBar

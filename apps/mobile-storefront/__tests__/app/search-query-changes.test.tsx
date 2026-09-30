@@ -212,4 +212,48 @@ describe('SearchScreen route', () => {
     );
     expect(mockViewProps.current).toMatchObject({ committedQuery: '' });
   });
+
+  it('explains rejected commits with a hint until the input is searchable', () => {
+    mockUseLocalSearchParams.mockReturnValue({});
+    mockUseProducts.mockReturnValue(mockProductState());
+
+    render(<SearchScreen />);
+    expect(mockViewProps.current).toMatchObject({
+      showMinLengthHint: false,
+    });
+
+    act(() => {
+      mockViewProps.current?.onQueryChange('!!');
+    });
+    act(() => {
+      mockViewProps.current?.onSubmitQuery();
+    });
+    expect(mockViewProps.current).toMatchObject({ showMinLengthHint: true });
+
+    // Editing toward a searchable query clears the explanation.
+    act(() => {
+      mockViewProps.current?.onQueryChange('!!a');
+    });
+    expect(mockViewProps.current).toMatchObject({
+      showMinLengthHint: false,
+    });
+
+    // A valid commit clears it too.
+    act(() => {
+      mockViewProps.current?.onQueryChange('!!');
+    });
+    act(() => {
+      mockViewProps.current?.onSubmitQuery();
+    });
+    expect(mockViewProps.current).toMatchObject({ showMinLengthHint: true });
+    act(() => {
+      mockViewProps.current?.onQueryChange('iphone');
+    });
+    act(() => {
+      mockViewProps.current?.onSubmitQuery();
+    });
+    expect(mockViewProps.current).toMatchObject({
+      showMinLengthHint: false,
+    });
+  });
 });

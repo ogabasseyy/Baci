@@ -24,6 +24,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 8,
   },
+  hintContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  hintText: {
+    fontSize: 13,
+  },
   searchInput: {
     flex: 1,
     fontSize: 15,

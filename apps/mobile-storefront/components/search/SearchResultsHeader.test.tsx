@@ -49,4 +49,20 @@ describe('SearchResultsHeader', () => {
 
     expect(screen.queryByLabelText('Clear search')).toBeNull();
   });
+
+  it('shows the minimum-length hint after a rejected commit', () => {
+    renderHeader({ query: '!!', showMinLengthHint: true });
+
+    expect(
+      screen.getByLabelText('Type at least 2 characters to search')
+    ).toBeTruthy();
+  });
+
+  it('hides the hint by default', () => {
+    renderHeader({ query: '!!' });
+
+    expect(
+      screen.queryByLabelText('Type at least 2 characters to search')
+    ).toBeNull();
+  });
 });

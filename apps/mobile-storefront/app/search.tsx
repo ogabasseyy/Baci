@@ -43,6 +43,10 @@ export default function SearchScreen() {
   const [selectedCondition, setSelectedCondition] = useState('All');
   const [minRating, setMinRating] = useState(0);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  // Mirrors the home submission path: committing a too-short or
+  // normalization-empty query explains itself instead of silently
+  // falling back to the recent-searches idle screen.
+  const [showSearchMinLengthHint, setShowSearchMinLengthHint] = useState(false);
   // Shared history state: writes here propagate to the still-mounted home
   // dropdown and overlay through the hook's subscription, with one write.
   const { recentSearches, saveSearch: saveToHistory } = useSearchStorage();
@@ -80,6 +84,7 @@ export default function SearchScreen() {
     setSelectedBrand('All');
     setSelectedCondition('All');
     setMinRating(0);
+    setShowSearchMinLengthHint(false);
     saveToHistory(nextQuery);
   });
   const clearRouteQuery = useEffectEvent(() => {
@@ -95,6 +100,7 @@ export default function SearchScreen() {
     setSelectedBrand('All');
     setSelectedCondition('All');
     setMinRating(0);
+    setShowSearchMinLengthHint(false);
   });
   useSearchRouteQuerySync({
     routeQueryParam,
@@ -105,7 +111,15 @@ export default function SearchScreen() {
   // Bound at acceptance so over-long pastes can never reach the debounced
   // auto-commit, history, or the search RPC from this screen either.
   const handleResultsQueryChange = (value: string) => {
-    setQuery(value.slice(0, MAX_SEARCH_QUERY_LENGTH));
+    const boundedValue = value.slice(0, MAX_SEARCH_QUERY_LENGTH);
+    setQuery(boundedValue);
+    if (
+      showSearchMinLengthHint &&
+      boundedValue.trim().length >= MIN_SEARCH_QUERY_LENGTH &&
+      isSearchableQuery(boundedValue)
+    ) {
+      setShowSearchMinLengthHint(false);
+    }
   };
 
   const commitSearchQuery = (value: string) => {
@@ -121,7 +135,10 @@ export default function SearchScreen() {
       trimmedValue.length >= MIN_SEARCH_QUERY_LENGTH &&
       isSearchableQuery(trimmedValue)
     ) {
+      setShowSearchMinLengthHint(false);
       saveToHistory(trimmedValue);
+    } else {
+      setShowSearchMinLengthHint(true);
     }
     Keyboard.dismiss();
   };
@@ -249,7 +266,10 @@ export default function SearchScreen() {
           router.push({ pathname: '/category/[slug]', params: { slug } })
         }
         onCategorySelect={handleCategorySelect}
-        onClearQuery={() => setQuery('')}
+        onClearQuery={() => {
+          setQuery('');
+          setShowSearchMinLengthHint(false);
+        }}
         onEndReached={handleEndReached}
         onPriceChange={(minimum, maximum) => {
           setMinPrice(minimum);
@@ -275,6 +295,7 @@ export default function SearchScreen() {
         recentSearches={recentSearches}
         searchError={hasSearchQuery ? productsError : null}
         selectedBrand={selectedBrand}
+        showMinLengthHint={showSearchMinLengthHint}
         selectedCategory={selectedCategory}
         selectedCondition={selectedCondition}
         totalCount={totalCount}

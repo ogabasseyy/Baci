@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { render, screen } from '@testing-library/react-native';
 import type { SharedValue } from 'react-native-reanimated';
 import type { Block } from '@/types/blocks';
 import { HomeScreenView } from './HomeScreenView';
@@ -38,6 +38,18 @@ jest.mock('expo-router', () => ({
     Screen: () => null,
   },
 }));
+
+jest.mock('@/components/OfflineNotice', () => {
+  const { Text } = jest.requireActual(
+    'react-native'
+  ) as typeof import('react-native');
+
+  return {
+    OfflineNotice: ({ message }: { message?: string }) => (
+      <Text>{message ?? 'Offline cached content'}</Text>
+    ),
+  };
+});
 
 jest.mock('./HomeFeedList', () => {
   const { Pressable, Text, View } = jest.requireActual(
@@ -115,17 +127,6 @@ jest.mock('@/components/storefront/SearchDropdown', () => {
   };
 });
 
-jest.mock('@/components/ui/Skeleton', () => {
-  const { Text } = jest.requireActual(
-    'react-native'
-  ) as typeof import('react-native');
-
-  return {
-    HeroSkeleton: () => <Text>Hero skeleton</Text>,
-    ProductGridSkeleton: () => <Text>Grid skeleton</Text>,
-  };
-});
-
 jest.mock('@/components/ui/SnowEffect', () => {
   const { Text } = jest.requireActual(
     'react-native'
@@ -184,41 +185,39 @@ describe('HomeScreenView', () => {
     mockColorScheme = 'light';
   });
 
-  it('renders the loading shell while initial content loads', () => {
-    render(<HomeScreenView {...createProps()} isConfigLoading={true} />);
+  it('renders only one shared backdrop for the elite home surface', () => {
+    render(<HomeScreenView {...createProps()} isElite={true} />);
 
-    expect(screen.getByText('Header')).toBeTruthy();
-    expect(screen.getByText('Hero skeleton')).toBeTruthy();
-    expect(screen.getByText('Grid skeleton')).toBeTruthy();
-    expect(screen.queryByTestId('home-feed-list')).toBeNull();
+    expect(screen.getAllByText(/Gadget pattern/)).toHaveLength(1);
+    expect(screen.getByText('Gadget pattern default dark')).toBeTruthy();
   });
 
-  it('renders home blocks and delegates header and refresh interactions', () => {
-    const onSearch = jest.fn();
-    const onRefresh = jest.fn(async () => undefined);
+  it('renders the online error notice for an unsuccessful page request', () => {
+    render(<HomeScreenView {...createProps()} isError={true} />);
 
+    expect(screen.getByText('Failed to load content')).toBeTruthy();
+  });
+
+  it('shows cached-content feedback and the elite backdrop while offline', () => {
+    render(
+      <HomeScreenView {...createProps()} isElite={true} isOnline={false} />
+    );
+
+    expect(screen.getByText('Offline cached content')).toBeTruthy();
+    expect(screen.getAllByText(/Gadget pattern/)).toHaveLength(1);
+  });
+
+  it('keeps heavy decorative layers deferred while rendering the elite backdrop immediately', () => {
     render(
       <HomeScreenView
         {...createProps()}
-        onRefresh={onRefresh}
-        onSearch={onSearch}
+        isElite={true}
+        shouldRenderDecorations={false}
       />
     );
 
     expect(screen.getByText('Block CategoryRail')).toBeTruthy();
-    expect(screen.getByText('Services')).toBeTruthy();
-    expect(screen.getByText('Block ProductGrid')).toBeTruthy();
-
-    fireEvent.press(screen.getByText('Header'));
-    expect(onSearch).toHaveBeenCalledTimes(1);
-
-    fireEvent.press(screen.getByTestId('home-feed-refresh'));
-    expect(onRefresh).toHaveBeenCalledTimes(1);
-  });
-
-  it('uses the active merchant theme color for decorative and refresh affordances', () => {
-    render(<HomeScreenView {...createProps()} primaryColor="#22c55e" />);
-
-    expect(screen.getByText('Gadget pattern #22c55e light')).toBeTruthy();
+    expect(screen.getByText('Gadget pattern default dark')).toBeTruthy();
+    expect(screen.queryByText('Snow effect')).toBeNull();
   });
 });

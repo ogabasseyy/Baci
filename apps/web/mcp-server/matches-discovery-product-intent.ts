@@ -1,15 +1,13 @@
 import { isBroadIntentDiscoveryWord } from './broad-intent-discovery-word';
 import { matchesCompatibilityClause } from './matches-discovery-product-intent-compat';
-import {
-  type IntentWordScope,
-  isModelNumberPrefix,
-  matchesIdentityTerms,
-  matchesModelSpecTokens,
-  matchesRequestedDevice,
-  matchesWord,
-  type ProductText,
-  words,
-} from './matches-discovery-product-intent-words';
+import { matchesIdentityTerms } from './matches-discovery-product-intent-identity-terms';
+import { isModelNumberPrefix } from './matches-discovery-product-intent-model-prefix';
+import { matchesModelSpecTokens } from './matches-discovery-product-intent-model-spec';
+import { type ProductText } from './matches-discovery-product-intent-product-text';
+import { matchesRequestedDevice } from './matches-discovery-product-intent-requested-device';
+import { matchesWord } from './matches-discovery-product-intent-word-match';
+import { type IntentWordScope } from './matches-discovery-product-intent-word-scope';
+import { words } from './matches-discovery-product-intent-words';
 import {
   accessoryHeadTypes,
   detailBoundary,
@@ -33,8 +31,8 @@ export function matchesDiscoveryProductIntent(
   if (!query) return true;
   const rawQuery = query.normalize('NFKC').toLocaleLowerCase('en').trim();
   const normalized = rawQuery
-    .replace(/^\s*(?:(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?(?:show|find|search|buy|get|recommend|suggest)(?:\s+me)?(?:\s+for)?|(?:looking|searching|shopping)\s+for|i\s+(?:want|need))(?:\s+(?:a|an|some|the))?\s+/i, '')
-    .replace(/^(?:(?:a|an|any|some|the)\s+)+/i, '');
+    .replace(/^\s*(?:(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?(?:show|find|search|buy|get|recommend|suggest)(?:\s+me)?(?:\s+for)?|(?:i(?:['\u2019]m|\s+am)\s+)?(?:looking|searching|shopping)\s+for|i\s+(?:want|need))(?:\s+(?:a|an|some|the))?\s+/i, '')
+    .replace(/^(?:(?:a|an|any|some|the|my|your|his|her|its|our|their)\s+)+/i, '');
   const queryWords = words(normalized);
   if (!enforceIntent && queryWords.filter((word) => /^[a-z]+$/.test(word)).length < 2 &&
     !queryWords.some((word) => /\d/.test(word) || productTypes.has(word)) && normalized === rawQuery) return true;

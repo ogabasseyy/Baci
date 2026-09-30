@@ -4,10 +4,8 @@ import {
   knownDeviceFamilyWords,
   modelQualifiers,
 } from './matches-discovery-product-intent-vocab';
-import {
-  hasConsecutiveWords,
-  matchesWord,
-} from './matches-discovery-product-intent-words';
+import { hasConsecutiveWords } from './matches-discovery-product-intent-consecutive-words';
+import { matchesWord } from './matches-discovery-product-intent-word-match';
 
 /** Validate "for", "compatible with", and "fits" device targets. Brands after
  * the introducer describe compatibility rather than the manufacturer, and
@@ -44,11 +42,27 @@ export function matchesCompatibilityClause({ compatibilityWords, coreWords, item
     }
   }
   if (current.length > 0) branches.push(current);
+  // Model-only targets ("S24" in "case for S24") carry no brand or family
+  // word but still identify the device, so they activate their branch.
   const active = branches.filter((branch) =>
-    branch.some((term) => knownBrandWords.has(term) || knownDeviceFamilyWords.has(term)));
+    branch.some((term) =>
+      knownBrandWords.has(term) || knownDeviceFamilyWords.has(term) || /\d/.test(term)));
   const span = active.length > 0 ? { end: spanEnd, start } : { end: 0, start: 0 };
+  // A target branch matches when its terms appear in order, tolerating
+  // recognized family words ("Galaxy") between the brand and the model.
+  const matchesTargetBranch = (text: string[], target: string[]): boolean =>
+    text.some((_, start) => {
+      if (!matchesWord([text[start] ?? ''], target[0] ?? '')) return false;
+      let position = start + 1;
+      for (const term of target.slice(1)) {
+        while (position < text.length && knownDeviceFamilyWords.has(text[position] ?? '')) position += 1;
+        if (!matchesWord([text[position] ?? ''], term)) return false;
+        position += 1;
+      }
+      return true;
+    });
   const matched = active.length === 0 || active.some((branch) => {
-    if (!hasConsecutiveWords(compatibilityWords, branch)) return false;
+    if (!matchesTargetBranch(compatibilityWords, branch)) return false;
     const anchor = branch.findIndex((word) => /\d/.test(word));
     if (anchor < 0) return true;
     const productAnchor = compatibilityWords.findIndex((word, index) =>

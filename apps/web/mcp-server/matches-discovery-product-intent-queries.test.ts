@@ -204,4 +204,13 @@ describe('discovery product intent', () => {
     expect(matchesDiscoveryProductIntent({ name: 'Office Laptop', category: 'Laptops' }, 'an office laptop')).toBe(true);
     expect(matchesDiscoveryProductIntent({ name: 'Google Pixel Buds Pro', category: 'Earbuds', description: 'Wireless earbuds' }, 'some wireless earbuds')).toBe(true);
   });
+
+  it('strips conversational wrappers and possessives', () => {
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', brand: 'Dell', category: 'Laptops' }, 'show me your laptops')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', brand: 'Dell', category: 'Laptops' }, 'I am looking for a laptop')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', brand: 'Dell', category: 'Laptops' }, 'I\u2019m looking for a laptop')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', brand: 'Dell', category: 'Laptops' }, "I'm looking for a laptop")).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', brand: 'Dell', category: 'Laptops' }, 'my laptop')).toBe(true);
+    expect(matchesDiscoveryProductIntent({ name: 'Dell Latitude', brand: 'Dell', category: 'Laptops' }, 'show me laptops')).toBe(true);
+  });
 });

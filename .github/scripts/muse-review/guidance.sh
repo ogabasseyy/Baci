@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Collect repo guidance: root candidates plus scoped AGENTS.md/CLAUDE.md from
-# each changed file's ancestor dirs. Base versions are trusted; head
+# each changed file's ancestor dirs. Default-branch base versions are
+# trusted; every other base (stacked PRs, custom branches) and all head
 # fallbacks are labeled UNTRUSTED in the prompt.
 #
 # Env in: RUNNER_TEMP, SCRIPT_DIR. Reads muse-vars.env, muse-files.json.
@@ -14,6 +15,7 @@ if [[ "${MUSE_STOP:-1}" == "1" ]]; then exit 0; fi
 # shellcheck disable=SC1091  # SCRIPT_DIR is set by the workflow step
 . "${SCRIPT_DIR}/lib.sh"
 
+trust_base_flag="$(trust_base "${MUSE_BASE_REF}" "${MUSE_DEFAULT_BRANCH:-}" "${MUSE_BASE_AVAILABLE}")"
 guidance_file="${RUNNER_TEMP}/muse-guidance.md"
 : > "${guidance_file}"
 guidance_bytes=0
@@ -25,7 +27,7 @@ emit_guidance() {
   if [[ "${guidance_capped}" == "true" ]]; then return 0; fi
   content=""
   source=""
-  if [[ "${MUSE_BASE_AVAILABLE}" == "true" ]] \
+  if [[ "${trust_base_flag}" == "true" ]] \
     && content="$(git show "FETCH_HEAD:${candidate}" 2>/dev/null)"; then
     # SHA, not the branch name: branch names are submitter-controlled and
     # this label prints outside any untrusted block.
@@ -94,7 +96,7 @@ done < <(jq -j '[.[] | .filename, (.previous_filename // empty)] | map(select(le
 # trusted rules are collected.
 for phase in base head; do
   for candidate in ${MUSE_CANDIDATES[@]+"${MUSE_CANDIDATES[@]}"}; do
-    if [[ "${MUSE_BASE_AVAILABLE}" == "true" ]] \
+    if [[ "${trust_base_flag}" == "true" ]] \
       && git show "FETCH_HEAD:${candidate}" >/dev/null 2>&1; then
       is_base=true
     else

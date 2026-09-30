@@ -12,6 +12,7 @@ import { useCategories, useProductBrands, useProducts } from '@/hooks';
 import { isSearchableQuery } from '@/hooks/is-searchable-query';
 import { parseRouteSearchQuery } from '@/hooks/parse-route-search-query';
 import { useNetworkState } from '@/hooks/use-network-state';
+import { useSearchMinLengthHint } from '@/hooks/use-search-min-length-hint';
 import { useSearchRouteQuerySync } from '@/hooks/use-search-route-query-sync';
 import { useSearchStorage } from '@/hooks/use-search-storage';
 import { resolveSelectedCategoryId } from '@/lib/product-filter-options';
@@ -43,10 +44,12 @@ export default function SearchScreen() {
   const [selectedCondition, setSelectedCondition] = useState('All');
   const [minRating, setMinRating] = useState(0);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  // Mirrors the home submission path: committing a too-short or
-  // normalization-empty query explains itself instead of silently
-  // falling back to the recent-searches idle screen.
-  const [showSearchMinLengthHint, setShowSearchMinLengthHint] = useState(false);
+  const {
+    showSearchMinLengthHint,
+    evaluateCommit,
+    noteQueryChange,
+    clearHint,
+  } = useSearchMinLengthHint();
   // Shared history state: writes here propagate to the still-mounted home
   // dropdown and overlay through the hook's subscription, with one write.
   const { recentSearches, saveSearch: saveToHistory } = useSearchStorage();
@@ -84,7 +87,7 @@ export default function SearchScreen() {
     setSelectedBrand('All');
     setSelectedCondition('All');
     setMinRating(0);
-    setShowSearchMinLengthHint(false);
+    clearHint();
     saveToHistory(nextQuery);
   });
   const clearRouteQuery = useEffectEvent(() => {
@@ -100,7 +103,7 @@ export default function SearchScreen() {
     setSelectedBrand('All');
     setSelectedCondition('All');
     setMinRating(0);
-    setShowSearchMinLengthHint(false);
+    clearHint();
   });
   useSearchRouteQuerySync({
     routeQueryParam,
@@ -113,13 +116,7 @@ export default function SearchScreen() {
   const handleResultsQueryChange = (value: string) => {
     const boundedValue = value.slice(0, MAX_SEARCH_QUERY_LENGTH);
     setQuery(boundedValue);
-    if (
-      showSearchMinLengthHint &&
-      boundedValue.trim().length >= MIN_SEARCH_QUERY_LENGTH &&
-      isSearchableQuery(boundedValue)
-    ) {
-      setShowSearchMinLengthHint(false);
-    }
+    noteQueryChange(boundedValue);
   };
 
   const commitSearchQuery = (value: string) => {
@@ -131,14 +128,8 @@ export default function SearchScreen() {
 
     setQuery(trimmedValue);
     setDebouncedQuery(trimmedValue);
-    if (
-      trimmedValue.length >= MIN_SEARCH_QUERY_LENGTH &&
-      isSearchableQuery(trimmedValue)
-    ) {
-      setShowSearchMinLengthHint(false);
+    if (evaluateCommit(trimmedValue)) {
       saveToHistory(trimmedValue);
-    } else {
-      setShowSearchMinLengthHint(true);
     }
     Keyboard.dismiss();
   };
@@ -268,7 +259,7 @@ export default function SearchScreen() {
         onCategorySelect={handleCategorySelect}
         onClearQuery={() => {
           setQuery('');
-          setShowSearchMinLengthHint(false);
+          clearHint();
         }}
         onEndReached={handleEndReached}
         onPriceChange={(minimum, maximum) => {

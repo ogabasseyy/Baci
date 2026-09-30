@@ -149,7 +149,7 @@ seen_reset() {
 }
 seen_add() {
   local _candidate="$1" _known
-  for _known in ${MUSE_SEEN[@]+"${MUSE_SEEN[@]}"}; do
+  for _known in "${MUSE_SEEN[@]+"${MUSE_SEEN[@]}"}"; do
     if [[ "${_known}" == "${_candidate}" ]]; then return 0; fi
   done
   MUSE_SEEN+=("${_candidate}")

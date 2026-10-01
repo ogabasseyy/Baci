@@ -50,6 +50,12 @@ tracking:
   # deploy.sh installs the tracking schedule, prepare-worker-release.sh
   # stages the release SHA, the bin/jobs entries are the poller +
   # capability chain, and the manifests feed the VPS preflight.
+  # The monorepo manifests (apps/web/package.json, root package.json,
+  # pnpm-lock.yaml) are excluded ON PURPOSE: the VPS poller runs its own
+  # older code + dependency tree self-consistently, so a manifest-only
+  # push changes nothing about what the poller executes; any tracking
+  # code change triggers through the paths above. Gating manifests would
+  # freeze main on every lockfile PR for no cutover benefit.
   - 'vps-workers/deploy.sh'
   - 'vps-workers/bin/process-gigl-tracking.sh'
   - 'vps-workers/bin/run-web-script.sh'

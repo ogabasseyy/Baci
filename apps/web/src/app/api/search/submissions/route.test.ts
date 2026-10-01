@@ -14,7 +14,11 @@ vi.mock('next/headers', () => ({ cookies: vi.fn().mockResolvedValue({}) }));
 vi.mock('@/lib/supabase/server', () => ({
   createClient: () => ({ rpc: mocks.rpc, from: mocks.from }),
 }));
+vi.mock('@/lib/logger', () => ({
+  logger: { warn: vi.fn() },
+}));
 
+import { logger } from '@/lib/logger';
 import { POST } from './route';
 
 const merchantId = '123e4567-e89b-12d3-a456-426614174000';
@@ -168,6 +172,26 @@ describe('explicit search submissions', () => {
     expect((await POST(req)).status).toBe(403);
     expect(mocks.merchant).not.toHaveBeenCalled();
     expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
+  it('logs origin rejections so proxy-induced shedding is observable', async () => {
+    const req = request(undefined, { origin: 'https://evil.test' });
+    expect((await POST(req)).status).toBe(403);
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith({
+      message: 'Search submission blocked: origin mismatch',
+      originHost: 'evil.test',
+      requestHost: 'ogabassey.com',
+    });
+  });
+
+  it('logs invalid origins without data access', async () => {
+    const req = request(undefined, { origin: 'null' });
+    expect((await POST(req)).status).toBe(403);
+    expect(logger.warn).toHaveBeenCalledExactlyOnceWith({
+      message: 'Search submission blocked: invalid origin',
+      origin: 'null',
+      requestHost: 'ogabassey.com',
+    });
   });
 
   it.each([

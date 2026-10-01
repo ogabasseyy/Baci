@@ -65,7 +65,8 @@ export async function SearchPageContent({
   const allProductsHref = `${pathPrefix}/products`;
   const contactHref = `${pathPrefix}/contact`;
   // A did-you-mean follow is a fresh submission, so it keeps the
-  // page-less submission URL (and its render is tracked as one).
+  // page-less submission URL; only the link activation records it,
+  // never the landing render.
   const didYouMeanHref = effectiveResult.didYouMean
     ? buildSearchSubmissionHref(searchBasePath, effectiveResult.didYouMean)
     : null;

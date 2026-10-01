@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import type { CachedMerchant } from '@/lib/cached-data';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
+import { logger } from '@/lib/logger';
 import {
   extractLocalhostSubdomain,
   extractSubdomain,
@@ -47,12 +48,25 @@ export async function POST(request: NextRequest) {
       originUrl.host !== requestHost ||
       originUrl.protocol !== request.nextUrl.protocol
     ) {
+      // Origin rejections shed telemetry silently for shoppers, so log them
+      // for operators: a proxy or preview setup rewriting host/protocol
+      // shows up here instead of as mysteriously flat submission counts.
+      logger.warn({
+        message: 'Search submission blocked: origin mismatch',
+        originHost: originUrl.host,
+        requestHost,
+      });
       return NextResponse.json(
         { error: 'Cross-origin request blocked' },
         { status: 403 }
       );
     }
   } catch {
+    logger.warn({
+      message: 'Search submission blocked: invalid origin',
+      origin: origin ?? null,
+      requestHost,
+    });
     return NextResponse.json(
       { error: 'Invalid Origin header' },
       { status: 403 }

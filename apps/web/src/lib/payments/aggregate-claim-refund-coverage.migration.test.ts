@@ -25,4 +25,24 @@ describe('aggregate claim refund coverage migration', () => {
       "refund.metadata->>'payment_transaction_id' IS NULL -- As in the completion gate: the unlinked refund -- attributes to the sole completed leg only, never to a -- refund_pending leg whose own provider refund is still -- outstanding. AND payment.status = 'completed' AND 1 = ("
     );
   });
+
+  it('normalizes gateways exactly like the executor linked path', () => {
+    expect(existsSync(migrationPath)).toBe(true);
+    if (!existsSync(migrationPath)) return;
+
+    const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
+
+    // Trimmed, uppercased comparison with missing gateways never
+    // matching: exact equality would leave a legacy `Paystack` leg
+    // uncovered here while the executor treats its `paystack` refund
+    // as covering it.
+    expect(migrationSql).toContain(
+      "AND NULLIF( upper( regexp_replace( COALESCE(refund.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' ) = NULLIF( upper( regexp_replace( COALESCE(payment.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' )"
+    );
+    // The Paystack verification gate normalizes too, so a legacy
+    // `Paystack` row cannot slip through unverified.
+    expect(migrationSql).toContain(
+      "NULLIF( upper( regexp_replace( COALESCE(refund.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' ) <> 'PAYSTACK'"
+    );
+  });
 });

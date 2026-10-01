@@ -192,7 +192,7 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
   {
     repositoryPath:
       'supabase/migrations/20260928140000_aggregate_claim_refund_coverage.sql',
-    sha256: '4c7cb0396744f20f4d0fe388e8e170f6c3f9bde992f107553409eaf32542e89c',
+    sha256: '97402e8edbed97a63adffb25c4d6ccf865c0eeff2852853ee4d0f0dd5f47d3f1',
   },
   {
     repositoryPath:

@@ -162,6 +162,29 @@ describe('legacy completed Paystack cancellation refunds', () => {
     expect(reconcile).toHaveBeenCalledWith(supabase, finalizedRefund);
   });
 
+  it('reconciles finalized rows before the pre-finalization batch', async () => {
+    const primaryRefund = { ...legacyRefund, id: 'refund-primary' };
+    const finalizedRefund = { ...legacyRefund, id: 'refund-finalized' };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce({
+        select: vi.fn(() => selectQuery([primaryRefund])),
+      })
+      .mockReturnValueOnce({
+        select: vi.fn(() => selectQuery([finalizedRefund])),
+      });
+    const supabase = { from } as never;
+
+    await expect(
+      reconcileCompletedPaystackCancellationRefunds(supabase)
+    ).resolves.toEqual({ checked: 2, failed: 0 });
+
+    // Trailing the finalized sweep would let a sustained backlog
+    // consume the row-start window and starve contradiction rechecks.
+    expect(reconcile).toHaveBeenNthCalledWith(1, supabase, finalizedRefund);
+    expect(reconcile).toHaveBeenNthCalledWith(2, supabase, primaryRefund);
+  });
+
   it('sends completed refunds on payment-pending orders for verification', async () => {
     const refund = {
       ...legacyRefund,

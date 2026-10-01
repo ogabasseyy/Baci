@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { reconcileWedgedGatewayOrders } from '@/lib/payments/reconcile-wedged-gateway-orders';
 
 const mocks = vi.hoisted(() => ({
+  fileDuplicateCaptureFallbackReview: vi.fn(),
   fileDuplicatePaymentCapture: vi.fn(),
   finalizeOrderGatewayPayment: vi.fn(),
   getJuicywaySession: vi.fn(),
@@ -24,6 +25,9 @@ vi.mock('@/lib/payments/finalize-order-gateway-payment', () => ({
 }));
 vi.mock('@/lib/payments/file-duplicate-payment-capture', () => ({
   fileDuplicatePaymentCapture: mocks.fileDuplicatePaymentCapture,
+}));
+vi.mock('@/lib/payments/file-duplicate-capture-fallback-review', () => ({
+  fileDuplicateCaptureFallbackReview: mocks.fileDuplicateCaptureFallbackReview,
 }));
 vi.mock(
   '@/lib/payments/handle-payment-for-cancelled-order',
@@ -128,6 +132,7 @@ describe('reconcileWedgedGatewayOrders late outcomes', () => {
       kind: 'completed',
     });
     mocks.fileDuplicatePaymentCapture.mockResolvedValue(false);
+    mocks.fileDuplicateCaptureFallbackReview.mockResolvedValue(false);
 
     const summary = await reconcileWedgedGatewayOrders({
       scheduleAfter,
@@ -140,6 +145,51 @@ describe('reconcileWedgedGatewayOrders late outcomes', () => {
     expect(supabase.rpc).not.toHaveBeenCalledWith(
       'stamp_wedge_sweep_resolution_v1',
       expect.anything()
+    );
+  });
+
+  it('files the fallback review when the wedge duplicate filing fails', async () => {
+    const supabase = buildSupabase({ data: [wedgedCandidate] });
+    mocks.verifyPaystackPayment.mockResolvedValue({
+      data: {
+        amount: 5829060,
+        currency: 'NGN',
+        id: 123456789,
+        status: 'success',
+      },
+      success: true,
+    });
+    mocks.finalizeOrderGatewayPayment.mockResolvedValue({
+      capturedOnPaidOrder: true,
+      healed: false,
+      kind: 'completed',
+      orderNumber: 'ORD-1',
+    });
+    mocks.fileDuplicatePaymentCapture.mockResolvedValue(false);
+    mocks.fileDuplicateCaptureFallbackReview.mockResolvedValue(true);
+
+    const summary = await reconcileWedgedGatewayOrders({
+      scheduleAfter,
+      supabase,
+    });
+
+    // The candidate already finalized, so no sweep reselects it: the
+    // direct fallback insert keeps the evidence and the row retires.
+    expect(mocks.fileDuplicateCaptureFallbackReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attempt: expect.objectContaining({ id: 'txn-1' }),
+      })
+    );
+    expect(summary.reviewsFiled).toEqual([
+      { orderId: 'order-1', transactionId: 'txn-1' },
+    ]);
+    expect(summary.failed).toEqual([]);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'stamp_wedge_sweep_resolution_v1',
+      expect.objectContaining({
+        p_resolution: 'duplicate_capture_reviewed',
+        p_transaction_id: 'txn-1',
+      })
     );
   });
 

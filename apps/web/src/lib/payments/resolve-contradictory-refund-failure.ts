@@ -149,13 +149,17 @@ function replacementMatchesFailedLeg(
  * half the leg was actually refunded, suppressing a live
  * contradiction. A failed 100-unit refund replaced by two completed
  * 50-unit refunds on the same leg is fully superseded. Malformed
- * amounts fail closed.
+ * amounts fail closed. No failed rows at all means the queued failure
+ * was superseded: the provider verdict domain is closed and only the
+ * RPC records failure verdicts, so an empty scan proves every failure
+ * was overwritten by a later non-failure verdict — alerting anyway
+ * would file a contradiction with no failed evidence.
  */
 function allFailedLegsCoveredByReplacements(
   failedRows: FailedRefundRow[],
   replacements: ReplacementRefundRow[]
 ): boolean {
-  if (failedRows.length === 0) return false;
+  if (failedRows.length === 0) return true;
   const ordered = [...failedRows].sort(
     (a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)
   );
@@ -185,10 +189,11 @@ function allFailedLegsCoveredByReplacements(
 
 /**
  * Decide a failure alert on an order still marked refunded. Returns true
- * only when every failed refund row has postdating provider-verified
- * completed refunds covering its own payment leg, each replacement
- * spent once — durable evidence that later successful replacement
- * refunds superseded them all. Otherwise
+ * when no failed verdict is current (the queued failure was superseded
+ * by a later non-failure verdict) or when every failed refund row has
+ * postdating provider-verified completed refunds covering its own
+ * payment leg, each replacement spent once — durable evidence that
+ * later successful replacement refunds superseded them all. Otherwise
  * the failure is fresh contradiction: file a falsely-refunded review
  * and return false so the caller still sends the merchant alert. Throws
  * on lookup/file failures so the notification retries instead of

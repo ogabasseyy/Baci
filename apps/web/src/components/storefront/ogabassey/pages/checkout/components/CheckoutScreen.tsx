@@ -2,15 +2,18 @@
 
 import type { ComponentProps } from 'react';
 import { DiscountCodeInput } from '@/components/storefront/checkout/discount-code-input';
-import { MobileOrderSummary } from '@/components/storefront/ogabassey/components/MobileOrderSummary';
-import { DeferredCheckoutAuthModal as CheckoutAuthModal } from './DeferredCheckoutAuthModal';
+import { MobileOrderSummary } from '../../../components/MobileCheckoutComponents';
+import type { deriveCheckoutOrderSummaryPresentation } from '../derive-checkout-order-summary-presentation';
+import type { useCheckoutFinancialSession } from '../hooks/use-checkout-financial-session';
 import { CheckoutHeader } from './CheckoutHeader';
 import { CheckoutPageHeading } from './CheckoutPageHeading';
 import { CheckoutPaymentSessionOverlays } from './CheckoutPaymentSessionOverlays';
-import { CheckoutStepComposition, type CheckoutStepCompositionSession } from './CheckoutStepComposition';
+import {
+  CheckoutStepComposition,
+  type CheckoutStepCompositionSession,
+} from './CheckoutStepComposition';
+import { DeferredCheckoutAuthModal as CheckoutAuthModal } from './DeferredCheckoutAuthModal';
 import { DesktopOrderSummary } from './DesktopOrderSummary';
-import type { useCheckoutFinancialSession } from '../hooks/use-checkout-financial-session';
-import type { deriveCheckoutOrderSummaryPresentation } from '../derive-checkout-order-summary-presentation';
 
 export interface CheckoutScreenProps {
   page: {
@@ -19,7 +22,10 @@ export interface CheckoutScreenProps {
     formatCurrency: (amount: number) => string;
   };
   auth: ComponentProps<typeof CheckoutAuthModal>;
-  overlays: Omit<ComponentProps<typeof CheckoutPaymentSessionOverlays>, 'merchantName' | 'formatCurrency'>;
+  overlays: Omit<
+    ComponentProps<typeof CheckoutPaymentSessionOverlays>,
+    'merchantName' | 'formatCurrency'
+  >;
   summary: {
     presentation: ReturnType<typeof deriveCheckoutOrderSummaryPresentation>;
     payment: ReturnType<typeof useCheckoutFinancialSession>['paymentSession'];
@@ -28,7 +34,13 @@ export interface CheckoutScreenProps {
 }
 
 /** Renders the checkout screen from the existing form, payment, and summary sessions. */
-export function CheckoutScreen({ page, auth, overlays, summary, steps }: CheckoutScreenProps) {
+export function CheckoutScreen({
+  page,
+  auth,
+  overlays,
+  summary,
+  steps,
+}: CheckoutScreenProps) {
   const { presentation, payment } = summary;
 
   return (
@@ -48,7 +60,9 @@ export function CheckoutScreen({ page, auth, overlays, summary, steps }: Checkou
       />
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <CheckoutPageHeading />
-        {presentation.showMobile && <MobileOrderSummary {...presentation.mobile} />}
+        {presentation.showMobile && (
+          <MobileOrderSummary {...presentation.mobile} />
+        )}
         {presentation.discount.visible && (
           <div className="mt-4">
             <DiscountCodeInput

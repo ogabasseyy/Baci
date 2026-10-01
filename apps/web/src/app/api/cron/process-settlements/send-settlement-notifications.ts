@@ -130,8 +130,11 @@ export async function sendSettlementNotifications({
         );
 
         // Guard the mark with the same predicates: a reversal racing
-        // the send must not be flagged notified.
-        await supabase
+        // the send must not be flagged notified. Supabase resolves
+        // write failures instead of throwing, so check the response:
+        // reporting sent when the mark failed would hide the next
+        // run's duplicate email behind a success signal.
+        const { error: markError } = await supabase
           .from('merchant_settlements')
           .update({
             settlement_notified: true,
@@ -143,6 +146,16 @@ export async function sendSettlementNotifications({
             'id',
             stillSettled.map((s) => s.id)
           );
+
+        if (markError) {
+          logger.error({
+            message: 'Failed to mark settlement notification sent',
+            merchantId: data.merchantId,
+            error: markError,
+          });
+          notificationResults.failed++;
+          continue;
+        }
 
         notificationResults.sent++;
       } catch (emailError) {

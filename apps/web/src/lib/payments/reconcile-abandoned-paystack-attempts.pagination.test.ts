@@ -48,6 +48,7 @@ it('checks the next stale attempt before rechecking 25 held attempts on the next
   const completed = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
     neq: vi.fn().mockReturnThis(),
     limit: vi.fn().mockResolvedValue({
       data: [{ id: 'paid-attempt' }],

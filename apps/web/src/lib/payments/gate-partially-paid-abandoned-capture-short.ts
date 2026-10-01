@@ -38,7 +38,7 @@ async function fileShortCaptureReview(
     id?: unknown;
     status?: unknown;
   };
-  const { error } = await supabase.from('reconciliation_review').insert({
+  const row = {
     candidates: null,
     issue_type: 'partial_capture_short_requires_review',
     merchant_id: attempt.merchant_id,
@@ -53,49 +53,161 @@ async function fileShortCaptureReview(
     paystack_ref: attempt.gateway_reference,
     reason: `Paystack capture ${attempt.gateway_reference} verified below the outstanding balance (${captureMinor} of ${outstandingMinor} kobo); captured funds need operations review`,
     txn_id: attempt.id,
-  });
+  };
+  const { error } = await supabase.from('reconciliation_review').insert(row);
   if (!error) return true;
   // The (issue_type, paystack_ref) index is global: two orders sharing a
   // legacy/corrupt reference collide, so a conflict may be the other
   // order's review rather than this capture already filed. Only treat it
-  // as success when this transaction's own review is open; otherwise
-  // holding keeps the captured funds visible instead of stamping them out
-  // of future sweeps.
-  if ((error as { code?: string }).code === POSTGRES_UNIQUE_VIOLATION) {
-    const { data: existing, error: lookupError } = await supabase
+  // as success when this transaction's own review is open.
+  if ((error as { code?: string }).code !== POSTGRES_UNIQUE_VIOLATION) {
+    logger.error({
+      error,
+      message: 'Failed to file short-capture review',
+      orderId: attempt.order_id,
+      reference: attempt.gateway_reference,
+      transactionId: attempt.id,
+    });
+    return false;
+  }
+  const { data: existing, error: lookupError } = await supabase
+    .from('reconciliation_review')
+    .select('txn_id')
+    .eq('issue_type', 'partial_capture_short_requires_review')
+    .eq('paystack_ref', attempt.gateway_reference)
+    .eq('txn_id', attempt.id)
+    .is('resolved_at', null)
+    .maybeSingle();
+  if (lookupError) {
+    logger.error({
+      error: lookupError,
+      message: 'Failed to confirm short-capture review',
+      orderId: attempt.order_id,
+      reference: attempt.gateway_reference,
+      transactionId: attempt.id,
+    });
+    return false;
+  }
+  if (existing) return true;
+  // Not our own review: another order's review (or a sibling attempt's)
+  // owns the reference slot. Refile without the globally colliding
+  // reference so this capture reaches the operations queue instead of
+  // rotating on the same conflict every sweep while blocking order
+  // cancellation. The review stays truthful — it never claims the
+  // reference — while metadata keeps the full capture evidence.
+  const { error: nullRefError } = await supabase
+    .from('reconciliation_review')
+    .insert({ ...row, paystack_ref: null });
+  if (!nullRefError) return true;
+  if ((nullRefError as { code?: string }).code !== POSTGRES_UNIQUE_VIOLATION) {
+    logger.error({
+      error: nullRefError,
+      message: 'Failed to file short-capture review without reference',
+      orderId: attempt.order_id,
+      reference: attempt.gateway_reference,
+      transactionId: attempt.id,
+    });
+    return false;
+  }
+  // Still conflicting: a sibling attempt's open review holds this
+  // order's slot. Append this capture under its own transaction key
+  // so both stay visible; holding here would rotate until the sibling
+  // resolves while this pending attempt blocks cancellation.
+  return appendShortCaptureToSiblingReview(supabase, {
+    attempt,
+    captureMinor,
+    outstandingMinor,
+    providerData,
+  });
+}
+
+async function appendShortCaptureToSiblingReview(
+  supabase: SupabaseClient,
+  {
+    attempt,
+    captureMinor,
+    outstandingMinor,
+    providerData,
+  }: { attempt: ShortAttempt } & ShortEvidence
+): Promise<boolean> {
+  const capture = providerData as unknown as {
+    currency?: unknown;
+    id?: unknown;
+    status?: unknown;
+  };
+  const entry = {
+    capture_amount_minor: captureMinor,
+    currency: typeof capture.currency === 'string' ? capture.currency : 'NGN',
+    gateway_reference: attempt.gateway_reference,
+    outstanding_amount_minor: outstandingMinor,
+    provider_reference: String(capture.id ?? ''),
+    provider_status: String(capture.status ?? ''),
+    observed_at: new Date().toISOString(),
+  };
+  // Read-modify-write, confirmed: concurrent appends for sibling
+  // attempts can clobber each other's keys, so re-read and retry once
+  // when our own key is missing. The update stays guarded on
+  // unresolved so evidence never lands in a review operations just
+  // closed — an empty update means the slot freed and the next sweep
+  // files normally.
+  for (let i = 0; i < 2; i++) {
+    const { data: sibling, error: siblingError } = await supabase
       .from('reconciliation_review')
-      .select('txn_id')
+      .select('id, metadata')
       .eq('issue_type', 'partial_capture_short_requires_review')
-      .eq('paystack_ref', attempt.gateway_reference)
-      .eq('txn_id', attempt.id)
+      .eq('order_id', attempt.order_id)
       .is('resolved_at', null)
       .maybeSingle();
-    if (lookupError) {
-      logger.error({
-        error: lookupError,
-        message: 'Failed to confirm short-capture review',
-        orderId: attempt.order_id,
-        reference: attempt.gateway_reference,
-        transactionId: attempt.id,
-      });
+    if (siblingError || !sibling) {
+      if (siblingError) {
+        logger.error({
+          error: siblingError,
+          message: 'Failed to find sibling short-capture review',
+          orderId: attempt.order_id,
+          transactionId: attempt.id,
+        });
+      }
       return false;
     }
-    if (!existing) {
-      logger.warn({
-        message: 'Short-capture review conflict belongs to another order',
-        orderId: attempt.order_id,
-        reference: attempt.gateway_reference,
-        transactionId: attempt.id,
-      });
+    const siblingMetadata =
+      (sibling.metadata as Record<string, unknown> | null) ?? {};
+    const shortCaptures =
+      (siblingMetadata.short_captures as Record<string, unknown> | null) ?? {};
+    const { data: updated, error: appendError } = await supabase
+      .from('reconciliation_review')
+      .update({
+        metadata: {
+          ...siblingMetadata,
+          short_captures: { ...shortCaptures, [attempt.id]: entry },
+        },
+      })
+      .eq('id', sibling.id)
+      .is('resolved_at', null)
+      .select('id');
+    if (appendError || !updated || updated.length === 0) {
+      if (appendError) {
+        logger.error({
+          error: appendError,
+          message: 'Failed to append short-capture evidence',
+          orderId: attempt.order_id,
+          transactionId: attempt.id,
+        });
+      }
       return false;
     }
-    return true;
+    const { data: confirmed } = await supabase
+      .from('reconciliation_review')
+      .select('metadata')
+      .eq('id', sibling.id)
+      .maybeSingle();
+    const confirmedCaptures = (
+      (confirmed?.metadata as Record<string, unknown> | null) ?? {}
+    ).short_captures as Record<string, unknown> | null;
+    if (confirmedCaptures && attempt.id in confirmedCaptures) return true;
   }
-  logger.error({
-    error,
-    message: 'Failed to file short-capture review',
+  logger.warn({
+    message: 'Short-capture evidence lost a sibling append race twice',
     orderId: attempt.order_id,
-    reference: attempt.gateway_reference,
     transactionId: attempt.id,
   });
   return false;

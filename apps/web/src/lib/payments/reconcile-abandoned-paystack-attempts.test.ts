@@ -59,7 +59,11 @@ describe('reconcileAbandonedPaystackAttempts', () => {
       'paid',
       'partially_paid',
     ]);
-    expect(completedLookup.eq).toHaveBeenCalledWith('status', 'completed');
+    expect(completedLookup.in).toHaveBeenCalledWith('status', [
+      'completed',
+      'refund_pending',
+      'refunded',
+    ]);
     expect(completedLookup.neq).toHaveBeenCalledWith('id', 'attempt-1');
     expect(lookup.order).toHaveBeenCalledWith('updated_at', {
       ascending: true,

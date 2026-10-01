@@ -130,5 +130,20 @@ if sed -n '/Checkout base filter/,/Drop audited/p' "$SEC" \
     | grep -qF "pull_request.base.ref"; then got="yes"; else got="no"; fi
 assert_eq "lockstep:base-ref-checkout" "yes" "$got"
 
+# --- workspace anchoring (reads GITHUB_WORKSPACE, not CWD) ---
+# CWD holds the pristine tree while GITHUB_WORKSPACE points at a
+# drifted copy: the filter must report the drifted tree's drift
+# (exit 1 + label), not the pristine CWD's clean pass (exit 0).
+rm -rf "$WORK/.github" "$WORK/semgrep.sarif" "$WORK/ws2"
+cp -r "$ROOT/.github" "$WORK/.github"
+cp "$WORK/happy.sarif" "$WORK/semgrep.sarif"
+mkdir -p "$WORK/ws2" && cp -r "$ROOT/.github" "$WORK/ws2/"
+printf 'PATH=/evil\n' >> "$WORK/ws2/.github/scripts/muse-review/collect.sh"
+out="$(cd "$WORK" && GITHUB_WORKSPACE="$WORK/ws2" python3 "$FILTER" 2>&1)"
+code="$?"
+case "$out" in *"helper-env-poison"*) got="yes";; *) got="no";; esac
+assert_eq "workspace-anchor-exit" "1" "$code"
+assert_eq "workspace-anchor-label" "yes" "$got"
+
 printf '\nhardening suite: %d passed, %d failed%s\n' "$pass" "$fail" "${fail_names:+ ($fail_names)}"
 [[ "$fail" -eq 0 ]]

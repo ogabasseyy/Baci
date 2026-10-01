@@ -30,6 +30,16 @@ from semgrep_sarif_steps import audit_agent_env, audit_step_commands
 
 def main():
     drift = []
+    # Resolve all file reads against the workspace root, not the
+    # process CWD: a future working-directory default would
+    # otherwise make the audit read the wrong tree (or report an
+    # "empty scan" exit 0) instead of failing closed.
+    root = os.environ.get("GITHUB_WORKSPACE") or os.getcwd()
+    try:
+        os.chdir(root)
+    except OSError as exc:
+        print(f"::error::Cannot enter workspace {root} ({exc}).")
+        return 1
     code, workflow, raw = load_workflow(AUDITED_PATH)
     ctx = SimpleNamespace(code_lines=code, workflow_lines=workflow,
                           workflow_raw=raw, pr_refs=[], span=(0, 0),

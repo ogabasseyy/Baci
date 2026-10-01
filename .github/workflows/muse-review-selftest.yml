@@ -17,6 +17,8 @@ on:
       - '.github/scripts/semgrep-sarif-hardening.test.sh'
       - '.github/workflows/muse-code-review.yml'
       - '.github/workflows/muse-review-selftest.yml'
+      - '.github/workflows/security.yml'
+      - '.github/workflows/dependency-review.yml'
   pull_request:
     paths:
       - '.github/scripts/muse-review/**'
@@ -26,6 +28,8 @@ on:
       - '.github/scripts/semgrep-sarif-hardening.test.sh'
       - '.github/workflows/muse-code-review.yml'
       - '.github/workflows/muse-review-selftest.yml'
+      - '.github/workflows/security.yml'
+      - '.github/workflows/dependency-review.yml'
   schedule:
     # Weekly bump signal so the pinned CLI cannot go silently stale.
     - cron: '17 9 * * 1'
@@ -68,7 +72,7 @@ jobs:
 
       - name: Workflow lint
         # Pinned actionlint binary, SHA256-verified like the Muse install.
-        # Scoped to these two files so unrelated workflows can't red this gate.
+        # Scoped to the reviewed workflows so unrelated ones can't red this gate.
         # A download/outage failure warns and skips (never reds): only a
         # checksum mismatch or a real lint error fails, so a CDN flake
         # cannot block an otherwise valid PR.
@@ -89,7 +93,7 @@ jobs:
             exit 1
           fi
           tar -xzf "${tmpdir}/actionlint.tar.gz" -C "${tmpdir}"
-          "${tmpdir}/actionlint" .github/workflows/muse-code-review.yml .github/workflows/muse-review-selftest.yml
+          "${tmpdir}/actionlint" .github/workflows/muse-code-review.yml .github/workflows/muse-review-selftest.yml .github/workflows/security.yml .github/workflows/dependency-review.yml
 
   pin-freshness:
     name: Muse pin freshness

@@ -127,7 +127,9 @@ t() {
     return
   fi
   if [[ -n "${7:-}" ]]; then export TRUSTED_CHANGED="$7"; else unset TRUSTED_CHANGED; fi
-  out="$(cd "$WORK" && python3 "$FILTER" 2>&1)"
+  # CI exports GITHUB_WORKSPACE (repo root); the filter anchors there,
+  # so unset it to keep the suite reading the scratch tree it mutates.
+  out="$(cd "$WORK" && env -u GITHUB_WORKSPACE python3 "$FILTER" 2>&1)"
   code="$?"
   unset TRUSTED_CHANGED
   assert_eq "$1-exit" "$2" "$code"

@@ -2,9 +2,12 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { getTrackedCustomerCancellationProducts } from '@/lib/get-tracked-customer-cancellation-products';
 import { logger } from '@/lib/logger';
 import { sendOrderCancellationEmail } from '@/lib/order-cancellation-email';
+import { productCacheRevalidation } from '@/lib/product-cache-revalidation';
 import { checkRateLimit } from '@/lib/rate-limiter';
+import { scheduleOrderProductBlogPurgeAfterResponse } from '@/lib/schedule-order-product-blog-purge-after-response';
 import { storefrontOrderCancellationSchema } from '@/schemas/storefront-order-cancellation';
 
 const orderIdSchema = z.uuid();
@@ -88,7 +91,7 @@ export async function POST(
   // cancellation into the generic RPC and 500.
   const { data: orderRow, error: orderLookupError } = await auth.supabase
     .from('orders')
-    .select('payment_method')
+    .select('payment_method, merchant_id, order_items(product_id, variant_id)')
     .eq('id', id)
     .maybeSingle();
   if (orderLookupError) {
@@ -105,9 +108,24 @@ export async function POST(
       { status: 503 }
     );
   }
+  const preCancelOrder = orderRow as {
+    payment_method?: string;
+    merchant_id?: string | null;
+    order_items?: unknown;
+  } | null;
+  // Snapshot the merchant + items BEFORE the RPC commits: if the
+  // post-cancellation reread below fails, this snapshot still identifies the
+  // caches to evict (neither value can change across the cancel RPC).
+  const preCancelSnapshot = preCancelOrder?.merchant_id?.trim()
+    ? {
+        merchant_id: preCancelOrder.merchant_id.trim(),
+        order_items: Array.isArray(preCancelOrder.order_items)
+          ? preCancelOrder.order_items
+          : [],
+      }
+    : null;
   const cancelRpc =
-    (orderRow as { payment_method?: string } | null)?.payment_method ===
-    'uba_redvault'
+    preCancelOrder?.payment_method === 'uba_redvault'
       ? 'cancel_uba_redvault_order_as_customer'
       : 'cancel_order_as_customer';
   const { data, error } = await auth.supabase.rpc(cancelRpc, {
@@ -144,6 +162,117 @@ export async function POST(
   }
 
   const didCancel = data === true;
+
+  // The customer cancellation RPC restocks managed inventory, but it cannot
+  // invalidate the storefront's Next/Cloudflare caches. Resolve the owning
+  // merchant and order products after the atomic transition, then queue the
+  // same best-effort purge flow used by checkout and merchant cancellation.
+  // This stays after the RPC so an idempotent retry (data === false) does not
+  // churn product or article caches a second time.
+  if (didCancel) {
+    try {
+      let cancelledOrder: {
+        merchant_id?: string | null;
+        order_items?: unknown;
+      } | null = null;
+      let cancelledOrderError: unknown = null;
+      try {
+        const reread = await auth.supabase
+          .from('orders')
+          .select('merchant_id, order_items(product_id, variant_id)')
+          .eq('id', id)
+          .maybeSingle();
+        cancelledOrder = reread.data;
+        cancelledOrderError = reread.error;
+      } catch (rereadError) {
+        // A rejected reread preserves the snapshot exactly like a resolved
+        // `{ error }`: the restock already committed, so the purge still
+        // runs from pre-cancellation data instead of escaping unqueued.
+        cancelledOrderError = rereadError;
+      }
+      // The restock already committed: fall back to the pre-cancellation
+      // snapshot when the reread fails so the purge still runs.
+      const effectiveOrder = cancelledOrder ?? preCancelSnapshot;
+      if (!effectiveOrder) {
+        throw cancelledOrderError ?? new Error('Cancelled order not found');
+      }
+      if (!cancelledOrder) {
+        logger.warn({
+          message:
+            'Cancelled order reread failed; purging from pre-cancellation snapshot',
+          orderId: id,
+          error: cancelledOrderError,
+        });
+      }
+
+      const typedOrder = effectiveOrder as unknown as {
+        merchant_id?: string | null;
+        order_items?: unknown;
+      };
+      const orderItems = (
+        Array.isArray(typedOrder.order_items) ? typedOrder.order_items : []
+      ).filter(
+        (item): item is { product_id?: unknown; variant_id?: unknown } =>
+          typeof item === 'object' && item !== null
+      );
+      const productIds = Array.from(
+        new Set(
+          orderItems
+            .map((item) => item.product_id)
+            .filter(
+              (productId): productId is string =>
+                typeof productId === 'string' && productId.trim().length > 0
+            )
+            .map((productId) => productId.trim())
+        )
+      );
+      const merchantId = typedOrder.merchant_id?.trim();
+      if (merchantId && productIds.length > 0) {
+        const trackedProducts = await getTrackedCustomerCancellationProducts({
+          merchantId,
+          productIds,
+          supabase: auth.supabase,
+        });
+        const trackedProductIds = trackedProducts.map((product) => product.id);
+        const slugs = trackedProducts
+          .map((product) => product.slug)
+          .filter((slug): slug is string => Boolean(slug?.trim()))
+          .map((slug) => slug.trim());
+        if (slugs.length > 0) {
+          productCacheRevalidation.revalidateProductSlugs(merchantId, slugs);
+        }
+
+        if (trackedProductIds.length > 0) {
+          try {
+            productCacheRevalidation.revalidateProducts(merchantId, undefined, {
+              feedScope: 'merchant',
+            });
+          } catch (productCacheError) {
+            logger.error({
+              message:
+                'Failed to revalidate product caches after customer cancellation',
+              orderId: id,
+              merchantId,
+              error: productCacheError,
+            });
+          }
+          scheduleOrderProductBlogPurgeAfterResponse({
+            merchantId,
+            productIds: trackedProductIds,
+            supabase: auth.supabase,
+          });
+        }
+      }
+    } catch (cacheError) {
+      // Cancellation is already committed. Cache invalidation remains
+      // best-effort; the product/article TTLs self-heal if this read fails.
+      logger.error({
+        message: 'Failed to queue product caches after customer cancellation',
+        orderId: id,
+        error: cacheError,
+      });
+    }
+  }
 
   // 5. Best-effort cancellation email. The order is already cancelled, so an
   // email failure must NOT fail the request.

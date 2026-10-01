@@ -75,7 +75,6 @@ export async function POST(request: NextRequest) {
           query: parsed.data.query,
           limit: requestLimit,
           offset: rankedSearchOffset,
-          trackAnalytics: false,
         });
         rankedSearchTotal = ranked.count;
 

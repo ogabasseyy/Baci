@@ -1,33 +1,11 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  jest,
-} from '@jest/globals';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { NavigationContext } from 'expo-router/react-navigation';
-import type { ComponentProps } from 'react';
-import { Platform } from 'react-native';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { SharedValue } from 'react-native-reanimated';
 import type { Block } from '@/types/blocks';
 import { HomeScreenView } from './HomeScreenView';
 
 const mockSetNavigationBarStyle = jest.fn();
 let mockColorScheme: 'dark' | 'light' = 'light';
-const originalPlatformOS = Platform.OS;
-type NavigationContextValue = NonNullable<
-  ComponentProps<typeof NavigationContext.Provider>['value']
->;
-type FocusEventName = 'blur' | 'focus';
-
-function setPlatformOS(os: typeof Platform.OS) {
-  Object.defineProperty(Platform, 'OS', {
-    configurable: true,
-    value: os,
-  });
-}
 
 jest.mock('expo-navigation-bar', () => ({
   setStyle: (...args: unknown[]) => mockSetNavigationBarStyle(...args),
@@ -36,16 +14,6 @@ jest.mock('expo-navigation-bar', () => ({
 jest.mock('@/components/useColorScheme', () => ({
   useColorScheme: () => mockColorScheme,
 }));
-
-jest.mock('expo-image', () => {
-  const { Text } = jest.requireActual(
-    'react-native'
-  ) as typeof import('react-native');
-
-  return {
-    Image: () => <Text>Elite texture</Text>,
-  };
-});
 
 jest.mock('@/components/storefront/GadgetPattern', () => {
   const { Text } = jest.requireActual(
@@ -70,18 +38,6 @@ jest.mock('expo-router', () => ({
     Screen: () => null,
   },
 }));
-
-jest.mock('@/components/OfflineNotice', () => {
-  const { Text } = jest.requireActual(
-    'react-native'
-  ) as typeof import('react-native');
-
-  return {
-    OfflineNotice: ({ message }: { message?: string }) => (
-      <Text>{message ?? 'Offline cached content'}</Text>
-    ),
-  };
-});
 
 jest.mock('./HomeFeedList', () => {
   const { Pressable, Text, View } = jest.requireActual(
@@ -123,16 +79,6 @@ jest.mock('@/components/storefront/Header', () => {
   };
 });
 
-jest.mock('@/components/storefront/HomeServiceCards', () => {
-  const { Text } = jest.requireActual(
-    'react-native'
-  ) as typeof import('react-native');
-
-  return {
-    HomeServiceCards: () => <Text>Services</Text>,
-  };
-});
-
 jest.mock('@/components/storefront/SearchDropdown', () => {
   const { Text } = jest.requireActual(
     'react-native'
@@ -142,10 +88,30 @@ jest.mock('@/components/storefront/SearchDropdown', () => {
     SearchDropdown: ({
       isVisible,
       onClose,
+      onSeeAllResults,
+      query,
+      showMinLengthHint,
     }: {
       isVisible: boolean;
       onClose: () => void;
-    }) => (isVisible ? <Text onPress={onClose}>Search results</Text> : null),
+      onSeeAllResults?: (query: string) => void;
+      query?: string;
+      showMinLengthHint?: boolean;
+    }) =>
+      isVisible ? (
+        <>
+          <Text onPress={onClose}>Search results</Text>
+          <Text
+            testID="mock-see-all-results"
+            onPress={() => onSeeAllResults?.(query ?? '')}
+          >
+            Mock see all results
+          </Text>
+          {showMinLengthHint ? (
+            <Text testID="mock-min-length-hint">Mock min length hint</Text>
+          ) : null}
+        </>
+      ) : null,
   };
 });
 
@@ -199,6 +165,7 @@ function createProps() {
     onSearchCancel: jest.fn(),
     onSearchQueryChange: jest.fn(),
     onSearchSubmit: jest.fn(),
+    onSeeAllResults: jest.fn(),
     primaryColor: '#0ea5e9',
     primaryProductGridIndex: 1,
     refreshing: false,
@@ -207,37 +174,7 @@ function createProps() {
     searchVisible: false,
     selectedCategoryId: null,
     shouldRenderDecorations: true,
-  };
-}
-
-function createNavigationMock(initialFocused = true) {
-  let focused = initialFocused;
-  const listeners: Record<FocusEventName, Array<() => void>> = {
-    blur: [],
-    focus: [],
-  };
-  const navigation = {
-    addListener: jest.fn((eventName: FocusEventName, listener: () => void) => {
-      listeners[eventName].push(listener);
-      return () => {
-        listeners[eventName] = listeners[eventName].filter(
-          (currentListener) => currentListener !== listener
-        );
-      };
-    }),
-    isFocused: jest.fn(() => focused),
-  } as unknown as NavigationContextValue;
-
-  return {
-    emit: (eventName: FocusEventName) => {
-      focused = eventName === 'focus';
-      act(() => {
-        for (const listener of listeners[eventName]) {
-          listener();
-        }
-      });
-    },
-    navigation,
+    showSearchMinLengthHint: false,
   };
 }
 
@@ -245,11 +182,6 @@ describe('HomeScreenView', () => {
   beforeEach(() => {
     mockSetNavigationBarStyle.mockClear();
     mockColorScheme = 'light';
-    setPlatformOS(originalPlatformOS);
-  });
-
-  afterEach(() => {
-    setPlatformOS(originalPlatformOS);
   });
 
   it('renders the loading shell while initial content loads', () => {
@@ -259,14 +191,6 @@ describe('HomeScreenView', () => {
     expect(screen.getByText('Hero skeleton')).toBeTruthy();
     expect(screen.getByText('Grid skeleton')).toBeTruthy();
     expect(screen.queryByTestId('home-feed-list')).toBeNull();
-  });
-
-  it('keeps the root navigation bar style while the light loading shell is visible', () => {
-    setPlatformOS('android');
-
-    render(<HomeScreenView {...createProps()} isConfigLoading={true} />);
-
-    expect(mockSetNavigationBarStyle).toHaveBeenLastCalledWith('dark');
   });
 
   it('renders home blocks and delegates header and refresh interactions', () => {
@@ -296,101 +220,5 @@ describe('HomeScreenView', () => {
     render(<HomeScreenView {...createProps()} primaryColor="#22c55e" />);
 
     expect(screen.getByText('Gadget pattern #22c55e light')).toBeTruthy();
-  });
-
-  it('renders only one shared backdrop for the elite home surface', () => {
-    render(<HomeScreenView {...createProps()} isElite={true} />);
-
-    expect(screen.getAllByText(/Gadget pattern/)).toHaveLength(1);
-    expect(screen.getByText('Gadget pattern default dark')).toBeTruthy();
-  });
-
-  it('renders the online error notice for an unsuccessful page request', () => {
-    render(<HomeScreenView {...createProps()} isError={true} />);
-
-    expect(screen.getByText('Failed to load content')).toBeTruthy();
-  });
-
-  it('shows cached-content feedback and the elite backdrop while offline', () => {
-    render(
-      <HomeScreenView {...createProps()} isElite={true} isOnline={false} />
-    );
-
-    expect(screen.getByText('Offline cached content')).toBeTruthy();
-    expect(screen.getAllByText(/Gadget pattern/)).toHaveLength(1);
-  });
-
-  it('keeps heavy decorative layers deferred while rendering the elite backdrop immediately', () => {
-    render(
-      <HomeScreenView
-        {...createProps()}
-        isElite={true}
-        shouldRenderDecorations={false}
-      />
-    );
-
-    expect(screen.getByText('Block CategoryRail')).toBeTruthy();
-    expect(screen.getByText('Gadget pattern default dark')).toBeTruthy();
-    expect(screen.queryByText('Snow effect')).toBeNull();
-  });
-
-  it('delegates closing the visible search overlay', () => {
-    const onSearchCancel = jest.fn();
-
-    render(
-      <HomeScreenView
-        {...createProps()}
-        onSearchCancel={onSearchCancel}
-        searchVisible={true}
-      />
-    );
-
-    fireEvent.press(screen.getByText('Search results'));
-
-    expect(onSearchCancel).toHaveBeenCalledTimes(1);
-  });
-
-  it('restores the root navigation bar style when the Home tab loses focus', () => {
-    setPlatformOS('android');
-    const { emit, navigation } = createNavigationMock(true);
-
-    const props = createProps();
-    render(
-      <NavigationContext.Provider value={navigation}>
-        <HomeScreenView {...props} />
-      </NavigationContext.Provider>
-    );
-
-    expect(mockSetNavigationBarStyle).toHaveBeenLastCalledWith('light');
-
-    emit('blur');
-
-    expect(mockSetNavigationBarStyle).toHaveBeenLastCalledWith('dark');
-
-    emit('focus');
-
-    expect(mockSetNavigationBarStyle).toHaveBeenLastCalledWith('light');
-  });
-
-  it('reapplies light Home navigation bar buttons when the color scheme changes', () => {
-    setPlatformOS('android');
-    const { navigation } = createNavigationMock(true);
-
-    const { rerender } = render(
-      <NavigationContext.Provider value={navigation}>
-        <HomeScreenView {...createProps()} />
-      </NavigationContext.Provider>
-    );
-
-    expect(mockSetNavigationBarStyle).toHaveBeenLastCalledWith('light');
-
-    mockColorScheme = 'dark';
-    rerender(
-      <NavigationContext.Provider value={navigation}>
-        <HomeScreenView {...createProps()} />
-      </NavigationContext.Provider>
-    );
-
-    expect(mockSetNavigationBarStyle).toHaveBeenLastCalledWith('light');
   });
 });

@@ -3748,6 +3748,34 @@ describe('POST /api/orders — product cache revalidation after order creation',
   });
 
   it('revalidates the merchant product caches once after a successful order', async () => {
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(() => {
+      const supabase = buildMockSupabase();
+      const originalFrom = supabase.from;
+      supabase.from = vi.fn((table: string) => {
+        const original = originalFrom(table);
+        if (table !== 'products') {
+          return original;
+        }
+        // Success path: the enrichment lookup resolves (no rows), so the
+        // rejection-only broad hard-expire below must not fire.
+        const enrichmentOutcome = Promise.resolve({
+          data: [],
+          error: null,
+        });
+        const select = vi.fn((columns: string) => {
+          if (columns.startsWith('id, slug, name')) {
+            return {
+              eq: vi.fn(() => ({ in: vi.fn(() => enrichmentOutcome) })),
+            };
+          }
+          return original.select(columns);
+        });
+        return { ...original, select };
+      });
+      return supabase as unknown as never;
+    });
+
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
@@ -3793,21 +3821,35 @@ describe('POST /api/orders — product cache revalidation after order creation',
         if (table !== 'products') {
           return original;
         }
-        // Only the slug-revalidation lookup selects exactly 'slug' — the
-        // pre-existing tax/negotiation product lookup selects other columns
-        // and must keep resolving via the default chain.
-        const select = vi.fn((columns: string) =>
-          columns === 'slug'
-            ? {
-                eq: vi.fn().mockReturnThis(),
-                in: vi.fn().mockReturnThis(),
-                returns: vi.fn().mockResolvedValue({
-                  data: null,
-                  error: { message: 'db down' },
-                }),
-              }
-            : original.select(columns)
-        );
+        // The cache-revalidation lookup selects the compact id/slug/policy
+        // projection; the pre-existing tax/negotiation product lookup selects
+        // other columns and must keep resolving via the default chain.
+        // The enrichment lookup (long projection) fails the same way — a db
+        // outage affects both reads — so it resolves a realistic `{ error }`
+        // instead of the default chain's bare-await undefined: enrichment
+        // fails open to caller hints without rejecting.
+        const enrichmentOutcome = Promise.resolve({
+          data: null,
+          error: { message: 'db down' },
+        });
+        const select = vi.fn((columns: string) => {
+          if (columns.startsWith('id, slug, manage_stock')) {
+            return {
+              eq: vi.fn().mockReturnThis(),
+              in: vi.fn().mockReturnThis(),
+              returns: vi.fn().mockResolvedValue({
+                data: null,
+                error: { message: 'db down' },
+              }),
+            };
+          }
+          if (columns.startsWith('id, slug, name')) {
+            return {
+              eq: vi.fn(() => ({ in: vi.fn(() => enrichmentOutcome) })),
+            };
+          }
+          return original.select(columns);
+        });
         return { ...original, select };
       });
       return supabase as unknown as never;
@@ -3822,7 +3864,14 @@ describe('POST /api/orders — product cache revalidation after order creation',
 
     expect(response.status).toBe(201);
     expect(mockRevalidateProducts).toHaveBeenCalledExactlyOnceWith(MERCHANT_ID);
-    expect(mockRevalidateProductSlugs).not.toHaveBeenCalled();
+    // Fail-closed: the route-level slug lookup failed, but the known-ids blog
+    // purge fallback still hard-expires the per-slug Next tags from the caller
+    // hints so a later edge purge cannot refill from stale snapshots.
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledExactlyOnceWith(
+      MERCHANT_ID,
+      ['p-1'],
+      { expireImmediately: true }
+    );
     expect(logger.error).toHaveBeenCalledWith(
       expect.objectContaining({
         message: 'Failed to resolve product slugs for PDP cache revalidation',
@@ -7048,6 +7097,14 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
   });
 
   it('dispatches a payment request email with transfer details for payforme orders', async () => {
+    // DVA-focused: stub the unrelated checkout blog-purge scheduler so the
+    // after() ordering assertions below observe only the DVA flow.
+    const blogPurgeMod = await import(
+      '@/lib/checkout/schedule-checkout-product-blog-purge'
+    );
+    const blogPurgeStub = vi
+      .spyOn(blogPurgeMod, 'scheduleCheckoutProductBlogPurge')
+      .mockResolvedValue(undefined);
     const supabase = buildMockSupabase();
     const { accountUpsert, backgroundSupabase } = createBackgroundSupabaseMock({
       orderItemsResponses: [
@@ -7145,6 +7202,7 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     });
 
     const response = await POST(request);
+    blogPurgeStub.mockRestore();
     expect(response.status).toBe(201);
 
     await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {
@@ -7194,6 +7252,14 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
   });
 
   it('retries Pay for Me DVA provisioning post-response after a handled provider failure', async () => {
+    // DVA-focused: stub the unrelated checkout blog-purge scheduler so the
+    // after() ordering assertions below observe only the DVA flow.
+    const retryBlogPurgeMod = await import(
+      '@/lib/checkout/schedule-checkout-product-blog-purge'
+    );
+    const retryBlogPurgeStub = vi
+      .spyOn(retryBlogPurgeMod, 'scheduleCheckoutProductBlogPurge')
+      .mockResolvedValue(undefined);
     // paystackRequest converts HTTP errors and fetch rejections into
     // { success: false }: the pre-response attempt must report retryable
     // (not suppress the fallback), so the committed request email still
@@ -7297,6 +7363,7 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     });
 
     const response = await POST(request);
+    retryBlogPurgeStub.mockRestore();
     expect(response.status).toBe(201);
 
     await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {

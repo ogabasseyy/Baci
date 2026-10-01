@@ -48,7 +48,6 @@ describe('event pipeline authority importer boundary', () => {
       'apps/web/src/app/api/cron/purge-jumia-self-authorization-discoveries/route.ts',
       'apps/web/src/app/api/orders/route.ts',
       'apps/web/src/app/api/payments/juicyway/webhook/route.ts',
-      'apps/web/src/app/api/platform/events/platform-event-forwarding.ts',
       'apps/web/src/app/api/shipping/quotes/route.ts',
       'apps/web/src/lib/events/record-platform-order-created-event.ts',
       'apps/web/src/lib/expo-push.ts',

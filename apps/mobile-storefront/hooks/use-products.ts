@@ -24,6 +24,7 @@ import {
   type UseProductsOptions,
 } from '@/hooks/product-utils';
 import { useMerchant } from '@/hooks/use-merchant';
+import { fetchLockedNextPage } from './product-next-page-lock';
 
 export function useProducts(options: UseProductsOptions = {}) {
   const { data: merchant } = useMerchant();
@@ -38,6 +39,7 @@ export function useProducts(options: UseProductsOptions = {}) {
     hasNextPage,
     isError,
     isFetchedAfterMount,
+    isFetchNextPageError,
     isFetching,
     isFetchingNextPage,
     isLoading,
@@ -56,6 +58,19 @@ export function useProducts(options: UseProductsOptions = {}) {
   });
 
   const pendingLoadMoreRef = useRef(false);
+  const nextPageLocksRef = useRef(new Map<string, boolean>());
+  const pendingLoadMoreKeyRef = useRef<string | null>(null);
+
+  // The queued bottom-reached signal is query-scoped: a signal queued for
+  // query A must not fire a next-page fetch after the shopper moves to B.
+  // (In-flight locks are keyed per query inside fetchLockedNextPage.)
+  // Adjusted inline during render so the reset lands before the drain
+  // effect runs.
+  const nextPageQueryKey = JSON.stringify(['products', merchantId, options]);
+  if (pendingLoadMoreKeyRef.current !== nextPageQueryKey) {
+    pendingLoadMoreKeyRef.current = nextPageQueryKey;
+    pendingLoadMoreRef.current = false;
+  }
 
   useEffect(() => {
     if (!hasNextPage) {
@@ -65,9 +80,27 @@ export function useProducts(options: UseProductsOptions = {}) {
 
     if (pendingLoadMoreRef.current && !isFetching && !isFetchingNextPage) {
       pendingLoadMoreRef.current = false;
-      void fetchNextPage();
+      // A failed background refetch drops the queued signal instead of
+      // draining it: firing fetchNextPage now could succeed and clear the
+      // generic error while the retained pages were never refreshed,
+      // hiding stale results and bypassing the refresh-retry path. Fresh
+      // intent (scroll or footer retry) drives the next fetch instead.
+      if (!isError) {
+        fetchLockedNextPage(
+          nextPageLocksRef.current,
+          nextPageQueryKey,
+          fetchNextPage
+        );
+      }
     }
-  }, [fetchNextPage, hasNextPage, isFetching, isFetchingNextPage]);
+  }, [
+    fetchNextPage,
+    hasNextPage,
+    isError,
+    isFetching,
+    isFetchingNextPage,
+    nextPageQueryKey,
+  ]);
 
   const products = dedupeById(
     data?.pages.flatMap((page) => page.products) || []
@@ -82,6 +115,10 @@ export function useProducts(options: UseProductsOptions = {}) {
     isFetching,
     isError,
     error: error?.message || null,
+    // True only when the failing request was a next-page fetch (as opposed
+    // to a background refetch of loaded pages), so error footers can route
+    // the retry to loadMore versus refetch.
+    isNextPageError: isFetchNextPageError,
     hasMore: hasNextPage || false,
     refetch,
     loadMore: () => {
@@ -100,7 +137,11 @@ export function useProducts(options: UseProductsOptions = {}) {
         return;
       }
 
-      void fetchNextPage();
+      fetchLockedNextPage(
+        nextPageLocksRef.current,
+        nextPageQueryKey,
+        fetchNextPage
+      );
     },
     isLoadingMore: isFetchingNextPage,
   };

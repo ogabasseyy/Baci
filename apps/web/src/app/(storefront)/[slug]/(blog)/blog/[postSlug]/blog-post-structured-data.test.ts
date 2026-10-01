@@ -118,4 +118,43 @@ describe('buildBlogPostStructuredData', () => {
       headline: 'Google Pixel Buying Guide',
     });
   });
+
+  it('keeps plain-text ampersands single-encoded alongside a price token', () => {
+    // Arrange: token resolution runs the plain-text description through the
+    // HTML sanitizer, which escapes `&` as `&amp;`.
+    const productId = '11111111-1111-4111-8111-111111111111';
+    const data = buildBlogPostStructuredData({
+      catalogPrices: {
+        products: [
+          { id: productId, name: 'Phone', price: 250000, manage_stock: false },
+        ],
+        currencySource: { country: 'NG', payout_currency: 'NGN' },
+      },
+      author: {
+        name: 'Bolakale',
+        url: 'https://ogabassey.com/blog/author/bolakale',
+      },
+      baseUrl: 'https://ogabassey.com',
+      blogIndexUrl: 'https://ogabassey.com/blog',
+      content: '<p>Guide body.</p>',
+      merchant: {
+        business_name: 'Ogabassey',
+        logo_url: null,
+        slug: 'ogabassey',
+        social_media: null,
+      },
+      post: {
+        published_at: '2026-06-25T08:00:00.000Z',
+        seo_description: `Phones from AT&T partner stores: {{catalog-price:${productId}}}.`,
+        title: 'Buying guide',
+      },
+      postUrl: 'https://ogabassey.com/blog/buying-guide',
+    });
+
+    // Assert: the schema stores the literal text (unicode-escaped once by
+    // the shared schema sanitizer), not the double-encoded entity.
+    expect(data.blogSchema.description).toContain('AT\\u0026T');
+    expect(data.blogSchema.description).toContain('₦250,000.00');
+    expect(data.blogSchema.description).not.toContain('amp;');
+  });
 });

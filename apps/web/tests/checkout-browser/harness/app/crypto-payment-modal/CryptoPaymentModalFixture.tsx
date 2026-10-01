@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { CryptoPaymentModal } from '@/components/storefront/ogabassey/pages/checkout/components/CryptoPaymentModal';
+import { CheckoutPaymentOverlays } from '@/components/storefront/ogabassey/pages/checkout/components/CheckoutPaymentOverlays';
 import type {
   CryptoPaymentData,
   CryptoVerificationStatus,
@@ -32,25 +32,13 @@ const paymentData: CryptoPaymentData = {
   qrcode: fixtureQr,
 };
 
-const closeConfirmation =
-  "Are you sure you want to close? If you've already sent payment, your order will still be processed once the payment is detected.";
-
 export function CryptoPaymentModalFixture() {
   const [verificationStatus, setVerificationStatus] =
     useState<CryptoVerificationStatus>('idle');
   const [isOpen, setIsOpen] = useState(false);
-  const [copiedText, setCopiedText] = useState<string | null>(null);
   const [dismissal, setDismissal] = useState<string | null>(null);
   const isVerifying =
     verificationStatus === 'checking' || verificationStatus === 'pending';
-
-  const copyToClipboard = (text: string) => {
-    if (!navigator.clipboard?.writeText) return;
-    void navigator.clipboard.writeText(text).then(
-      () => setCopiedText(text),
-      () => setCopiedText(null)
-    );
-  };
 
   return (
     <main className="min-h-screen bg-gray-50 p-8 text-gray-900">
@@ -89,7 +77,6 @@ export function CryptoPaymentModalFixture() {
           className="mt-5 rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white"
           onClick={() => {
             setDismissal(null);
-            setCopiedText(null);
             setIsOpen(true);
           }}
           type="button"
@@ -103,26 +90,23 @@ export function CryptoPaymentModalFixture() {
         )}
       </section>
 
-      {isOpen && (
-        <CryptoPaymentModal
-          copiedText={copiedText}
-          data={paymentData}
-          isVerifying={isVerifying}
-          onClose={() => {
-            setIsOpen(false);
-            setDismissal('Modal closed from header.');
-          }}
-          onCloseConfirm={() => {
-            if (window.confirm(closeConfirmation)) {
-              setIsOpen(false);
-              setDismissal('Modal closed from order status.');
-            }
-          }}
-          onCopyToClipboard={copyToClipboard}
-          onVerify={() => setVerificationStatus('checking')}
-          verificationStatus={verificationStatus}
-        />
-      )}
+      <CheckoutPaymentOverlays
+        cryptoPayment={
+          isOpen
+            ? {
+                data: paymentData,
+                isVerifying,
+                onClose: () => {
+                  setIsOpen(false);
+                  setDismissal('Crypto payment modal closed.');
+                },
+                onVerify: () => setVerificationStatus('checking'),
+                verificationStatus,
+              }
+            : undefined
+        }
+        walletTransfer={{}}
+      />
     </main>
   );
 }

@@ -45,12 +45,14 @@ interface HomeScreenViewProps {
   onSearchCancel: () => void;
   onSearchQueryChange: (query: string) => void;
   onSearchSubmit: () => void;
+  onSeeAllResults: (query: string) => void;
   primaryColor: string;
   primaryProductGridIndex: number;
   refreshing: boolean;
   resolvedHeaderHeight: number;
   searchQuery: string;
   searchVisible: boolean;
+  showSearchMinLengthHint: boolean;
   selectedCategoryId: string | null;
   shouldRenderDecorations: boolean;
 }
@@ -75,6 +77,7 @@ export function HomeScreenView({
   onSearchCancel,
   onSearchQueryChange,
   onSearchSubmit,
+  onSeeAllResults,
   primaryColor,
   primaryProductGridIndex,
   refreshing,
@@ -83,6 +86,7 @@ export function HomeScreenView({
   searchVisible,
   selectedCategoryId,
   shouldRenderDecorations,
+  showSearchMinLengthHint,
 }: HomeScreenViewProps) {
   const colorScheme = useColorScheme();
   useHomeNavigationBarStyle(colorScheme, !isConfigLoading);
@@ -211,6 +215,8 @@ export function HomeScreenView({
         topOffset={resolvedHeaderHeight}
         query={searchQuery}
         onQueryChange={onSearchQueryChange}
+        onSeeAllResults={onSeeAllResults}
+        showMinLengthHint={showSearchMinLengthHint}
         hideInput={true}
       />
     </View>

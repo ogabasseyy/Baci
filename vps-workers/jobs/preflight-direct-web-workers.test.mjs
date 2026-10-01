@@ -5,6 +5,7 @@ import { getDirectWorkerPreflightProblems } from './preflight-direct-web-workers
 const commonEnv = {
   BACI_REPO_DIR: '/opt/baci/app',
   BACI_WEB_BASE_URL: 'https://usebaci.com',
+  INTERNAL_API_SECRET: 'test-internal-secret',
   IMEI_IDENTIFIER_ENCRYPTION_KEY: 'encryption-key',
   JUMIA_AUTHORIZATION_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64'),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon-key',
@@ -21,6 +22,15 @@ const commonEnv = {
 };
 
 describe('direct worker environment preflight', () => {
+  it('requires the request-context cache expiry credential', () => {
+    assert.deepEqual(
+      getDirectWorkerPreflightProblems({
+        ...commonEnv,
+        INTERNAL_API_SECRET: '',
+      }),
+      ['INTERNAL_API_SECRET is required']
+    );
+  });
   it('accepts an explicitly configured pre-launch environment', () => {
     assert.deepEqual(getDirectWorkerPreflightProblems(commonEnv), []);
   });

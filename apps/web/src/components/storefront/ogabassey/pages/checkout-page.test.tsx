@@ -2,9 +2,11 @@ import {
   act,
   CheckoutPage,
   expect,
+  fireEvent,
   it,
   mockCaptureCheckoutFunnelEventOnce,
   mockCheckoutSubmissionState,
+  mockRouterPush,
   openCreditDirectCheckout,
   openCredPalCheckout,
   render,
@@ -32,6 +34,18 @@ it('wraps the normal checkout state in the OgaBassey checkout scope', async () =
   expect(
     checkoutMarkers.some((node) => node.closest('.ogabassey-checkout-page'))
   ).toBe(true);
+});
+
+it('returns to the merchant cart from checkout navigation', async () => {
+  mockCheckoutSubmissionState();
+
+  render(<CheckoutPage />);
+
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Return to Cart' })
+  );
+
+  expect(mockRouterPush).toHaveBeenCalledWith('/ogabassey/cart');
 });
 
 it('wraps the checkout loading state in the OgaBassey checkout scope', async () => {

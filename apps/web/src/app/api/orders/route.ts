@@ -30,7 +30,7 @@ import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiatio
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
 import { redvaultOrderDraftFulfillment } from '@/lib/checkout/redvault-order-draft-fulfillment';
 import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
-import { revalidateOrderProductCaches } from '@/lib/checkout/revalidate-order-product-caches';
+import { scheduleCheckoutProductBlogPurge } from '@/lib/checkout/schedule-checkout-product-blog-purge';
 import { selectIdempotencyShippingAddress } from '@/lib/checkout/select-idempotency-shipping-address';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import { validateLocalAirportDeliveryFee } from '@/lib/checkout/validate-local-airport-delivery-fee';
@@ -2112,12 +2112,23 @@ export async function POST(request: NextRequest) {
       // revalidation as the standard branch so listings and PDP pages do
       // not keep advertising pre-reservation stock.
       if (redvaultCheckoutResponse.status === 201) {
-        await revalidateOrderProductCaches({
-          merchantId: merchant_id,
-          orderId: null,
-          productIds: orderItemsPayload.map((item) => item.product_id),
-          supabase,
-        });
+        try {
+          await scheduleCheckoutProductBlogPurge({
+            merchantId: merchant_id,
+            merchantSlug: merchant.slug,
+            orderId: null,
+            orderItems: orderItemsPayload,
+            supabase,
+          });
+        } catch (revalidateError) {
+          logger.error({
+            message:
+              'Failed to revalidate product caches after REDVAULT order creation',
+            error: revalidateError,
+            orderId: null,
+            merchantId: merchant_id,
+          });
+        }
         // First-time REDVAULT creations return before the shared platform
         // event call below, so emit the idempotent order-created event
         // here. Replays answer 200 and stay suppressed: the event keys
@@ -2595,12 +2606,22 @@ export async function POST(request: NextRequest) {
     // effects — so it is never gated on downstream success. Skip on
     // idempotent replay (no re-decrement). Best-effort: never breaks checkout.
     if (!idempotencyReplayed) {
-      await revalidateOrderProductCaches({
-        merchantId: merchant_id,
-        orderId: order.id,
-        productIds: orderItemsPayload.map((item) => item.product_id),
-        supabase,
-      });
+      try {
+        await scheduleCheckoutProductBlogPurge({
+          merchantId: merchant_id,
+          merchantSlug: merchant.slug,
+          orderId: order.id,
+          orderItems: orderItemsPayload,
+          supabase,
+        });
+      } catch (revalidateError) {
+        logger.error({
+          message: 'Failed to revalidate product caches after order creation',
+          error: revalidateError,
+          orderId: order.id,
+          merchantId: merchant_id,
+        });
+      }
     }
 
     const orderTotal = Number(order.total ?? 0);

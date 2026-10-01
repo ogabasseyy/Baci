@@ -59,6 +59,25 @@ describe('scheduleNewProductCaches', () => {
     ]);
   });
 
+  it('passes category-fallback article slugs through the purge scheduler', () => {
+    scheduleNewProductCaches({
+      merchantId: 'merchant-1',
+      merchantSlug: 'merchant-store',
+      productId: 'product-1',
+      slug: 'new-product',
+      name: 'New Product',
+      category: 'Electronics',
+      images: [],
+      blogPostSlugs: ['electronics-buying-guide'],
+    });
+
+    expect(mocks.purge).toHaveBeenLastCalledWith(
+      'merchant-store',
+      [{ slug: 'new-product', categorySegment: 'electronics' }],
+      { blogPostSlugs: ['electronics-buying-guide'] }
+    );
+  });
+
   it('does not turn a cache-purge scheduling error into a failed product creation', () => {
     mocks.purge.mockImplementationOnce(() => {
       throw new Error('purge unavailable');

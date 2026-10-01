@@ -6,6 +6,8 @@ import {
 } from '@/lib/quiz/quiz-runtime-env';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/types/supabase';
+import { invalidateQuizProductCaches } from './quiz-product-cache-invalidation';
+import { resolveQuizSweepWatermarks } from './quiz-sweep-watermarks';
 
 const COUNT_KEYS = [
   'scheduledPromoted',
@@ -169,6 +171,7 @@ function runStep(client: QuizFinalizationClient, step: FinalizationStep) {
 export async function finalizeDueQuizEvents() {
   const summary = emptySummary();
   const client: QuizFinalizationClient = createAdminClient();
+  const cacheInvalidationStartedAt = new Date().toISOString();
   const phaseIsProduction = getQuizPhaseEnv() === 'production';
   const productionApproved = getQuizProductionApprovedEnv();
 
@@ -247,6 +250,16 @@ export async function finalizeDueQuizEvents() {
   if (!phaseIsProduction || !productionApproved) {
     summary.skippedLive = summary.liveAwaitingGate;
   }
+
+  // Sweep floors come from the database clock (same domain as the columns
+  // they filter), never the worker clock: a worker running ahead of the
+  // database would otherwise stamp a watermark newer than the rows the RPCs
+  // above just wrote and silently skip them.
+  const sweepWatermarks = await resolveQuizSweepWatermarks(
+    client,
+    cacheInvalidationStartedAt
+  );
+  await invalidateQuizProductCaches(client, sweepWatermarks);
 
   if (summary.failed > 0) {
     return {

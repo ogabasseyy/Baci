@@ -134,7 +134,6 @@ describe('chat tool handlers', () => {
         limit: 10,
         merchantId: OGABASSEY_MERCHANT_ID,
         query: 'laptop',
-        trackAnalytics: false,
       })
     );
     expect(query.in).toHaveBeenCalledWith('id', ['macbook-air-m4']);
@@ -182,7 +181,6 @@ describe('chat tool handlers', () => {
       expect.objectContaining({
         merchantId: OGABASSEY_MERCHANT_ID,
         query: 'MacBook Laptops',
-        trackAnalytics: false,
       })
     );
     expect(query.or).not.toHaveBeenCalled();
@@ -212,7 +210,6 @@ describe('chat tool handlers', () => {
       expect.objectContaining({
         merchantId: OGABASSEY_MERCHANT_ID,
         query: 'Laptops',
-        trackAnalytics: false,
       })
     );
     expect(query.or).not.toHaveBeenCalled();
@@ -273,7 +270,6 @@ describe('chat tool handlers', () => {
         limit: 10,
         merchantId: OGABASSEY_MERCHANT_ID,
         query: 'iphnoe',
-        trackAnalytics: false,
       })
     );
     expect(query.in).toHaveBeenCalledWith('id', ['iphone-16-pro', 'iphone-x']);
@@ -351,7 +347,6 @@ describe('chat tool handlers', () => {
       expect.objectContaining({
         merchantId: OGABASSEY_MERCHANT_ID,
         query: 'Laptops',
-        trackAnalytics: false,
       })
     );
     expect(query.or).not.toHaveBeenCalled();

@@ -53,7 +53,7 @@ export function normalizeClaimEmail(email: string | null | undefined) {
   return sanitizeCustomerLoginEmailHint(email) || null;
 }
 
-function isSafeClaimDomain(domain: string): boolean {
+export function isSafeClaimDomain(domain: string): boolean {
   // Mirrors the storefront custom-domain rules without importing the proxy
   // host module (kept dependency-free so notification senders stay inside
   // their audited import boundary): dotted hostname, no IPs, no userinfo or

@@ -56,6 +56,14 @@ The SQL harness creates and destroys its own empty, socket-only PostgreSQL clust
 using synthetic records. It replays the relevant claim/outbox migrations against
 a minimal domain fixture; it is not a full Supabase-history replay.
 
+## Release notes for support
+
+Verified-email redemption now gates legacy import claims too, not just manual
+claims: both public `redeem_receipt_claim*` routes delegate to the verified
+core, so pre-existing import-claim holders with unverified emails get 403
+`EMAIL_UNVERIFIED` where they previously could redeem. Tell affected
+customers to verify their purchase email address and retry the same link.
+
 ## Activation
 
 Release the matching, backwards-compatible web worker strictly first, then

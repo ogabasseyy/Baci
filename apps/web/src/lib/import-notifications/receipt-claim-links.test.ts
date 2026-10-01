@@ -6,11 +6,13 @@ vi.mock('@/env', () => ({
   getRootDomain: vi.fn(() => 'usebaci.com'),
 }));
 
+import { isValidCustomDomain } from '@/lib/proxy/host';
 import {
   buildReceiptClaimUrl,
   buildReceiptDeviceList,
   createReceiptClaimToken,
   hashReceiptClaimToken,
+  isSafeClaimDomain,
   normalizeClaimEmail,
 } from './receipt-claim-links';
 
@@ -181,5 +183,46 @@ describe('receipt claim links', () => {
       'Device 4',
       'and 8 more receipts',
     ]);
+  });
+
+  it('agrees with the proxy custom-domain rule on its shared core', () => {
+    // The claim validator deliberately duplicates the proxy rule instead of
+    // importing it (audited sender boundary); this pins the shared core so a
+    // future proxy change fails loudly here rather than drifting silently.
+    for (const host of [
+      'shop.example.com',
+      'store123.com',
+      'my-shop.io',
+      'a.b.c.example.co.uk',
+    ]) {
+      expect(isSafeClaimDomain(host)).toBe(true);
+      expect(isValidCustomDomain(host)).toBe(true);
+    }
+    for (const host of [
+      '10.0.0.1',
+      'user@evil.com',
+      'evil.com/attacker',
+      'no-dot-hostname',
+      'bad..dots.com',
+      'has space.com',
+    ]) {
+      expect(isSafeClaimDomain(host)).toBe(false);
+      expect(isValidCustomDomain(host)).toBe(false);
+    }
+  });
+
+  it('pins the intentional claim-domain divergences from the proxy rule', () => {
+    // Token URLs fail closed where the proxy is lenient with Host headers,
+    // and normalize sloppy DB values the proxy (correctly) rejects.
+    expect(isSafeClaimDomain('shop.example.com:443')).toBe(false);
+    expect(isValidCustomDomain('shop.example.com:443')).toBe(true);
+    for (const host of [
+      'shop.example.com/',
+      'shop.example.com.',
+      '  shop.example.com  ',
+    ]) {
+      expect(isSafeClaimDomain(host)).toBe(true);
+      expect(isValidCustomDomain(host)).toBe(false);
+    }
   });
 });

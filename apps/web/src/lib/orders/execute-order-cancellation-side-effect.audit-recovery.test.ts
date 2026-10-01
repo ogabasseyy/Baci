@@ -141,6 +141,8 @@ describe('cancellation refund audit recovery', () => {
   });
 
   it('waits without quarantining when a pending leg has provider evidence', async () => {
+    const eq = vi.fn().mockReturnThis();
+    const update = vi.fn().mockReturnValue({ eq });
     const from = vi
       .fn()
       .mockReturnValueOnce(
@@ -163,7 +165,8 @@ describe('cancellation refund audit recovery', () => {
           },
         ])
       )
-      .mockReturnValueOnce(auditReviewsQuery([]));
+      .mockReturnValueOnce(auditReviewsQuery([]))
+      .mockReturnValueOnce({ update });
 
     const error = await executeOrderCancellationSideEffect({
       merchant,
@@ -178,7 +181,8 @@ describe('cancellation refund audit recovery', () => {
       'cancellation_refund_awaiting_provider_completion'
     );
     expect(mocks.initiateRefund).not.toHaveBeenCalled();
-    expect(from).toHaveBeenCalledTimes(3);
+    expect(from).toHaveBeenCalledTimes(4);
+    expect(update).toHaveBeenCalledWith({ attempts: 0 });
   });
 
   it('quarantines pending legs without provider evidence', async () => {

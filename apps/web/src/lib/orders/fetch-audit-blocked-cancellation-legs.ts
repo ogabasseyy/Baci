@@ -74,6 +74,20 @@ export async function fetchAuditBlockedCancellationLegIds({
       review.issue_type === 'provider_refund_outside_cancellation' &&
       outsideEvidenceIndicatesMovement(metadata?.refund_evidence);
     const nestedLegIds = new Set<string>();
+    // Legs whose every nested entry is a definitive provider rejection:
+    // excluded from attribution so a failed refund for one leg never
+    // blocks it while a sibling leg's real evidence still blocks that
+    // leg. Entries without a status (cancellation markers) always
+    // count, and legs with no entries at all fail closed below.
+    const failedOnlyLegIds = new Set<string>();
+    const entryFailedByLeg = new Map<string, boolean[]>();
+    const trackEntryLeg = (legId: string, failed: boolean) => {
+      if (!failed) nestedLegIds.add(legId);
+      entryFailedByLeg.set(legId, [
+        ...(entryFailedByLeg.get(legId) ?? []),
+        failed,
+      ]);
+    };
     let nestedEvidenceMarked = false;
     const refundEvidence = metadata?.refund_evidence;
     if (refundEvidence && typeof refundEvidence === 'object') {
@@ -82,20 +96,29 @@ export async function fetchAuditBlockedCancellationLegIds({
           audit_record_failed?: unknown;
           candidate_payment_transaction_ids?: unknown;
           payment_transaction_id?: unknown;
+          provider_refund_status?: unknown;
         } | null;
         if (!typeCarriesEvidence && evidence?.audit_record_failed !== true) {
           continue;
         }
         nestedEvidenceMarked = true;
+        const failed =
+          typeof evidence?.provider_refund_status === 'string' &&
+          evidence.provider_refund_status.trim().toLowerCase() === 'failed';
         if (typeof evidence?.payment_transaction_id === 'string') {
-          nestedLegIds.add(evidence.payment_transaction_id);
+          trackEntryLeg(evidence.payment_transaction_id, failed);
         }
         const extraIds = evidence?.candidate_payment_transaction_ids;
         if (Array.isArray(extraIds)) {
           for (const extraId of extraIds) {
-            if (typeof extraId === 'string') nestedLegIds.add(extraId);
+            if (typeof extraId === 'string') trackEntryLeg(extraId, failed);
           }
         }
+      }
+    }
+    for (const [legId, failedFlags] of entryFailedByLeg) {
+      if (failedFlags.length > 0 && failedFlags.every(Boolean)) {
+        failedOnlyLegIds.add(legId);
       }
     }
     if (
@@ -131,7 +154,15 @@ export async function fetchAuditBlockedCancellationLegIds({
     for (const nestedLegId of nestedLegIds) {
       reviewLegIds.add(nestedLegId);
     }
+    for (const failedLegId of failedOnlyLegIds) {
+      reviewLegIds.delete(failedLegId);
+    }
     if (reviewLegIds.size === 0) {
+      if (failedOnlyLegIds.size > 0) {
+        // Every named leg explicitly failed at the provider: no money
+        // moved, so this review blocks nothing.
+        continue;
+      }
       // Marked evidence names no leg: fail closed on every leg rather
       // than risk a double refund on an unattributed provider refund.
       for (const leg of transactions) auditBlockedLegIds.add(leg.id);

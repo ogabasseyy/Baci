@@ -28,7 +28,39 @@ describe('refund-state side-effect row migration', () => {
     expect(migrationSql).toContain(
       "t.status IN ('completed', 'refund_pending', 'refunded')"
     );
-    expect(migrationSql).not.toContain("t.status = 'completed'");
+    // The backfill below legitimately reuses the old predicate to
+    // exclude completed-leg orders; only the function body must not.
+    const functionSql = migrationSql.split(
+      '-- Backfill the refund step for orders already cancelled'
+    )[0];
+    expect(functionSql).not.toContain("t.status = 'completed'");
     expect(migrationSql).toContain("'refund', 'failed'");
+  });
+
+  it('backfills missing refund steps for already-cancelled refund-state orders', () => {
+    expect(existsSync(migrationPath)).toBe(true);
+    if (!existsSync(migrationPath)) return;
+
+    const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
+
+    // The replacement function only covers future cancellations: without
+    // a backfill, existing refund-state-only cancellations still have no
+    // row for the drain to resume.
+    expect(migrationSql).toContain(
+      'INSERT INTO public.order_cancellation_side_effects'
+    );
+    expect(migrationSql).toContain(
+      "t.status IN ('refund_pending', 'refunded')"
+    );
+    // Completed-leg orders got rows under the old function: only orders
+    // with no completed external leg qualify, and rows in any status
+    // are never resurrected.
+    expect(migrationSql).toContain(
+      'AND NOT EXISTS ( SELECT 1 FROM public.transactions t'
+    );
+    expect(migrationSql).toContain(
+      'AND NOT EXISTS ( SELECT 1 FROM public.order_cancellation_side_effects s'
+    );
+    expect(migrationSql).toContain('ON CONFLICT (order_id, step) DO NOTHING');
   });
 });

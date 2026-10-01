@@ -43,7 +43,14 @@ export async function quarantineRefund({
       merchant_id: order.merchant_id,
       metadata: metadata ?? {},
       order_id: order.id,
-      paystack_ref: firstTransaction?.gateway_reference ?? null,
+      // Deliberately unset: the open-by-paystack-ref index is global,
+      // so a reference shared by two legacy orders would make this
+      // order's insert collide with the other order's review — and the
+      // merge RPCs below only search this order, failing redelivery
+      // with no durable evidence. Same-order redeliveries still merge
+      // via the open-by-order index; per-leg references stay in
+      // candidates for operations.
+      paystack_ref: null,
       reason,
       txn_id: firstTransaction?.id ?? null,
     });

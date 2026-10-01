@@ -140,6 +140,36 @@ describe('fetchAuditBlockedCancellationLegIds', () => {
     ).resolves.toEqual(new Set(['leg-1']));
   });
 
+  it('blocks only the leg with non-failed evidence in a mixed review', async () => {
+    const { supabase } = buildSupabase([
+      review({
+        candidates: [
+          { payment_transaction_id: 'leg-1' },
+          { payment_transaction_id: 'leg-2' },
+        ],
+        metadata: {
+          refund_evidence: {
+            'provider:7': {
+              payment_transaction_id: 'leg-1',
+              provider_refund_status: 'failed',
+            },
+            'provider:8': {
+              payment_transaction_id: 'leg-2',
+              provider_refund_status: 'processed',
+            },
+          },
+        },
+      }),
+    ]);
+
+    // Leg 1's refund was definitively rejected: blocking it would leave
+    // that amount unrefunded behind delivery_uncertain while leg 2's
+    // real evidence must still block leg 2.
+    await expect(
+      fetchAuditBlockedCancellationLegIds({ order, supabase, transactions })
+    ).resolves.toEqual(new Set(['leg-2']));
+  });
+
   it('fails closed on malformed outside evidence statuses', async () => {
     const { supabase } = buildSupabase([
       review({

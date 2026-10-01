@@ -56,9 +56,18 @@ export async function handlePaystackCancellationRefundFailure({
   // Transient legs stay review-free while retries remain — but the
   // drain never reselects attempts-capped rows, so a transient
   // failure on the last attempt must file durable evidence instead
-  // of stranding the leg while cron reports success.
+  // of stranding the leg while cron reports success. Legs accepted
+  // earlier in this run consumed the order-level budget, so a first
+  // failure for this leg after same-run progress defers for a fresh
+  // budget instead of filing exhaustion evidence it never earned.
   const isExhaustedTransientFailure =
-    isDefiniteTransientFailure && isLastAttempt === true;
+    isDefiniteTransientFailure &&
+    isLastAttempt === true &&
+    refundIds.length === 0;
+  const isProgressTransientFailure =
+    isDefiniteTransientFailure &&
+    isLastAttempt === true &&
+    refundIds.length > 0;
   if (refundIds.length > 0 && !isDefiniteTransientFailure) {
     await quarantineRefund({
       metadata: {
@@ -105,6 +114,25 @@ export async function handlePaystackCancellationRefundFailure({
       supabase,
       transactions: [transaction],
     });
+  } else if (isProgressTransientFailure) {
+    // Same-run progress consumed the order-level budget: this leg may
+    // never have been attempted, so defer uncapped with a fresh budget
+    // instead of terminalizing it.
+    try {
+      await supabase
+        .from('order_cancellation_side_effects')
+        .update({ attempts: 0 })
+        // This module only serves the refund step; the executor returns
+        // before initiation for customer_email.
+        .eq('order_id', order.id)
+        .eq('step', 'refund');
+    } catch {
+      // Best-effort reset: the deferral below still lands, and the
+      // awaiting branch resets again while the accepted legs settle.
+    }
+    throw new DeferredError(
+      'cancellation_refund_progress_deferred_for_settlement'
+    );
   } else if (isExhaustedTransientFailure) {
     const configExhausted = paystackRefund.code === 'CONFIG_ERROR';
     const authExhausted =

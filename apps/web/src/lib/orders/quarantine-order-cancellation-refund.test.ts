@@ -251,9 +251,15 @@ describe('quarantineRefund', () => {
     ).rejects.toBeInstanceOf(DeliveryUncertainError);
     expect(insert).toHaveBeenCalledWith(
       expect.objectContaining({
+        candidates: expect.arrayContaining([
+          expect.objectContaining({ gatewayReference: 'PAY-123' }),
+        ]),
         issue_type: 'order_cancellation_refund_requires_review',
         metadata: { provider_refund_id: 123 },
-        paystack_ref: 'PAY-123',
+        // The open-by-paystack-ref index is global: stamping the shared
+        // reference would collide with another order's review while the
+        // merge RPCs only search this order.
+        paystack_ref: null,
       })
     );
   });

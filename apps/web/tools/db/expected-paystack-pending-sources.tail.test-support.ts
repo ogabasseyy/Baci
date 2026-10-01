@@ -237,6 +237,6 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
   {
     repositoryPath:
       'supabase/migrations/20260928176000_queue_refund_row_for_refund_state_legs.sql',
-    sha256: '4619893fbde709f787545ac98fa06badfae53c58ce047d8ffa619a2ce4740b2d',
+    sha256: 'c10e5db26290c1f68d4acbcf64ac638e3dd122de6afc7a0e1ad7a71af4ba1adf',
   },
 ];

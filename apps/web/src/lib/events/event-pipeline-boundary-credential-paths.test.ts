@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { eventPipelineChatCredentialPaths } from './event-pipeline-chat-credential-paths';
 import { eventPipelineImmediateOrderCredentialPaths } from './event-pipeline-immediate-order-credential-paths';
 import { eventPipelineJumiaCredentialPaths } from './event-pipeline-jumia-credential-paths';
+import { eventPipelineManualOrderDocumentCredentialPaths } from './event-pipeline-manual-order-document-credential-paths';
 import { eventPipelineRedvaultCredentialPaths } from './event-pipeline-redvault-credential-paths';
 import { eventPipelineRepairPickupCredentialPaths } from './event-pipeline-repair-pickup-credential-paths';
 import { eventPipelineShippingCredentialPaths } from './event-pipeline-shipping-credential-paths';
@@ -324,6 +325,7 @@ describe('event pipeline credential-path authority', () => {
       ...eventPipelineRedvaultCredentialPaths,
       ...eventPipelineShippingCredentialPaths,
       ...eventPipelineChatCredentialPaths,
+      ...eventPipelineManualOrderDocumentCredentialPaths,
     ]);
   });
 });

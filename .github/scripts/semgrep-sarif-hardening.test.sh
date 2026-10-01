@@ -130,6 +130,18 @@ if sed -n '/Checkout base filter/,/Drop audited/p' "$SEC" \
     | grep -qF "pull_request.base.ref"; then got="yes"; else got="no"; fi
 assert_eq "lockstep:base-ref-checkout" "yes" "$got"
 
+# --- base-filter existence lockstep (every auditor module gated) ---
+# A base tree missing any imported module ImportErrors instead of
+# failing with the clean gate message; derive the module list
+# from the tree so the next new module cannot repeat the omission.
+loop="$(grep "for f in semgrep-sarif-filter.py" "$SEC")"
+missing=""
+for mod in "$ROOT"/.github/scripts/semgrep_sarif_*.py; do
+  name="$(basename "$mod")"
+  case "$loop" in *"$name"*) ;; *) missing="$missing $name";; esac
+done
+assert_eq "lockstep:existence-complete" "" "$missing"
+
 # --- workspace anchoring (reads GITHUB_WORKSPACE, not CWD) ---
 # CWD holds the pristine tree while GITHUB_WORKSPACE points at a
 # drifted copy: the filter must report the drifted tree's drift

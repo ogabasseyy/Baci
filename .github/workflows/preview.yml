@@ -92,6 +92,12 @@ jobs:
         # This proves the marking exists; the injector below additionally
         # refuses any non-blank value before the stand-in replaces it.
         run: node .github/scripts/assert-vercel-pulled-sensitive-env.mjs QUIZ_RPC_SERVER_SECRET .vercel/.env.preview.local
+      - name: Verify Preview env exposes no unexpected server values
+        # Fails closed on any non-blank server key outside NEXT_PUBLIC_* and
+        # the reviewed allowlist, so a future key added without the
+        # sensitive flag breaks loudly instead of leaking silently to the
+        # untrusted build. Runs pre-injection: stand-ins are ours by then.
+        run: node .github/scripts/assert-preview-env-allowlist.mjs .vercel/.env.preview.local .github/scripts/preview-env-allowlist.txt
       - name: Ensure build-time presence of runtime-only quiz RPC secret
         # No real secret passthrough: the stand-in satisfies build validation
         # and Vercel remains the runtime source, so dispatchable branches
@@ -177,11 +183,13 @@ jobs:
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-          # Remote cache is read-only in this job: untrusted target-ref
-          # scripts can read shared main-branch cache entries (needed for a
-          # viable build time) but cannot poison them. The token itself is
-          # still visible to those scripts, exactly as in PR CI; accepted
-          # tradeoff, documented here. (Verified against turbo 2.9.18: comma
+          # Remote cache defaults to read-only in this job so routine
+          # target-ref builds cannot poison shared main-branch entries while
+          # still reading them (needed for a viable build time). This is a
+          # client-side default, not enforcement: the token is visible to
+          # build scripts exactly as in PR CI, and a malicious script could
+          # re-export it or pass write flags. Accepted tradeoff, bounded by
+          # content-addressed keys. (Verified against turbo 2.9.18: comma
           # form parses; bare `remote:r` would disable every cache.)
           TURBO_CACHE: "remote:r,local:rw"
         run: trusted-ops/.github/scripts/run-pinned-vercel.sh build --yes
@@ -270,13 +278,16 @@ jobs:
           # `|| true`: under pipefail a no-match grep would exit the step
           # here, skipping the status-aware handling below.
           preview_url="$(grep -oiE 'preview:[[:space:]]*https://[^ )]+' preview-deploy.log | grep -oE 'https://[^ ]+\.vercel\.app' | tail -n 1 || true)"
-          # A captured URL covers both clean success and hang-after-ready.
+          # Only clean exits and timeout kills may carry a usable URL: a
+          # nonzero CLI exit means finalization failed even if a Preview
+          # line was printed (same ordering as deploy-with-retry.sh).
+          if [ "$deploy_status" -ne 0 ] && [ "$deploy_status" -ne 124 ] && [ "$deploy_status" -ne 137 ]; then
+            echo "Deploy failed with status $deploy_status; inspect preview-deploy.log." >&2
+            exit "$deploy_status"
+          fi
           if [ -z "$preview_url" ]; then
             if [ "$deploy_status" -eq 124 ] || [ "$deploy_status" -eq 137 ]; then
               echo 'Deploy timed out without printing a Preview URL; check the Vercel dashboard for an orphaned deployment before retrying.' >&2
-              exit "$deploy_status"
-            elif [ "$deploy_status" -ne 0 ]; then
-              echo "Deploy failed with status $deploy_status; inspect preview-deploy.log." >&2
               exit "$deploy_status"
             else
               echo 'Could not find the Preview URL in the deploy log; inspect preview-deploy.log.' >&2

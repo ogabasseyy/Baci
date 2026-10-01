@@ -169,6 +169,11 @@ deploy_scripts:
   - '.github/scripts/sync-cloudflare-vercel-production-env.sh'
   - '.github/scripts/sync-cloudflare-vercel-production-env.test.mjs'
   - '.github/scripts/preview-workflow-contract.test.mjs'
+  - '.github/scripts/preview-workflow-contract-parsing.test.mjs'
+  - '.github/scripts/preview-workflow-contract.helpers.mjs'
+  - '.github/scripts/assert-preview-env-allowlist.mjs'
+  - '.github/scripts/assert-preview-env-allowlist.test.mjs'
+  - '.github/scripts/preview-env-allowlist.txt'
   - '.github/workflows/deploy.yml'
   - '.github/workflows/preview.yml'
 # Root Next config changes affect the web app even when apps/web/** is untouched.

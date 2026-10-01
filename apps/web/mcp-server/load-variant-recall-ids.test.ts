@@ -42,9 +42,32 @@ it('flags truncation past the bounded scan window', async () => {
   const rows = Array.from({ length: 2001 }, (_, index) => ({
     product_id: `p-${index % 10}`, attributes: { Storage: '256GB' },
   }));
-  const result = await loadVariantRecallIds(intent(storageEq(256)), 'merchant-1', rpc(rows));
+  const supabase = {
+    rpc: vi.fn(async (_name: string, args: { p_limit: number; p_offset: number }) => ({
+      data: rows.slice(args.p_offset, args.p_offset + args.p_limit),
+      error: null,
+    })),
+  } as unknown as SupabaseClient;
+  const result = await loadVariantRecallIds(intent(storageEq(256)), 'merchant-1', supabase);
   expect(result.truncated).toBe(true);
   expect(result.ids).toHaveLength(10);
+  expect(supabase.rpc).toHaveBeenCalledTimes(3);
+});
+
+it('stops paging on a short page without probing', async () => {
+  const rows = Array.from({ length: 1500 }, (_, index) => ({
+    product_id: `p-${index % 10}`, attributes: { Storage: '256GB' },
+  }));
+  const supabase = {
+    rpc: vi.fn(async (_name: string, args: { p_limit: number; p_offset: number }) => ({
+      data: rows.slice(args.p_offset, args.p_offset + args.p_limit),
+      error: null,
+    })),
+  } as unknown as SupabaseClient;
+  const result = await loadVariantRecallIds(intent(storageEq(256)), 'merchant-1', supabase);
+  expect(result).toEqual({ ids: expect.any(Array), truncated: false });
+  expect(result.ids).toHaveLength(10);
+  expect(supabase.rpc).toHaveBeenCalledTimes(2);
 });
 
 it('pushes constraints into the recall RPC so filtering precedes the cap', async () => {
@@ -53,7 +76,8 @@ it('pushes constraints into the recall RPC so filtering precedes the cap', async
   expect(supabase.rpc).toHaveBeenCalledWith('search_product_variant_recall', {
     p_merchant_id: 'merchant-1',
     p_filters: [{ key: 'storage_gb', operator: 'eq', value: 256, branch: 0 }],
-    p_limit: 2001,
+    p_limit: 1000,
+    p_offset: 0,
   });
 });
 
@@ -73,6 +97,7 @@ it('numbers each alternative branch so the RPC scores branches separately', asyn
       { key: 'color', operator: 'eq', value: 'Black', branch: 0 },
       { key: 'color', operator: 'eq', value: 'White', branch: 1 },
     ],
-    p_limit: 2001,
+    p_limit: 1000,
+    p_offset: 0,
   });
 });

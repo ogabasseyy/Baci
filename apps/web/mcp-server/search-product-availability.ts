@@ -2,6 +2,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
 import type { McpSearchProductRow } from './search-products-query-helpers';
 import { getMcpProductStockSummary } from './product-stock-summary';
+import { SERIALIZED_THEN_UNLIMITED_STOCK_QUANTITY } from '../src/lib/hydrate-public-products';
+import {
+  getPublicSerializedVariantSummariesByProductId,
+  type PublicSerializedVariantSummary,
+} from '../src/lib/public-serialized-variant-summary';
 
 interface ProductVariant {
   id?: string;
@@ -21,6 +26,11 @@ interface ProductVariant {
 // 16 are invisible to the PDP itself.
 const STOREFRONT_SNAPSHOT_OFFER_WINDOW = 16;
 const STOREFRONT_SNAPSHOT_VARIANT_WINDOW = 128;
+// PostgREST clamps responses at 1,000 rows, so the option RPCs page by
+// product: 7 products carry at most 903 variant rows (129 each) and 62
+// carry at most 992 offer rows (16 each), keeping every response complete.
+const MCP_OPTION_VARIANT_PRODUCTS_PER_CALL = 7;
+const MCP_OPTION_OFFER_PRODUCTS_PER_CALL = 62;
 
 interface ProductOffer {
   id?: string;
@@ -37,24 +47,79 @@ export async function hydrateSearchProductAvailability(
   requestedCondition?: string
 ) {
   const condition = normalizeCanonicalProductCondition(requestedCondition);
+  // Simple serialized products resolve through the same projection as the
+  // PDP: the helper returns summaries only for serialized policies (variant
+  // products are projected inside the variants RPC instead, keeping this
+  // lookup to one anchor row per simple product). A lookup failure keeps
+  // stored stock rather than zeroing purchasability.
+  const serializedSummaries = new Map<string, PublicSerializedVariantSummary>();
+  const simpleProductIds = products
+    .filter((product) => product.has_variants !== true)
+    .map((product) => product.id);
+  if (simpleProductIds.length > 0) {
+    try {
+      const summaries = await getPublicSerializedVariantSummariesByProductId(
+        supabase,
+        merchantId,
+        simpleProductIds
+      );
+      for (const summary of summaries) {
+        if (!summary.variantId) serializedSummaries.set(summary.productId, summary);
+      }
+    } catch {
+      // Fall through with stored stock; options stay available.
+    }
+  }
+  const effectiveProducts = products.map((product) => {
+    const summary = serializedSummaries.get(product.id);
+    if (!summary || product.has_variants === true) return product;
+    // Mirrors hydrate-public-products.ts product-level resolution exactly.
+    const resolvedUnits =
+      summary.inventoryTrackingPolicy === 'serialized_then_unlimited' &&
+      summary.publicAvailableUnits === 0
+        ? SERIALIZED_THEN_UNLIMITED_STOCK_QUANTITY
+        : summary.publicAvailableUnits;
+    return {
+      ...product,
+      stock_quantity: resolvedUnits,
+      manage_stock:
+        summary.inventoryTrackingPolicy === 'serialized_strict'
+          ? true
+          : summary.inventoryTrackingPolicy === 'serialized_then_unlimited' &&
+              product.manage_stock !== false
+            ? false
+            : product.manage_stock,
+    };
+  });
   const productIds = products.filter((product) => product.has_variants).map((product) => product.id);
   const variantsMap = new Map<string, ProductVariant[]>();
   let variantLookupSucceeded = productIds.length === 0;
 
   if (productIds.length > 0) {
-    const { data: variants, error } = await supabase.rpc(
-      'get_mcp_search_product_variants',
-      { p_product_ids: productIds, p_merchant_id: merchantId }
-    );
-    if (error) {
-      console.error('Failed to fetch product variants for search:', error);
-    } else {
-      variantLookupSucceeded = true;
-      for (const variant of (variants ?? []) as ProductVariant[]) {
-        variantsMap.set(variant.product_id, [
-          ...(variantsMap.get(variant.product_id) ?? []),
-          variant,
-        ]);
+    variantLookupSucceeded = true;
+    for (
+      let offset = 0;
+      offset < productIds.length;
+      offset += MCP_OPTION_VARIANT_PRODUCTS_PER_CALL
+    ) {
+      const batch = productIds.slice(
+        offset,
+        offset + MCP_OPTION_VARIANT_PRODUCTS_PER_CALL
+      );
+      const { data: variants, error } = await supabase.rpc(
+        'get_mcp_search_product_variants',
+        { p_product_ids: batch, p_merchant_id: merchantId }
+      );
+      if (error) {
+        console.error('Failed to fetch product variants for search:', error);
+        variantLookupSucceeded = false;
+      } else {
+        for (const variant of (variants ?? []) as ProductVariant[]) {
+          variantsMap.set(variant.product_id, [
+            ...(variantsMap.get(variant.product_id) ?? []),
+            variant,
+          ]);
+        }
       }
     }
   }
@@ -63,26 +128,37 @@ export async function hydrateSearchProductAvailability(
   const offerIds = products.filter((product) => product.has_condition_offers).map((product) => product.id);
   let offerLookupSucceeded = offerIds.length === 0;
   if (offerIds.length > 0) {
-    const { data, error } = await supabase.rpc('get_mcp_search_product_offers', {
-      p_product_ids: offerIds,
-      p_merchant_id: merchantId,
-    });
-    if (error) {
-      console.error('Failed to fetch product offers for search:', error);
-    } else {
-      offerLookupSucceeded = true;
-      // Group the full ordered set: the 16-window slices first (the snapshot
-      // has no condition filter), then the requested condition applies, so a
-      // condition whose first row falls outside the window stays unresolvable
-      // exactly like on the PDP.
-      for (const offer of data ?? []) {
-        offersMap.set(offer.product_id, [...(offersMap.get(offer.product_id) ?? []), offer]);
+    offerLookupSucceeded = true;
+    for (
+      let offset = 0;
+      offset < offerIds.length;
+      offset += MCP_OPTION_OFFER_PRODUCTS_PER_CALL
+    ) {
+      const batch = offerIds.slice(
+        offset,
+        offset + MCP_OPTION_OFFER_PRODUCTS_PER_CALL
+      );
+      const { data, error } = await supabase.rpc('get_mcp_search_product_offers', {
+        p_product_ids: batch,
+        p_merchant_id: merchantId,
+      });
+      if (error) {
+        console.error('Failed to fetch product offers for search:', error);
+        offerLookupSucceeded = false;
+      } else {
+        // Group the full ordered set: the 16-window slices first (the snapshot
+        // has no condition filter), then the requested condition applies, so a
+        // condition whose first row falls outside the window stays unresolvable
+        // exactly like on the PDP.
+        for (const offer of data ?? []) {
+          offersMap.set(offer.product_id, [...(offersMap.get(offer.product_id) ?? []), offer]);
+        }
+        for (const id of batch) offersMap.set(id, offersMap.get(id) ?? []);
       }
-      for (const id of offerIds) offersMap.set(id, offersMap.get(id) ?? []);
     }
   }
 
-  return products.map((product) => {
+  return effectiveProducts.map((product) => {
     const baseCondition = normalizeCanonicalProductCondition(product.condition) || 'new';
     // Window before filtering, mirroring the snapshot: cheapest 128 by
     // (price, created, id). The search row lacks default_variant_id, so the

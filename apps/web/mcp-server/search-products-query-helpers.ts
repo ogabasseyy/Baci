@@ -15,6 +15,7 @@ export type McpSearchProductRow = {
   has_condition_offers?: boolean | null;
   has_variants?: boolean | null;
   images?: unknown;
+  inventory_tracking_policy?: string | null;
   manage_stock?: boolean | null;
   name?: string | null;
   price?: number | null;

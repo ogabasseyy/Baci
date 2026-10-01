@@ -27,7 +27,7 @@ BEGIN
 
   RETURN QUERY
   WITH requested_products AS MATERIALIZED (
-    SELECT p.id, p.merchant_id, p.price
+    SELECT p.id, p.merchant_id, p.price, p.inventory_tracking_policy
     FROM public.products AS p
     JOIN public.merchants AS m ON m.id = p.merchant_id
     WHERE p_product_ids IS NOT NULL
@@ -37,6 +37,26 @@ BEGIN
       AND p.merchant_id = p_merchant_id
       AND p.status = 'active'
       AND COALESCE(m.is_published, FALSE) IS TRUE
+  ),
+  merchant_branches AS (
+    SELECT count(*)::integer AS branch_count, (array_agg(b.id))[1] AS only_branch_id
+    FROM public.branches AS b
+    WHERE b.merchant_id = p_merchant_id AND b.active = true
+  ),
+  available_units AS (
+    SELECT vi.variant_id, count(*)::integer AS available
+    FROM public.variant_inventory AS vi
+    CROSS JOIN merchant_branches AS mb
+    WHERE vi.merchant_id = p_merchant_id
+      AND vi.status = 'available'
+      AND vi.order_id IS NULL
+      AND vi.order_item_id IS NULL
+      AND vi.sold_at IS NULL
+      AND (
+        (mb.branch_count = 1 AND (vi.branch_id = mb.only_branch_id OR vi.branch_id IS NULL))
+        OR (mb.branch_count IS DISTINCT FROM 1 AND vi.branch_id IS NULL)
+      )
+    GROUP BY vi.variant_id
   )
   SELECT
     option_row.id,
@@ -48,9 +68,30 @@ BEGIN
     option_row.created_at
   FROM requested_products AS product_row
   CROSS JOIN LATERAL (
+    -- Effective stock mirrors the storefront projection
+    -- (hydrate-public-products.ts): serialized policies replace stored
+    -- stock with public available units, and serialized_then_unlimited
+    -- reports 9999 once units run out instead of reading as sold out.
     SELECT v.id, v.attributes, v.condition, v.price_override,
-      v.stock_quantity, v.created_at
+      CASE
+        WHEN policy.effective_policy = 'serialized_then_unlimited'
+          AND COALESCE(units.available, 0) = 0 THEN 9999
+        WHEN policy.effective_policy IN ('serialized_strict', 'serialized_then_unlimited')
+          THEN COALESCE(units.available, 0)
+        ELSE v.stock_quantity
+      END AS stock_quantity,
+      v.created_at
     FROM public.product_variants AS v
+    LEFT JOIN available_units AS units ON units.variant_id = v.id
+    CROSS JOIN LATERAL (
+      SELECT CASE
+        WHEN COALESCE(v.inventory_tracking_policy, 'inherit') IN ('off', 'serialized_strict', 'serialized_then_unlimited')
+          THEN COALESCE(v.inventory_tracking_policy, 'inherit')
+        WHEN COALESCE(product_row.inventory_tracking_policy, 'off') IN ('serialized_strict', 'serialized_then_unlimited')
+          THEN product_row.inventory_tracking_policy
+        ELSE 'off'
+      END AS effective_policy
+    ) AS policy
     WHERE v.product_id = product_row.id
       AND v.merchant_id = product_row.merchant_id
       AND v.is_inventory_anchor IS NOT TRUE

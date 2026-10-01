@@ -13,10 +13,14 @@
 -- an acceptance class, so sold-out exact matches cannot fill the cap ahead
 -- of purchasable matches hydration would keep. Matchers live in
 -- 20261001090000, which always applies first.
+-- The offset parameter changes the signature, so the three-argument form is
+-- dropped first: without this it would linger as a stale overload.
+DROP FUNCTION IF EXISTS public.search_product_variant_recall(uuid, jsonb, integer);
 CREATE OR REPLACE FUNCTION public.search_product_variant_recall(
   p_merchant_id uuid,
   p_filters jsonb DEFAULT '[]'::jsonb,
-  p_limit integer DEFAULT 2000
+  p_limit integer DEFAULT 2000,
+  p_offset integer DEFAULT 0
 ) RETURNS TABLE (product_id uuid, attributes jsonb)
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path TO ''
 AS $$
@@ -155,11 +159,15 @@ BEGIN
   SELECT best.product_id, best.attributes FROM best
   ORDER BY (NOT best.is_accepted), (NOT best.is_purchasable),
     best.complete_branch_count DESC, best.best_branch_exact DESC, best.product_id
-  LIMIT least(greatest(coalesce(p_limit, 2000), 1), 2001);
+  LIMIT least(greatest(coalesce(p_limit, 2000), 1), 2001)
+  -- PostgREST clamps responses at 1,000 rows, so callers page below the cap
+  -- and probe the window edge instead of requesting 2,001 rows that can
+  -- never arrive complete. Negative offsets clamp to the first page.
+  OFFSET GREATEST(COALESCE(p_offset, 0), 0);
 END;
 $$;
 
-ALTER FUNCTION public.search_product_variant_recall(uuid, jsonb, integer) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.search_product_variant_recall(uuid, jsonb, integer) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.search_product_variant_recall(uuid, jsonb, integer) TO anon, authenticated, service_role;
-COMMENT ON FUNCTION public.search_product_variant_recall(uuid, jsonb, integer) IS 'Published-merchant variant attributes for discovery recall; filters narrow before the cap; NULL merchant returns no rows.';
+ALTER FUNCTION public.search_product_variant_recall(uuid, jsonb, integer, integer) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.search_product_variant_recall(uuid, jsonb, integer, integer) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.search_product_variant_recall(uuid, jsonb, integer, integer) TO anon, authenticated, service_role;
+COMMENT ON FUNCTION public.search_product_variant_recall(uuid, jsonb, integer, integer) IS 'Published-merchant variant attributes for discovery recall; filters narrow before the cap; NULL merchant returns no rows.';

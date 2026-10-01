@@ -127,4 +127,15 @@ describe('productDiscoveryMetadataSchema', () => {
         .success
     ).toBe(true);
   });
+  it('measures product_type length after NFKC canonicalization', () => {
+    expect(
+      productDiscoveryMetadataSchema.safeParse({
+        product_type: '\uFB03'.repeat(100),
+      }).success
+    ).toBe(false);
+    expect(
+      productDiscoveryMetadataSchema.parse({ product_type: 'Smartphones' })
+        .product_type
+    ).toBe('phone');
+  });
 });

@@ -85,7 +85,16 @@ function jsonbText(value: unknown): string {
 
 export const productDiscoveryMetadataSchema = z
   .strictObject({
-    product_type: text.transform(canonicalizeDiscoveryProductType).optional(),
+    // Length applies to the canonicalized output: NFKC can expand
+    // compatibility characters (100 ﬃ become 300 chars), and the route
+    // persists the parsed value, so pre-transform checks would admit
+    // payloads the database constraint rejects.
+    product_type: z
+      .string()
+      .trim()
+      .transform(canonicalizeDiscoveryProductType)
+      .pipe(text)
+      .optional(),
     model: text.optional(),
     compatible_with: z.array(text).max(50).optional(),
     attributes: attributes.optional(),

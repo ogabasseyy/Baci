@@ -20780,6 +20780,7 @@ export type Database = {
           p_filters?: Json;
           p_limit?: number;
           p_merchant_id: string;
+          p_offset?: number;
         };
         Returns: {
           attributes: Json;

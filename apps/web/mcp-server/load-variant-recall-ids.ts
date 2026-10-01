@@ -12,6 +12,9 @@ import { structuredDiscoveryIdentity } from './structured-discovery-identity';
 // a variant may prove one constraint while the parent metadata proves another;
 // the matcher enforces every constraint post-hydration.
 const VARIANT_SCAN_LIMIT = 2000;
+// Managed PostgREST clamps every response at 1,000 rows, so recall pages the
+// window instead of requesting 2,001 rows that can never arrive complete.
+const POSTGREST_MAX_ROWS = 1000;
 
 type IntentAttribute = NonNullable<McpDiscoveryIntent['alternatives'][number]['attributes']>[number];
 
@@ -60,22 +63,42 @@ export async function loadVariantRecallIds(
     // published-merchant RPC instead of the table directly. Constraints ride
     // into the RPC so filtering precedes the cap; a matching variant past
     // the window would otherwise be unreachable to product-level search.
-    const { data, error } = await supabase.rpc('search_product_variant_recall', {
-      p_merchant_id: merchantId,
-      p_filters: constraints.map(({ key, operator, value, branch }) => ({ key, operator, value, branch })),
-      p_limit: VARIANT_SCAN_LIMIT + 1,
-    });
-    if (error) throw error;
-    const rows = (Array.isArray(data) ? data : []).slice(0, VARIANT_SCAN_LIMIT);
-    const truncated = Array.isArray(data) && data.length > VARIANT_SCAN_LIMIT;
-    const ids = [...new Set(rows.flatMap((row) => {
+    // PostgREST clamps responses at 1,000 rows, so the 2,001-row probe pages
+    // below the cap: two full pages, then a one-row probe at the window edge
+    // discloses whether the RPC window cut the match set.
+    const filters = constraints.map(({ key, operator, value, branch }) => ({ key, operator, value, branch }));
+    const fetchPage = async (limit: number, offset: number) => {
+      const { data, error } = await supabase.rpc('search_product_variant_recall', {
+        p_merchant_id: merchantId,
+        p_filters: filters,
+        p_limit: limit,
+        p_offset: offset,
+      });
+      if (error) throw error;
+      return Array.isArray(data) ? data : [];
+    };
+    const first = await fetchPage(POSTGREST_MAX_ROWS, 0);
+    if (first.length < POSTGREST_MAX_ROWS) {
+      return collectRecallIds(first, false);
+    }
+    const second = await fetchPage(POSTGREST_MAX_ROWS, POSTGREST_MAX_ROWS);
+    const rows = [...first, ...second];
+    if (rows.length < VARIANT_SCAN_LIMIT) {
+      return collectRecallIds(rows, false);
+    }
+    const probe = await fetchPage(1, VARIANT_SCAN_LIMIT);
+    return collectRecallIds(rows, probe.length > 0);
+  } catch {
+    return { ids: [], truncated: true };
+  }
+
+  function collectRecallIds(window: unknown[], truncated: boolean) {
+    const ids = [...new Set(window.flatMap((row) => {
       const recordRow = record(row);
       const normalized = normalizeDiscoveryOptionAttributes(record(recordRow.attributes));
       return constraints.some((constraint) => variantSatisfies(normalized, constraint))
         ? [String(recordRow.product_id)] : [];
     }))];
     return { ids, truncated };
-  } catch {
-    return { ids: [], truncated: true };
   }
 }

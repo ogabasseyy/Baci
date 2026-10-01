@@ -30,10 +30,17 @@ function client(fixture: Fixture) {
         error: null,
       };
     }
-    if (name === 'get_storefront_product_variants') {
+    if (name === 'get_mcp_search_product_variants') {
       if (fixture.variantError) return { data: null, error: fixture.variantError };
       const ids = args?.p_product_ids as string[];
       return { data: (fixture.variants ?? []).filter((row) => ids.includes(String(row.product_id))), error: null };
+    }
+    if (name === 'get_mcp_search_product_offers') {
+      if (fixture.offerError) return { data: null, error: fixture.offerError };
+      const ids = args?.p_product_ids as string[];
+      const rows = (fixture.offers ?? []).filter((row) => ids.includes(String(row.product_id)));
+      rows.sort((left, right) => String(left.condition).localeCompare(String(right.condition)) || String(left.id).localeCompare(String(right.id)));
+      return { data: rows, error: null };
     }
     return { data: null, error: new Error(`Unexpected RPC ${name}`) };
   });

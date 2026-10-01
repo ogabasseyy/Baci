@@ -43,8 +43,8 @@ export async function hydrateSearchProductAvailability(
 
   if (productIds.length > 0) {
     const { data: variants, error } = await supabase.rpc(
-      'get_storefront_product_variants',
-      { p_product_ids: productIds }
+      'get_mcp_search_product_variants',
+      { p_product_ids: productIds, p_merchant_id: merchantId }
     );
     if (error) {
       console.error('Failed to fetch product variants for search:', error);
@@ -63,16 +63,10 @@ export async function hydrateSearchProductAvailability(
   const offerIds = products.filter((product) => product.has_condition_offers).map((product) => product.id);
   let offerLookupSucceeded = offerIds.length === 0;
   if (offerIds.length > 0) {
-    const { data, error } = await supabase.from('product_offers')
-      .select('id, product_id, condition, price, compare_at_price, stock_quantity')
-      .eq('merchant_id', merchantId)
-      .eq('status', 'active')
-      .in('product_id', offerIds)
-      // PDP parity: the storefront orders offers by raw condition and ID before
-      // find() takes the first canonical match, so selection must dedupe the
-      // same first row instead of an arbitrary Postgres order.
-      .order('condition')
-      .order('id');
+    const { data, error } = await supabase.rpc('get_mcp_search_product_offers', {
+      p_product_ids: offerIds,
+      p_merchant_id: merchantId,
+    });
     if (error) {
       console.error('Failed to fetch product offers for search:', error);
     } else {

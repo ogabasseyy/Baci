@@ -94,6 +94,37 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
       });
       return true;
     }
+    if (url.pathname.endsWith('/rest/v1/rpc/get_mcp_search_product_variants')) {
+      const rows = [
+        { id: 'variant-available-1', product_id: 'variant-available-product', attributes: { storage: '256GB' }, price_override: 100000, stock_quantity: 2, condition: 'new', created_at: '2026-01-01T00:00:00Z' },
+        { id: 'variant-cheaper-1', product_id: 'variant-cheaper-than-parent', attributes: { storage: '128GB' }, price_override: 90000, stock_quantity: 2, condition: 'new', created_at: '2026-01-01T00:00:00Z' },
+        { id: 'variant-pricier-1', product_id: 'variant-pricier-than-parent', attributes: { storage: '128GB' }, price_override: 120000, stock_quantity: 2, condition: 'new', created_at: '2026-01-01T00:00:00Z' },
+        { id: 'variant-sold-out-1', product_id: 'variant-sold-out-product', attributes: { storage: '128GB' }, price_override: 100000, stock_quantity: 0, condition: 'new', created_at: '2026-01-01T00:00:00Z' },
+        { id: 'variant-untracked-1', product_id: 'untracked-variant-product', attributes: { storage: '128GB' }, price_override: 100000, stock_quantity: 0, condition: 'new', created_at: '2026-01-01T00:00:00Z' },
+      ];
+      let body = '';
+      request.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      request.on('end', () => {
+        const requested = JSON.parse(body) as { p_product_ids?: string[] };
+        response.end(JSON.stringify(rows.filter((row) => requested.p_product_ids?.includes(row.product_id))));
+      });
+      return true;
+    }
+    if (url.pathname.endsWith('/rest/v1/rpc/get_mcp_search_product_offers')) {
+      const rows = [
+        { id: 'offer-condition-1', product_id: 'condition-offer-product', condition: 'used', price: 80000, compare_at_price: 90000, stock_quantity: 2 },
+        { id: 'offer-sold-out-1', product_id: 'condition-offer-sold-out-product', condition: 'used', price: 80000, compare_at_price: null, stock_quantity: 0 },
+        { id: 'offer-untracked-1', product_id: 'untracked-offer-product', condition: 'used', price: 80000, compare_at_price: null, stock_quantity: 0 },
+        { id: 'offer-combined-1', product_id: 'combined-options-product', condition: 'used', price: 85000, compare_at_price: null, stock_quantity: 2 },
+      ];
+      let body = '';
+      request.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      request.on('end', () => {
+        const requested = JSON.parse(body) as { p_product_ids?: string[] };
+        response.end(JSON.stringify(rows.filter((row) => requested.p_product_ids?.includes(row.product_id))));
+      });
+      return true;
+    }
     if (url.pathname.endsWith('/rest/v1/rpc/get_product_offers')) {
       let body = '';
       request.on('data', (chunk: Buffer) => { body += chunk.toString(); });

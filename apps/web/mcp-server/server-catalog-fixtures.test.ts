@@ -22,6 +22,22 @@ describe('catalog fixtures', () => {
         method: 'POST', body: JSON.stringify({ p_product_ids: ['variant-available-product'] }),
       });
       expect(await variants.json()).toEqual([expect.objectContaining({ product_id: 'variant-available-product', stock_quantity: 2 })]);
+      const boundedVariants = await fetch(`${origin}/rest/v1/rpc/get_mcp_search_product_variants`, {
+        method: 'POST', body: JSON.stringify({
+          p_product_ids: ['variant-available-product'], p_merchant_id: 'merchant-1',
+        }),
+      });
+      expect(await boundedVariants.json()).toEqual([expect.objectContaining({
+        id: 'variant-available-1', product_id: 'variant-available-product', stock_quantity: 2,
+      })]);
+      const boundedOffers = await fetch(`${origin}/rest/v1/rpc/get_mcp_search_product_offers`, {
+        method: 'POST', body: JSON.stringify({
+          p_product_ids: ['condition-offer-product'], p_merchant_id: 'merchant-1',
+        }),
+      });
+      expect(await boundedOffers.json()).toEqual([expect.objectContaining({
+        id: 'offer-condition-1', product_id: 'condition-offer-product', condition: 'used', price: 80000,
+      })]);
       const offers = await fetch(`${origin}/rest/v1/rpc/get_product_offers`, {
         method: 'POST', body: JSON.stringify({ p_product_id: 'condition-offer-product' }),
       });

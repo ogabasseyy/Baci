@@ -17,7 +17,7 @@ describe('hydrateSearchProductAvailability', () => {
     offerQuery.eq.mockReturnValue(offerQuery);
     offerQuery.in.mockReturnValue(offerQuery);
     offerQuery.order.mockReturnValue(offerQuery);
-    const supabase = { from: vi.fn(() => offerQuery) } as unknown as SupabaseClient;
+    const supabase = { rpc: vi.fn(async (name: string) => name === 'get_mcp_search_product_offers' ? await offerQuery : { data: [], error: null }) } as unknown as SupabaseClient;
     const product = { id: 'priced-phone', condition: 'new', price: 100000,
       manage_stock: true, has_condition_offers: true, stock_quantity: 3 };
 
@@ -40,7 +40,7 @@ describe('hydrateSearchProductAvailability', () => {
     emptyQuery.eq.mockReturnValue(emptyQuery);
     emptyQuery.in.mockReturnValue(emptyQuery);
     emptyQuery.order.mockReturnValue(emptyQuery);
-    const supabase = { from: vi.fn(() => emptyQuery) } as unknown as SupabaseClient;
+    const supabase = { rpc: vi.fn(async () => await emptyQuery) } as unknown as SupabaseClient;
     const product = { id: 'legacy-phone', condition: null, price: 50000, manage_stock: false };
 
     const [asNew] = await hydrateSearchProductAvailability([product], supabase, 'merchant-1', 'new');
@@ -62,7 +62,7 @@ describe('hydrateSearchProductAvailability', () => {
     offerQuery.eq.mockReturnValue(offerQuery);
     offerQuery.in.mockReturnValue(offerQuery);
     offerQuery.order.mockReturnValue(offerQuery);
-    const supabase = { from: vi.fn(() => offerQuery) } as unknown as SupabaseClient;
+    const supabase = { rpc: vi.fn(async (name: string) => name === 'get_mcp_search_product_offers' ? await offerQuery : { data: [], error: null }) } as unknown as SupabaseClient;
     const products = [{ id: 'base-phone', condition: 'new', manage_stock: true,
       has_condition_offers: true, stock_quantity: 3 }];
 
@@ -74,10 +74,10 @@ describe('hydrateSearchProductAvailability', () => {
   });
 
   it('does not claim new-option stock for a sold-out used-condition search', async () => {
-    const rpc = vi.fn(async () => ({ data: [
+    const rpc = vi.fn(async (name: string) => name === 'get_mcp_search_product_variants' ? ({ data: [
       { product_id: 'mixed-phone', condition: 'new', attributes: { storage: '128GB' }, stock_quantity: 2 },
       { product_id: 'mixed-phone', condition: 'uk_used', attributes: { storage: '64GB' }, stock_quantity: 0 },
-    ], error: null }));
+    ], error: null }) : await offerQuery);
     const offerQuery = {
       select: vi.fn(), eq: vi.fn(), in: vi.fn(), order: vi.fn(),
       then: (resolve: (value: { data: Array<{ product_id: string; condition: string; stock_quantity: number }>; error: null }) => unknown) =>
@@ -90,7 +90,7 @@ describe('hydrateSearchProductAvailability', () => {
     offerQuery.eq.mockReturnValue(offerQuery);
     offerQuery.in.mockReturnValue(offerQuery);
     offerQuery.order.mockReturnValue(offerQuery);
-    const supabase = { rpc, from: vi.fn(() => offerQuery) } as unknown as SupabaseClient;
+    const supabase = { rpc, } as unknown as SupabaseClient;
 
     const [used] = await hydrateSearchProductAvailability([
       { id: 'mixed-phone', condition: 'new', manage_stock: true, has_variants: true,
@@ -99,7 +99,9 @@ describe('hydrateSearchProductAvailability', () => {
 
     expect(used.stockSummary).toMatchObject({ inStock: false, level: 'Out of Stock' });
     expect(used.availableVariants).toEqual([]);
-    expect(offerQuery.select).toHaveBeenCalledWith('id, product_id, condition, price, compare_at_price, stock_quantity');
+    expect(rpc).toHaveBeenCalledWith('get_mcp_search_product_offers', {
+      p_product_ids: ['mixed-phone'], p_merchant_id: 'merchant-1',
+    });
   });
 
   it('hydrates public offer compare-at price and explicit lookup status', async () => {
@@ -117,7 +119,7 @@ describe('hydrateSearchProductAvailability', () => {
     const result = await hydrateSearchProductAvailability([
       { id: 'offer-phone', condition: 'new', price: 100000, manage_stock: true,
         has_condition_offers: true, stock_quantity: 0 },
-    ], { from: vi.fn(() => offerQuery) } as unknown as SupabaseClient, 'merchant-1', 'used');
+    ], { rpc: vi.fn(async () => await offerQuery) } as unknown as SupabaseClient, 'merchant-1', 'used');
 
     expect(result[0]).toMatchObject({
       displayPrice: 80000,
@@ -138,15 +140,15 @@ describe('hydrateSearchProductAvailability', () => {
     failedOffers.eq.mockReturnValue(failedOffers);
     failedOffers.in.mockReturnValue(failedOffers);
     failedOffers.order.mockReturnValue(failedOffers);
-    const rpc = vi.fn(async () => ({ data: [
+    const rpc = vi.fn(async (name: string) => name === 'get_mcp_search_product_variants' ? ({ data: [
       { product_id: 'mixed-options', id: 'variant-1', attributes: { storage: '256GB' }, stock_quantity: 2 },
-    ], error: null }));
+    ], error: null }) : await failedOffers);
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const [result] = await hydrateSearchProductAvailability([
         { id: 'mixed-options', price: 100, manage_stock: true, has_variants: true,
           has_condition_offers: true, stock_quantity: 0 },
-      ], { rpc, from: vi.fn(() => failedOffers) } as unknown as SupabaseClient, 'merchant-1');
+      ], { rpc, } as unknown as SupabaseClient, 'merchant-1');
 
       expect(result.optionsLookupFailed).toBe(true);
       expect(result.variantLookupFailed).toBe(false);
@@ -163,10 +165,10 @@ describe('hydrateSearchProductAvailability', () => {
   });
 
   it('uses stocked child variants and offers instead of zero parent stock', async () => {
-    const rpc = vi.fn(async () => ({ data: [
+    const rpc = vi.fn(async (name: string) => name === 'get_mcp_search_product_variants' ? ({ data: [
           { product_id: 'variant-phone', attributes: { storage: '64GB' }, stock_quantity: 0 },
           { product_id: 'variant-phone', attributes: { storage: '128GB' }, stock_quantity: 2 },
-        ], error: null }));
+        ], error: null }) : await offerQuery);
     const offerQuery = {
       select: vi.fn(), eq: vi.fn(), in: vi.fn(), order: vi.fn(),
       then: (resolve: (value: { data: Array<{ product_id: string; stock_quantity: number }>; error: null }) => unknown) =>
@@ -176,7 +178,7 @@ describe('hydrateSearchProductAvailability', () => {
     offerQuery.eq.mockReturnValue(offerQuery);
     offerQuery.in.mockReturnValue(offerQuery);
     offerQuery.order.mockReturnValue(offerQuery);
-    const supabase = { rpc, from: vi.fn(() => offerQuery) } as unknown as SupabaseClient;
+    const supabase = { rpc, } as unknown as SupabaseClient;
 
     const result = await hydrateSearchProductAvailability([
       { id: 'variant-phone', manage_stock: true, has_variants: true, stock_quantity: 0 },
@@ -188,8 +190,13 @@ describe('hydrateSearchProductAvailability', () => {
       { product_id: 'variant-phone', attributes: { storage: '128GB' }, stock_quantity: 2 },
     ]);
     expect(result[1].stockSummary.inStock).toBe(true);
-    expect(offerQuery.in).toHaveBeenCalledWith('product_id', ['offer-phone']);
-    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc).toHaveBeenCalledWith('get_mcp_search_product_variants', {
+      p_product_ids: ['variant-phone'], p_merchant_id: 'merchant-1',
+    });
+    expect(rpc).toHaveBeenCalledWith('get_mcp_search_product_offers', {
+      p_product_ids: ['offer-phone'], p_merchant_id: 'merchant-1',
+    });
   });
 
   it('leaves tracked option availability unconfirmed when lookup fails', async () => {
@@ -223,7 +230,7 @@ describe('hydrateSearchProductAvailability', () => {
       const result = await hydrateSearchProductAvailability([
         { id: 'offer-phone', condition: 'new', price: 80000, manage_stock: true,
           has_condition_offers: true, stock_quantity: 0 },
-      ], { from: vi.fn(() => offerQuery) } as unknown as SupabaseClient, 'merchant-1');
+      ], { rpc: vi.fn(async () => await offerQuery) } as unknown as SupabaseClient, 'merchant-1');
       expect(result[0].displayPrice).toBeNull();
       expect(selectSearchProductsByPrice(result, { max_price: 100000 }, 20)).toEqual([]);
     } finally {
@@ -248,7 +255,7 @@ describe('hydrateSearchProductAvailability', () => {
       id: 'dup-phone', condition: 'new', price: 500, manage_stock: true,
       has_condition_offers: true, stock_quantity: 0,
       discovery_metadata: { product_type: 'smartphone' },
-    }], { from: vi.fn(() => offerQuery) } as unknown as SupabaseClient, 'merchant-1');
+    }], { rpc: vi.fn(async () => await offerQuery) } as unknown as SupabaseClient, 'merchant-1');
 
     // The first row survives hydration so selection's first-row dedupe sees
     // the same row the PDP resolves; the later in-stock duplicate stays hidden.
@@ -277,8 +284,9 @@ describe('hydrateSearchProductAvailability', () => {
       id: 'wide', condition: 'new', price: 500, manage_stock: false,
       has_variants: true, has_condition_offers: true, stock_quantity: 0,
     }], {
-      from: vi.fn(() => offerQuery),
-      rpc: vi.fn(async () => ({ data: variants, error: null })),
+      rpc: vi.fn(async (name: string) => name === 'get_mcp_search_product_variants'
+        ? { data: variants, error: null }
+        : await offerQuery),
     } as unknown as SupabaseClient, 'merchant-1');
 
     expect(row.availableOffers).toHaveLength(16);

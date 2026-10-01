@@ -181,9 +181,11 @@ jobs:
       # a future nosemgrep can never silently hide a new finding. Before
       # filtering, the step re-asserts the hardening the audit relies on and
       # fails closed (SARIF untouched, alert re-opens) if it drifted.
-      # Matching runs on comment-stripped lines (stdlib only: the scan
-      # container has no jq and no PyYAML), so guard expressions kept in
-      # comments cannot spoof the checks; folded ref scalars are joined.
+      # Matching is key-positional on comment-stripped lines (stdlib only:
+      # the scan container has no jq and no PyYAML): the guard must sit in a
+      # real if: condition, persist-credentials/ref:/path: must be mapping
+      # keys, so run: echo strings cannot spoof them; folded ref scalars are
+      # joined and unnamed steps delimit spans.
       - name: Drop audited checkout finding from SARIF
         if: always()
         run: |
@@ -194,6 +196,7 @@ jobs:
           [ -f .github/workflows/muse-code-review.yml ] || exit 0
           python3 - <<'EOF'
           import json
+          import posixpath
           import re
           import sys
           AUDITED_RULE_ID = (
@@ -249,24 +252,60 @@ jobs:
                   workflow_raw.append(i)
                   i += 1
 
+          def is_step_boundary(line):
+              # Named (- name:) and unnamed (- uses:/- run:/...) steps both
+              # delimit spans, so an unnamed step cannot widen a span.
+              return re.match(r"^\s*-\s+\w[\w-]*:", line) is not None
+
           def step_start(lines, ref_index):
               for i in range(ref_index, -1, -1):
-                  if lines[i].lstrip().startswith("- name:"):
+                  if is_step_boundary(lines[i]):
                       return i
               return 0
 
           def step_end(lines, start_index):
               for i in range(start_index + 1, len(lines)):
-                  if lines[i].lstrip().startswith("- name:"):
+                  if is_step_boundary(lines[i]):
                       return i
               return len(lines)
 
+          def if_bodies():
+              # Every job/step condition: single-line values plus block-scalar
+              # bodies. The same-repo guard only counts in a real condition,
+              # never in a run: string or inert mapping.
+              bodies = []
+              i = 0
+              while i < len(code_lines):
+                  line = code_lines[i]
+                  block = re.match(r"^\s*if:\s*[>|][-+]?\s*$", line)
+                  single = re.match(r"^\s*if:\s+(\S.*)$", line)
+                  if block:
+                      base = len(line) - len(line.lstrip())
+                      j = i + 1
+                      while j < len(code_lines) and code_lines[j].strip() \
+                              and len(code_lines[j]) - len(code_lines[j].lstrip()) > base:
+                          bodies.append(code_lines[j].strip())
+                          j += 1
+                      i = j
+                  elif single:
+                      bodies.append(single.group(1))
+                      i += 1
+                  else:
+                      i += 1
+              return bodies
+
+          def is_pr_ref(line):
+              # Key-positional: the mapping key must be ref:, so a run: echo
+              # of a ref-looking string cannot count as a checkout input.
+              return (re.match(r"^ref:\s", line.lstrip()) is not None
+                      and "github.event.pull_request" in line)
+
           drift = []
-          if not any("head.repo.full_name == github.repository" in line
-                     for line in workflow_lines):
+          if not any("head.repo.full_name == github.repository" in body
+                     for body in if_bodies()):
               drift.append("same-repo-job-guard")
           pr_refs = [i for i, line in enumerate(workflow_lines)
-                     if "ref:" in line and "github.event.pull_request" in line]
+                     if is_pr_ref(line)]
           # 1-based inclusive raw line span of the audited checkout step, used
           # to pin the SARIF exemption to this exact finding (see below).
           audited_start = audited_end = 0
@@ -277,20 +316,24 @@ jobs:
               raw_start = workflow_raw[start]
               raw_end = step_end(code_lines, workflow_raw[pr_refs[0]])
               audited_start, audited_end = raw_start + 1, raw_end
-              block = "\n".join(workflow_lines[start:pr_refs[0]])
-              if "persist-credentials: false" not in block:
+              # Key-positional: a run: echo of the string must not satisfy it.
+              if not any(re.match(r"^persist-credentials:\s*false\s*$", line.strip())
+                         for line in workflow_lines[start:pr_refs[0]]):
                   drift.append("head-checkout-credentials")
           trusted = [i for i, line in enumerate(workflow_lines)
-                     if "path: trusted-scripts" in line]
+                     if re.match(r"^path:\s*trusted-scripts\s*$",
+                                 line.strip())]
           if not trusted:
               drift.append("trusted-scripts-checkout-missing")
           else:
               start = step_start(workflow_lines, trusted[0])
-              block = "\n".join(
-                  workflow_lines[start:step_end(workflow_lines, start)])
-              if "default_branch" not in block:
+              span = workflow_lines[start:step_end(workflow_lines, start)]
+              # The trusted checkout's own ref: input must name the default
+              # branch; any PR-controlled ref: in that span is drift.
+              if not any(re.match(r"^ref:.*default_branch", line.strip())
+                         for line in span):
                   drift.append("trusted-scripts-default-branch")
-              if "github.event.pull_request" in block:
+              if any(is_pr_ref(line) for line in span):
                   drift.append("trusted-scripts-pr-ref")
           if drift:
               print(f"::error::muse-code-review.yml hardening drifted "
@@ -310,8 +353,10 @@ jobs:
               for loc in locations:
                   physical = loc.get("physicalLocation", {})
                   uri = (physical.get("artifactLocation", {}).get("uri", "")
-                         or "")
-                  if not uri.endswith(AUDITED_PATH):
+                         or "").replace("\\", "/").strip()
+                  # Exact normalized match: a suffix test would also accept
+                  # a nested lookalike (e.g. archive/.github/workflows/...).
+                  if posixpath.normpath(uri) != AUDITED_PATH:
                       return False
                   # Pin the exact audited finding by region, not just the
                   # file: a second suppressed checkout elsewhere in the

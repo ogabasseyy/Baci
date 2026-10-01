@@ -8,7 +8,7 @@ from semgrep_sarif_pins import (MUSE_PINNED_HOST,
                                 MUSE_PINNED_SHA_AARCH64,
                                 MUSE_PINNED_SHA_X86,
                                 MUSE_PINNED_VERSION)
-from semgrep_sarif_shell import strip_comments
+from semgrep_sarif_shell import logical_lines, strip_comments
 
 def audit_agent_runner(drift):
 
@@ -25,18 +25,7 @@ def audit_agent_runner(drift):
     if not runner_raw:
         drift.append("agent-runner-missing")
     else:
-        logical = []
-        buf = ""
-        for raw in runner_raw:
-            code = strip_comments(raw).rstrip()
-            if code.endswith("\\"):
-                buf += code[:-1] + " "
-            else:
-                buf += code
-                logical.append(buf)
-                buf = ""
-        if buf.strip():
-            logical.append(buf)
+        logical = logical_lines(runner_raw)
         # Command-position match: quoted-path form (the real call) or a
         # bare muse following a command boundary/keyword. Prose
         # mentions (echo "muse ...") and identifiers (muse_rc,

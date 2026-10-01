@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       semgrep_relevant: ${{ steps.scope.outputs.semgrep_relevant }}
+      trusted_changed: ${{ steps.scope.outputs.trusted_changed }}
     steps:
       - if: github.event_name == 'pull_request'
         name: Checkout repository
@@ -71,14 +72,30 @@ jobs:
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'turbo.json'
+            # Any change under the trusted set fails the SARIF
+            # filter loudly for human review: directly hostile
+            # helper code is indistinguishable from legitimate
+            # token use, so no content rule can auto-pass it.
+            # Advisory, not blocking (Security is not required):
+            # the red X draws merger eyes, the human decides.
+            trusted_changed:
+              - '.github/scripts/muse-review/**'
+              - '.github/scripts/semgrep-sarif*'
+              - '.github/workflows/security.yml'
+              - '.github/workflows/muse-code-review.yml'
+              - '.github/workflows/muse-review-selftest.yml'
 
       - name: Resolve Semgrep scope output
         id: scope
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "semgrep_relevant=${{ steps.filter.outputs.semgrep_relevant }}" >> "$GITHUB_OUTPUT"
+            echo "trusted_changed=${{ steps.filter.outputs.trusted_changed }}" >> "$GITHUB_OUTPUT"
           else
             echo "semgrep_relevant=true" >> "$GITHUB_OUTPUT"
+            # Push/schedule/dispatch carry no PR diff; content
+            # rules still apply, only the change signal rests.
+            echo "trusted_changed=false" >> "$GITHUB_OUTPUT"
           fi
 
   semgrep:
@@ -187,7 +204,11 @@ jobs:
       # the transport for exactly one audited finding (the reviewed
       # pull_request_target checkout) after a fail-closed drift audit; any
       # drift keeps the SARIF unfiltered and fails the job. The audit runs
-      # even with no SARIF (empty scans must not skip it). Logic and pinned
+      # even with no SARIF (empty scans must not skip it). TRUSTED_CHANGED
+      # carries the scope job's trusted-set diff signal (same-repo PRs
+      # only; the job skips forks, where this signal cannot run -- that
+      # gap needs a pull_request_target audit from base, post-merge
+      # follow-up, not more pull_request YAML). Logic and pinned
       # constants live in .github/scripts/semgrep-sarif-filter.py (with the
       # semgrep_sarif_* modules); behavior is pinned by
       # .github/scripts/semgrep-sarif-filter.test.sh, run by the
@@ -195,6 +216,8 @@ jobs:
       - name: Drop audited checkout finding from SARIF
         if: always()
         run: python3 .github/scripts/semgrep-sarif-filter.py
+        env:
+          TRUSTED_CHANGED: ${{ needs.changes.outputs.trusted_changed }}
 
       - name: Verify SARIF exists
         id: verify-sarif

@@ -21,6 +21,8 @@ from semgrep_sarif_consumer import (audit_invocations,
                                     audit_path_literals,
                                     audit_resolver, audit_run_hygiene,
                                     audit_script_dir)
+from semgrep_sarif_helpers import (audit_helpers,
+                                   audit_trusted_changed)
 from semgrep_sarif_pins import AUDITED_PATH, AUDITED_RULE_ID
 from semgrep_sarif_runner import audit_agent_runner, audit_installer
 from semgrep_sarif_steps import audit_agent_env, audit_step_commands
@@ -50,6 +52,8 @@ def main():
     audit_agent_env(ctx, drift)
     audit_agent_runner(drift)
     audit_installer(drift)
+    audit_helpers(ctx, drift)
+    audit_trusted_changed(drift)
     if drift:
         print(f"::error::muse-code-review.yml hardening drifted "
               f"({', '.join(drift)}); keeping SARIF unfiltered.")

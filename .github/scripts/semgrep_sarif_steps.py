@@ -3,6 +3,8 @@ confinement, PATH-family hijack rejection, and the no-token-
 expression rule for the agent step and job environment.
 """
 import re
+from semgrep_sarif_scan import (is_trusted_write_target,
+                                    redirect_targets)
 from semgrep_sarif_shell import (ENV_POISON, SHELL_KEYWORDS,
                                  STRICT_ALLOW, is_step_boundary,
                                  peel_prefix, run_segments,
@@ -18,11 +20,14 @@ def audit_step_commands(ctx, drift):
     # plus git/rm (the collision step's tools). Every step
     # inherits runner runtime tokens, so even secretless steps
     # cannot run exfil-capable commands. Unknown interpreters,
-    # direct executables, eval/traps/aliases, and sudo in secret
-    # steps all drift. PATH-family assignment would hijack later
-    # argv0 resolution within the step, so it drifts in secret
-    # steps too. Residual: rm operands (runner-local DoS only;
-    # no secrets or consumed outputs in rm-bearing steps).
+    # direct executables, eval/traps/aliases, and sudo in any
+    # step all drift, as does any redirect into the trusted
+    # tree (a resolver git cat-file piped there would rewrite
+    # trusted scripts at runtime). PATH-family assignment would
+    # hijack later argv0 resolution within the step, so it
+    # drifts in secret steps too. Residual: rm operands
+    # (runner-local DoS only; no secrets or consumed outputs in
+    # rm-bearing steps).
     secret_ref = re.compile(
         r"secrets\s*\.\s*[A-Za-z_]\w*|github\s*\.\s*token\b",
         re.IGNORECASE)
@@ -50,13 +55,17 @@ def audit_step_commands(ctx, drift):
             secret_ref.search(line) for line in span)
         allowed = STRICT_ALLOW if strict else LOOSE_ALLOW
         for seg in run_segments(span):
+            for tgt in redirect_targets(seg):
+                if is_trusted_write_target(tgt) \
+                        and "step-trusted-write" not in drift:
+                    drift.append("step-trusted-write")
             code = re.sub(r"'[^']*'", "''", seg)
             if strict and re.search(
                     assign_prefix + builtin_prefix
                     + poison_alt + r"\s*=", code) \
                     and "secret-step-path-hijack" not in drift:
                 drift.append("secret-step-path-hijack")
-            if strict and re.search(
+            if re.search(
                     assign_prefix + r"(?:sudo|doas)\b", code) \
                     and "secret-step-untrusted-command" not in drift:
                 drift.append("secret-step-untrusted-command")

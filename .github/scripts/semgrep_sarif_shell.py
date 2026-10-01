@@ -93,6 +93,58 @@ def split_commands2(text):
 def tokenize(text):
     return re.findall(r"\"[^\"\n]*\"|'[^'\n]*'|\S+", text)
 
+def logical_lines(raw_lines):
+    # Join quote-continued lines (a multi-line string's prose
+    # must not parse as commands), then comment-strip, then
+    # join backslash continuations. A # outside quotes ends
+    # code for quote-tracking, matching strip_comments.
+    chunks = []
+    buf, quote = "", None
+    for raw in raw_lines:
+        if buf:
+            buf += "\n"
+        buf += raw
+        i = 0
+        while i < len(raw):
+            ch = raw[i]
+            if quote == "'":
+                if ch == "'":
+                    quote = None
+            elif quote == '"':
+                if ch == "\\":
+                    i += 1
+                elif ch == '"':
+                    quote = None
+            elif ch == "\\":
+                i += 1
+            elif ch == "#":
+                break
+            elif ch in ("'", '"'):
+                quote = ch
+            i += 1
+        if quote is None:
+            chunks.append(buf)
+            buf = ""
+    if buf.strip():
+        chunks.append(buf)
+    logical = []
+    buf = ""
+    for chunk in chunks:
+        # A backslash-newline inside single quotes is literal
+        # in bash; collapsing it can only split tokens, never
+        # merge them, so analysis stays conservative.
+        code = strip_comments(chunk.replace("\\\n", " ")).rstrip()
+        if code.endswith("\\"):
+            buf += code[:-1] + " "
+        else:
+            buf += code
+            logical.append(buf)
+            buf = ""
+    if buf.strip():
+        logical.append(buf)
+    return logical
+
+
 def unquote(token):
     if len(token) >= 2 and token[0] == token[-1] \
             and token[0] in ("'", '"'):

@@ -109,7 +109,7 @@ for op in spec.split("\x1e"):
 EOF
 }
 
-# t name expect_exit expect_label sarif op [expect_remaining]
+# t name expect_exit expect_label sarif op [expect_remaining] [trusted_changed]
 t() {
   rm -rf "$WORK/.github" "$WORK/semgrep.sarif"
   cp -r "$ROOT/.github" "$WORK/.github"
@@ -120,8 +120,11 @@ t() {
     printf 'FAIL %s\n  op failed to apply\n' "$1"
     return
   fi
+  if [[ -n "${7:-}" ]]; then export TRUSTED_CHANGED="$7"; else unset TRUSTED_CHANGED; fi
   out="$(cd "$WORK" && python3 "$FILTER" 2>&1)"
-  assert_eq "$1-exit" "$2" "$?"
+  code="$?"
+  unset TRUSTED_CHANGED
+  assert_eq "$1-exit" "$2" "$code"
   case "$out" in *"$3"*) got="yes";; *) got="no";; esac
   assert_eq "$1-label" "yes" "$got"
   if [[ -n "${6:-}" && -f "$WORK/semgrep.sarif" ]]; then
@@ -132,6 +135,7 @@ t() {
 S="$YML"
 R="$RUNSH"
 I="$INST"
+H='.github/scripts/muse-review/collect.sh'
 FS=$'\x1f'
 RS=$'\x1e'
 
@@ -212,6 +216,40 @@ t installer-version 1 "muse-installer-version" happy.sarif "$I${FS}MUSE_VERSION=
 t installer-checksum 1 "muse-installer-checksum" happy.sarif "$I${FS}SHA_X86_LINUX=\"${FS}r${FS}8b53c9cdbc025bc2d9068bc7016e2c1e51c3a0c608821da17528ad23be900a12${FS}8b53c9cdbc025bc2d9068bc7016e2c1e51c3a0c608821da17528ad23be900a13"
 t installer-noverify 1 "muse-installer-no-verify" happy.sarif "$I${FS}sha256sum${FS}d"
 t installer-url 1 "muse-installer-url" happy.sarif "$I${FS}version=\${MUSE_VERSION}${FS}r${FS}version=\${MUSE_VERSION}${FS}version=latest"
+
+# --- trusted-tree write guards (run blocks) ---
+t trusted-write-catfile 1 "step-trusted-write" happy.sarif "$S${FS}dir=\${GITHUB_WORKSPACE}/trusted-scripts${FS}a${FS}          git -C \"\${GITHUB_WORKSPACE}\" cat-file blob HEAD:x > \"\${GITHUB_WORKSPACE}/trusted-scripts/x\""
+t trusted-write-echo 1 "step-trusted-write" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          echo evil > trusted-scripts/evil.sh"
+t trusted-write-fd 1 "step-trusted-write" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          echo x &> \"\${SCRIPT_DIR}/e\""
+t redirect-quote-fp 0 "" happy.sarif "$S${FS}dir=\${GITHUB_WORKSPACE}/trusted-scripts${FS}a${FS}          echo \"a > trusted-scripts/b\""
+t redirect-expansion-fp 0 "" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          echo \"\${X:-a>b}\""
+t loose-sudo 1 "secret-step-untrusted-command" happy.sarif "$S${FS}dir=\${GITHUB_WORKSPACE}/trusted-scripts${FS}a${FS}          sudo id"
+
+# --- token-bearing helper guards ---
+t helper-exec-ws 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t helper-exec-relative 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}bash ./evil.sh"
+t helper-source-relative 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}. ./lib.sh"
+t helper-sudo 1 "helper-privilege" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}sudo id"
+t helper-su 1 "helper-privilege" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}su -c id"
+t helper-trusted-write 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo x > \"\${SCRIPT_DIR}/evil\""
+t helper-home-write 1 "helper-home-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo x > ~/.cache/y"
+t helper-absinterp 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}/usr/bin/perl \"\${GITHUB_WORKSPACE}/evil.pl\""
+t helper-query-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}bash --version"
+t helper-home-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}~/.local/bin/muse --version"
+t helper-eval-ws 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}eval \"\$(cat \${GITHUB_WORKSPACE}/x)\""
+t helper-perl-stdin 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}perl -pe"
+t helper-jq-f-ws 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}jq -f \"\${GITHUB_WORKSPACE}/evil.jq\" ."
+t helper-xargs-rel 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}find . -print0 | xargs -0 ./process"
+t helper-env-poison 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}BASH_ENV=/tmp/x bash \"\${SCRIPT_DIR}/y.sh\""
+t helper-find-exec 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}find . -name x -exec sh {} \\;"
+t helper-nice 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}nice bash ./x.sh"
+t helper-heredoc-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cat <<trusted-scripts${RS}$H${FS}cat <<trusted-scripts${FS}a${FS}bash ./evil.sh${RS}$H${FS}bash ./evil.sh${FS}a${FS}trusted-scripts"
+t helper-subshell-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}review=\"\$(cat \"\${RUNNER_TEMP}/muse-summary.md\")\""
+t helper-subshell-exec 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}x=\"\$(bash ./evil.sh)\""
+t helper-alias-evil 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}wsalias=\${GITHUB_WORKSPACE}${RS}$H${FS}wsalias=\${GITHUB_WORKSPACE}${FS}a${FS}bash \$wsalias/evil.sh"
+
+# --- trusted-set change signal ---
+t trusted-changed 1 "trusted-tree-changed" happy.sarif "none" "" "true"
 
 printf '\nfilter suite: %d passed, %d failed%s\n' "$pass" "$fail" "${fail_names:+ ($fail_names)}"
 [[ "$fail" -eq 0 ]]

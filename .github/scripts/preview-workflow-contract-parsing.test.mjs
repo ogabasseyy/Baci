@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   executable,
   jobBlock,
+  previewDeployScript,
 } from './preview-workflow-contract.helpers.mjs';
 
 test('free-form ref never reaches a shell script', () => {
@@ -45,33 +46,38 @@ test('artifacts expire at minimum retention', () => {
   assert.equal(retentions.length, 2);
 });
 
-test('preview URL parsing anchors on the deploy assignment line', () => {
+test('deploy step invokes the trusted runner with prebuilt flags', () => {
   const deploy = jobBlock('deploy');
-  assert.match(deploy, /grep -oiE 'preview:/);
-  assert.match(deploy, /https:\/\/\[\^ \]\+\\.vercel\\.app/);
+  assert.match(
+    deploy,
+    /run: trusted-ops\/\.github\/scripts\/preview-deploy-run\.sh trusted-ops\/\.github\/scripts\/run-pinned-vercel\.sh deploy --yes --prebuilt --archive=tgz\n/
+  );
+});
+
+test('preview URL parsing anchors on the deploy assignment line', () => {
+  assert.match(previewDeployScript, /grep -oiE 'preview:/);
+  assert.match(previewDeployScript, /https:\/\/\[\^ \]\+\\.vercel\\.app/);
   // Last match wins (Vercel prints the assignment after upload echoes;
   // same convention as deploy-with-retry.sh). Never first-match.
-  assert.match(deploy, /\|\s*tail -n 1/);
-  assert.doesNotMatch(deploy, /head -n 1/);
+  assert.match(previewDeployScript, /\|\s*tail -n 1/);
+  assert.doesNotMatch(previewDeployScript, /head -n 1/);
   // No-match grep must not exit the step under pipefail before the
   // status-aware handling runs.
-  assert.match(deploy, /tail -n 1 \|\| true/);
-  assert.match(deploy, /exit 1/);
+  assert.match(previewDeployScript, /tail -n 1 \|\| true/);
+  assert.match(previewDeployScript, /exit 1/);
 });
 
-test('deploy step fails fast with the true CLI exit code', () => {
-  const deploy = jobBlock('deploy');
-  assert.match(deploy, /set -euo pipefail/);
+test('deploy script fails fast with the true CLI exit code', () => {
+  assert.match(previewDeployScript, /set -euo pipefail/);
 });
 
-test('deploy step survives CLI hangs and captures diagnostics', () => {
-  const deploy = jobBlock('deploy');
-  assert.match(deploy, /2>&1 \| tee preview-deploy\.log/);
-  assert.match(deploy, /timeout[^\n]*run-pinned-vercel\.sh deploy/);
-  assert.match(deploy, /PIPESTATUS\[0\]/);
-  assert.match(deploy, /deploy_status.*124/);
+test('deploy script survives CLI hangs and captures diagnostics', () => {
+  assert.match(previewDeployScript, /2>&1 \| tee preview-deploy\.log/);
+  assert.match(previewDeployScript, /timeout -s TERM -k 2m 50m "\$@" 2>&1/);
+  assert.match(previewDeployScript, /PIPESTATUS\[0\]/);
+  assert.match(previewDeployScript, /deploy_status.*124/);
   // Non-timeout failures reject the run even when a URL was printed.
-  assert.match(deploy, /deploy_status" -ne 0.*-ne 124.*-ne 137/);
+  assert.match(previewDeployScript, /deploy_status" -ne 0.*-ne 124.*-ne 137/);
 });
 
 test('deploy job bootstraps pnpm before helpers', () => {
@@ -93,10 +99,20 @@ test('handoff artifacts survive reruns', () => {
 });
 
 test('deploy summary neutralizes markdown in the branch name', () => {
-  const deploy = jobBlock('deploy');
-  assert.match(deploy, /safe_ref=.*tr -d '\\n\\r`'/);
-  assert.match(deploy, /Preview ready for \\`\$safe_ref\\`/);
-  assert.doesNotMatch(deploy, /\$PREVIEW_REF:\s*\$preview_url/);
+  assert.match(previewDeployScript, /safe_ref=.*tr -d '\\n\\r`'/);
+  assert.match(previewDeployScript, /Preview ready for \\`\$safe_ref\\`/);
+  assert.doesNotMatch(previewDeployScript, /\$PREVIEW_REF:\s*\$preview_url/);
+});
+
+test('deploy script keeps the free-form ref quoted', () => {
+  const code = previewDeployScript
+    .split('\n')
+    .filter((line) => !/^\s*#/.test(line))
+    .join('\n');
+  const quotedOut = code
+    .replace(/"\$PREVIEW_REF[^"]*"/g, '')
+    .replace(/\$\{PREVIEW_REF[^}]*\}/g, '');
+  assert.doesNotMatch(quotedOut, /PREVIEW_REF/);
 });
 
 test('trusted checkouts pin the running commit, never the branch name', () => {

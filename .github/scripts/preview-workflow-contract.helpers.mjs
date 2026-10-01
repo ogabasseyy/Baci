@@ -20,4 +20,29 @@ function jobBlock(name) {
   return block;
 }
 
-export { executable, jobBlock, workflow };
+// Deploy shell extracted to a helper script (300-line rule); contracts
+// that used to read the deploy run block read this instead.
+const previewDeployScript = readFileSync(
+  new URL('./preview-deploy-run.sh', import.meta.url),
+  'utf8'
+);
+
+// Exposure-control data files: the enforcer allowlist and the redaction
+// patterns must stay disjoint (a key is either safe-real or blanked).
+const previewEnvAllowlist = readFileSync(
+  new URL('./preview-env-allowlist.txt', import.meta.url),
+  'utf8'
+);
+const previewEnvRedact = readFileSync(
+  new URL('./preview-env-redact.sed', import.meta.url),
+  'utf8'
+);
+
+export {
+  executable,
+  jobBlock,
+  previewDeployScript,
+  previewEnvAllowlist,
+  previewEnvRedact,
+  workflow,
+};

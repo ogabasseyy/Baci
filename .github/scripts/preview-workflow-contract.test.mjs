@@ -3,8 +3,30 @@ import test from 'node:test';
 import {
   executable,
   jobBlock,
+  previewEnvAllowlist,
+  previewEnvRedact,
   workflow,
 } from './preview-workflow-contract.helpers.mjs';
+
+const DENIED_KEYS = [
+  'ADDRESS_AUTOCOMPLETE_KV_REST_API_READ_ONLY_TOKEN',
+  'ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN',
+  'AUTONOMA_SECRET_ID',
+  'BLOG_PREVIEW_SECRET',
+  'CRON_SECRET',
+  'GEMINI_API_KEY',
+  'GO54_API_KEY',
+  'GOOGLE_GENAI_API_KEY',
+  'IMPORT_JOB_WORKER_SECRET',
+  'INTERNAL_API_SECRET',
+  'KV_REST_API_TOKEN',
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'VERCEL_OIDC_TOKEN',
+  'ZEPTOMAIL_MAILAGENT_KEY',
+  'ZEPTOMAIL_TOKEN',
+  'ZOHO_CLIENT_SECRET',
+  'ZOHO_REFRESH_TOKEN',
+];
 
 test('preview workflow stays dispatch-only', () => {
   const onBlock = executable.match(/\non:\n([\s\S]*?)\n[a-z]+:/)?.[1];
@@ -169,6 +191,7 @@ test('preview build uses stand-ins, never real server secrets', () => {
     executable,
     /SUPABASE_AGENTIC_JWT_PRIVATE_JWK:\s*\$\{\{/
   );
+  assert.doesNotMatch(executable, /SUPABASE_SERVICE_ROLE_KEY:\s*\$\{\{/);
 });
 
 test('only the known deployment secrets are bound', () => {
@@ -204,5 +227,48 @@ test('preview fails closed on unexpected exposed server values', () => {
     prepare.indexOf('assert-preview-env-allowlist') <
       prepare.indexOf('preview-vercel-dir'),
     'exposure check must precede the env artifact upload'
+  );
+});
+
+test('preview redacts privileged values before the exposure check', () => {
+  const prepare = jobBlock('prepare');
+  assert.match(
+    prepare,
+    /sed -i -E -f \.github\/scripts\/preview-env-redact\.sed \.vercel\/\.env\.preview\.local/
+  );
+  assert.ok(
+    prepare.indexOf('preview-env-redact.sed') <
+      prepare.indexOf('assert-preview-env-allowlist'),
+    'redaction must precede the exposure check'
+  );
+  for (const key of DENIED_KEYS) {
+    assert.match(
+      previewEnvRedact,
+      new RegExp(`s/\\^${key}=\\.\\*/${key}=""\\/`),
+      `${key} must stay redacted`
+    );
+    assert.doesNotMatch(
+      previewEnvAllowlist,
+      new RegExp(`^${key}$`, 'm'),
+      `${key} must not be allowlisted`
+    );
+  }
+});
+
+test('preview stands in the redacted service-role key', () => {
+  const prepare = jobBlock('prepare');
+  assert.match(
+    prepare,
+    /inject-prebuilt-env-secret\.mjs SUPABASE_SERVICE_ROLE_KEY \.vercel\/\.env\.preview\.local 'build-time-presence-stand-in-not-a-real-service-key-000000'/
+  );
+  assert.ok(
+    prepare.indexOf('preview-env-redact.sed') <
+      prepare.indexOf('inject-prebuilt-env-secret.mjs SUPABASE_SERVICE_ROLE_KEY'),
+    'service-role must be blanked before the stand-in replaces it'
+  );
+  assert.ok(
+    prepare.indexOf('inject-prebuilt-env-secret.mjs SUPABASE_SERVICE_ROLE_KEY') <
+      prepare.indexOf('preview-vercel-dir'),
+    'service-role stand-in must precede the env artifact upload'
   );
 });

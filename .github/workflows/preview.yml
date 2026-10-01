@@ -19,6 +19,11 @@ permissions:
   contents: read
 
 concurrency:
+  # Same-ref redispatch cancels the in-flight run (preview freshness beats
+  # orphan-avoidance; Vercel retains any orphaned deployment as inert
+  # ephemera). A cancelled run never prints the orphan checklist, so before
+  # retrying check the Vercel dashboard for a deployment the cancelled run
+  # may have left behind. Production uses false; previews choose true.
   group: preview-${{ inputs.ref }}
   cancel-in-progress: true
 
@@ -92,17 +97,28 @@ jobs:
         # This proves the marking exists; the injector below additionally
         # refuses any non-blank value before the stand-in replaces it.
         run: node .github/scripts/assert-vercel-pulled-sensitive-env.mjs QUIZ_RPC_SERVER_SECRET .vercel/.env.preview.local
+      - name: Redact privileged Preview values from the build env
+        # Runtime-only keys (see the pattern file): blanked before the
+        # untrusted build; service-role gets a presence stand-in below.
+        run: sed -i -E -f .github/scripts/preview-env-redact.sed .vercel/.env.preview.local
       - name: Verify Preview env exposes no unexpected server values
         # Fails closed on any non-blank server key outside NEXT_PUBLIC_* and
         # the reviewed allowlist, so a future key added without the
         # sensitive flag breaks loudly instead of leaking silently to the
-        # untrusted build. Runs pre-injection: stand-ins are ours by then.
+        # untrusted build. Runs post-redaction, pre-injection: stand-ins
+        # are ours by then.
         run: node .github/scripts/assert-preview-env-allowlist.mjs .vercel/.env.preview.local .github/scripts/preview-env-allowlist.txt
       - name: Ensure build-time presence of runtime-only quiz RPC secret
         # No real secret passthrough: the stand-in satisfies build validation
         # and Vercel remains the runtime source, so dispatchable branches
         # never observe the server secret.
         run: node .github/scripts/inject-prebuilt-env-secret.mjs QUIZ_RPC_SERVER_SECRET .vercel/.env.preview.local 'build-time-presence-stand-in-not-used-at-runtime-000000000000'
+      - name: Ensure build-time presence of redacted service-role key
+        # Validation requires this key non-blank, but the build never
+        # queries with it (SSG uses the anonymous client): a presence
+        # stand-in satisfies the schema without exposing the RLS-bypassing
+        # credential. Refuses non-blank input like the quiz injection.
+        run: node .github/scripts/inject-prebuilt-env-secret.mjs SUPABASE_SERVICE_ROLE_KEY .vercel/.env.preview.local 'build-time-presence-stand-in-not-a-real-service-key-000000'
       - name: Ensure JWK stand-in precondition
         # Preview intentionally carries no signing material, so the legacy
         # fallback cannot verify there. A blank assignment lets the injector
@@ -259,47 +275,9 @@ jobs:
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           PREVIEW_REF: ${{ inputs.ref }}
-        run: |
-          set -euo pipefail
-          # CLI 57 prints READY then hangs on some CI deploys (production
-          # wraps attempts the same way in deploy-with-retry.sh): cap below
-          # the step timeout and accept a captured URL on timeout. Merge
-          # stderr into the log: the labeled Preview line is diagnostic.
-          set +e
-          timeout -s TERM -k 2m 50m trusted-ops/.github/scripts/run-pinned-vercel.sh deploy --yes --prebuilt --archive=tgz 2>&1 | tee preview-deploy.log
-          deploy_status=${PIPESTATUS[0]}
-          set -e
-          # Last match wins: Vercel prints the deployment assignment at the
-          # end of its output, after any file-upload echoes, so tail takes
-          # the real URL. Same convention as extract_deployment_target in
-          # deploy-with-retry.sh. Residual risk (attacker string echoed
-          # after the assignment) is accepted: nothing downstream consumes
-          # this URL except the advisory summary link.
-          # `|| true`: under pipefail a no-match grep would exit the step
-          # here, skipping the status-aware handling below.
-          preview_url="$(grep -oiE 'preview:[[:space:]]*https://[^ )]+' preview-deploy.log | grep -oE 'https://[^ ]+\.vercel\.app' | tail -n 1 || true)"
-          # Only clean exits and timeout kills may carry a usable URL: a
-          # nonzero CLI exit means finalization failed even if a Preview
-          # line was printed (same ordering as deploy-with-retry.sh).
-          if [ "$deploy_status" -ne 0 ] && [ "$deploy_status" -ne 124 ] && [ "$deploy_status" -ne 137 ]; then
-            echo "Deploy failed with status $deploy_status; inspect preview-deploy.log." >&2
-            exit "$deploy_status"
-          fi
-          if [ -z "$preview_url" ]; then
-            if [ "$deploy_status" -eq 124 ] || [ "$deploy_status" -eq 137 ]; then
-              echo 'Deploy timed out without printing a Preview URL; check the Vercel dashboard for an orphaned deployment before retrying.' >&2
-              exit "$deploy_status"
-            else
-              echo 'Could not find the Preview URL in the deploy log; inspect preview-deploy.log.' >&2
-              exit 1
-            fi
-          fi
-          echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
-          # Dispatch inputs are free-form: strip newlines and carriage returns
-          # as well as backticks, then render inside a code span, so the
-          # summary heading stays one line and cannot be reshaped.
-          safe_ref="$(printf '%s' "$PREVIEW_REF" | tr -d '\n\r`')"
-          echo "## Preview ready for \`$safe_ref\`: $preview_url" >> "$GITHUB_STEP_SUMMARY"
+        # Shell logic lives in the trusted helper (300-line rule); the step
+        # stays a thin invocation pinned exactly by the contract suite.
+        run: trusted-ops/.github/scripts/preview-deploy-run.sh trusted-ops/.github/scripts/run-pinned-vercel.sh deploy --yes --prebuilt --archive=tgz
       - name: Clean up Vercel secrets
         if: always()
         run: |

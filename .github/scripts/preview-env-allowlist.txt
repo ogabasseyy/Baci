@@ -1,50 +1,34 @@
 # Preview env keys permitted to carry real (non-blank) values into the
 # untrusted preview build job. One key per line, `#` comments allowed.
 #
-# Seeded 2026-10-01 from the live Preview inventory: every non-NEXT_PUBLIC_
-# key that `vercel pull --environment=preview` returned with a real value
-# that day. NEXT_PUBLIC_* keys need no entry (public by definition) and
-# blank assignments need none (sensitive-marked keys arrive blank).
+# Seeded 2026-10-01 from the live Preview inventory, MINUS the privileged
+# keys the redact step blanks (see preview-env-redact.sed): only
+# identifiers, endpoints, and platform plumbing remain. NEXT_PUBLIC_*
+# keys need no entry (public by definition) and blank assignments need
+# none (sensitive-marked keys arrive blank).
 #
 # Adding a name here is a conscious decision that branch builds may read
 # the real Preview value. Prefer marking the key sensitive in Vercel
 # instead; only allowlist values the build genuinely needs. Any new
 # non-blank server key fails the workflow until it is allowlisted here
-# with review or marked sensitive.
-ADDRESS_AUTOCOMPLETE_KV_REST_API_READ_ONLY_TOKEN
-ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN
+# with review, marked sensitive, or added to the redact patterns.
 ADDRESS_AUTOCOMPLETE_KV_REST_API_URL
 ADDRESS_AUTOCOMPLETE_KV_URL
 ADDRESS_AUTOCOMPLETE_REDIS_URL
 AUTONOMA_CLIENT_ID
-AUTONOMA_SECRET_ID
-BLOG_PREVIEW_SECRET
-CRON_SECRET
 EDGE_CONFIG
-GEMINI_API_KEY
-GO54_API_KEY
 GO54_EMAIL
-GOOGLE_GENAI_API_KEY
-IMPORT_JOB_WORKER_SECRET
-INTERNAL_API_SECRET
-KV_REST_API_TOKEN
 KV_REST_API_URL
 NX_DAEMON
 OPENAI_AGENTIC_MERCHANT_SLUG
 PETROCK_API_BASE_URL
-SUPABASE_SERVICE_ROLE_KEY
 TURBO_CACHE
 TURBO_DOWNLOAD_LOCAL_ENABLED
 TURBO_REMOTE_ONLY
 TURBO_RUN_SUMMARY
 VERCEL
 VERCEL_ENV
-VERCEL_OIDC_TOKEN
 VERCEL_TARGET_ENV
 ZEPTOMAIL_FROM_DOMAIN
 ZEPTOMAIL_FROM_NAME
-ZEPTOMAIL_MAILAGENT_KEY
-ZEPTOMAIL_TOKEN
 ZOHO_CLIENT_ID
-ZOHO_CLIENT_SECRET
-ZOHO_REFRESH_TOKEN

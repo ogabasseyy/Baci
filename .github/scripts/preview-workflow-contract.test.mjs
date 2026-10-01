@@ -248,7 +248,16 @@ test('preview URL parsing anchors on the deploy assignment line', () => {
   const deploy = jobBlock('deploy');
   assert.match(deploy, /grep -oiE 'preview:/);
   assert.match(deploy, /https:\/\/\[\^ \]\+\\.vercel\\.app/);
+  // Last match wins (Vercel prints the assignment after upload echoes;
+  // same convention as deploy-with-retry.sh). Never first-match.
+  assert.match(deploy, /\|\s*tail -n 1/);
+  assert.doesNotMatch(deploy, /head -n 1/);
   assert.match(deploy, /exit 1/);
+});
+
+test('deploy step fails fast with the true CLI exit code', () => {
+  const deploy = jobBlock('deploy');
+  assert.match(deploy, /set -euo pipefail/);
 });
 
 test('deploy summary neutralizes markdown in the branch name', () => {

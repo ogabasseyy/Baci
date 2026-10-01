@@ -227,7 +227,14 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           PREVIEW_REF: ${{ inputs.ref }}
         run: |
+          set -euo pipefail
           trusted-ops/.github/scripts/run-pinned-vercel.sh deploy --yes --prebuilt --archive=tgz | tee preview-deploy.log
+          # Last match wins: Vercel prints the deployment assignment at the
+          # end of its output, after any file-upload echoes, so tail takes
+          # the real URL. Same convention as extract_deployment_target in
+          # deploy-with-retry.sh. Residual risk (attacker string echoed
+          # after the assignment) is accepted: nothing downstream consumes
+          # this URL except the advisory summary link.
           preview_url="$(grep -oiE 'preview:[[:space:]]*https://[^ )]+' preview-deploy.log | grep -oE 'https://[^ ]+\.vercel\.app' | tail -n 1)"
           if [ -z "$preview_url" ]; then
             echo 'Could not find the Preview URL in the deploy log; inspect preview-deploy.log.' >&2

@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail';
 import { assertRefundNotificationSendTime } from './assert-refund-notification-send-time';
 import { awaitRefundNotificationDeadline } from './await-refund-notification-deadline';
+import { fileDuplicateCaptureFallbackReview } from './file-duplicate-capture-fallback-review';
 import { fileDuplicatePaymentCapture } from './file-duplicate-payment-capture';
 import type { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
 import { gatePartiallyPaidAbandonedCapture } from './gate-partially-paid-abandoned-capture';
@@ -172,6 +173,13 @@ export async function finalizePartiallyPaidAbandonedAttempt({
         reference: string;
         status: string;
       };
+      const duplicateEvidence = {
+        gateway: 'paystack',
+        providerAmount: capture.amount,
+        providerCurrency: capture.currency,
+        providerReference: String(capture.id),
+        providerStatus: capture.status,
+      };
       const filed = await fileDuplicatePaymentCapture({
         attempt: {
           gateway_reference: attempt.gateway_reference,
@@ -182,16 +190,28 @@ export async function finalizePartiallyPaidAbandonedAttempt({
           metadata: null,
           order_id: attempt.order_id,
         },
-        evidence: {
-          gateway: 'paystack',
-          providerAmount: capture.amount,
-          providerCurrency: capture.currency,
-          providerReference: String(capture.id),
-          providerStatus: capture.status,
-        },
+        evidence: duplicateEvidence,
         supabase,
       });
       if (filed) {
+        summary.reviewsFiled.push(attempt.id);
+        return;
+      }
+      // finalizePayment already flipped this row to completed, so the
+      // status-guarded hold below persists nothing and no sweep
+      // reselects it: persist the evidence directly so the captured
+      // extra payment keeps its operations review.
+      const fallbackFiled = await fileDuplicateCaptureFallbackReview({
+        attempt: {
+          gateway_reference: attempt.gateway_reference,
+          id: attempt.id,
+          merchant_id: attempt.merchant_id,
+          order_id: attempt.order_id,
+        },
+        evidence: duplicateEvidence,
+        supabase,
+      });
+      if (fallbackFiled) {
         summary.reviewsFiled.push(attempt.id);
         return;
       }

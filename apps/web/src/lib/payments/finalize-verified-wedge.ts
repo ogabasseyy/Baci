@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { assertRefundNotificationSendTime } from '@/lib/payments/assert-refund-notification-send-time';
 import { awaitRefundNotificationDeadline } from '@/lib/payments/await-refund-notification-deadline';
 import { extractDuplicateCaptureEvidence } from '@/lib/payments/extract-duplicate-capture-evidence';
+import { fileDuplicateCaptureFallbackReview } from '@/lib/payments/file-duplicate-capture-fallback-review';
 import { fileDuplicatePaymentCapture } from '@/lib/payments/file-duplicate-payment-capture';
 import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
 import type {
@@ -132,6 +133,11 @@ export async function finalizeVerifiedWedge({
         });
         return 'finalized';
       }
+      const duplicateEvidence = {
+        gateway: candidate.gateway,
+        providerCurrency: verification.currency ?? candidate.currency ?? 'NGN',
+        ...responseEvidence,
+      };
       const filed = await fileDuplicatePaymentCapture({
         attempt: {
           gateway_reference: candidate.gateway_reference,
@@ -140,15 +146,35 @@ export async function finalizeVerifiedWedge({
           metadata: candidate.metadata,
           order_id: candidate.order_id,
         },
-        evidence: {
-          gateway: candidate.gateway,
-          providerCurrency:
-            verification.currency ?? candidate.currency ?? 'NGN',
-          ...responseEvidence,
-        },
+        evidence: duplicateEvidence,
         supabase,
       });
       if (filed) {
+        summary.reviewsFiled.push({
+          orderId: candidate.order_id,
+          transactionId: candidate.id,
+        });
+        await stampWedgeResolution(
+          supabase,
+          candidate,
+          'duplicate_capture_reviewed'
+        );
+        return 'finalized';
+      }
+      // The candidate already finalized, so no sweep reselects it:
+      // persist the evidence directly so the captured extra payment
+      // keeps its operations review instead of dying with this tick.
+      const fallbackFiled = await fileDuplicateCaptureFallbackReview({
+        attempt: {
+          gateway_reference: candidate.gateway_reference,
+          id: candidate.id,
+          merchant_id: candidate.merchant_id,
+          order_id: candidate.order_id,
+        },
+        evidence: duplicateEvidence,
+        supabase,
+      });
+      if (fallbackFiled) {
         summary.reviewsFiled.push({
           orderId: candidate.order_id,
           transactionId: candidate.id,

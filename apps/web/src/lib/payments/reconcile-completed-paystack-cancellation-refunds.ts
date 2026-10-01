@@ -69,7 +69,11 @@ export async function reconcileCompletedPaystackCancellationRefunds(
 
   let failed = 0;
   let checked = 0;
-  for (const refund of [...(data ?? []), ...(finalizedData ?? [])]) {
+  // Finalized rows first: the sweep is capped at five, so it costs the
+  // pre-finalization batch almost nothing — but trailing it would let a
+  // sustained backlog consume the whole row-start window and starve the
+  // contradiction recheck indefinitely.
+  for (const refund of [...(finalizedData ?? []), ...(data ?? [])]) {
     // Stop before the pass deadline so the settlement sweep keeps its
     // share of the cron budget instead of timing out behind this worker.
     if (shouldYieldReconcileWorker(deadlineMs)) break;

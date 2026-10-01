@@ -2,12 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const finalize = vi.hoisted(() => vi.fn());
 const fileDuplicate = vi.hoisted(() => vi.fn());
+const fileDuplicateFallback = vi.hoisted(() => vi.fn());
 const gatePartial = vi.hoisted(() => vi.fn());
 vi.mock('./finalize-order-gateway-payment', () => ({
   finalizeOrderGatewayPayment: finalize,
 }));
 vi.mock('./file-duplicate-payment-capture', () => ({
   fileDuplicatePaymentCapture: fileDuplicate,
+}));
+vi.mock('./file-duplicate-capture-fallback-review', () => ({
+  fileDuplicateCaptureFallbackReview: fileDuplicateFallback,
 }));
 vi.mock('./gate-partially-paid-abandoned-capture', () => ({
   gatePartiallyPaidAbandonedCapture: gatePartial,
@@ -295,6 +299,33 @@ describe('finalizePartiallyPaidAbandonedAttempt', () => {
     expect(h.hold).not.toHaveBeenCalled();
   });
 
+  it('persists the fallback review when the late duplicate filing fails', async () => {
+    const h = harness();
+    finalize.mockResolvedValue({
+      capturedOnPaidOrder: true,
+      kind: 'completed',
+    });
+    fileDuplicate.mockResolvedValue(false);
+    fileDuplicateFallback.mockResolvedValue(true);
+
+    await finalizePartiallyPaidAbandonedAttempt({
+      ...h,
+      attempt,
+      providerData: {},
+    });
+
+    // The row already completed, so the status-guarded hold would
+    // persist nothing: the direct fallback insert keeps the evidence.
+    expect(fileDuplicateFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attempt: expect.objectContaining({ id: 'attempt-1' }),
+      })
+    );
+    expect(h.summary.reviewsFiled).toEqual(['attempt-1']);
+    expect(h.summary.failed).toBe(false);
+    expect(h.hold).not.toHaveBeenCalled();
+  });
+
   it('fails the sweep when the late duplicate review cannot be filed', async () => {
     const h = harness();
     finalize.mockResolvedValue({
@@ -302,6 +333,7 @@ describe('finalizePartiallyPaidAbandonedAttempt', () => {
       kind: 'completed',
     });
     fileDuplicate.mockResolvedValue(false);
+    fileDuplicateFallback.mockResolvedValue(false);
 
     await finalizePartiallyPaidAbandonedAttempt({
       ...h,

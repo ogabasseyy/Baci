@@ -266,7 +266,11 @@ describe('resolveContradictoryRefundFailure', () => {
     );
   });
 
-  it('files even when no failed rows remain to attach', async () => {
+  it('treats no current failed verdict as superseded', async () => {
+    // The queued failure recovered before the drain: its verdict was
+    // overwritten, so the scan finds nothing failed. Filing here would
+    // attach an empty contradiction review and alert the merchant
+    // about a completed refund.
     const from = vi
       .fn()
       .mockReturnValueOnce(chain({ data: [], error: null }, 'limit'))
@@ -274,10 +278,8 @@ describe('resolveContradictoryRefundFailure', () => {
 
     await expect(
       resolveContradictoryRefundFailure({ from } as never, row, order)
-    ).resolves.toBe(false);
-    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
-      expect.objectContaining({ transactions: [] })
-    );
+    ).resolves.toBe(true);
+    expect(mocks.quarantineRefund).not.toHaveBeenCalled();
     expect(from).toHaveBeenCalledTimes(2);
   });
 
@@ -417,8 +419,30 @@ describe('resolveContradictoryRefundFailure', () => {
     mocks.quarantineRefund.mockRejectedValue(new Error('review write failed'));
     const from = vi
       .fn()
+      .mockReturnValueOnce(
+        chain(
+          {
+            data: [
+              {
+                amount: 100,
+                created_at: '2026-09-27T12:00:00Z',
+                currency: 'NGN',
+                gateway: 'paystack',
+                gateway_reference: 'RFD-1',
+                id: 'refund-1',
+                metadata: {
+                  payment_transaction_id: 'payment-1',
+                  provider_refund_status: 'failed',
+                },
+              },
+            ],
+            error: null,
+          },
+          'limit'
+        )
+      )
       .mockReturnValueOnce(chain({ data: [], error: null }, 'limit'))
-      .mockReturnValueOnce(chain({ data: [], error: null }, 'limit'));
+      .mockReturnValueOnce(chain({ data: [], error: null }, 'in'));
 
     await expect(
       resolveContradictoryRefundFailure({ from } as never, row, order)

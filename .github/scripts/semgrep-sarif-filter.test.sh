@@ -146,8 +146,11 @@ t missing-workflow 0 "exemption inactive" happy.sarif "rm:$S"
 # --- audited checkout guards ---
 t count-2 1 "pr-controlled-checkout-count" happy.sarif "$S${FS}ref: \${{ github.event.pull_request.head.sha }}${FS}a${FS}          ref: \${{ github.event.pull_request.head.sha }}"
 t guard-negated 1 "same-repo-job-guard" happy.sarif "$S${FS}head.repo.full_name == github.repository${FS}r${FS}==${FS}!="
+t guard-ormid 1 "same-repo-job-guard" happy.sarif "$S${FS}head.repo.full_name == github.repository${FS}r${FS}== github.repository${FS}== github.repository || true"
+t guard-ortrue 1 "same-repo-job-guard" happy.sarif "$S${FS}2:github.event.changes.base != null)${FS}r${FS}changes.base != null)${FS}changes.base != null) || true"
 t head-creds 1 "head-checkout-credentials" happy.sarif "$S${FS}persist-credentials: false${FS}r${FS}false${FS}true"
 t head-action 1 "head-checkout-action" happy.sarif "$S${FS}uses: actions/checkout@${FS}r${FS}@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0${FS}@v4"
+t head-shape 1 "head-checkout-shape" happy.sarif "$S${FS}persist-credentials: false${FS}a${FS}          repository: evil/x"
 
 # --- trusted checkout guards ---
 t trusted-missing 1 "trusted-scripts-checkout-missing" happy.sarif "$S${FS}path: trusted-scripts${FS}d"
@@ -170,6 +173,10 @@ t rebound-env 1 "script-dir-rebound" happy.sarif "$S${FS}SCRIPT_DIR: \${{ steps.
 t rebound-export 1 "script-dir-rebound" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          export SCRIPT_DIR=/tmp/e"
 t shell-override 1 "shell-override" happy.sarif "$S${FS}run: |${FS}a${FS}        shell: python"
 t unpinned-action 1 "reviewer-unpinned-action" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/install.sh\"${FS}a${FS}        uses: actions/setup-node@v4"
+t third-checkout 1 "reviewer-action-count" happy.sarif "$S${FS}2:uses: actions/checkout@${FS}a${FS}        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
+t env-poison-job 1 "reviewer-env-poison" happy.sarif "$S${FS}MUSE_EFFORT_RESOLVED:${FS}a${FS}      BASH_ENV: /tmp/evil"
+t env-poison-step 1 "reviewer-env-poison" happy.sarif "$S${FS}META_API_KEY: \${{ secrets.META_API_KEY }}${FS}a${FS}          PATH: /evil"
+t env-benign-fp 0 "" happy.sarif "$S${FS}MUSE_EFFORT_RESOLVED:${FS}a${FS}      MY_VAR: hello"
 t env-escape 1 "run-body-env-escape" happy.sarif "$S${FS}set -euo pipefail${FS}a${FS}          echo /tmp/evil >> \$GITHUB_PATH"
 t process-sub 1 "run-body-process-sub" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          echo <(id)"
 t substitution 1 "run-body-substitution" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          echo \`id\`"

@@ -129,12 +129,56 @@ def audit_run_hygiene(ctx, drift):
     if any(re.match(r"^\s*shell:", line) for line in ctx.workflow_lines):
         drift.append("shell-override")
     # Only the two pinned checkouts may run as actions: a third
-    # uses: could smuggle execution past the run:-block rules.
+    # uses: — even pinned — could smuggle execution past the run:
+    # rules by checking out attacker data into a trusted path.
+    checkout_uses = 0
     for line in ctx.workflow_lines:
         m = re.match(r"^uses:\s*(\S+)", line.strip())
-        if m and m.group(1) != PINNED_CHECKOUT_USES \
-                and "reviewer-unpinned-action" not in drift:
-            drift.append("reviewer-unpinned-action")
+        if not m:
+            continue
+        if m.group(1) != PINNED_CHECKOUT_USES:
+            if "reviewer-unpinned-action" not in drift:
+                drift.append("reviewer-unpinned-action")
+        else:
+            checkout_uses += 1
+    if checkout_uses != 2 and "reviewer-action-count" not in drift:
+        drift.append("reviewer-action-count")
+    # Shell-startup, loader, and interpreter-preload vars are
+    # inherited by every run: step: a poison var in any YAML env:
+    # mapping (job or step level) re-sources the audited blocks from
+    # outside their pinned spans. Only contiguous env: blocks (and
+    # flow mappings) are scanned, so run:-block text cannot FP.
+    poison = ("BASH_ENV", "ENV", "PATH", "LD_PRELOAD",
+              "LD_LIBRARY_PATH", "PYTHONPATH", "NODE_OPTIONS",
+              "RUBYOPT", "PERL5OPT")
+    idx = 0
+    while idx < len(ctx.workflow_lines):
+        line = ctx.workflow_lines[idx]
+        stripped = line.strip()
+        if re.match(r"^env:\s*\{", stripped):
+            if any(re.search(r"\b%s\s*:" % var, stripped)
+                   for var in poison) \
+                    and "reviewer-env-poison" not in drift:
+                drift.append("reviewer-env-poison")
+            idx += 1
+        elif re.match(r"^env:\s*(#|$)", stripped):
+            base = len(line) - len(line.lstrip(" "))
+            idx += 1
+            while idx < len(ctx.workflow_lines):
+                sub = ctx.workflow_lines[idx]
+                if sub.strip() == "" or sub.strip().startswith("#"):
+                    idx += 1
+                    continue
+                if len(sub) - len(sub.lstrip(" ")) <= base:
+                    break
+                key = re.match(r"^([A-Za-z_][A-Za-z0-9_]*):",
+                               sub.strip())
+                if key and key.group(1) in poison \
+                        and "reviewer-env-poison" not in drift:
+                    drift.append("reviewer-env-poison")
+                idx += 1
+        else:
+            idx += 1
     # Global run-body forbids: env/path propagation, process
     # substitution, and command substitution execute or persist
     # beyond the per-command rules (every step inherits runner

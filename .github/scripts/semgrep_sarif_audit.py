@@ -9,7 +9,7 @@ from semgrep_sarif_shell import (is_step_boundary, step_end,
 
 def load_workflow(path):
     try:
-        with open(AUDITED_PATH) as fh:
+        with open(path) as fh:
             raw_lines = fh.read().splitlines()
     except OSError:
         # Gone from this tree: pr_refs below is empty, so the audit
@@ -108,9 +108,12 @@ def audit_pr_checkout(ctx, drift):
     guard_bodies = (job_if_bodies(ctx.workflow_raw[ctx.pr_refs[0]], ctx.code_lines)
                     if len(ctx.pr_refs) == 1 else None)
     # The guard must be a positive top-level && conjunct of the job
-    # condition: mere presence would also accept !(guard),
-    # guard || true, or a lookalike comparison. Redundant outer
-    # parens are tolerated; anything else fails closed.
+    # condition with no top-level || branch: mere presence would also
+    # accept !(guard) or a lookalike, and `(guard && ...) || true` is
+    # unconditionally true despite containing the conjunct. Redundant
+    # outer parens are tolerated; anything else fails closed. A ||
+    # nested inside parens (e.g. the action/edited fallback) stays a
+    # restriction, so only depth-0 disjunction drifts.
     guard_expr = ("github.event.pull_request.head.repo.full_name"
                   " == github.repository")
 
@@ -130,6 +133,9 @@ def audit_pr_checkout(ctx, drift):
                 depth, buf, i = depth + 1, buf + ch, i + 1
             elif ch == ")":
                 depth, buf, i = max(0, depth - 1), buf + ch, i + 1
+            elif ch == "|" and condition[i:i + 2] == "||" \
+                    and depth == 0:
+                return False
             elif ch == "&" and condition[i:i + 2] == "&&" \
                     and depth == 0:
                 parts.append(buf)
@@ -193,6 +199,13 @@ def audit_pr_checkout(ctx, drift):
                 value == PINNED_CHECKOUT_USES
                 for value in audited_uses):
             drift.append("head-checkout-action")
+        # The audited step checks out the head into the default
+        # workspace for the agent to read: a path:/repository: key
+        # would relocate or re-source that data while the ref still
+        # audits, silently changing what gets reviewed.
+        if any(re.match(r"^(repository|path):", line.strip())
+               for line in audited_span):
+            drift.append("head-checkout-shape")
 
 
 def audit_trusted_checkout(ctx, drift):

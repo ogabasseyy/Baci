@@ -5,17 +5,17 @@ import { awaitRefundNotificationDeadline } from '@/lib/payments/await-refund-not
 import { extractDuplicateCaptureEvidence } from '@/lib/payments/extract-duplicate-capture-evidence';
 import { fileDuplicateCaptureFallbackReview } from '@/lib/payments/file-duplicate-capture-fallback-review';
 import { fileDuplicatePaymentCapture } from '@/lib/payments/file-duplicate-payment-capture';
-import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
+import type { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
 import type {
   WedgedCandidate,
   WedgedOrderSweepSummary,
 } from '@/lib/payments/reconcile-wedged-gateway-orders.types';
-import { stampWedgeResolution } from '@/lib/payments/retire-wedge-with-review';
+import type { stampWedgeResolution } from '@/lib/payments/retire-wedge-with-review';
 import type {
   GatewayChargeVerification,
   HealableGateway,
 } from '@/lib/payments/verify-gateway-charge';
-import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail';
+import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail-send-budget';
 
 type VerifiedCharge = Extract<GatewayChargeVerification, { ok: true }>;
 
@@ -34,7 +34,9 @@ const VERIFIED_WEDGE_EMAIL_ATTEMPTS = 1;
 export async function finalizeVerifiedWedge({
   candidate,
   deadlineMs,
+  finalizePayment,
   scheduleAfter,
+  stampResolution,
   summary,
   supabase,
   verification,
@@ -44,7 +46,9 @@ export async function finalizeVerifiedWedge({
     gateway_reference: string;
   };
   deadlineMs?: number;
+  finalizePayment: typeof finalizeOrderGatewayPayment;
   scheduleAfter: (task: () => Promise<void>) => void;
+  stampResolution: typeof stampWedgeResolution;
   summary: WedgedOrderSweepSummary;
   supabase: SupabaseClient;
   verification: VerifiedCharge;
@@ -78,7 +82,7 @@ export async function finalizeVerifiedWedge({
       ? undefined
       : AbortSignal.timeout(Math.max(1, deadlineMs - Date.now() - 10_000));
   const outcome = await awaitRefundNotificationDeadline(
-    finalizeOrderGatewayPayment({
+    finalizePayment({
       actor: 'cron:reconcile-gateway-paid-orders',
       emailMaxAttemptsPerSender: VERIFIED_WEDGE_EMAIL_ATTEMPTS,
       // Match the signal's 10s buffer: the platform-sender fallback
@@ -154,7 +158,7 @@ export async function finalizeVerifiedWedge({
           orderId: candidate.order_id,
           transactionId: candidate.id,
         });
-        await stampWedgeResolution(
+        await stampResolution(
           supabase,
           candidate,
           'duplicate_capture_reviewed'
@@ -179,7 +183,7 @@ export async function finalizeVerifiedWedge({
           orderId: candidate.order_id,
           transactionId: candidate.id,
         });
-        await stampWedgeResolution(
+        await stampResolution(
           supabase,
           candidate,
           'duplicate_capture_reviewed'
@@ -214,7 +218,7 @@ export async function finalizeVerifiedWedge({
       orderId: candidate.order_id,
       transactionId: candidate.id,
     });
-    await stampWedgeResolution(supabase, candidate, outcome.kind);
+    await stampResolution(supabase, candidate, outcome.kind);
   } else {
     summary.failed.push({
       reason: outcome.kind,

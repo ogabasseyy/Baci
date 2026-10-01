@@ -7,7 +7,10 @@ import type {
   WedgedOrderSweepSummary,
 } from '@/lib/payments/reconcile-wedged-gateway-orders.types';
 import { remainingVerificationSignal } from '@/lib/payments/remaining-verification-signal';
-import { retireWedgeWithReview } from '@/lib/payments/retire-wedge-with-review';
+import {
+  retireWedgeWithReview,
+  stampWedgeResolution,
+} from '@/lib/payments/retire-wedge-with-review';
 import {
   buildJuicywayVerificationContext,
   type HealableGateway,
@@ -230,7 +233,9 @@ export async function reconcileWedgedGatewayOrders({
       const finalizeAction = await finalizeVerifiedWedge({
         candidate: healableCandidate,
         deadlineMs,
+        finalizePayment: finalizeOrderGatewayPayment,
         scheduleAfter,
+        stampResolution: stampWedgeResolution,
         summary,
         supabase,
         verification,

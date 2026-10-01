@@ -12,7 +12,7 @@ import {
   type CancellationDrainCandidateRow,
   selectCancellationDrainCandidates,
 } from '@/lib/orders/select-cancellation-drain-candidates';
-import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail';
+import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail-send-budget';
 
 const DEFAULT_LIMIT = 10;
 const MAX_ATTEMPTS = 5;

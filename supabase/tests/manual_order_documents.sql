@@ -206,4 +206,13 @@ SELECT set_config('request.jwt.claims', '{"email":"second@example.com"}', true);
 SET LOCAL ROLE authenticated;
 SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('1',64), 'web')->>'status' = 'customer_link_failed', 'already-linked customer cannot be re-linked by another user');
 RESET ROLE;
+-- The dispatch marker atomically validates the rendered snapshot and records
+-- dispatch start while holding the order row, closing the check-then-mark gap
+-- between the sender's final read and the transport call.
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';
+SELECT pg_temp.assert_true((SELECT public.mark_manual_document_dispatch_started((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt'), 'm2-worker', '10000000-0000-4000-8000-000000000002', 'buyer@example.com', 100, 100, 'paid', 'pending', 3)->>'status' = 'marked'), 'fresh dispatch snapshot marks dispatch start');
+UPDATE public.order_notification_outbox SET dispatch_started_at = NULL WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';
+SELECT pg_temp.assert_true((SELECT public.mark_manual_document_dispatch_started((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt'), 'm2-worker', '10000000-0000-4000-8000-000000000002', 'buyer@example.com', 999, 100, 'paid', 'pending', 3)->>'status' = 'stale'), 'changed total aborts dispatch');
+UPDATE public.order_notification_outbox SET dispatch_started_at = NULL WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';
+SELECT pg_temp.assert_true((SELECT public.mark_manual_document_dispatch_started((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt'), 'other-worker', '10000000-0000-4000-8000-000000000002', 'buyer@example.com', 100, 100, 'paid', 'pending', 3)->>'status' = 'lease_lost'), 'second worker loses a marked dispatch');
 ROLLBACK;

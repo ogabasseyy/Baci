@@ -76,23 +76,31 @@ export function database(
     primaryDomain?: string | null;
     latestPaymentAt?: string | null;
     transactionsError?: { message: string } | null;
+    dispatchStatus?: string;
   } = {}
 ) {
   const filters: Record<string, unknown> = {};
   const effectiveOrder = { ...order, ...orderOverride };
   const client = {
-    rpc: vi.fn().mockResolvedValue({
-      data: {
-        status: 'created',
-        claim_id: 'claim-1',
-        customer_id: 'customer-1',
-        customer_email: 'ada@example.com',
-        order_total: effectiveOrder.total,
-        order_amount_paid: effectiveOrder.amount_paid,
-        order_item_count: effectiveOrder.order_items.length,
-        order_payment_status: effectiveOrder.payment_status,
-      },
-      error: null,
+    rpc: vi.fn().mockImplementation((fn: string) => {
+      if (fn === 'mark_manual_document_dispatch_started')
+        return Promise.resolve({
+          data: { status: options.dispatchStatus ?? 'marked' },
+          error: null,
+        });
+      return Promise.resolve({
+        data: {
+          status: 'created',
+          claim_id: 'claim-1',
+          customer_id: 'customer-1',
+          customer_email: 'ada@example.com',
+          order_total: effectiveOrder.total,
+          order_amount_paid: effectiveOrder.amount_paid,
+          order_item_count: effectiveOrder.order_items.length,
+          order_payment_status: effectiveOrder.payment_status,
+        },
+        error: null,
+      });
     }),
     from: vi.fn((table: string) => {
       const builder = {

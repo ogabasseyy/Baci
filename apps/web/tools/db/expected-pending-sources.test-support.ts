@@ -269,6 +269,11 @@ export const EXPECTED_PENDING_SOURCES = [
       'supabase/migrations/20260930160300_enable_manual_order_document_triggers.sql',
     sha256: '456b5336babfb3b42f08b406a7b241da4efce38095d9e9a740f990697358f71a',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260930160400_atomic_manual_document_dispatch.sql',
+    sha256: 'b079faecc327c0514b9edd1492577588d18350cff4f85b60458a948a0e2650bb',
+  },
 ]
   .sort((left, right) =>
     left.repositoryPath.localeCompare(right.repositoryPath)

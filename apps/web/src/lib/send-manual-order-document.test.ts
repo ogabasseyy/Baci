@@ -318,6 +318,21 @@ describe('send manual order document', () => {
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
+  it('retries instead of dispatching when the dispatch marker reports a stale order', async () => {
+    const db = database({}, { dispatchStatus: 'stale' });
+    // The marker runs as beforeTransportDispatch, so the provider mock is
+    // entered but never reaches its accept path: the stale throw rejects for
+    // retry instead of terminalizing an unknown outcome.
+    await expect(
+      sendManualOrderDocument({ supabase: db.client, row })
+    ).rejects.toThrow('order changed before dispatch');
+    expect(
+      db.rpc.mock.calls.some(
+        ([fn]) => fn === 'mark_manual_document_dispatch_started'
+      )
+    ).toBe(true);
+  });
+
   it('brands the claim link with the active primary domain', async () => {
     const db = database({}, { primaryDomain: 'shop.example.com' });
     await sendManualOrderDocument({ supabase: db.client, row });

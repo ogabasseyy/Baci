@@ -57,8 +57,12 @@ function isSafeClaimDomain(domain: string): boolean {
   // Mirrors the storefront custom-domain rules without importing the proxy
   // host module (kept dependency-free so notification senders stay inside
   // their audited import boundary): dotted hostname, no IPs, no userinfo or
-  // path tricks.
-  const host = domain.trim().toLowerCase().replace(/\/+$/, '');
+  // path tricks. A trailing-dot absolute FQDN is the same host, normalized.
+  const host = domain
+    .trim()
+    .toLowerCase()
+    .replace(/\/+$/, '')
+    .replace(/\.$/, '');
   return (
     host.includes('.') &&
     !/^\d+\.\d+\.\d+\.\d+$/.test(host) &&
@@ -74,7 +78,11 @@ export function buildReceiptClaimUrl({
   merchant: ReceiptClaimMerchantUrlContext;
   token: string;
 }) {
-  const customDomain = merchant.custom_domain?.trim().replace(/\/+$/, '');
+  const customDomain = merchant.custom_domain
+    ?.trim()
+    .toLowerCase()
+    .replace(/\/+$/, '')
+    .replace(/\.$/, '');
   const origin =
     customDomain && isSafeClaimDomain(customDomain)
       ? `https://${customDomain}`

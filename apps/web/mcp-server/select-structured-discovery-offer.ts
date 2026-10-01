@@ -1,9 +1,8 @@
 import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
-import { canonicalizeDiscoveryProductType } from '../src/schemas/canonical-discovery-product-type';
 import type { McpDiscoveryIntent } from '../src/schemas/mcp-discovery-intent';
-import { productDiscoveryMetadataSchema } from '../src/schemas/product-discovery-metadata';
 import { normalizeDiscoveryOptionAttributes } from './normalize-discovery-option-attributes';
 import type { hydrateSearchProductAvailability } from './search-product-availability';
+import { structuredDiscoveryIdentity } from './structured-discovery-identity';
 import { getMcpProductStockSummary } from './product-stock-summary';
 
 type HydratedProduct = Awaited<ReturnType<typeof hydrateSearchProductAvailability>>[number];
@@ -25,12 +24,6 @@ function record(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function normalized(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined;
-  const result = value.normalize('NFC').trim().toLocaleLowerCase('en-US').replace(/\s+/g, ' ');
-  return result || undefined;
-}
-
 function finitePrice(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
@@ -45,73 +38,6 @@ function stockQuantity(value: unknown): number | null {
   return Number.isFinite(quantity) && quantity >= 0 ? quantity : null;
 }
 
-function getDiscoveryMetadata(product: Record<string, unknown>) {
-  const parsed = productDiscoveryMetadataSchema.safeParse(product.discovery_metadata);
-  return parsed.success ? parsed.data : {};
-}
-
-function discoveryProductType(product: Record<string, unknown>, discovery: Record<string, unknown>) {
-  // The schema canonicalizes hyphens/spaces to underscores on parse, so the
-  // stored side must canonicalize too or 'security-camera' never equals
-  // intent 'security_camera'.
-  const explicit = normalized(discovery.product_type);
-  if (explicit) return canonicalizeDiscoveryProductType(explicit);
-  const category = normalized(product.category);
-  if (category === 'smartphones') return 'phone';
-  if (category === 'laptops') return 'laptop';
-  if (category === 'tablets') return 'tablet';
-  return undefined;
-}
-
-type IdentityVerdict = { excluded: boolean; unverified: boolean };
-
-// Product-level identity is identical for every candidate of a row: type,
-// brand, model, and compatibility never vary by option. An exclusion here is
-// definitive even when option hydration failed, because no missing variant or
-// offer could overturn verified product facts.
-function evaluateDiscoveryProductIdentity(
-  product: Record<string, unknown>,
-  discovery: Record<string, unknown>,
-  alternative: DiscoveryAlternative,
-  excludedTypes: Set<string>,
-  productType: string | undefined
-): IdentityVerdict {
-  let unverified = false;
-  if (excludedTypes.size > 0 && !productType) unverified = true;
-  if (productType && excludedTypes.has(productType)) return { excluded: true, unverified };
-
-  if (alternative.product_type !== undefined) {
-    const expectedRaw = normalized(alternative.product_type);
-    if (!expectedRaw) return { excluded: true, unverified };
-    const expected = canonicalizeDiscoveryProductType(expectedRaw);
-    if (!productType) unverified = true;
-    else if (productType !== expected) return { excluded: true, unverified };
-  }
-  if (alternative.brands !== undefined) {
-    const brand = normalized(product.brand);
-    const allowedBrands = alternative.brands.map(normalized).filter((value): value is string => Boolean(value));
-    if (!brand) unverified = true;
-    else if (!allowedBrands.includes(brand)) return { excluded: true, unverified };
-  }
-  if (alternative.model !== undefined) {
-    const model = normalized(discovery.model);
-    const expected = normalized(alternative.model);
-    if (!expected) return { excluded: true, unverified };
-    if (!model) unverified = true;
-    else if (model !== expected) return { excluded: true, unverified };
-  }
-  if (alternative.compatible_with !== undefined) {
-    const compatibility = Array.isArray(discovery.compatible_with)
-      ? discovery.compatible_with.map(normalized).filter((value): value is string => Boolean(value))
-      : [];
-    const expected = normalized(alternative.compatible_with);
-    if (!expected) return { excluded: true, unverified };
-    if (compatibility.length === 0) unverified = true;
-    else if (!compatibility.includes(expected)) return { excluded: true, unverified };
-  }
-  return { excluded: false, unverified };
-}
-
 function matchesAlternative(
   product: Record<string, unknown>,
   candidate: Candidate,
@@ -119,8 +45,8 @@ function matchesAlternative(
   alternative: DiscoveryAlternative,
   excludedTypes: Set<string>
 ) {
-  const productType = discoveryProductType(product, discovery);
-  const identity = evaluateDiscoveryProductIdentity(product, discovery, alternative, excludedTypes, productType);
+  const productType = structuredDiscoveryIdentity.productTypeOf(product, discovery);
+  const identity = structuredDiscoveryIdentity.evaluateAlternativeIdentity(product, discovery, alternative, excludedTypes, productType);
   if (identity.excluded) return false;
   let unverified = identity.unverified;
 
@@ -131,8 +57,8 @@ function matchesAlternative(
     if (actual === undefined || actual === null) { unverified = true; return true; }
     if (operator === 'eq') {
       if (typeof value === 'number') return typeof actual === 'number' && Number.isFinite(actual) && actual === value;
-      const expected = normalized(value);
-      return expected !== undefined && normalized(actual) === expected;
+      const expected = structuredDiscoveryIdentity.normalizeText(value);
+      return expected !== undefined && structuredDiscoveryIdentity.normalizeText(actual) === expected;
     }
     if (typeof value !== 'number' || typeof actual !== 'number' || !Number.isFinite(value) || !Number.isFinite(actual)) {
       return false;
@@ -140,22 +66,6 @@ function matchesAlternative(
     return operator === 'gte' ? actual >= value : actual <= value;
   });
   return !attributesMatch ? false : unverified ? undefined : true;
-}
-
-function getExcludedTypes(intent: McpDiscoveryIntent) {
-  return new Set((intent.excluded_product_types ?? []).map(normalized)
-    .filter((value): value is string => Boolean(value)).map(canonicalizeDiscoveryProductType));
-}
-
-/** True when verified product facts rule out every alternative, so a failed
- * options lookup for this row cannot change the result and must not veto it. */
-export function isStructuredDiscoveryRowExcludedByIdentity(row: HydratedProduct, intent: McpDiscoveryIntent) {
-  const product = row.product as Record<string, unknown>;
-  const discovery = getDiscoveryMetadata(product);
-  const excludedTypes = getExcludedTypes(intent);
-  const productType = discoveryProductType(product, discovery);
-  return intent.alternatives.every((alternative) =>
-    evaluateDiscoveryProductIdentity(product, discovery, alternative, excludedTypes, productType).excluded);
 }
 
 /** Selects the cheapest purchasable concrete option that satisfies one complete structured alternative. */
@@ -166,8 +76,8 @@ export function selectStructuredDiscoveryOffer(
   onUnverifiedFacts?: () => void
 ) {
   const product = row.product as Record<string, unknown>;
-  const discovery = getDiscoveryMetadata(product);
-  const excludedTypes = getExcludedTypes(intent);
+  const discovery = structuredDiscoveryIdentity.metadataOf(product);
+  const excludedTypes = structuredDiscoveryIdentity.excludedTypesOf(intent);
   const candidates: Candidate[] = [];
   const manageStock = product.manage_stock === true;
   const metadataAttributes = record(discovery.attributes);

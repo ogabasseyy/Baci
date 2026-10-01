@@ -29,8 +29,10 @@ const TYPE_RETRIEVAL_SPELLINGS: Record<string, string[]> = {
 function sanitizeTerm(value: string): string[] {
   // Dots survive inside version-like lexemes ('1.5' parses), but a dot-only
   // term voids the whole group server-side, so strip edge dots and drop terms
-  // with no letters or numbers.
-  return value.toLowerCase().replace(/[^\p{L}\p{N}.\s]+/gu, ' ').split(/\s+/)
+  // with no letters or numbers. NFC first: without it a decomposed model like
+  // NFD 'Café Pro' sheds its combining mark and can never match the composed
+  // lexeme stored in metadata-only documents.
+  return value.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}.\s]+/gu, ' ').split(/\s+/)
     .map((term) => term.replace(/^\.+|\.+$/g, ''))
     .filter((term) => /[\p{L}\p{N}]/u.test(term));
 }

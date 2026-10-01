@@ -66,6 +66,10 @@ it('retains Unicode identity terms while stripping query operators', () => {
     .toBe('(mömax & 三星 & 手机)');
 });
 
+it('normalizes decomposed Unicode before building retrieval terms', () => {
+  expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'Cafe\u0301 Pro' }))).toBe('(café & pro)');
+});
+
 it('drops dot-only terms and strips edge dots so groups stay valid', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ model: '...' }))).toBe('(a & !a)');
   expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'ZX-42.' }))).toBe('(zx & 42)');

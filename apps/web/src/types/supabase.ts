@@ -20761,6 +20761,20 @@ export type Database = {
           isSetofReturn: true;
         };
       };
+      search_product_discovery_facts: {
+        Args: {
+          brand_filter?: string;
+          category_filter?: string;
+          merchant_id_param: string;
+          query_text: string;
+          result_limit?: number;
+          result_offset?: number;
+        };
+        Returns: {
+          product_id: string;
+          total_count: number;
+        }[];
+      };
       search_products_v2: {
         Args: {
           brand_filter?: string;

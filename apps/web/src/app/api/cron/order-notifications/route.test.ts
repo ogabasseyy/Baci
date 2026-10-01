@@ -169,7 +169,7 @@ describe('GET /api/cron/order-notifications', () => {
     expect(sendOrderFulfillmentNotification).toHaveBeenCalledTimes(1);
   });
 
-  it('dead-letters corrupt rows that exhaust max attempts instead of looping', async () => {
+  it('dead-letters corrupt rows with a malformed event type', async () => {
     mockSupabase.rpc.mockResolvedValueOnce({
       data: [
         {
@@ -208,7 +208,7 @@ describe('GET /api/cron/order-notifications', () => {
     );
   });
 
-  it('leaves corrupt rows for lease expiry before max attempts', async () => {
+  it('dead-letters corrupt rows on first observation without an attempt threshold', async () => {
     mockSupabase.rpc.mockResolvedValueOnce({
       data: [
         {
@@ -227,10 +227,17 @@ describe('GET /api/cron/order-notifications', () => {
     expect(response.status).toBe(200);
     expect(body).toMatchObject({
       claimed: 1,
-      skipped: 0,
+      skipped: 1,
+      success: true,
       unparseable: 1,
     });
-    expect(mockSupabase.from).not.toHaveBeenCalled();
+    const updateBuilder = mockSupabase.from.mock.results[0]?.value;
+    expect(updateBuilder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skip_reason: 'unparseable',
+        status: 'skipped',
+      })
+    );
   });
 
   it('dead-letters known-type rows missing permanently required fields', async () => {

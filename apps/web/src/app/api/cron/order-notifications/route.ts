@@ -14,15 +14,20 @@ import {
 
 export const maxDuration = 60;
 
-// Dead-letters structurally corrupt claimed rows after max_attempts
-// observations instead of looping on the lease forever. Only rows with a
-// valid-but-unknown event type keep looping: they belong to a newer producer
-// and a worker that understands them may still deploy. Every other field the
-// row schema requires (identity, lease owner, attempt accounting) is
-// permanently required — metadata already accepts unknown shapes — so a row
-// that fails parsing with a known (or missing) event type can never be
-// delivered by any worker version. The known set is read off the worker
-// schema so the two cannot drift.
+// Dead-letters structurally corrupt claimed rows on first observation
+// instead of looping on the lease forever. Only rows with a valid-but-unknown
+// event type keep looping: they belong to a newer producer and a worker that
+// understands them may still deploy. Every other field the row schema
+// requires (identity, lease owner, attempt accounting) is permanently
+// required — metadata already accepts unknown shapes — so a row that fails
+// parsing with a known (or missing) event type can never be delivered by any
+// worker version. The known set is read off the worker schema so the two
+// cannot drift. There is intentionally no attempt threshold: the stale
+// dispatch terminalizer refunds the attempt for leases abandoned before
+// dispatch, so a corrupt row's counter oscillates and any threshold is
+// unreachable; corruption here is persistent by construction (table
+// constraints plus atomic JSON claim payloads), and manual rows re-arm on
+// the next order touch if the data is ever repaired.
 const knownOutboxEventTypes =
   claimedOrderNotificationOutboxRowSchema.shape.event_type;
 async function deadLetterCorruptOutboxRow(
@@ -39,17 +44,6 @@ async function deadLetterCorruptOutboxRow(
     !knownOutboxEventTypes.safeParse(raw.event_type).success
   )
     return false;
-  const attempts = raw.attempt_count;
-  const maxAttempts = raw.max_attempts;
-  if (
-    typeof attempts !== 'number' ||
-    typeof maxAttempts !== 'number' ||
-    !Number.isFinite(attempts) ||
-    !Number.isFinite(maxAttempts) ||
-    attempts < maxAttempts
-  ) {
-    return false;
-  }
   try {
     const { data, error } = await supabase
       .from('order_notification_outbox')
@@ -138,7 +132,7 @@ export async function GET(request: Request) {
   // producer, a future migration) must not fail the whole batch and stall
   // unrelated notifications until lease expiry. Unparseable rows stay
   // locked and return to pending when the lease expires, except corrupt rows
-  // that exhaust max_attempts (see deadLetterCorruptOutboxRow).
+  // (see deadLetterCorruptOutboxRow), which terminalize on first sight.
   // claimed counts the DB-claimed batch, and unparseable counts the rows
   // skipped below, so dashboards can alert on lease-held rows the other
   // outcome counters never mention; each skipped row is also logged by id.

@@ -25,6 +25,7 @@ jobs:
     outputs:
       web: ${{ steps.filter.outputs.web }}
       migrations: ${{ steps.filter.outputs.migrations }}
+      tracking: ${{ steps.filter.outputs.tracking }}
       cwv_runner: ${{ steps.filter.outputs.cwv_runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -126,8 +127,12 @@ jobs:
   # smoke in vps-drain-readiness would fail every first deploy from a schema
   # that predates the wrappers.
   gigl-worker-capability:
-    needs: [db-migrations]
-    if: github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success'
+    needs: [changes, db-migrations]
+    # Run only when the changeset can affect tracking: an unconditional live
+    # smoke would turn worker-secret drift into a full release freeze for
+    # unrelated web deploys. Manual dispatches skip the smoke (the gate
+    # bypasses it there too) so emergency deploys are never delayed by it.
+    if: github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success' && github.event_name != 'workflow_dispatch' && (needs.changes.outputs.tracking != 'false' || needs.changes.outputs.migrations != 'false')
     runs-on: baci-deploy
     timeout-minutes: 10
     permissions:
@@ -145,11 +150,12 @@ jobs:
     # Hard-require db-migrations success — `result == 'success'` excludes both
     # 'skipped' and 'failure', so a skipped migrations job (e.g. if its `if`
     # condition becomes false in a future change) cannot let a web deploy
-    # land against an out-of-date schema. The GIGL capability smoke is gated
-    # the same way: this deploy removes the 5-minute tracking cron, so a
-    # broken VPS worker must block the web release instead of stalling
-    # tracking with no scheduled fallback.
-    if: always() && github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success' && needs.gigl-worker-capability.result == 'success' && (needs.cwv-runner-contracts.result == 'success' || needs.cwv-runner-contracts.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.web == 'true' || needs.changes.outputs.migrations == 'true')
+    # land against an out-of-date schema. The GIGL capability smoke gates
+    # only tracking/migrations deploys: a broken VPS worker must block a
+    # release that removes the tracking cron, but worker-secret drift must
+    # not freeze unrelated web deploys (or emergency dispatches, where the
+    # smoke is skipped and this requirement bypassed the same way).
+    if: always() && github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success' && (needs.gigl-worker-capability.result == 'success' || github.event_name == 'workflow_dispatch' || (needs.changes.outputs.tracking == 'false' && needs.changes.outputs.migrations == 'false')) && (needs.cwv-runner-contracts.result == 'success' || needs.cwv-runner-contracts.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.web == 'true' || needs.changes.outputs.migrations == 'true')
     # Run production prebuilt deploys on GitHub-hosted runners while the VPS
     # provider is returning sustained CPU steal. This still uses a local
     # `vercel build --prod` followed by `vercel deploy --prebuilt --prod`, so

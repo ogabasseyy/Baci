@@ -42,6 +42,17 @@ web:
   - '.github/scripts/run-pinned-vercel.sh'
   - '.npmrc'
   - 'pnpm-workspace.yaml'
+tracking:
+  - 'vercel.json'
+  - 'vps-workers/**'
+  - 'apps/web/src/app/api/cron/gigl-tracking/**'
+  - 'apps/web/src/lib/gigl-tracking-worker-client.ts'
+  - 'apps/web/src/lib/verify-gigl-tracking-worker-capability.ts'
+  - 'apps/web/src/lib/shipping/providers/gigl.constants.ts'
+  - 'apps/web/src/scripts/process-gigl-tracking.ts'
+  - 'apps/web/src/scripts/verify-gigl-tracking-worker-capability.ts'
+  - 'supabase/migrations/*gigl*'
+  - '.github/filters/deploy.yml'
 migrations:
   - 'supabase/migrations/**'
   - '.github/filters/deploy.yml'

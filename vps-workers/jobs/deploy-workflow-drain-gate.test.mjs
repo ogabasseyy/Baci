@@ -42,8 +42,16 @@ describe('production cache-invalidation drain rollout gate', () => {
   it('smokes the live GIGL capability only after migrations apply', () => {
     const capability = jobBlock('gigl-worker-capability', 'deploy-production');
 
-    assert.match(capability, /needs: \[db-migrations\]/);
+    assert.match(capability, /needs: \[changes, db-migrations\]/);
     assert.match(capability, /needs\.db-migrations\.result == 'success'/);
+    assert.match(
+      capability,
+      /github\.event_name != 'workflow_dispatch'/
+    );
+    assert.match(
+      capability,
+      /needs\.changes\.outputs\.tracking != 'false' \|\| needs\.changes\.outputs\.migrations != 'false'/
+    );
     assert.match(
       capability,
       /BACI_WORKER_PROFILE=gigl-tracking BACI_WORKER_ENV="\$remote_dir\/\.env" "\$remote_dir\/bin\/verify-gigl-tracking-worker-capability\.sh"/
@@ -60,6 +68,10 @@ describe('production cache-invalidation drain rollout gate', () => {
       deployment,
       /needs\.gigl-worker-capability\.result == 'success'/
     );
+    assert.match(
+      deployment,
+      /needs\.changes\.outputs\.tracking == 'false' && needs\.changes\.outputs\.migrations == 'false'/
+    );
     assert.match(deployment, /deploy --prebuilt --prod/);
     assert.doesNotMatch(deployment, /run-pinned-vercel\.sh deploy --prod/);
     assert.match(
@@ -68,5 +80,24 @@ describe('production cache-invalidation drain rollout gate', () => {
     );
     assert.match(deployment, /0\|false\|off\) echo 'GIGL is not enabled/);
     assert.doesNotMatch(deployment, /''\|0\|false\|off\)/);
+  });
+
+  it('scopes the tracking changeset to the worker, fallback, and wrapper paths', () => {
+    const filter = readFileSync(
+      join(workerRoot, '..', '.github', 'filters', 'deploy.yml'),
+      'utf8'
+    );
+    const tracking = filter.slice(filter.indexOf('tracking:'));
+
+    assert.match(tracking, /^  - 'vercel\.json'$/m);
+    assert.match(tracking, /^  - 'vps-workers\/\*\*'$/m);
+    assert.match(
+      tracking,
+      /^  - 'apps\/web\/src\/app\/api\/cron\/gigl-tracking\/\*\*'$/m
+    );
+    assert.match(
+      tracking,
+      /^  - 'supabase\/migrations\/\*gigl\*'$/m
+    );
   });
 });

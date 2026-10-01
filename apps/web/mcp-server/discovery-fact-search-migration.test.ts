@@ -54,3 +54,17 @@ it('prebuilds the transient index concurrently and supports equivalent capacity 
   expect(capacity).toContain('numeric * 1024');
   expect(capacity).toContain('product_discovery_search_document_v2');
 });
+
+it('indexes and queries numeric facts with their attribute identity', () => {
+  const keyed = readFileSync(new URL('../../../supabase/migrations/20261001070000_keyed_discovery_numeric_facts.sql', import.meta.url), 'utf8');
+  expect(keyed.startsWith('-- disable-transaction')).toBe(true);
+  expect(keyed).toContain('product_discovery_search_document_v3');
+  expect(keyed).toContain("('storage_gb', 'GB', 'storage')");
+  expect(keyed).toContain("('ram_gb', 'GB', 'ram')");
+  expect(keyed).toContain('attribute_prefix || value || unit');
+  expect(keyed).toContain('CREATE INDEX CONCURRENTLY products_discovery_keyed_search_idx');
+  expect(keyed.indexOf('CREATE INDEX CONCURRENTLY products_discovery_keyed_search_idx'))
+    .toBeLessThan(keyed.indexOf('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts('));
+  expect(keyed).toContain('@@ pg_catalog.to_tsquery');
+  expect(keyed).toContain('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_capacity_search_idx');
+});

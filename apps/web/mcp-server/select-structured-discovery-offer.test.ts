@@ -212,6 +212,24 @@ it('keeps brand identity separate from compatibility and compares exact normaliz
   expect(selectStructuredDiscoveryOffer(row, intent({ model: 'A' }))).toBeUndefined();
 });
 
+it('matches canonically equivalent Unicode in product identity and text attributes', () => {
+  const row = makeRow({
+    brand: 'Café',
+    discovery_metadata: {
+      product_type: 'phone', model: 'Café Pro', compatible_with: ['Café case'],
+      attributes: { color: 'Café crème' },
+    },
+  });
+  const selected = selectStructuredDiscoveryOffer(row, intent({
+    brands: ['Cafe\u0301'],
+    model: 'Cafe\u0301 Pro',
+    compatible_with: 'Cafe\u0301 case',
+    attributes: [{ key: 'color', operator: 'eq', value: 'Cafe\u0301 cre\u0300me' }],
+  }));
+
+  expect(selected?.selectedOption.kind).toBe('base');
+});
+
 it('selects eligible condition offers and keeps unknown metadata from satisfying constraints', () => {
   const offerRow = makeRow({ has_condition_offers: true, manage_stock: true });
   offerRow.availableOffers = [

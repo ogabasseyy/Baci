@@ -27,7 +27,7 @@ function record(value: unknown): Record<string, unknown> {
 
 function normalized(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
-  const result = value.trim().toLocaleLowerCase('en-US').replace(/\s+/g, ' ');
+  const result = value.normalize('NFC').trim().toLocaleLowerCase('en-US').replace(/\s+/g, ' ');
   return result || undefined;
 }
 

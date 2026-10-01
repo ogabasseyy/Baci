@@ -24,18 +24,30 @@ BEGIN
      NOT document @@ plainto_tsquery('simple', '8192MB laptop') THEN
     RAISE EXCEPTION 'Equivalent canonical capacity retrieval failed';
   END IF;
+  document := public.product_discovery_search_document_v3('Laptop', 'Acme', 'Laptops', '',
+    '{"attributes":{"storage_gb":8,"ram_gb":8}}'::jsonb);
+  IF NOT document @@ plainto_tsquery('simple', 'ram8gb') OR
+     NOT document @@ plainto_tsquery('simple', 'storage8gb') OR
+     NOT document @@ plainto_tsquery('simple', 'ramgb') OR
+     NOT document @@ plainto_tsquery('simple', 'storagegb') THEN
+    RAISE EXCEPTION 'Keyed equality or range lexemes were not indexed';
+  END IF;
+  IF document @@ plainto_tsquery('simple', 'ram8.5gb') THEN
+    RAISE EXCEPTION 'Keyed numeric lexeme was fabricated';
+  END IF;
   IF (SELECT prosecdef FROM pg_proc WHERE oid = 'public.search_product_discovery_facts(uuid,text,integer,integer,text,text)'::regprocedure) THEN
     RAISE EXCEPTION 'Fact retrieval must preserve invoker RLS';
   END IF;
 END;
 $$;
 
-INSERT INTO public.merchants (id, email, business_name, slug)
+INSERT INTO public.merchants (id, email, business_name, slug, is_published)
 VALUES (
   'cb58d110-0000-4000-8000-000000000201',
   'facts-test@example.test',
   'Facts Test Merchant',
-  'facts-test-merchant'
+  'facts-test-merchant',
+  true
 );
 
 INSERT INTO public.products (id, merchant_id, name, slug, brand, price, status, discovery_metadata)
@@ -51,31 +63,62 @@ VALUES
    '{"product_type":"camera"}'::jsonb),
   ('cb58d110-0000-4000-8000-000000000205', 'cb58d110-0000-4000-8000-000000000201',
    'camera', 'camera-once', 'Acme', 50000, 'active',
-   '{"product_type":"camera"}'::jsonb);
+   '{"product_type":"camera"}'::jsonb),
+  ('cb58d110-0000-4000-8000-000000000206', 'cb58d110-0000-4000-8000-000000000201',
+   'Capacity fixture', 'ram-eight-storage-128', 'Acme', 50000, 'active',
+   '{"attributes":{"ram_gb":8,"storage_gb":128}}'::jsonb),
+  ('cb58d110-0000-4000-8000-000000000207', 'cb58d110-0000-4000-8000-000000000201',
+   'Capacity fixture', 'ram-128-storage-eight', 'Acme', 50000, 'active',
+   '{"attributes":{"ram_gb":128,"storage_gb":8}}'::jsonb);
+
+-- Exercise the RPC as its public storefront caller, under publication RLS.
+SET LOCAL ROLE anon;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
 
 DO $$
 DECLARE
   or_ids uuid[];
   first_id uuid;
 BEGIN
+  IF current_user <> 'anon' THEN
+    RAISE EXCEPTION 'RPC regression must run as the public caller';
+  END IF;
+  IF NOT pg_catalog.to_tsvector('simple'::regconfig, 'ram8gb')
+      @@ pg_catalog.plainto_tsquery('simple'::regconfig, 'ram8gb') OR
+     pg_catalog.to_tsvector('simple'::regconfig, 'ram8gb')
+      @@ pg_catalog.plainto_tsquery('simple'::regconfig, 'storage8gb') THEN
+    RAISE EXCEPTION 'PostgreSQL tokenizer merged distinct keyed numeric lexemes';
+  END IF;
   SELECT array_agg(product_id) INTO or_ids
   FROM public.search_product_discovery_facts('cb58d110-0000-4000-8000-000000000201',
     'phone & (samsung | google) & 256gb');
-  IF NOT (or_ids @> ARRAY['cb58d110-0000-4000-8000-000000000202', 'cb58d110-0000-4000-8000-000000000203']::uuid[]) THEN
+  IF NOT (coalesce(or_ids, ARRAY[]::uuid[]) @> ARRAY['cb58d110-0000-4000-8000-000000000202', 'cb58d110-0000-4000-8000-000000000203']::uuid[]) THEN
     RAISE EXCEPTION 'Fact retrieval dropped an OR branch';
   END IF;
   SELECT product_id INTO first_id
   FROM (SELECT product_id, row_number() OVER () AS rn
     FROM public.search_product_discovery_facts('cb58d110-0000-4000-8000-000000000201', 'camera')) ranked
   WHERE rn = 1;
-  IF first_id::text <> 'cb58d110-0000-4000-8000-000000000204' THEN
+  IF first_id::text IS DISTINCT FROM 'cb58d110-0000-4000-8000-000000000204' THEN
     RAISE EXCEPTION 'Fact retrieval is not relevance ordered';
   END IF;
   SELECT array_agg(product_id) INTO or_ids
   FROM public.search_product_discovery_facts('cb58d110-0000-4000-8000-000000000201',
     'phone & 256gb', 100, 0, 'sams');
-  IF or_ids <> ARRAY['cb58d110-0000-4000-8000-000000000202']::uuid[] THEN
+  IF or_ids IS DISTINCT FROM ARRAY['cb58d110-0000-4000-8000-000000000202']::uuid[] THEN
     RAISE EXCEPTION 'Fact retrieval brand filter must narrow before the cap';
+  END IF;
+  SELECT array_agg(product_id) INTO or_ids
+  FROM public.search_product_discovery_facts('cb58d110-0000-4000-8000-000000000201',
+    'storage8gb');
+  IF or_ids IS DISTINCT FROM ARRAY['cb58d110-0000-4000-8000-000000000207']::uuid[] THEN
+    RAISE EXCEPTION 'Storage equality retrieved a product matching only on RAM';
+  END IF;
+  SELECT array_agg(product_id) INTO or_ids
+  FROM public.search_product_discovery_facts('cb58d110-0000-4000-8000-000000000201',
+    'ram8gb');
+  IF or_ids IS DISTINCT FROM ARRAY['cb58d110-0000-4000-8000-000000000206']::uuid[] THEN
+    RAISE EXCEPTION 'RAM equality retrieved a product matching only on storage';
   END IF;
 END;
 $$;

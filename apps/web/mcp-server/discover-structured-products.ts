@@ -26,12 +26,12 @@ export async function discoverStructuredProducts({ intent, query, args, merchant
   let optionsLookupFailed = false;
   let factsUnverified = false;
   for (let offset = 0; offset < candidates.products.length; offset += 100) {
-    // Offer-capable rows skip the condition pre-filter: a stale or empty
+    // Option-capable rows skip the condition pre-filter: a stale or empty
     // available_conditions snapshot must not drop the product before its live
-    // offers hydrate, and hydration enforces the requested condition per
+    // offers/variants hydrate, and hydration enforces the requested condition per
     // option (offers, variants, and base eligibility).
     const hydrated = await hydrateSearchProductAvailability(candidates.products.slice(offset, offset + 100)
-      .filter((product) => product.has_condition_offers === true
+      .filter((product) => product.has_condition_offers === true || product.has_variants === true
         ? matchesMcpPostHydrationFilters(product, { brand: args.brand, category: args.category })
         : matchesMcpPostHydrationFilters(product, args)), supabase, merchantId, args.condition);
     for (const row of hydrated) {

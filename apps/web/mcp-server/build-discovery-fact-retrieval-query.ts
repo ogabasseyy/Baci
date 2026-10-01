@@ -39,19 +39,22 @@ function attributeTerms(key: string, value: string | number): string[] {
   if (typeof value === 'number') {
     if (!Number.isFinite(value) || value < 0) return [];
     const unit = NUMERIC_UNITS[key];
-    return [`${value}${unit ?? ''}`.toLowerCase()];
+    const identity = key.replace(/_gb$/, '').replace(/_w$/, '').replace(/_inches$/, '')
+      .replace(/_hz$/, '');
+    return [`${identity}${value}${unit ?? ''}`.toLowerCase()];
   }
   return sanitizeTerm(value);
 }
 
-// Ranges cannot be tsquery terms, but the combined document carries unit
-// lexemes (gb, w, inch, hz) for every numeric spec, so a range retrieves
-// documents that have any value in those units and the matcher enforces the
-// bound. (Attribute keys themselves are not indexed, only values and units.)
+// Ranges cannot be tsquery terms, but the combined document carries keyed
+// presence lexemes (ramgb, storagegb, etc.) so retrieval preserves the
+// attribute identity while the matcher enforces the bound.
 function rangeTerms(key: string, value: string | number): string[] {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return [];
   const unit = NUMERIC_UNITS[key];
-  return unit ? [unit.toLowerCase()] : [];
+  const identity = key.replace(/_gb$/, '').replace(/_w$/, '').replace(/_inches$/, '')
+    .replace(/_hz$/, '');
+  return unit ? [`${identity}${unit}`.toLowerCase()] : [];
 }
 
 function groupQuery(terms: string[]): string | undefined {

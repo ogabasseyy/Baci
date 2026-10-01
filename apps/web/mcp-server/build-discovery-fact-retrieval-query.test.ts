@@ -8,7 +8,7 @@ it('builds grouped tsquery text with brand alternation', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({
     product_type: 'phone', brands: ['Samsung', 'Google'],
     attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }],
-  }))).toBe('(((phone) | (phones) | (smartphone) | (smartphones) | (smart & phone) | (smart & phones) | (mobile & phone) | (mobile & phones) | (cell & phone) | (cell & phones)) & (samsung | google) & 256gb)');
+  }))).toBe('(((phone) | (phones) | (smartphone) | (smartphones) | (smart & phone) | (smart & phones) | (mobile & phone) | (mobile & phones) | (cell & phone) | (cell & phones)) & (samsung | google) & storage256gb)');
 });
 
 it('joins alternatives with OR and strips tsquery operators from terms', () => {
@@ -33,13 +33,25 @@ it('emits unit-suffixed equality values and unit lexemes for ranges', () => {
     { key: 'power_w', operator: 'eq', value: 30 },
     { key: 'storage_gb', operator: 'gte', value: 256 },
     { key: 'color', operator: 'eq', value: 'black' },
-  ] }))).toBe('(30w & gb & black)');
+  ] }))).toBe('(power30w & storagegb & black)');
   expect(buildDiscoveryFactRetrievalQuery(intent({ attributes: [
     { key: 'ram_gb', operator: 'gte', value: 16 },
-  ] }))).toBe('(gb)');
+  ] }))).toBe('(ramgb)');
   expect(buildDiscoveryFactRetrievalQuery(intent({ attributes: [
     { key: 'color', operator: 'gte', value: 'black' },
   ] }))).toBe('(a & !a)');
+});
+
+it('keeps equal numeric values distinct by attribute identity', () => {
+  const query = buildDiscoveryFactRetrievalQuery(intent({ attributes: [
+    { key: 'ram_gb', operator: 'eq', value: 8 },
+    { key: 'storage_gb', operator: 'eq', value: 8 },
+  ] }));
+  expect(query).toBe('(ram8gb & storage8gb)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ attributes: [
+    { key: 'screen_inches', operator: 'eq', value: 15 },
+    { key: 'refresh_hz', operator: 'eq', value: 120 },
+  ] }))).toBe('(screen15inch & refresh120hz)');
 });
 
 it('falls back to sanitized shopper wording and never emits empty syntax', () => {

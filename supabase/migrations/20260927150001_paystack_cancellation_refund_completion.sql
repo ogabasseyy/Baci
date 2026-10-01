@@ -1,7 +1,7 @@
 -- A provider-verified Paystack refund transition and durable, once-per-order
 -- notification queue. The worker alone can call the RPC after verifying the
 -- refund and original transaction with Paystack.
-CREATE TABLE public.paystack_cancellation_refund_notifications (
+CREATE TABLE IF NOT EXISTS public.paystack_cancellation_refund_notifications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   order_id uuid NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
   merchant_id uuid NOT NULL REFERENCES public.merchants(id) ON DELETE CASCADE,
@@ -24,19 +24,21 @@ CREATE TABLE public.paystack_cancellation_refund_notifications (
   UNIQUE (order_id, event_type)
 );
 
-CREATE INDEX paystack_cancellation_refund_notifications_ready_idx
+CREATE INDEX IF NOT EXISTS paystack_cancellation_refund_notifications_ready_idx
   ON public.paystack_cancellation_refund_notifications (status, created_at)
   WHERE status IN ('pending', 'failed');
-CREATE INDEX paystack_cancellation_refund_notifications_merchant_idx
+CREATE INDEX IF NOT EXISTS paystack_cancellation_refund_notifications_merchant_idx
   ON public.paystack_cancellation_refund_notifications (merchant_id);
 ALTER TABLE public.paystack_cancellation_refund_notifications ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS paystack_cancellation_refund_notifications_service_role_all
+  ON public.paystack_cancellation_refund_notifications;
 CREATE POLICY paystack_cancellation_refund_notifications_service_role_all
   ON public.paystack_cancellation_refund_notifications
   FOR ALL TO service_role USING (true) WITH CHECK (true);
 REVOKE ALL ON public.paystack_cancellation_refund_notifications FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.paystack_cancellation_refund_notifications TO service_role;
 
-CREATE FUNCTION public.record_verified_paystack_cancellation_refund_v1(
+CREATE OR REPLACE FUNCTION public.record_verified_paystack_cancellation_refund_v1(
   p_refund_id uuid,
   p_provider_status text,
   p_provider_transaction_id bigint,
@@ -172,7 +174,7 @@ REVOKE ALL ON FUNCTION public.record_verified_paystack_cancellation_refund_v1(uu
 GRANT EXECUTE ON FUNCTION public.record_verified_paystack_cancellation_refund_v1(uuid,text,bigint,bigint,text)
   TO service_role;
 
-CREATE FUNCTION public.hold_paystack_cancellation_refund_for_review_v1(
+CREATE OR REPLACE FUNCTION public.hold_paystack_cancellation_refund_for_review_v1(
   p_refund_id uuid,
   p_reason text
 ) RETURNS boolean
@@ -198,7 +200,7 @@ REVOKE ALL ON FUNCTION public.hold_paystack_cancellation_refund_for_review_v1(uu
 GRANT EXECUTE ON FUNCTION public.hold_paystack_cancellation_refund_for_review_v1(uuid,text)
   TO service_role;
 
-CREATE FUNCTION public.claim_paystack_cancellation_refund_notifications_v1(p_limit integer)
+CREATE OR REPLACE FUNCTION public.claim_paystack_cancellation_refund_notifications_v1(p_limit integer)
 RETURNS SETOF public.paystack_cancellation_refund_notifications
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN

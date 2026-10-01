@@ -55,4 +55,12 @@ describe('complete-order-gateway-payment completed-replay claims migration', () 
       'claim regardless. PERFORM public.claim_paystack_refund_recovery_watches_v1('
     );
   });
+
+  it('stays within the 300-line file limit', () => {
+    expect(existsSync(migrationPath)).toBe(true);
+    if (!existsSync(migrationPath)) return;
+
+    const lines = readFileSync(migrationPath, 'utf8').split('\n').length;
+    expect(lines).toBeLessThanOrEqual(300);
+  });
 });

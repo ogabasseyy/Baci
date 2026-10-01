@@ -152,9 +152,12 @@ describe('initiatePaystackCancellationRefunds', () => {
     insert.mockResolvedValue({ error: { code: '23505' } });
     const maybeSingle = vi.fn().mockResolvedValue({
       data: {
+        amount: 12.5,
+        currency: 'NGN',
         gateway: 'paystack',
         gateway_reference: '101',
         id: 'refund-1',
+        metadata: { payment_transaction_id: 'tx-1' },
         transaction_type: 'refund',
       },
       error: null,

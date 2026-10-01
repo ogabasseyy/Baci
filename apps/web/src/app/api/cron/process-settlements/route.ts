@@ -7,7 +7,10 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { sendEmail } from '@/lib/zeptomail';
 import { processSettlementsQuerySchema } from '@/schemas/process-settlements-query';
 import { processCancellationDrain } from './process-cancellation-drain';
-import { sendSettlementNotifications } from './send-settlement-notifications';
+import {
+  SETTLEMENT_NOTIFICATION_MAX_ATTEMPTS,
+  sendSettlementNotifications,
+} from './send-settlement-notifications';
 import {
   settlementDrainDeadlineMs,
   settlementDrainLimit,
@@ -92,7 +95,10 @@ export async function POST(request: Request) {
       totalAmount: result.total_amount,
     });
 
-    // 2. Get settlements that need notifications
+    // 2. Get settlements that need notifications. Rejected rows
+    // carry backoff state: without the retry-due and attempt-cap
+    // filters, permanently failing rows would pin this bounded
+    // oldest-first queue and newer merchants would never send.
     const { data: pendingNotifications, error: notifyError } = await supabase
       .from('merchant_settlements')
       // PostgREST cannot embed auth.users through merchants here; use the
@@ -106,6 +112,7 @@ export async function POST(request: Request) {
         source_type,
         description,
         actual_settlement_date,
+        notification_attempts,
         merchants (
           id,
           business_name,
@@ -115,6 +122,10 @@ export async function POST(request: Request) {
       )
       .eq('status', 'settled')
       .eq('settlement_notified', false)
+      .lt('notification_attempts', SETTLEMENT_NOTIFICATION_MAX_ATTEMPTS)
+      .or(
+        `notification_next_retry_at.is.null,notification_next_retry_at.lte.${new Date().toISOString()}`
+      )
       .order('actual_settlement_date', { ascending: true })
       .limit(50); // Process in batches
 

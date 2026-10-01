@@ -26,7 +26,7 @@ describe('PAYSTACK_PENDING_SOURCES', () => {
 
     expect(sources).toEqual(EXPECTED_PAYSTACK_PENDING_SOURCES);
     expect(sources.at(-1)?.repositoryPath).toBe(
-      'supabase/migrations/20260928183200_claim_paystack_refund_reference_watches_reusable.sql'
+      'supabase/migrations/20260928183300_settlement_notification_retry_backoff.sql'
     );
   });
 

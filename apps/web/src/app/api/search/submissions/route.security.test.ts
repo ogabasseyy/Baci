@@ -80,6 +80,22 @@ describe('explicit search submissions security gates', () => {
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 
+  it('records same-origin submissions with a stripped user agent', async () => {
+    const req = request();
+    req.headers.delete('user-agent');
+    expect((await POST(req)).status).toBe(204);
+    expect(mocks.insert).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects originless stripped clients at the origin gate', async () => {
+    const req = request();
+    req.headers.delete('user-agent');
+    req.headers.delete('origin');
+    expect((await POST(req)).status).toBe(403);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
   it('sheds originless bots silently without an origin warning', async () => {
     const req = request(undefined, { 'user-agent': 'Googlebot' });
     req.headers.delete('origin');

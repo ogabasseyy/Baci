@@ -34,27 +34,30 @@ const SUBMISSION_BOT_USER_AGENT_REGEX =
 /**
  * Public, best-effort telemetry. The proxy applies the dedicated per-IP budget.
  *
- * No double-submit CSRF token by design: this endpoint is unauthenticated
- * public analytics in the same class as /api/platform/events (exempt in
- * checkCsrfProtection), and storefront pages do not mint CSRF cookies
- * (CsrfInitializer mounts only in admin/dashboard/builder), so token
- * enforcement would reject every legitimate submission. Cross-site forgery is
- * instead blocked by the strict same-Origin check below — browsers always send
- * Origin on fetch/form POSTs, and a missing or mismatched Origin is a 403 —
- * plus bot-UA filtering, a bounded body, Zod validation, and the per-IP
- * budget. The worst case for a forged same-shape request is a polluted
- * analytics count; no privileged state is reachable here.
+ * No double-submit CSRF token by design: this endpoint never calls
+ * checkCsrfProtection (whose exemption list covers only /api/platform/events)
+ * and the proxy enforces a hostname allowlist, not tokens — and storefront
+ * pages do not mint CSRF cookies (CsrfInitializer mounts only in
+ * admin/dashboard/builder), so token enforcement would reject every
+ * legitimate submission. Cross-site forgery is instead blocked by the strict
+ * same-Origin check below — browsers always send Origin on fetch/form POSTs,
+ * and a missing or mismatched Origin is a 403 — plus bot/UA filtering, a
+ * bounded body, Zod validation, and the per-IP budget. The worst case for a
+ * forged same-shape request is a polluted analytics count; no privileged
+ * state is reachable here.
  */
 export async function POST(request: NextRequest) {
   const origin = request.headers.get('origin');
   const requestHost = request.headers.get('host') || request.nextUrl.host;
-  // Shed automated traffic before the Origin gate so bots stay silent:
+  // Shed known automation before the Origin gate so bots stay silent:
   // they would otherwise each mint a 403 warn log without ever recording.
+  // An empty UA is not itself proof of automation, so it proceeds to the
+  // Origin gate and can still record when same-origin.
   const userAgent = request.headers.get('user-agent') || '';
   if (
-    !userAgent ||
-    SUBMISSION_BOT_USER_AGENT_REGEX.test(userAgent) ||
-    /curl|wget|python-requests|headlesschrome/i.test(userAgent)
+    userAgent &&
+    (SUBMISSION_BOT_USER_AGENT_REGEX.test(userAgent) ||
+      /curl|wget|python-requests|headlesschrome/i.test(userAgent))
   ) {
     return new NextResponse(null, { status: 204 });
   }

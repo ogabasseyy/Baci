@@ -10,7 +10,14 @@ interface ProductGridDidYouMeanProps {
   onSelectSuggestion: (suggestion: string) => void;
 }
 
-/** Did-you-mean correction with explicit-submission tracking attached. */
+/**
+ * Did-you-mean correction with explicit-submission tracking attached.
+ *
+ * An empty basePath is safe to beacon: it only occurs under domain routing,
+ * where the endpoint resolves the merchant from the host and ignores the
+ * prefix. A missing merchant context renders null (no didYouMean), so this
+ * component never beacons an unresolvable platform-host prefix.
+ */
 export function ProductGridDidYouMean({
   didYouMean,
   searchQuery,

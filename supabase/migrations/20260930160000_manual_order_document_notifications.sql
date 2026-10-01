@@ -113,7 +113,8 @@ CREATE TRIGGER enqueue_manual_document_after_order_update
 -- an older cron binary (whole-batch parse) is still live, stalling the queue
 -- with 500s. Enable only after the new worker is deployed and verified (see
 -- docs/manual-order-document-notifications.md "Activation"), or via a
--- follow-up migration; until then no manual rows are produced.
+-- follow-up migration that also backfills the rollout window; until then no
+-- manual rows are produced.
 ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_items;
 ALTER TABLE public.orders DISABLE TRIGGER enqueue_manual_document_after_order_update;
 

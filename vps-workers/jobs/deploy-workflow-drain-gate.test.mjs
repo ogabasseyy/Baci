@@ -73,6 +73,10 @@ describe('production cache-invalidation drain rollout gate', () => {
       capability,
       /run: \.github\/scripts\/smoke-gigl-worker-capability\.sh/
     );
+    // The latch persists only after the smoke succeeds (same job, later
+    // step): it proves live token+hook function for the gate's bypass.
+    assert.match(capability, /Persist GIGL cutover latch/);
+    assert.match(capability, /\.gigl-capability-smoke-ok/);
   });
 
   it('keeps the web release behind migrations and prebuilt-only', () => {
@@ -85,14 +89,18 @@ describe('production cache-invalidation drain rollout gate', () => {
       deployment,
       /needs\.gigl-worker-capability\.result == 'success'/
     );
+    // The tracking=false bypass additionally requires the cutover latch
+    // (proven smoke function), so a web push after a smoke-failed tracking
+    // push cannot deploy the cron removal with a broken worker.
     assert.match(
       deployment,
-      /needs\.gigl-worker-capability\.result == 'success' \|\| needs\.changes\.outputs\.tracking == 'false'/
+      /needs\.gigl-worker-capability\.result == 'success' \|\| \(needs\.changes\.outputs\.tracking == 'false' && needs\.vps-drain-readiness\.outputs\.cutover_latched == 'true'\)/
     );
     assert.doesNotMatch(
       deployment,
-      /gigl-worker-capability\.result == 'success' \|\| \(needs/
+      /tracking == 'false' && needs\.changes\.outputs\.migrations == 'false'/
     );
+    assert.match(deployment, /needs: \[[^\]]*vps-drain-readiness[^\]]*\]/);
     assert.match(deployment, /deploy --prebuilt --prod/);
     assert.doesNotMatch(deployment, /run-pinned-vercel\.sh deploy --prod/);
     assert.match(

@@ -131,7 +131,11 @@ staging_dir="$1"
 remote_dir="$2"
 
 mkdir -p "$remote_dir"
-rsync -a --delete --exclude='.env*' --exclude='logs' --exclude='locks' \
+# The capability-smoke latch survives promotes: it records that a live
+# smoke proved token+hook function, which a worker redeploy (same .env,
+# same token) does not invalidate. Without this exclude, --delete would
+# wipe it every deploy.sh run and re-freeze web pushes until re-smoked.
+rsync -a --delete --exclude='.env*' --exclude='logs' --exclude='locks' --exclude='.gigl-capability-smoke-ok' \
   "$staging_dir/" "$remote_dir/"
 mkdir -p "$remote_dir/logs" "$remote_dir/locks"
 REMOTE_SH

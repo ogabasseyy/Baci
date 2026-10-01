@@ -48,3 +48,47 @@ test('uses a minimal sparse checkout for VPS drain readiness', async () => {
   );
   assert.equal(cutoverMarker.if, undefined);
 });
+
+test('reports the cutover latch as a readiness output signal', async () => {
+  const workflow = YAML.parse(await readFile(workflowUrl, 'utf8'));
+  const readiness = workflow.jobs['vps-drain-readiness'];
+  const latchCheck = readiness.steps.find(
+    (step) => step.name === 'Check GIGL cutover latch'
+  );
+
+  assert.equal(
+    readiness.outputs.cutover_latched,
+    '${{ steps.gigl-cutover-latch.outputs.latched }}'
+  );
+  // Signal, not gate: no changeset condition, never fails (fail-closed
+  // latched=false), so tracking pushes proceed to their own smoke.
+  assert.equal(latchCheck.if, undefined);
+  assert.match(latchCheck.run, /\.gigl-capability-smoke-ok/);
+  assert.match(latchCheck.run, /latched=false/);
+  assert.match(latchCheck.run, /\$GITHUB_OUTPUT/);
+});
+
+test('persists the cutover latch only after the smoke succeeds', async () => {
+  const workflow = YAML.parse(await readFile(workflowUrl, 'utf8'));
+  const capability = workflow.jobs['gigl-worker-capability'];
+  const steps = capability.steps;
+  const smokeIndex = steps.findIndex(
+    (step) => step.name === 'Smoke the live GIGL wrapper capability'
+  );
+  const persistIndex = steps.findIndex(
+    (step) => step.name === 'Persist GIGL cutover latch'
+  );
+
+  assert.ok(smokeIndex >= 0, 'missing capability smoke step');
+  assert.ok(
+    persistIndex > smokeIndex,
+    'latch must persist after the smoke succeeds'
+  );
+  // No `if`: same-job sequencing means this step runs if and only if the
+  // smoke step succeeded.
+  assert.equal(steps[persistIndex].if, undefined);
+  assert.match(
+    steps[persistIndex].run,
+    /\.gigl-capability-smoke-ok/
+  );
+});

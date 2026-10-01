@@ -18,4 +18,13 @@ describe('prepare worker release checkout identity', () => {
       /printf '%s' '\$APP_SHA' > '\$STAGING_DIR\/app-checkout\.sha'/
     );
   });
+
+  it('preserves the capability-smoke latch across worker promotes', () => {
+    const script = readFileSync(
+      join(directory, 'prepare-worker-release.sh'),
+      'utf8'
+    );
+
+    assert.match(script, /--exclude='\.gigl-capability-smoke-ok'/);
+  });
 });

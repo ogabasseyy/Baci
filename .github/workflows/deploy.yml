@@ -65,6 +65,8 @@ jobs:
     # cache-invalidation and GIGL cutover-marker verifications below; only
     # the exact-SHA GIGL step gates itself on the tracking changeset.
     if: always() && github.ref == 'refs/heads/main'
+    outputs:
+      cutover_latched: ${{ steps.gigl-cutover-latch.outputs.latched }}
     runs-on: baci-deploy
     timeout-minutes: 10
     permissions:
@@ -98,6 +100,25 @@ jobs:
         env:
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
         run: .readiness-checkout/vps-workers/bin/verify-gigl-direct-workers-installed.sh --cutover-marker
+      - name: Check GIGL cutover latch
+        id: gigl-cutover-latch
+        # Signal, not gate: reports whether ANY capability smoke has yet
+        # succeeded (the Persist step writes the latch file). The marker
+        # above proves install; the latch proves FUNCTION — without it, a
+        # web push after a smoke-failed tracking push would deploy the
+        # cron removal with a broken worker. This step never fails: a
+        # missing or corrupt latch reports latched=false and the
+        # deploy-production gate requires the latch for tracking=false
+        # pushes. Tracking pushes don't need it (they run the smoke).
+        env:
+          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
+        run: |
+          latch_file="$VPS_WORKER_REMOTE_DIR/.gigl-capability-smoke-ok"
+          latched=false
+          if [ -f "$latch_file" ] && [ "$(tr -d '\r\n' < "$latch_file" | grep -Ec '^[0-9a-f]{40}$')" = "1" ]; then
+            latched=true
+          fi
+          echo "latched=$latched" >> "$GITHUB_OUTPUT"
       - name: Verify production GIGL direct-worker installation
         # The verifier requires the VPS worker's exact checkout SHA to equal
         # the pushed commit, and the worker is deployed manually via
@@ -184,21 +205,37 @@ jobs:
         env:
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
         run: .github/scripts/smoke-gigl-worker-capability.sh
+      - name: Persist GIGL cutover latch
+        # Runs only after the smoke above succeeds (same job, no if): the
+        # latch file proves a live smoke verified token+hook function at
+        # this revision. The gate requires it for tracking=false pushes,
+        # so a web push after a smoke-failed tracking push cannot deploy
+        # the cron removal with a broken worker. A GIGL-disabled skip
+        # (exit 0 no-op) also latches: with polling disabled, cutover is
+        # vacuously complete. deploy.sh preserves this file on promote.
+        env:
+          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
+        run: printf '%s' '${{ github.sha }}' > "$VPS_WORKER_REMOTE_DIR/.gigl-capability-smoke-ok"
 
   deploy-production:
-    needs: [changes, cwv-runner-contracts, db-migrations, gigl-worker-capability]
+    needs: [changes, cwv-runner-contracts, db-migrations, gigl-worker-capability, vps-drain-readiness]
     # Hard-require db-migrations success — `result == 'success'` excludes both
     # 'skipped' and 'failure', so a skipped migrations job (e.g. if its `if`
     # condition becomes false in a future change) cannot let a web deploy
     # land against an out-of-date schema. The GIGL capability smoke gates
-    # only tracking deploys: a broken VPS worker must block a release that
-    # removes the tracking cron, but worker-secret drift must not freeze
-    # unrelated web or migration deploys. Manual dispatches are NOT exempt:
-    # the changes outputs are unset there, so `tracking == 'false'` is
-    # false and the smoke result is required — a dispatch can never land
-    # the cron removal unverified. (The trailing dispatch term only keeps
-    # the pre-existing "dispatch always deploys" scope behavior.)
-    if: always() && github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success' && (needs.gigl-worker-capability.result == 'success' || needs.changes.outputs.tracking == 'false') && (needs.cwv-runner-contracts.result == 'success' || needs.cwv-runner-contracts.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.web == 'true' || needs.changes.outputs.migrations == 'true')
+    # tracking deploys directly, and the cutover latch gates the
+    # tracking=false bypass: install presence alone (the marker) cannot
+    # prove the worker FUNCTIONS, so a web push after a smoke-failed
+    # tracking push must stay blocked until some smoke succeeds and writes
+    # the latch. Steady-state drift still doesn't freeze web deploys —
+    # the latch persists once proven — but the cron removal can never
+    # land before the first proven-function smoke. Manual dispatches are
+    # NOT exempt: the changes outputs are unset there, so
+    # `tracking == 'false'` is false and the smoke result is required — a
+    # dispatch can never land the cron removal unverified. (The trailing
+    # dispatch term only keeps the pre-existing "dispatch always deploys"
+    # scope behavior.)
+    if: always() && github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success' && (needs.gigl-worker-capability.result == 'success' || (needs.changes.outputs.tracking == 'false' && needs.vps-drain-readiness.outputs.cutover_latched == 'true')) && (needs.cwv-runner-contracts.result == 'success' || needs.cwv-runner-contracts.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.web == 'true' || needs.changes.outputs.migrations == 'true')
     # Run production prebuilt deploys on GitHub-hosted runners while the VPS
     # provider is returning sustained CPU steal. This still uses a local
     # `vercel build --prod` followed by `vercel deploy --prebuilt --prod`, so

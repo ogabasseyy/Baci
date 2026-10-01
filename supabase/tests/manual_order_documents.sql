@@ -139,6 +139,24 @@ SELECT pg_temp.assert_true((SELECT count(*) = 0 FROM public.order_notification_o
 UPDATE public.orders SET recorded_by_user_id = '10000000-0000-4000-8000-000000000010' WHERE id = '10000000-0000-4000-8000-000000000014';
 SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000014' AND event_type = 'manual_order_receipt'), 'late manual marking queues receipt');
 
+-- Terminal skipped/failed rows re-arm when a later correction re-triggers the
+-- queue; sent and possibly-dispatched rows never do.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000015', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'unpaid', 0);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000015', 'Device', 1, 100);
+UPDATE public.order_notification_outbox SET status = 'skipped', skip_reason = 'paid_balance_outstanding', skipped_at = now(), attempt_count = 3 WHERE order_id = '10000000-0000-4000-8000-000000000015';
+UPDATE public.orders SET total = 250 WHERE id = '10000000-0000-4000-8000-000000000015';
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND skip_reason IS NULL AND skipped_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000015'), 'skipped row re-arms on correction');
+UPDATE public.order_notification_outbox SET status = 'failed', attempt_count = 5, last_error = 'boom' WHERE order_id = '10000000-0000-4000-8000-000000000015';
+UPDATE public.orders SET total = 260 WHERE id = '10000000-0000-4000-8000-000000000015';
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND last_error IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000015'), 'failed row re-arms on correction');
+UPDATE public.order_notification_outbox SET status = 'skipped', skip_reason = 'delivery_outcome_unknown', dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000015';
+UPDATE public.orders SET total = 270 WHERE id = '10000000-0000-4000-8000-000000000015';
+SELECT pg_temp.assert_true((SELECT status = 'skipped' FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000015'), 'unknown-outcome row never re-arms');
+UPDATE public.order_notification_outbox SET status = 'sent', sent_at = now(), dispatch_started_at = NULL, skip_reason = NULL WHERE order_id = '10000000-0000-4000-8000-000000000015';
+UPDATE public.orders SET total = 280 WHERE id = '10000000-0000-4000-8000-000000000015';
+SELECT pg_temp.assert_true((SELECT status = 'sent' FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000015'), 'sent row never re-arms');
+
 -- A stale customers row does not strand a manual claim: the document went to
 -- the order email as an attachment, so verified sign-in as that recipient
 -- redeems even when the customer record disagrees. Import claims stay strict.

@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { createServiceClient } from '@/lib/supabase/service';
 import { createCronBatchSizeSchema } from '@/schemas/cron-batch-size';
 import {
+  type ClaimedOrderNotificationOutboxRow,
   claimedOrderNotificationOutboxRowSchema,
   createOrderNotificationCronSummary,
   processClaimedOrderNotificationRows,
@@ -18,7 +19,6 @@ const batchSizeSchema = createCronBatchSizeSchema({
   defaultSize: DEFAULT_BATCH_SIZE,
   maxSize: MAX_BATCH_SIZE,
 });
-const claimedRowsSchema = z.array(claimedOrderNotificationOutboxRowSchema);
 
 export async function GET(request: Request) {
   if (!hasValidCronSecret(request.headers, getCronSecret())) {
@@ -54,11 +54,9 @@ export async function GET(request: Request) {
     );
   }
 
-  const parsedRows = claimedRowsSchema.safeParse(data ?? []);
-  if (!parsedRows.success) {
+  if (!Array.isArray(data)) {
     logger.error({
       message: 'Invalid claimed order notification outbox payload',
-      error: z.flattenError(parsedRows.error),
     });
     return NextResponse.json(
       { error: 'Invalid claimed order notification payload' },
@@ -66,7 +64,26 @@ export async function GET(request: Request) {
     );
   }
 
-  const rows = parsedRows.data;
+  // Parse each claimed row individually: one unknown event type (a newer
+  // producer, a future migration) must not fail the whole batch and stall
+  // unrelated notifications until lease expiry. Unparseable rows stay
+  // locked and return to pending when the lease expires.
+  const rows: ClaimedOrderNotificationOutboxRow[] = [];
+  for (const row of data) {
+    const parsedRow = claimedOrderNotificationOutboxRowSchema.safeParse(row);
+    if (parsedRow.success) {
+      rows.push(parsedRow.data);
+      continue;
+    }
+    logger.error({
+      message: 'Skipping unparseable claimed outbox row',
+      rowId:
+        typeof row === 'object' && row !== null && 'id' in row
+          ? String((row as { id: unknown }).id)
+          : undefined,
+      error: z.flattenError(parsedRow.error),
+    });
+  }
   const summary = createOrderNotificationCronSummary(rows.length);
   try {
     await processClaimedOrderNotificationRows(supabase, rows, summary);

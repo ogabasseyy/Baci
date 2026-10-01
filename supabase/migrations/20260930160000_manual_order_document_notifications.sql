@@ -38,6 +38,12 @@ BEGIN
     v_event := 'manual_order_invoice';
   ELSE RETURN; END IF;
 
+  -- A later correction re-arms a terminal row the worker gave up on so the
+  -- customer gets the corrected document without staff deleting rows: only
+  -- skipped/failed rows that never started dispatch come back to pending.
+  -- Sent rows never re-arm (resend stays deliberate), and rows that may
+  -- already have dispatched (delivery_outcome_unknown, dispatch started)
+  -- stay terminal to preserve at-most-once delivery.
   INSERT INTO public.order_notification_outbox (
     merchant_id, order_id, event_type, fulfillment_cycle_id, metadata
   ) VALUES (
@@ -45,7 +51,13 @@ BEGIN
     v_order.fulfillment_notification_cycle_id,
     jsonb_build_object('source', 'manual_order_document')
   ) ON CONFLICT (order_id, event_type)
-    WHERE event_type IN ('manual_order_invoice', 'manual_order_receipt') DO NOTHING;
+    WHERE event_type IN ('manual_order_invoice', 'manual_order_receipt')
+    DO UPDATE SET status = 'pending', attempt_count = 0, next_attempt_at = NULL,
+      locked_by = NULL, locked_at = NULL, last_error = NULL,
+      skip_reason = NULL, skipped_at = NULL, updated_at = now()
+    WHERE public.order_notification_outbox.status IN ('skipped', 'failed')
+      AND public.order_notification_outbox.dispatch_started_at IS NULL
+      AND public.order_notification_outbox.skip_reason IS DISTINCT FROM 'delivery_outcome_unknown';
 END;
 $$;
 REVOKE ALL ON FUNCTION private.enqueue_manual_order_document(uuid)

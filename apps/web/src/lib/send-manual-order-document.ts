@@ -180,7 +180,6 @@ export async function sendManualOrderDocument({
     brandColor: merchant.brand_colors?.primary,
     // Visible support copy shows the public support address only: merchant.email
     // is the private login address and never renders on customer documents.
-    // (replyTo below keeps the import-sender fallback so replies route.)
     supportEmail: merchant.support_email || 'the store team',
     appLinks:
       merchant.slug === 'ogabassey'
@@ -231,7 +230,9 @@ export async function sendManualOrderDocument({
       emailType: 'orders',
       fromName:
         merchant.email_sender_name || merchant.business_name || merchant.slug,
-      replyTo: merchant.support_email || merchant.email,
+      // merchant.email is the private login address: never a reply target.
+      // Omitting replyTo lets the provider fall back to the sender identity.
+      replyTo: merchant.support_email || undefined,
       clientReference: `order:${order.id}:${row.event_type}`,
       beforeTransportDispatch: () => persistDispatch(true),
       resetTransportDispatch: () => persistDispatch(false),

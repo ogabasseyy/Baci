@@ -124,9 +124,9 @@ describe('GET /api/cron/order-notifications', () => {
     expect(sendOrderFulfillmentNotification).not.toHaveBeenCalled();
   });
 
-  it('returns 500 when the claim RPC returns a malformed row', async () => {
+  it('returns 500 when the claim RPC returns a malformed payload', async () => {
     mockSupabase.rpc.mockResolvedValueOnce({
-      data: [{ id: 'outbox-invalid', event_type: 'order_cancelled' }],
+      data: { id: 'outbox-invalid' },
       error: null,
     });
 
@@ -137,6 +137,36 @@ describe('GET /api/cron/order-notifications', () => {
       error: 'Invalid claimed order notification payload',
     });
     expect(sendOrderFulfillmentNotification).not.toHaveBeenCalled();
+  });
+
+  it('skips unknown event types without failing the rest of the batch', async () => {
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: [
+        { id: 'outbox-invalid', event_type: 'order_cancelled' },
+        {
+          claim_owner: 'web-cron-test',
+          attempt_count: 1,
+          event_type: 'order_shipped',
+          id: 'outbox-1',
+          max_attempts: 5,
+          merchant_id: 'merchant-1',
+          order_id: 'order-1',
+        },
+      ],
+      error: null,
+    });
+    mockSendOrderFulfillmentNotification.mockReset();
+    mockSendOrderFulfillmentNotification.mockResolvedValue({
+      status: 'sent',
+      messageId: 'msg-1',
+    });
+
+    const response = await GET(cronRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({ claimed: 1, sent: 1 });
+    expect(sendOrderFulfillmentNotification).toHaveBeenCalledTimes(1);
   });
 
   it('claims due notifications and marks sent/skipped outcomes without blocking fulfillment', async () => {

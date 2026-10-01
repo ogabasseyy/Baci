@@ -21,8 +21,12 @@ resent. A provider `client_reference` is an audit correlation, not an idempotenc
 ## Corrections and resend
 
 At most one invoice and one receipt row exist per order, and a claim token never
-rotates after its send marker is set, so correcting the recipient after a
-successful send does not automatically resend. Staff resend is deliberate:
+rotates after its send marker is set. A correction that re-triggers the queue
+automatically re-arms a skipped or failed row that never started dispatch, so
+the corrected document sends without staff action; sent rows and rows that may
+already have dispatched (`delivery_outcome_unknown`, dispatch started) stay
+terminal to preserve at-most-once delivery. Resending after a successful send
+is therefore deliberate:
 
 1. Correct the order contact (`customer_email`/`customer_id`) on the order row.
 2. Delete the sent `order_notification_outbox` row; the claim, its order links,

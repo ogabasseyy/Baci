@@ -5,9 +5,8 @@ import { resolveCheckoutResumeContext } from './checkout/resolve-checkout-resume
 import { useCheckoutDeliverySession } from './checkout/hooks/use-checkout-delivery-session';
 import { useCheckoutFormSession } from './checkout/hooks/use-checkout-form-session';
 import {
-  useDvaConfirmTransfer,
-  type DvaModalData,
-} from './checkout/hooks/use-dva-confirm-transfer';
+  useCheckoutDvaSession,
+} from './checkout/hooks/use-checkout-dva-session';
 
 import {
   getCheckoutPaymentIntent,
@@ -189,23 +188,23 @@ export const CheckoutPage: React.FC = () => {
   );
 
   // Dedicated Virtual Account (DVA) state
-  const [dvaData, setDvaData] = useState<DvaModalData | null>(null);
-  const [isInitializingDva, setIsInitializingDva] = useState(false);
-  const [dvaCountdown, setDvaCountdown] = useState(3600); // 1 hour in seconds
-  // "Confirm Transfer Sent" lifecycle (server verification, conversion,
-  // routing, delayed cart clear) tied to the modal attempt that started
-  // it — see useDvaConfirmTransfer.
-  const { closeDvaModal, handleDvaConfirmTransfer, isVerifyingDva } =
-    useDvaConfirmTransfer({
+  const {
+    closeDvaModal,
+    dvaData,
+    handleDvaConfirmTransfer,
+    isInitializingDva,
+    isVerifyingDva,
+    setDvaData,
+    setIsInitializingDva,
+  } =
+    useCheckoutDvaSession({
       checkoutCart,
       clearCart,
       clearCheckoutSession,
       clearPendingCheckoutOrder,
       currencyCode,
-      dvaData,
       getHref,
       merchantSlug: merchant?.slug ?? undefined,
-      setDvaData,
     });
 
   // Mobile app order resume state
@@ -461,7 +460,6 @@ export const CheckoutPage: React.FC = () => {
       setOrderCreated: setCheckoutOrderCreated,
       clearCheckoutSession,
       setDvaData,
-      setDvaCountdown,
       setIsInitializingDva,
       setPendingCryptoOrder,
       setShowCryptoSelector,

@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WalletOrderFundingIntent } from '@/schemas/order-wallet-funding-intent';
 import type { WalletFundingAccountResponse } from '@/schemas/wallet-funding-account';
-import type { DvaModalData } from '../hooks/use-dva-confirm-transfer';
+import type { DvaModalData } from '../hooks/use-checkout-dva-session';
 import type { CryptoPaymentData } from '../types';
 import {
   type CheckoutCryptoOverlaySession,

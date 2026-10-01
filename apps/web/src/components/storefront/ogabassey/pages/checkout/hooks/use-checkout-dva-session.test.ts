@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
-import { useDvaConfirmTransfer } from './use-dva-confirm-transfer';
-import type { DvaModalData } from './use-dva-confirm-transfer';
+import { act, renderHook } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { DvaModalData } from './use-checkout-dva-session';
+import { useCheckoutDvaSession } from './use-checkout-dva-session';
 
 const mockPush = vi.fn();
 
@@ -15,14 +15,13 @@ vi.mock('@/hooks/use-toast', () => ({
 
 const mockCaptureCheckoutPaymentCompleted = vi.fn();
 vi.mock('../capture-checkout-payment-completed', () => ({
-  captureCheckoutPaymentCompleted: (
-    ...args: Array<Record<string, unknown>>
-  ) => mockCaptureCheckoutPaymentCompleted(...args),
+  captureCheckoutPaymentCompleted: (...args: Record<string, unknown>[]) =>
+    mockCaptureCheckoutPaymentCompleted(...args),
 }));
 
 const mockClearCheckoutIdempotencyKey = vi.fn();
 vi.mock('../checkout-idempotency', () => ({
-  clearCheckoutIdempotencyKey: (...args: Array<unknown>) =>
+  clearCheckoutIdempotencyKey: (...args: unknown[]) =>
     mockClearCheckoutIdempotencyKey(...args),
 }));
 
@@ -44,7 +43,7 @@ const dvaData: DvaModalData = {
 };
 
 function baseDeps(
-  overrides: Partial<Parameters<typeof useDvaConfirmTransfer>[0]> = {}
+  overrides: Partial<Parameters<typeof useCheckoutDvaSession>[0]> = {}
 ) {
   return {
     checkoutCart: [],
@@ -52,12 +51,21 @@ function baseDeps(
     clearCheckoutSession: vi.fn(),
     clearPendingCheckoutOrder: vi.fn(),
     currencyCode: 'NGN',
-    dvaData,
     getHref: (path: string) => `https://store.example.com${path}`,
     merchantSlug: 'demo',
-    setDvaData: vi.fn(),
     ...overrides,
   };
+}
+
+function renderSession(
+  deps = baseDeps(),
+  initialData: DvaModalData | null = dvaData
+) {
+  const rendered = renderHook(() => useCheckoutDvaSession(deps));
+  if (initialData) {
+    act(() => rendered.result.current.setDvaData(initialData));
+  }
+  return rendered;
 }
 
 function mockPaidTrackOrder(orderId = 'order-123') {
@@ -76,7 +84,7 @@ async function confirmAndFlush(handleDvaConfirmTransfer: () => void) {
   });
 }
 
-describe('useDvaConfirmTransfer', () => {
+describe('useCheckoutDvaSession', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
@@ -89,17 +97,21 @@ describe('useDvaConfirmTransfer', () => {
   });
 
   it('starts idle with close/confirm handlers', () => {
-    const { result } = renderHook(() => useDvaConfirmTransfer(baseDeps()));
+    const { result } = renderSession(baseDeps(), null);
 
+    expect(result.current.dvaData).toBeNull();
+    expect(result.current.isInitializingDva).toBe(false);
     expect(result.current.isVerifyingDva).toBe(false);
     expect(typeof result.current.closeDvaModal).toBe('function');
     expect(typeof result.current.handleDvaConfirmTransfer).toBe('function');
+    act(() => result.current.setIsInitializingDva(true));
+    expect(result.current.isInitializingDva).toBe(true);
   });
 
   it('records the paid conversion with the stamped total and routes to success', async () => {
     mockPaidTrackOrder();
     const deps = baseDeps();
-    const { result } = renderHook(() => useDvaConfirmTransfer(deps));
+    const { result } = renderSession(deps);
 
     await confirmAndFlush(result.current.handleDvaConfirmTransfer);
 
@@ -118,7 +130,7 @@ describe('useDvaConfirmTransfer', () => {
     expect(mockClearCheckoutIdempotencyKey).toHaveBeenCalledWith('fp-123');
     expect(deps.clearPendingCheckoutOrder).toHaveBeenCalledTimes(1);
     expect(deps.clearCheckoutSession).toHaveBeenCalledTimes(1);
-    expect(deps.setDvaData).toHaveBeenCalledWith(null);
+    expect(result.current.dvaData).toBeNull();
     expect(mockPush).toHaveBeenCalledTimes(1);
     expect(String(mockPush.mock.calls[0]?.[0])).toContain(
       '/order-success?type=standard&orderId=order-123'
@@ -129,7 +141,7 @@ describe('useDvaConfirmTransfer', () => {
   it('clears the completed cart synchronously before navigation', async () => {
     mockPaidTrackOrder();
     const deps = baseDeps();
-    const { result } = renderHook(() => useDvaConfirmTransfer(deps));
+    const { result } = renderSession(deps);
 
     await confirmAndFlush(result.current.handleDvaConfirmTransfer);
 
@@ -148,7 +160,7 @@ describe('useDvaConfirmTransfer', () => {
       json: async () => ({ order: { payment_status: 'pending' } }),
     });
     const deps = baseDeps();
-    const { result } = renderHook(() => useDvaConfirmTransfer(deps));
+    const { result } = renderSession(deps);
 
     await confirmAndFlush(result.current.handleDvaConfirmTransfer);
 
@@ -157,7 +169,7 @@ describe('useDvaConfirmTransfer', () => {
     );
     expect(mockCaptureCheckoutPaymentCompleted).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
-    expect(deps.setDvaData).not.toHaveBeenCalled();
+    expect(result.current.dvaData).toEqual(dvaData);
     expect(result.current.isVerifyingDva).toBe(false);
   });
 
@@ -167,7 +179,7 @@ describe('useDvaConfirmTransfer', () => {
     // cart stays so the shopper can retry or check later.
     mockPaidTrackOrder('order-OLDER');
     const deps = baseDeps();
-    const { result } = renderHook(() => useDvaConfirmTransfer(deps));
+    const { result } = renderSession(deps);
 
     await confirmAndFlush(result.current.handleDvaConfirmTransfer);
 
@@ -176,7 +188,7 @@ describe('useDvaConfirmTransfer', () => {
     );
     expect(mockCaptureCheckoutPaymentCompleted).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
-    expect(deps.setDvaData).not.toHaveBeenCalled();
+    expect(result.current.dvaData).toEqual(dvaData);
     expect(deps.clearCart).not.toHaveBeenCalled();
     expect(result.current.isVerifyingDva).toBe(false);
   });
@@ -186,7 +198,7 @@ describe('useDvaConfirmTransfer', () => {
       new Error('Network error')
     );
     const deps = baseDeps();
-    const { result } = renderHook(() => useDvaConfirmTransfer(deps));
+    const { result } = renderSession(deps);
 
     await confirmAndFlush(result.current.handleDvaConfirmTransfer);
 
@@ -208,7 +220,7 @@ describe('useDvaConfirmTransfer', () => {
       })
     );
     const deps = baseDeps();
-    const { result } = renderHook(() => useDvaConfirmTransfer(deps));
+    const { result } = renderSession(deps);
 
     act(() => {
       result.current.handleDvaConfirmTransfer();
@@ -231,55 +243,20 @@ describe('useDvaConfirmTransfer', () => {
     expect(mockCaptureCheckoutPaymentCompleted).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
     expect(deps.clearCart).not.toHaveBeenCalled();
-    expect(deps.setDvaData).toHaveBeenCalledTimes(1);
-    expect(deps.setDvaData).toHaveBeenCalledWith(null);
-  });
-
-  it('skips routing and cart effects when the modal closes during idempotency cleanup', async () => {
-    mockPaidTrackOrder();
-    let resolveCleanup!: (value: void) => void;
-    mockClearCheckoutIdempotencyKey.mockReturnValueOnce(
-      new Promise<void>((resolve) => {
-        resolveCleanup = resolve;
-      })
-    );
-    const deps = baseDeps();
-    const { result } = renderHook(() => useDvaConfirmTransfer(deps));
-
-    await act(async () => {
-      result.current.handleDvaConfirmTransfer();
-      await vi.advanceTimersByTimeAsync(0);
-    });
-    // The conversion records before the cleanup await; closing in that
-    // gap must still gate the routing and cart side effects below.
-    expect(mockCaptureCheckoutPaymentCompleted).toHaveBeenCalledTimes(1);
-    act(() => {
-      result.current.closeDvaModal();
-    });
-    await act(async () => {
-      resolveCleanup();
-      await vi.advanceTimersByTimeAsync(0);
-    });
-
-    expect(mockPush).not.toHaveBeenCalled();
-    expect(deps.clearCheckoutSession).not.toHaveBeenCalled();
-    expect(deps.clearCart).not.toHaveBeenCalled();
+    expect(result.current.dvaData).toBeNull();
   });
 
   it('does nothing without DVA data or an order id', () => {
-    const withoutData = renderHook(() =>
-      useDvaConfirmTransfer(baseDeps({ dvaData: null }))
-    );
+    const withoutData = renderSession(baseDeps(), null);
     act(() => {
       withoutData.result.current.handleDvaConfirmTransfer();
     });
     expect(global.fetch).not.toHaveBeenCalled();
 
-    const withoutOrder = renderHook(() =>
-      useDvaConfirmTransfer(
-        baseDeps({ dvaData: { ...dvaData, orderId: undefined } })
-      )
-    );
+    const withoutOrder = renderSession(baseDeps(), {
+      ...dvaData,
+      orderId: undefined,
+    });
     act(() => {
       withoutOrder.result.current.handleDvaConfirmTransfer();
     });

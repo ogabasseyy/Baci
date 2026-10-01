@@ -33,7 +33,6 @@ export interface CheckoutPaymentDispatchContext {
   setIsProcessing: (value: boolean) => void;
   isOrderInFlightRef: { current: boolean };
   setDvaData: InitializeCheckoutDvaOptions['setDvaData'];
-  setDvaCountdown: (seconds: number) => void;
   setIsInitializingDva: (value: boolean) => void;
   setRedvaultStatus: (status: RedvaultStatus) => void;
   setPendingCryptoOrder: (order: JuicywayPendingOrder) => void;

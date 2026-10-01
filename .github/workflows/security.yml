@@ -185,7 +185,8 @@ jobs:
       # the scan container has no jq and no PyYAML): the guard must sit in a
       # real if: condition, persist-credentials/ref:/path: must be mapping
       # keys, so run: echo strings cannot spoof them; folded ref scalars are
-      # joined and unnamed steps delimit spans.
+      # joined and unnamed steps delimit spans. The resolver step must select
+      # the trusted checkout with no head-copy fallback.
       - name: Drop audited checkout finding from SARIF
         if: always()
         run: |
@@ -335,6 +336,23 @@ jobs:
                   drift.append("trusted-scripts-default-branch")
               if any(is_pr_ref(line) for line in span):
                   drift.append("trusted-scripts-pr-ref")
+          resolve = [i for i, line in enumerate(workflow_lines)
+                     if re.match(r"^- name:\s*Resolve script directory\s*$",
+                                 line.strip())]
+          if not resolve:
+              drift.append("script-resolution-step-missing")
+          else:
+              start = resolve[0]
+              span = workflow_lines[start:step_end(workflow_lines, start)]
+              # The exemption is only valid if executed scripts resolve to
+              # the trusted checkout: the step must reference the trusted
+              # path and must not resolve the head copy as a fallback.
+              if not any("trusted-scripts/.github/scripts/muse-review" in line
+                         for line in span):
+                  drift.append("script-resolution-trusted-path")
+              if any("${GITHUB_WORKSPACE}/.github/scripts/muse-review" in line
+                     for line in span):
+                  drift.append("script-resolution-head-fallback")
           if drift:
               print(f"::error::muse-code-review.yml hardening drifted "
                     f"({', '.join(drift)}); keeping SARIF unfiltered.")

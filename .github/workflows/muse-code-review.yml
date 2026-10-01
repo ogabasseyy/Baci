@@ -173,11 +173,14 @@ jobs:
           if [[ -f "${GITHUB_WORKSPACE}/trusted-scripts/.github/scripts/muse-review/lib.sh" ]]; then
             echo "dir=${GITHUB_WORKSPACE}/trusted-scripts/.github/scripts/muse-review" >> "${GITHUB_OUTPUT}"
           else
-            # Default branch predates the scripts (first-merge bootstrap
-            # only): fall back to the head copy. Afterwards the default
-            # branch always provides them.
-            echo "dir=${GITHUB_WORKSPACE}/.github/scripts/muse-review" >> "${GITHUB_OUTPUT}"
-            echo "::warning::Default branch lacks review scripts; running head copy (first-merge bootstrap)."
+            # No fallback to the head copy: executing PR-controlled scripts
+            # with tokens present would defeat the trusted-scripts design.
+            # The default branch has carried these scripts since launch, so
+            # a miss means breakage, never a bootstrap case. Fail closed.
+            # (The Security workflow's SARIF filter asserts this property;
+            # keep the two in lockstep.)
+            echo "::error::Trusted review scripts missing from default branch; refusing to run head copy."
+            exit 1
           fi
 
       - name: Collect PR diff and build prompt

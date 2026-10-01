@@ -173,27 +173,49 @@ jobs:
 
       # Semgrep honors nosemgrep for its exit code but still emits suppressed
       # findings into --sarif output with suppressions:[{kind:inSource}], and
-      # GitHub code scanning ignores that flag — audited findings stay open as
-      # phantom alerts (e.g. the reviewed pull_request_target checkout in
-      # muse-code-review.yml). Drop suppressed results before upload so the
-      # Security tab matches the in-source audit record. Uses python3 (the
-      # scan container has no jq); the nosemgrep comments remain the audit
-      # trail — nothing is hidden, only the broken transport is repaired.
-      - name: Drop suppressed findings from SARIF
+      # GitHub code scanning ignores that flag — the finding stays open as a
+      # phantom alert. Repair the transport for exactly one audited finding:
+      # the reviewed pull_request_target checkout in muse-code-review.yml
+      # (read-only agent, no PR code execution; see the nosemgrep comment
+      # there). Anything else suppressed, anywhere else, keeps uploading, so
+      # a future nosemgrep can never silently hide a new finding. Uses
+      # python3 (the scan container has no jq).
+      - name: Drop audited checkout finding from SARIF
         if: always()
         run: |
           # Scans that found no targets write no SARIF; nothing to filter then.
           [ -s semgrep.sarif ] || exit 0
           python3 - <<'EOF'
           import json
-          with open('semgrep.sarif') as fh:
+          AUDITED_RULE_ID = (
+              "yaml.github-actions.security.pull-request-target-code-checkout"
+              ".pull-request-target-code-checkout"
+          )
+          AUDITED_PATH_SUFFIX = ".github/workflows/muse-code-review.yml"
+
+          def is_audited_checkout(result):
+              if not result.get("suppressions"):
+                  return False
+              if result.get("ruleId") != AUDITED_RULE_ID:
+                  return False
+              locations = result.get("locations", [])
+              if not locations:
+                  return False
+              return all(
+                  (loc.get("physicalLocation", {})
+                      .get("artifactLocation", {})
+                      .get("uri", "") or "").endswith(AUDITED_PATH_SUFFIX)
+                  for loc in locations
+              )
+
+          with open("semgrep.sarif") as fh:
               sarif = json.load(fh)
-          for run in sarif.get('runs', []):
-              run['results'] = [
-                  r for r in run.get('results', [])
-                  if not r.get('suppressions')
+          for run in sarif.get("runs", []):
+              run["results"] = [
+                  r for r in run.get("results", [])
+                  if not is_audited_checkout(r)
               ]
-          with open('semgrep.sarif', 'w') as fh:
+          with open("semgrep.sarif", "w") as fh:
               json.dump(sarif, fh)
           EOF
 

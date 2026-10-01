@@ -272,6 +272,34 @@ describe('GET /api/cron/order-notifications', () => {
     );
   });
 
+  it('leaves soft-corrupt rows for lease expiry when delivery identity survives', async () => {
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: [
+        {
+          attempt_count: 'x',
+          claim_owner: 123,
+          event_type: 'order_shipped',
+          id: 'outbox-soft-corrupt',
+          max_attempts: 5,
+          merchant_id: 'merchant-1',
+          order_id: 'order-1',
+        },
+      ],
+      error: null,
+    });
+
+    const response = await GET(cronRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      claimed: 1,
+      skipped: 0,
+      unparseable: 1,
+    });
+    expect(mockSupabase.from).not.toHaveBeenCalled();
+  });
+
   it('never dead-letters exhausted rows with a valid future event type', async () => {
     mockSupabase.rpc.mockResolvedValueOnce({
       data: [

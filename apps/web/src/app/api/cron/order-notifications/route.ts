@@ -14,22 +14,25 @@ import {
 
 export const maxDuration = 60;
 
-// Dead-letters structurally corrupt claimed rows on first observation
-// instead of looping on the lease forever. Only rows with a valid-but-unknown
-// event type keep looping: they belong to a newer producer and a worker that
-// understands them may still deploy. Every other field the row schema
-// requires (identity, lease owner, attempt accounting) is permanently
-// required — metadata already accepts unknown shapes — so a row that fails
-// parsing with a known (or missing) event type can never be delivered by any
-// worker version. The known set is read off the worker schema so the two
-// cannot drift. There is intentionally no attempt threshold: the stale
-// dispatch terminalizer refunds the attempt for leases abandoned before
-// dispatch, so a corrupt row's counter oscillates and any threshold is
-// unreachable; corruption here is persistent by construction (table
-// constraints plus atomic JSON claim payloads), and manual rows re-arm on
-// the next order touch if the data is ever repaired.
+// Dead-letters provably unrecoverable claimed rows on first observation
+// instead of looping on the lease forever: a row with no usable event type,
+// merchant, or order can never be delivered by any worker version (nothing
+// to dispatch, no tenant scope, no order to fetch). Rows failing only on
+// softer fields (lease owner echo, attempt accounting) keep looping on the
+// lease — a future version could default those — as do rows with a
+// valid-but-unknown event type, which belong to a newer producer. The known
+// set is read off the worker schema so the two cannot drift. There is
+// intentionally no attempt threshold: the stale dispatch terminalizer
+// refunds the attempt for leases abandoned before dispatch, so a corrupt
+// row's counter oscillates and any threshold is unreachable; corruption here
+// is persistent by construction (table constraints plus atomic JSON claim
+// payloads), and manual rows re-arm on the next order touch if the data is
+// ever repaired.
 const knownOutboxEventTypes =
   claimedOrderNotificationOutboxRowSchema.shape.event_type;
+function hasUsableIdentity(value: unknown): boolean {
+  return typeof value === 'string' && value.length > 0;
+}
 async function deadLetterCorruptOutboxRow(
   supabase: ReturnType<typeof createServiceClient>,
   workerId: string,
@@ -37,11 +40,16 @@ async function deadLetterCorruptOutboxRow(
 ): Promise<boolean> {
   if (typeof row !== 'object' || row === null) return false;
   const raw = row as Record<string, unknown>;
-  if (typeof raw.id !== 'string' || raw.id.length === 0) return false;
+  if (!hasUsableIdentity(raw.id)) return false;
   if (
-    typeof raw.event_type === 'string' &&
-    raw.event_type.length > 0 &&
+    hasUsableIdentity(raw.event_type) &&
     !knownOutboxEventTypes.safeParse(raw.event_type).success
+  )
+    return false;
+  if (
+    hasUsableIdentity(raw.event_type) &&
+    hasUsableIdentity(raw.merchant_id) &&
+    hasUsableIdentity(raw.order_id)
   )
     return false;
   try {

@@ -56,6 +56,19 @@ describe('verify gigl fallback token', () => {
     });
   }
 
+  for (const line of [
+    'export GIGL_ENABLED=off',
+    '  GIGL_ENABLED=off',
+    'GIGL_ENABLED=off # comment',
+    'GIGL_ENABLED = off',
+  ]) {
+    it(`skips injection for dotenv form ${JSON.stringify(line)}`, () => {
+      const { stdout } = runWithDotenv(`${line}\n`);
+
+      assert.match(stdout, /skipping fallback token injection/);
+    });
+  }
+
   it('treats an unset flag as enabled and fails closed on a missing token', () => {
     runExpectingInjectorRefusal('GIGL_ENABLED=\n');
     runExpectingInjectorRefusal('OTHER_KEY=1\n');

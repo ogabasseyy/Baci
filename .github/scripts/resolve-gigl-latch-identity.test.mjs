@@ -98,4 +98,53 @@ describe('GIGL latch identity resolver', () => {
     });
     assert.equal(fingerprint, fingerprintOf('proc-token'));
   });
+
+  // dotenv subset parity with the capability smoke (dotenv 17.4.2):
+  // export prefix, surrounding whitespace, trailing comments, and
+  // last-assignment-wins must resolve exactly as dotenv parses them,
+  // or the latch identity disagrees with the smoke it recorded.
+  for (const line of [
+    'export GIGL_ENABLED=off',
+    '  GIGL_ENABLED=off',
+    'GIGL_ENABLED=off # comment',
+    'GIGL_ENABLED = off',
+    'export  GIGL_ENABLED="off" # rotated',
+  ]) {
+    it(`reports disabled scope for dotenv form ${JSON.stringify(line)}`, () => {
+      const { scope } = resolve({ envFile: `${line}\n` });
+      assert.equal(scope, 'disabled');
+    });
+  }
+
+  it('lets the last assignment win, like dotenv', () => {
+    assert.equal(
+      resolve({ envFile: 'GIGL_ENABLED=on\nGIGL_ENABLED=off\n' }).scope,
+      'disabled'
+    );
+    assert.equal(
+      resolve({ envFile: 'GIGL_ENABLED=off\nGIGL_ENABLED=on\n' }).scope,
+      'enabled'
+    );
+  });
+
+  it('ignores lookalike keys and comment lines', () => {
+    assert.equal(
+      resolve({ envFile: '# GIGL_ENABLED=off\nGIGL_ENABLED_FOO=off\n' }).scope,
+      'enabled'
+    );
+  });
+
+  it('strips trailing comments from file token values, like dotenv', () => {
+    const { fingerprint } = resolve({
+      envFile: 'GIGL_TRACKING_WORKER_TOKEN=aaa.bbb.ccc # rotated\n',
+    });
+    assert.equal(fingerprint, fingerprintOf('aaa.bbb.ccc'));
+  });
+
+  it('keeps hashes inside quoted token values, like dotenv', () => {
+    const { fingerprint } = resolve({
+      envFile: 'GIGL_TRACKING_WORKER_TOKEN="aaa#bbb"\n',
+    });
+    assert.equal(fingerprint, fingerprintOf('aaa#bbb'));
+  });
 });

@@ -8,10 +8,12 @@
 #   resolve-gigl-latch-identity.sh <remote-dir>
 #
 # dotenv parity with the TypeScript smoke: a SET process variable wins over
-# the <remote-dir>/.env file value (even when empty); the file value loses
-# one layer of surrounding quotes. Scope matching is trim + lowercase +
-# 0/false/off membership. The runner checkout never contains a CWD .env, so
-# dotenv's third tier cannot contribute here.
+# the <remote-dir>/.env file value (even when empty); the file parse
+# mirrors dotenv (leading whitespace, `export` prefix, spaces around `=`,
+# last assignment wins, matched-quote strip, trailing-`#`-comment strip).
+# Scope matching is trim + lowercase + 0/false/off membership. The runner
+# checkout never contains a CWD .env, so dotenv's third tier cannot
+# contribute here.
 set -euo pipefail
 
 remote_dir="${1:?remote dir is required}"
@@ -20,19 +22,50 @@ env_file="$remote_dir/.env"
 file_value() {
   local key="$1"
   [ -f "$env_file" ] || return 0
-  local raw
-  raw="$(awk -v key="$key" '
-    index($0, key "=") == 1 {
-      sub(key "=", "")
-      print
-      exit
+  # dotenv subset (verified against dotenv 17.4.2, which the capability
+  # smoke loads): optional leading whitespace, optional `export` prefix,
+  # spaces around `=`, last assignment wins, one layer of matched
+  # surrounding quotes stripped, otherwise a trailing `#` comment
+  # stripped. Anything else (multiline values, escapes) is out of
+  # subset and parses literally — the same file feeds dotenv, so a
+  # mismatch there fails the smoke before any latch is written.
+  awk -v key="$key" -v dq='"' -v sq="'" '
+    {
+      line = $0
+      sub(/^[ \t]+/, "", line)
+      sub(/^export[ \t]+/, "", line)
+      if (substr(line, 1, length(key)) != key) next
+      rest = substr(line, length(key) + 1)
+      sub(/^[ \t]+/, "", rest)
+      if (substr(rest, 1, 1) != "=") next
+      value = substr(rest, 2)
+      # Strip a trailing `#` comment, honoring single/double quotes the
+      # way dotenv does (a `#` inside quotes is data, not a comment).
+      uncommented = ""
+      quote = ""
+      for (i = 1; i <= length(value); i++) {
+        char = substr(value, i, 1)
+        if (quote == "") {
+          if (char == "#") break
+          if (char == dq || char == sq) quote = char
+        } else if (char == quote) {
+          quote = ""
+        }
+        uncommented = uncommented char
+      }
+      value = uncommented
+      sub(/^[ \t]+/, "", value)
+      sub(/[ \t\r]+$/, "", value)
+      first = substr(value, 1, 1)
+      last = substr(value, length(value), 1)
+      if (length(value) >= 2 && (first == dq || first == sq) && (last == dq || last == sq)) {
+        value = substr(value, 2, length(value) - 2)
+      }
+      found = value
+      have_value = 1
     }
-  ' "$env_file" 2>/dev/null || true)"
-  raw="${raw%\"}"
-  raw="${raw#\"}"
-  raw="${raw%\'}"
-  raw="${raw#\'}"
-  printf '%s' "$raw"
+    END { if (have_value) print found }
+  ' "$env_file" 2>/dev/null || true
 }
 
 effective() {

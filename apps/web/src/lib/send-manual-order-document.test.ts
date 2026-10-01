@@ -330,6 +330,17 @@ describe('send manual order document', () => {
     );
   });
 
+  it('keeps the private merchant email out of customer-visible copy', async () => {
+    const db = database({}, { merchantOverride: { support_email: null } });
+    await sendManualOrderDocument({ supabase: db.client, row });
+    const message = sendEmail.mock.calls[0][0];
+    expect(message.textContent).toContain('the store team');
+    expect(message.htmlContent).toContain('the store team');
+    expect(message.textContent).not.toContain('hello@ogabassey.com');
+    expect(message.htmlContent).not.toContain('hello@ogabassey.com');
+    expect(message.replyTo).toBe('hello@ogabassey.com');
+  });
+
   it('suppresses naira bank details on foreign-currency invoices', async () => {
     const bankedMerchant = {
       bank_code: '044',

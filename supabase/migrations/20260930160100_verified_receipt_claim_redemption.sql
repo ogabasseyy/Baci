@@ -31,7 +31,13 @@ BEGIN
   WHERE c.id = v_claim.customer_id AND c.merchant_id = v_claim.merchant_id
     AND c.deleted_at IS NULL FOR UPDATE;
   IF NOT FOUND THEN RETURN jsonb_build_object('status', 'customer_link_failed'); END IF;
-  IF lower(btrim(v_customer.email)) IS DISTINCT FROM v_email THEN
+  -- Manual documents arrive as email attachments, so the claim link is panel
+  -- convenience: the verified sign-in must match the recipient the document
+  -- was sent to, but the customers row (which staff contact corrections
+  -- legitimately leave stale) need not agree. Import claims stay strict
+  -- because the link is the only access path.
+  IF v_claim.manual_notification_id IS NULL
+    AND lower(btrim(v_customer.email)) IS DISTINCT FROM v_email THEN
     RETURN jsonb_build_object('status', 'email_mismatch');
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.receipt_claim_orders WHERE receipt_claim_id = v_claim.id)

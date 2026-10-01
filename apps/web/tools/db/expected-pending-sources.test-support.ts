@@ -252,12 +252,12 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260930160000_manual_order_document_notifications.sql',
-    sha256: 'da3d62454a84ad81bfab123c43611d45e6ad874521cf724d8481996ec4fa041b',
+    sha256: '18ae7095739a3750ccce02908da97a93e1052c0ddb9543356c5ae6b839f11a59',
   },
   {
     repositoryPath:
       'supabase/migrations/20260930160100_verified_receipt_claim_redemption.sql',
-    sha256: '51423453848322fe84d55a24cb479d34e70950ec5675437d7b315930bf7f00eb',
+    sha256: 'aa66be58cfc32c2aacbd785c20885b83029d73533127621507fba3618b6c2afa',
   },
   {
     repositoryPath:

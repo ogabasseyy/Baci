@@ -178,7 +178,10 @@ export async function sendManualOrderDocument({
         `${item.quantity > 1 ? `${item.quantity} x ` : ''}${item.name}${item.variant_name ? ` (${item.variant_name})` : ''}`
     ),
     brandColor: merchant.brand_colors?.primary,
-    supportEmail: merchant.support_email || merchant.email,
+    // Visible support copy shows the public support address only: merchant.email
+    // is the private login address and never renders on customer documents.
+    // (replyTo below keeps the import-sender fallback so replies route.)
+    supportEmail: merchant.support_email || 'the store team',
     appLinks:
       merchant.slug === 'ogabassey'
         ? {

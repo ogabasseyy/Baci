@@ -110,4 +110,16 @@ describe('GIGL tracking worker capability migration', () => {
     );
     expect(requestScopeMigration).toMatch(/NOTIFY pgrst, 'reload config'/);
   });
+
+  it('lets every API role execute the pre-request hook', () => {
+    // PostgREST invokes db_pre_request after User Impersonation, so the
+    // hook runs as the request JWT role; revoking EXECUTE from normal
+    // roles would fail every Data API request before the early return.
+    expect(requestScopeMigration).toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.enforce_gigl_tracking_worker_request_scope\(\)\s+TO PUBLIC/
+    );
+    expect(requestScopeMigration).not.toMatch(
+      /REVOKE ALL ON FUNCTION public\.enforce_gigl_tracking_worker_request_scope/
+    );
+  });
 });

@@ -32,10 +32,14 @@ $$;
 
 ALTER FUNCTION public.enforce_gigl_tracking_worker_request_scope()
   OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.enforce_gigl_tracking_worker_request_scope()
-  FROM PUBLIC, anon, authenticated, service_role;
+-- PostgREST invokes db_pre_request AFTER User Impersonation, so the hook
+-- executes as the request's JWT role and every current and future API role
+-- must hold EXECUTE; the auth.role() early return inside is the guard, not
+-- the privilege. Never revoke EXECUTE here: revoking from normal roles
+-- would fail every Data API request with permission denied before the
+-- early return could run.
 GRANT EXECUTE ON FUNCTION public.enforce_gigl_tracking_worker_request_scope()
-  TO authenticator, gigl_tracking_worker;
+  TO PUBLIC;
 
 DO $$
 DECLARE

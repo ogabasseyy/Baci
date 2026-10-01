@@ -136,9 +136,12 @@ describe('deploy crontab', () => {
   });
 
   it('prints the required full-checkout path in the environment reminder', () => {
-    const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
+    const envReminder = readFileSync(
+      join(workerRoot, 'lib', 'print-worker-env-reminder.sh'),
+      'utf8'
+    );
 
-    assert.match(deployScript, /BACI_REPO_DIR=\/opt\/baci\/app/);
+    assert.match(envReminder, /BACI_REPO_DIR=\/opt\/baci\/app/);
   });
 
   it('schedules the iOS live-build sync daily backstop through run-web-cron', () => {
@@ -173,6 +176,10 @@ describe('deploy crontab', () => {
 
   it('refreshes the GIGL service-centre directory outside checkout', () => {
     const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
+    const envReminder = readFileSync(
+      join(workerRoot, 'lib', 'print-worker-env-reminder.sh'),
+      'utf8'
+    );
 
     assert.match(
       deployScript,
@@ -182,9 +189,9 @@ describe('deploy crontab', () => {
       deployScript,
       /\$NODE_BIN \$REMOTE_DIR\/jobs\/sync-gigl-service-centres\.mjs/
     );
-    assert.match(deployScript, /GIGL_BASE_URL=\.\.\./);
-    assert.match(deployScript, /GIGL_EMAIL=\.\.\./);
-    assert.match(deployScript, /GIGL_PASSWORD=\.\.\./);
+    assert.match(envReminder, /GIGL_BASE_URL=\.\.\./);
+    assert.match(envReminder, /GIGL_EMAIL=\.\.\./);
+    assert.match(envReminder, /GIGL_PASSWORD=\.\.\./);
   });
 
   it('serializes the AI storefront worker behind the shared workload lock', () => {

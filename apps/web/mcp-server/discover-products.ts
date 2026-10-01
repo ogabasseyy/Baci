@@ -44,7 +44,10 @@ export async function discoverMcpProducts({
     return {
       selectedProducts: [],
       sanitizedQuery: query,
-      priceScanComplete: true,
+      // A rejected contract is not a complete scan: direct consumers keying
+      // only on this flag must not misread the rejection. server.ts still
+      // branches on invalidIntentMessage first, so the MCP surface is unchanged.
+      priceScanComplete: false,
       invalidIntentMessage: 'Search intent is required. Specify the product type, brand or model, and any product specifications to search.',
     };
   }
@@ -56,7 +59,7 @@ export async function discoverMcpProducts({
     return {
       selectedProducts: [],
       sanitizedQuery: query,
-      priceScanComplete: true,
+      priceScanComplete: false,
       invalidIntentMessage: `Invalid search intent: ${details || 'intent rejected by schema'}`,
     };
   }

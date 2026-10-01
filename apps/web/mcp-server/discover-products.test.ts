@@ -24,6 +24,7 @@ describe('discoverMcpProducts structured routing', () => {
     expect(result.selectedProducts).toEqual([]);
     expect(result.invalidIntentMessage).toMatch(/intent is required/i);
     expect(result.sanitizedQuery).toBe('affordable phone');
+    expect(result.priceScanComplete).toBe(false);
     expect(discoverStructuredProducts).not.toHaveBeenCalled();
   });
 
@@ -40,6 +41,7 @@ describe('discoverMcpProducts structured routing', () => {
 
     expect(result.selectedProducts).toEqual([]);
     expect(result.invalidIntentMessage).toMatch(/Invalid search intent/);
+    expect(result.priceScanComplete).toBe(false);
     expect(discoverStructuredProducts).not.toHaveBeenCalled();
   });
 

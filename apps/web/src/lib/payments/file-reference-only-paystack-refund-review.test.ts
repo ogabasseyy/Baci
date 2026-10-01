@@ -1,19 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fileReferenceOnlyPaystackRefundReview } from './file-reference-only-paystack-refund-review';
-import {
-  listQuery,
-  multiLegPayments,
-  reviewInput,
-} from './file-reference-only-paystack-refund-review.test-support';
+import { reviewInput } from './file-reference-only-paystack-refund-review.test-support';
 
 describe('fileReferenceOnlyPaystackRefundReview', () => {
   it('files a durable review when no completed linked row exists', async () => {
     const insert = vi.fn().mockResolvedValue({ error: null });
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(listQuery([]))
-      .mockReturnValueOnce(listQuery(multiLegPayments))
-      .mockReturnValueOnce({ insert });
+    const from = vi.fn().mockReturnValue({ insert });
     const rpc = vi.fn();
 
     await fileReferenceOnlyPaystackRefundReview(
@@ -51,210 +43,30 @@ describe('fileReferenceOnlyPaystackRefundReview', () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it('stays silent when a verified linked row already reconciled the payment', async () => {
-    const insert = vi.fn();
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(
-        listQuery([
-          {
-            amount: 100,
-            currency: 'NGN',
-            metadata: { provider_refund_status: 'processed' },
-          },
-        ])
-      )
-      .mockReturnValueOnce({ insert });
-    const rpc = vi.fn();
-
-    await fileReferenceOnlyPaystackRefundReview(
-      { from, rpc } as never,
-      reviewInput
-    );
-
-    expect(insert).not.toHaveBeenCalled();
-    expect(rpc).not.toHaveBeenCalled();
-  });
-
-  it('files when verified linked rows only partially cover the payment', async () => {
+  it('files even when settled rows already cover the payment', async () => {
     const insert = vi.fn().mockResolvedValue({ error: null });
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(
-        listQuery([
-          {
-            amount: 40,
-            currency: 'NGN',
-            metadata: { provider_refund_status: 'processed' },
-          },
-        ])
-      )
-      .mockReturnValueOnce(listQuery(multiLegPayments))
-      .mockReturnValueOnce({ insert });
+    const from = vi.fn().mockReturnValue({ insert });
 
     await fileReferenceOnlyPaystackRefundReview(
       { from, rpc: vi.fn() } as never,
       reviewInput
     );
 
-    // The 60 NGN balance may be the provider refund this ID-less event
-    // evidences; suppressing would drop the only durable trace.
+    // The event carries no refund ID, so it can never be tied to a
+    // recorded row: suppressing on coverage would hide a second
+    // manual refund and its over-refund as a presumed duplicate.
+    // Redeliveries merge idempotently under the leg key instead.
     expect(insert).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_type: 'order_cancellation_refund_requires_review',
+        order_id: 'order-1',
       })
     );
-  });
-
-  it('files when the linked row is completed but not provider-verified', async () => {
-    const insert = vi.fn().mockResolvedValue({ error: null });
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(listQuery([{ currency: 'NGN', metadata: {} }]))
-      .mockReturnValueOnce(listQuery(multiLegPayments))
-      .mockReturnValueOnce({ insert });
-
-    await fileReferenceOnlyPaystackRefundReview(
-      { from, rpc: vi.fn() } as never,
-      reviewInput
-    );
-
-    // Verification may yet reject the local row; the ID-less event must
-    // leave durable evidence instead of being discarded.
-    expect(insert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        issue_type: 'order_cancellation_refund_requires_review',
-      })
-    );
-  });
-
-  it('files when the linked row currency does not match the payment', async () => {
-    const insert = vi.fn().mockResolvedValue({ error: null });
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(
-        listQuery([
-          {
-            currency: 'USD',
-            metadata: { provider_refund_status: 'processed' },
-          },
-        ])
-      )
-      .mockReturnValueOnce(listQuery(multiLegPayments))
-      .mockReturnValueOnce({ insert });
-
-    await fileReferenceOnlyPaystackRefundReview(
-      { from, rpc: vi.fn() } as never,
-      reviewInput
-    );
-
-    expect(insert).toHaveBeenCalled();
-  });
-
-  it('stays silent when a sole legacy refund already covered the payment', async () => {
-    const insert = vi.fn();
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(listQuery([]))
-      .mockReturnValueOnce(
-        listQuery([{ amount: 100, currency: 'NGN', gateway: 'paystack' }])
-      )
-      .mockReturnValueOnce(
-        listQuery([
-          {
-            amount: 100,
-            currency: 'NGN',
-            metadata: { provider_refund_status: 'processed' },
-          },
-        ])
-      )
-      .mockReturnValueOnce({ insert });
-    const rpc = vi.fn();
-
-    await fileReferenceOnlyPaystackRefundReview(
-      { from, rpc } as never,
-      reviewInput
-    );
-
-    expect(insert).not.toHaveBeenCalled();
-    expect(rpc).not.toHaveBeenCalled();
-  });
-
-  it('files when legacy refunds only partially cover the sole payment', async () => {
-    const insert = vi.fn().mockResolvedValue({ error: null });
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(listQuery([]))
-      .mockReturnValueOnce(
-        listQuery([{ amount: 100, currency: 'NGN', gateway: 'paystack' }])
-      )
-      .mockReturnValueOnce(
-        listQuery([
-          {
-            amount: 40,
-            currency: 'NGN',
-            metadata: { provider_refund_status: 'processed' },
-          },
-        ])
-      )
-      .mockReturnValueOnce({ insert });
-
-    await fileReferenceOnlyPaystackRefundReview(
-      { from, rpc: vi.fn() } as never,
-      reviewInput
-    );
-
-    expect(insert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        issue_type: 'order_cancellation_refund_requires_review',
-      })
-    );
-  });
-
-  it('files when sole legacy refunds are not provider-verified', async () => {
-    const insert = vi.fn().mockResolvedValue({ error: null });
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(listQuery([]))
-      .mockReturnValueOnce(
-        listQuery([{ amount: 100, currency: 'NGN', gateway: 'paystack' }])
-      )
-      .mockReturnValueOnce(
-        listQuery([{ amount: 100, currency: 'NGN', metadata: {} }])
-      )
-      .mockReturnValueOnce({ insert });
-
-    await fileReferenceOnlyPaystackRefundReview(
-      { from, rpc: vi.fn() } as never,
-      reviewInput
-    );
-
-    expect(insert).toHaveBeenCalled();
-  });
-
-  it('files when the sole external payment is not a Paystack leg', async () => {
-    const insert = vi.fn().mockResolvedValue({ error: null });
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(listQuery([]))
-      .mockReturnValueOnce(listQuery([{ amount: 100, gateway: 'korapay' }]))
-      .mockReturnValueOnce({ insert });
-
-    await fileReferenceOnlyPaystackRefundReview(
-      { from, rpc: vi.fn() } as never,
-      reviewInput
-    );
-
-    expect(insert).toHaveBeenCalled();
   });
 
   it('merges into the open review on redelivery instead of duplicating', async () => {
     const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(listQuery([]))
-      .mockReturnValueOnce(listQuery(multiLegPayments))
-      .mockReturnValueOnce({ insert });
+    const from = vi.fn().mockReturnValue({ insert });
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
 
     await fileReferenceOnlyPaystackRefundReview(
@@ -276,11 +88,7 @@ describe('fileReferenceOnlyPaystackRefundReview', () => {
 
   it('fails the webhook when the review cannot be persisted', async () => {
     const insert = vi.fn().mockResolvedValue({ error: { code: 'ECONNRESET' } });
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(listQuery([]))
-      .mockReturnValueOnce(listQuery(multiLegPayments))
-      .mockReturnValueOnce({ insert });
+    const from = vi.fn().mockReturnValue({ insert });
 
     await expect(
       fileReferenceOnlyPaystackRefundReview(
@@ -288,18 +96,5 @@ describe('fileReferenceOnlyPaystackRefundReview', () => {
         reviewInput
       )
     ).rejects.toThrow('reference_only_refund_review_persistence_failed');
-  });
-
-  it('fails the webhook when the settled-row lookup fails', async () => {
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(listQuery(null, new Error('db down')));
-
-    await expect(
-      fileReferenceOnlyPaystackRefundReview(
-        { from, rpc: vi.fn() } as never,
-        reviewInput
-      )
-    ).rejects.toThrow('refund_event_lookup_failed');
   });
 });

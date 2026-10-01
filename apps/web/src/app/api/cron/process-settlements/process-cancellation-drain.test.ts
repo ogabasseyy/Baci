@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   drainPaystackRefundNotifications: vi.fn(),
   reconcileCompletedPaystackCancellationRefunds: vi.fn(),
   reconcilePendingPaystackCancellationRefunds: vi.fn(),
+  sweepPaystackRefundRecoveryWatches: vi.fn(),
   loggerError: vi.fn(),
   loggerWarn: vi.fn(),
   sendEmail: vi.fn(),
@@ -42,6 +43,9 @@ vi.mock(
       mocks.reconcileCompletedPaystackCancellationRefunds,
   })
 );
+vi.mock('@/lib/payments/sweep-paystack-refund-recovery-watches', () => ({
+  sweepPaystackRefundRecoveryWatches: mocks.sweepPaystackRefundRecoveryWatches,
+}));
 
 import { processCancellationDrain } from './process-cancellation-drain';
 
@@ -65,6 +69,12 @@ describe('processCancellationDrain', () => {
     mocks.reconcileCompletedPaystackCancellationRefunds.mockResolvedValue({
       checked: 0,
       failed: 0,
+    });
+    mocks.sweepPaystackRefundRecoveryWatches.mockResolvedValue({
+      checked: 0,
+      failed: 0,
+      redriven: 0,
+      retired: 0,
     });
     mocks.drainPaystackRefundNotifications.mockResolvedValue({
       claimed: 0,
@@ -110,6 +120,11 @@ describe('processCancellationDrain', () => {
     expect(
       mocks.reconcileCompletedPaystackCancellationRefunds
     ).toHaveBeenCalledWith(supabase, 25, 1_052_000);
+    expect(mocks.sweepPaystackRefundRecoveryWatches).toHaveBeenCalledWith(
+      supabase,
+      25,
+      1_052_000
+    );
     expect(mocks.drainPaystackRefundNotifications).toHaveBeenCalledWith(
       supabase,
       mocks.sendEmail,
@@ -230,6 +245,7 @@ describe('processCancellationDrain', () => {
   it.each([
     ['pending refunds', 'reconcilePendingPaystackCancellationRefunds'],
     ['legacy refunds', 'reconcileCompletedPaystackCancellationRefunds'],
+    ['refund watch sweep', 'sweepPaystackRefundRecoveryWatches'],
     ['refund notifications', 'drainPaystackRefundNotifications'],
   ] as const)('returns 503 when fulfilled %s report failures', async (_label, worker) => {
     mocks[worker].mockResolvedValueOnce({

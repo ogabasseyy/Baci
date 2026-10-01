@@ -46,6 +46,8 @@ function selectQuery(data: unknown, error: unknown = null) {
     maybeSingle: vi.fn().mockResolvedValue({ data, error }),
     order: vi.fn().mockReturnThis(),
     range: vi.fn().mockResolvedValue({ data, error }),
+    gt: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockResolvedValue({ data, error }),
     select: vi.fn().mockReturnThis(),
     // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are thenable.
     then: (resolve: (value: unknown) => void) => resolve({ data, error }),
@@ -103,7 +105,11 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
-    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc).toHaveBeenCalledTimes(3);
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_paystack_refund_recovery_watch_v1',
+      { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
+    );
     expect(rpc).toHaveBeenCalledWith(
       'file_paystack_refund_recovery_review_v1',
       expect.objectContaining({ p_order_id: 'order-1' })
@@ -136,15 +142,15 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
       cancelledOrder(`order-${index + 1}`)
     );
     const firstPage = selectQuery([]);
-    const firstRange = vi
+    const firstLimit = vi
       .fn()
       .mockResolvedValue({ data: payments.slice(0, 10), error: null });
-    firstPage.range = firstRange;
+    firstPage.limit = firstLimit;
     const secondPage = selectQuery([]);
-    const secondRange = vi
+    const secondLimit = vi
       .fn()
       .mockResolvedValue({ data: payments.slice(10), error: null });
-    secondPage.range = secondRange;
+    secondPage.limit = secondLimit;
     const from = vi
       .fn()
       .mockReturnValueOnce({ select: vi.fn(() => firstPage) })
@@ -157,10 +163,16 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
 
     // A corrupt reference shared past the response cap must still file
     // every order: truncating after the first page would drop the
-    // eleventh order's verified evidence after acknowledgement.
-    expect(firstRange).toHaveBeenCalledWith(0, 9);
-    expect(secondRange).toHaveBeenCalledWith(10, 19);
-    expect(rpc).toHaveBeenCalledTimes(11);
+    // eleventh order's verified evidence after acknowledgement. The
+    // id cursor keeps pages stable when a lower-id payment completes
+    // between reads; offsets would shift and omit a match.
+    expect(firstLimit).toHaveBeenCalledWith(10);
+    expect(secondPage.gt).toHaveBeenCalledWith('id', 'pay-10');
+    expect(rpc).toHaveBeenCalledTimes(12);
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_paystack_refund_recovery_watch_v1',
+      { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
+    );
     for (let index = 1; index <= 11; index++) {
       expect(rpc).toHaveBeenCalledWith(
         'file_paystack_refund_recovery_review_v1',
@@ -199,7 +211,11 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
-    expect(rpc).toHaveBeenCalledTimes(3);
+    expect(rpc).toHaveBeenCalledTimes(4);
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_paystack_refund_recovery_watch_v1',
+      { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
+    );
     expect(rpc).toHaveBeenNthCalledWith(
       3,
       'file_paystack_refund_recovery_review_v1',
@@ -310,10 +326,14 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
       recoverUnknownPaystackRefund(supabase, 202, 'PSK-1')
     ).rejects.toThrow('paystack_refund_evidence_invalid');
 
-    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledTimes(2);
     expect(rpc).toHaveBeenCalledWith(
       'file_paystack_refund_recovery_review_v1',
       expect.objectContaining({ p_order_id: 'order-1' })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_paystack_refund_recovery_watch_v1',
+      { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
     );
   });
 
@@ -355,7 +375,11 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
     // The cancellation queue drops the active order, so without the
     // non-cancellation filing the evidence would vanish with the last
     // provider retry while the order stays paid and fulfillable.
-    expect(rpc).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_paystack_refund_recovery_watch_v1',
+      { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
+    );
     expect(reviewInsert).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_type: 'provider_refund_outside_cancellation',
@@ -367,7 +391,7 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
     );
   });
 
-  it('throws when malformed evidence matches no local payment', async () => {
+  it('files a generic review when malformed evidence matches no local payment', async () => {
     mocks.fetchRefund.mockResolvedValue({
       data: {
         amount: 12.5,
@@ -379,14 +403,33 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
       success: true,
     });
     const rpc = reviewRpc();
-    const from = vi.fn().mockReturnValueOnce(selectQuery([]));
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(selectQuery([]))
+      .mockReturnValueOnce({ insert: reviewInsert });
     const supabase = { from, rpc } as unknown as SupabaseClient;
 
     await expect(
       recoverUnknownPaystackRefund(supabase, 202, 'PSK-1')
     ).rejects.toThrow('paystack_refund_evidence_unmatched');
 
-    expect(rpc).not.toHaveBeenCalled();
+    // Throwing with no durable trace would let the malformed evidence
+    // vanish with the last provider retry: the generic review keeps
+    // the wedge visible while redelivery still recovers glitches.
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'paystack_refund_evidence_invalid',
+        order_id: null,
+        paystack_ref: 'PSK-1',
+        reason: expect.stringContaining('unusable provider evidence'),
+      })
+    );
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_paystack_refund_recovery_watch_v1',
+      { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
+    );
   });
 
   it('files stalled matches on active orders into the non-cancellation queue', async () => {
@@ -459,7 +502,11 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
     // One review for the order, but both candidate legs retained: the
     // webhook is acknowledged, so a dropped leg would vanish from the
     // evidence ops uses to route the verified refund.
-    expect(rpc).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_paystack_refund_recovery_watch_v1',
+      { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
+    );
     expect(reviewInsert).toHaveBeenCalledTimes(1);
     expect(reviewInsert).toHaveBeenCalledWith(
       expect.objectContaining({

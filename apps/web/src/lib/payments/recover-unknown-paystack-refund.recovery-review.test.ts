@@ -52,6 +52,8 @@ function selectQuery(data: unknown, error: unknown = null) {
     maybeSingle: vi.fn().mockResolvedValue({ data, error }),
     order: vi.fn().mockReturnThis(),
     range: vi.fn().mockResolvedValue({ data, error }),
+    gt: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockResolvedValue({ data, error }),
     select: vi.fn().mockReturnThis(),
     // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are thenable.
     then: (resolve: (value: unknown) => void) => resolve({ data, error }),
@@ -94,7 +96,11 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
-    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc).toHaveBeenCalledTimes(3);
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_paystack_refund_recovery_watch_v1',
+      { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
+    );
     expect(rpc).toHaveBeenNthCalledWith(
       1,
       'file_paystack_refund_recovery_review_v1',
@@ -143,7 +149,11 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
 
     // The merge moved server-side: redelivery refiles the same evidence
     // payload and the RPC absorbs it into the open reviews.
-    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc).toHaveBeenCalledTimes(3);
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_paystack_refund_recovery_watch_v1',
+      { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
+    );
     expect(rpc).toHaveBeenCalledWith(
       'file_paystack_refund_recovery_review_v1',
       expect.objectContaining({
@@ -171,7 +181,11 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
-    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_paystack_refund_recovery_watch_v1',
+      { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
+    );
     expect(rpc).toHaveBeenCalledWith(
       'file_paystack_refund_recovery_review_v1',
       expect.objectContaining({
@@ -201,7 +215,11 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
-    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_paystack_refund_recovery_watch_v1',
+      { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
+    );
   });
 
   it('retains evidence when only a non-completed payment matches', async () => {
@@ -240,34 +258,50 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
   });
 
   it('acknowledges the event when no local payment matches at all', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
     const from = vi
       .fn()
       .mockReturnValueOnce(selectQuery([]))
-      .mockReturnValueOnce(selectQuery([]))
       .mockReturnValueOnce(selectQuery([]));
-    const supabase = { from } as unknown as SupabaseClient;
+    const supabase = { from, rpc } as unknown as SupabaseClient;
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
-    // Completed scan, stalled scan, then one confirming completed
-    // recheck: the handoff ends on the completed scan with the ack
-    // immediately after, so a payment completing during the stalled
-    // scan is caught and no query reopens a completion window behind
-    // the confirming scan. A second stalled scan here would let a
-    // concurrent charge complete unseen into an acknowledged refund.
-    expect(from).toHaveBeenCalledTimes(3);
+    // Completed scan, stalled scan, then the atomic watch-open
+    // recheck: the handoff ends with the watch open and the ack
+    // immediately after, so a payment completing later claims the
+    // watch on completion instead of slipping through unhandled. The
+    // watch stays open here — resolving it would drop the handoff.
+    expect(from).toHaveBeenCalledTimes(2);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_recovery_watch_v1',
+      expect.objectContaining({
+        p_paystack_ref: 'PSK-1',
+        p_provider_refund_id: 202,
+        p_evidence: expect.objectContaining({
+          amount_minor: 10000,
+          currency: 'NGN',
+          provider_payment_transaction_id: 555,
+          provider_refund_status: 'processed',
+        }),
+      })
+    );
   });
 
   it('records the payment when the recheck finds a concurrent completion', async () => {
     const auditInsert = vi.fn().mockResolvedValue({ error: null });
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [firstPayment], error: null })
+      .mockResolvedValue({ data: true, error: null });
     const from = vi
       .fn()
       .mockReturnValueOnce(selectQuery([]))
       .mockReturnValueOnce(selectQuery([]))
-      .mockReturnValueOnce(selectQuery([firstPayment]))
       .mockReturnValueOnce(selectQuery(order))
       .mockReturnValueOnce({ insert: auditInsert });
-    const supabase = { from } as unknown as SupabaseClient;
+    const supabase = { from, rpc } as unknown as SupabaseClient;
 
     // The payment was pending during the first scan and completed
     // before the stalled scan ran: without the recheck the verified
@@ -282,6 +316,12 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
       })
     );
     expect(mocks.reconcilePaystackCancellationRefund).toHaveBeenCalledTimes(1);
+    // The refund is durably recorded: the watch resolves so a later
+    // unrelated completion cannot claim it and file stale evidence.
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_paystack_refund_recovery_watch_v1',
+      { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
+    );
   });
 
   it('throws when the recovery review cannot be persisted', async () => {

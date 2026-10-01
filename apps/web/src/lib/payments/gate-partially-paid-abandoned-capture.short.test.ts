@@ -73,6 +73,10 @@ function shortClient({
         eq: vi.fn().mockReturnThis(),
         insert,
         is: vi.fn().mockReturnThis(),
+        // No open sibling: the conflict test's capture belongs to
+        // another order's slot with nothing to append to, so filing
+        // fails and the attempt holds for retry.
+        limit: vi.fn().mockResolvedValue({ data: [], error: null }),
         maybeSingle: confirmSingle,
         select: vi.fn().mockReturnThis(),
       };

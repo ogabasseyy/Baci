@@ -10,6 +10,7 @@ import { notificationDrainLimit } from '@/lib/payments/notification-drain-limit'
 import { reconcileCompletedPaystackCancellationRefunds } from '@/lib/payments/reconcile-completed-paystack-cancellation-refunds';
 import { reconcilePendingPaystackCancellationRefunds } from '@/lib/payments/reconcile-pending-paystack-cancellation-refunds';
 import { reconcileWorkerDeadlineMs } from '@/lib/payments/reconcile-worker-deadline';
+import { sweepPaystackRefundRecoveryWatches } from '@/lib/payments/sweep-paystack-refund-recovery-watches';
 import type { createServiceClient } from '@/lib/supabase/service';
 import type { sendEmail } from '@/lib/zeptomail';
 
@@ -17,9 +18,10 @@ type ServiceClient = ReturnType<typeof createServiceClient>;
 
 /**
  * Run the cancellation/refund worker batch: reconcile pending and completed
- * Paystack cancellation refunds first, then retry failed cancellation side
- * effects against the settled refund state within the remaining cron
- * budget, then drain refund notifications within what is left after that.
+ * Paystack cancellation refunds plus the refund-recovery watch sweep
+ * first, then retry failed cancellation side effects against the
+ * settled refund state within the remaining cron budget, then drain
+ * refund notifications within what is left after that.
  * The side-effect drain must observe
  * completed refunds: running it in parallel lets it read a refund as
  * nonterminal, then file a preflight review and record delivery_uncertain
@@ -38,14 +40,22 @@ export async function processCancellationDrain(
   // Bound the parallel reconcile phase so the serial drains behind it keep
   // a guaranteed share of the invocation instead of computing zero limits.
   const workerDeadlineMs = reconcileWorkerDeadlineMs(workersStartedAt);
-  const [refundResult, legacyRefundResult] = await Promise.allSettled([
-    reconcilePendingPaystackCancellationRefunds(supabase, 25, workerDeadlineMs),
-    reconcileCompletedPaystackCancellationRefunds(
-      supabase,
-      25,
-      workerDeadlineMs
-    ),
-  ]);
+  const [refundResult, legacyRefundResult, watchSweepResult] =
+    await Promise.allSettled([
+      reconcilePendingPaystackCancellationRefunds(
+        supabase,
+        25,
+        workerDeadlineMs
+      ),
+      reconcileCompletedPaystackCancellationRefunds(
+        supabase,
+        25,
+        workerDeadlineMs
+      ),
+      // Backstop for the refund-recovery watch handoff: re-drive
+      // watches completions outside the charge RPC leave behind.
+      sweepPaystackRefundRecoveryWatches(supabase, 25, workerDeadlineMs),
+    ]);
   // Budget the serial side-effect drain from the remaining invocation
   // time: an aborted step strands its row as claimed, which the next
   // drain converts to permanently non-retryable delivery_uncertain.
@@ -99,6 +109,8 @@ export async function processCancellationDrain(
     legacyRefundResult.status === 'fulfilled'
       ? legacyRefundResult.value.failed
       : 0;
+  const watchSweepFailures =
+    watchSweepResult.status === 'fulfilled' ? watchSweepResult.value.failed : 0;
   const notificationFailures =
     notificationResult[0].status === 'fulfilled'
       ? notificationResult[0].value.failed
@@ -111,10 +123,12 @@ export async function processCancellationDrain(
     cancellationResult.status === 'rejected' ||
     refundResult.status === 'rejected' ||
     legacyRefundResult.status === 'rejected' ||
+    watchSweepResult.status === 'rejected' ||
     notificationResult[0].status === 'rejected' ||
     cancellationFailures > 0 ||
     refundFailures > 0 ||
     legacyRefundFailures > 0 ||
+    watchSweepFailures > 0 ||
     notificationFailures > 0 ||
     notificationExhausted > 0
   ) {
@@ -125,6 +139,8 @@ export async function processCancellationDrain(
       refundFailed: refundResult.status === 'rejected' || refundFailures > 0,
       legacyRefundFailed:
         legacyRefundResult.status === 'rejected' || legacyRefundFailures > 0,
+      watchSweepFailed:
+        watchSweepResult.status === 'rejected' || watchSweepFailures > 0,
       notificationFailed:
         notificationResult[0].status === 'rejected' ||
         notificationFailures > 0 ||
@@ -141,6 +157,7 @@ export async function processCancellationDrain(
     cancellationSideEffectDrain: cancellationResult.value,
     paystackRefunds: refundResult.value,
     legacyPaystackRefunds: legacyRefundResult.value,
+    paystackRefundWatchSweep: watchSweepResult.value,
     paystackRefundNotifications: notificationResult[0].value,
   });
 }

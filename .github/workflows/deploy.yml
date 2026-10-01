@@ -87,11 +87,15 @@ jobs:
         # vps-workers/deploy.sh — so this step runs only when the changeset
         # can affect tracking. Otherwise every web-only commit after a worker
         # deploy would fail readiness and freeze migrations and releases.
+        # `tracking` only, never the broad `migrations` output: GIGL
+        # migrations already ride inside the tracking filter
+        # (supabase/migrations/*gigl*), so gating on every migration
+        # would freeze unrelated wallet/ads releases on worker drift.
         # Manual dispatches run it too: the changes job is skipped on
         # dispatch, so its outputs are unset and `!= 'false'` is true —
         # a dispatch can never land the cron removal with a stale worker.
         # Deploy procedure: run vps-workers/deploy.sh before dispatching.
-        if: needs.changes.outputs.tracking != 'false' || needs.changes.outputs.migrations != 'false'
+        if: needs.changes.outputs.tracking != 'false'
         env:
           BACI_EXPECTED_APP_SHA: ${{ github.sha }}
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
@@ -143,11 +147,14 @@ jobs:
     needs: [changes, db-migrations]
     # Run only when the changeset can affect tracking: an unconditional live
     # smoke would turn worker-secret drift into a full release freeze for
-    # unrelated web deploys. always() so a skipped changes job (manual
-    # dispatch) still runs the smoke — unset outputs fail closed — instead
-    # of landing the cron removal unverified. Deploy procedure: run
-    # vps-workers/deploy.sh before dispatching a tracking deploy.
-    if: always() && github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success' && (needs.changes.outputs.tracking != 'false' || needs.changes.outputs.migrations != 'false')
+    # unrelated web deploys — so the condition is `tracking` only. GIGL
+    # migrations are inside the tracking filter already; the broad
+    # `migrations` output must never gate this job. always() so a skipped
+    # changes job (manual dispatch) still runs the smoke — unset outputs
+    # fail closed — instead of landing the cron removal unverified. Deploy
+    # procedure: run vps-workers/deploy.sh before dispatching a tracking
+    # deploy.
+    if: always() && github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success' && needs.changes.outputs.tracking != 'false'
     runs-on: baci-deploy
     timeout-minutes: 10
     permissions:
@@ -167,14 +174,14 @@ jobs:
     # 'skipped' and 'failure', so a skipped migrations job (e.g. if its `if`
     # condition becomes false in a future change) cannot let a web deploy
     # land against an out-of-date schema. The GIGL capability smoke gates
-    # only tracking/migrations deploys: a broken VPS worker must block a
-    # release that removes the tracking cron, but worker-secret drift must
-    # not freeze unrelated web deploys. Manual dispatches are NOT exempt:
-    # the changes outputs are unset there, so the `== 'false'` pair is
+    # only tracking deploys: a broken VPS worker must block a release that
+    # removes the tracking cron, but worker-secret drift must not freeze
+    # unrelated web or migration deploys. Manual dispatches are NOT exempt:
+    # the changes outputs are unset there, so `tracking == 'false'` is
     # false and the smoke result is required — a dispatch can never land
     # the cron removal unverified. (The trailing dispatch term only keeps
     # the pre-existing "dispatch always deploys" scope behavior.)
-    if: always() && github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success' && (needs.gigl-worker-capability.result == 'success' || (needs.changes.outputs.tracking == 'false' && needs.changes.outputs.migrations == 'false')) && (needs.cwv-runner-contracts.result == 'success' || needs.cwv-runner-contracts.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.web == 'true' || needs.changes.outputs.migrations == 'true')
+    if: always() && github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success' && (needs.gigl-worker-capability.result == 'success' || needs.changes.outputs.tracking == 'false') && (needs.cwv-runner-contracts.result == 'success' || needs.cwv-runner-contracts.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.web == 'true' || needs.changes.outputs.migrations == 'true')
     # Run production prebuilt deploys on GitHub-hosted runners while the VPS
     # provider is returning sustained CPU steal. This still uses a local
     # `vercel build --prod` followed by `vercel deploy --prebuilt --prod`, so

@@ -36,8 +36,9 @@ describe('production cache-invalidation drain rollout gate', () => {
     assert.match(readiness, /needs: \[changes\]/);
     assert.match(
       readiness,
-      /needs\.changes\.outputs\.tracking != 'false' \|\| needs\.changes\.outputs\.migrations != 'false'/
+      /needs\.changes\.outputs\.tracking != 'false'/
     );
+    assert.doesNotMatch(readiness, /outputs\.migrations/);
     assert.doesNotMatch(readiness, /VPS_WORKER_SSH_TARGET|\bssh\b/);
     assert.doesNotMatch(readiness, /continue-on-error:\s*true/);
     assert.match(migrations, /needs: \[vps-drain-readiness\]/);
@@ -60,10 +61,13 @@ describe('production cache-invalidation drain rollout gate', () => {
       capability,
       /github\.event_name != 'workflow_dispatch'/
     );
+    // `tracking` only: the broad `migrations` output must never gate
+    // the smoke, or unrelated migrations freeze on worker drift.
     assert.match(
       capability,
-      /needs\.changes\.outputs\.tracking != 'false' \|\| needs\.changes\.outputs\.migrations != 'false'/
+      /needs\.changes\.outputs\.tracking != 'false'/
     );
+    assert.doesNotMatch(capability, /outputs\.migrations/);
     assert.match(
       capability,
       /run: \.github\/scripts\/smoke-gigl-worker-capability\.sh/
@@ -82,7 +86,11 @@ describe('production cache-invalidation drain rollout gate', () => {
     );
     assert.match(
       deployment,
-      /needs\.changes\.outputs\.tracking == 'false' && needs\.changes\.outputs\.migrations == 'false'/
+      /needs\.gigl-worker-capability\.result == 'success' \|\| needs\.changes\.outputs\.tracking == 'false'/
+    );
+    assert.doesNotMatch(
+      deployment,
+      /gigl-worker-capability\.result == 'success' \|\| \(needs/
     );
     assert.match(deployment, /deploy --prebuilt --prod/);
     assert.doesNotMatch(deployment, /run-pinned-vercel\.sh deploy --prod/);

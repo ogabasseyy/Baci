@@ -8,6 +8,8 @@
 # values blank); it cannot prove the value is real or unexpired. Operators
 # must keep the same rotated worker JWT in Vercel Production and the VPS
 # worker .env, or the retained manual fallback route returns 500.
+# Rotation procedure (expiry check + rotate steps):
+# vps-workers/docs/gigl-tracking-worker-token-rotation.md.
 set -euo pipefail
 
 file="${1:?dotenv path is required}"

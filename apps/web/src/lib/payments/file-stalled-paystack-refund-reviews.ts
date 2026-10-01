@@ -46,20 +46,32 @@ export async function fileStalledPaystackRefundReviews(
   }
 ): Promise<number> {
   const stalled: StalledPayment[] = [];
-  for (let offset = 0; ; offset += STALLED_MATCH_PAGE_SIZE) {
-    const { data: stalledRows, error: stalledError } = await supabase
+  // Keyset over the immutable id order: offsets over this
+  // status-filtered set would shift when a lower-id row transitions
+  // out of the stalled statuses between page reads, skipping a later
+  // match — and finding any stalled rows returns without opening a
+  // recovery watch, so the omitted order would keep no durable
+  // refund evidence for the acknowledged webhook.
+  let lastId: string | null = null;
+  for (;;) {
+    const filtered = supabase
       .from('transactions')
       .select('id, order_id, merchant_id, gateway_reference, amount')
       .eq('gateway', 'paystack')
       .eq('gateway_reference', gatewayReference)
       .eq('transaction_type', 'payment')
       .in('status', ['pending', 'processing', 'failed'])
-      .order('id', { ascending: true })
-      .range(offset, offset + STALLED_MATCH_PAGE_SIZE - 1);
+      .order('id', { ascending: true });
+    const { data: stalledRows, error: stalledError } = await (lastId === null
+      ? filtered
+      : filtered.gt('id', lastId)
+    ).limit(STALLED_MATCH_PAGE_SIZE);
     if (stalledError) throw new Error('refund_event_payment_lookup_failed');
     const page = (stalledRows ?? []) as StalledPayment[];
     stalled.push(...page);
     if (page.length < STALLED_MATCH_PAGE_SIZE) break;
+    lastId = page[page.length - 1]?.id ?? null;
+    if (lastId === null) break;
   }
   if (stalled.length === 0) {
     logger.info({

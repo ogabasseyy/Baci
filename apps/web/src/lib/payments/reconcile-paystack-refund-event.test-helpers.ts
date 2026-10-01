@@ -33,6 +33,9 @@ export function buildPaymentCandidates(rows: unknown[]) {
   return {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    gt: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockResolvedValue({ data: rows, error: null }),
     order: vi.fn().mockReturnThis(),
     range: vi.fn().mockResolvedValue({ data: rows, error: null }),
   };

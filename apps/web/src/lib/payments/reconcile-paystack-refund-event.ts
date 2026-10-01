@@ -119,6 +119,53 @@ async function reconcileSharedReferencePayment(
   }
 }
 
+async function forEachReferencePayment(
+  supabase: SupabaseClient,
+  transactionReference: string,
+  providerRefundStatus: string,
+  stalled: boolean
+): Promise<number> {
+  // Keyset over the immutable id order: offsets over this
+  // status-filtered set would shift when a payment completes (or a
+  // stalled row transitions out) between page reads, skipping a later
+  // match the caller then acknowledges without reconciling.
+  let lastId: string | null = null;
+  let actionable = 0;
+  for (;;) {
+    const filtered = supabase
+      .from('transactions')
+      .select(
+        'id, order_id, merchant_id, amount, currency, cancel_order:orders!transactions_order_id_fkey(cancelled_at,shipping_status,order_number)'
+      )
+      .eq('gateway', 'paystack')
+      .eq('gateway_reference', transactionReference)
+      .eq('transaction_type', 'payment');
+    const statusFiltered = stalled
+      ? filtered.in('status', ['pending', 'processing', 'failed'])
+      : filtered.eq('status', 'completed');
+    const ordered = statusFiltered.order('id', { ascending: true });
+    const { data: payments, error: paymentError } = await (lastId === null
+      ? ordered
+      : ordered.gt('id', lastId)
+    ).limit(SHARED_REFERENCE_PAGE_SIZE);
+    if (paymentError) throw new Error('refund_event_payment_lookup_failed');
+    const page = (payments ?? []) as Record<string, unknown>[];
+    for (const payment of page) {
+      if (payment.order_id != null) actionable++;
+      await reconcileSharedReferencePayment(
+        supabase,
+        transactionReference,
+        payment,
+        providerRefundStatus
+      );
+    }
+    if (page.length < SHARED_REFERENCE_PAGE_SIZE) break;
+    lastId = (page[page.length - 1]?.id as string | undefined) ?? null;
+    if (lastId === null) break;
+  }
+  return actionable;
+}
+
 export async function reconcilePaystackRefundEvent(
   supabase: SupabaseClient,
   transactionReference: string,
@@ -135,28 +182,25 @@ export async function reconcilePaystackRefundEvent(
   // completed payments: paginate the whole match set before the caller
   // acknowledges the event, so no cancelled order misses
   // reconciliation or its missing-audit review.
-  for (let offset = 0; ; offset += SHARED_REFERENCE_PAGE_SIZE) {
-    const { data: payments, error: paymentError } = await supabase
-      .from('transactions')
-      .select(
-        'id, order_id, merchant_id, amount, currency, cancel_order:orders!transactions_order_id_fkey(cancelled_at,shipping_status,order_number)'
-      )
-      .eq('gateway', 'paystack')
-      .eq('gateway_reference', transactionReference)
-      .eq('transaction_type', 'payment')
-      .eq('status', 'completed')
-      .order('id', { ascending: true })
-      .range(offset, offset + SHARED_REFERENCE_PAGE_SIZE - 1);
-    if (paymentError) throw new Error('refund_event_payment_lookup_failed');
-    const page = (payments ?? []) as Record<string, unknown>[];
-    for (const payment of page) {
-      await reconcileSharedReferencePayment(
-        supabase,
-        transactionReference,
-        payment,
-        providerRefundStatus
-      );
-    }
-    if (page.length < SHARED_REFERENCE_PAGE_SIZE) break;
-  }
+  const completed = await forEachReferencePayment(
+    supabase,
+    transactionReference,
+    providerRefundStatus,
+    false
+  );
+  if (completed > 0) return;
+  // No completed payment carries the reference — but the refund
+  // webhook may have won the race with charge completion. A pending
+  // or processing payment that later completes would leave the
+  // refunded order paid and fulfillable with no trace of this signed
+  // event, so persist its evidence against the stalled matches
+  // instead of acknowledging silently. (Failed rows ride along: a
+  // provider refund proves capture, so a failed local row is a stale
+  // wedge the evidence usefully surfaces.)
+  await forEachReferencePayment(
+    supabase,
+    transactionReference,
+    providerRefundStatus,
+    true
+  );
 }

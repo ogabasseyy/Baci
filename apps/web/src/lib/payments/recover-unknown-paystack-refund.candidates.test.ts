@@ -265,15 +265,15 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
       cancelledOrder(`order-${index + 1}`)
     );
     const firstStalled = selectQuery([]);
-    const firstStalledRange = vi
+    const firstStalledLimit = vi
       .fn()
       .mockResolvedValue({ data: stalled.slice(0, 10), error: null });
-    firstStalled.range = firstStalledRange;
+    firstStalled.limit = firstStalledLimit;
     const secondStalled = selectQuery([]);
-    const secondStalledRange = vi
+    const secondStalledLimit = vi
       .fn()
       .mockResolvedValue({ data: stalled.slice(10), error: null });
-    secondStalled.range = secondStalledRange;
+    secondStalled.limit = secondStalledLimit;
     const from = vi
       .fn()
       .mockReturnValueOnce(selectQuery([]))
@@ -287,9 +287,12 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
 
     // A legacy reference shared past the response cap must still file
     // every stalled order: the webhook is acknowledged, so a truncated
-    // subset would permanently drop the omitted verified evidence.
-    expect(firstStalledRange).toHaveBeenCalledWith(0, 9);
-    expect(secondStalledRange).toHaveBeenCalledWith(10, 19);
+    // subset would permanently drop the omitted verified evidence. The
+    // id cursor keeps pages stable when a lower-id row transitions
+    // out of the stalled statuses between reads; offsets would shift
+    // and skip a match with no watch to catch it.
+    expect(firstStalledLimit).toHaveBeenCalledWith(10);
+    expect(secondStalled.gt).toHaveBeenCalledWith('id', 'pay-stalled-10');
     expect(rpc).toHaveBeenCalledTimes(11);
     for (let index = 1; index <= 11; index++) {
       expect(rpc).toHaveBeenCalledWith(

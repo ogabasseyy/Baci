@@ -16,7 +16,7 @@ vi.mock('./recover-unknown-paystack-refund', () => ({
 
 function chain(result: { data: unknown; error: unknown }) {
   const builder: Record<string, unknown> = {};
-  for (const key of ['eq', 'lt', 'order', 'limit', 'select', 'update']) {
+  for (const key of ['eq', 'in', 'lt', 'order', 'limit', 'select', 'update']) {
     builder[key] = vi.fn().mockReturnValue(builder);
   }
   // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are thenable.
@@ -31,11 +31,18 @@ function database({
   retire?: { data: unknown; error: unknown };
   watches?: { data: unknown; error: unknown };
 } = {}) {
+  const selectChain = chain(watches);
+  const retireChain = chain(retire);
   const from = vi
     .fn()
-    .mockReturnValueOnce(chain(retire))
-    .mockReturnValueOnce(chain(watches));
-  return { from, supabase: { from } as unknown as SupabaseClient };
+    .mockReturnValueOnce(selectChain)
+    .mockReturnValueOnce(retireChain);
+  return {
+    from,
+    retireChain,
+    selectChain,
+    supabase: { from } as unknown as SupabaseClient,
+  };
 }
 
 describe('sweepPaystackRefundRecoveryWatches', () => {
@@ -43,14 +50,14 @@ describe('sweepPaystackRefundRecoveryWatches', () => {
     vi.clearAllMocks();
   });
 
-  it('retires stale watches and re-drives the remaining open ones', async () => {
+  it('re-drives open watches before retiring the stale ones', async () => {
     mocks.recover.mockResolvedValue(undefined);
-    const { from, supabase } = database({
-      retire: { data: [{ id: 'watch-old' }], error: null },
+    const { from, retireChain, supabase } = database({
+      retire: { data: [{ id: 'watch-1' }], error: null },
       watches: {
         data: [
           {
-            created_at: '2026-09-30T00:00:00Z',
+            created_at: '2026-09-20T00:00:00Z',
             id: 'watch-1',
             paystack_ref: 'PSK-1',
             provider_refund_id: 202,
@@ -65,6 +72,13 @@ describe('sweepPaystackRefundRecoveryWatches', () => {
     expect(from).toHaveBeenNthCalledWith(1, 'paystack_refund_recovery_watch');
     expect(from).toHaveBeenNthCalledWith(2, 'paystack_refund_recovery_watch');
     expect(mocks.recover).toHaveBeenCalledWith(supabase, 202, 'PSK-1');
+    // Retirement only covers redriven watches recovery left open: a
+    // handled watch resolves during the redrive and the status filter
+    // skips it.
+    expect(retireChain.in as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'id',
+      ['watch-1']
+    );
     expect(summary).toEqual({
       checked: 1,
       failed: 0,
@@ -73,20 +87,20 @@ describe('sweepPaystackRefundRecoveryWatches', () => {
     });
   });
 
-  it('counts failures per row instead of throwing', async () => {
+  it('counts failures per row and never retires a failed redrive', async () => {
     mocks.recover.mockRejectedValueOnce(new Error('provider down'));
     mocks.recover.mockResolvedValueOnce(undefined);
-    const { supabase } = database({
+    const { retireChain, supabase } = database({
       watches: {
         data: [
           {
-            created_at: '2026-09-30T00:00:00Z',
+            created_at: '2026-09-20T00:00:00Z',
             id: 'watch-1',
             paystack_ref: 'PSK-1',
             provider_refund_id: 202,
           },
           {
-            created_at: '2026-09-30T00:00:01Z',
+            created_at: '2026-09-20T00:00:01Z',
             id: 'watch-2',
             paystack_ref: 'PSK-2',
             provider_refund_id: 203,
@@ -107,11 +121,16 @@ describe('sweepPaystackRefundRecoveryWatches', () => {
     expect(mocks.loggerWarn).toHaveBeenCalledWith(
       expect.objectContaining({ watchId: 'watch-1', refundId: 202 })
     );
+    // The failed watch stays open for the next run even if stale.
+    expect(retireChain.in as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'id',
+      ['watch-2']
+    );
   });
 
-  it('stops starting rows past the deadline', async () => {
+  it('skips retirement entirely when nothing was redriven', async () => {
     mocks.recover.mockResolvedValue(undefined);
-    const { supabase } = database({
+    const { from, supabase } = database({
       watches: {
         data: [
           {
@@ -132,7 +151,13 @@ describe('sweepPaystackRefundRecoveryWatches', () => {
     );
 
     expect(mocks.recover).not.toHaveBeenCalled();
-    expect(summary.checked).toBe(0);
+    expect(from).toHaveBeenCalledTimes(1);
+    expect(summary).toEqual({
+      checked: 0,
+      failed: 0,
+      redriven: 0,
+      retired: 0,
+    });
   });
 
   it('throws when the watch lookup fails', async () => {

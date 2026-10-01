@@ -4,17 +4,25 @@ import { createClient } from './reconcile-abandoned-paystack-attempts.test-suppo
 
 function withReviewTable(
   client: { from: unknown },
-  reviewInsert: ReturnType<typeof vi.fn>
+  reviewInsert: ReturnType<typeof vi.fn>,
+  ownReview: unknown = null
 ) {
   const fromMock = client.from as ReturnType<typeof vi.fn>;
   const baseFrom = fromMock.getMockImplementation() as (
     table: string
   ) => unknown;
-  fromMock.mockImplementation((table: string) =>
-    table === 'reconciliation_review'
-      ? { insert: reviewInsert }
-      : baseFrom(table)
-  );
+  fromMock.mockImplementation((table: string) => {
+    if (table !== 'reconciliation_review') return baseFrom(table);
+    // Own-review confirm chain for the duplicate filer's conflict
+    // path, alongside the review insert.
+    const chain = {
+      eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: ownReview, error: null }),
+      select: vi.fn().mockReturnThis(),
+    };
+    return { insert: reviewInsert, ...chain };
+  });
 }
 
 function verifiedSuccess(overrides: Record<string, unknown> = {}) {
@@ -99,6 +107,39 @@ describe('abandoned Paystack attempt duplicate captures', () => {
         p_order_id: 'order-1',
         p_transaction_id: 'attempt-1',
       })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
+      expect.objectContaining({ p_resolution: 'verified_success_captured' })
+    );
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('refiles without the shared reference when another order owns the ref slot', async () => {
+    const { client, update } = createClient();
+    const reviewInsert = vi
+      .fn()
+      .mockResolvedValueOnce({ error: { code: '23505' } })
+      .mockResolvedValueOnce({ error: null });
+    // Definitive merge false: no open review for this order, so the
+    // conflict came from the global ref slot.
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({ data: false, error: null })
+      .mockResolvedValue({ data: true, error: null });
+    withReviewTable(client, reviewInsert);
+    Object.assign(client, { rpc });
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify: verifiedSuccess(),
+    });
+
+    expect(summary.reviewsFiled).toEqual(['attempt-1']);
+    expect(summary.held).toEqual([]);
+    expect(reviewInsert).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ paystack_ref: null, txn_id: 'attempt-1' })
     );
     expect(rpc).toHaveBeenCalledWith(
       'stamp_abandoned_sweep_resolution_v1',

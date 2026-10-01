@@ -18,14 +18,31 @@ export interface DuplicateCaptureEvidence {
   providerStatus: string;
 }
 
+async function confirmOwnDuplicateCaptureReview(
+  supabase: SupabaseClient,
+  attempt: { id: string }
+): Promise<boolean> {
+  const { data: existing, error: lookupError } = await supabase
+    .from('reconciliation_review')
+    .select('id')
+    .eq('issue_type', 'duplicate_payment_capture_requires_review')
+    .eq('txn_id', attempt.id)
+    .is('resolved_at', null)
+    .maybeSingle();
+  return !lookupError && existing != null;
+}
+
 /**
  * Files a duplicate-capture review for a stale attempt a gateway verified
  * as captured, merging into the open review on conflict, then stamps the
  * row so the sweep never reselects it. Returns true when the evidence is
  * durable. Only Paystack references occupy paystack_ref; other gateways
  * identify their charge in metadata so the column never misattributes a
- * capture. The stamp merges database-side: spreading the stale in-memory
- * metadata snapshot would clobber a concurrent charge.success completion.
+ * capture. When the global ref slot belongs to another order's capture
+ * (merge finds no open review for this order), the capture refiles
+ * without occupying paystack_ref instead of colliding forever. The
+ * stamp merges database-side: spreading the stale in-memory metadata
+ * snapshot would clobber a concurrent charge.success completion.
  */
 export async function fileDuplicatePaymentCapture({
   attempt,
@@ -45,29 +62,30 @@ export async function fileDuplicatePaymentCapture({
   const detail = evidence.mismatchKind
     ? ` with ${evidence.mismatchKind} (${evidence.mismatchDetail ?? 'provider evidence differs'})`
     : '';
+  const row = {
+    issue_type: 'duplicate_payment_capture_requires_review',
+    order_id: attempt.order_id,
+    merchant_id: attempt.merchant_id,
+    txn_id: attempt.id,
+    paystack_ref:
+      evidence.gateway === 'paystack' ? attempt.gateway_reference : null,
+    reason: `Stale ${evidence.gateway} attempt ${attempt.gateway_reference} verified as captured while the order is already paid; possible duplicate charge${detail}`,
+    metadata: {
+      gateway: evidence.gateway,
+      payment_transaction_id: attempt.id,
+      gateway_reference: attempt.gateway_reference,
+      provider_reference: evidence.providerReference,
+      provider_status: evidence.providerStatus,
+      provider_amount: evidence.providerAmount,
+      provider_currency: evidence.providerCurrency,
+      ...(evidence.mismatchKind
+        ? { evidence_mismatch: evidence.mismatchKind }
+        : {}),
+    },
+  };
   const { error: reviewError } = await supabase
     .from('reconciliation_review')
-    .insert({
-      issue_type: 'duplicate_payment_capture_requires_review',
-      order_id: attempt.order_id,
-      merchant_id: attempt.merchant_id,
-      txn_id: attempt.id,
-      paystack_ref:
-        evidence.gateway === 'paystack' ? attempt.gateway_reference : null,
-      reason: `Stale ${evidence.gateway} attempt ${attempt.gateway_reference} verified as captured while the order is already paid; possible duplicate charge${detail}`,
-      metadata: {
-        gateway: evidence.gateway,
-        payment_transaction_id: attempt.id,
-        gateway_reference: attempt.gateway_reference,
-        provider_reference: evidence.providerReference,
-        provider_status: evidence.providerStatus,
-        provider_amount: evidence.providerAmount,
-        provider_currency: evidence.providerCurrency,
-        ...(evidence.mismatchKind
-          ? { evidence_mismatch: evidence.mismatchKind }
-          : {}),
-      },
-    });
+    .insert(row);
   if (reviewError && (reviewError as { code?: string }).code !== '23505') {
     return false;
   }
@@ -89,7 +107,26 @@ export async function fileDuplicatePaymentCapture({
         p_provider_status: evidence.providerStatus,
       }
     );
-    if (mergeError || merged !== true) return false;
+    if (!mergeError && merged === true) {
+      // Evidence merged; fall through to the stamp below.
+    } else if (await confirmOwnDuplicateCaptureReview(supabase, attempt)) {
+      // Our own open review already holds the evidence (a prior run
+      // filed it but failed to stamp): durable, so stamp below.
+    } else if (mergeError) {
+      // A transport failure leaves the conflict unresolved: retrying
+      // the insert would collide again, so hold for the next sweep.
+      return false;
+    } else {
+      // No open review for this order: the global ref slot is owned
+      // by another order's capture. File without occupying
+      // paystack_ref so this capture keeps its own operations review
+      // instead of colliding forever; the column stays truthful
+      // while metadata keeps the full gateway evidence.
+      const { error: nullRefError } = await supabase
+        .from('reconciliation_review')
+        .insert({ ...row, paystack_ref: null });
+      if (nullRefError) return false;
+    }
   }
   // The Paystack stamp guards on gateway = 'paystack', so a verified
   // Korapay/Juicyway capture needs the gateway-neutral variant: without

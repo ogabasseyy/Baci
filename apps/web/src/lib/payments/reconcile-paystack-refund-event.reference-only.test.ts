@@ -47,6 +47,54 @@ describe('Paystack reference-only refund events', () => {
     );
   });
 
+  it('files stalled matches when no completed payment carries the reference', async () => {
+    const completed = buildPaymentCandidates([]);
+    const stalled = buildPaymentCandidates([cancelledPaymentRow()]);
+    const refunds = buildRefundCandidates([]);
+    const review = buildReviewInsert();
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(completed)
+      .mockReturnValueOnce(stalled)
+      .mockReturnValueOnce(refunds)
+      .mockReturnValueOnce(review);
+    const rpc = vi.fn();
+
+    await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
+
+    // The refund webhook may win the race with charge completion: a
+    // pending payment that later completes would leave the refunded
+    // order paid and fulfillable with no trace of this signed event.
+    expect(stalled.in).toHaveBeenCalledWith('status', [
+      'pending',
+      'processing',
+      'failed',
+    ]);
+    expect(review.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'order_cancellation_refund_requires_review',
+        order_id: 'order-1',
+        txn_id: 'payment-1',
+      })
+    );
+  });
+
+  it('skips the stalled scan when a completed payment carries the reference', async () => {
+    const completed = buildPaymentCandidates([cancelledPaymentRow()]);
+    const review = buildReviewInsert();
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(completed)
+      .mockReturnValueOnce(buildRefundCandidates([]))
+      .mockReturnValueOnce(review);
+    const rpc = vi.fn();
+
+    await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
+
+    expect(completed.in).not.toHaveBeenCalled();
+    expect(review.insert).toHaveBeenCalled();
+  });
+
   it('preserves the failed verdict in the reference-only review', async () => {
     const review = buildReviewInsert();
     const from = vi
@@ -101,8 +149,8 @@ describe('Paystack reference-only refund events', () => {
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
 
-    expect(page1.range).toHaveBeenCalledWith(0, 9);
-    expect(page2.range).toHaveBeenCalledWith(10, 19);
+    expect(page1.limit).toHaveBeenCalledWith(10);
+    expect(page2.gt).toHaveBeenCalledWith('id', 'payment-skip-9');
     // The cancelled payment on page 2 was reached, not truncated away
     // before the caller acknowledged the event.
     expect(refunds.eq).toHaveBeenCalledWith(

@@ -4,6 +4,11 @@ import { describe, expect, it } from 'vitest';
 
 const migrationPath = resolve(
   __dirname,
+  '../../../../../supabase/migrations/20260928179000_record_verified_paystack_cancellation_refund.sql'
+);
+
+const finalizePath = resolve(
+  __dirname,
   '../../../../../supabase/migrations/20260927150500_complete_legacy_paystack_cancellation_refunds.sql'
 );
 
@@ -110,10 +115,13 @@ describe('verified paystack cancellation refund migration', () => {
   });
 
   it('reverses the order paystack settlements with the refund transition', () => {
-    expect(existsSync(migrationPath)).toBe(true);
-    if (!existsSync(migrationPath)) return;
+    // Settlement reversal lives in the shared aggregate finalizer,
+    // which stayed in the original migration when the provider-verdict
+    // transition moved out.
+    expect(existsSync(finalizePath)).toBe(true);
+    if (!existsSync(finalizePath)) return;
 
-    const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
+    const migrationSql = normalizeSql(readFileSync(finalizePath, 'utf8'));
 
     expect(migrationSql).toContain(
       "AND settlement.source_id = p_order_id AND settlement.status IN ('pending', 'processing', 'settled')"
@@ -143,6 +151,28 @@ describe('verified paystack cancellation refund migration', () => {
     expect(migrationSql).toContain("status = 'pending', attempts = 0");
     expect(migrationSql).toContain(
       "paystack_cancellation_refund_notifications.status IN ('sent', 'failed', 'delivery_uncertain')"
+    );
+  });
+
+  it('keeps each state machine in its own sub-300-line migration', () => {
+    expect(existsSync(migrationPath)).toBe(true);
+    expect(existsSync(finalizePath)).toBe(true);
+    if (!existsSync(migrationPath) || !existsSync(finalizePath)) return;
+
+    for (const path of [migrationPath, finalizePath]) {
+      const lines = readFileSync(path, 'utf8').split('\n').length;
+      expect(lines).toBeLessThanOrEqual(300);
+    }
+    // The split moved only the location: the transition still
+    // delegates covered orders to the shared finalizer, which still
+    // owns the settlement reversal.
+    const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
+    const finalizeSql = normalizeSql(readFileSync(finalizePath, 'utf8'));
+    expect(migrationSql).toContain(
+      'PERFORM public.finalize_refunded_cancellation_order_v1('
+    );
+    expect(finalizeSql).not.toContain(
+      'FUNCTION public.record_verified_paystack_cancellation_refund_v1('
     );
   });
 

@@ -100,7 +100,7 @@ describe('gatePartiallyPaidAbandonedCapture short captures', () => {
       supabase: db as never,
     });
 
-    expect(gate).toBe('done');
+    expect(gate).toEqual({ status: 'done' });
     expect(db.rpc).toHaveBeenCalledWith(
       'stamp_abandoned_sweep_resolution_v1',
       expect.objectContaining({
@@ -125,7 +125,7 @@ describe('gatePartiallyPaidAbandonedCapture short captures', () => {
       supabase: db as never,
     });
 
-    expect(gate).toBe('done');
+    expect(gate).toEqual({ status: 'done' });
     expect(db.rpc).not.toHaveBeenCalled();
     expect(h.summary.failed).toBe(true);
     expect(h.hold).toHaveBeenCalledWith('partial_short_review_failed');
@@ -143,7 +143,7 @@ describe('gatePartiallyPaidAbandonedCapture short captures', () => {
       supabase: db as never,
     });
 
-    expect(gate).toBe('done');
+    expect(gate).toEqual({ status: 'done' });
     expect(db.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_type: 'partial_capture_short_requires_review',
@@ -170,7 +170,7 @@ describe('gatePartiallyPaidAbandonedCapture short captures', () => {
       supabase: db as never,
     });
 
-    expect(gate).toBe('done');
+    expect(gate).toEqual({ status: 'done' });
     expect(db.rpc).not.toHaveBeenCalled();
     expect(h.summary.failed).toBe(true);
     expect(h.hold).toHaveBeenCalledWith('partial_short_review_failed');

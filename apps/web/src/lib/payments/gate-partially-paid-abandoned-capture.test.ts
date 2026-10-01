@@ -80,7 +80,7 @@ describe('gatePartiallyPaidAbandonedCapture routing', () => {
       supabase: { from: vi.fn(), rpc } as never,
     });
 
-    expect(gate).toBe('proceed');
+    expect(gate).toEqual({ expectedOutstandingMinor: null, status: 'proceed' });
     expect(rpc).toHaveBeenCalledWith(
       'complete_merchant_invoice_partial_payment',
       expect.objectContaining({
@@ -119,7 +119,7 @@ describe('gatePartiallyPaidAbandonedCapture routing', () => {
       supabase: { from: vi.fn(), rpc } as never,
     });
 
-    expect(gate).toBe('done');
+    expect(gate).toEqual({ status: 'done' });
     expect(h.summary.completed).toEqual(['attempt-1']);
     expect(h.summary.failed).toBe(false);
   });
@@ -136,7 +136,10 @@ describe('gatePartiallyPaidAbandonedCapture routing', () => {
       supabase: db as never,
     });
 
-    expect(gate).toBe('proceed');
+    expect(gate).toEqual({
+      expectedOutstandingMinor: 7000,
+      status: 'proceed',
+    });
     expect(db.rpc).not.toHaveBeenCalled();
     expect(h.hold).not.toHaveBeenCalled();
   });
@@ -155,7 +158,7 @@ describe('gatePartiallyPaidAbandonedCapture routing', () => {
 
     // 100 against 70 owing: excess money the finalizer would silently
     // promote to paid, so it owes the duplicate review directly.
-    expect(gate).toBe('done');
+    expect(gate).toEqual({ status: 'done' });
     expect(mocks.fileDuplicatePaymentCapture).toHaveBeenCalledWith(
       expect.objectContaining({
         attempt: expect.objectContaining({ id: 'attempt-1' }),
@@ -199,7 +202,7 @@ describe('gatePartiallyPaidAbandonedCapture routing', () => {
 
     // A float tolerance would read both as exact; integer kobo files
     // the shortfall for review and the surplus as a duplicate.
-    expect(gate).toBe('done');
+    expect(gate).toEqual({ status: 'done' });
     if (filesShortReview) {
       expect(db.insert).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -236,7 +239,7 @@ describe('gatePartiallyPaidAbandonedCapture routing', () => {
     // 50 against 70 owing: promoting would trigger full paid side
     // effects, but the verified capture is real money — file it and
     // retire the row instead of rotating the same hold forever.
-    expect(gate).toBe('done');
+    expect(gate).toEqual({ status: 'done' });
     expect(db.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_type: 'partial_capture_short_requires_review',
@@ -273,7 +276,7 @@ describe('gatePartiallyPaidAbandonedCapture routing', () => {
       supabase: db as never,
     });
 
-    expect(gate).toBe('done');
+    expect(gate).toEqual({ status: 'done' });
     expect(h.summary.failed).toBe(true);
     expect(h.hold).toHaveBeenCalledWith('partial_balance_unavailable');
   });
@@ -291,7 +294,7 @@ describe('gatePartiallyPaidAbandonedCapture routing', () => {
       supabase: { from: vi.fn(), rpc } as never,
     });
 
-    expect(gate).toBe('done');
+    expect(gate).toEqual({ status: 'done' });
     expect(h.summary.failed).toBe(true);
     expect(h.hold).toHaveBeenCalledWith('partial_completion_unavailable');
   });

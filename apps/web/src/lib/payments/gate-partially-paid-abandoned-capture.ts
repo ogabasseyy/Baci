@@ -9,6 +9,10 @@ import { extractVerifiedGatewayFeeNgn } from './verified-gateway-fee';
 
 const INVOICE_PARTIAL_ALLOCATION = 'merchant_invoice_partial';
 
+export type PartialCaptureGateDecision =
+  | { expectedOutstandingMinor: number | null; status: 'proceed' }
+  | { status: 'done' };
+
 interface GateAttempt {
   amount: number;
   gateway_reference: string;
@@ -70,11 +74,16 @@ async function fileOverpaymentDuplicate(context: GateContext): Promise<'done'> {
  * underpayments without promoting the order and refuses overpayments;
  * only an exact-balance capture proceeds to the generic finalizer. Other
  * legs compare the capture against the live outstanding balance first.
- * Returns 'proceed' when the generic finalizer should run.
+ * Returns 'proceed' when the generic finalizer should run, carrying the
+ * observed outstanding (minor units) so the atomic completion can
+ * refuse to promote when a concurrent payment moved the balance
+ * between this read and the order lock. Invoice legs carry null: they
+ * never computed a live outstanding — their balance accounting lives
+ * in the partial-payment RPC.
  */
 export async function gatePartiallyPaidAbandonedCapture(
   context: GateContext
-): Promise<'proceed' | 'done'> {
+): Promise<PartialCaptureGateDecision> {
   const { attempt, hold, providerData, summary, supabase } = context;
   if (
     attempt.metadata?.order_payment_allocation !== INVOICE_PARTIAL_ALLOCATION
@@ -100,10 +109,12 @@ export async function gatePartiallyPaidAbandonedCapture(
     platformFee < 0 ||
     gatewayFee + platformFee > grossAmount
   ) {
-    return await fileConflictAndRetire(context, {
-      errorCode: 'SETTLEMENT_INPUT_INVALID',
-      reason: `Paystack partial payment ${attempt.gateway_reference} has invalid settlement inputs`,
-    });
+    return {
+      status: await fileConflictAndRetire(context, {
+        errorCode: 'SETTLEMENT_INPUT_INVALID',
+        reason: `Paystack partial payment ${attempt.gateway_reference} has invalid settlement inputs`,
+      }),
+    };
   }
 
   const { data, error } = await supabase.rpc(
@@ -129,7 +140,7 @@ export async function gatePartiallyPaidAbandonedCapture(
     });
     summary.failed = true;
     await hold('partial_completion_unavailable');
-    return 'done';
+    return { status: 'done' };
   }
 
   const completion = parsed.data;
@@ -143,11 +154,11 @@ export async function gatePartiallyPaidAbandonedCapture(
       transactionId: attempt.id,
     });
     summary.completed.push(attempt.id);
-    return 'done';
+    return { status: 'done' };
   }
   if (completion.outcome === 'standard_completion') {
     if (completion.reason !== 'order_terminal') {
-      return 'proceed';
+      return { expectedOutstandingMinor: null, status: 'proceed' };
     }
     // The order terminalized concurrently. Cancelled and refunded orders
     // still route through the generic finalizer for its dedicated
@@ -162,7 +173,7 @@ export async function gatePartiallyPaidAbandonedCapture(
     if (orderError || !order) {
       if (orderError) summary.failed = true;
       await hold('partial_terminal_status_unavailable');
-      return 'done';
+      return { status: 'done' };
     }
     const terminal = order as {
       cancelled_at: string | null;
@@ -182,22 +193,24 @@ export async function gatePartiallyPaidAbandonedCapture(
         (terminal.shipping_status === 'cancelled' ||
           terminal.shipping_status === 'canceled'))
     ) {
-      return 'proceed';
+      return { expectedOutstandingMinor: null, status: 'proceed' };
     }
-    return await fileOverpaymentDuplicate(context);
+    return { status: await fileOverpaymentDuplicate(context) };
   }
   if (completion.error_code === 'AMOUNT_EXCEEDS_REMAINING_BALANCE') {
-    return await fileOverpaymentDuplicate(context);
+    return { status: await fileOverpaymentDuplicate(context) };
   }
-  return await fileConflictAndRetire(context, {
-    errorCode: completion.error_code,
-    reason: `Paystack partial payment ${attempt.gateway_reference} no longer fits the merchant invoice balance (${completion.error_code})`,
-  });
+  return {
+    status: await fileConflictAndRetire(context, {
+      errorCode: completion.error_code,
+      reason: `Paystack partial payment ${attempt.gateway_reference} no longer fits the merchant invoice balance (${completion.error_code})`,
+    }),
+  };
 }
 
 async function gateNonInvoicePartialCapture(
   context: GateContext
-): Promise<'proceed' | 'done'> {
+): Promise<PartialCaptureGateDecision> {
   const { attempt, hold, providerData, summary, supabase } = context;
   const { data: order, error } = await supabase
     .from('orders')
@@ -208,7 +221,7 @@ async function gateNonInvoicePartialCapture(
   if (error || !order) {
     if (error) summary.failed = true;
     await hold('partial_balance_unavailable');
-    return 'done';
+    return { status: 'done' };
   }
   const row = order as {
     amount_paid: number | string | null;
@@ -226,7 +239,7 @@ async function gateNonInvoicePartialCapture(
   ) {
     summary.failed = true;
     await hold('partial_capture_invalid');
-    return 'done';
+    return { status: 'done' };
   }
   // A concurrent completion between this read and the finalizer resolves
   // through the atomic completion result (capturedOnPaidOrder files the
@@ -240,17 +253,19 @@ async function gateNonInvoicePartialCapture(
   // file it here.
   const outstandingMinor = Math.round(outstanding * 100);
   if (captureMinor === outstandingMinor) {
-    return 'proceed';
+    return { expectedOutstandingMinor: outstandingMinor, status: 'proceed' };
   }
   if (captureMinor > outstandingMinor) {
-    return await fileOverpaymentDuplicate(context);
+    return { status: await fileOverpaymentDuplicate(context) };
   }
   // A verified shortfall is terminal evidence, not a transient gap: the
   // captured funds are real money below the balance, so file them for
   // operations and retire the attempt instead of rotating the hold.
-  return await fileShortCaptureAndRetire(context, {
-    captureMinor,
-    outstandingMinor,
-    providerData,
-  });
+  return {
+    status: await fileShortCaptureAndRetire(context, {
+      captureMinor,
+      outstandingMinor,
+      providerData,
+    }),
+  };
 }

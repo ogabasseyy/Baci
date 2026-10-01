@@ -5,7 +5,10 @@ import {
   initiationTransaction,
   mockAcceptedRefund,
 } from './initiate-paystack-cancellation-refunds.test-helpers';
-import { DeliveryUncertainError } from './run-order-cancellation-side-effect';
+import {
+  DeferredError,
+  DeliveryUncertainError,
+} from './run-order-cancellation-side-effect';
 
 const mocks = vi.hoisted(() => ({
   initiatePaystackRefund: vi.fn(),
@@ -90,6 +93,77 @@ describe('initiatePaystackCancellationRefunds failures', () => {
       expect(mocks.initiatePaystackRefund).not.toHaveBeenCalled();
       expect(insert).not.toHaveBeenCalled();
       expect(mocks.quarantineRefund).not.toHaveBeenCalled();
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('defers with a fresh budget when the deadline expires on the last attempt', async () => {
+    acceptedRefund();
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_270_000);
+    const eq = vi.fn().mockReturnThis();
+    const update = vi.fn().mockReturnValue({ eq });
+    const localSupabase = { from: vi.fn(() => ({ update })) } as never;
+
+    try {
+      // The claim already raised the row to the attempts cap, so a
+      // retryable error would strand the never-attempted leg in a
+      // failed state the drain never reselects. Defer instead.
+      await expect(
+        initiatePaystackCancellationRefunds({
+          deadlineMs: 1_270_000,
+          isLastAttempt: true,
+          order,
+          refundedPaymentIds: new Set(),
+          supabase: localSupabase,
+          transactions: [transaction],
+        })
+      ).rejects.toBeInstanceOf(DeferredError);
+      expect(update).toHaveBeenCalledWith({ attempts: 0 });
+      expect(mocks.initiatePaystackRefund).not.toHaveBeenCalled();
+      expect(mocks.quarantineRefund).not.toHaveBeenCalled();
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('quarantines the unattempted leg when the last-attempt deadline reset fails', async () => {
+    acceptedRefund();
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_270_000);
+    const eq = vi.fn();
+    const update = vi.fn().mockReturnValue({ eq });
+    const localSupabase = { from: vi.fn(() => ({ update })) } as never;
+    eq.mockReturnValueOnce({ eq }).mockResolvedValue({
+      error: { code: 'XX000' },
+    });
+    mocks.quarantineRefund.mockRejectedValue(
+      new DeliveryUncertainError('quarantined')
+    );
+
+    try {
+      // The budget is spent and the reset failed: deferring would
+      // resume capped with no evidence, so file the leg for
+      // operations with durable exhaustion evidence instead.
+      await expect(
+        initiatePaystackCancellationRefunds({
+          deadlineMs: 1_270_000,
+          isLastAttempt: true,
+          order,
+          refundedPaymentIds: new Set(),
+          supabase: localSupabase,
+          transactions: [transaction],
+        })
+      ).rejects.toBeInstanceOf(DeliveryUncertainError);
+      expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            ambiguous_initiation: false,
+            deadline_exhausted: true,
+            failed_payment_transaction_id: 'tx-1',
+          }),
+          reason: expect.stringContaining('deadline expired'),
+        })
+      );
     } finally {
       now.mockRestore();
     }

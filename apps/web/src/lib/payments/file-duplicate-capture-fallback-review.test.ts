@@ -99,6 +99,93 @@ describe('fileDuplicateCaptureFallbackReview', () => {
     );
   });
 
+  it('merges into the open order review on conflict instead of a second insert', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(ownReviewQuery(null))
+      .mockReturnValue({ insert });
+
+    const filed = await fileDuplicateCaptureFallbackReview({
+      attempt,
+      evidence,
+      supabase: { from, rpc } as never,
+    });
+
+    // Retrying the insert with only paystack_ref cleared would hit the
+    // same open-by-order index again and lose the evidence; the merge
+    // records this capture on the already-open review instead.
+    expect(filed).toBe(true);
+    expect(insert).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith(
+      'merge_duplicate_payment_capture_evidence_v1',
+      expect.objectContaining({
+        p_order_id: 'order-1',
+        p_merchant_id: 'merchant-1',
+        p_transaction_id: 'attempt-1',
+        p_gateway_reference: 'PSK-1',
+        p_gateway: 'paystack',
+        p_charge_id: '123456789',
+        p_provider_amount: 5829060,
+        p_provider_currency: 'NGN',
+        p_provider_status: 'success',
+      })
+    );
+  });
+
+  it('falls back to the ref-less insert when no open review exists to merge into', async () => {
+    const insert = vi
+      .fn()
+      .mockResolvedValueOnce({ error: { code: '23505' } })
+      .mockResolvedValueOnce({ error: null });
+    const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(ownReviewQuery(null))
+      .mockReturnValue({ insert });
+
+    const filed = await fileDuplicateCaptureFallbackReview({
+      attempt,
+      evidence,
+      supabase: { from, rpc } as never,
+    });
+
+    // A definitive merge false means the conflict is another order's
+    // ref slot, not this order's review: no pointless merge retry,
+    // straight to the ref-less insert.
+    expect(filed).toBe(true);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(insert).toHaveBeenCalledTimes(2);
+    expect(insert).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ paystack_ref: null })
+    );
+  });
+
+  it('retries the merge once on transient failure before the ref-less insert', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({ data: null, error: { code: 'XX000' } })
+      .mockResolvedValueOnce({ data: true, error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(ownReviewQuery(null))
+      .mockReturnValue({ insert });
+
+    const filed = await fileDuplicateCaptureFallbackReview({
+      attempt,
+      evidence,
+      supabase: { from, rpc } as never,
+    });
+
+    expect(filed).toBe(true);
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(insert).toHaveBeenCalledTimes(1);
+  });
+
   it('returns false when the evidence cannot be persisted', async () => {
     const insert = vi.fn().mockResolvedValue({ error: new Error('db down') });
     const from = vi

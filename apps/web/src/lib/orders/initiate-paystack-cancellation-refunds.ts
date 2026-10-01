@@ -2,7 +2,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { initiateRefund as initiatePaystackRefund } from '@/lib/initiate-paystack-refund';
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
 import { handlePaystackCancellationRefundFailure } from '@/lib/orders/handle-paystack-cancellation-refund-failure';
+import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
 import { recordPaystackCancellationRefund } from '@/lib/orders/record-paystack-cancellation-refund';
+import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
+import { DeferredError } from './run-order-cancellation-side-effect';
 
 /**
  * Initiate a Paystack refund for every gateway leg that has no recorded
@@ -48,6 +51,43 @@ export async function initiatePaystackCancellationRefunds({
     const timeoutMs =
       deadlineMs === undefined ? undefined : deadlineMs - Date.now();
     if (timeoutMs !== undefined && timeoutMs <= 0) {
+      // On the final attempt the claim has already raised the row to
+      // the attempts cap, so a plain retryable error would finish it
+      // as failed-with-five-attempts — a state the drain never
+      // reselects — stranding this never-attempted leg with no
+      // review. Defer with a fresh budget when the reset lands so
+      // the resume attempts the leg; when the reset fails the budget
+      // is spent, so quarantine the leg with durable evidence
+      // instead of returning a retryable failure that cannot retry.
+      if (isLastAttempt === true) {
+        const resetFailed = await tryResetCancellationSideEffectAttempts(
+          supabase,
+          order.id,
+          'refund'
+        );
+        if (!resetFailed) {
+          throw new DeferredError(
+            'cancellation_refund_deadline_deferred_for_budget'
+          );
+        }
+        await quarantineRefund({
+          metadata: {
+            ...(refundIds.length > 0 ? { accepted_refund_ids: refundIds } : {}),
+            failed_payment_transaction_id: transaction.id,
+            // Definite non-acceptance: the deadline expired before
+            // the provider was called, so no refund may exist and
+            // the completion gate auto-closes on replacement
+            // coverage.
+            ambiguous_initiation: false,
+            deadline_exhausted: true,
+          },
+          order,
+          reason:
+            'The cancellation refund deadline expired on the final attempt before this payment leg could be attempted',
+          supabase,
+          transactions: [transaction],
+        });
+      }
       throw new Error('cancellation_refund_deadline_exceeded');
     }
     const transactionAmount = Number(transaction.amount);

@@ -20,6 +20,13 @@ export interface FinalizeOrderGatewayPaymentArgs {
   // Caps paid-email attempts per sender for short passes that cannot fit
   // the full retry loop; unset keeps the default four attempts.
   emailMaxAttemptsPerSender?: number;
+  /**
+   * Outstanding balance (minor units) the caller gated on. Forwarded
+   * to the atomic completion so a balance that moved between the
+   * gate and the order lock returns BALANCE_CHANGED instead of
+   * promoting. Unset preserves the legacy behavior.
+   */
+  expectedOutstandingMinor?: number | null;
 }
 
 export type FinalizeOrderGatewayPaymentOutcome =

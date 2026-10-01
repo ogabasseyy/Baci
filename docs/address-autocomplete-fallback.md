@@ -3,6 +3,8 @@
 The web address field requests `GET /api/places/autocomplete` with
 `fallback=geoapify`. Google remains first; Geoapify handles an exhausted application
 budget, provider quota/authentication/network failures, or no Google matches.
+An absent Google key also permits the explicitly requested, budgeted Geoapify
+fallback. Clients without that opt-in still receive the Google configuration error.
 Older native clients omit this parameter and continue receiving only Google
 predictions, because they do not support inline Geoapify details or attribution.
 

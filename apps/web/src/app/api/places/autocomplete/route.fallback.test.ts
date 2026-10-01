@@ -120,6 +120,20 @@ describe('address provider fallback', () => {
     expect(String(mockFetch.mock.calls[0][0])).toContain('api.geoapify.com');
   });
 
+  it('keeps budgeted Geoapify available when Google is not configured', async () => {
+    vi.stubEnv('GOOGLE_PLACES_API_KEY', '');
+    vi.stubEnv('GOOGLE_MAPS_API_KEY', '');
+    mockFetch.mockResolvedValueOnce(respond({ results: [geoResult] }));
+    const response = await GET(
+      makeRequest({ fallback: 'geoapify', input: 'Lagos', country: 'ng' })
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).predictions[0].provider).toBe('geoapify');
+    expect(reserveGooglePlacesRequest).not.toHaveBeenCalled();
+    expect(reserveGeoapifyRequest).toHaveBeenCalledOnce();
+    expect(mockFetch).toHaveBeenCalledOnce();
+  });
+
   it('falls back on a Google transport failure', async () => {
     mockFetch
       .mockRejectedValueOnce(new Error('timeout'))

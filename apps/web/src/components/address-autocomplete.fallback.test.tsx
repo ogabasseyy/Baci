@@ -1,7 +1,27 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { type ComponentProps, type ReactNode, useState } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { getPlaceDetails, getPlacePredictions } from '@/lib/google-places';
 import { AddressAutocomplete } from './address-autocomplete';
+
+// Exit animations are browser concerns; selection/reset assertions are immediate.
+vi.mock('framer-motion', () => ({
+  AnimatePresence: ({ children }: { children: ReactNode }) => <>{children}</>,
+  motion: {
+    div: ({
+      initial: _initial,
+      animate: _animate,
+      exit: _exit,
+      transition: _transition,
+      ...props
+    }: ComponentProps<'div'> & {
+      initial?: unknown;
+      animate?: unknown;
+      exit?: unknown;
+      transition?: unknown;
+    }) => <div {...props} />,
+  },
+}));
 
 vi.mock('@/lib/google-places', () => ({
   generateSessionToken: () => 'session',
@@ -100,4 +120,50 @@ it('clearing an input cancels its debounced provider call', async () => {
   fireEvent.change(screen.getByRole('textbox'), { target: { value: '' } });
   await act(async () => vi.advanceTimersByTimeAsync(300));
   expect(getPlacePredictions).not.toHaveBeenCalled();
+});
+
+function ControlledAddress() {
+  const [value, setValue] = useState('');
+  return (
+    <>
+      <AddressAutocomplete
+        aria-label="Address"
+        value={value}
+        onChange={(change) =>
+          setValue(typeof change === 'string' ? change : change.target.value)
+        }
+        onSelect={(place) => setValue(place.formattedAddress)}
+      />
+      <button type="button" onClick={() => setValue('')}>
+        Reset form
+      </button>
+      <button type="button" onClick={() => setValue('Different saved address')}>
+        Load another address
+      </button>
+    </>
+  );
+}
+
+it.each([
+  'Reset form',
+  'Load another address',
+])('removes selected-provider attribution when the parent invokes %s', async (action) => {
+  vi.mocked(getPlacePredictions).mockResolvedValue([geo]);
+  render(<ControlledAddress />);
+  await search(
+    screen.getByRole('textbox', { name: 'Address' }),
+    'Allen Avenue'
+  );
+  await act(async () =>
+    fireEvent.click(screen.getByRole('button', { name: /20 Allen Avenue/ }))
+  );
+  // The parent's own selection update must retain credit for the formatted value.
+  expect(screen.getByRole('textbox')).toHaveValue(geo.details.formattedAddress);
+  expect(
+    screen.getAllByRole('link', { name: 'Geoapify' }).at(-1)
+  ).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: action }));
+  expect(
+    screen.queryByRole('link', { name: 'Geoapify' })
+  ).not.toBeInTheDocument();
 });

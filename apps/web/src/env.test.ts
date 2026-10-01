@@ -58,6 +58,48 @@ describe('env validation', () => {
     );
   }, 60_000);
 
+  it('includes normalized autocomplete credentials in the validated server environment', async () => {
+    vi.stubEnv('GEOAPIFY_API_KEY', ' geo-test-key ');
+    vi.stubEnv(
+      'ADDRESS_AUTOCOMPLETE_REDIS_REST_URL',
+      ' https://redis.example.com '
+    );
+    vi.stubEnv('ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN', ' counter-test-token ');
+    const { env } = await loadEnvModule();
+    expect(env).toMatchObject({
+      GEOAPIFY_API_KEY: 'geo-test-key',
+      ADDRESS_AUTOCOMPLETE_REDIS_REST_URL: 'https://redis.example.com',
+      ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN: 'counter-test-token',
+    });
+  });
+
+  it('rejects malformed autocomplete Redis URLs during production validation', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('SUPABASE_JWT_SECRET', 'valid-test-signing-secret');
+    vi.stubEnv('ADDRESS_AUTOCOMPLETE_REDIS_REST_URL', 'not-a-url');
+    await expect(loadEnvModule()).rejects.toThrow(
+      'ADDRESS_AUTOCOMPLETE_REDIS_REST_URL'
+    );
+  });
+
+  it('excludes autocomplete secrets from client environment exports', async () => {
+    vi.stubGlobal('window', {});
+    vi.stubEnv('GEOAPIFY_API_KEY', 'private-test-key');
+    vi.stubEnv(
+      'ADDRESS_AUTOCOMPLETE_REDIS_REST_URL',
+      'https://redis.example.com'
+    );
+    vi.stubEnv(
+      'ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN',
+      'private-counter-token'
+    );
+    const { env } = await loadEnvModule();
+    expect(env.GEOAPIFY_API_KEY).toBeUndefined();
+    expect(env.ADDRESS_AUTOCOMPLETE_REDIS_REST_URL).toBeUndefined();
+    expect(env.ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN).toBeUndefined();
+  });
+
   it('treats whitespace-only Supabase JWT signing material as missing', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     vi.stubEnv('NODE_ENV', 'production');

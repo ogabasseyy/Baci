@@ -63,6 +63,8 @@ export function googleBudgetKey(date = new Date()): string {
   }).formatToParts(date);
   const year = parts.find((part) => part.type === 'year')?.value;
   const month = parts.find((part) => part.type === 'month')?.value;
+  if (!year || !month)
+    throw new Error('Google budget billing month unavailable');
   return `baci:address-budget:google:${year}-${month}`;
 }
 

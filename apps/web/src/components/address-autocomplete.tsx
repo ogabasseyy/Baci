@@ -1,83 +1,22 @@
 'use client';
 
-import { AnimatePresence, motion } from 'framer-motion';
-import { Home, Loader2, MapPin, X } from 'lucide-react';
+import { Home, Loader2, X } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { ThemedInput } from '@/components/themed';
 import { Input } from '@/components/ui/input';
 import {
   generateSessionToken,
-  getPlacePredictions,
   type PlacePrediction,
 } from '@/lib/google-places';
 import { cn } from '@/lib/utils';
 import { AddressAutocompleteAttribution } from './address-autocomplete-attribution';
+import { AddressAutocompleteDropdown } from './address-autocomplete-dropdown';
+import { loadPredictions } from './address-autocomplete-predictions';
 import { selectAddressPrediction } from './address-autocomplete-selection';
+import type { AddressAutocompleteProps } from './address-autocomplete-types';
 
-export interface PlaceDetails {
-  streetNumber: string;
-  route: string;
-  city: string;
-  state: string;
-  zip: string;
-  country: string;
-  formattedAddress: string;
-  location?: { latitude: number; longitude: number } | null;
-}
-
-interface AddressAutocompleteProps
-  extends Omit<
-    React.InputHTMLAttributes<HTMLInputElement>,
-    'onSelect' | 'onError'
-  > {
-  value?: string;
-  onChange?: (e: React.ChangeEvent<HTMLInputElement> | string) => void;
-  onSelect?: (place: PlaceDetails) => void;
-  useThemedInput?: boolean;
-  showIcon?: boolean;
-  country?: string;
-  /**
-   * Called with `true` when a prediction request fails (network/API error,
-   * e.g. Google Places quota exhausted) and `false` once a request succeeds.
-   * Lets callers offer a manual fallback instead of a silently empty dropdown.
-   */
-  onError?: (failed: boolean) => void;
-}
-
-function initSession(
-  setSessionToken: (token: string) => void,
-  setMounted: (mounted: boolean) => void
-): void {
-  setSessionToken(generateSessionToken());
-  setMounted(true);
-}
-
-async function loadPredictions(
-  query: string,
-  sessionToken: string,
-  country: string | undefined,
-  setPredictions: (predictions: PlacePrediction[]) => void,
-  setIsLoading: (loading: boolean) => void,
-  shouldApplyResult: () => boolean,
-  onError?: (failed: boolean) => void
-): Promise<void> {
-  try {
-    const results = await getPlacePredictions(query, sessionToken, country);
-    if (!shouldApplyResult()) return;
-    setPredictions(results);
-    onError?.(false);
-  } catch (error) {
-    if (!shouldApplyResult()) return;
-    console.error('Error fetching predictions:', error);
-    setPredictions([]);
-    onError?.(true);
-  } finally {
-    if (shouldApplyResult()) {
-      setIsLoading(false);
-    }
-  }
-}
+export type { PlaceDetails } from './address-autocomplete-types';
 
 export function AddressAutocomplete({
   value,
@@ -93,6 +32,16 @@ export function AddressAutocomplete({
   // Internal state for input value if not controlled
   const [internalValue, setInternalValue] = useState(value || '');
 
+  const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
+  const [sessionToken, setSessionToken] = useState<string>('');
+  const [isOpen, setIsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [mounted, setMounted] = useState(false);
+  const [selectedAddress, setSelectedAddress] = useState<{
+    provider: 'google' | 'geoapify';
+    values: string[];
+  } | null>(null);
   // Sync internal value with the controlled prop during render (prev-prop
   // compare) so users never see a stale frame between commits.
   const [prevValue, setPrevValue] = useState(value);
@@ -100,18 +49,11 @@ export function AddressAutocomplete({
     setPrevValue(value);
     if (value !== undefined) {
       setInternalValue(value);
+      if (selectedAddress && !selectedAddress.values.includes(value)) {
+        setSelectedAddress(null);
+      }
     }
   }
-
-  const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
-  const [sessionToken, setSessionToken] = useState<string>('');
-  const [isOpen, setIsOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const [mounted, setMounted] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState<
-    'google' | 'geoapify' | null
-  >(null);
   const [suggestionsFailed, setSuggestionsFailed] = useState(false);
   const handleProviderError = (failed: boolean) => {
     setSuggestionsFailed(failed);
@@ -126,7 +68,8 @@ export function AddressAutocomplete({
 
   // Initialize session token and mark as mounted
   useEffect(() => {
-    initSession(setSessionToken, setMounted);
+    setSessionToken(generateSessionToken());
+    setMounted(true);
     return () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
       predictionRequestId.current += 1;
@@ -154,7 +97,7 @@ export function AddressAutocomplete({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setInternalValue(newValue);
-    setSelectedProvider(null);
+    setSelectedAddress(null);
 
     // Call parent onChange
     if (onChange) {
@@ -197,7 +140,7 @@ export function AddressAutocomplete({
     predictionRequestId.current += 1;
     placeDetailsRequestId.current += 1;
     setInternalValue('');
-    setSelectedProvider(null);
+    setSelectedAddress(null);
     setPredictions([]);
     setIsOpen(false);
     setIsLoading(false);
@@ -235,7 +178,15 @@ export function AddressAutocomplete({
         onSelect,
         setSessionToken,
         setIsLoading,
-        setSelectedProvider,
+        setSelectedProvider: (provider) => {
+          setSelectedAddress({
+            provider,
+            values: [
+              prediction.mainText,
+              prediction.details?.formattedAddress || prediction.mainText,
+            ],
+          });
+        },
         onError: handleProviderError,
       },
       () => placeDetailsRequestId.current === currentRequestId
@@ -311,74 +262,15 @@ export function AddressAutocomplete({
           )}
         </div>
 
-        {/* Custom Dropdown - positioned to escape parent containers */}
-        <AnimatePresence>
-          {isOpen && predictions.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.15, ease: 'easeOut' }}
-              ref={dropdownRef}
-              className="absolute left-0 right-0 top-full z-9999 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-[300px] overflow-auto overflow-x-hidden"
-              style={{ position: 'absolute' }}
-            >
-              <div className="p-1.5 space-y-0.5">
-                {predictions.map((prediction, index) => (
-                  <button
-                    key={prediction.placeId}
-                    type="button"
-                    className={cn(
-                      'w-full px-3 py-2.5 text-left text-sm rounded-lg transition-colors flex items-start gap-3 group/item text-gray-700',
-                      highlightedIndex === index
-                        ? 'bg-store-primary/5 text-gray-900'
-                        : 'hover:bg-gray-50 hover:text-gray-900'
-                    )}
-                    onClick={() => handlePredictionSelect(prediction)}
-                  >
-                    <div
-                      className={cn(
-                        'mt-0.5 p-1.5 rounded-full transition-colors',
-                        highlightedIndex === index
-                          ? 'bg-store-primary/10 text-store-primary'
-                          : 'bg-gray-100 text-gray-500 group-hover/item:bg-store-primary/10 group-hover/item:text-store-primary'
-                      )}
-                    >
-                      <MapPin className="size-3.5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p
-                        className={cn(
-                          'font-medium truncate transition-colors',
-                          highlightedIndex === index
-                            ? 'text-store-primary'
-                            : 'text-gray-900'
-                        )}
-                      >
-                        {prediction.mainText}
-                      </p>
-                      <p className="text-xs text-gray-600 truncate">
-                        {prediction.secondaryText}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-
-              <div className="px-4 py-2 border-t border-gray-100 bg-gray-50 flex justify-end sticky bottom-0">
-                <AddressAutocompleteAttribution
-                  provider={
-                    predictions[0]?.provider === 'geoapify'
-                      ? 'geoapify'
-                      : 'google'
-                  }
-                />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <AddressAutocompleteDropdown
+          isOpen={isOpen}
+          predictions={predictions}
+          highlightedIndex={highlightedIndex}
+          dropdownRef={dropdownRef}
+          onSelect={handlePredictionSelect}
+        />
       </div>
-      {selectedProvider === 'geoapify' && (
+      {selectedAddress?.provider === 'geoapify' && (
         <div className="mt-2">
           <AddressAutocompleteAttribution provider="geoapify" />
         </div>

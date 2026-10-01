@@ -10,6 +10,7 @@ vi.mock('@/lib/orders/build-order-cancellation-email-message', () => ({
 }));
 
 import { executeOrderCancellationSideEffect } from './execute-order-cancellation-side-effect';
+import { auditReviewsQuery } from './execute-order-cancellation-side-effect.test-support';
 import { DeliveryUncertainError } from './run-order-cancellation-side-effect';
 
 const merchant = {
@@ -67,6 +68,7 @@ describe('cancellation refund audit recovery', () => {
         ])
       )
       .mockReturnValueOnce(transactionQuery([]))
+      .mockReturnValueOnce(auditReviewsQuery([]))
       .mockReturnValueOnce({ insert: auditInsert })
       .mockReturnValueOnce({ insert: reviewInsert });
     mocks.initiateRefund.mockResolvedValue({
@@ -123,6 +125,7 @@ describe('cancellation refund audit recovery', () => {
           },
         ])
       )
+      .mockReturnValueOnce(auditReviewsQuery([]))
       .mockReturnValueOnce({ insert: reviewInsert });
 
     const error = await executeOrderCancellationSideEffect({
@@ -159,7 +162,8 @@ describe('cancellation refund audit recovery', () => {
             status: 'refund_pending',
           },
         ])
-      );
+      )
+      .mockReturnValueOnce(auditReviewsQuery([]));
 
     const error = await executeOrderCancellationSideEffect({
       merchant,
@@ -174,7 +178,7 @@ describe('cancellation refund audit recovery', () => {
       'cancellation_refund_awaiting_provider_completion'
     );
     expect(mocks.initiateRefund).not.toHaveBeenCalled();
-    expect(from).toHaveBeenCalledTimes(2);
+    expect(from).toHaveBeenCalledTimes(3);
   });
 
   it('quarantines pending legs without provider evidence', async () => {
@@ -200,6 +204,7 @@ describe('cancellation refund audit recovery', () => {
           },
         ])
       )
+      .mockReturnValueOnce(auditReviewsQuery([]))
       .mockReturnValueOnce({ insert: reviewInsert });
 
     await expect(

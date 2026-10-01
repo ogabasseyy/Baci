@@ -10,6 +10,7 @@ vi.mock('@/lib/orders/build-order-cancellation-email-message', () => ({
 }));
 
 import { executeOrderCancellationSideEffect } from './execute-order-cancellation-side-effect';
+import { auditReviewsQuery } from './execute-order-cancellation-side-effect.test-support';
 import {
   DeferredError,
   DeliveryUncertainError,
@@ -92,7 +93,8 @@ async function runWithRefunds(
   const from = vi
     .fn()
     .mockReturnValueOnce(transactionQuery(payments))
-    .mockReturnValueOnce(transactionQuery(refunds));
+    .mockReturnValueOnce(transactionQuery(refunds))
+    .mockReturnValueOnce(auditReviewsQuery([]));
   const error = await executeOrderCancellationSideEffect({
     merchant,
     order,
@@ -118,7 +120,7 @@ describe('cancellation unverified refunds', () => {
       'cancellation_refund_awaiting_provider_completion'
     );
     expect(mocks.initiateRefund).not.toHaveBeenCalled();
-    expect(from).toHaveBeenCalledTimes(2);
+    expect(from).toHaveBeenCalledTimes(3);
   });
 
   it('waits instead of quarantining an unverified partial', async () => {
@@ -164,7 +166,8 @@ describe('cancellation unverified refunds', () => {
             gateway_reference: '43',
           }),
         ])
-      );
+      )
+      .mockReturnValueOnce(auditReviewsQuery([]));
 
     await expect(
       executeOrderCancellationSideEffect({

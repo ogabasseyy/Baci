@@ -45,11 +45,13 @@ function harness() {
 }
 
 function reviewClient({
+  confirmReview = { txn_id: 'attempt-1' },
   insertError = null,
   order,
   rpcData,
   stampData = true,
 }: {
+  confirmReview?: unknown;
   insertError?: unknown;
   order?: unknown;
   rpcData: unknown;
@@ -57,11 +59,23 @@ function reviewClient({
 }) {
   const insert = vi.fn().mockResolvedValue({ error: insertError });
   const maybeSingle = vi.fn().mockResolvedValue({ data: order, error: null });
+  const confirmSingle = vi
+    .fn()
+    .mockResolvedValue({ data: confirmReview, error: null });
   const from = vi.fn((table: string) => {
     if (table === 'orders') {
       return {
         eq: vi.fn().mockReturnThis(),
         maybeSingle,
+        select: vi.fn().mockReturnThis(),
+      };
+    }
+    if (table === 'reconciliation_review') {
+      return {
+        eq: vi.fn().mockReturnThis(),
+        insert,
+        is: vi.fn().mockReturnThis(),
+        maybeSingle: confirmSingle,
         select: vi.fn().mockReturnThis(),
       };
     }
@@ -224,5 +238,33 @@ describe('gatePartiallyPaidAbandonedCapture reviews', () => {
     expect(gate).toBe('done');
     expect(h.summary.failed).toBe(true);
     expect(h.hold).toHaveBeenCalledWith('partial_conflict_review_failed');
+  });
+
+  it('holds without retiring when the conflict collision belongs to another order', async () => {
+    const db = reviewClient({
+      confirmReview: null,
+      insertError: { code: '23505' },
+      rpcData: {
+        error_code: 'PARTIAL_PAYMENT_CONTRACT_MISMATCH',
+        outcome: 'review_required',
+      },
+    });
+    const h = harness();
+
+    const gate = await gatePartiallyPaidAbandonedCapture({
+      ...h,
+      attempt,
+      providerData,
+      supabase: db as never,
+    });
+
+    expect(gate).toBe('done');
+    expect(db.rpc).not.toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
+      expect.anything()
+    );
+    expect(h.summary.failed).toBe(true);
+    expect(h.hold).toHaveBeenCalledWith('partial_conflict_review_failed');
+    expect(h.summary.reviewsFiled).toEqual([]);
   });
 });

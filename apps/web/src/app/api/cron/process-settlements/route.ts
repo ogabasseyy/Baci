@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { buildSettlementNotificationEmail } from '@/lib/build-settlement-notification-email';
 import { constantTimeEqual } from '@/lib/constant-time-equal';
 import { notifyMerchant } from '@/lib/expo-push';
 import { logger } from '@/lib/logger';
@@ -8,6 +7,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { sendEmail } from '@/lib/zeptomail';
 import { processSettlementsQuerySchema } from '@/schemas/process-settlements-query';
 import { processCancellationDrain } from './process-cancellation-drain';
+import { sendSettlementNotifications } from './send-settlement-notifications';
 import {
   settlementDrainDeadlineMs,
   settlementDrainLimit,
@@ -126,138 +126,11 @@ export async function POST(request: Request) {
     }
 
     // 3. Send notifications
-    const notificationResults = {
-      sent: 0,
-      failed: 0,
-    };
-
-    if (pendingNotifications && pendingNotifications.length > 0) {
-      // Group settlements by merchant for batch notifications
-      const merchantSettlements = new Map<
-        string,
-        {
-          merchantId: string;
-          businessName: string;
-          email: string;
-          settlements: Array<{
-            id: string;
-            amount: number;
-            gateway: string;
-            description: string;
-          }>;
-          totalAmount: number;
-        }
-      >();
-
-      for (const settlement of pendingNotifications) {
-        const merchant = settlement.merchants as unknown as {
-          id: string;
-          business_name: string;
-          email: string | null;
-        };
-
-        if (!merchant?.email) continue;
-
-        const key = merchant.id;
-        const existing = merchantSettlements.get(key);
-
-        if (existing) {
-          existing.settlements.push({
-            id: settlement.id,
-            amount: Number(settlement.net_amount),
-            gateway: settlement.gateway,
-            description: settlement.description || 'Payment',
-          });
-          existing.totalAmount += Number(settlement.net_amount);
-        } else {
-          merchantSettlements.set(key, {
-            merchantId: merchant.id,
-            businessName: merchant.business_name,
-            email: merchant.email,
-            settlements: [
-              {
-                id: settlement.id,
-                amount: Number(settlement.net_amount),
-                gateway: settlement.gateway,
-                description: settlement.description || 'Payment',
-              },
-            ],
-            totalAmount: Number(settlement.net_amount),
-          });
-        }
-      }
-
-      // Send one email per merchant
-      for (const [, data] of merchantSettlements) {
-        try {
-          const settlementIds = data.settlements.map((s) => s.id);
-
-          // Revalidate immediately before sending: a concurrent refund
-          // may have reversed (cancelled) a snapshotted settlement
-          // after the batch read. Only settled, still-unnotified rows
-          // are announced. A reversal landing between this read and the
-          // send can still announce once; the guarded mark below keeps
-          // the flag truthful so it never repeats.
-          const { data: fresh, error: freshError } = await supabase
-            .from('merchant_settlements')
-            .select('id, status, settlement_notified')
-            .in('id', settlementIds);
-          if (freshError) throw freshError;
-          const current = new Map(
-            (
-              (fresh ?? []) as Array<{
-                id: string;
-                settlement_notified: boolean;
-                status: string;
-              }>
-            ).map((row) => [row.id, row])
-          );
-          const stillSettled = data.settlements.filter((item) => {
-            const row = current.get(item.id);
-            return (
-              row?.status === 'settled' && row.settlement_notified === false
-            );
-          });
-          if (stillSettled.length === 0) continue;
-          const totalAmount = stillSettled.reduce(
-            (sum, item) => sum + item.amount,
-            0
-          );
-
-          await sendEmail(
-            buildSettlementNotificationEmail({
-              ...data,
-              settlements: stillSettled,
-              totalAmount,
-            })
-          );
-
-          // Guard the mark with the same predicates: a reversal racing
-          // the send must not be flagged notified.
-          await supabase
-            .from('merchant_settlements')
-            .update({
-              settlement_notified: true,
-              notification_sent_at: new Date().toISOString(),
-            })
-            .eq('status', 'settled')
-            .eq('settlement_notified', false)
-            .in(
-              'id',
-              stillSettled.map((s) => s.id)
-            );
-
-          notificationResults.sent++;
-        } catch (emailError) {
-          logger.error({
-            message: 'Failed to send settlement notification',
-            merchantId: data.merchantId,
-            error: emailError,
-          });
-          notificationResults.failed++;
-        }
-      }
-    }
+    const notificationResults = await sendSettlementNotifications({
+      pendingNotifications,
+      sendEmail,
+      supabase,
+    });
 
     // The settlement RPC and notification emails above burned through the
     // shared 300s cron budget: bound the drain by what remains so provider

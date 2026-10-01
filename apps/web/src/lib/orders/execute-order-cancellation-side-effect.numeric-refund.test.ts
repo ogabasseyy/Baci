@@ -7,6 +7,7 @@ vi.mock('@/lib/orders/build-order-cancellation-email-message', () => ({
 }));
 
 import { executeOrderCancellationSideEffect } from './execute-order-cancellation-side-effect';
+import { auditReviewsQuery } from './execute-order-cancellation-side-effect.test-support';
 
 it('records Paystack numeric transaction IDs for later provider verification', async () => {
   const refundInsert = vi.fn().mockResolvedValue({ error: null });
@@ -30,6 +31,7 @@ it('records Paystack numeric transaction IDs for later provider verification', a
       ])
     )
     .mockReturnValueOnce(transactionQuery([]))
+    .mockReturnValueOnce(auditReviewsQuery([]))
     .mockReturnValueOnce({ insert: refundInsert });
   initiateRefund.mockResolvedValueOnce({
     success: true,

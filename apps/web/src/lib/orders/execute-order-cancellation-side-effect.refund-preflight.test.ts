@@ -412,6 +412,65 @@ describe('cancellation refund preflight quarantine', () => {
     );
   });
 
+  it('matches audit-blocked legs by snake-case recovery candidates', async () => {
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'paystack',
+            gateway_reference: 'PSK-1',
+            id: 'payment-1',
+            status: 'completed',
+          },
+        ])
+      )
+      .mockReturnValueOnce(transactionQuery([]))
+      .mockReturnValueOnce(
+        auditReviewsQuery([
+          {
+            // Recovery reviews leave txn_id unset and store
+            // candidates in snake_case.
+            candidates: [
+              {
+                amount: 100,
+                gateway_reference: 'PSK-1',
+                order_id: 'order-1',
+                payment_transaction_id: 'payment-1',
+              },
+            ],
+            metadata: {
+              audit_record_failed: true,
+              provider_refund_id: 202,
+              recovered_from_provider_event: true,
+            },
+            txn_id: null,
+          },
+        ])
+      )
+      .mockReturnValueOnce({ insert: reviewInsert });
+
+    await expect(
+      executeOrderCancellationSideEffect({
+        merchant,
+        order,
+        step: 'refund',
+        supabase: { from } as never,
+      })
+    ).rejects.toBeInstanceOf(DeliveryUncertainError);
+
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: expect.stringContaining('no verified local audit row'),
+        txn_id: 'payment-1',
+      })
+    );
+  });
+
   it('ignores cancellation reviews without audit-failed evidence', async () => {
     const refundInsert = vi.fn().mockResolvedValue({ error: null });
     const from = vi

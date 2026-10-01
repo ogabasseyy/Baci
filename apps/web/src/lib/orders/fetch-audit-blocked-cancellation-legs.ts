@@ -7,7 +7,8 @@ import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-tra
  * refund row exists; the provider refund may already be real, so these
  * legs wait for operations instead of initiating a second full provider
  * refund. Matches by the review's transaction id, its metadata leg id,
- * or merged candidate evidence. Fails closed when the lookup errors.
+ * or merged candidate evidence in either stored case. Fails closed when
+ * the lookup errors.
  */
 export async function fetchAuditBlockedCancellationLegIds({
   order,
@@ -42,13 +43,19 @@ export async function fetchAuditBlockedCancellationLegIds({
     if (typeof metadata.payment_transaction_id === 'string') {
       reviewLegIds.add(metadata.payment_transaction_id);
     }
+    // Recovery filers store candidates in snake_case while the
+    // reference-only filer uses camelCase; accept both stored shapes.
     const candidates = review.candidates as Array<{
       paymentTransactionId?: unknown;
+      payment_transaction_id?: unknown;
     }> | null;
     if (Array.isArray(candidates)) {
       for (const candidate of candidates) {
         if (typeof candidate?.paymentTransactionId === 'string') {
           reviewLegIds.add(candidate.paymentTransactionId);
+        }
+        if (typeof candidate?.payment_transaction_id === 'string') {
+          reviewLegIds.add(candidate.payment_transaction_id);
         }
       }
     }

@@ -17,9 +17,11 @@ interface RpcErrorShape {
 }
 
 /**
- * Detects the PostgREST "function not in schema cache" shape, which proves
- * the wrapper migration has not applied yet — distinct from a reachable
- * wrapper rejecting the caller's authority or input.
+ * Detects the pre-migration schema shapes, which prove the wrapper migration
+ * has not applied yet — distinct from a reachable wrapper rejecting the
+ * caller's authority or input. On the first rollout neither the role nor the
+ * RPCs exist, and PostgREST fails at SET ROLE before resolving the RPC, so
+ * both the missing-role and the missing-function shapes must defer.
  */
 export function isGiglWrapperSchemaMissing(
   error: RpcErrorShape | null
@@ -27,10 +29,14 @@ export function isGiglWrapperSchemaMissing(
   if (!error) {
     return false;
   }
-  if (error.code === 'PGRST202') {
+  if (error.code === 'PGRST202' || error.code === '42704') {
     return true;
   }
-  return /could not find the function/i.test(error.message ?? '');
+  const message = error.message ?? '';
+  return (
+    /could not find the function/i.test(message) ||
+    /role\s+"?[\w$]+"?\s+does not exist/i.test(message)
+  );
 }
 
 /** Proves the signed worker can reach its wrapper without claiming any work. */

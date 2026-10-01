@@ -219,13 +219,17 @@ jobs:
       # esbuild version is still on the allow list.
       - run: .github/scripts/run-pinned-vercel.sh pull --yes --environment=production
       - name: Verify GIGL fallback capability in Vercel Production
-        # The fallback route no-ops without provider configuration, so only
-        # require the worker token when GIGL is enabled; otherwise an
-        # intentionally unconfigured production would fail here.
+        # Mirror isExplicitlyDisabledEnv: only 0/false/off bypass this gate;
+        # an unset flag counts as enabled, matching the runtime default.
+        # The injector proves the Production key is DEFINED (Vercel pulls
+        # sensitive values blank); it cannot prove the value is real or
+        # unexpired. Operators must keep the same rotated worker JWT in both
+        # Vercel Production and the VPS worker .env, or the retained manual
+        # fallback route returns 500 'GIGL tracking worker unavailable'.
         run: |
           gigl_enabled="$(grep -E '^(export[[:space:]]+)?GIGL_ENABLED=' .vercel/.env.production.local 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r"'"'" | tr '[:upper:]' '[:lower:]' | xargs)"
           case "$gigl_enabled" in
-            ''|0|false|off) echo 'GIGL is not enabled; skipping fallback token injection.' ;;
+            0|false|off) echo 'GIGL is not enabled; skipping fallback token injection.' ;;
             *) node .github/scripts/inject-prebuilt-env-secret.mjs GIGL_TRACKING_WORKER_TOKEN .vercel/.env.production.local 'build-time-presence-stand-in-not-used-at-runtime-000000000000' ;;
           esac
       - name: Ensure wallet recovery HMAC Production configuration exists

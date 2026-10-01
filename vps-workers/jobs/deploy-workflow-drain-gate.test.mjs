@@ -66,5 +66,7 @@ describe('production cache-invalidation drain rollout gate', () => {
       deployment,
       /inject-prebuilt-env-secret\.mjs GIGL_TRACKING_WORKER_TOKEN \.vercel\/\.env\.production\.local/
     );
+    assert.match(deployment, /0\|false\|off\) echo 'GIGL is not enabled/);
+    assert.doesNotMatch(deployment, /''\|0\|false\|off\)/);
   });
 });

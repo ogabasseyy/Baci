@@ -24,6 +24,7 @@ describe('verifyGiglTrackingWorkerCapability', () => {
     for (const error of [
       { code: '42501', message: 'permission denied' },
       { code: 'PGRST301', message: 'invalid JWT' },
+      { code: '42P01', message: 'relation "public.shipments" does not exist' },
       null,
     ]) {
       const rpc = vi.fn().mockResolvedValue({ data: null, error });
@@ -41,6 +42,10 @@ describe('verifyGiglTrackingWorkerCapability', () => {
         code: '404',
         message:
           'Could not find the function public.claim_due_gigl_tracking_monitors in the schema cache',
+      },
+      {
+        code: '42704',
+        message: 'role "gigl_tracking_worker" does not exist',
       },
     ]) {
       const rpc = vi.fn().mockResolvedValue({ data: null, error });

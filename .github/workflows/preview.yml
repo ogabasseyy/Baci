@@ -1,41 +1,46 @@
 name: Preview (branch prebuilt)
 
 on:
-  # Dispatch from the branch to preview:
-  #   gh workflow run preview.yml --ref <branch>
+  # Dispatch the STABLE file from the default branch and select the target
+  # as an input, so unreviewed branch edits to this workflow can never run
+  # with deployment secrets:
+  #   gh workflow run preview.yml -f ref=<branch>
   # PREVIEW ONLY. This workflow must never gain --prod, the production
   # environment, migrations, postdeploy steps, or cache purges.
   workflow_dispatch:
+    inputs:
+      ref:
+        description: Same-repo branch, tag, or SHA to build and preview
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: preview-${{ github.ref }}
+  group: preview-${{ inputs.ref }}
   cancel-in-progress: true
 
 jobs:
   preview:
     # Mirrors deploy-production's prebuilt mechanism (pinned CLI, build-time
-    # secret stand-ins, tgz archive) but builds the dispatched ref and deploys
+    # secret stand-ins, tgz archive) but builds the requested ref and deploys
     # WITHOUT --prod. Vercel cloud builds cannot serve this repo (full builds
     # exceed the remote build time limit), and local builds must not be
     # promoted, so CI-built prebuilt previews are the only branch previews.
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_CLI_VERSION: "57.0.0"
-      BACI_NEXT_DEPLOYMENT_ID_SOURCE: ${{ github.run_id }}_${{ github.run_attempt }}_${{ github.sha }}
+      BACI_NEXT_DEPLOYMENT_ID_SOURCE: ${{ github.run_id }}_${{ github.run_attempt }}_${{ inputs.ref }}
       # Fix OOM error on runner (mirrors deploy-production).
       NODE_OPTIONS: "--max_old_space_size=8192"
     steps:
+      # Same-repo only: no `repository:` override, so a fork ref cannot be
+      # smuggled in through inputs.ref. Unknown refs fail closed here.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
       - name: Pre-run cleanup of stale secrets
         run: |
@@ -45,7 +50,14 @@ jobs:
         with:
           node-version: "24"
       - uses: ./.github/actions/pnpm-install-cached
-      - run: .github/scripts/run-pinned-vercel.sh pull --yes --environment=preview
+      # Deployment secrets stay off the third-party steps above: each secret
+      # is scoped to exactly the run-pinned-vercel steps that need it.
+      - name: Pull Preview environment
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: .github/scripts/run-pinned-vercel.sh pull --yes --environment=preview
       - name: Ensure build-time presence of runtime-only quiz RPC secret
         env:
           QUIZ_RPC_SERVER_SECRET: ${{ secrets.QUIZ_RPC_SERVER_SECRET }}
@@ -56,10 +68,21 @@ jobs:
         # Vercel remains the runtime source of the sensitive Preview value.
         run: node .github/scripts/inject-prebuilt-env-secret.mjs SUPABASE_AGENTIC_JWT_PRIVATE_JWK .vercel/.env.preview.local --generate-es256-jwk-standin
       - name: Build for Vercel
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: .github/scripts/run-pinned-vercel.sh build --yes
       # IMPORTANT: --archive=tgz is required to prevent Vercel upload rate limiting.
       - name: Deploy preview to Vercel
+        id: deploy
         timeout-minutes: 55
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           .github/scripts/run-pinned-vercel.sh deploy --yes --prebuilt --archive=tgz | tee preview-deploy.log
           preview_url="$(grep -oE 'https://[^ ]+\.vercel\.app' preview-deploy.log | tail -n 1)"

@@ -168,7 +168,9 @@ deploy_scripts:
   - '.github/scripts/storefront-sitemap-purge.mjs'
   - '.github/scripts/sync-cloudflare-vercel-production-env.sh'
   - '.github/scripts/sync-cloudflare-vercel-production-env.test.mjs'
+  - '.github/scripts/preview-workflow-contract.test.mjs'
   - '.github/workflows/deploy.yml'
+  - '.github/workflows/preview.yml'
 # Root Next config changes affect the web app even when apps/web/** is untouched.
 web:
   - 'apps/web/**'

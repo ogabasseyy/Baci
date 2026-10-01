@@ -45,9 +45,11 @@ function harness() {
 }
 
 function shortClient({
+  confirmReview = { txn_id: 'attempt-1' },
   insertError = null,
   stampData = true,
 }: {
+  confirmReview?: unknown;
   insertError?: unknown;
   stampData?: unknown;
 } = {}) {
@@ -55,11 +57,23 @@ function shortClient({
   const maybeSingle = vi
     .fn()
     .mockResolvedValue({ data: { amount_paid: 30, total: 100 }, error: null });
+  const confirmSingle = vi
+    .fn()
+    .mockResolvedValue({ data: confirmReview, error: null });
   const from = vi.fn((table: string) => {
     if (table === 'orders') {
       return {
         eq: vi.fn().mockReturnThis(),
         maybeSingle,
+        select: vi.fn().mockReturnThis(),
+      };
+    }
+    if (table === 'reconciliation_review') {
+      return {
+        eq: vi.fn().mockReturnThis(),
+        insert,
+        is: vi.fn().mockReturnThis(),
+        maybeSingle: confirmSingle,
         select: vi.fn().mockReturnThis(),
       };
     }
@@ -139,6 +153,27 @@ describe('gatePartiallyPaidAbandonedCapture short captures', () => {
     );
     expect(h.summary.failed).toBe(true);
     expect(h.hold).toHaveBeenCalledWith('partial_short_stamp_failed');
+    expect(h.summary.reviewsFiled).toEqual([]);
+  });
+
+  it('holds without retiring when the short-capture conflict belongs to another order', async () => {
+    const db = shortClient({
+      confirmReview: null,
+      insertError: { code: '23505' },
+    });
+    const h = harness();
+
+    const gate = await gatePartiallyPaidAbandonedCapture({
+      ...h,
+      attempt,
+      providerData,
+      supabase: db as never,
+    });
+
+    expect(gate).toBe('done');
+    expect(db.rpc).not.toHaveBeenCalled();
+    expect(h.summary.failed).toBe(true);
+    expect(h.hold).toHaveBeenCalledWith('partial_short_review_failed');
     expect(h.summary.reviewsFiled).toEqual([]);
   });
 });

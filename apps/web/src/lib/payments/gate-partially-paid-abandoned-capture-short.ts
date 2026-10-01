@@ -55,10 +55,40 @@ async function fileShortCaptureReview(
     txn_id: attempt.id,
   });
   if (!error) return true;
-  // This issue type dedupes per transfer (txn/ref), not per order, so a
-  // conflict means this same capture was already filed. Redelivery is
-  // success; nothing merges.
+  // The (issue_type, paystack_ref) index is global: two orders sharing a
+  // legacy/corrupt reference collide, so a conflict may be the other
+  // order's review rather than this capture already filed. Only treat it
+  // as success when this transaction's own review is open; otherwise
+  // holding keeps the captured funds visible instead of stamping them out
+  // of future sweeps.
   if ((error as { code?: string }).code === POSTGRES_UNIQUE_VIOLATION) {
+    const { data: existing, error: lookupError } = await supabase
+      .from('reconciliation_review')
+      .select('txn_id')
+      .eq('issue_type', 'partial_capture_short_requires_review')
+      .eq('paystack_ref', attempt.gateway_reference)
+      .eq('txn_id', attempt.id)
+      .is('resolved_at', null)
+      .maybeSingle();
+    if (lookupError) {
+      logger.error({
+        error: lookupError,
+        message: 'Failed to confirm short-capture review',
+        orderId: attempt.order_id,
+        reference: attempt.gateway_reference,
+        transactionId: attempt.id,
+      });
+      return false;
+    }
+    if (!existing) {
+      logger.warn({
+        message: 'Short-capture review conflict belongs to another order',
+        orderId: attempt.order_id,
+        reference: attempt.gateway_reference,
+        transactionId: attempt.id,
+      });
+      return false;
+    }
     return true;
   }
   logger.error({

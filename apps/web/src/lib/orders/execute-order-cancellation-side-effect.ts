@@ -75,6 +75,48 @@ export async function executeOrderCancellationSideEffect({
   if (refundLookupError) {
     throw new Error('Unable to verify existing cancellation refunds');
   }
+  // A signed reference-only refund event files an unresolved audit-failed
+  // review when no local refund row exists; the provider refund may
+  // already be real, so legs carrying that evidence wait for operations
+  // instead of initiating a second full provider refund.
+  const { data: auditReviewRows, error: auditReviewError } = await supabase
+    .from('reconciliation_review')
+    .select('candidates, metadata, txn_id')
+    .eq('issue_type', 'order_cancellation_refund_requires_review')
+    .eq('order_id', order.id)
+    .eq('merchant_id', order.merchant_id)
+    .is('resolved_at', null);
+  if (auditReviewError) {
+    throw new Error('Unable to verify refund evidence reviews');
+  }
+  const auditBlockedLegIds = new Set<string>();
+  for (const review of auditReviewRows ?? []) {
+    const metadata = review.metadata as {
+      audit_record_failed?: unknown;
+      payment_transaction_id?: unknown;
+    } | null;
+    if (metadata?.audit_record_failed !== true) continue;
+    const reviewLegIds = new Set<string>();
+    if (typeof review.txn_id === 'string') {
+      reviewLegIds.add(review.txn_id);
+    }
+    if (typeof metadata.payment_transaction_id === 'string') {
+      reviewLegIds.add(metadata.payment_transaction_id);
+    }
+    const candidates = review.candidates as Array<{
+      paymentTransactionId?: unknown;
+    }> | null;
+    if (Array.isArray(candidates)) {
+      for (const candidate of candidates) {
+        if (typeof candidate?.paymentTransactionId === 'string') {
+          reviewLegIds.add(candidate.paymentTransactionId);
+        }
+      }
+    }
+    for (const leg of transactions) {
+      if (reviewLegIds.has(leg.id)) auditBlockedLegIds.add(leg.id);
+    }
+  }
   const linkedPaymentId = (row: { metadata: unknown }): string | null => {
     const metadata = row.metadata as {
       payment_transaction_id?: unknown;
@@ -248,7 +290,15 @@ export async function executeOrderCancellationSideEffect({
   }
   // Withhold mismatched legs from initiation: their completed rows do not
   // cover them in matching money, so a full-leg provider refund now would
-  // double-refund the covered portion. Clean legs still move below.
+  // double-refund the covered portion. Audit-blocked legs withhold the
+  // same way: their provider refund may already exist. Clean legs still
+  // move below. Fully refunded legs need no quarantine: nothing will be
+  // initiated for them, so terminalizing would only strand the rest.
+  const auditBlockedTransactions = transactions.filter(
+    (transaction) =>
+      auditBlockedLegIds.has(transaction.id) &&
+      !refundedPaymentIds.has(transaction.id)
+  );
   const refundIds = await initiatePaystackCancellationRefunds({
     deadlineMs,
     isLastAttempt,
@@ -257,9 +307,22 @@ export async function executeOrderCancellationSideEffect({
     refundedPaymentIds,
     supabase,
     transactions: transactions.filter(
-      (transaction) => !mismatchedIds.has(transaction.id)
+      (transaction) =>
+        !mismatchedIds.has(transaction.id) &&
+        !auditBlockedLegIds.has(transaction.id)
     ),
   });
+  if (auditBlockedTransactions.length > 0) {
+    await quarantineRefund({
+      metadata: { audit_blocked_leg_count: auditBlockedTransactions.length },
+      order,
+      preflight: true,
+      reason:
+        'A provider refund event for this leg has no verified local audit row; verify it before another provider refund',
+      supabase,
+      transactions: auditBlockedTransactions,
+    });
+  }
   if (mismatchedTransactions.length > 0) {
     await quarantineRefund({
       metadata: { mismatched_leg_count: mismatchedTransactions.length },

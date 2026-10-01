@@ -10,6 +10,7 @@ vi.mock('@/lib/orders/build-order-cancellation-email-message', () => ({
 }));
 
 import { executeOrderCancellationSideEffect } from './execute-order-cancellation-side-effect';
+import { auditReviewsQuery } from './execute-order-cancellation-side-effect.test-support';
 import { DeliveryUncertainError } from './run-order-cancellation-side-effect';
 
 const merchant = {
@@ -86,6 +87,7 @@ describe('cancellation refund leg matching', () => {
       .mockReturnValueOnce(
         transactionQuery([completedRefund('payment-1', { amount: 40 })])
       )
+      .mockReturnValueOnce(auditReviewsQuery([]))
       .mockReturnValueOnce({ insert: reviewInsert });
 
     await expect(
@@ -117,6 +119,7 @@ describe('cancellation refund leg matching', () => {
       .mockReturnValueOnce(
         transactionQuery([completedRefund('payment-1', { currency: 'USD' })])
       )
+      .mockReturnValueOnce(auditReviewsQuery([]))
       .mockReturnValueOnce({ insert: reviewInsert });
 
     await expect(
@@ -147,6 +150,7 @@ describe('cancellation refund leg matching', () => {
           completedRefund('payment-1', { gateway: 'juicyway' }),
         ])
       )
+      .mockReturnValueOnce(auditReviewsQuery([]))
       .mockReturnValueOnce({ insert: reviewInsert });
 
     await expect(
@@ -177,7 +181,8 @@ describe('cancellation refund leg matching', () => {
             gateway_reference: '43',
           }),
         ])
-      );
+      )
+      .mockReturnValueOnce(auditReviewsQuery([]));
 
     await expect(
       executeOrderCancellationSideEffect({
@@ -189,7 +194,7 @@ describe('cancellation refund leg matching', () => {
     ).resolves.toEqual({ refundIds: [] });
 
     expect(mocks.initiateRefund).not.toHaveBeenCalled();
-    expect(from).toHaveBeenCalledTimes(2);
+    expect(from).toHaveBeenCalledTimes(3);
   });
 
   it('initiates clean legs before quarantining mismatched ones', async () => {
@@ -206,6 +211,7 @@ describe('cancellation refund leg matching', () => {
       .mockReturnValueOnce(
         transactionQuery([completedRefund('payment-2', { amount: 10 })])
       )
+      .mockReturnValueOnce(auditReviewsQuery([]))
       .mockReturnValueOnce({ insert: refundInsert })
       .mockReturnValueOnce({ insert: reviewInsert });
     mocks.initiateRefund.mockResolvedValue({
@@ -264,7 +270,8 @@ describe('cancellation refund leg matching', () => {
             status: 'refund_pending',
           },
         ])
-      );
+      )
+      .mockReturnValueOnce(auditReviewsQuery([]));
 
     const error = await executeOrderCancellationSideEffect({
       merchant,
@@ -279,6 +286,6 @@ describe('cancellation refund leg matching', () => {
       'cancellation_refund_awaiting_provider_completion'
     );
     expect(mocks.initiateRefund).not.toHaveBeenCalled();
-    expect(from).toHaveBeenCalledTimes(2);
+    expect(from).toHaveBeenCalledTimes(3);
   });
 });

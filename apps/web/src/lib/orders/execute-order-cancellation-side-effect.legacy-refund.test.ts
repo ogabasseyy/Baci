@@ -9,6 +9,7 @@ vi.mock('@/lib/orders/build-order-cancellation-email-message', () => ({
 }));
 
 import { executeOrderCancellationSideEffect } from './execute-order-cancellation-side-effect';
+import { auditReviewsQuery } from './execute-order-cancellation-side-effect.test-support';
 import { DeliveryUncertainError } from './run-order-cancellation-side-effect';
 
 const merchant = {
@@ -74,6 +75,7 @@ describe('legacy cancellation refund preflight', () => {
           },
         ])
       )
+      .mockReturnValueOnce(auditReviewsQuery([]))
       .mockReturnValueOnce({ insert: reviewInsert });
 
     await expect(

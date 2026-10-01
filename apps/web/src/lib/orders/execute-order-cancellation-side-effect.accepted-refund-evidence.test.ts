@@ -10,6 +10,7 @@ vi.mock('@/lib/orders/build-order-cancellation-email-message', () => ({
 }));
 
 import { executeOrderCancellationSideEffect } from './execute-order-cancellation-side-effect';
+import { auditReviewsQuery } from './execute-order-cancellation-side-effect.test-support';
 import { DeliveryUncertainError } from './run-order-cancellation-side-effect';
 
 const merchant = {
@@ -65,6 +66,7 @@ describe('cancellation accepted-refund evidence', () => {
         ])
       )
       .mockReturnValueOnce(transactionQuery([]))
+      .mockReturnValueOnce(auditReviewsQuery([]))
       .mockReturnValueOnce({ insert: auditInsert })
       .mockReturnValueOnce({ insert: reviewInsert });
     mocks.initiateRefund.mockResolvedValue({
@@ -121,6 +123,7 @@ describe('cancellation accepted-refund evidence', () => {
         ])
       )
       .mockReturnValueOnce(transactionQuery([]))
+      .mockReturnValueOnce(auditReviewsQuery([]))
       .mockReturnValueOnce({ insert: refundInsert })
       .mockReturnValueOnce({ insert: reviewInsert });
     mocks.initiateRefund.mockResolvedValue({

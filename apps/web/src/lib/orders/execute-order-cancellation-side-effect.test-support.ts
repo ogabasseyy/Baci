@@ -43,11 +43,21 @@ function transactionQuery(data: unknown) {
   };
 }
 
+export function auditReviewsQuery(data: unknown) {
+  return {
+    eq: vi.fn().mockReturnThis(),
+    is: vi.fn().mockResolvedValue({ data, error: null }),
+    select: vi.fn().mockReturnThis(),
+  };
+}
+
 export function refundClient({
+  auditReviews = [],
   insertError = null,
   payments = [paystackPayment],
   refundRows = [],
 }: {
+  auditReviews?: unknown[];
   insertError?: Error | null;
   payments?: (typeof paystackPayment)[];
   refundRows?: {
@@ -63,7 +73,8 @@ export function refundClient({
   const from = vi
     .fn()
     .mockReturnValueOnce(paymentLookup)
-    .mockReturnValueOnce(transactionQuery(refundRows));
+    .mockReturnValueOnce(transactionQuery(refundRows))
+    .mockReturnValueOnce(auditReviewsQuery(auditReviews));
   for (const _payment of payments) {
     from.mockReturnValueOnce({ insert });
   }

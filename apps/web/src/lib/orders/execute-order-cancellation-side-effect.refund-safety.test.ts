@@ -10,6 +10,7 @@ vi.mock('@/lib/orders/build-order-cancellation-email-message', () => ({
 }));
 
 import { executeOrderCancellationSideEffect } from './execute-order-cancellation-side-effect';
+import { auditReviewsQuery } from './execute-order-cancellation-side-effect.test-support';
 import { DeliveryUncertainError } from './run-order-cancellation-side-effect';
 
 const merchant = {
@@ -64,6 +65,7 @@ describe('cancellation refund safety', () => {
         ])
       )
       .mockReturnValueOnce(transactionQuery([]))
+      .mockReturnValueOnce(auditReviewsQuery([]))
       .mockReturnValueOnce({ insert: reviewInsert });
 
     await expect(
@@ -101,6 +103,7 @@ describe('cancellation refund safety', () => {
         ])
       )
       .mockReturnValueOnce(transactionQuery([]))
+      .mockReturnValueOnce(auditReviewsQuery([]))
       .mockReturnValueOnce({ insert: refundInsert });
     mocks.initiateRefund.mockResolvedValue({
       data: {
@@ -130,7 +133,7 @@ describe('cancellation refund safety', () => {
         status: 'refund_pending',
       })
     );
-    expect(from).toHaveBeenCalledTimes(3);
+    expect(from).toHaveBeenCalledTimes(4);
   });
 
   it('initiates every payment leg when an earlier accepted refund is pending', async () => {
@@ -156,6 +159,7 @@ describe('cancellation refund safety', () => {
         ])
       )
       .mockReturnValueOnce(transactionQuery([]))
+      .mockReturnValueOnce(auditReviewsQuery([]))
       .mockReturnValue({ insert: refundInsert });
     mocks.initiateRefund
       .mockResolvedValueOnce({
@@ -236,6 +240,7 @@ describe('cancellation refund safety', () => {
         ])
       )
       .mockReturnValueOnce(transactionQuery([]))
+      .mockReturnValueOnce(auditReviewsQuery([]))
       .mockReturnValueOnce({ insert: refundInsert })
       .mockReturnValueOnce({ insert: reviewInsert });
     mocks.initiateRefund

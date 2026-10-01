@@ -24,7 +24,7 @@ BEGIN
      NOT document @@ plainto_tsquery('simple', '8192MB laptop') THEN
     RAISE EXCEPTION 'Equivalent canonical capacity retrieval failed';
   END IF;
-  document := public.product_discovery_search_document_v3('Laptop', 'Acme', 'Laptops', '',
+  document := private.product_discovery_search_document_v3('Laptop', 'Acme', 'Laptops', '',
     '{"attributes":{"storage_gb":8,"ram_gb":8}}'::jsonb);
   IF NOT document @@ plainto_tsquery('simple', 'ram8gb') OR
      NOT document @@ plainto_tsquery('simple', 'storage8gb') OR
@@ -35,40 +35,63 @@ BEGIN
   IF document @@ plainto_tsquery('simple', 'ram8.5gb') THEN
     RAISE EXCEPTION 'Keyed numeric lexeme was fabricated';
   END IF;
-  document := public.product_discovery_search_document_v4('Headset', 'Acme', 'Audio',
+  document := private.product_discovery_search_document_v4('Headset', 'Acme', 'Audio',
     'USB-C accessory', '{"attributes":{"connector":"  Usb-C  "}}'::jsonb);
   IF NOT document @@ plainto_tsquery('simple',
       'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
         'connector' || pg_catalog.chr(31) || 'usb-c', 'UTF8'), 'sha256'), 'hex')) THEN
     RAISE EXCEPTION 'Correlated text attribute lexeme missed normalized connector value';
   END IF;
-  document := public.product_discovery_search_document_v4('Headset', 'Acme', 'Audio',
+  document := private.product_discovery_search_document_v4('Headset', 'Acme', 'Audio',
     'USB-C accessory', '{"attributes":{"connector":"Lightning"}}'::jsonb);
   IF document @@ plainto_tsquery('simple',
       'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
         'connector' || pg_catalog.chr(31) || 'usb-c', 'UTF8'), 'sha256'), 'hex')) THEN
     RAISE EXCEPTION 'Marketing text satisfied a verified connector constraint';
   END IF;
-  document := public.product_discovery_search_document_v4('Headset', 'Acme', 'Audio', '',
+  document := private.product_discovery_search_document_v4('Headset', 'Acme', 'Audio', '',
     '{"attributes":{"color":"USB-C"}}'::jsonb);
   IF document @@ plainto_tsquery('simple',
       'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
         'connector' || pg_catalog.chr(31) || 'usb-c', 'UTF8'), 'sha256'), 'hex')) THEN
     RAISE EXCEPTION 'USB-C under another attribute satisfied connector constraint';
   END IF;
-  document := public.product_discovery_search_document_v4('Headset', 'Acme', 'Audio', '',
+  document := private.product_discovery_search_document_v4('Headset', 'Acme', 'Audio', '',
     '{"attributes":{"connector":"Café   USB-C"}}'::jsonb);
   IF NOT document @@ plainto_tsquery('simple', 'fact' || pg_catalog.encode(
       extensions.digest(pg_catalog.convert_to('connector' || pg_catalog.chr(31) || pg_catalog.lower(
         pg_catalog.normalize('Café USB-C', 'NFC')), 'UTF8'), 'sha256'), 'hex')) THEN
     RAISE EXCEPTION 'Correlated text lexeme normalization diverged for Unicode or whitespace';
   END IF;
-  document := public.product_discovery_search_document_v3('Headset', 'Acme', 'Audio', '',
+  document := private.product_discovery_search_document_v3('Headset', 'Acme', 'Audio', '',
     '{"attributes":{"color":"black"}}'::jsonb);
   IF NOT document @@ plainto_tsquery('simple', 'black') OR
      NOT document @@ plainto_tsquery('simple', 'color') OR
      document @@ plainto_tsquery('simple', 'connector') THEN
     RAISE EXCEPTION 'Attribute key lexemes are missing or fabricated';
+  END IF;
+  document := private.product_discovery_search_document_v5('Generic handset', 'Samsung', 'Smartphones',
+    'phone phone phone', '{"product_type":"phone","model":"ZX-42","compatible_with":["USB-C dock"]}'::jsonb);
+  IF NOT document @@ plainto_tsquery('simple', 'typephone') OR
+     NOT document @@ plainto_tsquery('simple', 'brandsamsung') OR
+     NOT document @@ plainto_tsquery('simple', 'modelzx_42') OR
+     NOT document @@ plainto_tsquery('simple', 'compatusb_c_dock') THEN
+    RAISE EXCEPTION 'Keyed identity lexemes are missing';
+  END IF;
+  document := private.product_discovery_search_document_v5('phone phone phone', 'Acme', 'Accessories',
+    'phone accessory', '{"product_type":"accessory"}'::jsonb);
+  IF document @@ plainto_tsquery('simple', 'typephone') THEN
+    RAISE EXCEPTION 'Marketing text satisfied a keyed identity constraint';
+  END IF;
+  document := private.product_discovery_search_document_v5('Generic', 'Acme', 'Smartphones', '',
+    '{}'::jsonb);
+  IF NOT document @@ plainto_tsquery('simple', 'typephone') THEN
+    RAISE EXCEPTION 'Category fallback did not emit the canonical type lexeme';
+  END IF;
+  document := private.product_discovery_search_document_v5('Generic', 'Acme', 'Accessories', '',
+    '{"product_type":"smartphones"}'::jsonb);
+  IF NOT document @@ plainto_tsquery('simple', 'typephone') THEN
+    RAISE EXCEPTION 'Type alias did not collapse to the canonical identity lexeme';
   END IF;
   IF (SELECT prosecdef FROM pg_proc WHERE oid = 'public.search_product_discovery_facts(uuid,text,integer,integer,text,text)'::regprocedure) THEN
     RAISE EXCEPTION 'Fact retrieval must preserve invoker RLS';
@@ -113,7 +136,10 @@ VALUES
    '{"attributes":{"connector":"  Usb-C  "}}'::jsonb),
   ('cb58d110-0000-4000-8000-000000000210', 'cb58d110-0000-4000-8000-000000000201',
    'Accessory', 'connector-other-key', 'Acme', 50000, 'active',
-   '{"attributes":{"connector":"Lightning","color":"USB-C"}}'::jsonb);
+   '{"attributes":{"connector":"Lightning","color":"USB-C"}}'::jsonb),
+  ('cb58d110-0000-4000-8000-000000000211', 'cb58d110-0000-4000-8000-000000000201',
+   'phone phone phone', 'phone-marketing-accessory', 'Acme', 50000, 'active',
+   '{"product_type":"accessory"}'::jsonb);
 
 -- Exercise the RPC as its public storefront caller, under publication RLS.
 SET LOCAL ROLE anon;
@@ -170,6 +196,12 @@ BEGIN
       'connector' || pg_catalog.chr(31) || 'usb-c', 'UTF8'), 'sha256'), 'hex'));
   IF or_ids IS DISTINCT FROM ARRAY['cb58d110-0000-4000-8000-000000000209']::uuid[] THEN
     RAISE EXCEPTION 'Text equality matched marketing prose or a different attribute';
+  END IF;
+  SELECT array_agg(product_id) INTO or_ids
+  FROM public.search_product_discovery_facts('cb58d110-0000-4000-8000-000000000201',
+    'typephone & brandsamsung');
+  IF or_ids IS DISTINCT FROM ARRAY['cb58d110-0000-4000-8000-000000000202']::uuid[] THEN
+    RAISE EXCEPTION 'Keyed identity retrieval matched marketing prose or missed the phone';
   END IF;
 END;
 $$;

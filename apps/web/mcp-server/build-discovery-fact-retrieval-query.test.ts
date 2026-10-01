@@ -8,24 +8,23 @@ it('builds grouped tsquery text with brand alternation', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({
     product_type: 'phone', brands: ['Samsung', 'Google'],
     attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }],
-  }))).toBe('(((phone) | (phones) | (smartphone) | (smartphones) | (smart & phone) | (smart & phones) | (mobile & phone) | (mobile & phones) | (cell & phone) | (cell & phones)) & (samsung | google) & storage256gb)');
+  }))).toBe('(typephone & (brandsamsung | brandgoogle) & storage256gb)');
 });
 
 it('joins alternatives with OR and strips tsquery operators from terms', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'ZX-42' }, { product_type: 'charger' })))
-    .toBe('(zx & 42) | (((charger) | (chargers)))');
+    .toBe('(modelzx_42) | (typecharger)');
 });
 
-it('groups multi-word brand phrases with AND before OR-ing across brands', () => {
+it('keys multi-word brands as one lexeme before OR-ing across brands', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ brands: ['Hewlett Packard', 'Dell'] })))
-    .toBe('(((hewlett & packard) | dell))');
-  expect(buildDiscoveryFactRetrievalQuery(intent({ brands: ['Samsung Galaxy'] }))).toBe('((samsung & galaxy))');
+    .toBe('((brandhewlett_packard | branddell))');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ brands: ['Samsung Galaxy'] }))).toBe('(brandsamsung_galaxy)');
 });
 
-it('retrieves every spelling selection treats as the same type', () => {
-  expect(buildDiscoveryFactRetrievalQuery(intent({ product_type: 'Smartphones' })))
-    .toBe('(((phone) | (phones) | (smartphone) | (smartphones) | (smart & phone) | (smart & phones) | (mobile & phone) | (mobile & phones) | (cell & phone) | (cell & phones)))');
-  expect(buildDiscoveryFactRetrievalQuery(intent({ product_type: 'headphones' }))).toBe('(headphones)');
+it('keys every spelling selection treats as the same type to one canonical lexeme', () => {
+  expect(buildDiscoveryFactRetrievalQuery(intent({ product_type: 'Smartphones' }))).toBe('(typephone)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ product_type: 'headphones' }))).toBe('(typeheadphones)');
 });
 
 it('emits unit-suffixed equality values and unit lexemes for ranges', () => {
@@ -73,9 +72,10 @@ it('falls back to sanitized shopper wording and never emits empty syntax', () =>
   expect(buildDiscoveryFactRetrievalQuery(intent({}), 'or and the')).toBe('(a & !a)');
 });
 
-it('retains Unicode identity terms while stripping query operators', () => {
-  expect(buildDiscoveryFactRetrievalQuery(intent({ brands: ['Mömax'], model: '三星 手机 | !' })))
-    .toBe('(mömax & 三星 & 手机)');
+it('folds Unicode identity terms to ASCII-safe keys both sides agree on', () => {
+  expect(buildDiscoveryFactRetrievalQuery(intent({ brands: ['Mömax'], model: 'Café Pro | !' })))
+    .toBe('(brandmmax & modelcaf_pro__)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ model: '三星手机' }))).toBe('(a & !a)');
 });
 
 it('keeps every constraint in retrieval past the old twelve-term budget', () => {
@@ -86,7 +86,7 @@ it('keeps every constraint in retrieval past the old twelve-term budget', () => 
       { key: 'ram_gb', operator: 'gte', value: 16 },
       { key: 'color', operator: 'eq', value: 'midnight blue deep dark shade tone' },
     ],
-  }))).toBe('(((laptop) | (laptops)) & acme & zx & 42 & ultra & pro & max & plus & x & y & storage256gb & ramgb & fact9d4b15b3a2abd3add7dda96fe84fa0be4bbb8666e10bb3c3fc807d7c68e9ddc8)');
+  }))).toBe('(typelaptop & brandacme & modelzx_42_ultra_pro_max_plus_x_y_z & storage256gb & ramgb & fact9d4b15b3a2abd3add7dda96fe84fa0be4bbb8666e10bb3c3fc807d7c68e9ddc8)');
 });
 
 it('keeps the maximum structured text-attribute query under the database length bound', () => {
@@ -102,11 +102,23 @@ it('keeps the maximum structured text-attribute query under the database length 
 });
 
 it('normalizes decomposed Unicode before building retrieval terms', () => {
-  expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'Cafe\u0301 Pro' }))).toBe('(café & pro)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'Café Pro' }))).toBe('(modelcaf_pro)');
 });
 
-it('drops dot-only terms and strips edge dots so groups stay valid', () => {
+it('renders exponent-notation numbers as plain decimals like the SQL index', () => {
+  expect(buildDiscoveryFactRetrievalQuery(intent({ attributes: [{ key: 'screen_inches', operator: 'eq', value: 1e-7 }] })))
+    .toBe('(screen0.0000001inch)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ attributes: [{ key: 'storage_gb', operator: 'eq', value: 1e21 }] })))
+    .toBe('(storage1000000000000000000000gb)');
+});
+
+it('keys long models as one identity lexeme instead of truncating the tail', () => {
+  expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'Alpha Bravo Charlie Delta Echo Foxtrot Golf Hotel India Juliett Kilo Lima Mike November Oscar Papa' })))
+    .toBe('(modelalpha_bravo_charlie_delta_echo_foxtrot_golf_hotel_india_juliett_kilo_lima_mike_november_oscar_papa)');
+});
+
+it('keeps keyed identity terms free of dots so groups stay valid', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ model: '...' }))).toBe('(a & !a)');
-  expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'ZX-42.' }))).toBe('(zx & 42)');
-  expect(buildDiscoveryFactRetrievalQuery(intent({ model: '1.5' }))).toBe('(1.5)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'ZX-42.' }))).toBe('(modelzx_42)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ model: '1.5' }))).toBe('(model15)');
 });

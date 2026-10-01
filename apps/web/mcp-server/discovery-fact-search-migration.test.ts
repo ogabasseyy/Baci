@@ -70,6 +70,37 @@ it('indexes and queries numeric facts with their attribute identity', () => {
   expect(keyed).toContain('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_capacity_search_idx');
 });
 
+it('serves variant recall through a published-merchant RPC instead of the staff-only table', () => {
+  const recall = readFileSync(new URL('../../../supabase/migrations/20261001090000_product_variant_recall.sql', import.meta.url), 'utf8');
+  expect(recall).toContain('SECURITY DEFINER');
+  expect(recall).toContain('is_published');
+  expect(recall).toContain('is_inventory_anchor IS NOT TRUE');
+  expect(recall).toContain("p.status = 'active'");
+  expect(recall).toContain('TO anon, authenticated, service_role');
+});
+
+it('moves index builders out of the exposed schema without changing the serving contract', () => {
+  const move = readFileSync(new URL('../../../supabase/migrations/20261001100000_move_discovery_builders_private.sql', import.meta.url), 'utf8');
+  expect(move.startsWith('-- disable-transaction')).toBe(true);
+  expect(move).toContain('SET SCHEMA private');
+  expect(move).toContain('private.product_discovery_search_document_v4');
+  expect(move).toContain('USAGE ON SCHEMA private TO anon, authenticated');
+  expect(move).toContain('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts(');
+  expect(move).toContain('SECURITY INVOKER');
+});
+
+it('indexes key-specific identity lexemes for capped retrieval', () => {
+  const identity = readFileSync(new URL('../../../supabase/migrations/20261001110000_keyed_discovery_identity_facts.sql', import.meta.url), 'utf8');
+  expect(identity.startsWith('-- disable-transaction')).toBe(true);
+  expect(identity).toContain('product_discovery_search_document_v5');
+  expect(identity).toContain("'type' ||");
+  expect(identity).toContain("'brand' ||");
+  expect(identity).toContain("'model' ||");
+  expect(identity).toContain('private.discovery_identity_key');
+  expect(identity).toContain('CREATE INDEX CONCURRENTLY products_discovery_identity_search_idx');
+  expect(identity).toContain('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx');
+});
+
 it('indexes correlated verified text attribute pairs after the concurrent replacement build', () => {
   const correlated = readFileSync(new URL('../../../supabase/migrations/20261001080000_correlated_text_attribute_search.sql', import.meta.url), 'utf8');
   expect(correlated.startsWith('-- disable-transaction')).toBe(true);

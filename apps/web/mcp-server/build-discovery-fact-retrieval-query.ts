@@ -11,25 +11,19 @@ const NUMERIC_UNITS: Record<string, string> = {
 // terms), so no constraint is silently dropped and value/key pairs stay
 // atomic. Truncation drops whole trailing terms, never splits syntax, and the
 // matcher still enforces every constraint.
-const MAX_MODEL_TERMS = 8;
+// Model and compatible_with identifiers keep every token: the schema already
+// bounds values to 100 chars and the database gates the whole query at 16000
+// chars, while the matcher only sees recalled candidates, so a truncated
+// distinguishing token would silently lose valid products.
 const MAX_FALLBACK_TERMS = 12;
 // Plain-language connectives are required lexemes under to_tsquery (only '|'
 // is OR), so the fallback path drops them instead of collapsing recall.
 const FALLBACK_STOPWORDS = new Set(['or', 'and', 'a', 'the']);
-// Selection treats every spelling here as the same type (canonical aliases
-// plus the narrow category fallback), so retrieval must too: the simple
-// configuration does not stem, and a document carrying only 'smartphones'
-// would otherwise never match intent 'phone'.
-const TYPE_RETRIEVAL_SPELLINGS: Record<string, string[]> = {
-  phone: ['phone', 'phones', 'smartphone', 'smartphones', 'smart_phone', 'smart_phones',
-    'mobile_phone', 'mobile_phones', 'cell_phone', 'cell_phones'],
-  laptop: ['laptop', 'laptops'],
-  tablet: ['tablet', 'tablets'],
-  charger: ['charger', 'chargers'],
-  cable: ['cable', 'cables'],
-  security_camera: ['security_camera', 'security_cameras'],
-  fragrance_diffuser: ['fragrance_diffuser', 'fragrance_diffusers'],
-};
+// Identity constraints retrieve through key-specific lexemes derived from the
+// same authoritative fields the matcher verifies, so marketing prose can no
+// longer fill the capped fact window ahead of identity matches. Both sides
+// normalize identically (NFKC, trim, lower, separators to underscores, then
+// drop anything outside letters, digits, and underscores).
 
 function sanitizeTerm(value: string): string[] {
   // Dots survive inside version-like lexemes ('1.5' parses), but a dot-only
@@ -42,13 +36,30 @@ function sanitizeTerm(value: string): string[] {
     .filter((term) => /[\p{L}\p{N}]/u.test(term));
 }
 
+// trim_scale parity: JavaScript renders very small or large numbers with an
+// exponent ('1e-7'), but the SQL index expands JSON numbers to plain
+// decimals, and the exponent sign is invalid to_tsquery syntax that would
+// poison the whole group. Non-exponent spellings pass through untouched.
+function decimalTerm(value: number): string {
+  const text = String(value);
+  const match = /^(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/.exec(text);
+  if (!match) return text;
+  const [, head, tail = '', expText] = match;
+  const point = head.length + Number(expText);
+  const digits = (head + tail).replace(/^0+(?=\d)/, '');
+  if (point <= 0) return `0.${'0'.repeat(-point)}${digits}`.replace(/0+$/, '').replace(/\.$/, '');
+  if (point >= digits.length) return digits + '0'.repeat(point - digits.length);
+  const out = `${digits.slice(0, point)}.${digits.slice(point)}`.replace(/0+$/, '');
+  return out.endsWith('.') ? out.slice(0, -1) : out;
+}
+
 function attributeTerms(key: string, value: string | number): string[] {
   if (typeof value === 'number') {
     if (!Number.isFinite(value) || value < 0) return [];
     const unit = NUMERIC_UNITS[key];
     const identity = key.replace(/_gb$/, '').replace(/_w$/, '').replace(/_inches$/, '')
       .replace(/_hz$/, '');
-    return [`${identity}${value}${unit ?? ''}`.toLowerCase()];
+    return [`${identity}${decimalTerm(value)}${unit ?? ''}`.toLowerCase()];
   }
   // Hash a correlated key/value pair. Separate key and value postings can be
   // satisfied by different metadata fields or by unstructured marketing text.
@@ -75,15 +86,19 @@ function groupQuery(terms: string[]): string | undefined {
   return `(${terms.join(' & ')})`;
 }
 
+function identityKey(prefix: string, value: string): string | undefined {
+  // ASCII allowlist: PostgreSQL has no Unicode property escapes inside
+  // bracket expressions, so both sides strip identically to stay in
+  // agreement. Folded keys can only collide (the matcher disambiguates) and
+  // fully stripped values skip the term (recall broadens for the matcher).
+  const key = value.normalize('NFKC').trim().toLocaleLowerCase('en-US')
+    .replace(/[\s-]+/g, '_').replace(/[^a-z0-9_]/g, '');
+  return key ? `${prefix}${key}` : undefined;
+}
+
 function typeTerms(productType: string): string[] {
-  const spellings = TYPE_RETRIEVAL_SPELLINGS[canonicalizeDiscoveryProductType(productType)];
-  if (!spellings) return sanitizeTerm(productType);
-  const branches = spellings.flatMap((spelling) => {
-    const branch = groupQuery(sanitizeTerm(spelling));
-    return branch ? [branch] : [];
-  });
-  if (branches.length === 0) return sanitizeTerm(productType);
-  return [`(${branches.join(' | ')})`];
+  const key = identityKey('type', canonicalizeDiscoveryProductType(productType));
+  return key ? [key] : [];
 }
 
 /** tsquery text for the facts index, built from structured alternatives so
@@ -95,18 +110,21 @@ export function buildDiscoveryFactRetrievalQuery(intent: McpDiscoveryIntent, fal
   for (const alternative of intent.alternatives) {
     const terms: string[] = [];
     if (alternative.product_type) terms.push(...typeTerms(alternative.product_type));
-    // Each manufacturer's words join with AND before brands OR together, so a
+    // Each manufacturer keys as one lexeme before brands OR together, so a
     // multi-word brand cannot broaden retrieval to either token alone and
     // exhaust the capped fact window with partial matches.
-    const brandBranches = (alternative.brands ?? []).map((brand) => {
-      const tokens = sanitizeTerm(brand);
-      if (tokens.length === 1) return tokens[0];
-      return tokens.length > 1 ? `(${tokens.join(' & ')})` : undefined;
-    }).filter((branch): branch is string => branch !== undefined);
+    const brandBranches = (alternative.brands ?? []).map((brand) => identityKey('brand', brand))
+      .filter((branch): branch is string => branch !== undefined);
     if (brandBranches.length === 1) terms.push(brandBranches[0]);
     else if (brandBranches.length > 1) terms.push(`(${brandBranches.join(' | ')})`);
-    if (alternative.model) terms.push(...sanitizeTerm(alternative.model).slice(0, MAX_MODEL_TERMS));
-    if (alternative.compatible_with) terms.push(...sanitizeTerm(alternative.compatible_with).slice(0, MAX_MODEL_TERMS));
+    if (alternative.model) {
+      const key = identityKey('model', alternative.model);
+      if (key) terms.push(key);
+    }
+    if (alternative.compatible_with) {
+      const key = identityKey('compat', alternative.compatible_with);
+      if (key) terms.push(key);
+    }
     for (const attribute of alternative.attributes ?? []) {
       terms.push(...(attribute.operator === 'eq'
         ? attributeTerms(attribute.key, attribute.value)

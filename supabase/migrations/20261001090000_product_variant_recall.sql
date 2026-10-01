@@ -15,6 +15,7 @@ AS $$
   WHERE pv.merchant_id = p_merchant_id
     AND p.merchant_id = p_merchant_id
     AND p.status = 'active'
+    AND pv.is_inventory_anchor IS NOT TRUE
     AND (
       COALESCE(m.is_published, FALSE) = TRUE
       OR COALESCE(m.is_platform_admin, FALSE) = TRUE

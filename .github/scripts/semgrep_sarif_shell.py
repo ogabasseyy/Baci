@@ -7,20 +7,32 @@ validation, and run:-block extraction with continuation joining.
 import re
 
 def strip_comments(line):
+    # Backslash-aware: an escaped hash is literal (echo \#; evil
+    # still executes the suffix), so only an unescaped # outside
+    # quotes starts a comment. Quote branches match bash (no
+    # escapes in single quotes; \# stays two chars in doubles).
     buf = []
     quote = None
-    for ch in line:
+    i, n = 0, len(line)
+    while i < n:
+        ch = line[i]
         if quote:
             buf.append(ch)
             if ch == quote:
                 quote = None
+            i += 1
         elif ch in ("'", '"'):
             quote = ch
             buf.append(ch)
+            i += 1
+        elif ch == "\\" and i + 1 < n:
+            buf.append(line[i:i + 2])
+            i += 2
         elif ch == "#":
             break
         else:
             buf.append(ch)
+            i += 1
     return "".join(buf)
 
 
@@ -46,30 +58,6 @@ def unquote_value(value):
             and text[0] in ("'", '"'):
         return text[1:-1]
     return text
-
-
-def is_step_boundary(line):
-    # Named (- name:) and unnamed (- uses:/- run:/...) steps both
-    # delimit spans, so an unnamed step cannot widen a span.
-    # Quoted keys (- "name":) delimit too: a bare-key match would
-    # merge an attacker step into the previous span.
-    m = re.match(r"^\s*-\s+(.*)$", line)
-    if not m:
-        return False
-    key, _ = map_key_value(m.group(1).strip())
-    return key is not None
-
-def step_start(lines, ref_index):
-    for i in range(ref_index, -1, -1):
-        if is_step_boundary(lines[i]):
-            return i
-    return 0
-
-def step_end(lines, start_index):
-    for i in range(start_index + 1, len(lines)):
-        if is_step_boundary(lines[i]):
-            return i
-    return len(lines)
 
 
 # Shared shell parsing for the consumer checks below.

@@ -6,6 +6,7 @@ install order, pinned versioned URL, no pipe-to-shell).
 import re
 from semgrep_sarif_helpers import (CARRY_VARS, _collect_vars,
                                    _resolve)
+from semgrep_sarif_install import audit_install_binding
 from semgrep_sarif_pins import (MUSE_PINNED_HOST,
                                 MUSE_PINNED_SHA_AARCH64,
                                 MUSE_PINNED_SHA_X86,
@@ -251,16 +252,13 @@ def audit_installer(drift):
                   if "got_sha" in line and "want_sha" in line
                   and "!=" in line
                   and first_cmd(line) not in ("echo", "printf")]
-        install_at = [i for i, line in enumerate(installer)
-                      if first_cmd(line) == "install"
-                      and "tmp_bin" in line]
+        install_at = audit_install_binding(installer, first_cmd,
+                                           drift)
         if not verify_at:
             drift.append("muse-installer-no-verify")
         if not cmp_at:
             drift.append("muse-installer-no-compare")
-        if not install_at:
-            drift.append("muse-installer-no-install")
-        elif verify_at and cmp_at \
+        if install_at and verify_at and cmp_at \
                 and min(install_at) < max(verify_at + cmp_at):
             drift.append("muse-installer-unverified-install")
         if any(re.search(r"\|\s*(?:sudo\s+)?(?:bash|sh)\b", line)

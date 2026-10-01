@@ -37,7 +37,19 @@ def _jq_program(rest):
     return None
 
 
-def _check_command(argv0, rest, pre, drift):
+# Bare network-capable commands: no audited helper needs them —
+# install.sh's pinned download curl is the single exemption
+# (the installer URL rule constrains its target), and gh/git
+# stay allowed (load-bearing; programs audit separately). A bare
+# curl/nc/ssh falls past every path rule while exfiltrating
+# GH_TOKEN, so any other use drifts for human review.
+NET_DENY = {"aria2c", "axel", "busybox", "curl", "ftp", "lftp",
+            "mail", "msmtp", "nc", "ncat", "netcat", "nmap",
+            "openssl", "scp", "sendmail", "sftp", "socat", "ssh",
+            "telnet", "tftp", "rsync", "wget"}
+
+
+def _check_command(argv0, rest, pre, drift, pinned_curl=False):
     if "sudo" in pre or "doas" in pre \
             or argv0 in ("su", "runuser", "setpriv"):
         if "helper-privilege" not in drift:
@@ -48,6 +60,10 @@ def _check_command(argv0, rest, pre, drift):
                 and "helper-untrusted-exec" not in drift:
             drift.append("helper-untrusted-exec")
     base = argv0.rsplit("/", 1)[-1]
+    if base in NET_DENY \
+            and not (pinned_curl and base == "curl") \
+            and "helper-network-tool" not in drift:
+        drift.append("helper-network-tool")
     if base in ("bash", "sh", "source", "."):
         bound = script_operand(rest)
         if not bound and base in ("source", ".") and rest \
@@ -107,14 +123,14 @@ def _check_command(argv0, rest, pre, drift):
         if "helper-untrusted-exec" not in drift:
             drift.append("helper-untrusted-exec")
     elif base == "env":
-        _check_env(rest, drift)
+        _check_env(rest, drift, pinned_curl)
     elif base == "find":
         if any(t in ("-exec", "-execdir", "-ok", "-okdir")
                for t in rest) \
                 and "helper-untrusted-exec" not in drift:
             drift.append("helper-untrusted-exec")
     elif base == "xargs":
-        _check_xargs(rest, drift)
+        _check_xargs(rest, drift, pinned_curl)
     elif base in ("nice", "nohup", "stdbuf", "setsid"):
         # Execution wrappers obscure the real argv0; none is
         # used today, so any use fails closed.
@@ -134,7 +150,7 @@ def _check_command(argv0, rest, pre, drift):
             drift.append("helper-untrusted-exec")
 
 
-def _check_env(rest, drift):
+def _check_env(rest, drift, pinned_curl=False):
     # Token scrubbing legitimately uses env -u; anything else
     # routes the command back through the full dispatch. -S
     # takes its own quoting language: fail closed.
@@ -180,10 +196,11 @@ def _check_env(rest, drift):
     if not argv0:
         return
     pre = tail[:len(tail) - len(cmd_rest) - 1]
-    _check_command(argv0, list(cmd_rest), list(pre), drift)
+    _check_command(argv0, list(cmd_rest), list(pre), drift,
+                   pinned_curl)
 
 
-def _check_xargs(rest, drift):
+def _check_xargs(rest, drift, pinned_curl=False):
     # Arguments are opaque to the invoked command, so any
     # workspace-rooted token fails closed; the command itself
     # takes the path rule. -e/-E values are ambiguous: fail
@@ -223,6 +240,10 @@ def _check_xargs(rest, drift):
             and not _safe_exec_path(cmd) \
             and "helper-untrusted-exec" not in drift:
         drift.append("helper-untrusted-exec")
+    if cmd.rsplit("/", 1)[-1] in NET_DENY \
+            and not (pinned_curl and cmd == "curl") \
+            and "helper-network-tool" not in drift:
+        drift.append("helper-network-tool")
 
 
 def _check_poison_assign(pre, argv0, rest, drift):

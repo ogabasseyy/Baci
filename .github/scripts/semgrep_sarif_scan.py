@@ -126,6 +126,28 @@ def extract_subshells(text):
             i += 1
     return "".join(out), inners
 
+def subscript_cmdsubst(text):
+    # $(...) / `...` hiding in single-quoted [[ -v name[..] ]]
+    # operands, which extract_subshells treats as literal. The
+    # quoted form is version-dependent (bash 3.2 rejects it at
+    # parse time), so audit it as executable (fail closed).
+    # Only -v operands qualify (==/case/test operands never
+    # evaluate); unquoted and double-quoted forms are already
+    # covered by the main extraction. Returns inner commands.
+    inners = []
+    for m in re.finditer(r"\[\[\s+(?:!\s+)?-v\s+", text):
+        j = m.end()
+        while j < len(text) and text[j] in (" ", "\t"):
+            j += 1
+        if j >= len(text) or text[j] != "'":
+            continue
+        k = j + 1
+        while k < len(text) and text[k] != "'":
+            k += 1
+        _, sub = extract_subshells(text[j + 1:k])
+        inners.extend(sub)
+    return inners
+
 def arith_regions(text):
     # Bodies of $((...)) expansions. Arithmetic evaluates nested
     # expansions even inside single quotes (verified: PWNED), so a

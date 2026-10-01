@@ -12,22 +12,13 @@ from semgrep_sarif_programs import (audit_jq_content,
                                     audit_perl_content)
 from semgrep_sarif_scan import arith_regions
 from semgrep_sarif_shell import (ENV_POISON, INTERP_ALLOW,
-                                 is_step_boundary, map_key_value,
+                                 map_key_value,
                                  peel_prefix, run_segments,
                                  script_operand, split_commands2,
-                                 step_end, step_start,
                                  strip_comments, tokenize,
                                  unquote, unquote_value)
-
-def step_name(line):
-    # Name of a - name: step (quoted spellings included); "" when
-    # the line is not a named-step header.
-    dash = re.match(r"^-\s+(.*)$", line.strip())
-    if not dash:
-        return ""
-    key, val = map_key_value(dash.group(1).strip())
-    return unquote_value(val) if key == "name" else ""
-
+from semgrep_sarif_steps import (is_step_boundary, step_end,
+                                 step_name, step_start)
 
 def audit_resolver(ctx, drift):
     ctx.resolve = [i for i, line in enumerate(ctx.workflow_lines)

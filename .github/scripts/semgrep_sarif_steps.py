@@ -3,15 +3,47 @@ confinement, PATH-family hijack rejection, and the no-token-
 expression rule for the agent step and job environment.
 """
 import re
-from semgrep_sarif_consumer import step_name
 from semgrep_sarif_scan import (is_trusted_write_target,
                                     redirect_targets)
 from semgrep_sarif_shell import (ENV_POISON, SHELL_KEYWORDS,
-                                 STRICT_ALLOW, is_step_boundary,
+                                 STRICT_ALLOW,
                                  map_key_value, peel_prefix,
                                  run_segments, split_commands2,
-                                 step_end, strip_comments,
+                                 strip_comments,
                                  tokenize, unquote, unquote_value)
+
+def is_step_boundary(line):
+    # Named (- name:) and unnamed (- uses:/- run:/...) steps both
+    # delimit spans, so an unnamed step cannot widen a span.
+    # Quoted keys (- "name":) delimit too: a bare-key match would
+    # merge an attacker step into the previous span.
+    m = re.match(r"^\s*-\s+(.*)$", line)
+    if not m:
+        return False
+    key, _ = map_key_value(m.group(1).strip())
+    return key is not None
+
+def step_start(lines, ref_index):
+    for i in range(ref_index, -1, -1):
+        if is_step_boundary(lines[i]):
+            return i
+    return 0
+
+def step_end(lines, start_index):
+    for i in range(start_index + 1, len(lines)):
+        if is_step_boundary(lines[i]):
+            return i
+    return len(lines)
+
+def step_name(line):
+    # Name of a - name: step (quoted spellings included); "" when
+    # the line is not a named-step header.
+    dash = re.match(r"^-\s+(.*)$", line.strip())
+    if not dash:
+        return ""
+    key, val = map_key_value(dash.group(1).strip())
+    return unquote_value(val) if key == "name" else ""
+
 
 def audit_step_commands(ctx, drift):
 

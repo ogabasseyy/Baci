@@ -12,7 +12,8 @@ from semgrep_sarif_interp import (_check_command,
 from semgrep_sarif_pins import _is_home_write
 from semgrep_sarif_scan import (arith_regions, extract_subshells,
                                 is_trusted_write_target,
-                                redirect_targets, skip_braced)
+                                redirect_targets, skip_braced,
+                                subscript_cmdsubst)
 from semgrep_sarif_shell import (SHELL_KEYWORDS, logical_lines,
                                  peel_prefix, split_commands2,
                                  tokenize, unquote)
@@ -145,19 +146,21 @@ def _strip_heredocs(raw_lines):
 
 
 def _collect_vars(raw_lines):
-    # First top-level literal assignment per name (bash first-
+    # Last top-level literal assignment per name (bash last-
     # wins), so ${install_dir}/... resolves before path checks
-    # and a ws= alias cannot launder an attacker path. Values
-    # carrying anything but known env roots stay unresolved
-    # (fail closed at use). Conditional/indented assigns never
-    # resolve.
+    # while a SCRIPT_DIR alias reassigned to the workspace
+    # resolves to the workspace at use. An unresolvable last
+    # assignment deletes the entry: keeping the earlier literal
+    # would resolve dynamic content to a stale trusted-looking
+    # value. Conditional/indented assigns never resolve.
     carry = "(?:" + "|".join(CARRY_VARS) + ")"
     varmap = {}
     for line in raw_lines:
         m = re.match(r"^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)"
                      r"=(.*)$", line)
-        if not m or m.group(1) in varmap:
+        if not m:
             continue
+        name = m.group(1)
         val = m.group(2).strip()
         if len(val) >= 2 and val[0] == val[-1] \
                 and val[0] in ("'", '"'):
@@ -165,14 +168,17 @@ def _collect_vars(raw_lines):
         elif re.fullmatch(r"\S+", val or " "):
             inner = val
         else:
+            varmap.pop(name, None)
             continue
         if "`" in inner or "$(" in inner:
+            varmap.pop(name, None)
             continue
         scrubbed = re.sub(r"\$(?:\{" + carry + r"\}|" + carry
                            + r")", "", inner)
         if "$" in scrubbed:
+            varmap.pop(name, None)
             continue
-        varmap[m.group(1)] = inner
+        varmap[name] = inner
     for _ in range(3):
         for key in varmap:
             varmap[key] = _resolve(varmap[key], varmap)
@@ -198,10 +204,12 @@ def _resolve(text, varmap):
                   sub, text)
 
 
-def _audit_line(line, drift):
+def _audit_line(line, drift, pinned_curl=False):
     cleaned, inners = extract_subshells(line)
     for inner in inners:
-        _audit_line(inner, drift)
+        _audit_line(inner, drift, pinned_curl)
+    for inner in subscript_cmdsubst(line):
+        _audit_line(inner, drift, pinned_curl)
     if DEFERRED_RE.search(line) \
             and "helper-deferred-exec" not in drift:
         drift.append("helper-deferred-exec")
@@ -241,7 +249,8 @@ def _audit_line(line, drift):
             continue
         pre = words[:len(words) - len(rest) - 1]
         _check_poison_assign(pre, argv0, rest, drift)
-        _check_command(argv0, list(rest), list(pre), drift)
+        _check_command(argv0, list(rest), list(pre), drift,
+                       pinned_curl)
 
 
 def _audit_shell_file(path, drift):
@@ -252,8 +261,9 @@ def _audit_shell_file(path, drift):
         drift.append("helper-unreadable")
         return
     varmap = _collect_vars(raw)
+    pinned_curl = os.path.basename(path) == "install.sh"
     for line in logical_lines(_strip_heredocs(raw)):
-        _audit_line(_resolve(line, varmap), drift)
+        _audit_line(_resolve(line, varmap), drift, pinned_curl)
 
 
 def invoked_shell_refs(raw):

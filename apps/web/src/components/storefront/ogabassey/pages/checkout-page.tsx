@@ -2,9 +2,6 @@
 
 import { useCheckoutDeliverySession } from './checkout/hooks/use-checkout-delivery-session';
 import { useCheckoutFormSession } from './checkout/hooks/use-checkout-form-session';
-import {
-  useCheckoutDvaSession,
-} from './checkout/hooks/use-checkout-dva-session';
 
 import {
   getCheckoutPaymentIntent,
@@ -19,7 +16,6 @@ import {
 import { MobileOrderSummary } from '../components/MobileCheckoutComponents';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
-import { useCheckoutCryptoSession } from './checkout/hooks/use-checkout-crypto-session';
 import { useEffect } from 'react';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
@@ -49,7 +45,6 @@ import {
   inferAddressLocationFromInput,
 } from './checkout/utils';
 import { useCheckoutPaymentExecution } from './checkout/hooks/use-checkout-payment-execution';
-import { useStorefrontCustomerSession } from './checkout/hooks/use-storefront-customer-session';
 import { deriveCheckoutCartModel } from './checkout/derive-checkout-cart-model';
 import { deriveCheckoutOrderSummaryPresentation } from './checkout/derive-checkout-order-summary-presentation';
 import { useCheckoutFinancialSession } from './checkout/hooks/use-checkout-financial-session';
@@ -204,39 +199,6 @@ export const CheckoutPage: React.FC = () => {
     isLoadingResumedOrder,
     resumeOrderError,
   } = checkoutAttempt;
-  // Dedicated Virtual Account (DVA) state
-  const {
-    closeDvaModal,
-    dvaData,
-    handleDvaConfirmTransfer,
-    isInitializingDva,
-    isVerifyingDva,
-    setDvaData,
-    setIsInitializingDva,
-  } = useCheckoutDvaSession({
-    checkoutCart,
-    clearCart,
-    clearCheckoutSession,
-    clearPendingCheckoutOrder,
-    currencyCode,
-    getHref,
-    merchantSlug: merchant?.slug ?? undefined,
-  });
-
-  const crypto = useCheckoutCryptoSession({
-    merchantId: merchant?.id,
-    clearCheckoutSession,
-    clearPendingCheckoutOrder,
-    clearCart,
-    getHref,
-    isOrderInFlightRef,
-  });
-  const {
-    setCryptoPaymentData,
-    pendingCryptoOrder,
-    setPendingCryptoOrder,
-    setShowCryptoSelector,
-  } = crypto;
   const {
     displayItems,
     effectiveCheckoutCartTotal,
@@ -244,14 +206,6 @@ export const CheckoutPage: React.FC = () => {
     hasCheckoutCartItems,
     summaryOrder,
   } = checkoutDisplay;
-
-  // Storefront customer sign-in state. The `(commerce)` checkout route mounts
-  // neither `AuthProvider` nor `CustomerAuthProvider`, so `useAuthSafe()` above
-  // is null here even for a signed-in customer. The wallet-funded gate must read
-  // the cookie session directly (same source as the storefront header) or the
-  // dark-launch flow would never activate for real customers.
-  const { waitForResolvedAuthenticated: waitForResolvedStorefrontCustomerAuth } =
-    useStorefrontCustomerSession(merchant?.slug ?? undefined);
 
   // Prefer the persisted fee on resume (deep-link URLs omit giftWrappingCost).
   const giftWrappingCost =
@@ -328,32 +282,18 @@ export const CheckoutPage: React.FC = () => {
   const walletAmountUsed = paymentSession.wallet.amountUsed;
   const remainingAmount = paymentSession.wallet.remainingAmount;
 
-  const { handlePlaceOrder, walletFundedTransfer } =
+  const { crypto, dva, handlePlaceOrder, walletFundedTransfer } =
     useCheckoutPaymentExecution({
-      completion: {
-        clearCart,
-        clearCheckoutSession,
-        clearPendingCheckoutOrder,
-        getHref,
-        paymentMethod,
-      },
-      transfer: {
+      identity: {
         merchantId: merchant?.id,
         merchantSlug: merchant?.slug ?? undefined,
+        currencyCode,
       },
-      submission: {
+      form: {
         account: {
           createAccount: account.createAccount,
           password: account.password,
           user,
-          waitForResolvedCustomerAuth: waitForResolvedStorefrontCustomerAuth,
-        },
-        cart: {
-          cart,
-          checkoutCart,
-          checkoutCartTotal,
-          clearCart,
-          removeFromCart,
         },
         contact: {
           customerEmail,
@@ -362,46 +302,44 @@ export const CheckoutPage: React.FC = () => {
           lastName,
           newsletterOptIn,
         },
-        delivery: {
-          session: delivery,
-          method: deliveryMethod,
-          airportType,
-          airportRequiresQuote,
-          newAddressStreet,
-          newAddressCity,
-          newAddressState,
-          merchantCountry,
-          giftWrappingCost,
-          effectiveItemSubtotal,
-          taxAmount: orderTotals?.taxAmount ?? 0,
-        },
-        merchant,
-        navigation: {
-          setCurrentStep,
-          setCompletedSteps,
-          pushSuccessRoute: (url) => router.push(asRoute(url)),
-          getHref,
-        },
-        order: {
-          pending: pendingCheckoutOrder,
-          clearPending: clearPendingCheckoutOrder,
-          setPending: setPendingCheckoutOrder,
-          setOrderCreated: setCheckoutOrderCreated,
-          clearCheckoutSession,
-          setDvaData,
-          setIsInitializingDva,
-          setPendingCryptoOrder,
-          setShowCryptoSelector,
-          setCryptoPaymentData,
-        },
-        payment: {
-          session: paymentSession,
-          bankTransferAvailable: bankTransferCheckoutAvailable,
-          paystackAvailable: paystackCheckoutAvailable,
-          korapayAvailable: korapayCheckoutAvailable,
-          redvaultAvailable: redvaultAvailability.available,
-          currencyCode,
-        },
+      },
+      cart: { cart, checkoutCart, checkoutCartTotal, clearCart, removeFromCart },
+      delivery: {
+        session: delivery,
+        method: deliveryMethod,
+        airportType,
+        airportRequiresQuote,
+        newAddressStreet,
+        newAddressCity,
+        newAddressState,
+        merchantCountry,
+        giftWrappingCost,
+        effectiveItemSubtotal,
+        taxAmount: orderTotals?.taxAmount ?? 0,
+      },
+      merchant,
+      navigation: {
+        setCurrentStep,
+        setCompletedSteps,
+        pushSuccessRoute: (url) => router.push(asRoute(url)),
+        getHref,
+      },
+      order: {
+        pending: pendingCheckoutOrder,
+        clearPending: clearPendingCheckoutOrder,
+        setPending: setPendingCheckoutOrder,
+        setOrderCreated: setCheckoutOrderCreated,
+        clearCheckoutSession,
+      },
+      payment: {
+        session: paymentSession,
+        bankTransferAvailable: bankTransferCheckoutAvailable,
+        paystackAvailable: paystackCheckoutAvailable,
+        korapayAvailable: korapayCheckoutAvailable,
+        redvaultAvailable: redvaultAvailability.available,
+        currencyCode,
+      },
+      attempt: {
         resumed: {
           order: resumedOrder,
           preferredGateway,
@@ -506,10 +444,10 @@ export const CheckoutPage: React.FC = () => {
         crypto={crypto}
         walletFundedTransfer={walletFundedTransfer}
         dva={{
-          data: dvaData,
-          isVerifying: isVerifyingDva,
-          onClose: closeDvaModal,
-          onConfirmTransfer: handleDvaConfirmTransfer,
+          data: dva.dvaData,
+          isVerifying: dva.isVerifyingDva,
+          onClose: dva.closeDvaModal,
+          onConfirmTransfer: dva.handleDvaConfirmTransfer,
         }}
         merchantName={merchant?.business_name}
         formatCurrency={formatCurrencyAuto}
@@ -567,7 +505,7 @@ export const CheckoutPage: React.FC = () => {
                 session: paymentSession,
                 isProcessing,
                 isPayForMeValid,
-                isInitializingDva,
+                isInitializingDva: dva.isInitializingDva,
                 newsletterOptIn,
                 setNewsletterOptIn,
                 handlePlaceOrder,

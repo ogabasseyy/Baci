@@ -274,3 +274,15 @@ test('untrusted build reads but never writes the remote cache', () => {
   const build = jobBlock('build');
   assert.match(build, /TURBO_CACHE:\s*"remote:r,local:rw"/);
 });
+
+test('no checkout persists credentials or takes credential inputs', () => {
+  const checkoutSteps = executable
+    .split('\n      - ')
+    .filter((step) => step.includes('actions/checkout@'));
+  assert.equal(checkoutSteps.length, 4);
+  for (const step of checkoutSteps) {
+    assert.match(step, /persist-credentials:\s*false/);
+    assert.doesNotMatch(step, /^\s*token:/m);
+    assert.doesNotMatch(step, /^\s*ssh-key:/m);
+  }
+});

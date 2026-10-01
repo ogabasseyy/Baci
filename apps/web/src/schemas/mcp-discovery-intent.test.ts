@@ -145,6 +145,25 @@ describe('mcpDiscoveryIntentSchema', () => {
   });
 });
 
+describe('text length alignment with the published card schema', () => {
+  it.each([
+    { label: 'BMP', char: 'a' },
+    { label: 'astral', char: '😀' },
+  ])('measures $label text in code points like Draft-07 maxLength', ({
+    char,
+  }) => {
+    expect(
+      mcpDiscoveryIntentSchema.safeParse({
+        alternatives: [{ model: char.repeat(100) }],
+      }).success
+    ).toBe(true);
+    const over = mcpDiscoveryIntentSchema.safeParse({
+      alternatives: [{ model: char.repeat(101) }],
+    });
+    expect(over.success).toBe(false);
+  });
+});
+
 describe('semantic alternative constraints', () => {
   it.each([
     { attributes: [] },

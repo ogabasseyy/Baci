@@ -156,6 +156,21 @@ it('stages the builder move so a mid-migration failure stays retry-safe', () => 
   // Retry-then-build: a valid staged replacement promotes before the rebuild.
   expect(promoteOnRetry).toBeGreaterThanOrEqual(0);
   expect(promoteOnRetry).toBeLessThan(buildReplacement);
+  // Stale-canonical retry: when the canonical name still serves the old
+  // public.v4 expression, a valid replacement parks the stale index aside
+  // and promotes instead of being dropped for a redundant rebuild.
+  expect(move).toContain('pg_depend');
+  expect(move).toContain(
+    "to_regprocedure('public.product_discovery_search_document_v4(text, text, text, text, jsonb)')"
+  );
+  expect(move).toContain(
+    'RENAME TO products_discovery_correlated_search_idx_stale;'
+  );
+  const dropStale = move.indexOf(
+    'DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx_stale;'
+  );
+  expect(dropStale).toBeGreaterThanOrEqual(0);
+  expect(dropStale).toBeLessThan(buildReplacement);
   expect(switchRpc).toBeGreaterThan(buildReplacement);
   expect(dropServingIndex).toBeGreaterThan(switchRpc);
   expect(renameReplacement).toBeGreaterThan(dropServingIndex);

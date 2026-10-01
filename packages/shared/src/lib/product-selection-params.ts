@@ -323,12 +323,18 @@ export function resolveVariantSelectionParamResolution<
       { includeOutOfStock: true }
     );
 
+    // Paired offer links carry both params; the PDP resolves variant and
+    // condition as independent axes, so an explicit condition survives here
+    // instead of the page falling back to the default condition. Matches
+    // stay variantId-only because the paired variant need not carry the
+    // offer's condition itself.
     return {
       extracted,
       matches,
-      selectionInput: extracted.variantId
-        ? { variantId: extracted.variantId }
-        : {},
+      selectionInput: {
+        ...(extracted.condition ? { condition: extracted.condition } : {}),
+        ...(extracted.variantId ? { variantId: extracted.variantId } : {}),
+      },
       type: matches.length === 1 ? 'variant_id' : 'invalid_variant_id',
     };
   }

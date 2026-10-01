@@ -72,7 +72,7 @@ describe('product-selection-params', () => {
     ]);
   });
 
-  it('resolves a valid variantId regardless of other selection params', () => {
+  it('resolves variantId matches while retaining the condition param', () => {
     const resolution = resolveVariantSelectionParamResolution(
       baseProduct,
       new URLSearchParams(
@@ -81,8 +81,26 @@ describe('product-selection-params', () => {
     );
 
     expect(resolution.type).toBe('variant_id');
+    expect(resolution.matches.map((match) => match.id)).toEqual([
+      'variant-used-256',
+    ]);
     expect(resolution.selectionInput).toEqual({
+      condition: 'new',
       variantId: 'variant-used-256',
+    });
+  });
+
+  it('retains the condition param when the variantId is invalid', () => {
+    const resolution = resolveVariantSelectionParamResolution(
+      baseProduct,
+      new URLSearchParams('variantId=variant-missing&condition=used')
+    );
+
+    expect(resolution.type).toBe('invalid_variant_id');
+    expect(resolution.matches).toHaveLength(0);
+    expect(resolution.selectionInput).toEqual({
+      condition: 'used',
+      variantId: 'variant-missing',
     });
   });
 

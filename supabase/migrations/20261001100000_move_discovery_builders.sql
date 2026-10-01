@@ -109,6 +109,13 @@ $$;
 -- the temporary index serving: promote a valid build to the canonical name
 -- instead of dropping the only index matching the serving expression. An
 -- invalid leftover is not serving, so it falls through to the rebuild below.
+-- When the canonical name still refers to the old public.v4 expression, a
+-- valid replacement means the retry stopped after the RPC switch: the stale
+-- canonical parks aside for the plain-statement drop below (CONCURRENTLY
+-- cannot run inside DO) and the replacement promotes, so the serving RPC
+-- keeps its index instead of full-scanning through a redundant rebuild. The
+-- check reads pg_depend, not indexdef text, whose schema qualification
+-- depends on the caller's search_path.
 DO $$
 DECLARE
   replacement_serving boolean;
@@ -117,12 +124,25 @@ BEGIN
   FROM pg_catalog.pg_class AS c
   JOIN pg_catalog.pg_index AS i ON i.indexrelid = c.oid
   WHERE c.oid = pg_catalog.to_regclass('public.products_discovery_correlated_search_idx_new');
-  IF pg_catalog.to_regclass('public.products_discovery_correlated_search_idx') IS NULL
-    AND COALESCE(replacement_serving, false) THEN
+  IF pg_catalog.to_regclass('public.products_discovery_correlated_search_idx') IS NULL THEN
+    IF COALESCE(replacement_serving, false) THEN
+      ALTER INDEX public.products_discovery_correlated_search_idx_new RENAME TO products_discovery_correlated_search_idx;
+    END IF;
+  ELSIF COALESCE(replacement_serving, false)
+    AND EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_depend AS d
+      WHERE d.objid = pg_catalog.to_regclass('public.products_discovery_correlated_search_idx')
+        AND d.classid = 'pg_catalog.pg_class'::pg_catalog.regclass
+        AND d.refclassid = 'pg_catalog.pg_proc'::pg_catalog.regclass
+        AND d.refobjid = pg_catalog.to_regprocedure('public.product_discovery_search_document_v4(text, text, text, text, jsonb)')
+    ) THEN
+    ALTER INDEX public.products_discovery_correlated_search_idx RENAME TO products_discovery_correlated_search_idx_stale;
     ALTER INDEX public.products_discovery_correlated_search_idx_new RENAME TO products_discovery_correlated_search_idx;
   END IF;
 END;
 $$;
+DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx_stale;
 DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx_new;
 CREATE INDEX CONCURRENTLY products_discovery_correlated_search_idx_new ON public.products USING gin
 (discovery.product_discovery_search_document_v4(name, brand, category, description, discovery_metadata))

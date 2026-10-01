@@ -1,7 +1,18 @@
 import { z } from 'zod';
 import { canonicalizeDiscoveryProductType } from './canonical-discovery-product-type';
 
-const text = z.string().trim().min(1).max(100);
+// Draft-07 maxLength counts Unicode code points while z.string().max counts
+// UTF-16 units, so the runtime measures code points: it accepts exactly what
+// the published card schema advertises, including 100 astral characters. The
+// 200-unit prefilter is equivalent (100 code points need at most 200 units)
+// and keeps pathological input out of Array.from.
+const text = z
+  .string()
+  .trim()
+  .min(1)
+  .refine((value) => value.length <= 200 && Array.from(value).length <= 100, {
+    message: 'Text must contain at most 100 characters',
+  });
 // Retrieval expands numerics to plain decimals inside a 16,000-char gated
 // tsquery: unbounded magnitudes (Number.MAX_VALUE is 309 digits) would let a
 // schema-valid intent silently exceed the gate and return no rows. Bounds

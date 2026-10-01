@@ -110,4 +110,21 @@ describe('productDiscoveryMetadataSchema', () => {
         .success
     ).toBe(false);
   });
+  it('rejects unpaired surrogates PostgreSQL jsonb cannot store', () => {
+    for (const model of ['bad\ud800model', 'bad\udc00model', '\ud800']) {
+      const parsed = productDiscoveryMetadataSchema.safeParse({ model });
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(parsed.error.issues).toContainEqual(
+          expect.objectContaining({
+            message: 'Unpaired surrogates cannot be stored',
+          })
+        );
+      }
+    }
+    expect(
+      productDiscoveryMetadataSchema.safeParse({ model: '😀'.repeat(50) })
+        .success
+    ).toBe(true);
+  });
 });

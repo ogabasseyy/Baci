@@ -3,6 +3,12 @@ import { canonicalizeDiscoveryProductType } from './canonical-discovery-product-
 
 const maxDiscoveryMetadataBytes = 16_384;
 
+// Lone UTF-16 surrogates serialize as unpaired \uXXXX escapes, which
+// PostgreSQL jsonb rejects with an input-syntax error (a route 500) rather
+// than the handled check-constraint error, so they never leave validation.
+const loneSurrogatePattern =
+  /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
+
 const text = z
   .string()
   .trim()
@@ -11,6 +17,10 @@ const text = z
   .refine(
     (value) => !value.includes('\u0000'),
     'Null characters cannot be stored'
+  )
+  .refine(
+    (value) => !loneSurrogatePattern.test(value),
+    'Unpaired surrogates cannot be stored'
   );
 const numericAttributeKeys = new Set([
   'storage_gb',

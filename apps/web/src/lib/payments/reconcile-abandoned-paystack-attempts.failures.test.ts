@@ -2,6 +2,21 @@ import { describe, expect, it, vi } from 'vitest';
 import { reconcileAbandonedPaystackAttempts } from './reconcile-abandoned-paystack-attempts';
 import { createClient } from './reconcile-abandoned-paystack-attempts.test-support';
 
+function withReviewTable(
+  client: { from: unknown },
+  reviewInsert: ReturnType<typeof vi.fn>
+) {
+  const fromMock = client.from as ReturnType<typeof vi.fn>;
+  const baseFrom = fromMock.getMockImplementation() as (
+    table: string
+  ) => unknown;
+  fromMock.mockImplementation((table: string) =>
+    table === 'reconciliation_review'
+      ? { insert: reviewInsert }
+      : baseFrom(table)
+  );
+}
+
 const abandoned = {
   success: true,
   data: {
@@ -132,11 +147,14 @@ describe('abandoned Paystack attempt operational failures', () => {
 
   // HTTP_400 and other deterministic client rejections file a durable
   // review instead of holding (see the invalid-reference suite); a
-  // missing non-DVA reference still holds for the next sweep.
+  // missing non-DVA reference files too but keeps holding for a late
+  // verify instead of retiring.
   it.each([
     'HTTP_404',
-  ])('holds without failing on a genuine provider verdict (%s)', async (code) => {
+  ])('files a durable review while holding a missing reference (%s)', async (code) => {
     const { client } = createClient();
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    withReviewTable(client, reviewInsert);
 
     const summary = await reconcileAbandonedPaystackAttempts({
       supabase: client as never,
@@ -144,6 +162,32 @@ describe('abandoned Paystack attempt operational failures', () => {
     });
 
     expect(summary.failed).toBe(false);
+    expect(summary.reviewsFiled).toEqual(['attempt-1']);
+    expect(summary.held).toEqual([
+      { id: 'attempt-1', reason: 'verification_unavailable' },
+    ]);
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'abandoned_attempt_evidence_mismatch',
+        metadata: expect.objectContaining({ unresolved_reference: true }),
+      })
+    );
+  });
+
+  it('fails the sweep when the unresolved-reference review cannot be filed', async () => {
+    const { client } = createClient();
+    const reviewInsert = vi
+      .fn()
+      .mockResolvedValue({ error: new Error('db down') });
+    withReviewTable(client, reviewInsert);
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify: vi.fn().mockResolvedValue({ success: false, code: 'HTTP_404' }),
+    });
+
+    expect(summary.failed).toBe(true);
+    expect(summary.reviewsFiled).toEqual([]);
     expect(summary.held).toEqual([
       { id: 'attempt-1', reason: 'verification_unavailable' },
     ]);

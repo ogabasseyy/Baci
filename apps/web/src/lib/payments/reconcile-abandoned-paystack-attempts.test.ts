@@ -5,6 +5,21 @@ import {
   createClient,
 } from './reconcile-abandoned-paystack-attempts.test-support';
 
+function withReviewTable(
+  client: { from: unknown },
+  reviewInsert: ReturnType<typeof vi.fn>
+) {
+  const fromMock = client.from as ReturnType<typeof vi.fn>;
+  const baseFrom = fromMock.getMockImplementation() as (
+    table: string
+  ) => unknown;
+  fromMock.mockImplementation((table: string) =>
+    table === 'reconciliation_review'
+      ? { insert: reviewInsert }
+      : baseFrom(table)
+  );
+}
+
 describe('reconcileAbandonedPaystackAttempts', () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -107,6 +122,8 @@ describe('reconcileAbandonedPaystackAttempts', () => {
 
   it('holds an unmarked card attempt even when another DVA payment completed', async () => {
     const { client, update } = createClient([candidate], { dvaSibling: true });
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    withReviewTable(client, reviewInsert);
     const verify = vi.fn().mockResolvedValue({
       success: false,
       code: 'HTTP_404',
@@ -118,6 +135,7 @@ describe('reconcileAbandonedPaystackAttempts', () => {
     });
 
     expect(summary.retired).toEqual([]);
+    expect(summary.reviewsFiled).toEqual(['attempt-1']);
     expect(summary.held).toEqual([
       { id: 'attempt-1', reason: 'verification_unavailable' },
     ]);
@@ -128,6 +146,8 @@ describe('reconcileAbandonedPaystackAttempts', () => {
 
   it('holds an unmarked 404 when no completed DVA payment proves a placeholder', async () => {
     const { client, update } = createClient();
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    withReviewTable(client, reviewInsert);
     const verify = vi.fn().mockResolvedValue({
       success: false,
       code: 'HTTP_404',
@@ -139,6 +159,7 @@ describe('reconcileAbandonedPaystackAttempts', () => {
     });
 
     expect(summary.retired).toEqual([]);
+    expect(summary.reviewsFiled).toEqual(['attempt-1']);
     expect(summary.held).toEqual([
       { id: 'attempt-1', reason: 'verification_unavailable' },
     ]);

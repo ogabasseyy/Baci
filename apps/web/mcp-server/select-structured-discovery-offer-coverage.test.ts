@@ -127,6 +127,18 @@ it('does not prove specs through out-of-stock paired variants', () => {
     attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }] }))).toBeUndefined();
 });
 
+it('reports paired-offer availability from the tighter inventory with the variant visible', () => {
+  const row = makeRow({ has_variants: true, manage_stock: true, discovery_metadata: { product_type: 'phone' } });
+  row.allVariants = [{ id: 'v-256', product_id: 'phone', attributes: { storage_gb: 256 }, price_override: 700, stock_quantity: 3 }] as typeof row.availableVariants;
+  row.availableVariants = [];
+  row.availableOffers = [{ id: 'offer-used', price: 400, condition: 'used', stock_quantity: 10 }] as typeof row.availableOffers;
+  const selected = selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone',
+    attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }] }));
+  expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'offer-used', price: 400 });
+  expect(selected?.availableVariants).toMatchObject([{ id: 'v-256' }]);
+  expect(selected?.stockSummary).toMatchObject({ inStock: true, level: 'Last Units' });
+});
+
 it('disables offers when a filtered-out variant owns the condition axis', () => {
   const row = makeRow({ has_variants: true, discovery_metadata: { product_type: 'phone' } });
   row.allVariants = [

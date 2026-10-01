@@ -16,6 +16,7 @@ type Candidate = {
   compareAtPrice: number | null;
   stockQuantity?: unknown;
   sourceOption?: unknown;
+  pairedVariant?: unknown;
 };
 
 function record(value: unknown): Record<string, unknown> {
@@ -168,7 +169,7 @@ export function selectStructuredDiscoveryOffer(
       : [];
     if (pairings.length === 0) addCandidate({ ...offerCore, attributes: {} });
     for (const rawVariant of pairings) {
-      addCandidate({ ...offerCore,
+      addCandidate({ ...offerCore, pairedVariant: rawVariant,
         attributes: normalizeDiscoveryOptionAttributes(record(record(rawVariant).attributes)) });
     }
   }
@@ -194,19 +195,28 @@ export function selectStructuredDiscoveryOffer(
   const match = matches[0];
   if (!match) return undefined;
 
+  // A paired offer needs its variant for purchase like the PDP, so the pair's
+  // availability is the tighter of the two inventories and the paired variant
+  // stays visible; bare offers keep the offer-only summary.
+  const pairedOffer = match.kind === 'offer' && match.pairedVariant !== undefined;
   const stockSummary = getMcpProductStockSummary({
     ...product,
     has_variants: match.kind === 'variant',
-    has_condition_offers: match.kind === 'offer',
-    stock_quantity: match.kind === 'base' ? stockQuantity(product.stock_quantity) : 0,
+    has_condition_offers: match.kind === 'offer' && !pairedOffer,
+    stock_quantity: match.kind === 'base' ? stockQuantity(product.stock_quantity)
+      : pairedOffer ? Math.min(stockQuantity(match.stockQuantity) ?? 0,
+        stockQuantity(record(match.pairedVariant).stock_quantity) ?? 0)
+      : 0,
   }, match.kind === 'variant' ? [{ stock_quantity: stockQuantity(match.stockQuantity) }] : undefined,
-  match.kind === 'offer' ? [{ stock_quantity: stockQuantity(match.stockQuantity) }] : undefined);
+  match.kind === 'offer' && !pairedOffer ? [{ stock_quantity: stockQuantity(match.stockQuantity) }] : undefined);
 
   return {
     ...row,
     availableVariants: matches.flatMap((candidate) =>
       candidate.kind === 'variant' && candidate.sourceOption
-        ? [candidate.sourceOption as (typeof row.availableVariants)[number]] : []),
+        ? [candidate.sourceOption as (typeof row.availableVariants)[number]]
+        : candidate.kind === 'offer' && candidate.pairedVariant !== undefined
+          ? [candidate.pairedVariant as (typeof row.availableVariants)[number]] : []),
     displayPrice: match.price,
     displayCondition: match.condition,
     displayCompareAtPrice: match.compareAtPrice,

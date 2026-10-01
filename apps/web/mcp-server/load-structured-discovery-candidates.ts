@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { McpDiscoveryIntent } from '../src/schemas/mcp-discovery-intent';
 import { loadDiscoveryFactCandidates } from './load-discovery-fact-candidates';
+import { loadVariantRecallIds } from './load-variant-recall-ids';
 import { DISCOVERY_PRODUCT_PROJECTION } from './discovery-product-projection';
 import { buildSearchProductsV2RpcArgs } from './search-products-ranking';
 import {
@@ -18,6 +20,7 @@ const MAX_SEMANTIC_CANDIDATES = 200;
 type LoadStructuredDiscoveryCandidatesInput = {
   query?: string;
   factQuery?: string;
+  intent?: McpDiscoveryIntent;
   brand?: string;
   category?: string;
   merchantId: string;
@@ -164,6 +167,7 @@ function reciprocalRankFusion(...groups: string[][][]) {
 export async function loadStructuredDiscoveryCandidates({
   query,
   factQuery,
+  intent,
   brand,
   category,
   merchantId,
@@ -186,12 +190,13 @@ export async function loadStructuredDiscoveryCandidates({
       () => ({ value: { ids: [], truncated: true }, unavailable: true })
     )
     : Promise.resolve({ value: { ids: [], truncated: false }, unavailable: false });
-  const [lexical, semantic, facts] = await Promise.all([
+  const [lexical, semantic, facts, variants] = await Promise.all([
     lexicalPromise, semanticPromise,
     loadDiscoveryFactCandidates(factQuery || query || '(a & !a)', merchantId, supabase, { brand, category }),
+    loadVariantRecallIds(intent, merchantId, supabase),
   ]);
   // Correlated keyword/combined-document matches get one best lexical vote.
-  const rankedIds = reciprocalRankFusion([lexical.ids, facts.ids], [semantic.value.ids]);
+  const rankedIds = reciprocalRankFusion([lexical.ids, facts.ids, variants.ids], [semantic.value.ids]);
   const products: McpSearchProductRow[] = [];
 
   let hydrationFailed = false;
@@ -220,7 +225,7 @@ export async function loadStructuredDiscoveryCandidates({
   const hydrationDroppedIds = products.length < rankedIds.length;
   return {
     products,
-    truncated: lexical.truncated || semantic.value.truncated || facts.truncated || hydrationFailed || hydrationDroppedIds,
+    truncated: lexical.truncated || semantic.value.truncated || facts.truncated || variants.truncated || hydrationFailed || hydrationDroppedIds,
     semanticUnavailable: semantic.unavailable,
   };
 }

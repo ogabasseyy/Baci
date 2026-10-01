@@ -49,7 +49,7 @@ function client(fixture: Fixture) {
       range: vi.fn((start: number, end: number) => {range = [start, end]; return builder;}),
       then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => {
         if (table === 'product_offers' && fixture.offerError) return Promise.resolve({ data: null, error: fixture.offerError }).then(resolve, reject);
-        let rows = table === 'products' ? fixture.products : fixture.offers ?? [];
+        let rows = table === 'products' ? fixture.products : table === 'product_variants' ? fixture.variants ?? [] : fixture.offers ?? [];
         for (const [kind, column, value] of filters) {
           if (kind === 'eq') rows = rows.filter((row) => row[column] === value);
           if (kind === 'in' && Array.isArray(value)) rows = rows.filter((row) => value.includes(row[column]));
@@ -186,5 +186,15 @@ describe('discoverStructuredProducts', () => {
     const result = await discoverStructuredProducts(input(fixture.supabase, intent({ product_type: 'phone' })));
     expect(result.selectedProducts.map(({ product: s }) => s.id)).toEqual(['axis-phone']);
     expect(result).toMatchObject({ priceScanComplete: true, coverage: 'complete' });
+  });
+
+  it('recalls a variant-only spec the product-level sources miss', async () => {
+    const p = product('variant-spec-phone', { product_type: 'phone' }, { has_variants: true });
+    const fixture = client({ products: [p], lexicalIds: [], factIds: [],
+      variants: [{ id: 'v-256', product_id: 'variant-spec-phone', merchant_id: 'merchant-1', attributes: { Storage: '256GB' }, price_override: 100, stock_quantity: 1 }] });
+    const result = await discoverStructuredProducts(input(fixture.supabase,
+      intent({ product_type: 'phone', attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }] }), { query: undefined }));
+    expect(result.selectedProducts.map(({ product: s }) => s.id)).toEqual(['variant-spec-phone']);
+    expect(result.coverage).toBe('complete');
   });
 });

@@ -62,7 +62,10 @@ export async function reconcileCompletedPaystackCancellationRefunds(
     .eq('cancellation_order.payment_status', 'refunded')
     .in('cancellation_order.shipping_status', ['cancelled', 'canceled'])
     .not('cancellation_order.cancelled_at', 'is', null)
-    .lt('updated_at', finalizedCutoff)
+    // Null timestamps are the oldest eligible rows: a bare less-than
+    // compares SQL unknown and would exclude a finalized legacy
+    // refund from the contradiction sweep forever.
+    .or(`updated_at.is.null,updated_at.lt.${finalizedCutoff}`)
     .order('updated_at', { ascending: true })
     .limit(FINALIZED_CONTRADICTION_RECHECK_LIMIT);
   if (finalizedError) throw new Error('completed_refund_lookup_failed');

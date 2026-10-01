@@ -220,7 +220,7 @@ describe('POST /api/cron/process-settlements', () => {
     );
   });
 
-  it('skips settlement notifications when the merchant email is missing', async () => {
+  it('defers settlement notifications when the merchant email is missing', async () => {
     mocks.limit.mockResolvedValue({
       data: [
         {
@@ -240,14 +240,23 @@ describe('POST /api/cron/process-settlements', () => {
       ],
       error: null,
     });
+    // No per-merchant send runs, so the batch fetch is followed
+    // directly by the retry-accounting update.
+    mocks.from.mockReset();
+    mocks.from
+      .mockReturnValueOnce({ select: mocks.select })
+      .mockReturnValueOnce({ update: mocks.update });
 
     const response = await POST(makeCronRequest());
     const payload = await response.json();
 
     expect(response.status).toBe(200);
-    expect(payload.notifications).toEqual({ failed: 0, sent: 0 });
+    expect(payload.notifications).toEqual({ failed: 1, sent: 0 });
     expect(mocks.sendEmail).not.toHaveBeenCalled();
-    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.update).toHaveBeenCalledWith({
+      notification_attempts: 1,
+      notification_next_retry_at: expect.any(String),
+    });
   });
 
   it('bounds the cancellation drain by the remaining route budget', async () => {

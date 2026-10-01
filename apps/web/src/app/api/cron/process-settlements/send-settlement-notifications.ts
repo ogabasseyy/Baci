@@ -37,6 +37,66 @@ function notificationRetryDelayMs(attempts: number): number {
 }
 
 /**
+ * Defer unnotified rows with backoff, grouped by next attempt count.
+ * Past the cap the rows leave the bounded queue (the fetch excludes
+ * them) and the dead-letter log is operations' backstop. Failures
+ * only log: the row retries on the next run, and the caller already
+ * counted the outcome.
+ */
+async function scheduleNotificationRetries({
+  items,
+  logScope,
+  reason,
+  supabase,
+}: {
+  items: Array<{ id: string; notificationAttempts: number }>;
+  logScope: { merchantId: string } | { merchantIds: string[] };
+  reason: 'missing-email' | 'rejected';
+  supabase: SupabaseClient;
+}): Promise<void> {
+  const retryGroups = new Map<number, string[]>();
+  for (const item of items) {
+    const attempts = item.notificationAttempts + 1;
+    const ids = retryGroups.get(attempts) ?? [];
+    ids.push(item.id);
+    retryGroups.set(attempts, ids);
+  }
+  for (const [attempts, ids] of retryGroups) {
+    const deadLettered = attempts >= SETTLEMENT_NOTIFICATION_MAX_ATTEMPTS;
+    const { error: retryError } = await supabase
+      .from('merchant_settlements')
+      .update({
+        notification_attempts: attempts,
+        notification_next_retry_at: deadLettered
+          ? null
+          : new Date(
+              Date.now() + notificationRetryDelayMs(attempts)
+            ).toISOString(),
+      })
+      .eq('status', 'settled')
+      .eq('settlement_notified', false)
+      .in('id', ids);
+    if (retryError) {
+      logger.error({
+        message: 'Failed to schedule settlement notification retry',
+        ...logScope,
+        error: retryError,
+      });
+    } else if (deadLettered) {
+      logger.error({
+        message:
+          reason === 'rejected'
+            ? 'Settlement notification dead-lettered after repeated rejections'
+            : 'Settlement notification dead-lettered: merchant email missing',
+        ...logScope,
+        settlementIds: ids,
+        attempts,
+      });
+    }
+  }
+}
+
+/**
  * Send one batched notification email per merchant for newly settled
  * rows, then mark exactly the rows still settled-and-unnotified so a
  * concurrent reversal is never announced twice. Returns the send
@@ -59,6 +119,11 @@ export async function sendSettlementNotifications({
   if (pendingNotifications && pendingNotifications.length > 0) {
     // Group settlements by merchant for batch notifications
     const merchantSettlements = new Map<string, MerchantSettlementBatch>();
+    const missingEmail: Array<{
+      id: string;
+      merchantId: string;
+      notificationAttempts: number;
+    }> = [];
 
     for (const settlement of pendingNotifications) {
       const merchant = settlement.merchants as unknown as {
@@ -67,7 +132,17 @@ export async function sendSettlementNotifications({
         email: string | null;
       };
 
-      if (!merchant?.email) continue;
+      // No address to send to — but skipping silently would pin the
+      // bounded queue at zero attempts, so these rows defer through
+      // the same retry accounting below.
+      if (!merchant?.email) {
+        missingEmail.push({
+          id: settlement.id,
+          merchantId: merchant?.id ?? 'unknown',
+          notificationAttempts: Number(settlement.notification_attempts ?? 0),
+        });
+        continue;
+      }
 
       const key = merchant.id;
       const existing = merchantSettlements.get(key);
@@ -160,52 +235,13 @@ export async function sendSettlementNotifications({
             error: emailResult,
           });
           // A definite rejection stays unnotified but must not rejoin
-          // the head of the bounded oldest-first queue immediately:
-          // defer each row with backoff, grouped by its next attempt
-          // count since rows in one batch carry different histories.
-          // Past the cap the rows leave the queue (the fetch excludes
-          // them) and the dead-letter log below is operations'
-          // backstop. A failed deferral only logs: the row retries on
-          // the next run, and the rejection is already counted.
-          const retryGroups = new Map<number, string[]>();
-          for (const item of stillSettled) {
-            const attempts = item.notificationAttempts + 1;
-            const ids = retryGroups.get(attempts) ?? [];
-            ids.push(item.id);
-            retryGroups.set(attempts, ids);
-          }
-          for (const [attempts, ids] of retryGroups) {
-            const deadLettered =
-              attempts >= SETTLEMENT_NOTIFICATION_MAX_ATTEMPTS;
-            const { error: retryError } = await supabase
-              .from('merchant_settlements')
-              .update({
-                notification_attempts: attempts,
-                notification_next_retry_at: deadLettered
-                  ? null
-                  : new Date(
-                      Date.now() + notificationRetryDelayMs(attempts)
-                    ).toISOString(),
-              })
-              .eq('status', 'settled')
-              .eq('settlement_notified', false)
-              .in('id', ids);
-            if (retryError) {
-              logger.error({
-                message: 'Failed to schedule settlement notification retry',
-                merchantId: data.merchantId,
-                error: retryError,
-              });
-            } else if (deadLettered) {
-              logger.error({
-                message:
-                  'Settlement notification dead-lettered after repeated rejections',
-                merchantId: data.merchantId,
-                settlementIds: ids,
-                attempts,
-              });
-            }
-          }
+          // the head of the bounded oldest-first queue immediately.
+          await scheduleNotificationRetries({
+            items: stillSettled,
+            logScope: { merchantId: data.merchantId },
+            reason: 'rejected',
+            supabase,
+          });
           notificationResults.failed++;
           continue;
         }
@@ -260,6 +296,29 @@ export async function sendSettlementNotifications({
         });
         notificationResults.failed++;
       }
+    }
+
+    // Rows whose merchant has no email address cannot send, but must
+    // still advance through retry accounting: left at zero attempts
+    // they would pin the bounded queue exactly like unhandled
+    // rejections. A late-added email notifies on a later run while
+    // the row is still under the cap.
+    if (missingEmail.length > 0) {
+      const merchantIds = [
+        ...new Set(missingEmail.map((row) => row.merchantId)),
+      ];
+      logger.error({
+        message: 'Settlement notification skipped: merchant email missing',
+        merchantIds,
+        settlementIds: missingEmail.map((row) => row.id),
+      });
+      await scheduleNotificationRetries({
+        items: missingEmail,
+        logScope: { merchantIds },
+        reason: 'missing-email',
+        supabase,
+      });
+      notificationResults.failed += merchantIds.length;
     }
   }
 

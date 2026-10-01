@@ -146,16 +146,18 @@ describe('sendSettlementNotifications', () => {
     expect(markB.calls.in).toEqual([['id', ['set-3']]]);
   });
 
-  it('skips merchants without an email address', async () => {
+  it('defers rows whose merchant has no email address', async () => {
     const sendEmail = vi.fn().mockResolvedValue({ success: true });
     const fresh = freshQuery([
       { id: 'set-1', settlement_notified: false, status: 'settled' },
     ]);
     const mark = markQuery();
+    const retry = markQuery();
     const from = vi
       .fn()
       .mockReturnValueOnce(fresh)
-      .mockReturnValueOnce({ update: mark.update });
+      .mockReturnValueOnce({ update: mark.update })
+      .mockReturnValueOnce({ update: retry.update });
     const supabase = { from } as unknown as SupabaseClient;
 
     const result = await sendSettlementNotifications({
@@ -167,9 +169,45 @@ describe('sendSettlementNotifications', () => {
       supabase,
     });
 
-    expect(result).toEqual({ failed: 0, sent: 1 });
+    // Nothing to send to, but the row must still advance through
+    // retry accounting: left at zero attempts it would pin the
+    // bounded queue.
+    expect(result).toEqual({ failed: 1, sent: 1 });
     expect(sendEmail).toHaveBeenCalledTimes(1);
     expect(mark.calls.in).toEqual([['id', ['set-1']]]);
+    expect(retry.update).toHaveBeenCalledWith({
+      notification_attempts: 1,
+      notification_next_retry_at: expect.any(String),
+    });
+    expect(retry.calls.in).toEqual([['id', ['set-0']]]);
+  });
+
+  it('dead-letters email-less rows past the retry cap', async () => {
+    const sendEmail = vi.fn();
+    const retry = markQuery();
+    const from = vi.fn().mockReturnValueOnce({ update: retry.update });
+    const supabase = { from } as unknown as SupabaseClient;
+
+    const result = await sendSettlementNotifications({
+      pendingNotifications: [
+        settlement('set-0', { ...merchantA, email: null }, 2500, 4),
+      ],
+      sendEmail,
+      supabase,
+    });
+
+    expect(result).toEqual({ failed: 1, sent: 0 });
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(retry.update).toHaveBeenCalledWith({
+      notification_attempts: 5,
+      notification_next_retry_at: null,
+    });
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message:
+          'Settlement notification dead-lettered: merchant email missing',
+      })
+    );
   });
 
   it('announces only rows still settled and unnotified at send time', async () => {

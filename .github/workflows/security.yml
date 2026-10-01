@@ -190,7 +190,10 @@ jobs:
       # delimit spans. Every dir= value assigned to GITHUB_OUTPUT must
       # equal the trusted path exactly, and the trusted agent runner must
       # keep its execution-disabling flags and token isolation (single
-      # muse invocation).
+      # muse invocation). Suppression matching is validated against the
+      # pinned semgrep 1.104.0 SARIF shape (suppressions:[{kind:inSource}]);
+      # a surviving rule+path result emits a warning annotation instead
+      # of failing silently.
       - name: Drop audited checkout finding from SARIF
         if: always()
         run: |
@@ -396,6 +399,11 @@ jobs:
               start = step_start(workflow_lines, pr_refs[0])
               raw_start = workflow_raw[start]
               raw_end = step_end(code_lines, workflow_raw[pr_refs[0]])
+              # Trim trailing blank separator lines so the span ends at
+              # the step's last content line (not the next step's own).
+              while raw_end - 1 > raw_start \
+                      and not code_lines[raw_end - 1].strip():
+                  raw_end -= 1
               audited_start, audited_end = raw_start + 1, raw_end
               # Key-positional: a run: echo of the string must not satisfy it.
               if not any(re.match(r"^persist-credentials:\s*false\s*$", line.strip())
@@ -552,10 +560,27 @@ jobs:
           with open("semgrep.sarif") as fh:
               sarif = json.load(fh)
           for run in sarif.get("runs", []):
-              run["results"] = [
-                  r for r in run.get("results", [])
-                  if not is_audited_checkout(r)
-              ]
+              kept = []
+              for result in run.get("results", []):
+                  if is_audited_checkout(result):
+                      continue
+                  kept.append(result)
+                  # Shape/suppression drift is fail-closed (the alert
+                  # re-opens) but otherwise silent: surface it so the
+                  # cause (emitter shape change vs removed nosemgrep) is
+                  # investigated instead of the filter being blamed.
+                  for loc in result.get("locations", []):
+                      physical = loc.get("physicalLocation", {})
+                      uri = (physical.get("artifactLocation", {})
+                             .get("uri", "") or "").replace("\\", "/").strip()
+                      if result.get("ruleId") == AUDITED_RULE_ID \
+                              and posixpath.normpath(uri) == AUDITED_PATH:
+                          print("::warning::Audited checkout finding present "
+                                "but not filtered (suppressions removed or "
+                                "SARIF shape changed?); alert 1498 may "
+                                "re-open. Audit: " + AUDITED_PATH + ".")
+                          break
+              run["results"] = kept
           with open("semgrep.sarif", "w") as fh:
               json.dump(sarif, fh)
           EOF

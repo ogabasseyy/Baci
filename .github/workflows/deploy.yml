@@ -62,7 +62,8 @@ jobs:
   vps-drain-readiness:
     needs: [changes]
     # always() so a skipped changes job (manual dispatch) still runs the
-    # cache-invalidation verification below; the GIGL step gates itself.
+    # cache-invalidation and GIGL cutover-marker verifications below; only
+    # the exact-SHA GIGL step gates itself on the tracking changeset.
     if: always() && github.ref == 'refs/heads/main'
     runs-on: baci-deploy
     timeout-minutes: 10
@@ -81,6 +82,18 @@ jobs:
         env:
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
         run: .readiness-checkout/vps-workers/bin/verify-cache-invalidation-drain-installed.sh
+      - name: Verify GIGL tracking cutover marker
+        # Runs on EVERY main push with no changeset condition: the marker
+        # proves deploy.sh has installed the worker and its schedule at
+        # least once since the cutover. Diff-scoped gates alone cannot do
+        # this — after a blocked tracking push, the next unrelated web push
+        # reports tracking == 'false' and would otherwise deploy the cron
+        # removal with no worker live. Until the first post-merge deploy.sh
+        # run, this step fails and blocks all production deploys; that
+        # bounded freeze is the announced first-rollout procedure.
+        env:
+          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
+        run: .readiness-checkout/vps-workers/bin/verify-gigl-direct-workers-installed.sh --cutover-marker
       - name: Verify production GIGL direct-worker installation
         # The verifier requires the VPS worker's exact checkout SHA to equal
         # the pushed commit, and the worker is deployed manually via

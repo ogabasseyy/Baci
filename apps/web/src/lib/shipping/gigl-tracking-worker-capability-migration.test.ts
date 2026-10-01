@@ -16,20 +16,16 @@ const loginMigration = readFileSync(
   ),
   'utf8'
 );
-const postgrestRepairMigration = readFileSync(
-  join(
-    process.cwd(),
-    '../../supabase/migrations/20260805113000_restore_gigl_tracking_postgrest_capability.sql'
-  ),
-  'utf8'
+const RESTORE_MIGRATION_PATH = join(
+  process.cwd(),
+  '../../supabase/migrations/20260805113000_restore_gigl_tracking_postgrest_capability.sql'
 );
-const requestScopeMigration = readFileSync(
-  join(
-    process.cwd(),
-    '../../supabase/migrations/20260805170000_isolate_gigl_tracking_postgrest_capability.sql'
-  ),
-  'utf8'
+const ISOLATE_MIGRATION_PATH = join(
+  process.cwd(),
+  '../../supabase/migrations/20260805170000_isolate_gigl_tracking_postgrest_capability.sql'
 );
+const postgrestRepairMigration = readFileSync(RESTORE_MIGRATION_PATH, 'utf8');
+const requestScopeMigration = readFileSync(ISOLATE_MIGRATION_PATH, 'utf8');
 
 describe('GIGL tracking worker capability migration', () => {
   it('creates a non-login role that cannot bypass RLS', () => {
@@ -85,9 +81,9 @@ describe('GIGL tracking worker capability migration', () => {
     expect(postgrestRepairMigration).toMatch(
       /ALTER ROLE gigl_tracking_worker NOLOGIN CONNECTION LIMIT -1 PASSWORD NULL/
     );
-    // Membership lands with the request-scope hook in the isolate migration,
-    // never here: granting it earlier would leave the token usable without
-    // the hook if a later migration failed.
+    // Membership lands in the isolate migration, never here: granting it
+    // before the hook is active would leave the token usable without the
+    // hook if a later migration failed.
     expect(postgrestRepairMigration).not.toMatch(
       /GRANT gigl_tracking_worker TO authenticator/
     );
@@ -97,45 +93,54 @@ describe('GIGL tracking worker capability migration', () => {
   });
 
   it('confines the worker JWT to the five reviewed PostgREST RPC paths', () => {
-    expect(requestScopeMigration).toMatch(
+    // The hook is installed and activated in the restore migration, a full
+    // phase before membership is granted: PostgreSQL exposes membership at
+    // commit while PostgREST reloads asynchronously, so same-transaction
+    // activation would leave a post-commit bypass window.
+    expect(postgrestRepairMigration).toMatch(
       /auth\.role\(\) IS DISTINCT FROM 'gigl_tracking_worker'/
     );
-    expect(requestScopeMigration).toMatch(
+    expect(postgrestRepairMigration).toMatch(
       /request_method IS DISTINCT FROM 'POST'/
     );
-    expect(requestScopeMigration).toMatch(/request_path IS NULL/);
+    expect(postgrestRepairMigration).toMatch(/request_path IS NULL/);
     // PostgREST spells RPC routes in request.path without a leading slash
     // ("rpc/<function>"), so the five literals below are slashless by
     // design; a leading-slash spelling would never match and would fail
     // closed (deny) rather than open.
     expect(
-      requestScopeMigration.match(/'rpc\/gigl_worker_[a-z_]+'/g)
+      postgrestRepairMigration.match(/'rpc\/gigl_worker_[a-z_]+'/g)
     ).toHaveLength(5);
-    expect(requestScopeMigration).toMatch(
+    expect(postgrestRepairMigration).toMatch(
       /ALTER ROLE authenticator\s+SET pgrst\.db_pre_request = 'public\.enforce_gigl_tracking_worker_request_scope'/
     );
-    expect(requestScopeMigration).toMatch(
+    expect(postgrestRepairMigration).toMatch(
       /setting <> 'pgrst\.db_pre_request=public\.enforce_gigl_tracking_worker_request_scope'/
     );
-    expect(requestScopeMigration).toMatch(/NOTIFY pgrst, 'reload config'/);
+    expect(postgrestRepairMigration).toMatch(/NOTIFY pgrst, 'reload config'/);
+    expect(postgrestRepairMigration).toMatch(
+      /PostgREST pre-request hook failed to install/
+    );
   });
 
-  it('grants authenticator membership atomically with the hook', () => {
+  it('grants authenticator membership only after the hook is active', () => {
     expect(requestScopeMigration).toMatch(
       /GRANT gigl_tracking_worker TO authenticator/
     );
-    expect(requestScopeMigration.indexOf('pgrst.db_pre_request')).toBeLessThan(
-      requestScopeMigration.indexOf(
-        'GRANT gigl_tracking_worker TO authenticator'
-      )
-    );
+    // The hook must not be (re)installed here: enforcement predates
+    // usability, so activation stays in the earlier phase.
+    expect(requestScopeMigration).not.toMatch(/pgrst\.db_pre_request/);
+    expect(requestScopeMigration).not.toMatch(/CREATE OR REPLACE FUNCTION/);
+    // Supabase applies migrations in filename order: the restore phase
+    // (hook install) sorts before the isolate phase (membership grant).
+    expect(RESTORE_MIGRATION_PATH < ISOLATE_MIGRATION_PATH).toBe(true);
   });
 
   it('lets every API role execute the pre-request hook', () => {
     // PostgREST invokes db_pre_request after User Impersonation, so the
     // hook runs as the request JWT role; revoking EXECUTE from normal
     // roles would fail every Data API request before the early return.
-    expect(requestScopeMigration).toMatch(
+    expect(postgrestRepairMigration).toMatch(
       /GRANT EXECUTE ON FUNCTION public\.enforce_gigl_tracking_worker_request_scope\(\)\s+TO PUBLIC/
     );
     expect(requestScopeMigration).not.toMatch(

@@ -1,76 +1,12 @@
--- The gigl_tracking_worker role is reachable only through PostgREST, but every
--- PostgreSQL role inherits EXECUTE grants made to PUBLIC. Enforce the worker's
--- five-RPC capability at the Data API request boundary before PostgREST invokes
--- any exposed function or relation.
-
-CREATE OR REPLACE FUNCTION public.enforce_gigl_tracking_worker_request_scope()
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-DECLARE
-  request_method text := current_setting('request.method', true);
-  request_path text := current_setting('request.path', true);
-BEGIN
-  IF auth.role() IS DISTINCT FROM 'gigl_tracking_worker' THEN
-    RETURN;
-  END IF;
-
-  IF request_method IS DISTINCT FROM 'POST' OR request_path IS NULL OR request_path NOT IN (
-    'rpc/gigl_worker_apply_tracking_result',
-    'rpc/gigl_worker_claim_due_tracking_monitors',
-    'rpc/gigl_worker_pause_tracking_monitor',
-    'rpc/gigl_worker_record_tracking_failure',
-    'rpc/gigl_worker_release_tracking_claim'
-  ) THEN
-    RAISE EXCEPTION 'GIGL worker request is outside its capability scope'
-      USING ERRCODE = '42501';
-  END IF;
-END;
-$$;
-
-ALTER FUNCTION public.enforce_gigl_tracking_worker_request_scope()
-  OWNER TO postgres;
--- PostgREST invokes db_pre_request AFTER User Impersonation, so the hook
--- executes as the request's JWT role and every current and future API role
--- must hold EXECUTE; the auth.role() early return inside is the guard, not
--- the privilege. Never revoke EXECUTE here: revoking from normal roles
--- would fail every Data API request with permission denied before the
--- early return could run.
-GRANT EXECUTE ON FUNCTION public.enforce_gigl_tracking_worker_request_scope()
-  TO PUBLIC;
-
-DO $$
-DECLARE
-  conflicting_hook text;
-BEGIN
-  SELECT setting
-  INTO conflicting_hook
-  FROM pg_db_role_setting AS role_setting
-  JOIN pg_roles AS role_record ON role_record.oid = role_setting.setrole
-  CROSS JOIN LATERAL unnest(role_setting.setconfig) AS config_item(setting)
-  WHERE role_record.rolname = 'authenticator'
-    AND setting LIKE 'pgrst.db_pre_request=%'
-    AND setting <> 'pgrst.db_pre_request=public.enforce_gigl_tracking_worker_request_scope'
-  LIMIT 1;
-
-  IF conflicting_hook IS NOT NULL THEN
-    RAISE EXCEPTION 'authenticator already has a different PostgREST pre-request hook';
-  END IF;
-
-  ALTER ROLE authenticator
-    SET pgrst.db_pre_request = 'public.enforce_gigl_tracking_worker_request_scope';
-END
-$$;
-
--- Grant authenticator membership LAST and in this same migration: the worker
--- JWT becomes usable the moment this membership exists, so it must land in
--- the same transaction as the request-scope hook above. Never move it to an
--- earlier migration, where a later failure would leave the token unconfined.
+-- Grant authenticator membership LAST, after the request-scope hook was
+-- installed, activated, and reloaded by
+-- 20260805113000_restore_gigl_tracking_postgrest_capability. PostgreSQL
+-- exposes a new membership at commit while PostgREST reloads
+-- configuration asynchronously, so activating the hook in this same
+-- transaction would leave a post-commit window where an issued worker JWT
+-- could invoke PUBLIC-granted RPCs without the five-path restriction.
+-- With enforcement predating usability, the token is already confined the
+-- moment this membership makes it assumable. Never move this grant to an
+-- earlier migration, where a later failure would leave the token
+-- unconfined, and never reinstall the hook here.
 GRANT gigl_tracking_worker TO authenticator;
-
-NOTIFY pgrst, 'reload config';
--- The new gigl_worker_* wrappers are invisible to PostgREST until its schema
--- cache is reloaded; 'reload config' alone does not refresh it.
-NOTIFY pgrst, 'reload schema';

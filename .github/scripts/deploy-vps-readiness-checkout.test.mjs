@@ -16,6 +16,9 @@ test('uses a minimal sparse checkout for VPS drain readiness', async () => {
   const giglVerification = steps.find(
     (step) => step.name === 'Verify production GIGL direct-worker installation'
   );
+  const cutoverMarker = steps.find(
+    (step) => step.name === 'Verify GIGL tracking cutover marker'
+  );
 
   assert.equal(checkout.with.path, '.readiness-checkout');
   assert.equal(
@@ -36,4 +39,12 @@ test('uses a minimal sparse checkout for VPS drain readiness', async () => {
     giglVerification.if,
     "needs.changes.outputs.tracking != 'false'"
   );
+  // The cutover marker runs on every main push with no changeset
+  // condition: diff-scoped gates alone would let an unrelated web push
+  // deploy the cron removal while the worker was never installed.
+  assert.equal(
+    cutoverMarker.run,
+    '.readiness-checkout/vps-workers/bin/verify-gigl-direct-workers-installed.sh --cutover-marker'
+  );
+  assert.equal(cutoverMarker.if, undefined);
 });

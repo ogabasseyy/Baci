@@ -173,12 +173,12 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260805113000_restore_gigl_tracking_postgrest_capability.sql',
-    sha256: '98698dbda91f1d298b81b15ba6809d75dcc81d188e7ee2294cfee885a489d296',
+    sha256: '5c1ad6375b313dbb1b6b5a7624dee548bff1b32ab9795d0d0ee709a1c442f27e',
   },
   {
     repositoryPath:
       'supabase/migrations/20260805170000_isolate_gigl_tracking_postgrest_capability.sql',
-    sha256: '2cc78f981f2229b6f5a2abffe3ab750218439334ce5f1416fee28e4ade07de0a',
+    sha256: '1c1fe822046e253402bdbd9e90ae355a2c2b617b51bc8c745874ad7e0b014432',
   },
   ...EXPECTED_MERCHANT_INVOICE_PENDING_SOURCES,
   ...EXPECTED_PAYSTACK_PENDING_SOURCES,

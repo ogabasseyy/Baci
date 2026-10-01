@@ -192,6 +192,29 @@ describe('GIGL direct-worker deployment gate', () => {
     assert.match(result.stdout, /GIGL direct tracking worker is installed/);
   });
 
+  it('passes the cutover marker on install presence despite SHA and env drift', () => {
+    const result = verify(
+      {
+        dirtyCheckout: true,
+        staleCheckout: true,
+        staleWorkflowSha: true,
+        unusableCapability: true,
+        unusableProviderEnvironment: true,
+      },
+      ['--cutover-marker']
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /GIGL direct tracking worker is installed/);
+  });
+
+  it('blocks the cutover marker when the tracking schedule is missing', () => {
+    const result = verify({ staleTrackingCommand: true }, ['--cutover-marker']);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /1 total\/0 canonical/);
+  });
+
   it('rejects unknown verifier arguments', () => {
     const result = verify(undefined, ['--no-such-flag']);
 

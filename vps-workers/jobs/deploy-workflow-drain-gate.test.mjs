@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -33,11 +33,15 @@ describe('production cache-invalidation drain rollout gate', () => {
       readiness,
       /^\s+run: \.readiness-checkout\/vps-workers\/bin\/verify-gigl-direct-workers-installed\.sh --skip-live-smoke$/m
     );
-    assert.match(readiness, /needs: \[changes\]/);
+    // The cutover marker runs on every push (no changeset condition),
+    // so an unrelated web push cannot deploy the cron removal while the
+    // worker was never installed.
     assert.match(
       readiness,
-      /needs\.changes\.outputs\.tracking != 'false'/
+      /^\s+run: \.readiness-checkout\/vps-workers\/bin\/verify-gigl-direct-workers-installed\.sh --cutover-marker$/m
     );
+    assert.match(readiness, /needs: \[changes\]/);
+    assert.match(readiness, /needs\.changes\.outputs\.tracking != 'false'/);
     assert.doesNotMatch(readiness, /outputs\.migrations/);
     assert.doesNotMatch(readiness, /VPS_WORKER_SSH_TARGET|\bssh\b/);
     assert.doesNotMatch(readiness, /continue-on-error:\s*true/);
@@ -63,10 +67,7 @@ describe('production cache-invalidation drain rollout gate', () => {
     );
     // `tracking` only: the broad `migrations` output must never gate
     // the smoke, or unrelated migrations freeze on worker drift.
-    assert.match(
-      capability,
-      /needs\.changes\.outputs\.tracking != 'false'/
-    );
+    assert.match(capability, /needs\.changes\.outputs\.tracking != 'false'/);
     assert.doesNotMatch(capability, /outputs\.migrations/);
     assert.match(
       capability,
@@ -119,27 +120,96 @@ describe('production cache-invalidation drain rollout gate', () => {
     );
     const tracking = filter.slice(filter.indexOf('tracking:'));
 
-    assert.match(tracking, /^  - 'vercel\.json'$/m);
-    assert.match(tracking, /^  - 'vps-workers\/\*\*'$/m);
+    assert.match(tracking, /^ {2}- 'vercel\.json'$/m);
+    assert.match(tracking, /^ {2}- 'vps-workers\/deploy\.sh'$/m);
     assert.match(
       tracking,
-      /^  - 'apps\/web\/src\/app\/api\/cron\/gigl-tracking\/\*\*'$/m
+      /^ {2}- 'vps-workers\/bin\/process-gigl-tracking\.sh'$/m
+    );
+    assert.match(tracking, /^ {2}- 'vps-workers\/bin\/run-web-script\.sh'$/m);
+    assert.match(
+      tracking,
+      /^ {2}- 'vps-workers\/bin\/verify-gigl-direct-workers-installed\.sh'$/m
     );
     assert.match(
       tracking,
-      /^  - 'supabase\/migrations\/\*gigl\*'$/m
+      /^ {2}- 'vps-workers\/bin\/verify-gigl-tracking-worker-capability\.sh'$/m
     );
     assert.match(
       tracking,
-      /^  - 'apps\/web\/src\/lib\/shipping\/providers\/gigl\*'$/m
+      /^ {2}- 'vps-workers\/jobs\/preflight-direct-web-workers\.mjs'$/m
     );
     assert.match(
       tracking,
-      /^  - 'apps\/web\/src\/lib\/shipping\/providers\/base\.ts'$/m
+      /^ {2}- 'vps-workers\/lib\/prepare-worker-release\.sh'$/m
+    );
+    assert.match(tracking, /^ {2}- 'vps-workers\/package\.json'$/m);
+    assert.match(tracking, /^ {2}- 'vps-workers\/pnpm-lock\.yaml'$/m);
+    assert.match(tracking, /^ {2}- 'vps-workers\/pnpm-workspace\.yaml'$/m);
+    assert.match(
+      tracking,
+      /^ {2}- 'apps\/web\/src\/app\/api\/cron\/gigl-tracking\/\*\*'$/m
+    );
+    assert.match(tracking, /^ {2}- 'supabase\/migrations\/\*gigl\*'$/m);
+    assert.match(
+      tracking,
+      /^ {2}- 'apps\/web\/src\/lib\/shipping\/providers\/gigl\*'$/m
     );
     assert.match(
       tracking,
-      /^  - 'packages\/shared\/src\/lib\/gigl-tracking-status\.ts'$/m
+      /^ {2}- 'apps\/web\/src\/lib\/shipping\/providers\/base\.ts'$/m
     );
+    assert.match(
+      tracking,
+      /^ {2}- 'packages\/shared\/src\/lib\/gigl-tracking-status\.ts'$/m
+    );
+  });
+
+  it('keeps every GIGL-named behavioral worker file in the tracking filter', () => {
+    // Explicit paths (no vps-workers/** glob) risk silent under-triggering
+    // when GIGL worker files are added, so every gigl/tracking-named
+    // behavioral file must appear in the filter. Non-behavioral matches
+    // (tests, docs, runtime dirs) and the non-tracking GIGL directory
+    // sync (no worker token) are excluded by design.
+    const filter = readFileSync(
+      join(workerRoot, '..', '.github', 'filters', 'deploy.yml'),
+      'utf8'
+    );
+    const tracking = filter.slice(
+      filter.indexOf('tracking:'),
+      filter.indexOf('migrations:')
+    );
+
+    assert.doesNotMatch(tracking, /^ {2}- 'vps-workers\/\*\*'$/m);
+
+    const excluded = new Set([
+      'jobs/sync-gigl-service-centres.mjs',
+      'jobs/sync-gigl-service-centres.test.mjs',
+    ]);
+    const entries = readdirSync(workerRoot, { recursive: true });
+    const discovered = entries.filter(
+      (entry) =>
+        /gigl|tracking/i.test(entry) &&
+        !/\.test\./.test(entry) &&
+        !entry.startsWith('docs/') &&
+        !entry.startsWith('logs/') &&
+        !entry.startsWith('locks/') &&
+        !excluded.has(entry)
+    );
+
+    assert.ok(
+      discovered.length > 0,
+      'expected GIGL-named worker files to exist'
+    );
+    for (const entry of discovered) {
+      assert.match(
+        tracking,
+        new RegExp(
+          `^  - 'vps-workers/${entry.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'$`,
+          'm'
+        ),
+        `tracking filter omits vps-workers/${entry}`
+      );
+    }
   });
 });

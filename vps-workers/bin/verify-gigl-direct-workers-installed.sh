@@ -6,12 +6,30 @@ set -euo pipefail
 # crontab, preflight) for pre-migration readiness. The live wrapper smoke runs
 # after db-migrations instead: on a first deploy the gigl_worker_* RPCs do not
 # exist until the pending migrations apply.
+# --cutover-marker reduces further to install presence (files, well-formed
+# SHA, canonical crontab) with no SHA-equality, checkout, preflight, or live
+# checks. The deploy workflow runs it on EVERY main push: until deploy.sh has
+# installed the worker and its schedule, no production deploy may land —
+# diff-scoped gates alone would let an unrelated web push deploy the current
+# tree (which removes the Vercel tracking cron) with no worker live.
 skip_live_smoke=0
-if [ "${1:-}" = "--skip-live-smoke" ]; then
-  skip_live_smoke=1
-elif [ -n "${1:-}" ]; then
-  echo "Unknown argument: $1 (expected --skip-live-smoke)" >&2
-  exit 2
+cutover_marker=0
+# The $# guard keeps zero-arg runs working on bash 3.2 (macOS), where an
+# unguarded "$@" under `set -u` fails with an unbound-variable error.
+if [ "$#" -gt 0 ]; then
+  for arg in "$@"; do
+    case "$arg" in
+      --skip-live-smoke) skip_live_smoke=1 ;;
+      --cutover-marker)
+        cutover_marker=1
+        skip_live_smoke=1
+        ;;
+      *)
+        echo "Unknown argument: $arg (expected --skip-live-smoke or --cutover-marker)" >&2
+        exit 2
+        ;;
+    esac
+  done
 fi
 
 remote_dir="${VPS_WORKER_REMOTE_DIR:-/home/bassey/baci-workers}"
@@ -47,48 +65,52 @@ if [[ ! "$deployed_sha" =~ ^[0-9a-f]{40}$ ]]; then
   exit 1
 fi
 
-expected_workflow_sha="${BACI_EXPECTED_APP_SHA:-${GITHUB_SHA:-}}"
-if [[ ! "$expected_workflow_sha" =~ ^[0-9a-f]{40}$ ]]; then
-  echo "Missing or invalid expected workflow SHA." >&2
-  exit 1
-fi
-if [ "$deployed_sha" != "$expected_workflow_sha" ]; then
-  echo "Deployed GIGL worker does not match the current workflow SHA." >&2
-  exit 1
-fi
-
-repo_dir="$(
-  awk '
-    /^BACI_REPO_DIR=/ {
-      sub(/^BACI_REPO_DIR=/, "")
-      print
-      exit
-    }
-  ' "$remote_dir/.env"
-)"
-repo_dir="${repo_dir%\"}"
-repo_dir="${repo_dir#\"}"
-repo_dir="${repo_dir%\'}"
-repo_dir="${repo_dir#\'}"
-case "$repo_dir" in
-  /*) ;;
-  *)
-    echo "BACI_REPO_DIR must identify the delegated application checkout." >&2
+if [ "$cutover_marker" -eq 0 ]; then
+  expected_workflow_sha="${BACI_EXPECTED_APP_SHA:-${GITHUB_SHA:-}}"
+  if [[ ! "$expected_workflow_sha" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "Missing or invalid expected workflow SHA." >&2
     exit 1
-    ;;
-esac
+  fi
+  if [ "$deployed_sha" != "$expected_workflow_sha" ]; then
+    echo "Deployed GIGL worker does not match the current workflow SHA." >&2
+    exit 1
+  fi
+fi
 
-if ! checkout_sha="$(git -C "$repo_dir" rev-parse --verify HEAD 2>/dev/null)"; then
-  echo "Unable to verify the delegated application checkout." >&2
-  exit 1
-fi
-if [ -n "$(git -C "$repo_dir" status --porcelain=v1 --untracked-files=all)" ]; then
-  echo "Delegated application checkout is dirty." >&2
-  exit 1
-fi
-if [ "$checkout_sha" != "$deployed_sha" ]; then
-  echo "Delegated application checkout does not match the deployed worker SHA." >&2
-  exit 1
+if [ "$cutover_marker" -eq 0 ]; then
+  repo_dir="$(
+    awk '
+      /^BACI_REPO_DIR=/ {
+        sub(/^BACI_REPO_DIR=/, "")
+        print
+        exit
+      }
+    ' "$remote_dir/.env"
+  )"
+  repo_dir="${repo_dir%\"}"
+  repo_dir="${repo_dir#\"}"
+  repo_dir="${repo_dir%\'}"
+  repo_dir="${repo_dir#\'}"
+  case "$repo_dir" in
+    /*) ;;
+    *)
+      echo "BACI_REPO_DIR must identify the delegated application checkout." >&2
+      exit 1
+      ;;
+  esac
+
+  if ! checkout_sha="$(git -C "$repo_dir" rev-parse --verify HEAD 2>/dev/null)"; then
+    echo "Unable to verify the delegated application checkout." >&2
+    exit 1
+  fi
+  if [ -n "$(git -C "$repo_dir" status --porcelain=v1 --untracked-files=all)" ]; then
+    echo "Delegated application checkout is dirty." >&2
+    exit 1
+  fi
+  if [ "$checkout_sha" != "$deployed_sha" ]; then
+    echo "Delegated application checkout does not match the deployed worker SHA." >&2
+    exit 1
+  fi
 fi
 
 if ! installed_crontab="$(crontab -l 2>/dev/null)"; then
@@ -130,9 +152,11 @@ if [ "$tracking_total" -ne 1 ] || [ "$tracking_canonical" -ne 1 ]; then
   exit 1
 fi
 
-if ! node "$preflight"; then
-  echo "GIGL direct-worker environment failed its production preflight." >&2
-  exit 1
+if [ "$cutover_marker" -eq 0 ]; then
+  if ! node "$preflight"; then
+    echo "GIGL direct-worker environment failed its production preflight." >&2
+    exit 1
+  fi
 fi
 
 if [ "$skip_live_smoke" -eq 0 ]; then

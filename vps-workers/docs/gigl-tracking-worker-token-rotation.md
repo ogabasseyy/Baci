@@ -1,5 +1,15 @@
 # GIGL tracking worker token rotation
 
+## Pre-merge checklist (cutover PR)
+
+CI proves the Vercel key is DEFINED, never that the value is real or
+unexpired — do not rely on the green gate. Before merging:
+
+- [ ] Vercel Production `GIGL_TRACKING_WORKER_TOKEN` decodes (payload
+  `exp`, one-liner below) and matches the VPS `.env` value exactly.
+- [ ] `exp` leaves a 14-day runway; otherwise rotate first (steps below).
+- [ ] Manual fallback route returns 200 with the Vercel value.
+
 `GIGL_TRACKING_WORKER_TOKEN` is a signed, time-bounded PostgREST JWT whose
 `role` is exactly `gigl_tracking_worker`. It must hold the SAME value in
 two places or the retained manual fallback route returns 500 while the VPS

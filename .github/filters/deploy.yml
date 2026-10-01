@@ -44,7 +44,22 @@ web:
   - 'pnpm-workspace.yaml'
 tracking:
   - 'vercel.json'
-  - 'vps-workers/**'
+  # GIGL-owned worker paths only — never a vps-workers/** glob, which
+  # would let unrelated import-job/Petrock/remediator edits inherit the
+  # GIGL install/SHA/smoke gates and freeze releases on worker drift.
+  # deploy.sh installs the tracking schedule, prepare-worker-release.sh
+  # stages the release SHA, the bin/jobs entries are the poller +
+  # capability chain, and the manifests feed the VPS preflight.
+  - 'vps-workers/deploy.sh'
+  - 'vps-workers/bin/process-gigl-tracking.sh'
+  - 'vps-workers/bin/run-web-script.sh'
+  - 'vps-workers/bin/verify-gigl-direct-workers-installed.sh'
+  - 'vps-workers/bin/verify-gigl-tracking-worker-capability.sh'
+  - 'vps-workers/jobs/preflight-direct-web-workers.mjs'
+  - 'vps-workers/lib/prepare-worker-release.sh'
+  - 'vps-workers/package.json'
+  - 'vps-workers/pnpm-lock.yaml'
+  - 'vps-workers/pnpm-workspace.yaml'
   - 'apps/web/src/app/api/cron/gigl-tracking/**'
   - 'apps/web/src/lib/gigl-tracking-worker-client.ts'
   - 'apps/web/src/lib/verify-gigl-tracking-worker-capability.ts'

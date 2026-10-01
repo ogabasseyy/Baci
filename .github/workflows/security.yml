@@ -182,10 +182,11 @@ jobs:
       # filtering, the step re-asserts the hardening the audit relies on and
       # fails closed (SARIF untouched, alert re-opens) if it drifted.
       # Matching is key-positional on comment-stripped lines (stdlib only:
-      # the scan container has no jq and no PyYAML): the guard must sit in a
-      # real if: condition, persist-credentials/ref:/path: must be mapping
-      # keys, so run: echo strings cannot spoof them; folded ref scalars are
-      # joined and unnamed steps delimit spans. Every dir= value assigned to
+      # the scan container has no jq and no PyYAML): the guard must sit in
+      # the audited job's own job-level if: (not another job, step, or run:
+      # string), persist-credentials/ref:/path: must be mapping keys, so
+      # run: echo strings cannot spoof them; folded ref scalars are joined
+      # and unnamed steps delimit spans. Every dir= value assigned to
       # GITHUB_OUTPUT must resolve under the trusted tree, and the trusted
       # agent runner must keep its execution-disabling flags and token
       # isolation (single muse invocation).
@@ -272,21 +273,38 @@ jobs:
                       return i
               return len(lines)
 
-          def if_bodies():
-              # Every job/step condition: single-line values plus block-scalar
-              # bodies. The same-repo guard only counts in a real condition,
-              # never in a run: string or inert mapping.
+          def job_if_bodies(ref_raw_index):
+              # Conditions of the audited step's own job only: a matching
+              # guard string in another job, a step, or a run: block must
+              # not satisfy the check. Returns None when unlocatable.
+              jobs_at = next(
+                  (i for i, line in enumerate(code_lines)
+                   if re.match(r"^jobs:\s*$", line.strip())), None)
+              if jobs_at is None or ref_raw_index <= jobs_at:
+                  return None
+              job_at = next(
+                  (i for i in range(ref_raw_index, jobs_at, -1)
+                   if re.match(r"^  \S+:\s*$", code_lines[i])), None)
+              if job_at is None:
+                  return None
+              steps_at = next(
+                  (i for i in range(job_at + 1, len(code_lines))
+                   if re.match(r"^    steps:\s*$", code_lines[i])
+                   or re.match(r"^  \S+:\s*$", code_lines[i])),
+                  len(code_lines))
               bodies = []
-              i = 0
-              while i < len(code_lines):
+              i = job_at + 1
+              while i < steps_at:
                   line = code_lines[i]
-                  block = re.match(r"^\s*if:\s*[>|][-+]?\s*$", line)
-                  single = re.match(r"^\s*if:\s+(\S.*)$", line)
+                  if not re.match(r"^    if:", line):
+                      i += 1
+                      continue
+                  block = re.match(r"^    if:\s*[>|][-+]?\s*$", line)
+                  single = re.match(r"^    if:\s+(\S.*)$", line)
                   if block:
-                      base = len(line) - len(line.lstrip())
                       j = i + 1
-                      while j < len(code_lines) and code_lines[j].strip() \
-                              and len(code_lines[j]) - len(code_lines[j].lstrip()) > base:
+                      while j < steps_at and code_lines[j].strip() \
+                              and len(code_lines[j]) - len(code_lines[j].lstrip()) > 4:
                           bodies.append(code_lines[j].strip())
                           j += 1
                       i = j
@@ -304,17 +322,28 @@ jobs:
                       and "github.event.pull_request" in line)
 
           drift = []
-          if not any("head.repo.full_name == github.repository" in body
-                     for body in if_bodies()):
-              drift.append("same-repo-job-guard")
           pr_refs = [i for i, line in enumerate(workflow_lines)
                      if is_pr_ref(line)]
-          # 1-based inclusive raw line span of the audited checkout step, used
-          # to pin the SARIF exemption to this exact finding (see below).
-          audited_start = audited_end = 0
+          if not pr_refs:
+              # No PR-controlled checkout left to exempt (e.g. removed in
+              # favor of API-fetched diffs): nothing to filter, and failing
+              # here would punish the safest possible change.
+              sys.exit(0)
           if len(pr_refs) != 1:
               drift.append(f"pr-controlled-checkout-count={len(pr_refs)}")
-          else:
+          guard_bodies = (job_if_bodies(workflow_raw[pr_refs[0]])
+                          if len(pr_refs) == 1 else None)
+          if len(pr_refs) == 1 and (
+                  not guard_bodies or not any(
+                      "head.repo.full_name == github.repository" in body
+                      for body in guard_bodies)):
+              drift.append("same-repo-job-guard")
+          # 1-based inclusive raw line span of the audited checkout step, used
+          # to pin the SARIF exemption to this exact finding (see below).
+          # (Count drift is recorded above; a non-unique ref leaves the span
+          # empty so the predicate below cannot match anything.)
+          audited_start = audited_end = 0
+          if len(pr_refs) == 1:
               start = step_start(workflow_lines, pr_refs[0])
               raw_start = workflow_raw[start]
               raw_end = step_end(code_lines, workflow_raw[pr_refs[0]])

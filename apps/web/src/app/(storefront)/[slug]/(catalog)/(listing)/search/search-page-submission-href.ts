@@ -1,6 +1,7 @@
 /**
  * Submission entries (search form, navbar, see-all, did-you-mean) never
- * carry a page parameter; only their renders count as new searches.
+ * carry a page parameter; only explicit activation records a submission,
+ * never the landing render.
  */
 export function buildSearchSubmissionHref(
   searchBasePath: string,

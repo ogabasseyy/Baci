@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
+  fetch: vi.fn().mockResolvedValue({ ok: true }),
   // Route-reader mocks for the search-route query sync. The default is a
   // non-search route so the pre-existing tests exercise the navbar with no
   // route query syncing underneath them. The query is a raw string so
@@ -62,6 +63,8 @@ import { NavbarSearch } from './navbar-search';
 describe('NavbarSearch', () => {
   beforeEach(() => {
     mocks.push.mockClear();
+    mocks.fetch.mockClear();
+    vi.stubGlobal('fetch', mocks.fetch);
   });
 
   it('submits the fallback product search form before autocomplete is loaded', () => {
@@ -75,9 +78,23 @@ describe('NavbarSearch', () => {
 
     const input = screen.getByRole('searchbox', { name: /search products/i });
     fireEvent.change(input, { target: { value: 'iphone' } });
+    expect(input.closest('form')).toHaveAttribute('action', '/ogabassey/search');
+    expect(input.closest('form')).toHaveAttribute('method', 'get');
     fireEvent.submit(input.closest('form') as HTMLFormElement);
 
     expect(mocks.push).toHaveBeenCalledWith('/ogabassey/search?q=iphone');
+    expect(mocks.fetch).toHaveBeenCalledWith(
+      '/api/search/submissions',
+      expect.objectContaining({
+        method: 'POST',
+        keepalive: true,
+        body: JSON.stringify({
+          query: 'iphone',
+          pathPrefix: '/ogabassey',
+          source: 'navbar',
+        }),
+      })
+    );
   });
 
   it('loads autocomplete on focus and routes selected products through the store base path', async () => {
@@ -89,7 +106,9 @@ describe('NavbarSearch', () => {
       />
     );
 
-    fireEvent.focus(screen.getByRole('searchbox', { name: /search products/i }));
+    fireEvent.focus(
+      screen.getByRole('searchbox', { name: /search products/i })
+    );
 
     await waitFor(() => {
       expect(
@@ -247,6 +266,7 @@ describe('NavbarSearch', () => {
     expect(mocks.push).toHaveBeenCalledWith(
       '/ogabassey/blog?search=flash%20sale'
     );
+    expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
   it('clamps blog searches to the 100-character listing limit', () => {

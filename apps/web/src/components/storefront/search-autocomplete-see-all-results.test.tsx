@@ -102,7 +102,7 @@ describe('SearchAutocomplete', () => {
 
     fireEvent.click(seeAll);
     expect(onSubmitSearch).toHaveBeenCalledTimes(1);
-    expect(onSubmitSearch).toHaveBeenCalledWith('iphone');
+    expect(onSubmitSearch).toHaveBeenCalledWith('iphone', 'see-all');
   });
 
   it('shows "See all results" even when there are no suggestions', async () => {
@@ -141,7 +141,7 @@ describe('SearchAutocomplete', () => {
     );
     const seeAll = screen.getByRole('button', { name: /see all results/i });
     fireEvent.click(seeAll);
-    expect(onSubmitSearch).toHaveBeenCalledWith('zzzz');
+    expect(onSubmitSearch).toHaveBeenCalledWith('zzzz', 'see-all');
   });
 
   it('keeps "See all results" reachable when the suggestion fetch fails', async () => {
@@ -177,7 +177,7 @@ describe('SearchAutocomplete', () => {
 
     const seeAll = screen.getByRole('button', { name: /see all results/i });
     fireEvent.click(seeAll);
-    expect(onSubmitSearch).toHaveBeenCalledWith('iphone');
+    expect(onSubmitSearch).toHaveBeenCalledWith('iphone', 'see-all');
   });
 
   it('hides "See all results" when no submit handler is wired', async () => {

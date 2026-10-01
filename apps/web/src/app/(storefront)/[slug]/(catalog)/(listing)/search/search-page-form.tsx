@@ -3,6 +3,7 @@
 // Client boundary justified: the submit handler must intercept
 // sanitized-empty queries before the GET navigation fires.
 import { type FormEvent, useState } from 'react';
+import { recordSearchSubmission } from '@/lib/search-submission';
 import {
   parseStorefrontSearchQueryParam,
   STOREFRONT_SEARCH_MAX_QUERY_LENGTH,
@@ -11,9 +12,14 @@ import {
 interface SearchPageFormProps {
   action: string;
   defaultQuery: string;
+  pathPrefix: string;
 }
 
-export function SearchPageForm({ action, defaultQuery }: SearchPageFormProps) {
+export function SearchPageForm({
+  action,
+  defaultQuery,
+  pathPrefix,
+}: SearchPageFormProps) {
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -25,6 +31,12 @@ export function SearchPageForm({ action, defaultQuery }: SearchPageFormProps) {
     if (!parseStorefrontSearchQueryParam(typeof raw === 'string' ? raw : '')) {
       event.preventDefault();
       setError('Enter a searchable term to update the results.');
+      return;
+    }
+    // An explicit re-search: record it while the native GET navigation
+    // proceeds. Never blocks or alters the navigation.
+    if (typeof raw === 'string') {
+      recordSearchSubmission(raw, pathPrefix, 'results-form');
     }
   };
 

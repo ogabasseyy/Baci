@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import type { BreadcrumbList, CollectionPage, WithContext } from 'schema-dts';
 import { JsonLd } from '@/components/seo/json-ld';
 import { StorefrontPagination } from '@/components/storefront/ogabassey/components/StorefrontPagination';
+import { SearchSubmissionLink } from '@/components/storefront/search-submission-link';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { asRoute } from '@/lib/routes';
 import { STOREFRONT_PRODUCTS_PER_PAGE } from '@/lib/storefront-pagination';
@@ -17,7 +18,6 @@ import { SearchPageNoResultsPanel } from './search-page-no-results-panel';
 import { getPriceFormatter } from './search-page-price';
 import { buildSearchPageSchemas } from './search-page-schema';
 import { SearchPageStartPanel } from './search-page-start-panel';
-import { buildSearchSubmissionHref } from './search-page-submission-href';
 import { formatSearchSummary } from './search-page-summary';
 
 export interface SearchPageProps {
@@ -63,11 +63,6 @@ export async function SearchPageContent({
 
   const allProductsHref = `${pathPrefix}/products`;
   const contactHref = `${pathPrefix}/contact`;
-  // A did-you-mean follow is a fresh submission, so it keeps the
-  // page-less submission URL (and its render is tracked as one).
-  const didYouMeanHref = effectiveResult.didYouMean
-    ? buildSearchSubmissionHref(searchBasePath, effectiveResult.didYouMean)
-    : null;
   const pageUrl = searchQuery
     ? `${storeUrl}/search?q=${encodeURIComponent(searchQuery)}${page > 1 ? `&page=${page}` : ''}`
     : `${storeUrl}/search`;
@@ -143,17 +138,20 @@ export async function SearchPageContent({
             key={query}
             action={searchBasePath}
             defaultQuery={query}
+            pathPrefix={pathPrefix}
           />
 
-          {!searchFailed && effectiveResult.didYouMean && didYouMeanHref && (
+          {!searchFailed && effectiveResult.didYouMean && (
             <p className="mt-4 text-sm text-store-background-text/55">
               Did you mean{' '}
-              <Link
-                href={asRoute(didYouMeanHref)}
+              <SearchSubmissionLink
+                pathPrefix={pathPrefix}
+                query={effectiveResult.didYouMean}
+                source="did-you-mean"
                 className="font-medium text-store-primary underline-offset-4 hover:underline"
               >
                 {effectiveResult.didYouMean}
-              </Link>
+              </SearchSubmissionLink>
               ?
             </p>
           )}

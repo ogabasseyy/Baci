@@ -11,6 +11,7 @@ interface AutocompleteKeyDownInput {
   onChange: (value: string) => void;
   onClose: () => void;
   onHighlight: (updater: (prev: number) => number) => void;
+  onPopularSearchSelect?: (query: string) => void;
   onSelectProduct?: (url: string) => void;
   onSubmitSearch?: (query: string) => void;
   popularSearches: AutocompletePopularSearch[];
@@ -29,6 +30,7 @@ export function createAutocompleteKeyDownHandler({
   onChange,
   onClose,
   onHighlight,
+  onPopularSearchSelect,
   onSelectProduct,
   onSubmitSearch,
   popularSearches,
@@ -64,6 +66,8 @@ export function createAutocompleteKeyDownHandler({
         onChange(search.search_query);
         if (onSubmitSearch) {
           onSubmitSearch(search.search_query);
+        } else {
+          onPopularSearchSelect?.(search.search_query);
         }
         onClose();
       }

@@ -77,7 +77,7 @@ describe('loadSearchPageData', () => {
     mockNotFound.mockReset();
   });
 
-  it('loads a submission entry and tracks it as a new search', async () => {
+  it('loads a page-less URL without tracking a new search', async () => {
     mockStorefrontContext();
     mockGetStorefrontSearchProducts.mockResolvedValueOnce(
       searchPage() as never
@@ -95,7 +95,7 @@ describe('loadSearchPageData', () => {
     expect(data.searchResult?.products).toHaveLength(20);
     expect(data.merchant).toMatchObject({ id: 'merchant-1' });
     expect(mockGetStorefrontSearchProducts).toHaveBeenCalledWith(
-      expect.objectContaining({ offset: 0, trackAnalytics: true })
+      expect.objectContaining({ offset: 0 })
     );
   });
 
@@ -110,7 +110,7 @@ describe('loadSearchPageData', () => {
     expect(data.page).toBe(1);
     expect(data.redirectHref).toBeNull();
     expect(mockGetStorefrontSearchProducts).toHaveBeenCalledWith(
-      expect.objectContaining({ offset: 0, trackAnalytics: false })
+      expect.objectContaining({ offset: 0 })
     );
   });
 
@@ -124,7 +124,7 @@ describe('loadSearchPageData', () => {
 
     expect(data.page).toBe(2);
     expect(mockGetStorefrontSearchProducts).toHaveBeenCalledWith(
-      expect.objectContaining({ offset: 20, trackAnalytics: false })
+      expect.objectContaining({ offset: 20 })
     );
   });
 
@@ -157,7 +157,7 @@ describe('loadSearchPageData', () => {
 
     expect(mockGetStorefrontSearchProducts).toHaveBeenCalledTimes(1);
     expect(mockGetStorefrontSearchProducts).toHaveBeenCalledWith(
-      expect.objectContaining({ offset: 0, trackAnalytics: false })
+      expect.objectContaining({ offset: 0 })
     );
     expect(data.redirectHref).toBe('/ogabassey/search?q=iphone&page=3');
   });

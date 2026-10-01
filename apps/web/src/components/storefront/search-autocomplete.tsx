@@ -20,6 +20,7 @@ export function SearchAutocomplete({
   onChange,
   onSelectProduct,
   onSubmitSearch,
+  onPopularSearchSelect,
   isSearchSubmittable,
   maxLength,
   placeholder = 'Search products...',
@@ -78,12 +79,16 @@ export function SearchAutocomplete({
   const isSubmittableQuery =
     isSearchSubmittable ?? ((text: string) => text.trim().length > 0);
   const handleSubmitSearch = onSubmitSearch
-    ? (query: string) => {
+    ? (query: string, source?: 'navbar' | 'see-all') => {
         if (!isSubmittableQuery(query)) {
           return;
         }
         prepareNavigation();
-        onSubmitSearch(query);
+        if (source) {
+          onSubmitSearch(query, source);
+        } else {
+          onSubmitSearch(query);
+        }
       }
     : undefined;
 
@@ -93,6 +98,7 @@ export function SearchAutocomplete({
     onChange,
     onClose: () => setIsOpen(false),
     onHighlight: setHighlightedIndex,
+    onPopularSearchSelect,
     onSelectProduct: handleSelectProduct,
     onSubmitSearch: handleSubmitSearch,
     popularSearches,
@@ -250,6 +256,7 @@ export function SearchAutocomplete({
           loading={loading}
           onChange={onChange}
           onClose={() => setIsOpen(false)}
+          onPopularSearchSelect={onPopularSearchSelect}
           onSelectProduct={handleSelectProduct}
           onSubmitSearch={handleSubmitSearch ?? (() => undefined)}
           popularSearches={popularSearches}

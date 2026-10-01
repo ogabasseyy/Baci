@@ -79,6 +79,34 @@ describe('createAutocompleteKeyDownHandler', () => {
     expect(handlers.onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('reports a highlighted popular search without submitting when unwired', () => {
+    const onPopularSearchSelect = vi.fn();
+    const { handlers, press } = setup({
+      highlightedIndex: 1,
+      onPopularSearchSelect,
+      onSubmitSearch: undefined,
+    });
+
+    press('Enter');
+
+    expect(handlers.onChange).toHaveBeenCalledWith('galaxy');
+    expect(onPopularSearchSelect).toHaveBeenCalledExactlyOnceWith('galaxy');
+    expect(handlers.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not report a highlighted popular search when submission is wired', () => {
+    const onPopularSearchSelect = vi.fn();
+    const onSubmitSearch = vi.fn();
+    setup({
+      highlightedIndex: 1,
+      onPopularSearchSelect,
+      onSubmitSearch,
+    }).press('Enter');
+
+    expect(onSubmitSearch).toHaveBeenCalledWith('galaxy');
+    expect(onPopularSearchSelect).not.toHaveBeenCalled();
+  });
+
   it('falls back to the typed value when the highlight outlives its options', () => {
     const onSubmitSearch = vi.fn();
     const { handlers, press } = setup({

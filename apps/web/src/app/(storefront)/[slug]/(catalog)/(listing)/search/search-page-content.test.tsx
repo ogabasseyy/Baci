@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
@@ -82,6 +82,56 @@ describe('SearchPageContent', () => {
     mockHeaders.mockReset();
     mockRedirect.mockReset();
     mockNotFound.mockReset();
+  });
+
+  it('records explicit form and spelling submissions without tracking a render', async () => {
+    mockHeaders.mockResolvedValue(
+      new Headers([
+        ['host', 'proxy.internal'],
+        ['x-custom-domain', 'shop.example.ng'],
+        ['x-pathname', '/search'],
+      ])
+    );
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue({
+      id: 'merchant-1',
+      slug: 'ogabassey',
+      custom_domain: 'shop.example.ng',
+      business_name: 'Ogabassey',
+      payout_currency: 'NGN',
+    } as never);
+    mockGetStorefrontSearchProducts.mockResolvedValue({
+      count: 0,
+      products: [],
+      query: 'iphnoe',
+      didYouMean: 'iphone',
+    } as never);
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      (await SearchPageContent({
+        params: Promise.resolve({ slug: 'ogabassey' }),
+        searchParams: Promise.resolve({ q: 'iphnoe' }),
+      })) as React.ReactElement
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+    const input = screen.getByRole('searchbox', { name: 'Search products' });
+    expect(input).toHaveValue('iphnoe');
+    fireEvent.change(input, { target: { value: 'ipad' } });
+    fireEvent.submit(input.closest('form') as HTMLFormElement);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      query: 'ipad',
+      pathPrefix: '/ogabassey',
+      source: 'results-form',
+    });
+    const suggestion = screen.getByRole('link', { name: 'iphone' });
+    expect(suggestion).toHaveAttribute('href', '/ogabassey/search?q=iphone');
+    suggestion.addEventListener('click', (event) => event.preventDefault());
+    fireEvent.click(suggestion);
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
+      query: 'iphone',
+      pathPrefix: '/ogabassey',
+      source: 'did-you-mean',
+    });
   });
 
   it('shows the first slice of capped results and request-scoped schema URLs', async () => {

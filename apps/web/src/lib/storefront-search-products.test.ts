@@ -60,7 +60,7 @@ describe('getStorefrontSearchProducts submission tracking', () => {
     );
   });
 
-  it('records one submission after a fully successful search', async () => {
+  it('hydrates a successful first page without writing analytics', async () => {
     vi.mocked(createClient).mockReturnValue({
       rpc: vi.fn().mockResolvedValue({
         data: [{ product_id: 'product-1', total_count: 45 }],
@@ -71,29 +71,27 @@ describe('getStorefrontSearchProducts submission tracking', () => {
       })),
     } as never);
 
-    vi.mocked(createPublicClient)
-      .mockReturnValueOnce({
-        from: vi.fn(() => ({
-          select: vi.fn(() => ({
-            in: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                eq: vi.fn().mockResolvedValue({
-                  data: [
-                    {
-                      id: 'product-1',
-                      name: 'Phone One',
-                      price: 1000,
-                      slug: 'phone-one',
-                    },
-                  ],
-                  error: null,
-                }),
-              })),
+    vi.mocked(createPublicClient).mockReturnValueOnce({
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          in: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn().mockResolvedValue({
+                data: [
+                  {
+                    id: 'product-1',
+                    name: 'Phone One',
+                    price: 1000,
+                    slug: 'phone-one',
+                  },
+                ],
+                error: null,
+              }),
             })),
           })),
         })),
-      } as never)
-      .mockReturnValueOnce(mockAnalyticsSupabase as never);
+      })),
+    } as never);
 
     const result = await getStorefrontSearchProducts({
       merchantId: '123e4567-e89b-12d3-a456-426614174000',
@@ -102,14 +100,10 @@ describe('getStorefrontSearchProducts submission tracking', () => {
     });
 
     expect(result.products).toHaveLength(1);
-    expect(mockAnalyticsSupabase.from).toHaveBeenCalledWith('search_analytics');
-    expect(mockAnalyticsInsert).toHaveBeenCalledTimes(1);
-    expect(mockAnalyticsInsert).toHaveBeenCalledWith({
-      merchant_id: '123e4567-e89b-12d3-a456-426614174000',
-      search_query: 'phone',
-      results_count: 45,
-      search_method: 'server',
-    });
+    expect(mockAnalyticsSupabase.from).not.toHaveBeenCalledWith(
+      'search_analytics'
+    );
+    expect(mockAnalyticsInsert).not.toHaveBeenCalled();
   });
 
   it('leaves analytics untracked when hydration fails after a successful rpc', async () => {
@@ -158,7 +152,7 @@ describe('getStorefrontSearchProducts submission tracking', () => {
     expect(mockAnalyticsInsert).not.toHaveBeenCalled();
   });
 
-  it('skips the analytics insert when page views opt out of submission tracking', async () => {
+  it('leaves first-page analytics untracked', async () => {
     vi.mocked(createClient).mockReturnValue({
       rpc: vi.fn().mockResolvedValue({
         data: [{ product_id: 'product-1', total_count: 45 }],
@@ -196,7 +190,6 @@ describe('getStorefrontSearchProducts submission tracking', () => {
       query: 'phone',
       limit: 20,
       offset: 20,
-      trackAnalytics: false,
     });
 
     expect(result.products).toHaveLength(1);

@@ -153,6 +153,6 @@ describe('SearchAutocomplete submit eligibility', () => {
       name: /see all results for “iphone”/i,
     });
     fireEvent.click(seeAll);
-    expect(onSubmitSearch).toHaveBeenCalledWith('iphone');
+    expect(onSubmitSearch).toHaveBeenCalledWith('iphone', 'see-all');
   });
 });

@@ -87,6 +87,41 @@ describe('SearchAutocompletePopup', () => {
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('reports a clicked popular search without submitting when submission is unwired', () => {
+    const popularSearches = [
+      { search_query: 'galaxy', search_count: 42 },
+    ] as ComponentProps<typeof SearchAutocompletePopup>['popularSearches'];
+    const onPopularSearchSelect = vi.fn();
+    const { props } = renderPopup({
+      canSubmitSearch: false,
+      onPopularSearchSelect,
+      popularSearches,
+    });
+
+    fireEvent.click(screen.getByRole('option', { name: /galaxy/i }));
+
+    expect(onPopularSearchSelect).toHaveBeenCalledExactlyOnceWith('galaxy');
+    expect(props.onSubmitSearch).not.toHaveBeenCalled();
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not report a clicked popular search when submission is wired', () => {
+    const popularSearches = [
+      { search_query: 'galaxy', search_count: 42 },
+    ] as ComponentProps<typeof SearchAutocompletePopup>['popularSearches'];
+    const onPopularSearchSelect = vi.fn();
+    const { props } = renderPopup({
+      canSubmitSearch: true,
+      onPopularSearchSelect,
+      popularSearches,
+    });
+
+    fireEvent.click(screen.getByRole('option', { name: /galaxy/i }));
+
+    expect(props.onSubmitSearch).toHaveBeenCalledWith('galaxy');
+    expect(onPopularSearchSelect).not.toHaveBeenCalled();
+  });
+
   it('keeps the submit action outside the listbox ownership', () => {
     renderPopup({ canSubmitSearch: true });
 
@@ -121,7 +156,7 @@ describe('SearchAutocompletePopup', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /see all results/i }));
 
-    expect(props.onSubmitSearch).toHaveBeenCalledWith('  x ');
+    expect(props.onSubmitSearch).toHaveBeenCalledWith('  x ', 'see-all');
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
 

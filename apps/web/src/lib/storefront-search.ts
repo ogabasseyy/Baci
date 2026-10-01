@@ -2,11 +2,8 @@ import {
   extractProductSearchIds,
   getProductSearchTotalCount,
 } from '@baci/shared';
+
 import { isValidUuid, sanitizeSearchQuery } from './sanitize-core';
-import {
-  type StorefrontSearchAnalyticsSupabase,
-  scheduleSearchAnalyticsInsert,
-} from './storefront-search-analytics';
 import { findStorefrontSearchDidYouMean } from './storefront-search-did-you-mean';
 
 export type { StorefrontSearchProductsPage } from './storefront-search-products';
@@ -55,7 +52,6 @@ export interface StorefrontSearchFilters {
 
 interface SearchStorefrontProductsArgs {
   supabase: StorefrontSearchSupabase;
-  analyticsSupabase?: StorefrontSearchAnalyticsSupabase;
   filters?: StorefrontSearchFilters;
   includeDidYouMean?: boolean;
   merchantId: string;
@@ -63,7 +59,6 @@ interface SearchStorefrontProductsArgs {
   limit: number;
   offset?: number;
   sort?: StorefrontSearchSort;
-  trackAnalytics?: boolean;
 }
 
 export interface StorefrontSearchResult {
@@ -106,7 +101,6 @@ export function toStorefrontSearchSort(
 
 export async function searchStorefrontProducts({
   supabase,
-  analyticsSupabase,
   filters,
   includeDidYouMean = true,
   merchantId,
@@ -114,7 +108,6 @@ export async function searchStorefrontProducts({
   limit,
   offset,
   sort = 'relevance',
-  trackAnalytics = true,
 }: SearchStorefrontProductsArgs): Promise<StorefrontSearchResult> {
   if (!isValidUuid(merchantId)) {
     throw new InvalidMerchantIdError();
@@ -152,15 +145,6 @@ export async function searchStorefrontProducts({
   const productIds = extractProductSearchIds(rankedResults);
   const count = getProductSearchTotalCount(rankedResults);
 
-  if (trackAnalytics) {
-    scheduleSearchAnalyticsInsert({
-      supabase: analyticsSupabase,
-      merchantId,
-      query: sanitizedQuery,
-      resultsCount: count,
-    });
-  }
-
   const didYouMean =
     includeDidYouMean && productIds.length === 0
       ? await findStorefrontSearchDidYouMean({
@@ -190,19 +174,18 @@ export interface RankedSearchCandidates {
  * Pages through `search_products_v2` and accumulates ranked product IDs. Used
  * when storefront family filters must be applied in memory: the RPC caps each
  * page at 100 rows, so a single page would silently drop matches ranked past row
- * 100. Analytics is recorded once (first page) per search. Callers may pass
+ * 100. Reads never write analytics; explicit submissions use the submissions
+ * endpoint. Callers may pass
  * maxCandidates for explicit best-effort prefetches; omit it when post-filtered
  * counts must be exact.
  */
 export async function collectRankedSearchProductIds(args: {
   supabase: StorefrontSearchSupabase;
-  analyticsSupabase?: StorefrontSearchAnalyticsSupabase;
   merchantId: string;
   query: string;
   filters?: StorefrontSearchFilters;
   sort?: StorefrontSearchSort;
   maxCandidates?: number;
-  trackAnalytics?: boolean;
 }): Promise<RankedSearchCandidates> {
   const productIds: string[] = [];
   let query = '';
@@ -218,14 +201,12 @@ export async function collectRankedSearchProductIds(args: {
   ) {
     const page = await searchStorefrontProducts({
       supabase: args.supabase,
-      analyticsSupabase: args.analyticsSupabase,
       merchantId: args.merchantId,
       query: args.query,
       filters: args.filters,
       sort: args.sort,
       limit: RANKED_FILTER_PAGE_SIZE,
       offset: pageOffset,
-      trackAnalytics: pageOffset === 0 && (args.trackAnalytics ?? true),
     });
 
     total = page.count;

@@ -9,6 +9,8 @@ interface RateLimitMatch {
 }
 
 const RATE_LIMITS: Record<string, RateLimitConfig> = {
+  // Submission writes have their own budget; typing and result reads do not consume it.
+  '/api/search/submissions': { maxRequests: 20, windowMs: 60_000 },
   // Migration preview validation polls the active job about once per second.
   // Keep this prefix above the default ceiling so the UI can stream progress
   // without tripping middleware rate limiting during normal use.

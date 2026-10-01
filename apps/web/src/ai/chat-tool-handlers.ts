@@ -113,7 +113,6 @@ export async function handleSearchProducts(
         limit: 10,
         merchantId,
         query: searchText,
-        trackAnalytics: false,
       });
     } catch (error) {
       console.error('[Chat Tools] Search ranking error:', error);

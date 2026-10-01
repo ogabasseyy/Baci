@@ -111,20 +111,19 @@ export async function loadSearchPageData({
   let redirectHref: string | null = null;
 
   if (query) {
-    const fetchSearchPage = (offset: number, trackAnalytics: boolean) =>
+    const fetchSearchPage = (offset: number) =>
       getStorefrontSearchProducts({
         merchantId: merchant.id,
         query,
         limit: STOREFRONT_PRODUCTS_PER_PAGE,
         offset,
-        trackAnalytics,
       });
 
     try {
       if (page > STOREFRONT_SEARCH_MAX_PAGE) {
         // Bounded offset: resolve the true last page through a first-page
         // probe instead of issuing a giant-offset query.
-        const probe = await fetchSearchPage(0, false);
+        const probe = await fetchSearchPage(0);
         if (probe.count === 0) {
           redirectHref = href(query, 1);
         } else {
@@ -137,20 +136,17 @@ export async function loadSearchPageData({
           );
         }
       } else {
-        // Only an explicit search-submission entry counts as a new search:
-        // submission URLs never carry a page parameter, while every
-        // pagination link and page-1 redirect target does. Inferring from
-        // the page number would recount page 1 after paging forward and
-        // back; deeper page views and recovery probes stay untracked.
+        // URLs cannot establish submission intent: reloads, bookmarks and
+        // shared links reach this same loader. Only client activation events
+        // record submissions; every results read stays silent.
         searchResult = await fetchSearchPage(
-          (page - 1) * STOREFRONT_PRODUCTS_PER_PAGE,
-          rawPage === undefined
+          (page - 1) * STOREFRONT_PRODUCTS_PER_PAGE
         );
         if (page > 1 && searchResult.products.length === 0) {
           // The RPC reports its total only on returned rows, so an empty
           // non-first page needs a first-page probe to distinguish a genuine
           // no-results state from an invalid page.
-          const probe = await fetchSearchPage(0, false);
+          const probe = await fetchSearchPage(0);
           if (probe.count === 0) {
             // A page beyond the first of an empty result set is not a
             // distinct page: normalize to the explicit first-page URL so

@@ -150,11 +150,11 @@ describe('SearchPageContent', () => {
     expect(mockGetStorefrontSearchProducts).toHaveBeenCalledTimes(2);
     expect(mockGetStorefrontSearchProducts).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ offset: 80, trackAnalytics: false })
+      expect.objectContaining({ offset: 80 })
     );
     expect(mockGetStorefrontSearchProducts).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({ offset: 0, trackAnalytics: false })
+      expect.objectContaining({ offset: 0 })
     );
     expect(mockRedirect).toHaveBeenCalledWith(
       '/ogabassey/search?q=iphone&page=3'
@@ -243,7 +243,7 @@ describe('SearchPageContent', () => {
     // No giant-offset query is issued; the single probe stays untracked.
     expect(mockGetStorefrontSearchProducts).toHaveBeenCalledTimes(1);
     expect(mockGetStorefrontSearchProducts).toHaveBeenCalledWith(
-      expect.objectContaining({ offset: 0, trackAnalytics: false })
+      expect.objectContaining({ offset: 0 })
     );
     expect(mockRedirect).toHaveBeenCalledWith(
       '/ogabassey/search?q=iphone&page=3'

@@ -22,8 +22,9 @@ interface SearchAutocompletePopupProps {
   loading: boolean;
   onChange: (value: string) => void;
   onClose: () => void;
+  onPopularSearchSelect?: (query: string) => void;
   onSelectProduct?: (url: string) => void;
-  onSubmitSearch: (query: string) => void;
+  onSubmitSearch: (query: string, source?: 'navbar' | 'see-all') => void;
   popularSearches: AutocompletePopularSearch[];
   suggestions: AutocompleteProduct[];
   trimmedValue: string;
@@ -45,6 +46,7 @@ export function SearchAutocompletePopup({
   loading,
   onChange,
   onClose,
+  onPopularSearchSelect,
   onSelectProduct,
   onSubmitSearch,
   popularSearches,
@@ -150,9 +152,13 @@ export function SearchAutocompletePopup({
                         // Match the keyboard path: submit-wired consumers
                         // navigate on activation, so pointer and touch users
                         // are not left on the current page with a closed
-                        // popup. Legacy consumers keep fill-only behavior.
+                        // popup. Consumers without submission report the
+                        // explicit pick through onPopularSearchSelect so the
+                        // activation is still tracked once.
                         if (canSubmitSearch) {
                           onSubmitSearch(search.search_query);
+                        } else {
+                          onPopularSearchSelect?.(search.search_query);
                         }
                         onClose();
                       }}
@@ -191,7 +197,7 @@ export function SearchAutocompletePopup({
         <button
           type="button"
           onClick={() => {
-            onSubmitSearch(value);
+            onSubmitSearch(value, 'see-all');
             onClose();
           }}
           className="mt-1 flex w-full items-center justify-center gap-2 border-t border-store-border bg-store-secondary px-4 py-2.5 text-sm font-semibold text-store-primary transition-colors hover:bg-store-primary/10 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-store-primary"

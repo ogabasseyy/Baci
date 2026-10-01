@@ -178,7 +178,7 @@ describe('SearchAutocomplete', () => {
     fireEvent.click(
       screen.getByRole('button', { name: /see all results for “iphone”/i })
     );
-    expect(onSubmitSearch).toHaveBeenCalledWith('iphone');
+    expect(onSubmitSearch).toHaveBeenCalledWith('iphone', 'see-all');
     expect(
       screen.queryByRole('option', { name: /iphone 16/i })
     ).not.toBeInTheDocument();

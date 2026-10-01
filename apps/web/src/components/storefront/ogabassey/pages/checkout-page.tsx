@@ -3,35 +3,14 @@
 import { useCheckoutDeliverySession } from './checkout/hooks/use-checkout-delivery-session';
 import { useCheckoutFormSession } from './checkout/hooks/use-checkout-form-session';
 
-import {
-  getCheckoutPaymentIntent,
-} from '@baci/shared/contracts';
-import { CheckoutPaymentSessionOverlays } from './checkout/components/CheckoutPaymentSessionOverlays';
-import { CheckoutHeader } from './checkout/components/CheckoutHeader';
-import { CheckoutPageHeading } from './checkout/components/CheckoutPageHeading';
-import { CheckoutStepComposition } from './checkout/components/CheckoutStepComposition';
-import {
-  DiscountCodeInput,
-} from '@/components/storefront/checkout/discount-code-input';
-import { MobileOrderSummary } from '../components/MobileCheckoutComponents';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
 import { useEffect } from 'react';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { useCurrency } from '@/hooks/use-currency';
-import type {
-  DvaData,
-  PendingCryptoOrder,
-} from './checkout/types';
 import { useAuthSafe } from '@/contexts/auth-context';
-import { DeferredCheckoutAuthModal as CheckoutAuthModal } from './checkout/components/DeferredCheckoutAuthModal';
-import {
-  type PlaceDetails,
-} from '@/components/address-autocomplete';
 import { asRoute } from '@/lib/routes';
-import { getSubdivisions } from '@/lib/shipping/merchant-rates/subdivisions';
-import { toast } from '@/hooks/use-toast';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import {
   isBankTransferCheckoutAvailable,
@@ -41,33 +20,12 @@ import {
 import { isNgnChargeCurrency } from './checkout/components/payment-step-availability';
 import { useCheckoutAttemptSession } from './checkout/hooks/use-checkout-attempt-session';
 import { useRedvaultPaymentAvailability } from './checkout/hooks/use-redvault-payment-availability';
-import {
-  inferAddressLocationFromInput,
-} from './checkout/utils';
 import { useCheckoutPaymentExecution } from './checkout/hooks/use-checkout-payment-execution';
 import { deriveCheckoutCartModel } from './checkout/derive-checkout-cart-model';
 import { deriveCheckoutOrderSummaryPresentation } from './checkout/derive-checkout-order-summary-presentation';
 import { useCheckoutFinancialSession } from './checkout/hooks/use-checkout-financial-session';
 import { CheckoutResumeStatus } from './checkout/components/CheckoutResumeStatus';
-import { DesktopOrderSummary } from './checkout/components/DesktopOrderSummary';
-/**
- * Module-scope checkout helpers.
- *
- * React Compiler cannot yet lower `try {} finally {}` blocks or `throw`
- * statements nested inside a `try/catch` within a component body — each one
- * bails the entire component out of automatic memoization. The async
- * fetch/payment flows below are hoisted to module scope (taking state setters
- * as explicit parameters) so `CheckoutPage` stays compilable while runtime
- * behavior is unchanged.
- */
-
-// Module-scope helper: probes DVA settlement server-side so "Confirm
-// Transfer Sent" only records a conversion for a detected transfer.
-// Prefers the token-scoped order status: the settlement webhook marks the
-// ORDER paid after matching the transfer to the dedicated account, while
-// the DVA reference is a locally generated BAC-* value that was never
-// registered as a Paystack transaction (probing /transaction/verify with it
-// can only error for real DVA transfers).
+import { CheckoutScreen } from './checkout/components/CheckoutScreen';
 export const CheckoutPage: React.FC = () => {
   const { cart, clearCart, isHydrated, removeFromCart } = useCart();
   const merchantContext = useMerchantSafe();
@@ -427,101 +385,65 @@ export const CheckoutPage: React.FC = () => {
   // Skip this check when resuming an order (cart is empty during order resumption)
 
 
-
+  const checkoutScreenSteps = {
+    flow: checkoutFlow,
+    onSignIn: checkoutAuth.open,
+    contact: {
+      values: checkoutFormState.contactValues,
+      onChange: setCheckoutField,
+      onComplete: checkoutFlow.completeContact,
+      account,
+    },
+    delivery: {
+      session: delivery,
+      address: {
+        street: newAddressStreet,
+        city: newAddressCity,
+        state: newAddressState,
+        merchantCountry,
+        isHydrated,
+      },
+    },
+    payment: {
+      session: paymentSession,
+      isProcessing,
+      isPayForMeValid,
+      isInitializingDva: dva.isInitializingDva,
+      newsletterOptIn,
+      setNewsletterOptIn,
+      handlePlaceOrder,
+      merchant,
+      user,
+      currency: currencyCode,
+      redvaultAvailable: redvaultAvailability.available,
+      redvaultOrderReady: Boolean(redvaultOrderReady),
+    },
+  };
 
   return (
-    <div className="ogabassey-checkout-page min-h-screen bg-gray-50/50 pb-20 flex flex-col">
-      <CheckoutHeader
-        onReturnToCart={() => router.push(asRoute(getHref('/cart')))}
-      />
-      {checkoutAuth.isOpen && <CheckoutAuthModal
-        isOpen={checkoutAuth.isOpen}
-        onOpenChange={checkoutAuth.onOpenChange}
-        onSuccess={checkoutAuth.close}
-      />}
-
-      <CheckoutPaymentSessionOverlays
-        crypto={crypto}
-        walletFundedTransfer={walletFundedTransfer}
-        dva={{
+    <CheckoutScreen
+      page={{
+        onReturnToCart: () => router.push(asRoute(getHref('/cart'))),
+        merchantName: merchant?.business_name,
+        formatCurrency: formatCurrencyAuto,
+      }}
+      auth={{
+        isOpen: checkoutAuth.isOpen,
+        onOpenChange: checkoutAuth.onOpenChange,
+        onSuccess: checkoutAuth.close,
+      }}
+      overlays={{
+        crypto,
+        walletFundedTransfer,
+        dva: {
           data: dva.dvaData,
           isVerifying: dva.isVerifyingDva,
           onClose: dva.closeDvaModal,
           onConfirmTransfer: dva.handleDvaConfirmTransfer,
-        }}
-        merchantName={merchant?.business_name}
-        formatCurrency={formatCurrencyAuto}
-      />
-
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <CheckoutPageHeading />
-
-        {/* MOBILE ORDER SUMMARY (Collapsible) */}
-        {/* MOBILE ORDER SUMMARY (Collapsible) */}
-        {orderSummaryPresentation.showMobile && (
-          <MobileOrderSummary {...orderSummaryPresentation.mobile} />
-        )}
-
-        {/* Resumed-order-only checkout uses its persisted total and skips order
-            creation, so local discounts must not change its displayed due. An
-            active cart remains the pricing source when both are present. */}
-        {orderSummaryPresentation.discount.visible && (
-          <div className="mt-4">
-            <DiscountCodeInput
-              merchantId={orderSummaryPresentation.discount.merchantId}
-              cartTotal={orderSummaryPresentation.discount.cartTotal}
-              currencyCountryCode={orderSummaryPresentation.discount.currencyCountryCode}
-              payoutCurrency={orderSummaryPresentation.discount.payoutCurrency}
-              productIds={orderSummaryPresentation.discount.productIds}
-              appliedDiscount={paymentSession.discount.applied}
-              onApply={paymentSession.discount.setApplied}
-              onRemove={() => paymentSession.discount.setApplied(null)}
-            />
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
-          <CheckoutStepComposition
-            session={{
-              flow: checkoutFlow,
-              onSignIn: checkoutAuth.open,
-              contact: {
-                values: checkoutFormState.contactValues,
-                onChange: setCheckoutField,
-                onComplete: checkoutFlow.completeContact,
-                account,
-              },
-              delivery: {
-                session: delivery,
-                address: {
-                  street: newAddressStreet,
-                  city: newAddressCity,
-                  state: newAddressState,
-                  merchantCountry,
-                  isHydrated,
-                },
-              },
-              payment: {
-                session: paymentSession,
-                isProcessing,
-                isPayForMeValid,
-                isInitializingDva: dva.isInitializingDva,
-                newsletterOptIn,
-                setNewsletterOptIn,
-                handlePlaceOrder,
-                merchant,
-                user,
-                currency: currencyCode,
-                redvaultAvailable: redvaultAvailability.available,
-                redvaultOrderReady: Boolean(redvaultOrderReady),
-              },
-            }}
-          />
-
-          <DesktopOrderSummary {...orderSummaryPresentation.desktop} />
-        </div>
-      </div>
-
-    </div >
+        },
+      }}
+      summary={{ presentation: orderSummaryPresentation, payment: paymentSession }}
+      steps={checkoutScreenSteps}
+    />
   );
 };

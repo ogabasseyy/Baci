@@ -193,6 +193,72 @@ describe('deliverClaimedRefundNotification', () => {
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
+  it('falls back to email when push dispatch never starts', async () => {
+    const { supabase } = buildSupabase();
+    const sendEmail = vi.fn().mockResolvedValue({ success: true });
+    const sendMerchantPush = vi
+      .fn()
+      .mockRejectedValue(new Error('admin client unavailable'));
+
+    await expect(
+      deliverClaimedRefundNotification({
+        row: claimed('processed_merchant_push'),
+        sendEmail,
+        sendMerchantPush,
+        supabase,
+      })
+    ).resolves.toEqual({ lastError: null, outcome: 'sent' });
+
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ emailType: 'notifications' })
+    );
+  });
+
+  it('reports failed when push fails and the email fallback is rejected', async () => {
+    const { supabase } = buildSupabase();
+    const sendEmail = vi.fn().mockResolvedValue({ success: false });
+    const sendMerchantPush = vi
+      .fn()
+      .mockRejectedValue(new Error('admin client unavailable'));
+
+    await expect(
+      deliverClaimedRefundNotification({
+        row: claimed('processed_merchant_push'),
+        sendEmail,
+        sendMerchantPush,
+        supabase,
+      })
+    ).resolves.toEqual({
+      lastError: 'refund_merchant_email_rejected',
+      outcome: 'failed',
+    });
+  });
+
+  it('skips the email fallback on an unknown push result', async () => {
+    const { supabase } = buildSupabase();
+    const sendEmail = vi.fn();
+    const sendMerchantPush = vi.fn().mockResolvedValue({
+      deliveryOutcome: 'unknown',
+      errors: [],
+      failed: 0,
+      sent: 0,
+    });
+
+    await expect(
+      deliverClaimedRefundNotification({
+        row: claimed('processed_merchant_push'),
+        sendEmail,
+        sendMerchantPush,
+        supabase,
+      })
+    ).resolves.toEqual({
+      lastError: 'refund_merchant_push_uncertain',
+      outcome: 'delivery_uncertain',
+    });
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
   it('treats a superseded contradictory failure as sent', async () => {
     const { supabase } = buildSupabase();
     mocks.resolveContradictoryRefundFailure.mockResolvedValue(true);

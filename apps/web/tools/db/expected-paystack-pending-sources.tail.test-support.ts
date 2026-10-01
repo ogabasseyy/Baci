@@ -344,4 +344,9 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
       'supabase/migrations/20260928183500_duplicate_capture_review_pending_marker.sql',
     sha256: '80c4c0536dc68eca5ea4b96665e133a619cb3a92ce76c802a78c34d6ec8dc8aa',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928183600_index_duplicate_capture_review_pending_retries.sql',
+    sha256: 'f0ddbd0519f180388f0e4ca8e04c376cc6e0f6ac40dca4aa170fb635c71764dd',
+  },
 ];

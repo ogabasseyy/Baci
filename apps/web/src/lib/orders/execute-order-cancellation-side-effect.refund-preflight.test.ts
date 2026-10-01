@@ -275,6 +275,7 @@ describe('cancellation refund preflight quarantine', () => {
   it('withholds audit-blocked legs while clean legs still initiate', async () => {
     const auditSelect = vi.fn().mockReturnThis();
     const auditEq = vi.fn().mockReturnThis();
+    const auditIn = vi.fn().mockReturnThis();
     const auditIs = vi.fn().mockResolvedValue({
       data: [
         {
@@ -284,6 +285,7 @@ describe('cancellation refund preflight quarantine', () => {
               paymentTransactionId: 'payment-1',
             },
           ],
+          issue_type: 'order_cancellation_refund_requires_review',
           metadata: {
             audit_record_failed: true,
             payment_transaction_id: 'payment-1',
@@ -319,7 +321,12 @@ describe('cancellation refund preflight quarantine', () => {
         ])
       )
       .mockReturnValueOnce(transactionQuery([]))
-      .mockReturnValueOnce({ eq: auditEq, is: auditIs, select: auditSelect })
+      .mockReturnValueOnce({
+        eq: auditEq,
+        in: auditIn,
+        is: auditIs,
+        select: auditSelect,
+      })
       .mockReturnValueOnce({ insert: refundInsert })
       .mockReturnValueOnce({ insert: reviewInsert });
     mocks.initiateRefund.mockResolvedValue({
@@ -340,12 +347,15 @@ describe('cancellation refund preflight quarantine', () => {
       })
     ).rejects.toBeInstanceOf(DeliveryUncertainError);
 
-    // Only unresolved cancellation reviews for this order gate initiation.
-    expect(auditSelect).toHaveBeenCalledWith('candidates, metadata, txn_id');
-    expect(auditEq).toHaveBeenCalledWith(
-      'issue_type',
-      'order_cancellation_refund_requires_review'
+    // Only unresolved cancellation and outside-cancellation reviews for
+    // this order gate initiation.
+    expect(auditSelect).toHaveBeenCalledWith(
+      'candidates, issue_type, metadata, txn_id'
     );
+    expect(auditIn).toHaveBeenCalledWith('issue_type', [
+      'order_cancellation_refund_requires_review',
+      'provider_refund_outside_cancellation',
+    ]);
     expect(auditEq).toHaveBeenCalledWith('order_id', 'order-1');
     expect(auditEq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
     expect(auditIs).toHaveBeenCalledWith('resolved_at', null);
@@ -387,6 +397,7 @@ describe('cancellation refund preflight quarantine', () => {
         auditReviewsQuery([
           {
             candidates: [{ paymentTransactionId: 'payment-1' }],
+            issue_type: 'order_cancellation_refund_requires_review',
             metadata: { audit_record_failed: true },
             txn_id: 'unrelated-txn',
           },
@@ -442,6 +453,7 @@ describe('cancellation refund preflight quarantine', () => {
                 payment_transaction_id: 'payment-1',
               },
             ],
+            issue_type: 'order_cancellation_refund_requires_review',
             metadata: {
               audit_record_failed: true,
               provider_refund_id: 202,
@@ -492,6 +504,7 @@ describe('cancellation refund preflight quarantine', () => {
         auditReviewsQuery([
           {
             candidates: [],
+            issue_type: 'order_cancellation_refund_requires_review',
             metadata: {},
             txn_id: 'payment-1',
           },
@@ -536,6 +549,7 @@ describe('cancellation refund preflight quarantine', () => {
       .mockReturnValueOnce(transactionQuery([]))
       .mockReturnValueOnce({
         eq: vi.fn().mockReturnThis(),
+        in: vi.fn().mockReturnThis(),
         is: vi
           .fn()
           .mockResolvedValue({ data: null, error: new Error('db down') }),
@@ -554,5 +568,180 @@ describe('cancellation refund preflight quarantine', () => {
       'Unable to verify refund evidence reviews'
     );
     expect(mocks.initiateRefund).not.toHaveBeenCalled();
+  });
+
+  it('blocks legs with unresolved outside-cancellation refund evidence', async () => {
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'paystack',
+            gateway_reference: 'PSK-1',
+            id: 'payment-1',
+            status: 'completed',
+          },
+        ])
+      )
+      .mockReturnValueOnce(transactionQuery([]))
+      .mockReturnValueOnce(
+        auditReviewsQuery([
+          {
+            // Verified while the order was active: no audit-failed
+            // marker anywhere, but the provider refund may already
+            // have reached the customer.
+            candidates: [
+              {
+                amount: 100,
+                gateway_reference: 'PSK-1',
+                order_id: 'order-1',
+                payment_transaction_id: 'payment-1',
+              },
+            ],
+            issue_type: 'provider_refund_outside_cancellation',
+            metadata: {
+              payment_transaction_id: 'payment-1',
+              provider_payment_transaction_id: 555,
+              provider_refund_id: 202,
+              refund_evidence: {
+                'provider:202': {
+                  payment_transaction_id: 'payment-1',
+                  provider_payment_transaction_id: 555,
+                  provider_refund_status: 'processed',
+                },
+              },
+            },
+            txn_id: null,
+          },
+        ])
+      )
+      .mockReturnValueOnce({ insert: reviewInsert });
+
+    await expect(
+      executeOrderCancellationSideEffect({
+        merchant,
+        order,
+        step: 'refund',
+        supabase: { from } as never,
+      })
+    ).rejects.toBeInstanceOf(DeliveryUncertainError);
+
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: expect.stringContaining('no verified local audit row'),
+        txn_id: 'payment-1',
+      })
+    );
+  });
+
+  it('blocks legs named only by nested merged audit evidence', async () => {
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'paystack',
+            gateway_reference: 'PSK-1',
+            id: 'payment-1',
+            status: 'completed',
+          },
+        ])
+      )
+      .mockReturnValueOnce(transactionQuery([]))
+      .mockReturnValueOnce(
+        auditReviewsQuery([
+          {
+            // Recovery merged into a review without the top-level
+            // marker: the evidence lives only in the nested entry.
+            candidates: [],
+            issue_type: 'order_cancellation_refund_requires_review',
+            metadata: {
+              refund_evidence: {
+                'provider:202': {
+                  audit_record_failed: true,
+                  payment_transaction_id: 'payment-1',
+                },
+              },
+            },
+            txn_id: null,
+          },
+        ])
+      )
+      .mockReturnValueOnce({ insert: reviewInsert });
+
+    await expect(
+      executeOrderCancellationSideEffect({
+        merchant,
+        order,
+        step: 'refund',
+        supabase: { from } as never,
+      })
+    ).rejects.toBeInstanceOf(DeliveryUncertainError);
+
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ txn_id: 'payment-1' })
+    );
+  });
+
+  it('ignores nested evidence whose audit marker is not set', async () => {
+    const refundInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'paystack',
+            gateway_reference: 'PSK-1',
+            id: 'payment-1',
+            status: 'completed',
+          },
+        ])
+      )
+      .mockReturnValueOnce(transactionQuery([]))
+      .mockReturnValueOnce(
+        auditReviewsQuery([
+          {
+            candidates: [],
+            issue_type: 'order_cancellation_refund_requires_review',
+            metadata: {
+              refund_evidence: {
+                'provider:202': {
+                  payment_transaction_id: 'payment-1',
+                },
+              },
+            },
+            txn_id: null,
+          },
+        ])
+      )
+      .mockReturnValueOnce({ insert: refundInsert });
+    mocks.initiateRefund.mockResolvedValue({
+      data: {
+        id: 101,
+        status: 'pending',
+        transaction: { id: 55, reference: 'PSK-1' },
+      },
+      success: true,
+    });
+
+    const result = await executeOrderCancellationSideEffect({
+      merchant,
+      order,
+      step: 'refund',
+      supabase: { from } as never,
+    });
+
+    expect(result).toEqual({ refundIds: [101] });
+    expect(mocks.initiateRefund).toHaveBeenCalledTimes(1);
   });
 });

@@ -8,17 +8,23 @@ import {
   shouldYieldReconcileWorker,
 } from './reconcile-worker-deadline';
 
-/** Recheck legacy completed refund rows before finalizing a cancelled order. */
+const FINALIZED_CONTRADICTION_WINDOW_MS = 7 * 24 * 60 * 60_000;
+const FINALIZED_CONTRADICTION_RECHECK_LIMIT = 5;
+
+/**
+ * Recheck legacy completed refund rows before finalizing a cancelled
+ * order, plus a bounded contradiction sweep over finalized orders.
+ */
 export async function reconcileCompletedPaystackCancellationRefunds(
   supabase: SupabaseClient,
   limit = 25,
   deadlineMs: number = NO_RECONCILE_DEADLINE
 ): Promise<{ checked: number; failed: number }> {
+  const select =
+    'id, order_id, merchant_id, gateway_reference, amount, currency, description, metadata, status, cancellation_order:orders!transactions_order_id_fkey!inner(payment_status,shipping_status,cancelled_at)';
   const { data, error } = await supabase
     .from('transactions')
-    .select(
-      'id, order_id, merchant_id, gateway_reference, amount, currency, description, metadata, status, cancellation_order:orders!transactions_order_id_fkey!inner(payment_status,shipping_status,cancelled_at)'
-    )
+    .select(select)
     .eq('transaction_type', 'refund')
     .eq('gateway', 'paystack')
     .eq('status', 'completed')
@@ -38,9 +44,32 @@ export async function reconcileCompletedPaystackCancellationRefunds(
     .limit(limit);
   if (error) throw new Error('completed_refund_lookup_failed');
 
+  // Finalized orders keep a bounded contradiction recheck: a legacy row
+  // trusted before verification, or a later contradictory provider
+  // verdict whose webhook was missed, would otherwise never reach the
+  // transition RPC that detects it. Weekly per-row cadence (verified
+  // and rotated rows bump updated_at) with a small per-tick cap keeps
+  // the sweep from crowding the pre-finalization batch.
+  const finalizedCutoff = new Date(
+    Date.now() - FINALIZED_CONTRADICTION_WINDOW_MS
+  ).toISOString();
+  const { data: finalizedData, error: finalizedError } = await supabase
+    .from('transactions')
+    .select(select)
+    .eq('transaction_type', 'refund')
+    .eq('gateway', 'paystack')
+    .eq('status', 'completed')
+    .eq('cancellation_order.payment_status', 'refunded')
+    .in('cancellation_order.shipping_status', ['cancelled', 'canceled'])
+    .not('cancellation_order.cancelled_at', 'is', null)
+    .lt('updated_at', finalizedCutoff)
+    .order('updated_at', { ascending: true })
+    .limit(FINALIZED_CONTRADICTION_RECHECK_LIMIT);
+  if (finalizedError) throw new Error('completed_refund_lookup_failed');
+
   let failed = 0;
   let checked = 0;
-  for (const refund of data ?? []) {
+  for (const refund of [...(data ?? []), ...(finalizedData ?? [])]) {
     // Stop before the pass deadline so the settlement sweep keeps its
     // share of the cron budget instead of timing out behind this worker.
     if (shouldYieldReconcileWorker(deadlineMs)) break;

@@ -90,7 +90,11 @@ jobs:
         # reports tracking == 'false' and would otherwise deploy the cron
         # removal with no worker live. Until the first post-merge deploy.sh
         # run, this step fails and blocks all production deploys; that
-        # bounded freeze is the announced first-rollout procedure.
+        # bounded freeze is the announced first-rollout procedure. There is
+        # deliberately no GIGL-disabled bypass: readiness cannot see prod
+        # env by design (no Vercel pull before credentials are exposed),
+        # GIGL defaults to enabled, and installing the worker once is the
+        # safe default even for a currently-disabled provider.
         env:
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
         run: .readiness-checkout/vps-workers/bin/verify-gigl-direct-workers-installed.sh --cutover-marker

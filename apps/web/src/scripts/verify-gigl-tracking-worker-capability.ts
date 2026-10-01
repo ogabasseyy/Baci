@@ -5,6 +5,7 @@ import { createGiglTrackingWorkerClient } from '@/lib/gigl-tracking-worker-clien
 import {
   GiglWrapperSchemaMissingError,
   verifyGiglTrackingWorkerCapability,
+  verifyGiglTrackingWorkerScopeProbe,
 } from '@/lib/verify-gigl-tracking-worker-capability';
 
 /**
@@ -39,8 +40,14 @@ export async function runGiglTrackingCapabilityVerification({
   try {
     const client = createGiglTrackingWorkerClient(env);
     if (await verifyGiglTrackingWorkerCapability(client)) {
-      logger.info('[gigl-capability] restricted wrapper verified');
-      return 0;
+      if (await verifyGiglTrackingWorkerScopeProbe(client)) {
+        logger.info('[gigl-capability] restricted wrapper verified');
+        return 0;
+      }
+      logger.error(
+        '[gigl-capability] PostgREST scope hook is not active; reload PostgREST config and re-run'
+      );
+      return 1;
     }
   } catch (error) {
     if (error instanceof GiglWrapperSchemaMissingError) {

@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runGiglTrackingCapabilityVerification } from './verify-gigl-tracking-worker-capability';
 
-const { createClient, verifyCapability } = vi.hoisted(() => ({
-  createClient: vi.fn(() => ({ rpc: vi.fn() })),
-  verifyCapability: vi.fn(),
-}));
+const { createClient, verifyCapability, verifyScopeProbe } = vi.hoisted(
+  () => ({
+    createClient: vi.fn(() => ({ rpc: vi.fn() })),
+    verifyCapability: vi.fn(),
+    verifyScopeProbe: vi.fn(),
+  })
+);
 
 vi.mock('@/lib/gigl-tracking-worker-client', () => ({
   createGiglTrackingWorkerClient: createClient,
@@ -17,6 +20,7 @@ vi.mock('@/lib/verify-gigl-tracking-worker-capability', async (importOriginal) =
   return {
     GiglWrapperSchemaMissingError: original.GiglWrapperSchemaMissingError,
     verifyGiglTrackingWorkerCapability: verifyCapability,
+    verifyGiglTrackingWorkerScopeProbe: verifyScopeProbe,
   };
 });
 
@@ -25,6 +29,7 @@ describe('runGiglTrackingCapabilityVerification', () => {
 
   it('passes only after the live restricted wrapper smoke succeeds', async () => {
     verifyCapability.mockResolvedValue(true);
+    verifyScopeProbe.mockResolvedValue(true);
     const logger = { error: vi.fn(), info: vi.fn() };
 
     await expect(
@@ -36,8 +41,26 @@ describe('runGiglTrackingCapabilityVerification', () => {
 
     expect(createClient).toHaveBeenCalledOnce();
     expect(verifyCapability).toHaveBeenCalledOnce();
+    expect(verifyScopeProbe).toHaveBeenCalledOnce();
     expect(logger.info).toHaveBeenCalledWith(
       '[gigl-capability] restricted wrapper verified'
+    );
+  });
+
+  it('fails closed when the scope hook is not enforcing', async () => {
+    verifyCapability.mockResolvedValue(true);
+    verifyScopeProbe.mockResolvedValue(false);
+    const logger = { error: vi.fn(), info: vi.fn() };
+
+    await expect(
+      runGiglTrackingCapabilityVerification({
+        env: { NODE_ENV: 'test' },
+        logger,
+      })
+    ).resolves.toBe(1);
+
+    expect(logger.error).toHaveBeenCalledWith(
+      '[gigl-capability] PostgREST scope hook is not active; reload PostgREST config and re-run'
     );
   });
 

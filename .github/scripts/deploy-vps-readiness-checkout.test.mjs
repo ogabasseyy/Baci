@@ -24,7 +24,9 @@ test('uses a minimal sparse checkout for VPS drain readiness', async () => {
   assert.equal(
     checkout.with['sparse-checkout'],
     'vps-workers/bin/verify-cache-invalidation-drain-installed.sh\n' +
-      'vps-workers/bin/verify-gigl-direct-workers-installed.sh\n'
+      'vps-workers/bin/verify-gigl-direct-workers-installed.sh\n' +
+      '.github/scripts/check-gigl-cutover-latch.sh\n' +
+      '.github/filters/deploy.yml\n'
   );
   assert.equal(checkout.with['sparse-checkout-cone-mode'], false);
   assert.equal(
@@ -60,12 +62,20 @@ test('reports the cutover latch as a readiness output signal', async () => {
     readiness.outputs.cutover_latched,
     '${{ steps.gigl-cutover-latch.outputs.latched }}'
   );
+  assert.equal(
+    readiness.outputs.tracking_stale,
+    '${{ steps.gigl-cutover-latch.outputs.tracking_stale }}'
+  );
   // Signal, not gate: no changeset condition, never fails (fail-closed
-  // latched=false), so tracking pushes proceed to their own smoke.
+  // latched=false / stale=true), so tracking pushes proceed to their own
+  // smoke. The script diffs the latched revision against HEAD over the
+  // tracking filter; the token is read-scoped fetch auth only.
   assert.equal(latchCheck.if, undefined);
-  assert.match(latchCheck.run, /\.gigl-capability-smoke-ok/);
-  assert.match(latchCheck.run, /latched=false/);
-  assert.match(latchCheck.run, /\$GITHUB_OUTPUT/);
+  assert.equal(
+    latchCheck.run,
+    '.readiness-checkout/.github/scripts/check-gigl-cutover-latch.sh "$VPS_WORKER_REMOTE_DIR" .readiness-checkout'
+  );
+  assert.equal(latchCheck.env.GITHUB_TOKEN, '${{ github.token }}');
 });
 
 test('persists the cutover latch only after the smoke succeeds', async () => {

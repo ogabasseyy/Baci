@@ -90,11 +90,11 @@ describe('production cache-invalidation drain rollout gate', () => {
       /needs\.gigl-worker-capability\.result == 'success'/
     );
     // The tracking=false bypass additionally requires the cutover latch
-    // (proven smoke function), so a web push after a smoke-failed tracking
-    // push cannot deploy the cron removal with a broken worker.
+    // (proven smoke function) at a revision that still covers the tree,
+    // so a web push cannot carry unsmoked tracking changes to production.
     assert.match(
       deployment,
-      /needs\.gigl-worker-capability\.result == 'success' \|\| \(needs\.changes\.outputs\.tracking == 'false' && needs\.vps-drain-readiness\.outputs\.cutover_latched == 'true'\)/
+      /needs\.gigl-worker-capability\.result == 'success' \|\| \(needs\.changes\.outputs\.tracking == 'false' && needs\.vps-drain-readiness\.outputs\.cutover_latched == 'true' && needs\.vps-drain-readiness\.outputs\.tracking_stale == 'false'\)/
     );
     assert.doesNotMatch(
       deployment,

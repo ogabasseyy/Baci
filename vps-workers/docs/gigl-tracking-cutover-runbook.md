@@ -31,6 +31,16 @@ Later tracking changes follow the same deploy.sh-then-rerun rhythm.
 Web-only commits skip the exact-SHA/smoke verification once the latch
 exists; the marker still passes on install presence.
 
+## Stale-latch recovery
+
+The latch records the revision of the last passing smoke. If tracking
+changes land after that revision without a passing smoke (blocked
+tracking push followed by web pushes), the gate keeps blocking web
+pushes until the tree is re-smoked. Recover with `deploy.sh` from
+current main, then either push any tracking change (its smoke
+re-latches at HEAD) or dispatch the workflow (dispatch always runs the
+full smoke live and re-latches on success).
+
 ## Break-glass (VPS runner down, cron uninstallable)
 
 If the worker host or `baci-deploy` runner is down and an unrelated

@@ -159,12 +159,27 @@ describe('event pipeline credential-path authority', () => {
       ],
       [
         'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
+        'apps/web/src/app/api/cron/gigl-tracking-notifications/run-gigl-tracking-notification-batch.ts',
         'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
         'apps/web/src/lib/expo-push.ts',
         'apps/web/src/env.ts',
       ],
       [
         'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
+        'apps/web/src/app/api/cron/gigl-tracking-notifications/run-gigl-tracking-notification-batch.ts',
+        'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
+        'apps/web/src/lib/expo-push.ts',
+        'apps/web/src/lib/supabase/admin.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/cron/gigl-tracking-notifications/run-gigl-tracking-notification-batch.ts',
+        'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
+        'apps/web/src/lib/expo-push.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/cron/gigl-tracking-notifications/run-gigl-tracking-notification-batch.ts',
         'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
         'apps/web/src/lib/expo-push.ts',
         'apps/web/src/lib/supabase/admin.ts',
@@ -184,6 +199,7 @@ describe('event pipeline credential-path authority', () => {
       ],
       [
         'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
+        'apps/web/src/app/api/cron/gigl-tracking-notifications/run-gigl-tracking-notification-batch.ts',
         'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
         'apps/web/src/lib/insurance/notify-activate-protection.ts',
         'apps/web/src/lib/expo-push.ts',
@@ -191,6 +207,21 @@ describe('event pipeline credential-path authority', () => {
       ],
       [
         'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
+        'apps/web/src/app/api/cron/gigl-tracking-notifications/run-gigl-tracking-notification-batch.ts',
+        'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
+        'apps/web/src/lib/insurance/notify-activate-protection.ts',
+        'apps/web/src/lib/supabase/admin.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/cron/gigl-tracking-notifications/run-gigl-tracking-notification-batch.ts',
+        'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
+        'apps/web/src/lib/insurance/notify-activate-protection.ts',
+        'apps/web/src/lib/expo-push.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/cron/gigl-tracking-notifications/run-gigl-tracking-notification-batch.ts',
         'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
         'apps/web/src/lib/insurance/notify-activate-protection.ts',
         'apps/web/src/lib/supabase/admin.ts',

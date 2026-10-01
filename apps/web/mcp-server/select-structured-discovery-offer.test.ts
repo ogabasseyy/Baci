@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import type { McpDiscoveryIntent } from '../src/schemas/mcp-discovery-intent';
 import { selectStructuredDiscoveryOffer } from './select-structured-discovery-offer';
 import type { hydrateSearchProductAvailability } from './search-product-availability';
@@ -269,6 +269,20 @@ it('does not claim an unknown product type satisfies an explicit exclusion', () 
   expect(selectStructuredDiscoveryOffer(row, {
     alternatives: [{}], excluded_product_types: ['charger'],
   })).toBeUndefined();
+});
+
+it('withholds unknown facts from exclusions and spec-constrained offers while disclosing them', () => {
+  const onUnverifiedFacts = vi.fn();
+  const excluded = makeRow({ category: 'Accessories', discovery_metadata: {} });
+  expect(selectStructuredDiscoveryOffer(excluded, {
+    alternatives: [{}], excluded_product_types: ['charger'],
+  }, {}, onUnverifiedFacts)).toBeUndefined();
+  const row = makeRow({ has_variants: true, discovery_metadata: { product_type: 'phone' } });
+  row.availableOffers = [{ id: 'offer-1', price: 450, condition: 'new', stock_quantity: 1 }] as typeof row.availableOffers;
+  expect(selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone', attributes: [
+    { key: 'storage_gb', operator: 'eq', value: 128 },
+  ] }), {}, onUnverifiedFacts)).toBeUndefined();
+  expect(onUnverifiedFacts).toHaveBeenCalled();
 });
 
 

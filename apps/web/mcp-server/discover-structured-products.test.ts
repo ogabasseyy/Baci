@@ -118,6 +118,22 @@ describe('discoverStructuredProducts', () => {
     expect(result.coverage).toBe('complete');
   });
 
+  it('ignores lookup failures from rows ruled out by verified product facts', async () => {
+    const fixture = client({products: [product('variant-phone', {product_type: 'phone'}, {has_variants: true}), product('base-laptop', {product_type: 'laptop'})], variantError: new Error('x')});
+    const result = await discoverStructuredProducts(input(fixture.supabase, intent({product_type: 'laptop'})));
+    expect(result.selectedProducts.map(({product}) => product.id)).toEqual(['base-laptop']);
+    expect(result.priceScanComplete).toBe(true);
+    expect(result.coverage).toBe('complete');
+  });
+
+  it('still vetoes the scan when a failed lookup hides a possible match', async () => {
+    const fixture = client({products: [product('variant-phone', {product_type: 'phone'}, {has_variants: true})], variantError: new Error('x')});
+    const result = await discoverStructuredProducts(input(fixture.supabase, intent({product_type: 'phone', attributes: [{key: 'storage_gb', operator: 'eq', value: 256}]})));
+    expect(result.selectedProducts).toEqual([]);
+    expect(result.priceScanComplete).toBe(false);
+    expect(result.incompleteReason).toBe('option_lookup_failed');
+  });
+
   it.each([{max_price: 1000}, {sort: 'price_asc'}])('marks initial semantic failures incomplete for price-sensitive searches %s', async (args) => {
     const fixture = client({products: [product('confirmed', {})]});
     const result = await discoverStructuredProducts(input(fixture.supabase, intent({}), {
@@ -267,7 +283,7 @@ describe('discoverStructuredProducts', () => {
       intent({ product_type: 'phone', brands: ['Samsung', 'Google'], attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }] }),
       { query: 'Samsung or Google 256GB under budget' }));
     expect(fixture.rpc).toHaveBeenCalledWith('search_product_discovery_facts', expect.objectContaining({
-      query_text: '(phone & (samsung | google) & 256gb)',
+      query_text: '(((phone) | (phones) | (smartphone) | (smartphones) | (smart & phone) | (smart & phones) | (mobile & phone) | (mobile & phones) | (cell & phone) | (cell & phones)) & (samsung | google) & 256gb)',
     }));
   });
 

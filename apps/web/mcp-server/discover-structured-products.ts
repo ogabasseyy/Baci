@@ -3,7 +3,7 @@ import type { McpDiscoveryIntent } from '../src/schemas/mcp-discovery-intent';
 import { buildDiscoveryFactRetrievalQuery } from './build-discovery-fact-retrieval-query';
 import { loadStructuredDiscoveryCandidates } from './load-structured-discovery-candidates';
 import { hydrateSearchProductAvailability } from './search-product-availability';
-import { selectStructuredDiscoveryOffer } from './select-structured-discovery-offer';
+import { isStructuredDiscoveryRowExcludedByIdentity, selectStructuredDiscoveryOffer } from './select-structured-discovery-offer';
 import { matchesMcpPostHydrationFilters } from './search-products-query-helpers';
 import { selectSearchProductsByPrice } from './select-search-products-by-price';
 
@@ -28,10 +28,15 @@ export async function discoverStructuredProducts({ intent, query, args, merchant
   for (let offset = 0; offset < candidates.products.length; offset += 100) {
     const hydrated = await hydrateSearchProductAvailability(candidates.products.slice(offset, offset + 100)
       .filter((product) => matchesMcpPostHydrationFilters(product, args)), supabase, merchantId, args.condition);
-    optionsLookupFailed ||= hydrated.some((row) => row.optionsLookupFailed);
     for (const row of hydrated) {
       const match = selectStructuredDiscoveryOffer(row, intent, args, () => { factsUnverified = true; });
       if (match) selected.push(match);
+      // A lookup failure only vetoes the scan when the row could still satisfy
+      // the intent; rows ruled out by verified product facts cannot change the
+      // result no matter what their missing options contained.
+      if (row.optionsLookupFailed && (match !== undefined || !isStructuredDiscoveryRowExcludedByIdentity(row, intent))) {
+        optionsLookupFailed = true;
+      }
     }
   }
   if (args.sort === 'newest') selected.sort((a, b) =>

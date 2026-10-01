@@ -8,12 +8,18 @@ it('builds grouped tsquery text with brand alternation', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({
     product_type: 'phone', brands: ['Samsung', 'Google'],
     attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }],
-  }))).toBe('(phone & (samsung | google) & 256gb)');
+  }))).toBe('(((phone) | (phones) | (smartphone) | (smartphones) | (smart & phone) | (smart & phones) | (mobile & phone) | (mobile & phones) | (cell & phone) | (cell & phones)) & (samsung | google) & 256gb)');
 });
 
 it('joins alternatives with OR and strips tsquery operators from terms', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'ZX-42' }, { product_type: 'charger' })))
-    .toBe('(zx & 42) | (charger)');
+    .toBe('(zx & 42) | (((charger) | (chargers)))');
+});
+
+it('retrieves every spelling selection treats as the same type', () => {
+  expect(buildDiscoveryFactRetrievalQuery(intent({ product_type: 'Smartphones' })))
+    .toBe('(((phone) | (phones) | (smartphone) | (smartphones) | (smart & phone) | (smart & phones) | (mobile & phone) | (mobile & phones) | (cell & phone) | (cell & phones)))');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ product_type: 'headphones' }))).toBe('(headphones)');
 });
 
 it('emits unit-suffixed equality values and omits range bounds', () => {

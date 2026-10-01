@@ -9,11 +9,12 @@ it('advertises structured intent and returns the matching offer evidence through
     const tools = getResultTools(await postMcpJsonRpc(server.baseUrl, { id: 901, method: 'tools/list', params: {} }));
     const schema = tools.find((tool) => tool.name === 'search_products')?.inputSchema;
     expect(schema?.properties.intent).toBeDefined();
-    expect(schema?.required).toContain('intent');
+    expect(schema?.required ?? []).not.toContain('intent');
     const missing = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
       id: 900, method: 'tools/call', params: { name: 'search_products', arguments: { query: 'phone' } },
     }));
     expect(missing.isError).toBe(true);
+    expect(missing.structuredContent).toMatchObject({ status: 'error', message: expect.stringMatching(/intent is required/i) });
     const result = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
       id: 902, method: 'tools/call', params: { name: 'search_products', arguments: {
         intent: { alternatives: [{}] }, max_price: 100000, sort: 'price_asc', limit: 2,

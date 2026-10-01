@@ -41,6 +41,11 @@ export function selectCancellationDrainCandidates({
     string,
     CancellationDrainCandidateRow & { isLastAttempt: boolean }
   >();
+  // A zero (or negative) limit means the caller already logged the
+  // budget skip: return no candidates instead of admitting the first
+  // row before the size check below, which would claim a step with
+  // less than the required per-step budget.
+  if (limit <= 0) return candidates;
   const merged: Array<
     CancellationDrainCandidateRow & { isLastAttempt: boolean }
   > = [

@@ -38,6 +38,17 @@ describe('selectCancellationDrainCandidates', () => {
     expect([...candidates.keys()]).toEqual(['old:refund']);
   });
 
+  it('returns no candidates when the drain limit is zero', () => {
+    const candidates = selectCancellationDrainCandidates({
+      deferredRows: [row({ order_id: 'deferred' })],
+      failedRows: [row({ order_id: 'failed' })],
+      limit: 0,
+      maxAttempts: 5,
+    });
+
+    expect(candidates.size).toBe(0);
+  });
+
   it('marks exhausted rows as last attempts', () => {
     const candidates = selectCancellationDrainCandidates({
       deferredRows: [

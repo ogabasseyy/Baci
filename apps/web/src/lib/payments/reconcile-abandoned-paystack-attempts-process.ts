@@ -3,6 +3,7 @@ import type { verifyTransaction } from '@/lib/paystack';
 import { fileInvalidAttemptReference } from './file-invalid-attempt-reference';
 import { fileUnresolvedAttemptReference } from './file-unresolved-attempt-reference';
 import type { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
+import { guardAbandonedPaystackAttempt } from './guard-abandoned-paystack-attempt';
 import type { AbandonedPaystackAttemptSummary } from './reconcile-abandoned-paystack-attempts';
 import { resolveAbandonedAttemptMismatch } from './resolve-abandoned-attempt-mismatch';
 import { resolveVerifiedAbandonedAttemptCapture } from './resolve-verified-abandoned-attempt-capture';
@@ -115,44 +116,14 @@ export async function processAbandonedPaystackAttempt(
   // failed after the atomic finalizer settled it, so it must never
   // re-finalize nor retire — only its review is still owed.
   const isCompletedRetry = attempt.status === 'completed';
-  // Only clear attempts superseded by a different funded payment on an
-  // already paid order. Other pending attempts still need payment recovery.
-  // A completed retry only needs the order to exist: it was captured
-  // while paid, and a later refund must not strand its review.
-  const orderQuery = supabase
-    .from('orders')
-    .select('id')
-    .eq('id', attempt.order_id)
-    .eq('merchant_id', attempt.merchant_id);
-  if (!isCompletedRetry) {
-    orderQuery.in('payment_status', ['paid', 'partially_paid']);
-  }
-  const { data: order, error: orderError } = await orderQuery.maybeSingle();
-  if (orderError || !order) {
-    if (orderError) summary.failed = true;
-    await hold('order_not_paid_or_unavailable');
-    return;
-  }
-  // A funded leg in a refund state supersedes like a completed one: the
-  // cancellation flow refunds refund_pending/refunded legs, but
-  // cancel_order_as_merchant still rejects the order while this stale
-  // attempt stays pending — and a completed-only lookup would rotate
-  // it as unresolvable forever, so the merchant could never cancel
-  // even when provider verification would clear it.
-  const { data: completed, error: completedError } = await supabase
-    .from('transactions')
-    .select('id')
-    .eq('order_id', attempt.order_id)
-    .eq('merchant_id', attempt.merchant_id)
-    .eq('transaction_type', 'payment')
-    .in('status', ['completed', 'refund_pending', 'refunded'])
-    .neq('id', attempt.id)
-    .limit(1);
-  if (completedError || !completed?.length) {
-    if (completedError) summary.failed = true;
-    await hold('no_completed_payment_or_unavailable');
-    return;
-  }
+  const superseded = await guardAbandonedPaystackAttempt({
+    attempt,
+    hold,
+    isCompletedRetry,
+    summary,
+    supabase,
+  });
+  if (superseded !== 'proceed') return;
 
   let result: Awaited<ReturnType<typeof verifyTransaction>>;
   try {

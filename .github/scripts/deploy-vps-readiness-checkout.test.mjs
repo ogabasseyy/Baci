@@ -26,6 +26,7 @@ test('uses a minimal sparse checkout for VPS drain readiness', async () => {
     'vps-workers/bin/verify-cache-invalidation-drain-installed.sh\n' +
       'vps-workers/bin/verify-gigl-direct-workers-installed.sh\n' +
       '.github/scripts/check-gigl-cutover-latch.sh\n' +
+      '.github/scripts/resolve-gigl-latch-identity.sh\n' +
       '.github/filters/deploy.yml\n'
   );
   assert.equal(checkout.with['sparse-checkout-cone-mode'], false);

@@ -29,7 +29,10 @@ function parseJwtPart(token: string, index: number): Record<string, unknown> {
 
 // Runtime construction accepts any unexpired token so rotation can occur any
 // time before exp; the 24-hour rotation runway is enforced separately by the
-// VPS preflight (preflight-direct-web-workers.mjs), not here.
+// VPS preflight (preflight-direct-web-workers.mjs), not here. This is an
+// expiry/role pre-check only: it never verifies the JWT signature or issuer.
+// A mis-issued token surfaces at PostgREST, and the live scope smoke (not
+// this check) is the real proof of token validity.
 function hasCurrentWorkerCapability(token: string): boolean {
   try {
     if (token.split('.').length !== 3) return false;

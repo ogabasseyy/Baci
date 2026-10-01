@@ -47,6 +47,19 @@ describe('production cache-invalidation drain rollout gate', () => {
     assert.doesNotMatch(readiness, /continue-on-error:\s*true/);
     assert.match(migrations, /needs: \[vps-drain-readiness\]/);
     assert.match(migrations, /needs\.vps-drain-readiness\.result == 'success'/);
+    // Production is mid-rollout (worker role LOGIN-capable until this PR's
+    // later migrations apply), so the cron removal must never land while
+    // the interim window is open: assert the NOLOGIN final state after
+    // every apply, before anything downstream can proceed.
+    assert.match(
+      migrations,
+      /run: \.github\/scripts\/verify-gigl-worker-final-state\.sh/
+    );
+    assert.ok(
+      migrations.indexOf('Apply pending migrations via Management API') <
+        migrations.indexOf('Verify GIGL worker least-privilege final state'),
+      'final-state verification must run after migrations apply'
+    );
   });
 
   it('smokes the live GIGL capability only after migrations apply', () => {

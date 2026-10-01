@@ -81,6 +81,7 @@ jobs:
             vps-workers/bin/verify-cache-invalidation-drain-installed.sh
             vps-workers/bin/verify-gigl-direct-workers-installed.sh
             .github/scripts/check-gigl-cutover-latch.sh
+            .github/scripts/resolve-gigl-latch-identity.sh
             .github/filters/deploy.yml
           sparse-checkout-cone-mode: false
       - name: Verify production cache-invalidation drain installation
@@ -112,8 +113,10 @@ jobs:
         # later unsmoked tracking commit must still block the bypass, so
         # the gate requires latched AND NOT tracking_stale. The latch is
         # bound to the installed SHA: a manual promote of a different
-        # tree invalidates it until a fresh smoke re-latches. This step
-        # never fails: every error reports latched=false / stale=true.
+        # tree invalidates it until a fresh smoke re-latches. It also
+        # records the enablement scope and token fingerprint the smoke
+        # observed: flips and rotations invalidate until re-smoked. This
+        # step never fails: every error reports latched=false / stale=true.
         # Tracking pushes don't need the signal (they run the smoke).
         # GITHUB_TOKEN is the auto-provided read-scoped job token (fetch
         # only), not a production credential.
@@ -178,6 +181,14 @@ jobs:
         env:
           MIGRATION_PHASE: predeploy
         run: .github/scripts/apply-pending-migrations.sh
+      - name: Verify GIGL worker least-privilege final state
+        # Production is currently mid-rollout (worker role LOGIN-capable with
+        # a password, hook and isolate grant pending on this PR's migrations).
+        # The cron removal must never land while that interim window is open,
+        # so assert the final state explicitly after every apply: NOLOGIN, no
+        # password, scope hook installed, authenticator membership held.
+        # Failing here fails db-migrations, which blocks deploy-production.
+        run: .github/scripts/verify-gigl-worker-final-state.sh
 
   # Live-smoke the restricted GIGL wrapper capability only AFTER migrations:
   # the gigl_worker_* RPCs do not exist on a parent schema, so running this
@@ -222,12 +233,19 @@ jobs:
         # latch file proves a live smoke verified token+hook function at
         # this revision. The gate requires it for tracking=false pushes,
         # so a web push after a smoke-failed tracking push cannot deploy
-        # the cron removal with a broken worker. A GIGL-disabled skip
-        # (exit 0 no-op) also latches: with polling disabled, cutover is
-        # vacuously complete. deploy.sh preserves this file on promote.
+        # the cron removal with a broken worker. The latch records
+        # `<scope>:<sha>:<token-fingerprint>` for the environment the smoke
+        # just observed: a GIGL-disabled skip (exit 0 no-op) latches a
+        # DISABLED scope, which authorizes the bypass only while the worker
+        # is still disabled — a disabled run can never certify future
+        # enabled function, and any enablement flip or token change since
+        # the smoke invalidates. deploy.sh preserves this file on promote.
         env:
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
-        run: printf '%s' '${{ github.sha }}' > "$VPS_WORKER_REMOTE_DIR/.gigl-capability-smoke-ok"
+        run: |
+          identity="$(.github/scripts/resolve-gigl-latch-identity.sh "$VPS_WORKER_REMOTE_DIR")"
+          printf '%s:%s:%s' "${identity%% *}" '${{ github.sha }}' "${identity#* }" \
+            > "$VPS_WORKER_REMOTE_DIR/.gigl-capability-smoke-ok"
 
   deploy-production:
     needs: [changes, cwv-runner-contracts, db-migrations, gigl-worker-capability, vps-drain-readiness]

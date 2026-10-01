@@ -13,6 +13,17 @@
 # on promote, so without an installed-SHA check a manual promote of a
 # different tree (rollback, or the exit-42 unverified path) would leave a
 # latch that still validates while an unsmoked worker polls.
+#
+# Latch format is `<scope>:<sha>:<token-fingerprint>` where scope is the
+# effective GIGL enablement the smoke observed. A disabled-scoped latch
+# authorizes the bypass only while the worker is STILL disabled (vacuous
+# cutover); any enablement flip in either direction invalidates, so a
+# disabled smoke can never certify future enabled function and an enabled
+# latch cannot survive a disable/re-enable cycle unproven. Enabled latches
+# additionally bind the proven token fingerprint, so rotation, replacement,
+# or removal of the token forces a re-smoke. Token EXPIRY is enforced at
+# runtime instead: the VPS poller fails loud every 5 minutes on a bad
+# token, so expiry can stall polling but never pass silently.
 set -euo pipefail
 
 remote_dir="${1:?remote dir is required}"
@@ -21,13 +32,33 @@ latch_file="$remote_dir/.gigl-capability-smoke-ok"
 
 latched=false
 latch_sha=""
+latch_scope=""
+latch_fingerprint=""
 if [ -f "$latch_file" ]; then
   candidate="$(tr -d '\r\n' < "$latch_file")"
-  if [[ "$candidate" =~ ^[0-9a-f]{40}$ ]]; then
+  latch_scope="${candidate%%:*}"
+  rest="${candidate#*:}"
+  latch_sha="${rest%%:*}"
+  latch_fingerprint="${rest#*:}"
+  case "$latch_scope" in
+    enabled | disabled) ;;
+    *) latch_scope="" ;;
+  esac
+  if [ -z "$latch_scope" ] || [[ ! "$latch_sha" =~ ^[0-9a-f]{40}$ ]] || [[ ! "$latch_fingerprint" =~ ^[0-9a-f]{64}$ ]]; then
+    latch_scope=""
+    latch_sha=""
+    latch_fingerprint=""
+  else
     latched=true
-    latch_sha="$candidate"
   fi
 fi
+
+invalidate_latch() {
+  latched=false
+  latch_sha=""
+  latch_scope=""
+  latch_fingerprint=""
+}
 
 if [ "$latched" = true ]; then
   installed_sha=""
@@ -35,8 +66,19 @@ if [ "$latched" = true ]; then
     installed_sha="$(tr -d '\r\n' < "$remote_dir/app-checkout.sha")"
   fi
   if [ "$installed_sha" != "$latch_sha" ]; then
-    latched=false
-    latch_sha=""
+    invalidate_latch
+  fi
+fi
+
+if [ "$latched" = true ]; then
+  script_dir="$(unset CDPATH; cd -- "$(dirname -- "$0")" && pwd)"
+  identity="$("$script_dir/resolve-gigl-latch-identity.sh" "$remote_dir" 2>/dev/null || true)"
+  current_scope="${identity%% *}"
+  current_fingerprint="${identity#* }"
+  if [ "$current_scope" != "$latch_scope" ]; then
+    invalidate_latch
+  elif [ "$latch_scope" = "enabled" ] && [ "$current_fingerprint" != "$latch_fingerprint" ]; then
+    invalidate_latch
   fi
 fi
 

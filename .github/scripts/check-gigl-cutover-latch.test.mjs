@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   copyFileSync,
   mkdirSync,
@@ -104,12 +105,55 @@ function checkoutAt(origin, root, name, sha) {
   return checkout;
 }
 
-function check({ latch = null, installed = undefined, omitOutput = false, checkout }) {
+function tokenFingerprintOf(token) {
+  return createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
+function tokenInEnvFile(envFile) {
+  if (envFile === null) return '';
+  for (const line of envFile.split('\n')) {
+    if (line.startsWith('GIGL_TRACKING_WORKER_TOKEN=')) {
+      let value = line.slice('GIGL_TRACKING_WORKER_TOKEN='.length);
+      if (
+        value.length >= 2 &&
+        ((value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'")))
+      ) {
+        value = value.slice(1, -1);
+      }
+      return value;
+    }
+  }
+  return '';
+}
+
+function check({
+  latch = null,
+  latchLiteral = null,
+  scope = 'enabled',
+  envFile = null,
+  token = undefined,
+  installed = undefined,
+  omitOutput = false,
+  checkout,
+}) {
   const root = dirname(checkout);
   const remote = join(root, 'workers');
   const trap = join(root, 'trap-cwd');
-  if (latch !== null) {
-    writeFileSync(join(remote, '.gigl-capability-smoke-ok'), latch);
+  if (envFile !== null) {
+    writeFileSync(join(remote, '.env'), envFile);
+  }
+  if (latchLiteral !== null) {
+    writeFileSync(join(remote, '.gigl-capability-smoke-ok'), latchLiteral);
+  } else if (latch !== null) {
+    // Default: the latch records the token the fixture .env currently
+    // holds (the steady state). Pass an explicit token to simulate a
+    // rotation/removal since the smoke.
+    const recorded = token === undefined ? tokenInEnvFile(envFile) : token;
+    writeFileSync(
+      join(remote, '.gigl-capability-smoke-ok'),
+      `${scope}:${latch}:${tokenFingerprintOf(recorded)}`
+    );
   }
   // Default: installed == latch (the bound steady state). Pass an explicit
   // SHA to simulate drift, or null to simulate a missing marker file.
@@ -157,7 +201,7 @@ describe('GIGL cutover latch check', () => {
     const { origin, root, tip } = fixture();
     const checkout = checkoutAt(origin, root, 'checkout', tip);
 
-    const { result, values } = check({ checkout, latch: 'not-a-sha' });
+    const { result, values } = check({ checkout, latchLiteral: 'not-a-sha' });
 
     assert.equal(result.status, 0, result.stderr);
     assert.equal(values.latched, 'false');
@@ -271,6 +315,161 @@ describe('GIGL cutover latch check', () => {
       checkout,
       latch: tip,
       omitOutput: true,
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'true');
+    assert.equal(values.tracking_stale, 'false');
+  });
+
+  it('rejects the pre-scoped bare-SHA latch format', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    const { result, values } = check({
+      checkout,
+      latchLiteral: tip,
+      installed: tip,
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'false');
+    assert.equal(values.tracking_stale, 'true');
+  });
+
+  it('rejects a latch with an unknown scope', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    const { result, values } = check({
+      checkout,
+      latchLiteral: `bogus:${tip}:` + '1'.repeat(64),
+      installed: tip,
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'false');
+    assert.equal(values.tracking_stale, 'true');
+  });
+
+  it('accepts a disabled latch while the worker is still disabled', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      scope: 'disabled',
+      envFile: 'GIGL_ENABLED=off\n',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'true');
+    assert.equal(values.tracking_stale, 'false');
+  });
+
+  it('invalidates a disabled latch once the worker is re-enabled', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    // Same latch content as the steady-disabled case; only the live .env
+    // changed. A disabled smoke must never certify future enabled
+    // function, so only the scope re-check fails closed here.
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      scope: 'disabled',
+      envFile: 'GIGL_ENABLED=1\nGIGL_TRACKING_WORKER_TOKEN=aaa.bbb.ccc\n',
+      token: '',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'false');
+    assert.equal(values.tracking_stale, 'true');
+  });
+
+  it('invalidates a disabled latch when the env file disappears', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    // Absent .env means enabled, which mismatches the disabled scope.
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      scope: 'disabled',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'false');
+    assert.equal(values.tracking_stale, 'true');
+  });
+
+  it('invalidates an enabled latch once the worker is disabled', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    // Scope must match in BOTH directions: without this, a
+    // disable/re-enable cycle between latch and push would bypass the
+    // smoke on an unproven token.
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      scope: 'enabled',
+      envFile: 'GIGL_ENABLED=false\n',
+      token: '',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'false');
+    assert.equal(values.tracking_stale, 'true');
+  });
+
+  it('invalidates an enabled latch when the token rotates', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      scope: 'enabled',
+      envFile: 'GIGL_TRACKING_WORKER_TOKEN=new-token\n',
+      token: 'old-token',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'false');
+    assert.equal(values.tracking_stale, 'true');
+  });
+
+  it('invalidates an enabled latch when the token is removed', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      scope: 'enabled',
+      envFile: 'GIGL_ENABLED=1\n',
+      token: 'old-token',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'false');
+    assert.equal(values.tracking_stale, 'true');
+  });
+
+  it('ignores token changes on a disabled latch', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    // Provisioning a token while disabled must not freeze web deploys;
+    // the still-disabled scope check alone authorizes the vacuous bypass.
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      scope: 'disabled',
+      envFile: 'GIGL_ENABLED=off\nGIGL_TRACKING_WORKER_TOKEN=new-token\n',
+      token: '',
     });
 
     assert.equal(result.status, 0, result.stderr);

@@ -87,9 +87,11 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
   it('files one review per order when the reference matches two payments', async () => {
     const rpc = reviewRpc();
     const orders = [order, { ...order, id: 'order-2', order_number: 'B-2' }];
+    const candidates = [firstPayment, secondPayment];
     const from = vi
       .fn()
-      .mockReturnValueOnce(selectQuery([firstPayment, secondPayment]))
+      .mockReturnValueOnce(selectQuery(candidates))
+      .mockReturnValueOnce(selectQuery(candidates))
       .mockReturnValueOnce(selectQuery(orders))
       .mockReturnValueOnce(selectQuery(orders));
     const supabase = { from, rpc } as unknown as SupabaseClient;
@@ -138,9 +140,11 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
   it('merges redelivered ambiguity evidence into the open reviews', async () => {
     const rpc = reviewRpc();
     const orders = [order, { ...order, id: 'order-2', order_number: 'B-2' }];
+    const candidates = [firstPayment, secondPayment];
     const from = vi
       .fn()
-      .mockReturnValueOnce(selectQuery([firstPayment, secondPayment]))
+      .mockReturnValueOnce(selectQuery(candidates))
+      .mockReturnValueOnce(selectQuery(candidates))
       .mockReturnValueOnce(selectQuery(orders))
       .mockReturnValueOnce(selectQuery(orders));
     const supabase = { from, rpc } as unknown as SupabaseClient;
@@ -173,6 +177,7 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
     const rpc = reviewRpc();
     const from = vi
       .fn()
+      .mockReturnValueOnce(selectQuery([firstPayment]))
       .mockReturnValueOnce(selectQuery([firstPayment]))
       .mockReturnValueOnce(selectQuery(order))
       .mockReturnValueOnce({ insert: auditInsert })
@@ -207,6 +212,7 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
     const rpc = reviewRpc();
     const from = vi
       .fn()
+      .mockReturnValueOnce(selectQuery([firstPayment]))
       .mockReturnValueOnce(selectQuery([firstPayment]))
       .mockReturnValueOnce(selectQuery(order))
       .mockReturnValueOnce({ insert: auditInsert })
@@ -324,11 +330,45 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
     );
   });
 
+  it('files a generic review when the recheck finds only a detached payment', async () => {
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const detached = { ...firstPayment, order_id: null };
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [detached], error: null })
+      .mockResolvedValue({ data: true, error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(selectQuery([]))
+      .mockReturnValueOnce(selectQuery([]))
+      .mockReturnValueOnce({ insert: reviewInsert });
+    const supabase = { from, rpc } as unknown as SupabaseClient;
+
+    await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
+
+    // The atomic recheck returned the same detached row the watch was
+    // opened for: without the detached branch the stable pass would
+    // acknowledge with no audit row or review.
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'paystack_refund_evidence_invalid',
+        order_id: null,
+        paystack_ref: 'PSK-1',
+        reason: expect.stringContaining('detached from any order'),
+      })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_paystack_refund_recovery_watch_v1',
+      { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
+    );
+  });
+
   it('throws when the recovery review cannot be persisted', async () => {
     const auditInsert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
     const rpc = reviewRpc({ code: 'XX000' });
     const from = vi
       .fn()
+      .mockReturnValueOnce(selectQuery([firstPayment]))
       .mockReturnValueOnce(selectQuery([firstPayment]))
       .mockReturnValueOnce(selectQuery(order))
       .mockReturnValueOnce({ insert: auditInsert })

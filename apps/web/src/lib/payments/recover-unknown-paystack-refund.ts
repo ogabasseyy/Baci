@@ -153,6 +153,39 @@ export async function recoverUnknownPaystackRefund(
       return;
     }
     if (candidates.length !== 1 || !payment || !payment.order_id) {
+      const detached = candidates.length === 1 ? candidates[0] : undefined;
+      if (detached && !detached.order_id) {
+        // The sole completed payment was already detached when scanned
+        // (order_id null — e.g. the order FK's ON DELETE SET NULL fired
+        // before the first read): the verified refund is still a real
+        // merchant debit, so retain it in the order-independent queue
+        // instead of opening a watch whose rescan returns the same
+        // detached row and acknowledges with no audit row or review.
+        // Mirrors the post-scan deletion branch in
+        // recordRecoveredPaystackRefund; merges are idempotent, so the
+        // rescan pass refiling is safe.
+        await fileInvalidPaystackRefundEvidenceReview(supabase, {
+          evidence: {
+            providerPaymentTransactionId: evidence.providerPaymentTransactionId,
+            providerRefundId: refundId,
+            providerRefundStatus: evidence.providerRefundStatus,
+            reference: evidence.reference,
+          },
+          reason: `Paystack refund ${refundId} verified for reference ${resolvedPaymentReference} but its completed payment is detached from any order; route the merchant debit manually`,
+          reference: resolvedPaymentReference,
+          refundId,
+        });
+        await resolvePaystackRefundRecoveryWatch(supabase, {
+          providerRefundId: refundId,
+          reference: resolvedPaymentReference,
+        });
+        logger.info({
+          message:
+            'Unknown Paystack refund event payment is detached from any order',
+          refundId,
+        });
+        return;
+      }
       if (pass > 0) {
         // Stable empty under the watch: the first scan and the stalled
         // scan were both empty, and the watch opener below re-scanned

@@ -46,7 +46,7 @@ const payment = {
 
 describe('fetchCompletedPaymentsByReference', () => {
   it('returns completed payments for the reference with exact filters', async () => {
-    const { chain, from, select, supabase } = database([[payment]]);
+    const { chain, from, select, supabase } = database([[payment], [payment]]);
 
     const result = await fetchCompletedPaymentsByReference(supabase, 'PSK-1');
 
@@ -70,16 +70,44 @@ describe('fetchCompletedPaymentsByReference', () => {
       id: `pay-${index}`,
     }));
     const second = [{ ...payment, id: 'pay-10' }];
-    const { chain, supabase } = database([first, second]);
+    const { chain, supabase } = database([first, second, first, second]);
 
     const result = await fetchCompletedPaymentsByReference(supabase, 'PSK-1');
 
     expect(result).toHaveLength(11);
     // Offsets over this status-filtered set would shift when a
     // lower-id payment completes between page reads, omitting a later
-    // match; the immutable id cursor cannot shift.
+    // match; the immutable id cursor cannot shift, and the stabilizing
+    // pass re-reads the full set before acknowledging.
     expect(chain.gt).toHaveBeenCalledWith('id', 'pay-9');
-    expect(chain.limit).toHaveBeenCalledTimes(2);
+    expect(chain.limit).toHaveBeenCalledTimes(4);
+  });
+
+  it('repeats the scan until a payment completing behind the cursor is found', async () => {
+    const first = Array.from({ length: 10 }, (_, index) => ({
+      ...payment,
+      id: `pay-${index}`,
+    }));
+    // A lower-id payment completes after the first page is read: its
+    // id sits behind the cursor, so the second page skips it and only
+    // the stabilizing pass observes it.
+    const late = { ...payment, id: 'pay-0-late' };
+    const stabilizedFirst = [first[0], late, ...first.slice(1, 9)];
+    const stabilizedSecond = [first[9]];
+    const { supabase } = database([
+      first,
+      [],
+      stabilizedFirst,
+      stabilizedSecond,
+      stabilizedFirst,
+      stabilizedSecond,
+    ]);
+
+    const result = await fetchCompletedPaymentsByReference(supabase, 'PSK-1');
+
+    expect(result.map((row) => row.id)).toEqual(
+      [...first.map((row) => row.id), late.id].sort()
+    );
   });
 
   it('returns an empty list when nothing matches', async () => {

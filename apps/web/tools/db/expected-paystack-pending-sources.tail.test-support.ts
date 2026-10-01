@@ -303,11 +303,13 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
     repositoryPath:
       'supabase/migrations/20260928182700_claim_paystack_refund_reference_watches.sql',
     sha256: 'c5b9ecf27dda8bd06b2aa24e59d8dbc52fc7ff7b389b0f5d347b982be100ac6b',
-  },  {
+  },
+  {
     repositoryPath:
       'supabase/migrations/20260928182800_paystack_refund_watch_sticky_verdict.sql',
     sha256: 'ffae22f487f1fb67f8a20c6e9792f893baa6a79bbdfc0c3175c0de7b5c442f36',
-  },  {
+  },
+  {
     repositoryPath:
       'supabase/migrations/20260928182900_file_recovery_review_preserve_markers.sql',
     sha256: 'e96cfbe6edc5472c00f7353e57567c7806e0744df66265370a898d0e43dcbea4',

@@ -29,3 +29,8 @@ it('falls back to sanitized shopper wording and never emits empty syntax', () =>
   expect(buildDiscoveryFactRetrievalQuery(intent({}), '!!!')).toBe('(a & !a)');
   expect(buildDiscoveryFactRetrievalQuery(intent({}))).toBe('(a & !a)');
 });
+
+it('retains Unicode identity terms while stripping query operators', () => {
+  expect(buildDiscoveryFactRetrievalQuery(intent({ brands: ['Mömax'], model: '三星 手机 | !' })))
+    .toBe('(mömax & 三星 & 手机)');
+});

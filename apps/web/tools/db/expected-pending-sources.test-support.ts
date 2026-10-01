@@ -267,7 +267,7 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261001061000_equivalent_discovery_capacity_units.sql',
-    sha256: '047bc9be23b35c95249b1c4cd59b4e6ef80586df5e5cbcd4d18cd01da0e6cbe9',
+    sha256: 'fe70fb314a24e2e0413854853daaea1235c83a8347822e34df358bb3ff815c80',
   },
   {
     repositoryPath:

@@ -157,20 +157,20 @@ export async function loadStructuredDiscoveryCandidates({
   truncated: boolean;
   semanticUnavailable: boolean;
 }> {
-  if (!query) {
+  if (!query && (!factQuery || factQuery === '(a & !a)')) {
     const result = await loadBrowseRows(merchantId, supabase);
     return { products: result.products, truncated: result.truncated, semanticUnavailable: false };
   }
 
-  const lexicalPromise = loadLexicalIds(query, merchantId, supabase);
-  const semanticPromise = semanticSearch
+  const lexicalPromise = query ? loadLexicalIds(query, merchantId, supabase) : Promise.resolve({ ids: [], truncated: false });
+  const semanticPromise = query && semanticSearch
     ? loadSemanticIds(query, semanticSearch).then(
       (value) => ({ value, unavailable: value.probeFailed }),
       () => ({ value: { ids: [], truncated: true }, unavailable: true })
     )
     : Promise.resolve({ value: { ids: [], truncated: false }, unavailable: false });
   const [lexical, semantic, facts] = await Promise.all([
-    lexicalPromise, semanticPromise, loadDiscoveryFactCandidates(factQuery || query, merchantId, supabase),
+    lexicalPromise, semanticPromise, loadDiscoveryFactCandidates(factQuery || query || '(a & !a)', merchantId, supabase),
   ]);
   // Correlated keyword/combined-document matches get one best lexical vote.
   const rankedIds = reciprocalRankFusion([lexical.ids, facts.ids], [semantic.value.ids]);

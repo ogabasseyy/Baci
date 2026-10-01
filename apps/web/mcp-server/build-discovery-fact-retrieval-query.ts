@@ -9,7 +9,7 @@ const NUMERIC_UNITS: Record<string, string> = {
 const MAX_TERMS_PER_GROUP = 12;
 
 function sanitizeTerm(value: string): string[] {
-  return value.toLowerCase().replace(/[^a-z0-9.\s]+/g, ' ').split(/\s+/).filter(Boolean);
+  return value.toLowerCase().replace(/[^\p{L}\p{N}.\s]+/gu, ' ').split(/\s+/).filter(Boolean);
 }
 
 function attributeTerms(key: string, value: string | number): string[] {

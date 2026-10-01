@@ -155,7 +155,7 @@ describe('runGiglTrackingCapabilityVerification', () => {
 
     expect(logger.error).not.toHaveBeenCalled();
     expect(logger.info).toHaveBeenCalledWith(
-      '[gigl-capability] wrapper RPCs not deployed yet; deferring to the post-migration smoke'
+      '[gigl-capability] wrapper RPCs not deployed yet or role grant pending; deferring to the post-migration smoke'
     );
   });
 });

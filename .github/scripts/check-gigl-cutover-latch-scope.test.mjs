@@ -1,0 +1,137 @@
+import assert from 'node:assert/strict';
+import { afterEach, describe, it } from 'node:test';
+import {
+  check,
+  checkoutAt,
+  cleanupLatchFixtures,
+  fixture,
+} from './check-gigl-cutover-latch.test-fixtures.mjs';
+
+afterEach(cleanupLatchFixtures);
+
+describe('GIGL cutover latch scope and token binding', () => {
+  it('accepts a disabled latch while the worker is still disabled', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      scope: 'disabled',
+      envFile: 'GIGL_ENABLED=off\n',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'true');
+    assert.equal(values.tracking_stale, 'false');
+  });
+
+  it('invalidates a disabled latch once the worker is re-enabled', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    // Same latch content as the steady-disabled case; only the live .env
+    // changed. A disabled smoke must never certify future enabled
+    // function, so only the scope re-check fails closed here.
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      scope: 'disabled',
+      envFile: 'GIGL_ENABLED=1\nGIGL_TRACKING_WORKER_TOKEN=aaa.bbb.ccc\n',
+      token: '',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'false');
+    assert.equal(values.tracking_stale, 'true');
+  });
+
+  it('invalidates a disabled latch when the env file disappears', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    // Absent .env means enabled, which mismatches the disabled scope.
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      scope: 'disabled',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'false');
+    assert.equal(values.tracking_stale, 'true');
+  });
+
+  it('invalidates an enabled latch once the worker is disabled', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    // Scope must match in BOTH directions: without this, a
+    // disable/re-enable cycle between latch and push would bypass the
+    // smoke on an unproven token.
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      scope: 'enabled',
+      envFile: 'GIGL_ENABLED=false\n',
+      token: '',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'false');
+    assert.equal(values.tracking_stale, 'true');
+  });
+
+  it('invalidates an enabled latch when the token rotates', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      scope: 'enabled',
+      envFile: 'GIGL_TRACKING_WORKER_TOKEN=new-token\n',
+      token: 'old-token',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'false');
+    assert.equal(values.tracking_stale, 'true');
+  });
+
+  it('invalidates an enabled latch when the token is removed', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      scope: 'enabled',
+      envFile: 'GIGL_ENABLED=1\n',
+      token: 'old-token',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'false');
+    assert.equal(values.tracking_stale, 'true');
+  });
+
+  it('ignores token changes on a disabled latch', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    // Provisioning a token while disabled must not freeze web deploys;
+    // the still-disabled scope check alone authorizes the vacuous bypass.
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      scope: 'disabled',
+      envFile: 'GIGL_ENABLED=off\nGIGL_TRACKING_WORKER_TOKEN=new-token\n',
+      token: '',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'true');
+    assert.equal(values.tracking_stale, 'false');
+  });
+});

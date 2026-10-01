@@ -19,9 +19,14 @@ interface RpcErrorShape {
 /**
  * Detects the pre-migration schema shapes, which prove the wrapper migration
  * has not applied yet — distinct from a reachable wrapper rejecting the
- * caller's authority or input. On the first rollout neither the role nor the
- * RPCs exist, and PostgREST fails at SET ROLE before resolving the RPC, so
- * both the missing-role and the missing-function shapes must defer.
+ * caller's authority or input. Two pre-migration states defer: the pristine
+ * one (neither role nor RPCs exist, so PostgREST fails at SET ROLE before
+ * resolving the RPC) and the pre-isolation one (role and RPCs exist but the
+ * authenticator membership grant is still pending, so SET ROLE is denied
+ * with 42501). Without the pre-isolation shape the first rollout
+ * deadlocks: deploy.sh refuses to install on a failed smoke while the
+ * workflow refuses to apply the grant-fixing migrations until the worker
+ * is installed. Other 42501s still fail closed.
  */
 export function isGiglWrapperSchemaMissing(
   error: RpcErrorShape | null
@@ -35,7 +40,8 @@ export function isGiglWrapperSchemaMissing(
   const message = error.message ?? '';
   return (
     /could not find the function/i.test(message) ||
-    /role\s+"?[\w$]+"?\s+does not exist/i.test(message)
+    /role\s+"?[\w$]+"?\s+does not exist/i.test(message) ||
+    (error.code === '42501' && /permission denied to set role/i.test(message))
   );
 }
 

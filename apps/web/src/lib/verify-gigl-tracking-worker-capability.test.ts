@@ -50,6 +50,13 @@ describe('verifyGiglTrackingWorkerCapability', () => {
         code: '42704',
         message: 'role "gigl_tracking_worker" does not exist',
       },
+      // Pre-isolation rollout: role and RPCs exist, authenticator grant
+      // pending. Without this deferral deploy.sh refuses to install while
+      // the workflow withholds the grant-fixing migrations (deadlock).
+      {
+        code: '42501',
+        message: 'permission denied to set role "gigl_tracking_worker"',
+      },
     ]) {
       const rpc = vi.fn().mockResolvedValue({ data: null, error });
 
@@ -101,14 +108,20 @@ describe('verifyGiglTrackingWorkerScopeProbe', () => {
   });
 
   it('throws schema-missing when the wrapper RPCs are not deployed yet', async () => {
-    const rpc = vi.fn().mockResolvedValue({
-      data: null,
-      error: { code: 'PGRST202', message: 'not found' },
-    });
+    for (const error of [
+      { code: 'PGRST202', message: 'not found' },
+      // Pre-isolation rollout defers here too (same shared matcher).
+      {
+        code: '42501',
+        message: 'permission denied to set role "gigl_tracking_worker"',
+      },
+    ]) {
+      const rpc = vi.fn().mockResolvedValue({ data: null, error });
 
-    await expect(
-      verifyGiglTrackingWorkerScopeProbe({ rpc } as never)
-    ).rejects.toBeInstanceOf(GiglWrapperSchemaMissingError);
+      await expect(
+        verifyGiglTrackingWorkerScopeProbe({ rpc } as never)
+      ).rejects.toBeInstanceOf(GiglWrapperSchemaMissingError);
+    }
   });
 
   it('matches the denial message raised by the scope-hook migration', async () => {

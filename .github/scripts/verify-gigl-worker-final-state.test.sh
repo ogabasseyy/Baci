@@ -56,8 +56,10 @@ fi
 check 'accepts final state' 0 "$status"
 grep -q 'least-privilege final state verified' "$fixture_root/out.log"
 check 'prints verification' 0 "$?"
-grep -q 'gigl_tracking_worker' "$fixture_root/queries.log"
-check 'queries the worker role' 0 "$?"
+grep -q "rolname = 'gigl_tracking_worker'" "$fixture_root/queries.log"
+check 'queries the worker role quoted' 0 "$?"
+if grep -q '\$role' "$fixture_root/queries.log"; then literal=0; else literal=1; fi
+check 'leaves no uninterpolated jq variable in SQL' 1 "$literal"
 
 # Interim LOGIN window (current production shape): must block.
 if run_verifier '[{"login":true,"has_password":true,"hooks":0,"grants":0}]'; then

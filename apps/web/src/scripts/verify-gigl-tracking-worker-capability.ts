@@ -9,9 +9,11 @@ import {
 } from '@/lib/verify-gigl-tracking-worker-capability';
 
 /**
- * Exit code when the wrapper RPCs predate the migration (initial rollout).
- * `prepare-worker-release.sh` defers to the post-migration workflow smoke on
- * this code; every other caller must treat it as a failure.
+ * Exit code when the wrapper RPCs predate the migration (initial rollout),
+ * including the pre-isolation state where the role and RPCs exist but the
+ * authenticator grant is still pending. `prepare-worker-release.sh` defers
+ * to the post-migration workflow smoke on this code; every other caller
+ * must treat it as a failure.
  */
 export const GIGL_CAPABILITY_SCHEMA_MISSING_EXIT_CODE = 42;
 
@@ -62,7 +64,7 @@ export async function runGiglTrackingCapabilityVerification({
   } catch (error) {
     if (error instanceof GiglWrapperSchemaMissingError) {
       logger.info(
-        '[gigl-capability] wrapper RPCs not deployed yet; deferring to the post-migration smoke'
+        '[gigl-capability] wrapper RPCs not deployed yet or role grant pending; deferring to the post-migration smoke'
       );
       return GIGL_CAPABILITY_SCHEMA_MISSING_EXIT_CODE;
     }

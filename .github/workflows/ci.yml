@@ -407,6 +407,12 @@ jobs:
           .github/scripts/storefront-release-coherence-warming.test.mjs
           .github/scripts/storefront-release-config.test.mjs
           .github/scripts/storefront-release-marker.test.mjs
+          .github/scripts/check-gigl-cutover-latch.test.mjs
+          .github/scripts/check-gigl-cutover-latch-scope.test.mjs
+          .github/scripts/resolve-gigl-latch-identity.test.mjs
+          .github/scripts/verify-gigl-fallback-token.test.mjs
+          .github/scripts/smoke-gigl-worker-capability.test.mjs
+          && bash .github/scripts/verify-gigl-worker-final-state.test.sh
       - name: Verify Quiz Assets
         if: needs.changes.outputs.web == 'true' || needs.changes.outputs.quiz_db == 'true'
         run: pnpm --filter @baci/web verify:quiz-assets

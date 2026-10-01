@@ -11,7 +11,10 @@ set -euo pipefail
 
 API="https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/database/query"
 
-body="$(jq -n --arg role gigl_tracking_worker '{query: "SELECT rolcanlogin AS login, (rolpassword IS NOT NULL) AS has_password, (SELECT count(*) FROM pg_proc WHERE proname = \u0027enforce_gigl_tracking_worker_request_scope\u0027) AS hooks, (SELECT count(*) FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid JOIN pg_roles u ON u.oid = m.member WHERE r.rolname = $role AND u.rolname = \u0027authenticator\u0027) AS grants FROM pg_roles WHERE rolname = $role"}')"
+# NOTE: jq interpolates only via \(...), and the role needs SQL single
+# quotes: a bare $role would ship literally and the API would reject
+# every query. The value is a fixed identifier, never user input.
+body="$(jq -n --arg role gigl_tracking_worker '{query: "SELECT rolcanlogin AS login, (rolpassword IS NOT NULL) AS has_password, (SELECT count(*) FROM pg_proc WHERE proname = \u0027enforce_gigl_tracking_worker_request_scope\u0027) AS hooks, (SELECT count(*) FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid JOIN pg_roles u ON u.oid = m.member WHERE r.rolname = \u0027\($role)\u0027 AND u.rolname = \u0027authenticator\u0027) AS grants FROM pg_roles WHERE rolname = \u0027\($role)\u0027"}')"
 
 response="$(curl --fail-with-body --silent --show-error -X POST \
   -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \

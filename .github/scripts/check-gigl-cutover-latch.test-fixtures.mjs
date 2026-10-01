@@ -1,0 +1,194 @@
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const directory = dirname(fileURLToPath(import.meta.url));
+const script = join(directory, 'check-gigl-cutover-latch.sh');
+const realFilter = join(directory, '..', 'filters', 'deploy.yml');
+const temporaryDirectories = [];
+
+export function cleanupLatchFixtures() {
+  for (const path of temporaryDirectories.splice(0)) {
+    rmSync(path, { force: true, recursive: true });
+  }
+}
+
+export function git(repo, ...args) {
+  const result = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim();
+}
+
+export function fixture() {
+  const root = mkdtempSync(join(tmpdir(), 'baci-gigl-latch-'));
+  temporaryDirectories.push(root);
+  const origin = join(root, 'origin');
+  const remote = join(root, 'workers');
+  // Trap cwd: files matching the real filter globs. If the script ever
+  // lets the shell expand tracking patterns, the diff sees these trap
+  // paths (absent from the fixture repo) instead of literal pathspecs.
+  const trap = join(root, 'trap-cwd');
+  for (const trapFile of [
+    'supabase/migrations/999gigl-trap.ts',
+    'apps/web/src/lib/shipping/gigl-trap.ts',
+    'apps/web/src/lib/shipping/providers/gigl-trap.ts',
+    'apps/web/src/app/api/cron/gigl-tracking/trap.ts',
+  ]) {
+    const full = join(trap, trapFile);
+    mkdirSync(dirname(full), { recursive: true });
+    writeFileSync(full, 'trap\n');
+  }
+  mkdirSync(join(origin, '.github', 'filters'), { recursive: true });
+  mkdirSync(remote, { recursive: true });
+  copyFileSync(realFilter, join(origin, '.github', 'filters', 'deploy.yml'));
+
+  spawnSync('git', ['init', '-q', '-b', 'main', origin]);
+  const commit = (message) =>
+    git(
+      origin,
+      '-c',
+      'user.email=latch@test',
+      '-c',
+      'user.name=latch',
+      'commit',
+      '-q',
+      '-m',
+      message
+    );
+  mkdirSync(join(origin, 'vps-workers'), { recursive: true });
+  writeFileSync(join(origin, 'vps-workers', 'deploy.sh'), 'v1\n');
+  mkdirSync(join(origin, 'supabase', 'migrations'), { recursive: true });
+  writeFileSync(
+    join(origin, 'supabase', 'migrations', '111gigl-fixture.sql'),
+    'select 1;\n'
+  );
+  writeFileSync(join(origin, 'docs-notes.md'), 'v1\n');
+  git(origin, 'add', '-A');
+  commit('base');
+  const base = git(origin, 'rev-parse', 'HEAD');
+
+  // The tracking change touches a GLOB-covered pattern
+  // (supabase/migrations/*gigl*): without noglob, the trap cwd expands the
+  // pattern away and this change is silently dropped from the diff.
+  writeFileSync(
+    join(origin, 'supabase', 'migrations', '111gigl-fixture.sql'),
+    'select 2;\n'
+  );
+  git(origin, 'add', '-A');
+  commit('tracking change');
+  const tracking = git(origin, 'rev-parse', 'HEAD');
+
+  writeFileSync(join(origin, 'docs-notes.md'), 'v2\n');
+  git(origin, 'add', '-A');
+  commit('non-tracking change');
+  const tip = git(origin, 'rev-parse', 'HEAD');
+
+  return { base, origin, remote, root, tip, tracking, trap };
+}
+
+export function checkoutAt(origin, root, name, sha) {
+  const checkout = join(root, name);
+  spawnSync('git', ['clone', '-q', origin, checkout]);
+  git(checkout, 'checkout', '-q', sha);
+  return checkout;
+}
+
+export function tokenFingerprintOf(token) {
+  return createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
+function tokenInEnvFile(envFile) {
+  if (envFile === null) return '';
+  for (const line of envFile.split('\n')) {
+    if (line.startsWith('GIGL_TRACKING_WORKER_TOKEN=')) {
+      let value = line.slice('GIGL_TRACKING_WORKER_TOKEN='.length);
+      if (
+        value.length >= 2 &&
+        ((value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'")))
+      ) {
+        value = value.slice(1, -1);
+      }
+      return value;
+    }
+  }
+  return '';
+}
+
+export function check({
+  latch = null,
+  latchLiteral = null,
+  scope = 'enabled',
+  envFile = null,
+  token = undefined,
+  installed = undefined,
+  omitOutput = false,
+  githubToken = '',
+  extraPath = null,
+  checkout,
+}) {
+  const root = dirname(checkout);
+  const remote = join(root, 'workers');
+  const trap = join(root, 'trap-cwd');
+  if (envFile !== null) {
+    writeFileSync(join(remote, '.env'), envFile);
+  }
+  if (latchLiteral !== null) {
+    writeFileSync(join(remote, '.gigl-capability-smoke-ok'), latchLiteral);
+  } else if (latch !== null) {
+    // Default: the latch records the token the fixture .env currently
+    // holds (the steady state). Pass an explicit token to simulate a
+    // rotation/removal since the smoke.
+    const recorded = token === undefined ? tokenInEnvFile(envFile) : token;
+    writeFileSync(
+      join(remote, '.gigl-capability-smoke-ok'),
+      `${scope}:${latch}:${tokenFingerprintOf(recorded)}`
+    );
+  }
+  // Default: installed == latch (the bound steady state). Pass an explicit
+  // SHA to simulate drift, or null to simulate a missing marker file.
+  const installedSha = installed === undefined ? latch : installed;
+  if (installedSha !== null) {
+    writeFileSync(join(remote, 'app-checkout.sha'), installedSha);
+  }
+  const output = join(root, 'github-output.env');
+  writeFileSync(output, '');
+  const env = {
+    ...process.env,
+    GITHUB_OUTPUT: output,
+    GITHUB_TOKEN: githubToken,
+  };
+  if (omitOutput) {
+    delete env.GITHUB_OUTPUT;
+  }
+  if (extraPath !== null) {
+    env.PATH = `${extraPath}:${process.env.PATH}`;
+  }
+  const result = spawnSync('bash', [script, remote, checkout], {
+    cwd: trap,
+    encoding: 'utf8',
+    env,
+  });
+  const raw = omitOutput ? result.stdout : readFileSync(output, 'utf8');
+  const values = Object.fromEntries(
+    raw
+      .split('\n')
+      .filter((line) => line.includes('='))
+      .map((line) => {
+        const index = line.indexOf('=');
+        return [line.slice(0, index), line.slice(index + 1)];
+      })
+  );
+  return { result, values };
+}

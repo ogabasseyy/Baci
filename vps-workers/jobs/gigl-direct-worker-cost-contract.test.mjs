@@ -72,9 +72,55 @@ describe('GIGL direct worker cost contract', () => {
       releaseHelper,
       /"\$remote_dir\/bin\/process-gigl-tracking\.sh"/
     );
-    assert.match(
-      releaseHelper,
-      /verify-gigl-tracking-worker-capability\.sh/
+    assert.match(releaseHelper, /verify-gigl-tracking-worker-capability\.sh/);
+  });
+
+  it('runs the GIGL gate suites in the deployment-scripts CI step', () => {
+    const ci = readFileSync(
+      join(repoRoot, '.github', 'workflows', 'ci.yml'),
+      'utf8'
     );
+    const step = ci
+      .split('- name: Test Deployment and VPS Worker Scripts')[1]
+      .split(/^\s+- name: /m)[0];
+
+    for (const suite of [
+      'check-gigl-cutover-latch.test.mjs',
+      'check-gigl-cutover-latch-scope.test.mjs',
+      'resolve-gigl-latch-identity.test.mjs',
+      'verify-gigl-fallback-token.test.mjs',
+      'smoke-gigl-worker-capability.test.mjs',
+      'verify-gigl-worker-final-state.test.sh',
+    ]) {
+      assert.match(
+        step,
+        new RegExp(suite.replaceAll('.', '\\.')),
+        `${suite} must be registered in the Test Deployment and VPS Worker Scripts step`
+      );
+    }
+  });
+
+  it('selects deploy_scripts for GIGL gate script changes', () => {
+    const ciFilter = readFileSync(
+      join(repoRoot, '.github', 'filters', 'ci.yml'),
+      'utf8'
+    );
+    const group = ciFilter
+      .split(/^deploy_scripts:\s*$/m)[1]
+      .split(/^\w[\w-]*:\s*$/m)[0];
+
+    for (const path of [
+      '.github/scripts/check-gigl-cutover-latch.sh',
+      '.github/scripts/resolve-gigl-latch-identity.sh',
+      '.github/scripts/verify-gigl-fallback-token.sh',
+      '.github/scripts/verify-gigl-worker-final-state.sh',
+      '.github/scripts/smoke-gigl-worker-capability.sh',
+    ]) {
+      assert.match(
+        group,
+        new RegExp(`^\\s+- '${path.replaceAll('.', '\\.')}'\\s*$`, 'm'),
+        `${path} must select the deploy_scripts filter group`
+      );
+    }
   });
 });

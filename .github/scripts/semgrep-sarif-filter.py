@@ -17,12 +17,13 @@ from types import SimpleNamespace
 from semgrep_sarif_audit import (audit_pr_checkout,
                                  audit_trusted_checkout, find_pr_refs,
                                  load_workflow)
-from semgrep_sarif_consumer import (audit_invocations,
+from semgrep_sarif_consumer import (audit_helpers,
+                                    audit_invocations,
                                     audit_path_literals,
-                                    audit_resolver, audit_run_hygiene,
+                                    audit_resolver,
+                                    audit_run_hygiene,
                                     audit_script_dir)
-from semgrep_sarif_helpers import (audit_helpers,
-                                   audit_trusted_changed)
+from semgrep_sarif_helpers import audit_trusted_changed
 from semgrep_sarif_pins import AUDITED_PATH, AUDITED_RULE_ID
 from semgrep_sarif_runner import audit_agent_runner, audit_installer
 from semgrep_sarif_steps import audit_agent_env, audit_step_commands
@@ -34,10 +35,19 @@ def main():
                           workflow_raw=raw, pr_refs=[], span=(0, 0),
                           trusted=[], resolve=[], joined=[])
     ctx.pr_refs = find_pr_refs(ctx)
+    # The change signal gates even the no-checkout exit: a trusted-
+    # tree edit that also removes the checkout still needs eyes.
+    audit_trusted_changed(drift)
     if not ctx.pr_refs:
         # No PR-controlled checkout left to exempt (e.g. removed in
         # favor of API-fetched diffs): nothing to filter, and failing
-        # here would punish the safest possible change.
+        # here would punish the safest possible change — unless the
+        # trusted tree itself changed, which always needs review.
+        if drift:
+            print("::error::No PR-controlled checkout left in "
+                  + AUDITED_PATH + " but the trusted tree changed; "
+                  "needs human review.")
+            return 1
         print("::notice::No PR-controlled checkout in " + AUDITED_PATH
               + "; exemption inactive.")
         return 0
@@ -53,7 +63,6 @@ def main():
     audit_agent_runner(drift)
     audit_installer(drift)
     audit_helpers(ctx, drift)
-    audit_trusted_changed(drift)
     if drift:
         print(f"::error::muse-code-review.yml hardening drifted "
               f"({', '.join(drift)}); keeping SARIF unfiltered.")
@@ -97,8 +106,15 @@ def main():
         print("::notice::Drift audit passed with no SARIF to filter "
               "(empty scan); exemption inactive.")
         sys.exit(0)
-    with open("semgrep.sarif") as fh:
-        sarif = json.load(fh)
+    try:
+        with open("semgrep.sarif") as fh:
+            sarif = json.load(fh)
+    except (json.JSONDecodeError, OSError) as exc:
+        # A truncated/unreadable scan artifact must fail loudly with
+        # cause, not with a raw traceback.
+        print(f"::error::SARIF parse failed ({exc}); keeping "
+              f"semgrep.sarif unfiltered.")
+        return 1
     for run in sarif.get("runs", []):
         kept = []
         for result in run.get("results", []):

@@ -4,11 +4,118 @@ install.sh invariants (exact version/checksums, verify-before-
 install order, pinned versioned URL, no pipe-to-shell).
 """
 import re
+from semgrep_sarif_helpers import (CARRY_VARS, _collect_vars,
+                                   _resolve)
 from semgrep_sarif_pins import (MUSE_PINNED_HOST,
                                 MUSE_PINNED_SHA_AARCH64,
                                 MUSE_PINNED_SHA_X86,
                                 MUSE_PINNED_VERSION)
-from semgrep_sarif_shell import logical_lines, strip_comments
+from semgrep_sarif_scan import extract_subshells
+from semgrep_sarif_shell import (logical_lines, peel_prefix,
+                                 split_commands2,
+                                 strip_comments)
+
+
+def _shell_words(text):
+    # Shell words: whitespace splits outside quotes, quotes group
+    # (glued quotes stay one word: "a/"b is a/b, not two tokens).
+    words, buf, quote = [], "", None
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if quote == "'":
+            buf += ch
+            if ch == "'":
+                quote = None
+            i += 1
+        elif quote == '"' and ch == "\\" and i + 1 < len(text):
+            buf += text[i:i + 2]
+            i += 2
+        elif quote == '"' and ch == '"':
+            buf, quote, i = buf + ch, None, i + 1
+        elif quote:
+            buf, i = buf + ch, i + 1
+        elif ch in ("'", '"'):
+            quote, buf, i = ch, buf + ch, i + 1
+        elif ch in (" ", "\t", "\n"):
+            if buf:
+                words.append(buf)
+                buf = ""
+            i += 1
+        elif ch == "\\" and i + 1 < len(text):
+            buf += text[i:i + 2]
+            i += 2
+        else:
+            buf, i = buf + ch, i + 1
+    if buf:
+        words.append(buf)
+    return words
+
+
+def _dequote(word):
+    # Remove quote characters (backslash-aware): glued forms
+    # collapse to the executed spelling ("a/"b -> a/b).
+    out, quote, i = "", None, 0
+    while i < len(word):
+        ch = word[i]
+        if quote == "'":
+            if ch == "'":
+                quote = None
+            else:
+                out += ch
+            i += 1
+        elif ch == "\\" and quote != "'" and i + 1 < len(word):
+            out += word[i + 1]
+            i += 2
+        elif quote == '"' and ch == '"':
+            quote, i = None, i + 1
+        elif not quote and ch in ("'", '"'):
+            quote, i = ch, i + 1
+        else:
+            out, i = out + ch, i + 1
+    return out
+
+
+def _peel_env(words):
+    # See through env -u/-i/VAR= prefixes to the real argv0 (the
+    # runner scrubs tokens via env -u, so muse sits behind env).
+    assign = re.compile(
+        r"^([A-Za-z_][A-Za-z0-9_]*)(\[[^\]]*\])?(\+)?=")
+    i = 0
+    while i < len(words):
+        word = _dequote(words[i])
+        m = assign.match(word)
+        if m:
+            # Subscript/+= assigns are pure (never prefix a
+            # command, so nothing follows); plain VAR= may.
+            if m.group(2) or m.group(3):
+                return []
+            i += 1
+        elif word != "env":
+            break
+        else:
+            i += 1
+            while i < len(words):
+                tok = _dequote(words[i])
+                if tok == "--":
+                    i += 1
+                    break
+                if tok in ("-u", "-C", "--unset", "--chdir",
+                           "--argv0"):
+                    i += 2
+                elif tok in ("-i", "-0", "--null", "-v",
+                             "--ignore-environment"):
+                    i += 1
+                elif re.fullmatch(r"-[a-zA-Z0-9]+", tok):
+                    i += 2 if tok[-1] in "uC" else 1
+                elif tok.startswith("--") and "=" in tok:
+                    i += 1
+                elif re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*",
+                                  tok):
+                    i += 1
+                else:
+                    break
+    return words[i:]
 
 def audit_agent_runner(drift):
 
@@ -26,51 +133,68 @@ def audit_agent_runner(drift):
         drift.append("agent-runner-missing")
     else:
         logical = logical_lines(runner_raw)
-        # Command-position match: quoted-path form (the real call) or a
-        # bare muse following a command boundary/keyword. Prose
-        # mentions (echo "muse ...") and identifiers (muse_rc,
-        # muse-review) must not count as invocations.
-        invocation = re.compile(
-            r"/muse(?=[\"'\s]|$)|(?:^|[;&|()!`]|"
-            r"\b(?:if|while|until|time|sudo|command|builtin|exec)\s+)"
-            r"\s*muse(?=\s|$)")
-        calls = [line for line in logical if invocation.search(line)]
+        # Resolve top-level literal variables first: a constructed
+        # path (MUSE_BIN=...muse; "${MUSE_BIN}" exec ...) must count
+        # as an invocation, not slip past the literal match.
+        varmap = _collect_vars(runner_raw)
+        expanded = [_resolve(line, varmap) for line in logical]
+        # Command-position words (quote-glued, env-peeled): prose
+        # mentions (echo "muse ...") and identifiers (muse_rc) sit
+        # off command position and never count; subshell bodies
+        # recurse since $(muse ...) executes too.
+        roots = "|".join(
+            r"\$\{%s\}|\$%s(?![A-Za-z0-9_])" % (v, v)
+            for v in CARRY_VARS)
+
+        def calls_in(text):
+            found = []
+            cleaned, inners = extract_subshells(text)
+            for inner in inners:
+                found.extend(calls_in(inner))
+            for piece, _, _ in split_commands2(cleaned):
+                words = _peel_env(_shell_words(piece))
+                argv0, rest = peel_prefix(words)
+                if not argv0:
+                    continue
+                cmd = _dequote(argv0)
+                if cmd == "muse" or cmd.endswith("/muse"):
+                    found.append((piece, rest))
+            return found
+
+        calls = []
+        for line in expanded:
+            calls.extend(calls_in(line))
+        # Whatever still expands at command position is unresolvable
+        # statically (conditional assigns, read, $()): fail closed.
+        for line in expanded:
+            cleaned, _ = extract_subshells(line)
+            for piece, _, _ in split_commands2(cleaned):
+                words = _peel_env(_shell_words(piece))
+                argv0, _ = peel_prefix(words)
+                if not argv0:
+                    continue
+                bare = re.sub(roots, "", _dequote(argv0))
+                if "$" in bare or "`" in bare:
+                    if "agent-indirect-unresolved" not in drift:
+                        drift.append("agent-indirect-unresolved")
         if not calls:
             drift.append("agent-invocation-missing")
         elif len(calls) != 1:
             drift.append(f"agent-invocation-count={len(calls)}")
         else:
-            line = calls[0]
-            # Scope checks to the simple command containing muse:
-            # flags on a later chained command (muse ...; echo
-            # --disable-shell) must not satisfy them. Bounds are
-            # unquoted shell operators; redirects (>, <) stay
-            # inside the command. Disable flags are muse's own
-            # argv; -u may precede it (env prefix) so it is read
-            # from the whole scoped command.
-            ops = []
-            quote = None
-            for pos, ch in enumerate(line):
-                if quote:
-                    if ch == quote:
-                        quote = None
-                elif ch in ("'", '"'):
-                    quote = ch
-                elif ch in ";|&()`":
-                    ops.append(pos)
-            match = invocation.search(line)
-            seg_start = max([p + 1 for p in ops
-                             if p <= match.start()] + [0])
-            seg_end = min([p for p in ops
-                           if p >= match.end()] + [len(line)])
-            segment = line[seg_start:seg_end]
-            argv = line[match.end():seg_end]
+            # Scope checks to the simple command containing muse
+            # (split_commands2 already bounded it: flags on a later
+            # chained command cannot satisfy them). Disable flags are
+            # muse's own argv; -u may precede it (env prefix) so it is
+            # read from the whole scoped command.
+            piece, rest = calls[0]
+            argv = " ".join(_dequote(w) for w in rest)
             if not re.search(r"(?:^|\s)--disable-shell(?:\s|$)", argv):
                 drift.append("agent-shell-boundary")
             elif not re.search(r"(?:^|\s)--disable-write(?:\s|$)", argv):
                 drift.append("agent-write-boundary")
-            elif ("-u GITHUB_TOKEN" not in segment
-                  or "-u GH_TOKEN" not in segment):
+            elif "-u GITHUB_TOKEN" not in piece \
+                    or "-u GH_TOKEN" not in piece:
                 drift.append("agent-token-isolation")
 
 

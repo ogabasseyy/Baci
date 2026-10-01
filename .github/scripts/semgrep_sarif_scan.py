@@ -126,6 +126,34 @@ def extract_subshells(text):
             i += 1
     return "".join(out), inners
 
+def arith_regions(text):
+    # Bodies of $((...)) expansions. Arithmetic evaluates nested
+    # expansions even inside single quotes (verified: PWNED), so a
+    # $ or backtick in here is executable despite quote stripping.
+    regions = []
+    i, quote = 0, None
+    while i < len(text):
+        ch = text[i]
+        if quote == "'":
+            if ch == "'":
+                quote = None
+            i += 1
+        elif ch == "\\" and i + 1 < len(text):
+            i += 2
+        elif ch == "'":
+            quote, i = "'", i + 1
+        elif ch == '"' or ch == "`":
+            i += 1
+        elif text[i:i + 3] == "$((":
+            j = _paren_end(text, i + 2)
+            regions.append(text[i + 3:j - 1]
+                           if j < len(text) else text[i + 3:])
+            i = j + 1 if j < len(text) else j
+        else:
+            i += 1
+    return regions
+
+
 def redirect_targets(text):
     # Output-redirect targets outside quotes: >, >>, >|, &>,
     # &>>, <>, >&file. Inputs (<), heredocs (<<), fd dups

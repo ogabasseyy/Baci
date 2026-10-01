@@ -24,10 +24,40 @@ def strip_comments(line):
     return "".join(buf)
 
 
+def map_key_value(stripped):
+    # Split a stripped YAML mapping line into (key, value) with
+    # quoted keys normalized ("uses": -> uses). Single/double
+    # quotes only; exotic spellings (anchors, tags, ? keys) yield
+    # None so callers fall through to their fail-closed path.
+    m = re.match(r"""^(?:"([^"]*)"|'([^']*)'|"""
+                 r"""([A-Za-z_][A-Za-z0-9_.-]*))\s*:\s*(.*)$""",
+                 stripped)
+    if not m:
+        return None, None
+    key = m.group(1) or m.group(2) or m.group(3)
+    return key, m.group(4)
+
+
+def unquote_value(value):
+    # Strip one matching quote pair (uses: "actions/..." is valid
+    # YAML); anything else passes through to exact comparison.
+    text = value.strip()
+    if len(text) >= 2 and text[0] == text[-1] \
+            and text[0] in ("'", '"'):
+        return text[1:-1]
+    return text
+
+
 def is_step_boundary(line):
     # Named (- name:) and unnamed (- uses:/- run:/...) steps both
     # delimit spans, so an unnamed step cannot widen a span.
-    return re.match(r"^\s*-\s+\w[\w-]*:", line) is not None
+    # Quoted keys (- "name":) delimit too: a bare-key match would
+    # merge an attacker step into the previous span.
+    m = re.match(r"^\s*-\s+(.*)$", line)
+    if not m:
+        return False
+    key, _ = map_key_value(m.group(1).strip())
+    return key is not None
 
 def step_start(lines, ref_index):
     for i in range(ref_index, -1, -1):
@@ -229,11 +259,19 @@ def run_segments(lines):
     bodies = []
     i = 0
     while i < len(lines):
-        m = re.match(r"^(\s*)run:\s*([|>])?\s*(.*)$",
-                     lines[i])
-        if m and (m.group(2) or m.group(3)):
-            base = len(m.group(1))
-            if m.group(2):
+        # Quoted "run": keys open blocks too: a bare-key match
+        # would leave the whole step unaudited. Unnamed inline
+        # steps (- run: evil) are unwrapped the same way.
+        base = len(lines[i]) - len(lines[i].lstrip(" "))
+        text = lines[i].strip()
+        dash = re.match(r"^-\s+(.*)$", text)
+        if dash:
+            text = dash.group(1).strip()
+        key, rest = map_key_value(text)
+        ind = re.match(r"^([|>]?)\s*(.*)$", rest or "") \
+            if key == "run" else None
+        if ind and (ind.group(1) or ind.group(2)):
+            if ind.group(1):
                 j = i + 1
                 while j < len(lines) \
                         and (not lines[j].strip()
@@ -243,7 +281,7 @@ def run_segments(lines):
                     j += 1
                 i = j
             else:
-                bodies.append(m.group(3))
+                bodies.append(ind.group(2))
                 i += 1
         else:
             i += 1

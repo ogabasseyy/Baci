@@ -4,8 +4,10 @@ trusted-scripts checkout (ref, credentials, action, repo).
 """
 import re
 from semgrep_sarif_pins import AUDITED_PATH, PINNED_CHECKOUT_USES
-from semgrep_sarif_shell import (is_step_boundary, step_end,
-                                 step_start, strip_comments)
+from semgrep_sarif_shell import (is_step_boundary,
+                                 map_key_value, step_end,
+                                 step_start, strip_comments,
+                                 unquote_value)
 
 def load_workflow(path):
     try:
@@ -53,7 +55,8 @@ def job_if_bodies(ref_raw_index, code_lines):
     # not satisfy the check. Returns None when unlocatable.
     jobs_at = next(
         (i for i, line in enumerate(code_lines)
-         if re.match(r"^jobs:\s*$", line.strip())), None)
+         if map_key_value(line.strip())[0] == "jobs"
+         and not map_key_value(line.strip())[1]), None)
     if jobs_at is None or ref_raw_index <= jobs_at:
         return None
     job_at = next(
@@ -61,20 +64,28 @@ def job_if_bodies(ref_raw_index, code_lines):
          if re.match(r"^  \S+:\s*$", code_lines[i])), None)
     if job_at is None:
         return None
+    def is_steps(line):
+        if len(line) - len(line.lstrip(" ")) != 4:
+            return False
+        key, val = map_key_value(line.strip())
+        return key == "steps" and not val
+
     steps_at = next(
         (i for i in range(job_at + 1, len(code_lines))
-         if re.match(r"^    steps:\s*$", code_lines[i])
+         if is_steps(code_lines[i])
          or re.match(r"^  \S+:\s*$", code_lines[i])),
         len(code_lines))
     bodies = []
     i = job_at + 1
     while i < steps_at:
         line = code_lines[i]
-        if not re.match(r"^    if:", line):
+        indented = len(line) - len(line.lstrip(" ")) == 4
+        key, val = map_key_value(line.strip()) if indented else (None, None)
+        if key != "if":
             i += 1
             continue
-        block = re.match(r"^    if:\s*[>|][-+]?\s*$", line)
-        single = re.match(r"^    if:\s+(\S.*)$", line)
+        block = re.match(r"^[>|][-+]?\s*$", val)
+        single = re.match(r"^(\S.*)$", val)
         if block:
             j = i + 1
             while j < steps_at and code_lines[j].strip() \
@@ -92,8 +103,15 @@ def job_if_bodies(ref_raw_index, code_lines):
 def is_pr_ref(line):
     # Key-positional: the mapping key must be ref:, so a run: echo
     # of a ref-looking string cannot count as a checkout input.
-    return (re.match(r"^ref:\s", line.lstrip()) is not None
-            and "github.event.pull_request" in line)
+    # Quoted ("ref":) counts: quotes do not change YAML semantics.
+    key, _ = map_key_value(line.strip())
+    return key == "ref" and "github.event.pull_request" in line
+
+
+def cred_ok(line):
+    key, val = map_key_value(line.strip())
+    return key == "persist-credentials" \
+        and unquote_value(val) == "false"
 
 
 def find_pr_refs(ctx):
@@ -182,7 +200,7 @@ def audit_pr_checkout(ctx, drift):
             raw_end -= 1
         ctx.span = (raw_start + 1, raw_end)
         # Key-positional: a run: echo of the string must not satisfy it.
-        if not any(re.match(r"^persist-credentials:\s*false\s*$", line.strip())
+        if not any(cred_ok(line)
                    for line in ctx.workflow_lines[start:ctx.pr_refs[0]]):
             drift.append("head-checkout-credentials")
         # The step runs with the job's PR write token before the
@@ -192,9 +210,9 @@ def audit_pr_checkout(ctx, drift):
         audited_span = ctx.workflow_lines[
             start:step_end(ctx.workflow_lines, start)]
         audited_uses = [
-            line.strip()[len("uses:"):].strip()
+            unquote_value(map_key_value(line.strip())[1])
             for line in audited_span
-            if re.match(r"^uses:", line.strip())]
+            if map_key_value(line.strip())[0] == "uses"]
         if not audited_uses or not all(
                 value == PINNED_CHECKOUT_USES
                 for value in audited_uses):
@@ -203,15 +221,20 @@ def audit_pr_checkout(ctx, drift):
         # workspace for the agent to read: a path:/repository: key
         # would relocate or re-source that data while the ref still
         # audits, silently changing what gets reviewed.
-        if any(re.match(r"^(repository|path):", line.strip())
+        if any(map_key_value(line.strip())[0]
+               in ("repository", "path")
                for line in audited_span):
             drift.append("head-checkout-shape")
 
 
 def audit_trusted_checkout(ctx, drift):
+    def trusted_here(line):
+        key, val = map_key_value(line.strip())
+        return key == "path" \
+            and unquote_value(val) == "trusted-scripts"
+
     ctx.trusted = [i for i, line in enumerate(ctx.workflow_lines)
-               if re.match(r"^path:\s*trusted-scripts\s*$",
-                           line.strip())]
+                   if trusted_here(line)]
     if not ctx.trusted:
         drift.append("trusted-scripts-checkout-missing")
     else:
@@ -226,23 +249,18 @@ def audit_trusted_checkout(ctx, drift):
         # reading agent could exfiltrate under prompt injection.
         expected_ref = "${{github.event.repository.default_branch}}"
 
-        def norm_ref_value(stripped_line):
-            rest = stripped_line[len("ref:"):].strip()
-            rest = re.sub(r"^[>|][-+]?\s*", "", rest)
-            if len(rest) >= 2 and rest[0] == rest[-1] \
-                    and rest[0] in "\"'":
-                rest = rest[1:-1]
-            return re.sub(r"\s+", "", rest)
+        def norm_ref_value(value):
+            rest = re.sub(r"^[>|][-+]?\s*", "", value.strip())
+            return re.sub(r"\s+", "", unquote_value(rest))
 
         ref_values = [
-            norm_ref_value(line.strip())
+            norm_ref_value(map_key_value(line.strip())[1])
             for line in span
-            if re.match(r"^ref:", line.strip())]
+            if map_key_value(line.strip())[0] == "ref"]
         if not ref_values or not all(
                 value == expected_ref for value in ref_values):
             drift.append("trusted-scripts-default-branch")
-        if not any(re.match(r"^persist-credentials:\s*false\s*$",
-                            line.strip()) for line in span):
+        if not any(cred_ok(line) for line in span):
             drift.append("trusted-scripts-credentials")
         if any(is_pr_ref(line) for line in span):
             drift.append("trusted-scripts-pr-ref")
@@ -250,13 +268,13 @@ def audit_trusted_checkout(ctx, drift):
         # forbid repository:: either would otherwise silently
         # re-source the executable tree the token-bearing steps run.
         uses_values = [
-            line.strip()[len("uses:"):].strip()
+            unquote_value(map_key_value(line.strip())[1])
             for line in span
-            if re.match(r"^uses:", line.strip())]
+            if map_key_value(line.strip())[0] == "uses"]
         if not uses_values or not all(
                 value == PINNED_CHECKOUT_USES
                 for value in uses_values):
             drift.append("trusted-scripts-action")
-        if any(re.match(r"^repository:", line.strip())
+        if any(map_key_value(line.strip())[0] == "repository"
                for line in span):
             drift.append("trusted-scripts-repository")

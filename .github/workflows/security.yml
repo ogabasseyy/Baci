@@ -69,6 +69,11 @@ jobs:
               # that tree, so a runner-script change gets semantic SAST
               # at most ~24h after merge. Keep that schedule enabled.
               - '.github/scripts/muse-review/**'
+              # The drift auditor itself (both spellings: the filter
+              # is hyphenated, its modules underscored): auditor
+              # changes must run the job that executes the audit.
+              - '.github/scripts/semgrep-sarif*'
+              - '.github/scripts/semgrep_sarif_*'
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'turbo.json'
@@ -78,9 +83,13 @@ jobs:
             # token use, so no content rule can auto-pass it.
             # Advisory, not blocking (Security is not required):
             # the red X draws merger eyes, the human decides.
+            # Invariant: every trusted_changed path also matches
+            # semgrep_relevant above — otherwise the job that reads
+            # the signal is skipped and the red X never appears.
             trusted_changed:
               - '.github/scripts/muse-review/**'
               - '.github/scripts/semgrep-sarif*'
+              - '.github/scripts/semgrep_sarif_*'
               - '.github/workflows/security.yml'
               - '.github/workflows/muse-code-review.yml'
               - '.github/workflows/muse-review-selftest.yml'
@@ -198,24 +207,49 @@ jobs:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         continue-on-error: true
 
-      # Semgrep honors nosemgrep for its exit code but still emits suppressed
-      # findings into --sarif output, which GitHub code scanning ignores --
-      # the finding stays open as a phantom alert. The filter script repairs
-      # the transport for exactly one audited finding (the reviewed
-      # pull_request_target checkout) after a fail-closed drift audit; any
-      # drift keeps the SARIF unfiltered and fails the job. The audit runs
-      # even with no SARIF (empty scans must not skip it). TRUSTED_CHANGED
+      # The filter below repairs the nosemgrep/SARIF transport gap for
+      # exactly one audited finding after a fail-closed drift audit; any
+      # drift keeps the SARIF unfiltered and fails the job, even with no
+      # SARIF (empty scans must not skip the audit). TRUSTED_CHANGED
       # carries the scope job's trusted-set diff signal (same-repo PRs
-      # only; the job skips forks, where this signal cannot run -- that
-      # gap needs a pull_request_target audit from base, post-merge
-      # follow-up, not more pull_request YAML). Logic and pinned
-      # constants live in .github/scripts/semgrep-sarif-filter.py (with the
-      # semgrep_sarif_* modules); behavior is pinned by
-      # .github/scripts/semgrep-sarif-filter.test.sh, run by the
-      # muse-review-selftest workflow.
+      # only; forks skip this job). Auditor logic lives in
+      # .github/scripts/semgrep-sarif-filter.py (+ semgrep_sarif_*
+      # modules), pinned by semgrep-sarif-filter.test.sh (selftest).
+      # PRs execute the BASE revision of that auditor (checked out
+      # below): the job workspace holds submitter-controlled head
+      # code, so running the head copy would let a PR neuter its own
+      # audit. Push/schedule runs use the workspace copy, which
+      # already is a trusted branch. No fallback: a base without the
+      # auditor fails closed (bootstrap PRs stay red by design).
+      # Fork-PR gap (post-merge follow-up, not more pull_request
+      # YAML): forks skip this job, so they need a base-side audit.
+      - name: Clear base-filter collision
+        if: github.event_name == 'pull_request'
+        run: rm -rf "${GITHUB_WORKSPACE}/base-filter"
+
+      - name: Checkout base filter implementation
+        if: github.event_name == 'pull_request'
+        # Pin to full SHA for supply chain security
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.ref }}
+          path: base-filter
+          fetch-depth: 1
+          sparse-checkout: .github/scripts
+
       - name: Drop audited checkout finding from SARIF
         if: always()
-        run: python3 .github/scripts/semgrep-sarif-filter.py
+        run: |
+          set -euo pipefail
+          filter_dir=.github/scripts
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            filter_dir="${GITHUB_WORKSPACE}/base-filter/.github/scripts"
+            for f in semgrep-sarif-filter.py semgrep_sarif_audit.py semgrep_sarif_consumer.py semgrep_sarif_embeds.py semgrep_sarif_helpers.py semgrep_sarif_interp.py semgrep_sarif_pins.py semgrep_sarif_programs.py semgrep_sarif_runner.py semgrep_sarif_scan.py semgrep_sarif_shell.py semgrep_sarif_steps.py; do
+              [ -f "${filter_dir}/${f}" ] || { echo "::error::base filter copy missing ${f}; failing closed."; exit 1; }
+            done
+          fi
+          python3 "${filter_dir}/semgrep-sarif-filter.py"
         env:
           TRUSTED_CHANGED: ${{ needs.changes.outputs.trusted_changed }}
 
@@ -239,68 +273,6 @@ jobs:
       - name: Fail if Semgrep reported findings
         if: steps.verify-sarif.outputs.sarif_exists == 'true' && (steps.semgrep_pr.outcome == 'failure' || steps.semgrep_push.outcome == 'failure' || steps.semgrep_full.outcome == 'failure')
         run: exit 1
-
-  dependency-review:
-    name: Dependency Review
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    permissions:
-      contents: read
-      pull-requests: write
-
-    steps:
-      - name: Checkout repository
-        # Pin to full SHA for supply chain security
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Dependency Review
-        # Pin to full SHA for supply chain security
-        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v4
-        with:
-          fail-on-severity: high
-          # 2026 best practice: use allow-licenses (deny-licenses is deprecated)
-          # Allow permissive licenses + AGPL for TruffleHog security tool
-          # Added OFL-1.1 for Google Fonts (expo-google-fonts packages)
-          # Added MIT-0 for @csstools packages (MIT-0 is more permissive than MIT)
-          # Added Ruby for Fastlane transitive gems (highline, httpclient, json, concurrent-ruby)
-          allow-licenses: >-
-            MIT, MIT-0, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD,
-            Unlicense, CC0-1.0, WTFPL, Zlib, BlueOak-1.0.0,
-            MPL-2.0, LGPL-2.1-only, LGPL-2.1-or-later,
-            LGPL-3.0-only, LGPL-3.0-or-later,
-            AGPL-3.0-only, AGPL-3.0-or-later,
-            CC-BY-3.0, CC-BY-4.0, Python-2.0, PSF-2.0, Artistic-2.0,
-            OFL-1.1, Ruby
-          # Allow packages with compound/dual licenses or approved source-available tooling.
-          # Sentry CLI uses FSL-1.1-MIT and is required by the official React Native SDK
-          # for native symbol and source-map uploads; keep the exception package-scoped.
-          # nkf (Ruby/BSD-2-Clause, fastlane dep) and rdoc (dual Ruby/GPL-2.0,
-          # fastlane->irb dep, build tooling only) are flagged only because of
-          # scancode compound-expression artifacts; Ruby terms apply to both.
-          allow-dependencies-licenses: >-
-            pkg:gem/nkf,
-            pkg:gem/rdoc,
-            pkg:npm/big-integer,
-            pkg:npm/protobufjs,
-            pkg:npm/unicode-match-property-value-ecmascript,
-            pkg:npm/unicode-property-aliases-ecmascript,
-            pkg:npm/katex,
-            pkg:npm/robust-predicates,
-            pkg:npm/@posthog/react-native-plugin,
-            pkg:npm/@posthog/nextjs-config,
-            pkg:npm/posthog-js,
-            pkg:npm/posthog-node,
-            pkg:npm/@sentry/cli,
-            pkg:npm/@sentry/cli-darwin,
-            pkg:npm/@sentry/cli-linux-arm,
-            pkg:npm/@sentry/cli-linux-arm64,
-            pkg:npm/@sentry/cli-linux-i686,
-            pkg:npm/@sentry/cli-linux-x64,
-            pkg:npm/@sentry/cli-win32-arm64,
-            pkg:npm/@sentry/cli-win32-i686,
-            pkg:npm/@sentry/cli-win32-x64
 
   secrets-scan:
     name: Secret Scanning

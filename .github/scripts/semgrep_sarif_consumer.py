@@ -2,18 +2,36 @@
 interpreter operands, SCRIPT_DIR bindings, and run-block hygiene
 (shell overrides, unpinned actions, substitution/env escapes).
 """
+import os
 import re
+from semgrep_sarif_helpers import (DEFERRED_RE, XTRACE_RE,
+                                   _audit_shell_file,
+                                   invoked_shell_refs)
 from semgrep_sarif_pins import PINNED_CHECKOUT_USES
-from semgrep_sarif_shell import (INTERP_ALLOW, is_step_boundary,
+from semgrep_sarif_programs import (audit_jq_content,
+                                    audit_perl_content)
+from semgrep_sarif_scan import arith_regions
+from semgrep_sarif_shell import (ENV_POISON, INTERP_ALLOW,
+                                 is_step_boundary, map_key_value,
                                  peel_prefix, run_segments,
                                  script_operand, split_commands2,
-                                 step_end, step_start, tokenize,
-                                 unquote)
+                                 step_end, step_start,
+                                 strip_comments, tokenize,
+                                 unquote, unquote_value)
+
+def step_name(line):
+    # Name of a - name: step (quoted spellings included); "" when
+    # the line is not a named-step header.
+    dash = re.match(r"^-\s+(.*)$", line.strip())
+    if not dash:
+        return ""
+    key, val = map_key_value(dash.group(1).strip())
+    return unquote_value(val) if key == "name" else ""
+
 
 def audit_resolver(ctx, drift):
     ctx.resolve = [i for i, line in enumerate(ctx.workflow_lines)
-               if re.match(r"^- name:\s*Resolve script directory\s*$",
-                           line.strip())]
+                   if step_name(line) == "Resolve script directory"]
     if not ctx.resolve:
         drift.append("script-resolution-step-missing")
     else:
@@ -58,8 +76,7 @@ def audit_path_literals(ctx, drift):
     # consumers name no path (they use ${SCRIPT_DIR}).
     tree_ok = set()
     clear = [i for i, line in enumerate(ctx.workflow_lines)
-             if re.match(r"^- name:\s*Clear trusted-scripts collision\s*$",
-                         line.strip())]
+             if step_name(line) == "Clear trusted-scripts collision"]
     if ctx.trusted:
         s = step_start(ctx.workflow_lines, ctx.trusted[0])
         tree_ok.update(range(s, step_end(ctx.workflow_lines, s)))
@@ -116,8 +133,9 @@ def audit_script_dir(ctx, drift):
     # A hardcoded SCRIPT_DIR would launder an untrusted path
     # through check (b).
     for line in ctx.workflow_lines:
-        m = re.match(r"^SCRIPT_DIR:\s*(.+)$", line.strip())
-        if m and re.sub(r"\s+", "", m.group(1)) != \
+        key, val = map_key_value(line.strip())
+        if key == "SCRIPT_DIR" \
+                and re.sub(r"\s+", "", unquote_value(val)) != \
                 ("${{steps.scriptdir.outputs.dir}}") \
                 and "script-dir-rebound" not in drift:
             drift.append("script-dir-rebound")
@@ -125,18 +143,22 @@ def audit_script_dir(ctx, drift):
 
 def audit_run_hygiene(ctx, drift):
     # The whole analyzer assumes bash: a shell: override would
-    # silently invalidate every rule below.
-    if any(re.match(r"^\s*shell:", line) for line in ctx.workflow_lines):
+    # silently invalidate every rule below. Quoted ("shell":)
+    # counts: quotes do not change YAML semantics.
+    if any(map_key_value(line.strip())[0] == "shell"
+           for line in ctx.workflow_lines):
         drift.append("shell-override")
     # Only the two pinned checkouts may run as actions: a third
     # uses: — even pinned — could smuggle execution past the run:
     # rules by checking out attacker data into a trusted path.
+    # Quoted ("uses":) counts too, with quoted values unquoted.
     checkout_uses = 0
     for line in ctx.workflow_lines:
-        m = re.match(r"^uses:\s*(\S+)", line.strip())
-        if not m:
+        key, val = map_key_value(line.strip())
+        if key != "uses":
             continue
-        if m.group(1) != PINNED_CHECKOUT_USES:
+        first = (unquote_value(val).split() or [""])[0]
+        if first != PINNED_CHECKOUT_USES:
             if "reviewer-unpinned-action" not in drift:
                 drift.append("reviewer-unpinned-action")
         else:
@@ -148,20 +170,21 @@ def audit_run_hygiene(ctx, drift):
     # mapping (job or step level) re-sources the audited blocks from
     # outside their pinned spans. Only contiguous env: blocks (and
     # flow mappings) are scanned, so run:-block text cannot FP.
-    poison = ("BASH_ENV", "ENV", "PATH", "LD_PRELOAD",
-              "LD_LIBRARY_PATH", "PYTHONPATH", "NODE_OPTIONS",
-              "RUBYOPT", "PERL5OPT")
+    # The shared poison list (single source of truth) with quoted
+    # keys normalized in both the opener and the block entries.
     idx = 0
     while idx < len(ctx.workflow_lines):
         line = ctx.workflow_lines[idx]
         stripped = line.strip()
-        if re.match(r"^env:\s*\{", stripped):
-            if any(re.search(r"\b%s\s*:" % var, stripped)
-                   for var in poison) \
+        key, val = map_key_value(stripped)
+        if key == "env" and val.startswith("{"):
+            if any(re.search(r"""["']?\b%s\b["']?\s*:""" % var,
+                             stripped)
+                   for var in ENV_POISON) \
                     and "reviewer-env-poison" not in drift:
                 drift.append("reviewer-env-poison")
             idx += 1
-        elif re.match(r"^env:\s*(#|$)", stripped):
+        elif key == "env" and not val:
             base = len(line) - len(line.lstrip(" "))
             idx += 1
             while idx < len(ctx.workflow_lines):
@@ -171,9 +194,7 @@ def audit_run_hygiene(ctx, drift):
                     continue
                 if len(sub) - len(sub.lstrip(" ")) <= base:
                     break
-                key = re.match(r"^([A-Za-z_][A-Za-z0-9_]*):",
-                               sub.strip())
-                if key and key.group(1) in poison \
+                if map_key_value(sub.strip())[0] in ENV_POISON \
                         and "reviewer-env-poison" not in drift:
                     drift.append("reviewer-env-poison")
                 idx += 1
@@ -194,6 +215,20 @@ def audit_run_hygiene(ctx, drift):
         if ("`" in nosq or re.search(r"\$\((?!\()", nosq)) \
                 and "run-body-substitution" not in drift:
             drift.append("run-body-substitution")
+        # Deferred execution: single-quoted text is literal NOW but
+        # bash evaluates it LATER through PS4 (under set -x),
+        # PROMPT_COMMAND, and $((...)) (proven: PWNED). Reject the
+        # binding, the trace switch, and $/backtick in arithmetic.
+        if DEFERRED_RE.search(seg) \
+                and "run-body-deferred-exec" not in drift:
+            drift.append("run-body-deferred-exec")
+        if XTRACE_RE.search(nosq) \
+                and "run-body-xtrace" not in drift:
+            drift.append("run-body-xtrace")
+        if any("$" in body or "`" in body
+               for body in arith_regions(seg)) \
+                and "run-body-arithmetic-sub" not in drift:
+            drift.append("run-body-arithmetic-sub")
         # One-line `function f { evil; }` bodies evade operator
         # splitting (argv0 reads `function`), so definitions of
         # either spelling drift everywhere, not just secret steps.
@@ -201,3 +236,57 @@ def audit_run_hygiene(ctx, drift):
                      r"|[A-Za-z_][A-Za-z0-9_]*\(\)", nosq) \
                 and "run-body-function-def" not in drift:
             drift.append("run-body-function-def")
+
+
+def _read_helper(path, drift):
+    try:
+        with open(path) as fh:
+            return fh.read()
+    except OSError:
+        if "helper-unreadable" not in drift:
+            drift.append("helper-unreadable")
+        return None
+
+
+def audit_helpers(ctx, drift):
+    helper_dir = ".github/scripts/muse-review/"
+    invoked = invoked_shell_refs("\n".join(ctx.code_lines))
+    for name in sorted(invoked):
+        if not os.path.isfile(helper_dir + name) \
+                and "helper-referenced-missing" not in drift:
+            drift.append("helper-referenced-missing")
+    # Enumerate (not just resolve references): an executable the
+    # workflow reaches by another spelling — ranges.pl via perl,
+    # the jq -f programs, or any new format — must audit too.
+    # Unknown formats fail closed so the auditor learns them first.
+    # test.sh is deliberately out of scope: only the tokenless
+    # selftest executes it, and trusted-tree-changed still gates
+    # its changes for human review.
+    try:
+        entries = sorted(os.listdir(helper_dir))
+    except OSError:
+        if "helper-unreadable" not in drift:
+            drift.append("helper-unreadable")
+        return
+    for name in entries:
+        if name == "test.sh" or name.endswith(".json"):
+            # json is data, never executed (post.sh re-validates).
+            continue
+        path = helper_dir + name
+        if not os.path.isfile(path):
+            if "helper-unknown-format" not in drift:
+                drift.append("helper-unknown-format")
+        elif name.endswith(".sh"):
+            _audit_shell_file(path, drift)
+        elif name.endswith((".pl", ".jq")):
+            text = _read_helper(path, drift)
+            if text is None:
+                continue
+            if name.endswith(".pl"):
+                text = "\n".join(strip_comments(line)
+                                 for line in text.splitlines())
+                audit_perl_content(text, drift)
+            else:
+                audit_jq_content(text, drift)
+        elif "helper-unknown-format" not in drift:
+            drift.append("helper-unknown-format")

@@ -13,6 +13,8 @@ on:
       - '.github/scripts/muse-review/**'
       - '.github/scripts/semgrep-sarif-filter*'
       - '.github/scripts/semgrep_sarif_*.py'
+      - '.github/scripts/semgrep-sarif-test-lib.sh'
+      - '.github/scripts/semgrep-sarif-hardening.test.sh'
       - '.github/workflows/muse-code-review.yml'
       - '.github/workflows/muse-review-selftest.yml'
   pull_request:
@@ -20,6 +22,8 @@ on:
       - '.github/scripts/muse-review/**'
       - '.github/scripts/semgrep-sarif-filter*'
       - '.github/scripts/semgrep_sarif_*.py'
+      - '.github/scripts/semgrep-sarif-test-lib.sh'
+      - '.github/scripts/semgrep-sarif-hardening.test.sh'
       - '.github/workflows/muse-code-review.yml'
       - '.github/workflows/muse-review-selftest.yml'
   schedule:
@@ -47,6 +51,7 @@ jobs:
           set -euo pipefail
           python3 -m py_compile .github/scripts/semgrep-sarif-filter.py .github/scripts/semgrep_sarif_*.py
           bash .github/scripts/semgrep-sarif-filter.test.sh
+          bash .github/scripts/semgrep-sarif-hardening.test.sh
 
       - name: Shell syntax
         run: |

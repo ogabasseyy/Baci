@@ -3,13 +3,15 @@ confinement, PATH-family hijack rejection, and the no-token-
 expression rule for the agent step and job environment.
 """
 import re
+from semgrep_sarif_consumer import step_name
 from semgrep_sarif_scan import (is_trusted_write_target,
                                     redirect_targets)
 from semgrep_sarif_shell import (ENV_POISON, SHELL_KEYWORDS,
                                  STRICT_ALLOW, is_step_boundary,
-                                 peel_prefix, run_segments,
-                                 split_commands2, step_end,
-                                 tokenize, unquote)
+                                 map_key_value, peel_prefix,
+                                 run_segments, split_commands2,
+                                 step_end, strip_comments,
+                                 tokenize, unquote, unquote_value)
 
 def audit_step_commands(ctx, drift):
 
@@ -48,10 +50,8 @@ def audit_step_commands(ctx, drift):
               if is_step_boundary(line)] + [len(ctx.workflow_lines)]
     for k in range(len(bounds) - 1):
         span = ctx.workflow_lines[bounds[k]:bounds[k + 1]]
-        name_m = re.match(r"^\s*-\s*name:\s*(.+)$",
-                          span[0].strip())
-        step_name = name_m.group(1).strip() if name_m else ""
-        strict = step_name == "Install Muse Code" or any(
+        name = step_name(span[0])
+        strict = name == "Install Muse Code" or any(
             secret_ref.search(line) for line in span)
         allowed = STRICT_ALLOW if strict else LOOSE_ALLOW
         for seg in run_segments(span):
@@ -147,25 +147,40 @@ def audit_agent_env(ctx, drift):
     # The runner scrubs only the two conventional token variable
     # names: a token passed to the agent step under another key (or
     # via job-level env, which the step inherits) would survive into
-    # the third-party process. Forbid token expressions in both.
+    # the third-party process. Forbid token expressions in the agent
+    # step, in EVERY step that invokes the runner (a second step
+    # with an aliased token is the same hole), and in job env.
     token_expr = re.compile(
         r"secrets\s*\.\s*github_token\b|github\s*\.\s*token\b",
         re.IGNORECASE)
     agent_step = [i for i, line in enumerate(ctx.workflow_lines)
-                  if re.match(r"^- name:\s*Run Muse review\s*$",
-                              line.strip())]
+                  if step_name(line) == "Run Muse review"]
     agent_span = []
     if agent_step:
         s = agent_step[0]
         agent_span = ctx.workflow_lines[s:step_end(ctx.workflow_lines, s)]
     else:
         drift.append("agent-step-missing")
+    bounds = [i for i, line in enumerate(ctx.workflow_lines)
+              if is_step_boundary(line)] + [len(ctx.workflow_lines)]
+    for k in range(len(bounds) - 1):
+        span = ctx.workflow_lines[bounds[k]:bounds[k + 1]]
+        code = "\n".join(strip_comments(seg)
+                         for seg in run_segments(span))
+        # Consumer: run-block CODE invoking run.sh (comments
+        # stripped, so a "see run.sh" note cannot misfire, and an
+        # unbound ./run.sh is already caught elsewhere).
+        if "run.sh" in code and bounds[k] not in agent_step:
+            agent_span = agent_span + span
     job_env = []
     in_env = False
     for line in ctx.code_lines:
         # Job-level env: is 4-space (jobs.<name>.env); step-level
-        # is 8-space and must not start a job-env region.
-        if re.match(r"^    env:\s*$", line):
+        # is 8-space and must not start a job-env region. Quoted
+        # ("env":) opens a region too.
+        indented = len(line) - len(line.lstrip(" ")) == 4
+        key, val = map_key_value(line.strip()) if indented else (None, None)
+        if key == "env" and not val:
             in_env = True
         elif re.match(r"^  \S|^    \S", line):
             in_env = False

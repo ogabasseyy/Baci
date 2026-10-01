@@ -6,8 +6,35 @@ import re
 from semgrep_sarif_embeds import _check_awk, _check_perl
 from semgrep_sarif_pins import (RUNNER_PIN, SCRIPT_PIN,
                                 _safe_exec_path, _ws_rooted)
+from semgrep_sarif_programs import jq_program_has_env
 from semgrep_sarif_shell import (ENV_POISON, peel_prefix,
                                  script_operand)
+
+
+def _jq_program(rest):
+    # Inline jq program (first non-flag token), or None in -f file
+    # mode / flag-only argv. Value flags consume theirs (--arg=x
+    # still takes its value next); -L is rejected by the caller.
+    vals2 = {"--arg", "--argjson", "--slurpfile", "--rawfile"}
+    vals2_eq = tuple(v + "=" for v in vals2)
+    i = 0
+    while i < len(rest):
+        tok = rest[i]
+        if tok in ("-f", "--from-file") \
+                or tok.startswith("--from-file=") \
+                or tok.startswith("-f") and len(tok) > 2:
+            return None
+        if tok == "--":
+            return rest[i + 1] if i + 1 < len(rest) else None
+        if tok in vals2:
+            i += 3
+        elif tok.startswith(vals2_eq):
+            i += 2
+        elif tok.startswith("-") and len(tok) > 1:
+            i += 1
+        else:
+            return tok
+    return None
 
 
 def _check_command(argv0, rest, pre, drift):
@@ -41,10 +68,36 @@ def _check_command(argv0, rest, pre, drift):
                 target = rest[i + 1]
             elif tok.startswith("--from-file="):
                 target = tok[len("--from-file="):]
+            elif tok.startswith("-f") and len(tok) > 2:
+                target = tok[2:]
             if target is not None \
                     and not re.match(SCRIPT_PIN, target) \
                     and "helper-untrusted-exec" not in drift:
                 drift.append("helper-untrusted-exec")
+                break
+        # -L sources unpinned module dirs (none used today); the
+        # inline program scans for env access like -f files do.
+        if any(tok in ("-L", "--library-path")
+               or tok.startswith("--library-path=")
+               or re.fullmatch(r"-[a-zA-Z]*L[a-zA-Z]*", tok)
+               for tok in rest) \
+                and "helper-jq-env" not in drift:
+            drift.append("helper-jq-env")
+        prog = _jq_program(rest)
+        if prog is not None and jq_program_has_env(prog) \
+                and "helper-jq-env" not in drift:
+            drift.append("helper-jq-env")
+    elif base == "gh":
+        # gh --jq programs are jq: scan the value, not the API path.
+        for i, tok in enumerate(rest):
+            prog = None
+            if tok == "--jq" and i + 1 < len(rest):
+                prog = rest[i + 1]
+            elif tok.startswith("--jq="):
+                prog = tok[len("--jq="):]
+            if prog is not None and jq_program_has_env(prog) \
+                    and "helper-jq-env" not in drift:
+                drift.append("helper-jq-env")
                 break
     elif base == "awk":
         _check_awk(rest, drift)

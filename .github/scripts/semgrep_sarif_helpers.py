@@ -10,12 +10,28 @@ import re
 from semgrep_sarif_interp import (_check_command,
                                    _check_poison_assign)
 from semgrep_sarif_pins import _is_home_write
-from semgrep_sarif_scan import (extract_subshells,
+from semgrep_sarif_scan import (arith_regions, extract_subshells,
                                 is_trusted_write_target,
                                 redirect_targets, skip_braced)
 from semgrep_sarif_shell import (SHELL_KEYWORDS, logical_lines,
                                  peel_prefix, split_commands2,
                                  tokenize, unquote)
+
+DEFERRED_RE = re.compile(
+    r"(?:^|[;&|])\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*"
+    r"(?:(?:export|local|readonly|declare|typeset)\s+"
+    r"(?:-\S+\s+)*)?"
+    r"(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*"
+    r"(PS4|PROMPT_COMMAND)\s*="
+    r"|(?:^|[;&|])\s*printf\s+(?:--\s+)?-v\s*"
+    r"(PS4|PROMPT_COMMAND)\b")
+XTRACE_RE = re.compile(
+    r"\bset\s+-[A-Za-z]*x|\bset\s+-o\s+xtrace\b"
+    r"|\b(?:bash|sh)\s+-[A-Za-z]*x")
+BARE_POISON_RE = re.compile(
+    r"(?:^|[;&|])\s*PATH\s*=[^=]"
+    r"|(?:^|[;&|])\s*IFS\s*=(?![^;\s]*\s+"
+    r"(?:command\s+|builtin\s+)?read\b)[^=]")
 
 
 CARRY_VARS = ("HOME", "GITHUB_WORKSPACE", "RUNNER_TEMP",
@@ -186,6 +202,22 @@ def _audit_line(line, drift):
     cleaned, inners = extract_subshells(line)
     for inner in inners:
         _audit_line(inner, drift)
+    if DEFERRED_RE.search(line) \
+            and "helper-deferred-exec" not in drift:
+        drift.append("helper-deferred-exec")
+    nosq = re.sub(r"'[^']*'", "''", cleaned)
+    if XTRACE_RE.search(nosq) \
+            and "helper-xtrace" not in drift:
+        drift.append("helper-xtrace")
+    # Arithmetic scans the raw line: extraction above rewrites $(( as
+    # $( and would blind this rule to its own construct.
+    if any("$" in body or "`" in body
+           for body in arith_regions(line)) \
+            and "helper-arithmetic-sub" not in drift:
+        drift.append("helper-arithmetic-sub")
+    if BARE_POISON_RE.search(line) \
+            and "helper-env-poison" not in drift:
+        drift.append("helper-env-poison")
     for tgt in redirect_targets(cleaned):
         if is_trusted_write_target(tgt) \
                 and "helper-trusted-write" not in drift:
@@ -212,8 +244,21 @@ def _audit_line(line, drift):
         _check_command(argv0, list(rest), list(pre), drift)
 
 
-def audit_helpers(ctx, drift):
-    raw = "\n".join(ctx.code_lines)
+def _audit_shell_file(path, drift):
+    try:
+        with open(path) as fh:
+            raw = fh.read().splitlines()
+    except OSError:
+        drift.append("helper-unreadable")
+        return
+    varmap = _collect_vars(raw)
+    for line in logical_lines(_strip_heredocs(raw)):
+        _audit_line(_resolve(line, varmap), drift)
+
+
+def invoked_shell_refs(raw):
+    # .sh names the workflow routes via ${SCRIPT_DIR} (plus lib.sh,
+    # sourced by every helper): referenced-but-missing drifts.
     invoked = set(re.findall(
         r"\$\{SCRIPT_DIR\}/([\w][\w.-]*\.sh)", raw))
     compact = re.sub(r"\s+", "", raw)
@@ -221,19 +266,7 @@ def audit_helpers(ctx, drift):
         r"steps\.scriptdir\.outputs\.dir\}\}/"
         r"([\w][\w.-]*\.sh)", compact))
     invoked.add("lib.sh")
-    # test.sh is deliberately out of scope: only the tokenless
-    # selftest executes it, and trusted-tree-changed still gates
-    # its changes for human review.
-    for name in sorted(invoked):
-        try:
-            with open(".github/scripts/muse-review/"
-                      + name) as fh:
-                raw = fh.read().splitlines()
-        except OSError:
-            continue
-        varmap = _collect_vars(raw)
-        for line in logical_lines(_strip_heredocs(raw)):
-            _audit_line(_resolve(line, varmap), drift)
+    return invoked
 
 
 def audit_trusted_changed(drift):

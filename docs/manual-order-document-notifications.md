@@ -66,16 +66,23 @@ customers to verify their purchase email address and retry the same link.
 
 ## Activation
 
-Release the matching, backwards-compatible web worker strictly first, then
-apply the new append-only migrations to activate the triggers, with no
-mixed-version consumers draining the queue. Old revisions 500 the whole
-claimed batch (including unrelated shipped/delivered rows, which then wait
-for lease expiry) when a batch contains a manual event type, so migration
-before worker head-of-line-blocks shipping notifications. Drain outbox
-batches with the new code only: old workers do not understand the manual
-document event types. Watch the cron 5xx rate and outbox lock age while the
-new worker rolls out; any `manual_order_*` 500 means an old revision is still
-draining, so hold further deploys until the batches clear. No new email provider,
+The enqueue triggers ship DISABLED, so migrations and the web worker can
+roll out in either order: no manual rows exist until the triggers are
+enabled. After the new worker is deployed and verified draining batches
+with no 5xx, enable the triggers (or ship a follow-up migration that does):
+
+```sql
+ALTER TABLE public.order_items ENABLE TRIGGER enqueue_manual_documents_after_items;
+ALTER TABLE public.orders ENABLE TRIGGER enqueue_manual_document_after_order_update;
+```
+
+Enabling while an old worker revision is still live head-of-line-blocks
+shipping notifications: old revisions 500 the whole claimed batch
+(including unrelated shipped/delivered rows, which then wait for lease
+expiry) when a batch contains a manual event type. Drain outbox batches
+with the new code only. Watch the cron 5xx rate and outbox lock age while
+the new worker rolls out; any `manual_order_*` 500 means an old revision is
+still draining, so hold further deploys until the batches clear. No new email provider,
 cron schedule, app release or environment variable is required. Use a disposable
 staging merchant and test inbox to verify actual provider acceptance, PDF rendering,
 verified sign-in and account receipt access before a production release. No live

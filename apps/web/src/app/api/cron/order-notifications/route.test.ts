@@ -169,6 +169,95 @@ describe('GET /api/cron/order-notifications', () => {
     expect(sendOrderFulfillmentNotification).toHaveBeenCalledTimes(1);
   });
 
+  it('dead-letters corrupt rows that exhaust max attempts instead of looping', async () => {
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: [
+        {
+          attempt_count: 5,
+          event_type: 123,
+          id: 'outbox-corrupt',
+          max_attempts: 5,
+        },
+      ],
+      error: null,
+    });
+
+    const response = await GET(cronRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      claimed: 1,
+      skipped: 1,
+      success: true,
+      unparseable: 1,
+    });
+    const updateBuilder = mockSupabase.from.mock.results[0]?.value;
+    expect(mockSupabase.from).toHaveBeenCalledWith('order_notification_outbox');
+    expect(updateBuilder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skip_reason: 'unparseable',
+        status: 'skipped',
+      })
+    );
+    expect(updateBuilder.match).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'outbox-corrupt',
+        status: 'processing',
+      })
+    );
+  });
+
+  it('leaves corrupt rows for lease expiry before max attempts', async () => {
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: [
+        {
+          attempt_count: 1,
+          event_type: 123,
+          id: 'outbox-corrupt-early',
+          max_attempts: 5,
+        },
+      ],
+      error: null,
+    });
+
+    const response = await GET(cronRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      claimed: 1,
+      skipped: 0,
+      unparseable: 1,
+    });
+    expect(mockSupabase.from).not.toHaveBeenCalled();
+  });
+
+  it('never dead-letters exhausted rows with a valid future event type', async () => {
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: [
+        {
+          attempt_count: 9,
+          event_type: 'order_cancelled',
+          id: 'outbox-future',
+          max_attempts: 5,
+        },
+      ],
+      error: null,
+    });
+
+    const response = await GET(cronRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      claimed: 1,
+      skipped: 0,
+      unparseable: 1,
+    });
+    expect(mockSupabase.from).not.toHaveBeenCalled();
+  });
+
   it('claims due notifications and marks sent/skipped outcomes without blocking fulfillment', async () => {
     const response = await GET(cronRequest());
     const body = await response.json();

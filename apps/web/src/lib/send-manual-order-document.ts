@@ -71,8 +71,19 @@ export async function sendManualOrderDocument({
     throw new Error('Manual document data unavailable');
   if (!orderResult.data || !merchantResult.data)
     return { status: 'skipped', reason: 'order_or_merchant_missing' };
-  const order = manualDocumentOrderSchema.parse(orderResult.data);
-  const merchant = manualDocumentMerchantSchema.parse(merchantResult.data);
+  // Deterministic shape failures skip (re-armable by a later trigger) instead
+  // of throwing into max_attempts retries; only transient fetch errors above
+  // and RPC failures below keep throw/retry.
+  const orderParsed = manualDocumentOrderSchema.safeParse(orderResult.data);
+  if (!orderParsed.success)
+    return { status: 'skipped', reason: 'order_validation_failed' };
+  const merchantParsed = manualDocumentMerchantSchema.safeParse(
+    merchantResult.data
+  );
+  if (!merchantParsed.success)
+    return { status: 'skipped', reason: 'merchant_validation_failed' };
+  const order = orderParsed.data;
+  const merchant = merchantParsed.data;
   if (
     order.merchant_id !== row.merchant_id ||
     merchant.id !== row.merchant_id ||
@@ -158,7 +169,10 @@ export async function sendManualOrderDocument({
     }
   );
   if (error) throw new Error('Could not prepare manual document access');
-  const prepared = manualDocumentClaimSchema.parse(data);
+  const preparedParsed = manualDocumentClaimSchema.safeParse(data);
+  if (!preparedParsed.success)
+    return { status: 'skipped', reason: 'claim_validation_failed' };
+  const prepared = preparedParsed.data;
   if (prepared.status !== 'created')
     return { status: 'skipped', reason: 'document_claim_unavailable' };
   assertManualDocumentClaimMatchesOrder(prepared, order, recipient.email);

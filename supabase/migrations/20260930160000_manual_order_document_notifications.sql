@@ -109,6 +109,14 @@ CREATE TRIGGER enqueue_manual_document_after_order_update
   AFTER UPDATE OF payment_status, amount_paid, total, customer_email, customer_id, recorded_by_user_id, import_job_id, external_source, shipping_status ON public.orders
   FOR EACH ROW EXECUTE FUNCTION private.enqueue_manual_document_after_order_update();
 
+-- Ship disabled: enabling in the same migration would let rows enqueue while
+-- an older cron binary (whole-batch parse) is still live, stalling the queue
+-- with 500s. Enable only after the new worker is deployed and verified (see
+-- docs/manual-order-document-notifications.md "Activation"), or via a
+-- follow-up migration; until then no manual rows are produced.
+ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_items;
+ALTER TABLE public.orders DISABLE TRIGGER enqueue_manual_document_after_order_update;
+
 -- Revoke explicitly, including installations with older authenticated grants.
 REVOKE ALL ON FUNCTION public.claim_order_notification_outbox(integer, text)
   FROM PUBLIC, anon, authenticated;
@@ -143,17 +151,23 @@ BEGIN
   IF p_token_hash IS NULL OR p_token_hash !~ '^[a-f0-9]{64}$' THEN
     RETURN jsonb_build_object('status', 'skipped');
   END IF;
+  -- Lock the order before the outbox, matching the order-update trigger path
+  -- (which holds the order row while enqueue waits on the outbox): the reverse
+  -- order deadlocks against concurrent staff edits. The merchant scoping is
+  -- revalidated after both locks are held because the outbox row is unread yet.
+  SELECT o.* INTO v_order FROM public.orders AS o
+  WHERE o.id = (SELECT n.order_id FROM public.order_notification_outbox AS n WHERE n.id = p_outbox_id)
+  FOR SHARE;
   SELECT n.* INTO v_notification FROM public.order_notification_outbox AS n
   WHERE n.id = p_outbox_id AND n.status = 'processing'
     AND n.locked_by = p_claim_owner AND n.dispatch_started_at IS NULL
     AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
   FOR UPDATE;
   IF NOT FOUND THEN RETURN jsonb_build_object('status', 'skipped'); END IF;
-
-  SELECT o.* INTO v_order FROM public.orders AS o
-  WHERE o.id = v_notification.order_id AND o.merchant_id = v_notification.merchant_id
-  FOR SHARE;
-  IF NOT FOUND OR NOT v_order.manual_document_notification_eligible
+  IF v_order IS NULL OR v_order.merchant_id IS DISTINCT FROM v_notification.merchant_id THEN
+    RETURN jsonb_build_object('status', 'skipped');
+  END IF;
+  IF NOT v_order.manual_document_notification_eligible
     OR v_order.recorded_by_user_id IS NULL
     OR v_order.import_job_id IS NOT NULL OR v_order.external_source IS NOT NULL
     OR COALESCE(btrim(v_order.customer_email), '') = ''

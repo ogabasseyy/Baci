@@ -1,5 +1,10 @@
 BEGIN;
 CREATE FUNCTION pg_temp.assert_true(ok boolean, label text) RETURNS void LANGUAGE plpgsql AS $$ BEGIN IF ok IS DISTINCT FROM true THEN RAISE EXCEPTION 'FAIL: %', label; END IF; END $$;
+-- The enqueue triggers ship disabled so rows cannot enqueue while an older
+-- cron binary is live; the enable step below mirrors the documented rollout.
+SELECT pg_temp.assert_true((SELECT count(*) = 2 FROM pg_trigger WHERE tgname IN ('enqueue_manual_documents_after_items', 'enqueue_manual_document_after_order_update') AND tgenabled = 'D'), 'enqueue triggers ship disabled');
+ALTER TABLE public.order_items ENABLE TRIGGER enqueue_manual_documents_after_items;
+ALTER TABLE public.orders ENABLE TRIGGER enqueue_manual_document_after_order_update;
 INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, customer_name, order_number, payment_status, amount_paid)
 VALUES ('10000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'Buyer', 'PAID', 'paid', 100);
 SELECT pg_temp.assert_true((SELECT count(*) = 0 FROM public.order_notification_outbox), 'no email before items are saved');

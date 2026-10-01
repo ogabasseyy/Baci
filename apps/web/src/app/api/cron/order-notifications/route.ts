@@ -13,6 +13,67 @@ import {
 } from './order-notification-outbox-worker';
 
 export const maxDuration = 60;
+
+// Dead-letters only structurally corrupt claimed rows: a missing or
+// non-string event type can never parse under any producer version, so after
+// max_attempts observations the row is terminalized instead of looping on the
+// lease forever. Rows with an unknown-but-valid event type belong to a newer
+// producer and must keep looping until a worker that understands them
+// deploys; terminalizing those would silently drop deliverable rows.
+async function deadLetterCorruptOutboxRow(
+  supabase: ReturnType<typeof createServiceClient>,
+  workerId: string,
+  row: unknown
+): Promise<boolean> {
+  if (typeof row !== 'object' || row === null) return false;
+  const raw = row as Record<string, unknown>;
+  if (typeof raw.id !== 'string' || raw.id.length === 0) return false;
+  if (typeof raw.event_type === 'string' && raw.event_type.length > 0)
+    return false;
+  const attempts = raw.attempt_count;
+  const maxAttempts = raw.max_attempts;
+  if (
+    typeof attempts !== 'number' ||
+    typeof maxAttempts !== 'number' ||
+    !Number.isFinite(attempts) ||
+    !Number.isFinite(maxAttempts) ||
+    attempts < maxAttempts
+  ) {
+    return false;
+  }
+  try {
+    const { data, error } = await supabase
+      .from('order_notification_outbox')
+      .update({
+        last_error: 'unparseable_outbox_row',
+        locked_at: null,
+        locked_by: null,
+        skip_reason: 'unparseable',
+        skipped_at: new Date().toISOString(),
+        status: 'skipped',
+        updated_at: new Date().toISOString(),
+      })
+      .match({ id: raw.id, locked_by: workerId, status: 'processing' })
+      .select('id')
+      .maybeSingle();
+    if (error || data?.id !== raw.id) {
+      throw error ?? new Error('dead-letter claim was lost');
+    }
+    logger.error({
+      message: 'Dead-lettered unparseable outbox row',
+      rowId: raw.id,
+    });
+    return true;
+  } catch (error) {
+    logger.error({
+      message: 'Failed to dead-letter unparseable outbox row',
+      rowId: raw.id,
+      error,
+    });
+    return false;
+  }
+}
+
 const DEFAULT_BATCH_SIZE = 1;
 const MAX_BATCH_SIZE = 10;
 const batchSizeSchema = createCronBatchSizeSchema({
@@ -67,7 +128,8 @@ export async function GET(request: Request) {
   // Parse each claimed row individually: one unknown event type (a newer
   // producer, a future migration) must not fail the whole batch and stall
   // unrelated notifications until lease expiry. Unparseable rows stay
-  // locked and return to pending when the lease expires.
+  // locked and return to pending when the lease expires, except corrupt rows
+  // that exhaust max_attempts (see deadLetterCorruptOutboxRow).
   // claimed counts the DB-claimed batch, and unparseable counts the rows
   // skipped below, so dashboards can alert on lease-held rows the other
   // outcome counters never mention; each skipped row is also logged by id.
@@ -80,6 +142,10 @@ export async function GET(request: Request) {
       continue;
     }
     summary.unparseable += 1;
+    if (await deadLetterCorruptOutboxRow(supabase, workerId, row)) {
+      summary.skipped += 1;
+      continue;
+    }
     logger.error({
       message: 'Skipping unparseable claimed outbox row',
       rowId:

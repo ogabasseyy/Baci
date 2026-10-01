@@ -71,11 +71,13 @@ CREATE TRIGGER enqueue_manual_documents_after_items
 CREATE OR REPLACE FUNCTION private.enqueue_manual_document_after_order_update()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
-  -- Payment progress and late customer-contact corrections both re-evaluate
-  -- eligibility; an order created without an email/customer still sends once
-  -- staff fix the contact details.
+  -- Payment progress, total corrections, and late customer-contact
+  -- corrections all re-evaluate eligibility; an order created without an
+  -- email/customer still sends once staff fix the contact details, and a
+  -- touched total re-queues a document that a correction invalidated.
   IF NEW.payment_status IS DISTINCT FROM OLD.payment_status
     OR NEW.amount_paid IS DISTINCT FROM OLD.amount_paid
+    OR NEW.total IS DISTINCT FROM OLD.total
     OR NEW.customer_email IS DISTINCT FROM OLD.customer_email
     OR NEW.customer_id IS DISTINCT FROM OLD.customer_id THEN
     PERFORM private.enqueue_manual_order_document(NEW.id);
@@ -86,7 +88,7 @@ $$;
 REVOKE ALL ON FUNCTION private.enqueue_manual_document_after_order_update()
   FROM PUBLIC, anon, authenticated;
 CREATE TRIGGER enqueue_manual_document_after_order_update
-  AFTER UPDATE OF payment_status, amount_paid, customer_email, customer_id ON public.orders
+  AFTER UPDATE OF payment_status, amount_paid, total, customer_email, customer_id ON public.orders
   FOR EACH ROW EXECUTE FUNCTION private.enqueue_manual_document_after_order_update();
 
 -- Revoke explicitly, including installations with older authenticated grants.

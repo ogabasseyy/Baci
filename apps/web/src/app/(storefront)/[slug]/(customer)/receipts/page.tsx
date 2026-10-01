@@ -11,6 +11,7 @@ import {
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import { isArchiveOrder } from '@/app/(storefront)/[slug]/(customer)/receipts/archive-order-filter';
 import { loadArchiveOrders } from '@/app/(storefront)/[slug]/(customer)/receipts/load-archive-orders';
 import { ReceiptsStateCard } from '@/app/(storefront)/[slug]/(customer)/receipts/receipts-state-card';
 import { OgabasseyV2Receipts } from '@/components/storefront/ogabassey/pages/receipts';
@@ -22,10 +23,8 @@ import { useCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchant } from '@/hooks/use-merchant-client';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
 import { asRoute } from '@/lib/routes';
-import { normalizeShippingStatus } from '@/lib/storefront-account-document-data';
 import type { StorefrontOrder } from '@/types/storefront-order';
 
-const ARCHIVE_STATUSES = new Set(['shipped', 'delivered']);
 const ARCHIVE_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
   month: 'short',
@@ -179,14 +178,7 @@ function StandardReceiptsPage({
     };
   }, [merchantSlug]);
 
-  const archiveOrders = orders.filter(
-    (order) =>
-      Boolean(order.receipt_eligible) ||
-      Boolean(order.manual_document_available) ||
-      ARCHIVE_STATUSES.has(normalizeShippingStatus(order.shipping_status)) ||
-      order.payment_method === 'invoice' ||
-      order.paymentMethod === 'invoice'
-  );
+  const archiveOrders = orders.filter(isArchiveOrder);
 
   const query = searchQuery.trim().toLowerCase();
   const filteredOrders = query

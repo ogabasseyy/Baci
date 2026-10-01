@@ -18,6 +18,26 @@ lost after dispatch, accepted send with failed marker persistence or stale
 dispatched lease is terminalized as `delivery_outcome_unknown`, not automatically
 resent. A provider `client_reference` is an audit correlation, not an idempotency key.
 
+## Corrections and resend
+
+At most one invoice and one receipt row exist per order, and a claim token never
+rotates after its send marker is set, so correcting the recipient after a
+successful send does not automatically resend. Staff resend is deliberate:
+
+1. Correct the order contact (`customer_email`/`customer_id`) on the order row.
+2. Delete the sent `order_notification_outbox` row; the claim, its order links,
+   and the dead claim URL cascade with it.
+3. Touch a monitored column (`total`, `amount_paid`, `payment_status`,
+   `customer_email`, or `customer_id`) so the update trigger re-evaluates and
+   queues a fresh row with a new claim token for the corrected address.
+
+Total corrections alone also re-evaluate eligibility; a paid order whose total
+now exceeds its payments additionally needs a consistent `payment_status`
+(which itself re-triggers) before the matching document queues. Redemption of
+a manual claim requires verified sign-in as the recipient the document was
+sent to; unlike import claims it does not require the `customers` row to
+agree, because the document already arrived as an email attachment.
+
 ## Local verification
 
 With PostgreSQL tools on PATH, run:

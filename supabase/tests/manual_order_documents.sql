@@ -121,4 +121,29 @@ WHERE order_id = '10000000-0000-4000-8000-000000000003';
 SELECT * FROM public.claim_order_notification_outbox(10, 'next-worker');
 SELECT pg_temp.assert_true((SELECT status = 'skipped' AND skip_reason = 'delivery_outcome_unknown'
   FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000003'), 'stale dispatched document never resends');
+
+-- A total correction alone re-evaluates eligibility and re-queues a missing row.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000011', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'unpaid', 0);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000011', 'Device', 1, 100);
+SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000011' AND event_type = 'manual_order_invoice'), 'unpaid order queues invoice');
+DELETE FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000011';
+UPDATE public.orders SET total = 250 WHERE id = '10000000-0000-4000-8000-000000000011';
+SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000011' AND event_type = 'manual_order_invoice'), 'total correction re-queues the missing invoice');
+
+-- A stale customers row does not strand a manual claim: the document went to
+-- the order email as an attachment, so verified sign-in as that recipient
+-- redeems even when the customer record disagrees. Import claims stay strict.
+INSERT INTO public.customers (id, merchant_id, email) VALUES ('10000000-0000-4000-8000-000000000012', '10000000-0000-4000-8000-000000000001', 'stale@example.com');
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000013', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000012', '10000000-0000-4000-8000-000000000010', 'fresh@example.com', 'paid', 100);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000013', 'Device', 1, 100);
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000013' AND event_type = 'manual_order_receipt';
+SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000013' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('f', 64))->>'status' = 'created'), 'manual claim created despite stale customers row');
+INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000031', 'fresh@example.com', now(), null);
+SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000031', true);
+SELECT set_config('request.jwt.claims', '{"email":"fresh@example.com"}', true);
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('f',64), 'web')->>'status' = 'ok', 'verified corrected recipient redeems manual claim');
+RESET ROLE;
 ROLLBACK;

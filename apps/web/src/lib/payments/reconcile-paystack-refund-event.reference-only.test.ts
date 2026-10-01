@@ -55,6 +55,44 @@ describe('Paystack reference-only refund events', () => {
     );
   });
 
+  it('preserves the failed verdict in the reference-only review', async () => {
+    const review = buildReviewInsert();
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(buildPaymentCandidates([cancelledPaymentRow()]))
+      .mockReturnValueOnce(buildRefundCandidates([]))
+      .mockReturnValueOnce(buildSettledCandidates([]))
+      .mockReturnValueOnce(
+        buildSettledCandidates([
+          { amount: 100, gateway: 'paystack' },
+          { amount: 50, gateway: 'korapay' },
+        ])
+      )
+      .mockReturnValueOnce(review);
+    const rpc = vi.fn();
+
+    await reconcilePaystackRefundEvent(
+      { from, rpc } as never,
+      'PSK-1',
+      'failed'
+    );
+
+    // A definitively failed provider refund moved no money: the nested
+    // verdict lets audit blocking exclude this leg instead of
+    // stranding a later genuine cancellation behind delivery_uncertain.
+    expect(review.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          refund_evidence: {
+            'reference:PSK-1': expect.objectContaining({
+              provider_refund_status: 'failed',
+            }),
+          },
+        }),
+      })
+    );
+  });
+
   it('paginates past the first page of payments sharing a reference', async () => {
     // Orderless rows stay silent (nothing to file against); active
     // orders now file non-cancellation evidence instead of skipping.

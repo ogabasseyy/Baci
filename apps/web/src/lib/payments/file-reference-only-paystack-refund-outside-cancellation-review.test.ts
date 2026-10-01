@@ -17,6 +17,7 @@ function input(overrides = {}) {
     orderNumber: 'ORD-1',
     paymentId: 'pay-1',
     paymentReference: 'PSK-1',
+    providerRefundStatus: 'failed',
     ...overrides,
   };
 }
@@ -67,6 +68,13 @@ describe('fileReferenceOnlyPaystackRefundOutsideCancellationReview', () => {
         paystack_ref: null,
         metadata: expect.objectContaining({
           reference_only_refund_event: true,
+          refund_evidence: {
+            'payment:pay-1': expect.objectContaining({
+              audit_record_failed: true,
+              payment_transaction_id: 'pay-1',
+              provider_refund_status: 'failed',
+            }),
+          },
         }),
         reason: expect.stringContaining('PSK-1'),
       })
@@ -125,6 +133,9 @@ describe('fileReferenceOnlyPaystackRefundOutsideCancellationReview', () => {
         p_merchant_id: 'merchant-1',
         p_evidence_key: 'payment:pay-1',
         p_evidence: expect.objectContaining({
+          audit_record_failed: true,
+          payment_transaction_id: 'pay-1',
+          provider_refund_status: 'failed',
           reference_only_refund_event: true,
         }),
       })

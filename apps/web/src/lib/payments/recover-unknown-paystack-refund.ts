@@ -118,6 +118,18 @@ export async function recoverUnknownPaystackRefund(
       return;
     }
     if (candidates.length !== 1 || !payment || !payment.order_id) {
+      if (pass > 0) {
+        // Stable empty: the first completed scan and the stalled scan
+        // were both empty, and the confirming completed scan below
+        // rechecked after the stalled flow. Acknowledge with no
+        // further I/O — ending the handoff on the completed scan is
+        // the point: a payment completing during the stalled scan is
+        // caught by the recheck, and no completion can slip into a
+        // gap after the final scan except the return itself. Never
+        // re-run the stalled scan here: its queries would reopen a
+        // completion window the confirming scan just closed.
+        return;
+      }
       // No completed local payment: a stale pending attempt may already
       // have captured and been refunded before the sweep examined it.
       // Retain the verified provider evidence instead of treating it as
@@ -132,7 +144,7 @@ export async function recoverUnknownPaystackRefund(
         },
         refundId,
       });
-      if (stalledFiled > 0 || pass > 0) return;
+      if (stalledFiled > 0) return;
       // Both scans empty: a payment pending during the first read may
       // have completed before the stalled scan ran. Recheck once so a
       // concurrent charge cannot slip a funded payment through

@@ -27,10 +27,14 @@ export async function drainPaystackRefundNotifications(
   let claimed = 0;
   let sent = 0;
   let failed = 0;
-  let exhausted = 0;
-  if (limit > 0) {
-    exhausted = await countDeadLetteredPaystackRefundNotifications(supabase);
-  }
+  // Count dead letters even when no send can be admitted: with a zero
+  // budget the claim loop below never runs, but existing exhausted or
+  // stale-claimed rows are still permanently undeliverable and the
+  // caller folds this count into its failure signal. Gating the count
+  // on the budget would report them as exhausted: 0 and return
+  // success while notifications rot.
+  const exhausted =
+    await countDeadLetteredPaystackRefundNotifications(supabase);
   // Claim serially so a route timeout cannot strand an unsent batch.
   for (let remaining = limit; remaining > 0; remaining -= 1) {
     // Reserve time for the provider call and outcome write.

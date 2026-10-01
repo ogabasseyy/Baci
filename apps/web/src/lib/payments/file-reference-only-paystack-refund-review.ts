@@ -20,6 +20,7 @@ export async function fileReferenceOnlyPaystackRefundReview(
     orderId,
     paymentId,
     paymentReference,
+    providerRefundStatus,
   }: {
     amount: number;
     currency: string;
@@ -27,6 +28,7 @@ export async function fileReferenceOnlyPaystackRefundReview(
     orderId: string;
     paymentId: string;
     paymentReference: string;
+    providerRefundStatus: string;
   }
 ): Promise<void> {
   const covered = await referenceOnlyRefundCoveredBySettledRows(supabase, {
@@ -58,11 +60,25 @@ export async function fileReferenceOnlyPaystackRefundReview(
     // audit-failed marker without an ID keeps this open until operations
     // links the provider refund or confirms none exists: auto-closing on
     // other legs' evidence would hide an unreconciled customer refund.
+    // The nested entry preserves the event verdict per leg: a
+    // definitively failed provider refund moved no money, so audit
+    // blocking excludes failed-only evidence instead of stranding a
+    // later genuine cancellation behind delivery_uncertain. Keyed by
+    // reference rather than leg so a later leg-keyed merge never
+    // overwrites it — conflicting verdicts must both persist and fail
+    // closed as mixed evidence.
     metadata: {
       audit_record_failed: true,
       payment_transaction_id: paymentId,
       reference: paymentReference,
       reference_only_refund_event: true,
+      refund_evidence: {
+        [`reference:${paymentReference}`]: {
+          audit_record_failed: true,
+          payment_transaction_id: paymentId,
+          provider_refund_status: providerRefundStatus,
+        },
+      },
     },
     order_id: orderId,
     // Deliberately unset: the open-by-paystack-ref index is global, so a
@@ -90,6 +106,7 @@ export async function fileReferenceOnlyPaystackRefundReview(
         p_accepted_refund_ids: null,
         p_candidates: candidates,
         p_ambiguous: true,
+        p_provider_refund_status: providerRefundStatus,
       }
     );
     if (mergeError || merged !== true) {

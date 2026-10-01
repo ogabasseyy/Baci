@@ -14,7 +14,8 @@ const REFUND_PAGE_SIZE = 10;
 async function reconcileSharedReferencePayment(
   supabase: SupabaseClient,
   transactionReference: string,
-  payment: Record<string, unknown>
+  payment: Record<string, unknown>,
+  providerRefundStatus: string
 ): Promise<void> {
   if (!payment.order_id) return;
   // Mirror the ID handler's cancellation gate: a reference-only event
@@ -55,6 +56,7 @@ async function reconcileSharedReferencePayment(
       // The query selected this payment by reference, so it identifies
       // the leg even when the stored row omits it.
       paymentReference: transactionReference,
+      providerRefundStatus,
     });
     return;
   }
@@ -98,6 +100,7 @@ async function reconcileSharedReferencePayment(
         // The query selected this payment by reference, so it identifies
         // the leg even when the stored row omits it.
         paymentReference: transactionReference,
+        providerRefundStatus,
       });
       return;
     }
@@ -118,7 +121,8 @@ async function reconcileSharedReferencePayment(
 
 export async function reconcilePaystackRefundEvent(
   supabase: SupabaseClient,
-  transactionReference: string
+  transactionReference: string,
+  providerRefundStatus = 'unknown'
 ): Promise<void> {
   // Share the webhook reference alphabet: the caller already selected
   // this reference with the same validator, so only unusable values return.
@@ -149,7 +153,8 @@ export async function reconcilePaystackRefundEvent(
       await reconcileSharedReferencePayment(
         supabase,
         transactionReference,
-        payment
+        payment,
+        providerRefundStatus
       );
     }
     if (page.length < SHARED_REFERENCE_PAGE_SIZE) break;

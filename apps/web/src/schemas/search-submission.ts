@@ -1,9 +1,7 @@
 import { z } from 'zod';
 import { sanitizeSearchQuery } from '@/lib/sanitize-core';
-import {
-  SEARCH_SUBMISSION_QUERY_MAX_LENGTH,
-  SEARCH_SUBMISSION_SOURCES,
-} from '@/lib/search-submission';
+import { SEARCH_SUBMISSION_SOURCES } from '@/lib/search-submission';
+import { SEARCH_SUBMISSION_QUERY_MAX_LENGTH } from '@/lib/search-submission-query';
 
 export const searchSubmissionSchema = z.strictObject({
   query: z

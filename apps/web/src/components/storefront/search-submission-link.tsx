@@ -4,8 +4,8 @@ import type { ReactNode } from 'react';
 import {
   recordSearchSubmission,
   type SearchSubmissionLinkSource,
-  truncateSearchSubmissionQuery,
 } from '@/lib/search-submission';
+import { truncateSearchSubmissionQuery } from '@/lib/search-submission-query';
 
 interface SearchSubmissionLinkProps {
   pathPrefix: string;

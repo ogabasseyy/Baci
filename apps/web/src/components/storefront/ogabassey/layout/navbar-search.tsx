@@ -9,8 +9,8 @@ import type { SearchAutocompleteProps } from '@/components/storefront/search-aut
 import {
   recordSearchSubmission,
   type SearchSubmissionSource,
-  truncateSearchSubmissionQuery,
 } from '@/lib/search-submission';
+import { truncateSearchSubmissionQuery } from '@/lib/search-submission-query';
 import {
   parseStorefrontSearchQueryParam,
   STOREFRONT_SEARCH_MAX_QUERY_LENGTH,

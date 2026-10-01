@@ -89,15 +89,15 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
       },
     ];
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const candidates = [
+      payment('pay-1', 'order-1', 'merchant-1'),
+      payment('pay-2', 'order-2', 'merchant-2'),
+      payment('pay-9', 'order-9', 'merchant-9'),
+    ];
     const from = vi
       .fn()
-      .mockReturnValueOnce(
-        selectQuery([
-          payment('pay-1', 'order-1', 'merchant-1'),
-          payment('pay-2', 'order-2', 'merchant-2'),
-          payment('pay-9', 'order-9', 'merchant-9'),
-        ])
-      )
+      .mockReturnValueOnce(selectQuery(candidates))
+      .mockReturnValueOnce(selectQuery(candidates))
       .mockReturnValueOnce(selectQuery(orders))
       .mockReturnValueOnce(selectQuery(orders))
       .mockReturnValueOnce({ insert: reviewInsert });
@@ -151,10 +151,21 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
       .fn()
       .mockResolvedValue({ data: payments.slice(10), error: null });
     secondPage.limit = secondLimit;
+    // The stabilizing pass re-reads both pages and adds nothing.
+    const thirdPage = selectQuery([]);
+    thirdPage.limit = vi
+      .fn()
+      .mockResolvedValue({ data: payments.slice(0, 10), error: null });
+    const fourthPage = selectQuery([]);
+    fourthPage.limit = vi
+      .fn()
+      .mockResolvedValue({ data: payments.slice(10), error: null });
     const from = vi
       .fn()
       .mockReturnValueOnce({ select: vi.fn(() => firstPage) })
       .mockReturnValueOnce({ select: vi.fn(() => secondPage) })
+      .mockReturnValueOnce({ select: vi.fn(() => thirdPage) })
+      .mockReturnValueOnce({ select: vi.fn(() => fourthPage) })
       .mockReturnValueOnce(selectQuery(orders))
       .mockReturnValueOnce(selectQuery(orders));
     const supabase = { from, rpc } as unknown as SupabaseClient;
@@ -165,7 +176,9 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
     // every order: truncating after the first page would drop the
     // eleventh order's verified evidence after acknowledgement. The
     // id cursor keeps pages stable when a lower-id payment completes
-    // between reads; offsets would shift and omit a match.
+    // between reads (offsets would shift and omit a match), and the
+    // stabilizing pass repeats the scan so a completion landing
+    // behind the cursor is still observed before acknowledgement.
     expect(firstLimit).toHaveBeenCalledWith(10);
     expect(secondPage.gt).toHaveBeenCalledWith('id', 'pay-10');
     expect(rpc).toHaveBeenCalledTimes(12);
@@ -183,15 +196,15 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
 
   it('files one review per order when three payments share the reference', async () => {
     const rpc = reviewRpc();
+    const candidates = [
+      payment('pay-1', 'order-1', 'merchant-1'),
+      payment('pay-2', 'order-2', 'merchant-2'),
+      payment('pay-3', 'order-3', 'merchant-3'),
+    ];
     const from = vi
       .fn()
-      .mockReturnValueOnce(
-        selectQuery([
-          payment('pay-1', 'order-1', 'merchant-1'),
-          payment('pay-2', 'order-2', 'merchant-2'),
-          payment('pay-3', 'order-3', 'merchant-3'),
-        ])
-      )
+      .mockReturnValueOnce(selectQuery(candidates))
+      .mockReturnValueOnce(selectQuery(candidates))
       .mockReturnValueOnce(
         selectQuery([
           cancelledOrder('order-1'),
@@ -314,11 +327,11 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
       success: true,
     });
     const rpc = reviewRpc();
+    const candidates = [payment('pay-1', 'order-1', 'merchant-1')];
     const from = vi
       .fn()
-      .mockReturnValueOnce(
-        selectQuery([payment('pay-1', 'order-1', 'merchant-1')])
-      )
+      .mockReturnValueOnce(selectQuery(candidates))
+      .mockReturnValueOnce(selectQuery(candidates))
       .mockReturnValueOnce(selectQuery([cancelledOrder('order-1')]))
       // Active-queue lookup: the order is cancelled, so the
       // non-cancellation queue files nothing.
@@ -361,11 +374,11 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
     ];
     const rpc = reviewRpc();
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const candidates = [payment('pay-9', 'order-9', 'merchant-9')];
     const from = vi
       .fn()
-      .mockReturnValueOnce(
-        selectQuery([payment('pay-9', 'order-9', 'merchant-9')])
-      )
+      .mockReturnValueOnce(selectQuery(candidates))
+      .mockReturnValueOnce(selectQuery(candidates))
       .mockReturnValueOnce(selectQuery(active))
       .mockReturnValueOnce(selectQuery(active))
       .mockReturnValueOnce({ insert: reviewInsert });
@@ -487,14 +500,14 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
       },
     ];
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const candidates = [
+      payment('pay-1', 'order-9', 'merchant-9'),
+      payment('pay-2', 'order-9', 'merchant-9'),
+    ];
     const from = vi
       .fn()
-      .mockReturnValueOnce(
-        selectQuery([
-          payment('pay-1', 'order-9', 'merchant-9'),
-          payment('pay-2', 'order-9', 'merchant-9'),
-        ])
-      )
+      .mockReturnValueOnce(selectQuery(candidates))
+      .mockReturnValueOnce(selectQuery(candidates))
       .mockReturnValueOnce(selectQuery(active))
       .mockReturnValueOnce(selectQuery(active))
       .mockReturnValueOnce({ insert: reviewInsert });
@@ -528,6 +541,43 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
           }),
         }),
       })
+    );
+  });
+
+  it('files a generic review when the sole completed payment is already detached', async () => {
+    const rpc = reviewRpc();
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const detached = [
+      { ...payment('pay-1', 'order-1', 'merchant-1'), order_id: null },
+    ];
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(selectQuery(detached))
+      .mockReturnValueOnce(selectQuery(detached))
+      .mockReturnValueOnce({ insert: reviewInsert });
+    const supabase = { from, rpc } as unknown as SupabaseClient;
+
+    await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
+
+    // The order FK already nulled the link before the scan: opening a
+    // watch would rescan the same detached row and acknowledge with no
+    // audit row or review, so the verified merchant debit files into
+    // the order-independent queue instead.
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'paystack_refund_evidence_invalid',
+        order_id: null,
+        paystack_ref: 'PSK-1',
+        reason: expect.stringContaining('detached from any order'),
+      })
+    );
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_paystack_refund_recovery_watch_v1',
+      { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
+    );
+    expect(mocks.loggerInfo).toHaveBeenCalledWith(
+      expect.objectContaining({ refundId: 202 })
     );
   });
 });

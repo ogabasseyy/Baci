@@ -42,9 +42,13 @@ function database({
 } = {}) {
   const insert = vi.fn().mockResolvedValue({ error: insertError });
   const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
-  const from = vi
-    .fn()
-    .mockReturnValueOnce(selectQuery(paymentRows))
+  const from = vi.fn().mockReturnValueOnce(selectQuery(paymentRows));
+  if (paymentRows.length > 0) {
+    // The completed scan repeats until a pass adds nothing: the
+    // stabilizing pass observes the same rows and stops.
+    from.mockReturnValueOnce(selectQuery(paymentRows));
+  }
+  from
     .mockReturnValueOnce(selectQuery(orderRow))
     .mockReturnValueOnce({ insert })
     .mockReturnValueOnce(selectQuery(racedRow));

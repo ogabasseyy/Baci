@@ -40,6 +40,24 @@ describe('mcpDiscoveryIntentSchema', () => {
     expect(parsed.alternatives[0]?.product_type).toBe(metadata.product_type);
   });
 
+  it('canonicalizes symmetric phone aliases for product types and exclusions', () => {
+    for (const alias of [
+      'smart_phone',
+      'smart_phones',
+      'mobile_phone',
+      'mobile_phones',
+      'cell_phone',
+      'cell_phones',
+    ]) {
+      const parsed = mcpDiscoveryIntentSchema.parse({
+        alternatives: [{ product_type: alias }],
+        excluded_product_types: [alias],
+      });
+      expect(parsed.alternatives[0]?.product_type).toBe('phone');
+      expect(parsed.excluded_product_types).toEqual(['phone']);
+    }
+  });
+
   it('rejects incorrect value types and text comparison operators', () => {
     for (const attribute of [
       { key: 'ram_gb', operator: 'eq', value: '16' },
@@ -59,6 +77,14 @@ describe('mcpDiscoveryIntentSchema', () => {
   it('enforces alternative, attribute, and unknown-field contracts', () => {
     expect(
       mcpDiscoveryIntentSchema.safeParse({ alternatives: [] }).success
+    ).toBe(false);
+    expect(
+      mcpDiscoveryIntentSchema.safeParse({ alternatives: [{}] }).success
+    ).toBe(true);
+    expect(
+      mcpDiscoveryIntentSchema.safeParse({
+        alternatives: [{}, { product_type: 'phone' }],
+      }).success
     ).toBe(false);
     expect(
       mcpDiscoveryIntentSchema.safeParse({
@@ -89,5 +115,22 @@ describe('mcpDiscoveryIntentSchema', () => {
         alternatives: [{ merchant_id: 'tenant' }],
       }).success
     ).toBe(false);
+  });
+});
+
+describe('semantic alternative constraints', () => {
+  it.each([
+    { attributes: [] },
+    { model: undefined },
+  ])('rejects a semantically empty branch mixed with constraints: %s', (emptyBranch) => {
+    expect(
+      mcpDiscoveryIntentSchema.safeParse({
+        alternatives: [emptyBranch, { product_type: 'phone' }],
+      }).success
+    ).toBe(false);
+    expect(
+      mcpDiscoveryIntentSchema.safeParse({ alternatives: [emptyBranch] })
+        .success
+    ).toBe(true);
   });
 });

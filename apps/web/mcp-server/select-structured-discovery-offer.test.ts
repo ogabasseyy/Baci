@@ -56,6 +56,36 @@ it('normalizes live variant catalog attributes and narrows returned variants to 
   expect(selected?.availableVariants[0]?.id).toBe('variant-256-blue');
 });
 
+it('returns the inherited base and matched variant attributes used by matching', () => {
+  const row = makeRow({ has_variants: true, discovery_metadata: {
+    product_type: 'phone', model: 'A1', attributes: { storage_gb: 128, color: 'black' },
+  } });
+  row.availableVariants = [
+    { id: 'blue-128', product_id: 'phone', attributes: { Colour: 'Blue' }, price_override: 400, stock_quantity: 1 },
+  ] as typeof row.availableVariants;
+
+  const selected = selectStructuredDiscoveryOffer(row, intent({ attributes: [
+    { key: 'storage_gb', operator: 'eq', value: 128 },
+    { key: 'color', operator: 'eq', value: 'blue' },
+  ] }));
+
+  expect(selected?.selectedOption.attributes).toEqual({ storage_gb: 128, color: 'blue' });
+});
+
+it('returns inherited base attributes for a matched condition offer', () => {
+  const row = makeRow({ has_condition_offers: true, basePurchasable: false });
+  row.availableOffers = [{ id: 'used-1', price: 450, condition: 'used', stock_quantity: 1 }] as typeof row.availableOffers;
+
+  const selected = selectStructuredDiscoveryOffer(row, intent({ attributes: [
+    { key: 'storage_gb', operator: 'eq', value: 128 },
+  ] }));
+
+  expect(selected?.selectedOption).toMatchObject({
+    kind: 'offer',
+    attributes: { storage_gb: 128, color: 'black' },
+  });
+});
+
 it('does not inherit a base capacity when a recognized variant override is malformed', () => {
   const row = makeRow({ has_variants: true, discovery_metadata: {
     product_type: 'smartphone', attributes: { storage_gb: 128 },

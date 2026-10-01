@@ -6,7 +6,20 @@ export function canonicalizeDiscoveryProductType(value: string) {
     .toLocaleLowerCase('en-US')
     .replace(/[\s-]+/g, '_');
 
-  if (['phone', 'phones', 'smartphone', 'smartphones'].includes(canonical)) {
+  if (
+    [
+      'phone',
+      'phones',
+      'smartphone',
+      'smartphones',
+      'smart_phone',
+      'smart_phones',
+      'mobile_phone',
+      'mobile_phones',
+      'cell_phone',
+      'cell_phones',
+    ].includes(canonical)
+  ) {
     return 'phone';
   }
   if (['laptop', 'laptops'].includes(canonical)) return 'laptop';

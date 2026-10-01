@@ -92,8 +92,7 @@ function matchesAlternative(
     if (!expected || !compatibility.includes(expected)) return false;
   }
 
-  const baseAttributes = record(discovery.attributes);
-  const attributes = { ...baseAttributes, ...candidate.attributes };
+  const attributes = candidate.attributes;
   return (alternative.attributes ?? []).every(({ key, operator, value }) => {
     const normalizedKey = key.trim().toLocaleLowerCase('en-US');
     const actual = attributes[normalizedKey] ?? attributes[key];
@@ -173,6 +172,10 @@ export function selectStructuredDiscoveryOffer(
   }
 
   const matches = candidates
+    .map((candidate) => ({
+      ...candidate,
+      attributes: { ...metadataAttributes, ...candidate.attributes },
+    }))
     .filter((candidate) => intent.alternatives.some((alternative) =>
       matchesAlternative(product, candidate, discovery, alternative, excludedTypes)))
     .sort((left, right) => left.price - right.price);

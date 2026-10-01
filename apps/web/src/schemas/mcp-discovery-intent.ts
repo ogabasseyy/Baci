@@ -52,7 +52,28 @@ export const mcpDiscoveryIntentSchema = z.strictObject({
       })
     )
     .min(1)
-    .max(5),
+    .max(5)
+    .superRefine((alternatives, context) => {
+      if (
+        alternatives.length > 1 &&
+        alternatives.some(
+          ({ product_type, brands, model, compatible_with, attributes }) =>
+            !(
+              product_type ||
+              brands?.length ||
+              model ||
+              compatible_with ||
+              attributes?.length
+            )
+        )
+      ) {
+        context.addIssue({
+          code: 'custom',
+          message:
+            'An unconstrained browse alternative must be the only alternative',
+        });
+      }
+    }),
   excluded_product_types: z
     .array(text.transform(canonicalizeDiscoveryProductType))
     .max(10)

@@ -2,8 +2,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import { loadStructuredDiscoveryCandidates } from './load-structured-discovery-candidates';
 
-function setup({ lexicalPages, products }: {
+function setup({ lexicalPages, products, failHydrationCalls = [] }: {
   lexicalPages: unknown[][];
+  failHydrationCalls?: number[];
   products: Array<Record<string, unknown>>;
 }) {
   let rpcPage = 0;
@@ -12,6 +13,7 @@ function setup({ lexicalPages, products }: {
   const from = vi.fn((table: string) => {
     const calls: unknown[][] = [];
     queryCalls.push({ table, calls });
+    const fail = failHydrationCalls.includes(queryCalls.length);
     const builder = {
       select: vi.fn((...args: unknown[]) => { calls.push(['select', ...args]); return builder; }),
       eq: vi.fn((...args: unknown[]) => { calls.push(['eq', ...args]); return builder; }),
@@ -21,7 +23,7 @@ function setup({ lexicalPages, products }: {
       then: undefined as unknown,
     };
     Object.assign(builder, {
-      then: (resolve: (value: unknown) => unknown) => Promise.resolve({ data: products, error: null }).then(resolve),
+      then: (resolve: (value: unknown) => unknown) => Promise.resolve(fail ? {data: null, error: new Error('batch unavailable')} : { data: products, error: null }).then(resolve),
     });
     return builder;
   });
@@ -191,6 +193,27 @@ describe('loadStructuredDiscoveryCandidates', () => {
     });
     const result = await loadStructuredDiscoveryCandidates({query: 'query', merchantId: 'merchant-1', supabase: fixture.supabase});
     expect(result.products.map(({id}) => id)).toEqual(ids);
+    expect(result.truncated).toBe(true);
+  });
+
+  it('retains other confirmed product batches when one hydration batch fails', async () => {
+    const ids = Array.from({length: 250}, (_, i) => `p-${i}`);
+    const fixture = setup({lexicalPages: [ranked(ids.slice(0,100),250), ranked(ids.slice(100,200),250), ranked(ids.slice(200),250)], products: productRows(ids), failHydrationCalls: [2]});
+    const result = await loadStructuredDiscoveryCandidates({query: 'phone', merchantId: 'merchant-1', supabase: fixture.supabase});
+    expect(result.products.map(({id}) => id)).toEqual([...ids.slice(0,100), ...ids.slice(200)]);
+    expect(result.truncated).toBe(true);
+  });
+
+  it('preserves confirmed browse pages after a later page fails', async () => {
+    const rows = productRows(Array.from({length: 100}, (_, i) => `p-${i}`));
+    const from = () => {
+      const builder = { select: () => builder, eq: () => builder, order: () => builder,
+        range: async (start: number) => { if (start > 0) throw new Error('page unavailable'); return {data: rows, error: null}; },
+      };
+      return builder;
+    };
+    const result = await loadStructuredDiscoveryCandidates({merchantId: 'merchant-1', supabase: {from} as unknown as SupabaseClient});
+    expect(result.products).toHaveLength(100);
     expect(result.truncated).toBe(true);
   });
 

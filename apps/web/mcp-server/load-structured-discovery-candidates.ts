@@ -102,27 +102,31 @@ async function loadSemanticIds(
 
 async function loadBrowseRows(merchantId: string, supabase: SupabaseClient) {
   const products: McpSearchProductRow[] = [];
-  for (let offset = 0; offset < MAX_LEXICAL_CANDIDATES; offset += LEXICAL_PAGE_SIZE) {
-    const { data, error } = await supabase
-      .from('products')
-      .select(DISCOVERY_PRODUCT_PROJECTION)
+  try {
+    for (let offset = 0; offset < MAX_LEXICAL_CANDIDATES; offset += LEXICAL_PAGE_SIZE) {
+      const { data, error } = await supabase
+        .from('products')
+        .select(DISCOVERY_PRODUCT_PROJECTION)
+        .eq('merchant_id', merchantId)
+        .eq('status', 'active')
+        .order('id', { ascending: true })
+        .range(offset, offset + LEXICAL_PAGE_SIZE - 1);
+      if (error) throw error;
+      const rows = toMcpSearchProductRows(data);
+      products.push(...rows);
+      if (rows.length < LEXICAL_PAGE_SIZE) return { products, truncated: false };
+    }
+    const { data: next, error } = await supabase.from('products')
+      .select('id')
       .eq('merchant_id', merchantId)
       .eq('status', 'active')
       .order('id', { ascending: true })
-      .range(offset, offset + LEXICAL_PAGE_SIZE - 1);
-    if (error) throw error;
-    const rows = toMcpSearchProductRows(data);
-    products.push(...rows);
-    if (rows.length < LEXICAL_PAGE_SIZE) return { products, truncated: false };
+      .range(MAX_LEXICAL_CANDIDATES, MAX_LEXICAL_CANDIDATES);
+    if (error) return { products, truncated: true };
+    return { products, truncated: Array.isArray(next) && next.length > 0 };
+  } catch {
+    return { products, truncated: true };
   }
-  const { data: next, error } = await supabase.from('products')
-    .select('id')
-    .eq('merchant_id', merchantId)
-    .eq('status', 'active')
-    .order('id', { ascending: true })
-    .range(MAX_LEXICAL_CANDIDATES, MAX_LEXICAL_CANDIDATES);
-  if (error) return { products, truncated: true };
-  return { products, truncated: Array.isArray(next) && next.length > 0 };
 }
 
 function reciprocalRankFusion(...sources: string[][]) {
@@ -165,25 +169,30 @@ export async function loadStructuredDiscoveryCandidates({
   const rankedIds = reciprocalRankFusion(lexical.ids, semantic.value.ids, facts.ids);
   const products: McpSearchProductRow[] = [];
 
+  let hydrationFailed = false;
   for (let offset = 0; offset < rankedIds.length; offset += LEXICAL_PAGE_SIZE) {
     const batch = rankedIds.slice(offset, offset + LEXICAL_PAGE_SIZE);
-    const { data, error } = await supabase
-      .from('products')
-      .select(DISCOVERY_PRODUCT_PROJECTION)
-      .eq('merchant_id', merchantId)
-      .eq('status', 'active')
-      .in('id', batch);
-    if (error) throw error;
-    const byId = new Map(toMcpSearchProductRows(data).map((product) => [product.id, product]));
-    products.push(...batch.flatMap((id) => {
-      const product = byId.get(id);
-      return product ? [product] : [];
-    }));
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select(DISCOVERY_PRODUCT_PROJECTION)
+        .eq('merchant_id', merchantId)
+        .eq('status', 'active')
+        .in('id', batch);
+      if (error) throw error;
+      const byId = new Map(toMcpSearchProductRows(data).map((product) => [product.id, product]));
+      products.push(...batch.flatMap((id) => {
+        const product = byId.get(id);
+        return product ? [product] : [];
+      }));
+    } catch {
+      hydrationFailed = true;
+    }
   }
 
   return {
     products,
-    truncated: lexical.truncated || semantic.value.truncated || facts.truncated,
+    truncated: lexical.truncated || semantic.value.truncated || facts.truncated || hydrationFailed,
     semanticUnavailable: semantic.unavailable,
   };
 }

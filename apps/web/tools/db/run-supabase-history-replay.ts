@@ -5,6 +5,7 @@ import { applySupabaseCurrentTreeSources } from './apply-supabase-current-tree-s
 import { applySupabaseReplaySql } from './apply-supabase-replay-sql';
 import { canonicalJsonValue } from './canonical-json-value';
 import { createSupabaseReplayProjectId } from './create-supabase-replay-project-id';
+import { generateSupabaseReplayTypes } from './generate-supabase-replay-types';
 import * as ownershipTools from './replay-project-ownership';
 import { replayRepository } from './replay-repository-root';
 import { runSupabaseReplayStage } from './run-supabase-replay-stage';
@@ -227,17 +228,7 @@ export async function runSupabaseHistoryReplay(
     if ((await version()) !== '170006')
       throw new Error('Local server version mismatch');
     if (options.typesOutput) {
-      const generated = await runSupabaseReplayStage('gen types', () =>
-        run('supabase', [
-          'gen',
-          'types',
-          'typescript',
-          '--db-url',
-          databaseUrl,
-          '--schema',
-          'public',
-        ])
-      );
+      const generated = await generateSupabaseReplayTypes(run, databaseUrl);
       const output = await runtime.output(root, options.typesOutput);
       await output.replace(generated.stdout, { mode: 0o600 });
     }

@@ -31,14 +31,14 @@ export async function discoverStructuredProducts({ intent, query, args, merchant
   }
   if (args.sort === 'newest') selected.sort((a, b) =>
     (b.product.created_at ?? '').localeCompare(a.product.created_at ?? '') || a.product.id.localeCompare(b.product.id));
-  const priceCoverageIncomplete = candidates.truncated &&
-    (args.min_price !== undefined || args.max_price !== undefined || args.sort === 'price_asc' || args.sort === 'price_desc');
+  const orderedCoverageIncomplete = candidates.truncated &&
+    (args.min_price !== undefined || args.max_price !== undefined || args.sort === 'price_asc' || args.sort === 'price_desc' || args.sort === 'newest');
   return {
     selectedProducts: selectSearchProductsByPrice(selected, args, Math.min(20, Math.max(1, args.limit ?? 10))),
     sanitizedQuery: query,
-    priceScanComplete: !optionsLookupFailed && !priceCoverageIncomplete,
+    priceScanComplete: !optionsLookupFailed && !orderedCoverageIncomplete,
     incompleteReason: optionsLookupFailed ? 'option_lookup_failed' as const :
-      priceCoverageIncomplete ? 'candidate_limit' as const : undefined,
+      orderedCoverageIncomplete ? 'candidate_limit' as const : undefined,
     coverage: candidates.truncated || optionsLookupFailed ? 'partial' as const : 'complete' as const,
     semanticUnavailable: candidates.semanticUnavailable,
   };

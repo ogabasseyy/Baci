@@ -40,12 +40,13 @@ function client(fixture: Fixture) {
 
   const from = vi.fn((table: string) => {
     const filters: Array<[string, string, unknown]> = [];
+    let range: [number, number] | undefined;
     const builder = {
       select: vi.fn(() => builder),
       eq: vi.fn((column: string, value: unknown) => { filters.push(['eq', column, value]); return builder; }),
       in: vi.fn((column: string, value: unknown) => { filters.push(['in', column, value]); return builder; }),
       order: vi.fn(() => builder),
-      range: vi.fn(() => builder),
+      range: vi.fn((start: number, end: number) => {range = [start, end]; return builder;}),
       then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => {
         if (table === 'product_offers' && fixture.offerError) return Promise.resolve({ data: null, error: fixture.offerError }).then(resolve, reject);
         let rows = table === 'products' ? fixture.products : fixture.offers ?? [];
@@ -53,6 +54,7 @@ function client(fixture: Fixture) {
           if (kind === 'eq') rows = rows.filter((row) => row[column] === value);
           if (kind === 'in' && Array.isArray(value)) rows = rows.filter((row) => value.includes(row[column]));
         }
+        if (range) rows = rows.slice(range[0], range[1] + 1);
         return Promise.resolve({ data: rows, error: null }).then(resolve, reject);
       },
     };
@@ -273,6 +275,13 @@ describe('discoverStructuredProducts', () => {
     ));
     expect(result.selectedProducts.map(({ product: selected }) => selected.id)).toEqual(['holdout']);
   });
+  it.each(['camera', undefined])('marks truncated newest searches incomplete for query %s', async (query) => {
+    const ids = Array.from({length: 501}, (_, i) => `p-${i}`);
+    const fixture = client({products: ids.map(id => product(id, {})), lexicalIds: ids.slice(0,500), lexicalTotal: 501});
+    const result = await discoverStructuredProducts(input(fixture.supabase, intent({}), {query, args: {sort: 'newest'}}));
+    expect(result).toMatchObject({priceScanComplete: false, coverage: 'partial', incompleteReason: 'candidate_limit'});
+  });
+
   it('marks a truncated price-sorted structured search incomplete', async () => {
     const ids = Array.from({ length: 500 }, (_, index) => `p-${index}`);
     const fixture = client({ products: ids.map((id) => product(id, { product_type: 'security_camera' })), lexicalIds: ids, lexicalTotal: 501 });

@@ -48,9 +48,7 @@ import { useRedvaultPaymentAvailability } from './checkout/hooks/use-redvault-pa
 import {
   inferAddressLocationFromInput,
 } from './checkout/utils';
-import { useCheckoutOrderSubmission } from './checkout/hooks/use-checkout-order-submission';
-import { useWalletFundedBankTransfer } from './checkout/hooks/use-wallet-funded-bank-transfer';
-import { useWalletFundedOrderCompletion } from './checkout/hooks/use-wallet-funded-order-completion';
+import { useCheckoutPaymentExecution } from './checkout/hooks/use-checkout-payment-execution';
 import { useStorefrontCustomerSession } from './checkout/hooks/use-storefront-customer-session';
 import { deriveCheckoutCartModel } from './checkout/derive-checkout-cart-model';
 import { deriveCheckoutOrderSummaryPresentation } from './checkout/derive-checkout-order-summary-presentation';
@@ -330,98 +328,95 @@ export const CheckoutPage: React.FC = () => {
   const walletAmountUsed = paymentSession.wallet.amountUsed;
   const remainingAmount = paymentSession.wallet.remainingAmount;
 
-  const completeWalletFundedOrder = useWalletFundedOrderCompletion({
-    clearCart,
-    clearCheckoutSession,
-    clearPendingCheckoutOrder,
-    getHref,
-    paymentMethod,
-  });
-  // Wallet-funded bank transfer (P4a, dark-launched). Signed-in customers of
-  // an auto-debit-enabled merchant fund the order through their standing
-  // wallet account; the webhook credits it and the order auto-debits.
-  const walletFundedTransfer = useWalletFundedBankTransfer({
-    merchantId: merchant?.id,
-    merchantSlug: merchant?.slug ?? undefined,
-    onOrderPaid: completeWalletFundedOrder,
-  });
-
-  const { handlePlaceOrder } = useCheckoutOrderSubmission({
-    account: {
-      createAccount: account.createAccount,
-      password: account.password,
-      user,
-      waitForResolvedCustomerAuth: waitForResolvedStorefrontCustomerAuth,
-    },
-    cart: {
-      cart,
-      checkoutCart,
-      checkoutCartTotal,
-      clearCart,
-      removeFromCart,
-    },
-    contact: {
-      customerEmail,
-      customerPhone,
-      firstName,
-      lastName,
-      newsletterOptIn,
-    },
-    delivery: {
-      session: delivery,
-      method: deliveryMethod,
-      airportType,
-      airportRequiresQuote,
-      newAddressStreet,
-      newAddressCity,
-      newAddressState,
-      merchantCountry,
-      giftWrappingCost,
-      effectiveItemSubtotal,
-      taxAmount: orderTotals?.taxAmount ?? 0,
-    },
-    merchant,
-    navigation: {
-      setCurrentStep,
-      setCompletedSteps,
-      pushSuccessRoute: (url) => router.push(asRoute(url)),
-      getHref,
-    },
-    order: {
-      pending: pendingCheckoutOrder,
-      clearPending: clearPendingCheckoutOrder,
-      setPending: setPendingCheckoutOrder,
-      setOrderCreated: setCheckoutOrderCreated,
-      clearCheckoutSession,
-      setDvaData,
-      setIsInitializingDva,
-      setPendingCryptoOrder,
-      setShowCryptoSelector,
-      setCryptoPaymentData,
-      walletFundedTransfer,
-    },
-    payment: {
-      session: paymentSession,
-      bankTransferAvailable: bankTransferCheckoutAvailable,
-      paystackAvailable: paystackCheckoutAvailable,
-      korapayAvailable: korapayCheckoutAvailable,
-      redvaultAvailable: redvaultAvailability.available,
-      currencyCode,
-    },
-    resumed: {
-      order: resumedOrder,
-      preferredGateway,
-      trackingToken: resumeTrackingToken,
-      merchantSlugFromResume: resumeMerchantSlug,
-    },
-    processing: {
-      setIsProcessing,
-      isOrderInFlightRef,
-      tryBeginSubmission,
-      releaseSubmission,
-      handleSubmissionError,
-    },
-  });
+  const { handlePlaceOrder, walletFundedTransfer } =
+    useCheckoutPaymentExecution({
+      completion: {
+        clearCart,
+        clearCheckoutSession,
+        clearPendingCheckoutOrder,
+        getHref,
+        paymentMethod,
+      },
+      transfer: {
+        merchantId: merchant?.id,
+        merchantSlug: merchant?.slug ?? undefined,
+      },
+      submission: {
+        account: {
+          createAccount: account.createAccount,
+          password: account.password,
+          user,
+          waitForResolvedCustomerAuth: waitForResolvedStorefrontCustomerAuth,
+        },
+        cart: {
+          cart,
+          checkoutCart,
+          checkoutCartTotal,
+          clearCart,
+          removeFromCart,
+        },
+        contact: {
+          customerEmail,
+          customerPhone,
+          firstName,
+          lastName,
+          newsletterOptIn,
+        },
+        delivery: {
+          session: delivery,
+          method: deliveryMethod,
+          airportType,
+          airportRequiresQuote,
+          newAddressStreet,
+          newAddressCity,
+          newAddressState,
+          merchantCountry,
+          giftWrappingCost,
+          effectiveItemSubtotal,
+          taxAmount: orderTotals?.taxAmount ?? 0,
+        },
+        merchant,
+        navigation: {
+          setCurrentStep,
+          setCompletedSteps,
+          pushSuccessRoute: (url) => router.push(asRoute(url)),
+          getHref,
+        },
+        order: {
+          pending: pendingCheckoutOrder,
+          clearPending: clearPendingCheckoutOrder,
+          setPending: setPendingCheckoutOrder,
+          setOrderCreated: setCheckoutOrderCreated,
+          clearCheckoutSession,
+          setDvaData,
+          setIsInitializingDva,
+          setPendingCryptoOrder,
+          setShowCryptoSelector,
+          setCryptoPaymentData,
+        },
+        payment: {
+          session: paymentSession,
+          bankTransferAvailable: bankTransferCheckoutAvailable,
+          paystackAvailable: paystackCheckoutAvailable,
+          korapayAvailable: korapayCheckoutAvailable,
+          redvaultAvailable: redvaultAvailability.available,
+          currencyCode,
+        },
+        resumed: {
+          order: resumedOrder,
+          preferredGateway,
+          trackingToken: resumeTrackingToken,
+          merchantSlugFromResume: resumeMerchantSlug,
+        },
+        processing: {
+          setIsProcessing,
+          isOrderInFlightRef,
+          tryBeginSubmission,
+          releaseSubmission,
+          handleSubmissionError,
+        },
+      },
+    });
 
   const isPayForMeValid = paymentSession.payForMe.isValid;
   const orderSummaryPresentation = deriveCheckoutOrderSummaryPresentation({

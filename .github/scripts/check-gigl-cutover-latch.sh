@@ -119,9 +119,14 @@ if [ "$latched" = true ]; then
   if [ -n "$auth_config" ]; then rm -f "$auth_config"; fi
 fi
 
-# Default to stdout outside the workflow (local debugging, VPS shell),
-# where GITHUB_OUTPUT is unset and `set -u` would abort before the
-# fail-closed outputs are emitted.
-output_file="${GITHUB_OUTPUT:-/dev/stdout}"
-echo "latched=$latched" >> "$output_file"
-echo "tracking_stale=$tracking_stale" >> "$output_file"
+# Outside the workflow (local debugging, VPS shell) GITHUB_OUTPUT is
+# unset: write plain stdout lines. Do NOT reopen /dev/stdout for
+# append — on Linux that fails with ENXIO when stdout is a pipe,
+# breaking the never-fail contract (proven by CI, which macOS masked).
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+  echo "latched=$latched" >> "$GITHUB_OUTPUT"
+  echo "tracking_stale=$tracking_stale" >> "$GITHUB_OUTPUT"
+else
+  echo "latched=$latched"
+  echo "tracking_stale=$tracking_stale"
+fi

@@ -172,6 +172,7 @@ deploy_scripts:
   - '.github/scripts/check-gigl-cutover-latch.test.mjs'
   - '.github/scripts/check-gigl-cutover-latch-scope.test.mjs'
   - '.github/scripts/check-gigl-cutover-latch.test-fixtures.mjs'
+  - '.github/scripts/gigl-dotenv.sh'
   - '.github/scripts/resolve-gigl-latch-identity.sh'
   - '.github/scripts/resolve-gigl-latch-identity.test.mjs'
   - '.github/scripts/verify-gigl-fallback-token.sh'

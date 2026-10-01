@@ -82,6 +82,7 @@ jobs:
             vps-workers/bin/verify-gigl-direct-workers-installed.sh
             .github/scripts/check-gigl-cutover-latch.sh
             .github/scripts/resolve-gigl-latch-identity.sh
+            .github/scripts/gigl-dotenv.sh
             .github/filters/deploy.yml
           sparse-checkout-cone-mode: false
       - name: Verify production cache-invalidation drain installation

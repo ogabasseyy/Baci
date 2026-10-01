@@ -56,6 +56,11 @@ tracking:
   # push changes nothing about what the poller executes; any tracking
   # code change triggers through the paths above. Gating manifests would
   # freeze main on every lockfile PR for no cutover benefit.
+  # Accepted drift window: a manifest-only change (e.g. a transitive
+  # security fix the poller executes) reaches the VPS only at the next
+  # tracking-code push or manual deploy.sh run. Manifest-only pushes
+  # intentionally bypass the worker gates, so follow a time-sensitive
+  # dependency fix with a manual deploy.sh instead of assuming rollout.
   - 'vps-workers/deploy.sh'
   - 'vps-workers/bin/process-gigl-tracking.sh'
   - 'vps-workers/bin/run-web-script.sh'

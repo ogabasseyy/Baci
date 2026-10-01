@@ -74,6 +74,12 @@ describe('verify gigl fallback token', () => {
     runExpectingInjectorRefusal('OTHER_KEY=1\n');
   });
 
+  it('keeps hashes inside quotes (dotenv), so "off#x" stays enabled', () => {
+    // A naive `#`-cut would misread this as off and skip injection,
+    // leaving the fallback route without a token entry (runtime 500).
+    runExpectingInjectorRefusal('GIGL_ENABLED="off#x"\n');
+  });
+
   it('treats a missing flag as enabled when the token is configured', () => {
     const { stdout, updated } = runWithDotenv(
       'GIGL_TRACKING_WORKER_TOKEN=\n'

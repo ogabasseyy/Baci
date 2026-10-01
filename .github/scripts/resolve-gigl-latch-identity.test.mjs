@@ -44,7 +44,9 @@ describe('GIGL latch identity resolver', () => {
     });
   }
 
-  for (const value of ['1', 'true', 'on', '', 'nope', 'o ff']) {
+  // '"off#x"': dotenv keeps hashes inside quotes, so this is the
+  // enabled value `off#x` — a naive `#`-cut would misread it as off.
+  for (const value of ['1', 'true', 'on', '', 'nope', 'o ff', '"off#x"']) {
     it(`reports enabled scope for ${JSON.stringify(value)}`, () => {
       const { scope } = resolve({ envFile: `GIGL_ENABLED=${value}\n` });
       assert.equal(scope, 'enabled');

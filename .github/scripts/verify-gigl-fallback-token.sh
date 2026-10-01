@@ -13,14 +13,14 @@
 set -euo pipefail
 
 file="${1:?dotenv path is required}"
-# The trailing `|| true` tolerates grep finding no GIGL_ENABLED assignment:
-# without it, pipefail would kill the script before the case can treat an
-# absent flag as enabled (the runtime default).
-# Same dotenv subset as resolve-gigl-latch-identity.sh: leading
-# whitespace, `export` prefix, spaces around `=`, last assignment wins,
-# quotes stripped, trailing `#` comment stripped. (Naive `#`-cut is
-# verdict-equivalent to dotenv here: only exact 0/false/off bypass.)
-gigl_enabled="$(grep -E '^[[:space:]]*(export[[:space:]]+)?GIGL_ENABLED[[:space:]]*=' "$file" 2>/dev/null | tail -1 | cut -d= -f2- | cut -d'#' -f1 | tr -d '\r"'"'" | tr '[:upper:]' '[:lower:]' | xargs || true)"
+# Shared dotenv reader (same parser as the latch-identity resolver, so
+# the two can never disagree on export/quote/comment forms again). An
+# absent flag prints nothing and counts as enabled (the runtime
+# default); never add a naive `#`-cut here — dotenv keeps hashes
+# inside quotes (`GIGL_ENABLED="off#x"` is enabled, not off).
+# shellcheck source=.github/scripts/gigl-dotenv.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gigl-dotenv.sh"
+gigl_enabled="$(gigl_dotenv_value "$file" 'GIGL_ENABLED' | tr '[:upper:]' '[:lower:]')"
 case "$gigl_enabled" in
   0|false|off) echo 'GIGL is not enabled; skipping fallback token injection.' ;;
   *) node .github/scripts/inject-prebuilt-env-secret.mjs GIGL_TRACKING_WORKER_TOKEN "$file" 'build-time-presence-stand-in-not-used-at-runtime-000000000000' ;;

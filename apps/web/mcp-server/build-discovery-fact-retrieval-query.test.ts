@@ -16,6 +16,12 @@ it('joins alternatives with OR and strips tsquery operators from terms', () => {
     .toBe('(zx & 42) | (((charger) | (chargers)))');
 });
 
+it('groups multi-word brand phrases with AND before OR-ing across brands', () => {
+  expect(buildDiscoveryFactRetrievalQuery(intent({ brands: ['Hewlett Packard', 'Dell'] })))
+    .toBe('(((hewlett & packard) | dell))');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ brands: ['Samsung Galaxy'] }))).toBe('((samsung & galaxy))');
+});
+
 it('retrieves every spelling selection treats as the same type', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ product_type: 'Smartphones' })))
     .toBe('(((phone) | (phones) | (smartphone) | (smartphones) | (smart & phone) | (smart & phones) | (mobile & phone) | (mobile & phones) | (cell & phone) | (cell & phones)))');

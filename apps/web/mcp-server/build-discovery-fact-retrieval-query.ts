@@ -79,9 +79,16 @@ export function buildDiscoveryFactRetrievalQuery(intent: McpDiscoveryIntent, fal
   for (const alternative of intent.alternatives) {
     const terms: string[] = [];
     if (alternative.product_type) terms.push(...typeTerms(alternative.product_type));
-    const brands = (alternative.brands ?? []).flatMap(sanitizeTerm);
-    if (brands.length === 1) terms.push(brands[0]);
-    else if (brands.length > 1) terms.push(`(${brands.join(' | ')})`);
+    // Each manufacturer's words join with AND before brands OR together, so a
+    // multi-word brand cannot broaden retrieval to either token alone and
+    // exhaust the capped fact window with partial matches.
+    const brandBranches = (alternative.brands ?? []).map((brand) => {
+      const tokens = sanitizeTerm(brand);
+      if (tokens.length === 1) return tokens[0];
+      return tokens.length > 1 ? `(${tokens.join(' & ')})` : undefined;
+    }).filter((branch): branch is string => branch !== undefined);
+    if (brandBranches.length === 1) terms.push(brandBranches[0]);
+    else if (brandBranches.length > 1) terms.push(`(${brandBranches.join(' | ')})`);
     if (alternative.model) terms.push(...sanitizeTerm(alternative.model));
     if (alternative.compatible_with) terms.push(...sanitizeTerm(alternative.compatible_with));
     for (const attribute of alternative.attributes ?? []) {

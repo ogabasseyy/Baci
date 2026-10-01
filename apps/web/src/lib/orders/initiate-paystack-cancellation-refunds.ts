@@ -24,9 +24,10 @@ export async function initiatePaystackCancellationRefunds({
 }: {
   deadlineMs?: number;
   /**
-   * Set when this run consumes the final retry attempt: a rate-limited
-   * leg must file durable evidence instead of throwing retryable, since
-   * the drain never reselects attempts-capped rows.
+   * Set when this run consumes the final retry attempt: a
+   * transiently-failing leg must file durable evidence instead of
+   * throwing retryable, since the drain never reselects
+   * attempts-capped rows.
    */
   isLastAttempt?: boolean;
   order: {
@@ -63,17 +64,22 @@ export async function initiatePaystackCancellationRefunds({
       const isAmbiguousFailure =
         paystackRefund.code === 'NETWORK_ERROR' ||
         paystackRefund.code?.startsWith('HTTP_5');
-      // A rate-limited leg was definitely rejected: nothing was accepted,
-      // so quarantining terminally would strand the remaining legs after
-      // the accepted ones settle. Throw retryable instead — the drain
-      // defers while accepted legs are in flight, then resumes here with
-      // settled legs skipped. Ambiguous and deterministic failures still
-      // quarantine below: the provider may have accepted, or never will.
-      const isDefiniteTransientFailure = paystackRefund.code === 'HTTP_429';
-      // Rate-limited legs stay review-free while retries remain — but the
-      // drain never reselects attempts-capped rows, so a 429 on the last
-      // attempt must file durable evidence instead of stranding the leg
-      // while cron reports success.
+      // A rate-limited or unconfigured leg was definitely not accepted:
+      // nothing reached Paystack, so quarantining terminally would strand
+      // the remaining legs after the accepted ones settle — or, for a
+      // missing secret, strand the customer unrefunded behind a
+      // delivery_uncertain row that never retries after recovery. Throw
+      // retryable instead — the drain defers while accepted legs are in
+      // flight, then resumes here with settled legs skipped. Ambiguous
+      // and deterministic failures still quarantine below: the provider
+      // may have accepted, or never will.
+      const isDefiniteTransientFailure =
+        paystackRefund.code === 'HTTP_429' ||
+        paystackRefund.code === 'CONFIG_ERROR';
+      // Transient legs stay review-free while retries remain — but the
+      // drain never reselects attempts-capped rows, so a transient
+      // failure on the last attempt must file durable evidence instead
+      // of stranding the leg while cron reports success.
       const isExhaustedTransientFailure =
         isDefiniteTransientFailure && isLastAttempt === true;
       if (refundIds.length > 0 && !isDefiniteTransientFailure) {
@@ -123,6 +129,7 @@ export async function initiatePaystackCancellationRefunds({
           transactions: [transaction],
         });
       } else if (isExhaustedTransientFailure) {
+        const configExhausted = paystackRefund.code === 'CONFIG_ERROR';
         try {
           await quarantineRefund({
             metadata: {
@@ -130,10 +137,13 @@ export async function initiatePaystackCancellationRefunds({
                 ? { accepted_refund_ids: refundIds }
                 : {}),
               failed_payment_transaction_id: transaction.id,
-              // A 429 is a definite rejection: explicit false so the
-              // completion gate auto-closes on replacement coverage.
+              // A 429 or missing secret is a definite non-acceptance:
+              // explicit false so the completion gate auto-closes on
+              // replacement coverage.
               ambiguous_initiation: false,
-              rate_limit_exhausted: true,
+              ...(configExhausted
+                ? { config_exhausted: true }
+                : { rate_limit_exhausted: true }),
             },
             order,
             // The provider rejected every attempt, so a replacement
@@ -146,8 +156,12 @@ export async function initiatePaystackCancellationRefunds({
             preflight: true,
             reason:
               refundIds.length > 0
-                ? 'Some payment legs were accepted for refund, but a later leg was rate limited on every retry'
-                : 'Paystack refund initiation was rate limited on every retry for this payment leg',
+                ? configExhausted
+                  ? 'Some payment legs were accepted for refund, but a later leg could not be attempted on any retry because Paystack was not configured'
+                  : 'Some payment legs were accepted for refund, but a later leg was rate limited on every retry'
+                : configExhausted
+                  ? 'Paystack refund initiation could not be attempted on any retry because Paystack was not configured'
+                  : 'Paystack refund initiation was rate limited on every retry for this payment leg',
             supabase,
             transactions: [transaction],
           });

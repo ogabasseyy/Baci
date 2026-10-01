@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { verifyTransaction } from '@/lib/paystack';
 import { fileInvalidAttemptReference } from './file-invalid-attempt-reference';
+import { fileUnresolvedAttemptReference } from './file-unresolved-attempt-reference';
 import type { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
 import type { AbandonedPaystackAttemptSummary } from './reconcile-abandoned-paystack-attempts';
 import { resolveAbandonedAttemptMismatch } from './resolve-abandoned-attempt-mismatch';
@@ -178,6 +179,29 @@ export async function processAbandonedPaystackAttempt(
       return;
     }
     if (isVerificationUnavailable(result.code)) summary.failed = true;
+    if (
+      result.code === 'HTTP_404' &&
+      attempt.metadata?.paystack_payment_type !== 'dva'
+    ) {
+      // A non-DVA reference Paystack cannot find: unlike a DVA 404 this
+      // is not retired (a spurious 404 must not strand a funded
+      // payment), but rotating silently forever hides it from
+      // operations while merchant cancellation keeps rejecting the
+      // paid order. File a durable review — deduped, unstamped — and
+      // keep rotating for a late verify.
+      const filed = await fileUnresolvedAttemptReference({
+        attempt,
+        reason: result.code,
+        supabase,
+      });
+      if (filed) {
+        summary.reviewsFiled.push(attempt.id);
+      } else {
+        summary.failed = true;
+      }
+      await hold('verification_unavailable');
+      return;
+    }
     if (
       result.code !== 'HTTP_404' ||
       attempt.metadata?.paystack_payment_type !== 'dva'

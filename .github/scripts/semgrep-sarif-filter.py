@@ -25,7 +25,8 @@ from semgrep_sarif_consumer import (audit_helpers,
                                     audit_script_dir)
 from semgrep_sarif_helpers import audit_trusted_changed
 from semgrep_sarif_pins import AUDITED_PATH, AUDITED_RULE_ID
-from semgrep_sarif_runner import audit_agent_runner, audit_installer
+from semgrep_sarif_agent import audit_agent_runner
+from semgrep_sarif_runner import audit_installer
 from semgrep_sarif_steps import audit_agent_env, audit_step_commands
 
 def main():

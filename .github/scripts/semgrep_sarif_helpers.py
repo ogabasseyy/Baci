@@ -7,17 +7,20 @@ use, so any trusted-tree change also fails for human review.
 """
 import os
 import re
+from semgrep_sarif_defer import (_mapfile_callback,
+                                  _trap_handler)
 from semgrep_sarif_heredoc import _strip_heredocs
-from semgrep_sarif_interp import (_check_command,
-                                   _check_poison_assign)
+from semgrep_sarif_interp import _check_command
 from semgrep_sarif_pins import _is_home_write
+from semgrep_sarif_poison import _base as _varname
+from semgrep_sarif_poison import _check_poison_assign
 from semgrep_sarif_scan import (arith_regions, extract_subshells,
-                                is_trusted_write_target,
                                 redirect_targets,
-                                subscript_cmdsubst)
-from semgrep_sarif_shell import (SHELL_KEYWORDS, logical_lines,
-                                 peel_prefix, split_commands2,
-                                 tokenize, unquote)
+                                subscript_cmdsubst, _write_zone)
+from semgrep_sarif_shell import (ENV_POISON, SHELL_KEYWORDS,
+                                 logical_lines, peel_prefix,
+                                 split_commands2, tokenize,
+                                 unquote)
 
 DEFERRED_RE = re.compile(
     r"(?:^|[;&|])\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*"
@@ -30,8 +33,10 @@ DEFERRED_RE = re.compile(
 XTRACE_RE = re.compile(
     r"\bset\s+-[A-Za-z]*x|\bset\s+-o\s+xtrace\b"
     r"|\b(?:bash|sh)\s+-[A-Za-z]*x")
+_POISON_ALT = "(?:" + "|".join(
+    v for v in ENV_POISON if v != "IFS") + ")"
 BARE_POISON_RE = re.compile(
-    r"(?:^|[;&|])\s*PATH\s*=[^=]"
+    r"(?:^|[;&|])\s*" + _POISON_ALT + r"\s*=[^=]"
     r"|(?:^|[;&|])\s*IFS\s*=(?![^;\s]*\s+"
     r"(?:command\s+|builtin\s+)?read\b)[^=]")
 
@@ -145,7 +150,7 @@ def _resolve(text, varmap):
                   sub, text)
 
 
-def _audit_expansions(line, drift, pinned_curl=False):
+def _audit_expansions(line, drift, src=""):
     # Unquoted-heredoc-body audit: words are stdin data (never
     # commands), but expansions execute. Extracted commands
     # audit fully; arithmetic regions for nested $/backtick.
@@ -153,19 +158,19 @@ def _audit_expansions(line, drift, pinned_curl=False):
     # cannot fuse with another body's text into a phantom.
     _, inners = extract_subshells(line)
     for inner in inners:
-        _audit_line(inner, drift, pinned_curl)
+        _audit_line(inner, drift, src)
     if any("$" in body or "`" in body
            for body in arith_regions(line)) \
             and "helper-arithmetic-sub" not in drift:
         drift.append("helper-arithmetic-sub")
 
 
-def _audit_line(line, drift, pinned_curl=False):
+def _audit_line(line, drift, src=""):
     cleaned, inners = extract_subshells(line)
     for inner in inners:
-        _audit_line(inner, drift, pinned_curl)
+        _audit_line(inner, drift, src)
     for inner in subscript_cmdsubst(line):
-        _audit_line(inner, drift, pinned_curl)
+        _audit_line(inner, drift, src)
     if DEFERRED_RE.search(line) \
             and "helper-deferred-exec" not in drift:
         drift.append("helper-deferred-exec")
@@ -183,9 +188,13 @@ def _audit_line(line, drift, pinned_curl=False):
             and "helper-env-poison" not in drift:
         drift.append("helper-env-poison")
     for tgt in redirect_targets(cleaned):
-        if is_trusted_write_target(tgt) \
+        zone = _write_zone(tgt)
+        if zone == "trusted" \
                 and "helper-trusted-write" not in drift:
             drift.append("helper-trusted-write")
+        if zone == "workspace" \
+                and "helper-workspace-write" not in drift:
+            drift.append("helper-workspace-write")
         if _is_home_write(tgt) \
                 and "helper-home-write" not in drift:
             drift.append("helper-home-write")
@@ -197,16 +206,34 @@ def _audit_line(line, drift, pinned_curl=False):
         if not words:
             continue
         argv0, rest = peel_prefix(words)
-        if not argv0 or argv0 in SHELL_KEYWORDS \
-                or argv0 in ("for", "select", "case"):
+        if not argv0:
             continue
+        if argv0 in ("for", "select"):
+            # Loop variables assign: a poison name rebinds
+            # the environment for every later command.
+            # (Checked before the keyword skip: both words
+            # are in SHELL_KEYWORDS.)
+            if rest and _varname(rest[0]) in ENV_POISON \
+                    and "helper-env-poison" not in drift:
+                drift.append("helper-env-poison")
+            continue
+        if argv0 in SHELL_KEYWORDS or argv0 == "case":
+            continue
+        if argv0 == "trap":
+            handler = _trap_handler(rest)
+            if handler is not None:
+                _audit_line(handler, drift, src)
+        elif argv0 in ("mapfile", "readarray"):
+            cb = _mapfile_callback(rest)
+            if cb is not None:
+                _audit_line(cb, drift, src)
         if re.match(r"^[\*\?\[]", argv0) \
                 or re.match(r"^\d*[<>]", argv0):
             continue
         pre = words[:len(words) - len(rest) - 1]
         _check_poison_assign(pre, argv0, rest, drift)
         _check_command(argv0, list(rest), list(pre), drift,
-                       pinned_curl)
+                       src)
 
 
 def _audit_shell_file(path, drift):
@@ -217,13 +244,12 @@ def _audit_shell_file(path, drift):
         drift.append("helper-unreadable")
         return
     varmap = _collect_vars(raw)
-    pinned_curl = os.path.basename(path) == "install.sh"
+    src = os.path.basename(path)
     code, bodies = _strip_heredocs(raw)
     for line in logical_lines(code):
-        _audit_line(_resolve(line, varmap), drift, pinned_curl)
+        _audit_line(_resolve(line, varmap), drift, src)
     for line in bodies:
-        _audit_expansions(_resolve(line, varmap), drift,
-                          pinned_curl)
+        _audit_expansions(_resolve(line, varmap), drift, src)
 
 
 def invoked_shell_refs(raw):

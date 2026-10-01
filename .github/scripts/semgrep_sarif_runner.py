@@ -1,20 +1,15 @@
-"""Review-runner guards: the muse invocation in run.sh (single
-call, argv-scoped containment flags, token scrubbing) and the
-install.sh invariants (exact version/checksums, verify-before-
-install order, pinned versioned URL, no pipe-to-shell).
+"""Review-runner guards: quote-glued shell-word helpers shared
+with the agent audit, and the install.sh invariants (exact
+version/checksums, verify-before-install order, pinned
+versioned URL, no pipe-to-shell).
 """
 import re
-from semgrep_sarif_helpers import (CARRY_VARS, _collect_vars,
-                                   _resolve)
 from semgrep_sarif_install import audit_install_binding
 from semgrep_sarif_pins import (MUSE_PINNED_HOST,
                                 MUSE_PINNED_SHA_AARCH64,
                                 MUSE_PINNED_SHA_X86,
                                 MUSE_PINNED_VERSION)
-from semgrep_sarif_scan import extract_subshells
-from semgrep_sarif_shell import (logical_lines, peel_prefix,
-                                 split_commands2,
-                                 strip_comments)
+from semgrep_sarif_shell import strip_comments
 
 
 def _shell_words(text):
@@ -117,87 +112,6 @@ def _peel_env(words):
                 else:
                     break
     return words[i:]
-
-def audit_agent_runner(drift):
-
-    # The data-only premise rests on the agent invocation itself:
-    # every muse call in the trusted runner must carry the exact
-    # execution-disabling flags (comment mentions do not count) and
-    # must shed the GitHub token. Backslash continuations joined.
-    runner_path = ".github/scripts/muse-review/run.sh"
-    try:
-        with open(runner_path) as fh:
-            runner_raw = fh.read().splitlines()
-    except OSError:
-        runner_raw = []
-    if not runner_raw:
-        drift.append("agent-runner-missing")
-    else:
-        logical = logical_lines(runner_raw)
-        # Resolve top-level literal variables first: a constructed
-        # path (MUSE_BIN=...muse; "${MUSE_BIN}" exec ...) must count
-        # as an invocation, not slip past the literal match.
-        varmap = _collect_vars(runner_raw)
-        expanded = [_resolve(line, varmap) for line in logical]
-        # Command-position words (quote-glued, env-peeled): prose
-        # mentions (echo "muse ...") and identifiers (muse_rc) sit
-        # off command position and never count; subshell bodies
-        # recurse since $(muse ...) executes too.
-        roots = "|".join(
-            r"\$\{%s\}|\$%s(?![A-Za-z0-9_])" % (v, v)
-            for v in CARRY_VARS)
-
-        def calls_in(text):
-            found = []
-            cleaned, inners = extract_subshells(text)
-            for inner in inners:
-                found.extend(calls_in(inner))
-            for piece, _, _ in split_commands2(cleaned):
-                words = _peel_env(_shell_words(piece))
-                argv0, rest = peel_prefix(words)
-                if not argv0:
-                    continue
-                cmd = _dequote(argv0)
-                if cmd == "muse" or cmd.endswith("/muse"):
-                    found.append((piece, rest))
-            return found
-
-        calls = []
-        for line in expanded:
-            calls.extend(calls_in(line))
-        # Whatever still expands at command position is unresolvable
-        # statically (conditional assigns, read, $()): fail closed.
-        for line in expanded:
-            cleaned, _ = extract_subshells(line)
-            for piece, _, _ in split_commands2(cleaned):
-                words = _peel_env(_shell_words(piece))
-                argv0, _ = peel_prefix(words)
-                if not argv0:
-                    continue
-                bare = re.sub(roots, "", _dequote(argv0))
-                if "$" in bare or "`" in bare:
-                    if "agent-indirect-unresolved" not in drift:
-                        drift.append("agent-indirect-unresolved")
-        if not calls:
-            drift.append("agent-invocation-missing")
-        elif len(calls) != 1:
-            drift.append(f"agent-invocation-count={len(calls)}")
-        else:
-            # Scope checks to the simple command containing muse
-            # (split_commands2 already bounded it: flags on a later
-            # chained command cannot satisfy them). Disable flags are
-            # muse's own argv; -u may precede it (env prefix) so it is
-            # read from the whole scoped command.
-            piece, rest = calls[0]
-            argv = " ".join(_dequote(w) for w in rest)
-            if not re.search(r"(?:^|\s)--disable-shell(?:\s|$)", argv):
-                drift.append("agent-shell-boundary")
-            elif not re.search(r"(?:^|\s)--disable-write(?:\s|$)", argv):
-                drift.append("agent-write-boundary")
-            elif "-u GITHUB_TOKEN" not in piece \
-                    or "-u GH_TOKEN" not in piece:
-                drift.append("agent-token-isolation")
-
 
 def audit_installer(drift):
     # install.sh determines the executable that receives META_API_KEY:

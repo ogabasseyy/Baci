@@ -3,6 +3,7 @@ execution wrappers, privilege primitives, and loader/startup
 rebinding for token-bearing helper content.
 """
 import re
+from semgrep_sarif_copy import COPY_TOOLS, audit_copy_dest
 from semgrep_sarif_embeds import _check_awk, _check_perl
 from semgrep_sarif_pins import (RUNNER_PIN, SCRIPT_PIN,
                                 _safe_exec_path, _ws_rooted)
@@ -49,7 +50,7 @@ NET_DENY = {"aria2c", "axel", "busybox", "curl", "ftp", "lftp",
             "telnet", "tftp", "rsync", "wget"}
 
 
-def _check_command(argv0, rest, pre, drift, pinned_curl=False):
+def _check_command(argv0, rest, pre, drift, src=""):
     if "sudo" in pre or "doas" in pre \
             or argv0 in ("su", "runuser", "setpriv"):
         if "helper-privilege" not in drift:
@@ -61,10 +62,18 @@ def _check_command(argv0, rest, pre, drift, pinned_curl=False):
             drift.append("helper-untrusted-exec")
     base = argv0.rsplit("/", 1)[-1]
     if base in NET_DENY \
-            and not (pinned_curl and base == "curl") \
+            and not (src == "install.sh" and base == "curl") \
             and "helper-network-tool" not in drift:
         drift.append("helper-network-tool")
-    if base in ("bash", "sh", "source", "."):
+    if base in COPY_TOOLS:
+        audit_copy_dest(base, rest, drift, src)
+    elif base in ("at", "batch", "crontab", "watch"):
+        # Scheduled/repeated execution with no legitimate
+        # helper use (list/query spellings drift too: fail
+        # closed, reviewer whitelists if ever needed).
+        if "helper-deferred-exec" not in drift:
+            drift.append("helper-deferred-exec")
+    elif base in ("bash", "sh", "source", "."):
         bound = script_operand(rest)
         if not bound and base in ("source", ".") and rest \
                 and re.match(RUNNER_PIN, rest[0]):
@@ -123,14 +132,14 @@ def _check_command(argv0, rest, pre, drift, pinned_curl=False):
         if "helper-untrusted-exec" not in drift:
             drift.append("helper-untrusted-exec")
     elif base == "env":
-        _check_env(rest, drift, pinned_curl)
+        _check_env(rest, drift, src)
     elif base == "find":
         if any(t in ("-exec", "-execdir", "-ok", "-okdir")
                for t in rest) \
                 and "helper-untrusted-exec" not in drift:
             drift.append("helper-untrusted-exec")
     elif base == "xargs":
-        _check_xargs(rest, drift, pinned_curl)
+        _check_xargs(rest, drift, src)
     elif base in ("nice", "nohup", "stdbuf", "setsid"):
         # Execution wrappers obscure the real argv0; none is
         # used today, so any use fails closed.
@@ -150,7 +159,7 @@ def _check_command(argv0, rest, pre, drift, pinned_curl=False):
             drift.append("helper-untrusted-exec")
 
 
-def _check_env(rest, drift, pinned_curl=False):
+def _check_env(rest, drift, src=""):
     # Token scrubbing legitimately uses env -u; anything else
     # routes the command back through the full dispatch. -S
     # takes its own quoting language: fail closed.
@@ -197,10 +206,10 @@ def _check_env(rest, drift, pinned_curl=False):
         return
     pre = tail[:len(tail) - len(cmd_rest) - 1]
     _check_command(argv0, list(cmd_rest), list(pre), drift,
-                   pinned_curl)
+                   src)
 
 
-def _check_xargs(rest, drift, pinned_curl=False):
+def _check_xargs(rest, drift, src=""):
     # Arguments are opaque to the invoked command, so any
     # workspace-rooted token fails closed; the command itself
     # takes the path rule. -e/-E values are ambiguous: fail
@@ -241,40 +250,6 @@ def _check_xargs(rest, drift, pinned_curl=False):
             and "helper-untrusted-exec" not in drift:
         drift.append("helper-untrusted-exec")
     if cmd.rsplit("/", 1)[-1] in NET_DENY \
-            and not (pinned_curl and cmd == "curl") \
+            and not (src == "install.sh" and cmd == "curl") \
             and "helper-network-tool" not in drift:
         drift.append("helper-network-tool")
-
-
-def _check_poison_assign(pre, argv0, rest, drift):
-    # Loader/startup rebinding in prefix assigns or declaration
-    # builtins. Two safe idioms pass: IFS= scoped to read (a
-    # builtin, so no resolution happens under it) and local
-    # IFS (function-scoped, restored on return).
-    for word in pre:
-        m = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)=(.*)",
-                         word)
-        if not m or m.group(1) not in ENV_POISON:
-            continue
-        if m.group(1) == "IFS" and argv0 == "read":
-            continue
-        if "helper-env-poison" not in drift:
-            drift.append("helper-env-poison")
-    if argv0 in ("export", "local", "readonly", "declare",
-                "typeset"):
-        i = 0
-        while i < len(rest) and rest[i].startswith("-") \
-                and "=" not in rest[i]:
-            i += 1
-        for word in rest[i:]:
-            m = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)=(.*)",
-                             word)
-            if not m:
-                continue
-            if m.group(1) not in ENV_POISON:
-                continue
-            if argv0 == "local" and m.group(1) == "IFS":
-                continue
-            if "helper-env-poison" not in drift:
-                drift.append("helper-env-poison")
-

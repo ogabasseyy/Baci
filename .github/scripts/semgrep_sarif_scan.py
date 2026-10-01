@@ -2,6 +2,7 @@
 brace skipping, and output-redirect targets with the trusted-
 tree write predicate shared by run-block and helper audits.
 """
+import posixpath
 import re
 
 
@@ -256,4 +257,29 @@ def is_trusted_write_target(target):
     # the tree root in a redirect target drifts.
     return "trusted-scripts" in target or re.search(
         r"\$(\{)?SCRIPT_DIR\}?", target) is not None
+
+MUSE_BIN_RE = (r"^(?:\$(?:\{HOME\}|HOME)/|~/)"
+               r"\.local/bin/muse$")
+MUSE_DIR_RE = (r"^(?:\$(?:\{HOME\}|HOME)|~)"
+               r"(?:/\.local(?:/bin)?)?/?$")
+WS_RE = r"^\$(?:\{GITHUB_WORKSPACE\}|GITHUB_WORKSPACE)(?:/|$)"
+
+
+def _write_zone(target):
+    # Where a helper write lands: "trusted" (script tree, the
+    # installed muse binary, or its ancestor dirs -- a link
+    # swap there redirects the absolute-path invocation),
+    # "workspace" (the agent-readable checkout: token staging),
+    # or None. Lexically normalized first so .. spellings
+    # cannot hide a protected destination (over-approximating
+    # outward escapes is fail-closed).
+    t = posixpath.normpath(target)
+    if "trusted-scripts" in t or re.search(
+            r"\$(\{)?SCRIPT_DIR\}?", t) is not None:
+        return "trusted"
+    if re.match(MUSE_BIN_RE, t) or re.match(MUSE_DIR_RE, t):
+        return "trusted"
+    if re.match(WS_RE, t):
+        return "workspace"
+    return None
 

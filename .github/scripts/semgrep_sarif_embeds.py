@@ -5,7 +5,7 @@ import re
 from semgrep_sarif_pins import (SCRIPT_PIN,
                                 _is_home_write,
                                 _safe_exec_path)
-from semgrep_sarif_scan import is_trusted_write_target
+from semgrep_sarif_scan import _write_zone
 
 
 def _check_perl(rest, drift):
@@ -77,10 +77,15 @@ def _check_perl(rest, drift):
                     argv = rest[i + 1:]
                 if inplace:
                     for target in argv:
-                        if is_trusted_write_target(target) \
+                        zone = _write_zone(target)
+                        if zone == "trusted" \
                                 and "helper-trusted-write" \
                                 not in drift:
                             drift.append("helper-trusted-write")
+                        if zone == "workspace" \
+                                and "helper-workspace-write" \
+                                not in drift:
+                            drift.append("helper-workspace-write")
                         if _is_home_write(target) \
                                 and "helper-home-write" \
                                 not in drift:
@@ -102,12 +107,15 @@ def _check_perl(rest, drift):
 def _check_awk(rest, drift):
     # -f program files must be pinned; the positional program
     # and input files pass (inline code is human-visible,
-    # inputs are data). --source programs are inline too.
-    i = 0
+    # inputs are data). --source programs are inline too. -i
+    # inplace rewrites its file operands, so those take the
+    # write-zone rule (VAR= operands are assignments, data).
+    i, inplace, program_seen = 0, False, False
     while i < len(rest):
         tok = rest[i]
         if tok == "--":
-            return
+            i += 1
+            continue
         if tok in ("-f", "--file") and i + 1 < len(rest):
             if not re.match(SCRIPT_PIN, rest[i + 1]) \
                     and "helper-untrusted-exec" not in drift:
@@ -130,10 +138,49 @@ def _check_awk(rest, drift):
         elif tok == "--source" \
                 or tok.startswith("--source="):
             i += 2 if tok == "--source" else 1
+        elif tok == "-i":
+            # Bare -i takes an include file: only the inplace
+            # extension is known-safe (unpinned code otherwise).
+            nxt = rest[i + 1] if i + 1 < len(rest) else ""
+            if nxt.startswith("inplace"):
+                inplace = True
+                i += 2
+            elif nxt == "" or nxt == "--" \
+                    or nxt.startswith("-"):
+                i += 1
+            else:
+                if "helper-untrusted-exec" not in drift:
+                    drift.append("helper-untrusted-exec")
+                return
+        elif tok in ("--inplace",) \
+                or tok.startswith("--inplace="):
+            inplace = True
+            i += 1
+        elif tok.startswith("-i"):
+            if tok[2:].startswith("inplace"):
+                inplace = True
+                i += 1
+            else:
+                if "helper-untrusted-exec" not in drift:
+                    drift.append("helper-untrusted-exec")
+                return
         elif tok in ("-v", "-F", "-W"):
             i += 2
         elif tok.startswith("-"):
             i += 1
+        elif not program_seen:
+            program_seen = True
+            i += 1
+        elif inplace and not re.fullmatch(
+                r"[A-Za-z_][A-Za-z0-9_]*=.*", tok):
+            zone = _write_zone(tok)
+            if zone == "trusted" \
+                    and "helper-trusted-write" not in drift:
+                drift.append("helper-trusted-write")
+            if zone == "workspace" \
+                    and "helper-workspace-write" not in drift:
+                drift.append("helper-workspace-write")
+            i += 1
         else:
-            return
+            i += 1
 

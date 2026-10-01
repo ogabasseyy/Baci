@@ -6,6 +6,11 @@ import {
   mockFetch,
 } from './route.test-helpers';
 
+vi.mock('../provider-budget', () => ({
+  reserveGooglePlacesRequest: vi.fn(async () => true),
+  reserveGeoapifyRequest: vi.fn(async () => true),
+}));
+
 describe('GET /api/places/autocomplete errors', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -57,8 +62,10 @@ describe('GET /api/places/autocomplete errors', () => {
     });
   });
 
-  it('returns 500 on network/fetch error', async () => {
-    mockFetch.mockRejectedValueOnce(new Error('Network error'));
+  it('returns a safe 500 on an unexpected internal error', async () => {
+    mockFetch.mockRejectedValueOnce(
+      new TypeError('Unexpected implementation failure')
+    );
 
     const request = makeRequest({ input: 'Lagos' });
 
@@ -69,7 +76,7 @@ describe('GET /api/places/autocomplete errors', () => {
     expect(data).toEqual({ error: 'Internal server error' });
   });
 
-  it('retries on ECONNRESET error and eventually returns 500', async () => {
+  it('retries on ECONNRESET error and eventually returns a safe gateway error', async () => {
     const econnResetError = new Error('fetch failed: ECONNRESET');
 
     // Will retry twice (total 3 attempts)
@@ -83,8 +90,11 @@ describe('GET /api/places/autocomplete errors', () => {
     const response = await GET(request);
     const data = await response.json();
 
-    expect(response.status).toBe(500);
-    expect(data).toEqual({ error: 'Internal server error' });
+    expect(response.status).toBe(502);
+    expect(data).toEqual({
+      error: 'Failed to fetch predictions',
+      code: 'PLACES_AUTOCOMPLETE_HTTP_ERROR',
+    });
     expect(mockFetch).toHaveBeenCalledTimes(3); // Initial + 2 retries
   });
 

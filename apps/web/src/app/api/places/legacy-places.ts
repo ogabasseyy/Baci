@@ -13,7 +13,17 @@ export type LegacyPlacesResult<T> =
   | { ok: true; status: number; data: T }
   | { ok: false; status: number };
 
-function isRetryableNetworkError(error: unknown): boolean {
+export function isRetryableNetworkError(error: unknown): boolean {
+  // AbortSignal.timeout can reject with a DOMException from another realm,
+  // which is not necessarily an instanceof Error.
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'name' in error &&
+    (error.name === 'TimeoutError' || error.name === 'AbortError')
+  ) {
+    return true;
+  }
   return (
     error instanceof Error &&
     (error.message.includes('ECONNRESET') ||
@@ -27,15 +37,20 @@ function sleep(ms: number): Promise<void> {
 }
 
 export async function fetchLegacyPlacesJson<T extends { status?: string }>(
-  url: string
+  url: string,
+  beforeAttempt?: () => Promise<boolean>
 ): Promise<LegacyPlacesResult<T>> {
   let retries = MAX_RETRIES;
   let delay = INITIAL_RETRY_DELAY_MS;
 
   for (;;) {
+    if (beforeAttempt && !(await beforeAttempt())) {
+      return { ok: false, status: 429 };
+    }
     let response: Response;
     try {
       response = await fetch(url, {
+        signal: AbortSignal.timeout(5000),
         // Legacy Places requires the API key in the query string. Keep the
         // credential-bearing URL out of exported fetch spans.
         opentelemetry: { ignore: true },

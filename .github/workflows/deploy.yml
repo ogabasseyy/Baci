@@ -26,6 +26,7 @@ jobs:
       web: ${{ steps.filter.outputs.web }}
       migrations: ${{ steps.filter.outputs.migrations }}
       tracking: ${{ steps.filter.outputs.tracking }}
+      manifests: ${{ steps.filter.outputs.manifests }}
       cwv_runner: ${{ steps.filter.outputs.cwv_runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -125,6 +126,16 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
         run: .readiness-checkout/.github/scripts/check-gigl-cutover-latch.sh "$VPS_WORKER_REMOTE_DIR" .readiness-checkout
+      - name: Warn on manifest-only worker dependency drift
+        # Signal, not gate: manifests are deliberately outside the
+        # tracking filter, so a manifest-only push (e.g. a transitive
+        # security fix the VPS poller executes) deploys without
+        # refreshing the worker. Make that drift loud instead of
+        # silent; the operator follows urgent fixes with a manual
+        # deploy.sh. This step never fails.
+        if: needs.changes.outputs.manifests == 'true' && needs.changes.outputs.tracking != 'true'
+        run: >-
+          echo '::warning::Dependency manifests changed without tracking changes: the VPS GIGL poller keeps its installed dependency tree until the next tracking-code push or manual deploy.sh run.'
       - name: Verify production GIGL direct-worker installation
         # The verifier requires the VPS worker's exact checkout SHA to equal
         # the pushed commit, and the worker is deployed manually via

@@ -42,6 +42,10 @@ web:
   - '.github/scripts/run-pinned-vercel.sh'
   - '.npmrc'
   - 'pnpm-workspace.yaml'
+manifests:
+  - 'package.json'
+  - 'pnpm-lock.yaml'
+  - 'apps/web/package.json'
 tracking:
   - 'vercel.json'
   # GIGL-owned worker paths only — never a vps-workers/** glob, which

@@ -100,6 +100,32 @@ describe('GIGL direct worker cost contract', () => {
     }
   });
 
+  it('warns (never blocks) on manifest-only worker dependency drift', () => {
+    const deployFilter = readFileSync(
+      join(repoRoot, '.github', 'filters', 'deploy.yml'),
+      'utf8'
+    );
+    const group = deployFilter
+      .split(/^manifests:\s*$/m)[1]
+      .split(/^\w[\w-]*:\s*$/m)[0];
+    assert.match(group, /^\s+- 'package\.json'\s*$/m);
+    assert.match(group, /^\s+- 'pnpm-lock\.yaml'\s*$/m);
+    assert.match(group, /^\s+- 'apps\/web\/package\.json'\s*$/m);
+
+    const deploy = readFileSync(
+      join(repoRoot, '.github', 'workflows', 'deploy.yml'),
+      'utf8'
+    );
+    assert.match(deploy, /manifests: \$\{\{ steps\.filter\.outputs\.manifests \}\}/);
+    const step = deploy.split('- name: Warn on manifest-only worker dependency drift')[1].split(/^\s+- name: /m)[0];
+    assert.match(
+      step,
+      /needs\.changes\.outputs\.manifests == 'true' && needs\.changes\.outputs\.tracking != 'true'/
+    );
+    assert.match(step, /::warning::/);
+    assert.doesNotMatch(step, /::error::/);
+  });
+
   it('selects deploy_scripts for GIGL gate script changes', () => {
     const ciFilter = readFileSync(
       join(repoRoot, '.github', 'filters', 'ci.yml'),

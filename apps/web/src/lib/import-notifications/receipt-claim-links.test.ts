@@ -49,6 +49,23 @@ describe('receipt claim links', () => {
     ).toBe('https://future-merchant.usebaci.com/receipts/claim/token_abc');
   });
 
+  it('falls back to the slug subdomain for malformed custom domains', () => {
+    for (const custom_domain of [
+      'evil.com/attacker',
+      'user@evil.com',
+      '10.0.0.1',
+      'no-dot-hostname',
+      'bad..dots.com',
+    ]) {
+      expect(
+        buildReceiptClaimUrl({
+          merchant: { slug: 'ogabassey', custom_domain },
+          token: 'token_123',
+        })
+      ).toBe('https://ogabassey.usebaci.com/receipts/claim/token_123');
+    }
+  });
+
   it('does not add customer email hints to receipt claim links', () => {
     expect(
       buildReceiptClaimUrl({

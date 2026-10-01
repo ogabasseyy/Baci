@@ -25,6 +25,7 @@ const baseOrder = {
   amount_paid: 5000,
   payment_status: 'paid',
   payment_method: 'transfer',
+  invoice_type_code: null,
   shipping_status: 'pending',
   customer_name: 'Bassey John',
   customer_email: 'basseybjohn@yahoo.co.uk',

@@ -146,10 +146,13 @@ BEGIN
       AND COALESCE(v_order.payment_status, '') NOT IN ('unpaid', 'pending', 'partially_paid'))
   THEN RETURN jsonb_build_object('status', 'skipped'); END IF;
 
+  -- Bind by staff-selected customer identity, not email equality: the order's
+  -- email is the contact channel staff entered, and requiring the customers
+  -- row to agree would strand legitimate late corrections (verified sign-in
+  -- still gates redemption, and the order email stays the claim recipient).
   SELECT c.* INTO v_customer FROM public.customers AS c
   WHERE c.id = v_order.customer_id AND c.merchant_id = v_order.merchant_id
     AND c.deleted_at IS NULL
-    AND lower(btrim(c.email)) = lower(btrim(v_order.customer_email))
   FOR SHARE;
   IF NOT FOUND THEN RETURN jsonb_build_object('status', 'skipped'); END IF;
 

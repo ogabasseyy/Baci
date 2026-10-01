@@ -11,7 +11,7 @@ interface ManualDocumentEmailInput {
   customerName: string;
   customerEmail: string;
   orderNumber: string;
-  documentKind: 'invoice' | 'receipt';
+  documentKind: 'invoice' | 'proforma_invoice' | 'receipt';
   claimUrl: string;
   devices: string[];
   brandColor?: string | null;
@@ -22,6 +22,7 @@ interface ManualDocumentEmailInput {
 export function buildManualOrderDocumentEmail(input: ManualDocumentEmailInput) {
   const escapeText = escapeHtmlAttribute;
   const kind = input.documentKind;
+  const kindLabel = kind === 'proforma_invoice' ? 'proforma invoice' : kind;
   // Staff-entered order numbers are untrusted in header-adjacent fields:
   // strip line breaks that could smuggle extra subject lines, then cap the
   // reference length.
@@ -36,22 +37,22 @@ export function buildManualOrderDocumentEmail(input: ManualDocumentEmailInput) {
         ['Google Play', sanitizeUrl(input.appLinks.playStoreUrl)],
       ].filter((link) => link[1])
     : [];
-  const verification = `Sign in or register and verify ${input.customerEmail} to link this purchase to your account and view or download your ${kind}.`;
+  const verification = `Sign in or register and verify ${input.customerEmail} to link this purchase to your account and view or download your ${kindLabel}.`;
   const disclaimer =
-    kind === 'invoice'
-      ? 'This invoice shows the amount paid and outstanding balance. It is not proof of payment in full.'
-      : 'Your PDF receipt is attached. No app installation is needed to keep your proof of payment.';
+    kind === 'receipt'
+      ? 'Your PDF receipt is attached. No app installation is needed to keep your proof of payment.'
+      : 'This invoice shows the amount paid and outstanding balance. It is not proof of payment in full.';
   const optionalAppHtml = appLinks.length
     ? `<p>Optional: download the app, then sign in with the same verified email to see your linked purchases. ${appLinks.map(([label, url]) => `<a href="${escapeText(url ?? '')}">${label}</a>`).join(' | ')}</p>`
     : '';
   return {
-    subject: `Your ${kind} is ready - #${orderNumber}`,
+    subject: `Your ${kindLabel} is ready - #${orderNumber}`,
     textContent: [
       `Hello ${input.customerName},`,
-      `Your ${input.merchantName} ${kind} for order #${orderNumber} is ready.`,
-      kind === 'invoice'
-        ? 'Your PDF invoice is attached.'
-        : 'Your PDF receipt is attached.',
+      `Your ${input.merchantName} ${kindLabel} for order #${orderNumber} is ready.`,
+      kind === 'receipt'
+        ? 'Your PDF receipt is attached.'
+        : 'Your PDF invoice is attached.',
       disclaimer,
       verification,
       `View or download: ${claimUrl}`,
@@ -65,14 +66,14 @@ export function buildManualOrderDocumentEmail(input: ManualDocumentEmailInput) {
       `Need help? ${input.supportEmail}`,
     ].join('\n\n'),
     htmlContent: renderReceiptEmailHtml({
-      preheader: `Your ${kind} for order #${escapeText(orderNumber)} is ready.`,
+      preheader: `Your ${kindLabel} for order #${escapeText(orderNumber)} is ready.`,
       brandWordmark: escapeText(input.merchantName),
       brandColor: color,
-      eyebrow: kind.toUpperCase(),
-      headline: `Your ${kind} is ready`,
+      eyebrow: kindLabel.toUpperCase(),
+      headline: `Your ${kindLabel} is ready`,
       subhead: `Order #${escapeText(orderNumber)}`,
       greetingName: escapeText(input.customerName),
-      introHtml: `<p>Your PDF ${kind} is attached.</p><p>${escapeText(disclaimer)}</p><p>${escapeText(verification)}</p>${optionalAppHtml}`,
+      introHtml: `<p>Your PDF ${kindLabel} is attached.</p><p>${escapeText(disclaimer)}</p><p>${escapeText(verification)}</p>${optionalAppHtml}`,
       sectionLabel: 'Your purchase',
       deviceRowsHtml: renderReceiptDeviceRows(
         input.devices.map(escapeText),
@@ -80,7 +81,7 @@ export function buildManualOrderDocumentEmail(input: ManualDocumentEmailInput) {
       ),
       ctaHtml: renderReceiptCta(
         escapeText(claimUrl),
-        `View / download ${kind}`,
+        `View / download ${kindLabel}`,
         color
       ),
       reassurance:

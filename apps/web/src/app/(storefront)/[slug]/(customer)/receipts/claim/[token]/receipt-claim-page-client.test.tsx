@@ -376,6 +376,32 @@ describe('ReceiptClaimPageClient', () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 
+  it('surfaces the verify-email guidance when the account is unverified', async () => {
+    mockUseCustomerAuth.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+    });
+    mockFetchWithCsrf.mockResolvedValue(
+      createJsonResponse(
+        {
+          code: 'EMAIL_UNVERIFIED',
+          error: 'Verify your email address before claiming this receipt',
+          success: false,
+        },
+        { status: 403 }
+      )
+    );
+
+    renderClient();
+
+    expect(
+      await screen.findByText(
+        'Verify your email address before claiming this receipt'
+      )
+    ).toBeInTheDocument();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
   it('shows initial server errors and does not redeem', () => {
     mockUseCustomerAuth.mockReturnValue({
       isAuthenticated: true,

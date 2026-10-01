@@ -285,4 +285,35 @@ describe('sendSettlementNotifications', () => {
       expect.objectContaining({ merchantId: 'merchant-a' })
     );
   });
+
+  it('counts a resolved mark error instead of reporting sent', async () => {
+    const sendEmail = vi.fn().mockResolvedValue({ success: true });
+    const fresh = freshQuery([
+      { id: 'set-1', settlement_notified: false, status: 'settled' },
+    ]);
+    // Supabase resolves write failures instead of throwing: the mark
+    // rejects nothing, so only the checked response catches it.
+    const mark = markQuery({ error: { code: 'XX000' } });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(fresh)
+      .mockReturnValueOnce({ update: mark.update });
+    const supabase = { from } as unknown as SupabaseClient;
+
+    const result = await sendSettlementNotifications({
+      pendingNotifications: [settlement('set-1', merchantA)],
+      sendEmail,
+      supabase,
+    });
+
+    // The email was delivered but the row stays unnotified: reporting
+    // sent would hide the next run's duplicate email behind success.
+    expect(result).toEqual({ failed: 1, sent: 0 });
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchantId: 'merchant-a',
+        message: 'Failed to mark settlement notification sent',
+      })
+    );
+  });
 });

@@ -46,6 +46,7 @@ export function createClient(
   };
   const completedLookup = {
     eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
     neq: vi.fn().mockReturnThis(),
     limit: vi.fn().mockResolvedValue({
       data: completed

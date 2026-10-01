@@ -33,27 +33,58 @@ function harness() {
 function shortClient({
   confirmReview = { txn_id: 'attempt-1' },
   insertError = null,
+  insertErrors = [],
+  siblingReview = { id: 'review-9', metadata: {} },
+  confirmCaptures = { 'attempt-1': { capture_amount_minor: 5000 } },
+  updateRows = [{ id: 'review-9' }],
+  updateError = null,
   stampData = true,
   stampError = null,
 }: {
   confirmReview?: unknown;
   insertError?: unknown;
+  insertErrors?: unknown[];
+  siblingReview?: unknown;
+  confirmCaptures?: unknown;
+  updateRows?: unknown;
+  updateError?: unknown;
   stampData?: unknown;
   stampError?: unknown;
 } = {}) {
-  const insert = vi.fn().mockResolvedValue({ error: insertError });
+  const insert = vi.fn();
+  for (const error of insertErrors) {
+    insert.mockResolvedValueOnce({ error });
+  }
+  insert.mockResolvedValue({ error: insertError });
+  // Lookup order: own-transaction review, sibling review, append
+  // confirmation.
   const confirmSingle = vi
     .fn()
-    .mockResolvedValue({ data: confirmReview, error: null });
+    .mockResolvedValueOnce({ data: confirmReview, error: null })
+    .mockResolvedValueOnce({ data: siblingReview, error: null })
+    .mockResolvedValueOnce({
+      data: { metadata: { short_captures: confirmCaptures } },
+      error: null,
+    });
+  const updateSelect = vi
+    .fn()
+    .mockResolvedValue({ data: updateRows, error: updateError });
+  const updateBuilder = {
+    eq: vi.fn().mockReturnThis(),
+    is: vi.fn().mockReturnThis(),
+    select: updateSelect,
+  };
+  const update = vi.fn(() => updateBuilder);
   const from = vi.fn(() => ({
     eq: vi.fn().mockReturnThis(),
     insert,
     is: vi.fn().mockReturnThis(),
     maybeSingle: confirmSingle,
     select: vi.fn().mockReturnThis(),
+    update,
   }));
   const rpc = vi.fn().mockResolvedValue({ data: stampData, error: stampError });
-  return { from, insert, rpc };
+  return { from, insert, rpc, update };
 }
 
 describe('fileShortCaptureAndRetire', () => {
@@ -136,10 +167,72 @@ describe('fileShortCaptureAndRetire', () => {
     expect(h.hold).not.toHaveBeenCalled();
   });
 
-  it('holds without retiring when the conflict belongs to another order', async () => {
+  it('refiles without the reference when another order owns it', async () => {
     const db = shortClient({
       confirmReview: null,
-      insertError: { code: '23505' },
+      insertErrors: [{ code: '23505' }, null],
+    });
+    const h = harness();
+
+    const gate = await fileShortCaptureAndRetire(
+      { ...h, attempt, supabase: db as never },
+      evidence
+    );
+
+    // Holding here would rotate on the same global conflict every
+    // sweep while this pending attempt blocks order cancellation;
+    // the ref-less review reaches the operations queue instead.
+    expect(gate).toBe('done');
+    expect(db.insert).toHaveBeenCalledTimes(2);
+    expect(db.insert).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        paystack_ref: null,
+        txn_id: 'attempt-1',
+      })
+    );
+    expect(db.rpc).toHaveBeenCalled();
+    expect(h.summary.reviewsFiled).toEqual(['attempt-1']);
+    expect(h.summary.failed).toBe(false);
+    expect(h.hold).not.toHaveBeenCalled();
+  });
+
+  it('appends to the sibling review when the order slot is taken', async () => {
+    const db = shortClient({
+      confirmReview: null,
+      insertErrors: [{ code: '23505' }, { code: '23505' }],
+    });
+    const h = harness();
+
+    const gate = await fileShortCaptureAndRetire(
+      { ...h, attempt, supabase: db as never },
+      evidence
+    );
+
+    expect(gate).toBe('done');
+    expect(db.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          short_captures: expect.objectContaining({
+            'attempt-1': expect.objectContaining({
+              capture_amount_minor: 5000,
+              outstanding_amount_minor: 7000,
+            }),
+          }),
+        }),
+      })
+    );
+    expect(db.rpc).toHaveBeenCalled();
+    expect(h.summary.reviewsFiled).toEqual(['attempt-1']);
+    expect(h.summary.failed).toBe(false);
+    expect(h.hold).not.toHaveBeenCalled();
+  });
+
+  it('holds without retiring when the sibling append fails', async () => {
+    const db = shortClient({
+      confirmReview: null,
+      insertErrors: [{ code: '23505' }, { code: '23505' }],
+      updateError: { code: 'XX000' },
     });
     const h = harness();
 

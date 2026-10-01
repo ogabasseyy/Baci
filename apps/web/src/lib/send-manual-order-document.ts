@@ -130,6 +130,9 @@ export async function sendManualOrderDocument({
     recipientEmail: recipient.email,
     preferredPaymentAccount,
   });
+  // Staff-recorded orders may omit the customer name; greet with the import
+  // sender's fallback instead of throwing through every retry.
+  const displayCustomerName = order.customer_name || 'there';
   const receiptDate = await resolveManualDocumentReceiptDate(
     supabase,
     order.id,
@@ -165,7 +168,7 @@ export async function sendManualOrderDocument({
   );
   const content = buildManualOrderDocumentEmail({
     merchantName: merchant.business_name || merchant.slug,
-    customerName: order.customer_name,
+    customerName: displayCustomerName,
     customerEmail: recipient.email,
     orderNumber: order.order_number,
     documentKind: pdfDocumentKind,
@@ -219,7 +222,7 @@ export async function sendManualOrderDocument({
     const result = await sendEmail({
       ...content,
       to: recipient.email,
-      toName: order.customer_name,
+      toName: displayCustomerName,
       attachments: [
         {
           name: `${pdfDocumentKind}-${order.order_number.replace(/[^\w.-]/g, '_')}.pdf`,

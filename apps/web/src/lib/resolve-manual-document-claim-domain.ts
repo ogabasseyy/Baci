@@ -4,6 +4,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  * Resolves the merchant's active primary custom domain for a branded claim
  * link. Custom domains live in public.domains, not on the merchant row;
  * null falls back to the slug subdomain, which always routes.
+ *
+ * Ownership is established by the domains table, not by the syntactic check
+ * in buildReceiptClaimUrl: status only becomes 'active' after DNS/host
+ * verification (see the domains verify route), so an 'active' primary row
+ * is safe to embed in a token-bearing URL.
  */
 export async function resolveManualDocumentClaimDomain(
   supabase: SupabaseClient,

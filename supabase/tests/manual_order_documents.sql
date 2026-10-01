@@ -172,4 +172,18 @@ SELECT set_config('request.jwt.claims', '{"email":"fresh@example.com"}', true);
 SET LOCAL ROLE authenticated;
 SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('f',64), 'web')->>'status' = 'ok', 'verified corrected recipient redeems manual claim');
 RESET ROLE;
+
+-- An already-linked customer row is never re-linked to a different auth user,
+-- even when the relaxed manual email check passes.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000016', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000012', '10000000-0000-4000-8000-000000000010', 'second@example.com', 'paid', 100);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000016', 'Device', 1, 100);
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000016' AND event_type = 'manual_order_receipt';
+SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000016' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('1', 64))->>'status' = 'created'), 'second manual claim created for linked customer');
+INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000032', 'second@example.com', now(), null);
+SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000032', true);
+SELECT set_config('request.jwt.claims', '{"email":"second@example.com"}', true);
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('1',64), 'web')->>'status' = 'customer_link_failed', 'already-linked customer cannot be re-linked by another user');
+RESET ROLE;
 ROLLBACK;

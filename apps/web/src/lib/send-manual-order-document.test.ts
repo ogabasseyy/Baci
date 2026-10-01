@@ -331,6 +331,15 @@ describe('send manual order document', () => {
     );
   });
 
+  it('sends with a fallback greeting when the order has no customer name', async () => {
+    const db = database({ customer_name: null });
+    const result = await sendManualOrderDocument({ supabase: db.client, row });
+    expect(result.status).toBe('sent');
+    const message = sendEmail.mock.calls[0][0];
+    expect(message.textContent).toContain('Hello there,');
+    expect(message.toName).toBe('there');
+  });
+
   it('keeps the private merchant email out of customer-visible copy', async () => {
     const db = database({}, { merchantOverride: { support_email: null } });
     await sendManualOrderDocument({ supabase: db.client, row });

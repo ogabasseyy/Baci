@@ -68,6 +68,10 @@ export async function GET(request: Request) {
   // producer, a future migration) must not fail the whole batch and stall
   // unrelated notifications until lease expiry. Unparseable rows stay
   // locked and return to pending when the lease expires.
+  // claimed counts the DB-claimed batch, and unparseable counts the rows
+  // skipped below, so dashboards can alert on lease-held rows the other
+  // outcome counters never mention; each skipped row is also logged by id.
+  const summary = createOrderNotificationCronSummary(data.length);
   const rows: ClaimedOrderNotificationOutboxRow[] = [];
   for (const row of data) {
     const parsedRow = claimedOrderNotificationOutboxRowSchema.safeParse(row);
@@ -75,6 +79,7 @@ export async function GET(request: Request) {
       rows.push(parsedRow.data);
       continue;
     }
+    summary.unparseable += 1;
     logger.error({
       message: 'Skipping unparseable claimed outbox row',
       rowId:
@@ -84,10 +89,6 @@ export async function GET(request: Request) {
       error: z.flattenError(parsedRow.error),
     });
   }
-  // claimed counts the DB-claimed batch (including rows skipped below as
-  // unparseable) so dashboards can spot lease-held rows the summary outcomes
-  // never mention; each skipped row is also logged with its row id.
-  const summary = createOrderNotificationCronSummary(data.length);
   try {
     await processClaimedOrderNotificationRows(supabase, rows, summary);
   } catch (error) {

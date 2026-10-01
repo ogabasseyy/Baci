@@ -37,6 +37,7 @@ export function buildManualOrderDocumentPdfInput({
   const receiptOrder: ReceiptOrder = {
     ...order,
     currency: order.currency || 'NGN',
+    customer_name: order.customer_name || recipientEmail,
     customer_email: recipientEmail,
     amount_paid: order.amount_paid,
     balance: Math.max(0, order.total - order.amount_paid),

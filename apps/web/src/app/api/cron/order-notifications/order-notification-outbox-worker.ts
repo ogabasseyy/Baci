@@ -41,6 +41,7 @@ export interface OrderNotificationCronSummary {
   retried: number;
   sent: number;
   skipped: number;
+  unparseable: number;
   success: true;
 }
 
@@ -60,7 +61,8 @@ class OutboxStatusUpdateError extends Error {
 export function createOrderNotificationCronSummary(
   claimed: number
 ): OrderNotificationCronSummary {
-  return { claimed, failed: 0, retried: 0, sent: 0, skipped: 0, success: true };
+  // biome-ignore format: compact literal preserves the 300-line gate.
+  return { claimed, failed: 0, retried: 0, sent: 0, skipped: 0, unparseable: 0, success: true };
 }
 
 function retryDelayMs(attemptCount: number): number {

@@ -236,6 +236,53 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
     expect(rpc).toHaveBeenCalledTimes(3);
   });
 
+  it('files every order when stalled matches span more than one page', async () => {
+    const rpc = reviewRpc();
+    const stalled = Array.from({ length: 11 }, (_, index) =>
+      payment(
+        `pay-stalled-${index + 1}`,
+        `order-${index + 1}`,
+        `merchant-${index + 1}`
+      )
+    );
+    const orders = Array.from({ length: 11 }, (_, index) =>
+      cancelledOrder(`order-${index + 1}`)
+    );
+    const firstStalled = selectQuery([]);
+    const firstStalledRange = vi
+      .fn()
+      .mockResolvedValue({ data: stalled.slice(0, 10), error: null });
+    firstStalled.range = firstStalledRange;
+    const secondStalled = selectQuery([]);
+    const secondStalledRange = vi
+      .fn()
+      .mockResolvedValue({ data: stalled.slice(10), error: null });
+    secondStalled.range = secondStalledRange;
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(selectQuery([]))
+      .mockReturnValueOnce({ select: vi.fn(() => firstStalled) })
+      .mockReturnValueOnce({ select: vi.fn(() => secondStalled) })
+      .mockReturnValueOnce(selectQuery(orders))
+      .mockReturnValueOnce(selectQuery(orders));
+    const supabase = { from, rpc } as unknown as SupabaseClient;
+
+    await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
+
+    // A legacy reference shared past the response cap must still file
+    // every stalled order: the webhook is acknowledged, so a truncated
+    // subset would permanently drop the omitted verified evidence.
+    expect(firstStalledRange).toHaveBeenCalledWith(0, 9);
+    expect(secondStalledRange).toHaveBeenCalledWith(10, 19);
+    expect(rpc).toHaveBeenCalledTimes(11);
+    for (let index = 1; index <= 11; index++) {
+      expect(rpc).toHaveBeenCalledWith(
+        'file_paystack_refund_recovery_review_v1',
+        expect.objectContaining({ p_order_id: `order-${index}` })
+      );
+    }
+  });
+
   it('files mismatched refund evidence for review and throws for redelivery', async () => {
     mocks.fetchRefund.mockResolvedValue({
       data: {

@@ -4,7 +4,7 @@ import { fileCancelledPaystackRefundCandidateReviews } from './file-cancelled-pa
 import type { RefundRecoveryEvidence } from './file-paystack-refund-candidate-reviews';
 import { fileActiveOrderPaystackRefundCandidateReviews } from './file-provider-refund-outside-cancellation-review';
 
-interface StalledPayment {
+export interface StalledPayment {
   amount: number;
   gateway_reference: string | null;
   id: string;
@@ -12,16 +12,21 @@ interface StalledPayment {
   order_id: string | null;
 }
 
+const STALLED_MATCH_PAGE_SIZE = 10;
+
 /**
  * Retain verified provider evidence when no completed local payment
  * matches: a stale pending attempt may already have captured and been
- * refunded before the sweep examined it. Every stalled match is fetched
- * (no LIMIT) so a repeated reference cannot drop an order silently.
- * Cancelled-order matches file into the cancellation queue; a refund
- * for a stale payment on an active order is merchant evidence, so it
- * files into the non-cancellation queue instead — acknowledging it
- * with neither review nor local refund row would let a later charge
- * recovery mark the order paid even though the customer was refunded.
+ * refunded before the sweep examined it. A corrupt or legacy reference
+ * can be shared by more stalled payments than the PostgREST response
+ * cap, so every match is paginated in stable id order before filing —
+ * acknowledging a truncated subset would permanently drop the omitted
+ * orders' verified evidence. Cancelled-order matches file into the
+ * cancellation queue; a refund for a stale payment on an active order
+ * is merchant evidence, so it files into the non-cancellation queue
+ * instead — acknowledging it with neither review nor local refund row
+ * would let a later charge recovery mark the order paid even though
+ * the customer was refunded.
  */
 export async function fileStalledPaystackRefundReviews(
   supabase: SupabaseClient,
@@ -37,15 +42,22 @@ export async function fileStalledPaystackRefundReviews(
     refundId: number;
   }
 ): Promise<void> {
-  const { data: stalledRows, error: stalledError } = await supabase
-    .from('transactions')
-    .select('id, order_id, merchant_id, gateway_reference, amount')
-    .eq('gateway', 'paystack')
-    .eq('gateway_reference', gatewayReference)
-    .eq('transaction_type', 'payment')
-    .in('status', ['pending', 'processing', 'failed']);
-  if (stalledError) throw new Error('refund_event_payment_lookup_failed');
-  const stalled = (stalledRows ?? []) as StalledPayment[];
+  const stalled: StalledPayment[] = [];
+  for (let offset = 0; ; offset += STALLED_MATCH_PAGE_SIZE) {
+    const { data: stalledRows, error: stalledError } = await supabase
+      .from('transactions')
+      .select('id, order_id, merchant_id, gateway_reference, amount')
+      .eq('gateway', 'paystack')
+      .eq('gateway_reference', gatewayReference)
+      .eq('transaction_type', 'payment')
+      .in('status', ['pending', 'processing', 'failed'])
+      .order('id', { ascending: true })
+      .range(offset, offset + STALLED_MATCH_PAGE_SIZE - 1);
+    if (stalledError) throw new Error('refund_event_payment_lookup_failed');
+    const page = (stalledRows ?? []) as StalledPayment[];
+    stalled.push(...page);
+    if (page.length < STALLED_MATCH_PAGE_SIZE) break;
+  }
   if (stalled.length === 0) {
     logger.info({
       message:

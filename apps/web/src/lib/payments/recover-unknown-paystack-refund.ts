@@ -1,30 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
-import { selectPaystackRefundReference } from '@/lib/select-paystack-refund-reference';
-import { fetchPaystackPaymentById } from './fetch-paystack-payment-by-id';
-import { fetchRefund } from './fetch-paystack-refund';
+import { fetchCompletedPaymentsByReference } from './fetch-completed-payments-by-reference';
 import { fileCancelledPaystackRefundCandidateReviews } from './file-cancelled-paystack-refund-candidate-reviews';
-import { filePaystackRefundRecoveryReview } from './file-paystack-refund-recovery-review';
-import {
-  fileActiveOrderPaystackRefundCandidateReviews,
-  fileProviderRefundOutsideCancellationReview,
-} from './file-provider-refund-outside-cancellation-review';
+import { fileActiveOrderPaystackRefundCandidateReviews } from './file-provider-refund-outside-cancellation-review';
 import { fileStalledPaystackRefundReviews } from './file-stalled-paystack-refund-reviews';
-import {
-  lookupLocalRefundByProviderId,
-  reconcileRecoveredRow,
-} from './recover-unknown-paystack-refund-row';
-
-const PROVIDER_READ_TIMEOUT_MS = 8_000;
-const RECOVERY_MATCH_PAGE_SIZE = 10;
-
-interface RecoveryPayment {
-  amount: number;
-  gateway_reference: string | null;
-  id: string;
-  merchant_id: string;
-  order_id: string | null;
-}
+import { recordRecoveredPaystackRefund } from './record-recovered-paystack-refund';
+import { verifyUnknownPaystackRefundProvider } from './verify-unknown-paystack-refund-provider';
 
 /**
  * Recover a provider refund the signed event references but no local audit
@@ -42,73 +23,15 @@ export async function recoverUnknownPaystackRefund(
   refundId: number,
   paymentReference?: string
 ): Promise<void> {
-  const providerRefund = await fetchRefund(
-    refundId,
-    AbortSignal.timeout(PROVIDER_READ_TIMEOUT_MS)
+  const { current, resolvedPaymentReference } =
+    await verifyUnknownPaystackRefundProvider(refundId, paymentReference);
+  const candidates = await fetchCompletedPaymentsByReference(
+    supabase,
+    resolvedPaymentReference
   );
-  if (!providerRefund.success) {
-    throw new Error('paystack_refund_verification_unavailable');
-  }
-  const current = providerRefund.data;
-  if (!Number.isSafeInteger(current.transaction) || current.transaction <= 0) {
-    throw new Error('paystack_refund_transaction_invalid');
-  }
-  // Always resolve the payment from the refund's own numeric transaction
-  // ID: the webhook reference is only a hint and may be stale. A stale
-  // hint is logged but never blocks recovery of the verified refund.
-  const fetchedPayment = await fetchPaystackPaymentById(
-    current.transaction,
-    AbortSignal.timeout(PROVIDER_READ_TIMEOUT_MS)
-  );
-  if (!fetchedPayment.success) {
-    throw new Error('paystack_refund_payment_lookup_unavailable');
-  }
-  if (fetchedPayment.data.id !== current.transaction) {
-    throw new Error('paystack_refund_payment_lookup_mismatch');
-  }
-  const resolvedPaymentReference = fetchedPayment.data.reference;
-  if (
-    paymentReference !== undefined &&
-    paymentReference !== resolvedPaymentReference
-  ) {
-    logger.info({
-      message:
-        'Unknown Paystack refund event reference is stale; using the authoritative payment',
-      refundId,
-    });
-  }
-  // The recovery path shares the webhook's reference alphabet: a reference
-  // the selector will not pick is unusable downstream.
-  if (
-    typeof resolvedPaymentReference !== 'string' ||
-    selectPaystackRefundReference(resolvedPaymentReference, undefined) !==
-      resolvedPaymentReference
-  ) {
-    throw new Error('paystack_refund_payment_reference_invalid');
-  }
-  // A corrupt reference can be shared by more completed payments than
-  // the PostgREST response cap: paginate the whole match set in stable
-  // id order before branching, so the ambiguity path files every order
-  // instead of silently dropping truncated matches after acknowledge.
-  const candidates: RecoveryPayment[] = [];
-  for (let offset = 0; ; offset += RECOVERY_MATCH_PAGE_SIZE) {
-    const { data: payments, error: paymentError } = await supabase
-      .from('transactions')
-      .select('id, order_id, merchant_id, gateway_reference, amount')
-      .eq('gateway', 'paystack')
-      .eq('gateway_reference', resolvedPaymentReference)
-      .eq('transaction_type', 'payment')
-      .eq('status', 'completed')
-      .order('id', { ascending: true })
-      .range(offset, offset + RECOVERY_MATCH_PAGE_SIZE - 1);
-    if (paymentError) throw new Error('refund_event_payment_lookup_failed');
-    const page = (payments ?? []) as RecoveryPayment[];
-    candidates.push(...page);
-    if (page.length < RECOVERY_MATCH_PAGE_SIZE) break;
-  }
   const payment = candidates[0];
   const evidence = {
-    providerPaymentTransactionId: fetchedPayment.data.id,
+    providerPaymentTransactionId: current.transaction,
     providerRefundId: refundId,
     reference: resolvedPaymentReference,
   };
@@ -204,127 +127,10 @@ export async function recoverUnknownPaystackRefund(
     });
     return;
   }
-  const { data: order, error: orderError } = await supabase
-    .from('orders')
-    .select('id, order_number, cancelled_at, shipping_status')
-    .eq('id', payment.order_id)
-    .maybeSingle();
-  if (orderError) throw new Error('refund_event_order_lookup_failed');
-  if (!order) {
-    logger.info({
-      message: 'Unknown Paystack refund event payment has no order',
-      refundId,
-    });
-    return;
-  }
-  if (
-    order.cancelled_at == null ||
-    (order.shipping_status !== 'cancelled' &&
-      order.shipping_status !== 'canceled')
-  ) {
-    // Verified refund on an active order: file for operations (polling
-    // can never rediscover it). Write failures throw for redelivery.
-    await fileProviderRefundOutsideCancellationReview(supabase, {
-      amount: current.amount / 100,
-      currency: current.currency,
-      merchantId: payment.merchant_id,
-      orderId: payment.order_id,
-      orderNumber: order.order_number,
-      paymentId: payment.id,
-      paymentReference: payment.gateway_reference,
-      providerPaymentTransactionId: evidence.providerPaymentTransactionId,
-      providerRefundId: refundId,
-      providerRefundStatus: current.status,
-    });
-    logger.info({
-      message: 'Unknown Paystack refund event filed for an active order',
-      refundId,
-    });
-    return;
-  }
-  // A concurrent event (or the in-flight initiation) may record the row
-  // first: on conflict, reconcile the winning row instead of failing.
-  const refundRowId = crypto.randomUUID();
-  const providerVerdict = current.status.toLowerCase();
-  // A failed/needs-attention verdict must NOT be pre-populated: the
-  // record RPC treats an equal metadata verdict as a repeat and returns
-  // before transitioning the row or queuing the failure notification,
-  // stranding the side effect deferred while every poll no-ops. Leave
-  // it unset so the first reconcile applies the transition; later polls
-  // repeat no-op correctly once the RPC has persisted it.
-  const failedVerdict =
-    providerVerdict === 'failed' || providerVerdict === 'needs-attention';
-  const { error: insertError } = await supabase.from('transactions').insert({
-    id: refundRowId,
-    order_id: payment.order_id,
-    merchant_id: payment.merchant_id,
-    transaction_type: 'refund',
-    amount: current.amount / 100,
-    currency: current.currency,
-    status: 'refund_pending',
-    gateway: 'paystack',
-    gateway_reference: String(refundId),
-    description: `Refund for cancelled order #${order.order_number || order.id.slice(0, 8)}`,
-    metadata: {
-      payment_transaction_id: payment.id,
-      provider_payment_transaction_id: evidence.providerPaymentTransactionId,
-      ...(failedVerdict ? {} : { provider_refund_status: providerVerdict }),
-      recovered_from_provider_event: true,
-    },
-  });
-  if (insertError) {
-    if ((insertError as { code?: string }).code === '23505') {
-      const raced = await lookupLocalRefundByProviderId(supabase, refundId);
-      if (raced) {
-        await reconcileRecoveredRow(supabase, raced);
-        return;
-      }
-      // The order/reference slot is held by a row that is not this Paystack
-      // refund, so redelivery would collide forever: persist the verified
-      // provider evidence for reconciliation, then acknowledge.
-      await filePaystackRefundRecoveryReview(supabase, {
-        candidates: [
-          {
-            payment_transaction_id: payment.id,
-            order_id: payment.order_id,
-            amount: payment.amount,
-            gateway_reference: payment.gateway_reference,
-          },
-        ],
-        merchantId: payment.merchant_id,
-        metadata: {
-          provider_refund_id: refundId,
-          provider_payment_transaction_id:
-            evidence.providerPaymentTransactionId,
-          payment_transaction_id: payment.id,
-          audit_record_failed: true,
-          recovered_from_provider_event: true,
-        },
-        orderId: payment.order_id,
-        paystackRef: String(refundId),
-        reason: `Paystack refund ${refundId} collides with a non-refund transaction and cannot be recorded`,
-      });
-      logger.info({
-        message: 'Unknown Paystack refund audit collides; review filed',
-        refundId,
-      });
-      return;
-    }
-    throw new Error('refund_recovery_audit_failed');
-  }
-  await reconcileRecoveredRow(supabase, {
-    id: refundRowId,
-    order_id: payment.order_id,
-    merchant_id: payment.merchant_id,
-    gateway_reference: String(refundId),
-    amount: current.amount / 100,
-    currency: current.currency,
-    metadata: {
-      payment_transaction_id: payment.id,
-      provider_payment_transaction_id: evidence.providerPaymentTransactionId,
-      ...(failedVerdict ? {} : { provider_refund_status: providerVerdict }),
-      recovered_from_provider_event: true,
-    },
-    status: 'refund_pending',
+  await recordRecoveredPaystackRefund(supabase, {
+    current,
+    evidence,
+    payment: { ...payment, order_id: payment.order_id },
+    refundId,
   });
 }

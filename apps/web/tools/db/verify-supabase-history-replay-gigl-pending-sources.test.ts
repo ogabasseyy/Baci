@@ -127,11 +127,11 @@ describe('GIGL tracking pending replay sources', () => {
       ...GIGL_RECOVERY_EDGE_REPAIRS,
       [
         'supabase/migrations/20260805090300_add_least_privilege_gigl_tracking_worker.sql',
-        '65a27f2ef3df4ce71ad532745f748f63f69a0cdc8e69d8e5ec59372233db91ad',
+        '2a1e3dec697380dd82a00aa56a42f699f9e08b9240689c824927424c512cdd8e',
       ],
       [
         'supabase/migrations/20260805091000_enable_least_privilege_gigl_tracking_login.sql',
-        '67e35ce36d63d9026492bf25335492df816600f202c4904c725a90debf217b62',
+        'eaaaf55f907b3a98a7300cc2f91a932ea2d974b266298f50e5c5edbcb110027f',
       ],
       [
         'supabase/migrations/20260805113000_restore_gigl_tracking_postgrest_capability.sql',

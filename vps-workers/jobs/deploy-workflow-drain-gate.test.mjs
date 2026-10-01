@@ -53,7 +53,10 @@ describe('production cache-invalidation drain rollout gate', () => {
       capability,
       /uses: actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/
     );
-    assert.match(
+    // No dispatch exemption: always() runs the smoke even when the
+    // changes job is skipped, and unset outputs fail closed.
+    assert.match(capability, /if: always\(\) &&/);
+    assert.doesNotMatch(
       capability,
       /github\.event_name != 'workflow_dispatch'/
     );
@@ -87,13 +90,17 @@ describe('production cache-invalidation drain rollout gate', () => {
       deployment,
       /run: \.github\/scripts\/verify-gigl-fallback-token\.sh \.vercel\/\.env\.production\.local/
     );
-    assert.match(
+    // No dispatch exemption in the capability requirement: a dispatch
+    // can never land the cron removal unverified. The only remaining
+    // dispatch term is the pre-existing deploy-scope behavior.
+    assert.doesNotMatch(
       deployment,
-      /if: github\.event_name == 'workflow_dispatch'/
+      /needs\.gigl-worker-capability\.result == 'success' \|\| github\.event_name/
     );
+    assert.doesNotMatch(deployment, /bypasses the GIGL worker capability/);
     assert.match(
       deployment,
-      /::warning::Manual dispatch bypasses the GIGL worker capability smoke/
+      /github\.event_name == 'workflow_dispatch' \|\| needs\.changes\.outputs\.web == 'true'/
     );
   });
 

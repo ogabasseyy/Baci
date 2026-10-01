@@ -10,7 +10,10 @@ BEGIN
 END
 $$;
 
-GRANT gigl_tracking_worker TO authenticator;
+-- No GRANT to authenticator here: membership lands atomically with the
+-- pre-request hook in 20260805170000_isolate_gigl_tracking_postgrest_capability.
+-- Granting it here would leave the worker JWT usable without the hook if a
+-- later migration failed.
 GRANT USAGE ON SCHEMA public TO gigl_tracking_worker;
 
 CREATE OR REPLACE FUNCTION public.gigl_worker_claim_due_tracking_monitors(

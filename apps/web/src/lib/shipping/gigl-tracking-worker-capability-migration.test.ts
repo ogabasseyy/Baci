@@ -36,6 +36,12 @@ describe('GIGL tracking worker capability migration', () => {
     expect(migration).toMatch(
       /CREATE ROLE gigl_tracking_worker NOLOGIN NOINHERIT NOSUPERUSER\s+NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS/
     );
+    // Membership lands atomically with the hook in the isolate migration,
+    // never here: granting it at role creation would leave the token
+    // usable without the hook if a later migration failed.
+    expect(migration).not.toMatch(
+      /GRANT gigl_tracking_worker TO authenticator/
+    );
   });
 
   it('grants only the five tracking wrapper procedures to the worker role', () => {

@@ -11,6 +11,8 @@ BEGIN
 END
 $$;
 
+-- Idempotent guard: the add migration grants no membership, so this is a
+-- no-op on fresh chains and only cleans partially-applied states.
 REVOKE gigl_tracking_worker FROM authenticator;
 ALTER ROLE gigl_tracking_worker LOGIN CONNECTION LIMIT 2;
 

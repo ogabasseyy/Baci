@@ -34,6 +34,6 @@ test('uses a minimal sparse checkout for VPS drain readiness', async () => {
   );
   assert.equal(
     giglVerification.if,
-    "github.event_name != 'workflow_dispatch' && (needs.changes.outputs.tracking != 'false' || needs.changes.outputs.migrations != 'false')"
+    "needs.changes.outputs.tracking != 'false' || needs.changes.outputs.migrations != 'false'"
   );
 });

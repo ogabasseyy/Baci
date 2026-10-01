@@ -41,7 +41,11 @@ export const manualDocumentMerchantSchema = z.object({
       postal_code: nullableText.optional(),
       country: nullableText.optional(),
     })
-    .nullable(),
+    .nullable()
+    // The JSONB column is unconstrained: fall back to the business address
+    // instead of rejecting the merchant (a merchant fix cannot re-arm the
+    // outbox row, so strictness here would silently drop the document).
+    .catch(null),
   cac_rc_number: nullableText,
   tax_identification_number: nullableText,
   legal_entity_name: nullableText,
@@ -60,5 +64,8 @@ export const manualDocumentMerchantSchema = z.object({
         accent: z.string(),
       })
       .nullable()
+      // Cosmetic only, with null-safe consumers: fall back to default
+      // branding instead of rejecting the merchant (see registered_address).
+      .catch(null)
   ),
 });

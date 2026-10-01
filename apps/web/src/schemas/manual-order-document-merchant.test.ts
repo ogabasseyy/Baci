@@ -51,4 +51,24 @@ describe('manualDocumentMerchantSchema', () => {
       manualDocumentMerchantSchema.parse({ ...baseMerchant, email: undefined })
     ).toThrow();
   });
+
+  it('falls back to default branding for malformed brand colors', () => {
+    for (const brand_colors of ['{}', {}, [], 42]) {
+      expect(
+        manualDocumentMerchantSchema.parse({ ...baseMerchant, brand_colors })
+          .brand_colors
+      ).toBeNull();
+    }
+  });
+
+  it('falls back for a malformed registered address', () => {
+    for (const registered_address of ['12 Main St', [], 42]) {
+      expect(
+        manualDocumentMerchantSchema.parse({
+          ...baseMerchant,
+          registered_address,
+        }).registered_address
+      ).toBeNull();
+    }
+  });
 });

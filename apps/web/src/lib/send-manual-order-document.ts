@@ -71,9 +71,10 @@ export async function sendManualOrderDocument({
     throw new Error('Manual document data unavailable');
   if (!orderResult.data || !merchantResult.data)
     return { status: 'skipped', reason: 'order_or_merchant_missing' };
-  // Deterministic shape failures skip (re-armable by a later trigger) instead
-  // of throwing into max_attempts retries; only transient fetch errors above
-  // and RPC failures below keep throw/retry.
+  // Deterministic shape failures skip (order-side fixes re-arm via a later
+  // trigger; the merchant schema stays lenient on cosmetic JSONB for the
+  // same reason) instead of throwing into max_attempts retries; only
+  // transient fetch errors above and RPC failures below keep throw/retry.
   const orderParsed = manualDocumentOrderSchema.safeParse(orderResult.data);
   if (!orderParsed.success)
     return { status: 'skipped', reason: 'order_validation_failed' };

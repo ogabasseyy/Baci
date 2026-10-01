@@ -488,6 +488,16 @@ describe('send manual order document', () => {
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
+  it('sends with default branding when merchant brand colors are malformed', async () => {
+    const db = database({}, { merchantOverride: { brand_colors: '{}' } });
+    const result = await sendManualOrderDocument({
+      supabase: db.client,
+      row,
+    });
+    expect(result.status).toBe('sent');
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+  });
+
   it('throws for retry when the receipt-date lookup fails', async () => {
     const db = database({}, { transactionsError: { message: 'db down' } });
     await expect(

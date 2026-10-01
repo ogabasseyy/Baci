@@ -1,6 +1,4 @@
 'use client';
-import { useCheckoutResumeLifecycle } from './checkout/hooks/use-checkout-resume-lifecycle';
-import { resolveCheckoutResumeContext } from './checkout/resolve-checkout-resume-context';
 
 import { useCheckoutDeliverySession } from './checkout/hooks/use-checkout-delivery-session';
 import { useCheckoutFormSession } from './checkout/hooks/use-checkout-form-session';
@@ -22,8 +20,7 @@ import { MobileOrderSummary } from '../components/MobileCheckoutComponents';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
 import { useCheckoutCryptoSession } from './checkout/hooks/use-checkout-crypto-session';
-import { usePaymentReturnReset } from './checkout/use-payment-return-reset';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { useCurrency } from '@/hooks/use-currency';
@@ -31,9 +28,6 @@ import type {
   DvaData,
   PendingCryptoOrder,
 } from './checkout/types';
-import {
-  usePersistedState,
-} from '@/hooks/use-persisted-state';
 import { useAuthSafe } from '@/contexts/auth-context';
 import { DeferredCheckoutAuthModal as CheckoutAuthModal } from './checkout/components/DeferredCheckoutAuthModal';
 import {
@@ -49,11 +43,7 @@ import {
   isPaystackCheckoutAvailable,
 } from '@/lib/checkout/payment-gateway-availability';
 import { isNgnChargeCurrency } from './checkout/components/payment-step-availability';
-import {
-  CHECKOUT_PENDING_ORDER_STORAGE_KEY,
-  type PendingCheckoutOrderSnapshot,
-} from './checkout/pending-checkout-order';
-import { useCheckoutSubmissionState } from './checkout/hooks/use-checkout-submission-state';
+import { useCheckoutAttemptSession } from './checkout/hooks/use-checkout-attempt-session';
 import { useRedvaultPaymentAvailability } from './checkout/hooks/use-redvault-payment-availability';
 import {
   inferAddressLocationFromInput,
@@ -62,14 +52,9 @@ import { useCheckoutOrderSubmission } from './checkout/hooks/use-checkout-order-
 import { useWalletFundedBankTransfer } from './checkout/hooks/use-wallet-funded-bank-transfer';
 import { useWalletFundedOrderCompletion } from './checkout/hooks/use-wallet-funded-order-completion';
 import { useStorefrontCustomerSession } from './checkout/hooks/use-storefront-customer-session';
-import {
-  useResumedCheckoutStartFunnel,
-} from './checkout/hooks/use-resumed-checkout-start-funnel';
-import { deriveCheckoutDisplayModel } from './checkout/derive-checkout-display-model';
 import { deriveCheckoutCartModel } from './checkout/derive-checkout-cart-model';
 import { deriveCheckoutOrderSummaryPresentation } from './checkout/derive-checkout-order-summary-presentation';
 import { useCheckoutFinancialSession } from './checkout/hooks/use-checkout-financial-session';
-import { readCheckoutAttemptGeneration } from './checkout/checkout-attempt-generation';
 import { CheckoutResumeStatus } from './checkout/components/CheckoutResumeStatus';
 import { DesktopOrderSummary } from './checkout/components/DesktopOrderSummary';
 /**
@@ -178,15 +163,49 @@ export const CheckoutPage: React.FC = () => {
     setCurrentStep,
     setCompletedSteps,
   } = checkoutFlow;
-  const [
+  // Mobile app order resume state
+  // When opening from mobile app with ?orderId=xxx&gateway=credpal, we resume that order
+  const checkoutAttempt = useCheckoutAttemptSession({
+    searchParams,
+    merchantId: merchant?.id,
+    merchantSlug: merchant?.slug,
+    merchantChargeCurrency: currencyCode,
+    isHydrated,
+    form: { setCheckoutFields, clearCheckoutSession },
+    navigation: {
+      setCurrentStep,
+      setCompletedSteps,
+      routerPush: (url) => router.push(asRoute(url)),
+      getHref,
+    },
+    funnel: {
+      checkoutCart,
+      checkoutCartTotal,
+      itemSubtotal,
+      currencyCode,
+    },
+  });
+  const {
     pendingCheckoutOrder,
     setPendingCheckoutOrder,
     clearPendingCheckoutOrder,
-  ] = usePersistedState<PendingCheckoutOrderSnapshot | null>(
-    CHECKOUT_PENDING_ORDER_STORAGE_KEY,
-    null
-  );
-
+    setCheckoutOrderCreated,
+    displayModel: checkoutDisplay,
+    resumeOrderId,
+    resumeTrackingToken,
+    resumeLookupEmail,
+    resumeMerchantSlug,
+    preferredGateway,
+    isProcessing,
+    setIsProcessing,
+    isOrderInFlightRef,
+    tryBeginSubmission,
+    releaseSubmission,
+    handleSubmissionError,
+    resumedOrder,
+    isLoadingResumedOrder,
+    resumeOrderError,
+  } = checkoutAttempt;
   // Dedicated Virtual Account (DVA) state
   const {
     closeDvaModal,
@@ -196,39 +215,16 @@ export const CheckoutPage: React.FC = () => {
     isVerifyingDva,
     setDvaData,
     setIsInitializingDva,
-  } =
-    useCheckoutDvaSession({
-      checkoutCart,
-      clearCart,
-      clearCheckoutSession,
-      clearPendingCheckoutOrder,
-      currencyCode,
-      getHref,
-      merchantSlug: merchant?.slug ?? undefined,
-    });
-
-  // Mobile app order resume state
-  // When opening from mobile app with ?orderId=xxx&gateway=credpal, we resume that order
-  const {
-    resumeOrderId,
-    resumeTrackingToken,
-    resumeLookupEmail,
-    resumeMerchantSlug,
-    preferredGateway,
-  } = resolveCheckoutResumeContext({
-    searchParams,
-    pendingCheckoutOrder,
-    merchantId: merchant?.id,
-    merchantSlug: merchant?.slug,
+  } = useCheckoutDvaSession({
+    checkoutCart,
+    clearCart,
+    clearCheckoutSession,
+    clearPendingCheckoutOrder,
+    currencyCode,
+    getHref,
+    merchantSlug: merchant?.slug ?? undefined,
   });
-  const {
-    isProcessing,
-    setIsProcessing,
-    isOrderInFlightRef,
-    tryBeginSubmission,
-    releaseSubmission,
-    handleSubmissionError,
-  } = useCheckoutSubmissionState({ setCurrentStep, setCompletedSteps });
+
   const crypto = useCheckoutCryptoSession({
     merchantId: merchant?.id,
     clearCheckoutSession,
@@ -243,32 +239,6 @@ export const CheckoutPage: React.FC = () => {
     setPendingCryptoOrder,
     setShowCryptoSelector,
   } = crypto;
-  const { resumedOrder, isLoadingResumedOrder, resumeOrderError } =
-    useCheckoutResumeLifecycle({
-      resumeOrderId,
-      resumeTrackingToken,
-      resumeLookupEmail,
-      resumeMerchantSlug,
-      preferredGateway,
-      isHydrated,
-      hasCheckoutCartItems: checkoutCart.length > 0,
-      setCheckoutFields,
-      merchantSlug: merchant?.slug,
-      merchantChargeCurrency: currencyCode,
-      isProcessing,
-      setIsProcessing,
-      clearCheckoutSession,
-      routerPush: (url: string) => router.push(asRoute(url)),
-      getHref,
-    });
-
-  const checkoutDisplay = deriveCheckoutDisplayModel({
-    checkoutCart,
-    checkoutCartTotal,
-    currencyCode,
-    itemSubtotal,
-    resumedOrder,
-  });
   const {
     displayItems,
     effectiveCheckoutCartTotal,
@@ -276,32 +246,6 @@ export const CheckoutPage: React.FC = () => {
     hasCheckoutCartItems,
     summaryOrder,
   } = checkoutDisplay;
-
-  // Set once an order is created for this attempt: post-creation rerenders
-  // (pending-order persist, widget state) must not re-emit checkout_started
-  // for the same attempt just because the generation already rotated.
-  // Declared before the funnel hook below, which reads it.
-  const [checkoutOrderCreated, setCheckoutOrderCreated] = useState(false);
-  // Session-persisted checkout attempt: rotates after every created order so
-  // a repeat purchase of the same cart emits a fresh start, while a reload
-  // mid-attempt keeps the same generation (unlike React useId, which is
-  // deterministic per rendered tree and collides after reload).
-  // Start instrumentation (including the resumed-order stamped
-  // total/currency derivation) lives in the focused hook below so edits
-  // here leave this page smaller, not larger.
-  useResumedCheckoutStartFunnel({
-    attemptId: `gen-${readCheckoutAttemptGeneration()}`,
-    checkoutCartTotal,
-    currencyCode,
-    displayItems,
-    effectiveItemSubtotal,
-    hasCheckoutCartItems,
-    isHydrated: isHydrated && !checkoutOrderCreated,
-    merchantId: merchant?.id,
-    resumedOrder,
-  });
-
-  usePaymentReturnReset(releaseSubmission);
 
   // Storefront customer sign-in state. The `(commerce)` checkout route mounts
   // neither `AuthProvider` nor `CustomerAuthProvider`, so `useAuthSafe()` above
@@ -401,16 +345,6 @@ export const CheckoutPage: React.FC = () => {
     merchantSlug: merchant?.slug ?? undefined,
     onOrderPaid: completeWalletFundedOrder,
   });
-
-  useEffect(() => {
-    if (
-      pendingCheckoutOrder &&
-      merchant?.id &&
-      pendingCheckoutOrder.merchantId !== merchant.id
-    ) {
-      clearPendingCheckoutOrder();
-    }
-  }, [pendingCheckoutOrder, merchant?.id, clearPendingCheckoutOrder]);
 
   const { handlePlaceOrder } = useCheckoutOrderSubmission({
     account: {

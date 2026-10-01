@@ -10,6 +10,7 @@ import {
 } from '@/lib/import-notifications/receipt-claim-links';
 import { resolveInvoicePaymentAccount } from '@/lib/invoice-payment-account';
 import { buildManualOrderDocumentEmail } from '@/lib/manual-order-document-email';
+import { markManualDocumentDispatchStarted } from '@/lib/mark-manual-document-dispatch-started';
 import { resolveOrderNotificationRecipient } from '@/lib/order-notification-recipient';
 import {
   generateReceiptPDF,
@@ -18,7 +19,6 @@ import {
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { resolveManualDocumentClaimDomain } from '@/lib/resolve-manual-document-claim-domain';
 import { resolveManualDocumentReceiptDate } from '@/lib/resolve-manual-document-receipt-date';
-import { revalidateManualDocumentDispatchState } from '@/lib/revalidate-manual-document-dispatch';
 import { sendEmail } from '@/lib/zeptomail';
 import {
   assertManualDocumentClaimMatchesOrder,
@@ -211,7 +211,7 @@ export async function sendManualOrderDocument({
   let dispatchStarted = false;
   let providerAccepted = false;
   async function persistDispatch(started: boolean) {
-    if (started) await revalidateManualDocumentDispatchState(supabase, order);
+    if (started) await markManualDocumentDispatchStarted(supabase, row, order);
     const query = supabase
       .from('order_notification_outbox')
       .update({

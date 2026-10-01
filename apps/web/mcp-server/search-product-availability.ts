@@ -140,6 +140,9 @@ export async function hydrateSearchProductAvailability(
       availableVariants: variants.filter((variant) =>
         product.manage_stock !== true || Number(variant.stock_quantity ?? 0) > 0
       ),
+      // Unfiltered by condition: purchasability gates and the condition-axis
+      // check mirror the PDP, which reasons over all variants.
+      allVariants: variantsMap.get(product.id) ?? [],
       variantAttributeValues: (variantsMap.get(product.id) ?? []).flatMap((variant) =>
         Object.values(variant.attributes ?? {}).filter((value): value is string | number =>
           typeof value === 'string' || typeof value === 'number')),

@@ -131,14 +131,17 @@ export function selectStructuredDiscoveryOffer(
   // offers on variant products need a purchasable variant (the PDP blocks
   // add-to-cart without one), and duplicate canonical conditions resolve to
   // the first row like the PDP find().
-  // Mirrors shared hasVariantConditionAxis: any variant with a normalized
-  // condition owns the condition axis and disables offers entirely.
-  const variantsOwnConditionAxis = product.has_variants === true && row.availableVariants.some((rawVariant) => {
+  // PDP mirrors over the unfiltered variant set (falling back for rows built
+  // without it): the axis check sees every variant like hasVariantConditionAxis,
+  // and purchasability ignores the requested condition because the PDP lets a
+  // condition offer combine with any selectable variant when offers own the axis.
+  const variantUniverse = row.allVariants ?? row.availableVariants;
+  const variantsOwnConditionAxis = product.has_variants === true && variantUniverse.some((rawVariant) => {
     const variantCondition = record(rawVariant).condition;
     return normalizeCanonicalProductCondition(typeof variantCondition === 'string' ? variantCondition : null) !== '';
   });
   const offersSelectable = !variantsOwnConditionAxis &&
-    (!product.has_variants || row.availableVariants.some((rawVariant) => {
+    (!product.has_variants || variantUniverse.some((rawVariant) => {
       const variant = record(rawVariant);
       if (manageStock && !hasPositiveStock(variant.stock_quantity)) return false;
       return (finitePrice(variant.price_override) ?? finitePrice(product.price)) !== undefined;

@@ -91,3 +91,15 @@ it('resolves duplicate canonical offer conditions to the first row', () => {
   const selected = selectStructuredDiscoveryOffer(row, intent({}));
   expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'ob-1', price: 500 });
 });
+
+it('disables offers when a filtered-out variant owns the condition axis', () => {
+  const row = makeRow({ has_variants: true, discovery_metadata: { product_type: 'phone' } });
+  row.allVariants = [
+    { id: 'v-new', product_id: 'phone', condition: 'new', attributes: {}, price_override: 600, stock_quantity: 1 },
+    { id: 'v-plain', product_id: 'phone', attributes: {}, price_override: 500, stock_quantity: 1 },
+  ] as typeof row.availableVariants;
+  row.availableVariants = [row.allVariants[1]];
+  row.availableOffers = [{ id: 'offer-used', price: 400, condition: 'used', stock_quantity: 1 }] as typeof row.availableOffers;
+  const selected = selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone' }));
+  expect(selected?.selectedOption).toMatchObject({ kind: 'variant', option_id: 'v-plain', price: 500 });
+});

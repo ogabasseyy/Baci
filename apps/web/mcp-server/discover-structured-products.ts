@@ -5,8 +5,36 @@ import { loadStructuredDiscoveryCandidates } from './load-structured-discovery-c
 import { hydrateSearchProductAvailability } from './search-product-availability';
 import { selectStructuredDiscoveryOffer } from './select-structured-discovery-offer';
 import { structuredDiscoveryIdentity } from './structured-discovery-identity';
+import { toGoogleListingCondition } from '@baci/shared/lib';
 import { matchesMcpPostHydrationFilters } from './search-products-query-helpers';
 import { selectSearchProductsByPrice } from './select-search-products-by-price';
+
+type HydratedRow = Awaited<ReturnType<typeof hydrateSearchProductAvailability>>[number];
+type SelectedMatch = ReturnType<typeof selectStructuredDiscoveryOffer>;
+
+// A lookup failure only vetoes the scan when the row's missing options could
+// have produced a different result. Rows ruled out by verified product facts
+// cannot change the result. Source-scoped: variant failures always matter
+// because variants are the primary purchase path, but offer failures matter
+// only when a missing offer could still be selected — with no requested
+// condition any offer could win, while a requested condition matching the
+// parent's listing rules every missing offer ineligible by design (the
+// same-condition skip in select-structured-discovery-offer).
+function lookupFailureCouldMatter(
+  row: HydratedRow,
+  intent: McpDiscoveryIntent,
+  match: SelectedMatch,
+  requestedCondition: string | undefined,
+): boolean {
+  if (!row.optionsLookupFailed) return false;
+  if (match === undefined && structuredDiscoveryIdentity.isRowExcludedByIdentity(row, intent)) return false;
+  if (row.variantLookupFailed) return true;
+  if (!row.offerLookupFailed) return false;
+  if (!requestedCondition) return true;
+  const product = row.product as Record<string, unknown>;
+  const parentCondition = typeof product.condition === 'string' ? product.condition : null;
+  return toGoogleListingCondition(requestedCondition) !== (toGoogleListingCondition(parentCondition) ?? 'new');
+}
 
 type Input = {
   intent: McpDiscoveryIntent;
@@ -38,12 +66,7 @@ export async function discoverStructuredProducts({ intent, query, args, merchant
     for (const row of hydrated) {
       const match = selectStructuredDiscoveryOffer(row, intent, args, () => { factsUnverified = true; });
       if (match) selected.push(match);
-      // A lookup failure only vetoes the scan when the row could still satisfy
-      // the intent; rows ruled out by verified product facts cannot change the
-      // result no matter what their missing options contained.
-      if (row.optionsLookupFailed && (match !== undefined || !structuredDiscoveryIdentity.isRowExcludedByIdentity(row, intent))) {
-        optionsLookupFailed = true;
-      }
+      if (lookupFailureCouldMatter(row, intent, match, args.condition)) optionsLookupFailed = true;
     }
   }
   if (args.sort === 'newest') selected.sort((a, b) =>

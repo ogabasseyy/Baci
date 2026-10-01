@@ -166,4 +166,17 @@ describe('discoverStructuredProducts', () => {
     const result = await discoverStructuredProducts(input(fixture.supabase, intent({ product_type: 'phone' }), { args: { condition: 'used' } }));
     expect(result.selectedProducts[0]?.selectedOption).toMatchObject({ kind: 'variant', option_id: 'used-variant', condition: 'used' });
   });
+
+  it('treats an offer failure as complete when the requested condition rules every missing offer ineligible', async () => {
+    const fixture = client({ products: [product('new-base', { product_type: 'phone' }, { has_condition_offers: true })], offerError: new Error('offline') });
+    const result = await discoverStructuredProducts(input(fixture.supabase, intent({ product_type: 'phone' }), { args: { condition: 'new' } }));
+    expect(result.selectedProducts.map(({ product: s }) => s.id)).toEqual(['new-base']);
+    expect(result).toMatchObject({ priceScanComplete: true, coverage: 'complete' });
+  });
+
+  it('still vetoes an offer failure when a missing offer could match the requested condition', async () => {
+    const fixture = client({ products: [product('new-base', { product_type: 'phone' }, { has_condition_offers: true })], offerError: new Error('offline') });
+    const result = await discoverStructuredProducts(input(fixture.supabase, intent({ product_type: 'phone' }), { args: { condition: 'used' } }));
+    expect(result).toMatchObject({ priceScanComplete: false, coverage: 'partial', incompleteReason: 'option_lookup_failed' });
+  });
 });

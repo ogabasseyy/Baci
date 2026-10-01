@@ -26,8 +26,11 @@ it('checks the next stale attempt before rechecking 25 held attempts on the next
     in: vi.fn().mockReturnThis(),
     is: vi.fn().mockReturnThis(),
     not: vi.fn().mockReturnThis(),
-    lt: vi.fn((field: string, value: string) => {
-      cutoffs.set(field, Date.parse(value));
+    or: vi.fn((filter: string) => {
+      const match = (filter.split(',')[0] ?? '').match(/^(\w+)\.lt\.(.+)$/);
+      if (match?.[1] && match?.[2]) {
+        cutoffs.set(match[1], Date.parse(match[2]));
+      }
       return candidates;
     }),
     order: vi.fn().mockReturnThis(),

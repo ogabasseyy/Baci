@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { recordRecoveredPaystackRefund } from './record-recovered-paystack-refund';
 
 const mocks = vi.hoisted(() => ({
+  fileInvalidPaystackRefundEvidenceReview: vi.fn(),
   filePaystackRefundRecoveryReview: vi.fn(),
   fileProviderRefundOutsideCancellationReview: vi.fn(),
   loggerInfo: vi.fn(),
@@ -10,6 +11,10 @@ const mocks = vi.hoisted(() => ({
   reconcileRecoveredRow: vi.fn(),
 }));
 
+vi.mock('./file-invalid-paystack-refund-evidence-review', () => ({
+  fileInvalidPaystackRefundEvidenceReview:
+    mocks.fileInvalidPaystackRefundEvidenceReview,
+}));
 vi.mock('./file-paystack-refund-recovery-review', () => ({
   filePaystackRefundRecoveryReview: mocks.filePaystackRefundRecoveryReview,
 }));
@@ -180,7 +185,7 @@ describe('recordRecoveredPaystackRefund', () => {
     expect(mocks.reconcileRecoveredRow).not.toHaveBeenCalled();
   });
 
-  it('returns quietly when the payment has no order', async () => {
+  it('files order-independent evidence when the payment has no order', async () => {
     const { insert, supabase } = database({ orderRow: null });
 
     await recordRecoveredPaystackRefund(supabase, {
@@ -190,6 +195,17 @@ describe('recordRecoveredPaystackRefund', () => {
       refundId: 202,
     });
 
+    // The order vanished after the payment scan, but the verified
+    // refund is still a real merchant debit: retain it in the
+    // order-independent queue instead of treating it as handled.
+    expect(mocks.fileInvalidPaystackRefundEvidenceReview).toHaveBeenCalledWith(
+      supabase,
+      expect.objectContaining({
+        reference: 'PSK-1',
+        refundId: 202,
+        reason: expect.stringContaining('no longer exists'),
+      })
+    );
     expect(mocks.loggerInfo).toHaveBeenCalledWith(
       expect.objectContaining({ refundId: 202 })
     );

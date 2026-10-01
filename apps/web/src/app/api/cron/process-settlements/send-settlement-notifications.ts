@@ -136,8 +136,7 @@ export async function sendSettlementNotifications({
           })
         );
         const uncertainDelivery =
-          !emailResult.success &&
-          emailResult.deliveryOutcome === 'unknown';
+          !emailResult.success && emailResult.deliveryOutcome === 'unknown';
         if (!emailResult.success && !uncertainDelivery) {
           logger.error({
             message: 'Settlement notification email rejected',

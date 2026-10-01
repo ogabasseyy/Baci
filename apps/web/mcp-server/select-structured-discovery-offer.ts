@@ -126,7 +126,7 @@ export function selectStructuredDiscoveryOffer(
   // shared eligibility helper (row identity, first-per-condition) do not
   // apply to cheapest-option selection.
   const parentListingCondition = toGoogleListingCondition(
-    typeof product.condition === 'string' ? product.condition : null);
+    typeof product.condition === 'string' ? product.condition : null) ?? 'new';
   for (const rawOffer of row.availableOffers ?? []) {
     const offer = record(rawOffer);
     if (toGoogleListingCondition(typeof offer.condition === 'string' ? offer.condition : null) === parentListingCondition) continue;

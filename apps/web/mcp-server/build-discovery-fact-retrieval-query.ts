@@ -4,10 +4,15 @@ import type { McpDiscoveryIntent } from '../src/schemas/mcp-discovery-intent';
 const NUMERIC_UNITS: Record<string, string> = {
   storage_gb: 'GB', ram_gb: 'GB', power_w: 'W', screen_inches: 'inch', refresh_hz: 'Hz',
 };
-// Retrieval text stays small so it never needs truncation, which could split
-// tsquery syntax. Dropping trailing terms only broadens recall; the structured
+// Term budgets apply per value, never per group: every structured constraint
+// always participates in retrieval (long free-text values keep leading
+// terms), so no constraint is silently dropped and value/key pairs stay
+// atomic. Truncation drops whole trailing terms, never splits syntax, and the
 // matcher still enforces every constraint.
-const MAX_TERMS_PER_GROUP = 12;
+const MAX_MODEL_TERMS = 8;
+const MAX_TEXT_VALUE_TERMS = 6;
+const MAX_KEY_TERMS = 4;
+const MAX_FALLBACK_TERMS = 12;
 // Plain-language connectives are required lexemes under to_tsquery (only '|'
 // is OR), so the fallback path drops them instead of collapsing recall.
 const FALLBACK_STOPWORDS = new Set(['or', 'and', 'a', 'the']);
@@ -47,7 +52,7 @@ function attributeTerms(key: string, value: string | number): string[] {
   }
   // Text values AND with their key so connector=USB-C cannot be satisfied by
   // a document whose USB-C lives under another key or in marketing prose.
-  return [...sanitizeTerm(value), ...sanitizeTerm(key)];
+  return [...sanitizeTerm(value).slice(0, MAX_TEXT_VALUE_TERMS), ...sanitizeTerm(key).slice(0, MAX_KEY_TERMS)];
 }
 
 // Ranges cannot be tsquery terms, but the combined document carries keyed
@@ -63,7 +68,7 @@ function rangeTerms(key: string, value: string | number): string[] {
 
 function groupQuery(terms: string[]): string | undefined {
   if (terms.length === 0) return undefined;
-  return `(${terms.slice(0, MAX_TERMS_PER_GROUP).join(' & ')})`;
+  return `(${terms.join(' & ')})`;
 }
 
 function typeTerms(productType: string): string[] {
@@ -96,8 +101,8 @@ export function buildDiscoveryFactRetrievalQuery(intent: McpDiscoveryIntent, fal
     }).filter((branch): branch is string => branch !== undefined);
     if (brandBranches.length === 1) terms.push(brandBranches[0]);
     else if (brandBranches.length > 1) terms.push(`(${brandBranches.join(' | ')})`);
-    if (alternative.model) terms.push(...sanitizeTerm(alternative.model));
-    if (alternative.compatible_with) terms.push(...sanitizeTerm(alternative.compatible_with));
+    if (alternative.model) terms.push(...sanitizeTerm(alternative.model).slice(0, MAX_MODEL_TERMS));
+    if (alternative.compatible_with) terms.push(...sanitizeTerm(alternative.compatible_with).slice(0, MAX_MODEL_TERMS));
     for (const attribute of alternative.attributes ?? []) {
       terms.push(...(attribute.operator === 'eq'
         ? attributeTerms(attribute.key, attribute.value)
@@ -107,6 +112,6 @@ export function buildDiscoveryFactRetrievalQuery(intent: McpDiscoveryIntent, fal
     if (group) groups.push(group);
   }
   if (groups.length > 0) return groups.join(' | ');
-  const fallback = groupQuery(sanitizeTerm(fallbackQuery).filter((term) => !FALLBACK_STOPWORDS.has(term)));
+  const fallback = groupQuery(sanitizeTerm(fallbackQuery).filter((term) => !FALLBACK_STOPWORDS.has(term)).slice(0, MAX_FALLBACK_TERMS));
   return fallback ?? '(a & !a)';
 }

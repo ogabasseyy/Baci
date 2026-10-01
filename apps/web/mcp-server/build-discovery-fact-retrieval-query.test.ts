@@ -69,6 +69,17 @@ it('retains Unicode identity terms while stripping query operators', () => {
     .toBe('(mömax & 三星 & 手机)');
 });
 
+it('keeps every constraint in retrieval past the old twelve-term budget', () => {
+  expect(buildDiscoveryFactRetrievalQuery(intent({
+    product_type: 'laptop', brands: ['Acme'], model: 'ZX 42 Ultra Pro Max Plus X Y Z',
+    attributes: [
+      { key: 'storage_gb', operator: 'eq', value: 256 },
+      { key: 'ram_gb', operator: 'gte', value: 16 },
+      { key: 'color', operator: 'eq', value: 'midnight blue deep dark shade tone' },
+    ],
+  }))).toBe('(((laptop) | (laptops)) & acme & zx & 42 & ultra & pro & max & plus & x & y & storage256gb & ramgb & midnight & blue & deep & dark & shade & tone & color)');
+});
+
 it('normalizes decomposed Unicode before building retrieval terms', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'Cafe\u0301 Pro' }))).toBe('(café & pro)');
 });

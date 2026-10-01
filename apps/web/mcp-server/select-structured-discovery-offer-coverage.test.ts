@@ -59,3 +59,10 @@ it('matches full-width variant text against identical intent values', () => {
   ] }));
   expect(selected?.selectedOption).toMatchObject({ kind: 'variant', price: 400 });
 });
+
+it('treats a missing parent condition as new when excluding same-condition offers', () => {
+  const row = makeRow({ condition: null, has_condition_offers: true });
+  row.availableOffers = [{ id: 'new-offer', price: 400, condition: 'new', stock_quantity: 1 }] as typeof row.availableOffers;
+  const selected = selectStructuredDiscoveryOffer(row, intent({}));
+  expect(selected?.selectedOption).toMatchObject({ kind: 'base', price: 500 });
+});

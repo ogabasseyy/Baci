@@ -77,6 +77,7 @@ it('pushes constraints into the recall RPC so filtering precedes the cap', async
     p_merchant_id: 'merchant-1',
     p_filters: [{ key: 'storage_gb', operator: 'eq', value: 256, branch: 0 }],
     p_identity: [{ branch: 0 }],
+    p_excluded_types: [],
     p_limit: 1000,
     p_offset: 0,
   });
@@ -114,6 +115,24 @@ it('sends each branch identity so the RPC ranks verified products first', async 
       },
       { branch: 1 },
     ],
+    p_excluded_types: [],
+    p_limit: 1000,
+    p_offset: 0,
+  });
+});
+
+it('forwards excluded product types so the RPC sinks verified-excluded rows', async () => {
+  const supabase = rpc([]);
+  await loadVariantRecallIds(
+    { ...intent(storageEq(256)), excluded_product_types: ['laptop', 'tablet'] },
+    'merchant-1',
+    supabase
+  );
+  expect(supabase.rpc).toHaveBeenCalledWith('search_product_variant_recall', {
+    p_merchant_id: 'merchant-1',
+    p_filters: [{ key: 'storage_gb', operator: 'eq', value: 256, branch: 0 }],
+    p_identity: [{ branch: 0 }],
+    p_excluded_types: ['laptop', 'tablet'],
     p_limit: 1000,
     p_offset: 0,
   });
@@ -136,6 +155,7 @@ it('numbers each alternative branch so the RPC scores branches separately', asyn
       { key: 'color', operator: 'eq', value: 'White', branch: 1 },
     ],
     p_identity: [{ branch: 0 }, { branch: 1 }],
+    p_excluded_types: [],
     p_limit: 1000,
     p_offset: 0,
   });

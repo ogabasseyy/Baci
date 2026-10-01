@@ -52,6 +52,30 @@ BEGIN
 END;
 $$;
 
+-- Binary64 lens over the exact-numeric parse: PostgREST decodes JSON
+-- numbers to JavaScript doubles, so 256.00000000000001 reads as 256
+-- downstream while exact numeric would verifiably fail it here. Unit math
+-- stays exact (powers of two divide exactly), and the final rounding
+-- matches the loader's doubles; past float8 range the loader observes
+-- Infinity, so overflow maps there instead of erroring (actuals are
+-- nonneg by construction, keeping the sign branch out).
+CREATE OR REPLACE FUNCTION discovery.recall_variant_parse_float8(filter_key text, raw jsonb)
+RETURNS float8
+LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE SECURITY INVOKER SET search_path = ''
+AS $$
+DECLARE
+  num numeric;
+BEGIN
+  num := discovery.recall_variant_parse_numeric(filter_key, raw);
+  IF num IS NULL THEN RETURN NULL; END IF;
+  BEGIN
+    RETURN num::float8;
+  EXCEPTION WHEN numeric_value_out_of_range THEN
+    RETURN 'Infinity'::float8;
+  END;
+END;
+$$;
+
 -- Canonical-key test shared by the superset and exact matchers: mirror
 -- normalizeAxisKey + the commerce alias map + the discovery allowlist so
 -- only keys the loader would normalize to filter_key count.
@@ -88,8 +112,8 @@ DECLARE
   entry_value jsonb;
   last_value jsonb;
   found boolean := false;
-  actual_numeric numeric;
-  expected_numeric numeric;
+  actual_float float8;
+  expected_float float8;
   actual_text text;
   expected_text text;
 BEGIN
@@ -120,12 +144,12 @@ BEGIN
   -- 256GB intent).
   IF NOT found THEN RETURN false; END IF;
   IF numeric_key THEN
-    actual_numeric := discovery.recall_variant_parse_numeric(filter_key, last_value);
-    IF actual_numeric IS NULL THEN RETURN false; END IF;
-    expected_numeric := (filter_value)::text::numeric;
-    IF filter_operator = 'eq' AND actual_numeric IS DISTINCT FROM expected_numeric THEN RETURN true; END IF;
-    IF filter_operator = 'gte' AND actual_numeric < expected_numeric THEN RETURN true; END IF;
-    IF filter_operator = 'lte' AND actual_numeric > expected_numeric THEN RETURN true; END IF;
+    actual_float := discovery.recall_variant_parse_float8(filter_key, last_value);
+    IF actual_float IS NULL THEN RETURN false; END IF;
+    expected_float := (filter_value)::text::float8;
+    IF filter_operator = 'eq' AND actual_float IS DISTINCT FROM expected_float THEN RETURN true; END IF;
+    IF filter_operator = 'gte' AND actual_float < expected_float THEN RETURN true; END IF;
+    IF filter_operator = 'lte' AND actual_float > expected_float THEN RETURN true; END IF;
     RETURN false;
   ELSE
     IF pg_catalog.jsonb_typeof(last_value) IS DISTINCT FROM 'string' THEN RETURN false; END IF;
@@ -158,7 +182,7 @@ DECLARE
   entry_value jsonb;
   last_value jsonb;
   found boolean := false;
-  actual_numeric numeric;
+  actual_float float8;
   actual_text text;
   expected_text text;
 BEGIN
@@ -185,11 +209,11 @@ BEGIN
   -- pass: the exact flag must describe the value the loader would decide on.
   IF NOT found THEN RETURN false; END IF;
   IF numeric_key THEN
-    actual_numeric := discovery.recall_variant_parse_numeric(filter_key, last_value);
-    IF actual_numeric IS NULL THEN RETURN false; END IF;
-    IF filter_operator = 'eq' AND actual_numeric = (filter_value)::text::numeric THEN RETURN true; END IF;
-    IF filter_operator = 'gte' AND actual_numeric >= (filter_value)::text::numeric THEN RETURN true; END IF;
-    IF filter_operator = 'lte' AND actual_numeric <= (filter_value)::text::numeric THEN RETURN true; END IF;
+    actual_float := discovery.recall_variant_parse_float8(filter_key, last_value);
+    IF actual_float IS NULL THEN RETURN false; END IF;
+    IF filter_operator = 'eq' AND actual_float = (filter_value)::text::float8 THEN RETURN true; END IF;
+    IF filter_operator = 'gte' AND actual_float >= (filter_value)::text::float8 THEN RETURN true; END IF;
+    IF filter_operator = 'lte' AND actual_float <= (filter_value)::text::float8 THEN RETURN true; END IF;
     RETURN false;
   ELSE
     IF pg_catalog.jsonb_typeof(last_value) IS DISTINCT FROM 'string' THEN RETURN false; END IF;
@@ -227,7 +251,7 @@ DECLARE
   entry_value jsonb;
   last_value jsonb;
   found boolean := false;
-  actual_numeric numeric;
+  actual_float float8;
   actual_text text;
   expected_text text;
 BEGIN
@@ -252,11 +276,11 @@ BEGIN
   END LOOP;
   IF NOT found THEN RETURN true; END IF;
   IF numeric_key THEN
-    actual_numeric := discovery.recall_variant_parse_numeric(filter_key, last_value);
-    IF actual_numeric IS NULL THEN RETURN filter_operator = 'eq'; END IF;
-    IF filter_operator = 'eq' THEN RETURN actual_numeric = (filter_value)::text::numeric; END IF;
-    IF filter_operator = 'gte' THEN RETURN actual_numeric >= (filter_value)::text::numeric; END IF;
-    RETURN actual_numeric <= (filter_value)::text::numeric;
+    actual_float := discovery.recall_variant_parse_float8(filter_key, last_value);
+    IF actual_float IS NULL THEN RETURN filter_operator = 'eq'; END IF;
+    IF filter_operator = 'eq' THEN RETURN actual_float = (filter_value)::text::float8; END IF;
+    IF filter_operator = 'gte' THEN RETURN actual_float >= (filter_value)::text::float8; END IF;
+    RETURN actual_float <= (filter_value)::text::float8;
   ELSE
     IF pg_catalog.jsonb_typeof(last_value) IS DISTINCT FROM 'string' THEN RETURN true; END IF;
     actual_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(

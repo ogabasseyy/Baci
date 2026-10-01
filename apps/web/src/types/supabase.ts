@@ -20777,6 +20777,7 @@ export type Database = {
       };
       search_product_variant_recall: {
         Args: {
+          p_excluded_types?: Json;
           p_filters?: Json;
           p_identity?: Json;
           p_limit?: number;

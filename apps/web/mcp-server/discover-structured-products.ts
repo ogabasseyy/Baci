@@ -15,11 +15,13 @@ type SelectedMatch = ReturnType<typeof selectStructuredDiscoveryOffer>;
 // A lookup failure only vetoes the scan when the row's missing options could
 // have produced a different result. Rows ruled out by verified product facts
 // cannot change the result. Source-scoped: variant failures always matter
-// because variants are the primary purchase path, but offer failures matter
-// only when a missing offer could still be selected — with no requested
-// condition any offer could win, while a requested condition matching the
-// parent's listing rules every missing offer ineligible by design (the
-// same-condition skip in select-structured-discovery-offer).
+// because variants are the primary purchase path, and serialized failures
+// always matter because the row's price and stock fell back to stored values
+// that may be stale; offer failures matter only when a missing offer could
+// still be selected — with no requested condition any offer could win, while
+// a requested condition matching the parent's listing rules every missing
+// offer ineligible by design (the same-condition skip in
+// select-structured-discovery-offer).
 function lookupFailureCouldMatter(
   row: HydratedRow,
   intent: McpDiscoveryIntent,
@@ -29,6 +31,7 @@ function lookupFailureCouldMatter(
   if (!row.optionsLookupFailed) return false;
   if (match === undefined && structuredDiscoveryIdentity.isRowExcludedByIdentity(row, intent)) return false;
   if (row.variantLookupFailed) return true;
+  if (row.serializedLookupFailed) return true;
   if (!row.offerLookupFailed) return false;
   // Variants owning the condition axis disable offers entirely (PDP parity),
   // so an offer-only failure cannot change selection with or without a
@@ -71,7 +74,11 @@ export async function discoverStructuredProducts({ intent, query, args, merchant
         : matchesMcpPostHydrationFilters(product, args)), supabase, merchantId, args.condition);
     for (const row of hydrated) {
       const match = selectStructuredDiscoveryOffer(row, intent, args, () => { factsUnverified = true; });
-      if (match) selected.push(match);
+      // PDP parity: the storefront snapshot refuses products past the
+      // 128-variant window as unavailable with no fallback, so serving the
+      // match would link to an unusable PDP. Exclude the row; coverage
+      // already reports partial for the truncation.
+      if (match && !row.variantWindowTruncated) selected.push(match);
       if (lookupFailureCouldMatter(row, intent, match, args.condition)) optionsLookupFailed = true;
       if (row.variantWindowTruncated) variantWindowTruncated = true;
     }

@@ -67,6 +67,10 @@ export async function loadVariantRecallIds(
     // below the cap: two full pages, then a one-row probe at the window edge
     // discloses whether the RPC window cut the match set.
     const filters = constraints.map(({ key, operator, value, branch }) => ({ key, operator, value, branch }));
+    // Intent-level excluded product types ride as their own argument: the RPC
+    // sinks verified-excluded rows below every non-excluded row (the matcher
+    // drops them on every branch), while unverified rows stay reachable.
+    const excludedTypes = intent?.excluded_product_types ?? [];
     // Identity rides along per branch: without it the RPC ranks every
     // attribute-matching variant equally, so wrong-identity products can
     // fill the capped window ahead of the valid one. Only specified fields
@@ -84,6 +88,7 @@ export async function loadVariantRecallIds(
         p_merchant_id: merchantId,
         p_filters: filters,
         p_identity: identity,
+        p_excluded_types: excludedTypes,
         p_limit: limit,
         p_offset: offset,
       });

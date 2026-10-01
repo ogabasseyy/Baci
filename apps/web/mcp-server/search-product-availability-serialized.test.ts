@@ -124,4 +124,25 @@ describe('hydrateSearchProductAvailability serialized projection', () => {
     expect(hydrated).toMatchObject({ basePurchasable: false });
     expect(hydrated.product.stock_quantity).toBe(0);
   });
+
+  it('flags rows whose serialized lookup failed instead of passing them as verified', async () => {
+    const supabase = {
+      from: vi.fn(() => {
+        throw new Error('counts unavailable');
+      }),
+      rpc: vi.fn(async () => ({ data: [], error: null })),
+    } as unknown as SupabaseClient;
+    const [hydrated] = await hydrateSearchProductAvailability(
+      [serializedProduct],
+      supabase,
+      'merchant-1'
+    );
+
+    expect(hydrated).toMatchObject({
+      serializedLookupFailed: true,
+      optionsLookupFailed: true,
+      variantLookupFailed: false,
+      offerLookupFailed: false,
+    });
+  });
 });

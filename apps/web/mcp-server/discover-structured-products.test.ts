@@ -53,6 +53,7 @@ function client(fixture: Fixture) {
       eq: vi.fn((column: string, value: unknown) => { filters.push(['eq', column, value]); return builder; }),
       in: vi.fn((column: string, value: unknown) => { filters.push(['in', column, value]); return builder; }),
       order: vi.fn(() => builder),
+      returns: vi.fn(() => builder),
       range: vi.fn((start: number, end: number) => {range = [start, end]; return builder;}),
       then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => {
         if (table === 'product_offers' && fixture.offerError) return Promise.resolve({ data: null, error: fixture.offerError }).then(resolve, reject);

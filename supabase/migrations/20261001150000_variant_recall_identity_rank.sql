@@ -1,14 +1,10 @@
--- Identity-scoped variant recall ranking. The recall RPC ranked every
--- variant satisfying the attribute constraints equally, so for an intent
--- like phone AND storage_gb=256 (storage living only on variants), enough
--- wrong-identity 256 GB variants could fill the capped window ahead of the
--- valid phone with no product-level recovery. Alternatives now ride their
--- product type, brand, model, and compatibility identity into the RPC, and
--- identity-verified representatives rank ahead of contradicted ones. Ranking
--- stays fail-open like the matcher: missing product fields demote to the
--- middle tier instead of excluding, and an empty identity set is neutral.
--- The offset signature changes again, so the four-argument form is dropped
--- first: without this it would linger as a stale overload.
+-- Identity-scoped variant recall ranking. Alternatives ride their product
+-- identity into the RPC, and representatives rank by per-branch JOINT
+-- verdicts: full-alternative branches first, then clear branches, so hybrids
+-- (identity from one alternative, attributes from another) sink below valid
+-- and unverified products. Verified excluded types sink below every
+-- non-excluded row. Ranking stays fail-open: missing fields demote, never
+-- exclude. The five-argument form is dropped for the excluded-types param.
 -- Canonical product type shared by stored and expected recall identity:
 -- explicit metadata wins, else the storefront category map, mirroring the
 -- matcher's productTypeOf (including its smartphones/laptops/tablets map)
@@ -20,16 +16,11 @@ AS $$
   SELECT CASE
     WHEN nullif(discovery.discovery_identity_normalize(product_type), '') IS NOT NULL
     THEN CASE discovery.discovery_identity_normalize(product_type)
-      WHEN 'phone' THEN 'phone' WHEN 'phones' THEN 'phone'
-      WHEN 'smartphone' THEN 'phone' WHEN 'smartphones' THEN 'phone'
-      WHEN 'smart_phone' THEN 'phone' WHEN 'smart_phones' THEN 'phone'
-      WHEN 'mobile_phone' THEN 'phone' WHEN 'mobile_phones' THEN 'phone'
-      WHEN 'cell_phone' THEN 'phone' WHEN 'cell_phones' THEN 'phone'
-      WHEN 'laptop' THEN 'laptop' WHEN 'laptops' THEN 'laptop'
-      WHEN 'tablet' THEN 'tablet' WHEN 'tablets' THEN 'tablet'
-      WHEN 'chargers' THEN 'charger' WHEN 'cables' THEN 'cable'
-      WHEN 'security_cameras' THEN 'security_camera'
-      WHEN 'fragrance_diffusers' THEN 'fragrance_diffuser'
+      WHEN 'phone' THEN 'phone' WHEN 'phones' THEN 'phone' WHEN 'smartphone' THEN 'phone' WHEN 'smartphones' THEN 'phone'
+      WHEN 'smart_phone' THEN 'phone' WHEN 'smart_phones' THEN 'phone' WHEN 'mobile_phone' THEN 'phone' WHEN 'mobile_phones' THEN 'phone'
+      WHEN 'cell_phone' THEN 'phone' WHEN 'cell_phones' THEN 'phone' WHEN 'laptop' THEN 'laptop' WHEN 'laptops' THEN 'laptop'
+      WHEN 'tablet' THEN 'tablet' WHEN 'tablets' THEN 'tablet' WHEN 'chargers' THEN 'charger' WHEN 'cables' THEN 'cable'
+      WHEN 'security_cameras' THEN 'security_camera' WHEN 'fragrance_diffusers' THEN 'fragrance_diffuser'
       ELSE discovery.discovery_identity_normalize(product_type) END
     WHEN nullif(discovery.discovery_identity_normalize(category), '') = 'smartphones' THEN 'phone'
     WHEN nullif(discovery.discovery_identity_normalize(category), '') = 'laptops' THEN 'laptop'
@@ -37,13 +28,14 @@ AS $$
   END;
 $$;
 
-DROP FUNCTION IF EXISTS public.search_product_variant_recall(uuid, jsonb, integer, integer);
+DROP FUNCTION IF EXISTS public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb);
 CREATE OR REPLACE FUNCTION public.search_product_variant_recall(
   p_merchant_id uuid,
   p_filters jsonb DEFAULT '[]'::jsonb,
   p_limit integer DEFAULT 2000,
   p_offset integer DEFAULT 0,
-  p_identity jsonb DEFAULT '[]'::jsonb
+  p_identity jsonb DEFAULT '[]'::jsonb,
+  p_excluded_types jsonb DEFAULT '[]'::jsonb
 ) RETURNS TABLE (product_id uuid, attributes jsonb)
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path TO ''
 AS $$
@@ -67,6 +59,12 @@ BEGIN
     RAISE EXCEPTION 'variant recall accepts identity for at most 5 branches'
       USING ERRCODE = '22023';
   END IF;
+  IF pg_catalog.jsonb_typeof(p_excluded_types) = 'array'
+    AND (pg_catalog.jsonb_array_length(p_excluded_types) > 10
+      OR pg_catalog.octet_length(p_excluded_types::text) > 8192) THEN
+    RAISE EXCEPTION 'variant recall accepts at most 10 excluded product types'
+      USING ERRCODE = '22023';
+  END IF;
   RETURN QUERY
   WITH filters AS (
     -- Normalize once: a non-array boundary value means no filtering, and
@@ -84,12 +82,9 @@ BEGIN
     ) AS filter_element
   ),
   identity AS (
-    -- Per-branch specified identity, normalized once: a non-array boundary
-    -- value means no identity ranking, and the CASE keeps array expansion
-    -- away from values that would error. Malformed branches fall back to
-    -- group zero (fail open), mirroring filters. Expected types route
-    -- through the same canonicalizer as stored types so a direct caller
-    -- sending a raw alias still compares canonically.
+    -- Per-branch specified identity, normalized once. Malformed branches
+    -- fall back to group zero (fail open), mirroring filters; expected
+    -- types route through the stored-side canonicalizer for direct callers.
     SELECT
       CASE WHEN identity_element.value ->> 'branch' ~ '^-?[0-9]{1,9}$'
         THEN (identity_element.value ->> 'branch')::integer
@@ -107,6 +102,16 @@ BEGIN
     FROM pg_catalog.jsonb_array_elements(
       CASE WHEN pg_catalog.jsonb_typeof(p_identity) = 'array' THEN p_identity ELSE '[]'::jsonb END
     ) AS identity_element
+  ),
+  excluded_types AS (
+    -- Intent-level excluded product types, canonicalized once. A non-array
+    -- boundary value excludes nothing.
+    SELECT coalesce(array_agg(DISTINCT discovery.canonical_identity_product_type(elem, NULL))
+      FILTER (WHERE discovery.canonical_identity_product_type(elem, NULL) IS NOT NULL),
+      '{}'::text[]) AS types
+    FROM pg_catalog.jsonb_array_elements_text(
+      CASE WHEN pg_catalog.jsonb_typeof(p_excluded_types) = 'array' THEN p_excluded_types ELSE '[]'::jsonb END
+    ) AS elem
   ),
   merchant_branches AS (
     -- Branch scope for serialized availability mirrors the public counts
@@ -155,24 +160,12 @@ BEGIN
       ) AS per_branch), 0) AS best_branch_exact,
       EXISTS (SELECT 1 FROM filters
         WHERE discovery.recall_variant_filter_loader_accepts(pv.attributes, filters.filter)) AS is_accepted,
-      -- Identity verdicts mirror the matcher's alternative evaluation: a
-      -- branch completes when every specified field verifies, and stays
-      -- clear while none contradicts. Missing product fields demote to the
-      -- middle tier (fail open); an identity-less branch completes
-      -- vacuously, exactly like the matcher.
-      EXISTS (SELECT 1 FROM identity AS idn
-        WHERE (idn.product_type IS NULL OR stored.product_type = idn.product_type)
-          AND (idn.brands = '{}' OR stored.brand = ANY (idn.brands))
-          AND (idn.model IS NULL OR stored.model = idn.model)
-          AND (idn.compatible_with IS NULL OR stored.compatible_with @> ARRAY[idn.compatible_with])
-      ) AS identity_complete,
-      EXISTS (SELECT 1 FROM identity AS idn
-        WHERE (idn.product_type IS NULL OR stored.product_type IS NULL OR stored.product_type = idn.product_type)
-          AND (idn.brands = '{}' OR stored.brand IS NULL OR stored.brand = ANY (idn.brands))
-          AND (idn.model IS NULL OR stored.model IS NULL OR stored.model = idn.model)
-          AND (idn.compatible_with IS NULL OR stored.compatible_with = '{}'
-            OR stored.compatible_with @> ARRAY[idn.compatible_with])
-      ) AS identity_clear,
+      -- Joint tiers (see the joint lateral below) plus the verified
+      -- exclusion flag, which sinks excluded rows below every non-excluded
+      -- row while leaving unverified rows untouched (fail open).
+      joint.complete_alternatives AS complete_alternative_count,
+      joint.clear_branches AS clear_branch_count,
+      coalesce(stored.product_type = ANY (excluded.types), false) AS identity_excluded,
       -- Effective purchasability mirrors the storefront projection: explicit
       -- variant policy wins, else a serialized product policy, else off.
       -- Serialized policies replace stored stock with public available
@@ -212,6 +205,43 @@ BEGIN
                  THEN meta.facts -> 'compatible_with' ELSE '[]'::jsonb END) AS compat_elem) AS compat
          WHERE compat.norm IS NOT NULL) AS compatible_with
     ) AS stored
+    CROSS JOIN excluded_types AS excluded
+    CROSS JOIN LATERAL (
+      -- Per-branch JOINT verdicts: identity and attributes must satisfy the
+      -- SAME branch, or hybrids tie valid products. Absent identity rows or
+      -- filters complete vacuously; IS NOT TRUE (not NOT) keeps NULL
+      -- verdicts failing, mirroring the FILTER semantics above.
+      SELECT
+        count(*) FILTER (WHERE branch_state.identity_complete AND branch_state.attrs_complete) AS complete_alternatives,
+        count(*) FILTER (WHERE branch_state.identity_clear AND branch_state.attrs_complete) AS clear_branches
+      FROM (
+        SELECT
+          b.branch,
+          NOT EXISTS (
+            SELECT 1 FROM identity AS idn
+            WHERE idn.branch = b.branch
+              AND ((idn.product_type IS NULL OR stored.product_type = idn.product_type) AND (idn.brands = '{}' OR stored.brand = ANY (idn.brands))
+                AND (idn.model IS NULL OR stored.model = idn.model) AND (idn.compatible_with IS NULL OR stored.compatible_with @> ARRAY[idn.compatible_with])) IS NOT TRUE
+          ) AS identity_complete,
+          NOT EXISTS (
+            SELECT 1 FROM identity AS idn
+            WHERE idn.branch = b.branch
+              AND ((idn.product_type IS NULL OR stored.product_type IS NULL OR stored.product_type = idn.product_type)
+                AND (idn.brands = '{}' OR stored.brand IS NULL OR stored.brand = ANY (idn.brands)) AND (idn.model IS NULL OR stored.model IS NULL OR stored.model = idn.model)
+                AND (idn.compatible_with IS NULL OR stored.compatible_with = '{}' OR stored.compatible_with @> ARRAY[idn.compatible_with])) IS NOT TRUE
+          ) AS identity_clear,
+          NOT EXISTS (
+            SELECT 1 FROM filters AS f
+            WHERE f.branch = b.branch
+              AND discovery.recall_variant_filter_exactly_matches(pv.attributes, f.filter) IS NOT TRUE
+          ) AS attrs_complete
+        FROM (
+          SELECT f.branch FROM filters AS f GROUP BY f.branch
+          UNION
+          SELECT idn.branch FROM identity AS idn GROUP BY idn.branch
+        ) AS b
+      ) AS branch_state
+    ) AS joint
     WHERE pv.merchant_id = p_merchant_id
       AND p.merchant_id = p_merchant_id
       AND p.status = 'active'
@@ -238,25 +268,22 @@ BEGIN
     -- acceptance class, purchasable representatives rank ahead: hydration
     -- discards sold-out variants, so sold-out products filling the cap would
     -- strand purchasable matches past it with no product-level recovery.
-    -- Identity is product-level, so it cannot change the representative;
-    -- it ranks in the outer select only. Within a purchasability class,
-    -- identity-verified products rank first, then unverified ones, so
-    -- wrong-identity variants cannot evict valid ones from the cap. Then
-    -- variants completing an alternative rank first, then the best
-    -- per-branch exact count, so complete multi-attribute matches outrank
-    -- partial ones and cross-branch hybrids.
+    -- Product-level tiers (exclusion) cannot change the representative
+    -- and rank outer-only; joint branch tiers pick the best variant first.
     SELECT DISTINCT ON (eligible.product_id)
       eligible.product_id, eligible.attributes, eligible.is_accepted,
-      eligible.is_purchasable, eligible.identity_complete, eligible.identity_clear,
+      eligible.is_purchasable, eligible.identity_excluded,
+      eligible.complete_alternative_count, eligible.clear_branch_count,
       eligible.complete_branch_count, eligible.best_branch_exact
     FROM eligible
     ORDER BY eligible.product_id, (NOT eligible.is_accepted), (NOT eligible.is_purchasable),
+      eligible.complete_alternative_count DESC, eligible.clear_branch_count DESC,
       eligible.complete_branch_count DESC, eligible.best_branch_exact DESC,
       eligible.created_at, eligible.id
   )
   SELECT best.product_id, best.attributes FROM best
-  ORDER BY (NOT best.is_accepted), (NOT best.is_purchasable),
-    (NOT best.identity_complete), (NOT best.identity_clear),
+  ORDER BY (NOT best.is_accepted), (NOT best.is_purchasable), best.identity_excluded,
+    best.complete_alternative_count DESC, best.clear_branch_count DESC,
     best.complete_branch_count DESC, best.best_branch_exact DESC, best.product_id
   LIMIT least(greatest(coalesce(p_limit, 2000), 1), 2001)
   -- PostgREST clamps responses at 1,000 rows, so callers page below the cap
@@ -266,7 +293,7 @@ BEGIN
 END;
 $$;
 
-ALTER FUNCTION public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb) TO anon, authenticated, service_role;
-COMMENT ON FUNCTION public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb) IS 'Published-merchant variant attributes for discovery recall; filters narrow before the cap, identity ranks before branch completeness; NULL merchant returns no rows.';
+ALTER FUNCTION public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb, jsonb) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb, jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb, jsonb) TO anon, authenticated, service_role;
+COMMENT ON FUNCTION public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb, jsonb) IS 'Published-merchant variant attributes for discovery recall; joint branch verdicts rank before attribute tiers; NULL merchant returns no rows.';

@@ -2,6 +2,20 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 export function serveCatalogFixture(request: IncomingMessage, response: ServerResponse, url: URL): boolean {
     if (url.pathname.endsWith('/rest/v1/products')) {
+      // Serialized-policy lookup (getPublicSerializedVariantSummariesByProductId
+      // selects inventory_tracking_policy with id=in.(...)): fixture products
+      // are never serialized, so resolve every requested id as off/active.
+      // Without this the in.(...) query falls into the 406 else below and
+      // availability flags every simple row as lookup-failed.
+      const policyIds = url.searchParams.get('id');
+      if (url.searchParams.get('select')?.includes('inventory_tracking_policy') &&
+        policyIds !== null && policyIds.startsWith('in.')) {
+        const ids = policyIds.slice(3).replace(/[()]/g, '').split(',').filter((id) => id !== '');
+        response.end(JSON.stringify(ids.map((id) => ({
+          id, inventory_tracking_policy: 'off', has_variants: false, status: 'active',
+        }))));
+        return true;
+      }
       if (url.searchParams.get('id') === 'eq.available-product') {
         response.end(JSON.stringify({ id: 'available-product', name: 'Test Phone', slug: 'test-phone', price: 100000, manage_stock: false }));
       } else if (url.searchParams.get('id') === 'eq.sold-out-product') {
@@ -72,6 +86,13 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
       return true;
     }
     if (url.pathname.endsWith('/rest/v1/product_variants')) {
+      // Serialized-policy lookup only needs anchor rows; fixtures carry no
+      // serialized policies, so resolve it empty without disturbing the fixed
+      // display row other selects rely on.
+      if (url.searchParams.get('select')?.includes('inventory_tracking_policy')) {
+        response.end(JSON.stringify([]));
+        return true;
+      }
       response.end(JSON.stringify([{ attributes: { storage: '128GB' }, price_override: 100000, stock_quantity: 0, condition: 'new', sku: 'TEST-128' }]));
       return true;
     }

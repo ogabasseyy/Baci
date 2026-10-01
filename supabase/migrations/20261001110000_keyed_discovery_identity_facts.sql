@@ -39,67 +39,39 @@ CREATE OR REPLACE FUNCTION discovery.product_discovery_search_document_v5(
   product_name text, product_brand text, product_category text,
   product_description text, facts jsonb
 ) RETURNS tsvector
-LANGUAGE sql IMMUTABLE PARALLEL SAFE SECURITY INVOKER SET search_path = ''
+LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE SECURITY INVOKER SET search_path = ''
 AS $$
-  SELECT discovery.product_discovery_search_document_v4(
-      product_name, product_brand, product_category, product_description, facts)
-    || pg_catalog.to_tsvector('simple'::regconfig, coalesce((
-      SELECT pg_catalog.string_agg(lexeme, ' ')
-      FROM (
-        -- Canonical types route through the shared lexeme so overlong values
-        -- digest exactly like the query builder's identityKey: a 65+ char
-        -- custom type indexed literally would never match the queried digest.
-        SELECT discovery.discovery_identity_lexeme('type', canonical_type) AS lexeme
-        FROM (SELECT CASE
-          WHEN nullif(pg_catalog.lower(pg_catalog.normalize(
-              pg_catalog.regexp_replace(
-                pg_catalog.regexp_replace(
-                  pg_catalog.normalize(facts ->> 'product_type', 'NFC'),
-                  '^[[:space:]]+|[[:space:]]+$', '', 'g'),
-                '[[:space:]]+', ' ', 'g'), 'NFC')), '') IS NOT NULL
-          THEN CASE discovery.discovery_identity_normalize(facts ->> 'product_type')
-            WHEN 'phone' THEN 'phone' WHEN 'phones' THEN 'phone'
-            WHEN 'smartphone' THEN 'phone' WHEN 'smartphones' THEN 'phone'
-            WHEN 'smart_phone' THEN 'phone' WHEN 'smart_phones' THEN 'phone'
-            WHEN 'mobile_phone' THEN 'phone' WHEN 'mobile_phones' THEN 'phone'
-            WHEN 'cell_phone' THEN 'phone' WHEN 'cell_phones' THEN 'phone'
-            WHEN 'laptop' THEN 'laptop' WHEN 'laptops' THEN 'laptop'
-            WHEN 'tablet' THEN 'tablet' WHEN 'tablets' THEN 'tablet'
-            WHEN 'chargers' THEN 'charger' WHEN 'cables' THEN 'cable'
-            WHEN 'security_cameras' THEN 'security_camera'
-            WHEN 'fragrance_diffusers' THEN 'fragrance_diffuser'
-            ELSE discovery.discovery_identity_normalize(facts ->> 'product_type') END
-          WHEN pg_catalog.lower(pg_catalog.normalize(
-              pg_catalog.regexp_replace(
-                pg_catalog.regexp_replace(
-                  pg_catalog.normalize(product_category, 'NFC'),
-                  '^[[:space:]]+|[[:space:]]+$', '', 'g'),
-                '[[:space:]]+', ' ', 'g'), 'NFC')) = 'smartphones' THEN 'phone'
-          WHEN pg_catalog.lower(pg_catalog.normalize(
-              pg_catalog.regexp_replace(
-                pg_catalog.regexp_replace(
-                  pg_catalog.normalize(product_category, 'NFC'),
-                  '^[[:space:]]+|[[:space:]]+$', '', 'g'),
-                '[[:space:]]+', ' ', 'g'), 'NFC')) = 'laptops' THEN 'laptop'
-          WHEN pg_catalog.lower(pg_catalog.normalize(
-              pg_catalog.regexp_replace(
-                pg_catalog.regexp_replace(
-                  pg_catalog.normalize(product_category, 'NFC'),
-                  '^[[:space:]]+|[[:space:]]+$', '', 'g'),
-                '[[:space:]]+', ' ', 'g'), 'NFC')) = 'tablets' THEN 'tablet'
-        END AS canonical_type) AS typed
-        UNION ALL
-        SELECT discovery.discovery_identity_lexeme('brand', product_brand)
-        UNION ALL
-        SELECT discovery.discovery_identity_lexeme('model', facts ->> 'model')
-        UNION ALL
-        SELECT discovery.discovery_identity_lexeme('compat', elem)
-        FROM pg_catalog.jsonb_array_elements_text(
-          CASE WHEN pg_catalog.jsonb_typeof(facts -> 'compatible_with') = 'array'
-          THEN facts -> 'compatible_with' ELSE '[]'::jsonb END) AS elem
-      ) AS lexemes
-      WHERE lexeme IS NOT NULL
-    ), ''));
+BEGIN
+  -- Canonical types route through the shared canonicalizer so the indexed
+  -- lexeme matches the validator and the query builder bit for bit: the
+  -- older inline trim-then-NFKC path emitted type_phone for inputs like
+  -- ¨phone while the builder queried typephone. plpgsql resolves the
+  -- canonicalizer (defined in 20261001160000) at execution, which a
+  -- LANGUAGE sql body cannot forward-reference. Overlong values still
+  -- digest through the shared lexeme exactly like the builder's identityKey.
+  RETURN (
+    SELECT discovery.product_discovery_search_document_v4(
+        product_name, product_brand, product_category, product_description, facts)
+      || pg_catalog.to_tsvector('simple'::regconfig, coalesce((
+        SELECT pg_catalog.string_agg(lexeme, ' ')
+        FROM (
+          SELECT discovery.discovery_identity_lexeme('type',
+            discovery.canonical_identity_product_type(
+              facts ->> 'product_type', product_category)) AS lexeme
+          UNION ALL
+          SELECT discovery.discovery_identity_lexeme('brand', product_brand)
+          UNION ALL
+          SELECT discovery.discovery_identity_lexeme('model', facts ->> 'model')
+          UNION ALL
+          SELECT discovery.discovery_identity_lexeme('compat', elem)
+          FROM pg_catalog.jsonb_array_elements_text(
+            CASE WHEN pg_catalog.jsonb_typeof(facts -> 'compatible_with') = 'array'
+            THEN facts -> 'compatible_with' ELSE '[]'::jsonb END) AS elem
+        ) AS lexemes
+        WHERE lexeme IS NOT NULL
+      ), ''))
+  );
+END;
 $$;
 
 -- Build the replacement under a temporary name before switching the serving

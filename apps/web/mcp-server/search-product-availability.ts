@@ -20,10 +20,10 @@ interface ProductVariant {
 
 // Storefront snapshot windows (pdp_core_slug_case_insensitive): the PDP
 // snapshot retains 16 offers by (condition, id) and 128 variants by
-// (default, price, created, id) with a full-RPC fallback for selections
-// outside. Search mirrors the windows; variant truncation is disclosed
-// because the fallback can reach options search hides, while offers past
-// 16 are invisible to the PDP itself.
+// (default, price, created, id), and refuses truncated products as
+// unavailable with no full-RPC fallback. Search mirrors the windows and
+// excludes truncated rows from selection; offers past 16 are invisible to
+// the PDP itself.
 const STOREFRONT_SNAPSHOT_OFFER_WINDOW = 16;
 const STOREFRONT_SNAPSHOT_VARIANT_WINDOW = 128;
 // PostgREST clamps responses at 1,000 rows, so the option RPCs page by
@@ -31,6 +31,28 @@ const STOREFRONT_SNAPSHOT_VARIANT_WINDOW = 128;
 // carry at most 992 offer rows (16 each), keeping every response complete.
 const MCP_OPTION_VARIANT_PRODUCTS_PER_CALL = 7;
 const MCP_OPTION_OFFER_PRODUCTS_PER_CALL = 62;
+// A 100-product page fans out to 15 variant batches plus 2 offer batches;
+// strictly serial waves cost 17 round trips per page (180 across a capped
+// 1,200-product scan). Waves of 5 keep the sub-1,000-row batch sizes while
+// bounding sockets; batches touch disjoint product sets, so the shared
+// maps stay consistent without locking.
+const MCP_OPTION_BATCH_CONCURRENCY = 5;
+
+async function runOptionBatches(
+  ids: string[],
+  perCall: number,
+  run: (batch: string[]) => Promise<void>,
+): Promise<void> {
+  const batches: string[][] = [];
+  for (let offset = 0; offset < ids.length; offset += perCall) {
+    batches.push(ids.slice(offset, offset + perCall));
+  }
+  for (let wave = 0; wave < batches.length; wave += MCP_OPTION_BATCH_CONCURRENCY) {
+    await Promise.all(
+      batches.slice(wave, wave + MCP_OPTION_BATCH_CONCURRENCY).map(run)
+    );
+  }
+}
 
 interface ProductOffer {
   id?: string;
@@ -51,8 +73,10 @@ export async function hydrateSearchProductAvailability(
   // PDP: the helper returns summaries only for serialized policies (variant
   // products are projected inside the variants RPC instead, keeping this
   // lookup to one anchor row per simple product). A lookup failure keeps
-  // stored stock rather than zeroing purchasability.
+  // stored stock rather than zeroing purchasability, but the affected rows
+  // are flagged instead of passing as confidently verified.
   const serializedSummaries = new Map<string, PublicSerializedVariantSummary>();
+  const serializedLookupFailedIds = new Set<string>();
   const simpleProductIds = products
     .filter((product) => product.has_variants !== true)
     .map((product) => product.id);
@@ -66,8 +90,9 @@ export async function hydrateSearchProductAvailability(
       for (const summary of summaries) {
         if (!summary.variantId) serializedSummaries.set(summary.productId, summary);
       }
-    } catch {
-      // Fall through with stored stock; options stay available.
+    } catch (error) {
+      console.error('Failed to fetch serialized summaries for search:', error);
+      for (const id of simpleProductIds) serializedLookupFailedIds.add(id);
     }
   }
   const effectiveProducts = products.map((product) => {
@@ -98,15 +123,7 @@ export async function hydrateSearchProductAvailability(
   const variantLookupFailedIds = new Set<string>();
 
   if (productIds.length > 0) {
-    for (
-      let offset = 0;
-      offset < productIds.length;
-      offset += MCP_OPTION_VARIANT_PRODUCTS_PER_CALL
-    ) {
-      const batch = productIds.slice(
-        offset,
-        offset + MCP_OPTION_VARIANT_PRODUCTS_PER_CALL
-      );
+    await runOptionBatches(productIds, MCP_OPTION_VARIANT_PRODUCTS_PER_CALL, async (batch) => {
       const { data: variants, error } = await supabase.rpc(
         'get_mcp_search_product_variants',
         { p_product_ids: batch, p_merchant_id: merchantId }
@@ -122,22 +139,14 @@ export async function hydrateSearchProductAvailability(
           ]);
         }
       }
-    }
+    });
   }
 
   const offersMap = new Map<string, ProductOffer[]>();
   const offerIds = products.filter((product) => product.has_condition_offers).map((product) => product.id);
   const offerLookupFailedIds = new Set<string>();
   if (offerIds.length > 0) {
-    for (
-      let offset = 0;
-      offset < offerIds.length;
-      offset += MCP_OPTION_OFFER_PRODUCTS_PER_CALL
-    ) {
-      const batch = offerIds.slice(
-        offset,
-        offset + MCP_OPTION_OFFER_PRODUCTS_PER_CALL
-      );
+    await runOptionBatches(offerIds, MCP_OPTION_OFFER_PRODUCTS_PER_CALL, async (batch) => {
       const { data, error } = await supabase.rpc('get_mcp_search_product_offers', {
         p_product_ids: batch,
         p_merchant_id: merchantId,
@@ -155,7 +164,7 @@ export async function hydrateSearchProductAvailability(
         }
         for (const id of batch) offersMap.set(id, offersMap.get(id) ?? []);
       }
-    }
+    });
   }
 
   return effectiveProducts.map((product) => {
@@ -222,7 +231,8 @@ export async function hydrateSearchProductAvailability(
     );
     const optionPriceLookupFailed =
       (product.has_variants && variantLookupFailedIds.has(product.id)) ||
-      (product.has_condition_offers && !offersMap.has(product.id));
+      (product.has_condition_offers && !offersMap.has(product.id)) ||
+      serializedLookupFailedIds.has(product.id);
     const variantLookupStatus = !product.has_variants
       ? 'not_required' as const
       : variantLookupFailedIds.has(product.id) ? 'failed' as const : 'available' as const;
@@ -249,6 +259,7 @@ export async function hydrateSearchProductAvailability(
       optionsLookupFailed: optionPriceLookupFailed,
       variantLookupFailed: variantLookupStatus === 'failed',
       offerLookupFailed: offerLookupStatus === 'failed',
+      serializedLookupFailed: serializedLookupFailedIds.has(product.id),
       variantLookupStatus,
       offerLookupStatus,
       basePurchasable,

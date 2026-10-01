@@ -102,6 +102,12 @@ BEGIN
     RAISE EXCEPTION 'Type alias did not collapse to the canonical identity lexeme';
   END IF;
   document := discovery.product_discovery_search_document_v5('Generic', 'Acme', 'Accessories', '',
+    '{"product_type":"¨phone"}'::jsonb);
+  IF NOT document @@ plainto_tsquery('simple', 'typephone') OR
+     document @@ plainto_tsquery('simple', 'type_phone') THEN
+    RAISE EXCEPTION 'Compatibility-whitespace type did not use the shared canonicalizer lexeme';
+  END IF;
+  document := discovery.product_discovery_search_document_v5('Generic', 'Acme', 'Accessories', '',
     '{"model":"三星手机","product_type":"手机"}'::jsonb);
   IF NOT document @@ plainto_tsquery('simple',
       'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(

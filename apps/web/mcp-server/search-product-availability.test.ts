@@ -4,6 +4,20 @@ import { hydrateSearchProductAvailability } from './search-product-availability'
 import { selectSearchProductsByPrice } from './select-search-products-by-price';
 import { selectStructuredDiscoveryOffer } from './select-structured-discovery-offer';
 
+// Serialized-policy discovery runs for every simple product; tests that do
+// not exercise it stub an empty policy lookup.
+function emptyPolicyFrom() {
+  const builder = {
+    select: vi.fn(() => builder),
+    eq: vi.fn(() => builder),
+    in: vi.fn(() => builder),
+    returns: vi.fn(() => builder),
+    then: (resolve: (value: unknown) => unknown) =>
+      Promise.resolve({ data: [], error: null }).then(resolve),
+  };
+  return builder;
+}
+
 describe('hydrateSearchProductAvailability', () => {
   it('uses the purchasable price for the requested condition', async () => {
     const offerQuery = {
@@ -17,7 +31,7 @@ describe('hydrateSearchProductAvailability', () => {
     offerQuery.eq.mockReturnValue(offerQuery);
     offerQuery.in.mockReturnValue(offerQuery);
     offerQuery.order.mockReturnValue(offerQuery);
-    const supabase = { rpc: vi.fn(async (name: string) => name === 'get_mcp_search_product_offers' ? await offerQuery : { data: [], error: null }) } as unknown as SupabaseClient;
+    const supabase = { rpc: vi.fn(async (name: string) => name === 'get_mcp_search_product_offers' ? await offerQuery : { data: [], error: null }), from: vi.fn(emptyPolicyFrom) } as unknown as SupabaseClient;
     const product = { id: 'priced-phone', condition: 'new', price: 100000,
       manage_stock: true, has_condition_offers: true, stock_quantity: 3 };
 
@@ -40,7 +54,7 @@ describe('hydrateSearchProductAvailability', () => {
     emptyQuery.eq.mockReturnValue(emptyQuery);
     emptyQuery.in.mockReturnValue(emptyQuery);
     emptyQuery.order.mockReturnValue(emptyQuery);
-    const supabase = { rpc: vi.fn(async () => await emptyQuery) } as unknown as SupabaseClient;
+    const supabase = { rpc: vi.fn(async () => await emptyQuery), from: vi.fn(emptyPolicyFrom) } as unknown as SupabaseClient;
     const product = { id: 'legacy-phone', condition: null, price: 50000, manage_stock: false };
 
     const [asNew] = await hydrateSearchProductAvailability([product], supabase, 'merchant-1', 'new');
@@ -62,7 +76,7 @@ describe('hydrateSearchProductAvailability', () => {
     offerQuery.eq.mockReturnValue(offerQuery);
     offerQuery.in.mockReturnValue(offerQuery);
     offerQuery.order.mockReturnValue(offerQuery);
-    const supabase = { rpc: vi.fn(async (name: string) => name === 'get_mcp_search_product_offers' ? await offerQuery : { data: [], error: null }) } as unknown as SupabaseClient;
+    const supabase = { rpc: vi.fn(async (name: string) => name === 'get_mcp_search_product_offers' ? await offerQuery : { data: [], error: null }), from: vi.fn(emptyPolicyFrom) } as unknown as SupabaseClient;
     const products = [{ id: 'base-phone', condition: 'new', manage_stock: true,
       has_condition_offers: true, stock_quantity: 3 }];
 
@@ -90,7 +104,7 @@ describe('hydrateSearchProductAvailability', () => {
     offerQuery.eq.mockReturnValue(offerQuery);
     offerQuery.in.mockReturnValue(offerQuery);
     offerQuery.order.mockReturnValue(offerQuery);
-    const supabase = { rpc, } as unknown as SupabaseClient;
+    const supabase = { rpc, from: vi.fn(emptyPolicyFrom) } as unknown as SupabaseClient;
 
     const [used] = await hydrateSearchProductAvailability([
       { id: 'mixed-phone', condition: 'new', manage_stock: true, has_variants: true,
@@ -119,7 +133,7 @@ describe('hydrateSearchProductAvailability', () => {
     const result = await hydrateSearchProductAvailability([
       { id: 'offer-phone', condition: 'new', price: 100000, manage_stock: true,
         has_condition_offers: true, stock_quantity: 0 },
-    ], { rpc: vi.fn(async () => await offerQuery) } as unknown as SupabaseClient, 'merchant-1', 'used');
+    ], { rpc: vi.fn(async () => await offerQuery), from: vi.fn(emptyPolicyFrom) } as unknown as SupabaseClient, 'merchant-1', 'used');
 
     expect(result[0]).toMatchObject({
       displayPrice: 80000,
@@ -148,7 +162,7 @@ describe('hydrateSearchProductAvailability', () => {
       const [result] = await hydrateSearchProductAvailability([
         { id: 'mixed-options', price: 100, manage_stock: true, has_variants: true,
           has_condition_offers: true, stock_quantity: 0 },
-      ], { rpc, } as unknown as SupabaseClient, 'merchant-1');
+      ], { rpc, from: vi.fn(emptyPolicyFrom) } as unknown as SupabaseClient, 'merchant-1');
 
       expect(result.optionsLookupFailed).toBe(true);
       expect(result.variantLookupFailed).toBe(false);
@@ -178,7 +192,7 @@ describe('hydrateSearchProductAvailability', () => {
     offerQuery.eq.mockReturnValue(offerQuery);
     offerQuery.in.mockReturnValue(offerQuery);
     offerQuery.order.mockReturnValue(offerQuery);
-    const supabase = { rpc, } as unknown as SupabaseClient;
+    const supabase = { rpc, from: vi.fn(emptyPolicyFrom) } as unknown as SupabaseClient;
 
     const result = await hydrateSearchProductAvailability([
       { id: 'variant-phone', manage_stock: true, has_variants: true, stock_quantity: 0 },
@@ -200,7 +214,7 @@ describe('hydrateSearchProductAvailability', () => {
   });
 
   it('leaves tracked option availability unconfirmed when lookup fails', async () => {
-    const supabase = { rpc: vi.fn(async () => ({ data: null, error: { message: 'unavailable' } })) } as unknown as SupabaseClient;
+    const supabase = { rpc: vi.fn(async () => ({ data: null, error: { message: 'unavailable' } })), from: vi.fn(emptyPolicyFrom) } as unknown as SupabaseClient;
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const result = await hydrateSearchProductAvailability([
@@ -230,7 +244,7 @@ describe('hydrateSearchProductAvailability', () => {
       const result = await hydrateSearchProductAvailability([
         { id: 'offer-phone', condition: 'new', price: 80000, manage_stock: true,
           has_condition_offers: true, stock_quantity: 0 },
-      ], { rpc: vi.fn(async () => await offerQuery) } as unknown as SupabaseClient, 'merchant-1');
+      ], { rpc: vi.fn(async () => await offerQuery), from: vi.fn(emptyPolicyFrom) } as unknown as SupabaseClient, 'merchant-1');
       expect(result[0].displayPrice).toBeNull();
       expect(selectSearchProductsByPrice(result, { max_price: 100000 }, 20)).toEqual([]);
     } finally {
@@ -255,7 +269,7 @@ describe('hydrateSearchProductAvailability', () => {
       id: 'dup-phone', condition: 'new', price: 500, manage_stock: true,
       has_condition_offers: true, stock_quantity: 0,
       discovery_metadata: { product_type: 'smartphone' },
-    }], { rpc: vi.fn(async () => await offerQuery) } as unknown as SupabaseClient, 'merchant-1');
+    }], { rpc: vi.fn(async () => await offerQuery), from: vi.fn(emptyPolicyFrom) } as unknown as SupabaseClient, 'merchant-1');
 
     // The first row survives hydration so selection's first-row dedupe sees
     // the same row the PDP resolves; the later in-stock duplicate stays hidden.

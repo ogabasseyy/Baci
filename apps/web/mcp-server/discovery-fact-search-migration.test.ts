@@ -136,21 +136,25 @@ it('filters variant recall by constraints before applying the cap', () => {
     .toBeLessThan(recall.indexOf('LIMIT least'));
 });
 
-it('ranks variant recall by branch identity before branch completeness', () => {
+it('ranks variant recall by joint branch verdicts before attribute tiers', () => {
   const recall = readFileSync(new URL('../../../supabase/migrations/20261001150000_variant_recall_identity_rank.sql', import.meta.url), 'utf8');
   expect(recall.split('\n').length).toBeLessThanOrEqual(300);
   expect(recall).toContain(
-    'DROP FUNCTION IF EXISTS public.search_product_variant_recall(uuid, jsonb, integer, integer);'
+    'DROP FUNCTION IF EXISTS public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb);'
   );
   expect(recall).toContain("p_identity jsonb DEFAULT '[]'::jsonb");
+  expect(recall).toContain("p_excluded_types jsonb DEFAULT '[]'::jsonb");
   expect(recall).toContain('canonical_identity_product_type');
-  expect(recall).toContain('identity_complete');
-  expect(recall).toContain('identity_clear');
+  expect(recall).toContain('complete_alternative_count');
+  expect(recall).toContain('clear_branch_count');
+  expect(recall).toContain('identity_excluded');
   expect(recall).toContain('jsonb_array_length(p_identity) > 5');
-  expect(recall).toContain('octet_length(p_identity::text) > 32768');
+  expect(recall).toContain('jsonb_array_length(p_excluded_types) > 10');
   expect(recall.lastIndexOf('(NOT best.is_purchasable)'))
-    .toBeLessThan(recall.indexOf('(NOT best.identity_complete)'));
-  expect(recall.lastIndexOf('(NOT best.identity_clear)'))
+    .toBeLessThan(recall.lastIndexOf('best.identity_excluded'));
+  expect(recall.lastIndexOf('best.identity_excluded'))
+    .toBeLessThan(recall.lastIndexOf('best.complete_alternative_count DESC'));
+  expect(recall.lastIndexOf('best.clear_branch_count DESC'))
     .toBeLessThan(recall.lastIndexOf('best.complete_branch_count DESC'));
 });
 

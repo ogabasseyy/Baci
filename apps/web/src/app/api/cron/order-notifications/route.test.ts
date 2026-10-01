@@ -196,6 +196,8 @@ describe('GET /api/cron/order-notifications', () => {
     expect(mockSupabase.from).toHaveBeenCalledWith('order_notification_outbox');
     expect(updateBuilder.update).toHaveBeenCalledWith(
       expect.objectContaining({
+        dispatch_started_at: null,
+        next_attempt_at: null,
         skip_reason: 'unparseable',
         status: 'skipped',
       })

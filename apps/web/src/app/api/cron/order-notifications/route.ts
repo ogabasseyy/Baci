@@ -56,9 +56,11 @@ async function deadLetterCorruptOutboxRow(
     const { data, error } = await supabase
       .from('order_notification_outbox')
       .update({
+        dispatch_started_at: null,
         last_error: 'unparseable_outbox_row',
         locked_at: null,
         locked_by: null,
+        next_attempt_at: null,
         skip_reason: 'unparseable',
         skipped_at: new Date().toISOString(),
         status: 'skipped',

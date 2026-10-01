@@ -13,6 +13,14 @@ const executable = workflow
   .filter((line) => !/^\s*#/.test(line))
   .join('\n');
 
+function jobBlock(name) {
+  const block = executable.match(
+    new RegExp(`\\n  ${name}:\\n([\\s\\S]*?)(?=\\n  \\w+:\\n|$)`)
+  )?.[1];
+  assert.ok(block, `${name} job must remain extractable`);
+  return block;
+}
+
 test('preview workflow stays dispatch-only', () => {
   const onBlock = executable.match(/\non:\n([\s\S]*?)\n[a-z]+:/)?.[1];
   assert.ok(onBlock, 'on: block must remain extractable');
@@ -29,8 +37,14 @@ test('preview workflow selects the target ref via inputs, not --ref execution', 
 });
 
 test('preview workflow refuses branch-selected workflow files', () => {
-  assert.match(executable, /github\.event\.repository\.default_branch/);
-  assert.match(executable, /github\.ref/);
+  const guard = executable.match(
+    /Require default-branch workflow file[\s\S]*?(?=\n      - )/
+  )?.[0];
+  assert.ok(guard, 'guard step must remain extractable');
+  assert.match(guard, /github\.ref/);
+  assert.match(guard, /refs\/heads\//);
+  assert.match(guard, /github\.event\.repository\.default_branch/);
+  assert.match(guard, /exit 1/);
 });
 
 test('preview workflow never promotes to production', () => {
@@ -51,6 +65,26 @@ test('preview workflow runs on github-hosted runners only', () => {
   assert.doesNotMatch(workflow, /baci-vps/);
 });
 
+test('untrusted build runs isolated between trusted token jobs', () => {
+  assert.match(jobBlock('build'), /needs:\s*\[prepare\]/);
+  assert.match(jobBlock('deploy'), /needs:\s*\[build\]/);
+  const checkouts =
+    executable.match(/uses:\s*actions\/checkout@/g) ?? [];
+  assert.equal(checkouts.length, 4);
+  const build = jobBlock('build');
+  assert.ok(
+    build.indexOf('Checkout preview source') <
+      build.indexOf('Checkout trusted ops files'),
+    'source checkout must precede the trusted checkout it could wipe'
+  );
+});
+
+test('token jobs are tagged with the preview environment', () => {
+  const tagged = executable.match(/^\s*environment:\s*preview$/gm) ?? [];
+  assert.equal(tagged.length, 2);
+  assert.doesNotMatch(jobBlock('build'), /environment:\s*preview/);
+});
+
 test('preview helpers execute from the trusted default-branch checkout', () => {
   assert.match(executable, /path:\s*trusted-ops/);
   assert.match(
@@ -65,41 +99,53 @@ test('preview helpers execute from the trusted default-branch checkout', () => {
     /trusted-ops\/\.github\/scripts\/run-pinned-vercel\.sh/g
   );
   assert.ok(
-    trustedRuns && trustedRuns.length >= 3,
-    'pull, build, and deploy must invoke the trusted runner'
+    trustedRuns && trustedRuns.length >= 4,
+    'pull, build, pull, and deploy must invoke the trusted runner'
   );
   assert.doesNotMatch(executable, /run:\s*\.github\/scripts\//);
   assert.doesNotMatch(executable, /run:\s*node\s+\.github\/scripts\//);
   assert.doesNotMatch(executable, /uses:\s*\.\/\.github\/actions\//);
 });
 
-test('deployment secrets stay off the job-level environment', () => {
-  const jobEnv = workflow.match(/\n {4}env:\n((?: {6}[^\n]*\n)+)/)?.[1];
-  assert.ok(jobEnv, 'job env block must remain extractable');
-  for (const secret of [
-    'TURBO_TOKEN',
-    'TURBO_TEAM',
-    'VERCEL_ORG_ID',
-    'VERCEL_PROJECT_ID',
-    'VERCEL_TOKEN',
-    'QUIZ_RPC_SERVER_SECRET',
-  ]) {
-    assert.doesNotMatch(
-      jobEnv,
-      new RegExp(`^ {6}${secret}:`, 'm'),
-      `${secret} must be step-scoped, not job-scoped`
-    );
+test('deployment secrets stay off job-level environments', () => {
+  const jobEnvs = [
+    ...executable.matchAll(/\n {4}env:\n((?: {6}[^\n]*\n)+)/g),
+  ].map((match) => match[1]);
+  assert.ok(jobEnvs.length >= 3, 'all job env blocks must be extractable');
+  for (const jobEnv of jobEnvs) {
+    for (const secret of [
+      'TURBO_TOKEN',
+      'TURBO_TEAM',
+      'VERCEL_ORG_ID',
+      'VERCEL_PROJECT_ID',
+      'VERCEL_TOKEN',
+      'QUIZ_RPC_SERVER_SECRET',
+    ]) {
+      assert.doesNotMatch(
+        jobEnv,
+        new RegExp(`^ {6}${secret}:`, 'm'),
+        `${secret} must be step-scoped, not job-scoped`
+      );
+    }
   }
 });
 
 test('deployment token reaches only the trusted pull and deploy steps', () => {
   const count = (name) =>
     executable.match(new RegExp(`^\\s*${name}:`, 'gm'))?.length ?? 0;
-  assert.equal(count('VERCEL_TOKEN'), 2);
-  assert.equal(count('VERCEL_ORG_ID'), 2);
-  assert.equal(count('VERCEL_PROJECT_ID'), 2);
+  assert.equal(count('VERCEL_TOKEN'), 3);
+  assert.equal(count('VERCEL_ORG_ID'), 3);
+  assert.equal(count('VERCEL_PROJECT_ID'), 3);
   assert.equal(count('TURBO_TOKEN'), 1);
   assert.equal(count('TURBO_TEAM'), 1);
+  assert.doesNotMatch(jobBlock('build'), /VERCEL_TOKEN/);
+  assert.doesNotMatch(jobBlock('build'), /VERCEL_ORG_ID/);
+  assert.doesNotMatch(jobBlock('build'), /VERCEL_PROJECT_ID/);
+});
+
+test('preview build uses a stand-in, never the real quiz secret', () => {
+  assert.doesNotMatch(executable, /QUIZ_RPC_SERVER_SECRET:\s*\$\{\{/);
+  assert.match(executable, /build-time-presence-stand-in/);
 });
 
 test('preview URL parsing anchors on the deploy assignment line', () => {

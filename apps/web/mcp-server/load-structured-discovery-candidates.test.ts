@@ -280,15 +280,15 @@ describe('loadStructuredDiscoveryCandidates', () => {
     expect(fixture.queryCalls[0]?.calls).toContainEqual(['ilike', 'brand', '%S\\%ms\\_ng%']);
     expect(fixture.queryCalls[0]?.calls).toContainEqual(['ilike', 'category', '%Phones%']);
   });
-  it('does not double-count correlated lexical and combined-document votes', async () => {
-    const fixture = setup({ lexicalPages: [ranked(['keyword-stuffed', 'semantic-match'])], products: productRows(['keyword-stuffed', 'semantic-match']) });
+  it('boosts lexical hits that also satisfy the structured facts', async () => {
+    const fixture = setup({ lexicalPages: [ranked(['keyword-exact', 'semantic-match'])], products: productRows(['keyword-exact', 'semantic-match']) });
     const original = fixture.rpc.getMockImplementation()!;
     fixture.rpc.mockImplementation(async (name) => name === 'search_product_discovery_facts'
-      ? { data: ranked(['keyword-stuffed']), error: null } : original(name));
+      ? { data: ranked(['keyword-exact']), error: null } : original(name));
     const result = await loadStructuredDiscoveryCandidates({ query: 'camera', merchantId: 'merchant-1', supabase: fixture.supabase,
       semanticSearch: async () => ['semantic-match'],
     });
-    expect(result.products.map(({id}) => id)).toEqual(['semantic-match', 'keyword-stuffed']);
+    expect(result.products.map(({id}) => id)).toEqual(['keyword-exact', 'semantic-match']);
   });
 
 });

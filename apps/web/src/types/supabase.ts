@@ -20775,6 +20775,16 @@ export type Database = {
           total_count: number;
         }[];
       };
+      search_product_variant_recall: {
+        Args: {
+          p_limit?: number;
+          p_merchant_id: string;
+        };
+        Returns: {
+          attributes: Json;
+          product_id: string;
+        }[];
+      };
       search_products_v2: {
         Args: {
           brand_filter?: string;

@@ -35,25 +35,31 @@ function client(fixture: Fixture) {
       const ids = args?.p_product_ids as string[];
       return { data: (fixture.variants ?? []).filter((row) => ids.includes(String(row.product_id))), error: null };
     }
+    if (name === 'search_product_variant_recall') {
+      const merchant = String(args?.p_merchant_id ?? '');
+      return { data: (fixture.variants ?? []).filter((row) => String(row.merchant_id ?? '') === merchant), error: null };
+    }
     return { data: null, error: new Error(`Unexpected RPC ${name}`) };
   });
 
   const from = vi.fn((table: string) => {
     const filters: Array<[string, string, unknown]> = [];
+    const orders: string[] = [];
     let range: [number, number] | undefined;
     const builder = {
       select: vi.fn(() => builder),
       eq: vi.fn((column: string, value: unknown) => { filters.push(['eq', column, value]); return builder; }),
       in: vi.fn((column: string, value: unknown) => { filters.push(['in', column, value]); return builder; }),
-      order: vi.fn(() => builder),
+      order: vi.fn((column: string) => {orders.push(column); return builder;}),
       range: vi.fn((start: number, end: number) => {range = [start, end]; return builder;}),
       then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => {
         if (table === 'product_offers' && fixture.offerError) return Promise.resolve({ data: null, error: fixture.offerError }).then(resolve, reject);
-        let rows = table === 'products' ? fixture.products : table === 'product_variants' ? fixture.variants ?? [] : fixture.offers ?? [];
+        let rows = table === 'products' ? fixture.products : fixture.offers ?? [];
         for (const [kind, column, value] of filters) {
           if (kind === 'eq') rows = rows.filter((row) => row[column] === value);
           if (kind === 'in' && Array.isArray(value)) rows = rows.filter((row) => value.includes(row[column]));
         }
+        for (const column of [...orders].reverse()) rows = [...rows].sort((a, b) => String(a[column] ?? '').localeCompare(String(b[column] ?? '')));
         if (range) rows = rows.slice(range[0], range[1] + 1);
         return Promise.resolve({ data: rows, error: null }).then(resolve, reject);
       },
@@ -196,5 +202,42 @@ describe('discoverStructuredProducts', () => {
       intent({ product_type: 'phone', attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }] }), { query: undefined }));
     expect(result.selectedProducts.map(({ product: s }) => s.id)).toEqual(['variant-spec-phone']);
     expect(result.coverage).toBe('complete');
+  });
+
+  it('recalls variants satisfying range constraints the product sources miss', async () => {
+    const p = product('range-phone', { product_type: 'phone' }, { has_variants: true });
+    const fixture = client({ products: [p], lexicalIds: [], factIds: [],
+      variants: [{ id: 'v-512', product_id: 'range-phone', merchant_id: 'merchant-1', attributes: { Storage: '512GB' }, price_override: 100, stock_quantity: 1 }] });
+    const result = await discoverStructuredProducts(input(fixture.supabase,
+      intent({ product_type: 'phone', attributes: [{ key: 'storage_gb', operator: 'gte', value: 256 }] }), { query: undefined }));
+    expect(result.selectedProducts.map(({ product: s }) => s.id)).toEqual(['range-phone']);
+  });
+
+  it('does not recall variants that fail range constraints', async () => {
+    const p = product('small-phone', { product_type: 'phone' }, { has_variants: true });
+    const fixture = client({ products: [p], lexicalIds: [], factIds: [],
+      variants: [{ id: 'v-128', product_id: 'small-phone', merchant_id: 'merchant-1', attributes: { Storage: '128GB' }, price_override: 100, stock_quantity: 1 }] });
+    const result = await discoverStructuredProducts(input(fixture.supabase,
+      intent({ product_type: 'phone', attributes: [{ key: 'storage_gb', operator: 'gte', value: 256 }] }), { query: undefined }));
+    expect(result.selectedProducts).toEqual([]);
+    expect(result.coverage).toBe('complete');
+  });
+
+  it('boosts exact keyword hits that also satisfy the structured facts', async () => {
+    const a = product('aaa', { product_type: 'phone' });
+    const b = product('zzz', { product_type: 'phone' });
+    const fixture = client({ products: [a, b], lexicalIds: ['aaa', 'zzz'], factIds: ['zzz'] });
+    const result = await discoverStructuredProducts(input(fixture.supabase, intent({ product_type: 'phone' }), { query: 'iPhone' }));
+    expect(result.selectedProducts.map(({ product: s }) => s.id)).toEqual(['zzz', 'aaa']);
+  });
+
+  it('dedupes canonical offer conditions in PDP condition order', async () => {
+    const p = product('ordered-offers', { product_type: 'phone' }, { has_condition_offers: true, price: 1000 });
+    const fixture = client({ products: [p], offers: [
+      { id: 'ref-1', product_id: 'ordered-offers', merchant_id: 'merchant-1', status: 'active', condition: 'refurbished', price: 450, compare_at_price: null, stock_quantity: 1 },
+      { id: 'ob-1', product_id: 'ordered-offers', merchant_id: 'merchant-1', status: 'active', condition: 'open_box', price: 500, compare_at_price: null, stock_quantity: 1 },
+    ] });
+    const result = await discoverStructuredProducts(input(fixture.supabase, intent({ product_type: 'phone' })));
+    expect(result.selectedProducts[0]?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'ob-1', price: 500 });
   });
 });

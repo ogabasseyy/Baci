@@ -6,7 +6,7 @@ import { selectSearchProductsByPrice } from './select-search-products-by-price';
 describe('hydrateSearchProductAvailability', () => {
   it('uses the purchasable price for the requested condition', async () => {
     const offerQuery = {
-      select: vi.fn(), eq: vi.fn(), in: vi.fn(),
+      select: vi.fn(), eq: vi.fn(), in: vi.fn(), order: vi.fn(),
       then: (resolve: (value: { data: Array<{ product_id: string; condition: string; price: number; stock_quantity: number }>; error: null }) => unknown) =>
         Promise.resolve({ data: [
           { product_id: 'priced-phone', condition: 'used', price: 80000, stock_quantity: 2 },
@@ -15,6 +15,7 @@ describe('hydrateSearchProductAvailability', () => {
     offerQuery.select.mockReturnValue(offerQuery);
     offerQuery.eq.mockReturnValue(offerQuery);
     offerQuery.in.mockReturnValue(offerQuery);
+    offerQuery.order.mockReturnValue(offerQuery);
     const supabase = { from: vi.fn(() => offerQuery) } as unknown as SupabaseClient;
     const product = { id: 'priced-phone', condition: 'new', price: 100000,
       manage_stock: true, has_condition_offers: true, stock_quantity: 3 };
@@ -30,13 +31,14 @@ describe('hydrateSearchProductAvailability', () => {
 
   it('treats a null base condition as new for availability', async () => {
     const emptyQuery = {
-      select: vi.fn(), eq: vi.fn(), in: vi.fn(),
+      select: vi.fn(), eq: vi.fn(), in: vi.fn(), order: vi.fn(),
       then: (resolve: (value: { data: []; error: null }) => unknown) =>
         Promise.resolve({ data: [], error: null }).then(resolve),
     };
     emptyQuery.select.mockReturnValue(emptyQuery);
     emptyQuery.eq.mockReturnValue(emptyQuery);
     emptyQuery.in.mockReturnValue(emptyQuery);
+    emptyQuery.order.mockReturnValue(emptyQuery);
     const supabase = { from: vi.fn(() => emptyQuery) } as unknown as SupabaseClient;
     const product = { id: 'legacy-phone', condition: null, price: 50000, manage_stock: false };
 
@@ -49,7 +51,7 @@ describe('hydrateSearchProductAvailability', () => {
 
   it('keeps base stock for its own condition but not alternate offers', async () => {
     const offerQuery = {
-      select: vi.fn(), eq: vi.fn(), in: vi.fn(),
+      select: vi.fn(), eq: vi.fn(), in: vi.fn(), order: vi.fn(),
       then: (resolve: (value: { data: Array<{ product_id: string; condition: string; stock_quantity: number }>; error: null }) => unknown) =>
         Promise.resolve({ data: [
           { product_id: 'base-phone', condition: 'used', stock_quantity: 0 },
@@ -58,6 +60,7 @@ describe('hydrateSearchProductAvailability', () => {
     offerQuery.select.mockReturnValue(offerQuery);
     offerQuery.eq.mockReturnValue(offerQuery);
     offerQuery.in.mockReturnValue(offerQuery);
+    offerQuery.order.mockReturnValue(offerQuery);
     const supabase = { from: vi.fn(() => offerQuery) } as unknown as SupabaseClient;
     const products = [{ id: 'base-phone', condition: 'new', manage_stock: true,
       has_condition_offers: true, stock_quantity: 3 }];
@@ -75,7 +78,7 @@ describe('hydrateSearchProductAvailability', () => {
       { product_id: 'mixed-phone', condition: 'uk_used', attributes: { storage: '64GB' }, stock_quantity: 0 },
     ], error: null }));
     const offerQuery = {
-      select: vi.fn(), eq: vi.fn(), in: vi.fn(),
+      select: vi.fn(), eq: vi.fn(), in: vi.fn(), order: vi.fn(),
       then: (resolve: (value: { data: Array<{ product_id: string; condition: string; stock_quantity: number }>; error: null }) => unknown) =>
         Promise.resolve({ data: [
           { product_id: 'mixed-phone', condition: 'new', stock_quantity: 3 },
@@ -85,6 +88,7 @@ describe('hydrateSearchProductAvailability', () => {
     offerQuery.select.mockReturnValue(offerQuery);
     offerQuery.eq.mockReturnValue(offerQuery);
     offerQuery.in.mockReturnValue(offerQuery);
+    offerQuery.order.mockReturnValue(offerQuery);
     const supabase = { rpc, from: vi.fn(() => offerQuery) } as unknown as SupabaseClient;
 
     const [used] = await hydrateSearchProductAvailability([
@@ -99,7 +103,7 @@ describe('hydrateSearchProductAvailability', () => {
 
   it('hydrates public offer compare-at price and explicit lookup status', async () => {
     const offerQuery = {
-      select: vi.fn(), eq: vi.fn(), in: vi.fn(),
+      select: vi.fn(), eq: vi.fn(), in: vi.fn(), order: vi.fn(),
       then: (resolve: (value: { data: Array<{ product_id: string; condition: string; price: number; compare_at_price: number; stock_quantity: number }>; error: null }) => unknown) =>
         Promise.resolve({ data: [
           { product_id: 'offer-phone', condition: 'used', price: 80000, compare_at_price: 95000, stock_quantity: 2 },
@@ -108,6 +112,7 @@ describe('hydrateSearchProductAvailability', () => {
     offerQuery.select.mockReturnValue(offerQuery);
     offerQuery.eq.mockReturnValue(offerQuery);
     offerQuery.in.mockReturnValue(offerQuery);
+    offerQuery.order.mockReturnValue(offerQuery);
     const result = await hydrateSearchProductAvailability([
       { id: 'offer-phone', condition: 'new', price: 100000, manage_stock: true,
         has_condition_offers: true, stock_quantity: 0 },
@@ -124,13 +129,14 @@ describe('hydrateSearchProductAvailability', () => {
 
   it('reports each failed option source without discarding a successful source', async () => {
     const failedOffers = {
-      select: vi.fn(), eq: vi.fn(), in: vi.fn(),
+      select: vi.fn(), eq: vi.fn(), in: vi.fn(), order: vi.fn(),
       then: (resolve: (value: { data: null; error: { message: string } }) => unknown) =>
         Promise.resolve({ data: null, error: { message: 'offer lookup failed' } }).then(resolve),
     };
     failedOffers.select.mockReturnValue(failedOffers);
     failedOffers.eq.mockReturnValue(failedOffers);
     failedOffers.in.mockReturnValue(failedOffers);
+    failedOffers.order.mockReturnValue(failedOffers);
     const rpc = vi.fn(async () => ({ data: [
       { product_id: 'mixed-options', id: 'variant-1', attributes: { storage: '256GB' }, stock_quantity: 2 },
     ], error: null }));
@@ -161,13 +167,14 @@ describe('hydrateSearchProductAvailability', () => {
           { product_id: 'variant-phone', attributes: { storage: '128GB' }, stock_quantity: 2 },
         ], error: null }));
     const offerQuery = {
-      select: vi.fn(), eq: vi.fn(), in: vi.fn(),
+      select: vi.fn(), eq: vi.fn(), in: vi.fn(), order: vi.fn(),
       then: (resolve: (value: { data: Array<{ product_id: string; stock_quantity: number }>; error: null }) => unknown) =>
         Promise.resolve({ data: [{ product_id: 'offer-phone', stock_quantity: 1 }], error: null }).then(resolve),
     };
     offerQuery.select.mockReturnValue(offerQuery);
     offerQuery.eq.mockReturnValue(offerQuery);
     offerQuery.in.mockReturnValue(offerQuery);
+    offerQuery.order.mockReturnValue(offerQuery);
     const supabase = { rpc, from: vi.fn(() => offerQuery) } as unknown as SupabaseClient;
 
     const result = await hydrateSearchProductAvailability([
@@ -202,13 +209,14 @@ describe('hydrateSearchProductAvailability', () => {
 
   it('does not substitute the parent price when an offer-only lookup fails', async () => {
     const offerQuery = {
-      select: vi.fn(), eq: vi.fn(), in: vi.fn(),
+      select: vi.fn(), eq: vi.fn(), in: vi.fn(), order: vi.fn(),
       then: (resolve: (value: { data: null; error: { message: string } }) => unknown) =>
         Promise.resolve({ data: null, error: { message: 'unavailable' } }).then(resolve),
     };
     offerQuery.select.mockReturnValue(offerQuery);
     offerQuery.eq.mockReturnValue(offerQuery);
     offerQuery.in.mockReturnValue(offerQuery);
+    offerQuery.order.mockReturnValue(offerQuery);
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const result = await hydrateSearchProductAvailability([

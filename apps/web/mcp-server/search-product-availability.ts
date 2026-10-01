@@ -57,7 +57,12 @@ export async function hydrateSearchProductAvailability(
       .select('id, product_id, condition, price, compare_at_price, stock_quantity')
       .eq('merchant_id', merchantId)
       .eq('status', 'active')
-      .in('product_id', offerIds);
+      .in('product_id', offerIds)
+      // PDP parity: the storefront orders offers by raw condition and ID before
+      // find() takes the first canonical match, so selection must dedupe the
+      // same first row instead of an arbitrary Postgres order.
+      .order('condition')
+      .order('id');
     if (error) {
       console.error('Failed to fetch product offers for search:', error);
     } else {

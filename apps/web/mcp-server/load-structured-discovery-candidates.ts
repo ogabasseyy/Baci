@@ -195,8 +195,10 @@ export async function loadStructuredDiscoveryCandidates({
     loadDiscoveryFactCandidates(factQuery || query || '(a & !a)', merchantId, supabase, { brand, category }),
     loadVariantRecallIds(intent, merchantId, supabase),
   ]);
-  // Correlated keyword/combined-document matches get one best lexical vote.
-  const rankedIds = reciprocalRankFusion([lexical.ids, facts.ids, variants.ids], [semantic.value.ids]);
+  // Free-text relevance votes independently from structured-fact votes
+  // (facts plus variant recall), so an exact keyword hit that also satisfies
+  // the structured facts outranks a fact-only match instead of tying it.
+  const rankedIds = reciprocalRankFusion([lexical.ids], [facts.ids, variants.ids], [semantic.value.ids]);
   const products: McpSearchProductRow[] = [];
 
   let hydrationFailed = false;

@@ -76,11 +76,12 @@ export async function hydrateSearchProductAvailability(
   }
 
   return products.map((product) => {
+    const baseCondition = normalizeCanonicalProductCondition(product.condition) || 'new';
     const variants = (variantsMap.get(product.id) ?? []).filter((variant) => {
       if (!condition) return true;
       const variantCondition = normalizeCanonicalProductCondition(
-        variant.condition ?? (typeof variant.attributes?.condition === 'string' ? variant.attributes.condition : null)
-      ) || normalizeCanonicalProductCondition(product.condition);
+        variant.condition
+      ) || baseCondition;
       return variantCondition === condition;
     });
     const offers = offersMap.get(product.id) ?? [];
@@ -100,7 +101,6 @@ export async function hydrateSearchProductAvailability(
     });
     // A null base condition sells as new on the PDP, so availability must
     // default it before comparing instead of rejecting it as unrecognized.
-    const baseCondition = normalizeCanonicalProductCondition(product.condition) || 'new';
     const basePurchasable = !product.has_variants &&
       (!condition || baseCondition === condition) &&
       (product.manage_stock !== true || Number(product.stock_quantity ?? 0) > 0);
@@ -109,7 +109,7 @@ export async function hydrateSearchProductAvailability(
         .map((variant) => ({
           price: variant.price_override ?? product.price,
           condition: normalizeCanonicalProductCondition(
-            variant.condition ?? (typeof variant.attributes?.condition === 'string' ? variant.attributes.condition : null)
+            variant.condition
           ) || baseCondition,
         })),
       ...offers.filter((offer) => product.manage_stock !== true || Number(offer.stock_quantity ?? 0) > 0)

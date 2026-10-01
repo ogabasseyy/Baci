@@ -108,11 +108,7 @@ export function selectStructuredDiscoveryOffer(
       if (manageStock && !hasPositiveStock(variant.stock_quantity)) continue;
       const price = finitePrice(variant.price_override) ?? finitePrice(product.price);
       if (price === undefined) continue;
-      const variantCondition = typeof variant.condition === 'string'
-        ? variant.condition
-        : typeof record(variant.attributes).condition === 'string'
-          ? record(variant.attributes).condition as string
-          : null;
+      const variantCondition = typeof variant.condition === 'string' ? variant.condition : null;
       // PDP parity: product-detail-client resolves the comparison price as
       // the variant's own value with an unconditional parent fallback, even
       // when an override moved the selling price.

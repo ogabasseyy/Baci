@@ -57,6 +57,27 @@ export function formatSearchProductsResponse({
     const descriptionExcerpt = descriptionCharacters.length > 320
       ? `${descriptionCharacters.slice(0, 319).join('').trimEnd()}…`
       : descriptionText;
+    // Option-aware PDP link: the PDP resolves variantId + condition route
+    // params, so the link opens the option that satisfied the intent instead
+    // of the default. Offers resolve by condition; variants and paired
+    // offers additionally pin the variant.
+    const matchedOption = 'selectedOption' in selection
+      ? selection.selectedOption as { kind?: unknown; option_id?: unknown; variantId?: unknown; condition?: unknown } | undefined
+      : undefined;
+    const optionParams = new URLSearchParams();
+    if (matchedOption?.kind === 'variant' && typeof matchedOption.option_id === 'string' && matchedOption.option_id !== '') {
+      optionParams.set('variantId', matchedOption.option_id);
+    } else if (matchedOption?.kind === 'offer') {
+      if (typeof matchedOption.condition === 'string' && matchedOption.condition !== '') {
+        optionParams.set('condition', matchedOption.condition);
+      }
+      if (typeof matchedOption.variantId === 'string' && matchedOption.variantId !== '') {
+        optionParams.set('variantId', matchedOption.variantId);
+      }
+    }
+    const url = typeof p.slug === 'string' && p.slug !== ''
+      ? `https://ogabassey.com/products/${encodeURIComponent(p.slug)}${optionParams.size > 0 ? `?${optionParams}` : ''}`
+      : undefined;
     return {
       id: p.id,
       ...(descriptionExcerpt ? { description_excerpt: descriptionExcerpt } : {}),
@@ -75,6 +96,7 @@ export function formatSearchProductsResponse({
       matched_option: 'selectedOption' in selection ? selection.selectedOption : undefined,
       available_variants: availableOptions || 'Standard',
       last_updated: p.updated_at,
+      ...(url === undefined ? {} : { url }),
     };
   });
 

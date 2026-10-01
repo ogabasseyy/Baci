@@ -7,10 +7,20 @@ interface ProductVariant {
   id?: string;
   attributes: Record<string, unknown> | null;
   condition?: string | null;
+  created_at?: string | null;
   price_override?: number | null;
   product_id: string;
   stock_quantity?: number | null;
 }
+
+// Storefront snapshot windows (pdp_core_slug_case_insensitive): the PDP
+// snapshot retains 16 offers by (condition, id) and 128 variants by
+// (default, price, created, id) with a full-RPC fallback for selections
+// outside. Search mirrors the windows; variant truncation is disclosed
+// because the fallback can reach options search hides, while offers past
+// 16 are invisible to the PDP itself.
+const STOREFRONT_SNAPSHOT_OFFER_WINDOW = 16;
+const STOREFRONT_SNAPSHOT_VARIANT_WINDOW = 128;
 
 interface ProductOffer {
   id?: string;
@@ -67,8 +77,11 @@ export async function hydrateSearchProductAvailability(
       console.error('Failed to fetch product offers for search:', error);
     } else {
       offerLookupSucceeded = true;
+      // Group the full ordered set: the 16-window slices first (the snapshot
+      // has no condition filter), then the requested condition applies, so a
+      // condition whose first row falls outside the window stays unresolvable
+      // exactly like on the PDP.
       for (const offer of data ?? []) {
-        if (condition && normalizeCanonicalProductCondition(offer.condition) !== condition) continue;
         offersMap.set(offer.product_id, [...(offersMap.get(offer.product_id) ?? []), offer]);
       }
       for (const id of offerIds) offersMap.set(id, offersMap.get(id) ?? []);
@@ -77,14 +90,29 @@ export async function hydrateSearchProductAvailability(
 
   return products.map((product) => {
     const baseCondition = normalizeCanonicalProductCondition(product.condition) || 'new';
-    const variants = (variantsMap.get(product.id) ?? []).filter((variant) => {
+    // Window before filtering, mirroring the snapshot: cheapest 128 by
+    // (price, created, id). The search row lacks default_variant_id, so the
+    // snapshot's default-first nuance cannot apply; price order retains the
+    // options selection actually needs.
+    const fullVariants = variantsMap.get(product.id) ?? [];
+    const windowedVariants = [...fullVariants].sort((left, right) =>
+      (left.price_override ?? product.price ?? Number.POSITIVE_INFINITY) -
+        (right.price_override ?? product.price ?? Number.POSITIVE_INFINITY) ||
+      String(left.created_at ?? '').localeCompare(String(right.created_at ?? '')) ||
+      String(left.id ?? '').localeCompare(String(right.id ?? ''))
+    ).slice(0, STOREFRONT_SNAPSHOT_VARIANT_WINDOW);
+    const variantWindowTruncated = fullVariants.length > windowedVariants.length;
+    const variants = windowedVariants.filter((variant) => {
       if (!condition) return true;
       const variantCondition = normalizeCanonicalProductCondition(
         variant.condition
       ) || baseCondition;
       return variantCondition === condition;
     });
-    const offers = offersMap.get(product.id) ?? [];
+    const offers = (offersMap.get(product.id) ?? [])
+      .slice(0, STOREFRONT_SNAPSHOT_OFFER_WINDOW)
+      .filter((offer) => !condition ||
+        normalizeCanonicalProductCondition(offer.condition) === condition);
     // PDP parity: both PDPs resolve the first row per canonical condition
     // with no stock check, so the ordered first row survives hydration even
     // when out of stock. Selection claims the condition on that row and
@@ -145,7 +173,7 @@ export async function hydrateSearchProductAvailability(
           ? { ...product, stock_quantity: 0 }
           : product,
         product.has_variants && variantLookupSucceeded ? variants : undefined,
-        product.has_condition_offers ? offersMap.get(product.id) : undefined
+        product.has_condition_offers ? offers : undefined
       ),
       availableOffers,
       optionsLookupFailed: optionPriceLookupFailed,
@@ -157,12 +185,13 @@ export async function hydrateSearchProductAvailability(
       availableVariants: variants.filter((variant) =>
         product.manage_stock !== true || Number(variant.stock_quantity ?? 0) > 0
       ),
-      // Unfiltered by condition: purchasability gates and the condition-axis
-      // check mirror the PDP, which reasons over all variants.
-      allVariants: variantsMap.get(product.id) ?? [],
-      variantAttributeValues: (variantsMap.get(product.id) ?? []).flatMap((variant) =>
+      // Unfiltered by condition but windowed like the snapshot: gates and the
+      // condition-axis check see the same 128 the PDP reasons over.
+      allVariants: windowedVariants,
+      variantAttributeValues: windowedVariants.flatMap((variant) =>
         Object.values(variant.attributes ?? {}).filter((value): value is string | number =>
           typeof value === 'string' || typeof value === 'number')),
+      variantWindowTruncated,
     };
   });
 }

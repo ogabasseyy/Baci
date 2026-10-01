@@ -1070,8 +1070,8 @@ const widgetHtml = `<!DOCTYPE html>
             '</div>' +
           '</div>';
 
-        card.querySelector('.product-img-wrap')?.addEventListener('click', () => openLink(productUrl(p.slug)));
-        card.querySelector('.product-name')?.addEventListener('click', () => openLink(productUrl(p.slug)));
+        card.querySelector('.product-img-wrap')?.addEventListener('click', () => openLink(p.url || productUrl(p.slug)));
+        card.querySelector('.product-name')?.addEventListener('click', () => openLink(p.url || productUrl(p.slug)));
         card.querySelector('.btn-cart')?.addEventListener('click', (e) => { e.stopPropagation(); openLink(cartUrl(p.id)); });
         card.querySelector('.btn-buy')?.addEventListener('click', (e) => { e.stopPropagation(); openLink(cartUrl(p.id)); });
         return card;

@@ -26,11 +26,13 @@ LANGUAGE sql IMMUTABLE PARALLEL SAFE SECURITY INVOKER SET search_path = ''
 AS $$
   SELECT CASE
     WHEN normalized IS NULL OR normalized = '' THEN NULL
-    ELSE COALESCE(tag || nullif(pg_catalog.regexp_replace(normalized, '[^a-z0-9_]', '', 'g'), ''),
-      'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
-        tag || pg_catalog.chr(31) || normalized, 'UTF8'), 'sha256'), 'hex'))
+    WHEN cleaned = '' OR pg_catalog.char_length(cleaned) > 64
+      THEN 'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+        tag || pg_catalog.chr(31) || normalized, 'UTF8'), 'sha256'), 'hex')
+    ELSE tag || cleaned
   END
-  FROM (SELECT discovery.discovery_identity_normalize(raw) AS normalized) AS input;
+  FROM (SELECT discovery.discovery_identity_normalize(raw) AS normalized) AS input,
+    LATERAL (SELECT pg_catalog.regexp_replace(normalized, '[^a-z0-9_]', '', 'g') AS cleaned) AS stripped;
 $$;
 
 CREATE OR REPLACE FUNCTION discovery.product_discovery_search_document_v5(

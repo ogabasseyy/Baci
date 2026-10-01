@@ -76,6 +76,7 @@ describe('formatSearchProductsResponse', () => {
         matched_option: { kind: 'variant', option_id: 'variant-1', attributes: { storage_gb: 256 }, condition: 'new', price: 125000 },
         available_variants: 'color: Black, Silver | storage: 256GB',
         last_updated: '2026-09-29T10:00:00.000Z',
+        url: 'https://ogabassey.com/products/baci-laptop?variantId=variant-1',
       }],
       coverage: 'partial',
       search_mode: 'structured',
@@ -153,6 +154,24 @@ describe('formatSearchProductsResponse', () => {
       expect(response.structuredContent.products[0].description_excerpt)
         .toBe(description.startsWith('<p>') ? 'Portable laptop for work.' : description);
     }
+  });
+
+  it.each([
+    ['variant pins the variant', { kind: 'variant', option_id: 'v-9', attributes: {}, condition: 'new', price: 100 },
+      'https://ogabassey.com/products/baci-laptop?variantId=v-9'],
+    ['bare offer pins the condition', { kind: 'offer', option_id: 'o-1', attributes: {}, condition: 'used', price: 90 },
+      'https://ogabassey.com/products/baci-laptop?condition=used'],
+    ['paired offer pins condition and variant', { kind: 'offer', option_id: 'o-1', variantId: 'v-9', attributes: {}, condition: 'used', price: 100 },
+      'https://ogabassey.com/products/baci-laptop?condition=used&variantId=v-9'],
+    ['base links carry no params', { kind: 'base', attributes: {}, condition: 'new', price: 100 },
+      'https://ogabassey.com/products/baci-laptop'],
+  ])('builds option-aware links: %s', (_label, selectedOption, url) => {
+    const response = formatSearchProductsResponse({
+      selectedProducts: [{ ...selectedProducts[0], selectedOption }] as unknown as typeof selectedProducts,
+      sanitizedQuery: 'laptop', coverage: 'complete', searchMode: 'structured',
+      semanticUnavailable: false, requestedCondition: undefined, getSafeCatalogImageUrl: () => undefined,
+    });
+    expect(response.structuredContent.products[0].url).toBe(url);
   });
 
 });

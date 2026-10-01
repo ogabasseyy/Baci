@@ -253,4 +253,15 @@ describe('discoverStructuredProducts', () => {
     const result = await discoverStructuredProducts(input(fixture.supabase, intent({}), { query: undefined }));
     expect(result.coverage).toBe('complete');
   });
+
+  it('discloses partial coverage when a product exceeds the variant window', async () => {
+    const p = product('wide', { product_type: 'phone' }, { has_variants: true });
+    const variants = Array.from({ length: 129 }, (_, i) => ({
+      id: `v-${i}`, product_id: 'wide', merchant_id: 'merchant-1',
+      attributes: { color: 'black' }, stock_quantity: 1, price_override: 100 + i,
+    }));
+    const fixture = client({ products: [p], variants });
+    const result = await discoverStructuredProducts(input(fixture.supabase, intent({})));
+    expect(result.coverage).toBe('partial');
+  });
 });

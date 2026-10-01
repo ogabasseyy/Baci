@@ -59,6 +59,7 @@ export async function discoverStructuredProducts({ intent, query, args, merchant
   const selected = [];
   let optionsLookupFailed = false;
   let factsUnverified = false;
+  let variantWindowTruncated = false;
   for (let offset = 0; offset < candidates.products.length; offset += 100) {
     // Option-capable rows skip the condition pre-filter: a stale or empty
     // available_conditions snapshot must not drop the product before its live
@@ -72,11 +73,12 @@ export async function discoverStructuredProducts({ intent, query, args, merchant
       const match = selectStructuredDiscoveryOffer(row, intent, args, () => { factsUnverified = true; });
       if (match) selected.push(match);
       if (lookupFailureCouldMatter(row, intent, match, args.condition)) optionsLookupFailed = true;
+      if (row.variantWindowTruncated) variantWindowTruncated = true;
     }
   }
   if (args.sort === 'newest') selected.sort((a, b) =>
     (b.product.created_at ?? '').localeCompare(a.product.created_at ?? '') || a.product.id.localeCompare(b.product.id));
-  const orderedCoverageIncomplete = candidates.truncated &&
+  const orderedCoverageIncomplete = (candidates.truncated || variantWindowTruncated) &&
     (args.min_price !== undefined || args.max_price !== undefined || args.sort === 'price_asc' || args.sort === 'price_desc' || args.sort === 'newest');
   // Fact-only retrieval (no free-text query) fetches only rows already
   // carrying the requested facts: products with missing discovery metadata
@@ -93,7 +95,7 @@ export async function discoverStructuredProducts({ intent, query, args, merchant
     priceScanComplete: !optionsLookupFailed && !orderedCoverageIncomplete,
     incompleteReason: optionsLookupFailed ? 'option_lookup_failed' as const :
       orderedCoverageIncomplete ? 'candidate_limit' as const : undefined,
-    coverage: candidates.truncated || optionsLookupFailed || factsUnverified || factOnlyConstrained ? 'partial' as const : 'complete' as const,
+    coverage: candidates.truncated || optionsLookupFailed || factsUnverified || factOnlyConstrained || variantWindowTruncated ? 'partial' as const : 'complete' as const,
     semanticUnavailable: candidates.semanticUnavailable,
   };
 }

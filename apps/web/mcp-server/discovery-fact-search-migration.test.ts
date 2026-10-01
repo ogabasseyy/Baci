@@ -37,6 +37,10 @@ describe('combined catalog/fact index contract', () => {
     const retire = combinedSql.indexOf('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_fact_search_idx');
     expect(build).toBeGreaterThan(0);
     expect(retire).toBeGreaterThan(build);
+    expect(combinedSql).toContain('CREATE INDEX CONCURRENTLY products_discovery_combined_search_idx_new');
+    expect(combinedSql).toContain('RENAME TO products_discovery_combined_search_idx;');
+    expect(combinedSql).toContain("to_regclass('public.products_discovery_combined_search_idx') IS NULL");
+    expect(combinedSql).toContain('i.indisvalid');
   });
   it('derives retrieval unit lexemes only from canonical numeric facts', () => {
     expect(combinedSql).toContain("('storage_gb', 'GB')");
@@ -53,6 +57,10 @@ it('prebuilds the transient index concurrently and supports equivalent capacity 
   expect(capacity).toContain('numeric / 1024');
   expect(capacity).toContain('numeric * 1024');
   expect(capacity).toContain('product_discovery_search_document_v2');
+  expect(capacity).toContain('CREATE INDEX CONCURRENTLY products_discovery_capacity_search_idx_new');
+  expect(capacity).toContain('RENAME TO products_discovery_capacity_search_idx;');
+  expect(capacity).toContain("to_regclass('public.products_discovery_capacity_search_idx') IS NULL");
+  expect(capacity).toContain('i.indisvalid');
 });
 
 it('indexes and queries numeric facts with their attribute identity', () => {
@@ -105,8 +113,10 @@ it('filters variant recall by constraints before applying the cap', () => {
   expect(recall).toContain('DISTINCT ON (eligible.product_id)');
   expect(recall).toContain('is_purchasable');
   expect(recall).toContain('p.manage_stock IS NOT TRUE OR COALESCE(pv.stock_quantity, 0) > 0');
+  expect(recall).toContain('exact_count');
   expect(recall.indexOf('(NOT best.is_purchasable)'))
-    .toBeLessThan(recall.indexOf('(NOT best.is_exact)'));
+    .toBeLessThan(recall.indexOf('best.exact_count DESC'));
+  expect(recall).not.toContain('is_exact');
   expect(recall).toContain('jsonb_array_length(p_filters) > 50');
   expect(recall).toContain('octet_length(p_filters::text) > 16384');
   expect(recall.indexOf('recall_variant_filter_verifiably_fails(pv.attributes'))
@@ -129,9 +139,12 @@ it('stages the builder move so a mid-migration failure stays retry-safe', () => 
   const copyV3 = move.indexOf('CREATE OR REPLACE FUNCTION discovery.product_discovery_search_document_v3(');
   const copyV4 = move.indexOf('CREATE OR REPLACE FUNCTION discovery.product_discovery_search_document_v4(');
   const buildReplacement = move.indexOf('CREATE INDEX CONCURRENTLY products_discovery_correlated_search_idx_new');
+  expect(move).toContain("to_regclass('public.products_discovery_correlated_search_idx') IS NULL");
+  expect(move).toContain('i.indisvalid');
   const switchRpc = move.indexOf('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts(');
   const dropServingIndex = move.indexOf('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx;');
-  const renameReplacement = move.indexOf('RENAME TO products_discovery_correlated_search_idx;');
+  const promoteOnRetry = move.indexOf('RENAME TO products_discovery_correlated_search_idx;');
+  const renameReplacement = move.indexOf('RENAME TO products_discovery_correlated_search_idx;', dropServingIndex);
   const dropV4 = move.indexOf('DROP FUNCTION IF EXISTS public.product_discovery_search_document_v4(');
   const dropV3 = move.indexOf('DROP FUNCTION IF EXISTS public.product_discovery_search_document_v3(');
   // Copy-first: both discovery copies exist before the serving index or RPC switches.
@@ -140,6 +153,9 @@ it('stages the builder move so a mid-migration failure stays retry-safe', () => 
   expect(buildReplacement).toBeGreaterThan(copyV4);
   // Build-before-drop: the replacement index finishes before the RPC
   // switches, and the serving index drops only after the switch.
+  // Retry-then-build: a valid staged replacement promotes before the rebuild.
+  expect(promoteOnRetry).toBeGreaterThanOrEqual(0);
+  expect(promoteOnRetry).toBeLessThan(buildReplacement);
   expect(switchRpc).toBeGreaterThan(buildReplacement);
   expect(dropServingIndex).toBeGreaterThan(switchRpc);
   expect(renameReplacement).toBeGreaterThan(dropServingIndex);

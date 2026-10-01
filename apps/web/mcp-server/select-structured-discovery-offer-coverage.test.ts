@@ -189,7 +189,7 @@ it('prices paired offers at the variant price like the PDP', () => {
   const selected = selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone',
     attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }] }));
   expect(selected?.displayPrice).toBe(700);
-  expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'offer-used', price: 700 });
+  expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'offer-used', price: 700, variantId: 'v-256' });
   // The offer row price must not smuggle the pair through a budget the
   // variant price exceeds: the PDP charges 700 for this selection.
   expect(selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone',

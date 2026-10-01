@@ -81,6 +81,21 @@ it('folds Unicode identity terms to ASCII-safe keys both sides agree on', () => 
     .toBe('(factbb1bdab90230c0d7d60bd6e9016c5357bf3eb7bf3b8a58b9be181828eec3c879)');
 });
 
+it('digests overlong identity lexemes so worst-case queries stay under the gate', () => {
+  expect(buildDiscoveryFactRetrievalQuery(intent({ brands: ['a'.repeat(64)] })))
+    .toBe(`(brand${'a'.repeat(64)})`);
+  expect(buildDiscoveryFactRetrievalQuery(intent({ brands: ['a'.repeat(65)] })))
+    .toBe('(fact3ed6eb2031e94b76633bc7b2f85a5c618fb6568a90ee878996448e7d78bfc9d4)');
+  // Five alternatives of max-length identities: every term digested, the
+  // joined query stays far below the 16k gate.
+  const worst = buildDiscoveryFactRetrievalQuery({ alternatives: Array.from({ length: 5 }, () => ({
+    product_type: 'b'.repeat(100), brands: Array.from({ length: 10 }, () => 'c'.repeat(100)),
+    model: 'd'.repeat(100), compatible_with: 'e'.repeat(100),
+  })) });
+  expect(worst?.length).toBeLessThan(16384);
+  expect(worst).not.toContain('b'.repeat(65));
+});
+
 it('keeps every constraint in retrieval past the old twelve-term budget', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({
     product_type: 'laptop', brands: ['Acme'], model: 'ZX 42 Ultra Pro Max Plus X Y Z',
@@ -115,9 +130,9 @@ it('renders exponent-notation numbers as plain decimals like the SQL index', () 
     .toBe('(storage1000000000000000000000gb)');
 });
 
-it('keys long models as one identity lexeme instead of truncating the tail', () => {
+it('keys long models as one digest lexeme instead of truncating the tail', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'Alpha Bravo Charlie Delta Echo Foxtrot Golf Hotel India Juliett Kilo Lima Mike November Oscar Papa' })))
-    .toBe('(modelalpha_bravo_charlie_delta_echo_foxtrot_golf_hotel_india_juliett_kilo_lima_mike_november_oscar_papa)');
+    .toBe('(factcb93feba5d3baa95c7f29c8373096a2db0d08f18a7740b1a6b2d7025543facff)');
 });
 
 it('keeps keyed identity terms free of dots so groups stay valid', () => {

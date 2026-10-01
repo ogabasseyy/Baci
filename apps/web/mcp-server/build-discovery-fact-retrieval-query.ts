@@ -86,6 +86,12 @@ function groupQuery(terms: string[]): string | undefined {
   return `(${terms.join(' & ')})`;
 }
 
+// Lexemes longer than this digest on both sides (SQL mirrors in
+// discovery_identity_lexeme): NFKC can triple ASCII length, and five
+// alternatives of max-length identities would otherwise push the joined
+// query past the 16k tsquery gate. Digests keep every constraint exact.
+const MAX_IDENTITY_LEXEME_CHARS = 64;
+
 function identityKey(prefix: string, value: string): string | undefined {
   // ASCII allowlist: PostgreSQL has no Unicode property escapes inside
   // bracket expressions, so both sides strip identically to stay in
@@ -93,10 +99,12 @@ function identityKey(prefix: string, value: string): string | undefined {
   // Fully stripped values fall back to a correlated digest both sides
   // derive identically (tag + unit separator + normalized identity):
   // skipping the term would strand exact matches past the browse window.
+  // Overlong lexemes digest identically: the stripped key is ASCII-only,
+  // so code-point length equals SQL char_length exactly.
   const normalized = value.normalize('NFKC').trim().toLocaleLowerCase('en-US')
     .replace(/[\s-]+/g, '_');
   const key = normalized.replace(/[^a-z0-9_]/g, '');
-  if (key) return `${prefix}${key}`;
+  if (key && Array.from(key).length <= MAX_IDENTITY_LEXEME_CHARS) return `${prefix}${key}`;
   if (!normalized) return undefined;
   return `fact${createHash('sha256').update(`${prefix}\u001f${normalized}`, 'utf8').digest('hex')}`;
 }

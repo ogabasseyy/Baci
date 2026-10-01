@@ -41,7 +41,7 @@ function stockQuantity(value: unknown): number | null {
 
 function matchesAlternative(
   product: Record<string, unknown>,
-  candidate: Candidate,
+  candidate: Pick<Candidate, 'attributes'>,
   discovery: Record<string, unknown>,
   alternative: DiscoveryAlternative,
   excludedTypes: Set<string>
@@ -91,6 +91,17 @@ export function selectStructuredDiscoveryOffer(
     if (candidate.price > (budget.max_price ?? Number.POSITIVE_INFINITY)) return;
     candidates.push(candidate);
   };
+  // One normalization per variant per product: the variant loop and every
+  // offer pairing share this instead of renormalizing the same attributes.
+  const normalizedVariantAttributes = new Map<unknown, Record<string, unknown>>();
+  const normalizedAttributesOf = (rawVariant: unknown) => {
+    let normalized = normalizedVariantAttributes.get(rawVariant);
+    if (!normalized) {
+      normalized = normalizeDiscoveryOptionAttributes(record(record(rawVariant).attributes));
+      normalizedVariantAttributes.set(rawVariant, normalized);
+    }
+    return normalized;
+  };
 
   if (product.has_variants !== true) {
     const baseAvailable = row.basePurchasable === true;
@@ -112,7 +123,7 @@ export function selectStructuredDiscoveryOffer(
       // PDP parity: product-detail-client resolves the comparison price as
       // the variant's own value with an unconditional parent fallback, even
       // when an override moved the selling price.
-      addCandidate({ kind: 'variant', attributes: normalizeDiscoveryOptionAttributes(record(variant.attributes)),
+      addCandidate({ kind: 'variant', attributes: normalizedAttributesOf(rawVariant),
         condition: normalizeCanonicalProductCondition(variantCondition) || baseCondition,
         price, compareAtPrice: finitePrice(variant.compare_at_price)
           ?? finitePrice(product.compare_at_price) ?? null,
@@ -169,6 +180,11 @@ export function selectStructuredDiscoveryOffer(
     // with every selectable universe variant (the PDP selects offer and variant
     // independently) and the live variant proves the specification. One bare
     // candidate survives when nothing pairs, for spec-less intents.
+    // Pairs evaluate before allocating: a 16-offer by 128-variant product
+    // would otherwise materialize thousands of normalized candidates per
+    // search. Normalization is memoized per variant and only matching pairs
+    // become candidates, so the match-then-sort below sees exactly the set
+    // the eager version would have kept.
     const pairings = product.has_variants === true
       ? variantUniverse.filter((rawVariant) => !manageStock || hasPositiveStock(record(rawVariant).stock_quantity))
       : [];
@@ -180,9 +196,19 @@ export function selectStructuredDiscoveryOffer(
       const pairedPrice = finitePrice(record(rawVariant).price_override)
         ?? finitePrice(product.price);
       if (pairedPrice === undefined) continue;
+      if (pairedPrice < (budget.min_price ?? Number.NEGATIVE_INFINITY)) continue;
+      if (pairedPrice > (budget.max_price ?? Number.POSITIVE_INFINITY)) continue;
+      const normalized = normalizedAttributesOf(rawVariant);
+      const evaluations = intent.alternatives.map((alternative) =>
+        matchesAlternative(product, { attributes: { ...metadataAttributes, ...normalized } },
+          discovery, alternative, excludedTypes));
+      if (!evaluations.includes(true)) {
+        if (evaluations.includes(undefined)) onUnverifiedFacts?.();
+        continue;
+      }
       addCandidate({ ...offerCore, price: pairedPrice, pairedVariant: rawVariant,
         compareAtPrice: finitePrice(record(rawVariant).compare_at_price) ?? productCompareAtPrice,
-        attributes: normalizeDiscoveryOptionAttributes(record(record(rawVariant).attributes)) });
+        attributes: normalized });
     }
   }
 
@@ -240,6 +266,12 @@ export function selectStructuredDiscoveryOffer(
       kind: match.kind,
       ...(match.kind !== 'base' && typeof record(match.sourceOption).id === 'string'
         ? { option_id: record(match.sourceOption).id as string }
+        : {}),
+      // Paired offers resolve by condition on the PDP but price by variant,
+      // so the paired variant ID travels with the selection for option-aware
+      // links; without it the PDP would open the default variant.
+      ...(pairedOffer && typeof record(match.pairedVariant).id === 'string'
+        ? { variantId: record(match.pairedVariant).id as string }
         : {}),
       attributes: match.attributes,
       condition: match.condition,

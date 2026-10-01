@@ -42,8 +42,12 @@ BEGIN
   ),
   eligible AS (
     SELECT pv.product_id, pv.attributes, pv.created_at, pv.id,
-      EXISTS (SELECT 1 FROM filters
-        WHERE discovery.recall_variant_filter_exactly_matches(pv.attributes, filters.filter)) AS is_exact,
+      -- Exact-match count, not a boolean: for multi-attribute intents a
+      -- variant satisfying one of several constraints must rank below a
+      -- variant satisfying all of them, or partial matches flood the cap
+      -- ahead of the complete match.
+      (SELECT count(*) FROM filters
+        WHERE discovery.recall_variant_filter_exactly_matches(pv.attributes, filters.filter)) AS exact_count,
       EXISTS (SELECT 1 FROM filters
         WHERE discovery.recall_variant_filter_loader_accepts(pv.attributes, filters.filter)) AS is_accepted,
       -- Purchasability mirrors the loader's stock gate exactly: unmanaged
@@ -78,15 +82,17 @@ BEGIN
     -- acceptance class, purchasable representatives rank ahead: hydration
     -- discards sold-out variants, so sold-out products filling the cap would
     -- strand purchasable matches past it with no product-level recovery.
+    -- Within a purchasability class, higher exact counts rank first so
+    -- complete multi-attribute matches outrank partial ones.
     SELECT DISTINCT ON (eligible.product_id)
       eligible.product_id, eligible.attributes, eligible.is_accepted,
-      eligible.is_purchasable, eligible.is_exact
+      eligible.is_purchasable, eligible.exact_count
     FROM eligible
     ORDER BY eligible.product_id, (NOT eligible.is_accepted), (NOT eligible.is_purchasable),
-      (NOT eligible.is_exact), eligible.created_at, eligible.id
+      eligible.exact_count DESC, eligible.created_at, eligible.id
   )
   SELECT best.product_id, best.attributes FROM best
-  ORDER BY (NOT best.is_accepted), (NOT best.is_purchasable), (NOT best.is_exact), best.product_id
+  ORDER BY (NOT best.is_accepted), (NOT best.is_purchasable), best.exact_count DESC, best.product_id
   LIMIT least(greatest(coalesce(p_limit, 2000), 1), 2001);
 END;
 $$;

@@ -8,9 +8,26 @@ CREATE SCHEMA IF NOT EXISTS discovery;
 -- validated PUT route. Unknown fields or mistyped attributes would fail the
 -- reader's strict safeParse and silently drop the product from structured
 -- matches, so the same shape holds at this boundary. A CHECK cannot contain
--- the subqueries this validation needs, hence the helper. Residual corners
--- stay with the route: JS trim/UTF-16 length nuances for exotic whitespace
--- and astral text, which only shift boundary rejections, never the shape.
+-- the subqueries this validation needs, hence the helpers.
+-- UTF-16 length of the JS-trimmed value: zod measures .max(100) in UTF-16
+-- units after String trim, while char_length counts code points, so astral
+-- text and exotic whitespace need identical treatment here. Each astral
+-- code point is one UTF-8 four-byte sequence (lead byte F0-F4, never a
+-- continuation byte), so units = characters + lead-byte count. The trim
+-- class is the specified trim set: ASCII whitespace plus U+00A0, U+1680,
+-- U+2000-U+200A, U+2028, U+2029, U+202F, U+205F, U+3000, U+FEFF.
+CREATE OR REPLACE FUNCTION discovery.product_discovery_text_length(raw text)
+RETURNS integer
+LANGUAGE sql IMMUTABLE PARALLEL SAFE SECURITY INVOKER SET search_path = ''
+AS $$
+  SELECT pg_catalog.char_length(trimmed) + (
+    SELECT count(*)::integer FROM (
+      SELECT (pg_catalog.regexp_matches(pg_catalog.encode(
+        pg_catalog.convert_to(trimmed, 'UTF8'), 'hex'), '..', 'g'))[1] AS byte
+    ) AS bytes WHERE byte >= 'f0' AND byte <= 'f4')
+  FROM (SELECT pg_catalog.regexp_replace(raw,
+    '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g') AS trimmed) AS t;
+$$;
 CREATE OR REPLACE FUNCTION discovery.product_discovery_metadata_valid(facts jsonb)
 RETURNS boolean
 LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE SECURITY INVOKER SET search_path = ''
@@ -19,7 +36,6 @@ DECLARE
   top_key text;
   entry_key text;
   entry_value jsonb;
-  trimmed text;
   attribute_count integer := 0;
 BEGIN
   IF facts IS NULL THEN RETURN true; END IF;
@@ -31,8 +47,7 @@ BEGIN
   FOR top_key IN SELECT pg_catalog.unnest(ARRAY['product_type', 'model']) LOOP
     IF facts -> top_key IS NOT NULL THEN
       IF pg_catalog.jsonb_typeof(facts -> top_key) IS DISTINCT FROM 'string' THEN RETURN false; END IF;
-      trimmed := pg_catalog.regexp_replace(facts ->> top_key, '^[[:space:]]+|[[:space:]]+$', '', 'g');
-      IF pg_catalog.char_length(trimmed) NOT BETWEEN 1 AND 100 THEN RETURN false; END IF;
+      IF discovery.product_discovery_text_length(facts ->> top_key) NOT BETWEEN 1 AND 100 THEN RETURN false; END IF;
     END IF;
   END LOOP;
   IF facts -> 'compatible_with' IS NOT NULL THEN
@@ -40,8 +55,7 @@ BEGIN
     IF pg_catalog.jsonb_array_length(facts -> 'compatible_with') > 50 THEN RETURN false; END IF;
     FOR entry_value IN SELECT * FROM pg_catalog.jsonb_array_elements(facts -> 'compatible_with') LOOP
       IF pg_catalog.jsonb_typeof(entry_value) IS DISTINCT FROM 'string' THEN RETURN false; END IF;
-      trimmed := pg_catalog.regexp_replace(entry_value #>> '{}', '^[[:space:]]+|[[:space:]]+$', '', 'g');
-      IF pg_catalog.char_length(trimmed) NOT BETWEEN 1 AND 100 THEN RETURN false; END IF;
+      IF discovery.product_discovery_text_length(entry_value #>> '{}') NOT BETWEEN 1 AND 100 THEN RETURN false; END IF;
     END LOOP;
   END IF;
   IF facts -> 'attributes' IS NOT NULL THEN
@@ -50,18 +64,23 @@ BEGIN
       attribute_count := attribute_count + 1;
       IF attribute_count > 50 THEN RETURN false; END IF;
       IF entry_key !~ '^[a-z][a-z0-9_]{0,49}$' THEN RETURN false; END IF;
+      -- Finite range, not just nonnegativity: jsonb accepts 1e309 but the
+      -- JavaScript reader decodes it as Infinity, failing the schema's
+      -- finite() check for the whole document. The bound is Number.MAX_VALUE;
+      -- values in the sub-ULP overflow band decode finite but are rejected
+      -- all the same, erring toward never storing unverifiable numbers.
       IF entry_key IN ('storage_gb', 'ram_gb', 'power_w', 'screen_inches', 'refresh_hz') THEN
         IF pg_catalog.jsonb_typeof(entry_value) IS DISTINCT FROM 'number'
-          OR (entry_value)::text::numeric < 0 THEN RETURN false; END IF;
+          OR (entry_value)::text::numeric < 0
+          OR (entry_value)::text::numeric > 1.7976931348623157e308 THEN RETURN false; END IF;
       ELSIF entry_key IN ('color', 'connector', 'processor', 'connectivity') THEN
         IF pg_catalog.jsonb_typeof(entry_value) IS DISTINCT FROM 'string' THEN RETURN false; END IF;
-        trimmed := pg_catalog.regexp_replace(entry_value #>> '{}', '^[[:space:]]+|[[:space:]]+$', '', 'g');
-        IF pg_catalog.char_length(trimmed) NOT BETWEEN 1 AND 100 THEN RETURN false; END IF;
+        IF discovery.product_discovery_text_length(entry_value #>> '{}') NOT BETWEEN 1 AND 100 THEN RETURN false; END IF;
       ELSIF pg_catalog.jsonb_typeof(entry_value) = 'number' THEN
-        IF (entry_value)::text::numeric < 0 THEN RETURN false; END IF;
+        IF (entry_value)::text::numeric < 0
+          OR (entry_value)::text::numeric > 1.7976931348623157e308 THEN RETURN false; END IF;
       ELSIF pg_catalog.jsonb_typeof(entry_value) = 'string' THEN
-        trimmed := pg_catalog.regexp_replace(entry_value #>> '{}', '^[[:space:]]+|[[:space:]]+$', '', 'g');
-        IF pg_catalog.char_length(trimmed) NOT BETWEEN 1 AND 100 THEN RETURN false; END IF;
+        IF discovery.product_discovery_text_length(entry_value #>> '{}') NOT BETWEEN 1 AND 100 THEN RETURN false; END IF;
       ELSE
         RETURN false;
       END IF;

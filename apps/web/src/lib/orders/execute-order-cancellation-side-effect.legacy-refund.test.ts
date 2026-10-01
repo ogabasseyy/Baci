@@ -10,7 +10,10 @@ vi.mock('@/lib/orders/build-order-cancellation-email-message', () => ({
 
 import { executeOrderCancellationSideEffect } from './execute-order-cancellation-side-effect';
 import { auditReviewsQuery } from './execute-order-cancellation-side-effect.test-support';
-import { DeliveryUncertainError } from './run-order-cancellation-side-effect';
+import {
+  DeferredError,
+  DeliveryUncertainError,
+} from './run-order-cancellation-side-effect';
 
 const merchant = {
   business_name: 'Store',
@@ -90,6 +93,110 @@ describe('legacy cancellation refund preflight', () => {
     expect(reviewInsert).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_type: 'order_cancellation_refund_requires_review',
+        reason: expect.stringContaining('cannot be linked'),
+      })
+    );
+  });
+
+  it('defers when an unlinked legacy refund covers the sole completed leg and another leg is in flight', async () => {
+    mocks.initiateRefund.mockReset();
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'paypal',
+            gateway_reference: 'paypal-leg-1',
+            id: 'payment-1',
+            status: 'completed',
+          },
+          {
+            amount: 50,
+            currency: 'NGN',
+            gateway: 'paypal',
+            gateway_reference: 'paypal-leg-2',
+            id: 'payment-2',
+            status: 'refund_pending',
+          },
+        ])
+      )
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'paypal',
+            gateway_reference: 'PP-1',
+            metadata: {},
+            status: 'completed',
+          },
+        ])
+      )
+      .mockReturnValueOnce(auditReviewsQuery([]))
+      .mockReturnValueOnce({ insert: reviewInsert });
+
+    // Terminalizing here would strand aggregate finalization: the drain
+    // never reselects delivery_uncertain rows, so the pending leg's
+    // completion could no longer resume the step. Defer instead — the
+    // claim gate attributes the legacy refund and finalizes on resume.
+    await expect(
+      executeOrderCancellationSideEffect({
+        merchant,
+        order,
+        step: 'refund',
+        supabase: { from } as never,
+      })
+    ).rejects.toBeInstanceOf(DeferredError);
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+    expect(reviewInsert).not.toHaveBeenCalled();
+  });
+
+  it('quarantines when the unlinked legacy refund only partially covers the sole leg', async () => {
+    mocks.initiateRefund.mockReset();
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'paypal',
+            gateway_reference: 'paypal-leg-1',
+            id: 'payment-1',
+            status: 'completed',
+          },
+        ])
+      )
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 40,
+            currency: 'NGN',
+            gateway: 'paypal',
+            gateway_reference: 'PP-1',
+            metadata: {},
+            status: 'completed',
+          },
+        ])
+      )
+      .mockReturnValueOnce(auditReviewsQuery([]))
+      .mockReturnValueOnce({ insert: reviewInsert });
+
+    await expect(
+      executeOrderCancellationSideEffect({
+        merchant,
+        order,
+        step: 'refund',
+        supabase: { from } as never,
+      })
+    ).rejects.toBeInstanceOf(DeliveryUncertainError);
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
         reason: expect.stringContaining('cannot be linked'),
       })
     );

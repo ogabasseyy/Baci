@@ -88,4 +88,71 @@ describe('matchCancellationRefundCoverage', () => {
     expect(coverage.refundedPaymentIds).toEqual(new Set());
     expect(coverage.mismatchedIds).toEqual(new Set(['payment-1']));
   });
+
+  it('attributes an unlinked legacy refund to the sole completed leg', () => {
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId: () => null,
+      refundRows: [
+        row({ gateway: 'paypal', metadata: { provider_refund_status: 'x' } }),
+      ],
+      soleCompletedLegId: 'payment-1',
+      transactions: [leg({ gateway: 'paypal' })],
+    });
+
+    expect(coverage.refundedPaymentIds).toEqual(new Set(['payment-1']));
+    expect(coverage.unattributedUnlinkedCount).toBe(0);
+    expect(coverage.mismatchedIds).toEqual(new Set());
+  });
+
+  it('leaves unlinked rows unattributed without a sole leg', () => {
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId: () => null,
+      refundRows: [row({})],
+      transactions: [leg({}), leg({ id: 'payment-2' })],
+    });
+
+    expect(coverage.refundedPaymentIds).toEqual(new Set());
+    expect(coverage.unattributedUnlinkedCount).toBe(1);
+  });
+
+  it('requires exact gateway equality for attribution', () => {
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId: () => null,
+      refundRows: [row({ gateway: 'PayPal' })],
+      soleCompletedLegId: 'payment-1',
+      transactions: [leg({ gateway: 'paypal' })],
+    });
+
+    // The claim gate compares gateways exactly: attributing here would
+    // mark the leg refunded while the gate still sees it uncovered,
+    // deferring forever instead of refunding or quarantining.
+    expect(coverage.refundedPaymentIds).toEqual(new Set());
+    expect(coverage.unattributedUnlinkedCount).toBe(1);
+  });
+
+  it('waits on attributed unverified paystack rows instead of covering', () => {
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId: () => null,
+      refundRows: [row({ metadata: {} })],
+      soleCompletedLegId: 'payment-1',
+      transactions: [leg({})],
+    });
+
+    expect(coverage.refundedPaymentIds).toEqual(new Set());
+    expect(coverage.unverifiedLinkedLegIds).toEqual(new Set(['payment-1']));
+    expect(coverage.unattributedUnlinkedCount).toBe(0);
+  });
+
+  it('counts a partial attribution as a mismatch for quarantine', () => {
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId: () => null,
+      refundRows: [row({ amount: 40, gateway: 'paypal' })],
+      soleCompletedLegId: 'payment-1',
+      transactions: [leg({ gateway: 'paypal' })],
+    });
+
+    expect(coverage.refundedPaymentIds).toEqual(new Set());
+    expect(coverage.mismatchedIds).toEqual(new Set(['payment-1']));
+    expect(coverage.unattributedUnlinkedCount).toBe(0);
+  });
 });

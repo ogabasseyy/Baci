@@ -178,7 +178,8 @@ export async function notifyStorefrontUpdateAvailable(
   let okTokenIds: string[] = [];
   let stampFailed = false;
   try {
-    const tickets = await sendPushNotifications(messages);
+    const { deliveryUncertain, tickets } =
+      await sendPushNotifications(messages);
     okTokenIds = tokens
       .filter((_, i) => tickets[i]?.status === 'ok')
       .map((t) => t.id);
@@ -186,6 +187,7 @@ export async function notifyStorefrontUpdateAvailable(
       appType,
       channel: 'general',
       notificationType: 'mobile_update_available',
+      deliveryUncertain,
     });
   } catch (err) {
     sendResult = {

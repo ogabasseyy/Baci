@@ -35,12 +35,46 @@ describe('sendPushNotificationChunks', () => {
       { to: 'ExponentPushToken[valid]', body: 'valid' },
     ] as ExpoPushMessage[];
 
-    const tickets = await sendPushNotificationChunks(new Expo(), messages);
+    const delivery = await sendPushNotificationChunks(new Expo(), messages);
 
-    expect(tickets).toEqual([
+    expect(delivery.tickets).toEqual([
       expect.objectContaining({ status: 'error' }),
       { status: 'ok', id: 'accepted' },
     ]);
+    // Locally rejected tokens never reached the provider.
+    expect(delivery.deliveryUncertain).toBe(false);
+  });
+
+  it('marks the delivery uncertain when a provider request throws', async () => {
+    sendPushNotificationsAsync.mockRejectedValueOnce(
+      new Error('socket hangup')
+    );
+
+    const delivery = await sendPushNotificationChunks(new Expo(), [
+      { to: 'ExponentPushToken[valid]', body: 'valid' },
+    ] as ExpoPushMessage[]);
+
+    expect(delivery.tickets).toEqual([
+      expect.objectContaining({
+        details: { error: 'ExpoError' },
+        status: 'error',
+      }),
+    ]);
+    expect(delivery.deliveryUncertain).toBe(true);
+  });
+
+  it('marks a definitive provider rejection as certain', async () => {
+    // Expo's own `ExpoError` ticket is a definitive rejection: the
+    // public error code must never be inferred as uncertain.
+    sendPushNotificationsAsync.mockResolvedValueOnce([
+      { details: { error: 'ExpoError' }, status: 'error' },
+    ]);
+
+    const delivery = await sendPushNotificationChunks(new Expo(), [
+      { to: 'ExponentPushToken[valid]', body: 'valid' },
+    ] as ExpoPushMessage[]);
+
+    expect(delivery.deliveryUncertain).toBe(false);
   });
 
   it('calls the rejection boundary only after definitive error tickets', async () => {

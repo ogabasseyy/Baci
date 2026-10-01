@@ -117,7 +117,13 @@ describe('refund notification cron deadline', () => {
 
     // The stale conclusion is discarded without counting a failure:
     // the next sweep re-evaluates with the fresh contradiction.
-    expect(result).toEqual({ claimed: 1, sent: 0, failed: 0, exhausted: 0 });
+    expect(result).toEqual({
+      claimed: 1,
+      sent: 0,
+      failed: 0,
+      exhausted: 0,
+      uncertain: 0,
+    });
     expect(db.finish.update).toHaveBeenCalledTimes(2);
     expect(db.finish.update).toHaveBeenNthCalledWith(
       2,
@@ -161,7 +167,13 @@ describe('refund notification cron deadline', () => {
     // No requeue: a second sweep could re-send an email the lost
     // finish already concluded. The row parks as delivery_uncertain
     // and the failure surfaces once.
-    expect(result).toEqual({ claimed: 1, sent: 0, failed: 1, exhausted: 0 });
+    expect(result).toEqual({
+      claimed: 1,
+      sent: 0,
+      failed: 1,
+      exhausted: 0,
+      uncertain: 0,
+    });
     expect(db.finish.update).toHaveBeenCalledTimes(2);
     expect(db.finish.update).not.toHaveBeenCalledWith(
       expect.objectContaining({ status: 'pending' })
@@ -187,7 +199,13 @@ describe('refund notification cron deadline', () => {
       undefined
     );
 
-    expect(result).toEqual({ claimed: 1, sent: 0, failed: 1, exhausted: 0 });
+    expect(result).toEqual({
+      claimed: 1,
+      sent: 0,
+      failed: 1,
+      exhausted: 0,
+      uncertain: 0,
+    });
     expect(db.finish.update).toHaveBeenCalledTimes(2);
   });
 
@@ -209,7 +227,13 @@ describe('refund notification cron deadline', () => {
       undefined
     );
 
-    expect(result).toEqual({ claimed: 1, sent: 1, failed: 0, exhausted: 0 });
+    expect(result).toEqual({
+      claimed: 1,
+      sent: 1,
+      failed: 0,
+      exhausted: 0,
+      uncertain: 0,
+    });
     expect(sendEmail).toHaveBeenCalledOnce();
     expect(db.finish.update).toHaveBeenCalledTimes(2);
     expect(db.finish.update).not.toHaveBeenCalledWith(
@@ -241,7 +265,13 @@ describe('refund notification cron deadline', () => {
       undefined
     );
 
-    expect(result).toEqual({ claimed: 1, sent: 0, failed: 1, exhausted: 0 });
+    expect(result).toEqual({
+      claimed: 1,
+      sent: 0,
+      failed: 1,
+      exhausted: 0,
+      uncertain: 0,
+    });
     expect(sendEmail).toHaveBeenCalledOnce();
     expect(db.finish.update).toHaveBeenCalledTimes(3);
     expect(db.finish.update).not.toHaveBeenCalledWith(

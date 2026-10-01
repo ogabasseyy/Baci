@@ -35,8 +35,20 @@ export async function initiateRefund(
   }
 
   const payload: Record<string, unknown> = { transaction };
-  if (amount !== undefined && amount > 0) {
-    payload.amount = amount;
+  if (amount !== undefined) {
+    // A corrupt amount must never silently become a full refund:
+    // defined non-positive values use the documented provider
+    // default, but a non-finite value is always invalid input.
+    if (!Number.isFinite(amount)) {
+      return {
+        success: false,
+        error: 'Invalid refund amount',
+        code: 'VALIDATION_ERROR',
+      };
+    }
+    if (amount > 0) {
+      payload.amount = amount;
+    }
   }
   if (reason) {
     payload.customer_note = reason;

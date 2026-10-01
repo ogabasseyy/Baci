@@ -92,7 +92,13 @@ describe('Paystack refund notification recovery', () => {
     });
     await expect(
       drainPaystackRefundNotifications(db as never, mocks.sendEmail)
-    ).resolves.toEqual({ claimed: 2, sent: 2, failed: 0, exhausted: 0 });
+    ).resolves.toEqual({
+      claimed: 2,
+      sent: 2,
+      failed: 0,
+      exhausted: 0,
+      uncertain: 0,
+    });
     expect(db.rpc).toHaveBeenCalledWith(
       'claim_paystack_cancellation_refund_notifications_v1',
       { p_limit: 1 }

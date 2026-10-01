@@ -10,6 +10,7 @@ import type {
   CancellationMerchant,
   CancellationOrder,
 } from '@/lib/orders/order-cancellation-side-effect-types';
+import { quarantineInvalidRefundAmountLegs } from '@/lib/orders/quarantine-invalid-refund-amount-legs';
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
 import {
@@ -162,13 +163,22 @@ export async function executeOrderCancellationSideEffect({
       transactions,
     });
   }
+  // A legacy/corrupt non-finite leg amount must never reach the
+  // provider (the reduction below would treat NaN as zero while the
+  // predicate accepts it): quarantine it for review first. Zero and
+  // negative legs keep the existing fail-closed predicate throw below.
+  await quarantineInvalidRefundAmountLegs({ order, supabase, transactions });
   const gatewayRefundAmount = transactions.reduce(
     (total, transaction) => total + (Number(transaction.amount) || 0),
     0
   );
   if (
     gatewayRefundAmount <= 0 ||
-    transactions.some((transaction) => Number(transaction.amount) <= 0)
+    transactions.some(
+      (transaction) =>
+        !Number.isFinite(Number(transaction.amount)) ||
+        Number(transaction.amount) <= 0
+    )
   ) {
     throw new Error('Completed payment transaction has no refundable amount');
   }

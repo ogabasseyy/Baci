@@ -12,7 +12,10 @@ vi.mock('@/lib/logger', () => ({
   },
 }));
 
-import { countDeadLetteredPaystackRefundNotifications } from './count-dead-lettered-paystack-refund-notifications';
+import {
+  countDeadLetteredPaystackRefundNotifications,
+  countUnresolvedUncertainRefundNotifications,
+} from './count-dead-lettered-paystack-refund-notifications';
 
 function notificationQueries(
   exhausted: { data: unknown; count: number },
@@ -119,6 +122,64 @@ describe('countDeadLetteredPaystackRefundNotifications', () => {
 
     await expect(
       countDeadLetteredPaystackRefundNotifications({ from } as never)
+    ).rejects.toThrow('refund_notification_claim_failed');
+  });
+});
+
+describe('countUnresolvedUncertainRefundNotifications', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function uncertainQuery(result: { data: unknown; count: number }) {
+    const limit = vi.fn().mockResolvedValue({ ...result, error: null });
+    const query = {
+      eq: vi.fn().mockReturnThis(),
+      limit,
+      select: vi.fn().mockReturnThis(),
+    };
+    return { from: vi.fn().mockReturnValue(query), query };
+  }
+
+  it('counts terminal rows awaiting operations review', async () => {
+    const { from, query } = uncertainQuery({
+      count: 2,
+      data: [{ event_type: 'failed_merchant_push', order_id: 'order-3' }],
+    });
+
+    await expect(
+      countUnresolvedUncertainRefundNotifications({ from } as never)
+    ).resolves.toBe(2);
+    expect(query.eq).toHaveBeenCalledWith('status', 'delivery_uncertain');
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({ uncertain: 2 })
+    );
+  });
+
+  it('reports zero without logging when no terminal rows exist', async () => {
+    const { from } = uncertainQuery({ data: [], count: 0 });
+
+    await expect(
+      countUnresolvedUncertainRefundNotifications({ from } as never)
+    ).resolves.toBe(0);
+    expect(mocks.loggerError).not.toHaveBeenCalled();
+  });
+
+  it('throws when the terminal count fails', async () => {
+    const limit = vi.fn().mockResolvedValue({
+      data: null,
+      count: null,
+      error: new Error('db down'),
+    });
+    const query = {
+      eq: vi.fn().mockReturnThis(),
+      limit,
+      select: vi.fn().mockReturnThis(),
+    };
+    const from = vi.fn().mockReturnValue(query);
+
+    await expect(
+      countUnresolvedUncertainRefundNotifications({ from } as never)
     ).rejects.toThrow('refund_notification_claim_failed');
   });
 });

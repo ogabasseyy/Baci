@@ -67,6 +67,17 @@ describe('initiateRefund', () => {
     );
   });
 
+  it.each([
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+  ])('rejects a non-finite amount instead of firing a full refund (%s)', async (amount) => {
+    await expect(initiateRefund('PSK-1', amount)).resolves.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      success: false,
+    });
+    expect(mocks.paystackRequest).not.toHaveBeenCalled();
+  });
+
   it('aborts the provider call at the callers timeout', async () => {
     mocks.paystackRequest.mockResolvedValue({ success: true });
 

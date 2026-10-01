@@ -56,7 +56,10 @@ describe('deliverAdminPushTest', () => {
       data: [{ token: 'ExponentPushToken[one]' }],
       error: null,
     });
-    mocks.sendChunks.mockResolvedValue([{ status: 'ok' }]);
+    mocks.sendChunks.mockResolvedValue({
+      deliveryUncertain: false,
+      tickets: [{ status: 'ok' }],
+    });
     const supabase = { from: mocks.from };
 
     const result = await deliverAdminPushTest(

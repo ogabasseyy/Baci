@@ -147,6 +147,13 @@ export function buildEmailExecutor({
       subtotal: toNumber(validatedOrder.subtotal, 'order subtotal'),
       total: toNumber(validatedOrder.total, 'order total'),
     };
+    if (signal?.aborted) {
+      // The pass budget died before dispatch (slow finalizer DB ops
+      // can consume the shared timeout): nothing was sent, so this
+      // is a retryable definite non-send — not the indeterminate
+      // outcome an abort after dispatch would be.
+      throw new Error('paid_email_aborted_before_dispatch');
+    }
     const result = await sendEmail({
       auditContext: {
         customerId: validatedOrder.customer_id ?? null,

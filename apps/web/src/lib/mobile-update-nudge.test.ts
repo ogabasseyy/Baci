@@ -128,9 +128,10 @@ describe('notifyStorefrontUpdateAvailable', () => {
       .mockReturnValueOnce(selectChain)
       .mockReturnValueOnce(stampChain);
     mocks.createAdminClient.mockReturnValue({ from });
-    mocks.sendPushNotifications.mockResolvedValueOnce([
-      { status: 'ok', id: 'ticket-1' },
-    ]);
+    mocks.sendPushNotifications.mockResolvedValueOnce({
+      deliveryUncertain: false,
+      tickets: [{ status: 'ok', id: 'ticket-1' }],
+    });
 
     const { notifyStorefrontUpdateAvailable } = await import(
       './mobile-update-nudge'

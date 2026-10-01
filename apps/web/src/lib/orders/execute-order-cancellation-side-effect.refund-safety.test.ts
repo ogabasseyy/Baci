@@ -87,6 +87,53 @@ describe('cancellation refund safety', () => {
     );
   });
 
+  it('quarantines a completed payment with a corrupt amount', async () => {
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'paystack',
+            gateway_reference: 'paystack-ref',
+            id: 'payment-1',
+          },
+          {
+            amount: 'NaN',
+            currency: 'NGN',
+            gateway: 'paystack',
+            gateway_reference: 'paystack-ref-2',
+            id: 'payment-2',
+          },
+        ])
+      )
+      .mockReturnValueOnce(transactionQuery([]))
+      .mockReturnValueOnce(auditReviewsQuery([]))
+      .mockReturnValueOnce({ insert: reviewInsert });
+
+    await expect(
+      executeOrderCancellationSideEffect({
+        merchant,
+        order,
+        step: 'refund',
+        supabase: { from } as never,
+      })
+    ).rejects.toBeInstanceOf(DeliveryUncertainError);
+
+    // NaN would pass the old predicate and reach the provider as an
+    // omitted amount — a full refund of a corrupt leg.
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'order_cancellation_refund_requires_review',
+        merchant_id: 'merchant-1',
+        reason: expect.stringContaining('invalid amount'),
+      })
+    );
+  });
+
   it('records an accepted pending refund without blocking initiation', async () => {
     const refundInsert = vi.fn().mockResolvedValue({ error: null });
     const from = vi

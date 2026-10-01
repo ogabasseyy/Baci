@@ -32,6 +32,7 @@ describe('Paystack refund notifications', () => {
       sent: 1,
       failed: 0,
       exhausted: 0,
+      uncertain: 0,
     });
     expect(mocks.sendEmail).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -89,7 +90,13 @@ describe('Paystack refund notifications', () => {
     });
     await expect(
       drainPaystackRefundNotifications(db as never, mocks.sendEmail)
-    ).resolves.toEqual({ claimed: 1, sent: 1, failed: 0, exhausted: 0 });
+    ).resolves.toEqual({
+      claimed: 1,
+      sent: 1,
+      failed: 0,
+      exhausted: 0,
+      uncertain: 0,
+    });
     expect(mocks.sendEmail).toHaveBeenCalledWith(
       expect.objectContaining({ to: 'buyer@example.com' })
     );
@@ -158,7 +165,13 @@ describe('Paystack refund notifications', () => {
     });
     await expect(
       drainPaystackRefundNotifications(db as never, mocks.sendEmail)
-    ).resolves.toEqual({ claimed: 1, sent: 1, failed: 0, exhausted: 0 });
+    ).resolves.toEqual({
+      claimed: 1,
+      sent: 1,
+      failed: 0,
+      exhausted: 0,
+      uncertain: 0,
+    });
     expect(mocks.sendEmail.mock.calls[0][0].textContent).toContain('100');
     expect(db.finish.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'sent' })
@@ -263,7 +276,13 @@ describe('Paystack refund notifications', () => {
     });
     await expect(
       drainPaystackRefundNotifications(db as never, mocks.sendEmail)
-    ).resolves.toEqual({ claimed: 1, sent: 1, failed: 0, exhausted: 0 });
+    ).resolves.toEqual({
+      claimed: 1,
+      sent: 1,
+      failed: 0,
+      exhausted: 0,
+      uncertain: 0,
+    });
     expect(mocks.sendEmail.mock.calls[0][0].textContent).toContain('100');
     expect(db.finish.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'sent' })
@@ -307,7 +326,36 @@ describe('Paystack refund notifications', () => {
     // No send is admitted, but the dead letters are still permanently
     // undeliverable: suppressing the count would let the caller
     // return success while notifications rot.
-    expect(summary).toEqual({ claimed: 0, sent: 0, failed: 0, exhausted: 2 });
+    expect(summary).toEqual({
+      claimed: 0,
+      sent: 0,
+      failed: 0,
+      exhausted: 2,
+      uncertain: 0,
+    });
     expect(mocks.sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('surfaces terminal rows the claim already moved out of every signal', async () => {
+    const db = database('processed_customer_email');
+    db.finish.limit
+      .mockResolvedValueOnce({ data: [], count: 0, error: null })
+      .mockResolvedValueOnce({ data: [], count: 0, error: null })
+      .mockResolvedValueOnce({
+        data: [{ event_type: 'failed_merchant_push', order_id: 'order-3' }],
+        count: 1,
+        error: null,
+      });
+
+    const summary = await drainPaystackRefundNotifications(
+      db as never,
+      mocks.sendEmail
+    );
+
+    // Terminal rows are no longer pre-transition, so exhausted stays
+    // 0 — but they must not vanish: the uncertain count keeps them
+    // visible in logs and payload until operations reviews them.
+    expect(summary.exhausted).toBe(0);
+    expect(summary.uncertain).toBe(1);
   });
 });

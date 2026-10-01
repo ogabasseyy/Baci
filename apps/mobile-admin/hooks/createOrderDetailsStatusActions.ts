@@ -116,13 +116,21 @@ export function createOrderDetailsStatusActions({
         return;
       }
 
-      const cancellationNeedsReconciliation =
+      // Read the code structurally: a rewrapped or serialized error
+      // across a bundle boundary fails instanceof but still carries
+      // the server's code. Both actionable cancel rejections surface
+      // the server reason instead of the generic fallback.
+      const errorCode =
+        nextError instanceof OrderStatusUpdateError
+          ? nextError.code
+          : (nextError as { code?: unknown }).code;
+      const cancellationShowsServerReason =
         newStatus === 'cancelled' &&
-        nextError instanceof OrderStatusUpdateError &&
-        nextError.code === 'PAYMENT_RECONCILIATION_REQUIRED';
+        (errorCode === 'PAYMENT_RECONCILIATION_REQUIRED' ||
+          errorCode === 'ORDER_NOT_CANCELLABLE');
       Alert.alert(
         'Error',
-        cancellationNeedsReconciliation
+        cancellationShowsServerReason
           ? nextError.message
           : 'Failed to update status'
       );

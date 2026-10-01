@@ -198,6 +198,10 @@ describe('POST /api/cron/process-settlements', () => {
     expect(mocks.or).toHaveBeenCalledWith(
       expect.stringContaining('notification_next_retry_at.lte.')
     );
+    // Fractional seconds inject a dot the OR parser reads as a
+    // condition separator: the retry-due stamp stays millis-free.
+    const orFilters = mocks.or.mock.calls.map(([filter]) => String(filter));
+    expect(orFilters.join(' ')).not.toMatch(/\d{2}:\d{2}:\d{2}\.\d+Z/);
   });
 
   it('continues without sending emails when pending notification lookup fails', async () => {
@@ -296,8 +300,32 @@ describe('POST /api/cron/process-settlements', () => {
         failed: [],
         skipped: [],
       });
+      // Deferred work must not look like an idle system: pollers see
+      // the skip flag and operators get the warn log.
+      expect(payload.skippedDueToBudget).toBe(true);
+      expect(mocks.loggerWarn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message:
+            'Skipping cancellation side-effect drain: cron budget exhausted',
+        })
+      );
     } finally {
       now.mockRestore();
     }
+  });
+
+  it('reports no budget skip when the cancellation drain runs', async () => {
+    const response = await POST(makeCronRequest());
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mocks.drainFailedOrderCancellationSideEffects).toHaveBeenCalled();
+    expect(payload.skippedDueToBudget).toBe(false);
+    expect(mocks.loggerWarn).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        message:
+          'Skipping cancellation side-effect drain: cron budget exhausted',
+      })
+    );
   });
 });

@@ -97,6 +97,10 @@ export async function POST(request: Request) {
     // carry backoff state: without the retry-due and attempt-cap
     // filters, permanently failing rows would pin this bounded
     // oldest-first queue and newer merchants would never send.
+    // Millis-free stamp for the or() filter below: fractional seconds
+    // inject a dot the OR parser reads as a condition separator (the
+    // same hazard the abandoned-attempt sweep strips millis for).
+    const retryDueStamp = `${new Date().toISOString().split('.')[0]}Z`;
     const { data: pendingNotifications, error: notifyError } = await supabase
       .from('merchant_settlements')
       // PostgREST cannot embed auth.users through merchants here; use the
@@ -122,7 +126,7 @@ export async function POST(request: Request) {
       .eq('settlement_notified', false)
       .lt('notification_attempts', SETTLEMENT_NOTIFICATION_MAX_ATTEMPTS)
       .or(
-        `notification_next_retry_at.is.null,notification_next_retry_at.lte.${new Date().toISOString()}`
+        `notification_next_retry_at.is.null,notification_next_retry_at.lte.${retryDueStamp}`
       )
       .order('actual_settlement_date', { ascending: true })
       .limit(50); // Process in batches
@@ -146,18 +150,29 @@ export async function POST(request: Request) {
     // refund calls stop before the platform abort, and skip it outright
     // once the margin is gone rather than stranding an accepted refund
     // without its audit row.
-    const drainLimit = settlementDrainLimit(Date.now() - invocationStartedAt);
-    const cancellationSideEffectDrain =
-      drainLimit > 0
-        ? await drainFailedOrderCancellationSideEffects({
-            deadlineMs: settlementDrainDeadlineMs(invocationStartedAt),
-            limit: drainLimit,
-            sendCancellationEmail: sendEmail,
-            supabase,
-          })
-        : { drained: [], failed: [], skipped: [] };
+    const drainElapsedMs = Date.now() - invocationStartedAt;
+    const drainLimit = settlementDrainLimit(drainElapsedMs);
+    const drainSkippedDueToBudget = drainLimit <= 0;
+    if (drainSkippedDueToBudget) {
+      logger.warn({
+        message:
+          'Skipping cancellation side-effect drain: cron budget exhausted',
+        elapsedMs: drainElapsedMs,
+      });
+    }
+    const cancellationSideEffectDrain = drainSkippedDueToBudget
+      ? { drained: [], failed: [], skipped: [] }
+      : await drainFailedOrderCancellationSideEffects({
+          deadlineMs: settlementDrainDeadlineMs(invocationStartedAt),
+          limit: drainLimit,
+          sendCancellationEmail: sendEmail,
+          supabase,
+        });
     return NextResponse.json({
       success: true,
+      // A skipped drain is deferred work, not an idle system: pollers
+      // must distinguish 'nothing to do' from 'no time to do it'.
+      skippedDueToBudget: drainSkippedDueToBudget,
       cancellationSideEffectDrain,
       settlements: {
         processed: result.processed_count,

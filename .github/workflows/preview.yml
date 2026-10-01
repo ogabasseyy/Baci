@@ -54,7 +54,11 @@ jobs:
       - name: Checkout trusted source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          # Pin to the running commit, not the branch name: the guard above
+          # proves dispatch came from the default branch, so this sha is the
+          # reviewed default-branch commit, and it cannot drift if main
+          # advances during this long run.
+          ref: ${{ github.sha }}
           persist-credentials: false
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -132,7 +136,9 @@ jobs:
       - name: Checkout trusted ops files
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          # Same running-commit pin as the prepare job: no drift if main
+          # advances mid-run.
+          ref: ${{ github.sha }}
           sparse-checkout: .github
           sparse-checkout-cone-mode: false
           path: trusted-ops
@@ -159,6 +165,13 @@ jobs:
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+          # Remote cache is read-only in this job: untrusted target-ref
+          # scripts can read shared main-branch cache entries (needed for a
+          # viable build time) but cannot poison them. The token itself is
+          # still visible to those scripts, exactly as in PR CI; accepted
+          # tradeoff, documented here. (Verified against turbo 2.9.18: comma
+          # form parses; bare `remote:r` would disable every cache.)
+          TURBO_CACHE: "remote:r,local:rw"
         run: trusted-ops/.github/scripts/run-pinned-vercel.sh build --yes
       - name: Upload prebuilt output
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -186,7 +199,9 @@ jobs:
       - name: Checkout trusted ops files
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          # Same running-commit pin as the prepare job: no drift if main
+          # advances mid-run.
+          ref: ${{ github.sha }}
           sparse-checkout: .github
           sparse-checkout-cone-mode: false
           path: trusted-ops
@@ -219,9 +234,10 @@ jobs:
             exit 1
           fi
           echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
-          # Branch names can carry markdown metacharacters: strip backticks
-          # and render inside a code span so the summary cannot be reshaped.
-          safe_ref="$(printf '%s' "$PREVIEW_REF" | tr -d '`')"
+          # Dispatch inputs are free-form: strip newlines and carriage returns
+          # as well as backticks, then render inside a code span, so the
+          # summary heading stays one line and cannot be reshaped.
+          safe_ref="$(printf '%s' "$PREVIEW_REF" | tr -d '\n\r`')"
           echo "## Preview ready for \`$safe_ref\`: $preview_url" >> "$GITHUB_STEP_SUMMARY"
       - name: Clean up Vercel secrets
         if: always()

@@ -253,7 +253,24 @@ test('preview URL parsing anchors on the deploy assignment line', () => {
 
 test('deploy summary neutralizes markdown in the branch name', () => {
   const deploy = jobBlock('deploy');
-  assert.match(deploy, /safe_ref=.*tr -d/);
+  assert.match(deploy, /safe_ref=.*tr -d '\\n\\r`'/);
   assert.match(deploy, /Preview ready for \\`\$safe_ref\\`/);
   assert.doesNotMatch(deploy, /\$PREVIEW_REF:\s*\$preview_url/);
+});
+
+test('trusted checkouts pin the running commit, never the branch name', () => {
+  const refs = [...executable.matchAll(/^\s*ref:\s*\$\{\{\s*([a-z._]+)\s*\}\}/gm)].map(
+    (match) => match[1]
+  );
+  assert.deepEqual(refs.sort(), [
+    'github.sha',
+    'github.sha',
+    'github.sha',
+    'inputs.ref',
+  ]);
+});
+
+test('untrusted build reads but never writes the remote cache', () => {
+  const build = jobBlock('build');
+  assert.match(build, /TURBO_CACHE:\s*"remote:r,local:rw"/);
 });

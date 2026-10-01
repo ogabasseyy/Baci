@@ -29,20 +29,29 @@ function harness() {
 function conflictClient({
   confirmLookupError = null,
   confirmReview = { txn_id: 'attempt-1' },
+  ownReview = null,
   insertError = null,
+  insertErrors = [],
   stampData = true,
   stampError = null,
 }: {
   confirmLookupError?: unknown;
   confirmReview?: unknown;
+  ownReview?: unknown;
   insertError?: unknown;
+  insertErrors?: unknown[];
   stampData?: unknown;
   stampError?: unknown;
 } = {}) {
-  const insert = vi.fn().mockResolvedValue({ error: insertError });
+  const insert = vi.fn();
+  for (const error of insertErrors) {
+    insert.mockResolvedValueOnce({ error });
+  }
+  insert.mockResolvedValue({ error: insertError });
   const confirmSingle = vi
     .fn()
-    .mockResolvedValue({ data: confirmReview, error: confirmLookupError });
+    .mockResolvedValueOnce({ data: confirmReview, error: confirmLookupError })
+    .mockResolvedValue({ data: ownReview, error: null });
   const from = vi.fn(() => ({
     eq: vi.fn().mockReturnThis(),
     insert,
@@ -72,7 +81,10 @@ describe('fileConflictAndRetire', () => {
     expect(db.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_type: 'merchant_invoice_partial_payment_conflict',
-        metadata: { error_code: 'HTTP_409' },
+        metadata: {
+          error_code: 'HTTP_409',
+          gateway_reference: 'BAC-CONFLICT',
+        },
         txn_id: 'attempt-1',
       })
     );
@@ -104,10 +116,10 @@ describe('fileConflictAndRetire', () => {
     expect(h.hold).not.toHaveBeenCalled();
   });
 
-  it('holds when the conflict collision belongs to another order', async () => {
+  it('refiles without the reference when another order owns it', async () => {
     const db = conflictClient({
       confirmReview: null,
-      insertError: { code: '23505' },
+      insertErrors: [{ code: '23505' }, null],
     });
     const h = harness();
 
@@ -117,10 +129,41 @@ describe('fileConflictAndRetire', () => {
     );
 
     expect(gate).toBe('done');
-    expect(db.rpc).not.toHaveBeenCalled();
-    expect(h.summary.failed).toBe(true);
-    expect(h.hold).toHaveBeenCalledWith('partial_conflict_review_failed');
-    expect(h.summary.reviewsFiled).toEqual([]);
+    expect(db.insert).toHaveBeenCalledTimes(2);
+    expect(db.insert).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        paystack_ref: null,
+        txn_id: 'attempt-1',
+        metadata: expect.objectContaining({
+          gateway_reference: 'BAC-CONFLICT',
+        }),
+      })
+    );
+    expect(db.rpc).toHaveBeenCalled();
+    expect(h.summary.reviewsFiled).toEqual(['attempt-1']);
+    expect(h.summary.failed).toBe(false);
+    expect(h.hold).not.toHaveBeenCalled();
+  });
+
+  it('accepts its own reference-less review filed by an earlier run', async () => {
+    const db = conflictClient({
+      confirmReview: null,
+      ownReview: { id: 'review-7' },
+      insertErrors: [{ code: '23505' }, { code: '23505' }],
+    });
+    const h = harness();
+
+    const gate = await fileConflictAndRetire(
+      { ...h, attempt, supabase: db as never },
+      filing
+    );
+
+    expect(gate).toBe('done');
+    expect(db.rpc).toHaveBeenCalled();
+    expect(h.summary.reviewsFiled).toEqual(['attempt-1']);
+    expect(h.summary.failed).toBe(false);
+    expect(h.hold).not.toHaveBeenCalled();
   });
 
   it('holds when the conflict review cannot be filed', async () => {

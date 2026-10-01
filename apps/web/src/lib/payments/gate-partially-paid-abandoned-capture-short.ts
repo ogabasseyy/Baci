@@ -109,10 +109,32 @@ async function fileShortCaptureReview(
     });
     return false;
   }
-  // Still conflicting: a sibling attempt's open review holds this
-  // order's slot. Append this capture under its own transaction key
-  // so both stay visible; holding here would rotate until the sibling
-  // resolves while this pending attempt blocks cancellation.
+  // Still conflicting: either our own reference-less review from an
+  // earlier run that failed to stamp, or a sibling attempt's open
+  // review holding this order's slot. Confirm by transaction first:
+  // accepting our own review lets the stamp below retire the attempt
+  // instead of holding an already-reviewed capture forever.
+  const { data: ownReview, error: ownError } = await supabase
+    .from('reconciliation_review')
+    .select('id')
+    .eq('issue_type', 'partial_capture_short_requires_review')
+    .eq('txn_id', attempt.id)
+    .is('resolved_at', null)
+    .maybeSingle();
+  if (ownError) {
+    logger.error({
+      error: ownError,
+      message: 'Failed to confirm own short-capture review',
+      orderId: attempt.order_id,
+      transactionId: attempt.id,
+    });
+    return false;
+  }
+  if (ownReview) return true;
+  // A sibling attempt's open review holds this order's slot. Append
+  // this capture under its own transaction key so both stay visible;
+  // holding here would rotate until the sibling resolves while this
+  // pending attempt blocks cancellation.
   return appendShortCaptureToSiblingReview(supabase, {
     attempt,
     captureMinor,
@@ -151,13 +173,20 @@ async function appendShortCaptureToSiblingReview(
   // closed — an empty update means the slot freed and the next sweep
   // files normally.
   for (let i = 0; i < 2; i++) {
-    const { data: sibling, error: siblingError } = await supabase
+    // Multiple open reviews of this type per order are permitted, so
+    // take the first sibling as the evidence vessel instead of
+    // single-row fetching: any open sibling carries the capture to
+    // the operations queue.
+    const { data: siblings, error: siblingError } = await supabase
       .from('reconciliation_review')
       .select('id, metadata')
       .eq('issue_type', 'partial_capture_short_requires_review')
       .eq('order_id', attempt.order_id)
       .is('resolved_at', null)
-      .maybeSingle();
+      .limit(1);
+    const sibling = siblings?.[0] as
+      | { id: string; metadata: unknown }
+      | undefined;
     if (siblingError || !sibling) {
       if (siblingError) {
         logger.error({
@@ -201,8 +230,8 @@ async function appendShortCaptureToSiblingReview(
       .eq('id', sibling.id)
       .maybeSingle();
     const confirmedCaptures = (
-      (confirmed?.metadata as Record<string, unknown> | null) ?? {}
-    ).short_captures as Record<string, unknown> | null;
+      confirmed?.metadata as Record<string, unknown> | null
+    )?.short_captures as Record<string, unknown> | null;
     if (confirmedCaptures && attempt.id in confirmedCaptures) return true;
   }
   logger.warn({

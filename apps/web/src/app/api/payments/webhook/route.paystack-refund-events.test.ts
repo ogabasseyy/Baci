@@ -129,7 +129,8 @@ describe('POST /api/payments/webhook paystack refund events', () => {
     expect(response.status).toBe(200);
     expect(mockReconcilePaystackRefundEvent).toHaveBeenCalledWith(
       mockServiceClient,
-      'PAYMENT-1'
+      'PAYMENT-1',
+      'processed'
     );
   });
 

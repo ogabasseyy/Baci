@@ -26,61 +26,95 @@ async function fileConflictReview(
     reason,
   }: { attempt: ConflictAttempt; errorCode: string; reason: string }
 ): Promise<boolean> {
-  const { error } = await supabase.from('reconciliation_review').insert({
+  const row = {
     candidates: null,
     issue_type: 'merchant_invoice_partial_payment_conflict',
     merchant_id: attempt.merchant_id,
-    metadata: { error_code: errorCode },
+    metadata: {
+      error_code: errorCode,
+      gateway_reference: attempt.gateway_reference,
+    },
     order_id: attempt.order_id,
     paystack_ref: attempt.gateway_reference,
     reason,
     txn_id: attempt.id,
-  });
+  };
+  const { error } = await supabase.from('reconciliation_review').insert(row);
   if (!error) return true;
   // The (issue_type, paystack_ref) index is global: two orders sharing a
   // legacy/corrupt reference collide, so a conflict may be the other
   // order's review rather than this capture already filed. Only treat it
-  // as success when this transaction's own review is open; otherwise
-  // holding keeps the captured funds visible instead of stamping them out
-  // of future sweeps.
-  if ((error as { code?: string }).code === POSTGRES_UNIQUE_VIOLATION) {
-    const { data: existing, error: lookupError } = await supabase
-      .from('reconciliation_review')
-      .select('txn_id')
-      .eq('issue_type', 'merchant_invoice_partial_payment_conflict')
-      .eq('paystack_ref', attempt.gateway_reference)
-      .eq('txn_id', attempt.id)
-      .is('resolved_at', null)
-      .maybeSingle();
-    if (lookupError) {
-      logger.error({
-        error: lookupError,
-        message: 'Failed to confirm conflict review',
-        orderId: attempt.order_id,
-        reference: attempt.gateway_reference,
-        transactionId: attempt.id,
-      });
-      return false;
-    }
-    if (!existing) {
-      logger.warn({
-        message: 'Conflict review collision belongs to another order',
-        orderId: attempt.order_id,
-        reference: attempt.gateway_reference,
-        transactionId: attempt.id,
-      });
-      return false;
-    }
-    return true;
+  // as success when this transaction's own review is open.
+  if ((error as { code?: string }).code !== POSTGRES_UNIQUE_VIOLATION) {
+    logger.error({
+      error,
+      message: 'Failed to file merchant invoice payment review',
+      orderId: attempt.order_id,
+      reference: attempt.gateway_reference,
+      transactionId: attempt.id,
+    });
+    return false;
   }
-  logger.error({
-    error,
-    message: 'Failed to file merchant invoice payment review',
-    orderId: attempt.order_id,
-    reference: attempt.gateway_reference,
-    transactionId: attempt.id,
-  });
-  return false;
+  const { data: existing, error: lookupError } = await supabase
+    .from('reconciliation_review')
+    .select('txn_id')
+    .eq('issue_type', 'merchant_invoice_partial_payment_conflict')
+    .eq('paystack_ref', attempt.gateway_reference)
+    .eq('txn_id', attempt.id)
+    .is('resolved_at', null)
+    .maybeSingle();
+  if (lookupError) {
+    logger.error({
+      error: lookupError,
+      message: 'Failed to confirm conflict review',
+      orderId: attempt.order_id,
+      reference: attempt.gateway_reference,
+      transactionId: attempt.id,
+    });
+    return false;
+  }
+  if (existing) return true;
+  // Not our own review: another order owns the reference slot. Refile
+  // without the globally colliding reference so this capture reaches
+  // the operations queue instead of rotating on the same conflict
+  // every sweep while blocking order cancellation. This issue type is
+  // excluded from the per-order open index, so no sibling merge is
+  // needed — the metadata keeps the reference for operations.
+  const { error: nullRefError } = await supabase
+    .from('reconciliation_review')
+    .insert({ ...row, paystack_ref: null });
+  if (!nullRefError) return true;
+  if ((nullRefError as { code?: string }).code !== POSTGRES_UNIQUE_VIOLATION) {
+    logger.error({
+      error: nullRefError,
+      message: 'Failed to file conflict review without reference',
+      orderId: attempt.order_id,
+      reference: attempt.gateway_reference,
+      transactionId: attempt.id,
+    });
+    return false;
+  }
+  // Our own reference-less review from an earlier run that failed to
+  // stamp collides on the transaction slot: confirm by transaction
+  // and accept it so the stamp below retires the attempt instead of
+  // holding an already-reviewed capture forever.
+  const { data: ownReview, error: ownError } = await supabase
+    .from('reconciliation_review')
+    .select('id')
+    .eq('issue_type', 'merchant_invoice_partial_payment_conflict')
+    .eq('txn_id', attempt.id)
+    .is('resolved_at', null)
+    .maybeSingle();
+  if (ownError) {
+    logger.error({
+      error: ownError,
+      message: 'Failed to confirm own conflict review',
+      orderId: attempt.order_id,
+      transactionId: attempt.id,
+    });
+    return false;
+  }
+  return ownReview != null;
 }
 
 async function stampConflictResolution(

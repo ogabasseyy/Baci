@@ -33,21 +33,27 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 /**
  * Extract review evidence from a successful charge verification. Returns
- * null when the response shape cannot identify the charge (unknown id or
- * unusable amount): the caller fails closed so the row retries instead of
- * filing unattributed evidence. Korapay exposes no separate charge id, so
- * the verified reference identifies the charge.
+ * null when the response shape cannot identify the charge (unknown id
+ * without a fallback, or an unusable amount/status): the caller fails
+ * closed so the row retries instead of filing unattributed evidence.
+ * Korapay exposes no separate charge id, so the verified reference
+ * identifies the charge. The optional fallback is the verified gateway
+ * reference the sweep already confirmed: a successful response that
+ * omits the charge id still attributes to that known reference instead
+ * of dropping the duplicate review for an already-completed capture.
  */
 export function extractDuplicateCaptureEvidence(
   gateway: HealableGateway,
-  response: Record<string, unknown>
+  response: Record<string, unknown>,
+  fallbackReference?: string | null
 ): DuplicateCaptureResponseEvidence | null {
+  const fallback = asNonEmptyString(fallbackReference);
   if (gateway === 'juicyway') {
     const payment = asRecord(response.payment);
     if (!payment) return null;
     const providerAmount = asPositiveNumber(payment.amount);
     const providerStatus = asNonEmptyString(payment.status);
-    const providerReference = asNonEmptyString(payment.id);
+    const providerReference = asNonEmptyString(payment.id) ?? fallback;
     if (
       providerAmount === null ||
       providerStatus === null ||
@@ -63,12 +69,17 @@ export function extractDuplicateCaptureEvidence(
     gateway === 'korapay'
       ? asNonEmptyString(response.reference)
       : asNonEmptyString(response.id);
+  const resolvedReference = providerReference ?? fallback;
   if (
     providerAmount === null ||
     providerStatus === null ||
-    providerReference === null
+    resolvedReference === null
   ) {
     return null;
   }
-  return { providerAmount, providerReference, providerStatus };
+  return {
+    providerAmount,
+    providerReference: resolvedReference,
+    providerStatus,
+  };
 }

@@ -6,6 +6,7 @@ it('stops starting attempts at the pass deadline', async () => {
     eq: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
     is: vi.fn().mockReturnThis(),
+    neq: vi.fn().mockReturnThis(),
     limit: vi.fn().mockResolvedValue({
       data: [
         {

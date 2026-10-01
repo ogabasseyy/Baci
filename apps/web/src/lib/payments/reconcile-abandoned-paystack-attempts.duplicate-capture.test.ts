@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { reconcileAbandonedPaystackAttempts } from './reconcile-abandoned-paystack-attempts';
-import { createClient } from './reconcile-abandoned-paystack-attempts.test-support';
+import {
+  candidate,
+  createClient,
+} from './reconcile-abandoned-paystack-attempts.test-support';
 
 function withReviewTable(
   client: { from: unknown },
@@ -256,5 +259,79 @@ describe('abandoned Paystack attempt duplicate captures', () => {
     expect(summary.reviewsFiled).toEqual([]);
     expect(summary.failed).toBe(true);
     expect(summary.held).toEqual([{ id: 'attempt-1', reason: 'success' }]);
+  });
+
+  it('files a marked completed retry without re-finalizing or retiring it', async () => {
+    const { client, update } = createClient([], {}, [
+      {
+        ...candidate,
+        metadata: { duplicate_capture_review_pending: true },
+        status: 'completed',
+      },
+    ]);
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    const finalizePayment = vi.fn();
+    withReviewTable(client, reviewInsert);
+    Object.assign(client, { rpc });
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      finalizePayment,
+      supabase: client as never,
+      verify: verifiedSuccess(),
+    });
+
+    // The row already settled: only the duplicate review is still
+    // owed, and success clears the retry marker.
+    expect(summary.reviewsFiled).toEqual(['attempt-1']);
+    expect(summary.retired).toEqual([]);
+    expect(summary.held).toEqual([]);
+    expect(finalizePayment).not.toHaveBeenCalled();
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'duplicate_payment_capture_requires_review',
+        txn_id: 'attempt-1',
+      })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'set_duplicate_capture_review_pending_v1',
+      expect.objectContaining({
+        p_pending: false,
+        p_transaction_id: 'attempt-1',
+      })
+    );
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('files a marked completed retry under a reversed provider status', async () => {
+    const { client, update } = createClient([], {}, [
+      {
+        ...candidate,
+        metadata: { duplicate_capture_review_pending: true },
+        status: 'completed',
+      },
+    ]);
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    withReviewTable(client, reviewInsert);
+    Object.assign(client, { rpc });
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify: verifiedSuccess({ status: 'reversed' }),
+    });
+
+    // The funds settled, so a now-reversed charge owes the duplicate
+    // review with the gateway's actual status — never a retire that
+    // would un-complete the payment.
+    expect(summary.reviewsFiled).toEqual(['attempt-1']);
+    expect(summary.retired).toEqual([]);
+    expect(summary.failed).toBe(false);
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ provider_status: 'reversed' }),
+      })
+    );
+    expect(update).not.toHaveBeenCalled();
   });
 });

@@ -35,9 +35,12 @@ function buildSupabase(result: { data?: unknown[]; error?: unknown }) {
   for (const method of ['eq', 'neq', 'not', 'lt', 'is', 'or', 'order']) {
     builder[method] = vi.fn().mockReturnValue(builder);
   }
+  // The sweep runs two candidate queries (main, then filing-only
+  // retries): the canned rows belong to the main query only.
   builder.limit = vi
     .fn()
-    .mockResolvedValue({ data: null, error: null, ...result });
+    .mockResolvedValueOnce({ data: null, error: null, ...result })
+    .mockResolvedValue({ data: [], error: null });
   return {
     from: vi.fn().mockReturnValue(builder),
   } as unknown as SupabaseClient;

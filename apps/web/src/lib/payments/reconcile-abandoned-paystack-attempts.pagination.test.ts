@@ -20,11 +20,17 @@ it('checks the next stale attempt before rechecking 25 held attempts on the next
     updatedAt: firstRun - 13 * 60 * 60_000 + index,
   }));
   const cutoffs = new Map<string, number>();
+  const candidatesEqCalls: unknown[][] = [];
+  let candidatesEqSeen = 0;
   const candidates = {
     select: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
+    eq: vi.fn((...args: unknown[]) => {
+      candidatesEqCalls.push(args);
+      return candidates;
+    }),
     in: vi.fn().mockReturnThis(),
     is: vi.fn().mockReturnThis(),
+    neq: vi.fn().mockReturnThis(),
     not: vi.fn().mockReturnThis(),
     or: vi.fn((filter: string) => {
       const match = (filter.split(',')[0] ?? '').match(/^(\w+)\.lt\.(.+)$/);
@@ -34,19 +40,28 @@ it('checks the next stale attempt before rechecking 25 held attempts on the next
       return candidates;
     }),
     order: vi.fn().mockReturnThis(),
-    limit: vi.fn((limit: number) =>
-      Promise.resolve({
-        data: rows
-          .filter(
-            (row) =>
-              row.createdAt < (cutoffs.get('created_at') ?? 0) &&
-              row.updatedAt < (cutoffs.get('updated_at') ?? 0)
-          )
-          .sort((left, right) => left.updatedAt - right.updatedAt)
-          .slice(0, limit),
+    limit: vi.fn((limit: number) => {
+      // The sweep runs two candidate queries (main, then filing-only
+      // retries): only the main query resolves the canned rows here.
+      const queryEqCalls = candidatesEqCalls.slice(candidatesEqSeen);
+      candidatesEqSeen = candidatesEqCalls.length;
+      const isPendingRetry = queryEqCalls.some(
+        ([column]) => column === 'metadata->>duplicate_capture_review_pending'
+      );
+      return Promise.resolve({
+        data: isPendingRetry
+          ? []
+          : rows
+              .filter(
+                (row) =>
+                  row.createdAt < (cutoffs.get('created_at') ?? 0) &&
+                  row.updatedAt < (cutoffs.get('updated_at') ?? 0)
+              )
+              .sort((left, right) => left.updatedAt - right.updatedAt)
+              .slice(0, limit),
         error: null,
-      })
-    ),
+      });
+    }),
   };
   const completed = {
     select: vi.fn().mockReturnThis(),

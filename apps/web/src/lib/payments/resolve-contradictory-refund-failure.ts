@@ -148,8 +148,9 @@ function replacementMatchesFailedLeg(
  * same leg would cover each of them against the full pool while only
  * half the leg was actually refunded, suppressing a live
  * contradiction. A failed 100-unit refund replaced by two completed
- * 50-unit refunds on the same leg is fully superseded. Malformed
- * amounts fail closed. No failed rows at all means the queued failure
+ * 50-unit refunds on the same leg is fully superseded. Malformed or
+ * non-positive failed amounts fail closed. No failed rows at all means
+ * the queued failure
  * was superseded: the provider verdict domain is closed and only the
  * RPC records failure verdicts, so an empty scan proves every failure
  * was overwritten by a later non-failure verdict — alerting anyway
@@ -168,7 +169,11 @@ function allFailedLegsCoveredByReplacements(
   const remaining = new Map<number, number>();
   for (const failed of ordered) {
     const failedAmount = Number(failed.amount);
-    if (!Number.isFinite(failedAmount)) return false;
+    // A zero or negative failed amount is corrupt, not covered: need
+    // would start non-positive and skip the replacement loop, marking
+    // the shared notification sent without delivery even when no
+    // replacement exists. Fail closed so the alert still sends.
+    if (!Number.isFinite(failedAmount) || failedAmount <= 0) return false;
     let need = failedAmount;
     for (let i = 0; i < replacements.length && need > 0; i++) {
       const replacement = replacements[i] as ReplacementRefundRow;

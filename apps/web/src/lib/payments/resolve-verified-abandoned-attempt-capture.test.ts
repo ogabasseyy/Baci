@@ -81,6 +81,28 @@ describe('resolveVerifiedAbandonedAttemptCapture', () => {
     expect(hold).not.toHaveBeenCalled();
   });
 
+  it('holds a completed retry instead of re-finalizing a partially paid order', async () => {
+    const s = summary();
+
+    await resolveVerifiedAbandonedAttemptCapture({
+      attempt: { ...attempt, status: 'completed' },
+      deadlineMs: 1_180_000,
+      hold,
+      mismatchKind: null,
+      paidOrderStatus: 'partially_paid',
+      finalizePayment: vi.fn(),
+      result,
+      scheduleAfter,
+      summary: s,
+      supabase,
+    });
+
+    expect(mocks.finalizePartiallyPaidAbandonedAttempt).not.toHaveBeenCalled();
+    expect(mocks.fileDuplicatePaymentCapture).not.toHaveBeenCalled();
+    expect(hold).toHaveBeenCalledWith('completed_capture_unexpected');
+    expect(s.failed).toBe(true);
+  });
+
   it('files a duplicate review for a capture on a paid order', async () => {
     const s = summary();
 

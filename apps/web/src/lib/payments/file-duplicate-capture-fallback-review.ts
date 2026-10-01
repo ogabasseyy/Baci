@@ -1,16 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { clearDuplicateCaptureReviewPending } from './duplicate-capture-review-pending';
 import type { DuplicateCaptureEvidence } from './file-duplicate-payment-capture';
 
 /**
  * Fallback duplicate-capture filing for post-completion failures. The
  * primary filer already flipped the attempt row to completed, so the
- * status-guarded sweep hold persists nothing and no sweep reselects
- * the row — without this direct insert the captured extra payment
- * permanently loses its operations review. Mirrors the primary filer's
- * row so the fallback review is indistinguishable in the ops queue.
- * Returns true when the evidence is durable. No stamp attempt: the
- * stamp only excludes rows from sweeps, which already exclude
- * completed rows.
+ * status-guarded sweep hold persists nothing and the main sweep
+ * queries reselect nothing — without this direct insert the captured
+ * extra payment keeps only its retry-marker rescan for an operations
+ * review. Mirrors the primary filer's row so the fallback review is
+ * indistinguishable in the ops queue. Returns true when the evidence
+ * is durable. No stamp attempt: the stamp only excludes rows from
+ * sweeps, which already exclude completed rows.
  */
 async function tryMergeFallbackCaptureEvidence(
   supabase: SupabaseClient,
@@ -77,7 +78,10 @@ export async function fileDuplicateCaptureFallbackReview({
     .eq('txn_id', attempt.id)
     .is('resolved_at', null)
     .maybeSingle();
-  if (!lookupError && existing) return true;
+  if (!lookupError && existing) {
+    await clearDuplicateCaptureReviewPending(supabase, attempt.id);
+    return true;
+  }
   const detail = evidence.mismatchKind
     ? ` with ${evidence.mismatchKind} (${evidence.mismatchDetail ?? 'provider evidence differs'})`
     : '';
@@ -103,7 +107,10 @@ export async function fileDuplicateCaptureFallbackReview({
     },
   };
   const { error } = await supabase.from('reconciliation_review').insert(row);
-  if (!error) return true;
+  if (!error) {
+    await clearDuplicateCaptureReviewPending(supabase, attempt.id);
+    return true;
+  }
   if ((error as { code?: string }).code !== '23505') return false;
   // The conflict is either this order's open review or another order's
   // ref slot. A second order-level insert would hit the open-by-order
@@ -113,6 +120,7 @@ export async function fileDuplicateCaptureFallbackReview({
   if (
     await tryMergeFallbackCaptureEvidence(supabase, attempt, evidence, detail)
   ) {
+    await clearDuplicateCaptureReviewPending(supabase, attempt.id);
     return true;
   }
   // No open review for this order: the ref slot is owned by another
@@ -123,5 +131,7 @@ export async function fileDuplicateCaptureFallbackReview({
   const { error: nullRefError } = await supabase
     .from('reconciliation_review')
     .insert({ ...row, paystack_ref: null });
-  return !nullRefError;
+  if (nullRefError) return false;
+  await clearDuplicateCaptureReviewPending(supabase, attempt.id);
+  return true;
 }

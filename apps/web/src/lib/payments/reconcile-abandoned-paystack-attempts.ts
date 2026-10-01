@@ -19,7 +19,7 @@ interface PendingAttempt {
   order_id: string;
   paid_order?: { payment_status: string } | Array<{ payment_status: string }>;
   platform_fee: number | null;
-  status: 'pending' | 'processing';
+  status: 'pending' | 'processing' | 'completed';
 }
 
 export interface AbandonedPaystackAttemptSummary {
@@ -67,7 +67,7 @@ export async function reconcileAbandonedPaystackAttempts({
   // would inject dots the OR parser reads as condition separators.
   const orCutoff = `${cutoff.split('.')[0]}Z`;
   const orRecheckCutoff = `${recheckCutoff.split('.')[0]}Z`;
-  const { data: attempts, error: lookupError } = await supabase
+  const { data: mainAttempts, error: lookupError } = await supabase
     .from('transactions')
     .select(
       'id, order_id, merchant_id, gateway_reference, amount, currency, status, metadata, platform_fee, paid_order:orders!transactions_order_id_fkey!inner(payment_status)'
@@ -95,7 +95,37 @@ export async function reconcileAbandonedPaystackAttempts({
     );
   }
 
-  for (const attempt of (attempts ?? []) as PendingAttempt[]) {
+  // Filing-only retries: completed captures whose duplicate filings
+  // both failed carry the retry marker. Unstamped only, and never on
+  // partially-paid orders — a completed row must not re-enter the
+  // partial-payment finalizer.
+  const { data: pendingRetries, error: pendingError } = await supabase
+    .from('transactions')
+    .select(
+      'id, order_id, merchant_id, gateway_reference, amount, currency, status, metadata, platform_fee, paid_order:orders!transactions_order_id_fkey!inner(payment_status)'
+    )
+    .eq('transaction_type', 'payment')
+    .eq('gateway', 'paystack')
+    .eq('status', 'completed')
+    .neq('paid_order.payment_status', 'partially_paid')
+    .not('order_id', 'is', null)
+    .not('gateway_reference', 'is', null)
+    .is('metadata->abandoned_sweep_resolution', null)
+    .eq('metadata->>duplicate_capture_review_pending', 'true')
+    .or(`created_at.lt.${orCutoff},created_at.is.null`)
+    .or(`updated_at.lt.${orRecheckCutoff},updated_at.is.null`)
+    .order('updated_at', { ascending: true })
+    .limit(limit);
+
+  if (pendingError) {
+    throw new Error(
+      `pending_paystack_attempt_lookup_failed: ${pendingError.message}`
+    );
+  }
+
+  const attempts = [...(mainAttempts ?? []), ...(pendingRetries ?? [])];
+
+  for (const attempt of attempts as PendingAttempt[]) {
     // Stop starting attempts at the pass deadline: serial provider
     // verification can outlast the invocation budget, and unstarted rows
     // stay eligible for the next sweep.

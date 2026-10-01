@@ -62,6 +62,54 @@ describe('extractDuplicateCaptureEvidence', () => {
     ).toBeNull();
   });
 
+  it('attributes a missing Paystack charge id to the known gateway reference', () => {
+    expect(
+      extractDuplicateCaptureEvidence(
+        'paystack',
+        {
+          amount: 5829060,
+          status: 'success',
+        },
+        'BAC-REF'
+      )
+    ).toEqual({
+      providerAmount: 5829060,
+      providerReference: 'BAC-REF',
+      providerStatus: 'success',
+    });
+  });
+
+  it('prefers the response charge id over the fallback reference', () => {
+    expect(
+      extractDuplicateCaptureEvidence(
+        'paystack',
+        {
+          amount: 5829060,
+          id: 123456789,
+          status: 'success',
+        },
+        'BAC-REF'
+      )
+    ).toEqual({
+      providerAmount: 5829060,
+      providerReference: '123456789',
+      providerStatus: 'success',
+    });
+  });
+
+  it('returns null when the amount is unusable even with a fallback reference', () => {
+    expect(
+      extractDuplicateCaptureEvidence(
+        'paystack',
+        {
+          amount: 0,
+          status: 'success',
+        },
+        'BAC-REF'
+      )
+    ).toBeNull();
+  });
+
   it('returns null when the Juicyway session has no settled payment', () => {
     expect(
       extractDuplicateCaptureEvidence('juicyway', {

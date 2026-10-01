@@ -38,7 +38,7 @@ export async function resolveVerifiedAbandonedAttemptCapture({
     metadata: Record<string, unknown> | null;
     order_id: string;
     platform_fee: number | null;
-    status: 'pending' | 'processing';
+    status: 'pending' | 'processing' | 'completed';
   };
   deadlineMs?: number;
   finalizePayment?: typeof finalizeOrderGatewayPayment;
@@ -51,13 +51,26 @@ export async function resolveVerifiedAbandonedAttemptCapture({
   supabase: SupabaseClient;
 }): Promise<void> {
   if (!mismatchKind && paidOrderStatus === 'partially_paid') {
+    if (attempt.status === 'completed') {
+      // Defensive: the retry sweep never selects partially-paid orders
+      // for completed rows, so re-finalizing one would misroute
+      // settled funds. Hold instead of filing or finalizing.
+      summary.failed = true;
+      await hold('completed_capture_unexpected');
+      return;
+    }
     if (!finalizePayment) {
       summary.failed = true;
       await hold('payment_finalizer_unavailable');
       return;
     }
+    // Proven non-completed by the guard above; the finalizer only
+    // admits pending/processing rows.
+    const finalizableAttempt = attempt as Omit<typeof attempt, 'status'> & {
+      status: 'pending' | 'processing';
+    };
     await finalizePartiallyPaidAbandonedAttempt({
-      attempt,
+      attempt: finalizableAttempt,
       deadlineMs,
       finalizePayment,
       hold,

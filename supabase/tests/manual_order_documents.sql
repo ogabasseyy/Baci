@@ -3,8 +3,20 @@ CREATE FUNCTION pg_temp.assert_true(ok boolean, label text) RETURNS void LANGUAG
 -- The enqueue triggers ship disabled so rows cannot enqueue while an older
 -- cron binary is live; the enable step below mirrors the documented rollout.
 SELECT pg_temp.assert_true((SELECT count(*) = 2 FROM pg_trigger WHERE tgname IN ('enqueue_manual_documents_after_items', 'enqueue_manual_document_after_order_update') AND tgenabled = 'D'), 'enqueue triggers ship disabled');
+-- An eligible order created while the triggers are disabled (the rollout
+-- window) enqueues nothing until the enable step backfills it.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000009', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'paid', 100);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000009', 'Device', 1, 100);
+SELECT pg_temp.assert_true((SELECT count(*) = 0 FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000009'), 'disabled window enqueues nothing yet');
 ALTER TABLE public.order_items ENABLE TRIGGER enqueue_manual_documents_after_items;
 ALTER TABLE public.orders ENABLE TRIGGER enqueue_manual_document_after_order_update;
+SELECT pg_temp.assert_true((SELECT count(*) FROM (SELECT private.enqueue_manual_order_document(o.id) FROM public.orders AS o WHERE o.manual_document_notification_eligible AND NOT EXISTS (SELECT 1 FROM public.order_notification_outbox AS n WHERE n.order_id = o.id AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt'))) AS backfilled) = 1, 'enable step backfills exactly the window order');
+SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000009' AND event_type = 'manual_order_receipt'), 'window order gets its receipt after enable');
+-- The window case is proven; remove its row so the suite below keeps its
+-- empty-outbox precondition for global count assertions.
+DELETE FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000009';
+SELECT pg_temp.assert_true((SELECT count(*) = 0 FROM public.order_notification_outbox), 'window test leaves a clean outbox');
 INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, customer_name, order_number, payment_status, amount_paid)
 VALUES ('10000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'Buyer', 'PAID', 'paid', 100);
 SELECT pg_temp.assert_true((SELECT count(*) = 0 FROM public.order_notification_outbox), 'no email before items are saved');

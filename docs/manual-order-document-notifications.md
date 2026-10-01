@@ -69,11 +69,26 @@ customers to verify their purchase email address and retry the same link.
 The enqueue triggers ship DISABLED, so migrations and the web worker can
 roll out in either order: no manual rows exist until the triggers are
 enabled. After the new worker is deployed and verified draining batches
-with no 5xx, enable the triggers (or ship a follow-up migration that does):
+with no 5xx, run the enable step below as one transaction (or ship a
+follow-up migration that does the same). The backfill is load-bearing:
+enabling a trigger is not retroactive, so eligible orders created between
+the migration commit and this step would otherwise silently miss their
+documents. The backfill is re-runnable — orders that already have a manual
+row are skipped, and the enqueue function re-validates all eligibility:
 
 ```sql
 ALTER TABLE public.order_items ENABLE TRIGGER enqueue_manual_documents_after_items;
 ALTER TABLE public.orders ENABLE TRIGGER enqueue_manual_document_after_order_update;
+SELECT count(*) FROM (
+  SELECT private.enqueue_manual_order_document(o.id)
+  FROM public.orders AS o
+  WHERE o.manual_document_notification_eligible
+    AND NOT EXISTS (
+      SELECT 1 FROM public.order_notification_outbox AS n
+      WHERE n.order_id = o.id
+        AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
+    )
+) AS backfilled;
 ```
 
 Enabling while an old worker revision is still live head-of-line-blocks

@@ -70,14 +70,15 @@ function createOptions(
     preferredGateway: null,
     trackingToken: null,
     merchantSlugFromResume: null,
+  },
+  identity: CheckoutPaymentExecutionOptions['identity'] = {
+    merchantId: 'merchant-1',
+    merchantSlug: 'test-store',
+    currencyCode: 'NGN',
   }
 ): CheckoutPaymentExecutionOptions {
   return {
-    identity: {
-      merchantId: 'merchant-1',
-      merchantSlug: 'test-store',
-      currencyCode: 'NGN',
-    },
+    identity,
     form: {
       account: {
         createAccount: false,
@@ -248,4 +249,39 @@ describe('useCheckoutPaymentExecution', () => {
     act(() => vi.advanceTimersByTime(500));
     expect(options.cart.clearCart).toHaveBeenCalledOnce();
   });
+
+  it.each([null, undefined])(
+    'keeps unresolved merchant identity safe and preserves submission guards (%s)',
+    (merchantId) => {
+      const options = createOptions(undefined, {
+        merchantId,
+        merchantSlug: undefined,
+        currencyCode: 'NGN',
+      });
+      const { result } = renderHook(() => useCheckoutPaymentExecution(options));
+      const submission = vi.mocked(useCheckoutOrderSubmission).mock.calls[0]?.[0];
+
+      expect(vi.mocked(useStorefrontCustomerSession)).toHaveBeenCalledWith(undefined);
+      expect(vi.mocked(useCheckoutCryptoSession)).toHaveBeenCalledWith(
+        expect.objectContaining({ merchantId })
+      );
+      expect(vi.mocked(useWalletFundedBankTransfer)).toHaveBeenCalledWith(
+        expect.objectContaining({ merchantId: undefined, merchantSlug: undefined })
+      );
+      expect(submission?.account.waitForResolvedCustomerAuth).toBe(
+        waitForResolvedCustomerAuth
+      );
+      expect(submission?.processing).toBe(options.attempt.processing);
+      expect(submission?.processing.tryBeginSubmission).toBe(
+        options.attempt.processing.tryBeginSubmission
+      );
+      expect(submission?.processing.releaseSubmission).toBe(
+        options.attempt.processing.releaseSubmission
+      );
+      expect(submission?.processing.handleSubmissionError).toBe(
+        options.attempt.processing.handleSubmissionError
+      );
+      expect(result.current.handlePlaceOrder).toBe(handlePlaceOrder);
+    }
+  );
 });

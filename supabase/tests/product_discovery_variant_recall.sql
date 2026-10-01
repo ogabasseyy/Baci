@@ -74,11 +74,11 @@ BEGIN
     RAISE EXCEPTION 'discovery metadata validator rejected Number.MAX_VALUE';
   END IF;
   IF discovery.product_discovery_metadata_valid(
-    '{"model":"' || repeat('😀', 100) || '"}'::jsonb) THEN
+    ('{"model":"' || repeat('😀', 100) || '"}')::jsonb) THEN
     RAISE EXCEPTION 'discovery metadata validator accepted 200 UTF-16 units';
   END IF;
   IF NOT discovery.product_discovery_metadata_valid(
-    '{"model":"' || repeat('😀', 50) || '"}'::jsonb) THEN
+    ('{"model":"' || repeat('😀', 50) || '"}')::jsonb) THEN
     RAISE EXCEPTION 'discovery metadata validator rejected 100 UTF-16 units';
   END IF;
 END;

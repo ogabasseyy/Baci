@@ -10,7 +10,7 @@ describe('paystack cancellation pending replay sources', () => {
   it('pins each migration to its checked-in bytes', async () => {
     const rows =
       PAYSTACK_CANCELLATION_PENDING_REPLAY_SOURCE_ROWS.trim().split('\n');
-    expect(rows).toHaveLength(26);
+    expect(rows).toHaveLength(28);
     const filenames = rows.map((row) => row.split(' ')[1]);
     expect(new Set(filenames).size).toBe(filenames.length);
 

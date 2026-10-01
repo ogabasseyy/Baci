@@ -307,5 +307,14 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
     repositoryPath:
       'supabase/migrations/20260928182800_paystack_refund_watch_sticky_verdict.sql',
     sha256: 'ffae22f487f1fb67f8a20c6e9792f893baa6a79bbdfc0c3175c0de7b5c442f36',
+  },  {
+    repositoryPath:
+      'supabase/migrations/20260928182900_file_recovery_review_preserve_markers.sql',
+    sha256: 'e96cfbe6edc5472c00f7353e57567c7806e0744df66265370a898d0e43dcbea4',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928183000_flag_over_refunds_completed_leg_only.sql',
+    sha256: '39a01a3c0c6566ae34f4acf6919fb404d570d7f04182dc69b20e7213ed084f99',
   },
 ];

@@ -1,6 +1,6 @@
 import { EMAIL_ATTEMPTS_PER_SENDER } from '@/lib/orders/execute-customer-email-cancellation-side-effect';
 import type { OrderCancellationSideEffectStep } from '@/lib/orders/run-order-cancellation-side-effect';
-import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail';
+import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail-send-budget';
 
 export interface CancellationDrainCandidateRow {
   attempts: number;

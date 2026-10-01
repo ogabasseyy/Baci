@@ -8,7 +8,7 @@ import type {
 import { DeliveryUncertainError } from '@/lib/orders/run-order-cancellation-side-effect';
 import { assertRefundNotificationSendTime } from '@/lib/payments/assert-refund-notification-send-time';
 import { awaitRefundNotificationDeadline } from '@/lib/payments/await-refund-notification-deadline';
-import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail';
+import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail-send-budget';
 
 // One transport attempt per sender: the cancellation phase cannot fit a
 // full retry loop, so the next cron tick retries instead of in-process

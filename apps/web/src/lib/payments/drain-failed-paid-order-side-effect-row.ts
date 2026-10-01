@@ -11,7 +11,7 @@ import {
   isTerminalGatewayVerificationReason,
   verifyGatewayCharge,
 } from '@/lib/payments/verify-gateway-charge';
-import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail';
+import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail-send-budget';
 
 // One attempt per sender: pass 2's 90s incremental share cannot fit
 // the default four-attempt loop, and the drain retries failures on

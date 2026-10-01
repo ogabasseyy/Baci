@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail';
+import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail-send-budget';
 import { assertRefundNotificationSendTime } from './assert-refund-notification-send-time';
 import { awaitRefundNotificationDeadline } from './await-refund-notification-deadline';
 import { fileDuplicateCaptureFallbackReview } from './file-duplicate-capture-fallback-review';

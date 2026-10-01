@@ -1,18 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({
-  finalizeOrderGatewayPayment: vi.fn(),
-}));
-
-vi.mock('./finalize-order-gateway-payment', () => ({
-  finalizeOrderGatewayPayment: mocks.finalizeOrderGatewayPayment,
-}));
-
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
 }));
 
-import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail';
+import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail-send-budget';
 import { finalizeVerifiedWedge } from './finalize-verified-wedge';
 
 const candidate = {
@@ -43,30 +35,37 @@ function summary() {
 describe('finalizeVerifiedWedge email budget admission', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.finalizeOrderGatewayPayment.mockResolvedValue({
+  });
+
+  function authorities() {
+    const finalizePayment = vi.fn().mockResolvedValue({
       kind: 'completed',
       orderNumber: 'ORD-1',
     });
-  });
+    return { finalizePayment, stampResolution: vi.fn() };
+  }
 
   it('stops without starting when the pass cannot fit the single-attempt email budget', async () => {
     const singleAttemptBudget = zeptomailSendAdmissionBudgetMs(1);
     expect(singleAttemptBudget - 1000).toBeGreaterThan(20_000);
     const deadlineMs = Date.now() + singleAttemptBudget - 1000;
+    const { finalizePayment } = authorities();
 
     const result = await finalizeVerifiedWedge({
       candidate: { ...candidate },
       deadlineMs,
+      finalizePayment,
       scheduleAfter: (task) => {
         void task();
       },
+      stampResolution: vi.fn(),
       summary: summary(),
       supabase: {} as never,
       verification: { amount: 5829060, ok: true, response: {} },
     });
 
     expect(result).toBe('stop');
-    expect(mocks.finalizeOrderGatewayPayment).not.toHaveBeenCalled();
+    expect(finalizePayment).not.toHaveBeenCalled();
   });
 
   it('admits a 90s pass share with the single-attempt cap', async () => {
@@ -75,20 +74,23 @@ describe('finalizeVerifiedWedge email budget admission', () => {
     expect(zeptomailSendAdmissionBudgetMs()).toBeGreaterThan(90_000);
     expect(zeptomailSendAdmissionBudgetMs(1)).toBeLessThanOrEqual(90_000);
     const deadlineMs = Date.now() + 90_000;
+    const { finalizePayment } = authorities();
 
     const result = await finalizeVerifiedWedge({
       candidate: { ...candidate },
       deadlineMs,
+      finalizePayment,
       scheduleAfter: (task) => {
         void task();
       },
+      stampResolution: vi.fn(),
       summary: summary(),
       supabase: {} as never,
       verification: { amount: 5829060, ok: true, response: {} },
     });
 
     expect(result).toBe('finalized');
-    expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledWith(
+    expect(finalizePayment).toHaveBeenCalledWith(
       expect.objectContaining({
         emailMaxAttemptsPerSender: 1,
         fallbackDeadlineMs: deadlineMs - 10_000,

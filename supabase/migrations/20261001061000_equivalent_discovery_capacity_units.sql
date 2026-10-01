@@ -48,9 +48,12 @@ AS $$
   -- branches retrieve (websearch_to_tsquery ignores grouping parentheses)
   -- instead of requiring every token in one product. Rank by text relevance
   -- because callers treat array position as reciprocal rank. The builder caps
-  -- emitted terms, so no truncation can split the syntax.
+  -- emitted terms, so no truncation can split the syntax; the length gate only
+  -- rejects oversized non-builder input with an empty set instead of paying
+  -- unbounded parse cost (worst-case schema-bound builder output is ~13KB).
   SELECT p.id, count(*) OVER () FROM public.products p
   WHERE p.merchant_id = merchant_id_param AND p.status = 'active'
+    AND pg_catalog.char_length(query_text) <= 16000
     AND public.product_discovery_search_document_v2(p.name, p.brand, p.category,
       p.description, p.discovery_metadata)
       @@ pg_catalog.to_tsquery('simple'::regconfig, query_text)

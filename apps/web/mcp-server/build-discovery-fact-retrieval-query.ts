@@ -7,6 +7,9 @@ const NUMERIC_UNITS: Record<string, string> = {
 // tsquery syntax. Dropping trailing terms only broadens recall; the structured
 // matcher still enforces every constraint.
 const MAX_TERMS_PER_GROUP = 12;
+// Plain-language connectives are required lexemes under to_tsquery (only '|'
+// is OR), so the fallback path drops them instead of collapsing recall.
+const FALLBACK_STOPWORDS = new Set(['or', 'and', 'a', 'the']);
 
 function sanitizeTerm(value: string): string[] {
   return value.toLowerCase().replace(/[^\p{L}\p{N}.\s]+/gu, ' ').split(/\s+/).filter(Boolean);
@@ -48,6 +51,6 @@ export function buildDiscoveryFactRetrievalQuery(intent: McpDiscoveryIntent, fal
     if (group) groups.push(group);
   }
   if (groups.length > 0) return groups.join(' | ');
-  const fallback = groupQuery(sanitizeTerm(fallbackQuery));
+  const fallback = groupQuery(sanitizeTerm(fallbackQuery).filter((term) => !FALLBACK_STOPWORDS.has(term)));
   return fallback ?? '(a & !a)';
 }

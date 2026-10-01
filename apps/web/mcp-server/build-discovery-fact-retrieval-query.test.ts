@@ -25,9 +25,10 @@ it('emits unit-suffixed equality values and omits range bounds', () => {
 });
 
 it('falls back to sanitized shopper wording and never emits empty syntax', () => {
-  expect(buildDiscoveryFactRetrievalQuery(intent({}), 'Samsung or Google 256GB?')).toBe('(samsung & or & google & 256gb)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({}), 'Samsung or Google 256GB?')).toBe('(samsung & google & 256gb)');
   expect(buildDiscoveryFactRetrievalQuery(intent({}), '!!!')).toBe('(a & !a)');
   expect(buildDiscoveryFactRetrievalQuery(intent({}))).toBe('(a & !a)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({}), 'or and the')).toBe('(a & !a)');
 });
 
 it('retains Unicode identity terms while stripping query operators', () => {

@@ -4,16 +4,16 @@ import { buildDiscoveryFactRetrievalQuery } from './build-discovery-fact-retriev
 
 const intent = (...alternatives: McpDiscoveryIntent['alternatives']): McpDiscoveryIntent => ({ alternatives });
 
-it('builds fact retrieval text from alternatives with brand OR semantics', () => {
+it('builds grouped tsquery text with brand alternation', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({
     product_type: 'phone', brands: ['Samsung', 'Google'],
     attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }],
-  }))).toBe('phone Samsung OR Google 256GB');
+  }))).toBe('(phone & (samsung | google) & 256gb)');
 });
 
-it('joins alternatives with OR and sanitizes tsquery operators', () => {
+it('joins alternatives with OR and strips tsquery operators from terms', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'ZX-42' }, { product_type: 'charger' })))
-    .toBe('ZX 42 OR charger');
+    .toBe('(zx & 42) | (charger)');
 });
 
 it('emits unit-suffixed equality values and omits range bounds', () => {
@@ -21,10 +21,11 @@ it('emits unit-suffixed equality values and omits range bounds', () => {
     { key: 'power_w', operator: 'eq', value: 30 },
     { key: 'storage_gb', operator: 'gte', value: 256 },
     { key: 'color', operator: 'eq', value: 'black' },
-  ] }))).toBe('30W black');
+  ] }))).toBe('(30w & black)');
 });
 
-it('returns empty text when no alternative names a retrieval term', () => {
-  expect(buildDiscoveryFactRetrievalQuery(intent({}))).toBe('');
-  expect(buildDiscoveryFactRetrievalQuery(intent({ attributes: [{ key: 'ram_gb', operator: 'gte', value: 8 }] }))).toBe('');
+it('falls back to sanitized shopper wording and never emits empty syntax', () => {
+  expect(buildDiscoveryFactRetrievalQuery(intent({}), 'Samsung or Google 256GB?')).toBe('(samsung & or & google & 256gb)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({}), '!!!')).toBe('(a & !a)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({}))).toBe('(a & !a)');
 });

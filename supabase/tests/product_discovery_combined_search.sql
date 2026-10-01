@@ -60,7 +60,7 @@ DECLARE
 BEGIN
   SELECT array_agg(product_id) INTO or_ids
   FROM public.search_product_discovery_facts('cb58d110-0000-4000-8000-000000000201',
-    'phone Samsung OR Google 256GB');
+    'phone & (samsung | google) & 256gb');
   IF NOT (or_ids @> ARRAY['cb58d110-0000-4000-8000-000000000202', 'cb58d110-0000-4000-8000-000000000203']::uuid[]) THEN
     RAISE EXCEPTION 'Fact retrieval dropped an OR branch';
   END IF;

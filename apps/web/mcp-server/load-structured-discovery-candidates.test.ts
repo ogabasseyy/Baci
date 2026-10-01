@@ -125,9 +125,9 @@ describe('loadStructuredDiscoveryCandidates', () => {
   it('sends the structured fact query to the facts index instead of shopper wording', async () => {
     const fixture = setup({ lexicalPages: [[]], products: [] });
     await loadStructuredDiscoveryCandidates({ query: 'Samsung or Google 256GB under budget',
-      factQuery: 'phone Samsung OR Google 256GB', merchantId: 'merchant-1', supabase: fixture.supabase });
+      factQuery: '(phone & (samsung | google) & 256gb)', merchantId: 'merchant-1', supabase: fixture.supabase });
     expect(fixture.rpc).toHaveBeenCalledWith('search_product_discovery_facts', {
-      merchant_id_param: 'merchant-1', query_text: 'phone Samsung OR Google 256GB', result_limit: 100, result_offset: 0,
+      merchant_id_param: 'merchant-1', query_text: '(phone & (samsung | google) & 256gb)', result_limit: 100, result_offset: 0,
     });
   });
 

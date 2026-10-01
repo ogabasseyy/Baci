@@ -3,38 +3,51 @@ import type { McpDiscoveryIntent } from '../src/schemas/mcp-discovery-intent';
 const NUMERIC_UNITS: Record<string, string> = {
   storage_gb: 'GB', ram_gb: 'GB', power_w: 'W', screen_inches: 'inch', refresh_hz: 'Hz',
 };
+// Retrieval text stays small so it never needs truncation, which could split
+// tsquery syntax. Dropping trailing terms only broadens recall; the structured
+// matcher still enforces every constraint.
+const MAX_TERMS_PER_GROUP = 12;
 
-function sanitizeTerm(value: string): string {
-  return value.replace(/[^a-zA-Z0-9.\s]+/g, ' ').replace(/\s+/g, ' ').trim();
+function sanitizeTerm(value: string): string[] {
+  return value.toLowerCase().replace(/[^a-z0-9.\s]+/g, ' ').split(/\s+/).filter(Boolean);
 }
 
-function attributeTerm(key: string, value: string | number): string | undefined {
+function attributeTerms(key: string, value: string | number): string[] {
   if (typeof value === 'number') {
-    if (!Number.isFinite(value) || value < 0) return undefined;
+    if (!Number.isFinite(value) || value < 0) return [];
     const unit = NUMERIC_UNITS[key];
-    return unit ? `${value}${unit}` : String(value);
+    return [`${value}${unit ?? ''}`.toLowerCase()];
   }
-  return sanitizeTerm(value) || undefined;
+  return sanitizeTerm(value);
 }
 
-/** Retrieval text for the facts index, built from structured alternatives so
- * shopper wording never constrains candidate recall. Emitted ORs require
- * websearch_to_tsquery on the SQL side. Range bounds are omitted: retrieval
- * must not narrow on them, the matcher enforces ranges. */
-export function buildDiscoveryFactRetrievalQuery(intent: McpDiscoveryIntent): string {
-  const groups = intent.alternatives.map((alternative) => {
+function groupQuery(terms: string[]): string | undefined {
+  if (terms.length === 0) return undefined;
+  return `(${terms.slice(0, MAX_TERMS_PER_GROUP).join(' & ')})`;
+}
+
+/** tsquery text for the facts index, built from structured alternatives so
+ * shopper wording never constrains candidate recall. Groups join with OR and
+ * terms with AND, matching the matcher's branch semantics; range bounds are
+ * omitted because the matcher, not retrieval, enforces ranges. */
+export function buildDiscoveryFactRetrievalQuery(intent: McpDiscoveryIntent, fallbackQuery = ''): string {
+  const groups: string[] = [];
+  for (const alternative of intent.alternatives) {
     const terms: string[] = [];
-    if (alternative.product_type) terms.push(sanitizeTerm(alternative.product_type));
-    const brands = (alternative.brands ?? []).map(sanitizeTerm).filter(Boolean);
-    if (brands.length > 0) terms.push(brands.join(' OR '));
-    if (alternative.model) terms.push(sanitizeTerm(alternative.model));
-    if (alternative.compatible_with) terms.push(sanitizeTerm(alternative.compatible_with));
+    if (alternative.product_type) terms.push(...sanitizeTerm(alternative.product_type));
+    const brands = (alternative.brands ?? []).flatMap(sanitizeTerm);
+    if (brands.length === 1) terms.push(brands[0]);
+    else if (brands.length > 1) terms.push(`(${brands.join(' | ')})`);
+    if (alternative.model) terms.push(...sanitizeTerm(alternative.model));
+    if (alternative.compatible_with) terms.push(...sanitizeTerm(alternative.compatible_with));
     for (const attribute of alternative.attributes ?? []) {
       if (attribute.operator !== 'eq') continue;
-      const term = attributeTerm(attribute.key, attribute.value);
-      if (term) terms.push(term);
+      terms.push(...attributeTerms(attribute.key, attribute.value));
     }
-    return terms.filter(Boolean).join(' ');
-  }).filter(Boolean);
-  return groups.join(' OR ');
+    const group = groupQuery(terms);
+    if (group) groups.push(group);
+  }
+  if (groups.length > 0) return groups.join(' | ');
+  const fallback = groupQuery(sanitizeTerm(fallbackQuery));
+  return fallback ?? '(a & !a)';
 }

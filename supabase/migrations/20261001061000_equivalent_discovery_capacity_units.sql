@@ -44,17 +44,19 @@ CREATE OR REPLACE FUNCTION public.search_product_discovery_facts(
 ) RETURNS TABLE (product_id uuid, total_count bigint)
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path = ''
 AS $$
-  -- query_text carries websearch syntax built from structured alternatives, so OR
-  -- branches retrieve instead of requiring every token in one product. Rank by
-  -- text relevance because callers treat array position as reciprocal rank.
+  -- query_text carries tsquery syntax built from structured alternatives, so OR
+  -- branches retrieve (websearch_to_tsquery ignores grouping parentheses)
+  -- instead of requiring every token in one product. Rank by text relevance
+  -- because callers treat array position as reciprocal rank. The builder caps
+  -- emitted terms, so no truncation can split the syntax.
   SELECT p.id, count(*) OVER () FROM public.products p
   WHERE p.merchant_id = merchant_id_param AND p.status = 'active'
     AND public.product_discovery_search_document_v2(p.name, p.brand, p.category,
       p.description, p.discovery_metadata)
-      @@ pg_catalog.websearch_to_tsquery('simple'::regconfig, left(query_text, 100))
+      @@ pg_catalog.to_tsquery('simple'::regconfig, query_text)
   ORDER BY pg_catalog.ts_rank(public.product_discovery_search_document_v2(p.name, p.brand,
       p.category, p.description, p.discovery_metadata),
-    pg_catalog.websearch_to_tsquery('simple'::regconfig, left(query_text, 100))) DESC, p.id
+    pg_catalog.to_tsquery('simple'::regconfig, query_text)) DESC, p.id
   LIMIT least(greatest(coalesce(result_limit, 100), 1), 100)
   OFFSET least(greatest(coalesce(result_offset, 0), 0), 500);
 $$;

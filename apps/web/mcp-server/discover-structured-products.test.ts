@@ -267,7 +267,7 @@ describe('discoverStructuredProducts', () => {
       intent({ product_type: 'phone', brands: ['Samsung', 'Google'], attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }] }),
       { query: 'Samsung or Google 256GB under budget' }));
     expect(fixture.rpc).toHaveBeenCalledWith('search_product_discovery_facts', expect.objectContaining({
-      query_text: 'phone Samsung OR Google 256GB',
+      query_text: '(phone & (samsung | google) & 256gb)',
     }));
   });
 

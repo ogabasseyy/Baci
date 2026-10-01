@@ -109,12 +109,12 @@ CREATE TRIGGER enqueue_manual_document_after_order_update
   AFTER UPDATE OF payment_status, amount_paid, total, customer_email, customer_id, recorded_by_user_id, import_job_id, external_source, shipping_status ON public.orders
   FOR EACH ROW EXECUTE FUNCTION private.enqueue_manual_document_after_order_update();
 
--- Ship disabled: enabling in the same migration would let rows enqueue while
--- an older cron binary (whole-batch parse) is still live, stalling the queue
--- with 500s. Enable only after the new worker is deployed and verified (see
--- docs/manual-order-document-notifications.md "Activation"), or via a
--- follow-up migration that also backfills the rollout window; until then no
--- manual rows are produced.
+-- Ship disabled: enabling here would let rows enqueue while an older cron
+-- binary (whole-batch parse) is still live, stalling the queue with 500s.
+-- Activation is the deferred postdeploy migration 20260930160300, which the
+-- deployer applies after draining the previous revision; until then no
+-- manual rows are produced (see docs/manual-order-document-notifications.md
+-- "Activation").
 ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_items;
 ALTER TABLE public.orders DISABLE TRIGGER enqueue_manual_document_after_order_update;
 

@@ -69,38 +69,24 @@ customers to verify their purchase email address and retry the same link.
 
 ## Activation
 
-The enqueue triggers ship DISABLED, so migrations and the web worker can
-roll out in either order: no manual rows exist until the triggers are
-enabled. After the new worker is deployed and verified draining batches
-with no 5xx, run the enable step below as one transaction (or ship a
-follow-up migration that does the same). The backfill is load-bearing:
-enabling a trigger is not retroactive, so eligible orders created between
-the migration commit and this step would otherwise silently miss their
-documents. The backfill is re-runnable — orders that already have a manual
-row are skipped, and the enqueue function re-validates all eligibility:
+The enqueue triggers ship DISABLED and are enabled automatically: migration
+20260930160300 is deferred to the postdeploy phase, so the deployer applies
+it after the new web revision is live and the previous revision has drained
+(305s), when no old cron binary with the all-or-nothing batch parser can
+still claim. The same transaction backfills eligible orders created while
+the triggers were disabled — enabling is not retroactive, so without the
+backfill those orders would silently miss their documents. The backfill is
+re-runnable: orders that already have a manual row are skipped, and the
+enqueue function re-validates all eligibility. In environments without the
+deploy pipeline, run the statements in 20260930160300 manually as one
+transaction after verifying the new worker drains batches with no 5xx.
 
-```sql
-ALTER TABLE public.order_items ENABLE TRIGGER enqueue_manual_documents_after_items;
-ALTER TABLE public.orders ENABLE TRIGGER enqueue_manual_document_after_order_update;
-SELECT count(*) FROM (
-  SELECT private.enqueue_manual_order_document(o.id)
-  FROM public.orders AS o
-  WHERE o.manual_document_notification_eligible
-    AND NOT EXISTS (
-      SELECT 1 FROM public.order_notification_outbox AS n
-      WHERE n.order_id = o.id
-        AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
-    )
-) AS backfilled;
-```
-
-Enabling while an old worker revision is still live head-of-line-blocks
-shipping notifications: old revisions 500 the whole claimed batch
+This ordering matters because old revisions 500 the whole claimed batch
 (including unrelated shipped/delivered rows, which then wait for lease
-expiry) when a batch contains a manual event type. Drain outbox batches
-with the new code only. Watch the cron 5xx rate and outbox lock age while
-the new worker rolls out; any `manual_order_*` 500 means an old revision is
-still draining, so hold further deploys until the batches clear. No new email provider,
+expiry) when a batch contains a manual event type. Watch the cron 5xx rate
+and outbox lock age while the new worker rolls out; any `manual_order_*`
+500 means an old revision is still draining, so hold further deploys until
+the batches clear. No new email provider,
 cron schedule, app release or environment variable is required. Use a disposable
 staging merchant and test inbox to verify actual provider acceptance, PDF rendering,
 verified sign-in and account receipt access before a production release. No live

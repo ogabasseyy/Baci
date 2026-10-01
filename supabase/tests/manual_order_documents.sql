@@ -9,9 +9,10 @@ INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, cu
 VALUES ('10000000-0000-4000-8000-000000000009', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'paid', 100);
 INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000009', 'Device', 1, 100);
 SELECT pg_temp.assert_true((SELECT count(*) = 0 FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000009'), 'disabled window enqueues nothing yet');
-ALTER TABLE public.order_items ENABLE TRIGGER enqueue_manual_documents_after_items;
-ALTER TABLE public.orders ENABLE TRIGGER enqueue_manual_document_after_order_update;
-SELECT pg_temp.assert_true((SELECT count(*) FROM (SELECT private.enqueue_manual_order_document(o.id) FROM public.orders AS o WHERE o.manual_document_notification_eligible AND NOT EXISTS (SELECT 1 FROM public.order_notification_outbox AS n WHERE n.order_id = o.id AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt'))) AS backfilled) = 1, 'enable step backfills exactly the window order');
+-- Apply the real postdeploy enable migration (not a copy): it enables both
+-- triggers and backfills the window in one transaction.
+\ir ../migrations/20260930160300_enable_manual_order_document_triggers.sql
+SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.order_notification_outbox), 'enable step backfills exactly the window order');
 SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000009' AND event_type = 'manual_order_receipt'), 'window order gets its receipt after enable');
 -- The window case is proven; remove its row so the suite below keeps its
 -- empty-outbox precondition for global count assertions.

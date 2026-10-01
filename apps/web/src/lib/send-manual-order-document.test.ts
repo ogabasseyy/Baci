@@ -105,12 +105,13 @@ describe('send manual order document', () => {
     expect(db.rpc).not.toHaveBeenCalled();
   });
 
-  it('retries an incomplete order without sending a document with no items', async () => {
+  it('skips an order whose items were removed after enqueue', async () => {
     const db = database({ order_items: [] });
-    await expect(
-      sendManualOrderDocument({ supabase: db.client, row })
-    ).rejects.toThrow('Manual order items unavailable');
+    expect(await sendManualOrderDocument({ supabase: db.client, row })).toEqual(
+      { status: 'skipped', reason: 'missing_order_items' }
+    );
     expect(sendEmail).not.toHaveBeenCalled();
+    expect(db.rpc).not.toHaveBeenCalled();
   });
 
   it('skips an obsolete invoice if the order is now paid', async () => {
@@ -227,10 +228,11 @@ describe('send manual order document', () => {
 
   it('does not label an underpaid order as a fully paid receipt', async () => {
     const db = database({ amount_paid: 100000 });
-    await expect(
-      sendManualOrderDocument({ supabase: db.client, row })
-    ).rejects.toThrow('outstanding balance');
+    expect(await sendManualOrderDocument({ supabase: db.client, row })).toEqual(
+      { status: 'skipped', reason: 'paid_balance_outstanding' }
+    );
     expect(sendEmail).not.toHaveBeenCalled();
+    expect(db.rpc).not.toHaveBeenCalled();
   });
 
   it('never promotes Ogabassey app links for another merchant', async () => {

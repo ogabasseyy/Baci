@@ -42,6 +42,18 @@ describe('manual order document email', () => {
     expect(result.textContent).not.toMatch(/PDF receipt is attached/i);
   });
 
+  it('strips line breaks from staff-entered order numbers in the subject', () => {
+    const result = buildManualOrderDocumentEmail({
+      ...input,
+      orderNumber: 'ORD-42\r\nBcc: attacker@example.com',
+    });
+    expect(result.subject).toBe(
+      'Your receipt is ready - #ORD-42Bcc: attacker@example.com'
+    );
+    expect(result.subject).not.toMatch(/[\r\n]/);
+    expect(result.textContent).not.toMatch(/[\r\n]Bcc:/);
+  });
+
   it('does not advertise another merchant’s app or accept unsafe URLs/colors', () => {
     const result = buildManualOrderDocumentEmail({
       ...input,

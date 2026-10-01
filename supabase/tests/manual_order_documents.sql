@@ -23,6 +23,14 @@ SELECT pg_temp.assert_true((SELECT count(*) = 0 FROM public.order_notification_o
 UPDATE public.orders SET payment_status = 'paid', amount_paid = 100 WHERE id = '10000000-0000-4000-8000-000000000004';
 SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000004' AND event_type = 'manual_order_receipt'), 'later payment queues receipt');
 
+-- Orders created without customer contact still send once staff correct it.
+INSERT INTO public.orders (id, merchant_id, recorded_by_user_id, customer_name, order_number, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000008', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000010', 'Buyer', 'NOEMAIL', 'paid', 100);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000008', 'Device', 1, 100);
+SELECT pg_temp.assert_true((SELECT count(*) = 0 FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000008'), 'no email before customer contact exists');
+UPDATE public.orders SET customer_id = '10000000-0000-4000-8000-000000000002', customer_email = 'buyer@example.com' WHERE id = '10000000-0000-4000-8000-000000000008';
+SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000008' AND event_type = 'manual_order_receipt'), 'corrected contact queues receipt');
+
 SELECT pg_temp.assert_true(NOT has_function_privilege('authenticated', 'public.claim_order_notification_outbox(integer,text)', 'EXECUTE'), 'customers cannot drain queue');
 SELECT pg_temp.assert_true(NOT has_function_privilege('anon', 'public.create_manual_order_document_claim(uuid,text,text)', 'EXECUTE'), 'public cannot generate claims');
 SELECT pg_temp.assert_true(NOT has_table_privilege('authenticated', 'public.receipt_claims', 'SELECT'), 'claim hashes remain private');

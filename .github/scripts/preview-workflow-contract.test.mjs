@@ -45,6 +45,12 @@ test('preview workflow refuses branch-selected workflow files', () => {
   assert.match(guard, /refs\/heads\//);
   assert.match(guard, /github\.event\.repository\.default_branch/);
   assert.match(guard, /exit 1/);
+  const guardScript = guard.match(/run:\s*\|[\s\S]*/)?.[0] ?? '';
+  assert.doesNotMatch(
+    guardScript,
+    /\$\{\{/,
+    'guard must compare env vars, not interpolated expressions'
+  );
 });
 
 test('preview workflow never promotes to production', () => {
@@ -162,6 +168,12 @@ test('preview verifies sensitive markings before injecting stand-ins', () => {
     prepare,
     /assert-vercel-pulled-sensitive-env\.mjs\s+QUIZ_RPC_SERVER_SECRET\s+\.vercel\/\.env\.preview\.local/
   );
+  assert.ok(
+    prepare.indexOf('Normalize sensitive placeholders') <
+      prepare.indexOf('inject-prebuilt-env-secret.mjs QUIZ_RPC_SERVER_SECRET'),
+    'placeholder normalization must precede stand-in injection'
+  );
+  assert.match(prepare, /SUPABASE_AGENTIC_JWT_PRIVATE_JWK=""/);
 });
 
 test('preview build uses stand-ins, never real server secrets', () => {
@@ -202,16 +214,27 @@ test('free-form ref never reaches a shell script', () => {
     }
     if (/^\s*run:\s*\S/.test(line)) {
       assert.doesNotMatch(line, /inputs\.ref/);
+      assert.doesNotMatch(line, /github\.ref/);
       inRunBlock = false;
       continue;
     }
     if (inRunBlock) {
       if (/^\s{10,}\S/.test(line)) {
         assert.doesNotMatch(line, /inputs\.ref/);
+        assert.doesNotMatch(line, /github\.ref/);
         continue;
       }
       inRunBlock = false;
     }
+  }
+  for (const line of lines.filter((candidate) =>
+    candidate.includes('inputs.ref')
+  )) {
+    assert.match(
+      line,
+      /^\s*(group|ref|PREVIEW_REF):/,
+      'inputs.ref is allowed only in concurrency, checkout, and env positions'
+    );
   }
 });
 

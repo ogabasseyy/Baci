@@ -39,8 +39,13 @@ jobs:
       NODE_OPTIONS: "--max_old_space_size=8192"
     steps:
       - name: Require default-branch workflow file
+        # Ref names can carry shell metacharacters: pass both sides through
+        # env instead of interpolating expressions into the script.
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          if [ "${{ github.ref }}" != "refs/heads/${{ github.event.repository.default_branch }}" ]; then
+          if [ "$WORKFLOW_REF" != "refs/heads/$DEFAULT_BRANCH" ]; then
             echo 'Refusing: dispatch the stable file from the default branch: gh workflow run preview.yml -f ref=<branch>' >&2
             exit 1
           fi
@@ -62,20 +67,34 @@ jobs:
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: .github/scripts/run-pinned-vercel.sh pull --yes --environment=preview
+      - name: Normalize sensitive placeholders to blank
+        # Pinned CLI >=56.3 writes KEY="[SENSITIVE]" where older CLIs wrote
+        # blanks. The injector only substitutes explicit blanks, and build
+        # code expects blank-or-real; normalize the literal token (verified
+        # against CLI 57.0.0 output; real values never match it).
+        run: |
+          sed -i -E 's/="\[SENSITIVE\]"$/=""/' .vercel/.env.preview.local
       - name: Verify quiz RPC secret is marked sensitive in Preview
-        # Sensitive Vercel values pull as blank assignments. This proves the
-        # marking exists; the injector below additionally refuses any
-        # non-blank value before the stand-in replaces it.
+        # This proves the marking exists; the injector below additionally
+        # refuses any non-blank value before the stand-in replaces it.
         run: node .github/scripts/assert-vercel-pulled-sensitive-env.mjs QUIZ_RPC_SERVER_SECRET .vercel/.env.preview.local
       - name: Ensure build-time presence of runtime-only quiz RPC secret
         # No real secret passthrough: the stand-in satisfies build validation
         # and Vercel remains the runtime source, so dispatchable branches
         # never observe the server secret.
         run: node .github/scripts/inject-prebuilt-env-secret.mjs QUIZ_RPC_SERVER_SECRET .vercel/.env.preview.local 'build-time-presence-stand-in-not-used-at-runtime-000000000000'
+      - name: Ensure JWK stand-in precondition
+        # Preview intentionally carries no signing material, so the legacy
+        # fallback cannot verify there. A blank assignment lets the injector
+        # mint a fresh build-only stand-in; a real value would fail closed.
+        run: |
+          if ! grep -qE '^SUPABASE_AGENTIC_JWT_PRIVATE_JWK=' .vercel/.env.preview.local; then
+            printf '%s\n' 'SUPABASE_AGENTIC_JWT_PRIVATE_JWK=""' >> .vercel/.env.preview.local
+          fi
       - name: Ensure build-time presence of runtime-only scoped Supabase JWT key
-        # Vercel pulls sensitive runtime values as empty strings. Generate a
-        # fresh build-only JWK inside the injector to satisfy build validation;
-        # Vercel remains the runtime source of the sensitive Preview value.
+        # Generate a fresh build-only JWK inside the injector to satisfy
+        # build validation; Vercel remains the runtime source of the
+        # sensitive Preview value.
         run: node .github/scripts/inject-prebuilt-env-secret.mjs SUPABASE_AGENTIC_JWT_PRIVATE_JWK .vercel/.env.preview.local --generate-es256-jwk-standin
       # The pulled env file holds Preview values Vercel does not mark
       # sensitive (sensitive ones pull as blank); NEXT_PUBLIC_* are baked
@@ -99,7 +118,7 @@ jobs:
     timeout-minutes: 150
     env:
       VERCEL_CLI_VERSION: "57.0.0"
-      BACI_NEXT_DEPLOYMENT_ID_SOURCE: ${{ github.run_id }}_${{ github.run_attempt }}_${{ inputs.ref }}
+      BACI_NEXT_DEPLOYMENT_ID_SOURCE: ${{ github.run_id }}_${{ github.run_attempt }}
       # Fix OOM error on runner (mirrors deploy-production).
       NODE_OPTIONS: "--max_old_space_size=8192"
     steps:
@@ -191,6 +210,7 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          PREVIEW_REF: ${{ inputs.ref }}
         run: |
           trusted-ops/.github/scripts/run-pinned-vercel.sh deploy --yes --prebuilt --archive=tgz | tee preview-deploy.log
           preview_url="$(grep -oiE 'preview:[[:space:]]*https://[^ )]+' preview-deploy.log | grep -oE 'https://[^ ]+\.vercel\.app' | tail -n 1)"
@@ -199,7 +219,7 @@ jobs:
             exit 1
           fi
           echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
-          echo "## Preview ready: $preview_url" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Preview ready for $PREVIEW_REF: $preview_url" >> "$GITHUB_STEP_SUMMARY"
       - name: Clean up Vercel secrets
         if: always()
         run: |

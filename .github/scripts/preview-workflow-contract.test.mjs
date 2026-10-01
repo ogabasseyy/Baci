@@ -250,3 +250,10 @@ test('preview URL parsing anchors on the deploy assignment line', () => {
   assert.match(deploy, /https:\/\/\[\^ \]\+\\.vercel\\.app/);
   assert.match(deploy, /exit 1/);
 });
+
+test('deploy summary neutralizes markdown in the branch name', () => {
+  const deploy = jobBlock('deploy');
+  assert.match(deploy, /safe_ref=.*tr -d/);
+  assert.match(deploy, /Preview ready for \\`\$safe_ref\\`/);
+  assert.doesNotMatch(deploy, /\$PREVIEW_REF:\s*\$preview_url/);
+});

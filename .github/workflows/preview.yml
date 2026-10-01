@@ -219,7 +219,10 @@ jobs:
             exit 1
           fi
           echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
-          echo "## Preview ready for $PREVIEW_REF: $preview_url" >> "$GITHUB_STEP_SUMMARY"
+          # Branch names can carry markdown metacharacters: strip backticks
+          # and render inside a code span so the summary cannot be reshaped.
+          safe_ref="$(printf '%s' "$PREVIEW_REF" | tr -d '`')"
+          echo "## Preview ready for \`$safe_ref\`: $preview_url" >> "$GITHUB_STEP_SUMMARY"
       - name: Clean up Vercel secrets
         if: always()
         run: |

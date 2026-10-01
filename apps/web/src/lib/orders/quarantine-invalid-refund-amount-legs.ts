@@ -17,7 +17,7 @@ export async function quarantineInvalidRefundAmountLegs({
   transactions,
 }: {
   order: CancellationOrder;
-  supabase: SupabaseClient;
+  supabase: Pick<SupabaseClient, 'from' | 'rpc'>;
   transactions: GatewayPaymentTransaction[];
 }): Promise<void> {
   const invalidAmountLegs = transactions.filter(

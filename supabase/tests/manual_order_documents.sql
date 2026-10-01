@@ -63,6 +63,8 @@ SELECT pg_temp.assert_true(NOT has_function_privilege('anon', 'public.create_man
 SELECT pg_temp.assert_true(NOT has_table_privilege('authenticated', 'public.receipt_claims', 'SELECT'), 'claim hashes remain private');
 SELECT pg_temp.assert_true(NOT has_function_privilege('authenticated', 'private.redeem_receipt_claim_v2(text,text)', 'EXECUTE'), 'old private core cannot bypass verification');
 SELECT pg_temp.assert_true(NOT has_function_privilege('authenticated', 'public.create_manual_order_document_claim(uuid,text,text)', 'EXECUTE'), 'customers cannot create manual claims');
+SELECT pg_temp.assert_true(has_function_privilege('anon', 'private.preview_receipt_claim(text)', 'EXECUTE'), 'logged-out previews can execute');
+SELECT pg_temp.assert_true(has_function_privilege('authenticated', 'private.preview_receipt_claim(text)', 'EXECUTE'), 'signed-in previews can execute');
 
 SELECT * FROM public.claim_order_notification_outbox(10, 'fixture-worker');
 DO $$

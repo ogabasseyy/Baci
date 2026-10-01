@@ -211,7 +211,7 @@ export async function sendManualOrderDocument({
   let dispatchStarted = false;
   let providerAccepted = false;
   async function persistDispatch(started: boolean) {
-    if (started) await revalidateManualDocumentDispatchState(supabase, row);
+    if (started) await revalidateManualDocumentDispatchState(supabase, order);
     const query = supabase
       .from('order_notification_outbox')
       .update({

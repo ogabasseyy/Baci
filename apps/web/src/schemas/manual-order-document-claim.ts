@@ -16,3 +16,43 @@ export const manualDocumentClaimSchema = z.discriminatedUnion('status', [
   }),
   z.object({ status: z.literal('skipped') }),
 ]);
+
+export type ManualDocumentCreatedClaim = Extract<
+  z.infer<typeof manualDocumentClaimSchema>,
+  { status: 'created' }
+>;
+
+export interface ManualDocumentClaimOrderSnapshot {
+  customer_id: string | null;
+  total: number;
+  amount_paid: number;
+  order_items: readonly unknown[];
+  payment_status: string;
+}
+
+/**
+ * Confirms the claim RPC validated the same order the sender rendered.
+ * Recipient drift fails loudly; an order edit that landed between the
+ * sender's read and the claim throws so the worker retries with a fresh
+ * read instead of dispatching a stale document.
+ */
+export function assertManualDocumentClaimMatchesOrder(
+  prepared: ManualDocumentCreatedClaim,
+  order: ManualDocumentClaimOrderSnapshot,
+  recipientEmail: string
+): void {
+  if (
+    prepared.customer_id !== order.customer_id ||
+    prepared.customer_email.trim().toLowerCase() !== recipientEmail
+  ) {
+    throw new Error('Manual document recipient changed');
+  }
+  if (
+    prepared.order_total !== order.total ||
+    prepared.order_amount_paid !== order.amount_paid ||
+    prepared.order_item_count !== order.order_items.length ||
+    prepared.order_payment_status !== order.payment_status
+  ) {
+    throw new Error('Manual document order changed during preparation');
+  }
+}

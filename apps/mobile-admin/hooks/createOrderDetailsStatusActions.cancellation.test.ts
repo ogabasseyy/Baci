@@ -64,4 +64,48 @@ describe('createOrderDetailsStatusActions paid cancellation', () => {
       status: 'cancelled',
     });
   });
+
+  it('shows the server reason when the order can no longer be cancelled', async () => {
+    const message = 'This order can no longer be cancelled.';
+    const { actions } = createPaidOrderStatusActions({
+      updateStatus: vi
+        .fn()
+        .mockRejectedValue(
+          new OrderStatusUpdateError(message, 'ORDER_NOT_CANCELLABLE')
+        ),
+    });
+
+    await actions.handleStatusUpdate('cancelled');
+    const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
+    const cancelOrder = confirmation?.find(
+      (button) => button.text === 'Cancel Order'
+    );
+    cancelOrder?.onPress?.();
+    await vi.waitFor(() => {
+      expect(Alert.alert).toHaveBeenCalledWith('Error', message);
+    });
+  });
+
+  it('shows the server reason when the error is rewrapped without the class', async () => {
+    const message =
+      'A payment attempt needs to be checked before this order can be cancelled. Please contact support.';
+    const { actions } = createPaidOrderStatusActions({
+      // A serialized copy across a bundle boundary: no instanceof,
+      // but the server code survives.
+      updateStatus: vi.fn().mockRejectedValue({
+        code: 'PAYMENT_RECONCILIATION_REQUIRED',
+        message,
+      }),
+    });
+
+    await actions.handleStatusUpdate('cancelled');
+    const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
+    const cancelOrder = confirmation?.find(
+      (button) => button.text === 'Cancel Order'
+    );
+    cancelOrder?.onPress?.();
+    await vi.waitFor(() => {
+      expect(Alert.alert).toHaveBeenCalledWith('Error', message);
+    });
+  });
 });

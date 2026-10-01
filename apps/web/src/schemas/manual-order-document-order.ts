@@ -24,7 +24,10 @@ export const manualDocumentOrderSchema = z.object({
   payment_status: z.string(),
   payment_method: nullableText,
   shipping_status: z.string(),
-  customer_name: z.string(),
+  // Nullable: staff-recorded orders may omit the name, and the enqueue
+  // trigger never requires it. The sender falls back to a display name so a
+  // missing name sends instead of throwing through every retry.
+  customer_name: nullableText,
   customer_email: nullableText,
   customer_phone: nullableText,
   invoice_type_code: nullableText,

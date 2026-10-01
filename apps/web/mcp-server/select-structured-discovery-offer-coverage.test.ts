@@ -101,6 +101,32 @@ it('selects a condition offer when the request filters every variant out through
   expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'offer-used', price: 400 });
 });
 
+it('pairs a condition offer with the universe variant that proves the spec', () => {
+  const row = makeRow({ has_variants: true, condition: 'new', discovery_metadata: { product_type: 'phone' } });
+  row.allVariants = [
+    { id: 'v-128', product_id: 'phone', attributes: { storage_gb: 128 }, price_override: 600, stock_quantity: 1 },
+    { id: 'v-256', product_id: 'phone', attributes: { storage_gb: 256 }, price_override: 700, stock_quantity: 1 },
+  ] as typeof row.availableVariants;
+  row.availableVariants = [];
+  row.availableOffers = [{ id: 'offer-used', price: 400, condition: 'used', stock_quantity: 1 }] as typeof row.availableOffers;
+  const selected = selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone',
+    attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }] }));
+  expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'offer-used', price: 400 });
+  expect(selected?.selectedOption.attributes).toMatchObject({ storage_gb: 256 });
+});
+
+it('does not prove specs through out-of-stock paired variants', () => {
+  const row = makeRow({ has_variants: true, manage_stock: true, discovery_metadata: { product_type: 'phone' } });
+  row.allVariants = [
+    { id: 'v-128', product_id: 'phone', attributes: { storage_gb: 128 }, price_override: 600, stock_quantity: 1 },
+    { id: 'v-256', product_id: 'phone', attributes: { storage_gb: 256 }, price_override: 700, stock_quantity: 0 },
+  ] as typeof row.availableVariants;
+  row.availableVariants = [];
+  row.availableOffers = [{ id: 'offer-used', price: 400, condition: 'used', stock_quantity: 1 }] as typeof row.availableOffers;
+  expect(selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone',
+    attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }] }))).toBeUndefined();
+});
+
 it('disables offers when a filtered-out variant owns the condition axis', () => {
   const row = makeRow({ has_variants: true, discovery_metadata: { product_type: 'phone' } });
   row.allVariants = [

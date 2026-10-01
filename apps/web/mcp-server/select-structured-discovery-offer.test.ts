@@ -86,9 +86,9 @@ it('returns inherited base attributes for a matched condition offer', () => {
   });
 });
 
-it('does not let condition offers inherit metadata specs on variant products', () => {
+it('lets condition offers prove specs through the live variant instead of metadata', () => {
   const row = makeRow({ has_variants: true, has_condition_offers: true, discovery_metadata: {
-    product_type: 'smartphone', attributes: { storage_gb: 256 },
+    product_type: 'smartphone', attributes: { color: 'black' },
   } });
   row.availableVariants = [
     { id: 'variant-256', product_id: 'phone', attributes: { Storage: '256GB' }, price_override: 700, stock_quantity: 2 },
@@ -99,8 +99,9 @@ it('does not let condition offers inherit metadata specs on variant products', (
   const selected = selectStructuredDiscoveryOffer(row, intent({ attributes: [
     { key: 'storage_gb', operator: 'eq', value: 256 },
   ] }));
-  expect(selected?.displayPrice).toBe(700);
-  expect(selected?.selectedOption).toMatchObject({ kind: 'variant', option_id: 'variant-256' });
+  expect(selected?.displayPrice).toBe(450);
+  expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'used-1' });
+  expect(selected?.selectedOption.attributes).toMatchObject({ storage_gb: 256 });
 });
 
 it('excludes offers from spec matches when no variant proves the spec', () => {

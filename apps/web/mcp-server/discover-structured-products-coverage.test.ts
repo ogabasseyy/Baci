@@ -179,4 +179,12 @@ describe('discoverStructuredProducts', () => {
     const result = await discoverStructuredProducts(input(fixture.supabase, intent({ product_type: 'phone' }), { args: { condition: 'used' } }));
     expect(result).toMatchObject({ priceScanComplete: false, coverage: 'partial', incompleteReason: 'option_lookup_failed' });
   });
+
+  it('ignores an offer failure when variants own the condition axis', async () => {
+    const p = product('axis-phone', { product_type: 'phone' }, { has_variants: true, has_condition_offers: true });
+    const fixture = client({ products: [p], variants: [{ id: 'v-used', product_id: 'axis-phone', condition: 'used', attributes: {}, price_override: 100, stock_quantity: 1 }], offerError: new Error('offline') });
+    const result = await discoverStructuredProducts(input(fixture.supabase, intent({ product_type: 'phone' })));
+    expect(result.selectedProducts.map(({ product: s }) => s.id)).toEqual(['axis-phone']);
+    expect(result).toMatchObject({ priceScanComplete: true, coverage: 'complete' });
+  });
 });

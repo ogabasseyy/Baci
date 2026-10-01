@@ -30,6 +30,11 @@ function lookupFailureCouldMatter(
   if (match === undefined && structuredDiscoveryIdentity.isRowExcludedByIdentity(row, intent)) return false;
   if (row.variantLookupFailed) return true;
   if (!row.offerLookupFailed) return false;
+  // Variants owning the condition axis disable offers entirely (PDP parity),
+  // so an offer-only failure cannot change selection with or without a
+  // requested condition.
+  if (structuredDiscoveryIdentity.variantsOwnConditionAxis(
+    row.product as Record<string, unknown>, row.allVariants ?? row.availableVariants)) return false;
   if (!requestedCondition) return true;
   const product = row.product as Record<string, unknown>;
   const parentCondition = typeof product.condition === 'string' ? product.condition : null;

@@ -139,11 +139,7 @@ export function selectStructuredDiscoveryOffer(
   // because the PDP lets a condition offer combine with any selectable variant
   // when offers own the axis.
   const variantUniverse = row.allVariants ?? row.availableVariants;
-  const variantsOwnConditionAxis = product.has_variants === true && variantUniverse.some((rawVariant) => {
-    const variantCondition = record(rawVariant).condition;
-    return normalizeCanonicalProductCondition(typeof variantCondition === 'string' ? variantCondition : null) !== '';
-  });
-  const offersSelectable = !variantsOwnConditionAxis &&
+  const offersSelectable = !structuredDiscoveryIdentity.variantsOwnConditionAxis(product, variantUniverse) &&
     (!product.has_variants || variantUniverse.some((rawVariant) => {
       const variant = record(rawVariant);
       if (manageStock && !hasPositiveStock(variant.stock_quantity)) return false;
@@ -159,10 +155,22 @@ export function selectStructuredDiscoveryOffer(
     const canonicalOfferCondition = normalizeCanonicalProductCondition(typeof offer.condition === 'string' ? offer.condition : null);
     if (!canonicalOfferCondition || seenOfferConditions.has(canonicalOfferCondition)) continue;
     seenOfferConditions.add(canonicalOfferCondition);
-    addCandidate({ kind: 'offer', attributes: {},
+    const offerCore = { kind: 'offer' as const,
       condition: normalizeCanonicalProductCondition(typeof offer.condition === 'string' ? offer.condition : null) || baseCondition,
       price, compareAtPrice: finitePrice(offer.compare_at_price) ?? null,
-      stockQuantity: offer.stock_quantity, sourceOption: rawOffer });
+      stockQuantity: offer.stock_quantity, sourceOption: rawOffer };
+    // Offers carry no spec attributes, so on variant products each offer pairs
+    // with every selectable universe variant (the PDP selects offer and variant
+    // independently) and the live variant proves the specification. One bare
+    // candidate survives when nothing pairs, for spec-less intents.
+    const pairings = product.has_variants === true
+      ? variantUniverse.filter((rawVariant) => !manageStock || hasPositiveStock(record(rawVariant).stock_quantity))
+      : [];
+    if (pairings.length === 0) addCandidate({ ...offerCore, attributes: {} });
+    for (const rawVariant of pairings) {
+      addCandidate({ ...offerCore,
+        attributes: normalizeDiscoveryOptionAttributes(record(record(rawVariant).attributes)) });
+    }
   }
 
   const matches = candidates

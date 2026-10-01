@@ -1,3 +1,4 @@
+import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
 import { canonicalizeDiscoveryProductType } from '../src/schemas/canonical-discovery-product-type';
 import type { McpDiscoveryIntent } from '../src/schemas/mcp-discovery-intent';
 import { productDiscoveryMetadataSchema } from '../src/schemas/product-discovery-metadata';
@@ -94,6 +95,20 @@ function isRowExcludedByIdentity(row: HydratedProduct, intent: McpDiscoveryInten
     evaluateAlternativeIdentity(product, discovery, alternative, excludedTypes, productType).excluded);
 }
 
+/** Mirrors the PDP hasVariantConditionAxis: any variant with a normalized
+ * condition owns the condition axis and disables condition offers entirely.
+ * Shared by offer selection and the options-lookup veto so both callers
+ * evaluate identical facts. */
+function variantsOwnConditionAxis(product: Record<string, unknown>, variants: readonly unknown[] | undefined) {
+  if (product.has_variants !== true) return false;
+  return (variants ?? []).some((rawVariant) => {
+    const variant = rawVariant !== null && typeof rawVariant === 'object' && !Array.isArray(rawVariant)
+      ? rawVariant as Record<string, unknown> : {};
+    const variantCondition = variant.condition;
+    return normalizeCanonicalProductCondition(typeof variantCondition === 'string' ? variantCondition : null) !== '';
+  });
+}
+
 /** Product-level structured identity: the shared verdict behind offer
  * selection and the options-lookup veto, kept in one module so both callers
  * evaluate identical facts. */
@@ -104,4 +119,5 @@ export const structuredDiscoveryIdentity = {
   metadataOf,
   normalizeText,
   productTypeOf,
+  variantsOwnConditionAxis,
 };

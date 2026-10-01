@@ -55,6 +55,11 @@ describe('production cache-invalidation drain rollout gate', () => {
 
     assert.match(deployment, /needs: \[[^\]]*db-migrations[^\]]*\]/);
     assert.match(deployment, /needs\.db-migrations\.result == 'success'/);
+    assert.match(deployment, /needs: \[[^\]]*gigl-worker-capability[^\]]*\]/);
+    assert.match(
+      deployment,
+      /needs\.gigl-worker-capability\.result == 'success'/
+    );
     assert.match(deployment, /deploy --prebuilt --prod/);
     assert.doesNotMatch(deployment, /run-pinned-vercel\.sh deploy --prod/);
     assert.match(

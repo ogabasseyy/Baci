@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { verifyGiglTrackingWorkerCapability } from './verify-gigl-tracking-worker-capability';
+import {
+  GiglWrapperSchemaMissingError,
+  verifyGiglTrackingWorkerCapability,
+} from './verify-gigl-tracking-worker-capability';
 
 describe('verifyGiglTrackingWorkerCapability', () => {
   it('accepts the reviewed invalid-limit response without claiming work', async () => {
@@ -28,6 +31,23 @@ describe('verifyGiglTrackingWorkerCapability', () => {
       await expect(
         verifyGiglTrackingWorkerCapability({ rpc } as never)
       ).resolves.toBe(false);
+    }
+  });
+
+  it('throws schema-missing when the wrapper RPCs are not deployed yet', async () => {
+    for (const error of [
+      { code: 'PGRST202', message: 'not found' },
+      {
+        code: '404',
+        message:
+          'Could not find the function public.claim_due_gigl_tracking_monitors in the schema cache',
+      },
+    ]) {
+      const rpc = vi.fn().mockResolvedValue({ data: null, error });
+
+      await expect(
+        verifyGiglTrackingWorkerCapability({ rpc } as never)
+      ).rejects.toBeInstanceOf(GiglWrapperSchemaMissingError);
     }
   });
 });

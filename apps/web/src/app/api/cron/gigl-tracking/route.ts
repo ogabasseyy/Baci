@@ -35,7 +35,16 @@ export async function GET(request: Request) {
     });
   }
 
-  const supabase = createGiglTrackingWorkerClient(process.env);
+  let supabase: ReturnType<typeof createGiglTrackingWorkerClient>;
+  try {
+    supabase = createGiglTrackingWorkerClient(process.env);
+  } catch {
+    logger.error({ message: 'Invalid GIGL tracking worker token' });
+    return NextResponse.json(
+      { error: 'GIGL tracking worker unavailable' },
+      { status: 500 }
+    );
+  }
   const workerId = `gigl-tracking-${crypto.randomUUID()}`;
   const result = await runGiglTrackingMonitorBatch({
     batchSize: parsedBatchSize.data,

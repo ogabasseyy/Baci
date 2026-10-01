@@ -108,7 +108,15 @@ fi
 REMOTE_SH
 
   echo "==> Verifying the live GIGL database capability"
-  if ! ssh "$VPS" "NODE_ENV=production BACI_WORKER_PROFILE=gigl-tracking BACI_WORKER_ENV='$STAGING_DIR/.env' '$STAGING_DIR/bin/verify-gigl-tracking-worker-capability.sh'"; then
+  gigl_capability_status=0
+  ssh "$VPS" "NODE_ENV=production BACI_WORKER_PROFILE=gigl-tracking BACI_WORKER_ENV='$STAGING_DIR/.env' '$STAGING_DIR/bin/verify-gigl-tracking-worker-capability.sh'" || gigl_capability_status=$?
+  if [ "$gigl_capability_status" -eq 42 ]; then
+    # Exit 42 means the wrapper RPCs predate the migration (initial rollout):
+    # the RPCs land via db-migrations minutes later, so install the worker
+    # now (readiness requires it) and let the post-migration workflow smoke
+    # verify capability before the web deploy.
+    echo "GIGL wrapper RPCs are not deployed yet; deferring capability verification to the post-migration smoke." >&2
+  elif [ "$gigl_capability_status" -ne 0 ]; then
     echo "GIGL database capability verification failed; live worker files and crontab were not changed." >&2
     exit 1
   fi

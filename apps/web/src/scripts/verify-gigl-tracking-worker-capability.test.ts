@@ -9,9 +9,16 @@ const { createClient, verifyCapability } = vi.hoisted(() => ({
 vi.mock('@/lib/gigl-tracking-worker-client', () => ({
   createGiglTrackingWorkerClient: createClient,
 }));
-vi.mock('@/lib/verify-gigl-tracking-worker-capability', () => ({
-  verifyGiglTrackingWorkerCapability: verifyCapability,
-}));
+vi.mock('@/lib/verify-gigl-tracking-worker-capability', async (importOriginal) => {
+  const original =
+    await importOriginal<
+      typeof import('@/lib/verify-gigl-tracking-worker-capability')
+    >();
+  return {
+    GiglWrapperSchemaMissingError: original.GiglWrapperSchemaMissingError,
+    verifyGiglTrackingWorkerCapability: verifyCapability,
+  };
+});
 
 describe('runGiglTrackingCapabilityVerification', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -84,6 +91,28 @@ describe('runGiglTrackingCapabilityVerification', () => {
     expect(createClient).not.toHaveBeenCalled();
     expect(logger.info).toHaveBeenCalledWith(
       '[gigl-capability] skipped while GIGL is disabled'
+    );
+  });
+
+  it('exits 42 when the wrapper RPCs predate the migration', async () => {
+    const { GiglWrapperSchemaMissingError } = await import(
+      '@/lib/verify-gigl-tracking-worker-capability'
+    );
+    verifyCapability.mockRejectedValueOnce(
+      new GiglWrapperSchemaMissingError()
+    );
+    const logger = { error: vi.fn(), info: vi.fn() };
+
+    await expect(
+      runGiglTrackingCapabilityVerification({
+        env: { NODE_ENV: 'test' },
+        logger,
+      })
+    ).resolves.toBe(42);
+
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith(
+      '[gigl-capability] wrapper RPCs not deployed yet; deferring to the post-migration smoke'
     );
   });
 });

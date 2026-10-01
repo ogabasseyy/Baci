@@ -2,7 +2,17 @@ import 'dotenv/config';
 
 import { pathToFileURL } from 'node:url';
 import { createGiglTrackingWorkerClient } from '@/lib/gigl-tracking-worker-client';
-import { verifyGiglTrackingWorkerCapability } from '@/lib/verify-gigl-tracking-worker-capability';
+import {
+  GiglWrapperSchemaMissingError,
+  verifyGiglTrackingWorkerCapability,
+} from '@/lib/verify-gigl-tracking-worker-capability';
+
+/**
+ * Exit code when the wrapper RPCs predate the migration (initial rollout).
+ * `prepare-worker-release.sh` defers to the post-migration workflow smoke on
+ * this code; every other caller must treat it as a failure.
+ */
+export const GIGL_CAPABILITY_SCHEMA_MISSING_EXIT_CODE = 42;
 
 interface CapabilityLogger {
   error(message: string): void;
@@ -32,7 +42,13 @@ export async function runGiglTrackingCapabilityVerification({
       logger.info('[gigl-capability] restricted wrapper verified');
       return 0;
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof GiglWrapperSchemaMissingError) {
+      logger.info(
+        '[gigl-capability] wrapper RPCs not deployed yet; deferring to the post-migration smoke'
+      );
+      return GIGL_CAPABILITY_SCHEMA_MISSING_EXIT_CODE;
+    }
     // Keep credential and provider errors out of release logs.
   }
 

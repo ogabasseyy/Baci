@@ -95,6 +95,10 @@ describe('GIGL tracking worker capability migration', () => {
       /request_method IS DISTINCT FROM 'POST'/
     );
     expect(requestScopeMigration).toMatch(/request_path IS NULL/);
+    // PostgREST spells RPC routes in request.path without a leading slash
+    // ("rpc/<function>"), so the five literals below are slashless by
+    // design; a leading-slash spelling would never match and would fail
+    // closed (deny) rather than open.
     expect(
       requestScopeMigration.match(/'rpc\/gigl_worker_[a-z_]+'/g)
     ).toHaveLength(5);

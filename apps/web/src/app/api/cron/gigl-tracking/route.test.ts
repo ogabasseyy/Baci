@@ -115,6 +115,20 @@ describe('GET /api/cron/gigl-tracking', () => {
     });
   });
 
+  it('returns a bounded 500 when the worker token is invalid', async () => {
+    mockCreateWorkerClient.mockImplementationOnce(() => {
+      throw new Error('expired worker token');
+    });
+
+    const response = await GET(request());
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: 'GIGL tracking worker unavailable',
+    });
+    expect(mockSupabase.rpc).not.toHaveBeenCalled();
+  });
+
   it('uses a bounded function duration', () => {
     expect(maxDuration).toBe(60);
   });

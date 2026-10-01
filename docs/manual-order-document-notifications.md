@@ -5,6 +5,9 @@ one invoice or paid receipt after their item batch is saved. Missing/invalid ema
 missing customer/items, cancelled/returned orders and inconsistent paid balances
 are not sent. Later full payment queues one receipt, as do late customer-contact
 corrections. Existing orders are excluded from automatic notification backfill.
+An order awaiting contact correction can appear in the receipts archive before
+its first email can be sent; that transient state is accepted (in-account
+download needs no email) rather than hidden.
 
 The existing CRON_SECRET-authenticated `/api/cron/order-notifications` worker sends
 a branded email with a PDF attachment and a website claim link. Ogabassey also

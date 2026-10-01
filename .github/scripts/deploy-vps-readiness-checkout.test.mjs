@@ -32,4 +32,8 @@ test('uses a minimal sparse checkout for VPS drain readiness', async () => {
     giglVerification.run,
     '.readiness-checkout/vps-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke'
   );
+  assert.equal(
+    giglVerification.if,
+    "github.event_name != 'workflow_dispatch' && (needs.changes.outputs.tracking != 'false' || needs.changes.outputs.migrations != 'false')"
+  );
 });

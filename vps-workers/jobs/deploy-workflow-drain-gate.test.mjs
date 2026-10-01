@@ -33,6 +33,11 @@ describe('production cache-invalidation drain rollout gate', () => {
       readiness,
       /^\s+run: \.readiness-checkout\/vps-workers\/bin\/verify-gigl-direct-workers-installed\.sh --skip-live-smoke$/m
     );
+    assert.match(readiness, /needs: \[changes\]/);
+    assert.match(
+      readiness,
+      /needs\.changes\.outputs\.tracking != 'false' \|\| needs\.changes\.outputs\.migrations != 'false'/
+    );
     assert.doesNotMatch(readiness, /VPS_WORKER_SSH_TARGET|\bssh\b/);
     assert.doesNotMatch(readiness, /continue-on-error:\s*true/);
     assert.match(migrations, /needs: \[vps-drain-readiness\]/);
@@ -54,7 +59,7 @@ describe('production cache-invalidation drain rollout gate', () => {
     );
     assert.match(
       capability,
-      /BACI_WORKER_PROFILE=gigl-tracking BACI_WORKER_ENV="\$remote_dir\/\.env" "\$remote_dir\/bin\/verify-gigl-tracking-worker-capability\.sh"/
+      /run: \.github\/scripts\/smoke-gigl-worker-capability\.sh/
     );
   });
 
@@ -76,10 +81,8 @@ describe('production cache-invalidation drain rollout gate', () => {
     assert.doesNotMatch(deployment, /run-pinned-vercel\.sh deploy --prod/);
     assert.match(
       deployment,
-      /inject-prebuilt-env-secret\.mjs GIGL_TRACKING_WORKER_TOKEN \.vercel\/\.env\.production\.local/
+      /run: \.github\/scripts\/verify-gigl-fallback-token\.sh \.vercel\/\.env\.production\.local/
     );
-    assert.match(deployment, /0\|false\|off\) echo 'GIGL is not enabled/);
-    assert.doesNotMatch(deployment, /''\|0\|false\|off\)/);
   });
 
   it('scopes the tracking changeset to the worker, fallback, and wrapper paths', () => {

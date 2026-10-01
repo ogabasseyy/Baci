@@ -60,7 +60,10 @@ jobs:
   # runner first; missing worker files or schedule entries fail closed before
   # database credentials are exposed to a job.
   vps-drain-readiness:
-    if: github.ref == 'refs/heads/main'
+    needs: [changes]
+    # always() so a skipped changes job (manual dispatch) still runs the
+    # cache-invalidation verification below; the GIGL step gates itself.
+    if: always() && github.ref == 'refs/heads/main'
     runs-on: baci-deploy
     timeout-minutes: 10
     permissions:
@@ -79,6 +82,14 @@ jobs:
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
         run: .readiness-checkout/vps-workers/bin/verify-cache-invalidation-drain-installed.sh
       - name: Verify production GIGL direct-worker installation
+        # The verifier requires the VPS worker's exact checkout SHA to equal
+        # the pushed commit, and the worker is deployed manually via
+        # vps-workers/deploy.sh — so this step runs only when the changeset
+        # can affect tracking. Otherwise every web-only commit after a worker
+        # deploy would fail readiness and freeze migrations and releases.
+        # Manual dispatches skip it (emergency web deploys must not wait on
+        # a worker redeploy); run deploy.sh and re-run failed jobs instead.
+        if: github.event_name != 'workflow_dispatch' && (needs.changes.outputs.tracking != 'false' || needs.changes.outputs.migrations != 'false')
         env:
           BACI_EXPECTED_APP_SHA: ${{ github.sha }}
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
@@ -132,6 +143,8 @@ jobs:
     # smoke would turn worker-secret drift into a full release freeze for
     # unrelated web deploys. Manual dispatches skip the smoke (the gate
     # bypasses it there too) so emergency deploys are never delayed by it.
+    # Operator duty: after a dispatch deploy, run the VPS capability wrapper
+    # manually before relying on tracking.
     if: github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success' && github.event_name != 'workflow_dispatch' && (needs.changes.outputs.tracking != 'false' || needs.changes.outputs.migrations != 'false')
     runs-on: baci-deploy
     timeout-minutes: 10
@@ -141,9 +154,7 @@ jobs:
       - name: Smoke the live GIGL wrapper capability
         env:
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
-        run: |
-          remote_dir="${VPS_WORKER_REMOTE_DIR:-/home/bassey/baci-workers}"
-          NODE_ENV=production BACI_WORKER_PROFILE=gigl-tracking BACI_WORKER_ENV="$remote_dir/.env" "$remote_dir/bin/verify-gigl-tracking-worker-capability.sh"
+        run: .github/scripts/smoke-gigl-worker-capability.sh
 
   deploy-production:
     needs: [changes, cwv-runner-contracts, db-migrations, gigl-worker-capability]
@@ -225,19 +236,7 @@ jobs:
       # esbuild version is still on the allow list.
       - run: .github/scripts/run-pinned-vercel.sh pull --yes --environment=production
       - name: Verify GIGL fallback capability in Vercel Production
-        # Mirror isExplicitlyDisabledEnv: only 0/false/off bypass this gate;
-        # an unset flag counts as enabled, matching the runtime default.
-        # The injector proves the Production key is DEFINED (Vercel pulls
-        # sensitive values blank); it cannot prove the value is real or
-        # unexpired. Operators must keep the same rotated worker JWT in both
-        # Vercel Production and the VPS worker .env, or the retained manual
-        # fallback route returns 500 'GIGL tracking worker unavailable'.
-        run: |
-          gigl_enabled="$(grep -E '^(export[[:space:]]+)?GIGL_ENABLED=' .vercel/.env.production.local 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r"'"'" | tr '[:upper:]' '[:lower:]' | xargs)"
-          case "$gigl_enabled" in
-            0|false|off) echo 'GIGL is not enabled; skipping fallback token injection.' ;;
-            *) node .github/scripts/inject-prebuilt-env-secret.mjs GIGL_TRACKING_WORKER_TOKEN .vercel/.env.production.local 'build-time-presence-stand-in-not-used-at-runtime-000000000000' ;;
-          esac
+        run: .github/scripts/verify-gigl-fallback-token.sh .vercel/.env.production.local
       - name: Ensure wallet recovery HMAC Production configuration exists
         # `vercel pull` omits undefined keys and writes blank placeholders for
         # defined sensitive values. CLI 57.0.0 can exit 0 after an empty

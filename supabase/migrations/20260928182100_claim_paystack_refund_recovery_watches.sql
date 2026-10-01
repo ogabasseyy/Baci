@@ -40,7 +40,7 @@ BEGIN
   END IF;
   IF p_transaction_id IS NULL OR p_order_id IS NULL THEN RETURN 0; END IF;
 
-  SELECT t.gateway, nullif(btrim(coalesce(t.gateway_reference, ''))),
+  SELECT t.gateway, nullif(btrim(coalesce(t.gateway_reference, '')), ''),
     coalesce(t.amount, 0)
   INTO v_txn_gateway, v_txn_reference, v_txn_amount
   FROM public.transactions AS t
@@ -66,7 +66,7 @@ BEGIN
   );
 
   v_order_label := coalesce(
-    nullif(btrim(coalesce(v_order_number, ''))),
+    nullif(btrim(coalesce(v_order_number, '')), ''),
     upper(left(p_order_id::text, 8))
   );
   v_candidate := jsonb_build_object(

@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
 import { canonicalizeDiscoveryProductType } from '../src/schemas/canonical-discovery-product-type';
 import type { McpDiscoveryIntent } from '../src/schemas/mcp-discovery-intent';
+import { structuredDiscoveryIdentity } from './structured-discovery-identity';
 
 const NUMERIC_UNITS: Record<string, string> = {
   storage_gb: 'GB', ram_gb: 'GB', power_w: 'W', screen_inches: 'inch', refresh_hz: 'Hz',
@@ -10,8 +12,6 @@ const NUMERIC_UNITS: Record<string, string> = {
 // atomic. Truncation drops whole trailing terms, never splits syntax, and the
 // matcher still enforces every constraint.
 const MAX_MODEL_TERMS = 8;
-const MAX_TEXT_VALUE_TERMS = 6;
-const MAX_KEY_TERMS = 4;
 const MAX_FALLBACK_TERMS = 12;
 // Plain-language connectives are required lexemes under to_tsquery (only '|'
 // is OR), so the fallback path drops them instead of collapsing recall.
@@ -50,9 +50,13 @@ function attributeTerms(key: string, value: string | number): string[] {
       .replace(/_hz$/, '');
     return [`${identity}${value}${unit ?? ''}`.toLowerCase()];
   }
-  // Text values AND with their key so connector=USB-C cannot be satisfied by
-  // a document whose USB-C lives under another key or in marketing prose.
-  return [...sanitizeTerm(value).slice(0, MAX_TEXT_VALUE_TERMS), ...sanitizeTerm(key).slice(0, MAX_KEY_TERMS)];
+  // Hash a correlated key/value pair. Separate key and value postings can be
+  // satisfied by different metadata fields or by unstructured marketing text.
+  const normalizedKey = structuredDiscoveryIdentity.normalizeText(key);
+  const normalizedValue = structuredDiscoveryIdentity.normalizeText(value);
+  if (!normalizedKey || !normalizedValue) return [];
+  const pairDigest = createHash('sha256').update(`${normalizedKey}\u001f${normalizedValue}`, 'utf8').digest('hex');
+  return [`fact${pairDigest}`];
 }
 
 // Ranges cannot be tsquery terms, but the combined document carries keyed

@@ -69,3 +69,22 @@ it('indexes and queries numeric facts with their attribute identity', () => {
   expect(keyed).toContain('@@ pg_catalog.to_tsquery');
   expect(keyed).toContain('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_capacity_search_idx');
 });
+
+it('indexes correlated verified text attribute pairs after the concurrent replacement build', () => {
+  const correlated = readFileSync(new URL('../../../supabase/migrations/20261001080000_correlated_text_attribute_search.sql', import.meta.url), 'utf8');
+  expect(correlated.startsWith('-- disable-transaction')).toBe(true);
+  expect(correlated).toContain('product_discovery_search_document_v3');
+  expect(correlated).toContain('pg_catalog.encode');
+  expect(correlated).toContain('extensions.digest');
+  expect(correlated).toContain("pg_catalog.convert_to(pair.key || pg_catalog.chr(31) || pair.normalized_value, 'UTF8')");
+  expect(correlated).toContain("attribute.key IN ('color', 'connector', 'processor', 'connectivity')");
+  expect(correlated).toContain("pg_catalog.jsonb_typeof(attribute.value) = 'string'");
+  expect(correlated).toContain('pg_catalog.normalize(attribute.value #>>');
+  expect(correlated).toContain('NFC');
+  expect(correlated).toContain('pg_catalog.chr(31)');
+  expect(correlated).toContain('CREATE INDEX CONCURRENTLY products_discovery_correlated_search_idx');
+  expect(correlated.indexOf('CREATE INDEX CONCURRENTLY products_discovery_correlated_search_idx'))
+    .toBeLessThan(correlated.indexOf('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts('));
+  expect(correlated).toContain('SECURITY INVOKER');
+  expect(correlated).toContain('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_keyed_search_idx');
+});

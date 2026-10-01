@@ -33,16 +33,25 @@ it('emits unit-suffixed equality values and unit lexemes for ranges', () => {
     { key: 'power_w', operator: 'eq', value: 30 },
     { key: 'storage_gb', operator: 'gte', value: 256 },
     { key: 'color', operator: 'eq', value: 'black' },
-  ] }))).toBe('(power30w & storagegb & black & color)');
+  ] }))).toBe('(power30w & storagegb & fact2da864cb0599c70b188812c7ee944b96ef701cc392e9ce63531c4b56dd89fde5)');
   expect(buildDiscoveryFactRetrievalQuery(intent({ attributes: [
     { key: 'connector', operator: 'eq', value: 'USB-C' },
-  ] }))).toBe('(usb & c & connector)');
+  ] }))).toBe('(fact0799a4fe78453e262b104ae43eeede491f19b6d3f98c8be2525f29fb1d059548)');
   expect(buildDiscoveryFactRetrievalQuery(intent({ attributes: [
     { key: 'ram_gb', operator: 'gte', value: 16 },
   ] }))).toBe('(ramgb)');
   expect(buildDiscoveryFactRetrievalQuery(intent({ attributes: [
     { key: 'color', operator: 'gte', value: 'black' },
   ] }))).toBe('(a & !a)');
+});
+
+it('hashes text attribute pairs with the selector normalization and keeps keys correlated', () => {
+  const query = (key: 'connector' | 'color', value: string) =>
+    buildDiscoveryFactRetrievalQuery(intent({ attributes: [{ key, operator: 'eq', value }] }));
+  expect(query('connector', '  Usb-C  ')).toBe('(fact0799a4fe78453e262b104ae43eeede491f19b6d3f98c8be2525f29fb1d059548)');
+  expect(query('connector', 'USB-C')).toBe(query('connector', '  Usb-C  '));
+  expect(query('color', 'USB-C')).not.toBe(query('connector', 'USB-C'));
+  expect(query('connector', 'Cafe\u0301')).toBe(query('connector', 'Café'));
 });
 
 it('keeps equal numeric values distinct by attribute identity', () => {
@@ -77,7 +86,19 @@ it('keeps every constraint in retrieval past the old twelve-term budget', () => 
       { key: 'ram_gb', operator: 'gte', value: 16 },
       { key: 'color', operator: 'eq', value: 'midnight blue deep dark shade tone' },
     ],
-  }))).toBe('(((laptop) | (laptops)) & acme & zx & 42 & ultra & pro & max & plus & x & y & storage256gb & ramgb & midnight & blue & deep & dark & shade & tone & color)');
+  }))).toBe('(((laptop) | (laptops)) & acme & zx & 42 & ultra & pro & max & plus & x & y & storage256gb & ramgb & fact9d4b15b3a2abd3add7dda96fe84fa0be4bbb8666e10bb3c3fc807d7c68e9ddc8)');
+});
+
+it('keeps the maximum structured text-attribute query under the database length bound', () => {
+  const attributes = Array.from({ length: 10 }, (_, index) => ({
+    key: 'connector' as const,
+    operator: 'eq' as const,
+    value: `USB-C ${'x'.repeat(90)} ${index}`,
+  }));
+  const query = buildDiscoveryFactRetrievalQuery(intent(
+    ...Array.from({ length: 5 }, () => ({ attributes }))
+  ));
+  expect(query.length).toBeLessThanOrEqual(16000);
 });
 
 it('normalizes decomposed Unicode before building retrieval terms', () => {

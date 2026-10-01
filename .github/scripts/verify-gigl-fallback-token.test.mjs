@@ -25,14 +25,23 @@ function runWithDotenv(contents) {
   }
 }
 
-function runExpectingFailure(contents) {
+function runExpectingInjectorRefusal(contents) {
   const dir = mkdtempSync(join(tmpdir(), 'gigl-fallback-token-'));
   try {
     const file = join(dir, '.env.production.local');
     writeFileSync(file, contents);
-    assert.throws(() =>
-      execFileSync('bash', [script, file], { cwd: repoRoot, stdio: 'pipe' })
-    );
+    try {
+      execFileSync('bash', [script, file], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch (error) {
+      // Must fail in the injector (absent key), not in the flag probe.
+      assert.match(String(error.stderr ?? ''), /is absent in/);
+      return;
+    }
+    assert.fail('expected a non-zero exit');
   } finally {
     rmSync(dir, { force: true, recursive: true });
   }
@@ -48,8 +57,20 @@ describe('verify gigl fallback token', () => {
   }
 
   it('treats an unset flag as enabled and fails closed on a missing token', () => {
-    runExpectingFailure('GIGL_ENABLED=\n');
-    runExpectingFailure('OTHER_KEY=1\n');
+    runExpectingInjectorRefusal('GIGL_ENABLED=\n');
+    runExpectingInjectorRefusal('OTHER_KEY=1\n');
+  });
+
+  it('treats a missing flag as enabled when the token is configured', () => {
+    const { stdout, updated } = runWithDotenv(
+      'GIGL_TRACKING_WORKER_TOKEN=\n'
+    );
+
+    assert.match(stdout, /build-time stand-in/);
+    assert.match(
+      updated,
+      /GIGL_TRACKING_WORKER_TOKEN="build-time-presence-stand-in-not-used-at-runtime-000000000000"/
+    );
   });
 
   it('injects the build-time stand-in over a blank pulled token', () => {

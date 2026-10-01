@@ -11,7 +11,10 @@
 set -euo pipefail
 
 file="${1:?dotenv path is required}"
-gigl_enabled="$(grep -E '^(export[[:space:]]+)?GIGL_ENABLED=' "$file" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r"'"'" | tr '[:upper:]' '[:lower:]' | xargs)"
+# The trailing `|| true` tolerates grep finding no GIGL_ENABLED assignment:
+# without it, pipefail would kill the script before the case can treat an
+# absent flag as enabled (the runtime default).
+gigl_enabled="$(grep -E '^(export[[:space:]]+)?GIGL_ENABLED=' "$file" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r"'"'" | tr '[:upper:]' '[:lower:]' | xargs || true)"
 case "$gigl_enabled" in
   0|false|off) echo 'GIGL is not enabled; skipping fallback token injection.' ;;
   *) node .github/scripts/inject-prebuilt-env-secret.mjs GIGL_TRACKING_WORKER_TOKEN "$file" 'build-time-presence-stand-in-not-used-at-runtime-000000000000' ;;

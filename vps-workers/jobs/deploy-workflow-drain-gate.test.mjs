@@ -51,6 +51,10 @@ describe('production cache-invalidation drain rollout gate', () => {
     assert.match(capability, /needs\.db-migrations\.result == 'success'/);
     assert.match(
       capability,
+      /uses: actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/
+    );
+    assert.match(
+      capability,
       /github\.event_name != 'workflow_dispatch'/
     );
     assert.match(
@@ -83,6 +87,14 @@ describe('production cache-invalidation drain rollout gate', () => {
       deployment,
       /run: \.github\/scripts\/verify-gigl-fallback-token\.sh \.vercel\/\.env\.production\.local/
     );
+    assert.match(
+      deployment,
+      /if: github\.event_name == 'workflow_dispatch'/
+    );
+    assert.match(
+      deployment,
+      /::warning::Manual dispatch bypasses the GIGL worker capability smoke/
+    );
   });
 
   it('scopes the tracking changeset to the worker, fallback, and wrapper paths', () => {
@@ -101,6 +113,10 @@ describe('production cache-invalidation drain rollout gate', () => {
     assert.match(
       tracking,
       /^  - 'supabase\/migrations\/\*gigl\*'$/m
+    );
+    assert.match(
+      tracking,
+      /^  - 'apps\/web\/src\/lib\/shipping\/providers\/gigl\*'$/m
     );
   });
 });

@@ -151,6 +151,9 @@ jobs:
     permissions:
       contents: read
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Smoke the live GIGL wrapper capability
         env:
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
@@ -228,6 +231,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: .github/scripts/current-main-deploy-guard.mjs
+      - name: Warn when dispatch bypasses the GIGL capability smoke
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo '::warning::Manual dispatch bypasses the GIGL worker capability smoke. Run the VPS capability wrapper by hand after this deploy before relying on tracking.'
       - uses: ./.github/actions/pnpm-install-cached
       # Pin Vercel CLI + allow esbuild postinstall in an isolated runner-temp
       # package so pnpm 10's strict ERR_PNPM_IGNORED_BUILDS does not block

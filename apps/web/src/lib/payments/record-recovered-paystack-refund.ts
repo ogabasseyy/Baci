@@ -131,6 +131,7 @@ export async function recordRecoveredPaystackRefund(
         },
         orderId: payment.order_id,
         paystackRef: String(refundId),
+        providerRefundStatus: current.status,
         reason: `Paystack refund ${refundId} collides with a non-refund transaction and cannot be recorded`,
       });
       logger.info({

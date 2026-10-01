@@ -165,6 +165,44 @@ describe('handlePaystackCancellationRefundFailure', () => {
     expect(eq).toHaveBeenCalledWith('step', 'refund');
   });
 
+  it('files exhaustion when the progress reset fails instead of deferring blind', async () => {
+    const terminalEq = vi
+      .fn()
+      .mockResolvedValue({ data: null, error: { code: 'CONN' } });
+    const eq = vi.fn().mockReturnValue({ eq: terminalEq });
+    const update = vi.fn().mockReturnValue({ eq });
+    const supabase = {
+      from: vi.fn().mockReturnValue({ update }),
+    } as unknown as Pick<SupabaseClient, 'from' | 'rpc'>;
+
+    // The reset did not land, so the resumed leg would still be capped:
+    // deferring would strand it with no evidence. File exhaustion with
+    // the accepted legs attached instead.
+    await expect(
+      handlePaystackCancellationRefundFailure({
+        isLastAttempt: true,
+        order: initiationOrder,
+        paystackRefund: {
+          code: 'HTTP_429',
+          error: 'slow down',
+          success: false,
+        },
+        refundIds: [101],
+        supabase,
+        transaction: initiationTransaction,
+      })
+    ).rejects.toThrow('slow down');
+
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          accepted_refund_ids: [101],
+          rate_limit_exhausted: true,
+        }),
+      })
+    );
+  });
+
   it('carries accepted legs into a later-leg failure review', async () => {
     await expect(
       invoke({ code: 'VALIDATION_ERROR', error: 'bad leg', refundIds: [101] })

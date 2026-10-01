@@ -243,12 +243,43 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
     const from = vi
       .fn()
       .mockReturnValueOnce(selectQuery([]))
+      .mockReturnValueOnce(selectQuery([]))
+      .mockReturnValueOnce(selectQuery([]))
       .mockReturnValueOnce(selectQuery([]));
     const supabase = { from } as unknown as SupabaseClient;
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
-    expect(from).toHaveBeenCalledTimes(2);
+    // Completed scan, stalled scan, then one completed recheck (a
+    // concurrent charge may have completed between the reads) and a
+    // final stalled scan before acknowledging the unknown refund.
+    expect(from).toHaveBeenCalledTimes(4);
+  });
+
+  it('records the payment when the recheck finds a concurrent completion', async () => {
+    const auditInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(selectQuery([]))
+      .mockReturnValueOnce(selectQuery([]))
+      .mockReturnValueOnce(selectQuery([firstPayment]))
+      .mockReturnValueOnce(selectQuery(order))
+      .mockReturnValueOnce({ insert: auditInsert });
+    const supabase = { from } as unknown as SupabaseClient;
+
+    // The payment was pending during the first scan and completed
+    // before the stalled scan ran: without the recheck the verified
+    // refund would be acknowledged with no local row, and a later
+    // recovery would mark the refunded order paid.
+    await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
+
+    expect(auditInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gateway_reference: '202',
+        transaction_type: 'refund',
+      })
+    );
+    expect(mocks.reconcilePaystackCancellationRefund).toHaveBeenCalledTimes(1);
   });
 
   it('throws when the recovery review cannot be persisted', async () => {

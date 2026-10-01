@@ -26,7 +26,10 @@ const STALLED_MATCH_PAGE_SIZE = 10;
  * is merchant evidence, so it files into the non-cancellation queue
  * instead — acknowledging it with neither review nor local refund row
  * would let a later charge recovery mark the order paid even though
- * the customer was refunded.
+ * the customer was refunded. Returns the number of stalled matches
+ * filed so the caller can recheck completed payments when both scans
+ * are empty (a concurrent charge webhook may have completed the
+ * payment between the two reads).
  */
 export async function fileStalledPaystackRefundReviews(
   supabase: SupabaseClient,
@@ -41,7 +44,7 @@ export async function fileStalledPaystackRefundReviews(
     refund: { amount: number; currency: string; status: string };
     refundId: number;
   }
-): Promise<void> {
+): Promise<number> {
   const stalled: StalledPayment[] = [];
   for (let offset = 0; ; offset += STALLED_MATCH_PAGE_SIZE) {
     const { data: stalledRows, error: stalledError } = await supabase
@@ -64,7 +67,7 @@ export async function fileStalledPaystackRefundReviews(
         'Unknown Paystack refund event matches no single completed payment',
       refundId,
     });
-    return;
+    return 0;
   }
   const reason = `Paystack refund ${refundId} matches a non-completed local payment for reference ${gatewayReference}`;
   await fileCancelledPaystackRefundCandidateReviews(
@@ -84,4 +87,5 @@ export async function fileStalledPaystackRefundReviews(
     message: 'Unknown Paystack refund event matches a non-completed payment',
     refundId,
   });
+  return stalled.length;
 }

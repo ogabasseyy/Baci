@@ -25,14 +25,18 @@ export async function recoverUnknownPaystackRefund(
 ): Promise<void> {
   const { current, resolvedPaymentReference } =
     await verifyUnknownPaystackRefundProvider(refundId, paymentReference);
-  const candidates = await fetchCompletedPaymentsByReference(
+  let candidates = await fetchCompletedPaymentsByReference(
     supabase,
     resolvedPaymentReference
   );
-  const payment = candidates[0];
   const evidence = {
     providerPaymentTransactionId: current.transaction,
     providerRefundId: refundId,
+    // Coerced: the malformed-evidence branch below files with this same
+    // object, and a non-string verdict must fail closed downstream as
+    // non-failed rather than poison the exclusion check.
+    providerRefundStatus:
+      typeof current.status === 'string' ? current.status : 'unknown',
     reference: resolvedPaymentReference,
   };
   if (
@@ -79,58 +83,73 @@ export async function recoverUnknownPaystackRefund(
     );
     throw new Error('paystack_refund_evidence_invalid');
   }
-  if (candidates.length > 1) {
-    // The reference resolves to completed payments on different orders and
-    // redelivery cannot disambiguate them: persist one review per
-    // cancelled order so ops can route the verified provider refund,
-    // then acknowledge. Active-order matches stay out of the
-    // cancellation queue but still need operations eyes, so they file
-    // into the non-cancellation queue below.
-    const reason = `Paystack refund ${refundId} matches multiple completed payments for reference ${resolvedPaymentReference}`;
-    await fileCancelledPaystackRefundCandidateReviews(
-      supabase,
-      candidates,
+  for (let pass = 0; ; pass++) {
+    const payment = candidates[0];
+    if (candidates.length > 1) {
+      // The reference resolves to completed payments on different orders
+      // and redelivery cannot disambiguate them: persist one review per
+      // cancelled order so ops can route the verified provider refund,
+      // then acknowledge. Active-order matches stay out of the
+      // cancellation queue but still need operations eyes, so they file
+      // into the non-cancellation queue below.
+      const reason = `Paystack refund ${refundId} matches multiple completed payments for reference ${resolvedPaymentReference}`;
+      await fileCancelledPaystackRefundCandidateReviews(
+        supabase,
+        candidates,
+        evidence,
+        reason
+      );
+      await fileActiveOrderPaystackRefundCandidateReviews(
+        supabase,
+        candidates,
+        evidence,
+        reason,
+        {
+          amount: current.amount / 100,
+          currency: current.currency,
+          status: current.status,
+        }
+      );
+      logger.info({
+        message:
+          'Unknown Paystack refund event matches multiple completed payments',
+        refundId,
+      });
+      return;
+    }
+    if (candidates.length !== 1 || !payment || !payment.order_id) {
+      // No completed local payment: a stale pending attempt may already
+      // have captured and been refunded before the sweep examined it.
+      // Retain the verified provider evidence instead of treating it as
+      // unrelated.
+      const stalledFiled = await fileStalledPaystackRefundReviews(supabase, {
+        evidence,
+        gatewayReference: resolvedPaymentReference,
+        refund: {
+          amount: current.amount / 100,
+          currency: current.currency,
+          status: current.status,
+        },
+        refundId,
+      });
+      if (stalledFiled > 0 || pass > 0) return;
+      // Both scans empty: a payment pending during the first read may
+      // have completed before the stalled scan ran. Recheck once so a
+      // concurrent charge cannot slip a funded payment through
+      // unacknowledged — without a row or review, a later recovery
+      // would mark the refunded order paid.
+      candidates = await fetchCompletedPaymentsByReference(
+        supabase,
+        resolvedPaymentReference
+      );
+      continue;
+    }
+    await recordRecoveredPaystackRefund(supabase, {
+      current,
       evidence,
-      reason
-    );
-    await fileActiveOrderPaystackRefundCandidateReviews(
-      supabase,
-      candidates,
-      evidence,
-      reason,
-      {
-        amount: current.amount / 100,
-        currency: current.currency,
-        status: current.status,
-      }
-    );
-    logger.info({
-      message:
-        'Unknown Paystack refund event matches multiple completed payments',
+      payment: { ...payment, order_id: payment.order_id },
       refundId,
     });
     return;
   }
-  if (candidates.length !== 1 || !payment || !payment.order_id) {
-    // No completed local payment: a stale pending attempt may already have
-    // captured and been refunded before the sweep examined it. Retain the
-    // verified provider evidence instead of treating it as unrelated.
-    await fileStalledPaystackRefundReviews(supabase, {
-      evidence,
-      gatewayReference: resolvedPaymentReference,
-      refund: {
-        amount: current.amount / 100,
-        currency: current.currency,
-        status: current.status,
-      },
-      refundId,
-    });
-    return;
-  }
-  await recordRecoveredPaystackRefund(supabase, {
-    current,
-    evidence,
-    payment: { ...payment, order_id: payment.order_id },
-    refundId,
-  });
 }

@@ -42,6 +42,7 @@ const current = {
 const evidence = {
   providerPaymentTransactionId: 555,
   providerRefundId: 202,
+  providerRefundStatus: 'failed',
   reference: 'PSK-1',
 };
 const order = {

@@ -56,6 +56,7 @@ function database(pages: unknown[][]) {
 const evidence = {
   providerPaymentTransactionId: 555,
   providerRefundId: 202,
+  providerRefundStatus: 'failed',
   reference: 'PSK-1',
 };
 const refund = { amount: 10000, currency: 'NGN', status: 'processed' };
@@ -79,7 +80,7 @@ describe('fileStalledPaystackRefundReviews', () => {
   it('files both queues when stalled payments match', async () => {
     const { chain, supabase } = database([stalled]);
 
-    await fileStalledPaystackRefundReviews(supabase, {
+    const filed = await fileStalledPaystackRefundReviews(supabase, {
       evidence,
       gatewayReference: 'PSK-1',
       refund,
@@ -100,12 +101,13 @@ describe('fileStalledPaystackRefundReviews', () => {
     expect(mocks.loggerInfo).toHaveBeenCalledWith(
       expect.objectContaining({ refundId: 202 })
     );
+    expect(filed).toBe(stalled.length);
   });
 
   it('returns without filing when nothing matches', async () => {
     const { supabase } = database([[]]);
 
-    await fileStalledPaystackRefundReviews(supabase, {
+    const filed = await fileStalledPaystackRefundReviews(supabase, {
       evidence,
       gatewayReference: 'PSK-1',
       refund,
@@ -121,6 +123,7 @@ describe('fileStalledPaystackRefundReviews', () => {
     expect(mocks.loggerInfo).toHaveBeenCalledWith(
       expect.objectContaining({ refundId: 202 })
     );
+    expect(filed).toBe(0);
   });
 
   it('paginates full pages before filing', async () => {

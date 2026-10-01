@@ -11,6 +11,7 @@ import type {
   CancellationOrder,
 } from '@/lib/orders/order-cancellation-side-effect-types';
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
+import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
 import {
   DeferredError,
   type OrderCancellationSideEffectStep,
@@ -227,18 +228,10 @@ export async function executeOrderCancellationSideEffect({
     // permanently once the pending refund completes. Reset the budget
     // the order-level attempts consumed so the resumed run retries the
     // outstanding legs fresh instead of mistaking their first failure
-    // for exhaustion. Best-effort — the deferral below still lands if
-    // the write fails, and the resume re-enters this branch while legs
-    // are still awaiting.
-    try {
-      await supabase
-        .from('order_cancellation_side_effects')
-        .update({ attempts: 0 })
-        .eq('order_id', order.id)
-        .eq('step', step);
-    } catch {
-      // The resume retries the reset while legs are still awaiting.
-    }
+    // for exhaustion. Best-effort: when the reset fails the resume
+    // re-enters this branch while legs are still awaiting and retries
+    // it then.
+    await tryResetCancellationSideEffectAttempts(supabase, order.id, step);
     throw new DeferredError('cancellation_refund_awaiting_provider_completion');
   }
   // Withhold mismatched legs from initiation: their completed rows do not

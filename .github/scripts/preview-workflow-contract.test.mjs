@@ -85,26 +85,39 @@ test('token jobs are tagged with the preview environment', () => {
   assert.doesNotMatch(jobBlock('build'), /environment:\s*preview/);
 });
 
-test('preview helpers execute from the trusted default-branch checkout', () => {
-  assert.match(executable, /path:\s*trusted-ops/);
+test('preview helpers execute from trusted checkouts only', () => {
+  const prepare = jobBlock('prepare');
+  const build = jobBlock('build');
+  const deploy = jobBlock('deploy');
+  // Prepare's root is a full default-branch checkout, so root-relative
+  // helpers are trusted there.
+  assert.match(prepare, /run:\s*\.github\/scripts\/run-pinned-vercel\.sh/);
+  assert.doesNotMatch(prepare, /trusted-ops\//);
+  // Build and deploy roots are untrusted or empty: only trusted-ops helpers.
+  for (const [name, block] of [
+    ['build', build],
+    ['deploy', deploy],
+  ]) {
+    assert.match(block, /path:\s*trusted-ops/, `${name} isolates helpers`);
+    assert.doesNotMatch(block, /run:\s*\.github\/scripts\//);
+    assert.doesNotMatch(block, /run:\s*node\s+\.github\/scripts\//);
+    assert.doesNotMatch(block, /uses:\s*\.\/\.github\/actions\//);
+  }
   assert.match(
-    executable,
+    build,
     /uses:\s*\.\/trusted-ops\/\.github\/actions\/pnpm-install-cached/
   );
   assert.match(
-    executable,
+    build,
     /\.\/trusted-ops\/\.github\/scripts\/pnpm-install-with-retry\.sh/
   );
   const trustedRuns = executable.match(
     /trusted-ops\/\.github\/scripts\/run-pinned-vercel\.sh/g
   );
   assert.ok(
-    trustedRuns && trustedRuns.length >= 4,
-    'pull, build, pull, and deploy must invoke the trusted runner'
+    trustedRuns && trustedRuns.length === 3,
+    'build, pull, and deploy must invoke the trusted runner'
   );
-  assert.doesNotMatch(executable, /run:\s*\.github\/scripts\//);
-  assert.doesNotMatch(executable, /run:\s*node\s+\.github\/scripts\//);
-  assert.doesNotMatch(executable, /uses:\s*\.\/\.github\/actions\//);
 });
 
 test('deployment secrets stay off job-level environments', () => {
@@ -143,11 +156,66 @@ test('deployment token reaches only the trusted pull and deploy steps', () => {
   assert.doesNotMatch(jobBlock('build'), /VERCEL_PROJECT_ID/);
 });
 
-test('preview build uses a stand-in, never the real quiz secret', () => {
+test('preview build uses stand-ins, never real server secrets', () => {
   assert.doesNotMatch(executable, /QUIZ_RPC_SERVER_SECRET:\s*\$\{\{/);
   assert.match(executable, /build-time-presence-stand-in/);
+  assert.match(executable, /--generate-es256-jwk-standin/);
+  assert.doesNotMatch(
+    executable,
+    /SUPABASE_AGENTIC_JWT_PRIVATE_JWK:\s*\$\{\{/
+  );
+});
+
+test('only the known deployment secrets are bound', () => {
+  const bound = new Set(
+    [...executable.matchAll(/secrets\.([A-Z_]+)/g)].map(
+      (match) => match[1]
+    )
+  );
+  assert.deepEqual(
+    [...bound].sort(),
+    [
+      'TURBO_TEAM',
+      'TURBO_TOKEN',
+      'VERCEL_ORG_ID',
+      'VERCEL_PROJECT_ID',
+      'VERCEL_TOKEN',
+    ].sort()
+  );
+});
+
+test('free-form ref never reaches a shell script', () => {
+  const lines = executable.split('\n');
+  let inRunBlock = false;
+  for (const line of lines) {
+    if (/^\s*run:\s*\|/.test(line)) {
+      inRunBlock = true;
+      continue;
+    }
+    if (/^\s*run:\s*\S/.test(line)) {
+      assert.doesNotMatch(line, /inputs\.ref/);
+      inRunBlock = false;
+      continue;
+    }
+    if (inRunBlock) {
+      if (/^\s{10,}\S/.test(line)) {
+        assert.doesNotMatch(line, /inputs\.ref/);
+        continue;
+      }
+      inRunBlock = false;
+    }
+  }
+});
+
+test('artifacts expire at minimum retention', () => {
+  const retentions =
+    executable.match(/retention-days:\s*1\b/g) ?? [];
+  assert.equal(retentions.length, 2);
 });
 
 test('preview URL parsing anchors on the deploy assignment line', () => {
-  assert.match(executable, /grep -i 'preview:'/);
+  const deploy = jobBlock('deploy');
+  assert.match(deploy, /grep -oiE 'preview:/);
+  assert.match(deploy, /https:\/\/\[\^ \]\+\\.vercel\\.app/);
+  assert.match(deploy, /exit 1/);
 });

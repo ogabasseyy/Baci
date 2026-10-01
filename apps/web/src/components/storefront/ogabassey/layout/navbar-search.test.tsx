@@ -78,6 +78,8 @@ describe('NavbarSearch', () => {
 
     const input = screen.getByRole('searchbox', { name: /search products/i });
     fireEvent.change(input, { target: { value: 'iphone' } });
+    expect(input.closest('form')).toHaveAttribute('action', '/ogabassey/search');
+    expect(input.closest('form')).toHaveAttribute('method', 'get');
     fireEvent.submit(input.closest('form') as HTMLFormElement);
 
     expect(mocks.push).toHaveBeenCalledWith('/ogabassey/search?q=iphone');

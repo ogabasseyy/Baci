@@ -1,3 +1,5 @@
+import type { SearchSubmissionSource } from '@/lib/search-submission';
+
 export interface AutocompleteProduct {
   id: string;
   name: string;
@@ -31,7 +33,10 @@ export interface SearchAutocompleteProps {
    * input instead of opening the first product suggestion. When omitted,
    * the legacy first-product behavior is preserved.
    */
-  onSubmitSearch?: (query: string) => void;
+  onSubmitSearch?: (
+    query: string,
+    source?: Extract<SearchSubmissionSource, 'navbar' | 'see-all'>
+  ) => void;
   /**
    * Explicit popular-search selection recording for consumers without
    * full-search submission (e.g. live-filter headers): picking a popular

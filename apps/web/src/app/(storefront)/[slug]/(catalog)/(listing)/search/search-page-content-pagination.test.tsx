@@ -144,7 +144,6 @@ describe('SearchPageContent', () => {
         query: 'iphone',
         limit: 20,
         offset: 20,
-        trackAnalytics: false,
       })
     );
     expect(
@@ -193,7 +192,7 @@ describe('SearchPageContent', () => {
     );
   });
 
-  it('records a submission entry without a page param as a new search', async () => {
+  it('does not record a page-less results render as a new search', async () => {
     mockStorefrontContext();
     mockGetStorefrontSearchProducts.mockResolvedValueOnce({
       count: 45,
@@ -210,7 +209,7 @@ describe('SearchPageContent', () => {
     );
 
     expect(mockGetStorefrontSearchProducts).toHaveBeenCalledWith(
-      expect.objectContaining({ offset: 0, trackAnalytics: true })
+      expect.objectContaining({ offset: 0 })
     );
   });
 
@@ -231,11 +230,11 @@ describe('SearchPageContent', () => {
     );
 
     expect(mockGetStorefrontSearchProducts).toHaveBeenCalledWith(
-      expect.objectContaining({ offset: 0, trackAnalytics: false })
+      expect.objectContaining({ offset: 0 })
     );
   });
 
-  it('tracks one submission across a page 1 → 2 → 1 journey', async () => {
+  it('does not track results renders across a page 1 → 2 → 1 journey', async () => {
     mockStorefrontContext();
     mockGetStorefrontSearchProducts.mockResolvedValue({
       count: 45,
@@ -252,7 +251,7 @@ describe('SearchPageContent', () => {
       )) as React.ReactElement
     );
     expect(mockGetStorefrontSearchProducts).toHaveBeenLastCalledWith(
-      expect.objectContaining({ offset: 0, trackAnalytics: true })
+      expect.objectContaining({ offset: 0 })
     );
 
     // Paging forward is navigation, not a submission.
@@ -262,7 +261,7 @@ describe('SearchPageContent', () => {
       )) as React.ReactElement
     );
     expect(mockGetStorefrontSearchProducts).toHaveBeenLastCalledWith(
-      expect.objectContaining({ offset: 20, trackAnalytics: false })
+      expect.objectContaining({ offset: 20 })
     );
 
     // Returning to page 1 via the Previous link (explicit page=1) must not
@@ -273,7 +272,7 @@ describe('SearchPageContent', () => {
       )) as React.ReactElement
     );
     expect(mockGetStorefrontSearchProducts).toHaveBeenLastCalledWith(
-      expect.objectContaining({ offset: 0, trackAnalytics: false })
+      expect.objectContaining({ offset: 0 })
     );
     expect(mockGetStorefrontSearchProducts).toHaveBeenCalledTimes(3);
   });

@@ -11,7 +11,6 @@ import {
   type StorefrontSearchSort,
   searchStorefrontProducts,
 } from './storefront-search';
-import { scheduleSearchAnalyticsInsert } from './storefront-search-analytics';
 import { createPublicClient } from './supabase/public';
 import { createClient } from './supabase/server';
 
@@ -50,14 +49,6 @@ export async function getStorefrontSearchProducts(args: {
   limit: number;
   offset?: number;
   sort?: StorefrontSearchSort;
-  /**
-   * Opt into recording this call as a new submission in `search_analytics`.
-   * Reads are silent by default; when opted in, recording happens only
-   * after the search fully succeeds (ranked call plus hydration): partial
-   * failures stay untracked so a retry records the submission exactly
-   * once.
-   */
-  trackAnalytics?: boolean;
 }): Promise<StorefrontSearchProductsPage> {
   const publicSupabase = createPublicClient({
     clientInfo: 'baci-storefront-search-page',
@@ -70,26 +61,6 @@ export async function getStorefrontSearchProducts(args: {
     conditionFilter && !storefrontProductFilters.isAllFilter(conditionFilter)
   );
 
-  // Analytics records only fully successful searches. The ranked calls below
-  // run untracked; scheduling happens at each return instead. `after()` runs
-  // even for error-panel renders, so scheduling before the fallible
-  // did-you-mean/hydration steps would record partial failures — and a retry
-  // would then recount the same submission. Counts reflect the returned
-  // page (post-filter matches on the family path: what the shopper sees).
-  // Reads are silent by default: only explicit submissions (via the
-  // submissions endpoint) write analytics. Callers opt into render
-  // tracking explicitly where a first-page view counts as a submission.
-  const shouldTrackSearch = args.trackAnalytics ?? false;
-  const trackSearchSubmission = (result: { count: number; query: string }) => {
-    if (shouldTrackSearch) {
-      scheduleSearchAnalyticsInsert({
-        merchantId: args.merchantId,
-        query: result.query,
-        resultsCount: result.count,
-      });
-    }
-  };
-
   // Fast path: no in-memory family filter, so search_products_v2 owns
   // pagination and returns the exact total count in one page.
   if (!needsConditionFamilyFilter) {
@@ -101,11 +72,9 @@ export async function getStorefrontSearchProducts(args: {
       limit: requestedLimit,
       offset: requestedOffset,
       sort: args.sort,
-      trackAnalytics: false,
     });
 
     if (searchResult.productIds.length === 0) {
-      trackSearchSubmission(searchResult);
       return { ...searchResult, products: [] };
     }
 
@@ -116,7 +85,6 @@ export async function getStorefrontSearchProducts(args: {
     });
 
     const result = { ...searchResult, products };
-    trackSearchSubmission(result);
     return result;
   }
 
@@ -128,7 +96,6 @@ export async function getStorefrontSearchProducts(args: {
     query: args.query,
     filters: { ...args.filters, condition: null },
     sort: args.sort,
-    trackAnalytics: false,
   });
 
   if (candidates.productIds.length === 0) {
@@ -139,7 +106,6 @@ export async function getStorefrontSearchProducts(args: {
       products: [],
       query: candidates.query,
     };
-    trackSearchSubmission(result);
     return result;
   }
 
@@ -167,6 +133,5 @@ export async function getStorefrontSearchProducts(args: {
     products,
     query: candidates.query,
   };
-  trackSearchSubmission(result);
   return result;
 }

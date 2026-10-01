@@ -79,12 +79,16 @@ export function SearchAutocomplete({
   const isSubmittableQuery =
     isSearchSubmittable ?? ((text: string) => text.trim().length > 0);
   const handleSubmitSearch = onSubmitSearch
-    ? (query: string) => {
+    ? (query: string, source?: 'navbar' | 'see-all') => {
         if (!isSubmittableQuery(query)) {
           return;
         }
         prepareNavigation();
-        onSubmitSearch(query);
+        if (source) {
+          onSubmitSearch(query, source);
+        } else {
+          onSubmitSearch(query);
+        }
       }
     : undefined;
 

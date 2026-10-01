@@ -14,6 +14,7 @@ export const SEARCH_SUBMISSION_QUERY_MAX_LENGTH = 200;
 export const SEARCH_SUBMISSION_SOURCES = [
   'navbar',
   'results-form',
+  'see-all',
   'did-you-mean',
   'popular-search',
 ] as const;

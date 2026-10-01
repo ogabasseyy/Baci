@@ -77,7 +77,7 @@ describe('mounted navbar submission paths', () => {
     expect(submissionCalls()).toHaveLength(2); // identical intentional re-submission counts
   });
 
-  it('records see-all button activation once as a navbar submission', async () => {
+  it('records see-all button activation once as a see-all submission', async () => {
     await loadAutocomplete();
     fireEvent.change(screen.getByRole('searchbox'), {
       target: { value: 'phone case' },
@@ -91,7 +91,7 @@ describe('mounted navbar submission paths', () => {
       '/ogabassey/search?q=phone%20case'
     );
     expect(submissionBodies()).toEqual([
-      { query: 'phone case', pathPrefix: '/ogabassey', source: 'navbar' },
+      { query: 'phone case', pathPrefix: '/ogabassey', source: 'see-all' },
     ]);
   });
 

@@ -156,7 +156,7 @@ describe('SearchAutocompletePopup', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /see all results/i }));
 
-    expect(props.onSubmitSearch).toHaveBeenCalledWith('  x ');
+    expect(props.onSubmitSearch).toHaveBeenCalledWith('  x ', 'see-all');
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
 

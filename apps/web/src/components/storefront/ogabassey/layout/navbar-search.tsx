@@ -6,8 +6,11 @@ import type React from 'react';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import type { SearchAutocompleteProps } from '@/components/storefront/search-autocomplete';
-import { recordSearchSubmission } from '@/lib/search-submission';
-import { truncateSearchSubmissionQuery } from '@/lib/search-submission';
+import {
+  recordSearchSubmission,
+  type SearchSubmissionSource,
+  truncateSearchSubmissionQuery,
+} from '@/lib/search-submission';
 import {
   parseStorefrontSearchQueryParam,
   STOREFRONT_SEARCH_MAX_QUERY_LENGTH,
@@ -120,7 +123,10 @@ export function NavbarSearch({
     return null;
   }
 
-  const pushSearchRoute = (query: string) => {
+  const pushSearchRoute = (
+    query: string,
+    source: Extract<SearchSubmissionSource, 'navbar' | 'see-all'> = 'navbar'
+  ) => {
     // The blog branch keeps its own 100-character limit: the listing
     // lookup discards everything past it, so submitting the 200-character
     // product limit would display and encode a query the results ignore.
@@ -150,7 +156,7 @@ export function NavbarSearch({
       return;
     }
 
-    recordSearchSubmission(trimmedQuery, basePath, 'navbar');
+    recordSearchSubmission(trimmedQuery, basePath, source);
     router.push(
       `${basePath}/search?q=${encodeURIComponent(trimmedQuery)}` as `/${string}`
     );
@@ -204,7 +210,12 @@ export function NavbarSearch({
   let searchContent: React.ReactNode;
   if (isBlogPage) {
     searchContent = (
-      <form onSubmit={handleSubmit} className="ogabassey-navbar-search">
+      <form
+        action={`${basePath}/${isBlogPage ? 'blog' : 'search'}`}
+        method="get"
+        onSubmit={handleSubmit}
+        className="ogabassey-navbar-search"
+      >
         <Input
           type="search"
           value={searchQuery}
@@ -247,7 +258,12 @@ export function NavbarSearch({
     );
   } else {
     searchContent = (
-      <form onSubmit={handleSubmit} className="ogabassey-navbar-search">
+      <form
+        action={`${basePath}/${isBlogPage ? 'blog' : 'search'}`}
+        method="get"
+        onSubmit={handleSubmit}
+        className="ogabassey-navbar-search"
+      >
         <Search className="ogabassey-navbar-search__icon" aria-hidden="true" />
         <Input
           type="search"

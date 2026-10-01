@@ -99,7 +99,7 @@ describe('SearchAutocomplete', () => {
     // Submitting navigates away (persistent consumers stay mounted), so
     // the pending request is cancelled with the close.
     fireEvent.click(seeAll);
-    expect(onSubmitSearch).toHaveBeenCalledWith('ip');
+    expect(onSubmitSearch).toHaveBeenCalledWith('ip', 'see-all');
     expect(signal?.aborted).toBe(true);
     expect(
       screen.queryByRole('button', { name: /see all results/i })

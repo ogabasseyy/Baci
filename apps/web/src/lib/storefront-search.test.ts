@@ -238,7 +238,6 @@ describe('searchStorefrontProducts', () => {
       merchantId: '123e4567-e89b-12d3-a456-426614174000',
       query: 'iphone',
       limit: 10,
-      trackAnalytics: false,
     });
 
     expect(createPublicClient).not.toHaveBeenCalledWith({

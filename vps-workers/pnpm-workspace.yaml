@@ -2,6 +2,8 @@ minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   # Security hotfixes for Dependabot alerts opened 2026-06-18.
   - undici@7.29.0
+  # Security hotfixes for Dependabot alerts opened 2026-10-01.
+  - undici@7.29.1
 
 packages:
   - "."
@@ -9,4 +11,6 @@ packages:
 overrides:
   ws: "8.21.0"
   # Pin to patched 7.x without forcing a cross-major Undici 8 upgrade.
-  undici: "7.29.0"
+  # 7.29.1 closes the WebSocket DoS, BalancedPool TLS bypass,
+  # cookie-disclosure, retry-interceptor, and decompression advisories.
+  undici: "7.29.1"

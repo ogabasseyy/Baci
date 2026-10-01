@@ -171,6 +171,32 @@ jobs:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         continue-on-error: true
 
+      # Semgrep honors nosemgrep for its exit code but still emits suppressed
+      # findings into --sarif output with suppressions:[{kind:inSource}], and
+      # GitHub code scanning ignores that flag — audited findings stay open as
+      # phantom alerts (e.g. the reviewed pull_request_target checkout in
+      # muse-code-review.yml). Drop suppressed results before upload so the
+      # Security tab matches the in-source audit record. Uses python3 (the
+      # scan container has no jq); the nosemgrep comments remain the audit
+      # trail — nothing is hidden, only the broken transport is repaired.
+      - name: Drop suppressed findings from SARIF
+        if: always()
+        run: |
+          # Scans that found no targets write no SARIF; nothing to filter then.
+          [ -s semgrep.sarif ] || exit 0
+          python3 - <<'EOF'
+          import json
+          with open('semgrep.sarif') as fh:
+              sarif = json.load(fh)
+          for run in sarif.get('runs', []):
+              run['results'] = [
+                  r for r in run.get('results', [])
+                  if not r.get('suppressions')
+              ]
+          with open('semgrep.sarif', 'w') as fh:
+              json.dump(sarif, fh)
+          EOF
+
       - name: Verify SARIF exists
         id: verify-sarif
         if: always()

@@ -27,6 +27,8 @@ minimumReleaseAgeExclude:
   - nanoid@3.3.17 || 5.1.16
   - dompurify@3.4.13
   - js-yaml@4.3.1
+  # Security hotfixes released within the cooldown window; Dependabot alerts opened 2026-10-01.
+  - next@16.3.6
 # Refuse trust-signal downgrades; trustLockfile keeps already-locked entries installable.
 trustPolicy: no-downgrade
 trustLockfile: true
@@ -119,7 +121,9 @@ overrides:
   # Pin qs 6.16.0 for GHSA-q8mj-m7cp-5q26 (comma-format arrays) plus the isBuffer
   # DoS and bracket-key array-limit bypass advisories.
   qs: "6.16.0"
-  markdown-it: "14.2.0"
+  # Pin to 14.3.1 to mitigate GHSA-253c-mchw-3w2r (linkify quadratic
+  # event-loop blocking) while staying on the Markdown-it 14 line.
+  markdown-it: "14.3.1"
   "@modelcontextprotocol/sdk": "^1.25.2"
   # SDK 57 worklets 0.10.1; keep lockstep with react-native-reanimated (#2960).
   react-native-worklets: "0.10.1"
@@ -131,10 +135,14 @@ overrides:
   svgo: "3.3.5"
   linkify-it: "5.0.2"
   underscore: "^1.13.8"
-  # Pin to 3.4.13 to mitigate GHSA-55q2-fjhq-7xh7 and prior DOMPurify advisories.
-  dompurify: "3.4.13"
+  # Pin to 3.4.16 to mitigate GHSA-p98j-92pf-mc4p (IN_PLACE afterSanitize
+  # hook DOM XSS) and prior DOMPurify advisories.
+  dompurify: "3.4.16"
   # Pin to patched 7.x without forcing a cross-major Undici 8 upgrade.
-  undici: "7.29.0"
+  # 7.29.1 closes the GHSA-rfgv-xxqx-mfg5 WebSocket DoS, GHSA-w293-vg96-wgc3
+  # BalancedPool TLS bypass, cookie-disclosure, retry-interceptor, and
+  # decompression advisories.
+  undici: "7.29.1"
   # Pin sanitize-html 2.17.7 for GHSA-rpr9-rxv7-x643 / CVE-2026-44990 (xmp passthrough)
   # plus the textarea allowedTags bypass and SVG SMIL scheme-policy XSS advisories.
   sanitize-html: "2.17.7"
@@ -151,7 +159,9 @@ overrides:
   minimatch: "10.2.3"
   # Pin older uuid consumers to 11.1.1 to mitigate GHSA-w5hq-g745-h8pq while staying on a CommonJS-compatible patched release.
   # Pin the minimatch transitive to the current patched 5.x release.
-  "minimatch>brace-expansion": "5.0.9"
+  # 5.0.12 closes the GHSA-6j4f-fj2g-mc7p / GHSA-qhr7-859c-m2p7 recursion
+  # DoS and GHSA-q2hr-2g5m-vwhr quadratic-expansion advisories.
+  "minimatch>brace-expansion": "5.0.12"
   # Pin vulnerable ws consumers to patched lines for GHSA-96hv-2xvq-fx4p / CVE-2026-48779 without forcing cross-major upgrades.
   "ws@>=5 <5.2.5": "5.2.5"
   "ws@>=6 <6.2.4": "6.2.4"
@@ -164,8 +174,9 @@ overrides:
   # Pin fast-xml-builder for Dependabot #161/#162 (compatible with fast-xml-parser ^1.1.5).
   fast-xml-builder: "1.2.0"
   # AJV 8.x has no fast-uri peer constraint, so this exact patched pin is compatible.
-  # 3.1.6 closes the percent-decoding SSRF and IDN/scheme host-confusion advisories.
-  fast-uri: "3.1.6"
+  # 3.1.8 closes the GHSA-qw65-cvwx-89v3 authority injection, GHSA-58mr-gqgx-xq4g
+  # host confusion, and GHSA-hrr3-gc8f-f4qj normalization advisories.
+  fast-uri: "3.1.8"
   # Pin to 4.1.0 so Vitest 4.x can import isAgent from a compatible std-env release.
   std-env: "4.1.0"
   # Pin to 3.1.0 so Vitest 4.x consumers resolve a compatible color utility during CLI startup.
@@ -182,9 +193,13 @@ overrides:
   # Pin uuid 13.x consumers to 13.0.1 to mitigate GHSA-w5hq-g745-h8pq.
   "uuid@>=13 <13.0.1": "13.0.1"
   # Pin transitive Lighthouse/Puppeteer proxy tooling to the current patched release.
-  ip-address: "10.3.1"
-  # Keep every workspace package on the reviewed Next.js 16.3.4 release.
-  next: "16.3.4"
+  # 10.7.1 closes the GHSA-j6r3-76f7-8jcv allowlist bypass, GHSA-h3mg-xc3c-68pw
+  # parse-diagnostic DoS, and GHSA-rpw4-54j3-4h4q / GHSA-2vr4-cq9g-pvrc SSRF
+  # trust-boundary advisories.
+  ip-address: "10.7.1"
+  # Keep every workspace package on the reviewed Next.js 16.3.6 release.
+  # 16.3.6 closes GHSA-vcvr-r3jv-pc5j (critical RCE in next/og ImageResponse).
+  next: "16.3.6"
   flatted: "3.4.2"
   lodash: "4.18.1"
   lodash-es: "4.18.1"
@@ -258,15 +273,15 @@ overrides:
   path-to-regexp: ">=8.4.0"
   # Mermaid arrives transitively via streamdown; keep it on the current patched 11.x line.
   mermaid: "^11.16.1"
-  # gRPC patched minors for CVE-2026-48068 / CVE-2026-48069 within semver bounds.
-  "@grpc/grpc-js@>=1.9.0 <1.9.16": "1.9.16"
-  "@grpc/grpc-js@>=1.10.0 <1.10.12": "1.10.12"
-  "@grpc/grpc-js@>=1.11.0 <1.11.4": "1.11.4"
-  "@grpc/grpc-js@>=1.12.0 <1.12.7": "1.12.7"
-  "@grpc/grpc-js@>=1.13.0 <1.13.5": "1.13.5"
-  "@grpc/grpc-js@>=1.14.0 <1.14.4": "1.14.4"
+  # gRPC patched floors for GHSA-m9gg-hp2v-232j (getAuthContext certificate
+  # confusion) and GHSA-f596-whhp-79r4 (method-handler error disclosure).
+  # No patched 1.9-1.12 line exists, so pre-1.13 consumers (incl. the Firebase
+  # Firestore ~1.9.0 transitive) move to the first patched 1.13 release; the
+  # 1.x API is semver-stable across these minors.
+  "@grpc/grpc-js@<1.13.6": "1.13.6"
+  "@grpc/grpc-js@>=1.14.0 <1.14.5": "1.14.5"
   # google-gax: prefer patched grpc-js 1.14.x over the 1.10.x floor.
-  "google-gax>@grpc/grpc-js": "1.14.4"
+  "google-gax>@grpc/grpc-js": "1.14.5"
   # Pin to 1.9.0 to mitigate GHSA-395f-4hp3-45gv / CVE-2026-9277.
   shell-quote: "1.9.0"
   # Pin each body-parser major to its first patched release for GHSA-v422-hmwv-36x6.
@@ -329,5 +344,5 @@ patchedDependencies:
   # checking (SWIFT_STRICT_CONCURRENCY is ignored in Swift 6 language mode).
   "expo-modules-core@57.0.12": "patches/expo-modules-core@57.0.12.patch"
   image-size@1.2.1: patches/image-size@1.2.1.patch
-  "next@16.3.4": "patches/next@16.3.4.patch"
+  "next@16.3.6": "patches/next@16.3.6.patch"
   '@supabase/auth-js@2.108.2': patches/@supabase__auth-js@2.108.2.patch

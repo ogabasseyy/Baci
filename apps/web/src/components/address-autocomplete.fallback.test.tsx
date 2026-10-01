@@ -122,13 +122,18 @@ it('clearing an input cancels its debounced provider call', async () => {
   expect(getPlacePredictions).not.toHaveBeenCalled();
 });
 
-function ControlledAddress() {
+function ControlledAddress({
+  onError,
+}: {
+  onError?: (failed: boolean) => void;
+}) {
   const [value, setValue] = useState('');
   return (
     <>
       <AddressAutocomplete
         aria-label="Address"
         value={value}
+        onError={onError}
         onChange={(change) =>
           setValue(typeof change === 'string' ? change : change.target.value)
         }
@@ -166,4 +171,22 @@ it.each([
   expect(
     screen.queryByRole('link', { name: 'Geoapify' })
   ).not.toBeInTheDocument();
+});
+
+it.each([
+  'Reset form',
+  'Load another address',
+])('clears failed suggestions and notifies recovery when the parent invokes %s', async (action) => {
+  vi.mocked(getPlacePredictions).mockRejectedValue(new Error('Unavailable'));
+  const onError = vi.fn();
+  render(<ControlledAddress onError={onError} />);
+  await search(
+    screen.getByRole('textbox', { name: 'Address' }),
+    'Allen Avenue'
+  );
+  expect(screen.getByRole('status')).toHaveTextContent(/unavailable/);
+  expect(onError).toHaveBeenLastCalledWith(true);
+  fireEvent.click(screen.getByRole('button', { name: action }));
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(onError).toHaveBeenLastCalledWith(false);
 });

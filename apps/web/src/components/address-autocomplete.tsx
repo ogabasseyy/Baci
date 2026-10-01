@@ -14,6 +14,7 @@ import { AddressAutocompleteAttribution } from './address-autocomplete-attributi
 import { AddressAutocompleteDropdown } from './address-autocomplete-dropdown';
 import { loadPredictions } from './address-autocomplete-predictions';
 import { selectAddressPrediction } from './address-autocomplete-selection';
+import { useAddressAutocompleteStatus } from './address-autocomplete-status';
 import type { AddressAutocompleteProps } from './address-autocomplete-types';
 
 export type { PlaceDetails } from './address-autocomplete-types';
@@ -38,6 +39,8 @@ export function AddressAutocomplete({
   const [isLoading, setIsLoading] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [mounted, setMounted] = useState(false);
+  const { suggestionsFailed, handleProviderError, clearProviderError } =
+    useAddressAutocompleteStatus(onError);
   const [selectedAddress, setSelectedAddress] = useState<{
     provider: 'google' | 'geoapify';
     values: string[];
@@ -48,18 +51,13 @@ export function AddressAutocomplete({
   if (value !== prevValue) {
     setPrevValue(value);
     if (value !== undefined) {
+      if (value !== internalValue) clearProviderError();
       setInternalValue(value);
       if (selectedAddress && !selectedAddress.values.includes(value)) {
         setSelectedAddress(null);
       }
     }
   }
-  const [suggestionsFailed, setSuggestionsFailed] = useState(false);
-  const handleProviderError = (failed: boolean) => {
-    setSuggestionsFailed(failed);
-    onError?.(failed);
-  };
-
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);

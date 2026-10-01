@@ -86,13 +86,34 @@ describe('distributed address provider budgets', () => {
     expect(await budget.reserveGooglePlacesRequest('autocomplete')).toBe(false);
     expect(evalMock).not.toHaveBeenCalled();
   });
-  it('fails closed rather than mixing credentials from different databases', async () => {
-    vi.stubEnv('ADDRESS_AUTOCOMPLETE_REDIS_REST_URL', 'https://address.test');
+  it.each([
+    ['https://address.test', ''],
+    ['', 'address-token'],
+  ])('fails closed rather than resetting usage in another database for partial config %s/%s', async (url, token) => {
+    vi.stubEnv('ADDRESS_AUTOCOMPLETE_REDIS_REST_URL', url);
+    vi.stubEnv('ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN', token);
     vi.stubEnv('KV_REST_API_URL', 'https://kv.test');
     vi.stubEnv('KV_REST_API_TOKEN', 'kv-token');
     const budget = await import('./provider-budget');
+    expect(await budget.reserveGooglePlacesRequest('autocomplete')).toBe(false);
     expect(await budget.reserveGeoapifyRequest()).toBe(false);
     expect(redisConstructor).not.toHaveBeenCalled();
+    expect(evalMock).not.toHaveBeenCalled();
+  });
+  it('shares provider account budgets across preview and production', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-02T12:00:00Z'));
+    vi.stubEnv('KV_REST_API_URL', 'https://kv.test');
+    vi.stubEnv('KV_REST_API_TOKEN', 'kv-token');
+    const budget = await import('./provider-budget');
+    vi.stubEnv('VERCEL_ENV', 'production');
+    await budget.reserveGooglePlacesRequest('autocomplete');
+    await budget.reserveGeoapifyRequest();
+    vi.stubEnv('VERCEL_ENV', 'preview');
+    await budget.reserveGooglePlacesRequest('autocomplete');
+    await budget.reserveGeoapifyRequest();
+    expect(evalMock.mock.calls[0][1]).toEqual(evalMock.mock.calls[2][1]);
+    expect(evalMock.mock.calls[1][1]).toEqual(evalMock.mock.calls[3][1]);
   });
   it('reserves Geoapify calls in an atomic rolling day with request spacing', async () => {
     vi.stubEnv('KV_REST_API_URL', 'https://kv.test');

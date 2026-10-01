@@ -3,7 +3,10 @@ import { fetchGoogleAutocomplete } from './google-autocomplete';
 import { fetchLegacyPlacesJson } from './legacy-places';
 import { reserveGooglePlacesRequest } from './provider-budget';
 
-vi.mock('./legacy-places', () => ({ fetchLegacyPlacesJson: vi.fn() }));
+vi.mock('./legacy-places', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./legacy-places')>()),
+  fetchLegacyPlacesJson: vi.fn(),
+}));
 vi.mock('./provider-budget', () => ({
   reserveGooglePlacesRequest: vi.fn(async () => true),
 }));
@@ -135,6 +138,20 @@ describe('Google autocomplete provider boundary', () => {
     expect(await fetchGoogleAutocomplete('Lagos')).toEqual({
       status: 500,
       body: { error: 'Internal server error' },
+    });
+  });
+  it.each([
+    new DOMException('Timed out', 'TimeoutError'),
+    new DOMException('Aborted', 'AbortError'),
+    new TypeError('fetch failed'),
+  ])('classifies exhausted transport errors as a safe gateway failure: %s', async (error) => {
+    vi.mocked(fetchLegacyPlacesJson).mockRejectedValue(error);
+    expect(await fetchGoogleAutocomplete('Lagos')).toEqual({
+      status: 502,
+      body: {
+        error: 'Failed to fetch predictions',
+        code: 'PLACES_AUTOCOMPLETE_HTTP_ERROR',
+      },
     });
   });
 });

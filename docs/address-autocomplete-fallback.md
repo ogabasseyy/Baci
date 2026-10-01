@@ -3,6 +3,8 @@
 The web address field requests `GET /api/places/autocomplete` with
 `fallback=geoapify`. Google remains first; Geoapify handles an exhausted application
 budget, provider quota/authentication/network failures, or no Google matches.
+Unexpected internal errors or malformed Google JSON return a safe 500 without
+spending Geoapify credits; exhausted transport errors remain fallback-eligible.
 An absent Google key also permits the explicitly requested, budgeted Geoapify
 fallback. Clients without that opt-in still receive the Google configuration error.
 Older native clients omit this parameter and continue receiving only Google
@@ -20,8 +22,15 @@ An isolated Redis database configured through `ADDRESS_AUTOCOMPLETE_REDIS_REST_U
 and `ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN` provides atomic shared counters across
 deployments. `UPSTASH_REDIS_REST_*` and `KV_REST_API_*` are supported as fallbacks.
 URL and token must come from the same configuration pair.
+A partially configured preferred pair fails closed even if another pair is
+complete. Automatically switching databases would lose the active ledger's
+usage history and could reset its spending allowance. A fallback database is
+selected only when the preferred pair is entirely absent.
 If distributed storage is unavailable, admission fails closed; there is no local
 counter that could reset on a serverless restart.
+Preview and staging requests using these credentials consume the same counters
+as production. Separate environment counters would multiply the allowance for
+the same provider account. Automated tests mock provider requests and counters.
 
 - Google: **4,500 combined upstream attempts per Pacific calendar month**, counting
   autocomplete, Details and retries. New predictions stop at 4,400, leaving 100

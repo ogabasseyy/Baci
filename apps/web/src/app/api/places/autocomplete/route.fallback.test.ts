@@ -135,8 +135,11 @@ describe('address provider fallback', () => {
   });
 
   it('falls back on a Google transport failure', async () => {
+    const timeout = new DOMException('Timed out', 'TimeoutError');
     mockFetch
-      .mockRejectedValueOnce(new Error('timeout'))
+      .mockRejectedValueOnce(timeout)
+      .mockRejectedValueOnce(timeout)
+      .mockRejectedValueOnce(timeout)
       .mockResolvedValueOnce(respond({ results: [geoResult] }));
     expect(
       (
@@ -149,6 +152,32 @@ describe('address provider fallback', () => {
         )
       ).status
     ).toBe(200);
+  });
+
+  it.each([
+    'parse',
+    'internal',
+  ])('does not spend the fallback budget for an unexpected Google %s failure', async (failure) => {
+    if (failure === 'parse') {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new SyntaxError('Invalid provider JSON');
+        },
+      });
+    } else {
+      mockFetch.mockRejectedValueOnce(
+        new TypeError('Unexpected implementation failure')
+      );
+    }
+    const response = await GET(
+      makeRequest({ fallback: 'geoapify', input: 'Lagos' })
+    );
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: 'Internal server error' });
+    expect(reserveGeoapifyRequest).not.toHaveBeenCalled();
+    expect(mockFetch).toHaveBeenCalledOnce();
   });
 
   it('exposes manual entry when both budgets are unavailable, without calling a provider', async () => {

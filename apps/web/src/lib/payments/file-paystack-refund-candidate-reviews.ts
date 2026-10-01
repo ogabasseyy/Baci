@@ -4,6 +4,7 @@ import { filePaystackRefundRecoveryReview } from './file-paystack-refund-recover
 export interface RefundRecoveryEvidence {
   providerPaymentTransactionId: number;
   providerRefundId: number;
+  providerRefundStatus: string;
   reference: string;
 }
 
@@ -49,6 +50,7 @@ export async function filePaystackRefundCandidateReviews(
       // refund, and the open-by-paystack-ref index would collapse all but
       // the first order's review.
       paystackRef: null,
+      providerRefundStatus: evidence.providerRefundStatus,
       reason,
     });
   }

@@ -6,16 +6,27 @@ export interface PaystackRefundRecoveryReview {
   metadata: Record<string, unknown>;
   orderId: string;
   paystackRef: string | null;
+  providerRefundStatus: string;
   reason: string;
 }
 
 // Per-refund entries reuse the nested shape the completion RPC resolves, so
-// every merged refund must complete before the review closes.
+// every merged refund must complete before the review closes. The verified
+// verdict rides along per entry: a definitively failed provider refund
+// moved no money, so audit blocking excludes failed-only evidence per leg
+// instead of stranding a later genuine cancellation behind
+// delivery_uncertain. Candidate leg ids travel with the entry because the
+// top-level transaction id is often unset for candidate reviews.
 function nestedEvidence(review: PaystackRefundRecoveryReview) {
+  const candidateLegIds = review.candidates
+    .map((candidate) => candidate.payment_transaction_id)
+    .filter((id): id is string => typeof id === 'string');
   return {
     [`provider:${String(review.metadata.provider_refund_id)}`]: {
       audit_record_failed: true,
       payment_transaction_id: review.metadata.payment_transaction_id ?? null,
+      provider_refund_status: review.providerRefundStatus,
+      candidate_payment_transaction_ids: candidateLegIds,
       reason: review.reason.slice(0, 120),
       observed_at: new Date().toISOString(),
     },

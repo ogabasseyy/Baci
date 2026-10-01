@@ -37,6 +37,7 @@ function ordersQuery(data: unknown, error: unknown = null) {
 const evidence = {
   providerPaymentTransactionId: 555,
   providerRefundId: 202,
+  providerRefundStatus: 'failed',
   reference: 'PSK-1',
 };
 

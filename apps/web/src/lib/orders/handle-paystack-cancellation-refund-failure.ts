@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { initiateRefund as initiatePaystackRefund } from '@/lib/initiate-paystack-refund';
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
+import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
 import {
   DeferredError,
   DeliveryUncertainError,
@@ -59,15 +60,28 @@ export async function handlePaystackCancellationRefundFailure({
   // of stranding the leg while cron reports success. Legs accepted
   // earlier in this run consumed the order-level budget, so a first
   // failure for this leg after same-run progress defers for a fresh
-  // budget instead of filing exhaustion evidence it never earned.
-  const isExhaustedTransientFailure =
-    isDefiniteTransientFailure &&
-    isLastAttempt === true &&
-    refundIds.length === 0;
-  const isProgressTransientFailure =
+  // budget instead of filing exhaustion evidence it never earned —
+  // but only when the reset lands: deferring on a failed reset would
+  // leave the resumed leg capped at five attempts with no evidence,
+  // so a failed reset falls through to exhaustion filing below.
+  const shouldResetBudget =
     isDefiniteTransientFailure &&
     isLastAttempt === true &&
     refundIds.length > 0;
+  // The refund step is the only caller: the executor returns before
+  // initiation for customer_email.
+  const progressResetFailed = shouldResetBudget
+    ? await tryResetCancellationSideEffectAttempts(supabase, order.id, 'refund')
+    : false;
+  const isExhaustedTransientFailure =
+    isDefiniteTransientFailure &&
+    isLastAttempt === true &&
+    (refundIds.length === 0 || progressResetFailed);
+  const isProgressTransientFailure =
+    isDefiniteTransientFailure &&
+    isLastAttempt === true &&
+    refundIds.length > 0 &&
+    !progressResetFailed;
   if (refundIds.length > 0 && !isDefiniteTransientFailure) {
     await quarantineRefund({
       metadata: {
@@ -115,21 +129,9 @@ export async function handlePaystackCancellationRefundFailure({
       transactions: [transaction],
     });
   } else if (isProgressTransientFailure) {
-    // Same-run progress consumed the order-level budget: this leg may
-    // never have been attempted, so defer uncapped with a fresh budget
-    // instead of terminalizing it.
-    try {
-      await supabase
-        .from('order_cancellation_side_effects')
-        .update({ attempts: 0 })
-        // This module only serves the refund step; the executor returns
-        // before initiation for customer_email.
-        .eq('order_id', order.id)
-        .eq('step', 'refund');
-    } catch {
-      // Best-effort reset: the deferral below still lands, and the
-      // awaiting branch resets again while the accepted legs settle.
-    }
+    // Same-run progress consumed the order-level budget and the reset
+    // above landed: this leg may never have been attempted, so defer
+    // uncapped with a fresh budget instead of terminalizing it.
     throw new DeferredError(
       'cancellation_refund_progress_deferred_for_settlement'
     );

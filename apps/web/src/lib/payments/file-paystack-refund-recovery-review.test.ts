@@ -20,6 +20,7 @@ const review = {
   },
   orderId: 'order-1',
   paystackRef: '202',
+  providerRefundStatus: 'failed',
   reason: 'Paystack refund 202 collides with a non-refund transaction',
 };
 
@@ -49,6 +50,8 @@ describe('filePaystackRefundRecoveryReview', () => {
             'provider:202': expect.objectContaining({
               audit_record_failed: true,
               payment_transaction_id: 'pay-1',
+              provider_refund_status: 'failed',
+              candidate_payment_transaction_ids: ['pay-1'],
             }),
           },
         }),

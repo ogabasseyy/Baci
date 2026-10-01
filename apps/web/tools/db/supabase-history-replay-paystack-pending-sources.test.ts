@@ -26,7 +26,7 @@ describe('PAYSTACK_PENDING_SOURCES', () => {
 
     expect(sources).toEqual(EXPECTED_PAYSTACK_PENDING_SOURCES);
     expect(sources.at(-1)?.repositoryPath).toBe(
-      'supabase/migrations/20260928176000_queue_refund_row_for_refund_state_legs.sql'
+      'supabase/migrations/20260928177000_requeue_pending_legs_covered_only_by_unlinked_refunds.sql'
     );
   });
 

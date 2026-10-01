@@ -98,7 +98,7 @@ it('selects a condition offer when the request filters every variant out through
   row.availableVariants = [];
   row.availableOffers = [{ id: 'offer-used', price: 400, condition: 'used', stock_quantity: 1 }] as typeof row.availableOffers;
   const selected = selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone' }));
-  expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'offer-used', price: 400 });
+  expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'offer-used', price: 600 });
 });
 
 it('pairs a condition offer with the universe variant that proves the spec', () => {
@@ -111,7 +111,7 @@ it('pairs a condition offer with the universe variant that proves the spec', () 
   row.availableOffers = [{ id: 'offer-used', price: 400, condition: 'used', stock_quantity: 1 }] as typeof row.availableOffers;
   const selected = selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone',
     attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }] }));
-  expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'offer-used', price: 400 });
+  expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'offer-used', price: 700 });
   expect(selected?.selectedOption.attributes).toMatchObject({ storage_gb: 256 });
 });
 
@@ -134,7 +134,7 @@ it('reports paired-offer availability from the tighter inventory with the varian
   row.availableOffers = [{ id: 'offer-used', price: 400, condition: 'used', stock_quantity: 10 }] as typeof row.availableOffers;
   const selected = selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone',
     attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }] }));
-  expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'offer-used', price: 400 });
+  expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'offer-used', price: 700 });
   expect(selected?.availableVariants).toMatchObject([{ id: 'v-256' }]);
   expect(selected?.stockSummary).toMatchObject({ inStock: true, level: 'Last Units' });
 });
@@ -164,7 +164,7 @@ it('merges product metadata under paired-variant attributes with variant overrid
       { key: 'storage_gb', operator: 'eq', value: 256 },
       { key: 'processor', operator: 'eq', value: 'A17' },
     ] }));
-  expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'offer-used', price: 400 });
+  expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'offer-used', price: 700 });
   expect(selected?.selectedOption.attributes).toMatchObject({ storage_gb: 256, processor: 'A17' });
 });
 
@@ -177,8 +177,23 @@ it('sources paired-offer compare-at from the variant then parent, never the offe
   row.availableOffers = [{ id: 'offer-used', price: 400, condition: 'used', stock_quantity: 1, compare_at_price: 450 }] as typeof row.availableOffers;
   const selected = selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone',
     attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }] }));
-  expect(selected?.displayPrice).toBe(400);
+  expect(selected?.displayPrice).toBe(700);
   expect(selected?.displayCompareAtPrice).toBe(800);
+});
+
+it('prices paired offers at the variant price like the PDP', () => {
+  const row = makeRow({ has_variants: true, condition: 'new', discovery_metadata: { product_type: 'phone' } });
+  row.allVariants = [{ id: 'v-256', product_id: 'phone', attributes: { storage_gb: 256 }, price_override: 700, stock_quantity: 1 }] as typeof row.availableVariants;
+  row.availableVariants = [];
+  row.availableOffers = [{ id: 'offer-used', price: 450, condition: 'used', stock_quantity: 1 }] as typeof row.availableOffers;
+  const selected = selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone',
+    attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }] }));
+  expect(selected?.displayPrice).toBe(700);
+  expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'offer-used', price: 700 });
+  // The offer row price must not smuggle the pair through a budget the
+  // variant price exceeds: the PDP charges 700 for this selection.
+  expect(selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone',
+    attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }] }), { max_price: 500 })).toBeUndefined();
 });
 
 it('lets the first offer row claim its condition even when it is out of stock', () => {

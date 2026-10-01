@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import { hydrateSearchProductAvailability } from './search-product-availability';
 import { selectSearchProductsByPrice } from './select-search-products-by-price';
+import { selectStructuredDiscoveryOffer } from './select-structured-discovery-offer';
 
 describe('hydrateSearchProductAvailability', () => {
   it('uses the purchasable price for the requested condition', async () => {
@@ -228,5 +229,30 @@ describe('hydrateSearchProductAvailability', () => {
     } finally {
       error.mockRestore();
     }
+  });
+
+  it('preserves the out-of-stock first offer through hydration into selection', async () => {
+    const offerQuery = {
+      select: vi.fn(), eq: vi.fn(), in: vi.fn(), order: vi.fn(),
+      then: (resolve: (value: { data: Array<{ product_id: string; condition: string; price: number; stock_quantity: number }>; error: null }) => unknown) =>
+        Promise.resolve({ data: [
+          { product_id: 'dup-phone', condition: 'used', price: 400, stock_quantity: 0 },
+          { product_id: 'dup-phone', condition: 'used', price: 450, stock_quantity: 1 },
+        ], error: null }).then(resolve),
+    };
+    offerQuery.select.mockReturnValue(offerQuery);
+    offerQuery.eq.mockReturnValue(offerQuery);
+    offerQuery.in.mockReturnValue(offerQuery);
+    offerQuery.order.mockReturnValue(offerQuery);
+    const [row] = await hydrateSearchProductAvailability([{
+      id: 'dup-phone', condition: 'new', price: 500, manage_stock: true,
+      has_condition_offers: true, stock_quantity: 0,
+      discovery_metadata: { product_type: 'smartphone' },
+    }], { from: vi.fn(() => offerQuery) } as unknown as SupabaseClient, 'merchant-1');
+
+    // The first row survives hydration so selection's first-row dedupe sees
+    // the same row the PDP resolves; the later in-stock duplicate stays hidden.
+    expect(row.availableOffers).toHaveLength(2);
+    expect(selectStructuredDiscoveryOffer(row, { alternatives: [{}] })).toBeUndefined();
   });
 });

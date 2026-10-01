@@ -1,7 +1,7 @@
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
 import { getEffectiveStock } from '@/lib/product-stock';
 import type { ResolvedProductVariantSelection } from '@baci/shared/lib';
-import type { ConditionType } from './product-condition';
+import { type ConditionType, normalizeConditionType } from './product-condition';
 import type { NormalizedProductDetails } from './product-normalization';
 
 export interface ProductDetailsCurrentOffer {
@@ -38,8 +38,11 @@ export function resolveCurrentOffer(
     selectedCondition.toLowerCase() !==
     (productData.condition || 'new').toLowerCase()
   ) {
+    // Canonical comparison: stored rows use merchant spellings (refurbished,
+    // uk_used) that never equal the canonical selection raw, which silently
+    // fell back to the parent price for exactly those offers.
     const offer = productData.offers?.find(
-      (item) => item.condition.toLowerCase() === selectedCondition.toLowerCase()
+      (item) => normalizeConditionType(item.condition) === selectedCondition
     );
 
     if (offer) {

@@ -90,16 +90,17 @@ it('lets condition offers prove specs through the live variant instead of metada
   const row = makeRow({ has_variants: true, has_condition_offers: true, discovery_metadata: {
     product_type: 'smartphone', attributes: { color: 'black' },
   } });
-  row.availableVariants = [
+  row.allVariants = [
     { id: 'variant-256', product_id: 'phone', attributes: { Storage: '256GB' }, price_override: 700, stock_quantity: 2 },
   ] as typeof row.availableVariants;
+  row.availableVariants = [];
   row.availableOffers = [
     { id: 'used-1', price: 450, condition: 'used', stock_quantity: 1 },
   ] as typeof row.availableOffers;
   const selected = selectStructuredDiscoveryOffer(row, intent({ attributes: [
     { key: 'storage_gb', operator: 'eq', value: 256 },
   ] }));
-  expect(selected?.displayPrice).toBe(450);
+  expect(selected?.displayPrice).toBe(700);
   expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'used-1' });
   expect(selected?.selectedOption.attributes).toMatchObject({ storage_gb: 256 });
 });

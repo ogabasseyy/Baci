@@ -178,7 +178,13 @@ export function selectStructuredDiscoveryOffer(
       : [];
     if (pairings.length === 0) addCandidate({ ...offerCore, attributes: {}, compareAtPrice: productCompareAtPrice });
     for (const rawVariant of pairings) {
-      addCandidate({ ...offerCore, pairedVariant: rawVariant,
+      // PDP parity: resolveCurrentOffer replaces any selected offer price
+      // with the variant price whenever a variant is selected, so a paired
+      // candidate is priced by its variant, never the offer row.
+      const pairedPrice = finitePrice(record(rawVariant).price_override)
+        ?? finitePrice(product.price);
+      if (pairedPrice === undefined) continue;
+      addCandidate({ ...offerCore, price: pairedPrice, pairedVariant: rawVariant,
         compareAtPrice: finitePrice(record(rawVariant).compare_at_price) ?? productCompareAtPrice,
         attributes: normalizeDiscoveryOptionAttributes(record(record(rawVariant).attributes)) });
     }

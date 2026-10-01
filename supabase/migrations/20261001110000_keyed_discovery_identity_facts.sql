@@ -104,6 +104,24 @@ $$;
 -- RPC: on a retry after the switch, a serving v5 index already exists, and
 -- dropping it first would force every discovery query through a full product
 -- scan for the duration of the concurrent rebuild.
+-- A retry after an interruption between the RPC switch and the rename finds
+-- the temporary index serving: promote a valid build to the canonical name
+-- instead of dropping the only index matching the serving expression. An
+-- invalid leftover is not serving, so it falls through to the rebuild below.
+DO $$
+DECLARE
+  replacement_serving boolean;
+BEGIN
+  SELECT i.indisvalid INTO replacement_serving
+  FROM pg_catalog.pg_class AS c
+  JOIN pg_catalog.pg_index AS i ON i.indexrelid = c.oid
+  WHERE c.oid = pg_catalog.to_regclass('public.products_discovery_identity_search_idx_new');
+  IF pg_catalog.to_regclass('public.products_discovery_identity_search_idx') IS NULL
+    AND COALESCE(replacement_serving, false) THEN
+    ALTER INDEX public.products_discovery_identity_search_idx_new RENAME TO products_discovery_identity_search_idx;
+  END IF;
+END;
+$$;
 DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_identity_search_idx_new;
 CREATE INDEX CONCURRENTLY products_discovery_identity_search_idx_new ON public.products USING gin
 (discovery.product_discovery_search_document_v5(name, brand, category, description, discovery_metadata))

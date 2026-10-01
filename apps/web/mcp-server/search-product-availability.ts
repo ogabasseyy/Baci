@@ -84,6 +84,20 @@ export async function hydrateSearchProductAvailability(
       return variantCondition === condition;
     });
     const offers = offersMap.get(product.id) ?? [];
+    // PDP parity: both PDPs resolve the first row per canonical condition
+    // with no stock check, so the ordered first row survives hydration even
+    // when out of stock. Selection claims the condition on that row and
+    // drops it on stock, instead of advertising a later duplicate the PDP
+    // would never resolve.
+    const seenOfferConditions = new Set<string>();
+    const availableOffers = offers.filter((offer) => {
+      const canonical = normalizeCanonicalProductCondition(offer.condition);
+      const firstOfCondition = canonical !== '' && !seenOfferConditions.has(canonical);
+      if (canonical !== '') seenOfferConditions.add(canonical);
+      return product.manage_stock !== true
+        || Number(offer.stock_quantity ?? 0) > 0
+        || firstOfCondition;
+    });
     // A null base condition sells as new on the PDP, so availability must
     // default it before comparing instead of rejecting it as unrecognized.
     const baseCondition = normalizeCanonicalProductCondition(product.condition) || 'new';
@@ -133,9 +147,7 @@ export async function hydrateSearchProductAvailability(
         product.has_variants && variantLookupSucceeded ? variants : undefined,
         product.has_condition_offers ? offersMap.get(product.id) : undefined
       ),
-      availableOffers: offers.filter((offer) =>
-        product.manage_stock !== true || Number(offer.stock_quantity ?? 0) > 0
-      ),
+      availableOffers,
       optionsLookupFailed: optionPriceLookupFailed,
       variantLookupFailed: variantLookupStatus === 'failed',
       offerLookupFailed: offerLookupStatus === 'failed',

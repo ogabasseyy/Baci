@@ -69,12 +69,14 @@ it('indexes and queries numeric facts with their attribute identity', () => {
   expect(keyed.indexOf('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_keyed_search_idx;'))
     .toBeGreaterThan(keyed.indexOf('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts('));
   expect(keyed).toContain('RENAME TO products_discovery_keyed_search_idx;');
+  expect(keyed).toContain("to_regclass('public.products_discovery_keyed_search_idx') IS NULL");
+  expect(keyed).toContain('i.indisvalid');
   expect(keyed).toContain('@@ pg_catalog.to_tsquery');
   expect(keyed).toContain('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_capacity_search_idx');
 });
 
 it('serves variant recall through a published-merchant RPC instead of the staff-only table', () => {
-  const recall = readFileSync(new URL('../../../supabase/migrations/20261001090000_product_variant_recall.sql', import.meta.url), 'utf8');
+  const recall = readFileSync(new URL('../../../supabase/migrations/20261001093000_product_variant_recall_rpc.sql', import.meta.url), 'utf8');
   expect(recall).toContain('SECURITY DEFINER');
   expect(recall).toContain('is_published');
   expect(recall).toContain('is_inventory_anchor IS NOT TRUE');
@@ -82,13 +84,29 @@ it('serves variant recall through a published-merchant RPC instead of the staff-
   expect(recall).toContain('TO anon, authenticated, service_role');
 });
 
+it('keeps the recall matchers in the helper migration under the size limit', () => {
+  const helpers = readFileSync(new URL('../../../supabase/migrations/20261001090000_product_variant_recall.sql', import.meta.url), 'utf8');
+  expect(helpers.split('\n').length).toBeLessThanOrEqual(300);
+  expect(helpers).toContain('recall_variant_parse_numeric');
+  expect(helpers).toContain('recall_variant_key_matches');
+  expect(helpers).toContain('recall_variant_filter_verifiably_fails');
+  expect(helpers).toContain('recall_variant_filter_exactly_matches');
+  expect(helpers).toContain('recall_variant_filter_loader_accepts');
+  expect(helpers).not.toContain('search_product_variant_recall(');
+});
+
 it('filters variant recall by constraints before applying the cap', () => {
-  const recall = readFileSync(new URL('../../../supabase/migrations/20261001090000_product_variant_recall.sql', import.meta.url), 'utf8');
+  const recall = readFileSync(new URL('../../../supabase/migrations/20261001093000_product_variant_recall_rpc.sql', import.meta.url), 'utf8');
+  expect(recall.split('\n').length).toBeLessThanOrEqual(300);
   expect(recall).toContain('p_filters jsonb');
   expect(recall).toContain('recall_variant_filter_verifiably_fails');
-  expect(recall).toContain('recall_variant_parse_numeric');
+  expect(recall).toContain('recall_variant_filter_exactly_matches');
   expect(recall).toContain('recall_variant_filter_loader_accepts');
   expect(recall).toContain('DISTINCT ON (eligible.product_id)');
+  expect(recall).toContain('is_purchasable');
+  expect(recall).toContain('p.manage_stock IS NOT TRUE OR COALESCE(pv.stock_quantity, 0) > 0');
+  expect(recall.indexOf('(NOT best.is_purchasable)'))
+    .toBeLessThan(recall.indexOf('(NOT best.is_exact)'));
   expect(recall).toContain('jsonb_array_length(p_filters) > 50');
   expect(recall).toContain('octet_length(p_filters::text) > 16384');
   expect(recall.indexOf('recall_variant_filter_verifiably_fails(pv.attributes'))
@@ -154,6 +172,8 @@ it('indexes key-specific identity lexemes for capped retrieval', () => {
   expect(identity.indexOf('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_identity_search_idx;'))
     .toBeGreaterThan(identity.indexOf('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts('));
   expect(identity).toContain('RENAME TO products_discovery_identity_search_idx;');
+  expect(identity).toContain("to_regclass('public.products_discovery_identity_search_idx') IS NULL");
+  expect(identity).toContain('i.indisvalid');
   expect(identity).toContain('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx');
 });
 
@@ -175,6 +195,8 @@ it('indexes correlated verified text attribute pairs after the concurrent replac
   expect(correlated.indexOf('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx;'))
     .toBeGreaterThan(correlated.indexOf('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts('));
   expect(correlated).toContain('RENAME TO products_discovery_correlated_search_idx;');
+  expect(correlated).toContain("to_regclass('public.products_discovery_correlated_search_idx') IS NULL");
+  expect(correlated).toContain('i.indisvalid');
   expect(correlated).toContain('SECURITY INVOKER');
   expect(correlated).toContain('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_keyed_search_idx');
 });

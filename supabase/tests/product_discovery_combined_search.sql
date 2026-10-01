@@ -15,6 +15,13 @@ BEGIN
   IF document @@ plainto_tsquery('simple', '512GB phone') THEN
     RAISE EXCEPTION 'Search document fabricated a numeric specification';
   END IF;
+  document := public.product_discovery_search_document_v2('Laptop', 'Acme', 'Laptops', '',
+    '{"attributes":{"storage_gb":1024,"ram_gb":8}}'::jsonb);
+  IF NOT document @@ plainto_tsquery('simple', '1TB laptop') OR
+     NOT document @@ plainto_tsquery('simple', '1 TB laptop') OR
+     NOT document @@ plainto_tsquery('simple', '8192MB laptop') THEN
+    RAISE EXCEPTION 'Equivalent canonical capacity retrieval failed';
+  END IF;
   IF (SELECT prosecdef FROM pg_proc WHERE oid = 'public.search_product_discovery_facts(uuid,text,integer,integer)'::regprocedure) THEN
     RAISE EXCEPTION 'Fact retrieval must preserve invoker RLS';
   END IF;

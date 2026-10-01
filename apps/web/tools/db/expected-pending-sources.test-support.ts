@@ -261,6 +261,16 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   {
     repositoryPath:
+      'supabase/migrations/20260930205900_prebuild_product_discovery_fact_index.sql',
+    sha256: 'c1c907d2c32a26b3a90f3ccf2442014652126bed71c91e9bb6c7fec1b942fe14',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261001061000_equivalent_discovery_capacity_units.sql',
+    sha256: '047bc9be23b35c95249b1c4cd59b4e6ef80586df5e5cbcd4d18cd01da0e6cbe9',
+  },
+  {
+    repositoryPath:
       'supabase/migrations/20261001002000_combined_product_discovery_search.sql',
     sha256: 'c8342c1069c092798daa03aa945c7ab8932f2d12ef2973dca86f9a96b4b5754c',
   },

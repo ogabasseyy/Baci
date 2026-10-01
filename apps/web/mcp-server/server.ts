@@ -1,3 +1,4 @@
+import { formatInvalidDiscoveryIntent } from './format-invalid-discovery-intent';
 /**
  * Ogabassey ChatGPT MCP Server
  *
@@ -1274,10 +1275,7 @@ function createOgabasseyServer() {
         const coverage = 'coverage' in discovery ? discovery.coverage : undefined;
         if ('invalidIntentMessage' in discovery && discovery.invalidIntentMessage) {
           const message = discovery.invalidIntentMessage;
-          return {
-            content: [{ type: 'text', text: message }],
-            structuredContent: { products: [], status: 'error', message },
-          };
+          return formatInvalidDiscoveryIntent(message);
         }
         if (!priceScanComplete) {
           const message = 'incompleteReason' in discovery && discovery.incompleteReason === 'option_lookup_failed'

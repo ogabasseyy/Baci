@@ -17,3 +17,11 @@ it('normalizes storefront RAM and memory suffix labels while rejecting unrelated
   expect(normalizeDiscoveryOptionAttributes({ ram: '64GB SSD', storage: '64GB RAM', power: '20W RAM' }))
     .toEqual({ ram_gb: null, storage_gb: null, power_w: null });
 });
+
+it.each(['SSD', 'HDD', 'NVMe', 'eMMC'])('accepts the storefront storage-media suffix %s', (suffix) => {
+  expect(normalizeDiscoveryOptionAttributes({ storage: `1TB ${suffix}` })).toEqual({ storage_gb: 1024 });
+});
+it('rejects storage marketing suffixes and media suffixes on other dimensions', () => {
+  expect(normalizeDiscoveryOptionAttributes({ storage: '1TB fast', ram: '1TB SSD', power: '65W HDD' }))
+    .toEqual({ storage_gb: null, ram_gb: null, power_w: null });
+});

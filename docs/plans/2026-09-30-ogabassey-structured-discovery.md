@@ -71,3 +71,9 @@ Embedding coverage does not establish verified-fact coverage. Audit and populate
 ### Combined retrieval document
 
 Append migration `20261001002000_combined_product_discovery_search.sql` before rollout. Its fixed-config immutable document combines catalog text and verified fact values, plus unit-formatted lexemes derived from canonical numeric attributes (GB, W, inches, Hz). Query text remains retrieval-only; no sentence grammar is introduced. Verified structured constraints still decide identity and specifications after retrieval. Exact model identity and unknown-type exclusions intentionally remain strict. Missing product fetch batches preserve other confirmed results and report partial coverage.
+
+### Follow-up review: coverage and correlated retrieval
+
+Unknown required catalog facts now cause partial coverage disclosure while still failing closed for selection. Verified mismatches remain definitive. The keyword and combined catalog/fact source form one lexical RRF group: each product contributes its best reciprocal lexical rank once, plus an independent semantic contribution. This prevents the shared marketing text from voting twice without losing compound catalog/fact recall.
+
+The replay runner applies current-tree SQL through psql `-f` without `--single-transaction`; its existing orchestration regression verifies these exact arguments. The deployment procedure must likewise use autocommit for concurrent-index migrations. Actual PostgreSQL replay remains a required CI gate. Additive prebuild migration 20260930205900 creates the temporary fact index concurrently before the older IF NOT EXISTS definition; 20261001061000 builds a v2 combined document with equivalent GB/TB/MB lexemes and switches the RPC/index before retiring the previous combined index. No historical migration was rewritten.

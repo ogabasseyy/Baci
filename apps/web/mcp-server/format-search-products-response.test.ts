@@ -104,4 +104,14 @@ describe('formatSearchProductsResponse', () => {
       structuredContent: { products: [], status: 'empty', coverage: 'complete' },
     });
   });
+  it('does not turn an unconfirmed null price into a free price', () => {
+    const response = formatSearchProductsResponse({
+      selectedProducts: [{ ...selectedProducts[0], displayPrice: null }] as unknown as typeof selectedProducts,
+      sanitizedQuery: 'laptop', coverage: 'partial', searchMode: 'structured',
+      semanticUnavailable: false, requestedCondition: undefined, getSafeCatalogImageUrl: () => undefined,
+    });
+    expect(response.content[0].text).toContain('Price unconfirmed');
+    expect(response.content[0].text).not.toContain('₦0');
+  });
+
 });

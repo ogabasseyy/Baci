@@ -129,12 +129,16 @@ async function loadBrowseRows(merchantId: string, supabase: SupabaseClient) {
   }
 }
 
-function reciprocalRankFusion(...sources: string[][]) {
+function reciprocalRankFusion(...groups: string[][][]) {
   const scores = new Map<string, number>();
-  for (const ids of sources) {
-    for (const [rank, id] of ids.entries()) {
-      scores.set(id, (scores.get(id) ?? 0) + 1 / (60 + rank + 1));
+  for (const sources of groups) {
+    const groupScores = new Map<string, number>();
+    for (const ids of sources) {
+      for (const [rank, id] of ids.entries()) {
+        groupScores.set(id, Math.max(groupScores.get(id) ?? 0, 1 / (60 + rank + 1)));
+      }
     }
+    for (const [id, score] of groupScores) scores.set(id, (scores.get(id) ?? 0) + score);
   }
   return [...scores].sort(([idA, scoreA], [idB, scoreB]) =>
     scoreB - scoreA || idA.localeCompare(idB)
@@ -166,7 +170,8 @@ export async function loadStructuredDiscoveryCandidates({
   const [lexical, semantic, facts] = await Promise.all([
     lexicalPromise, semanticPromise, loadDiscoveryFactCandidates(query, merchantId, supabase),
   ]);
-  const rankedIds = reciprocalRankFusion(lexical.ids, semantic.value.ids, facts.ids);
+  // Correlated keyword/combined-document matches get one best lexical vote.
+  const rankedIds = reciprocalRankFusion([lexical.ids, facts.ids], [semantic.value.ids]);
   const products: McpSearchProductRow[] = [];
 
   let hydrationFailed = false;

@@ -45,3 +45,12 @@ describe('combined catalog/fact index contract', () => {
     expect(combinedSql).toContain("value || ' ' || unit || ' ' || value || unit");
   });
 });
+
+it('prebuilds the transient index concurrently and supports equivalent capacity units additively', () => {
+  const prebuild = readFileSync(new URL('../../../supabase/migrations/20260930205900_prebuild_product_discovery_fact_index.sql', import.meta.url), 'utf8');
+  const capacity = readFileSync(new URL('../../../supabase/migrations/20261001061000_equivalent_discovery_capacity_units.sql', import.meta.url), 'utf8');
+  expect(prebuild).toContain('CREATE INDEX CONCURRENTLY IF NOT EXISTS products_discovery_fact_search_idx');
+  expect(capacity).toContain('numeric / 1024');
+  expect(capacity).toContain('numeric * 1024');
+  expect(capacity).toContain('product_discovery_search_document_v2');
+});

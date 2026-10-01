@@ -300,4 +300,24 @@ describe('discoverStructuredProducts', () => {
     expect(result).toMatchObject({ priceScanComplete: false, coverage: 'partial', incompleteReason: 'option_lookup_failed' });
   });
 
+  it.each(['product_type', 'model', 'attributes', 'exclusion'])('discloses partial coverage for missing %s facts', async (constraint) => {
+    const p = product('unverified', {}, { category: 'Accessories' });
+    const fixture = client({ products: [p] });
+    const request = constraint === 'exclusion'
+      ? { alternatives: [{}], excluded_product_types: ['charger'] }
+      : intent(constraint === 'attributes'
+        ? { attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }] }
+        : { [constraint]: constraint === 'model' ? 'ZX42' : 'security_camera' });
+    const result = await discoverStructuredProducts(input(fixture.supabase, request as McpDiscoveryIntent));
+    expect(result.selectedProducts).toEqual([]);
+    expect(result.coverage).toBe('partial');
+  });
+
+  it('retains complete coverage for a verified mismatch even if another fact is absent', async () => {
+    const fixture = client({ products: [product('phone', { product_type: 'phone' })] });
+    const result = await discoverStructuredProducts(input(fixture.supabase, intent({ product_type: 'charger', model: 'ZX42' })));
+    expect(result.selectedProducts).toEqual([]);
+    expect(result.coverage).toBe('complete');
+  });
+
 });

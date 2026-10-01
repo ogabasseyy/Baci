@@ -87,7 +87,7 @@ export function formatSearchProductsResponse({
     `Found ${count} Ogabassey products. Prices are listed in NGN; confirm availability before checkout.`,
     ...(coverage === 'partial' ? ['This is a partial selection; other products may match.'] : []),
     ...formatted.map((product) =>
-      `${product.name} — ₦${Number(product.price).toLocaleString('en-NG')} (${product.stock_level}); ${product.available_variants}.`
+      `${product.name} — ${typeof product.price === 'number' && Number.isFinite(product.price) ? `₦${product.price.toLocaleString('en-NG')}` : 'Price unconfirmed'} (${product.stock_level}); ${product.available_variants}.`
     ),
   ].join('\n');
 

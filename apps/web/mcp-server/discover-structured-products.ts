@@ -20,12 +20,13 @@ export async function discoverStructuredProducts({ intent, query, args, merchant
   const candidates = await loadStructuredDiscoveryCandidates({ query, merchantId, supabase, semanticSearch });
   const selected = [];
   let optionsLookupFailed = false;
+  let factsUnverified = false;
   for (let offset = 0; offset < candidates.products.length; offset += 100) {
     const hydrated = await hydrateSearchProductAvailability(candidates.products.slice(offset, offset + 100)
       .filter((product) => matchesMcpPostHydrationFilters(product, args)), supabase, merchantId, args.condition);
     optionsLookupFailed ||= hydrated.some((row) => row.optionsLookupFailed);
     for (const row of hydrated) {
-      const match = selectStructuredDiscoveryOffer(row, intent, args);
+      const match = selectStructuredDiscoveryOffer(row, intent, args, () => { factsUnverified = true; });
       if (match) selected.push(match);
     }
   }
@@ -39,7 +40,7 @@ export async function discoverStructuredProducts({ intent, query, args, merchant
     priceScanComplete: !optionsLookupFailed && !orderedCoverageIncomplete,
     incompleteReason: optionsLookupFailed ? 'option_lookup_failed' as const :
       orderedCoverageIncomplete ? 'candidate_limit' as const : undefined,
-    coverage: candidates.truncated || optionsLookupFailed ? 'partial' as const : 'complete' as const,
+    coverage: candidates.truncated || optionsLookupFailed || factsUnverified ? 'partial' as const : 'complete' as const,
     semanticUnavailable: candidates.semanticUnavailable,
   };
 }

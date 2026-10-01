@@ -9,7 +9,9 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { updateProductDiscoveryMetadataSchema } from '@/schemas/update-product-discovery-metadata';
 
-/** Save merchant-verified public search facts; never accept a body-selected tenant. */
+/** Save merchant-verified public search facts; never accept a body-selected tenant.
+ * Full replacement: clients must send the complete document, since omitted
+ * keys are cleared rather than merged. */
 export async function PUT(request: NextRequest) {
   const supabase = createClient(await cookies());
   const {

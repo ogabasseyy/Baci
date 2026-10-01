@@ -184,7 +184,12 @@ export function selectStructuredDiscoveryOffer(
   const matches = candidates
     .map((candidate) => ({
       ...candidate,
-      attributes: { ...metadataAttributes, ...candidate.attributes },
+      // Condition offers carry no spec attributes of their own, and on variant
+      // products the base metadata may describe a different variant, so offers
+      // there must not inherit it for spec matching.
+      attributes: candidate.kind === 'offer' && product.has_variants === true
+        ? candidate.attributes
+        : { ...metadataAttributes, ...candidate.attributes },
     }))
     .filter((candidate) => {
       const evaluations = intent.alternatives.map((alternative) =>

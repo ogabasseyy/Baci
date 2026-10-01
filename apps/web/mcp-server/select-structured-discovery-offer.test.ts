@@ -86,6 +86,38 @@ it('returns inherited base attributes for a matched condition offer', () => {
   });
 });
 
+it('does not let condition offers inherit metadata specs on variant products', () => {
+  const row = makeRow({ has_variants: true, has_condition_offers: true, discovery_metadata: {
+    product_type: 'smartphone', attributes: { storage_gb: 256 },
+  } });
+  row.availableVariants = [
+    { id: 'variant-256', product_id: 'phone', attributes: { Storage: '256GB' }, price_override: 700, stock_quantity: 2 },
+  ] as typeof row.availableVariants;
+  row.availableOffers = [
+    { id: 'used-1', price: 450, condition: 'used', stock_quantity: 1 },
+  ] as typeof row.availableOffers;
+  const selected = selectStructuredDiscoveryOffer(row, intent({ attributes: [
+    { key: 'storage_gb', operator: 'eq', value: 256 },
+  ] }));
+  expect(selected?.displayPrice).toBe(700);
+  expect(selected?.selectedOption).toMatchObject({ kind: 'variant', option_id: 'variant-256' });
+});
+
+it('excludes offers from spec matches when no variant proves the spec', () => {
+  const row = makeRow({ has_variants: true, has_condition_offers: true, discovery_metadata: {
+    product_type: 'smartphone', attributes: { storage_gb: 256 },
+  } });
+  row.availableVariants = [
+    { id: 'variant-128', product_id: 'phone', attributes: { Storage: '128GB' }, price_override: 700, stock_quantity: 2 },
+  ] as typeof row.availableVariants;
+  row.availableOffers = [
+    { id: 'used-1', price: 450, condition: 'used', stock_quantity: 1 },
+  ] as typeof row.availableOffers;
+  expect(selectStructuredDiscoveryOffer(row, intent({ attributes: [
+    { key: 'storage_gb', operator: 'eq', value: 256 },
+  ] }))).toBeUndefined();
+});
+
 it('does not inherit a base capacity when a recognized variant override is malformed', () => {
   const row = makeRow({ has_variants: true, discovery_metadata: {
     product_type: 'smartphone', attributes: { storage_gb: 128 },

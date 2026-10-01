@@ -49,6 +49,8 @@ export default function ReceiptClaimPageClient({
   const loginNavigationInFlight = useRef(false);
   const redemptionInFlightToken = useRef<string | null>(null);
   const preview = initialClaim;
+  const documentLabel =
+    preview?.documentKind === 'invoice' ? 'invoice' : 'receipt';
   useEffect(() => {
     if (
       !token ||
@@ -207,7 +209,9 @@ export default function ReceiptClaimPageClient({
                 <div className="rounded-md border border-store-border bg-store-secondary/60 p-4">
                   <div className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.12em] text-store-primary">
                     <Smartphone aria-hidden="true" className="size-4" />
-                    Device receipts
+                    {documentLabel === 'invoice'
+                      ? 'Device invoices'
+                      : 'Device receipts'}
                   </div>
                   <ol className="space-y-2 pl-5 text-sm">
                     {createDeviceListItems(preview.devices).map((item) => (
@@ -218,7 +222,7 @@ export default function ReceiptClaimPageClient({
 
                 <p className="text-sm text-store-background-text/70">
                   {preview.claimed
-                    ? 'This receipt link has already been claimed. You can view it from the receipts panel.'
+                    ? `This ${documentLabel} link has already been claimed. You can view it from the receipts panel.`
                     : 'Sign in with the email address that received this link. We will open your receipts panel after verification.'}
                 </p>
 
@@ -239,7 +243,7 @@ export default function ReceiptClaimPageClient({
                     />
                     <span>
                       {isRedeeming
-                        ? 'Claiming receipt...'
+                        ? `Claiming ${documentLabel}...`
                         : 'Preparing receipts...'}
                     </span>
                   </div>
@@ -249,7 +253,7 @@ export default function ReceiptClaimPageClient({
                     className="w-full bg-store-primary text-store-primary-text hover:bg-store-primary/90"
                   >
                     <Link href={asRoute(loginPath)} onClick={handleLoginClick}>
-                      Sign in to claim receipt
+                      Sign in to claim {documentLabel}
                     </Link>
                   </Button>
                 )}

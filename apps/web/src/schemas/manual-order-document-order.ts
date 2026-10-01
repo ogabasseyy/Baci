@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 const number = z.coerce.number().finite().nonnegative();
 const nullableText = z.string().nullable();
+
 export const manualDocumentOrderSchema = z.object({
   id: z.string(),
   merchant_id: z.string(),
@@ -49,39 +50,3 @@ export const manualDocumentOrderSchema = z.object({
     })
   ),
 });
-
-export const manualDocumentMerchantSchema = z.object({
-  id: z.string(),
-  slug: z.string(),
-  business_name: nullableText,
-  custom_domain: nullableText,
-  email_sender_name: nullableText,
-  logo_url: nullableText,
-  email: z.string(),
-  phone: nullableText,
-  support_email: nullableText,
-  support_phone: nullableText,
-  business_address: nullableText,
-  cac_rc_number: nullableText,
-  tax_identification_number: nullableText,
-  legal_entity_name: nullableText,
-  vat_registration_status: nullableText,
-  vat_rate: number.nullable(),
-  bank_code: nullableText,
-  bank_account_number: nullableText,
-  bank_name: nullableText,
-  bank_account_name: nullableText,
-  brand_colors: z
-    .object({ primary: z.string(), background: z.string(), accent: z.string() })
-    .nullable(),
-});
-
-export const manualDocumentClaimSchema = z.discriminatedUnion('status', [
-  z.object({
-    status: z.literal('created'),
-    claim_id: z.string().min(1),
-    customer_id: z.string().min(1),
-    customer_email: z.string().min(1),
-  }),
-  z.object({ status: z.literal('skipped') }),
-]);

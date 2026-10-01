@@ -34,7 +34,7 @@ describe('send manual order document', () => {
     expect(message.to).toBe('ada@example.com');
     expect(message.subject).toBe('Your receipt is ready - #ORD-42');
     expect(message.htmlContent).toMatch(
-      /https:\/\/ogabassey.com\/receipts\/claim\/[a-f0-9]{64}/
+      /https:\/\/ogabassey.usebaci.com\/receipts\/claim\/[a-f0-9]{64}/
     );
     expect(message.auditContext).toMatchObject({
       merchantId: 'merchant-1',
@@ -280,6 +280,10 @@ describe('send manual order document', () => {
         claim_id: 'claim-1',
         customer_id: 'customer-2',
         customer_email: 'another@example.com',
+        order_total: 950000,
+        order_amount_paid: 950000,
+        order_item_count: 1,
+        order_payment_status: 'paid',
       },
       error: null,
     });
@@ -287,6 +291,117 @@ describe('send manual order document', () => {
       sendManualOrderDocument({ supabase: db.client, row })
     ).rejects.toThrow('recipient changed');
     expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('retries instead of dispatching when the order changed during preparation', async () => {
+    const db = database();
+    db.rpc.mockResolvedValueOnce({
+      data: {
+        status: 'created',
+        claim_id: 'claim-1',
+        customer_id: 'customer-1',
+        customer_email: 'ada@example.com',
+        order_total: 960000,
+        order_amount_paid: 950000,
+        order_item_count: 1,
+        order_payment_status: 'paid',
+      },
+      error: null,
+    });
+    await expect(
+      sendManualOrderDocument({ supabase: db.client, row })
+    ).rejects.toThrow('changed during preparation');
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('brands the claim link with the active primary domain', async () => {
+    const db = database({}, { primaryDomain: 'shop.example.com' });
+    await sendManualOrderDocument({ supabase: db.client, row });
+    expect(sendEmail.mock.calls[0][0].textContent).toContain(
+      'https://shop.example.com/receipts/claim/'
+    );
+  });
+
+  it('falls back to the slug subdomain without a primary domain', async () => {
+    const db = database();
+    await sendManualOrderDocument({ supabase: db.client, row });
+    expect(sendEmail.mock.calls[0][0].textContent).toContain(
+      'https://ogabassey.usebaci.com/receipts/claim/'
+    );
+  });
+
+  it('suppresses naira bank details on foreign-currency invoices', async () => {
+    const bankedMerchant = {
+      bank_code: '044',
+      bank_account_number: '1234567890',
+      bank_name: 'Test Bank',
+      bank_account_name: 'Ogabassey',
+    };
+    const ngn = database(
+      { payment_status: 'unpaid', amount_paid: 0, currency: 'NGN' },
+      { merchantOverride: bankedMerchant }
+    );
+    await sendManualOrderDocument({
+      supabase: ngn.client,
+      row: { ...row, event_type: 'manual_order_invoice' },
+    });
+    const ngnPdf = Buffer.from(
+      sendEmail.mock.calls[0][0].attachments[0].content,
+      'base64'
+    ).toString('latin1');
+    expect(ngnPdf).toContain('1234567890');
+
+    sendEmail.mockClear();
+    const usd = database(
+      { payment_status: 'unpaid', amount_paid: 0, currency: 'USD' },
+      { merchantOverride: bankedMerchant }
+    );
+    await sendManualOrderDocument({
+      supabase: usd.client,
+      row: { ...row, event_type: 'manual_order_invoice' },
+    });
+    const usdPdf = Buffer.from(
+      sendEmail.mock.calls[0][0].attachments[0].content,
+      'base64'
+    ).toString('latin1');
+    expect(usdPdf).not.toContain('1234567890');
+    expect(usdPdf).not.toContain('Test Bank');
+  });
+
+  it('dates later-payment receipts from the completing transaction', async () => {
+    const db = database({}, { latestPaymentAt: '2026-09-29T12:00:00Z' });
+    await sendManualOrderDocument({ supabase: db.client, row });
+    const pdf = Buffer.from(
+      sendEmail.mock.calls[0][0].attachments[0].content,
+      'base64'
+    ).toString('latin1');
+    expect(pdf).toContain('29 Sept 2026');
+  });
+
+  it('prints the registered seller address on emailed invoices', async () => {
+    const db = database(
+      { payment_status: 'unpaid', amount_paid: 0 },
+      {
+        merchantOverride: {
+          registered_address: {
+            street: '12 Marina Street',
+            city: 'Lagos',
+            state: 'Lagos',
+            postal_code: null,
+            country: 'Nigeria',
+          },
+        },
+      }
+    );
+    await sendManualOrderDocument({
+      supabase: db.client,
+      row: { ...row, event_type: 'manual_order_invoice' },
+    });
+    const pdf = Buffer.from(
+      sendEmail.mock.calls[0][0].attachments[0].content,
+      'base64'
+    ).toString('latin1');
+    expect(pdf).toContain('12 Marina Street');
   });
 
   it('does not label an underpaid order as a fully paid receipt', async () => {
@@ -305,8 +420,8 @@ describe('send manual order document', () => {
         merchantOverride: {
           slug: 'another-shop',
           business_name: 'Another Shop',
-          custom_domain: 'shop.example.com',
         },
+        primaryDomain: 'shop.example.com',
       }
     );
     await sendManualOrderDocument({ supabase: db.client, row });

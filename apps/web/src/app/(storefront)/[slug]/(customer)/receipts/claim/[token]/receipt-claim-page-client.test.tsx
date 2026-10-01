@@ -67,6 +67,7 @@ const preview = {
   claimed: false,
   customerName: 'Bassey John',
   devices: ['iPhone 16 Pro Max', '2 x AirPods Pro'],
+  documentKind: 'receipt' as const,
   merchantName: 'Ogabassey',
 };
 
@@ -133,6 +134,18 @@ describe('ReceiptClaimPageClient', () => {
       '/account/login?redirect=%2Freceipts%2Fclaim%2Fclaim-token&email=customer%40example.com'
     );
     expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('labels invoice claim previews as invoices, not receipts', () => {
+    renderClient({
+      initialClaim: { ...preview, documentKind: 'invoice' as const },
+    });
+
+    expect(screen.getByText('Device invoices')).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'Sign in to claim invoice' })
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Device receipts')).not.toBeInTheDocument();
   });
 
   it('does not show Ogabassey app links on other merchant claim pages', () => {

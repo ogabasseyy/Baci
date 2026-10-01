@@ -1,5 +1,5 @@
 import type { useCheckoutCryptoSession } from '../hooks/use-checkout-crypto-session';
-import type { DvaModalData } from '../hooks/use-dva-confirm-transfer';
+import type { DvaModalData } from '../hooks/use-checkout-dva-session';
 import type { useWalletFundedBankTransfer } from '../hooks/use-wallet-funded-bank-transfer';
 import { CheckoutPaymentOverlays } from './CheckoutPaymentOverlays';
 

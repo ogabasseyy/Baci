@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { toast } from '@/hooks/use-toast';
+import { useRef, useState } from 'react';
 import type { CartItem } from '@/hooks/cart';
+import { toast } from '@/hooks/use-toast';
 import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
 import { asRoute } from '@/lib/routes';
 import { captureCheckoutPaymentCompleted } from '../capture-checkout-payment-completed';
@@ -56,8 +56,7 @@ async function verifyDvaTransferStatus({
     // the paid verdict to the displayed order id, or a different order's
     // payment records the conversion and routes under this order's URL.
     return (
-      result?.order?.id === orderId &&
-      result?.order?.payment_status === 'paid'
+      result?.order?.id === orderId && result?.order?.payment_status === 'paid'
     );
   }
   const response = await fetch(
@@ -70,20 +69,18 @@ async function verifyDvaTransferStatus({
   return result?.success === true && result?.is_confirmed === true;
 }
 
-export interface DvaConfirmTransferDeps {
+export interface CheckoutDvaSessionOptions {
   checkoutCart: CartItem[];
   clearCart: () => void;
   clearCheckoutSession: () => void;
   clearPendingCheckoutOrder: () => void;
   currencyCode: string;
-  dvaData: DvaModalData | null;
   getHref: (path: string) => string;
   merchantSlug?: string;
-  setDvaData: (data: DvaModalData | null) => void;
 }
 
 /**
- * Owns the "Confirm Transfer Sent" lifecycle for the provisioned-DVA
+ * Owns the provisioned-DVA account and "Confirm Transfer Sent" lifecycle for the
  * modal: server-side verification, paid conversion, the completed-cart
  * clear, and routing — all tied to the modal attempt that started them.
  *
@@ -94,23 +91,28 @@ export interface DvaConfirmTransferDeps {
  * navigation (never via a delayed timer): a timer would survive
  * navigation and could erase a newer cart started in the window.
  */
-export function useDvaConfirmTransfer({
+export function useCheckoutDvaSession({
   checkoutCart,
   clearCart,
   clearCheckoutSession,
   clearPendingCheckoutOrder,
   currencyCode,
-  dvaData,
   getHref,
   merchantSlug,
-  setDvaData,
-}: DvaConfirmTransferDeps) {
+}: CheckoutDvaSessionOptions) {
+  const [dvaData, setDvaDataState] = useState<DvaModalData | null>(null);
+  const [isInitializingDva, setIsInitializingDva] = useState(false);
   const [isVerifyingDva, setIsVerifyingDva] = useState(false);
   const dvaConfirmAttemptRef = useRef(0);
   const router = useRouter();
 
-  const closeDvaModal = () => {
+  const setDvaData = (data: DvaModalData | null) => {
     dvaConfirmAttemptRef.current += 1;
+    setDvaDataState(data);
+    setIsVerifyingDva(false);
+  };
+
+  const closeDvaModal = () => {
     setDvaData(null);
   };
 
@@ -121,7 +123,7 @@ export function useDvaConfirmTransfer({
   // failure, and stay on the modal so the shopper can retry or
   // close-and-check-later.
   const handleDvaConfirmTransfer = () => {
-    if (!dvaData || !dvaData.orderId || isVerifyingDva) {
+    if (!dvaData?.orderId || isVerifyingDva) {
       return;
     }
     const {
@@ -143,18 +145,18 @@ export function useDvaConfirmTransfer({
       trackingToken,
     })
       .then(async (confirmed) => {
+        // The modal may close or receive a replacement account while the
+        // status request is pending; ignore both success and failure from
+        // that retired attempt.
+        if (confirmAttempt !== dvaConfirmAttemptRef.current) {
+          return;
+        }
         if (!confirmed) {
           toast({
             title: 'Transfer not detected yet',
             description:
               'We could not find your transfer. If you already sent it, wait a moment and confirm again.',
           });
-          return;
-        }
-        // The modal closed while the status request was pending (either
-        // close action retires the attempt): the shopper chose "close and
-        // check later", so never clear state, route, or clear the cart.
-        if (confirmAttempt !== dvaConfirmAttemptRef.current) {
           return;
         }
         const confirmedItems = buildCheckoutOrderItems(checkoutCart);
@@ -196,9 +198,14 @@ export function useDvaConfirmTransfer({
         if (trackingToken) {
           successQuery.set('trackingToken', trackingToken);
         }
-        router.push(asRoute(getHref(`/order-success?${successQuery.toString()}`)));
+        router.push(
+          asRoute(getHref(`/order-success?${successQuery.toString()}`))
+        );
       })
       .catch(() => {
+        if (confirmAttempt !== dvaConfirmAttemptRef.current) {
+          return;
+        }
         toast({
           title: 'Could not verify transfer',
           description: 'Please check your connection and try again.',
@@ -206,9 +213,19 @@ export function useDvaConfirmTransfer({
         });
       })
       .finally(() => {
-        setIsVerifyingDva(false);
+        if (confirmAttempt === dvaConfirmAttemptRef.current) {
+          setIsVerifyingDva(false);
+        }
       });
   };
 
-  return { closeDvaModal, handleDvaConfirmTransfer, isVerifyingDva };
+  return {
+    closeDvaModal,
+    dvaData,
+    handleDvaConfirmTransfer,
+    isInitializingDva,
+    isVerifyingDva,
+    setDvaData,
+    setIsInitializingDva,
+  };
 }

@@ -1,14 +1,12 @@
 'use client';
-import { useCheckoutAddressInference } from './checkout/hooks/use-checkout-address-inference';
 import { useCheckoutResumeLifecycle } from './checkout/hooks/use-checkout-resume-lifecycle';
 import { resolveCheckoutResumeContext } from './checkout/resolve-checkout-resume-context';
 
 import { useCheckoutDeliverySession } from './checkout/hooks/use-checkout-delivery-session';
-import { useCheckoutCustomerPrefill } from './checkout/hooks/use-checkout-customer-prefill';
+import { useCheckoutFormSession } from './checkout/hooks/use-checkout-form-session';
 import {
-  useDvaConfirmTransfer,
-  type DvaModalData,
-} from './checkout/hooks/use-dva-confirm-transfer';
+  useCheckoutDvaSession,
+} from './checkout/hooks/use-checkout-dva-session';
 
 import {
   getCheckoutPaymentIntent,
@@ -23,8 +21,6 @@ import {
 import { MobileOrderSummary } from '../components/MobileCheckoutComponents';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
-import { useCheckoutFormState } from './checkout/hooks/use-checkout-form-state';
-import { useCheckoutStepState } from './checkout/hooks/use-checkout-step-state';
 import { useCheckoutCryptoSession } from './checkout/hooks/use-checkout-crypto-session';
 import { usePaymentReturnReset } from './checkout/use-payment-return-reset';
 import { useEffect, useState } from 'react';
@@ -76,8 +72,6 @@ import { useCheckoutFinancialSession } from './checkout/hooks/use-checkout-finan
 import { readCheckoutAttemptGeneration } from './checkout/checkout-attempt-generation';
 import { CheckoutResumeStatus } from './checkout/components/CheckoutResumeStatus';
 import { DesktopOrderSummary } from './checkout/components/DesktopOrderSummary';
-
-
 /**
  * Module-scope checkout helpers.
  *
@@ -88,16 +82,6 @@ import { DesktopOrderSummary } from './checkout/components/DesktopOrderSummary';
  * as explicit parameters) so `CheckoutPage` stays compilable while runtime
  * behavior is unchanged.
  */
-
-/**
- * Throws at module scope so call sites inside the component's try/catch avoid
- * the compiler's "ThrowStatement inside of try/catch" bailout.
- */
-function raiseCheckoutError(message: string): never {
-  throw new Error(message);
-}
-
-
 
 // Module-scope helper: probes DVA settlement server-side so "Confirm
 // Transfer Sent" only records a conversion for a detected transfer.
@@ -154,14 +138,21 @@ export const CheckoutPage: React.FC = () => {
   const auth = useAuthSafe();
   const user = auth?.user;
 
-  // Persisted checkout form state - survives hydration re-mounts and page refreshes
-  // Using custom hook with debounced sessionStorage persistence (2025 best practice)
+  const checkoutFormSession = useCheckoutFormSession({ isHydrated, user });
+  const {
+    form: checkoutFormState,
+    flow: checkoutFlow,
+    account,
+    auth: checkoutAuth,
+  } = checkoutFormSession;
   const {
     values: checkoutForm,
-    setValue: setCheckoutField,
-    setValues: setCheckoutFields,
+    setField: setCheckoutField,
+    setFields: setCheckoutFields,
     clear: clearCheckoutSession,
-  } = useCheckoutFormState();
+    inferredLocation,
+    setNewsletterOptIn,
+  } = checkoutFormState;
 
   // Destructure for convenience (these are reactive)
   const {
@@ -179,31 +170,14 @@ export const CheckoutPage: React.FC = () => {
     selectedQuoteId: persistedSelectedQuoteId,
     selectedProviderRateId: persistedSelectedProviderRateId,
     newsletterOptIn,
-    currentStep: rawCurrentStep,
-    completedSteps: rawCompletedSteps,
   } = checkoutForm;
 
   const {
     currentStep,
     completedSteps,
-    focusActiveStep,
     setCurrentStep,
     setCompletedSteps,
-    completeContact,
-  } = useCheckoutStepState({
-    isHydrated,
-    currentStep: rawCurrentStep,
-    completedSteps: rawCompletedSteps,
-    setField: setCheckoutField,
-    setFields: setCheckoutFields,
-  });
-
-  // Convenient setters that update the persisted form
-  const setFirstName = (v: string) => setCheckoutField('firstName', v);
-  const setLastName = (v: string) => setCheckoutField('lastName', v);
-  const setCustomerEmail = (v: string) => setCheckoutField('customerEmail', v);
-  const setCustomerPhone = (v: string) => setCheckoutField('customerPhone', v);
-  const inferredLocation = useCheckoutAddressInference(setCheckoutFields);
+  } = checkoutFlow;
   const [
     pendingCheckoutOrder,
     setPendingCheckoutOrder,
@@ -213,30 +187,24 @@ export const CheckoutPage: React.FC = () => {
     null
   );
 
-  // Non-persisted UI state
-  const [createAccount, setCreateAccount] = useState(false);
-  const [accountPassword, setAccountPassword] = useState('');
-  const setNewsletterOptIn = (value: boolean) => setCheckoutField('newsletterOptIn', value);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-
   // Dedicated Virtual Account (DVA) state
-  const [dvaData, setDvaData] = useState<DvaModalData | null>(null);
-  const [isInitializingDva, setIsInitializingDva] = useState(false);
-  const [dvaCountdown, setDvaCountdown] = useState(3600); // 1 hour in seconds
-  // "Confirm Transfer Sent" lifecycle (server verification, conversion,
-  // routing, delayed cart clear) tied to the modal attempt that started
-  // it — see useDvaConfirmTransfer.
-  const { closeDvaModal, handleDvaConfirmTransfer, isVerifyingDva } =
-    useDvaConfirmTransfer({
+  const {
+    closeDvaModal,
+    dvaData,
+    handleDvaConfirmTransfer,
+    isInitializingDva,
+    isVerifyingDva,
+    setDvaData,
+    setIsInitializingDva,
+  } =
+    useCheckoutDvaSession({
       checkoutCart,
       clearCart,
       clearCheckoutSession,
       clearPendingCheckoutOrder,
       currencyCode,
-      dvaData,
       getHref,
       merchantSlug: merchant?.slug ?? undefined,
-      setDvaData,
     });
 
   // Mobile app order resume state
@@ -409,32 +377,9 @@ export const CheckoutPage: React.FC = () => {
       preferredGateway,
     });
 
-  // Note: currentStep and completedSteps are now part of checkoutForm (persisted)
-
-  useCheckoutCustomerPrefill({
-    user,
-    values: { customerEmail, customerPhone, firstName, lastName },
-    setFields: setCheckoutFields,
-  });
-
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
-
-  // Date Calculation for Door Delivery
-  const getDeliveryDateRange = () => {
-    const today = new Date();
-    const start = new Date(today);
-    start.setDate(today.getDate() + 1);
-    const end = new Date(today);
-    end.setDate(today.getDate() + 3);
-
-    const options: Intl.DateTimeFormatOptions = {
-      day: 'numeric',
-      month: 'short',
-    };
-    return `${start.toLocaleDateString('en-GB', options)} to ${end.toLocaleDateString('en-GB', options)}`;
-  };
 
   const paymentMethod = paymentSession.method;
   const redvaultOrderReady = paymentSession.redvault.orderReady;
@@ -469,8 +414,8 @@ export const CheckoutPage: React.FC = () => {
 
   const { handlePlaceOrder } = useCheckoutOrderSubmission({
     account: {
-      createAccount,
-      password: accountPassword,
+      createAccount: account.createAccount,
+      password: account.password,
       user,
       waitForResolvedCustomerAuth: waitForResolvedStorefrontCustomerAuth,
     },
@@ -515,7 +460,6 @@ export const CheckoutPage: React.FC = () => {
       setOrderCreated: setCheckoutOrderCreated,
       clearCheckoutSession,
       setDvaData,
-      setDvaCountdown,
       setIsInitializingDva,
       setPendingCryptoOrder,
       setShowCryptoSelector,
@@ -623,10 +567,10 @@ export const CheckoutPage: React.FC = () => {
       <CheckoutHeader
         onReturnToCart={() => router.push(asRoute(getHref('/cart')))}
       />
-      {isAuthModalOpen && <CheckoutAuthModal
-        isOpen={isAuthModalOpen}
-        onOpenChange={setIsAuthModalOpen}
-        onSuccess={() => setIsAuthModalOpen(false)}
+      {checkoutAuth.isOpen && <CheckoutAuthModal
+        isOpen={checkoutAuth.isOpen}
+        onOpenChange={checkoutAuth.onOpenChange}
+        onSuccess={checkoutAuth.close}
       />}
 
       <CheckoutPaymentSessionOverlays
@@ -672,25 +616,13 @@ export const CheckoutPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
           <CheckoutStepComposition
             session={{
-              flow: {
-                currentStep,
-                completedSteps,
-                focusOnActivate: focusActiveStep,
-                signedIn: Boolean(user),
-                setCurrentStep,
-                setCompletedSteps,
-              },
-              onSignIn: () => setIsAuthModalOpen(true),
+              flow: checkoutFlow,
+              onSignIn: checkoutAuth.open,
               contact: {
-                values: { firstName, lastName, customerEmail, customerPhone },
+                values: checkoutFormState.contactValues,
                 onChange: setCheckoutField,
-                onComplete: completeContact,
-                account: {
-                  createAccount,
-                  password: accountPassword,
-                  setCreateAccount,
-                  setPassword: setAccountPassword,
-                },
+                onComplete: checkoutFlow.completeContact,
+                account,
               },
               delivery: {
                 session: delivery,

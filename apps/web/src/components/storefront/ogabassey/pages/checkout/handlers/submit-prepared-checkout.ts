@@ -158,7 +158,6 @@ export async function submitPreparedCheckout(
           setIsProcessing: processing.setIsProcessing,
           isOrderInFlightRef: processing.isOrderInFlightRef,
           setDvaData: order.setDvaData,
-          setDvaCountdown: order.setDvaCountdown,
           setIsInitializingDva: order.setIsInitializingDva,
           setRedvaultStatus: redvault.setStatus,
           setPendingCryptoOrder: order.setPendingCryptoOrder,

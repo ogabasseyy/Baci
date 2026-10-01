@@ -27,7 +27,6 @@ export async function startCheckoutBankTransfer(
     setIsProcessing,
     isOrderInFlightRef,
     setDvaData,
-    setDvaCountdown,
     setIsInitializingDva,
     capturePaymentStarted,
     hasPaymentStarted,
@@ -110,7 +109,6 @@ export async function startCheckoutBankTransfer(
     total,
     order,
     setDvaData,
-    setDvaCountdown,
     setIsProcessing,
     setIsInitializingDva,
     releaseSubmitLock: () => {

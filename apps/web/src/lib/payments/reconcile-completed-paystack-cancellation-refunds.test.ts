@@ -32,6 +32,7 @@ function selectQuery(data: unknown) {
     in: vi.fn().mockReturnThis(),
     lt: vi.fn().mockReturnThis(),
     not: vi.fn().mockReturnThis(),
+    or: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     limit: vi.fn().mockResolvedValue({ data, error: null }),
   };
@@ -86,6 +87,7 @@ describe('legacy completed Paystack cancellation refunds', () => {
       in: vi.fn().mockReturnThis(),
       lt: vi.fn().mockReturnThis(),
       not: vi.fn().mockReturnThis(),
+      or: vi.fn().mockReturnThis(),
       order: vi.fn().mockReturnThis(),
       limit: vi.fn().mockResolvedValue({ data: [refund], error: null }),
     };
@@ -128,6 +130,7 @@ describe('legacy completed Paystack cancellation refunds', () => {
       in: vi.fn().mockReturnThis(),
       lt: vi.fn().mockReturnThis(),
       not: vi.fn().mockReturnThis(),
+      or: vi.fn().mockReturnThis(),
       order: vi.fn().mockReturnThis(),
       limit: vi
         .fn()
@@ -146,14 +149,18 @@ describe('legacy completed Paystack cancellation refunds', () => {
 
     // Finalized orders stay eligible, but only rows untouched for a
     // week and only a few per tick, so the sweep never crowds the
-    // pre-finalization batch.
+    // pre-finalization batch. Null timestamps compare oldest: a bare
+    // less-than would exclude them from the sweep forever.
     expect(finalizedQuery.eq).toHaveBeenCalledWith(
       'cancellation_order.payment_status',
       'refunded'
     );
-    const cutoff = finalizedQuery.lt.mock.calls.find(
-      (call) => call[0] === 'updated_at'
-    )?.[1] as string;
+    expect(finalizedQuery.lt).not.toHaveBeenCalled();
+    expect(finalizedQuery.or).toHaveBeenCalledWith(
+      expect.stringContaining('updated_at.is.null')
+    );
+    const predicate = finalizedQuery.or.mock.calls[0]?.[0] as string;
+    const cutoff = predicate.split('updated_at.lt.')[1] as string;
     expect(typeof cutoff).toBe('string');
     expect(Math.abs(Date.parse(cutoff) - Date.parse(weekAgo))).toBeLessThan(
       60_000

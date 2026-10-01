@@ -1,7 +1,5 @@
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
-  # Security hotfixes for Dependabot alerts opened 2026-06-18.
-  - undici@7.29.0
   # Security hotfixes for Dependabot alerts opened 2026-10-01.
   - undici@7.29.1
 

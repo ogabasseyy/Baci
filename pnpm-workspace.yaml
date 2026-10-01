@@ -18,7 +18,6 @@ minimumReleaseAgeExclude:
   - js-yaml@4.2.0
   - '@babel/core@7.29.6'
   # Security hotfixes released within the cooldown window; Dependabot alerts opened 2026-06-18.
-  - undici@7.29.0
   - ip-address@10.3.1
   - mermaid@11.16.1
   - postcss@8.5.23
@@ -29,6 +28,7 @@ minimumReleaseAgeExclude:
   - js-yaml@4.3.1
   # Security hotfixes released within the cooldown window; Dependabot alerts opened 2026-10-01.
   - next@16.3.6
+  - '@next/env@16.3.6'
 # Refuse trust-signal downgrades; trustLockfile keeps already-locked entries installable.
 trustPolicy: no-downgrade
 trustLockfile: true

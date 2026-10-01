@@ -46,6 +46,8 @@ function getBudgetRedis(): Redis | null {
     [process.env.UPSTASH_REDIS_REST_URL, process.env.UPSTASH_REDIS_REST_TOKEN],
     [process.env.KV_REST_API_URL, process.env.KV_REST_API_TOKEN],
   ];
+  // A configured but incomplete preferred pair is an error. Switching to a
+  // different database would discard its usage history and reset the spend cap.
   const [url, token] =
     configurations.find(([candidateUrl, candidateToken]) =>
       Boolean(candidateUrl || candidateToken)

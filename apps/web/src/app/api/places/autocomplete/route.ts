@@ -24,7 +24,12 @@ export async function GET(request: NextRequest) {
   if (input.length < 2) return NextResponse.json({ predictions: [] });
 
   const google = await fetchGoogleAutocomplete(input, sessionToken, country);
-  if (google.status === 400 || google.body.predictions?.length) {
+  if (
+    google.status === 400 ||
+    (google.status === 500 &&
+      google.body.code !== 'PLACES_AUTOCOMPLETE_NOT_CONFIGURED') ||
+    google.body.predictions?.length
+  ) {
     return NextResponse.json(google.body, { status: google.status });
   }
   if (

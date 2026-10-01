@@ -1,4 +1,7 @@
-import { fetchLegacyPlacesJson } from './legacy-places';
+import {
+  fetchLegacyPlacesJson,
+  isRetryableNetworkError,
+} from './legacy-places';
 import { reserveGooglePlacesRequest } from './provider-budget';
 
 interface LegacyAutocompleteResponse {
@@ -18,7 +21,13 @@ export async function fetchGoogleAutocomplete(
   const apiKey =
     process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
   if (!apiKey)
-    return { status: 500, body: { error: 'Google Places API not configured' } };
+    return {
+      status: 500,
+      body: {
+        error: 'Google Places API not configured',
+        code: 'PLACES_AUTOCOMPLETE_NOT_CONFIGURED',
+      },
+    };
 
   const url = new URL(
     'https://maps.googleapis.com/maps/api/place/autocomplete/json'
@@ -75,7 +84,15 @@ export async function fetchGoogleAutocomplete(
         };
       });
     return { status: 200, body: { predictions } };
-  } catch {
+  } catch (error) {
+    if (isRetryableNetworkError(error))
+      return {
+        status: 502,
+        body: {
+          error: 'Failed to fetch predictions',
+          code: 'PLACES_AUTOCOMPLETE_HTTP_ERROR',
+        },
+      };
     return { status: 500, body: { error: 'Internal server error' } };
   }
 }

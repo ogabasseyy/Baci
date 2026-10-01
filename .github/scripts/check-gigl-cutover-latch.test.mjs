@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
+  chmodSync,
   copyFileSync,
   mkdirSync,
   mkdtempSync,
@@ -135,6 +136,8 @@ function check({
   token = undefined,
   installed = undefined,
   omitOutput = false,
+  githubToken = '',
+  extraPath = null,
   checkout,
 }) {
   const root = dirname(checkout);
@@ -163,9 +166,16 @@ function check({
   }
   const output = join(root, 'github-output.env');
   writeFileSync(output, '');
-  const env = { ...process.env, GITHUB_OUTPUT: output, GITHUB_TOKEN: '' };
+  const env = {
+    ...process.env,
+    GITHUB_OUTPUT: output,
+    GITHUB_TOKEN: githubToken,
+  };
   if (omitOutput) {
     delete env.GITHUB_OUTPUT;
+  }
+  if (extraPath !== null) {
+    env.PATH = `${extraPath}:${process.env.PATH}`;
   }
   const result = spawnSync('bash', [script, remote, checkout], {
     cwd: trap,
@@ -257,6 +267,48 @@ describe('GIGL cutover latch check', () => {
     assert.equal(result.status, 0, result.stderr);
     assert.equal(values.latched, 'true');
     assert.equal(values.tracking_stale, 'true');
+  });
+
+  it('never passes the job token on the git command line', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+    const realGit = spawnSync('/bin/sh', ['-c', 'command -v git'], {
+      encoding: 'utf8',
+    }).stdout.trim();
+    assert.ok(realGit.length > 0, 'expected to resolve a real git binary');
+    const binDir = join(root, 'shim-bin');
+    const argvLog = join(root, 'git-argv.log');
+    mkdirSync(binDir, { recursive: true });
+    writeFileSync(argvLog, '');
+    const shim = join(binDir, 'git');
+    writeFileSync(
+      shim,
+      `#!/bin/sh\nprintf '%s\\n' "$*" >> "${argvLog}"\nexec "${realGit}" "$@"\n`
+    );
+    chmodSync(shim, 0o755);
+
+    const sentinel = 'sentinel_job_token_for_argv_assertion';
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      githubToken: sentinel,
+      extraPath: binDir,
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'true');
+    assert.equal(values.tracking_stale, 'false');
+    const argvLines = readFileSync(argvLog, 'utf8')
+      .split('\n')
+      .filter((line) => line.length > 0);
+    assert.ok(
+      argvLines.some((line) => line.includes('fetch')),
+      `expected a fetch invocation, saw: ${argvLines.join('; ')}`
+    );
+    assert.ok(
+      !argvLines.some((line) => line.includes(sentinel)),
+      'job token must not appear in git argv'
+    );
   });
 
   it('reports unlatched when a promote replaced the smoked worker', () => {

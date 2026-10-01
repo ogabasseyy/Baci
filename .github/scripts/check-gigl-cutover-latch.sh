@@ -84,11 +84,21 @@ fi
 
 tracking_stale=true
 if [ "$latched" = true ]; then
-  fetch_env=()
+  # The job token must never appear in a process argument vector (visible
+  # via `ps` on the shared runner): hand it to git through a 0600 config
+  # file instead of `-c http.extraHeader=...`. Any failure here falls
+  # back to unauthenticated git; the fetch then fails and the gate
+  # fails closed via tracking_stale=true.
+  fetch_env=(git)
+  auth_config=""
   if [ -n "${GITHUB_TOKEN:-}" ]; then
-    fetch_env=(git -c "http.extraHeader=AUTHORIZATION: bearer $GITHUB_TOKEN")
-  else
-    fetch_env=(git)
+    auth_config="$(mktemp 2>/dev/null)" || auth_config=""
+    if [ -n "$auth_config" ] && printf '[http]\n\textraHeader = AUTHORIZATION: bearer %s\n' "$GITHUB_TOKEN" > "$auth_config"; then
+      fetch_env=(git -c "include.path=$auth_config")
+    else
+      [ -n "$auth_config" ] && rm -f "$auth_config"
+      auth_config=""
+    fi
   fi
   if "${fetch_env[@]}" -C "$checkout_dir" fetch --quiet --depth 1 origin "$latch_sha" 2>/dev/null; then
     tracking_paths="$(awk '/^tracking:/ { in_group=1; next } /^[^ #]/ { in_group=0 } in_group && $1 == "-" { gsub(/'\''/, "", $2); print $2 }' "$checkout_dir/.github/filters/deploy.yml" 2>/dev/null || true)"
@@ -106,6 +116,7 @@ if [ "$latched" = true ]; then
       fi
     fi
   fi
+  if [ -n "$auth_config" ]; then rm -f "$auth_config"; fi
 fi
 
 # Default to stdout outside the workflow (local debugging, VPS shell),

@@ -3,12 +3,11 @@ import { logger } from '@/lib/logger';
 
 /**
  * File a durable review for a signed reference-only refund event with no
- * local audit row (provider-side manual refund, lost audit insert).
- * Verified linked rows that cover the payment amount mean the event is a
- * late duplicate and stays silent; otherwise polling can never rediscover
- * the provider refund, so the review stays open for operations instead of
- * acknowledging silently. Redeliveries merge into the open review
- * instead of duplicating it.
+ * local audit row (provider-side manual refund, lost audit insert). The
+ * event carries no refund ID so it can never be tied to a recorded row:
+ * polling can never rediscover the provider refund, so the review stays
+ * open for operations instead of acknowledging silently. Redeliveries
+ * merge into the open review instead of duplicating it.
  */
 export async function fileReferenceOnlyPaystackRefundReview(
   supabase: SupabaseClient,

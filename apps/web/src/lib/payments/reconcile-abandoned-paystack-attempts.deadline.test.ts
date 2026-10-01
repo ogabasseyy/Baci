@@ -21,8 +21,8 @@ it('stops starting attempts at the pass deadline', async () => {
       ],
       error: null,
     }),
-    lt: vi.fn().mockReturnThis(),
     not: vi.fn().mockReturnThis(),
+    or: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     select: vi.fn().mockReturnThis(),
   };

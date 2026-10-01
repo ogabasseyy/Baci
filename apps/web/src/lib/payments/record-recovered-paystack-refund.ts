@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import type { CompletedPaymentMatch } from './fetch-completed-payments-by-reference';
+import { fileInvalidPaystackRefundEvidenceReview } from './file-invalid-paystack-refund-evidence-review';
 import type { RefundRecoveryEvidence } from './file-paystack-refund-candidate-reviews';
 import { filePaystackRefundRecoveryReview } from './file-paystack-refund-recovery-review';
 import { fileProviderRefundOutsideCancellationReview } from './file-provider-refund-outside-cancellation-review';
@@ -40,6 +41,21 @@ export async function recordRecoveredPaystackRefund(
     .maybeSingle();
   if (orderError) throw new Error('refund_event_order_lookup_failed');
   if (!order) {
+    // The order vanished after the payment scan (the foreign key
+    // already nulled the stored row's order link): the verified
+    // refund is still a real merchant debit, so retain it in the
+    // order-independent queue instead of treating it as handled.
+    await fileInvalidPaystackRefundEvidenceReview(supabase, {
+      evidence: {
+        providerPaymentTransactionId: evidence.providerPaymentTransactionId,
+        providerRefundId: refundId,
+        providerRefundStatus: evidence.providerRefundStatus,
+        reference: evidence.reference,
+      },
+      reason: `Paystack refund ${refundId} verified for reference ${evidence.reference} but its order no longer exists; route the merchant debit manually`,
+      reference: evidence.reference,
+      refundId,
+    });
     logger.info({
       message: 'Unknown Paystack refund event payment has no order',
       refundId,

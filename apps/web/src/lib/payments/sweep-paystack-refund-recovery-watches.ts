@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
+import { reconcilePaystackRefundEvent } from './reconcile-paystack-refund-event';
 import {
   NO_RECONCILE_DEADLINE,
   shouldYieldReconcileWorker,
@@ -15,9 +16,12 @@ export interface RefundRecoveryWatchSweepSummary {
 
 interface OpenWatchRow {
   created_at: string;
+  evidence: {
+    provider_refund_status?: string;
+  } | null;
   id: string;
   paystack_ref: string;
-  provider_refund_id: number;
+  provider_refund_id: number | null;
 }
 
 const WATCH_RETIREMENT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -27,10 +31,12 @@ const WATCH_RETIREMENT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
  * normally claims watches atomically, but completions outside the
  * charge RPC — and watches whose filing failed — stay open: re-drive
  * recovery for them so a payment that landed after the scan is
- * recorded instead of lingering watched-but-unhandled. Retirement
- * only follows a successful redrive: a stale watch whose recovery
- * still finds nothing held no payment for a week, so with no payment
- * row the merchant collected nothing locally and there is no order to
+ * recorded instead of lingering watched-but-unhandled. Reference-only
+ * watches (no refund ID) re-drive through the reference-only path
+ * with the watched event verdict. Retirement only follows a
+ * successful redrive: a stale watch whose recovery still finds
+ * nothing held no payment for a week, so with no payment row the
+ * merchant collected nothing locally and there is no order to
  * protect. Failed redrives stay open for the next run. Reports
  * per-row failure counts instead of throwing, like the sibling
  * reconcile workers.
@@ -50,7 +56,7 @@ export async function sweepPaystackRefundRecoveryWatches(
   // no watch waits past retirement behind a younger backlog.
   const { data: watches, error: watchError } = await supabase
     .from('paystack_refund_recovery_watch')
-    .select('id, paystack_ref, provider_refund_id, created_at')
+    .select('id, paystack_ref, provider_refund_id, created_at, evidence')
     .eq('status', 'open')
     .order('created_at', { ascending: true })
     .limit(limit);
@@ -60,11 +66,24 @@ export async function sweepPaystackRefundRecoveryWatches(
     if (shouldYieldReconcileWorker(deadlineMs)) break;
     summary.checked++;
     try {
-      await recoverUnknownPaystackRefund(
-        supabase,
-        watch.provider_refund_id,
-        watch.paystack_ref
-      );
+      if (watch.provider_refund_id === null) {
+        const verdict =
+          typeof watch.evidence?.provider_refund_status === 'string' &&
+          watch.evidence.provider_refund_status.trim() !== ''
+            ? watch.evidence.provider_refund_status
+            : 'unknown';
+        await reconcilePaystackRefundEvent(
+          supabase,
+          watch.paystack_ref,
+          verdict
+        );
+      } else {
+        await recoverUnknownPaystackRefund(
+          supabase,
+          watch.provider_refund_id,
+          watch.paystack_ref
+        );
+      }
       summary.redriven++;
       redrivenIds.push(watch.id);
     } catch (reason) {

@@ -5,8 +5,10 @@ import { fileReferenceOnlyPaystackRefundReview } from './file-reference-only-pay
 import { fileRefundEvidenceReview } from './file-refund-evidence-review';
 import { holdPaystackRefundForReview } from './hold-paystack-refund-for-review';
 import { isDeterministicRefundError } from './is-deterministic-paystack-refund-error';
+import { openPaystackRefundReferenceWatch } from './open-paystack-refund-reference-watch';
 import type { RefundRow } from './paystack-cancellation-refund-row';
 import { reconcilePaystackCancellationRefund } from './reconcile-paystack-cancellation-refund';
+import { resolvePaystackRefundReferenceWatch } from './resolve-paystack-refund-reference-watch';
 
 const SHARED_REFERENCE_PAGE_SIZE = 10;
 const REFUND_PAGE_SIZE = 10;
@@ -188,19 +190,43 @@ export async function reconcilePaystackRefundEvent(
     providerRefundStatus,
     false
   );
-  if (completed > 0) return;
-  // No completed payment carries the reference — but the refund
+  // Always scan the stalled states too: a completed match does not
+  // prove there are no additional in-flight matches, and the refund
   // webhook may have won the race with charge completion. A pending
   // or processing payment that later completes would leave the
   // refunded order paid and fulfillable with no trace of this signed
   // event, so persist its evidence against the stalled matches
-  // instead of acknowledging silently. (Failed rows ride along: a
-  // provider refund proves capture, so a failed local row is a stale
-  // wedge the evidence usefully surfaces.)
-  await forEachReferencePayment(
+  // instead of acknowledging after the completed pass alone. (Failed
+  // rows ride along: a provider refund proves capture, so a failed
+  // local row is a stale wedge the evidence usefully surfaces.)
+  const stalled = await forEachReferencePayment(
     supabase,
     transactionReference,
     providerRefundStatus,
     true
   );
+  if (completed + stalled > 0) return;
+  // Both passes empty — but a payment pending during the completed
+  // scan may have completed before the stalled scan ran, ending both
+  // passes empty around a settled payment. Open the reference watch
+  // and re-scan atomically under the lock the completion path
+  // claims under: late rows are handled and the watch resolves, an
+  // empty set leaves the watch open so the completion files the
+  // evidence instead of acknowledging silently.
+  const late = await openPaystackRefundReferenceWatch(supabase, {
+    providerRefundStatus,
+    reference: transactionReference,
+  });
+  if (late.length === 0) return;
+  for (const payment of late) {
+    await reconcileSharedReferencePayment(
+      supabase,
+      transactionReference,
+      payment as unknown as Record<string, unknown>,
+      providerRefundStatus
+    );
+  }
+  await resolvePaystackRefundReferenceWatch(supabase, {
+    reference: transactionReference,
+  });
 }

@@ -29,6 +29,9 @@ describe('Paystack reference-only refund events', () => {
     const review = buildReviewInsert();
     const from = vi
       .fn()
+      // Default empty page: the trailing stalled-states pass runs after
+      // every completed pass; staged pages take precedence.
+      .mockReturnValue(buildPaymentCandidates([]))
       .mockReturnValueOnce(buildPaymentCandidates([cancelledPaymentRow()]))
       .mockReturnValueOnce(buildRefundCandidates([]))
       .mockReturnValueOnce(review);
@@ -54,6 +57,9 @@ describe('Paystack reference-only refund events', () => {
     const review = buildReviewInsert();
     const from = vi
       .fn()
+      // Default empty page: the trailing stalled-states pass runs after
+      // every completed pass; staged pages take precedence.
+      .mockReturnValue(buildPaymentCandidates([]))
       .mockReturnValueOnce(completed)
       .mockReturnValueOnce(stalled)
       .mockReturnValueOnce(refunds)
@@ -79,26 +85,106 @@ describe('Paystack reference-only refund events', () => {
     );
   });
 
-  it('skips the stalled scan when a completed payment carries the reference', async () => {
-    const completed = buildPaymentCandidates([cancelledPaymentRow()]);
+  it('opens the reference watch when both passes find nothing actionable', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
+    const from = vi.fn().mockReturnValue(buildPaymentCandidates([]));
+    const supabase = { from, rpc } as never;
+
+    await reconcilePaystackRefundEvent(supabase, 'PSK-1', 'processed');
+
+    // A payment pending during the completed scan may have completed
+    // before the stalled scan ran: the atomic open-plus-rescan hands
+    // the race to the completion path instead of acknowledging with
+    // no durable trace. The watch stays open on an empty rescan.
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_reference_watch_v1',
+      {
+        p_evidence: {
+          provider_refund_status: 'processed',
+          reference_only: true,
+        },
+        p_paystack_ref: 'PSK-1',
+      }
+    );
+  });
+
+  it('files late rows from the confirming rescan and resolves the watch', async () => {
     const review = buildReviewInsert();
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: [cancelledPaymentRow()],
+        error: null,
+      })
+      .mockResolvedValue({ data: true, error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(buildPaymentCandidates([]))
+      .mockReturnValueOnce(buildPaymentCandidates([]))
+      .mockReturnValueOnce(buildRefundCandidates([]))
+      .mockReturnValueOnce(review);
+    const supabase = { from, rpc } as never;
+
+    await reconcilePaystackRefundEvent(supabase, 'PSK-1', 'processed');
+
+    // The payment completed between the passes: the confirming
+    // rescan caught it, its evidence is filed, and the watch
+    // resolves so a later completion cannot claim it.
+    expect(review.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'order_cancellation_refund_requires_review',
+        order_id: 'order-1',
+      })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_paystack_refund_reference_watch_v1',
+      { p_paystack_ref: 'PSK-1' }
+    );
+  });
+
+  it('runs the stalled pass alongside completed matches', async () => {
+    const completed = buildPaymentCandidates([cancelledPaymentRow()]);
+    const stalled = buildPaymentCandidates([
+      cancelledPaymentRow({ id: 'payment-2', order_id: 'order-2' }),
+    ]);
+    const completedReview = buildReviewInsert();
+    const stalledReview = buildReviewInsert();
     const from = vi
       .fn()
       .mockReturnValueOnce(completed)
       .mockReturnValueOnce(buildRefundCandidates([]))
-      .mockReturnValueOnce(review);
+      .mockReturnValueOnce(completedReview)
+      .mockReturnValueOnce(stalled)
+      .mockReturnValueOnce(buildRefundCandidates([]))
+      .mockReturnValueOnce(stalledReview);
     const rpc = vi.fn();
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
 
-    expect(completed.in).not.toHaveBeenCalled();
-    expect(review.insert).toHaveBeenCalled();
+    // A completed match does not prove there are no additional
+    // in-flight matches: the stalled row gets its own durable
+    // evidence instead of being skipped behind the completed pass.
+    expect(stalled.in).toHaveBeenCalledWith('status', [
+      'pending',
+      'processing',
+      'failed',
+    ]);
+    expect(completedReview.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ order_id: 'order-1' })
+    );
+    expect(stalledReview.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ order_id: 'order-2' })
+    );
   });
 
   it('preserves the failed verdict in the reference-only review', async () => {
     const review = buildReviewInsert();
     const from = vi
       .fn()
+      // Default empty page: the trailing stalled-states pass runs after
+      // every completed pass; staged pages take precedence.
+      .mockReturnValue(buildPaymentCandidates([]))
       .mockReturnValueOnce(buildPaymentCandidates([cancelledPaymentRow()]))
       .mockReturnValueOnce(buildRefundCandidates([]))
       .mockReturnValueOnce(review);
@@ -141,6 +227,9 @@ describe('Paystack reference-only refund events', () => {
     const review = buildReviewInsert();
     const from = vi
       .fn()
+      // Default empty page: the trailing stalled-states pass runs after
+      // every completed pass; staged pages take precedence.
+      .mockReturnValue(buildPaymentCandidates([]))
       .mockReturnValueOnce(page1)
       .mockReturnValueOnce(page2)
       .mockReturnValueOnce(refunds)
@@ -163,7 +252,7 @@ describe('Paystack reference-only refund events', () => {
         order_id: 'order-1',
       })
     );
-    expect(from).toHaveBeenCalledTimes(4);
+    expect(from).toHaveBeenCalledTimes(5);
   });
 
   it('revisits every in-flight refund past the first page', async () => {
@@ -198,6 +287,9 @@ describe('Paystack reference-only refund events', () => {
     const refundsPage2 = buildRefundCandidates(rows.slice(10));
     const from = vi
       .fn()
+      // Default empty page: the trailing stalled-states pass runs after
+      // every completed pass; staged pages take precedence.
+      .mockReturnValue(buildPaymentCandidates([]))
       .mockReturnValueOnce(buildPaymentCandidates([cancelledPaymentRow()]))
       .mockReturnValueOnce(refundsPage1);
     for (let index = 0; index < 10; index++) {
@@ -224,6 +316,9 @@ describe('Paystack reference-only refund events', () => {
     const review = buildReviewInsert({ code: '23505' });
     const from = vi
       .fn()
+      // Default empty page: the trailing stalled-states pass runs after
+      // every completed pass; staged pages take precedence.
+      .mockReturnValue(buildPaymentCandidates([]))
       .mockReturnValueOnce(
         buildPaymentCandidates([
           cancelledPaymentRow({
@@ -253,6 +348,9 @@ describe('Paystack reference-only refund events', () => {
     const review = buildReviewInsert();
     const from = vi
       .fn()
+      // Default empty page: the trailing stalled-states pass runs after
+      // every completed pass; staged pages take precedence.
+      .mockReturnValue(buildPaymentCandidates([]))
       .mockReturnValueOnce(
         buildPaymentCandidates([
           cancelledPaymentRow({
@@ -277,13 +375,16 @@ describe('Paystack reference-only refund events', () => {
         order_id: 'order-1',
       })
     );
-    expect(from).toHaveBeenCalledTimes(2);
+    expect(from).toHaveBeenCalledTimes(3);
   });
 
   it('files for a cancelled payment even when settled rows exist', async () => {
     const review = buildReviewInsert();
     const from = vi
       .fn()
+      // Default empty page: the trailing stalled-states pass runs after
+      // every completed pass; staged pages take precedence.
+      .mockReturnValue(buildPaymentCandidates([]))
       .mockReturnValueOnce(buildPaymentCandidates([cancelledPaymentRow()]))
       .mockReturnValueOnce(buildRefundCandidates([]))
       .mockReturnValueOnce(review);
@@ -297,6 +398,6 @@ describe('Paystack reference-only refund events', () => {
         order_id: 'order-1',
       })
     );
-    expect(from).toHaveBeenCalledTimes(3);
+    expect(from).toHaveBeenCalledTimes(4);
   });
 });

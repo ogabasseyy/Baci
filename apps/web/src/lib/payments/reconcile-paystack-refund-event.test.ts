@@ -50,6 +50,9 @@ describe('Paystack cancellation refund mismatch evidence', () => {
     const review = buildReviewInsert();
     const from = vi
       .fn()
+      // Default empty page: the trailing stalled-states pass runs after
+      // every completed pass; staged pages take precedence.
+      .mockReturnValue(buildPaymentCandidates([]))
       .mockReturnValueOnce(buildPaymentCandidates([cancelledPaymentRow()]))
       .mockReturnValueOnce(buildRefundCandidates([REFUND_FIXTURE, refund2]))
       .mockReturnValueOnce(paymentLookup)
@@ -112,6 +115,9 @@ describe('Paystack cancellation refund mismatch evidence', () => {
     };
     const from = vi
       .fn()
+      // Default empty page: the trailing stalled-states pass runs after
+      // every completed pass; staged pages take precedence.
+      .mockReturnValue(buildPaymentCandidates([]))
       .mockReturnValueOnce(buildPaymentCandidates([cancelledPaymentRow()]))
       .mockReturnValueOnce(buildRefundCandidates([REFUND_FIXTURE]))
       .mockReturnValueOnce(buildPaymentLookup())
@@ -151,9 +157,12 @@ describe('Paystack cancellation refund mismatch evidence', () => {
     const stalledCandidates = buildPaymentCandidates([]);
     const from = vi
       .fn()
+      // Default empty page: the trailing stalled-states pass runs after
+      // every completed pass; staged pages take precedence.
+      .mockReturnValue(buildPaymentCandidates([]))
       .mockReturnValueOnce(paymentCandidates)
       .mockReturnValueOnce(stalledCandidates);
-    const rpc = vi.fn();
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK.1=x');
 
@@ -169,6 +178,13 @@ describe('Paystack cancellation refund mismatch evidence', () => {
       'processing',
       'failed',
     ]);
+    // Both passes empty: the reference watch opens atomically with a
+    // confirming re-scan so a concurrent completion claims the watch
+    // instead of slipping through unhandled.
+    expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_reference_watch_v1',
+      expect.objectContaining({ p_paystack_ref: 'PSK.1=x' })
+    );
   });
 
   it.each([
@@ -182,6 +198,9 @@ describe('Paystack cancellation refund mismatch evidence', () => {
     const review = buildReviewInsert();
     const from = vi
       .fn()
+      // Default empty page: the trailing stalled-states pass runs after
+      // every completed pass; staged pages take precedence.
+      .mockReturnValue(buildPaymentCandidates([]))
       .mockReturnValueOnce(
         buildPaymentCandidates([
           cancelledPaymentRow({ cancel_order: cancelOrder }),
@@ -211,17 +230,25 @@ describe('Paystack cancellation refund mismatch evidence', () => {
     const stalledCandidates = buildPaymentCandidates([]);
     const from = vi
       .fn()
+      // Default empty page: the trailing stalled-states pass runs after
+      // every completed pass; staged pages take precedence.
+      .mockReturnValue(buildPaymentCandidates([]))
       .mockReturnValueOnce(paymentCandidates)
       .mockReturnValueOnce(stalledCandidates);
-    const rpc = vi.fn();
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
 
     // Orderless completed rows file nothing, so the stalled scan
     // still runs — a stalled payment with an order must not be
-    // missed behind an orderless completed row.
+    // missed behind an orderless completed row. Nothing actionable
+    // in either pass opens the reference watch for the handoff.
     expect(from).toHaveBeenCalledTimes(2);
-    expect(rpc).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_reference_watch_v1',
+      expect.objectContaining({ p_paystack_ref: 'PSK-1' })
+    );
   });
 
   it('ignores references outside the shared alphabet', async () => {

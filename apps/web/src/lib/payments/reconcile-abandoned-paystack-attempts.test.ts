@@ -53,8 +53,15 @@ describe('reconcileAbandonedPaystackAttempts', () => {
       'paid',
       'partially_paid',
     ]);
-    expect(lookup.lt).toHaveBeenCalledWith('created_at', expect.any(String));
-    expect(lookup.lt).toHaveBeenCalledWith('updated_at', expect.any(String));
+    // Null timestamps stay eligible: a missing timestamp is the
+    // stalest possible signal, and plain < comparisons would exclude
+    // legacy/imported rows from the sweep forever.
+    expect(lookup.or).toHaveBeenCalledWith(
+      expect.stringMatching(/^created_at\.lt\.\S+Z,created_at\.is\.null$/)
+    );
+    expect(lookup.or).toHaveBeenCalledWith(
+      expect.stringMatching(/^updated_at\.lt\.\S+Z,updated_at\.is\.null$/)
+    );
     expect(orderLookup.in).toHaveBeenCalledWith('payment_status', [
       'paid',
       'partially_paid',
@@ -194,7 +201,10 @@ describe('reconcileAbandonedPaystackAttempts', () => {
     const rotatedAt = (
       update.mock.calls as unknown as [{ updated_at: string }][]
     )[0]?.[0].updated_at;
-    const retryCutoff = lookup.lt.mock.calls[1]?.[1] as string;
+    const retryFilter = lookup.or.mock.calls[1]?.[0] as string;
+    const retryCutoff = retryFilter
+      .split(',')[0]
+      ?.split('updated_at.lt.')[1] as string;
     expect(Date.parse(rotatedAt)).toBeGreaterThan(Date.parse(retryCutoff));
     expect(Date.parse(rotatedAt)).toBeLessThanOrEqual(Date.now());
   });

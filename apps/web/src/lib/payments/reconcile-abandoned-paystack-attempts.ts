@@ -63,6 +63,10 @@ export async function reconcileAbandonedPaystackAttempts({
   const recheckCutoff = new Date(
     Date.now() - RECHECK_AFTER_MINUTES * 60_000
   ).toISOString();
+  // Millis-free stamps for the or() filters below: fractional seconds
+  // would inject dots the OR parser reads as condition separators.
+  const orCutoff = `${cutoff.split('.')[0]}Z`;
+  const orRecheckCutoff = `${recheckCutoff.split('.')[0]}Z`;
   const { data: attempts, error: lookupError } = await supabase
     .from('transactions')
     .select(
@@ -75,8 +79,13 @@ export async function reconcileAbandonedPaystackAttempts({
     .not('order_id', 'is', null)
     .not('gateway_reference', 'is', null)
     .is('metadata->abandoned_sweep_resolution', null)
-    .lt('created_at', cutoff)
-    .lt('updated_at', recheckCutoff)
+    // The schema permits null timestamps, and plain < comparisons
+    // exclude legacy/imported rows forever — leaving them pending
+    // while cancellation keeps rejecting the order as in-flight. A
+    // missing timestamp is the stalest possible signal, so nulls
+    // stay eligible for reconciliation.
+    .or(`created_at.lt.${orCutoff},created_at.is.null`)
+    .or(`updated_at.lt.${orRecheckCutoff},updated_at.is.null`)
     .order('updated_at', { ascending: true })
     .limit(limit);
 

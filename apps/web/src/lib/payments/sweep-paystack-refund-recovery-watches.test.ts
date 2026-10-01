@@ -4,11 +4,15 @@ import { sweepPaystackRefundRecoveryWatches } from './sweep-paystack-refund-reco
 
 const mocks = vi.hoisted(() => ({
   loggerWarn: vi.fn(),
+  reconcile: vi.fn(),
   recover: vi.fn(),
 }));
 
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), info: vi.fn(), warn: mocks.loggerWarn },
+}));
+vi.mock('./reconcile-paystack-refund-event', () => ({
+  reconcilePaystackRefundEvent: mocks.reconcile,
 }));
 vi.mock('./recover-unknown-paystack-refund', () => ({
   recoverUnknownPaystackRefund: mocks.recover,
@@ -84,6 +88,42 @@ describe('sweepPaystackRefundRecoveryWatches', () => {
       failed: 0,
       redriven: 1,
       retired: 1,
+    });
+  });
+
+  it('re-drives reference-only watches through the reference-only path', async () => {
+    mocks.reconcile.mockResolvedValue(undefined);
+    const { supabase } = database({
+      watches: {
+        data: [
+          {
+            created_at: '2026-09-30T00:00:00Z',
+            evidence: {
+              provider_refund_status: 'processed',
+              reference_only: true,
+            },
+            id: 'watch-ref',
+            paystack_ref: 'PSK-9',
+            provider_refund_id: null,
+          },
+        ],
+        error: null,
+      },
+    });
+
+    const summary = await sweepPaystackRefundRecoveryWatches(supabase);
+
+    expect(mocks.reconcile).toHaveBeenCalledWith(
+      supabase,
+      'PSK-9',
+      'processed'
+    );
+    expect(mocks.recover).not.toHaveBeenCalled();
+    expect(summary).toEqual({
+      checked: 1,
+      failed: 0,
+      redriven: 1,
+      retired: 0,
     });
   });
 

@@ -32,7 +32,7 @@ export function createClient(
     is: vi.fn().mockReturnThis(),
     neq: vi.fn().mockReturnThis(),
     not: vi.fn().mockReturnThis(),
-    lt: vi.fn().mockReturnThis(),
+    or: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     limit: vi.fn().mockResolvedValue({ data: rows, error: null }),
   };

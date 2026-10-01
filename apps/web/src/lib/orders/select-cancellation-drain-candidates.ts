@@ -25,12 +25,14 @@ export interface CancellationDrainCandidateRow {
 export function selectCancellationDrainCandidates({
   deadlineMs,
   deferredRows,
+  emailDeadlineMs,
   failedRows,
   limit,
   maxAttempts,
 }: {
   deadlineMs?: number;
   deferredRows: CancellationDrainCandidateRow[] | null;
+  emailDeadlineMs?: number;
   failedRows: CancellationDrainCandidateRow[] | null;
   limit: number;
   maxAttempts: number;
@@ -53,11 +55,15 @@ export function selectCancellationDrainCandidates({
   ].sort((a, b) =>
     a.claimed_at < b.claimed_at ? -1 : a.claimed_at > b.claimed_at ? 1 : 0
   );
+  // Emails admit against their own later cutoff: the side-effect
+  // deadline leaves no room after a full reconcile phase. Callers
+  // that pass none keep the legacy shared-deadline behavior.
+  const emailCutoff = emailDeadlineMs ?? deadlineMs;
   for (const row of merged) {
     if (
       row.step === 'customer_email' &&
-      deadlineMs !== undefined &&
-      deadlineMs - Date.now() <
+      emailCutoff !== undefined &&
+      emailCutoff - Date.now() <
         zeptomailSendAdmissionBudgetMs(EMAIL_ATTEMPTS_PER_SENDER)
     ) {
       continue;

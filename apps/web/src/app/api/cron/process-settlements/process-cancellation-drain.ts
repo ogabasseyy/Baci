@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
-import { cancellationDrainDeadlineMs } from '@/lib/orders/cancellation-drain-deadline';
+import {
+  cancellationDrainDeadlineMs,
+  cancellationEmailDrainDeadlineMs,
+} from '@/lib/orders/cancellation-drain-deadline';
 import { cancellationSideEffectDrainLimit } from '@/lib/orders/cancellation-side-effect-drain-limit';
 import { drainFailedOrderCancellationSideEffects } from '@/lib/orders/drain-failed-order-cancellation-side-effects';
 import type { MerchantRefundPushSender } from '@/lib/payments/drain-paystack-refund-notifications';
@@ -72,6 +75,10 @@ export async function processCancellationDrain(
   const [cancellationResult] = await Promise.allSettled([
     drainFailedOrderCancellationSideEffects({
       deadlineMs: cancellationDrainDeadlineMs(workersStartedAt),
+      // Emails admit against their own cutoff: the 90s side-effect
+      // deadline leaves no 48s sender budget after a full reconcile
+      // phase, excluding every customer email on each backlog run.
+      emailDeadlineMs: cancellationEmailDrainDeadlineMs(workersStartedAt),
       limit: sideEffectLimit,
       sendCancellationEmail,
       supabase,

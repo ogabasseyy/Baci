@@ -42,11 +42,13 @@ const MERCHANT_SELECT =
 export async function drainFailedOrderCancellationSideEffects({
   supabase,
   deadlineMs,
+  emailDeadlineMs,
   limit = DEFAULT_LIMIT,
   sendCancellationEmail,
 }: {
   supabase: SupabaseClient;
   deadlineMs?: number;
+  emailDeadlineMs?: number;
   limit?: number;
   sendCancellationEmail: CancellationEmailSender;
 }): Promise<CancellationSideEffectDrainSummary> {
@@ -56,6 +58,10 @@ export async function drainFailedOrderCancellationSideEffects({
     skipped: [],
   };
   const select = 'order_id, step, claimed_at, attempts';
+  // Emails admit against their own later cutoff: the side-effect
+  // deadline leaves no room after a full reconcile phase. Callers
+  // that pass none keep the legacy shared-deadline behavior.
+  const emailCutoff = emailDeadlineMs ?? deadlineMs;
   // When the email admission budget is already short, customer_email rows
   // can never be admitted this run — yet the SQL limit counts them, so a
   // limit-1 fetch returning only an old email starves the refund behind
@@ -63,8 +69,8 @@ export async function drainFailedOrderCancellationSideEffects({
   // budget-eligible rows fill the batch; the fill-loop filter and the
   // per-row backstop stay for budget that burns out mid-run.
   const emailAdmissionShort =
-    deadlineMs !== undefined &&
-    deadlineMs - Date.now() <
+    emailCutoff !== undefined &&
+    emailCutoff - Date.now() <
       zeptomailSendAdmissionBudgetMs(EMAIL_ATTEMPTS_PER_SENDER);
   const failedFetch = supabase
     .from('order_cancellation_side_effects')
@@ -145,6 +151,7 @@ export async function drainFailedOrderCancellationSideEffects({
   const candidates = selectCancellationDrainCandidates({
     deadlineMs,
     deferredRows: (deferredRows ?? []) as CancellationDrainCandidateRow[],
+    emailDeadlineMs,
     failedRows: (failedRows ?? []) as CancellationDrainCandidateRow[],
     limit,
     maxAttempts: MAX_ATTEMPTS,
@@ -170,8 +177,8 @@ export async function drainFailedOrderCancellationSideEffects({
     // failed for a tick with room. Later refund steps still run.
     if (
       step === 'customer_email' &&
-      deadlineMs !== undefined &&
-      deadlineMs - Date.now() <
+      emailCutoff !== undefined &&
+      emailCutoff - Date.now() <
         zeptomailSendAdmissionBudgetMs(EMAIL_ATTEMPTS_PER_SENDER)
     ) {
       logger.info({
@@ -215,8 +222,8 @@ export async function drainFailedOrderCancellationSideEffects({
       // claim write no longer fits.
       if (
         step === 'customer_email' &&
-        deadlineMs !== undefined &&
-        deadlineMs - Date.now() <
+        emailCutoff !== undefined &&
+        emailCutoff - Date.now() <
           zeptomailSendAdmissionBudgetMs(EMAIL_ATTEMPTS_PER_SENDER) +
             CLAIM_WRITE_ALLOWANCE_MS
       ) {
@@ -235,7 +242,7 @@ export async function drainFailedOrderCancellationSideEffects({
         supabase,
         execute: () =>
           executeOrderCancellationSideEffect({
-            deadlineMs,
+            deadlineMs: step === 'customer_email' ? emailCutoff : deadlineMs,
             isLastAttempt: candidate.isLastAttempt,
             merchant,
             order,

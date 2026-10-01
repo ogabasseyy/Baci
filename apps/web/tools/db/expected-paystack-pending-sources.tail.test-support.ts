@@ -332,6 +332,6 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
   {
     repositoryPath:
       'supabase/migrations/20260928183300_settlement_notification_retry_backoff.sql',
-    sha256: 'cdc747a7ace8cbece6fc92c22b3ad19654b73357d5dbac63a80a59d2e8ce9593',
+    sha256: 'ffa627680762c2e203ac159709dbb7dba02efeb63241ccf018424793a79caa75',
   },
 ];

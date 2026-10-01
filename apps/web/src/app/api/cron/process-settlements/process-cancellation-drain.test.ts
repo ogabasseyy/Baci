@@ -103,6 +103,10 @@ describe('processCancellationDrain', () => {
         // 150s notification reserve plus the 30s handoff slack, so the
         // final step's tail lands before the notification threshold.
         deadlineMs: 1_090_000,
+        // Emails admit against their own later cutoff: the 90s
+        // side-effect deadline leaves no 48s sender budget after a
+        // full reconcile phase.
+        emailDeadlineMs: 1_108_000,
         // Three steps fit after the margin, the reserved notification
         // share, and the handoff slack; the remainder retries on the
         // next invocation.
@@ -187,6 +191,7 @@ describe('processCancellationDrain', () => {
       ).toHaveBeenCalledWith(
         expect.objectContaining({
           deadlineMs: 1_090_000,
+          emailDeadlineMs: 1_108_000,
           limit: 0,
           sendCancellationEmail: mocks.sendEmail,
         })

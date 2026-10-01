@@ -11,6 +11,10 @@ ALTER TABLE public.merchant_settlements
   ADD COLUMN IF NOT EXISTS notification_attempts integer NOT NULL DEFAULT 0;
 ALTER TABLE public.merchant_settlements
   ADD COLUMN IF NOT EXISTS notification_next_retry_at timestamptz;
+-- The cap mirrors SETTLEMENT_NOTIFICATION_MAX_ATTEMPTS: capped rows
+-- never match the queue query, so excluding them keeps the partial
+-- index small as dead letters accumulate.
 CREATE INDEX IF NOT EXISTS merchant_settlements_notification_queue_idx
   ON public.merchant_settlements (notification_next_retry_at)
-  WHERE status = 'settled' AND settlement_notified = false;
+  WHERE status = 'settled' AND settlement_notified = false
+    AND notification_attempts < 5;

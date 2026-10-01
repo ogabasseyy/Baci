@@ -409,11 +409,33 @@ jobs:
           else:
               start = step_start(workflow_lines, trusted[0])
               span = workflow_lines[start:step_end(workflow_lines, start)]
-              # The trusted checkout's own ref: input must name the default
-              # branch; any PR-controlled ref: in that span is drift.
-              if not any(re.match(r"^ref:.*default_branch", line.strip())
-                         for line in span):
+              # The trusted checkout's own ref: inputs must equal the
+              # audited default-branch expression exactly (whitespace
+              # aside): a contains-check would accept PR-controlled
+              # lookalikes such as default_branch && github.head_ref.
+              # Credentials must stay disabled: a persisted token in the
+              # nested repo's git config is file content the workspace-
+              # reading agent could exfiltrate under prompt injection.
+              expected_ref = "${{github.event.repository.default_branch}}"
+
+              def norm_ref_value(stripped_line):
+                  rest = stripped_line[len("ref:"):].strip()
+                  rest = re.sub(r"^[>|][-+]?\s*", "", rest)
+                  if len(rest) >= 2 and rest[0] == rest[-1] \
+                          and rest[0] in "\"'":
+                      rest = rest[1:-1]
+                  return re.sub(r"\s+", "", rest)
+
+              ref_values = [
+                  norm_ref_value(line.strip())
+                  for line in span
+                  if re.match(r"^ref:", line.strip())]
+              if not ref_values or not all(
+                      value == expected_ref for value in ref_values):
                   drift.append("trusted-scripts-default-branch")
+              if not any(re.match(r"^persist-credentials:\s*false\s*$",
+                                  line.strip()) for line in span):
+                  drift.append("trusted-scripts-credentials")
               if any(is_pr_ref(line) for line in span):
                   drift.append("trusted-scripts-pr-ref")
           resolve = [i for i, line in enumerate(workflow_lines)

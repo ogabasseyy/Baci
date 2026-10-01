@@ -1,6 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
-import { referenceOnlyRefundCoveredBySettledRows } from './reference-only-refund-settled-coverage';
 
 /**
  * File a durable review for a signed reference-only refund event with no
@@ -31,15 +30,11 @@ export async function fileReferenceOnlyPaystackRefundReview(
     providerRefundStatus: string;
   }
 ): Promise<void> {
-  const covered = await referenceOnlyRefundCoveredBySettledRows(supabase, {
-    amount,
-    currency,
-    merchantId,
-    orderId,
-    paymentId,
-  });
-  if (covered) return;
-
+  // No settled-coverage suppression: the event carries no refund ID,
+  // so it can never be tied to a recorded row — treating it as a
+  // duplicate of covering rows would hide a second manual refund and
+  // its over-refund. Redeliveries merge idempotently under the leg
+  // key instead.
   const reason =
     `Paystack refund event for payment ${paymentReference} has no local ` +
     'audit row; verify the provider refund before another is initiated';

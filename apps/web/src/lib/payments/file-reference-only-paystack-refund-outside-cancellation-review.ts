@@ -1,6 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
-import { referenceOnlyRefundCoveredBySettledRows } from './reference-only-refund-settled-coverage';
 
 /**
  * File non-cancellation evidence for a signed reference-only refund
@@ -8,12 +7,27 @@ import { referenceOnlyRefundCoveredBySettledRows } from './reference-only-refund
  * cancellation recovery path cannot record it — but the customer may
  * have been refunded while the order stays paid, settleable, and
  * fulfillable, and polling can never rediscover a provider-only
- * refund. Settled local rows that already reconcile the payment stay
- * silent as late duplicates; otherwise the review stays open for
- * operations. One open review per order: redeliveries merge
- * payment-keyed evidence into it. Throws on write failure for
- * redelivery.
+ * refund. The review stays open for operations. One open review per
+ * order: redeliveries merge payment-keyed evidence into it. The key
+ * carries the verdict, so a later genuine refund cannot overwrite an
+ * earlier failed one for the same payment. Throws on write failure
+ * for redelivery.
  */
+
+/**
+ * Slug a provider verdict for use in an evidence key. The verdict is
+ * free-form provider text, so it is lowercased, stripped to a safe
+ * alphabet, and bounded — the raw value still rides nested inside
+ * the evidence object, so nothing is lost.
+ */
+function verdictSuffix(status: string): string {
+  const slug = status
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32);
+  return slug === '' ? 'unknown' : slug;
+}
 export async function fileReferenceOnlyPaystackRefundOutsideCancellationReview(
   supabase: SupabaseClient,
   {
@@ -36,15 +50,11 @@ export async function fileReferenceOnlyPaystackRefundOutsideCancellationReview(
     providerRefundStatus: string;
   }
 ): Promise<void> {
-  const covered = await referenceOnlyRefundCoveredBySettledRows(supabase, {
-    amount,
-    currency,
-    merchantId,
-    orderId,
-    paymentId,
-  });
-  if (covered) return;
-
+  // No settled-coverage suppression: the event carries no refund ID,
+  // so it can never be tied to a recorded row — treating it as a
+  // duplicate of covering rows would hide a second manual refund and
+  // its over-refund. Redeliveries merge idempotently under the same
+  // evidence key instead.
   const orderLabel = orderNumber || orderId.slice(0, 8).toUpperCase();
   const reason =
     `Paystack refund event for payment ${paymentReference} on active ` +
@@ -60,7 +70,11 @@ export async function fileReferenceOnlyPaystackRefundOutsideCancellationReview(
       payment_transaction_id: paymentId,
     },
   ];
-  const evidenceKey = `payment:${paymentId}`;
+  // Verdict-suffixed: without it, the first failed refund's evidence
+  // would stick while a later genuine refund for the same payment —
+  // or vice versa — overwrote it under the identical key, and audit
+  // blocking reads the nested verdict per leg.
+  const evidenceKey = `payment:${paymentId}:${verdictSuffix(providerRefundStatus)}`;
   // The verdict rides in the same object the merge path stores
   // verbatim, so insert and merge produce the identical nested entry:
   // a definitively failed provider refund moved no money, and audit

@@ -2,27 +2,30 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import { fetchCompletedPaymentsByReference } from './fetch-completed-payments-by-reference';
 
-function paymentChain(range: ReturnType<typeof vi.fn>) {
+function paymentChain(limit: ReturnType<typeof vi.fn>) {
   const chain: {
     eq: ReturnType<typeof vi.fn>;
+    gt: ReturnType<typeof vi.fn>;
+    limit: ReturnType<typeof vi.fn>;
     order: ReturnType<typeof vi.fn>;
-    range: ReturnType<typeof vi.fn>;
   } = {
     eq: vi.fn(),
+    gt: vi.fn(),
+    limit,
     order: vi.fn(),
-    range,
   };
   chain.eq.mockReturnValue(chain);
+  chain.gt.mockReturnValue(chain);
   chain.order.mockReturnValue(chain);
   return chain;
 }
 
 function database(pages: unknown[][]) {
-  const range = vi.fn();
+  const limit = vi.fn();
   for (const page of pages) {
-    range.mockResolvedValueOnce({ data: page, error: null });
+    limit.mockResolvedValueOnce({ data: page, error: null });
   }
-  const chain = paymentChain(range);
+  const chain = paymentChain(limit);
   const select = vi.fn().mockReturnValue(chain);
   const from = vi.fn().mockReturnValue({ select });
   return {
@@ -57,10 +60,11 @@ describe('fetchCompletedPaymentsByReference', () => {
     expect(chain.eq).toHaveBeenCalledWith('transaction_type', 'payment');
     expect(chain.eq).toHaveBeenCalledWith('status', 'completed');
     expect(chain.order).toHaveBeenCalledWith('id', { ascending: true });
-    expect(chain.range).toHaveBeenCalledWith(0, 9);
+    expect(chain.limit).toHaveBeenCalledWith(10);
+    expect(chain.gt).not.toHaveBeenCalled();
   });
 
-  it('paginates full pages so no match is dropped', async () => {
+  it('pages by id cursor so concurrent completions shift nothing', async () => {
     const first = Array.from({ length: 10 }, (_, index) => ({
       ...payment,
       id: `pay-${index}`,
@@ -71,8 +75,11 @@ describe('fetchCompletedPaymentsByReference', () => {
     const result = await fetchCompletedPaymentsByReference(supabase, 'PSK-1');
 
     expect(result).toHaveLength(11);
-    expect(chain.range).toHaveBeenCalledWith(0, 9);
-    expect(chain.range).toHaveBeenCalledWith(10, 19);
+    // Offsets over this status-filtered set would shift when a
+    // lower-id payment completes between page reads, omitting a later
+    // match; the immutable id cursor cannot shift.
+    expect(chain.gt).toHaveBeenCalledWith('id', 'pay-9');
+    expect(chain.limit).toHaveBeenCalledTimes(2);
   });
 
   it('returns an empty list when nothing matches', async () => {
@@ -84,11 +91,11 @@ describe('fetchCompletedPaymentsByReference', () => {
   });
 
   it('throws when the payment lookup fails', async () => {
-    const range = vi.fn().mockResolvedValue({
+    const limit = vi.fn().mockResolvedValue({
       data: null,
       error: new Error('db down'),
     });
-    const select = vi.fn().mockReturnValue(paymentChain(range));
+    const select = vi.fn().mockReturnValue(paymentChain(limit));
     const from = vi.fn().mockReturnValue({ select });
     const supabase = { from } as unknown as SupabaseClient;
 

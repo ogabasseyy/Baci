@@ -17,7 +17,6 @@ import {
   buildPaymentLookup,
   buildRefundCandidates,
   buildReviewInsert,
-  buildSettledCandidates,
   cancelledPaymentRow,
 } from './reconcile-paystack-refund-event.test-helpers';
 
@@ -32,13 +31,6 @@ describe('Paystack reference-only refund events', () => {
       .fn()
       .mockReturnValueOnce(buildPaymentCandidates([cancelledPaymentRow()]))
       .mockReturnValueOnce(buildRefundCandidates([]))
-      .mockReturnValueOnce(buildSettledCandidates([]))
-      .mockReturnValueOnce(
-        buildSettledCandidates([
-          { amount: 100, gateway: 'paystack' },
-          { amount: 50, gateway: 'korapay' },
-        ])
-      )
       .mockReturnValueOnce(review);
     const rpc = vi.fn();
 
@@ -61,13 +53,6 @@ describe('Paystack reference-only refund events', () => {
       .fn()
       .mockReturnValueOnce(buildPaymentCandidates([cancelledPaymentRow()]))
       .mockReturnValueOnce(buildRefundCandidates([]))
-      .mockReturnValueOnce(buildSettledCandidates([]))
-      .mockReturnValueOnce(
-        buildSettledCandidates([
-          { amount: 100, gateway: 'paystack' },
-          { amount: 50, gateway: 'korapay' },
-        ])
-      )
       .mockReturnValueOnce(review);
     const rpc = vi.fn();
 
@@ -105,20 +90,13 @@ describe('Paystack reference-only refund events', () => {
     const page1 = buildPaymentCandidates(skipped);
     const page2 = buildPaymentCandidates([cancelledPaymentRow()]);
     const refunds = buildRefundCandidates([]);
+    const review = buildReviewInsert();
     const from = vi
       .fn()
       .mockReturnValueOnce(page1)
       .mockReturnValueOnce(page2)
       .mockReturnValueOnce(refunds)
-      .mockReturnValueOnce(
-        buildSettledCandidates([
-          {
-            amount: 100,
-            currency: 'NGN',
-            metadata: { provider_refund_status: 'processed' },
-          },
-        ])
-      );
+      .mockReturnValueOnce(review);
     const rpc = vi.fn();
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
@@ -130,6 +108,12 @@ describe('Paystack reference-only refund events', () => {
     expect(refunds.eq).toHaveBeenCalledWith(
       'metadata->>payment_transaction_id',
       'payment-1'
+    );
+    expect(review.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'order_cancellation_refund_requires_review',
+        order_id: 'order-1',
+      })
     );
     expect(from).toHaveBeenCalledTimes(4);
   });
@@ -203,13 +187,6 @@ describe('Paystack reference-only refund events', () => {
           }),
         ])
       )
-      .mockReturnValueOnce(buildSettledCandidates([]))
-      .mockReturnValueOnce(
-        buildSettledCandidates([
-          { amount: 100, gateway: 'paystack' },
-          { amount: 50, gateway: 'korapay' },
-        ])
-      )
       .mockReturnValueOnce(review);
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
 
@@ -218,13 +195,14 @@ describe('Paystack reference-only refund events', () => {
     expect(rpc).toHaveBeenCalledWith(
       'merge_provider_refund_outside_cancellation_evidence_v1',
       expect.objectContaining({
-        p_evidence_key: 'payment:payment-1',
+        p_evidence_key: 'payment:payment-1:unknown',
         p_order_id: 'order-1',
       })
     );
   });
 
-  it('stays silent when settled rows already reconcile an active payment', async () => {
+  it('files for an active payment even when settled rows exist', async () => {
+    const review = buildReviewInsert();
     const from = vi
       .fn()
       .mockReturnValueOnce(
@@ -237,42 +215,40 @@ describe('Paystack reference-only refund events', () => {
           }),
         ])
       )
-      .mockReturnValueOnce(
-        buildSettledCandidates([
-          {
-            amount: 100,
-            currency: 'NGN',
-            metadata: { provider_refund_status: 'processed' },
-          },
-        ])
-      );
+      .mockReturnValueOnce(review);
     const rpc = vi.fn();
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
 
+    // No refund ID means the event can never be tied to a recorded
+    // row, so settled rows no longer suppress the review — a second
+    // manual refund would otherwise hide as a presumed duplicate.
+    expect(review.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'provider_refund_outside_cancellation',
+        order_id: 'order-1',
+      })
+    );
     expect(from).toHaveBeenCalledTimes(2);
-    expect(rpc).not.toHaveBeenCalled();
   });
 
-  it('stays silent when a completed row already reconciled the payment', async () => {
+  it('files for a cancelled payment even when settled rows exist', async () => {
+    const review = buildReviewInsert();
     const from = vi
       .fn()
       .mockReturnValueOnce(buildPaymentCandidates([cancelledPaymentRow()]))
       .mockReturnValueOnce(buildRefundCandidates([]))
-      .mockReturnValueOnce(
-        buildSettledCandidates([
-          {
-            amount: 100,
-            currency: 'NGN',
-            metadata: { provider_refund_status: 'processed' },
-          },
-        ])
-      );
+      .mockReturnValueOnce(review);
     const rpc = vi.fn();
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
 
+    expect(review.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'order_cancellation_refund_requires_review',
+        order_id: 'order-1',
+      })
+    );
     expect(from).toHaveBeenCalledTimes(3);
-    expect(rpc).not.toHaveBeenCalled();
   });
 });

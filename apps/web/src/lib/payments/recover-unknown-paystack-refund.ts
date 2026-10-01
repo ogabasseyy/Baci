@@ -2,9 +2,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { fetchCompletedPaymentsByReference } from './fetch-completed-payments-by-reference';
 import { fileCancelledPaystackRefundCandidateReviews } from './file-cancelled-paystack-refund-candidate-reviews';
+import { fileInvalidPaystackRefundEvidenceReview } from './file-invalid-paystack-refund-evidence-review';
 import { fileActiveOrderPaystackRefundCandidateReviews } from './file-provider-refund-outside-cancellation-review';
 import { fileStalledPaystackRefundReviews } from './file-stalled-paystack-refund-reviews';
+import { openPaystackRefundRecoveryWatch } from './open-paystack-refund-recovery-watch';
 import { recordRecoveredPaystackRefund } from './record-recovered-paystack-refund';
+import { resolvePaystackRefundRecoveryWatch } from './resolve-paystack-refund-recovery-watch';
 import { verifyUnknownPaystackRefundProvider } from './verify-unknown-paystack-refund-provider';
 
 /**
@@ -52,9 +55,25 @@ export async function recoverUnknownPaystackRefund(
     // and throw for redelivery instead. Merges are idempotent, so a
     // transient provider glitch recovers on redelivery while a
     // permanently malformed shape stays visible for operations.
-    if (candidates.length === 0)
-      throw new Error('paystack_refund_evidence_unmatched');
     const invalidReason = `Paystack refund ${refundId} returned unusable provider evidence for reference ${resolvedPaymentReference}`;
+    if (candidates.length === 0) {
+      // No candidate orders for the order-scoped filers — but throwing
+      // with no durable trace would let the malformed evidence vanish
+      // with the last provider retry, so file the generic review
+      // first. The throw still stands: a transient glitch recovers on
+      // redelivery while the review keeps the wedge visible.
+      await fileInvalidPaystackRefundEvidenceReview(supabase, {
+        evidence,
+        reason: invalidReason,
+        reference: resolvedPaymentReference,
+        refundId,
+      });
+      await resolvePaystackRefundRecoveryWatch(supabase, {
+        providerRefundId: refundId,
+        reference: resolvedPaymentReference,
+      });
+      throw new Error('paystack_refund_evidence_unmatched');
+    }
     await fileCancelledPaystackRefundCandidateReviews(
       supabase,
       candidates,
@@ -81,6 +100,14 @@ export async function recoverUnknownPaystackRefund(
         status: typeof current.status === 'string' ? current.status : 'unknown',
       }
     );
+    // The malformed evidence is durably filed: resolve the watch (a
+    // no-op when none is open) so a later completion cannot claim it
+    // and file stale evidence. The throw still stands for glitch
+    // recovery on redelivery.
+    await resolvePaystackRefundRecoveryWatch(supabase, {
+      providerRefundId: refundId,
+      reference: resolvedPaymentReference,
+    });
     throw new Error('paystack_refund_evidence_invalid');
   }
   for (let pass = 0; ; pass++) {
@@ -110,6 +137,14 @@ export async function recoverUnknownPaystackRefund(
           status: current.status,
         }
       );
+      // Every match is retained in a durable review: resolve the
+      // watch (a no-op when this run never opened one) so a later
+      // unrelated completion cannot claim it and file stale
+      // evidence against an already-handled refund.
+      await resolvePaystackRefundRecoveryWatch(supabase, {
+        providerRefundId: refundId,
+        reference: resolvedPaymentReference,
+      });
       logger.info({
         message:
           'Unknown Paystack refund event matches multiple completed payments',
@@ -119,15 +154,14 @@ export async function recoverUnknownPaystackRefund(
     }
     if (candidates.length !== 1 || !payment || !payment.order_id) {
       if (pass > 0) {
-        // Stable empty: the first completed scan and the stalled scan
-        // were both empty, and the confirming completed scan below
-        // rechecked after the stalled flow. Acknowledge with no
-        // further I/O — ending the handoff on the completed scan is
-        // the point: a payment completing during the stalled scan is
-        // caught by the recheck, and no completion can slip into a
-        // gap after the final scan except the return itself. Never
-        // re-run the stalled scan here: its queries would reopen a
-        // completion window the confirming scan just closed.
+        // Stable empty under the watch: the first scan and the stalled
+        // scan were both empty, and the watch opener below re-scanned
+        // atomically with the watch insert. Acknowledge with no
+        // further I/O — the open watch is the handoff: a payment
+        // completing after the scan claims it on completion and files
+        // the evidence, so no completion slips through unhandled.
+        // Never re-run the stalled scan here: its queries would reopen
+        // a completion window the atomic recheck just closed.
         return;
       }
       // No completed local payment: a stale pending attempt may already
@@ -146,14 +180,22 @@ export async function recoverUnknownPaystackRefund(
       });
       if (stalledFiled > 0) return;
       // Both scans empty: a payment pending during the first read may
-      // have completed before the stalled scan ran. Recheck once so a
-      // concurrent charge cannot slip a funded payment through
-      // unacknowledged — without a row or review, a later recovery
-      // would mark the refunded order paid.
-      candidates = await fetchCompletedPaymentsByReference(
-        supabase,
-        resolvedPaymentReference
-      );
+      // have completed before the stalled scan ran. Open the recovery
+      // watch and re-scan atomically under the reference lock the
+      // completion path claims under: rows returned mean the payment
+      // landed first and loop around to handle them; an empty set
+      // leaves the watch open so the completion files the evidence
+      // instead of acknowledging silently.
+      candidates = await openPaystackRefundRecoveryWatch(supabase, {
+        evidence: {
+          amount_minor: current.amount,
+          currency: current.currency,
+          provider_payment_transaction_id: current.transaction,
+          provider_refund_status: current.status,
+        },
+        providerRefundId: refundId,
+        reference: resolvedPaymentReference,
+      });
       continue;
     }
     await recordRecoveredPaystackRefund(supabase, {
@@ -161,6 +203,12 @@ export async function recoverUnknownPaystackRefund(
       evidence,
       payment: { ...payment, order_id: payment.order_id },
       refundId,
+    });
+    // The refund is durably recorded (or its evidence filed): resolve
+    // the watch so a later unrelated completion cannot claim it.
+    await resolvePaystackRefundRecoveryWatch(supabase, {
+      providerRefundId: refundId,
+      reference: resolvedPaymentReference,
     });
     return;
   }

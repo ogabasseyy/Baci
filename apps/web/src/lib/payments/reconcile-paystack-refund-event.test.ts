@@ -17,7 +17,6 @@ import {
   buildPaymentLookup,
   buildRefundCandidates,
   buildReviewInsert,
-  buildSettledCandidates,
   cancelledPaymentRow,
   REFUND_FIXTURE,
 } from './reconcile-paystack-refund-event.test-helpers';
@@ -175,13 +174,6 @@ describe('Paystack cancellation refund mismatch evidence', () => {
       .mockReturnValueOnce(
         buildPaymentCandidates([
           cancelledPaymentRow({ cancel_order: cancelOrder }),
-        ])
-      )
-      .mockReturnValueOnce(buildSettledCandidates([]))
-      .mockReturnValueOnce(
-        buildSettledCandidates([
-          { amount: 100, gateway: 'paystack' },
-          { amount: 50, gateway: 'korapay' },
         ])
       )
       .mockReturnValueOnce(review);

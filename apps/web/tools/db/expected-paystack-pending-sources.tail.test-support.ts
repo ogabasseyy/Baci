@@ -259,4 +259,24 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
       'supabase/migrations/20260928180000_merge_leg_evidence_provider_refund_status.sql',
     sha256: '18197dede6001367b1313d4e001f7c09cb73d2892d41a75c02bfc74faee0e2e8',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928181000_paystack_refund_evidence_invalid_review.sql',
+    sha256: '90af721cd5a29166601d376b759f4bf4970d74266bbab3410490b7c4d471658c',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928182000_paystack_refund_recovery_watch.sql',
+    sha256: 'a5b67f857535893a37e7b1872c86939c06674e1ee8f8ff5d5a7ec1b84d6919a7',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928182100_claim_paystack_refund_recovery_watches.sql',
+    sha256: '1bd70693f274c07164964e21b6b359bcb8262e8640a0906a8f505aa0cf543c75',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928182200_complete_order_gateway_payment_claim_refund_watches.sql',
+    sha256: 'f3c840de8c4b4013c9bb56957eb6a6a29c7ad521b680fffefd523b423867c2d8',
+  },
 ];

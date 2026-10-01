@@ -2,17 +2,37 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
 
 /**
+ * Whether outside-cancellation evidence indicates money may have moved.
+ * Only a definitively rejected provider refund (every nested entry
+ * failed) proves otherwise; missing, empty, malformed, or mixed
+ * evidence fails closed and keeps blocking the leg.
+ */
+function outsideEvidenceIndicatesMovement(refundEvidence: unknown): boolean {
+  if (!refundEvidence || typeof refundEvidence !== 'object') return true;
+  const entries = Object.values(refundEvidence);
+  if (entries.length === 0) return true;
+  return entries.some((entry) => {
+    const status = (entry as { provider_refund_status?: unknown } | null)
+      ?.provider_refund_status;
+    return (
+      typeof status !== 'string' || status.trim().toLowerCase() !== 'failed'
+    );
+  });
+}
+
+/**
  * Find payment legs carrying unresolved provider-refund evidence. A
  * signed reference-only refund event files such a review when no local
  * refund row exists, and a provider-only refund verified while the
  * order was active leaves outside-cancellation evidence behind; the
  * provider refund may already be real, so these legs wait for
  * operations instead of initiating a second full provider refund.
- * Matches by the review's transaction id, its metadata leg id, merged
- * candidate evidence in either stored case, or nested per-refund
- * evidence entries (recovery merges leave the top-level marker
- * untouched). Marked evidence with no leg attribution fails closed on
- * every leg. Fails closed when the lookup errors.
+ * Definitively rejected (failed) outside refunds moved no money and
+ * never block. Matches by the review's transaction id, its metadata
+ * leg id, merged candidate evidence in either stored case, or nested
+ * per-refund evidence entries (recovery merges leave the top-level
+ * marker untouched). Marked evidence with no leg attribution fails
+ * closed on every leg. Fails closed when the lookup errors.
  */
 export async function fetchAuditBlockedCancellationLegIds({
   order,
@@ -44,10 +64,15 @@ export async function fetchAuditBlockedCancellationLegIds({
       refund_evidence?: unknown;
     } | null;
     // Outside-cancellation reviews are verified provider-refund
-    // evidence by type; cancellation reviews need an audit-failed
-    // marker, top-level or nested.
+    // evidence by type — unless every nested entry is a definitive
+    // provider rejection: a failed refund moved no money, so blocking
+    // the leg would strand a later genuine cancellation behind
+    // delivery_uncertain for a refund Paystack already refused.
+    // Cancellation reviews need an audit-failed marker, top-level or
+    // nested.
     const typeCarriesEvidence =
-      review.issue_type === 'provider_refund_outside_cancellation';
+      review.issue_type === 'provider_refund_outside_cancellation' &&
+      outsideEvidenceIndicatesMovement(metadata?.refund_evidence);
     const nestedLegIds = new Set<string>();
     let nestedEvidenceMarked = false;
     const refundEvidence = metadata?.refund_evidence;

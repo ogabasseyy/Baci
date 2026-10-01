@@ -90,4 +90,74 @@ describe('fetchAuditBlockedCancellationLegIds', () => {
       fetchAuditBlockedCancellationLegIds({ order, supabase, transactions })
     ).resolves.toEqual(new Set(['leg-1', 'leg-2']));
   });
+
+  it('ignores an outside review whose only evidence is a failed refund', async () => {
+    const { supabase } = buildSupabase([
+      review({
+        metadata: {
+          payment_transaction_id: 'leg-1',
+          refund_evidence: {
+            'provider:7': {
+              payment_transaction_id: 'leg-1',
+              provider_refund_status: 'failed',
+            },
+          },
+        },
+        txn_id: 'leg-1',
+      }),
+    ]);
+
+    // Paystack definitively rejected the refund, so no money moved:
+    // blocking would strand a later genuine cancellation behind
+    // delivery_uncertain for nothing.
+    await expect(
+      fetchAuditBlockedCancellationLegIds({ order, supabase, transactions })
+    ).resolves.toEqual(new Set());
+  });
+
+  it('still blocks when any outside evidence is not a rejection', async () => {
+    const { supabase } = buildSupabase([
+      review({
+        metadata: {
+          payment_transaction_id: 'leg-1',
+          refund_evidence: {
+            'provider:7': {
+              payment_transaction_id: 'leg-1',
+              provider_refund_status: 'failed',
+            },
+            'provider:8': {
+              payment_transaction_id: 'leg-1',
+              provider_refund_status: 'processed',
+            },
+          },
+        },
+        txn_id: 'leg-1',
+      }),
+    ]);
+
+    await expect(
+      fetchAuditBlockedCancellationLegIds({ order, supabase, transactions })
+    ).resolves.toEqual(new Set(['leg-1']));
+  });
+
+  it('fails closed on malformed outside evidence statuses', async () => {
+    const { supabase } = buildSupabase([
+      review({
+        metadata: {
+          payment_transaction_id: 'leg-2',
+          refund_evidence: {
+            'provider:7': {
+              payment_transaction_id: 'leg-2',
+              provider_refund_status: null,
+            },
+          },
+        },
+        txn_id: 'leg-2',
+      }),
+    ]);
+
+    await expect(
+      fetchAuditBlockedCancellationLegIds({ order, supabase, transactions })
+    ).resolves.toEqual(new Set(['leg-2']));
+  });
 });

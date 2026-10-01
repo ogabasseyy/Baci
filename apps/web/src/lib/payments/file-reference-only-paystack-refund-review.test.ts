@@ -28,10 +28,15 @@ describe('fileReferenceOnlyPaystackRefundReview', () => {
         metadata: expect.objectContaining({
           audit_record_failed: true,
           payment_transaction_id: 'payment-1',
+          reference: 'PSK-1',
           reference_only_refund_event: true,
         }),
         order_id: 'order-1',
-        paystack_ref: 'PSK-1',
+        // The open-by-paystack-ref index is global: stamping the shared
+        // reference would let the first order's review collide every
+        // later order's insert, failing redelivery forever since the
+        // merge RPC only searches the colliding order.
+        paystack_ref: null,
         reason: expect.stringContaining('PSK-1'),
         txn_id: 'payment-1',
       })

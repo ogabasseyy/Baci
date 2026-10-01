@@ -58,6 +58,10 @@ jobs:
               - 'supabase/migrations/**'
               - 'next.config.ts'
               - '.github/workflows/**'
+              # The SARIF filter audits the review runner's containment
+              # flags, so runner-only changes must trigger the Semgrep
+              # job instead of skipping the fail-closed audit.
+              - '.github/scripts/muse-review/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'turbo.json'
@@ -196,7 +200,10 @@ jobs:
       # of failing silently. The trusted checkout's action and repo are
       # pinned, and every consumer of the review scripts must route via
       # the validated resolver output (no hardcoded scripts paths, no
-      # rebound SCRIPT_DIR, no unbound interpreter invocations).
+      # rebound SCRIPT_DIR, no unbound interpreter invocations). The
+      # audited checkout's action is pinned too; every resolver write
+      # to GITHUB_OUTPUT must be the known-safe echo; muse flags are
+      # scoped to its own argv, not the whole shell line.
       - name: Drop audited checkout finding from SARIF
         if: always()
         run: |
@@ -215,7 +222,7 @@ jobs:
               ".pull-request-target-code-checkout"
           )
           AUDITED_PATH = ".github/workflows/muse-code-review.yml"
-          TRUSTED_CHECKOUT_USES = (
+          PINNED_CHECKOUT_USES = (
               "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
           )
 
@@ -415,6 +422,20 @@ jobs:
               if not any(re.match(r"^persist-credentials:\s*false\s*$", line.strip())
                          for line in workflow_lines[start:pr_refs[0]]):
                   drift.append("head-checkout-credentials")
+              # The step runs with the job's PR write token before the
+              # secret-bearing steps: pin its exact action, not just the
+              # ref it checks out. A mutable action ref could persist
+              # code into the later steps while the ref still audits.
+              audited_span = workflow_lines[
+                  start:step_end(workflow_lines, start)]
+              audited_uses = [
+                  line.strip()[len("uses:"):].strip()
+                  for line in audited_span
+                  if re.match(r"^uses:", line.strip())]
+              if not audited_uses or not all(
+                      value == PINNED_CHECKOUT_USES
+                      for value in audited_uses):
+                  drift.append("head-checkout-action")
           trusted = [i for i, line in enumerate(workflow_lines)
                      if re.match(r"^path:\s*trusted-scripts\s*$",
                                  line.strip())]
@@ -460,7 +481,7 @@ jobs:
                   for line in span
                   if re.match(r"^uses:", line.strip())]
               if not uses_values or not all(
-                      value == TRUSTED_CHECKOUT_USES
+                      value == PINNED_CHECKOUT_USES
                       for value in uses_values):
                   drift.append("trusted-scripts-action")
               if any(re.match(r"^repository:", line.strip())
@@ -483,17 +504,24 @@ jobs:
               # untrusted-scripts/, and also rules out traversal (..).
               expected = ("${GITHUB_WORKSPACE}/trusted-scripts"
                           "/.github/scripts/muse-review")
-              assigns = []
-              for line in span:
-                  found = re.search(
-                      r"""echo\s+["']dir=([^"']+)["']\s*>>\s*"""
-                      r"""["']?\$?\{?GITHUB_OUTPUT\}?["']?""", line)
-                  if found:
-                      assigns.append(found.group(1))
-              if not assigns:
+              # Every mention of GITHUB_OUTPUT in the resolver must be the
+              # known-safe echo of the exact trusted path: the effective
+              # dir is the LAST write, so a printf/tee/exec line the old
+              # single-spelling collector ignored would silently win. An
+              # aliasing line (OUT=$GITHUB_OUTPUT) trips here too, at the
+              # alias. Residual: a var name split across expansions.
+              safe_echo = re.compile(
+                  r"""echo\s+["']dir=([^"']+)["']\s*>>\s*"""
+                  r"""["']?\$?\{?GITHUB_OUTPUT\}?["']?""")
+              writes = [line for line in span if "GITHUB_OUTPUT" in line]
+              if not writes:
                   drift.append("script-resolution-no-output")
-              elif not all(value.strip() == expected for value in assigns):
-                  drift.append("script-resolution-untrusted-target")
+              else:
+                  for line in writes:
+                      found = safe_echo.search(line)
+                      if not found or found.group(1).strip() != expected:
+                          drift.append("script-resolution-unverified-output")
+                          break
           # Every executable reference to the review scripts must route
           # through the validated resolver output: a later edit could
           # otherwise hardcode the PR-head scripts path in a token step
@@ -633,12 +661,36 @@ jobs:
                   drift.append(f"agent-invocation-count={len(calls)}")
               else:
                   line = calls[0]
-                  if not re.search(r"(?:^|\s)--disable-shell(?:\s|$)", line):
+                  # Scope checks to the simple command containing muse:
+                  # flags on a later chained command (muse ...; echo
+                  # --disable-shell) must not satisfy them. Bounds are
+                  # unquoted shell operators; redirects (>, <) stay
+                  # inside the command. Disable flags are muse's own
+                  # argv; -u may precede it (env prefix) so it is read
+                  # from the whole scoped command.
+                  ops = []
+                  quote = None
+                  for pos, ch in enumerate(line):
+                      if quote:
+                          if ch == quote:
+                              quote = None
+                      elif ch in ("'", '"'):
+                          quote = ch
+                      elif ch in ";|&()`":
+                          ops.append(pos)
+                  match = invocation.search(line)
+                  seg_start = max([p + 1 for p in ops
+                                   if p <= match.start()] + [0])
+                  seg_end = min([p for p in ops
+                                 if p >= match.end()] + [len(line)])
+                  segment = line[seg_start:seg_end]
+                  argv = line[match.end():seg_end]
+                  if not re.search(r"(?:^|\s)--disable-shell(?:\s|$)", argv):
                       drift.append("agent-shell-boundary")
-                  elif not re.search(r"(?:^|\s)--disable-write(?:\s|$)", line):
+                  elif not re.search(r"(?:^|\s)--disable-write(?:\s|$)", argv):
                       drift.append("agent-write-boundary")
-                  elif ("-u GITHUB_TOKEN" not in line
-                        or "-u GH_TOKEN" not in line):
+                  elif ("-u GITHUB_TOKEN" not in segment
+                        or "-u GH_TOKEN" not in segment):
                       drift.append("agent-token-isolation")
           if drift:
               print(f"::error::muse-code-review.yml hardening drifted "

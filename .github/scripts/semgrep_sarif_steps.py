@@ -12,26 +12,48 @@ from semgrep_sarif_shell import (ENV_POISON, SHELL_KEYWORDS,
                                  strip_comments,
                                  tokenize, unquote, unquote_value)
 
-def is_step_boundary(line):
+def _steps_item_indent(lines):
+    # Indent of `- ` items under the first block-style steps:
+    # key (quoted spellings included). None when no block
+    # sequence exists: callers fall back to any-indent so step
+    # enumeration cannot silently empty itself.
+    for line in lines:
+        m = re.match(r"^(\s*)(?:\"steps\"|'steps'|steps):"
+                     r"\s*(?:#.*)?$", line)
+        if m:
+            return len(m.group(1)) + 2
+    return None
+
+def is_step_boundary(line, item_indent=None):
     # Named (- name:) and unnamed (- uses:/- run:/...) steps both
     # delimit spans, so an unnamed step cannot widen a span.
     # Quoted keys (- "name":) delimit too: a bare-key match would
-    # merge an attacker step into the previous span.
-    m = re.match(r"^\s*-\s+(.*)$", line)
+    # merge an attacker step into the previous span. The dash
+    # must sit at the steps-item indent: block-scalar content
+    # (run: | bodies, heredocs) is always deeper, so a `- name:`
+    # there is prose, not a step -- while a dash at exactly the
+    # item indent dedents out of any scalar and YAML parses it
+    # as a real (audited) step either way.
+    m = re.match(r"^(\s*)-\s+(.*)$", line)
     if not m:
         return False
-    key, _ = map_key_value(m.group(1).strip())
+    if item_indent is not None \
+            and len(m.group(1)) != item_indent:
+        return False
+    key, _ = map_key_value(m.group(2).strip())
     return key is not None
 
 def step_start(lines, ref_index):
+    indent = _steps_item_indent(lines)
     for i in range(ref_index, -1, -1):
-        if is_step_boundary(lines[i]):
+        if is_step_boundary(lines[i], indent):
             return i
     return 0
 
 def step_end(lines, start_index):
+    indent = _steps_item_indent(lines)
     for i in range(start_index + 1, len(lines)):
-        if is_step_boundary(lines[i]):
+        if is_step_boundary(lines[i], indent):
             return i
     return len(lines)
 
@@ -78,8 +100,10 @@ def audit_step_commands(ctx, drift):
     builtin_prefix = (r"(?:(?:export|local|readonly|declare|"
                       r"typeset)\s+(?:-\S+\s+)*)?"
                       r"(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*")
+    indent = _steps_item_indent(ctx.workflow_lines)
     bounds = [i for i, line in enumerate(ctx.workflow_lines)
-              if is_step_boundary(line)] + [len(ctx.workflow_lines)]
+              if is_step_boundary(line, indent)] \
+        + [len(ctx.workflow_lines)]
     for k in range(len(bounds) - 1):
         span = ctx.workflow_lines[bounds[k]:bounds[k + 1]]
         name = step_name(span[0])
@@ -193,8 +217,10 @@ def audit_agent_env(ctx, drift):
         agent_span = ctx.workflow_lines[s:step_end(ctx.workflow_lines, s)]
     else:
         drift.append("agent-step-missing")
+    indent = _steps_item_indent(ctx.workflow_lines)
     bounds = [i for i, line in enumerate(ctx.workflow_lines)
-              if is_step_boundary(line)] + [len(ctx.workflow_lines)]
+              if is_step_boundary(line, indent)] \
+        + [len(ctx.workflow_lines)]
     for k in range(len(bounds) - 1):
         span = ctx.workflow_lines[bounds[k]:bounds[k + 1]]
         code = "\n".join(strip_comments(seg)

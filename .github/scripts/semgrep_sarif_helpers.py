@@ -7,12 +7,13 @@ use, so any trusted-tree change also fails for human review.
 """
 import os
 import re
+from semgrep_sarif_heredoc import _strip_heredocs
 from semgrep_sarif_interp import (_check_command,
                                    _check_poison_assign)
 from semgrep_sarif_pins import _is_home_write
 from semgrep_sarif_scan import (arith_regions, extract_subshells,
                                 is_trusted_write_target,
-                                redirect_targets, skip_braced,
+                                redirect_targets,
                                 subscript_cmdsubst)
 from semgrep_sarif_shell import (SHELL_KEYWORDS, logical_lines,
                                  peel_prefix, split_commands2,
@@ -85,66 +86,6 @@ def _strip_case_patterns(nosub):
     return "; ".join(kept)
 
 
-def _strip_heredocs(raw_lines):
-    # Drop heredoc bodies (prose, not commands). Tracks quoted
-    # and ${} regions so a << inside them cannot start a fake
-    # body that would hide real code; <<< is a herestring,
-    # never a heredoc. Empty delimiters never push.
-    out, pending = [], []
-    for line in raw_lines:
-        if pending:
-            delim, tabs = pending[0]
-            text = line.lstrip("\t") if tabs else line
-            if text == delim:
-                pending.pop(0)
-            out.append("")
-            continue
-        out.append(line)
-        i, quote = 0, None
-        while i < len(line):
-            ch = line[i]
-            if quote:
-                if ch == quote:
-                    quote = None
-                i += 1
-            elif ch in ("'", '"'):
-                quote, i = ch, i + 1
-            elif ch == "\\":
-                i += 2
-            elif ch == "#":
-                break
-            elif ch == "$" and line[i:i + 2] == "${":
-                i = skip_braced(line, i)
-            elif ch == "<" and line[i:i + 2] == "<<" \
-                    and line[i:i + 3] != "<<<":
-                j = i + 2
-                tabs = False
-                if j < len(line) and line[j] == "-":
-                    tabs, j = True, j + 1
-                while j < len(line) \
-                        and line[j] in (" ", "\t"):
-                    j += 1
-                if j < len(line) and line[j] in ("'", '"'):
-                    q, k = line[j], j + 1
-                    while k < len(line) and line[k] != q:
-                        k += 1
-                    delim, j = line[j + 1:k], k + 1
-                else:
-                    k = j
-                    while k < len(line) \
-                            and line[k] not in (" ", "\t", ";",
-                                                "|", "&", "(",
-                                                ")", "<", ">"):
-                        k += 1
-                    delim, j = line[j:k], k
-                if delim:
-                    pending.append((delim, tabs))
-                i = j
-            else:
-                i += 1
-    return out
-
-
 def _collect_vars(raw_lines):
     # Last top-level literal assignment per name (bash last-
     # wins), so ${install_dir}/... resolves before path checks
@@ -202,6 +143,21 @@ def _resolve(text, varmap):
         return varmap[name]
     return re.sub(r"\$(\{)?([A-Za-z_][A-Za-z0-9_]*)(\})?",
                   sub, text)
+
+
+def _audit_expansions(line, drift, pinned_curl=False):
+    # Unquoted-heredoc-body audit: words are stdin data (never
+    # commands), but expansions execute. Extracted commands
+    # audit fully; arithmetic regions for nested $/backtick.
+    # Per-line (never joined): a $((...)) split across bodies
+    # cannot fuse with another body's text into a phantom.
+    _, inners = extract_subshells(line)
+    for inner in inners:
+        _audit_line(inner, drift, pinned_curl)
+    if any("$" in body or "`" in body
+           for body in arith_regions(line)) \
+            and "helper-arithmetic-sub" not in drift:
+        drift.append("helper-arithmetic-sub")
 
 
 def _audit_line(line, drift, pinned_curl=False):
@@ -262,8 +218,12 @@ def _audit_shell_file(path, drift):
         return
     varmap = _collect_vars(raw)
     pinned_curl = os.path.basename(path) == "install.sh"
-    for line in logical_lines(_strip_heredocs(raw)):
+    code, bodies = _strip_heredocs(raw)
+    for line in logical_lines(code):
         _audit_line(_resolve(line, varmap), drift, pinned_curl)
+    for line in bodies:
+        _audit_expansions(_resolve(line, varmap), drift,
+                          pinned_curl)
 
 
 def invoked_shell_refs(raw):

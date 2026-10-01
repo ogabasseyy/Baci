@@ -257,6 +257,54 @@ describe('drainFailedOrderCancellationSideEffects', () => {
     }
   });
 
+  it('skips an email without claiming when lookups burn the send margin', async () => {
+    const email = {
+      attempts: 4,
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-1',
+      step: 'customer_email',
+    };
+    const failedQuery = terminalQuery([email]);
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(failedQuery)
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(
+        terminalQuery({ id: 'order-1', merchant_id: 'merchant-1' })
+      )
+      .mockReturnValueOnce(terminalQuery({ id: 'merchant-1' }));
+    // 70s at admission, then 49s after the order/merchant reads: above
+    // the 48s send threshold the old code claimed on, but short of the
+    // send-plus-claim budget, so claiming would burn the final attempt
+    // on an admission refusal. Calls: fetch exclusion, stale cutoff,
+    // batch fill, deadline guard, pre-read backstop, post-read recheck.
+    const now = vi
+      .spyOn(Date, 'now')
+      .mockReturnValueOnce(1_200_000)
+      .mockReturnValueOnce(1_200_000)
+      .mockReturnValueOnce(1_200_000)
+      .mockReturnValueOnce(1_200_000)
+      .mockReturnValueOnce(1_200_000)
+      .mockReturnValue(1_221_000);
+
+    try {
+      const result = await drainFailedOrderCancellationSideEffects({
+        deadlineMs: 1_270_000,
+        limit: 1,
+        sendCancellationEmail: vi.fn(),
+        supabase: { from } as never,
+      });
+
+      expect(failedQuery.neq).not.toHaveBeenCalled();
+      expect(mocks.run).not.toHaveBeenCalled();
+      expect(from).toHaveBeenCalledTimes(5);
+      expect(result).toEqual({ drained: [], failed: [], skipped: [] });
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it('fails closed when candidate lookup fails', async () => {
     const from = vi
       .fn()

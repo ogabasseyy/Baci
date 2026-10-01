@@ -112,11 +112,17 @@ it('filters variant recall by constraints before applying the cap', () => {
   expect(recall).toContain('recall_variant_filter_loader_accepts');
   expect(recall).toContain('DISTINCT ON (eligible.product_id)');
   expect(recall).toContain('is_purchasable');
-  expect(recall).toContain('p.manage_stock IS NOT TRUE OR COALESCE(pv.stock_quantity, 0) > 0');
-  expect(recall).toContain('exact_count');
+  expect(recall).toContain("policy.effective_policy = 'serialized_then_unlimited'");
+  expect(recall).toContain("policy.effective_policy = 'serialized_strict'");
+  expect(recall).toContain('COALESCE(units.available, 0) > 0');
+  expect(recall).toContain('complete_branch_count');
+  expect(recall).toContain('best_branch_exact');
   expect(recall.indexOf('(NOT best.is_purchasable)'))
-    .toBeLessThan(recall.indexOf('best.exact_count DESC'));
+    .toBeLessThan(recall.indexOf('best.complete_branch_count DESC'));
+  expect(recall.indexOf('best.complete_branch_count DESC'))
+    .toBeLessThan(recall.indexOf('best.best_branch_exact DESC'));
   expect(recall).not.toContain('is_exact');
+  expect(recall).not.toContain('exact_count');
   expect(recall).toContain('jsonb_array_length(p_filters) > 50');
   expect(recall).toContain('octet_length(p_filters::text) > 16384');
   expect(recall.indexOf('recall_variant_filter_verifiably_fails(pv.attributes'))

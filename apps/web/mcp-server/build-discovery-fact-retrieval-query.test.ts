@@ -130,6 +130,13 @@ it('renders exponent-notation numbers as plain decimals like the SQL index', () 
     .toBe('(storage1000000000000000000000gb)');
 });
 
+it('digests overlong product types exactly like the SQL identity lexeme', () => {
+  expect(buildDiscoveryFactRetrievalQuery(intent({ product_type: 'a'.repeat(64) })))
+    .toBe(`(type${'a'.repeat(64)})`);
+  expect(buildDiscoveryFactRetrievalQuery(intent({ product_type: 'a'.repeat(65) })))
+    .toBe('(factae06f028c9669fc614057907c6b067678cc3d6c6f65f66363a6c487d306c8370)');
+});
+
 it('keys long models as one digest lexeme instead of truncating the tail', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'Alpha Bravo Charlie Delta Echo Foxtrot Golf Hotel India Juliett Kilo Lima Mike November Oscar Papa' })))
     .toBe('(factcb93feba5d3baa95c7f29c8373096a2db0d08f18a7740b1a6b2d7025543facff)');

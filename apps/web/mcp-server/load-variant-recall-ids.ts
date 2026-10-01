@@ -47,7 +47,13 @@ export async function loadVariantRecallIds(
   merchantId: string,
   supabase: SupabaseClient
 ): Promise<{ ids: string[]; truncated: boolean }> {
-  const constraints = (intent?.alternatives ?? []).flatMap((alternative) => alternative.attributes ?? []);
+  // Branch identity rides along: alternatives are OR branches, so the RPC
+  // must score each branch separately instead of counting exact matches
+  // over the flattened set (a hybrid matching one constraint from each of
+  // two branches must not tie a variant completing one branch).
+  const constraints = (intent?.alternatives ?? []).flatMap((alternative, branch) =>
+    (alternative.attributes ?? []).map((attribute) => ({ ...attribute, branch }))
+  );
   if (constraints.length === 0) return { ids: [], truncated: false };
   try {
     // product_variants is staff-only under RLS, so recall reads through the
@@ -56,7 +62,7 @@ export async function loadVariantRecallIds(
     // the window would otherwise be unreachable to product-level search.
     const { data, error } = await supabase.rpc('search_product_variant_recall', {
       p_merchant_id: merchantId,
-      p_filters: constraints.map(({ key, operator, value }) => ({ key, operator, value })),
+      p_filters: constraints.map(({ key, operator, value, branch }) => ({ key, operator, value, branch })),
       p_limit: VARIANT_SCAN_LIMIT + 1,
     });
     if (error) throw error;

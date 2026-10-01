@@ -1030,6 +1030,16 @@ const widgetHtml = `<!DOCTYPE html>
     const openLink = (url) => window.openai?.openExternal?.({ href: url }) || window.open(url, '_blank');
     const productUrl = (slug) => 'https://ogabassey.com/products/' + encodeURIComponent(slug);
     const cartUrl = (productId) => 'https://ogabassey.com/cart?item_id=' + encodeURIComponent(productId);
+    const hasOptionParams = (url) => {
+      if (typeof url !== 'string' || url === '') return false;
+      try {
+        const params = new URL(url).searchParams;
+        return params.has('variantId') || params.has('condition');
+      } catch { return false; }
+    };
+    // Option-bearing results open the PDP: the cart handoff rejects
+    // variant/condition products with "Choose product options".
+    const purchaseUrl = (p) => (hasOptionParams(p.url) ? p.url : cartUrl(p.id));
 
     const renderProducts = (products) => {
       if (!products?.length) {
@@ -1072,8 +1082,8 @@ const widgetHtml = `<!DOCTYPE html>
 
         card.querySelector('.product-img-wrap')?.addEventListener('click', () => openLink(p.url || productUrl(p.slug)));
         card.querySelector('.product-name')?.addEventListener('click', () => openLink(p.url || productUrl(p.slug)));
-        card.querySelector('.btn-cart')?.addEventListener('click', (e) => { e.stopPropagation(); openLink(cartUrl(p.id)); });
-        card.querySelector('.btn-buy')?.addEventListener('click', (e) => { e.stopPropagation(); openLink(cartUrl(p.id)); });
+        card.querySelector('.btn-cart')?.addEventListener('click', (e) => { e.stopPropagation(); openLink(purchaseUrl(p)); });
+        card.querySelector('.btn-buy')?.addEventListener('click', (e) => { e.stopPropagation(); openLink(purchaseUrl(p)); });
         return card;
       });
 

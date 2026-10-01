@@ -52,7 +52,27 @@ it('pushes constraints into the recall RPC so filtering precedes the cap', async
   await loadVariantRecallIds(intent(storageEq(256)), 'merchant-1', supabase);
   expect(supabase.rpc).toHaveBeenCalledWith('search_product_variant_recall', {
     p_merchant_id: 'merchant-1',
-    p_filters: [{ key: 'storage_gb', operator: 'eq', value: 256 }],
+    p_filters: [{ key: 'storage_gb', operator: 'eq', value: 256, branch: 0 }],
+    p_limit: 2001,
+  });
+});
+
+it('numbers each alternative branch so the RPC scores branches separately', async () => {
+  const supabase = rpc([]);
+  await loadVariantRecallIds(
+    intent(
+      { attributes: [{ key: 'color', operator: 'eq', value: 'Black' }] },
+      { attributes: [{ key: 'color', operator: 'eq', value: 'White' }] }
+    ),
+    'merchant-1',
+    supabase
+  );
+  expect(supabase.rpc).toHaveBeenCalledWith('search_product_variant_recall', {
+    p_merchant_id: 'merchant-1',
+    p_filters: [
+      { key: 'color', operator: 'eq', value: 'Black', branch: 0 },
+      { key: 'color', operator: 'eq', value: 'White', branch: 1 },
+    ],
     p_limit: 2001,
   });
 });

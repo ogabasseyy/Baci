@@ -11,6 +11,56 @@ VALUES (
   true
 );
 
+-- Branch and serialized rankings run under an isolated merchant so the
+-- stocked-recall cap assertions above keep their exact row counts.
+INSERT INTO public.merchants (id, email, business_name, slug, is_published)
+VALUES (
+  'cb58d110-0000-4000-8000-000000000202',
+  'branch-test@example.test',
+  'Branch Test Merchant',
+  'branch-test-merchant',
+  true
+);
+
+-- A hybrid matching one constraint per branch must rank below a variant
+-- completing one branch; serialized availability (not stored stock) decides
+-- purchasability for serialized policies.
+INSERT INTO public.products
+  (id, merchant_id, name, slug, brand, price, status, has_variants, manage_stock, inventory_tracking_policy, discovery_metadata)
+VALUES
+  ('cb58d110-0000-4000-8000-000000000411', 'cb58d110-0000-4000-8000-000000000202',
+   'Complete option', 'complete-option', 'Acme', 50000, 'active', true, true, 'off', '{}'),
+  ('cb58d110-0000-4000-8000-000000000412', 'cb58d110-0000-4000-8000-000000000202',
+   'Hybrid option', 'hybrid-option', 'Acme', 50000, 'active', true, true, 'off', '{}'),
+  ('cb58d110-0000-4000-8000-000000000413', 'cb58d110-0000-4000-8000-000000000202',
+   'Serialized option', 'serialized-option', 'Acme', 50000, 'active', true, true, 'serialized_strict', '{}'),
+  ('cb58d110-0000-4000-8000-000000000414', 'cb58d110-0000-4000-8000-000000000202',
+   'Sold out exact option', 'sold-out-exact-option', 'Acme', 50000, 'active', true, true, 'off', '{}'),
+  ('cb58d110-0000-4000-8000-000000000415', 'cb58d110-0000-4000-8000-000000000202',
+   'Unlimited option', 'unlimited-option', 'Acme', 50000, 'active', true, true, 'serialized_then_unlimited', '{}');
+
+INSERT INTO public.product_variants (id, product_id, merchant_id, attributes, stock_quantity)
+VALUES
+  ('cb58d110-0000-4000-8000-000000000421', 'cb58d110-0000-4000-8000-000000000411',
+   'cb58d110-0000-4000-8000-000000000202', '{"color":"black","storage_gb":256}', 5),
+  ('cb58d110-0000-4000-8000-000000000422', 'cb58d110-0000-4000-8000-000000000412',
+   'cb58d110-0000-4000-8000-000000000202', '{"color":"black","storage_gb":128}', 5),
+  ('cb58d110-0000-4000-8000-000000000423', 'cb58d110-0000-4000-8000-000000000413',
+   'cb58d110-0000-4000-8000-000000000202', '{"color":"red","storage_gb":64}', 0),
+  ('cb58d110-0000-4000-8000-000000000424', 'cb58d110-0000-4000-8000-000000000414',
+   'cb58d110-0000-4000-8000-000000000202', '{"color":"red","storage_gb":64}', 0),
+  ('cb58d110-0000-4000-8000-000000000425', 'cb58d110-0000-4000-8000-000000000415',
+   'cb58d110-0000-4000-8000-000000000202', '{"color":"red","storage_gb":64}', 0);
+
+INSERT INTO public.variant_inventory (merchant_id, variant_id, identifier_type, identifier_value, status)
+VALUES (
+  'cb58d110-0000-4000-8000-000000000202',
+  'cb58d110-0000-4000-8000-000000000423',
+  'serial',
+  'SER-0001',
+  'available'
+);
+
 -- Availability-aware variant recall must keep stocked options inside the
 -- bounded product cap, while inventory-untracked products remain eligible.
 INSERT INTO public.products
@@ -73,6 +123,13 @@ BEGIN
   IF NOT discovery.product_discovery_metadata_valid('{"attributes":{"storage_gb":1.7976931348623157e308}}'::jsonb) THEN
     RAISE EXCEPTION 'discovery metadata validator rejected Number.MAX_VALUE';
   END IF;
+  IF discovery.product_discovery_metadata_valid('{"attributes":{"storage_gb":256.00000000000001}}'::jsonb)
+    OR discovery.product_discovery_metadata_valid('{"attributes":{"custom":9007199254740993}}'::jsonb) THEN
+    RAISE EXCEPTION 'discovery metadata validator accepted a decimal JavaScript cannot round-trip';
+  END IF;
+  IF NOT discovery.product_discovery_metadata_valid('{"attributes":{"screen_inches":15.6,"power_w":0.1}}'::jsonb) THEN
+    RAISE EXCEPTION 'discovery metadata validator rejected naturally written decimals';
+  END IF;
   IF discovery.product_discovery_metadata_valid(
     ('{"model":"' || repeat('😀', 100) || '"}')::jsonb) THEN
     RAISE EXCEPTION 'discovery metadata validator accepted 200 UTF-16 units';
@@ -108,6 +165,41 @@ BEGIN
     ])
     OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000213'::uuid] THEN
     RAISE EXCEPTION 'variant recall cap must prioritize stocked and untracked options, got %', recall_ids;
+  END IF;
+END;
+$$;
+
+DO $$
+DECLARE
+  recall_ids uuid[];
+BEGIN
+  IF current_user <> 'anon' THEN
+    RAISE EXCEPTION 'RPC regression must run as the public caller';
+  END IF;
+  SELECT array_agg(product_id) INTO recall_ids
+  FROM public.search_product_variant_recall(
+    'cb58d110-0000-4000-8000-000000000202',
+    '[{"key":"color","operator":"eq","value":"black","branch":0},{"key":"storage_gb","operator":"eq","value":256,"branch":0},{"key":"color","operator":"eq","value":"white","branch":1},{"key":"storage_gb","operator":"eq","value":128,"branch":1}]'::jsonb,
+    10
+  );
+  IF cardinality(recall_ids) IS DISTINCT FROM 2
+    OR recall_ids[1] IS DISTINCT FROM 'cb58d110-0000-4000-8000-000000000411'::uuid
+    OR recall_ids[2] IS DISTINCT FROM 'cb58d110-0000-4000-8000-000000000412'::uuid THEN
+    RAISE EXCEPTION 'branch-complete variants must outrank cross-branch hybrids, got %', recall_ids;
+  END IF;
+  SELECT array_agg(product_id) INTO recall_ids
+  FROM public.search_product_variant_recall(
+    'cb58d110-0000-4000-8000-000000000202',
+    '[{"key":"color","operator":"eq","value":"red"},{"key":"storage_gb","operator":"eq","value":64}]'::jsonb,
+    10
+  );
+  IF cardinality(recall_ids) IS DISTINCT FROM 3
+    OR recall_ids[3] IS DISTINCT FROM 'cb58d110-0000-4000-8000-000000000414'::uuid
+    OR NOT (recall_ids[1:2] @> ARRAY[
+      'cb58d110-0000-4000-8000-000000000413'::uuid,
+      'cb58d110-0000-4000-8000-000000000415'::uuid
+    ]) THEN
+    RAISE EXCEPTION 'serialized availability must outrank stored-stock sold-out rows, got %', recall_ids;
   END IF;
 END;
 $$;

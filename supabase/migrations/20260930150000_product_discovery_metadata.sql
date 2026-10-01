@@ -28,6 +28,20 @@ AS $$
   FROM (SELECT pg_catalog.regexp_replace(raw,
     '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g') AS trimmed) AS t;
 $$;
+-- Binary64 round-trip: the SQL builder expands the stored decimal while the
+-- JavaScript reader decodes the nearest double, so a value like
+-- 256.00000000000001 indexes unit lexemes no 256 intent can retrieve. A
+-- storable decimal must equal PostgreSQL's shortest float8 rendering parsed
+-- back, which is what JavaScript prints for the same double (PG 12+
+-- float output). Naturally written decimals (0.1, 15.6) pass; only
+-- beyond-double precision and integers past 2^53 fail. Callers range-check
+-- first: float8 overflows past Number.MAX_VALUE.
+CREATE OR REPLACE FUNCTION discovery.product_discovery_numeric_round_trips(raw jsonb)
+RETURNS boolean
+LANGUAGE sql IMMUTABLE PARALLEL SAFE SECURITY INVOKER SET search_path = ''
+AS $$
+  SELECT (raw)::text::numeric = (((raw)::text::float8)::text)::numeric;
+$$;
 CREATE OR REPLACE FUNCTION discovery.product_discovery_metadata_valid(facts jsonb)
 RETURNS boolean
 LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE SECURITY INVOKER SET search_path = ''
@@ -70,15 +84,20 @@ BEGIN
       -- values in the sub-ULP overflow band decode finite but are rejected
       -- all the same, erring toward never storing unverifiable numbers.
       IF entry_key IN ('storage_gb', 'ram_gb', 'power_w', 'screen_inches', 'refresh_hz') THEN
-        IF pg_catalog.jsonb_typeof(entry_value) IS DISTINCT FROM 'number'
-          OR (entry_value)::text::numeric < 0
+        -- Sequential guards: the range cast must precede the float8
+        -- round-trip (which overflows past MAX_VALUE), and OR clause order
+        -- is undefined, so each check is its own statement.
+        IF pg_catalog.jsonb_typeof(entry_value) IS DISTINCT FROM 'number' THEN RETURN false; END IF;
+        IF (entry_value)::text::numeric < 0
           OR (entry_value)::text::numeric > 1.7976931348623157e308 THEN RETURN false; END IF;
+        IF NOT discovery.product_discovery_numeric_round_trips(entry_value) THEN RETURN false; END IF;
       ELSIF entry_key IN ('color', 'connector', 'processor', 'connectivity') THEN
         IF pg_catalog.jsonb_typeof(entry_value) IS DISTINCT FROM 'string' THEN RETURN false; END IF;
         IF discovery.product_discovery_text_length(entry_value #>> '{}') NOT BETWEEN 1 AND 100 THEN RETURN false; END IF;
       ELSIF pg_catalog.jsonb_typeof(entry_value) = 'number' THEN
         IF (entry_value)::text::numeric < 0
           OR (entry_value)::text::numeric > 1.7976931348623157e308 THEN RETURN false; END IF;
+        IF NOT discovery.product_discovery_numeric_round_trips(entry_value) THEN RETURN false; END IF;
       ELSIF pg_catalog.jsonb_typeof(entry_value) = 'string' THEN
         IF discovery.product_discovery_text_length(entry_value #>> '{}') NOT BETWEEN 1 AND 100 THEN RETURN false; END IF;
       ELSE

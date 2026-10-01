@@ -46,10 +46,10 @@ AS $$
     || pg_catalog.to_tsvector('simple'::regconfig, coalesce((
       SELECT pg_catalog.string_agg(lexeme, ' ')
       FROM (
-        SELECT COALESCE('type' || nullif(pg_catalog.regexp_replace(canonical_type, '[^a-z0-9_]', '', 'g'), ''),
-          CASE WHEN canonical_type IS NOT NULL AND canonical_type <> ''
-            THEN 'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
-              'type' || pg_catalog.chr(31) || canonical_type, 'UTF8'), 'sha256'), 'hex') END) AS lexeme
+        -- Canonical types route through the shared lexeme so overlong values
+        -- digest exactly like the query builder's identityKey: a 65+ char
+        -- custom type indexed literally would never match the queried digest.
+        SELECT discovery.discovery_identity_lexeme('type', canonical_type) AS lexeme
         FROM (SELECT CASE
           WHEN nullif(pg_catalog.lower(pg_catalog.normalize(
               pg_catalog.regexp_replace(

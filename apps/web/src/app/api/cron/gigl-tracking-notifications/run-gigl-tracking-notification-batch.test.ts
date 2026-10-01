@@ -15,6 +15,7 @@ describe('runGiglTrackingNotificationBatch', () => {
       merchant_id: '00000000-0000-4000-8000-000000000002',
       notification_kind: 'in_transit',
       order_id: '00000000-0000-4000-8000-000000000003',
+      shipment_id: '00000000-0000-4000-8000-000000000005',
       tracking_event_id: '00000000-0000-4000-8000-000000000004',
     };
     const rpc = vi

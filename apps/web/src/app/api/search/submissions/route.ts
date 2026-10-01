@@ -42,6 +42,16 @@ function unavailable() {
 export async function POST(request: NextRequest) {
   const origin = request.headers.get('origin');
   const requestHost = request.headers.get('host') || request.nextUrl.host;
+  // Shed automated traffic before the Origin gate so bots stay silent:
+  // they would otherwise each mint a 403 warn log without ever recording.
+  const userAgent = request.headers.get('user-agent') || '';
+  if (
+    !userAgent ||
+    BOT_USER_AGENT_REGEX.test(userAgent) ||
+    /curl|wget|python-requests|headlesschrome/i.test(userAgent)
+  ) {
+    return new NextResponse(null, { status: 204 });
+  }
   try {
     const originUrl = new URL(origin || '');
     if (
@@ -71,15 +81,6 @@ export async function POST(request: NextRequest) {
       { error: 'Invalid Origin header' },
       { status: 403 }
     );
-  }
-
-  const userAgent = request.headers.get('user-agent') || '';
-  if (
-    !userAgent ||
-    BOT_USER_AGENT_REGEX.test(userAgent) ||
-    /curl|wget|python-requests|headlesschrome/i.test(userAgent)
-  ) {
-    return new NextResponse(null, { status: 204 });
   }
 
   // Compare only the media type, case-insensitively: parameters (e.g.

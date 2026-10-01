@@ -57,6 +57,15 @@ describe('explicit search submissions security gates', () => {
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 
+  it('sheds originless bots silently without an origin warning', async () => {
+    const req = request(undefined, { 'user-agent': 'Googlebot' });
+    req.headers.delete('origin');
+    expect((await POST(req)).status).toBe(204);
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(mocks.merchant).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
   it.each([
     '{',
     { query: ' ', pathPrefix: '', source: 'navbar' },

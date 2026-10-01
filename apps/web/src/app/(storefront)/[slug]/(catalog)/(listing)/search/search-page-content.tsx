@@ -18,7 +18,6 @@ import { SearchPageNoResultsPanel } from './search-page-no-results-panel';
 import { getPriceFormatter } from './search-page-price';
 import { buildSearchPageSchemas } from './search-page-schema';
 import { SearchPageStartPanel } from './search-page-start-panel';
-import { buildSearchSubmissionHref } from './search-page-submission-href';
 import { formatSearchSummary } from './search-page-summary';
 
 export interface SearchPageProps {
@@ -64,12 +63,6 @@ export async function SearchPageContent({
 
   const allProductsHref = `${pathPrefix}/products`;
   const contactHref = `${pathPrefix}/contact`;
-  // A did-you-mean follow is a fresh submission, so it keeps the
-  // page-less submission URL; only the link activation records it,
-  // never the landing render.
-  const didYouMeanHref = effectiveResult.didYouMean
-    ? buildSearchSubmissionHref(searchBasePath, effectiveResult.didYouMean)
-    : null;
   const pageUrl = searchQuery
     ? `${storeUrl}/search?q=${encodeURIComponent(searchQuery)}${page > 1 ? `&page=${page}` : ''}`
     : `${storeUrl}/search`;
@@ -148,7 +141,7 @@ export async function SearchPageContent({
             pathPrefix={pathPrefix}
           />
 
-          {!searchFailed && effectiveResult.didYouMean && didYouMeanHref && (
+          {!searchFailed && effectiveResult.didYouMean && (
             <p className="mt-4 text-sm text-store-background-text/55">
               Did you mean{' '}
               <SearchSubmissionLink

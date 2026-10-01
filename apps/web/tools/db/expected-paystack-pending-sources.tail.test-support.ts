@@ -234,4 +234,9 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
       'supabase/migrations/20260928175000_partial_capture_short_review_type.sql',
     sha256: '88b8af90db3ccb9ed8bec2caf3094857b430c888656e3ffc09f485921c6c4cd7',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928176000_queue_refund_row_for_refund_state_legs.sql',
+    sha256: '4619893fbde709f787545ac98fa06badfae53c58ce047d8ffa619a2ce4740b2d',
+  },
 ];

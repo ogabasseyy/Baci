@@ -104,6 +104,36 @@ describe('handlePaystackCancellationRefundFailure', () => {
     );
   });
 
+  it.each([
+    'HTTP_401',
+    'HTTP_403',
+  ])('retries a %s leg while attempts remain instead of terminalizing', async (code) => {
+    // A rejected credential accepted nothing, so terminal quarantine
+    // would strand the customer unrefunded behind delivery_uncertain
+    // even after the key is corrected.
+    await expect(invoke({ code, error: 'invalid key' })).rejects.toThrow(
+      'invalid key'
+    );
+
+    expect(mocks.quarantineRefund).not.toHaveBeenCalled();
+  });
+
+  it('files auth exhaustion distinctly when credential retries run out', async () => {
+    await expect(
+      invoke({ code: 'HTTP_401', error: 'invalid key', isLastAttempt: true })
+    ).rejects.toThrow('invalid key');
+
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          ambiguous_initiation: false,
+          auth_exhausted: true,
+        }),
+        reason: expect.stringContaining('credentials were invalid'),
+      })
+    );
+  });
+
   it('carries accepted legs into a later-leg failure review', async () => {
     await expect(
       invoke({ code: 'VALIDATION_ERROR', error: 'bad leg', refundIds: [101] })

@@ -95,7 +95,37 @@ export async function executeOrderCancellationSideEffect({
   const unlinkedRefunds = (refundRows ?? []).filter(
     (row) => linkedPaymentId(row) === null
   );
-  if (unlinkedRefunds.length > 0) {
+  // Mirror the claim gate's sole-completed-leg attribution: an unlinked
+  // legacy refund covering the only completed leg must not terminalize
+  // the step while another leg's provider refund is still outstanding —
+  // the completion gate attributes it and finalizes once that leg lands.
+  const soleCompletedLegs = transactions.filter(
+    (transaction) =>
+      transaction.status === 'completed' && Number(transaction.amount) > 0
+  );
+  const soleCompletedLeg =
+    soleCompletedLegs.length === 1 ? soleCompletedLegs[0] : null;
+  const {
+    mismatchedIds,
+    mismatchedTransactions,
+    refundedPaymentIds,
+    unattributedUnlinkedCount,
+    unverifiedLinkedLegIds,
+  } = matchCancellationRefundCoverage({
+    linkedPaymentId,
+    refundRows,
+    soleCompletedLegId: soleCompletedLeg?.id ?? null,
+    transactions,
+  });
+  const soleLegCovered =
+    soleCompletedLeg !== undefined &&
+    soleCompletedLeg !== null &&
+    (refundedPaymentIds.has(soleCompletedLeg.id) ||
+      unverifiedLinkedLegIds.has(soleCompletedLeg.id));
+  if (
+    unattributedUnlinkedCount > 0 ||
+    (unlinkedRefunds.length > 0 && !soleLegCovered)
+  ) {
     await quarantineRefund({
       metadata: { unlinked_refund_count: unlinkedRefunds.length },
       order,
@@ -106,16 +136,6 @@ export async function executeOrderCancellationSideEffect({
       transactions,
     });
   }
-  const {
-    mismatchedIds,
-    mismatchedTransactions,
-    refundedPaymentIds,
-    unverifiedLinkedLegIds,
-  } = matchCancellationRefundCoverage({
-    linkedPaymentId,
-    refundRows,
-    transactions,
-  });
   // Unsupported and reference-less legs quarantine only when uncovered:
   // a fully refunded non-Paystack leg needs no further action, and
   // terminalizing the row for it would strand the remaining Paystack

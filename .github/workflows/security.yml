@@ -178,23 +178,74 @@ jobs:
       # the reviewed pull_request_target checkout in muse-code-review.yml
       # (read-only agent, no PR code execution; see the nosemgrep comment
       # there). Anything else suppressed, anywhere else, keeps uploading, so
-      # a future nosemgrep can never silently hide a new finding. Uses
+      # a future nosemgrep can never silently hide a new finding. Before
+      # filtering, the step re-asserts the hardening the audit relies on and
+      # fails closed (SARIF untouched, alert re-opens) if it drifted. Uses
       # python3 (the scan container has no jq).
       - name: Drop audited checkout finding from SARIF
         if: always()
         run: |
           # Scans that found no targets write no SARIF; nothing to filter then.
           [ -s semgrep.sarif ] || exit 0
+          # The audited finding lives in the reviewer workflow; if that file
+          # is gone from this tree there is nothing to filter either.
+          [ -f .github/workflows/muse-code-review.yml ] || exit 0
           python3 - <<'EOF'
           import json
+          import sys
           AUDITED_RULE_ID = (
               "yaml.github-actions.security.pull-request-target-code-checkout"
               ".pull-request-target-code-checkout"
           )
-          AUDITED_PATH_SUFFIX = ".github/workflows/muse-code-review.yml"
+          AUDITED_PATH = ".github/workflows/muse-code-review.yml"
+
+          with open(AUDITED_PATH) as fh:
+              workflow_lines = fh.read().splitlines()
+
+          def step_start(ref_index):
+              for i in range(ref_index, -1, -1):
+                  if workflow_lines[i].lstrip().startswith("- name:"):
+                      return i
+              return 0
+
+          def step_end(start_index):
+              for i in range(start_index + 1, len(workflow_lines)):
+                  if workflow_lines[i].lstrip().startswith("- name:"):
+                      return i
+              return len(workflow_lines)
+
+          drift = []
+          if not any("head.repo.full_name == github.repository" in line
+                     for line in workflow_lines):
+              drift.append("same-repo-job-guard")
+          pr_refs = [i for i, line in enumerate(workflow_lines)
+                     if "ref:" in line and "github.event.pull_request" in line]
+          if len(pr_refs) != 1:
+              drift.append(f"pr-controlled-checkout-count={len(pr_refs)}")
+          else:
+              block = "\n".join(workflow_lines[step_start(pr_refs[0]):pr_refs[0]])
+              if "persist-credentials: false" not in block:
+                  drift.append("head-checkout-credentials")
+          trusted = [i for i, line in enumerate(workflow_lines)
+                     if "path: trusted-scripts" in line]
+          if not trusted:
+              drift.append("trusted-scripts-checkout-missing")
+          else:
+              start = step_start(trusted[0])
+              block = "\n".join(workflow_lines[start:step_end(start)])
+              if "default_branch" not in block:
+                  drift.append("trusted-scripts-default-branch")
+              if "github.event.pull_request" in block:
+                  drift.append("trusted-scripts-pr-ref")
+          if drift:
+              print(f"::error::muse-code-review.yml hardening drifted "
+                    f"({', '.join(drift)}); keeping SARIF unfiltered.")
+              sys.exit(1)
 
           def is_audited_checkout(result):
-              if not result.get("suppressions"):
+              suppressions = result.get("suppressions") or []
+              if not suppressions or not all(
+                      s.get("kind") == "inSource" for s in suppressions):
                   return False
               if result.get("ruleId") != AUDITED_RULE_ID:
                   return False
@@ -204,7 +255,7 @@ jobs:
               return all(
                   (loc.get("physicalLocation", {})
                       .get("artifactLocation", {})
-                      .get("uri", "") or "").endswith(AUDITED_PATH_SUFFIX)
+                      .get("uri", "") or "").endswith(AUDITED_PATH)
                   for loc in locations
               )
 

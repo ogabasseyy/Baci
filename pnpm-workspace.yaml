@@ -275,9 +275,13 @@ overrides:
   mermaid: "^11.16.1"
   # gRPC patched floors for GHSA-m9gg-hp2v-232j (getAuthContext certificate
   # confusion) and GHSA-f596-whhp-79r4 (method-handler error disclosure).
-  # No patched 1.9-1.12 line exists, so pre-1.13 consumers (incl. the Firebase
-  # Firestore ~1.9.0 transitive) move to the first patched 1.13 release; the
-  # 1.x API is semver-stable across these minors.
+  # No patched 1.9-1.12 line exists, so the pre-1.13 consumer moves to the
+  # first patched 1.13 release. That consumer is @firebase/firestore's ~1.9.0
+  # spec, arriving via @react-native-firebase/app's firebase JS SDK, which no
+  # workspace JS imports (RNFB is native-only: GoogleService configs, zero JS
+  # firestore usage); the 1.x API is semver-stable regardless. The 1.14 line
+  # is currently unoccupied (google-gax left with firebase-admin) but stays
+  # pinned so a returning consumer cannot regress to a vulnerable minor.
   "@grpc/grpc-js@<1.13.6": "1.13.6"
   "@grpc/grpc-js@>=1.14.0 <1.14.5": "1.14.5"
   # google-gax: prefer patched grpc-js 1.14.x over the 1.10.x floor.

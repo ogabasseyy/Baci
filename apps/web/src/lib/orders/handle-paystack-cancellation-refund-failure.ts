@@ -37,8 +37,13 @@ export async function handlePaystackCancellationRefundFailure({
   supabase: Pick<SupabaseClient, 'from' | 'rpc'>;
   transaction: GatewayPaymentTransaction;
 }): Promise<never> {
+  // A 408 does not establish whether Paystack accepted the refund
+  // before timing out, so it quarantines ambiguously like a
+  // network error — never as a deterministic rejection operations
+  // could mistake for definite non-acceptance and replace twice.
   const isAmbiguousFailure =
     paystackRefund.code === 'NETWORK_ERROR' ||
+    paystackRefund.code === 'HTTP_408' ||
     paystackRefund.code?.startsWith('HTTP_5');
   // A rate-limited, unconfigured, or unauthenticated leg was definitely
   // not accepted: nothing reached Paystack, so quarantining terminally

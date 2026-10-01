@@ -127,12 +127,32 @@ export function selectStructuredDiscoveryOffer(
   // apply to cheapest-option selection.
   const parentListingCondition = toGoogleListingCondition(
     typeof product.condition === 'string' ? product.condition : null) ?? 'new';
-  for (const rawOffer of row.availableOffers ?? []) {
+  // PDP parity: variants owning the condition axis disable offers entirely,
+  // offers on variant products need a purchasable variant (the PDP blocks
+  // add-to-cart without one), and duplicate canonical conditions resolve to
+  // the first row like the PDP find().
+  // Mirrors shared hasVariantConditionAxis: any variant with a normalized
+  // condition owns the condition axis and disables offers entirely.
+  const variantsOwnConditionAxis = product.has_variants === true && row.availableVariants.some((rawVariant) => {
+    const variantCondition = record(rawVariant).condition;
+    return normalizeCanonicalProductCondition(typeof variantCondition === 'string' ? variantCondition : null) !== '';
+  });
+  const offersSelectable = !variantsOwnConditionAxis &&
+    (!product.has_variants || row.availableVariants.some((rawVariant) => {
+      const variant = record(rawVariant);
+      if (manageStock && !hasPositiveStock(variant.stock_quantity)) return false;
+      return (finitePrice(variant.price_override) ?? finitePrice(product.price)) !== undefined;
+    }));
+  const seenOfferConditions = new Set<string>();
+  for (const rawOffer of offersSelectable ? row.availableOffers ?? [] : []) {
     const offer = record(rawOffer);
     if (toGoogleListingCondition(typeof offer.condition === 'string' ? offer.condition : null) === parentListingCondition) continue;
     if (manageStock && !hasPositiveStock(offer.stock_quantity)) continue;
     const price = finitePrice(offer.price);
     if (price === undefined) continue;
+    const canonicalOfferCondition = normalizeCanonicalProductCondition(typeof offer.condition === 'string' ? offer.condition : null);
+    if (!canonicalOfferCondition || seenOfferConditions.has(canonicalOfferCondition)) continue;
+    seenOfferConditions.add(canonicalOfferCondition);
     addCandidate({ kind: 'offer', attributes: {},
       condition: normalizeCanonicalProductCondition(typeof offer.condition === 'string' ? offer.condition : null) || baseCondition,
       price, compareAtPrice: finitePrice(offer.compare_at_price) ?? null,

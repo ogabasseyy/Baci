@@ -66,3 +66,28 @@ it('treats a missing parent condition as new when excluding same-condition offer
   const selected = selectStructuredDiscoveryOffer(row, intent({}));
   expect(selected?.selectedOption).toMatchObject({ kind: 'base', price: 500 });
 });
+
+it('ignores offers when variants own the condition axis', () => {
+  const row = makeRow({ has_variants: true, discovery_metadata: { product_type: 'phone' } });
+  row.availableVariants = [{ id: 'v-used', product_id: 'phone', condition: 'used', attributes: {}, price_override: 600, stock_quantity: 1 }] as typeof row.availableVariants;
+  row.availableOffers = [{ id: 'cheap-offer', price: 400, condition: 'used', stock_quantity: 1 }] as typeof row.availableOffers;
+  const selected = selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone' }));
+  expect(selected?.selectedOption).toMatchObject({ kind: 'variant', price: 600 });
+});
+
+it('requires a purchasable variant before selecting an offer', () => {
+  const row = makeRow({ has_variants: true, manage_stock: true, discovery_metadata: { product_type: 'phone' } });
+  row.availableVariants = [{ id: 'v-oos', product_id: 'phone', attributes: {}, stock_quantity: 0 }] as typeof row.availableVariants;
+  row.availableOffers = [{ id: 'offer-1', price: 400, condition: 'used', stock_quantity: 1 }] as typeof row.availableOffers;
+  expect(selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone' }))).toBeUndefined();
+});
+
+it('resolves duplicate canonical offer conditions to the first row', () => {
+  const row = makeRow({ price: 600, has_condition_offers: true });
+  row.availableOffers = [
+    { id: 'ob-1', price: 500, condition: 'open_box', stock_quantity: 1 },
+    { id: 'ob-2', price: 450, condition: 'refurbished', stock_quantity: 1 },
+  ] as typeof row.availableOffers;
+  const selected = selectStructuredDiscoveryOffer(row, intent({}));
+  expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'ob-1', price: 500 });
+});

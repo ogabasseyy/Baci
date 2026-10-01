@@ -13,7 +13,6 @@ import {
   RESERVED_SUBDOMAINS,
   ROOT_DOMAIN,
 } from '@/lib/proxy/host';
-import { BOT_USER_AGENT_REGEX } from '@/lib/proxy/routing-constants';
 import { searchStorefrontProducts } from '@/lib/storefront-search';
 import { createClient } from '@/lib/supabase/server';
 import { searchSubmissionSchema } from '@/schemas/search-submission';
@@ -24,6 +23,13 @@ function unavailable() {
     { status: 503 }
   );
 }
+
+// Same crawler tokens as the shared proxy regex, but token-boundaried: the
+// shared bare-substring match would shed real shoppers whose device model
+// merely contains "bot" (e.g. CUBOT Android phones). Kept local so proxy
+// routing semantics stay untouched.
+const SUBMISSION_BOT_USER_AGENT_REGEX =
+  /\b(?:bot|crawler|spider|crawling|googlebot|bingbot|slurp|duckduckbot|baiduspider|yandexbot|facebookexternalhit|twitterbot|rogerbot|linkedinbot|embedly|quora link preview|showyoubot|outbrain|pinterest|slackbot|vkshare|w3c_validator)\b/i;
 
 /**
  * Public, best-effort telemetry. The proxy applies the dedicated per-IP budget.
@@ -47,7 +53,7 @@ export async function POST(request: NextRequest) {
   const userAgent = request.headers.get('user-agent') || '';
   if (
     !userAgent ||
-    BOT_USER_AGENT_REGEX.test(userAgent) ||
+    SUBMISSION_BOT_USER_AGENT_REGEX.test(userAgent) ||
     /curl|wget|python-requests|headlesschrome/i.test(userAgent)
   ) {
     return new NextResponse(null, { status: 204 });

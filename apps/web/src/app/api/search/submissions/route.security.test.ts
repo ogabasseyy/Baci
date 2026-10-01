@@ -57,6 +57,29 @@ describe('explicit search submissions security gates', () => {
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 
+  it('records shoppers whose device model merely contains bot', async () => {
+    const response = await POST(
+      request(undefined, {
+        'user-agent':
+          'Mozilla/5.0 (Linux; Android 14; CUBOT_P80) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36',
+      })
+    );
+    expect(response.status).toBe(204);
+    expect(mocks.insert).toHaveBeenCalledTimes(1);
+  });
+
+  it('sheds full crawler user agents with token boundaries', async () => {
+    const response = await POST(
+      request(undefined, {
+        'user-agent':
+          'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+      })
+    );
+    expect(response.status).toBe(204);
+    expect(mocks.merchant).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
   it('sheds originless bots silently without an origin warning', async () => {
     const req = request(undefined, { 'user-agent': 'Googlebot' });
     req.headers.delete('origin');

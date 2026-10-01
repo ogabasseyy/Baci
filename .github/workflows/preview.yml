@@ -62,6 +62,11 @@ jobs:
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: .github/scripts/run-pinned-vercel.sh pull --yes --environment=preview
+      - name: Verify quiz RPC secret is marked sensitive in Preview
+        # Sensitive Vercel values pull as blank assignments. This proves the
+        # marking exists; the injector below additionally refuses any
+        # non-blank value before the stand-in replaces it.
+        run: node .github/scripts/assert-vercel-pulled-sensitive-env.mjs QUIZ_RPC_SERVER_SECRET .vercel/.env.preview.local
       - name: Ensure build-time presence of runtime-only quiz RPC secret
         # No real secret passthrough: the stand-in satisfies build validation
         # and Vercel remains the runtime source, so dispatchable branches
@@ -114,7 +119,7 @@ jobs:
           path: trusted-ops
           persist-credentials: false
       - name: Download Preview Vercel dir
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # main-branch pin, no version tag (matches cwv-runner-attestation.yml)
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # full-SHA pin of an untagged main commit (matches cwv-runner-attestation.yml)
         with:
           name: preview-vercel-dir
           path: .vercel
@@ -174,7 +179,7 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: trusted-ops/.github/scripts/run-pinned-vercel.sh pull --yes --environment=preview
       - name: Download prebuilt output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # main-branch pin, no version tag (matches cwv-runner-attestation.yml)
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # full-SHA pin of an untagged main commit (matches cwv-runner-attestation.yml)
         with:
           name: preview-prebuilt-output
           path: .vercel/output

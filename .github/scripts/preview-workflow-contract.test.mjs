@@ -156,6 +156,14 @@ test('deployment token reaches only the trusted pull and deploy steps', () => {
   assert.doesNotMatch(jobBlock('build'), /VERCEL_PROJECT_ID/);
 });
 
+test('preview verifies sensitive markings before injecting stand-ins', () => {
+  const prepare = jobBlock('prepare');
+  assert.match(
+    prepare,
+    /assert-vercel-pulled-sensitive-env\.mjs\s+QUIZ_RPC_SERVER_SECRET\s+\.vercel\/\.env\.preview\.local/
+  );
+});
+
 test('preview build uses stand-ins, never real server secrets', () => {
   assert.doesNotMatch(executable, /QUIZ_RPC_SERVER_SECRET:\s*\$\{\{/);
   assert.match(executable, /build-time-presence-stand-in/);

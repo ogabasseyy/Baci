@@ -19,6 +19,8 @@ function selectQuery(data: unknown, error: unknown = null) {
   return {
     eq: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockResolvedValue({ data, error }),
+    order: vi.fn().mockReturnThis(),
+    range: vi.fn().mockResolvedValue({ data, error }),
     select: vi.fn().mockReturnThis(),
     // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are thenable.
     then: (resolve: (value: unknown) => void) => resolve({ data, error }),

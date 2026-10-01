@@ -2,9 +2,16 @@ import { getZeptoMailFromDomain, getZeptoMailToken } from '@/env';
 import { getActiveMerchantSendingDomain } from '@/lib/merchant-sending-domain';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
+  senderLoopWorstMs,
+  ZEPTOMAIL_MAX_RETRIES,
+  ZEPTOMAIL_RETRY_BASE_DELAY_MS,
+} from '@/lib/zeptomail-send-budget';
+import {
   ZEPTOMAIL_DELIVERY_OUTCOME_UNKNOWN_CODE,
   zeptoMailRequest,
 } from '@/lib/zeptomail-transport';
+
+export { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail-send-budget';
 
 /**
  * Resolve the ZeptoMail API token. Called inside each send attempt's
@@ -373,44 +380,10 @@ function sleep(ms: number): Promise<void> {
  * Retry configuration
  */
 const RETRY_CONFIG = {
-  maxRetries: 3,
-  baseDelayMs: 1000,
+  maxRetries: ZEPTOMAIL_MAX_RETRIES,
+  baseDelayMs: ZEPTOMAIL_RETRY_BASE_DELAY_MS,
   retryableCodes: ['TM_5001', 'TM_5002', 'TM_5003'], // Server errors
 };
-// One transport attempt worst case: mirrors ZEPTOMAIL_REQUEST_TIMEOUT_MS
-// in zeptomail-transport.ts; keep identical.
-const TRANSPORT_ATTEMPT_WORST_MS = 30_000;
-const AUDIT_WRITE_MARGIN_MS = 8_000;
-// Callers abort the send 10s before their deadline (signal + deadline
-// race); admission budgets must leave that buffer on top of the loop.
-const SEND_CUTOFF_BUFFER_MS = 10_000;
-
-function senderLoopWorstMs(maxAttempts: number): number {
-  const attempts = Math.max(
-    1,
-    Math.min(maxAttempts, RETRY_CONFIG.maxRetries + 1)
-  );
-  let backoffMs = 0;
-  for (let i = 0; i < attempts - 1; i++) {
-    backoffMs += RETRY_CONFIG.baseDelayMs * 2 ** i;
-  }
-  return (
-    attempts * TRANSPORT_ATTEMPT_WORST_MS + backoffMs + AUDIT_WRITE_MARGIN_MS
-  );
-}
-
-/**
- * Budget a send must start with to guarantee completion before its
- * cutoff: the primary sender's worst retry loop plus the 10s abort
- * buffer. The platform-sender fallback needs no extra reservation — it
- * declines unless its own loop fits the remaining budget, so a send
- * admitted with this budget always finishes before the cutoff.
- */
-export function zeptomailSendAdmissionBudgetMs(
-  maxAttemptsPerSender: number = RETRY_CONFIG.maxRetries + 1
-): number {
-  return senderLoopWorstMs(maxAttemptsPerSender) + SEND_CUTOFF_BUFFER_MS;
-}
 
 /**
  * Check if error is retryable

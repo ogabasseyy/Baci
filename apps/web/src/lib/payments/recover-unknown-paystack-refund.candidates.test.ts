@@ -36,14 +36,16 @@ function cancelledOrder(id: string) {
   };
 }
 
-// The candidate queries fetch every match (no LIMIT): the builder itself
-// is the terminal the double awaits.
+// The candidate queries paginate every match in stable id order: the
+// range terminal resolves one page per staged query.
 function selectQuery(data: unknown, error: unknown = null) {
   return {
     eq: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
     is: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockResolvedValue({ data, error }),
+    order: vi.fn().mockReturnThis(),
+    range: vi.fn().mockResolvedValue({ data, error }),
     select: vi.fn().mockReturnThis(),
     // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are thenable.
     then: (resolve: (value: unknown) => void) => resolve({ data, error }),
@@ -123,6 +125,48 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
         metadata: expect.objectContaining({ provider_refund_id: 202 }),
       })
     );
+  });
+
+  it('files every order when matches span more than one page', async () => {
+    const rpc = reviewRpc();
+    const payments = Array.from({ length: 11 }, (_, index) =>
+      payment(`pay-${index + 1}`, `order-${index + 1}`, `merchant-${index + 1}`)
+    );
+    const orders = Array.from({ length: 11 }, (_, index) =>
+      cancelledOrder(`order-${index + 1}`)
+    );
+    const firstPage = selectQuery([]);
+    const firstRange = vi
+      .fn()
+      .mockResolvedValue({ data: payments.slice(0, 10), error: null });
+    firstPage.range = firstRange;
+    const secondPage = selectQuery([]);
+    const secondRange = vi
+      .fn()
+      .mockResolvedValue({ data: payments.slice(10), error: null });
+    secondPage.range = secondRange;
+    const from = vi
+      .fn()
+      .mockReturnValueOnce({ select: vi.fn(() => firstPage) })
+      .mockReturnValueOnce({ select: vi.fn(() => secondPage) })
+      .mockReturnValueOnce(selectQuery(orders))
+      .mockReturnValueOnce(selectQuery(orders));
+    const supabase = { from, rpc } as unknown as SupabaseClient;
+
+    await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
+
+    // A corrupt reference shared past the response cap must still file
+    // every order: truncating after the first page would drop the
+    // eleventh order's verified evidence after acknowledgement.
+    expect(firstRange).toHaveBeenCalledWith(0, 9);
+    expect(secondRange).toHaveBeenCalledWith(10, 19);
+    expect(rpc).toHaveBeenCalledTimes(11);
+    for (let index = 1; index <= 11; index++) {
+      expect(rpc).toHaveBeenCalledWith(
+        'file_paystack_refund_recovery_review_v1',
+        expect.objectContaining({ p_order_id: `order-${index}` })
+      );
+    }
   });
 
   it('files one review per order when three payments share the reference', async () => {

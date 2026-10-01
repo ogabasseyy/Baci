@@ -155,7 +155,7 @@ export async function gatePartiallyPaidAbandonedCapture(
     // is excess money and owes the duplicate review directly.
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('payment_status')
+      .select('payment_status, shipping_status, cancelled_at')
       .eq('id', attempt.order_id)
       .eq('merchant_id', attempt.merchant_id)
       .maybeSingle();
@@ -164,9 +164,23 @@ export async function gatePartiallyPaidAbandonedCapture(
       await hold('partial_terminal_status_unavailable');
       return 'done';
     }
+    const terminal = order as {
+      cancelled_at: string | null;
+      payment_status: string;
+      shipping_status: string | null;
+    };
+    // Merchant cancellation leaves payment_status behind (e.g.
+    // partially_paid): without the shipping/cancelled_at check the
+    // capture routes to the overpayment duplicate, which stamps the
+    // resolution while leaving the transaction pending — future sweeps
+    // then exclude it and the cancellation-refund workflow never sees
+    // the captured funds.
     if (
-      (order as { payment_status: string }).payment_status === 'cancelled' ||
-      (order as { payment_status: string }).payment_status === 'refunded'
+      terminal.payment_status === 'cancelled' ||
+      terminal.payment_status === 'refunded' ||
+      (terminal.cancelled_at != null &&
+        (terminal.shipping_status === 'cancelled' ||
+          terminal.shipping_status === 'canceled'))
     ) {
       return 'proceed';
     }

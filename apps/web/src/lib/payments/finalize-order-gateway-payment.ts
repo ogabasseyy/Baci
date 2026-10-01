@@ -1,4 +1,5 @@
 import { logger } from '@/lib/logger';
+import { classifyPaidOrderReplay } from '@/lib/payments/classify-paid-order-replay';
 import { confirmPaidOrderInventoryOrRollback } from '@/lib/payments/confirm-paid-order-inventory';
 import { fileBlockedOrderPaymentReview } from '@/lib/payments/file-blocked-order-payment-review';
 import type {
@@ -13,7 +14,6 @@ export type {
 
 import { fileSettlementCaptureFailureReview } from '@/lib/payments/file-settlement-capture-failure-review';
 import { schedulePaidOrderNotifications } from '@/lib/payments/notify-paid-order';
-import { getOrderOutboxState } from '@/lib/payments/order-has-outbox-rows';
 import { toRichPaidOrder } from '@/lib/payments/paid-order-normalization';
 import { persistPaidOrderSideEffectRetry } from '@/lib/payments/paid-order-retry-persistence';
 import { PAID_ORDER_RICH_SELECT } from '@/lib/payments/paid-order-rich-select';
@@ -61,48 +61,29 @@ export async function finalizeOrderGatewayPayment({
     return blockedOutcome;
   }
 
-  const healed = Boolean(
-    completion.already_completed && completion.order_updated
-  );
-  const outboxState = completion.order_updated
-    ? null
-    : await getOrderOutboxState(supabase, orderId);
-  if (
-    completion.order_already_paid &&
-    !completion.order_updated &&
-    outboxState?.lookupFailed
-  ) {
+  const {
+    capturedOnAlreadyPaidOrder,
+    healed,
+    legacyPaidReplay,
+    outboxState,
+    shouldNotify,
+    sideEffectsLookupFailed,
+  } = await classifyPaidOrderReplay({
+    alreadyCompleted: completion.already_completed,
+    orderAlreadyPaid: completion.order_already_paid,
+    orderId,
+    orderUpdated: completion.order_updated,
+    redvaultDuplicate: result.redvaultDuplicate,
+    supabase,
+    transactionId: transaction.id,
+    wonTransactionFlip,
+  });
+  if (sideEffectsLookupFailed) {
     return {
       error: new Error('payment_side_effects_lookup_failed'),
       kind: 'completion_failed',
     };
   }
-  // A same-transaction replay must not read as a new capture: when the
-  // outbox names THIS transaction as the payer, the order was paid by
-  // this row and a pending snapshot that set wonTransactionFlip is
-  // stale (a concurrent writer completed it first). Gate only on the
-  // payer evidence — not already_completed, which also holds for
-  // redelivered fresh captures that still owe settlement.
-  const sameTransactionReplay =
-    outboxState?.hasRows === true &&
-    outboxState?.payerTransactionId === transaction.id;
-  const capturedOnAlreadyPaidOrder =
-    Boolean(completion.order_already_paid) &&
-    !completion.order_updated &&
-    ((!result.redvaultDuplicate &&
-      wonTransactionFlip &&
-      !sameTransactionReplay) ||
-      (Boolean(outboxState?.hasRows) &&
-        outboxState?.payerTransactionId !== transaction.id));
-  const legacyPaidReplay =
-    Boolean(completion.order_already_paid) &&
-    !completion.order_updated &&
-    !wonTransactionFlip &&
-    outboxState?.hasRows === false;
-
-  const shouldNotify =
-    Boolean(completion.order_updated) ||
-    (!capturedOnAlreadyPaidOrder && Boolean(outboxState?.onlyUntouchedSeed));
 
   const { data: order, error: orderFetchError } = await supabase
     .from('orders')

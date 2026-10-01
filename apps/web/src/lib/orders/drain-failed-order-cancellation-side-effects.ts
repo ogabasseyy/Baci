@@ -8,6 +8,10 @@ import {
   type OrderCancellationSideEffectStep,
   runOrderCancellationSideEffect,
 } from '@/lib/orders/run-order-cancellation-side-effect';
+import {
+  type CancellationDrainCandidateRow,
+  selectCancellationDrainCandidates,
+} from '@/lib/orders/select-cancellation-drain-candidates';
 import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail';
 
 const DEFAULT_LIMIT = 10;
@@ -17,13 +21,6 @@ const STALE_CLAIM_MINUTES = 15;
 // after the order/merchant reads: mirrors zeptomail's audit-write
 // margin for a single database write.
 const CLAIM_WRITE_ALLOWANCE_MS = 8_000;
-
-interface CandidateRow {
-  attempts: number;
-  claimed_at: string;
-  order_id: string;
-  step: OrderCancellationSideEffectStep;
-}
 
 export interface CancellationSideEffectDrainSummary {
   drained: Array<{ orderId: string; step: OrderCancellationSideEffectStep }>;
@@ -123,7 +120,7 @@ export async function drainFailedOrderCancellationSideEffects({
   }
 
   for (const raw of staleRows ?? []) {
-    const stale = raw as CandidateRow;
+    const stale = raw as CancellationDrainCandidateRow;
     const { error: quarantineError } = await supabase
       .from('order_cancellation_side_effects')
       .update({
@@ -145,48 +142,13 @@ export async function drainFailedOrderCancellationSideEffects({
     summary.failed.push({ orderId: stale.order_id, reason, step: stale.step });
   }
 
-  const candidates = new Map<
-    string,
-    CandidateRow & { isLastAttempt: boolean }
-  >();
-  // Deferred rows reselect uncapped and the claim RPC never increments
-  // their attempts, but an already-exhausted deferred row must still run
-  // as a last attempt: without the flag a 429 is recorded as an
-  // ordinary failure the capped failed-queue never reselects, so the
-  // leg disappears without its exhausted-rate-limit review. Merge both
-  // queues by age (ISO claimed_at sorts lexicographically): filling the
-  // batch from failed rows first would starve provider-awaiting refunds
-  // whenever the failure backlog stays above the limit.
-  const merged: Array<CandidateRow & { isLastAttempt: boolean }> = [
-    ...((failedRows ?? []) as CandidateRow[]).map((row) => ({
-      ...row,
-      isLastAttempt: row.attempts >= MAX_ATTEMPTS - 1,
-    })),
-    ...((deferredRows ?? []) as CandidateRow[]).map((row) => ({
-      ...row,
-      isLastAttempt: row.attempts >= MAX_ATTEMPTS - 1,
-    })),
-  ].sort((a, b) =>
-    a.claimed_at < b.claimed_at ? -1 : a.claimed_at > b.claimed_at ? 1 : 0
-  );
-  for (const row of merged) {
-    // Budget-ineligible emails must not occupy a slot: with one slot
-    // left and 30s on the clock, an old email row would be selected,
-    // skipped unclaimed below, and starve every later refund row on
-    // every invocation. Filter here so replacement candidates fill the
-    // batch; the per-row guard below stays as the backstop since time
-    // keeps burning while the batch runs.
-    if (
-      row.step === 'customer_email' &&
-      deadlineMs !== undefined &&
-      deadlineMs - Date.now() <
-        zeptomailSendAdmissionBudgetMs(EMAIL_ATTEMPTS_PER_SENDER)
-    ) {
-      continue;
-    }
-    candidates.set(`${row.order_id}:${row.step}`, row);
-    if (candidates.size >= limit) break;
-  }
+  const candidates = selectCancellationDrainCandidates({
+    deadlineMs,
+    deferredRows: (deferredRows ?? []) as CancellationDrainCandidateRow[],
+    failedRows: (failedRows ?? []) as CancellationDrainCandidateRow[],
+    limit,
+    maxAttempts: MAX_ATTEMPTS,
+  });
 
   for (const candidate of candidates.values()) {
     const { order_id: orderId, step } = candidate;

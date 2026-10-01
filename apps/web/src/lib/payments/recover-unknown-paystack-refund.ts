@@ -16,6 +16,7 @@ import {
 } from './recover-unknown-paystack-refund-row';
 
 const PROVIDER_READ_TIMEOUT_MS = 8_000;
+const RECOVERY_MATCH_PAGE_SIZE = 10;
 
 interface RecoveryPayment {
   amount: number;
@@ -85,18 +86,26 @@ export async function recoverUnknownPaystackRefund(
   ) {
     throw new Error('paystack_refund_payment_reference_invalid');
   }
-  // Fetch every completed match (no LIMIT): the ambiguity branch files
-  // one review per order, so truncating here would silently drop orders
-  // from a corrupt/ambiguous reference shared across payments.
-  const { data: payments, error: paymentError } = await supabase
-    .from('transactions')
-    .select('id, order_id, merchant_id, gateway_reference, amount')
-    .eq('gateway', 'paystack')
-    .eq('gateway_reference', resolvedPaymentReference)
-    .eq('transaction_type', 'payment')
-    .eq('status', 'completed');
-  if (paymentError) throw new Error('refund_event_payment_lookup_failed');
-  const candidates = (payments ?? []) as RecoveryPayment[];
+  // A corrupt reference can be shared by more completed payments than
+  // the PostgREST response cap: paginate the whole match set in stable
+  // id order before branching, so the ambiguity path files every order
+  // instead of silently dropping truncated matches after acknowledge.
+  const candidates: RecoveryPayment[] = [];
+  for (let offset = 0; ; offset += RECOVERY_MATCH_PAGE_SIZE) {
+    const { data: payments, error: paymentError } = await supabase
+      .from('transactions')
+      .select('id, order_id, merchant_id, gateway_reference, amount')
+      .eq('gateway', 'paystack')
+      .eq('gateway_reference', resolvedPaymentReference)
+      .eq('transaction_type', 'payment')
+      .eq('status', 'completed')
+      .order('id', { ascending: true })
+      .range(offset, offset + RECOVERY_MATCH_PAGE_SIZE - 1);
+    if (paymentError) throw new Error('refund_event_payment_lookup_failed');
+    const page = (payments ?? []) as RecoveryPayment[];
+    candidates.push(...page);
+    if (page.length < RECOVERY_MATCH_PAGE_SIZE) break;
+  }
   const payment = candidates[0];
   const evidence = {
     providerPaymentTransactionId: fetchedPayment.data.id,

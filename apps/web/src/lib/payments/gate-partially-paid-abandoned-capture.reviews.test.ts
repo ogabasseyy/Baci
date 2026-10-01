@@ -185,6 +185,33 @@ describe('gatePartiallyPaidAbandonedCapture reviews', () => {
     expect(h.hold).not.toHaveBeenCalled();
   });
 
+  it('proceeds when merchant cancellation leaves payment partially paid', async () => {
+    const db = reviewClient({
+      order: {
+        cancelled_at: '2026-09-30T00:00:00Z',
+        payment_status: 'partially_paid',
+        shipping_status: 'cancelled',
+      },
+      rpcData: { outcome: 'standard_completion', reason: 'order_terminal' },
+    });
+    const h = harness();
+
+    const gate = await gatePartiallyPaidAbandonedCapture({
+      ...h,
+      attempt,
+      providerData,
+      supabase: db as never,
+    });
+
+    // Payment-status-only routing would file the overpayment duplicate
+    // here, stamping the resolution while leaving the transaction
+    // pending so the cancellation-refund workflow never sees the funds.
+    expect(gate).toBe('proceed');
+    expect(mocks.fileDuplicatePaymentCapture).not.toHaveBeenCalled();
+    expect(h.hold).not.toHaveBeenCalled();
+    expect(h.summary.reviewsFiled).toEqual([]);
+  });
+
   it('files a conflict review when the invoice leg no longer fits', async () => {
     const db = reviewClient({
       rpcData: {

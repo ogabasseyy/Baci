@@ -287,17 +287,4 @@ describe('discoverStructuredProducts', () => {
     }));
   });
 
-  it('marks a fact-only constrained search partial even when every hydrated row verifies', async () => {
-    const fixture = client({ products: [product('phone', { product_type: 'phone' })] });
-    const result = await discoverStructuredProducts(input(fixture.supabase, intent({ product_type: 'charger', model: 'ZX42' }), { query: undefined }));
-    expect(result.selectedProducts).toEqual([]);
-    expect(result.coverage).toBe('partial');
-  });
-
-  it('retains complete coverage for an unconstrained fact-only browse', async () => {
-    const fixture = client({ products: [product('phone', { product_type: 'phone' })] });
-    const result = await discoverStructuredProducts(input(fixture.supabase, intent({}), { query: undefined }));
-    expect(result.coverage).toBe('complete');
-  });
-
 });

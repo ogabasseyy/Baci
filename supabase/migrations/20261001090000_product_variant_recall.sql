@@ -124,8 +124,11 @@ BEGIN
       IF filter_operator = 'lte' AND actual_numeric > expected_numeric THEN RETURN true; END IF;
     ELSE
       IF pg_catalog.jsonb_typeof(entry_value) IS DISTINCT FROM 'string' THEN CONTINUE; END IF;
-      actual_text := pg_catalog.lower(pg_catalog.regexp_replace(
-        pg_catalog.normalize(entry_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g'));
+      -- Collapse internal whitespace like the matcher, which normalizes
+      -- both sides: without this a multi-space value falsely mismatches.
+      actual_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
+        pg_catalog.normalize(entry_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g')),
+        '[[:space:]]+', ' ', 'g');
       expected_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
         pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g')),
         '[[:space:]]+', ' ', 'g');
@@ -177,8 +180,11 @@ BEGIN
       IF filter_operator = 'lte' AND actual_numeric <= (filter_value)::text::numeric THEN RETURN true; END IF;
     ELSE
       IF pg_catalog.jsonb_typeof(entry_value) IS DISTINCT FROM 'string' THEN CONTINUE; END IF;
-      actual_text := pg_catalog.lower(pg_catalog.regexp_replace(
-        pg_catalog.normalize(entry_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g'));
+      -- Collapse internal whitespace like the matcher, which normalizes
+      -- both sides: without this a multi-space value falsely mismatches.
+      actual_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
+        pg_catalog.normalize(entry_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g')),
+        '[[:space:]]+', ' ', 'g');
       expected_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
         pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g')),
         '[[:space:]]+', ' ', 'g');

@@ -32,7 +32,7 @@ export const EXPECTED_DISCOVERY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261001090000_product_variant_recall.sql',
-    sha256: '3cd356b3e66d248fe21e7b60005f8e09f94d6f7af7a0e2b6c93a30c714ce8fa6',
+    sha256: 'd9ba781193ad7d62dd0b7b2c46620889d6ab94fe071fcd56f6175db629fe01a4',
   },
   {
     repositoryPath:

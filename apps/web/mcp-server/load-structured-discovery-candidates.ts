@@ -16,6 +16,9 @@ const LEXICAL_PAGE_SIZE = 100;
 const MAX_LEXICAL_CANDIDATES = 500;
 const SEMANTIC_PAGE_SIZE = 40;
 const MAX_SEMANTIC_CANDIDATES = 200;
+// Twelve hydration rounds of 100: the pre-recall union budget. Recall's
+// 2,000-row window must not turn one search into 32 serial hydration rounds.
+const MAX_STRUCTURED_CANDIDATE_PRODUCTS = 1200;
 
 type LoadStructuredDiscoveryCandidatesInput = {
   query?: string;
@@ -199,11 +202,15 @@ export async function loadStructuredDiscoveryCandidates({
   // (facts plus variant recall), so an exact keyword hit that also satisfies
   // the structured facts outranks a fact-only match instead of tying it.
   const rankedIds = reciprocalRankFusion([lexical.ids], [facts.ids, variants.ids], [semantic.value.ids]);
+  // RRF order keeps the best candidates; overflow past the global budget
+  // marks truncation like any other cap instead of hydrating silently.
+  const cappedIds = rankedIds.slice(0, MAX_STRUCTURED_CANDIDATE_PRODUCTS);
+  const unionTruncated = cappedIds.length < rankedIds.length;
   const products: McpSearchProductRow[] = [];
 
   let hydrationFailed = false;
-  for (let offset = 0; offset < rankedIds.length; offset += LEXICAL_PAGE_SIZE) {
-    const batch = rankedIds.slice(offset, offset + LEXICAL_PAGE_SIZE);
+  for (let offset = 0; offset < cappedIds.length; offset += LEXICAL_PAGE_SIZE) {
+    const batch = cappedIds.slice(offset, offset + LEXICAL_PAGE_SIZE);
     try {
       const { data, error } = await supabase
         .from('products')
@@ -224,10 +231,10 @@ export async function loadStructuredDiscoveryCandidates({
 
   // Ranked IDs that vanish before hydration (RLS filtering, deletes) are silent
   // coverage loss, so they mark the scan truncated like any other cap.
-  const hydrationDroppedIds = products.length < rankedIds.length;
+  const hydrationDroppedIds = products.length < cappedIds.length;
   return {
     products,
-    truncated: lexical.truncated || semantic.value.truncated || facts.truncated || variants.truncated || hydrationFailed || hydrationDroppedIds,
+    truncated: lexical.truncated || semantic.value.truncated || facts.truncated || variants.truncated || unionTruncated || hydrationFailed || hydrationDroppedIds,
     semanticUnavailable: semantic.unavailable,
   };
 }

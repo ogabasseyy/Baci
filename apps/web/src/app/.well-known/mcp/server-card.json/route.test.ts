@@ -117,7 +117,12 @@ describe('GET /.well-known/mcp/server-card.json', () => {
       properties: {
         key: { enum: expect.arrayContaining(['storage_gb', 'power_w']) },
         operator: { enum: ['eq', 'gte', 'lte'] },
-        value: { type: 'number', minimum: 0, maximum: 1000000000 },
+        value: {
+          anyOf: [
+            { const: 0 },
+            { type: 'number', minimum: 0.000001, maximum: 1000000000 },
+          ],
+        },
       },
     });
     expect(attributeBranches[1]).toMatchObject({

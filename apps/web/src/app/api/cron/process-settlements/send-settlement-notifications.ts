@@ -121,11 +121,13 @@ export async function sendSettlementNotifications({
           0
         );
 
-        // ZeptoMail resolves definitive rejections (invalid
-        // recipient, exhausted provider retries) instead of throwing:
-        // only mark notified when the send actually succeeded, so a
-        // failed email stays retryable instead of vanishing behind a
-        // success signal.
+        // ZeptoMail resolves failures instead of throwing. A
+        // definite rejection (invalid recipient, exhausted provider
+        // retries) stays unnotified and retryable. An uncertain
+        // outcome (timeout after the provider may have accepted) must
+        // NOT rejoin the retry queue — the next run could duplicate a
+        // delivered message — so it marks notified below but still
+        // counts failed so operations verifies actual delivery.
         const emailResult = await sendSettlementEmail(
           buildSettlementNotificationEmail({
             ...data,
@@ -133,7 +135,10 @@ export async function sendSettlementNotifications({
             totalAmount,
           })
         );
-        if (!emailResult.success) {
+        const uncertainDelivery =
+          !emailResult.success &&
+          emailResult.deliveryOutcome === 'unknown';
+        if (!emailResult.success && !uncertainDelivery) {
           logger.error({
             message: 'Settlement notification email rejected',
             merchantId: data.merchantId,
@@ -166,6 +171,19 @@ export async function sendSettlementNotifications({
             message: 'Failed to mark settlement notification sent',
             merchantId: data.merchantId,
             error: markError,
+          });
+          notificationResults.failed++;
+          continue;
+        }
+
+        if (uncertainDelivery) {
+          // Persisted as notified so no retry duplicates a possibly
+          // delivered message; failed so the run signals operations
+          // to verify delivery out of band.
+          logger.error({
+            message: 'Settlement notification delivery uncertain',
+            merchantId: data.merchantId,
+            error: emailResult,
           });
           notificationResults.failed++;
           continue;

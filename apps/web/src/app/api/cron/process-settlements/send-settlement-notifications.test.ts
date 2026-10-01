@@ -316,6 +316,42 @@ describe('sendSettlementNotifications', () => {
     );
   });
 
+  it('marks notified but failed when delivery is uncertain', async () => {
+    const sendEmail = vi
+      .fn()
+      .mockResolvedValue({ deliveryOutcome: 'unknown', success: false });
+    const fresh = freshQuery([
+      { id: 'set-1', settlement_notified: false, status: 'settled' },
+    ]);
+    const mark = markQuery();
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(fresh)
+      .mockReturnValueOnce({ update: mark.update });
+    const supabase = { from } as unknown as SupabaseClient;
+
+    const result = await sendSettlementNotifications({
+      pendingNotifications: [settlement('set-1', merchantA)],
+      sendEmail,
+      supabase,
+    });
+
+    // The provider may already have accepted the message: leaving
+    // the rows unnotified would duplicate a delivered email on the
+    // next run, so persist notified while signaling operations to
+    // verify actual delivery.
+    expect(result).toEqual({ failed: 1, sent: 0 });
+    expect(mark.update).toHaveBeenCalledWith(
+      expect.objectContaining({ settlement_notified: true })
+    );
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchantId: 'merchant-a',
+        message: 'Settlement notification delivery uncertain',
+      })
+    );
+  });
+
   it('counts a resolved mark error instead of reporting sent', async () => {
     const sendEmail = vi.fn().mockResolvedValue({ success: true });
     const fresh = freshQuery([

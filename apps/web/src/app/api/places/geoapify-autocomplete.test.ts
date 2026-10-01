@@ -79,6 +79,20 @@ describe('Geoapify address mapping', () => {
       1
     );
   });
+  it.each([
+    undefined,
+    '',
+  ])('keeps a country-filtered address when country metadata is absent: %s', async (countryCode) => {
+    respond([{ ...result, country_code: countryCode }]);
+    const predictions = await fetchGeoapifyPredictions('Allen Avenue', 'ng');
+    expect(predictions).toHaveLength(1);
+    expect(predictions[0].details).toMatchObject({
+      city: 'Ikeja',
+      country: 'Nigeria',
+    });
+    const url = new URL(String(mockFetch.mock.calls[0][0]));
+    expect(url.searchParams.get('filter')).toBe('countrycode:ng');
+  });
   it('rejects invalid upstream coordinates safely', async () => {
     respond([{ ...result, lat: 91 }]);
     await expect(

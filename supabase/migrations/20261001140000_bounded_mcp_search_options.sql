@@ -36,7 +36,13 @@ BEGIN
       AND p.id = ANY (p_product_ids)
       AND p.merchant_id = p_merchant_id
       AND p.status = 'active'
-      AND COALESCE(m.is_published, FALSE) IS TRUE
+      -- Platform-admin storefronts stay publicly visible (same exemption
+      -- as the PDP and variant recall); ordinary unpublished merchants
+      -- still return no rows.
+      AND (
+        COALESCE(m.is_published, FALSE) IS TRUE
+        OR COALESCE(m.is_platform_admin, FALSE) IS TRUE
+      )
   ),
   merchant_branches AS (
     SELECT count(*)::integer AS branch_count, (array_agg(b.id))[1] AS only_branch_id
@@ -146,7 +152,13 @@ BEGIN
       AND p.id = ANY (p_product_ids)
       AND p.merchant_id = p_merchant_id
       AND p.status = 'active'
-      AND COALESCE(m.is_published, FALSE) IS TRUE
+      -- Platform-admin storefronts stay publicly visible (same exemption
+      -- as the PDP and variant recall); ordinary unpublished merchants
+      -- still return no rows.
+      AND (
+        COALESCE(m.is_published, FALSE) IS TRUE
+        OR COALESCE(m.is_platform_admin, FALSE) IS TRUE
+      )
   )
   SELECT
     option_row.id,

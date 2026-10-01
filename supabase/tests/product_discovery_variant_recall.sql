@@ -138,6 +138,30 @@ BEGIN
     ('{"model":"' || repeat('😀', 50) || '"}')::jsonb) THEN
     RAISE EXCEPTION 'discovery metadata validator rejected 100 UTF-16 units';
   END IF;
+  IF discovery.product_discovery_metadata_valid(
+    ('{"product_type":"' || repeat('ﬃ', 100) || '"}')::jsonb) THEN
+    RAISE EXCEPTION 'discovery metadata validator accepted a product type that NFKC-expands past 100 units';
+  END IF;
+  IF NOT discovery.product_discovery_metadata_valid(
+    ('{"product_type":"' || repeat('ﬃ', 33) || '"}')::jsonb) THEN
+    RAISE EXCEPTION 'discovery metadata validator rejected a product type within 100 canonical units';
+  END IF;
+END;
+$$;
+
+-- The binary64 round-trip pins its own float rendering: sessions running
+-- with extra_float_digits = 0 (notably the hosted replay image) must
+-- reach the same verdict instead of rejecting Number.MAX_VALUE.
+DO $$
+DECLARE
+  ambient text;
+BEGIN
+  ambient := pg_catalog.current_setting('extra_float_digits');
+  PERFORM pg_catalog.set_config('extra_float_digits', '0', true);
+  IF NOT discovery.product_discovery_metadata_valid('{"attributes":{"storage_gb":1.7976931348623157e308}}'::jsonb) THEN
+    RAISE EXCEPTION 'metadata validator verdict changed under extra_float_digits = 0';
+  END IF;
+  PERFORM pg_catalog.set_config('extra_float_digits', ambient, true);
 END;
 $$;
 

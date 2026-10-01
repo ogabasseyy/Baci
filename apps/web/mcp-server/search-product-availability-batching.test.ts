@@ -45,4 +45,88 @@ describe('hydrateSearchProductAvailability PostgREST paging', () => {
       expect(row.variantLookupFailed).toBe(false);
     }
   });
+
+  it('fails only the products in a failed variant batch', async () => {
+    const products = Array.from({ length: 15 }, (_, index) => ({
+      id: `partial-${index}`,
+      price: 1000,
+      manage_stock: false,
+      has_variants: true,
+    }));
+    let calls = 0;
+    const rpc = vi.fn(async (name: string, args: { p_product_ids: string[] }) => {
+      if (name !== 'get_mcp_search_product_variants') {
+        return { data: [], error: null };
+      }
+      calls += 1;
+      if (calls === 2) return { data: null, error: new Error('page offline') };
+      return {
+        data: args.p_product_ids.map((product_id) => ({
+          id: `v-${product_id}`,
+          product_id,
+          attributes: {},
+          price_override: 900,
+          stock_quantity: 1,
+        })),
+        error: null,
+      };
+    });
+    const supabase = { rpc } as unknown as SupabaseClient;
+
+    const hydrated = await hydrateSearchProductAvailability(
+      products,
+      supabase,
+      'merchant-1'
+    );
+
+    expect(hydrated).toHaveLength(15);
+    hydrated.forEach((row, index) => {
+      const failed = index >= 7 && index < 14;
+      expect(row.variantLookupFailed).toBe(failed);
+      expect(Boolean(row.optionsLookupFailed)).toBe(failed);
+      expect(row.allVariants).toHaveLength(failed ? 0 : 1);
+    });
+  });
+
+  it('fails only the products in a failed offer batch', async () => {
+    const products = Array.from({ length: 63 }, (_, index) => ({
+      id: `offer-partial-${index}`,
+      price: 1000,
+      manage_stock: false,
+      has_condition_offers: true,
+    }));
+    let calls = 0;
+    const rpc = vi.fn(async (name: string, args: { p_product_ids: string[] }) => {
+      if (name !== 'get_mcp_search_product_offers') {
+        return { data: [], error: null };
+      }
+      calls += 1;
+      if (calls === 1) return { data: null, error: new Error('page offline') };
+      return {
+        data: args.p_product_ids.map((product_id) => ({
+          id: `o-${product_id}`,
+          product_id,
+          condition: 'used',
+          price: 800,
+          stock_quantity: 1,
+        })),
+        error: null,
+      };
+    });
+    const supabase = { rpc } as unknown as SupabaseClient;
+
+    const hydrated = await hydrateSearchProductAvailability(
+      products,
+      supabase,
+      'merchant-1'
+    );
+
+    expect(hydrated).toHaveLength(63);
+    hydrated.forEach((row, index) => {
+      const failed = index < 62;
+      expect(row.offerLookupFailed).toBe(failed);
+      expect(Boolean(row.optionsLookupFailed)).toBe(failed);
+    });
+    expect(hydrated[62].availableOffers).toHaveLength(1);
+  });
 });

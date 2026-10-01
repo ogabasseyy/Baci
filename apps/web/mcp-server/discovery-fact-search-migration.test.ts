@@ -154,6 +154,20 @@ it('ranks variant recall by branch identity before branch completeness', () => {
     .toBeLessThan(recall.lastIndexOf('best.complete_branch_count DESC'));
 });
 
+it('measures product-type length on the canonicalized SQL value', () => {
+  const length = readFileSync(new URL('../../../supabase/migrations/20261001160000_canonical_product_type_length.sql', import.meta.url), 'utf8');
+  expect(length.split('\n').length).toBeLessThanOrEqual(300);
+  expect(length).toContain(
+    'DROP FUNCTION IF EXISTS discovery.canonical_identity_product_type(text, text);'
+  );
+  expect(length).toContain(
+    'CREATE OR REPLACE FUNCTION discovery.product_discovery_metadata_valid(facts jsonb)'
+  );
+  expect(length).toContain(
+    'canonical_identity_product_type(facts ->> top_key, NULL)'
+  );
+});
+
 it('moves index builders out of the exposed schema without changing the serving contract', () => {
   const move = readFileSync(new URL('../../../supabase/migrations/20261001100000_move_discovery_builders.sql', import.meta.url), 'utf8');
   expect(move.startsWith('-- disable-transaction')).toBe(true);

@@ -1,56 +1,65 @@
--- Public search facts, separate from private product metadata and merchandising categories.
--- Existing product publication and merchant-write RLS remain authoritative.
-ALTER TABLE public.products ADD COLUMN IF NOT EXISTS discovery_metadata jsonb;
-CREATE SCHEMA IF NOT EXISTS discovery;
+-- Canonicalized product-type length at the SQL boundary. The metadata
+-- CHECK measured the raw stored value while the reader schema measures the
+-- NFKC-canonicalized output, so a direct PostgREST write of 100
+-- compatibility ligatures passed the boundary and then failed the reader,
+-- dropping the product's indexed facts. Length now applies to the same
+-- canonicalized value the runtime uses. The shared canonicalizer is also
+-- tightened to the exact runtime pipeline (trim after NFKC with the JS
+-- trim set), replacing the index-normalizer approximation it started with.
+DROP FUNCTION IF EXISTS discovery.canonical_identity_product_type(text, text);
+CREATE FUNCTION discovery.canonical_identity_product_type(product_type text, category text)
+RETURNS text
+LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE SECURITY INVOKER SET search_path = ''
+AS $$
+DECLARE
+  normalized text;
+  categorized text;
+BEGIN
+  -- Exact mirror of canonicalizeDiscoveryProductType over the matcher's
+  -- normalizeText output: NFC folds into NFKC and the pre-trims are
+  -- subsumed, but the trim MUST follow NFKC (compatibility decomposition
+  -- can create trimmable edges, e.g. U+3000), or whitespace-only values
+  -- canonicalize to a phantom underscore the runtime never produces. The
+  -- class is the JS trim set, copied from product_discovery_text_length.
+  normalized := pg_catalog.lower(pg_catalog.regexp_replace(
+    pg_catalog.regexp_replace(
+      pg_catalog.normalize(product_type, 'NFKC'),
+      '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g'),
+    '[[:space:]   -     　﻿-]+', '_', 'g'));
+  IF nullif(normalized, '') IS NOT NULL THEN
+    RETURN CASE normalized
+      WHEN 'phone' THEN 'phone' WHEN 'phones' THEN 'phone'
+      WHEN 'smartphone' THEN 'phone' WHEN 'smartphones' THEN 'phone'
+      WHEN 'smart_phone' THEN 'phone' WHEN 'smart_phones' THEN 'phone'
+      WHEN 'mobile_phone' THEN 'phone' WHEN 'mobile_phones' THEN 'phone'
+      WHEN 'cell_phone' THEN 'phone' WHEN 'cell_phones' THEN 'phone'
+      WHEN 'laptop' THEN 'laptop' WHEN 'laptops' THEN 'laptop'
+      WHEN 'tablet' THEN 'tablet' WHEN 'tablets' THEN 'tablet'
+      WHEN 'chargers' THEN 'charger' WHEN 'cables' THEN 'cable'
+      WHEN 'security_cameras' THEN 'security_camera'
+      WHEN 'fragrance_diffusers' THEN 'fragrance_diffuser'
+      ELSE normalized END;
+  END IF;
+  -- Storefront category map, mirroring productTypeOf exactly (NFC
+  -- lowercase with interior spaces collapsed; no underscore mapping here).
+  categorized := pg_catalog.regexp_replace(
+    pg_catalog.lower(pg_catalog.regexp_replace(
+      pg_catalog.normalize(category, 'NFC'),
+      '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
+    '[[:space:]   -     　﻿]+', ' ', 'g');
+  IF categorized = 'smartphones' THEN RETURN 'phone'; END IF;
+  IF categorized = 'laptops' THEN RETURN 'laptop'; END IF;
+  IF categorized = 'tablets' THEN RETURN 'tablet'; END IF;
+  RETURN NULL;
+END;
+$$;
 
--- Shape mirror of productDiscoveryMetadataSchema: authenticated clients can
--- write discovery_metadata directly through PostgREST, bypassing the
--- validated PUT route. Unknown fields or mistyped attributes would fail the
--- reader's strict safeParse and silently drop the product from structured
--- matches, so the same shape holds at this boundary. A CHECK cannot contain
--- the subqueries this validation needs, hence the helpers.
--- UTF-16 length of the JS-trimmed value: zod measures .max(100) in UTF-16
--- units after String trim, while char_length counts code points, so astral
--- text and exotic whitespace need identical treatment here. Each astral
--- code point is one UTF-8 four-byte sequence (lead byte F0-F4, never a
--- continuation byte), so units = characters + lead-byte count. The trim
--- class is the specified trim set: ASCII whitespace plus U+00A0, U+1680,
--- U+2000-U+200A, U+2028, U+2029, U+202F, U+205F, U+3000, U+FEFF.
-CREATE OR REPLACE FUNCTION discovery.product_discovery_text_length(raw text)
-RETURNS integer
-LANGUAGE sql IMMUTABLE PARALLEL SAFE SECURITY INVOKER SET search_path = ''
-AS $$
-  SELECT pg_catalog.char_length(trimmed) + (
-    SELECT count(*)::integer FROM (
-      SELECT (pg_catalog.regexp_matches(pg_catalog.encode(
-        pg_catalog.convert_to(trimmed, 'UTF8'), 'hex'), '..', 'g'))[1] AS byte
-    ) AS bytes WHERE byte >= 'f0' AND byte <= 'f4')
-  FROM (SELECT pg_catalog.regexp_replace(raw,
-    '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g') AS trimmed) AS t;
-$$;
--- Binary64 round-trip: the SQL builder expands the stored decimal while the
--- JavaScript reader decodes the nearest double, so a value like
--- 256.00000000000001 indexes unit lexemes no 256 intent can retrieve. A
--- storable decimal must equal PostgreSQL's shortest float8 rendering parsed
--- back, which is what JavaScript prints for the same double (PG 12+
--- float output). Naturally written decimals (0.1, 15.6) pass; only
--- beyond-double precision and integers past 2^53 fail. Callers range-check
--- first: float8 overflows past Number.MAX_VALUE.
--- Shortest float rendering requires extra_float_digits = 1: sessions
--- running at 0 (notably the hosted replay image) print fewer digits, so
--- Number.MAX_VALUE would fail its own round-trip. The pin keeps the CHECK
--- verdict identical in every session.
-CREATE OR REPLACE FUNCTION discovery.product_discovery_numeric_round_trips(raw jsonb)
-RETURNS boolean
-LANGUAGE sql IMMUTABLE PARALLEL SAFE SECURITY INVOKER SET search_path = '' SET extra_float_digits = 1
-AS $$
-  SELECT (raw)::text::numeric = (((raw)::text::float8)::text)::numeric;
-$$;
 CREATE OR REPLACE FUNCTION discovery.product_discovery_metadata_valid(facts jsonb)
 RETURNS boolean
 LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE SECURITY INVOKER SET search_path = ''
 AS $$
 DECLARE
+  canonical_type text;
   top_key text;
   entry_key text;
   entry_value jsonb;
@@ -65,7 +74,16 @@ BEGIN
   FOR top_key IN SELECT pg_catalog.unnest(ARRAY['product_type', 'model']) LOOP
     IF facts -> top_key IS NOT NULL THEN
       IF pg_catalog.jsonb_typeof(facts -> top_key) IS DISTINCT FROM 'string' THEN RETURN false; END IF;
-      IF discovery.product_discovery_text_length(facts ->> top_key) NOT BETWEEN 1 AND 100 THEN RETURN false; END IF;
+      -- Length applies to the canonicalized output, mirroring the route
+      -- schema's .pipe(text): NFKC can triple compatibility characters
+      -- (100 ligatures become 300), and the reader rejects the whole
+      -- document when the canonical form exceeds 100 units. Direct writes
+      -- must meet the same bound or the stored facts read as absent.
+      IF top_key = 'product_type' THEN
+        canonical_type := discovery.canonical_identity_product_type(facts ->> top_key, NULL);
+        IF canonical_type IS NULL
+          OR discovery.product_discovery_text_length(canonical_type) NOT BETWEEN 1 AND 100 THEN RETURN false; END IF;
+      ELSIF discovery.product_discovery_text_length(facts ->> top_key) NOT BETWEEN 1 AND 100 THEN RETURN false; END IF;
     END IF;
   END LOOP;
   IF facts -> 'compatible_with' IS NOT NULL THEN
@@ -112,21 +130,3 @@ BEGIN
   RETURN true;
 END;
 $$;
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conrelid = 'public.products'::regclass
-      AND conname = 'products_discovery_metadata_object'
-  ) THEN
-    ALTER TABLE public.products ADD CONSTRAINT products_discovery_metadata_object
-      CHECK (discovery.product_discovery_metadata_valid(discovery_metadata))
-      NOT VALID;
-  END IF;
-END;
-$$;
--- Left NOT VALID on purpose: validation scans the populated table, so it
--- runs in 20261001120000_validate_discovery_metadata.sql after this
--- transaction commits the ALTER TABLE lock.
-COMMENT ON COLUMN public.products.discovery_metadata IS
-  'Merchant-verified public discovery facts: product_type, model, compatible_with and canonical attributes. Missing facts are unknown; never infer availability or price from this document.';

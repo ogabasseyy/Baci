@@ -93,10 +93,11 @@ export async function hydrateSearchProductAvailability(
   });
   const productIds = products.filter((product) => product.has_variants).map((product) => product.id);
   const variantsMap = new Map<string, ProductVariant[]>();
-  let variantLookupSucceeded = productIds.length === 0;
+  // Per-product failure: a failed batch must not invalidate rows whose own
+  // batch loaded successfully, or one bad page rejects the whole search.
+  const variantLookupFailedIds = new Set<string>();
 
   if (productIds.length > 0) {
-    variantLookupSucceeded = true;
     for (
       let offset = 0;
       offset < productIds.length;
@@ -112,7 +113,7 @@ export async function hydrateSearchProductAvailability(
       );
       if (error) {
         console.error('Failed to fetch product variants for search:', error);
-        variantLookupSucceeded = false;
+        for (const id of batch) variantLookupFailedIds.add(id);
       } else {
         for (const variant of (variants ?? []) as ProductVariant[]) {
           variantsMap.set(variant.product_id, [
@@ -126,9 +127,8 @@ export async function hydrateSearchProductAvailability(
 
   const offersMap = new Map<string, ProductOffer[]>();
   const offerIds = products.filter((product) => product.has_condition_offers).map((product) => product.id);
-  let offerLookupSucceeded = offerIds.length === 0;
+  const offerLookupFailedIds = new Set<string>();
   if (offerIds.length > 0) {
-    offerLookupSucceeded = true;
     for (
       let offset = 0;
       offset < offerIds.length;
@@ -144,7 +144,7 @@ export async function hydrateSearchProductAvailability(
       });
       if (error) {
         console.error('Failed to fetch product offers for search:', error);
-        offerLookupSucceeded = false;
+        for (const id of batch) offerLookupFailedIds.add(id);
       } else {
         // Group the full ordered set: the 16-window slices first (the snapshot
         // has no condition filter), then the requested condition applies, so a
@@ -221,14 +221,14 @@ export async function hydrateSearchProductAvailability(
       undefined
     );
     const optionPriceLookupFailed =
-      (product.has_variants && !variantLookupSucceeded) ||
+      (product.has_variants && variantLookupFailedIds.has(product.id)) ||
       (product.has_condition_offers && !offersMap.has(product.id));
     const variantLookupStatus = !product.has_variants
       ? 'not_required' as const
-      : variantLookupSucceeded ? 'available' as const : 'failed' as const;
+      : variantLookupFailedIds.has(product.id) ? 'failed' as const : 'available' as const;
     const offerLookupStatus = !product.has_condition_offers
       ? 'not_required' as const
-      : offerLookupSucceeded ? 'available' as const : 'failed' as const;
+      : offerLookupFailedIds.has(product.id) ? 'failed' as const : 'available' as const;
     const displayPrice = cheapestOption
       ? cheapestOption.price
       : optionPriceLookupFailed && !basePurchasable ? null : product.price;
@@ -242,7 +242,7 @@ export async function hydrateSearchProductAvailability(
           normalizeCanonicalProductCondition(product.condition) !== condition
           ? { ...product, stock_quantity: 0 }
           : product,
-        product.has_variants && variantLookupSucceeded ? variants : undefined,
+        product.has_variants && !variantLookupFailedIds.has(product.id) ? variants : undefined,
         product.has_condition_offers ? offers : undefined
       ),
       availableOffers,

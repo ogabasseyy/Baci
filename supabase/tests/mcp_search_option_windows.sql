@@ -45,17 +45,19 @@ BEGIN
 END;
 $$;
 
-INSERT INTO public.merchants (id, email, business_name, slug, is_published)
+INSERT INTO public.merchants (id, email, business_name, slug, is_published, is_platform_admin)
 VALUES
-  ('e4100000-0000-4000-8000-000000000001', 'mcp-options-public@example.test', 'MCP Options Public', 'mcp-options-public', true),
-  ('e4100000-0000-4000-8000-000000000002', 'mcp-options-private@example.test', 'MCP Options Private', 'mcp-options-private', false);
+  ('e4100000-0000-4000-8000-000000000001', 'mcp-options-public@example.test', 'MCP Options Public', 'mcp-options-public', true, false),
+  ('e4100000-0000-4000-8000-000000000002', 'mcp-options-private@example.test', 'MCP Options Private', 'mcp-options-private', false, false),
+  ('e4100000-0000-4000-8000-000000000003', 'mcp-options-admin@example.test', 'MCP Options Admin', 'mcp-options-admin', false, true);
 
 INSERT INTO public.products (id, merchant_id, name, price, status, has_variants, has_condition_offers)
 VALUES
   ('e4100000-0000-4000-8000-000000000011', 'e4100000-0000-4000-8000-000000000001', 'Wide option product', 50000, 'active', true, true),
   ('e4100000-0000-4000-8000-000000000012', 'e4100000-0000-4000-8000-000000000001', 'Second product', 50000, 'active', true, true),
   ('e4100000-0000-4000-8000-000000000013', 'e4100000-0000-4000-8000-000000000001', 'Draft product', 50000, 'draft', true, true),
-  ('e4100000-0000-4000-8000-000000000014', 'e4100000-0000-4000-8000-000000000002', 'Unpublished product', 50000, 'active', true, true);
+  ('e4100000-0000-4000-8000-000000000014', 'e4100000-0000-4000-8000-000000000002', 'Unpublished product', 50000, 'active', true, true),
+  ('e4100000-0000-4000-8000-000000000015', 'e4100000-0000-4000-8000-000000000003', 'Admin product', 50000, 'active', true, true);
 
 INSERT INTO public.product_variants
   (id, product_id, merchant_id, attributes, price_override, stock_quantity, created_at)
@@ -74,7 +76,8 @@ INSERT INTO public.product_variants
 VALUES
   ('e4100000-0000-4000-8000-000000000201', 'e4100000-0000-4000-8000-000000000012', 'e4100000-0000-4000-8000-000000000001', '{"storage_gb":256}', 100, 2),
   ('e4100000-0000-4000-8000-000000000202', 'e4100000-0000-4000-8000-000000000013', 'e4100000-0000-4000-8000-000000000001', '{"storage_gb":128}', 100, 2),
-  ('e4100000-0000-4000-8000-000000000203', 'e4100000-0000-4000-8000-000000000014', 'e4100000-0000-4000-8000-000000000002', '{"storage_gb":128}', 100, 2);
+  ('e4100000-0000-4000-8000-000000000203', 'e4100000-0000-4000-8000-000000000014', 'e4100000-0000-4000-8000-000000000002', '{"storage_gb":128}', 100, 2),
+  ('e4100000-0000-4000-8000-000000000205', 'e4100000-0000-4000-8000-000000000015', 'e4100000-0000-4000-8000-000000000003', '{"storage_gb":256}', 100, 2);
 
 INSERT INTO public.product_offers
   (id, product_id, merchant_id, condition, price, compare_at_price, stock_quantity, status)
@@ -89,7 +92,8 @@ INSERT INTO public.product_offers
 VALUES
   ('e4100000-0000-4000-8000-000000000401', 'e4100000-0000-4000-8000-000000000012', 'e4100000-0000-4000-8000-000000000001', 'new', 100, 1, 'active'),
   ('e4100000-0000-4000-8000-000000000402', 'e4100000-0000-4000-8000-000000000013', 'e4100000-0000-4000-8000-000000000001', 'new', 100, 1, 'active'),
-  ('e4100000-0000-4000-8000-000000000403', 'e4100000-0000-4000-8000-000000000014', 'e4100000-0000-4000-8000-000000000002', 'new', 100, 1, 'active');
+  ('e4100000-0000-4000-8000-000000000403', 'e4100000-0000-4000-8000-000000000014', 'e4100000-0000-4000-8000-000000000002', 'new', 100, 1, 'active'),
+  ('e4100000-0000-4000-8000-000000000405', 'e4100000-0000-4000-8000-000000000015', 'e4100000-0000-4000-8000-000000000003', 'new', 100, 1, 'active');
 
 SET LOCAL ROLE anon;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
@@ -162,8 +166,8 @@ BEGIN
     OR v_offer_ids IS DISTINCT FROM ARRAY[
       'e4100000-0000-4000-8000-000000000301'::uuid,
       'e4100000-0000-4000-8000-000000000302'::uuid,
-      'e4100000-0000-4000-8000-000000000303'::uuid,
-      'e4100000-0000-4000-8000-000000000304'::uuid
+      'e4100000-0000-4000-8000-000000000304'::uuid,
+      'e4100000-0000-4000-8000-000000000303'::uuid
     ] THEN
     RAISE EXCEPTION 'offer RPC must preserve legal ordered condition offers, got % rows: %', v_count, v_offer_ids;
   END IF;
@@ -197,6 +201,20 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'offer RPC exposed draft or unpublished products';
   END IF;
+
+  SELECT pg_catalog.count(*) INTO v_count
+  FROM public.get_mcp_search_product_variants(
+    ARRAY['e4100000-0000-4000-8000-000000000015'::uuid],
+    'e4100000-0000-4000-8000-000000000003'
+  );
+  IF v_count <> 1 THEN RAISE EXCEPTION 'variant RPC hid a platform-admin storefront product'; END IF;
+
+  SELECT pg_catalog.count(*) INTO v_count
+  FROM public.get_mcp_search_product_offers(
+    ARRAY['e4100000-0000-4000-8000-000000000015'::uuid],
+    'e4100000-0000-4000-8000-000000000003'
+  );
+  IF v_count <> 1 THEN RAISE EXCEPTION 'offer RPC hid a platform-admin storefront product'; END IF;
 
   BEGIN
     PERFORM * FROM public.get_mcp_search_product_variants(

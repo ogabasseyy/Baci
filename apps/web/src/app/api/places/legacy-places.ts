@@ -14,6 +14,16 @@ export type LegacyPlacesResult<T> =
   | { ok: false; status: number };
 
 function isRetryableNetworkError(error: unknown): boolean {
+  // AbortSignal.timeout can reject with a DOMException from another realm,
+  // which is not necessarily an instanceof Error.
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'name' in error &&
+    (error.name === 'TimeoutError' || error.name === 'AbortError')
+  ) {
+    return true;
+  }
   return (
     error instanceof Error &&
     (error.message.includes('ECONNRESET') ||

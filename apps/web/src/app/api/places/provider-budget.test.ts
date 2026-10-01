@@ -31,6 +31,7 @@ describe('distributed address provider budgets', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it('denies all provider calls when distributed storage is missing', async () => {
@@ -73,6 +74,17 @@ describe('distributed address provider budgets', () => {
       url: 'https://address.test',
       token: 'address-token',
     });
+  });
+  it('fails closed without writing a malformed billing-month key', async () => {
+    vi.stubEnv('KV_REST_API_URL', 'https://kv.test');
+    vi.stubEnv('KV_REST_API_TOKEN', 'kv-token');
+    vi.spyOn(Intl.DateTimeFormat.prototype, 'formatToParts').mockReturnValue(
+      []
+    );
+    const budget = await import('./provider-budget');
+    expect(() => budget.googleBudgetKey()).toThrow('billing month unavailable');
+    expect(await budget.reserveGooglePlacesRequest('autocomplete')).toBe(false);
+    expect(evalMock).not.toHaveBeenCalled();
   });
   it('fails closed rather than mixing credentials from different databases', async () => {
     vi.stubEnv('ADDRESS_AUTOCOMPLETE_REDIS_REST_URL', 'https://address.test');

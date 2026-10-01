@@ -3,7 +3,7 @@ import {
   getPlaceDetails,
   type PlacePrediction,
 } from '@/lib/google-places';
-import type { PlaceDetails } from './address-autocomplete';
+import type { PlaceDetails } from './address-autocomplete-types';
 
 interface SelectionCallbacks {
   onSelect?: (place: PlaceDetails) => void;

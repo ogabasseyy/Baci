@@ -1,0 +1,208 @@
+"""Bash/YAML parsing primitives for the SARIF drift audit.
+
+Stdlib only. Quote-aware operator splitting, argv0 peeling with
+timeout/builtin/keyword transparency, interpreter operand
+validation, and run:-block extraction with continuation joining.
+"""
+import re
+
+def strip_comments(line):
+    buf = []
+    quote = None
+    for ch in line:
+        if quote:
+            buf.append(ch)
+            if ch == quote:
+                quote = None
+        elif ch in ("'", '"'):
+            quote = ch
+            buf.append(ch)
+        elif ch == "#":
+            break
+        else:
+            buf.append(ch)
+    return "".join(buf)
+
+
+def is_step_boundary(line):
+    # Named (- name:) and unnamed (- uses:/- run:/...) steps both
+    # delimit spans, so an unnamed step cannot widen a span.
+    return re.match(r"^\s*-\s+\w[\w-]*:", line) is not None
+
+def step_start(lines, ref_index):
+    for i in range(ref_index, -1, -1):
+        if is_step_boundary(lines[i]):
+            return i
+    return 0
+
+def step_end(lines, start_index):
+    for i in range(start_index + 1, len(lines)):
+        if is_step_boundary(lines[i]):
+            return i
+    return len(lines)
+
+
+# Shared shell parsing for the consumer checks below.
+# Residual: -c payloads (drift, needs human review), URLs/paths
+# assembled from variables, read/getopts/printf -v rebindings.
+SHELL_KEYWORDS = {"if", "then", "else", "elif", "fi", "for",
+                  "while", "until", "do", "done", "case", "in",
+                  "esac", "select", "function", "time", "!",
+                  "[[", "]]", "{", "}"}
+# Peeled (transparent) leading words; `for/select/case` pieces
+# are skipped outright (word lists, not commands).
+STRIP_WORDS = {"if", "while", "until", "time", "!", "then",
+               "do", "else", "elif", "{", "}"}
+INTERP_ALLOW = {"bash", "sh", "source", "."}
+STRICT_ALLOW = INTERP_ALLOW | {
+    "set", "echo", "exit", "export", "readonly", "local",
+    "declare", "typeset", "true", "false", ":", "test"}
+# Vars whose assignment redirects execution or the environment
+# of later commands in the same step (PATH hijack, preloaded
+# libraries, startup files, parser behavior).
+ENV_POISON = ("PATH", "LD_PRELOAD", "LD_LIBRARY_PATH",
+              "BASH_ENV", "ENV", "ZDOTDIR", "PYTHONPATH",
+              "PYTHONHOME", "RUBYLIB", "RUBYOPT", "PERL5LIB",
+              "PERL5OPT", "NODE_PATH", "NODE_OPTIONS",
+              "DYLD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES",
+              "IFS")
+
+def split_commands2(text):
+    # Quote-aware operator split. Yields (piece,
+    # started_after_open, ended_at_close) so `a)` case patterns
+    # (not after `(`) are distinguishable from `(cmd)` bodies.
+    parts = []
+    buf, quote = "", None
+    started_after_open = False
+    for ch in text:
+        if quote:
+            buf += ch
+            if ch == quote:
+                quote = None
+        elif ch in ("'", '"'):
+            quote, buf = ch, buf + ch
+        elif ch in ";|&()":
+            parts.append((buf, started_after_open, ch == ")"))
+            buf = ""
+            started_after_open = (ch == "(")
+        else:
+            buf += ch
+    parts.append((buf, started_after_open, False))
+    return parts
+
+def tokenize(text):
+    return re.findall(r"\"[^\"\n]*\"|'[^'\n]*'|\S+", text)
+
+def unquote(token):
+    if len(token) >= 2 and token[0] == token[-1] \
+            and token[0] in ("'", '"'):
+        return token[1:-1]
+    return token
+
+def peel_prefix(words):
+    # Strip VAR= assigns, timeout + duration, transparent
+    # builtins and control keywords; returns (argv0, rest).
+    i = 0
+    timeout_args = {"-s", "--signal", "-k", "--kill-after"}
+    while i < len(words):
+        word = words[i]
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=\S*",
+                        word):
+            i += 1
+        elif word == "timeout":
+            i += 1
+            while i < len(words) \
+                    and words[i].startswith("-"):
+                i += 2 if words[i] in timeout_args else 1
+            i += 1
+        elif word in ("command", "builtin", "exec",
+                     "sudo", "doas"):
+            i += 1
+        elif word in STRIP_WORDS:
+            i += 1
+        else:
+            break
+    if i >= len(words):
+        return "", []
+    return words[i], words[i + 1:]
+
+def script_operand(rest):
+    # Validate an interpreter's script operand. Returns True
+    # when bound (or provably non-executing), False on drift.
+    # --version/--help/-n exit or never execute: safe with any
+    # operand. -c/--command drifts (arbitrary code, review it).
+    # -s/stdin/no-operand drifts (uninspectable script).
+    query = {"--version", "--help", "-n", "--noexec"}
+    if any(t in query for t in rest):
+        return True
+    redir = re.compile(r"^\d*(>>|>|<<|<<<|<|>&|<&)")
+    i = 0
+    while i < len(rest):
+        tok = rest[i]
+        m = redir.match(tok)
+        if m:
+            i += 1 if len(tok) > m.end() else 2
+        elif tok == "--":
+            i += 1
+            break
+        elif tok == "-" or tok in ("-c", "--command",
+                                   "--init-file", "--rcfile"):
+            return False
+        elif re.fullmatch(r"[+-][a-zA-Z]+", tok):
+            if "c" in tok:
+                return False
+            if "s" in tok:
+                return False
+            if tok in ("-o", "+o") \
+                    or re.fullmatch(r"[+-][a-zA-Z]*o", tok):
+                i += 2
+            else:
+                i += 1
+        elif tok.startswith("--"):
+            i += 1
+        else:
+            break
+    if i >= len(rest):
+        return False
+    op = rest[i]
+    if re.match(r"^\$\{?SCRIPT_DIR\}?/", op):
+        return True
+    # Concatenated so the raw text never holds an expression
+    # opener, which actionlint would parse as this job's
+    # expression (steps.scriptdir is undefined here).
+    return re.sub(r"\s+", "", op).startswith(
+        "${{steps.scriptdir.outputs.dir}}")
+
+def run_segments(lines):
+    bodies = []
+    i = 0
+    while i < len(lines):
+        m = re.match(r"^(\s*)run:\s*([|>])?\s*(.*)$",
+                     lines[i])
+        if m and (m.group(2) or m.group(3)):
+            base = len(m.group(1))
+            if m.group(2):
+                j = i + 1
+                while j < len(lines) \
+                        and (not lines[j].strip()
+                             or len(lines[j])
+                             - len(lines[j].lstrip()) > base):
+                    bodies.append(lines[j])
+                    j += 1
+                i = j
+            else:
+                bodies.append(m.group(3))
+                i += 1
+        else:
+            i += 1
+    joined = []
+    buf = ""
+    for raw in bodies:
+        stripped = raw.rstrip()
+        if stripped.endswith("\\"):
+            buf += stripped[:-1] + " "
+        else:
+            buf += stripped
+            joined.append(buf)
+            buf = ""
+    return joined

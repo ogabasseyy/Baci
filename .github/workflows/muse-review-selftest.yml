@@ -1,8 +1,9 @@
 # Self-test for the Muse review workflow's scripts.
 #
-# Runs the regression suite plus static checks whenever the review scripts or
-# either workflow file changes. Fast (<2 min), no secrets, no network — except
-# the scheduled pin-freshness job, which queries the stable channel manifest.
+# Runs the regression suites plus static checks whenever the review scripts,
+# the SARIF drift auditor, or the related workflow files change. Fast
+# (<2 min), no secrets, no network — except the scheduled pin-freshness
+# job, which queries the stable channel manifest.
 name: Muse Review Selftest
 
 on:
@@ -10,11 +11,15 @@ on:
     branches: [main]
     paths:
       - '.github/scripts/muse-review/**'
+      - '.github/scripts/semgrep-sarif-filter*'
+      - '.github/scripts/semgrep_sarif_*.py'
       - '.github/workflows/muse-code-review.yml'
       - '.github/workflows/muse-review-selftest.yml'
   pull_request:
     paths:
       - '.github/scripts/muse-review/**'
+      - '.github/scripts/semgrep-sarif-filter*'
+      - '.github/scripts/semgrep_sarif_*.py'
       - '.github/workflows/muse-code-review.yml'
       - '.github/workflows/muse-review-selftest.yml'
   schedule:
@@ -36,6 +41,12 @@ jobs:
 
       - name: Regression suite
         run: bash .github/scripts/muse-review/test.sh
+
+      - name: SARIF filter suite
+        run: |
+          set -euo pipefail
+          python3 -m py_compile .github/scripts/semgrep-sarif-filter.py .github/scripts/semgrep_sarif_*.py
+          bash .github/scripts/semgrep-sarif-filter.test.sh
 
       - name: Shell syntax
         run: |

@@ -28,7 +28,12 @@
 #   - concurrency cancel-in-progress: only the latest push per PR is reviewed
 #   - bounded prompt (diff + repo guidance; the agent reads full files itself)
 #   - --max-model-steps cap + job timeout
-#   - never fails the build and never posts a commit status gate
+#   - never fails the build and never posts a commit status gate,
+#     EXCEPT the trusted-scripts resolver: a missing default-branch
+#     scripts checkout exits 1 (fail closed) rather than silently
+#     running PR-controlled scripts with tokens. This workflow must
+#     stay out of required branch-protection checks so that red X
+#     degrades the advisory review without blocking merges.
 #
 # Forks skipped by the job `if` (head repo check) — load-bearing under
 # pull_request_target, which WOULD expose secrets to forks otherwise.

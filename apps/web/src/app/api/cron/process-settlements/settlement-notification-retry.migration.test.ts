@@ -27,6 +27,12 @@ describe('settlement notification retry migration', () => {
     expect(migrationSql).toContain(
       'CREATE INDEX IF NOT EXISTS merchant_settlements_notification_queue_idx'
     );
+    // Capped rows never match the queue query: excluding them keeps
+    // the partial index small as dead letters accumulate. The cap
+    // mirrors SETTLEMENT_NOTIFICATION_MAX_ATTEMPTS.
+    expect(migrationSql).toContain(
+      "WHERE status = 'settled' AND settlement_notified = false AND notification_attempts < 5"
+    );
   });
 
   it('stays within the migration line limit', () => {

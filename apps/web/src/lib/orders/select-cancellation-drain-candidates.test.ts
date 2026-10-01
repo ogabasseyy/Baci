@@ -94,4 +94,26 @@ describe('selectCancellationDrainCandidates', () => {
 
     expect([...candidates.keys()]).toEqual(['order-1:customer_email']);
   });
+
+  it('admits emails against the separate email cutoff', () => {
+    // 30s to the side-effect deadline but 48s to the email cutoff:
+    // after a full reconcile phase only the email deadline admits.
+    vi.spyOn(Date, 'now').mockReturnValue(1_240_000);
+    const email = row({
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-1',
+      step: 'customer_email',
+    });
+
+    const candidates = selectCancellationDrainCandidates({
+      deadlineMs: 1_270_000,
+      deferredRows: [],
+      emailDeadlineMs: 1_288_000,
+      failedRows: [email],
+      limit: 1,
+      maxAttempts: 5,
+    });
+
+    expect([...candidates.keys()]).toEqual(['order-1:customer_email']);
+  });
 });

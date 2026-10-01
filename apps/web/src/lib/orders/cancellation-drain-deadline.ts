@@ -36,3 +36,29 @@ export function cancellationDrainDeadlineMs(startedAtMs: number): number {
     HANDOFF_SLACK_MS
   );
 }
+
+// The serial drain starts after the reconcile phase, but a customer
+// email needs its full sender admission budget to be admitted: gating
+// emails on the 90s side-effect deadline leaves only ~30s after a
+// full reconcile phase, excluding every email on each backlog run.
+// Emails get their own cutoff past a full reconcile phase plus the
+// admission budget. The email send aborts 10s before its cutoff, and
+// refund row-starts still gate on the 90s deadline, so the phase's
+// worst-case end (a 30s refund tail at 120s) is unchanged and the
+// notification reserve holds: 108s + 150s + 30s = 288s of 300s.
+// Shared with reconcile-worker-deadline WORKER_BUDGET_MS and
+// zeptomailSendAdmissionBudgetMs(EMAIL_ATTEMPTS_PER_SENDER): keep
+// identical, and keep the invariant test below in lockstep.
+const RECONCILE_PHASE_MS = 60_000;
+const EMAIL_ADMISSION_MS = 48_000;
+
+/**
+ * Absolute epoch-ms cutoff for customer-email admission and sends for
+ * work started at `startedAtMs`: a full reconcile phase plus the
+ * one-attempt sender admission budget. Refund steps keep gating on
+ * `cancellationDrainDeadlineMs`; only email admission, rechecks, and
+ * the email send cutoff use this later deadline.
+ */
+export function cancellationEmailDrainDeadlineMs(startedAtMs: number): number {
+  return startedAtMs + RECONCILE_PHASE_MS + EMAIL_ADMISSION_MS;
+}

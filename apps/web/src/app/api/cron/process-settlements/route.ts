@@ -7,10 +7,8 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { sendEmail } from '@/lib/zeptomail';
 import { processSettlementsQuerySchema } from '@/schemas/process-settlements-query';
 import { processCancellationDrain } from './process-cancellation-drain';
-import {
-  SETTLEMENT_NOTIFICATION_MAX_ATTEMPTS,
-  sendSettlementNotifications,
-} from './send-settlement-notifications';
+import { SETTLEMENT_NOTIFICATION_MAX_ATTEMPTS } from './schedule-settlement-notification-retries';
+import { sendSettlementNotifications } from './send-settlement-notifications';
 import {
   settlementDrainDeadlineMs,
   settlementDrainLimit,

@@ -23,7 +23,7 @@ const RECEIPT_READY_STATUSES = new Set(['shipped', 'delivered']);
 const MERCHANT_COLUMNS =
   'id, slug, business_name, logo_url, email, phone, support_email, support_phone, rider_phone_number, business_address, cac_rc_number, tax_identification_number, legal_entity_name, brand_colors, vat_registration_status, vat_rate, bank_code, bank_account_number, bank_name, bank_account_name, social_media, pages, registered_address';
 
-const ORDER_SELECT = `${ORDER_COLUMNS}, transaction_date, external_source, import_job_id, is_credit_order, invoice_type_code, invoice_issue_date, tax_point_date, payment_due_date, buyer_reference, purchase_order_reference, tax_exclusive_amount, tax_inclusive_amount, invoice_note, firs_irn, firs_csid, firs_qr_code, payment_terms, shipping_rate_id, shipping_rate_name, shipping_pickup_details`;
+const ORDER_SELECT = `${ORDER_COLUMNS}, transaction_date, recorded_by_user_id, external_source, import_job_id, is_credit_order, invoice_type_code, invoice_issue_date, tax_point_date, payment_due_date, buyer_reference, purchase_order_reference, tax_exclusive_amount, tax_inclusive_amount, invoice_note, firs_irn, firs_csid, firs_qr_code, payment_terms, shipping_rate_id, shipping_rate_name, shipping_pickup_details`;
 
 interface StorefrontAccountDocumentParams {
   supabase: SupabaseClient;
@@ -58,12 +58,32 @@ function isImportedHistoricalOrder(input: {
   return Boolean(input.externalSource || input.importJobId);
 }
 
-export function isReceiptEligible(input: {
+interface DocumentEligibilityInput {
   paymentStatus: string | null | undefined;
   shippingStatus: string | null | undefined;
   externalSource?: string | null;
   importJobId?: string | null;
-}) {
+  recordedByUserId?: string | null;
+  total?: number | string | null;
+  amountPaid?: number | string | null;
+}
+
+export function isManualOrderDocumentAvailable(
+  input: DocumentEligibilityInput
+) {
+  return (
+    Boolean(input.recordedByUserId) &&
+    !isImportedHistoricalOrder(input) &&
+    !['cancelled', 'canceled', 'returned', 'failed'].includes(
+      normalizeShippingStatus(input.shippingStatus)
+    ) &&
+    ['paid', 'unpaid', 'pending', 'partially_paid'].includes(
+      normalizePaymentStatus(input.paymentStatus)
+    )
+  );
+}
+
+export function isReceiptEligible(input: DocumentEligibilityInput) {
   if (normalizePaymentStatus(input.paymentStatus) !== 'paid') {
     return false;
   }
@@ -72,17 +92,24 @@ export function isReceiptEligible(input: {
     return true;
   }
 
+  if (input.recordedByUserId) {
+    return (
+      isManualOrderDocumentAvailable(input) &&
+      input.total != null &&
+      input.amountPaid != null &&
+      Number.isFinite(Number(input.total)) &&
+      Number(input.total) >= 0 &&
+      Number.isFinite(Number(input.amountPaid)) &&
+      Number(input.amountPaid) >= Number(input.total)
+    );
+  }
+
   return RECEIPT_READY_STATUSES.has(
     normalizeShippingStatus(input.shippingStatus)
   );
 }
 
-export function getCurrentDocumentKind(input: {
-  paymentStatus: string | null | undefined;
-  shippingStatus: string | null | undefined;
-  externalSource?: string | null;
-  importJobId?: string | null;
-}) {
+export function getCurrentDocumentKind(input: DocumentEligibilityInput) {
   return isReceiptEligible(input) ? 'receipt' : 'invoice';
 }
 
@@ -196,6 +223,9 @@ export async function getStorefrontAccountDocumentData({
     shippingStatus: order.shipping_status,
     externalSource: order.external_source,
     importJobId: order.import_job_id,
+    recordedByUserId: order.recorded_by_user_id,
+    total: order.total,
+    amountPaid: order.amount_paid,
   });
   const transactionRows = (transactionsResult.data ||
     []) as StorefrontAccountDocumentTransactionRow[];

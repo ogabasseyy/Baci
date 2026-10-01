@@ -115,6 +115,14 @@ describe('ReceiptClaimPageClient', () => {
     renderClient({ initialEmailHint: 'customer@example.com' });
 
     expect(screen.getByText('Welcome Bassey John')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Your Ogabassey purchase is ready to link to your account.'
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/moved your receipt to/i)
+    ).not.toBeInTheDocument();
     expect(screen.getByText('iPhone 16 Pro Max')).toBeInTheDocument();
     expect(screen.getByText('2 x AirPods Pro')).toBeInTheDocument();
 

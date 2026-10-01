@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getCurrentDocumentKind,
   getStorefrontAccountDocumentData,
+  isManualOrderDocumentAvailable,
   isReceiptEligible,
   normalizePaymentStatus,
   normalizeShippingStatus,
@@ -50,6 +51,38 @@ function createSupabaseMock(options?: {
 }
 
 describe('storefront account document status helpers', () => {
+  it('makes a fully paid manual receipt downloadable before shipping', () => {
+    const input = {
+      paymentStatus: 'paid',
+      shippingStatus: 'pending',
+      recordedByUserId: 'staff-1',
+      total: 100,
+      amountPaid: 100,
+    };
+    expect(isReceiptEligible(input)).toBe(true);
+    expect(getCurrentDocumentKind(input)).toBe('receipt');
+    expect(isReceiptEligible({ ...input, amountPaid: 50 })).toBe(false);
+    expect(isReceiptEligible({ ...input, shippingStatus: 'cancelled' })).toBe(
+      false
+    );
+  });
+
+  it('makes an unpaid manual invoice visible without changing ordinary checkout eligibility', () => {
+    const input = {
+      paymentStatus: 'partially_paid',
+      shippingStatus: 'pending',
+      recordedByUserId: 'staff-1',
+    };
+    expect(isManualOrderDocumentAvailable(input)).toBe(true);
+    expect(getCurrentDocumentKind(input)).toBe('invoice');
+    expect(
+      isManualOrderDocumentAvailable({ ...input, recordedByUserId: null })
+    ).toBe(false);
+    expect(
+      isManualOrderDocumentAvailable({ ...input, shippingStatus: 'returned' })
+    ).toBe(false);
+  });
+
   it('normalizes payment and shipping statuses to lowercase tokens', () => {
     expect(normalizePaymentStatus('PAID')).toBe('paid');
     expect(normalizePaymentStatus('Partially_Paid')).toBe('partially_paid');

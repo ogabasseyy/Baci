@@ -5,6 +5,7 @@ import { sanitizePublicOrder } from '@/lib/public-fulfillment-sanitizer';
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import {
   getCurrentDocumentKind,
+  isManualOrderDocumentAvailable,
   isReceiptEligible,
   normalizePaymentStatus,
   normalizeShippingStatus,
@@ -114,6 +115,7 @@ export async function GET(request: NextRequest) {
         currency,
         external_source,
         import_job_id,
+        recorded_by_user_id,
         payment_status,
         shipping_status,
         shipping_address,
@@ -173,6 +175,15 @@ export async function GET(request: NextRequest) {
     const transformedOrders = orders.map((order) => {
       const paymentStatus = normalizePaymentStatus(order.payment_status);
       const shippingStatus = normalizeShippingStatus(order.shipping_status);
+      const documentEligibility = {
+        paymentStatus,
+        shippingStatus,
+        externalSource: order.external_source,
+        importJobId: order.import_job_id,
+        recordedByUserId: order.recorded_by_user_id,
+        total: order.total,
+        amountPaid: order.amount_paid,
+      };
 
       return {
         id: order.id,
@@ -199,12 +210,7 @@ export async function GET(request: NextRequest) {
           0,
           Number(order.total || 0) - Number(order.amount_paid || 0)
         ),
-        current_document_kind: getCurrentDocumentKind({
-          paymentStatus,
-          shippingStatus,
-          externalSource: order.external_source,
-          importJobId: order.import_job_id,
-        }),
+        current_document_kind: getCurrentDocumentKind(documentEligibility),
         invoice_type_code: resolveInvoiceTypeCode({
           paymentMethod: order.payment_method,
           isPaid: paymentStatus === 'paid',
@@ -213,12 +219,10 @@ export async function GET(request: NextRequest) {
           amountPaid: order.amount_paid,
           storedTypeCode: order.invoice_type_code,
         }),
-        receipt_eligible: isReceiptEligible({
-          paymentStatus,
-          shippingStatus,
-          externalSource: order.external_source,
-          importJobId: order.import_job_id,
-        }),
+        receipt_eligible: isReceiptEligible(documentEligibility),
+        manual_document_available:
+          isManualOrderDocumentAvailable(documentEligibility) &&
+          Boolean(order.order_items?.length),
         items: (order.order_items || []).map((item) => {
           const product = extractJoinedProduct(item.products);
           const productImages = extractProductImages(product);

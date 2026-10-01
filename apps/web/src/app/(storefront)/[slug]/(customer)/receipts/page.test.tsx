@@ -221,6 +221,24 @@ describe('ReceiptsPage', () => {
               },
             ],
           },
+          {
+            id: 'manual-partial',
+            order_number: 'MANUAL-PARTIAL',
+            created_at: '2026-09-30T09:00:00Z',
+            total: 100,
+            shipping_status: 'pending',
+            current_document_kind: 'invoice',
+            manual_document_available: true,
+            receipt_eligible: false,
+            items: [
+              {
+                id: 'manual-item',
+                name: 'Manual Device',
+                quantity: 1,
+                price: 100,
+              },
+            ],
+          },
         ],
       })
     );
@@ -231,6 +249,7 @@ describe('ReceiptsPage', () => {
     expect(screen.getByText('#ORD-1002')).toBeInTheDocument();
     expect(screen.getByText('#ORD-1003')).toBeInTheDocument();
     expect(screen.getByText('#ORD-1004')).toBeInTheDocument();
+    expect(screen.getByText('#MANUAL-PARTIAL')).toBeInTheDocument();
     expect(screen.queryByText('#ORD-1000')).not.toBeInTheDocument();
     expect(
       screen.getAllByRole('link', { name: /download invoice/i })[0]

@@ -146,6 +146,20 @@ describe('POST /api/storefront/receipts/claims/[token]', () => {
     });
   });
 
+  it('asks an unverified account to verify its email without linking the purchase', async () => {
+    const supabase = createSupabaseRpcMock({
+      data: { status: 'email_unverified' },
+      error: null,
+    });
+    mockAuthenticatedSupabase(supabase);
+    const response = await POST(postRequest(), params);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: 'Verify your email address before claiming this receipt',
+      code: 'EMAIL_UNVERIFIED',
+    });
+  });
+
   it('redeems a verified customer claim through the database RPC', async () => {
     const supabase = createSupabaseRpcMock({
       data: { redirectPath: '/receipts', status: 'ok' },

@@ -17,6 +17,66 @@ describe('GET /api/storefront/orders', () => {
     vi.clearAllMocks();
   });
 
+  it.each([
+    'paid',
+    'partially_paid',
+  ])('exposes a manual %s document without exposing the recording staff identity', async (paymentStatus) => {
+    const supabase = createSupabaseMock({
+      orders: {
+        data: [
+          {
+            id: 'manual-order',
+            order_number: 'MANUAL-1',
+            created_at: '2026-09-30T09:00:00Z',
+            total: 100,
+            subtotal: 100,
+            shipping_fee: 0,
+            tax_amount: 0,
+            discount_amount: 0,
+            amount_paid: paymentStatus === 'paid' ? 100 : 50,
+            currency: 'NGN',
+            payment_status: paymentStatus,
+            shipping_status: 'pending',
+            recorded_by_user_id: 'staff-1',
+            shipping_address: null,
+            tracking_number: null,
+            shipping_provider: null,
+            payment_method: 'bank_transfer',
+            order_items: [
+              {
+                id: 'item-1',
+                product_id: 'product-1',
+                name: 'Device',
+                quantity: 1,
+                price: 100,
+                has_assurance: false,
+              },
+            ],
+          },
+        ],
+        error: null,
+      },
+    });
+    vi.mocked(authenticateApiRequest).mockResolvedValue(
+      createAuthenticatedAuthResult(supabase)
+    );
+    const response = await GET(
+      new NextRequest(
+        'http://localhost/api/storefront/orders?merchantSlug=ogabassey'
+      )
+    );
+    const data = await response.json();
+    expect(data.orders[0]).toMatchObject({
+      manual_document_available: true,
+      current_document_kind: paymentStatus === 'paid' ? 'receipt' : 'invoice',
+      receipt_eligible: paymentStatus === 'paid',
+    });
+    expect(data.orders[0]).not.toHaveProperty('recorded_by_user_id');
+    expect(supabase.from('orders').select).toHaveBeenCalledWith(
+      expect.stringContaining('recorded_by_user_id')
+    );
+  });
+
   it('returns 401 when the customer is not authenticated', async () => {
     vi.mocked(authenticateApiRequest).mockResolvedValue({
       user: null,
@@ -202,6 +262,7 @@ describe('GET /api/storefront/orders', () => {
           current_document_kind: 'receipt',
           invoice_type_code: '380',
           receipt_eligible: true,
+          manual_document_available: false,
           items: [
             {
               id: 'item-1',

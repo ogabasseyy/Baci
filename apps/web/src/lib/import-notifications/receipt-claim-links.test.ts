@@ -205,6 +205,7 @@ describe('receipt claim links', () => {
       'no-dot-hostname',
       'bad..dots.com',
       'has space.com',
+      '-example.com',
     ]) {
       expect(isSafeClaimDomain(host)).toBe(false);
       expect(isValidCustomDomain(host)).toBe(false);
@@ -223,6 +224,12 @@ describe('receipt claim links', () => {
     ]) {
       expect(isSafeClaimDomain(host)).toBe(true);
       expect(isValidCustomDomain(host)).toBe(false);
+    }
+    // Per-label strictness the proxy lacks: hyphen-terminated labels and
+    // all-numeric TLDs fall back to the slug subdomain in token URLs.
+    for (const host of ['example-.com', 'example.123']) {
+      expect(isSafeClaimDomain(host)).toBe(false);
+      expect(isValidCustomDomain(host)).toBe(true);
     }
   });
 });

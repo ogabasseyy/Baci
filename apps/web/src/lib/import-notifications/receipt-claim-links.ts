@@ -58,16 +58,21 @@ export function isSafeClaimDomain(domain: string): boolean {
   // host module (kept dependency-free so notification senders stay inside
   // their audited import boundary): dotted hostname, no IPs, no userinfo or
   // path tricks. A trailing-dot absolute FQDN is the same host, normalized.
+  // Strictly tighter than the proxy rule: every label must start and end
+  // alphanumeric and the TLD must not be all-numeric, so malformed hosts
+  // fall back to the slug subdomain instead of landing in a token URL.
   const host = domain
     .trim()
     .toLowerCase()
     .replace(/\/+$/, '')
     .replace(/\.$/, '');
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) return false;
+  const labels = host.split('.');
+  const topLabel = labels[labels.length - 1] ?? '';
   return (
-    host.includes('.') &&
-    !/^\d+\.\d+\.\d+\.\d+$/.test(host) &&
-    /^[a-z0-9][a-z0-9.-]*[a-z0-9]$/.test(host) &&
-    !host.includes('..')
+    labels.length >= 2 &&
+    labels.every((label) => /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label)) &&
+    !/^\d+$/.test(topLabel)
   );
 }
 

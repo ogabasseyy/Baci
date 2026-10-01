@@ -87,3 +87,10 @@ BEGIN
   );
 END;
 $$;
+-- Anonymous claim-link previews execute this SECURITY DEFINER function as
+-- anon (logged out) or authenticated; state the posture explicitly instead
+-- of relying on the default PUBLIC execute grant.
+REVOKE ALL ON FUNCTION private.preview_receipt_claim(text)
+  FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION private.preview_receipt_claim(text)
+  TO anon, authenticated, service_role;

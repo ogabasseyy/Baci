@@ -262,7 +262,7 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260930160200_preview_receipt_claim_document_kind.sql',
-    sha256: '2ef955fbe608fb3696154a7053258618b614c60c3cf9cb1bc08b25e0d4b58ce2',
+    sha256: 'af24b4db0228b8bf9691e74c3a0e95a6c9425c73c7a93f6a4b001d9d77e2f22f',
   },
   {
     repositoryPath:

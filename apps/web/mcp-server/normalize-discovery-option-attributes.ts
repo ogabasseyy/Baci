@@ -21,7 +21,10 @@ export function normalizeDiscoveryOptionAttributes(attributes: Record<string, un
     if (!key) continue;
     const numeric = ['storage_gb', 'ram_gb', 'power_w', 'screen_inches', 'refresh_hz'].includes(key);
     if (!numeric) {
-      result[key] = typeof rawValue === 'string' ? rawValue.normalize('NFKC').trim().toLowerCase() : null;
+      // NFC, matching the matcher: NFKC would fold compatibility characters
+      // (full-width, ligatures, circled digits) that the intent side preserves,
+      // incorrectly rejecting identical values.
+      result[key] = typeof rawValue === 'string' ? rawValue.normalize('NFC').trim().toLowerCase() : null;
       continue;
     }
     // A malformed overriding variant attribute must not inherit the base value.

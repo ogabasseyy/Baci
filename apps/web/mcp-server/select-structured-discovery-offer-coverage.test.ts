@@ -50,3 +50,12 @@ it('excludes same-condition offers the storefront would not sell through', () =>
   const selected = selectStructuredDiscoveryOffer(row, intent({}));
   expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'used-offer', price: 450 });
 });
+
+it('matches full-width variant text against identical intent values', () => {
+  const row = makeRow({ has_variants: true, discovery_metadata: { product_type: 'phone' } });
+  row.availableVariants = [{ id: 'v-wide', product_id: 'phone', attributes: { color: '\uFF26\uFF35\uFF2C\uFF2C\uFF37\uFF29\uFF24\uFF34\uFF28' }, price_override: 400 }] as typeof row.availableVariants;
+  const selected = selectStructuredDiscoveryOffer(row, intent({ attributes: [
+    { key: 'color', operator: 'eq', value: '\uFF26\uFF35\uFF2C\uFF2C\uFF37\uFF29\uFF24\uFF34\uFF28' },
+  ] }));
+  expect(selected?.selectedOption).toMatchObject({ kind: 'variant', price: 400 });
+});

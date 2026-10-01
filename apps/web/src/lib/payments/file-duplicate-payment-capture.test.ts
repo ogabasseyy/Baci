@@ -146,7 +146,118 @@ describe('fileDuplicatePaymentCapture', () => {
   it('returns false when the merge fails', async () => {
     const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
     const rpc = vi.fn().mockResolvedValue({ data: null, error: {} });
-    const db = { from: vi.fn(() => ({ insert })), rpc };
+    const maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
+    const db = {
+      from: vi.fn(() => ({
+        eq: vi.fn().mockReturnThis(),
+        insert,
+        is: vi.fn().mockReturnThis(),
+        maybeSingle,
+        select: vi.fn().mockReturnThis(),
+      })),
+      rpc,
+    };
+
+    await expect(
+      fileDuplicatePaymentCapture({
+        attempt,
+        evidence,
+        supabase: db as never,
+      })
+    ).resolves.toBe(false);
+    // A transport failure leaves the conflict unresolved: no ref-less
+    // retry, which would collide again.
+    expect(insert).toHaveBeenCalledTimes(1);
+  });
+
+  it('refiles without the shared reference when another order owns the ref slot', async () => {
+    const insert = vi
+      .fn()
+      .mockResolvedValueOnce({ error: { code: '23505' } })
+      .mockResolvedValueOnce({ error: null });
+    // Definitive false: no open review for this order, so the 23505
+    // came from the global ref slot, not the order slot.
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({ data: false, error: null })
+      .mockResolvedValue({ data: true, error: null });
+    const maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
+    const db = {
+      from: vi.fn(() => ({
+        eq: vi.fn().mockReturnThis(),
+        insert,
+        is: vi.fn().mockReturnThis(),
+        maybeSingle,
+        select: vi.fn().mockReturnThis(),
+      })),
+      rpc,
+    };
+
+    await expect(
+      fileDuplicatePaymentCapture({
+        attempt,
+        evidence,
+        supabase: db as never,
+      })
+    ).resolves.toBe(true);
+    expect(insert).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ paystack_ref: null, txn_id: 'attempt-1' })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
+      expect.objectContaining({ p_transaction_id: 'attempt-1' })
+    );
+  });
+
+  it('stamps without refiling when our own review already holds the evidence', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({ data: false, error: null })
+      .mockResolvedValue({ data: true, error: null });
+    const maybeSingle = vi
+      .fn()
+      .mockResolvedValue({ data: { id: 'review-1' }, error: null });
+    const db = {
+      from: vi.fn(() => ({
+        eq: vi.fn().mockReturnThis(),
+        insert,
+        is: vi.fn().mockReturnThis(),
+        maybeSingle,
+        select: vi.fn().mockReturnThis(),
+      })),
+      rpc,
+    };
+
+    await expect(
+      fileDuplicatePaymentCapture({
+        attempt,
+        evidence,
+        supabase: db as never,
+      })
+    ).resolves.toBe(true);
+    expect(insert).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
+      expect.objectContaining({ p_transaction_id: 'attempt-1' })
+    );
+  });
+
+  it('returns false when the ref-less refiling also collides', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
+    const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
+    const maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
+    const db = {
+      from: vi.fn(() => ({
+        eq: vi.fn().mockReturnThis(),
+        insert,
+        is: vi.fn().mockReturnThis(),
+        maybeSingle,
+        select: vi.fn().mockReturnThis(),
+      })),
+      rpc,
+    };
 
     await expect(
       fileDuplicatePaymentCapture({

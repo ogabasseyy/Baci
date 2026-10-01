@@ -148,7 +148,11 @@ describe('Paystack cancellation refund mismatch evidence', () => {
 
   it('reconciles references with dots and equals signs', async () => {
     const paymentCandidates = buildPaymentCandidates([]);
-    const from = vi.fn().mockReturnValueOnce(paymentCandidates);
+    const stalledCandidates = buildPaymentCandidates([]);
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(paymentCandidates)
+      .mockReturnValueOnce(stalledCandidates);
     const rpc = vi.fn();
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK.1=x');
@@ -158,6 +162,13 @@ describe('Paystack cancellation refund mismatch evidence', () => {
       'gateway_reference',
       'PSK.1=x'
     );
+    // No completed payment carries the reference, so the stalled
+    // states scan runs before the event is acknowledged.
+    expect(stalledCandidates.in).toHaveBeenCalledWith('status', [
+      'pending',
+      'processing',
+      'failed',
+    ]);
   });
 
   it.each([
@@ -197,12 +208,19 @@ describe('Paystack cancellation refund mismatch evidence', () => {
     const paymentCandidates = buildPaymentCandidates([
       cancelledPaymentRow({ order_id: null }),
     ]);
-    const from = vi.fn().mockReturnValueOnce(paymentCandidates);
+    const stalledCandidates = buildPaymentCandidates([]);
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(paymentCandidates)
+      .mockReturnValueOnce(stalledCandidates);
     const rpc = vi.fn();
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
 
-    expect(from).toHaveBeenCalledTimes(1);
+    // Orderless completed rows file nothing, so the stalled scan
+    // still runs — a stalled payment with an order must not be
+    // missed behind an orderless completed row.
+    expect(from).toHaveBeenCalledTimes(2);
     expect(rpc).not.toHaveBeenCalled();
   });
 

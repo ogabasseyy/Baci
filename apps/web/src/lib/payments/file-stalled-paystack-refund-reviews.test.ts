@@ -20,30 +20,33 @@ vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), info: mocks.loggerInfo, warn: vi.fn() },
 }));
 
-function stalledChain(range: ReturnType<typeof vi.fn>) {
+function stalledChain(limit: ReturnType<typeof vi.fn>) {
   const chain: {
     eq: ReturnType<typeof vi.fn>;
+    gt: ReturnType<typeof vi.fn>;
     in: ReturnType<typeof vi.fn>;
+    limit: ReturnType<typeof vi.fn>;
     order: ReturnType<typeof vi.fn>;
-    range: ReturnType<typeof vi.fn>;
   } = {
     eq: vi.fn(),
+    gt: vi.fn(),
     in: vi.fn(),
+    limit,
     order: vi.fn(),
-    range,
   };
   chain.eq.mockReturnValue(chain);
+  chain.gt.mockReturnValue(chain);
   chain.in.mockReturnValue(chain);
   chain.order.mockReturnValue(chain);
   return chain;
 }
 
 function database(pages: unknown[][]) {
-  const range = vi.fn();
+  const limit = vi.fn();
   for (const page of pages) {
-    range.mockResolvedValueOnce({ data: page, error: null });
+    limit.mockResolvedValueOnce({ data: page, error: null });
   }
-  const chain = stalledChain(range);
+  const chain = stalledChain(limit);
   const select = vi.fn().mockReturnValue(chain);
   const from = vi.fn().mockReturnValue({ select });
   return {
@@ -141,19 +144,19 @@ describe('fileStalledPaystackRefundReviews', () => {
       refundId: 202,
     });
 
-    expect(chain.range).toHaveBeenCalledWith(0, 9);
-    expect(chain.range).toHaveBeenCalledWith(10, 19);
+    expect(chain.limit).toHaveBeenCalledWith(10);
+    expect(chain.gt).toHaveBeenCalledWith('id', 'pay-9');
     expect(
       mocks.fileCancelledPaystackRefundCandidateReviews
     ).toHaveBeenCalledWith(supabase, [...first, ...second], evidence, reason);
   });
 
   it('throws when the stalled lookup fails', async () => {
-    const range = vi.fn().mockResolvedValue({
+    const limit = vi.fn().mockResolvedValue({
       data: null,
       error: new Error('db down'),
     });
-    const select = vi.fn().mockReturnValue(stalledChain(range));
+    const select = vi.fn().mockReturnValue(stalledChain(limit));
     const from = vi.fn().mockReturnValue({ select });
     const supabase = { from } as unknown as SupabaseClient;
 

@@ -11,6 +11,9 @@
 -- the row), and exact matches order first so sparse keys cannot flood the
 -- window ahead of them. The loader re-verifies precisely and the matcher
 -- enforces every constraint post-hydration.
+-- Duplicate aliases resolve last-wins like the loader's overwrite pass.
+-- The cap measures products (one representative row each), and the filter
+-- set itself is bounded because this RPC is anonymously executable.
 CREATE SCHEMA IF NOT EXISTS discovery;
 
 CREATE OR REPLACE FUNCTION discovery.recall_variant_parse_numeric(filter_key text, raw jsonb)
@@ -93,6 +96,8 @@ DECLARE
   numeric_key boolean;
   entry_key text;
   entry_value jsonb;
+  last_value jsonb;
+  found boolean := false;
   actual_numeric numeric;
   expected_numeric numeric;
   actual_text text;
@@ -114,28 +119,36 @@ BEGIN
   THEN RETURN false; END IF;
   IF pg_catalog.jsonb_typeof(attributes) IS DISTINCT FROM 'object' THEN RETURN false; END IF;
   FOR entry_key, entry_value IN SELECT * FROM pg_catalog.jsonb_each(attributes) LOOP
-    IF NOT discovery.recall_variant_key_matches(filter_key, entry_key) THEN CONTINUE; END IF;
-    IF numeric_key THEN
-      actual_numeric := discovery.recall_variant_parse_numeric(filter_key, entry_value);
-      IF actual_numeric IS NULL THEN CONTINUE; END IF;
-      expected_numeric := (filter_value)::text::numeric;
-      IF filter_operator = 'eq' AND actual_numeric IS DISTINCT FROM expected_numeric THEN RETURN true; END IF;
-      IF filter_operator = 'gte' AND actual_numeric < expected_numeric THEN RETURN true; END IF;
-      IF filter_operator = 'lte' AND actual_numeric > expected_numeric THEN RETURN true; END IF;
-    ELSE
-      IF pg_catalog.jsonb_typeof(entry_value) IS DISTINCT FROM 'string' THEN CONTINUE; END IF;
-      -- Collapse internal whitespace like the matcher, which normalizes
-      -- both sides: without this a multi-space value falsely mismatches.
-      actual_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
-        pg_catalog.normalize(entry_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g')),
-        '[[:space:]]+', ' ', 'g');
-      expected_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
-        pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g')),
-        '[[:space:]]+', ' ', 'g');
-      IF actual_text IS DISTINCT FROM expected_text THEN RETURN true; END IF;
+    IF discovery.recall_variant_key_matches(filter_key, entry_key) THEN
+      last_value := entry_value;
+      found := true;
     END IF;
   END LOOP;
-  RETURN false;
+  -- Last alias wins, mirroring the loader's overwrite pass over the same
+  -- document order: deciding on an earlier alias would discard rows the
+  -- loader recalls (storage 128GB followed by capacity 256GB satisfies a
+  -- 256GB intent).
+  IF NOT found THEN RETURN false; END IF;
+  IF numeric_key THEN
+    actual_numeric := discovery.recall_variant_parse_numeric(filter_key, last_value);
+    IF actual_numeric IS NULL THEN RETURN false; END IF;
+    expected_numeric := (filter_value)::text::numeric;
+    IF filter_operator = 'eq' AND actual_numeric IS DISTINCT FROM expected_numeric THEN RETURN true; END IF;
+    IF filter_operator = 'gte' AND actual_numeric < expected_numeric THEN RETURN true; END IF;
+    IF filter_operator = 'lte' AND actual_numeric > expected_numeric THEN RETURN true; END IF;
+    RETURN false;
+  ELSE
+    IF pg_catalog.jsonb_typeof(last_value) IS DISTINCT FROM 'string' THEN RETURN false; END IF;
+    -- Collapse internal whitespace like the matcher, which normalizes
+    -- both sides: without this a multi-space value falsely mismatches.
+    actual_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
+      pg_catalog.normalize(last_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g')),
+      '[[:space:]]+', ' ', 'g');
+    expected_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
+      pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g')),
+      '[[:space:]]+', ' ', 'g');
+    IF actual_text IS DISTINCT FROM expected_text THEN RETURN true; ELSE RETURN false; END IF;
+  END IF;
 END;
 $$;
 
@@ -153,6 +166,8 @@ DECLARE
   numeric_key boolean;
   entry_key text;
   entry_value jsonb;
+  last_value jsonb;
+  found boolean := false;
   actual_numeric numeric;
   actual_text text;
   expected_text text;
@@ -171,27 +186,100 @@ BEGIN
   THEN RETURN false; END IF;
   IF pg_catalog.jsonb_typeof(attributes) IS DISTINCT FROM 'object' THEN RETURN false; END IF;
   FOR entry_key, entry_value IN SELECT * FROM pg_catalog.jsonb_each(attributes) LOOP
-    IF NOT discovery.recall_variant_key_matches(filter_key, entry_key) THEN CONTINUE; END IF;
-    IF numeric_key THEN
-      actual_numeric := discovery.recall_variant_parse_numeric(filter_key, entry_value);
-      IF actual_numeric IS NULL THEN CONTINUE; END IF;
-      IF filter_operator = 'eq' AND actual_numeric = (filter_value)::text::numeric THEN RETURN true; END IF;
-      IF filter_operator = 'gte' AND actual_numeric >= (filter_value)::text::numeric THEN RETURN true; END IF;
-      IF filter_operator = 'lte' AND actual_numeric <= (filter_value)::text::numeric THEN RETURN true; END IF;
-    ELSE
-      IF pg_catalog.jsonb_typeof(entry_value) IS DISTINCT FROM 'string' THEN CONTINUE; END IF;
-      -- Collapse internal whitespace like the matcher, which normalizes
-      -- both sides: without this a multi-space value falsely mismatches.
-      actual_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
-        pg_catalog.normalize(entry_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g')),
-        '[[:space:]]+', ' ', 'g');
-      expected_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
-        pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g')),
-        '[[:space:]]+', ' ', 'g');
-      IF actual_text = expected_text THEN RETURN true; END IF;
+    IF discovery.recall_variant_key_matches(filter_key, entry_key) THEN
+      last_value := entry_value;
+      found := true;
     END IF;
   END LOOP;
-  RETURN false;
+  -- Last alias wins, like the superset matcher and the loader's overwrite
+  -- pass: the exact flag must describe the value the loader would decide on.
+  IF NOT found THEN RETURN false; END IF;
+  IF numeric_key THEN
+    actual_numeric := discovery.recall_variant_parse_numeric(filter_key, last_value);
+    IF actual_numeric IS NULL THEN RETURN false; END IF;
+    IF filter_operator = 'eq' AND actual_numeric = (filter_value)::text::numeric THEN RETURN true; END IF;
+    IF filter_operator = 'gte' AND actual_numeric >= (filter_value)::text::numeric THEN RETURN true; END IF;
+    IF filter_operator = 'lte' AND actual_numeric <= (filter_value)::text::numeric THEN RETURN true; END IF;
+    RETURN false;
+  ELSE
+    IF pg_catalog.jsonb_typeof(last_value) IS DISTINCT FROM 'string' THEN RETURN false; END IF;
+    -- Collapse internal whitespace like the matcher, which normalizes
+    -- both sides: without this a multi-space value falsely mismatches.
+    actual_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
+      pg_catalog.normalize(last_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g')),
+      '[[:space:]]+', ' ', 'g');
+    expected_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
+      pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g')),
+      '[[:space:]]+', ' ', 'g');
+    -- A blank constraint value never matches in the loader, even against a
+    -- blank variant value.
+    IF expected_text = '' THEN RETURN false; END IF;
+    IF actual_text = expected_text THEN RETURN true; ELSE RETURN false; END IF;
+  END IF;
+END;
+$$;
+
+-- Loader-acceptance mirror: true exactly when the loader would recall this
+-- row for the filter (last alias wins; missing keys and equality-with-an
+-- unparseable-value accept; ranges need a parsed comparison that holds).
+-- Malformed filters fail open. Drives one-row-per-product selection so the
+-- representative preserves the loader's product decision exactly.
+CREATE OR REPLACE FUNCTION discovery.recall_variant_filter_loader_accepts(attributes jsonb, filter jsonb)
+RETURNS boolean
+LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE SECURITY INVOKER SET search_path = ''
+AS $$
+DECLARE
+  filter_key text;
+  filter_operator text;
+  filter_value jsonb;
+  numeric_key boolean;
+  entry_key text;
+  entry_value jsonb;
+  last_value jsonb;
+  found boolean := false;
+  actual_numeric numeric;
+  actual_text text;
+  expected_text text;
+BEGIN
+  IF pg_catalog.jsonb_typeof(filter) IS DISTINCT FROM 'object' THEN RETURN true; END IF;
+  filter_key := filter ->> 'key';
+  filter_operator := filter ->> 'operator';
+  filter_value := filter -> 'value';
+  numeric_key := filter_key IN ('storage_gb', 'ram_gb', 'power_w', 'screen_inches', 'refresh_hz');
+  IF filter_key NOT IN ('storage_gb', 'ram_gb', 'power_w', 'screen_inches', 'refresh_hz',
+      'color', 'connector', 'processor', 'connectivity')
+    OR filter_operator NOT IN ('eq', 'gte', 'lte')
+    OR (numeric_key AND pg_catalog.jsonb_typeof(filter_value) IS DISTINCT FROM 'number')
+    OR (NOT numeric_key AND (filter_operator IS DISTINCT FROM 'eq'
+      OR pg_catalog.jsonb_typeof(filter_value) IS DISTINCT FROM 'string'))
+  THEN RETURN true; END IF;
+  IF pg_catalog.jsonb_typeof(attributes) IS DISTINCT FROM 'object' THEN RETURN true; END IF;
+  FOR entry_key, entry_value IN SELECT * FROM pg_catalog.jsonb_each(attributes) LOOP
+    IF discovery.recall_variant_key_matches(filter_key, entry_key) THEN
+      last_value := entry_value;
+      found := true;
+    END IF;
+  END LOOP;
+  IF NOT found THEN RETURN true; END IF;
+  IF numeric_key THEN
+    actual_numeric := discovery.recall_variant_parse_numeric(filter_key, last_value);
+    IF actual_numeric IS NULL THEN RETURN filter_operator = 'eq'; END IF;
+    IF filter_operator = 'eq' THEN RETURN actual_numeric = (filter_value)::text::numeric; END IF;
+    IF filter_operator = 'gte' THEN RETURN actual_numeric >= (filter_value)::text::numeric; END IF;
+    RETURN actual_numeric <= (filter_value)::text::numeric;
+  ELSE
+    IF pg_catalog.jsonb_typeof(last_value) IS DISTINCT FROM 'string' THEN RETURN true; END IF;
+    actual_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
+      pg_catalog.normalize(last_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g')),
+      '[[:space:]]+', ' ', 'g');
+    expected_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
+      pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g')),
+      '[[:space:]]+', ' ', 'g');
+    -- A blank constraint value never matches in the loader, even against a
+    -- blank variant value.
+    IF expected_text = '' THEN RETURN false; END IF;
+    RETURN actual_text = expected_text;
+  END IF;
 END;
 $$;
 
@@ -200,8 +288,20 @@ CREATE OR REPLACE FUNCTION public.search_product_variant_recall(
   p_filters jsonb DEFAULT '[]'::jsonb,
   p_limit integer DEFAULT 2000
 ) RETURNS TABLE (product_id uuid, attributes jsonb)
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO ''
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path TO ''
 AS $$
+BEGIN
+  -- Anonymous-executable boundary: cap the filter set before expansion, or a
+  -- raw caller bypassing the MCP schema could force unbounded regex/parse
+  -- CPU across the merchant's variant catalog. The loader never exceeds 50
+  -- constraints (5 alternatives × 10 attributes, ~8KB worst case).
+  IF pg_catalog.jsonb_typeof(p_filters) = 'array'
+    AND (pg_catalog.jsonb_array_length(p_filters) > 50
+      OR pg_catalog.octet_length(p_filters::text) > 16384) THEN
+    RAISE EXCEPTION 'variant recall accepts at most 50 constraints'
+      USING ERRCODE = '22023';
+  END IF;
+  RETURN QUERY
   WITH filters AS (
     -- Normalize once: a non-array boundary value means no filtering, and
     -- the CASE keeps array expansion away from values that would error.
@@ -209,35 +309,49 @@ AS $$
     FROM pg_catalog.jsonb_array_elements(
       CASE WHEN pg_catalog.jsonb_typeof(p_filters) = 'array' THEN p_filters ELSE '[]'::jsonb END
     ) AS filter_element
-  )
-  SELECT pv.product_id, pv.attributes
-  FROM public.product_variants AS pv
-  JOIN public.products AS p ON p.id = pv.product_id
-  JOIN public.merchants AS m ON m.id = p.merchant_id
-  WHERE pv.merchant_id = p_merchant_id
-    AND p.merchant_id = p_merchant_id
-    AND p.status = 'active'
-    AND pv.is_inventory_anchor IS NOT TRUE
-    AND (
-      COALESCE(m.is_published, FALSE) = TRUE
-      OR COALESCE(m.is_platform_admin, FALSE) = TRUE
-    )
-    -- Recall OR: a variant survives when some constraint cannot rule it
-    -- out, mirroring the loader.
-    AND (
-      NOT EXISTS (SELECT 1 FROM filters)
-      OR EXISTS (
-        SELECT 1 FROM filters
-        WHERE NOT discovery.recall_variant_filter_verifiably_fails(pv.attributes, filters.filter)
+  ),
+  eligible AS (
+    SELECT pv.product_id, pv.attributes, pv.created_at, pv.id,
+      EXISTS (SELECT 1 FROM filters
+        WHERE discovery.recall_variant_filter_exactly_matches(pv.attributes, filters.filter)) AS is_exact,
+      EXISTS (SELECT 1 FROM filters
+        WHERE discovery.recall_variant_filter_loader_accepts(pv.attributes, filters.filter)) AS is_accepted
+    FROM public.product_variants AS pv
+    JOIN public.products AS p ON p.id = pv.product_id
+    JOIN public.merchants AS m ON m.id = p.merchant_id
+    WHERE pv.merchant_id = p_merchant_id
+      AND p.merchant_id = p_merchant_id
+      AND p.status = 'active'
+      AND pv.is_inventory_anchor IS NOT TRUE
+      AND (
+        COALESCE(m.is_published, FALSE) = TRUE
+        OR COALESCE(m.is_platform_admin, FALSE) = TRUE
       )
-    )
-  ORDER BY
-    CASE WHEN EXISTS (
-      SELECT 1 FROM filters
-      WHERE discovery.recall_variant_filter_exactly_matches(pv.attributes, filters.filter)
-    ) THEN 0 ELSE 1 END,
-    pv.product_id, pv.created_at, pv.id
+      -- Recall OR: a variant survives when some constraint cannot rule it
+      -- out, mirroring the loader.
+      AND (
+        NOT EXISTS (SELECT 1 FROM filters)
+        OR EXISTS (
+          SELECT 1 FROM filters
+          WHERE NOT discovery.recall_variant_filter_verifiably_fails(pv.attributes, filters.filter)
+        )
+      )
+  ),
+  best AS (
+    -- One row per product: the cap measures candidate products, so a single
+    -- product with thousands of variants cannot evict every other product.
+    -- Ordering by acceptance first preserves the loader's product decision
+    -- exactly: the representative accepts iff some variant would.
+    SELECT DISTINCT ON (eligible.product_id)
+      eligible.product_id, eligible.attributes, eligible.is_accepted, eligible.is_exact
+    FROM eligible
+    ORDER BY eligible.product_id, (NOT eligible.is_accepted), (NOT eligible.is_exact),
+      eligible.created_at, eligible.id
+  )
+  SELECT best.product_id, best.attributes FROM best
+  ORDER BY (NOT best.is_accepted), (NOT best.is_exact), best.product_id
   LIMIT least(greatest(coalesce(p_limit, 2000), 1), 2001);
+END;
 $$;
 
 ALTER FUNCTION public.search_product_variant_recall(uuid, jsonb, integer) OWNER TO postgres;

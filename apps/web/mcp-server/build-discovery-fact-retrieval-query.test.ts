@@ -75,7 +75,10 @@ it('falls back to sanitized shopper wording and never emits empty syntax', () =>
 it('folds Unicode identity terms to ASCII-safe keys both sides agree on', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ brands: ['Mömax'], model: 'Café Pro | !' })))
     .toBe('(brandmmax & modelcaf_pro__)');
-  expect(buildDiscoveryFactRetrievalQuery(intent({ model: '三星手机' }))).toBe('(a & !a)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ model: '三星手机' })))
+    .toBe('(fact1dcf18b552623ad2401d64b631bd9f4fa97e9fc1a0aa174514dfbdd406e452a2)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ compatible_with: '三星' })))
+    .toBe('(factbb1bdab90230c0d7d60bd6e9016c5357bf3eb7bf3b8a58b9be181828eec3c879)');
 });
 
 it('keeps every constraint in retrieval past the old twelve-term budget', () => {
@@ -118,7 +121,8 @@ it('keys long models as one identity lexeme instead of truncating the tail', () 
 });
 
 it('keeps keyed identity terms free of dots so groups stay valid', () => {
-  expect(buildDiscoveryFactRetrievalQuery(intent({ model: '...' }))).toBe('(a & !a)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ model: '...' })))
+    .toBe('(factb4ae896383178edd76f0571298f566c14dd9c2dc32a6a4cf372cb8618478bce0)');
   expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'ZX-42.' }))).toBe('(modelzx_42)');
   expect(buildDiscoveryFactRetrievalQuery(intent({ model: '1.5' }))).toBe('(model15)');
 });

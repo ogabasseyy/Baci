@@ -22,17 +22,17 @@ export const EXPECTED_DISCOVERY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261001070000_keyed_discovery_numeric_facts.sql',
-    sha256: 'd9c021d3687c6a487f8c85d63f43329072515b186c8e886ff91c9684b074e43c',
+    sha256: '23a4522d0156d830f36021a6e55e13f4a33c52b7940ea270a0532db5a2680cd0',
   },
   {
     repositoryPath:
       'supabase/migrations/20261001080000_correlated_text_attribute_search.sql',
-    sha256: '75617f50d7ad224628b4a6898f1c7fe045ff1a206a87bf16b2a6cd9618d513a5',
+    sha256: '2c7db225c7a3fb27baf91e243e0ff93a5015cc42a4686767c7790ff976e85071',
   },
   {
     repositoryPath:
       'supabase/migrations/20261001090000_product_variant_recall.sql',
-    sha256: 'd9ba781193ad7d62dd0b7b2c46620889d6ab94fe071fcd56f6175db629fe01a4',
+    sha256: '62eb77fede3a5f08db12883266e40c792eb28eeb45d63045d168f8d538a927d0',
   },
   {
     repositoryPath:
@@ -42,7 +42,7 @@ export const EXPECTED_DISCOVERY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261001110000_keyed_discovery_identity_facts.sql',
-    sha256: '1380a6d9b4877070c9538c359d3082441f6b33d6bd02baaafae5655c344ea6a0',
+    sha256: '90aed8a6e4d2d7b03d60ce6d26cb9cface7630a3c5bf0b8421ea3ef92adc293f',
   },
   {
     repositoryPath:

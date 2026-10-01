@@ -35,6 +35,14 @@ BEGIN
   IF document @@ plainto_tsquery('simple', 'ram8.5gb') THEN
     RAISE EXCEPTION 'Keyed numeric lexeme was fabricated';
   END IF;
+  document := discovery.product_discovery_search_document_v3('Display', 'Acme', 'Monitors', '',
+    '{"attributes":{"screen_inches":6.5}}'::jsonb);
+  IF NOT document @@ pg_catalog.to_tsquery('simple'::regconfig, 'screen6.5inch') THEN
+    RAISE EXCEPTION 'Dotted keyed numeric lexeme did not round-trip';
+  END IF;
+  IF document @@ pg_catalog.to_tsquery('simple'::regconfig, 'screen6.4inch') THEN
+    RAISE EXCEPTION 'Dotted keyed numeric lexeme matched a near miss';
+  END IF;
   document := discovery.product_discovery_search_document_v4('Headset', 'Acme', 'Audio',
     'USB-C accessory', '{"attributes":{"connector":"  Usb-C  "}}'::jsonb);
   IF NOT document @@ plainto_tsquery('simple',
@@ -93,6 +101,23 @@ BEGIN
   IF NOT document @@ plainto_tsquery('simple', 'typephone') THEN
     RAISE EXCEPTION 'Type alias did not collapse to the canonical identity lexeme';
   END IF;
+  document := discovery.product_discovery_search_document_v5('Generic', 'Acme', 'Accessories', '',
+    '{"model":"三星手机","product_type":"手机"}'::jsonb);
+  IF NOT document @@ plainto_tsquery('simple',
+      'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+        'model' || pg_catalog.chr(31) || '三星手机', 'UTF8'), 'sha256'), 'hex')) THEN
+    RAISE EXCEPTION 'Non-ASCII model digest missed the identity';
+  END IF;
+  IF document @@ plainto_tsquery('simple',
+      'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+        'model' || pg_catalog.chr(31) || '华为手机', 'UTF8'), 'sha256'), 'hex')) THEN
+    RAISE EXCEPTION 'Non-ASCII model digest matched a different identity';
+  END IF;
+  IF NOT document @@ plainto_tsquery('simple',
+      'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+        'type' || pg_catalog.chr(31) || '手机', 'UTF8'), 'sha256'), 'hex')) THEN
+    RAISE EXCEPTION 'Non-ASCII custom type digest missed the identity';
+  END IF;
   IF (SELECT prosecdef FROM pg_proc WHERE oid = 'public.search_product_discovery_facts(uuid,text,integer,integer,text,text)'::regprocedure) THEN
     RAISE EXCEPTION 'Fact retrieval must preserve invoker RLS';
   END IF;
@@ -139,7 +164,10 @@ VALUES
    '{"attributes":{"connector":"Lightning","color":"USB-C"}}'::jsonb),
   ('cb58d110-0000-4000-8000-000000000211', 'cb58d110-0000-4000-8000-000000000201',
    'phone phone phone', 'phone-marketing-accessory', 'Acme', 50000, 'active',
-   '{"product_type":"accessory"}'::jsonb);
+   '{"product_type":"accessory"}'::jsonb),
+  ('cb58d110-0000-4000-8000-000000000212', 'cb58d110-0000-4000-8000-000000000201',
+   'Display fixture', 'screen-six-half', 'Acme', 50000, 'active',
+   '{"attributes":{"screen_inches":6.5}}'::jsonb);
 
 -- Exercise the RPC as its public storefront caller, under publication RLS.
 SET LOCAL ROLE anon;
@@ -189,6 +217,12 @@ BEGIN
     'ram8gb');
   IF or_ids IS DISTINCT FROM ARRAY['cb58d110-0000-4000-8000-000000000206']::uuid[] THEN
     RAISE EXCEPTION 'RAM equality retrieved a product matching only on storage';
+  END IF;
+  SELECT array_agg(product_id) INTO or_ids
+  FROM public.search_product_discovery_facts('cb58d110-0000-4000-8000-000000000201',
+    'screen6.5inch');
+  IF or_ids IS DISTINCT FROM ARRAY['cb58d110-0000-4000-8000-000000000212']::uuid[] THEN
+    RAISE EXCEPTION 'Dotted keyed numeric lexeme did not round-trip through retrieval';
   END IF;
   SELECT array_agg(product_id) INTO or_ids
   FROM public.search_product_discovery_facts('cb58d110-0000-4000-8000-000000000201',

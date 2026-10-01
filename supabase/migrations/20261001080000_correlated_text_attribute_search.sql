@@ -33,10 +33,12 @@ AS $$
     END);
 $$;
 
--- Build the replacement before switching the serving RPC; preserve v3 until
--- the new index is available.
-DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx;
-CREATE INDEX CONCURRENTLY products_discovery_correlated_search_idx ON public.products USING gin
+-- Build the replacement under a temporary name before switching the serving
+-- RPC: on a retry after the switch, a serving v4 index already exists, and
+-- dropping it first would force every discovery query through a full product
+-- scan for the duration of the concurrent rebuild.
+DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx_new;
+CREATE INDEX CONCURRENTLY products_discovery_correlated_search_idx_new ON public.products USING gin
 (public.product_discovery_search_document_v4(name, brand, category, description, discovery_metadata))
 WHERE status = 'active';
 
@@ -67,3 +69,7 @@ REVOKE ALL ON FUNCTION public.search_product_discovery_facts(uuid, text, integer
 GRANT EXECUTE ON FUNCTION public.search_product_discovery_facts(uuid, text, integer, integer, text, text) TO anon, authenticated;
 
 DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_keyed_search_idx;
+-- Retire the pre-switch correlated build (a no-op on first run) and promote
+-- the replacement to the canonical name.
+DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx;
+ALTER INDEX IF EXISTS public.products_discovery_correlated_search_idx_new RENAME TO products_discovery_correlated_search_idx;

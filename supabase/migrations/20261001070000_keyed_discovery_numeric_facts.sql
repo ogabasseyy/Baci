@@ -45,9 +45,12 @@ AS $$
       ELSE '' END);
 $$;
 
--- Keep the serving index until the keyed replacement has finished building.
-DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_keyed_search_idx;
-CREATE INDEX CONCURRENTLY products_discovery_keyed_search_idx ON public.products USING gin
+-- Build the keyed replacement under a temporary name: on a retry after the
+-- RPC switch, a serving v3 index already exists, and dropping it first would
+-- force every discovery query through a full product scan for the duration of
+-- the concurrent rebuild.
+DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_keyed_search_idx_new;
+CREATE INDEX CONCURRENTLY products_discovery_keyed_search_idx_new ON public.products USING gin
 (public.product_discovery_search_document_v3(name, brand, category, description, discovery_metadata))
 WHERE status = 'active';
 
@@ -78,3 +81,7 @@ REVOKE ALL ON FUNCTION public.search_product_discovery_facts(uuid, text, integer
 GRANT EXECUTE ON FUNCTION public.search_product_discovery_facts(uuid, text, integer, integer, text, text) TO anon, authenticated;
 
 DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_capacity_search_idx;
+-- Retire the pre-switch keyed build (a no-op on first run) and promote the
+-- replacement to the canonical name.
+DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_keyed_search_idx;
+ALTER INDEX IF EXISTS public.products_discovery_keyed_search_idx_new RENAME TO products_discovery_keyed_search_idx;

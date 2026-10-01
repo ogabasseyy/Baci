@@ -89,11 +89,16 @@ function groupQuery(terms: string[]): string | undefined {
 function identityKey(prefix: string, value: string): string | undefined {
   // ASCII allowlist: PostgreSQL has no Unicode property escapes inside
   // bracket expressions, so both sides strip identically to stay in
-  // agreement. Folded keys can only collide (the matcher disambiguates) and
-  // fully stripped values skip the term (recall broadens for the matcher).
-  const key = value.normalize('NFKC').trim().toLocaleLowerCase('en-US')
-    .replace(/[\s-]+/g, '_').replace(/[^a-z0-9_]/g, '');
-  return key ? `${prefix}${key}` : undefined;
+  // agreement. Folded keys can only collide (the matcher disambiguates).
+  // Fully stripped values fall back to a correlated digest both sides
+  // derive identically (tag + unit separator + normalized identity):
+  // skipping the term would strand exact matches past the browse window.
+  const normalized = value.normalize('NFKC').trim().toLocaleLowerCase('en-US')
+    .replace(/[\s-]+/g, '_');
+  const key = normalized.replace(/[^a-z0-9_]/g, '');
+  if (key) return `${prefix}${key}`;
+  if (!normalized) return undefined;
+  return `fact${createHash('sha256').update(`${prefix}\u001f${normalized}`, 'utf8').digest('hex')}`;
 }
 
 function typeTerms(productType: string): string[] {

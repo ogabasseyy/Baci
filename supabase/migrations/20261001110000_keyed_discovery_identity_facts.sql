@@ -14,12 +14,23 @@ AS $$
     '[[:space:]-]+', '_', 'g');
 $$;
 
-CREATE OR REPLACE FUNCTION discovery.discovery_identity_key(raw text)
+-- Identity lexeme with a Unicode-safe fallback: fully non-ASCII values
+-- (model 三星手机) strip to nothing, which would skip retrieval and strand
+-- exact matches past the browse window. Such values emit a correlated
+-- digest both sides derive identically (tag + unit separator + normalized
+-- identity), mirroring the v4 text-attribute convention. The tag keeps
+-- brand/model/compat digests distinct from each other and from v4's.
+CREATE OR REPLACE FUNCTION discovery.discovery_identity_lexeme(tag text, raw text)
 RETURNS text
 LANGUAGE sql IMMUTABLE PARALLEL SAFE SECURITY INVOKER SET search_path = ''
 AS $$
-  SELECT nullif(pg_catalog.regexp_replace(
-    discovery.discovery_identity_normalize(raw), '[^a-z0-9_]', '', 'g'), '');
+  SELECT CASE
+    WHEN normalized IS NULL OR normalized = '' THEN NULL
+    ELSE COALESCE(tag || nullif(pg_catalog.regexp_replace(normalized, '[^a-z0-9_]', '', 'g'), ''),
+      'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+        tag || pg_catalog.chr(31) || normalized, 'UTF8'), 'sha256'), 'hex'))
+  END
+  FROM (SELECT discovery.discovery_identity_normalize(raw) AS normalized) AS input;
 $$;
 
 CREATE OR REPLACE FUNCTION discovery.product_discovery_search_document_v5(
@@ -33,7 +44,10 @@ AS $$
     || pg_catalog.to_tsvector('simple'::regconfig, coalesce((
       SELECT pg_catalog.string_agg(lexeme, ' ')
       FROM (
-        SELECT 'type' || nullif(pg_catalog.regexp_replace(canonical_type, '[^a-z0-9_]', '', 'g'), '') AS lexeme
+        SELECT COALESCE('type' || nullif(pg_catalog.regexp_replace(canonical_type, '[^a-z0-9_]', '', 'g'), ''),
+          CASE WHEN canonical_type IS NOT NULL AND canonical_type <> ''
+            THEN 'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+              'type' || pg_catalog.chr(31) || canonical_type, 'UTF8'), 'sha256'), 'hex') END) AS lexeme
         FROM (SELECT CASE
           WHEN nullif(pg_catalog.lower(pg_catalog.normalize(
               pg_catalog.regexp_replace(
@@ -73,11 +87,11 @@ AS $$
                 '[[:space:]]+', ' ', 'g'), 'NFC')) = 'tablets' THEN 'tablet'
         END AS canonical_type) AS typed
         UNION ALL
-        SELECT 'brand' || discovery.discovery_identity_key(product_brand)
+        SELECT discovery.discovery_identity_lexeme('brand', product_brand)
         UNION ALL
-        SELECT 'model' || discovery.discovery_identity_key(facts ->> 'model')
+        SELECT discovery.discovery_identity_lexeme('model', facts ->> 'model')
         UNION ALL
-        SELECT 'compat' || discovery.discovery_identity_key(elem)
+        SELECT discovery.discovery_identity_lexeme('compat', elem)
         FROM pg_catalog.jsonb_array_elements_text(
           CASE WHEN pg_catalog.jsonb_typeof(facts -> 'compatible_with') = 'array'
           THEN facts -> 'compatible_with' ELSE '[]'::jsonb END) AS elem
@@ -86,10 +100,12 @@ AS $$
     ), ''));
 $$;
 
--- Build the replacement before switching the serving RPC; preserve v4 until
--- the new index is available.
-DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_identity_search_idx;
-CREATE INDEX CONCURRENTLY products_discovery_identity_search_idx ON public.products USING gin
+-- Build the replacement under a temporary name before switching the serving
+-- RPC: on a retry after the switch, a serving v5 index already exists, and
+-- dropping it first would force every discovery query through a full product
+-- scan for the duration of the concurrent rebuild.
+DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_identity_search_idx_new;
+CREATE INDEX CONCURRENTLY products_discovery_identity_search_idx_new ON public.products USING gin
 (discovery.product_discovery_search_document_v5(name, brand, category, description, discovery_metadata))
 WHERE status = 'active';
 
@@ -120,3 +136,7 @@ REVOKE ALL ON FUNCTION public.search_product_discovery_facts(uuid, text, integer
 GRANT EXECUTE ON FUNCTION public.search_product_discovery_facts(uuid, text, integer, integer, text, text) TO anon, authenticated;
 
 DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx;
+-- Retire the pre-switch identity build (a no-op on first run) and promote
+-- the replacement to the canonical name.
+DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_identity_search_idx;
+ALTER INDEX IF EXISTS public.products_discovery_identity_search_idx_new RENAME TO products_discovery_identity_search_idx;

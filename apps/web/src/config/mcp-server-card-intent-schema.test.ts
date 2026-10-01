@@ -35,4 +35,23 @@ describe('SEARCH_PRODUCTS_INTENT_SCHEMA', () => {
     expect(text.properties.operator.enum).toEqual(['eq']);
     expect(text.properties.value).toMatchObject({ type: 'string' });
   });
+
+  it('rejects whitespace-only text like the trimmed runtime schema', () => {
+    const alternative =
+      SEARCH_PRODUCTS_INTENT_SCHEMA.properties.alternatives.items.properties;
+    expect(alternative.model).toMatchObject({ pattern: '.*\\S.*' });
+    expect(alternative.brands.items).toMatchObject({ pattern: '.*\\S.*' });
+  });
+
+  it('lets a lone alternative browse but constrains every sibling branch', () => {
+    const alternatives = SEARCH_PRODUCTS_INTENT_SCHEMA.properties.alternatives;
+    expect(alternatives.anyOf).toHaveLength(2);
+    expect(alternatives.anyOf[0]).toMatchObject({ maxItems: 1 });
+    const constrained = alternatives.anyOf[1].items.anyOf;
+    expect(constrained).toHaveLength(5);
+    expect(constrained).toContainEqual({
+      required: ['attributes'],
+      properties: { attributes: { minItems: 1 } },
+    });
+  });
 });

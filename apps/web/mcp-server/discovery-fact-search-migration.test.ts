@@ -63,9 +63,12 @@ it('indexes and queries numeric facts with their attribute identity', () => {
   expect(keyed).toContain("('ram_gb', 'GB', 'ram')");
   expect(keyed).toContain('attribute_prefix || value || unit');
   expect(keyed).toContain('jsonb_object_keys');
-  expect(keyed).toContain('CREATE INDEX CONCURRENTLY products_discovery_keyed_search_idx');
-  expect(keyed.indexOf('CREATE INDEX CONCURRENTLY products_discovery_keyed_search_idx'))
+  expect(keyed).toContain('CREATE INDEX CONCURRENTLY products_discovery_keyed_search_idx_new');
+  expect(keyed.indexOf('CREATE INDEX CONCURRENTLY products_discovery_keyed_search_idx_new'))
     .toBeLessThan(keyed.indexOf('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts('));
+  expect(keyed.indexOf('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_keyed_search_idx;'))
+    .toBeGreaterThan(keyed.indexOf('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts('));
+  expect(keyed).toContain('RENAME TO products_discovery_keyed_search_idx;');
   expect(keyed).toContain('@@ pg_catalog.to_tsquery');
   expect(keyed).toContain('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_capacity_search_idx');
 });
@@ -84,6 +87,10 @@ it('filters variant recall by constraints before applying the cap', () => {
   expect(recall).toContain('p_filters jsonb');
   expect(recall).toContain('recall_variant_filter_verifiably_fails');
   expect(recall).toContain('recall_variant_parse_numeric');
+  expect(recall).toContain('recall_variant_filter_loader_accepts');
+  expect(recall).toContain('DISTINCT ON (eligible.product_id)');
+  expect(recall).toContain('jsonb_array_length(p_filters) > 50');
+  expect(recall).toContain('octet_length(p_filters::text) > 16384');
   expect(recall.indexOf('recall_variant_filter_verifiably_fails(pv.attributes'))
     .toBeLessThan(recall.indexOf('LIMIT least'));
 });
@@ -138,11 +145,15 @@ it('indexes key-specific identity lexemes for capped retrieval', () => {
   const identity = readFileSync(new URL('../../../supabase/migrations/20261001110000_keyed_discovery_identity_facts.sql', import.meta.url), 'utf8');
   expect(identity.startsWith('-- disable-transaction')).toBe(true);
   expect(identity).toContain('product_discovery_search_document_v5');
-  expect(identity).toContain("'type' ||");
-  expect(identity).toContain("'brand' ||");
-  expect(identity).toContain("'model' ||");
-  expect(identity).toContain('discovery.discovery_identity_key');
-  expect(identity).toContain('CREATE INDEX CONCURRENTLY products_discovery_identity_search_idx');
+  expect(identity).toContain('discovery.discovery_identity_lexeme');
+  expect(identity).toContain("'fact' || pg_catalog.encode(extensions.digest");
+  expect(identity).toContain("tag || pg_catalog.chr(31) || normalized");
+  expect(identity).toContain('CREATE INDEX CONCURRENTLY products_discovery_identity_search_idx_new');
+  expect(identity.indexOf('CREATE INDEX CONCURRENTLY products_discovery_identity_search_idx_new'))
+    .toBeLessThan(identity.indexOf('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts('));
+  expect(identity.indexOf('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_identity_search_idx;'))
+    .toBeGreaterThan(identity.indexOf('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts('));
+  expect(identity).toContain('RENAME TO products_discovery_identity_search_idx;');
   expect(identity).toContain('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx');
 });
 
@@ -158,9 +169,12 @@ it('indexes correlated verified text attribute pairs after the concurrent replac
   expect(correlated).toContain('pg_catalog.normalize(attribute.value #>>');
   expect(correlated).toContain('NFC');
   expect(correlated).toContain('pg_catalog.chr(31)');
-  expect(correlated).toContain('CREATE INDEX CONCURRENTLY products_discovery_correlated_search_idx');
-  expect(correlated.indexOf('CREATE INDEX CONCURRENTLY products_discovery_correlated_search_idx'))
+  expect(correlated).toContain('CREATE INDEX CONCURRENTLY products_discovery_correlated_search_idx_new');
+  expect(correlated.indexOf('CREATE INDEX CONCURRENTLY products_discovery_correlated_search_idx_new'))
     .toBeLessThan(correlated.indexOf('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts('));
+  expect(correlated.indexOf('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx;'))
+    .toBeGreaterThan(correlated.indexOf('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts('));
+  expect(correlated).toContain('RENAME TO products_discovery_correlated_search_idx;');
   expect(correlated).toContain('SECURITY INVOKER');
   expect(correlated).toContain('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_keyed_search_idx');
 });

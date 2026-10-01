@@ -180,3 +180,14 @@ it('sources paired-offer compare-at from the variant then parent, never the offe
   expect(selected?.displayPrice).toBe(400);
   expect(selected?.displayCompareAtPrice).toBe(800);
 });
+
+it('lets the first offer row claim its condition even when it is out of stock', () => {
+  const row = makeRow({ condition: 'new', has_condition_offers: true, manage_stock: true, stock_quantity: 0 });
+  row.availableOffers = [
+    { id: 'used-oos', price: 400, condition: 'used', stock_quantity: 0 },
+    { id: 'used-instock', price: 450, condition: 'used', stock_quantity: 1 },
+  ] as typeof row.availableOffers;
+  // Like the PDP find(), the out-of-stock first row wins the condition, so
+  // the later in-stock duplicate must not surface as a purchasable option.
+  expect(selectStructuredDiscoveryOffer(row, intent({}))).toBeUndefined();
+});

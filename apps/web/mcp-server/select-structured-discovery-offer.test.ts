@@ -217,11 +217,10 @@ it('keeps brand identity separate from compatibility and compares exact normaliz
 it('selects eligible condition offers and keeps unknown metadata from satisfying constraints', () => {
   const offerRow = makeRow({ has_condition_offers: true, manage_stock: true });
   offerRow.availableOffers = [
-    { price: 450, condition: 'used', stock_quantity: 0 },
-    { price: 550, condition: 'used', stock_quantity: 2 },
+    { price: 450, condition: 'used', stock_quantity: 2 },
   ] as typeof offerRow.availableOffers;
   const selectedOffer = selectStructuredDiscoveryOffer(offerRow, intent({ model: 'A1' }));
-  expect(selectedOffer?.displayPrice).toBe(550);
+  expect(selectedOffer?.displayPrice).toBe(450);
   expect(selectedOffer?.displayCondition).toBe('used');
   expect(selectedOffer?.selectedOption.kind).toBe('offer');
 
@@ -288,12 +287,12 @@ it('withholds unknown facts from exclusions and spec-constrained offers while di
 });
 
 
-it('retains the base comparison price for variants that inherit the product price', () => {
+it('falls back to the parent comparison price for overridden variants like the PDP', () => {
   const row = makeRow({ has_variants: true });
-  row.availableVariants = [{id: 'blue', product_id: 'phone', attributes: { color: 'blue' }, stock_quantity: 0}] as typeof row.availableVariants;
-  const selected = selectStructuredDiscoveryOffer(row, intent({}));
-  expect(selected?.displayPrice).toBe(500);
-  expect(selected?.displayCompareAtPrice).toBe(600);
   row.availableVariants = [{id: 'blue', product_id: 'phone', attributes: { color: 'blue' }, stock_quantity: 0, price_override: 400}] as typeof row.availableVariants;
-  expect(selectStructuredDiscoveryOffer(row, intent({}))?.displayCompareAtPrice).toBeNull();
+  const selected = selectStructuredDiscoveryOffer(row, intent({}));
+  expect(selected?.displayPrice).toBe(400);
+  expect(selected?.displayCompareAtPrice).toBe(600);
+  row.availableVariants = [{id: 'blue', product_id: 'phone', attributes: { color: 'blue' }, stock_quantity: 0, price_override: 400, compare_at_price: 450}] as typeof row.availableVariants;
+  expect(selectStructuredDiscoveryOffer(row, intent({}))?.displayCompareAtPrice).toBe(450);
 });

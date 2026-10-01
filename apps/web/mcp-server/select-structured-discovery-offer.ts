@@ -113,10 +113,13 @@ export function selectStructuredDiscoveryOffer(
         : typeof record(variant.attributes).condition === 'string'
           ? record(variant.attributes).condition as string
           : null;
+      // PDP parity: product-detail-client resolves the comparison price as
+      // the variant's own value with an unconditional parent fallback, even
+      // when an override moved the selling price.
       addCandidate({ kind: 'variant', attributes: normalizeDiscoveryOptionAttributes(record(variant.attributes)),
         condition: normalizeCanonicalProductCondition(variantCondition) || baseCondition,
-        price, compareAtPrice: price === finitePrice(product.price)
-          ? finitePrice(product.compare_at_price) ?? null : null,
+        price, compareAtPrice: finitePrice(variant.compare_at_price)
+          ?? finitePrice(product.compare_at_price) ?? null,
         stockQuantity: variant.stock_quantity, sourceOption: rawVariant });
     }
   }
@@ -150,12 +153,15 @@ export function selectStructuredDiscoveryOffer(
   for (const rawOffer of offersSelectable ? row.availableOffers ?? [] : []) {
     const offer = record(rawOffer);
     if (toGoogleListingCondition(typeof offer.condition === 'string' ? offer.condition : null) === parentListingCondition) continue;
-    if (manageStock && !hasPositiveStock(offer.stock_quantity)) continue;
-    const price = finitePrice(offer.price);
-    if (price === undefined) continue;
+    // PDP parity: product.offers.find() keeps the first canonical match with
+    // no stock check, so the first row claims the condition even when it is
+    // out of stock and a later in-stock duplicate must not surface instead.
     const canonicalOfferCondition = normalizeCanonicalProductCondition(typeof offer.condition === 'string' ? offer.condition : null);
     if (!canonicalOfferCondition || seenOfferConditions.has(canonicalOfferCondition)) continue;
     seenOfferConditions.add(canonicalOfferCondition);
+    if (manageStock && !hasPositiveStock(offer.stock_quantity)) continue;
+    const price = finitePrice(offer.price);
+    if (price === undefined) continue;
     // PDP parity: the PDP prices the selected offer but always sources the
     // comparison price from the selected variant or parent product, never
     // the offer's own compare-at value.

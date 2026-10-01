@@ -83,6 +83,20 @@ describe('storefront account document status helpers', () => {
     ).toBe(false);
   });
 
+  it('hides paid manual orders whose corrected total exceeds payments', () => {
+    const input = {
+      paymentStatus: 'paid',
+      shippingStatus: 'pending',
+      recordedByUserId: 'staff-1',
+      total: 200,
+      amountPaid: 100,
+    };
+    expect(isManualOrderDocumentAvailable(input)).toBe(false);
+    expect(isManualOrderDocumentAvailable({ ...input, amountPaid: 200 })).toBe(
+      true
+    );
+  });
+
   it('normalizes payment and shipping statuses to lowercase tokens', () => {
     expect(normalizePaymentStatus('PAID')).toBe('paid');
     expect(normalizePaymentStatus('Partially_Paid')).toBe('partially_paid');

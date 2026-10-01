@@ -223,7 +223,7 @@ export async function sendManualOrderDocument({
       toName: order.customer_name,
       attachments: [
         {
-          name: `${documentKind}-${order.order_number.replace(/[^\w.-]/g, '_')}.pdf`,
+          name: `${pdfDocumentKind}-${order.order_number.replace(/[^\w.-]/g, '_')}.pdf`,
           content: Buffer.from(pdf.output('arraybuffer')).toString('base64'),
           mime_type: 'application/pdf',
         },

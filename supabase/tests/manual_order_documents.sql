@@ -131,6 +131,14 @@ DELETE FROM public.order_notification_outbox WHERE order_id = '10000000-0000-400
 UPDATE public.orders SET total = 250 WHERE id = '10000000-0000-4000-8000-000000000011';
 SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000011' AND event_type = 'manual_order_invoice'), 'total correction re-queues the missing invoice');
 
+-- Late manual-marking transitions re-evaluate instead of silently never sending.
+INSERT INTO public.orders (id, merchant_id, customer_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000014', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', 'buyer@example.com', 'paid', 100);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000014', 'Device', 1, 100);
+SELECT pg_temp.assert_true((SELECT count(*) = 0 FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000014'), 'unmarked order does not enqueue');
+UPDATE public.orders SET recorded_by_user_id = '10000000-0000-4000-8000-000000000010' WHERE id = '10000000-0000-4000-8000-000000000014';
+SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000014' AND event_type = 'manual_order_receipt'), 'late manual marking queues receipt');
+
 -- A stale customers row does not strand a manual claim: the document went to
 -- the order email as an attachment, so verified sign-in as that recipient
 -- redeems even when the customer record disagrees. Import claims stay strict.

@@ -88,6 +88,7 @@ describe('send manual order document', () => {
     });
     const message = sendEmail.mock.calls[0][0];
     expect(message.subject).toBe('Your proforma invoice is ready - #ORD-42');
+    expect(message.attachments[0].name).toBe('proforma_invoice-ORD-42.pdf');
     const pdf = Buffer.from(message.attachments[0].content, 'base64').toString(
       'latin1'
     );

@@ -1,3 +1,5 @@
+import { canonicalizeCommerceVariantAxis } from '@baci/shared/lib';
+
 const keys: Record<string, string> = {
   storage: 'storage_gb', storage_gb: 'storage_gb', capacity: 'storage_gb', storage_capacity: 'storage_gb',
   ram: 'ram_gb', memory: 'ram_gb', ram_gb: 'ram_gb', ram_options: 'ram_gb',
@@ -11,7 +13,10 @@ const keys: Record<string, string> = {
 export function normalizeDiscoveryOptionAttributes(attributes: Record<string, unknown>) {
   const result: Record<string, unknown> = {};
   for (const [rawKey, rawValue] of Object.entries(attributes)) {
-    const normalizedKey = rawKey.trim().toLowerCase().replace(/\s+/g, '_');
+    // Storefront axes arrive in any spelling (storageCapacity, screen.inches,
+    // RAM-Options), so canonicalize with the shared helper before the local
+    // discovery allowlist; unrecognized axes still fall through to no key.
+    const normalizedKey = canonicalizeCommerceVariantAxis(rawKey) ?? '';
     const key = Object.hasOwn(keys, normalizedKey) ? keys[normalizedKey] : undefined;
     if (!key) continue;
     const numeric = ['storage_gb', 'ram_gb', 'power_w', 'screen_inches', 'refresh_hz'].includes(key);

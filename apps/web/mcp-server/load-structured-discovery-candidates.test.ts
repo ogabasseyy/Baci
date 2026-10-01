@@ -260,6 +260,15 @@ describe('loadStructuredDiscoveryCandidates', () => {
     expect(calls).toContainEqual(['eq', 'status', 'active']);
     expect(calls).toContainEqual(['range', 100, 199]);
   });
+  it('narrows the browse window with escaped brand/category substrings before the cap', async () => {
+    const fixture = setup({ lexicalPages: [[]], products: productRows(['p-1']) });
+    const result = await loadStructuredDiscoveryCandidates({
+      merchantId: 'merchant-3', supabase: fixture.supabase, brand: 'S%ms_ng', category: 'Phones',
+    });
+    expect(result.products).toHaveLength(1);
+    expect(fixture.queryCalls[0]?.calls).toContainEqual(['ilike', 'brand', '%S\\%ms\\_ng%']);
+    expect(fixture.queryCalls[0]?.calls).toContainEqual(['ilike', 'category', '%Phones%']);
+  });
   it('does not double-count correlated lexical and combined-document votes', async () => {
     const fixture = setup({ lexicalPages: [ranked(['keyword-stuffed', 'semantic-match'])], products: productRows(['keyword-stuffed', 'semantic-match']) });
     const original = fixture.rpc.getMockImplementation()!;

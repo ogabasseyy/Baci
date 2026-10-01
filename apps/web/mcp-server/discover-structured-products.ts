@@ -19,7 +19,9 @@ type Input = {
 /** Structured calls evaluate catalog facts and option prices, never sentence grammar. */
 export async function discoverStructuredProducts({ intent, query, args, merchantId, supabase, semanticSearch }: Input) {
   const factQuery = buildDiscoveryFactRetrievalQuery(intent, query);
-  const candidates = await loadStructuredDiscoveryCandidates({ query, factQuery, merchantId, supabase, semanticSearch });
+  const candidates = await loadStructuredDiscoveryCandidates({
+    query, factQuery, brand: args.brand, category: args.category, merchantId, supabase, semanticSearch,
+  });
   const selected = [];
   let optionsLookupFailed = false;
   let factsUnverified = false;

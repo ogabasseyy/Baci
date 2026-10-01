@@ -35,3 +35,9 @@ it('retains Unicode identity terms while stripping query operators', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ brands: ['Mömax'], model: '三星 手机 | !' })))
     .toBe('(mömax & 三星 & 手机)');
 });
+
+it('drops dot-only terms and strips edge dots so groups stay valid', () => {
+  expect(buildDiscoveryFactRetrievalQuery(intent({ model: '...' }))).toBe('(a & !a)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'ZX-42.' }))).toBe('(zx & 42)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ model: '1.5' }))).toBe('(1.5)');
+});

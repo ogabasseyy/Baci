@@ -1,4 +1,5 @@
 import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
+import { canonicalizeDiscoveryProductType } from '../src/schemas/canonical-discovery-product-type';
 import type { McpDiscoveryIntent } from '../src/schemas/mcp-discovery-intent';
 import { productDiscoveryMetadataSchema } from '../src/schemas/product-discovery-metadata';
 import { normalizeDiscoveryOptionAttributes } from './normalize-discovery-option-attributes';
@@ -50,8 +51,11 @@ function getDiscoveryMetadata(product: Record<string, unknown>) {
 }
 
 function discoveryProductType(product: Record<string, unknown>, discovery: Record<string, unknown>) {
+  // The schema canonicalizes hyphens/spaces to underscores on parse, so the
+  // stored side must canonicalize too or 'security-camera' never equals
+  // intent 'security_camera'.
   const explicit = normalized(discovery.product_type);
-  if (explicit) return explicit;
+  if (explicit) return canonicalizeDiscoveryProductType(explicit);
   const category = normalized(product.category);
   if (category === 'smartphones') return 'phone';
   if (category === 'laptops') return 'laptop';
@@ -72,8 +76,9 @@ function matchesAlternative(
   if (productType && excludedTypes.has(productType)) return false;
 
   if (alternative.product_type !== undefined) {
-    const expected = normalized(alternative.product_type);
-    if (!expected) return false;
+    const expectedRaw = normalized(alternative.product_type);
+    if (!expectedRaw) return false;
+    const expected = canonicalizeDiscoveryProductType(expectedRaw);
     if (!productType) unverified = true;
     else if (productType !== expected) return false;
   }
@@ -127,7 +132,8 @@ export function selectStructuredDiscoveryOffer(
 ) {
   const product = row.product as Record<string, unknown>;
   const discovery = getDiscoveryMetadata(product);
-  const excludedTypes = new Set((intent.excluded_product_types ?? []).map(normalized).filter((value): value is string => Boolean(value)));
+  const excludedTypes = new Set((intent.excluded_product_types ?? []).map(normalized)
+    .filter((value): value is string => Boolean(value)).map(canonicalizeDiscoveryProductType));
   const candidates: Candidate[] = [];
   const manageStock = product.manage_stock === true;
   const metadataAttributes = record(discovery.attributes);

@@ -10,9 +10,13 @@ BEGIN
   ) THEN
     ALTER TABLE public.products ADD CONSTRAINT products_discovery_metadata_object
       CHECK (discovery_metadata IS NULL OR
-        (jsonb_typeof(discovery_metadata) = 'object' AND octet_length(discovery_metadata::text) <= 16384));
+        (jsonb_typeof(discovery_metadata) = 'object' AND octet_length(discovery_metadata::text) <= 16384))
+      NOT VALID;
   END IF;
 END;
 $$;
+-- Validate separately so the backfill scan does not hold the ALTER TABLE lock
+-- against catalog writes on populated tables.
+ALTER TABLE public.products VALIDATE CONSTRAINT products_discovery_metadata_object;
 COMMENT ON COLUMN public.products.discovery_metadata IS
   'Merchant-verified public discovery facts: product_type, model, compatible_with and canonical attributes. Missing facts are unknown; never infer availability or price from this document.';

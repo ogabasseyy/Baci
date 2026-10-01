@@ -29,3 +29,7 @@ it('maps the shared commerce axis aliases storage_capacity and ram_options', () 
   expect(normalizeDiscoveryOptionAttributes({ storage_capacity: '256GB', ram_options: '16GB' }))
     .toEqual({ storage_gb: 256, ram_gb: 16 });
 });
+it('resolves camelCase, dotted, and hyphenated axis spellings', () => {
+  expect(normalizeDiscoveryOptionAttributes({ storageCapacity: '256GB', 'screen.inches': '6.5in', 'RAM-Options': '8GB' }))
+    .toEqual({ storage_gb: 256, screen_inches: 6.5, ram_gb: 8 });
+});

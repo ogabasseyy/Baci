@@ -16,6 +16,7 @@ function setup({ lexicalPages, products, failHydrationCalls = [] }: {
     const builder = {
       select: vi.fn((...args: unknown[]) => { calls.push(['select', ...args]); return builder; }),
       eq: vi.fn((...args: unknown[]) => { calls.push(['eq', ...args]); return builder; }),
+      ilike: vi.fn((...args: unknown[]) => { calls.push(['ilike', ...args]); return builder; }),
       in: vi.fn((...args: unknown[]) => { calls.push(['in', ...args]); return builder; }),
       order: vi.fn((...args: unknown[]) => { calls.push(['order', ...args]); return builder; }),
       range: vi.fn((...args: unknown[]) => { calls.push(['range', ...args]); return builder; }),

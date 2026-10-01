@@ -18,10 +18,18 @@ const MAX_SEMANTIC_CANDIDATES = 200;
 type LoadStructuredDiscoveryCandidatesInput = {
   query?: string;
   factQuery?: string;
+  brand?: string;
+  category?: string;
   merchantId: string;
   supabase: SupabaseClient;
   semanticSearch?: (query: string, offset: number) => Promise<string[]>;
 };
+
+type BrowseFilters = { brand?: string; category?: string };
+
+function likeContains(value: string) {
+  return `%${value.replace(/[\\%_]/g, '\\$&')}%`;
+}
 
 type SearchProductsArgs = { sort: 'relevance' };
 
@@ -101,27 +109,29 @@ async function loadSemanticIds(
   }
 }
 
-async function loadBrowseRows(merchantId: string, supabase: SupabaseClient) {
+async function loadBrowseRows(merchantId: string, supabase: SupabaseClient, filters: BrowseFilters) {
+  // The browse window is an arbitrary UUID slice, so brand/category narrow it
+  // server-side with the same substring semantics as post-hydration filters
+  // instead of filtering after the cap.
+  const browseQuery = (columns: string) => {
+    let query = supabase.from('products').select(columns)
+      .eq('merchant_id', merchantId)
+      .eq('status', 'active');
+    if (filters.brand) query = query.ilike('brand', likeContains(filters.brand));
+    if (filters.category) query = query.ilike('category', likeContains(filters.category));
+    return query.order('id', { ascending: true });
+  };
   const products: McpSearchProductRow[] = [];
   try {
     for (let offset = 0; offset < MAX_LEXICAL_CANDIDATES; offset += LEXICAL_PAGE_SIZE) {
-      const { data, error } = await supabase
-        .from('products')
-        .select(DISCOVERY_PRODUCT_PROJECTION)
-        .eq('merchant_id', merchantId)
-        .eq('status', 'active')
-        .order('id', { ascending: true })
+      const { data, error } = await browseQuery(DISCOVERY_PRODUCT_PROJECTION)
         .range(offset, offset + LEXICAL_PAGE_SIZE - 1);
       if (error) throw error;
       const rows = toMcpSearchProductRows(data);
       products.push(...rows);
       if (rows.length < LEXICAL_PAGE_SIZE) return { products, truncated: false };
     }
-    const { data: next, error } = await supabase.from('products')
-      .select('id')
-      .eq('merchant_id', merchantId)
-      .eq('status', 'active')
-      .order('id', { ascending: true })
+    const { data: next, error } = await browseQuery('id')
       .range(MAX_LEXICAL_CANDIDATES, MAX_LEXICAL_CANDIDATES);
     if (error) return { products, truncated: true };
     return { products, truncated: Array.isArray(next) && next.length > 0 };
@@ -149,6 +159,8 @@ function reciprocalRankFusion(...groups: string[][][]) {
 export async function loadStructuredDiscoveryCandidates({
   query,
   factQuery,
+  brand,
+  category,
   merchantId,
   supabase,
   semanticSearch,
@@ -158,7 +170,7 @@ export async function loadStructuredDiscoveryCandidates({
   semanticUnavailable: boolean;
 }> {
   if (!query && (!factQuery || factQuery === '(a & !a)')) {
-    const result = await loadBrowseRows(merchantId, supabase);
+    const result = await loadBrowseRows(merchantId, supabase, { brand, category });
     return { products: result.products, truncated: result.truncated, semanticUnavailable: false };
   }
 

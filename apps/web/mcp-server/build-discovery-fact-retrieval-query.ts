@@ -12,7 +12,12 @@ const MAX_TERMS_PER_GROUP = 12;
 const FALLBACK_STOPWORDS = new Set(['or', 'and', 'a', 'the']);
 
 function sanitizeTerm(value: string): string[] {
-  return value.toLowerCase().replace(/[^\p{L}\p{N}.\s]+/gu, ' ').split(/\s+/).filter(Boolean);
+  // Dots survive inside version-like lexemes ('1.5' parses), but a dot-only
+  // term voids the whole group server-side, so strip edge dots and drop terms
+  // with no letters or numbers.
+  return value.toLowerCase().replace(/[^\p{L}\p{N}.\s]+/gu, ' ').split(/\s+/)
+    .map((term) => term.replace(/^\.+|\.+$/g, ''))
+    .filter((term) => /[\p{L}\p{N}]/u.test(term));
 }
 
 function attributeTerms(key: string, value: string | number): string[] {

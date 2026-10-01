@@ -241,6 +241,11 @@ it.each(['smartphone', 'Smartphones', 'phone'])('matches stored %s metadata with
   expect(selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone' }))?.displayPrice).toBe(500);
 });
 
+it.each([['security-camera', 'security_camera'], ['security camera', 'security_camera'], ['security_camera', 'security-camera']])('matches hyphen/space/underscore spellings %s vs %s', (stored, wanted) => {
+  const row = makeRow({ category: 'Cameras', discovery_metadata: { product_type: stored } });
+  expect(selectStructuredDiscoveryOffer(row, intent({ product_type: wanted }))?.displayPrice).toBe(500);
+});
+
 
 it('shows all matching purchasable variants while keeping one headline option', () => {
   const row = makeRow({ has_variants: true, manage_stock: true });

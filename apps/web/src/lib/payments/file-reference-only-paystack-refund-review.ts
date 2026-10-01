@@ -65,7 +65,13 @@ export async function fileReferenceOnlyPaystackRefundReview(
       reference_only_refund_event: true,
     },
     order_id: orderId,
-    paystack_ref: paymentReference,
+    // Deliberately unset: the open-by-paystack-ref index is global, so a
+    // corrupt reference shared by several cancelled orders would let the
+    // first order's review collide every later order's insert — and the
+    // merge RPC only searches the colliding order, failing redelivery
+    // forever. Same-order redeliveries still merge via the open-by-order
+    // index; the reference stays in metadata for operations.
+    paystack_ref: null,
     reason,
     txn_id: paymentId,
   });

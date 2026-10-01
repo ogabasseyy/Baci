@@ -53,6 +53,20 @@ export function normalizeClaimEmail(email: string | null | undefined) {
   return sanitizeCustomerLoginEmailHint(email) || null;
 }
 
+function isSafeClaimDomain(domain: string): boolean {
+  // Mirrors the storefront custom-domain rules without importing the proxy
+  // host module (kept dependency-free so notification senders stay inside
+  // their audited import boundary): dotted hostname, no IPs, no userinfo or
+  // path tricks.
+  const host = domain.trim().toLowerCase().replace(/\/+$/, '');
+  return (
+    host.includes('.') &&
+    !/^\d+\.\d+\.\d+\.\d+$/.test(host) &&
+    /^[a-z0-9][a-z0-9.-]*[a-z0-9]$/.test(host) &&
+    !host.includes('..')
+  );
+}
+
 export function buildReceiptClaimUrl({
   merchant,
   token,
@@ -60,9 +74,11 @@ export function buildReceiptClaimUrl({
   merchant: ReceiptClaimMerchantUrlContext;
   token: string;
 }) {
-  const origin = merchant.custom_domain
-    ? `https://${merchant.custom_domain.replace(/\/+$/g, '')}`
-    : `https://${merchant.slug}.${getRootDomain() || 'usebaci.com'}`;
+  const customDomain = merchant.custom_domain?.trim().replace(/\/+$/, '');
+  const origin =
+    customDomain && isSafeClaimDomain(customDomain)
+      ? `https://${customDomain}`
+      : `https://${merchant.slug}.${getRootDomain() || 'usebaci.com'}`;
 
   return `${origin}${DEFAULT_RECEIPT_CLAIM_PATH}/${encodeURIComponent(token)}`;
 }

@@ -42,6 +42,16 @@ describe('manual order document email', () => {
     expect(result.textContent).not.toMatch(/PDF receipt is attached/i);
   });
 
+  it('labels proforma invoices like the account invoice view', () => {
+    const result = buildManualOrderDocumentEmail({
+      ...input,
+      documentKind: 'proforma_invoice',
+    });
+    expect(result.subject).toBe('Your proforma invoice is ready - #ORD-42');
+    expect(result.textContent).toContain('Your PDF invoice is attached.');
+    expect(result.textContent).toMatch(/not.*proof of payment/i);
+  });
+
   it('strips line breaks from staff-entered order numbers in the subject', () => {
     const result = buildManualOrderDocumentEmail({
       ...input,

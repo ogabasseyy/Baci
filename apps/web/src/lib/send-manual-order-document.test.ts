@@ -76,6 +76,69 @@ describe('send manual order document', () => {
     expect(message.textContent).toMatch(/not.*proof of payment/i);
   });
 
+  it('renders invoice-method orders as proforma like the account invoice view', async () => {
+    const db = database({
+      payment_status: 'unpaid',
+      amount_paid: 0,
+      payment_method: 'invoice',
+    });
+    await sendManualOrderDocument({
+      supabase: db.client,
+      row: { ...row, event_type: 'manual_order_invoice' },
+    });
+    const message = sendEmail.mock.calls[0][0];
+    expect(message.subject).toBe('Your proforma invoice is ready - #ORD-42');
+    const pdf = Buffer.from(message.attachments[0].content, 'base64').toString(
+      'latin1'
+    );
+    expect(pdf).toContain('PROFORMA INVOICE');
+  });
+
+  it('attaches the assigned virtual account to invoice payment instructions', async () => {
+    const db = database(
+      { payment_status: 'unpaid', amount_paid: 0 },
+      {
+        paymentAccounts: [
+          {
+            account_number: '9988776655',
+            bank_name: 'Test Bank',
+            account_name: 'Ogabassey Collections',
+            assigned_at: '2026-09-30T09:00:00Z',
+            expires_at: null,
+            revoked_at: null,
+            archived_at: null,
+          },
+        ],
+      }
+    );
+    await sendManualOrderDocument({
+      supabase: db.client,
+      row: { ...row, event_type: 'manual_order_invoice' },
+    });
+    const message = sendEmail.mock.calls[0][0];
+    const pdf = Buffer.from(message.attachments[0].content, 'base64').toString(
+      'latin1'
+    );
+    expect(pdf).toContain('9988776655');
+    expect(pdf).toContain('Test Bank');
+  });
+
+  it('retries invoices when the payment account lookup fails', async () => {
+    const db = database(
+      { payment_status: 'unpaid', amount_paid: 0 },
+      {
+        paymentAccountError: { message: 'timeout' },
+      }
+    );
+    await expect(
+      sendManualOrderDocument({
+        supabase: db.client,
+        row: { ...row, event_type: 'manual_order_invoice' },
+      })
+    ).rejects.toThrow('Manual document payment account unavailable');
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
   it('uses the order date for legacy invoices without a persisted issue date', async () => {
     const db = database({
       payment_status: 'unpaid',

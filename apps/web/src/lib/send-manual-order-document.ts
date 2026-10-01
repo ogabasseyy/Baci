@@ -8,12 +8,14 @@ import {
   buildReceiptClaimUrl,
   createReceiptClaimToken,
 } from '@/lib/import-notifications/receipt-claim-links';
+import { resolveInvoicePaymentAccount } from '@/lib/invoice-payment-account';
 import { buildManualOrderDocumentEmail } from '@/lib/manual-order-document-email';
 import { resolveOrderNotificationRecipient } from '@/lib/order-notification-recipient';
 import {
   generateReceiptPDF,
   resolveReceiptLogoDataUri,
 } from '@/lib/receipt-pdf-generator';
+import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { sendEmail } from '@/lib/zeptomail';
 import {
   manualDocumentClaimSchema,
@@ -49,7 +51,7 @@ export async function sendManualOrderDocument({
     supabase
       .from('orders')
       .select(
-        'id, merchant_id, customer_id, recorded_by_user_id, import_job_id, external_source, order_number, created_at, transaction_date, invoice_issue_date, currency, total, subtotal, shipping_fee, tax_amount, discount_amount, amount_paid, payment_status, payment_method, shipping_status, customer_name, customer_email, customer_phone, shipping_address, order_items(id, name, quantity, price, variant_name, condition)'
+        'id, merchant_id, customer_id, recorded_by_user_id, import_job_id, external_source, order_number, created_at, transaction_date, invoice_issue_date, currency, total, subtotal, shipping_fee, tax_amount, discount_amount, amount_paid, payment_status, payment_method, shipping_status, customer_name, customer_email, customer_phone, shipping_address, invoice_type_code, order_items(id, name, quantity, price, variant_name, condition)'
       )
       .eq('id', row.order_id)
       .eq('merchant_id', row.merchant_id)
@@ -95,12 +97,43 @@ export async function sendManualOrderDocument({
     return { status: 'skipped', reason: 'document_state_changed' };
   if (isPaid && order.amount_paid < order.total)
     return { status: 'skipped', reason: 'paid_balance_outstanding' };
+  // Match the canonical invoice surfaces: invoice-method orders render as
+  // proforma (Peppol type 325) so the emailed document agrees with the
+  // customer's account view.
+  const invoiceTypeCode = isPaid
+    ? null
+    : resolveInvoiceTypeCode({
+        paymentMethod: order.payment_method,
+        isPaid,
+        wasPaid: false,
+        paymentStatus: order.payment_status,
+        amountPaid: order.amount_paid,
+        storedTypeCode: order.invoice_type_code,
+      });
+  const pdfDocumentKind =
+    invoiceTypeCode === '325' ? 'proforma_invoice' : documentKind;
+  // Attach the assigned virtual account so invoice payment instructions name
+  // the exact account instead of generic merchant bank details.
+  const invoicePaymentAccount = isPaid
+    ? null
+    : await resolveInvoicePaymentAccount(supabase, order.id, false);
+  if (invoicePaymentAccount?.error) {
+    throw new Error('Manual document payment account unavailable');
+  }
+  const preferredPaymentAccount = invoicePaymentAccount?.paymentAccount ?? null;
   const receiptOrder: ReceiptOrder = {
     ...order,
     currency: order.currency || 'NGN',
     customer_email: recipient.email,
     amount_paid: order.amount_paid,
     balance: Math.max(0, order.total - order.amount_paid),
+    virtual_account: preferredPaymentAccount
+      ? {
+          account_number: preferredPaymentAccount.account_number,
+          bank_name: preferredPaymentAccount.bank_name || '',
+          account_name: preferredPaymentAccount.account_name || '',
+        }
+      : null,
     shipping_address: order.shipping_address
       ? {
           ...order.shipping_address,
@@ -120,7 +153,8 @@ export async function sendManualOrderDocument({
   };
   const logoDataUri = await resolveReceiptLogoDataUri(receiptMerchant);
   const pdf = generateReceiptPDF(receiptOrder, receiptMerchant, {
-    documentKind,
+    documentKind: pdfDocumentKind,
+    invoiceTypeCode,
     documentDate:
       (isPaid ? order.transaction_date : order.invoice_issue_date) ||
       order.created_at,
@@ -150,7 +184,7 @@ export async function sendManualOrderDocument({
     customerName: order.customer_name,
     customerEmail: recipient.email,
     orderNumber: order.order_number,
-    documentKind,
+    documentKind: pdfDocumentKind,
     claimUrl: buildReceiptClaimUrl({ merchant, token: claim.token }),
     devices: order.order_items.map(
       (item) =>

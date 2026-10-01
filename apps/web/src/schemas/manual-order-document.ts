@@ -26,6 +26,7 @@ export const manualDocumentOrderSchema = z.object({
   customer_name: z.string(),
   customer_email: nullableText,
   customer_phone: nullableText,
+  invoice_type_code: nullableText,
   shipping_address: z
     .object({
       address: z.string().optional(),

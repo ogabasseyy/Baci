@@ -45,6 +45,7 @@ const order = {
   amount_paid: 950000,
   payment_status: 'paid',
   payment_method: 'bank_transfer',
+  invoice_type_code: null,
   shipping_status: 'pending',
   customer_name: 'Ada',
   customer_email: 'ada@example.com',
@@ -70,6 +71,8 @@ export function database(
     claimMarkerThrows?: boolean;
     dispatchMissing?: boolean;
     merchantOverride?: Record<string, unknown>;
+    paymentAccounts?: Record<string, unknown>[];
+    paymentAccountError?: { message: string } | null;
   } = {}
 ) {
   const filters: Record<string, unknown> = {};
@@ -96,6 +99,23 @@ export function database(
         }),
         match: vi.fn(() => builder),
         update: vi.fn(() => builder),
+        in: vi.fn(() => builder),
+        or: vi.fn(() => builder),
+        order: vi.fn(() => builder),
+        limit: vi.fn(() => builder),
+        // biome-ignore lint/suspicious/noThenProperty: mock mirrors thenable supabase builder.
+        then: vi.fn((resolve: (value: unknown) => void) =>
+          resolve({
+            data:
+              table === 'order_payment_accounts'
+                ? (options.paymentAccounts ?? [])
+                : [],
+            error:
+              table === 'order_payment_accounts'
+                ? (options.paymentAccountError ?? null)
+                : null,
+          })
+        ),
         maybeSingle: vi.fn(() => {
           if (table === 'receipt_claims' && options.claimMarkerThrows)
             return Promise.reject(new Error('network lost'));

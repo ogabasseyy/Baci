@@ -35,7 +35,10 @@ a minimal domain fixture; it is not a full Supabase-history replay.
 
 Release the matching, backwards-compatible web worker first, then apply both new
 append-only migrations to activate the triggers. Drain outbox batches with the
-new code only: old workers do not understand the manual document event types. No new email provider,
+new code only: old workers do not understand the manual document event types.
+Watch the cron 5xx rate while the new worker rolls out; any `manual_order_*`
+500 means an old revision is still draining, so hold further deploys until the
+batches clear. No new email provider,
 cron schedule, app release or environment variable is required. Use a disposable
 staging merchant and test inbox to verify actual provider acceptance, PDF rendering,
 verified sign-in and account receipt access before a production release. No live

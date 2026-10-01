@@ -1,8 +1,13 @@
 -- Claim reference-only watches alongside ID-keyed ones. Reference
 -- watches (provider_refund_id NULL) file the per-payment review the
 -- reference-only path would have filed had the payment been settled
--- during its scans; ID-keyed handling is unchanged. Same signature:
--- OR REPLACE keeps the completion wrapper on the new body.
+-- during its scans; ID-keyed handling is unchanged. Reference
+-- evidence applies to every matching completion, so already-claimed
+-- reference rows stay visible to later completions: only the
+-- open->claimed flip consumes the sweep handoff, and a second
+-- legacy/corrupt payment completing under the same reference still
+-- files instead of finding no open watch. Same signature: OR
+-- REPLACE keeps the completion wrapper on the new body.
 CREATE OR REPLACE FUNCTION public.claim_paystack_refund_recovery_watches_v1(
   p_transaction_id uuid,
   p_order_id uuid
@@ -73,7 +78,11 @@ BEGIN
 
   FOR v_watch IN
     SELECT * FROM public.paystack_refund_recovery_watch
-    WHERE paystack_ref = v_txn_reference AND status = 'open'
+    WHERE paystack_ref = v_txn_reference
+      AND (
+        status = 'open'
+        OR (status = 'claimed' AND provider_refund_id IS NULL)
+      )
     ORDER BY created_at
     FOR UPDATE
   LOOP
@@ -81,7 +90,12 @@ BEGIN
       -- Reference-only watches carry no refund ID: file the
       -- per-payment review the reference path would have filed, then
       -- claim. Failures fall into the handler below so the watch
-      -- stays open for the sweep.
+      -- stays open for the sweep. Only the open->claimed flip
+      -- consumes the sweep handoff: the evidence applies to every
+      -- matching completion, so an already-claimed row files again
+      -- for this payment and stays claimed. Per-payment filing
+      -- merges, so replays of the same transaction re-file
+      -- idempotently.
       IF v_watch.provider_refund_id IS NULL THEN
         PERFORM public.file_paystack_refund_reference_watch_claim_v1(
           p_transaction_id,
@@ -92,10 +106,12 @@ BEGIN
               v_watch.evidence->>'provider_refund_status', '')), ''),
             'unknown')
         );
-        UPDATE public.paystack_refund_recovery_watch
-          SET status = 'claimed', updated_at = now()
-          WHERE id = v_watch.id;
-        v_claimed := v_claimed + 1;
+        IF v_watch.status = 'open' THEN
+          UPDATE public.paystack_refund_recovery_watch
+            SET status = 'claimed', updated_at = now()
+            WHERE id = v_watch.id;
+          v_claimed := v_claimed + 1;
+        END IF;
         CONTINUE;
       END IF;
       v_evidence := coalesce(v_watch.evidence, '{}'::jsonb);
@@ -224,7 +240,26 @@ BEGIN
       v_claimed := v_claimed + 1;
     EXCEPTION WHEN OTHERS THEN
       -- Filing must never fail the payment completion: the watch
-      -- stays open and the recovery sweep re-drives it.
+      -- stays open and the recovery sweep re-drives it. An
+      -- already-claimed reference row re-opens (when no sibling open
+      -- row already holds the handoff) so the unfiled payment keeps
+      -- its sweep backstop instead of stranding the evidence only
+      -- this completion observed. The guard cannot race: the opener
+      -- inserts under this same reference lock, which this
+      -- transaction holds.
+      IF v_watch.provider_refund_id IS NULL
+        AND v_watch.status = 'claimed'
+        AND NOT EXISTS (
+          SELECT 1 FROM public.paystack_refund_recovery_watch
+          WHERE paystack_ref = v_txn_reference
+            AND provider_refund_id IS NULL
+            AND status = 'open'
+            AND id <> v_watch.id
+        ) THEN
+        UPDATE public.paystack_refund_recovery_watch
+          SET status = 'open', updated_at = now()
+          WHERE id = v_watch.id AND status = 'claimed';
+      END IF;
       RAISE WARNING 'paystack refund watch % claim skipped: %',
         v_watch.id, SQLERRM;
     END;

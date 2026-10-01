@@ -48,7 +48,7 @@ BEGIN
   IF NOT FOUND THEN RAISE EXCEPTION 'claim order not found'; END IF;
 
   v_order_label := coalesce(
-    nullif(btrim(coalesce(v_order_number, ''))),
+    nullif(btrim(coalesce(v_order_number, '')), ''),
     upper(left(p_order_id::text, 8))
   );
 

@@ -18,6 +18,7 @@ function terminalQuery(data: unknown, error: Error | null = null) {
   const query = {
     eq: vi.fn().mockReturnThis(),
     lt: vi.fn().mockReturnThis(),
+    neq: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     select: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue({ data, error }),

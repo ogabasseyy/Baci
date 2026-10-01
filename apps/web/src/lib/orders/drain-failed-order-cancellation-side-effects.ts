@@ -55,11 +55,25 @@ export async function drainFailedOrderCancellationSideEffects({
     skipped: [],
   };
   const select = 'order_id, step, claimed_at, attempts';
-  const { data: failedRows, error: failedLookupError } = await supabase
+  // When the email admission budget is already short, customer_email rows
+  // can never be admitted this run — yet the SQL limit counts them, so a
+  // limit-1 fetch returning only an old email starves the refund behind
+  // it on every invocation. Exclude them from the fetch so
+  // budget-eligible rows fill the batch; the fill-loop filter and the
+  // per-row backstop stay for budget that burns out mid-run.
+  const emailAdmissionShort =
+    deadlineMs !== undefined &&
+    deadlineMs - Date.now() <
+      zeptomailSendAdmissionBudgetMs(EMAIL_ATTEMPTS_PER_SENDER);
+  const failedFetch = supabase
     .from('order_cancellation_side_effects')
     .select(select)
     .eq('status', 'failed')
-    .lt('attempts', MAX_ATTEMPTS)
+    .lt('attempts', MAX_ATTEMPTS);
+  if (emailAdmissionShort) {
+    failedFetch.neq('step', 'customer_email');
+  }
+  const { data: failedRows, error: failedLookupError } = await failedFetch
     .order('claimed_at', { ascending: true })
     .limit(limit);
   if (failedLookupError) {
@@ -88,10 +102,14 @@ export async function drainFailedOrderCancellationSideEffects({
   // them without the attempts cap so a pending refund that completes late
   // still resumes its remaining legs. The claim RPC never increments
   // attempts for deferred rows, so this cannot spin the retry budget.
-  const { data: deferredRows, error: deferredLookupError } = await supabase
+  const deferredFetch = supabase
     .from('order_cancellation_side_effects')
     .select(select)
-    .eq('status', 'deferred')
+    .eq('status', 'deferred');
+  if (emailAdmissionShort) {
+    deferredFetch.neq('step', 'customer_email');
+  }
+  const { data: deferredRows, error: deferredLookupError } = await deferredFetch
     .order('claimed_at', { ascending: true })
     .limit(limit);
   if (deferredLookupError) {

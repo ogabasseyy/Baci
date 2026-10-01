@@ -1,4 +1,4 @@
-import type { ReceiptOrder } from '@baci/shared';
+import { type ReceiptOrder, showMerchantBankDetails } from '@baci/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   OGABASSEY_STOREFRONT_APP_STORE_URL,
@@ -17,11 +17,9 @@ import {
 } from '@/lib/receipt-pdf-generator';
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { sendEmail } from '@/lib/zeptomail';
-import {
-  manualDocumentClaimSchema,
-  manualDocumentMerchantSchema,
-  manualDocumentOrderSchema,
-} from '@/schemas/manual-order-document';
+import { manualDocumentClaimSchema } from '@/schemas/manual-order-document-claim';
+import { manualDocumentMerchantSchema } from '@/schemas/manual-order-document-merchant';
+import { manualDocumentOrderSchema } from '@/schemas/manual-order-document-order';
 
 export type ManualOrderDocumentEventType =
   | 'manual_order_receipt'
@@ -59,7 +57,7 @@ export async function sendManualOrderDocument({
     supabase
       .from('merchants')
       .select(
-        'id, slug, custom_domain, business_name, email_sender_name, logo_url, email, phone, support_email, support_phone, business_address, cac_rc_number, tax_identification_number, legal_entity_name, vat_registration_status, vat_rate, bank_code, bank_account_number, bank_name, bank_account_name, brand_colors'
+        'id, slug, business_name, email_sender_name, logo_url, email, phone, support_email, support_phone, business_address, registered_address, cac_rc_number, tax_identification_number, legal_entity_name, vat_registration_status, vat_rate, bank_code, bank_account_number, bank_name, bank_account_name, brand_colors'
       )
       .eq('id', row.merchant_id)
       .maybeSingle(),
@@ -121,19 +119,24 @@ export async function sendManualOrderDocument({
     throw new Error('Manual document payment account unavailable');
   }
   const preferredPaymentAccount = invoicePaymentAccount?.paymentAccount ?? null;
+  // The persisted bank details are untyped naira accounts: hide them (and the
+  // order-level virtual account the renderer prefers) on foreign-currency
+  // documents so customers never wire dollars to a naira account.
+  const showBankDetails = showMerchantBankDetails(order.currency || 'NGN');
   const receiptOrder: ReceiptOrder = {
     ...order,
     currency: order.currency || 'NGN',
     customer_email: recipient.email,
     amount_paid: order.amount_paid,
     balance: Math.max(0, order.total - order.amount_paid),
-    virtual_account: preferredPaymentAccount
-      ? {
-          account_number: preferredPaymentAccount.account_number,
-          bank_name: preferredPaymentAccount.bank_name || '',
-          account_name: preferredPaymentAccount.account_name || '',
-        }
-      : null,
+    virtual_account:
+      showBankDetails && preferredPaymentAccount
+        ? {
+            account_number: preferredPaymentAccount.account_number,
+            bank_name: preferredPaymentAccount.bank_name || '',
+            account_name: preferredPaymentAccount.account_name || '',
+          }
+        : null,
     shipping_address: order.shipping_address
       ? {
           ...order.shipping_address,
@@ -150,14 +153,39 @@ export async function sendManualOrderDocument({
   const receiptMerchant = {
     ...merchant,
     brand_colors: merchant.brand_colors ?? undefined,
+    bank_code: showBankDetails ? merchant.bank_code : null,
+    bank_account_number: showBankDetails ? merchant.bank_account_number : null,
+    bank_name: showBankDetails ? merchant.bank_name : null,
+    bank_account_name: showBankDetails ? merchant.bank_account_name : null,
   };
+  // Later payments land in the transactions ledger without touching the
+  // order's transaction date: date the receipt from the completing payment
+  // when one exists, falling back to the recorded order dates.
+  const paymentTransaction = isPaid
+    ? await supabase
+        .from('transactions')
+        .select('created_at')
+        .eq('order_id', order.id)
+        .eq('transaction_type', 'payment')
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    : null;
+  const receiptDate =
+    paymentTransaction?.data?.created_at &&
+    !paymentTransaction.error &&
+    typeof paymentTransaction.data.created_at === 'string'
+      ? paymentTransaction.data.created_at
+      : null;
   const logoDataUri = await resolveReceiptLogoDataUri(receiptMerchant);
   const pdf = generateReceiptPDF(receiptOrder, receiptMerchant, {
     documentKind: pdfDocumentKind,
     invoiceTypeCode,
     documentDate:
-      (isPaid ? order.transaction_date : order.invoice_issue_date) ||
-      order.created_at,
+      (isPaid
+        ? (receiptDate ?? order.transaction_date)
+        : order.invoice_issue_date) || order.created_at,
     logoDataUri,
   });
   const claim = createReceiptClaimToken();
@@ -179,13 +207,47 @@ export async function sendManualOrderDocument({
   ) {
     throw new Error('Manual document recipient changed');
   }
+  // The claim RPC re-read the live order: abort (and retry with a fresh read)
+  // when an edit landed between our read and the claim instead of dispatching
+  // a document rendered from stale totals.
+  if (
+    prepared.order_total !== order.total ||
+    prepared.order_amount_paid !== order.amount_paid ||
+    prepared.order_item_count !== order.order_items.length ||
+    prepared.order_payment_status !== order.payment_status
+  ) {
+    throw new Error('Manual document order changed during preparation');
+  }
+  // Custom domains live in public.domains, not on the merchant row: resolve
+  // the active primary domain for a branded claim link, falling back to the
+  // slug subdomain (which always routes) when none is assigned.
+  const primaryDomain = await supabase
+    .from('domains')
+    .select('domain')
+    .eq('merchant_id', row.merchant_id)
+    .eq('is_primary', true)
+    .eq('status', 'active')
+    .order('updated_at', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false, nullsFirst: false })
+    .order('id')
+    .limit(1)
+    .maybeSingle();
+  const customDomain =
+    !primaryDomain.error &&
+    primaryDomain.data &&
+    typeof primaryDomain.data.domain === 'string'
+      ? primaryDomain.data.domain
+      : null;
   const content = buildManualOrderDocumentEmail({
     merchantName: merchant.business_name || merchant.slug,
     customerName: order.customer_name,
     customerEmail: recipient.email,
     orderNumber: order.order_number,
     documentKind: pdfDocumentKind,
-    claimUrl: buildReceiptClaimUrl({ merchant, token: claim.token }),
+    claimUrl: buildReceiptClaimUrl({
+      merchant: { slug: merchant.slug, custom_domain: customDomain },
+      token: claim.token,
+    }),
     devices: order.order_items.map(
       (item) =>
         `${item.quantity > 1 ? `${item.quantity} x ` : ''}${item.name}${item.variant_name ? ` (${item.variant_name})` : ''}`

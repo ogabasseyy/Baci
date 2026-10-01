@@ -4,7 +4,6 @@ import { vi } from 'vitest';
 const merchant = {
   id: 'merchant-1',
   slug: 'ogabassey',
-  custom_domain: 'ogabassey.com',
   business_name: 'Ogabassey',
   email: 'hello@ogabassey.com',
   support_email: 'support@ogabassey.com',
@@ -15,6 +14,7 @@ const merchant = {
   phone: null,
   support_phone: null,
   business_address: 'Ikeja, Lagos',
+  registered_address: null,
   cac_rc_number: null,
   tax_identification_number: null,
   legal_entity_name: null,
@@ -73,9 +73,12 @@ export function database(
     merchantOverride?: Record<string, unknown>;
     paymentAccounts?: Record<string, unknown>[];
     paymentAccountError?: { message: string } | null;
+    primaryDomain?: string | null;
+    latestPaymentAt?: string | null;
   } = {}
 ) {
   const filters: Record<string, unknown> = {};
+  const effectiveOrder = { ...order, ...orderOverride };
   const client = {
     rpc: vi.fn().mockResolvedValue({
       data: {
@@ -83,6 +86,10 @@ export function database(
         claim_id: 'claim-1',
         customer_id: 'customer-1',
         customer_email: 'ada@example.com',
+        order_total: effectiveOrder.total,
+        order_amount_paid: effectiveOrder.amount_paid,
+        order_item_count: effectiveOrder.order_items.length,
+        order_payment_status: effectiveOrder.payment_status,
       },
       error: null,
     }),
@@ -119,6 +126,20 @@ export function database(
         maybeSingle: vi.fn(() => {
           if (table === 'receipt_claims' && options.claimMarkerThrows)
             return Promise.reject(new Error('network lost'));
+          if (table === 'domains')
+            return Promise.resolve({
+              data: options.primaryDomain
+                ? { domain: options.primaryDomain }
+                : null,
+              error: null,
+            });
+          if (table === 'transactions')
+            return Promise.resolve({
+              data: options.latestPaymentAt
+                ? { created_at: options.latestPaymentAt }
+                : null,
+              error: null,
+            });
           return Promise.resolve({
             data:
               table === 'orders'

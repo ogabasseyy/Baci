@@ -172,8 +172,13 @@ BEGIN
   IF v_claim_id IS NULL THEN RETURN jsonb_build_object('status', 'skipped'); END IF;
   INSERT INTO public.receipt_claim_orders (receipt_claim_id, order_id)
   VALUES (v_claim_id, v_order.id) ON CONFLICT DO NOTHING;
+  -- Snapshot the validated live row so the worker can abort when the order
+  -- changed between its read and this claim instead of sending stale totals.
   RETURN jsonb_build_object('status', 'created', 'claim_id', v_claim_id,
-    'customer_id', v_customer.id, 'customer_email', v_order.customer_email);
+    'customer_id', v_customer.id, 'customer_email', v_order.customer_email,
+    'order_total', v_order.total, 'order_amount_paid', v_order.amount_paid,
+    'order_item_count', (SELECT count(*) FROM public.order_items AS oi WHERE oi.order_id = v_order.id),
+    'order_payment_status', v_order.payment_status);
 END;
 $$;
 REVOKE ALL ON FUNCTION public.create_manual_order_document_claim(uuid, text, text)

@@ -180,8 +180,10 @@ jobs:
       # there). Anything else suppressed, anywhere else, keeps uploading, so
       # a future nosemgrep can never silently hide a new finding. Before
       # filtering, the step re-asserts the hardening the audit relies on and
-      # fails closed (SARIF untouched, alert re-opens) if it drifted. Uses
-      # python3 (the scan container has no jq).
+      # fails closed (SARIF untouched, alert re-opens) if it drifted.
+      # Matching runs on comment-stripped lines (stdlib only: the scan
+      # container has no jq and no PyYAML), so guard expressions kept in
+      # comments cannot spoof the checks; folded ref scalars are joined.
       - name: Drop audited checkout finding from SARIF
         if: always()
         run: |
@@ -192,15 +194,56 @@ jobs:
           [ -f .github/workflows/muse-code-review.yml ] || exit 0
           python3 - <<'EOF'
           import json
+          import re
           import sys
           AUDITED_RULE_ID = (
               "yaml.github-actions.security.pull-request-target-code-checkout"
               ".pull-request-target-code-checkout"
           )
           AUDITED_PATH = ".github/workflows/muse-code-review.yml"
+          AUDITED_STEP = "- name: Checkout repository"
+
+          def strip_comments(line):
+              buf = []
+              quote = None
+              for ch in line:
+                  if quote:
+                      buf.append(ch)
+                      if ch == quote:
+                          quote = None
+                  elif ch in ("'", '"'):
+                      quote = ch
+                      buf.append(ch)
+                  elif ch == "#":
+                      break
+                  else:
+                      buf.append(ch)
+              return "".join(buf)
 
           with open(AUDITED_PATH) as fh:
-              workflow_lines = fh.read().splitlines()
+              raw_lines = fh.read().splitlines()
+          # Match on code, never comments: a weakened guard that survives
+          # only inside a comment must not satisfy the checks below.
+          # Block-scalar ref values (ref: >- on its own line) are joined so
+          # a folded PR-controlled ref cannot evade the checkout count.
+          code_lines = [strip_comments(line) for line in raw_lines]
+          workflow_lines = []
+          i = 0
+          while i < len(code_lines):
+              line = code_lines[i]
+              if re.match(r"^\s*ref:\s*[>|][-+]?\s*$", line):
+                  base = len(line) - len(line.lstrip())
+                  parts = [line]
+                  j = i + 1
+                  while j < len(code_lines) and code_lines[j].strip() \
+                          and len(code_lines[j]) - len(code_lines[j].lstrip()) > base:
+                      parts.append(code_lines[j].strip())
+                      j += 1
+                  workflow_lines.append(" ".join(parts))
+                  i = j
+              else:
+                  workflow_lines.append(line)
+                  i += 1
 
           def step_start(ref_index):
               for i in range(ref_index, -1, -1):
@@ -252,12 +295,20 @@ jobs:
               locations = result.get("locations", [])
               if not locations:
                   return False
-              return all(
-                  (loc.get("physicalLocation", {})
-                      .get("artifactLocation", {})
-                      .get("uri", "") or "").endswith(AUDITED_PATH)
-                  for loc in locations
-              )
+              for loc in locations:
+                  physical = loc.get("physicalLocation", {})
+                  uri = (physical.get("artifactLocation", {}).get("uri", "")
+                         or "")
+                  if not uri.endswith(AUDITED_PATH):
+                      return False
+                  # Pin the exact audited step, not just the file: a second
+                  # suppressed checkout elsewhere in the workflow must stay
+                  # visible. A step rename fails closed (finding resurfaces).
+                  snippet = ((physical.get("region", {}).get("snippet", {})
+                               .get("text", "")) or "")
+                  if AUDITED_STEP not in snippet:
+                      return False
+              return True
 
           with open("semgrep.sarif") as fh:
               sarif = json.load(fh)

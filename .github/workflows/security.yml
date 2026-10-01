@@ -185,8 +185,10 @@ jobs:
       # the scan container has no jq and no PyYAML): the guard must sit in a
       # real if: condition, persist-credentials/ref:/path: must be mapping
       # keys, so run: echo strings cannot spoof them; folded ref scalars are
-      # joined and unnamed steps delimit spans. The resolver step must select
-      # the trusted checkout with no head-copy fallback.
+      # joined and unnamed steps delimit spans. Every dir= value assigned to
+      # GITHUB_OUTPUT must resolve under the trusted tree, and the trusted
+      # agent runner must keep its execution-disabling flags and token
+      # isolation (single muse invocation).
       - name: Drop audited checkout finding from SARIF
         if: always()
         run: |
@@ -345,14 +347,69 @@ jobs:
               start = resolve[0]
               span = workflow_lines[start:step_end(workflow_lines, start)]
               # The exemption is only valid if executed scripts resolve to
-              # the trusted checkout: the step must reference the trusted
-              # path and must not resolve the head copy as a fallback.
-              if not any("trusted-scripts/.github/scripts/muse-review" in line
-                         for line in span):
-                  drift.append("script-resolution-trusted-path")
-              if any("${GITHUB_WORKSPACE}/.github/scripts/muse-review" in line
-                     for line in span):
-                  drift.append("script-resolution-head-fallback")
+              # the trusted checkout: parse every dir= assignment written to
+              # GITHUB_OUTPUT (not mere mentions) and require each value to
+              # sit under the trusted tree with no parent traversal.
+              assigns = []
+              for line in span:
+                  found = re.search(
+                      r"""echo\s+["']dir=([^"']+)["']\s*>>\s*"""
+                      r"""["']?\$?\{?GITHUB_OUTPUT\}?["']?""", line)
+                  if found:
+                      assigns.append(found.group(1))
+              if not assigns:
+                  drift.append("script-resolution-no-output")
+              elif not all("trusted-scripts/" in value for value in assigns):
+                  drift.append("script-resolution-untrusted-target")
+              elif any(".." in value for value in assigns):
+                  drift.append("script-resolution-path-traversal")
+          # The data-only premise rests on the agent invocation itself:
+          # every muse call in the trusted runner must carry the exact
+          # execution-disabling flags (comment mentions do not count) and
+          # must shed the GitHub token. Backslash continuations joined.
+          runner_path = ".github/scripts/muse-review/run.sh"
+          try:
+              with open(runner_path) as fh:
+                  runner_raw = fh.read().splitlines()
+          except OSError:
+              runner_raw = []
+          if not runner_raw:
+              drift.append("agent-runner-missing")
+          else:
+              logical = []
+              buf = ""
+              for raw in runner_raw:
+                  code = strip_comments(raw).rstrip()
+                  if code.endswith("\\"):
+                      buf += code[:-1] + " "
+                  else:
+                      buf += code
+                      logical.append(buf)
+                      buf = ""
+              if buf.strip():
+                  logical.append(buf)
+              # Command-position match: quoted-path form (the real call) or a
+              # bare muse following a command boundary/keyword. Prose
+              # mentions (echo "muse ...") and identifiers (muse_rc,
+              # muse-review) must not count as invocations.
+              invocation = re.compile(
+                  r"/muse(?=[\"'\s]|$)|(?:^|[;&|()!`]|"
+                  r"\b(?:if|while|until|time|sudo|command|builtin|exec)\s+)"
+                  r"\s*muse(?=\s|$)")
+              calls = [line for line in logical if invocation.search(line)]
+              if not calls:
+                  drift.append("agent-invocation-missing")
+              elif len(calls) != 1:
+                  drift.append(f"agent-invocation-count={len(calls)}")
+              else:
+                  line = calls[0]
+                  if not re.search(r"(?:^|\s)--disable-shell(?:\s|$)", line):
+                      drift.append("agent-shell-boundary")
+                  elif not re.search(r"(?:^|\s)--disable-write(?:\s|$)", line):
+                      drift.append("agent-write-boundary")
+                  elif ("-u GITHUB_TOKEN" not in line
+                        or "-u GH_TOKEN" not in line):
+                      drift.append("agent-token-isolation")
           if drift:
               print(f"::error::muse-code-review.yml hardening drifted "
                     f"({', '.join(drift)}); keeping SARIF unfiltered.")

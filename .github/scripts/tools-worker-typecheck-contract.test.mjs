@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-async function readWebFilter() {
+async function readWebFilter(filterPath = '.github/filters/ci.yml') {
   const [workflow, filters] = await Promise.all([
     readFile('.github/workflows/ci.yml', 'utf8'),
-    readFile('.github/filters/ci.yml', 'utf8'),
+    readFile(filterPath, 'utf8'),
   ]);
   const filterLines = filters.split('\n');
   const webFilterIndex = filterLines.findIndex((line) => line.trim() === 'web:');
@@ -76,6 +76,10 @@ test('the Quality Gate generates route types and reaches the tools and worker Ty
     webFilter.includes("- '.github/scripts/tools-worker-typecheck-contract.test.mjs'")
   );
   assert.ok(webFilter.includes("- 'vercel.json'"));
+  const { webFilter: deployWebFilter } = await readWebFilter(
+    '.github/filters/deploy.yml'
+  );
+  assert.ok(deployWebFilter.includes("- 'vercel.json'"));
   assert.match(workflow, /filters: \.github\/filters\/ci\.yml/);
   assert.match(configTest, /import '\.\/tools-worker-typecheck-contract\.test\.mjs';/);
   assert.match(workflow, /node --test [^\n]*resolve-ci-test-plan-config\.test\.mjs/);

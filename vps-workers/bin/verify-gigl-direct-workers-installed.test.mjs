@@ -108,10 +108,10 @@ esac
   };
 }
 
-function verify(options) {
+function verify(options, args = []) {
   const { crontab, dirtyCheckout, fakeBin, remote, repoSha, workflowSha } =
     fixture(options);
-  return spawnSync('bash', [verifier], {
+  return spawnSync('bash', [verifier, ...args], {
     encoding: 'utf8',
     env: {
       ...process.env,
@@ -183,5 +183,19 @@ describe('GIGL direct-worker deployment gate', () => {
 
     assert.equal(result.status, 1);
     assert.match(result.stderr, /environment failed its production preflight/);
+  });
+
+  it('skips the live wrapper smoke for pre-migration readiness', () => {
+    const result = verify({ unusableCapability: true }, ['--skip-live-smoke']);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /GIGL direct tracking worker is installed/);
+  });
+
+  it('rejects unknown verifier arguments', () => {
+    const result = verify(undefined, ['--no-such-flag']);
+
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /Unknown argument/);
   });
 });

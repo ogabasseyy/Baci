@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const migration = readFileSync(
   join(
     process.cwd(),
-    '../../supabase/migrations/20260805090000_add_least_privilege_gigl_tracking_worker.sql'
+    '../../supabase/migrations/20260805090300_add_least_privilege_gigl_tracking_worker.sql'
   ),
   'utf8'
 );
@@ -26,7 +26,7 @@ const postgrestRepairMigration = readFileSync(
 const requestScopeMigration = readFileSync(
   join(
     process.cwd(),
-    '../../supabase/migrations/20260805150000_isolate_gigl_tracking_postgrest_capability.sql'
+    '../../supabase/migrations/20260805170000_isolate_gigl_tracking_postgrest_capability.sql'
   ),
   'utf8'
 );

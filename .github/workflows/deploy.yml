@@ -81,7 +81,7 @@ jobs:
         env:
           BACI_EXPECTED_APP_SHA: ${{ github.sha }}
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
-        run: .readiness-checkout/vps-workers/bin/verify-gigl-direct-workers-installed.sh
+        run: .readiness-checkout/vps-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke
 
   # Apply any pending Supabase migrations AFTER drain readiness and BEFORE the
   # Vercel deploy so application code never lands ahead of the schema it depends on. Migrations
@@ -120,6 +120,25 @@ jobs:
         env:
           MIGRATION_PHASE: predeploy
         run: .github/scripts/apply-pending-migrations.sh
+
+  # Live-smoke the restricted GIGL wrapper capability only AFTER migrations:
+  # the gigl_worker_* RPCs do not exist on a parent schema, so running this
+  # smoke in vps-drain-readiness would fail every first deploy from a schema
+  # that predates the wrappers.
+  gigl-worker-capability:
+    needs: [db-migrations]
+    if: github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success'
+    runs-on: baci-deploy
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Smoke the live GIGL wrapper capability
+        env:
+          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
+        run: |
+          remote_dir="${VPS_WORKER_REMOTE_DIR:-/home/bassey/baci-workers}"
+          NODE_ENV=production BACI_WORKER_PROFILE=gigl-tracking BACI_WORKER_ENV="$remote_dir/.env" "$remote_dir/bin/verify-gigl-tracking-worker-capability.sh"
 
   deploy-production:
     needs: [changes, cwv-runner-contracts, db-migrations]
@@ -197,7 +216,15 @@ jobs:
       # esbuild version is still on the allow list.
       - run: .github/scripts/run-pinned-vercel.sh pull --yes --environment=production
       - name: Verify GIGL fallback capability in Vercel Production
-        run: node .github/scripts/inject-prebuilt-env-secret.mjs GIGL_TRACKING_WORKER_TOKEN .vercel/.env.production.local 'build-time-presence-stand-in-not-used-at-runtime-000000000000'
+        # The fallback route no-ops without provider configuration, so only
+        # require the worker token when GIGL is enabled; otherwise an
+        # intentionally unconfigured production would fail here.
+        run: |
+          gigl_enabled="$(grep -E '^(export[[:space:]]+)?GIGL_ENABLED=' .vercel/.env.production.local 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r"'"'" | tr '[:upper:]' '[:lower:]' | xargs)"
+          case "$gigl_enabled" in
+            ''|0|false|off) echo 'GIGL is not enabled; skipping fallback token injection.' ;;
+            *) node .github/scripts/inject-prebuilt-env-secret.mjs GIGL_TRACKING_WORKER_TOKEN .vercel/.env.production.local 'build-time-presence-stand-in-not-used-at-runtime-000000000000' ;;
+          esac
       - name: Ensure wallet recovery HMAC Production configuration exists
         # `vercel pull` omits undefined keys and writes blank placeholders for
         # defined sensitive values. CLI 57.0.0 can exit 0 after an empty

@@ -2,6 +2,18 @@
 
 set -euo pipefail
 
+# --skip-live-smoke keeps this verifier to install state (files, SHA, checkout,
+# crontab, preflight) for pre-migration readiness. The live wrapper smoke runs
+# after db-migrations instead: on a first deploy the gigl_worker_* RPCs do not
+# exist until the pending migrations apply.
+skip_live_smoke=0
+if [ "${1:-}" = "--skip-live-smoke" ]; then
+  skip_live_smoke=1
+elif [ -n "${1:-}" ]; then
+  echo "Unknown argument: $1 (expected --skip-live-smoke)" >&2
+  exit 2
+fi
+
 remote_dir="${VPS_WORKER_REMOTE_DIR:-/home/bassey/baci-workers}"
 
 echo "==> Verifying production GIGL direct workers on the deploy runner"
@@ -123,13 +135,15 @@ if ! node "$preflight"; then
   exit 1
 fi
 
-if ! NODE_ENV=production \
-  BACI_WORKER_PROFILE=gigl-tracking \
-  BACI_WORKER_ENV="$remote_dir/.env" \
-  "$capability_wrapper"
-then
-  echo "GIGL restricted database capability failed its live wrapper smoke." >&2
-  exit 1
+if [ "$skip_live_smoke" -eq 0 ]; then
+  if ! NODE_ENV=production \
+    BACI_WORKER_PROFILE=gigl-tracking \
+    BACI_WORKER_ENV="$remote_dir/.env" \
+    "$capability_wrapper"
+  then
+    echo "GIGL restricted database capability failed its live wrapper smoke." >&2
+    exit 1
+  fi
 fi
 
 echo "GIGL direct tracking worker is installed."

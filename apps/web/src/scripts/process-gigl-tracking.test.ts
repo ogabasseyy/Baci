@@ -1,7 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
 import { runGiglTrackingCli } from './process-gigl-tracking';
 
-const configuredEnv = {
+const { mockCreateClient, mockRunMonitorBatch } = vi.hoisted(() => ({
+  mockCreateClient: vi.fn(() => ({ rpc: vi.fn() })),
+  mockRunMonitorBatch: vi.fn(),
+}));
+
+vi.mock('@/app/api/cron/gigl-tracking/run-gigl-tracking-monitor-batch', () => ({
+  runGiglTrackingMonitorBatch: mockRunMonitorBatch,
+}));
+vi.mock('@/lib/gigl-tracking-worker-client', () => ({
+  createGiglTrackingWorkerClient: mockCreateClient,
+}));
+
+const configuredEnv: NodeJS.ProcessEnv = {
+  NODE_ENV: 'test',
   GIGL_BASE_URL: 'https://gigl.example.com',
   GIGL_EMAIL: 'worker@example.com',
   GIGL_PASSWORD: 'provider-password',
@@ -63,6 +76,28 @@ describe('process-gigl-tracking', () => {
     );
   });
 
+  it.each([
+    'http://gigl.example.com',
+    'https://user@gigl.example.com',
+    'https://user:pass@gigl.example.com',
+  ])('rejects unsafe provider URLs without running the batch: %s', async (url) => {
+    const runBatch = vi.fn();
+    const logger = { error: vi.fn(), info: vi.fn() };
+
+    await expect(
+      runGiglTrackingCli({
+        env: { ...configuredEnv, GIGL_BASE_URL: url },
+        logger,
+        runBatch,
+      })
+    ).resolves.toBe(1);
+
+    expect(runBatch).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      '[gigl-tracking] preflight failed'
+    );
+  });
+
   it('preserves the explicit GIGL disable switch without claiming work', async () => {
     const runBatch = vi.fn();
     const logger = { error: vi.fn(), info: vi.fn() };
@@ -104,6 +139,39 @@ describe('process-gigl-tracking', () => {
     expect(logger.error).toHaveBeenCalledWith('[gigl-tracking] failed');
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain(
       'provider credential leaked here'
+    );
+  });
+
+  it('builds the default batch client from the validated environment', async () => {
+    mockRunMonitorBatch.mockResolvedValue({
+      ok: true,
+      summary: {
+        applied: 1,
+        claimed: 1,
+        failed: 0,
+        paused: 0,
+        success: true,
+      },
+    });
+    const logger = { error: vi.fn(), info: vi.fn() };
+    const originalToken = process.env.GIGL_TRACKING_WORKER_TOKEN;
+    process.env.GIGL_TRACKING_WORKER_TOKEN = 'process-env-token';
+    try {
+      await expect(
+        runGiglTrackingCli({ env: configuredEnv, logger })
+      ).resolves.toBe(0);
+    } finally {
+      if (originalToken === undefined) {
+        delete process.env.GIGL_TRACKING_WORKER_TOKEN;
+      } else {
+        process.env.GIGL_TRACKING_WORKER_TOKEN = originalToken;
+      }
+    }
+
+    expect(mockCreateClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        GIGL_TRACKING_WORKER_TOKEN: 'header.payload.signature',
+      })
     );
   });
 

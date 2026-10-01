@@ -31,12 +31,23 @@ describe('production cache-invalidation drain rollout gate', () => {
     );
     assert.match(
       readiness,
-      /^\s+run: vps-workers\/bin\/verify-gigl-direct-workers-installed\.sh$/m
+      /^\s+run: \.readiness-checkout\/vps-workers\/bin\/verify-gigl-direct-workers-installed\.sh --skip-live-smoke$/m
     );
     assert.doesNotMatch(readiness, /VPS_WORKER_SSH_TARGET|\bssh\b/);
     assert.doesNotMatch(readiness, /continue-on-error:\s*true/);
     assert.match(migrations, /needs: \[vps-drain-readiness\]/);
     assert.match(migrations, /needs\.vps-drain-readiness\.result == 'success'/);
+  });
+
+  it('smokes the live GIGL capability only after migrations apply', () => {
+    const capability = jobBlock('gigl-worker-capability', 'deploy-production');
+
+    assert.match(capability, /needs: \[db-migrations\]/);
+    assert.match(capability, /needs\.db-migrations\.result == 'success'/);
+    assert.match(
+      capability,
+      /BACI_WORKER_PROFILE=gigl-tracking BACI_WORKER_ENV="\$remote_dir\/\.env" "\$remote_dir\/bin\/verify-gigl-tracking-worker-capability\.sh"/
+    );
   });
 
   it('keeps the web release behind migrations and prebuilt-only', () => {

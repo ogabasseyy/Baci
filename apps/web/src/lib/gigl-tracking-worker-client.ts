@@ -4,7 +4,6 @@ import type { Database } from '@/types/supabase';
 type GiglTrackingRpcClient = Pick<SupabaseClient<Database>, 'rpc'>;
 
 const EXPECTED_WORKER_ROLE = 'gigl_tracking_worker';
-const MINIMUM_TOKEN_LIFETIME_MS = 24 * 60 * 60 * 1000;
 const RESTRICTED_RPC_NAMES: Readonly<Record<string, string>> = {
   apply_gigl_tracking_result: 'gigl_worker_apply_tracking_result',
   claim_due_gigl_tracking_monitors: 'gigl_worker_claim_due_tracking_monitors',
@@ -26,6 +25,9 @@ function parseJwtPart(token: string, index: number): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
+// Runtime construction accepts any unexpired token so rotation can occur any
+// time before exp; the 24-hour rotation runway is enforced separately by the
+// VPS preflight (preflight-direct-web-workers.mjs), not here.
 function hasCurrentWorkerCapability(token: string): boolean {
   try {
     if (token.split('.').length !== 3) return false;
@@ -36,7 +38,7 @@ function hasCurrentWorkerCapability(token: string): boolean {
       SUPPORTED_SIGNING_ALGORITHMS.has(header.alg) &&
       claims.role === EXPECTED_WORKER_ROLE &&
       typeof claims.exp === 'number' &&
-      claims.exp * 1000 > Date.now() + MINIMUM_TOKEN_LIFETIME_MS
+      claims.exp * 1000 > Date.now()
     );
   } catch {
     return false;
@@ -67,7 +69,17 @@ export function createGiglTrackingWorkerClient(
     },
     global: { headers: { Authorization: `Bearer ${workerToken}` } },
   });
-  const rpc = client.rpc.bind(client);
+  // Bind through a minimal signature: resolving the generic Supabase rpc
+  // overloads against Database here exceeds type-instantiation depth.
+  const rpc = (
+    client as unknown as {
+      rpc: (
+        functionName: never,
+        args?: never,
+        options?: Record<string, unknown>
+      ) => unknown;
+    }
+  ).rpc.bind(client);
   return {
     rpc: ((
       functionName: string,

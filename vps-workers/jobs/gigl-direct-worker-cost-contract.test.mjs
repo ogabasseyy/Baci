@@ -33,6 +33,15 @@ describe('GIGL direct worker cost contract', () => {
     assert.match(deployFilter, /^\s+- 'vercel\.json'\s*$/m);
   });
 
+  it('treats Vercel configuration as a CI web input', () => {
+    const ciFilter = readFileSync(
+      join(repoRoot, '.github', 'filters', 'ci.yml'),
+      'utf8'
+    );
+
+    assert.match(ciFilter, /^\s+- 'vercel\.json'\s*$/m);
+  });
+
   it('schedules tracking directly every five minutes', () => {
     const cronLine = deployScript
       .split('\n')

@@ -41,10 +41,13 @@ function isExplicitlyDisabled(value: string | undefined) {
   return ['0', 'false', 'off'].includes(value?.trim().toLowerCase() ?? '');
 }
 
-async function runBatchDirectly({ batchSize }: { batchSize: number }) {
+async function runBatchDirectly(
+  { batchSize }: { batchSize: number },
+  env: NodeJS.ProcessEnv = process.env
+) {
   return runGiglTrackingMonitorBatch({
     batchSize,
-    client: createGiglTrackingWorkerClient(process.env),
+    client: createGiglTrackingWorkerClient(env),
     workerId: `gigl-tracking-vps-${randomUUID()}`,
   });
 }
@@ -52,7 +55,7 @@ async function runBatchDirectly({ batchSize }: { batchSize: number }) {
 export async function runGiglTrackingCli({
   env = process.env,
   logger = console,
-  runBatch = runBatchDirectly,
+  runBatch = (options) => runBatchDirectly(options, env),
 }: {
   env?: NodeJS.ProcessEnv;
   logger?: CliLogger;

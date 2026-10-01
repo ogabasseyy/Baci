@@ -61,3 +61,6 @@ END
 $$;
 
 NOTIFY pgrst, 'reload config';
+-- The new gigl_worker_* wrappers are invisible to PostgREST until its schema
+-- cache is reloaded; 'reload config' alone does not refresh it.
+NOTIFY pgrst, 'reload schema';

@@ -7,13 +7,13 @@ vi.mock('@supabase/supabase-js', () => ({
   createClient: vi.fn(() => ({ rpc })),
 }));
 
-function token(role: string, alg = 'ES256') {
+function token(role: string, alg = 'ES256', exp = 4_102_444_800) {
   const header = Buffer.from(JSON.stringify({ alg, typ: 'JWT' })).toString(
     'base64url'
   );
-  const payload = Buffer.from(
-    JSON.stringify({ exp: 4_102_444_800, role })
-  ).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({ exp, role })).toString(
+    'base64url'
+  );
   return `${header}.${payload}.signature`;
 }
 
@@ -72,6 +72,34 @@ describe('createGiglTrackingWorkerClient', () => {
         })
       ).toThrow('GIGL tracking worker database capability is invalid');
     }
+    expect(createClient).not.toHaveBeenCalled();
+  });
+
+  it('accepts a worker token inside its final 24 hours until expiry', () => {
+    const client = createGiglTrackingWorkerClient({
+      ...configuredEnv,
+      GIGL_TRACKING_WORKER_TOKEN: token(
+        'gigl_tracking_worker',
+        'ES256',
+        Math.floor(Date.now() / 1000) + 60 * 60
+      ),
+    });
+
+    expect(createClient).toHaveBeenCalledOnce();
+    expect(client).toBeDefined();
+  });
+
+  it('rejects an expired worker token', () => {
+    expect(() =>
+      createGiglTrackingWorkerClient({
+        ...configuredEnv,
+        GIGL_TRACKING_WORKER_TOKEN: token(
+          'gigl_tracking_worker',
+          'ES256',
+          Math.floor(Date.now() / 1000) - 60
+        ),
+      })
+    ).toThrow('GIGL tracking worker database capability is invalid');
     expect(createClient).not.toHaveBeenCalled();
   });
 

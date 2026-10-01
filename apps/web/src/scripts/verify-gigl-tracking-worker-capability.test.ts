@@ -21,7 +21,10 @@ describe('runGiglTrackingCapabilityVerification', () => {
     const logger = { error: vi.fn(), info: vi.fn() };
 
     await expect(
-      runGiglTrackingCapabilityVerification({ env: {}, logger })
+      runGiglTrackingCapabilityVerification({
+        env: { NODE_ENV: 'test' },
+        logger,
+      })
     ).resolves.toBe(0);
 
     expect(createClient).toHaveBeenCalledOnce();
@@ -38,7 +41,10 @@ describe('runGiglTrackingCapabilityVerification', () => {
     const logger = { error: vi.fn(), info: vi.fn() };
 
     await expect(
-      runGiglTrackingCapabilityVerification({ env: {}, logger })
+      runGiglTrackingCapabilityVerification({
+        env: { NODE_ENV: 'test' },
+        logger,
+      })
     ).resolves.toBe(1);
 
     expect(logger.error).toHaveBeenCalledWith(
@@ -49,12 +55,28 @@ describe('runGiglTrackingCapabilityVerification', () => {
     );
   });
 
+  it('fails closed on a non-throwing failed capability probe', async () => {
+    verifyCapability.mockResolvedValue(false);
+    const logger = { error: vi.fn(), info: vi.fn() };
+
+    await expect(
+      runGiglTrackingCapabilityVerification({
+        env: { NODE_ENV: 'test' },
+        logger,
+      })
+    ).resolves.toBe(1);
+
+    expect(logger.error).toHaveBeenCalledWith(
+      '[gigl-capability] verification failed'
+    );
+  });
+
   it('does not require credentials when GIGL is explicitly disabled', async () => {
     const logger = { error: vi.fn(), info: vi.fn() };
 
     await expect(
       runGiglTrackingCapabilityVerification({
-        env: { GIGL_ENABLED: 'off' },
+        env: { GIGL_ENABLED: 'off', NODE_ENV: 'test' },
         logger,
       })
     ).resolves.toBe(0);

@@ -51,7 +51,12 @@ function buildSupabase(data: unknown[]) {
   ]) {
     builder[method] = vi.fn().mockReturnValue(builder);
   }
-  builder.limit = vi.fn().mockResolvedValue({ data, error: null });
+  // The sweep runs two candidate queries (main, then filing-only
+  // retries): the canned rows belong to the main query only.
+  builder.limit = vi
+    .fn()
+    .mockResolvedValueOnce({ data, error: null })
+    .mockResolvedValue({ data: [], error: null });
   return {
     from: vi.fn().mockReturnValue(builder),
     rpc,

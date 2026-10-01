@@ -116,6 +116,44 @@ describe('reconcileWedgedGatewayOrders late outcomes', () => {
     );
   });
 
+  it('attributes the duplicate review to the gateway reference when the charge id is missing', async () => {
+    const supabase = buildSupabase({ data: [wedgedCandidate] });
+    mocks.verifyPaystackPayment.mockResolvedValue({
+      data: {
+        amount: 5829060,
+        currency: 'NGN',
+        status: 'success',
+      },
+      success: true,
+    });
+    mocks.finalizeOrderGatewayPayment.mockResolvedValue({
+      capturedOnPaidOrder: true,
+      healed: false,
+      kind: 'completed',
+      orderNumber: 'ORD-1',
+    });
+    mocks.fileDuplicatePaymentCapture.mockResolvedValue(true);
+
+    const summary = await reconcileWedgedGatewayOrders({
+      scheduleAfter,
+      supabase,
+    });
+
+    // Verification only checks status/amount/currency, so an id-less
+    // success still finalizes: the review falls back to the verified
+    // gateway reference instead of dying silently on the completed row.
+    expect(mocks.fileDuplicatePaymentCapture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evidence: expect.objectContaining({
+          providerReference: '100004260711172450165090811595',
+        }),
+      })
+    );
+    expect(summary.reviewsFiled).toEqual([
+      { orderId: 'order-1', transactionId: 'txn-1' },
+    ]);
+  });
+
   it('retries the wedge when the late duplicate review cannot be filed', async () => {
     const supabase = buildSupabase({ data: [wedgedCandidate] });
     mocks.verifyPaystackPayment.mockResolvedValue({
@@ -142,9 +180,71 @@ describe('reconcileWedgedGatewayOrders late outcomes', () => {
     expect(summary.failed).toEqual([
       { reason: 'duplicate_capture_review_failed', transactionId: 'txn-1' },
     ]);
+    // The row already completed, so the main queries reselect nothing:
+    // the retry marker requeues it for a filing-only pass.
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'set_duplicate_capture_review_pending_v1',
+      expect.objectContaining({
+        p_pending: true,
+        p_transaction_id: 'txn-1',
+      })
+    );
     expect(supabase.rpc).not.toHaveBeenCalledWith(
       'stamp_wedge_sweep_resolution_v1',
       expect.anything()
+    );
+  });
+
+  it('retries a marked capture with filing only, never re-finalizing', async () => {
+    const supabase = buildSupabase(
+      { data: [] },
+      {
+        data: [
+          {
+            ...wedgedCandidate,
+            metadata: { duplicate_capture_review_pending: true },
+            orders: {
+              cancelled_at: null,
+              id: 'order-1',
+              payment_status: 'paid',
+            },
+          },
+        ],
+      }
+    );
+    mocks.verifyPaystackPayment.mockResolvedValue({
+      data: {
+        amount: 5829060,
+        currency: 'NGN',
+        id: 123456789,
+        status: 'success',
+      },
+      success: true,
+    });
+    mocks.fileDuplicatePaymentCapture.mockResolvedValue(true);
+
+    const summary = await reconcileWedgedGatewayOrders({
+      scheduleAfter,
+      supabase,
+    });
+
+    // The row already completed: re-running the finalizer would
+    // re-settle captured funds, so only the review is still owed.
+    expect(mocks.finalizeOrderGatewayPayment).not.toHaveBeenCalled();
+    expect(mocks.fileDuplicatePaymentCapture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attempt: expect.objectContaining({ id: 'txn-1' }),
+      })
+    );
+    expect(summary.reviewsFiled).toEqual([
+      { orderId: 'order-1', transactionId: 'txn-1' },
+    ]);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'stamp_wedge_sweep_resolution_v1',
+      expect.objectContaining({
+        p_resolution: 'duplicate_capture_reviewed',
+        p_transaction_id: 'txn-1',
+      })
     );
   });
 
@@ -288,33 +388,5 @@ describe('reconcileWedgedGatewayOrders late outcomes', () => {
     expect(summary.reviewsFiled).toEqual([
       { orderId: 'order-1', transactionId: 'txn-1' },
     ]);
-  });
-
-  it('fails closed when the verification response cannot identify the charge', async () => {
-    const supabase = buildSupabase({ data: [wedgedCandidate] });
-    mocks.verifyPaystackPayment.mockResolvedValue({
-      data: { amount: 5829060, currency: 'NGN', status: 'success' },
-      success: true,
-    });
-    mocks.finalizeOrderGatewayPayment.mockResolvedValue({
-      capturedOnPaidOrder: true,
-      healed: false,
-      kind: 'completed',
-      orderNumber: 'ORD-1',
-    });
-
-    const summary = await reconcileWedgedGatewayOrders({
-      scheduleAfter,
-      supabase,
-    });
-
-    expect(mocks.fileDuplicatePaymentCapture).not.toHaveBeenCalled();
-    expect(summary.failed).toEqual([
-      { reason: 'duplicate_capture_evidence_invalid', transactionId: 'txn-1' },
-    ]);
-    expect(supabase.rpc).not.toHaveBeenCalledWith(
-      'stamp_wedge_sweep_resolution_v1',
-      expect.anything()
-    );
   });
 });

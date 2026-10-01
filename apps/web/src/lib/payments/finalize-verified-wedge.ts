@@ -2,6 +2,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { assertRefundNotificationSendTime } from '@/lib/payments/assert-refund-notification-send-time';
 import { awaitRefundNotificationDeadline } from '@/lib/payments/await-refund-notification-deadline';
+import {
+  DUPLICATE_CAPTURE_REVIEW_PENDING_KEY,
+  setDuplicateCaptureReviewPending,
+} from '@/lib/payments/duplicate-capture-review-pending';
 import { extractDuplicateCaptureEvidence } from '@/lib/payments/extract-duplicate-capture-evidence';
 import { fileDuplicateCaptureFallbackReview } from '@/lib/payments/file-duplicate-capture-fallback-review';
 import { fileDuplicatePaymentCapture } from '@/lib/payments/file-duplicate-payment-capture';
@@ -71,6 +75,83 @@ export async function finalizeVerifiedWedge({
     });
     return 'stop';
   }
+  // File the duplicate review for an extra capture on an already-paid
+  // order. Shared by fresh captures and filing-only retries: evidence
+  // comes from the verification response — never re-scaled from the
+  // normalized amount — so the review carries the gateway's own
+  // charge total, charge id, and status vocabulary, falling back to
+  // the verified gateway reference when the response omits the id.
+  // When both filings fail the row is already completed, so the main
+  // sweep queries reselect nothing: mark it for a filing-only retry
+  // instead of losing the review with this tick.
+  const resolveDuplicateCapture = async (): Promise<void> => {
+    const responseEvidence = extractDuplicateCaptureEvidence(
+      candidate.gateway,
+      verification.response,
+      candidate.gateway_reference
+    );
+    if (!responseEvidence) {
+      summary.failed.push({
+        reason: 'duplicate_capture_evidence_invalid',
+        transactionId: candidate.id,
+      });
+      return;
+    }
+    const duplicateEvidence = {
+      gateway: candidate.gateway,
+      providerCurrency: verification.currency ?? candidate.currency ?? 'NGN',
+      ...responseEvidence,
+    };
+    const filed = await fileDuplicatePaymentCapture({
+      attempt: {
+        gateway_reference: candidate.gateway_reference,
+        id: candidate.id,
+        merchant_id: candidate.merchant_id,
+        metadata: candidate.metadata,
+        order_id: candidate.order_id,
+      },
+      evidence: duplicateEvidence,
+      supabase,
+    });
+    if (filed) {
+      summary.reviewsFiled.push({
+        orderId: candidate.order_id,
+        transactionId: candidate.id,
+      });
+      await stampResolution(supabase, candidate, 'duplicate_capture_reviewed');
+      return;
+    }
+    const fallbackFiled = await fileDuplicateCaptureFallbackReview({
+      attempt: {
+        gateway_reference: candidate.gateway_reference,
+        id: candidate.id,
+        merchant_id: candidate.merchant_id,
+        order_id: candidate.order_id,
+      },
+      evidence: duplicateEvidence,
+      supabase,
+    });
+    if (fallbackFiled) {
+      summary.reviewsFiled.push({
+        orderId: candidate.order_id,
+        transactionId: candidate.id,
+      });
+      await stampResolution(supabase, candidate, 'duplicate_capture_reviewed');
+      return;
+    }
+    await setDuplicateCaptureReviewPending(supabase, candidate.id);
+    summary.failed.push({
+      reason: 'duplicate_capture_review_failed',
+      transactionId: candidate.id,
+    });
+  };
+  if (candidate.metadata?.[DUPLICATE_CAPTURE_REVIEW_PENDING_KEY] === true) {
+    // Filing-only retry: the row already completed on an earlier tick
+    // whose duplicate filings both failed. Re-running the finalizer
+    // would re-settle captured funds; only the review is still owed.
+    await resolveDuplicateCapture();
+    return 'finalized';
+  }
   // Cancel the finalize itself — not just this wait — when the pass
   // budget runs out: the signal aborts the in-flight paid-email send
   // (ZeptoMail treats aborts as terminal, never retried), so an
@@ -122,78 +203,8 @@ export async function finalizeVerifiedWedge({
       // Another transaction paid the order after the wedge query: this
       // capture is extra money, so classify from the atomic completion
       // result and file the duplicate review used by the
-      // abandoned-attempt path instead of recording a heal. Evidence
-      // comes from the verification response — never re-scaled from the
-      // normalized amount — so the review carries the gateway's own
-      // charge total, charge id, and status vocabulary.
-      const responseEvidence = extractDuplicateCaptureEvidence(
-        candidate.gateway,
-        verification.response
-      );
-      if (!responseEvidence) {
-        summary.failed.push({
-          reason: 'duplicate_capture_evidence_invalid',
-          transactionId: candidate.id,
-        });
-        return 'finalized';
-      }
-      const duplicateEvidence = {
-        gateway: candidate.gateway,
-        providerCurrency: verification.currency ?? candidate.currency ?? 'NGN',
-        ...responseEvidence,
-      };
-      const filed = await fileDuplicatePaymentCapture({
-        attempt: {
-          gateway_reference: candidate.gateway_reference,
-          id: candidate.id,
-          merchant_id: candidate.merchant_id,
-          metadata: candidate.metadata,
-          order_id: candidate.order_id,
-        },
-        evidence: duplicateEvidence,
-        supabase,
-      });
-      if (filed) {
-        summary.reviewsFiled.push({
-          orderId: candidate.order_id,
-          transactionId: candidate.id,
-        });
-        await stampResolution(
-          supabase,
-          candidate,
-          'duplicate_capture_reviewed'
-        );
-        return 'finalized';
-      }
-      // The candidate already finalized, so no sweep reselects it:
-      // persist the evidence directly so the captured extra payment
-      // keeps its operations review instead of dying with this tick.
-      const fallbackFiled = await fileDuplicateCaptureFallbackReview({
-        attempt: {
-          gateway_reference: candidate.gateway_reference,
-          id: candidate.id,
-          merchant_id: candidate.merchant_id,
-          order_id: candidate.order_id,
-        },
-        evidence: duplicateEvidence,
-        supabase,
-      });
-      if (fallbackFiled) {
-        summary.reviewsFiled.push({
-          orderId: candidate.order_id,
-          transactionId: candidate.id,
-        });
-        await stampResolution(
-          supabase,
-          candidate,
-          'duplicate_capture_reviewed'
-        );
-        return 'finalized';
-      }
-      summary.failed.push({
-        reason: 'duplicate_capture_review_failed',
-        transactionId: candidate.id,
-      });
+      // abandoned-attempt path instead of recording a heal.
+      await resolveDuplicateCapture();
       return 'finalized';
     }
     logger.warn({

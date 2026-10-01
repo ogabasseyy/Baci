@@ -26,7 +26,7 @@ describe('PAYSTACK_PENDING_SOURCES', () => {
 
     expect(sources).toEqual(EXPECTED_PAYSTACK_PENDING_SOURCES);
     expect(sources.at(-1)?.repositoryPath).toBe(
-      'supabase/migrations/20260928183300_settlement_notification_retry_backoff.sql'
+      'supabase/migrations/20260928183500_duplicate_capture_review_pending_marker.sql'
     );
   });
 

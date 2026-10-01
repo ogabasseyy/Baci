@@ -353,6 +353,7 @@ describe('finalizePartiallyPaidAbandonedAttempt', () => {
 
   it('fails the sweep when the late duplicate review cannot be filed', async () => {
     const h = harness();
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
     finalize.mockResolvedValue({
       capturedOnPaidOrder: true,
       kind: 'completed',
@@ -364,11 +365,21 @@ describe('finalizePartiallyPaidAbandonedAttempt', () => {
       ...h,
       attempt,
       providerData: {},
+      supabase: { rpc } as never,
     });
 
     expect(h.summary.failed).toBe(true);
     expect(h.hold).toHaveBeenCalledWith('duplicate_capture_review_failed');
     expect(h.summary.reviewsFiled).toEqual([]);
+    // The row already completed, so the hold persists nothing: the
+    // retry marker requeues it for a filing-only pass.
+    expect(rpc).toHaveBeenCalledWith(
+      'set_duplicate_capture_review_pending_v1',
+      expect.objectContaining({
+        p_pending: true,
+        p_transaction_id: 'attempt-1',
+      })
+    );
   });
 
   it('fails the sweep when admitting a processing attempt errors', async () => {

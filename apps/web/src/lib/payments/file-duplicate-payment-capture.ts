@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { clearDuplicateCaptureReviewPending } from './duplicate-capture-review-pending';
 
 export interface DuplicateCaptureEvidence {
   /** Capture gateway: names the review and selects the reference column. */
@@ -128,6 +129,11 @@ export async function fileDuplicatePaymentCapture({
       if (nullRefError) return false;
     }
   }
+  // The evidence is durable from here (inserted, merged, or already
+  // filed): release a filing-only retry marker ahead of the stamp so a
+  // stamp-only failure cannot reselect a reviewed row. Best-effort — a
+  // failed clear only refiles through the dedupe above.
+  await clearDuplicateCaptureReviewPending(supabase, attempt.id);
   // The Paystack stamp guards on gateway = 'paystack', so a verified
   // Korapay/Juicyway capture needs the gateway-neutral variant: without
   // it the stamp returns false, the filing reports failure, and the sweep

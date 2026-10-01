@@ -334,4 +334,14 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
       'supabase/migrations/20260928183300_settlement_notification_retry_backoff.sql',
     sha256: 'ffa627680762c2e203ac159709dbb7dba02efeb63241ccf018424793a79caa75',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928183400_record_verified_refund_failed_alert.sql',
+    sha256: 'aa12ae26256d3896223d32b440309026d8294bd4c5527c23bcf5e9e5cc42f1d4',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928183500_duplicate_capture_review_pending_marker.sql',
+    sha256: '80c4c0536dc68eca5ea4b96665e133a619cb3a92ce76c802a78c34d6ec8dc8aa',
+  },
 ];

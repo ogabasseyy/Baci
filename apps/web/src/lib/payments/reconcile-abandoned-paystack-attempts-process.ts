@@ -19,7 +19,7 @@ interface PendingAttempt {
   order_id: string;
   paid_order?: { payment_status: string } | Array<{ payment_status: string }>;
   platform_fee: number | null;
-  status: 'pending' | 'processing';
+  status: 'pending' | 'processing' | 'completed';
 }
 
 function paidOrderStatus(
@@ -111,15 +111,23 @@ export async function processAbandonedPaystackAttempt(
     }
   };
 
+  // A completed row is a filing-only retry: its duplicate filings
+  // failed after the atomic finalizer settled it, so it must never
+  // re-finalize nor retire — only its review is still owed.
+  const isCompletedRetry = attempt.status === 'completed';
   // Only clear attempts superseded by a different funded payment on an
   // already paid order. Other pending attempts still need payment recovery.
-  const { data: order, error: orderError } = await supabase
+  // A completed retry only needs the order to exist: it was captured
+  // while paid, and a later refund must not strand its review.
+  const orderQuery = supabase
     .from('orders')
     .select('id')
     .eq('id', attempt.order_id)
-    .eq('merchant_id', attempt.merchant_id)
-    .in('payment_status', ['paid', 'partially_paid'])
-    .maybeSingle();
+    .eq('merchant_id', attempt.merchant_id);
+  if (!isCompletedRetry) {
+    orderQuery.in('payment_status', ['paid', 'partially_paid']);
+  }
+  const { data: order, error: orderError } = await orderQuery.maybeSingle();
   if (orderError || !order) {
     if (orderError) summary.failed = true;
     await hold('order_not_paid_or_unavailable');
@@ -231,7 +239,13 @@ export async function processAbandonedPaystackAttempt(
       mismatchKind = 'payment_evidence_mismatch';
     }
   }
-  if (result.success && result.data.status === 'success') {
+  // A completed retry files under any verified provider status: the
+  // funds settled, so even a now-reversed charge owes the duplicate
+  // review with the gateway's actual status instead of retiring.
+  if (
+    result.success &&
+    (result.data.status === 'success' || isCompletedRetry)
+  ) {
     await resolveVerifiedAbandonedAttemptCapture({
       attempt,
       deadlineMs,
@@ -271,6 +285,14 @@ export async function processAbandonedPaystackAttempt(
     return;
   }
 
+  if (isCompletedRetry) {
+    // Verification failed outright (not a status verdict): never
+    // un-complete an atomically settled payment — hold for the next
+    // sweep instead of retiring it to failed.
+    summary.failed = true;
+    await hold('verification_unavailable');
+    return;
+  }
   // The order and reference guards prevent a concurrent webhook or retry
   // from being overwritten after provider verification.
   const retire = async () =>

@@ -28,6 +28,7 @@ function ownReviewQuery(existing: unknown) {
 describe('fileDuplicateCaptureFallbackReview', () => {
   it('returns true when our own open review already holds the evidence', async () => {
     const insert = vi.fn();
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
     const from = vi
       .fn()
       .mockReturnValueOnce(ownReviewQuery({ id: 'review-1' }))
@@ -36,15 +37,23 @@ describe('fileDuplicateCaptureFallbackReview', () => {
     const filed = await fileDuplicateCaptureFallbackReview({
       attempt,
       evidence,
-      supabase: { from } as never,
+      supabase: { from, rpc } as never,
     });
 
     expect(filed).toBe(true);
     expect(insert).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledWith(
+      'set_duplicate_capture_review_pending_v1',
+      expect.objectContaining({
+        p_pending: false,
+        p_transaction_id: 'attempt-1',
+      })
+    );
   });
 
   it('inserts the full evidence row when no review exists', async () => {
     const insert = vi.fn().mockResolvedValue({ error: null });
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
     const from = vi
       .fn()
       .mockReturnValueOnce(ownReviewQuery(null))
@@ -53,10 +62,14 @@ describe('fileDuplicateCaptureFallbackReview', () => {
     const filed = await fileDuplicateCaptureFallbackReview({
       attempt,
       evidence,
-      supabase: { from } as never,
+      supabase: { from, rpc } as never,
     });
 
     expect(filed).toBe(true);
+    expect(rpc).toHaveBeenCalledWith(
+      'set_duplicate_capture_review_pending_v1',
+      expect.objectContaining({ p_pending: false })
+    );
     expect(insert).toHaveBeenCalledTimes(1);
     expect(insert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -77,6 +90,10 @@ describe('fileDuplicateCaptureFallbackReview', () => {
       .fn()
       .mockResolvedValueOnce({ error: { code: '23505' } })
       .mockResolvedValueOnce({ error: null });
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({ data: false, error: null })
+      .mockResolvedValue({ data: true, error: null });
     const from = vi
       .fn()
       .mockReturnValueOnce(ownReviewQuery(null))
@@ -85,10 +102,14 @@ describe('fileDuplicateCaptureFallbackReview', () => {
     const filed = await fileDuplicateCaptureFallbackReview({
       attempt,
       evidence,
-      supabase: { from } as never,
+      supabase: { from, rpc } as never,
     });
 
     expect(filed).toBe(true);
+    expect(rpc).toHaveBeenCalledWith(
+      'set_duplicate_capture_review_pending_v1',
+      expect.objectContaining({ p_pending: false })
+    );
     expect(insert).toHaveBeenCalledTimes(2);
     expect(insert).toHaveBeenNthCalledWith(
       2,
@@ -118,7 +139,11 @@ describe('fileDuplicateCaptureFallbackReview', () => {
     // records this capture on the already-open review instead.
     expect(filed).toBe(true);
     expect(insert).toHaveBeenCalledTimes(1);
-    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc).toHaveBeenCalledWith(
+      'set_duplicate_capture_review_pending_v1',
+      expect.objectContaining({ p_pending: false })
+    );
     expect(rpc).toHaveBeenCalledWith(
       'merge_duplicate_payment_capture_evidence_v1',
       expect.objectContaining({
@@ -156,7 +181,11 @@ describe('fileDuplicateCaptureFallbackReview', () => {
     // ref slot, not this order's review: no pointless merge retry,
     // straight to the ref-less insert.
     expect(filed).toBe(true);
-    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc).toHaveBeenCalledWith(
+      'set_duplicate_capture_review_pending_v1',
+      expect.objectContaining({ p_pending: false })
+    );
     expect(insert).toHaveBeenCalledTimes(2);
     expect(insert).toHaveBeenNthCalledWith(
       2,
@@ -169,7 +198,8 @@ describe('fileDuplicateCaptureFallbackReview', () => {
     const rpc = vi
       .fn()
       .mockResolvedValueOnce({ data: null, error: { code: 'XX000' } })
-      .mockResolvedValueOnce({ data: true, error: null });
+      .mockResolvedValueOnce({ data: true, error: null })
+      .mockResolvedValue({ data: true, error: null });
     const from = vi
       .fn()
       .mockReturnValueOnce(ownReviewQuery(null))
@@ -182,7 +212,11 @@ describe('fileDuplicateCaptureFallbackReview', () => {
     });
 
     expect(filed).toBe(true);
-    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc).toHaveBeenCalledTimes(3);
+    expect(rpc).toHaveBeenCalledWith(
+      'set_duplicate_capture_review_pending_v1',
+      expect.objectContaining({ p_pending: false })
+    );
     expect(insert).toHaveBeenCalledTimes(1);
   });
 

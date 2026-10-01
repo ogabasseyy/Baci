@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail-send-budget';
 import { assertRefundNotificationSendTime } from './assert-refund-notification-send-time';
 import { awaitRefundNotificationDeadline } from './await-refund-notification-deadline';
+import { setDuplicateCaptureReviewPending } from './duplicate-capture-review-pending';
 import { fileDuplicateCaptureFallbackReview } from './file-duplicate-capture-fallback-review';
 import { fileDuplicatePaymentCapture } from './file-duplicate-payment-capture';
 import type { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
@@ -220,6 +221,11 @@ export async function finalizePartiallyPaidAbandonedAttempt({
         summary.reviewsFiled.push(attempt.id);
         return;
       }
+      // finalizePayment already flipped this row to completed, so the
+      // status-guarded hold below persists nothing and no sweep
+      // reselects it: mark the row for a filing-only retry so the
+      // captured extra payment keeps its operations review.
+      await setDuplicateCaptureReviewPending(supabase, attempt.id);
       summary.failed = true;
       await hold('duplicate_capture_review_failed');
       return;

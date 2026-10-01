@@ -54,6 +54,14 @@ describe('fileDuplicatePaymentCapture', () => {
         p_transaction_id: 'attempt-1',
       })
     );
+    // Durable evidence releases any filing-only retry marker.
+    expect(rpc).toHaveBeenCalledWith(
+      'set_duplicate_capture_review_pending_v1',
+      expect.objectContaining({
+        p_pending: false,
+        p_transaction_id: 'attempt-1',
+      })
+    );
   });
 
   it('keeps non-Paystack references out of paystack_ref', async () => {

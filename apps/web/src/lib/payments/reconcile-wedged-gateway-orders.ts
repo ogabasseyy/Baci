@@ -64,7 +64,7 @@ export async function reconcileWedgedGatewayOrders({
   // Cancelled/refunded orders stay in scope (the finalizer files their
   // review); every terminal outcome is stamped so it never consumes the
   // batch again nor starves healable candidates.
-  const { data: candidates, error: lookupError } = await supabase
+  const { data: mainCandidates, error: lookupError } = await supabase
     .from('transactions')
     .select(
       'id, created_at, order_id, merchant_id, amount, currency, platform_fee, gateway, gateway_reference, metadata, status, orders!transactions_order_id_fkey!inner(id, payment_status, cancelled_at)'
@@ -88,7 +88,31 @@ export async function reconcileWedgedGatewayOrders({
     throw new Error(`wedged_order_lookup_failed: ${lookupError.message}`);
   }
 
-  for (const raw of candidates ?? []) {
+  // Filing-only retries: completed captures on paid orders whose
+  // duplicate filings both failed carry the retry marker. Unstamped
+  // only — a stamped row already reached a terminal outcome.
+  const { data: pendingRetries, error: pendingError } = await supabase
+    .from('transactions')
+    .select(
+      'id, created_at, order_id, merchant_id, amount, currency, platform_fee, gateway, gateway_reference, metadata, status, orders!transactions_order_id_fkey!inner(id, payment_status, cancelled_at)'
+    )
+    .eq('transaction_type', 'payment')
+    .eq('status', 'completed')
+    .eq('orders.payment_status', 'paid')
+    .eq('metadata->>duplicate_capture_review_pending', 'true')
+    .not('order_id', 'is', null)
+    .lt('updated_at', cutoff)
+    .is('metadata->wedge_sweep_resolution', null)
+    .order('updated_at', { ascending: true })
+    .limit(limit);
+
+  if (pendingError) {
+    throw new Error(`wedged_order_lookup_failed: ${pendingError.message}`);
+  }
+
+  const candidates = [...(mainCandidates ?? []), ...(pendingRetries ?? [])];
+
+  for (const raw of candidates) {
     const candidate = raw as unknown as WedgedCandidate;
     // Stop starting candidates at the pass deadline: serial provider
     // re-verification can outlast the invocation budget, and unstarted

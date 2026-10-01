@@ -13,9 +13,13 @@ export const candidate = {
   status: 'pending',
 };
 
+const CANDIDATE_COLUMNS =
+  'id, order_id, merchant_id, gateway_reference, amount, currency, status, metadata, platform_fee, paid_order:orders!transactions_order_id_fkey!inner(payment_status)';
+
 export function createClient(
   rows = [candidate],
-  { paid = true, completed = true, dvaSibling = false } = {}
+  { paid = true, completed = true, dvaSibling = false } = {},
+  pendingRows: unknown[] = []
 ) {
   const selectUpdated = vi.fn().mockResolvedValue({
     data: [{ id: 'attempt-1' }],
@@ -26,15 +30,30 @@ export function createClient(
     select: selectUpdated,
   };
   const update = vi.fn(() => updateBuilder);
+  const lookupEqCalls: unknown[][] = [];
+  let lookupEqSeen = 0;
   const lookup = {
-    eq: vi.fn().mockReturnThis(),
+    eq: vi.fn((...args: unknown[]) => {
+      lookupEqCalls.push(args);
+      return lookup;
+    }),
     in: vi.fn().mockReturnThis(),
     is: vi.fn().mockReturnThis(),
     neq: vi.fn().mockReturnThis(),
     not: vi.fn().mockReturnThis(),
     or: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockResolvedValue({ data: rows, error: null }),
+    // The sweep runs two candidate queries (main, then filing-only
+    // retries): route by the retry marker filter so each resolves its
+    // own canned rows.
+    limit: vi.fn(() => {
+      const queryEqCalls = lookupEqCalls.slice(lookupEqSeen);
+      lookupEqSeen = lookupEqCalls.length;
+      const isPendingRetry = queryEqCalls.some(
+        ([column]) => column === 'metadata->>duplicate_capture_review_pending'
+      );
+      return { data: isPendingRetry ? pendingRows : rows, error: null };
+    }),
   };
   const orderLookup = {
     eq: vi.fn().mockReturnThis(),
@@ -67,13 +86,19 @@ export function createClient(
   };
   let transactionSelects = 0;
   const from = vi.fn((table: string) => ({
-    select: vi.fn(() =>
-      table === 'orders'
-        ? orderLookup
-        : transactionSelects++ % 2 === 0
-          ? lookup
-          : completedLookup
-    ),
+    select: vi.fn((columns: string) => {
+      if (table === 'orders') return orderLookup;
+      // Candidate queries always resolve the attempt rows and the
+      // completed-payment probe always resolves its own canned rows;
+      // anything else keeps the legacy alternation.
+      if (table === 'transactions' && columns === CANDIDATE_COLUMNS) {
+        return lookup;
+      }
+      if (table === 'transactions' && columns === 'id') {
+        return completedLookup;
+      }
+      return transactionSelects++ % 2 === 0 ? lookup : completedLookup;
+    }),
     update,
   }));
   return {

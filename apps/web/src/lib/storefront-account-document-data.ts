@@ -71,6 +71,17 @@ interface DocumentEligibilityInput {
 export function isManualOrderDocumentAvailable(
   input: DocumentEligibilityInput
 ) {
+  // Mirror the sender's paid-balance consistency check: a paid order whose
+  // total was corrected above its payments is skipped, never sent, so the
+  // archive must not advertise a document for it.
+  const paidBalanceSettled =
+    normalizePaymentStatus(input.paymentStatus) !== 'paid' ||
+    (input.total != null &&
+      input.amountPaid != null &&
+      Number.isFinite(Number(input.total)) &&
+      Number(input.total) >= 0 &&
+      Number.isFinite(Number(input.amountPaid)) &&
+      Number(input.amountPaid) >= Number(input.total));
   return (
     Boolean(input.recordedByUserId) &&
     !isImportedHistoricalOrder(input) &&
@@ -79,7 +90,8 @@ export function isManualOrderDocumentAvailable(
     ) &&
     ['paid', 'unpaid', 'pending', 'partially_paid'].includes(
       normalizePaymentStatus(input.paymentStatus)
-    )
+    ) &&
+    paidBalanceSettled
   );
 }
 

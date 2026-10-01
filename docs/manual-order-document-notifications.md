@@ -27,9 +27,10 @@ successful send does not automatically resend. Staff resend is deliberate:
 1. Correct the order contact (`customer_email`/`customer_id`) on the order row.
 2. Delete the sent `order_notification_outbox` row; the claim, its order links,
    and the dead claim URL cascade with it.
-3. Touch a monitored column (`total`, `amount_paid`, `payment_status`,
-   `customer_email`, or `customer_id`) so the update trigger re-evaluates and
-   queues a fresh row with a new claim token for the corrected address.
+3. Touch a monitored column (`payment_status`, `amount_paid`, `total`,
+   `customer_email`, `customer_id`, `recorded_by_user_id`, `import_job_id`,
+   `external_source`, or `shipping_status`) so the update trigger re-evaluates
+   and queues a fresh row with a new claim token for the corrected address.
 
 Total corrections alone also re-evaluate eligibility; a paid order whose total
 now exceeds its payments additionally needs a consistent `payment_status`
@@ -53,12 +54,16 @@ a minimal domain fixture; it is not a full Supabase-history replay.
 
 ## Activation
 
-Release the matching, backwards-compatible web worker first, then apply both new
-append-only migrations to activate the triggers. Drain outbox batches with the
-new code only: old workers do not understand the manual document event types.
-Watch the cron 5xx rate while the new worker rolls out; any `manual_order_*`
-500 means an old revision is still draining, so hold further deploys until the
-batches clear. No new email provider,
+Release the matching, backwards-compatible web worker strictly first, then
+apply the new append-only migrations to activate the triggers, with no
+mixed-version consumers draining the queue. Old revisions 500 the whole
+claimed batch (including unrelated shipped/delivered rows, which then wait
+for lease expiry) when a batch contains a manual event type, so migration
+before worker head-of-line-blocks shipping notifications. Drain outbox
+batches with the new code only: old workers do not understand the manual
+document event types. Watch the cron 5xx rate and outbox lock age while the
+new worker rolls out; any `manual_order_*` 500 means an old revision is still
+draining, so hold further deploys until the batches clear. No new email provider,
 cron schedule, app release or environment variable is required. Use a disposable
 staging merchant and test inbox to verify actual provider acceptance, PDF rendering,
 verified sign-in and account receipt access before a production release. No live

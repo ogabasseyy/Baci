@@ -33,7 +33,10 @@ it('emits unit-suffixed equality values and unit lexemes for ranges', () => {
     { key: 'power_w', operator: 'eq', value: 30 },
     { key: 'storage_gb', operator: 'gte', value: 256 },
     { key: 'color', operator: 'eq', value: 'black' },
-  ] }))).toBe('(power30w & storagegb & black)');
+  ] }))).toBe('(power30w & storagegb & black & color)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ attributes: [
+    { key: 'connector', operator: 'eq', value: 'USB-C' },
+  ] }))).toBe('(usb & c & connector)');
   expect(buildDiscoveryFactRetrievalQuery(intent({ attributes: [
     { key: 'ram_gb', operator: 'gte', value: 16 },
   ] }))).toBe('(ramgb)');

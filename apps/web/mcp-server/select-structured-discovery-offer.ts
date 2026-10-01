@@ -1,4 +1,4 @@
-import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
+import { normalizeCanonicalProductCondition, toGoogleListingCondition } from '@baci/shared/lib';
 import type { McpDiscoveryIntent } from '../src/schemas/mcp-discovery-intent';
 import { normalizeDiscoveryOptionAttributes } from './normalize-discovery-option-attributes';
 import type { hydrateSearchProductAvailability } from './search-product-availability';
@@ -120,8 +120,16 @@ export function selectStructuredDiscoveryOffer(
     }
   }
 
+  // Same-condition offers serve the parent price on the PDP and are never sold
+  // through directly, so selection must not advertise them as options. Only
+  // the condition comparison is borrowed here: feed-row concerns from the
+  // shared eligibility helper (row identity, first-per-condition) do not
+  // apply to cheapest-option selection.
+  const parentListingCondition = toGoogleListingCondition(
+    typeof product.condition === 'string' ? product.condition : null);
   for (const rawOffer of row.availableOffers ?? []) {
     const offer = record(rawOffer);
+    if (toGoogleListingCondition(typeof offer.condition === 'string' ? offer.condition : null) === parentListingCondition) continue;
     if (manageStock && !hasPositiveStock(offer.stock_quantity)) continue;
     const price = finitePrice(offer.price);
     if (price === undefined) continue;

@@ -45,7 +45,9 @@ function attributeTerms(key: string, value: string | number): string[] {
       .replace(/_hz$/, '');
     return [`${identity}${value}${unit ?? ''}`.toLowerCase()];
   }
-  return sanitizeTerm(value);
+  // Text values AND with their key so connector=USB-C cannot be satisfied by
+  // a document whose USB-C lives under another key or in marketing prose.
+  return [...sanitizeTerm(value), ...sanitizeTerm(key)];
 }
 
 // Ranges cannot be tsquery terms, but the combined document carries keyed

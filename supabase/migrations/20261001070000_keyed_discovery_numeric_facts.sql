@@ -34,7 +34,15 @@ AS $$
         FROM (VALUES ('storage_gb', 'storage'), ('ram_gb', 'ram')) AS capacities(key, attribute_prefix)
         WHERE pg_catalog.jsonb_typeof(facts -> 'attributes' -> key) = 'number'
       ) AS values_with_units
-    ), ''));
+    ), ''))
+    -- Attribute keys are lexemes too, so a text constraint retrieves only
+    -- documents carrying that key: color=black must not match a document
+    -- that merely mentions black. Keys tokenize the same way as values.
+    || pg_catalog.to_tsvector('simple'::regconfig,
+      CASE WHEN pg_catalog.jsonb_typeof(facts -> 'attributes') = 'object'
+      THEN coalesce((SELECT pg_catalog.string_agg(k, ' ')
+        FROM pg_catalog.jsonb_object_keys(facts -> 'attributes') AS k), '')
+      ELSE '' END);
 $$;
 
 -- Keep the serving index until the keyed replacement has finished building.

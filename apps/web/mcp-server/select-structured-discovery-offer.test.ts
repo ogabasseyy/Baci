@@ -279,7 +279,7 @@ it('withholds unknown facts from exclusions and spec-constrained offers while di
     alternatives: [{}], excluded_product_types: ['charger'],
   }, {}, onUnverifiedFacts)).toBeUndefined();
   const row = makeRow({ has_variants: true, discovery_metadata: { product_type: 'phone' } });
-  row.availableOffers = [{ id: 'offer-1', price: 450, condition: 'new', stock_quantity: 1 }] as typeof row.availableOffers;
+  row.availableOffers = [{ id: 'offer-1', price: 450, condition: 'used', stock_quantity: 1 }] as typeof row.availableOffers;
   expect(selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone', attributes: [
     { key: 'storage_gb', operator: 'eq', value: 128 },
   ] }), {}, onUnverifiedFacts)).toBeUndefined();

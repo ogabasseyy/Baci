@@ -40,3 +40,13 @@ it('matches canonically equivalent Unicode in product identity and text attribut
 
   expect(selected?.selectedOption.kind).toBe('base');
 });
+
+it('excludes same-condition offers the storefront would not sell through', () => {
+  const row = makeRow({ condition: 'new', has_condition_offers: true });
+  row.availableOffers = [
+    { id: 'new-cheap', price: 400, condition: 'new', stock_quantity: 1 },
+    { id: 'used-offer', price: 450, condition: 'used', stock_quantity: 1 },
+  ] as typeof row.availableOffers;
+  const selected = selectStructuredDiscoveryOffer(row, intent({}));
+  expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'used-offer', price: 450 });
+});

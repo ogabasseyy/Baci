@@ -62,6 +62,7 @@ it('indexes and queries numeric facts with their attribute identity', () => {
   expect(keyed).toContain("('storage_gb', 'GB', 'storage')");
   expect(keyed).toContain("('ram_gb', 'GB', 'ram')");
   expect(keyed).toContain('attribute_prefix || value || unit');
+  expect(keyed).toContain('jsonb_object_keys');
   expect(keyed).toContain('CREATE INDEX CONCURRENTLY products_discovery_keyed_search_idx');
   expect(keyed.indexOf('CREATE INDEX CONCURRENTLY products_discovery_keyed_search_idx'))
     .toBeLessThan(keyed.indexOf('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts('));

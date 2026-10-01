@@ -35,6 +35,13 @@ BEGIN
   IF document @@ plainto_tsquery('simple', 'ram8.5gb') THEN
     RAISE EXCEPTION 'Keyed numeric lexeme was fabricated';
   END IF;
+  document := public.product_discovery_search_document_v3('Headset', 'Acme', 'Audio', '',
+    '{"attributes":{"color":"black"}}'::jsonb);
+  IF NOT document @@ plainto_tsquery('simple', 'black') OR
+     NOT document @@ plainto_tsquery('simple', 'color') OR
+     document @@ plainto_tsquery('simple', 'connector') THEN
+    RAISE EXCEPTION 'Attribute key lexemes are missing or fabricated';
+  END IF;
   IF (SELECT prosecdef FROM pg_proc WHERE oid = 'public.search_product_discovery_facts(uuid,text,integer,integer,text,text)'::regprocedure) THEN
     RAISE EXCEPTION 'Fact retrieval must preserve invoker RLS';
   END IF;

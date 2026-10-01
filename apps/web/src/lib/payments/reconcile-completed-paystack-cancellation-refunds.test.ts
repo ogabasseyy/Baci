@@ -30,6 +30,7 @@ function selectQuery(data: unknown) {
   return {
     eq: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
+    lt: vi.fn().mockReturnThis(),
     not: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     limit: vi.fn().mockResolvedValue({ data, error: null }),
@@ -83,11 +84,15 @@ describe('legacy completed Paystack cancellation refunds', () => {
     const query = {
       eq: vi.fn().mockReturnThis(),
       in: vi.fn().mockReturnThis(),
+      lt: vi.fn().mockReturnThis(),
       not: vi.fn().mockReturnThis(),
       order: vi.fn().mockReturnThis(),
       limit: vi.fn().mockResolvedValue({ data: [refund], error: null }),
     };
-    const from = vi.fn().mockReturnValue({ select: vi.fn(() => query) });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce({ select: vi.fn(() => query) })
+      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([])) });
     const supabase = { from } as never;
 
     await expect(
@@ -104,7 +109,57 @@ describe('legacy completed Paystack cancellation refunds', () => {
       'cancellation_order.shipping_status',
       ['cancelled', 'canceled']
     );
+    expect(query.limit).toHaveBeenCalledWith(25);
     expect(reconcile).toHaveBeenCalledWith(supabase, refund);
+  });
+
+  it('sweeps stale finalized refunds for contradictions within a small cap', async () => {
+    const finalizedRefund = {
+      ...legacyRefund,
+      id: 'refund-finalized',
+      cancellation_order: {
+        payment_status: 'refunded',
+        shipping_status: 'cancelled',
+        cancelled_at: '2026-09-20T00:00:00Z',
+      },
+    };
+    const finalizedQuery = {
+      eq: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
+      lt: vi.fn().mockReturnThis(),
+      not: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi
+        .fn()
+        .mockResolvedValue({ data: [finalizedRefund], error: null }),
+    };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([])) })
+      .mockReturnValueOnce({ select: vi.fn(() => finalizedQuery) });
+    const supabase = { from } as never;
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60_000).toISOString();
+
+    await expect(
+      reconcileCompletedPaystackCancellationRefunds(supabase)
+    ).resolves.toEqual({ checked: 1, failed: 0 });
+
+    // Finalized orders stay eligible, but only rows untouched for a
+    // week and only a few per tick, so the sweep never crowds the
+    // pre-finalization batch.
+    expect(finalizedQuery.eq).toHaveBeenCalledWith(
+      'cancellation_order.payment_status',
+      'refunded'
+    );
+    const cutoff = finalizedQuery.lt.mock.calls.find(
+      (call) => call[0] === 'updated_at'
+    )?.[1] as string;
+    expect(typeof cutoff).toBe('string');
+    expect(Math.abs(Date.parse(cutoff) - Date.parse(weekAgo))).toBeLessThan(
+      60_000
+    );
+    expect(finalizedQuery.limit).toHaveBeenCalledWith(5);
+    expect(reconcile).toHaveBeenCalledWith(supabase, finalizedRefund);
   });
 
   it('sends completed refunds on payment-pending orders for verification', async () => {
@@ -119,7 +174,8 @@ describe('legacy completed Paystack cancellation refunds', () => {
     };
     const from = vi
       .fn()
-      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([refund])) });
+      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([refund])) })
+      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([])) });
     const supabase = { from } as never;
 
     await expect(
@@ -143,6 +199,7 @@ describe('legacy completed Paystack cancellation refunds', () => {
       .mockReturnValueOnce({
         select: vi.fn(() => selectQuery([auditedRefund])),
       })
+      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([])) })
       .mockReturnValueOnce({ update });
     const supabase = { from } as never;
 
@@ -174,6 +231,7 @@ describe('legacy completed Paystack cancellation refunds', () => {
     const from = vi
       .fn()
       .mockReturnValueOnce({ select: vi.fn(() => selectQuery([legacyRefund])) })
+      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([])) })
       .mockReturnValueOnce({ update });
     const supabase = { from } as never;
 
@@ -206,6 +264,7 @@ describe('legacy completed Paystack cancellation refunds', () => {
     const from = vi
       .fn()
       .mockReturnValueOnce({ select: vi.fn(() => selectQuery([legacyRefund])) })
+      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([])) })
       .mockReturnValueOnce({ update });
     const supabase = { from } as never;
 
@@ -241,6 +300,7 @@ describe('legacy completed Paystack cancellation refunds', () => {
           ])
         ),
       })
+      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([])) })
       .mockReturnValueOnce({ update });
 
     await expect(
@@ -260,6 +320,7 @@ describe('legacy completed Paystack cancellation refunds', () => {
     const from = vi
       .fn()
       .mockReturnValueOnce({ select: vi.fn(() => selectQuery([legacyRefund])) })
+      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([])) })
       .mockReturnValueOnce({ update });
 
     await expect(

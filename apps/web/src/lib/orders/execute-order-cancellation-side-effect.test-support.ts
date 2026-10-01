@@ -46,6 +46,7 @@ function transactionQuery(data: unknown) {
 export function auditReviewsQuery(data: unknown) {
   return {
     eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
     is: vi.fn().mockResolvedValue({ data, error: null }),
     select: vi.fn().mockReturnThis(),
   };

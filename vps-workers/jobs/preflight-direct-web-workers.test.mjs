@@ -10,7 +10,9 @@ const commonEnv = {
   GIGL_EMAIL: 'worker@example.com',
   GIGL_PASSWORD: 'provider-password',
   GIGL_TRACKING_WORKER_TOKEN: token('gigl_tracking_worker'),
+  INTERNAL_API_SECRET: 'test-internal-secret',
   IMEI_IDENTIFIER_ENCRYPTION_KEY: 'encryption-key',
+  JUMIA_AUTHORIZATION_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64'),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon-key',
   NEXT_PUBLIC_SUPABASE_URL: 'https://projectref.supabase.co',
   PETROCK_API_TOKEN: 'petrock-token',
@@ -20,6 +22,7 @@ const commonEnv = {
   QUIZ_PHASE: '1a',
   QUIZ_PRODUCTION_APPROVED: 'false',
   SUPABASE_SERVICE_ROLE_KEY: 'service-role-key',
+  SUPABASE_JUMIA_CREDENTIAL_KEY: 'jumia-credential-key',
   ZEPTOMAIL_TOKEN: 'zeptomail-token',
 };
 
@@ -34,6 +37,15 @@ function token(role, alg = 'ES256') {
 }
 
 describe('direct worker environment preflight', () => {
+  it('requires the request-context cache expiry credential', () => {
+    assert.deepEqual(
+      getDirectWorkerPreflightProblems({
+        ...commonEnv,
+        INTERNAL_API_SECRET: '',
+      }),
+      ['INTERNAL_API_SECRET is required']
+    );
+  });
   it('accepts an explicitly configured pre-launch environment', () => {
     assert.deepEqual(getDirectWorkerPreflightProblems(commonEnv), []);
   });
@@ -103,6 +115,27 @@ describe('direct worker environment preflight', () => {
       assert.deepEqual(problems, []);
     });
   }
+  it('requires the shared Jumia authorization encryption key', () => {
+    const problems = getDirectWorkerPreflightProblems({
+      ...commonEnv,
+      JUMIA_AUTHORIZATION_ENCRYPTION_KEY: '',
+    });
+
+    assert.deepEqual(problems, [
+      'JUMIA_AUTHORIZATION_ENCRYPTION_KEY is required',
+    ]);
+  });
+
+  it('rejects a Jumia authorization key that is not 32 decoded bytes', () => {
+    const problems = getDirectWorkerPreflightProblems({
+      ...commonEnv,
+      JUMIA_AUTHORIZATION_ENCRYPTION_KEY: Buffer.alloc(16).toString('base64'),
+    });
+
+    assert.deepEqual(problems, [
+      'JUMIA_AUTHORIZATION_ENCRYPTION_KEY must be Base64-encoded 32 bytes',
+    ]);
+  });
 
   it('requires the full quiz production gate', () => {
     const problems = getDirectWorkerPreflightProblems({

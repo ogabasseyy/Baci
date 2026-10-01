@@ -10,7 +10,7 @@ import {
   supabaseMocks,
   THEME_TEXT,
   THEME_TEXT_ON_PRIMARY,
-} from './analytics-config.test-support';
+} from '../../__tests__/admin/analytics-config.test-support';
 
 describe('AnalyticsConfigScreen — appearance and access', () => {
   beforeEach(resetAnalyticsConfigMocks);

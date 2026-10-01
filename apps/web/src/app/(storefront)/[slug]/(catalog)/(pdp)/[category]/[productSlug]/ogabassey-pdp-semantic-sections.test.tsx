@@ -125,14 +125,16 @@ describe('OgabasseyPdpSemanticSections', () => {
       })
     );
 
-    expect(mockGetCachedProductSeoLinkData).toHaveBeenCalledWith(
-      'merchant-1',
-      'laptops',
-      'prod-1',
-      'lenovo-legion',
-      'Lenovo',
-      true
-    );
+    expect(mockGetCachedProductSeoLinkData).toHaveBeenCalledWith({
+      blogEnabled: true,
+      categorySlug: 'laptops',
+      merchantId: 'merchant-1',
+      productBrand: 'Lenovo',
+      productId: 'prod-1',
+      productName: 'Lenovo Legion',
+      productSlug: 'lenovo-legion',
+      storeSlug: 'ogabassey',
+    });
     expect(mockBuildProductSemanticModel).toHaveBeenCalledWith(
       expect.objectContaining({
         categorySlug: 'laptops',
@@ -218,5 +220,38 @@ describe('OgabasseyPdpSemanticSections', () => {
     );
 
     warnSpy.mockRestore();
+  });
+
+  it('passes the display name to the guide prefilter when a legacy slug differs', async () => {
+    const legacyProduct = {
+      ...product,
+      slug: 'legacy-item-42',
+      name: 'Lenovo Legion 5 Pro',
+    } as Product;
+
+    await OgabasseyPdpSemanticSections({
+      categoryName: 'Laptops',
+      categorySlug: 'laptops',
+      merchant: {
+        id: 'merchant-1',
+        business_name: 'OgaBassey',
+        feature_settings: { blog_enabled: true },
+      },
+      product: legacyProduct,
+      productComparePathPrefix: '/ogabassey',
+      storeSlug: 'ogabassey',
+      storeUrl: 'https://ogabassey.com',
+    });
+
+    expect(mockGetCachedProductSeoLinkData).toHaveBeenCalledWith({
+      blogEnabled: true,
+      categorySlug: 'laptops',
+      merchantId: 'merchant-1',
+      productBrand: 'Lenovo',
+      productId: 'prod-1',
+      productName: 'Lenovo Legion 5 Pro',
+      productSlug: 'legacy-item-42',
+      storeSlug: 'ogabassey',
+    });
   });
 });

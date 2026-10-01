@@ -113,13 +113,4 @@ config.resolver = {
   ],
 };
 
-// Worklets bundle mode must wrap the FULL config LAST: it composes
-// resolver.resolveRequest, so applying it before the resolver assignment above
-// would let `config.resolver = {…}` overwrite it. If a Sentry metro wrapper is
-// ever added, it must wrap OUTSIDE this call:
-//   withSentryConfig(getBundleModeMetroConfig(config), …)
-const {
-  getBundleModeMetroConfig,
-} = require('react-native-worklets/bundleMode');
-
-module.exports = getBundleModeMetroConfig(config);
+module.exports = config;

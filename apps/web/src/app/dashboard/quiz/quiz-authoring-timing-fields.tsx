@@ -1,0 +1,105 @@
+import { QUIZ_DEFAULT_TIME_ZONE } from '@baci/shared';
+import { clampNumberInput } from './quiz-admin-actions';
+import { QUIZ_AUTHORING_MAX_DURATION_SECONDS } from './quiz-authoring-timing-limits';
+
+interface QuizAuthoringTimingFieldsProps {
+  timingKind: 'immediate' | 'scheduled';
+  onTimingKindChange: (timingKind: 'immediate' | 'scheduled') => void;
+  windowMinutes: string;
+  onWindowMinutesChange: (value: string) => void;
+  scheduledStart: string;
+  onScheduledStartChange: (value: string) => void;
+  scheduledEnd: string;
+  onScheduledEndChange: (value: string) => void;
+}
+
+/**
+ * Launch timing inputs: the immediate live window, or the scheduled
+ * universal start/end wall clocks in the launch policy zone. The parent
+ * owns syncing and validation; this component only edits.
+ */
+export function QuizAuthoringTimingFields({
+  timingKind,
+  onTimingKindChange,
+  windowMinutes,
+  onWindowMinutesChange,
+  scheduledStart,
+  onScheduledStartChange,
+  scheduledEnd,
+  onScheduledEndChange,
+}: QuizAuthoringTimingFieldsProps) {
+  return (
+    <>
+      <label className="grid gap-2 text-sm font-medium">
+        Launch timing
+        <select
+          className="h-11 rounded-md border bg-background px-3"
+          value={timingKind}
+          onChange={(event) =>
+            onTimingKindChange(
+              event.target.value === 'scheduled' ? 'scheduled' : 'immediate'
+            )
+          }
+        >
+          <option value="immediate">Launch immediately after review</option>
+          <option value="scheduled">Schedule a universal start and end</option>
+        </select>
+      </label>
+      {timingKind === 'immediate' ? (
+        <label className="grid gap-2 text-sm font-medium">
+          Total quiz duration (seconds)
+          <input
+            className="h-11 rounded-md border bg-background px-3"
+            min={1}
+            max={QUIZ_AUTHORING_MAX_DURATION_SECONDS}
+            step={1}
+            type="number"
+            value={Math.round(Number(windowMinutes) * 60)}
+            onBlur={() => {
+              // Blur only clamps the displayed value; reporting an
+              // unchanged duration would mark the window as manually
+              // edited and skip the automatic duration resync after
+              // generation changes the question count.
+              const clamped = String(
+                Number(
+                  clampNumberInput(
+                    String(Math.round(Number(windowMinutes) * 60)),
+                    1,
+                    QUIZ_AUTHORING_MAX_DURATION_SECONDS
+                  )
+                ) / 60
+              );
+              if (Number(clamped) !== Number(windowMinutes)) {
+                onWindowMinutesChange(clamped);
+              }
+            }}
+            onChange={(event) =>
+              onWindowMinutesChange(String(Number(event.target.value) / 60))
+            }
+          />
+        </label>
+      ) : (
+        <>
+          <label className="grid gap-2 text-sm font-medium">
+            Scheduled start ({QUIZ_DEFAULT_TIME_ZONE})
+            <input
+              className="h-11 rounded-md border bg-background px-3"
+              type="datetime-local"
+              value={scheduledStart}
+              onChange={(event) => onScheduledStartChange(event.target.value)}
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-medium">
+            Universal end ({QUIZ_DEFAULT_TIME_ZONE})
+            <input
+              className="h-11 rounded-md border bg-background px-3"
+              type="datetime-local"
+              value={scheduledEnd}
+              onChange={(event) => onScheduledEndChange(event.target.value)}
+            />
+          </label>
+        </>
+      )}
+    </>
+  );
+}

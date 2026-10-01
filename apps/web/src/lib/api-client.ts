@@ -122,11 +122,13 @@ export async function fetchWithCsrf(
  */
 export async function apiPost<T = unknown>(
   url: string,
-  data?: unknown
+  data?: unknown,
+  options: Omit<RequestInit, 'body' | 'method'> = {}
 ): Promise<T> {
   const response = await fetchWithCsrf(url, {
+    ...options,
     method: 'POST',
-    body: data ? JSON.stringify(data) : undefined,
+    body: data === undefined ? undefined : JSON.stringify(data),
   });
 
   if (!response.ok) {

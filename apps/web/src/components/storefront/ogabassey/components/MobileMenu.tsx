@@ -163,7 +163,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
               Login / Register
             </button>
             <p className="text-center text-[10px] text-gray-400 mt-3">
-              v1.0.0 • © {new Date().getFullYear()} Ogabassey
+              v1.0.0 • © Ogabassey
             </p>
           </div>
         </div>

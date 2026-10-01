@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { type RefObject, useRef } from 'react';
 import type { OrdersViewState } from '@/lib/orders-view-state';
 import { OrdersDateChip } from './OrdersDateChip';
 import { OrdersList } from './OrdersList';
@@ -31,6 +31,9 @@ interface OrdersScrollSurfaceProps {
   onDismissInsight: () => void;
   onRefresh: () => void;
   onEndReached: () => void;
+  scrollRef?: RefObject<{
+    scrollToOffset: (options: { offset: number; animated?: boolean }) => void;
+  } | null>;
 }
 
 export function OrdersScrollSurface({
@@ -50,6 +53,7 @@ export function OrdersScrollSurface({
   onDismissInsight,
   onRefresh,
   onEndReached,
+  scrollRef,
 }: OrdersScrollSurfaceProps) {
   const hasDismissedInsight = useRef(false);
 
@@ -88,6 +92,7 @@ export function OrdersScrollSurface({
         onScroll={handleListScroll}
         onRefresh={onRefresh}
         onEndReached={onEndReached}
+        scrollRef={scrollRef}
       />
     </>
   );

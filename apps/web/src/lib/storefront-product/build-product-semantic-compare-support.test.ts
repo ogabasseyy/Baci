@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PRODUCT_SCOPED_COMPARE_DISCOVERY_PRODUCT_LIMIT } from '@/lib/storefront-compare/build-compare-discovery-links';
+import { parseCompareSlug } from '@/lib/storefront-compare/compare-slugs';
 import {
   buildProductSemanticCompareSupport,
   isApprovedSupportLink,
@@ -41,6 +42,16 @@ function makeInput(
 }
 
 describe('buildProductSemanticCompareSupport', () => {
+  it('does not approve a compare participant with a product-slug prefix only', () => {
+    expect(
+      isApprovedSupportLink({
+        approvedCompareSlugs: new Set(['current-phone-vs-other-phone']),
+        categorySlug: 'smartphones',
+        href: 'https://ogabassey.com/smartphones/compare/current-phone-plus-vs-other-phone',
+      })
+    ).toBe(false);
+  });
+
   it('keeps only the category hub when inventory is empty', () => {
     const currentProduct = makeCandidate({
       slug: 'iphone-17-pro-max',
@@ -118,7 +129,7 @@ describe('buildProductSemanticCompareSupport', () => {
     ]);
   });
 
-  it('keeps price-band links for deep PDPs without unapproved compare links', () => {
+  it('reserves an older current PDP in the bounded compare approval window', () => {
     const inventory = Array.from(
       { length: PRODUCT_SCOPED_COMPARE_DISCOVERY_PRODUCT_LIMIT + 1 },
       (_, index) =>
@@ -147,9 +158,25 @@ describe('buildProductSemanticCompareSupport', () => {
       })
     );
 
+    const compareLinks = support.supportLinks.filter((link) =>
+      link.href.includes('/compare/')
+    );
+    expect(compareLinks.length).toBeGreaterThan(0);
     expect(
-      support.supportLinks.some((link) => link.href.includes('/compare/'))
-    ).toBe(false);
+      compareLinks.every((link) => {
+        const slug = link.href.split('/compare/')[1]?.split(/[?#]/)[0];
+        const parsed = slug ? parseCompareSlug(slug) : null;
+        return Boolean(
+          parsed &&
+            [parsed.leftKey, parsed.rightKey].includes(currentProduct.slug)
+        );
+      })
+    ).toBe(true);
+    expect(
+      Array.from(support.approvedCompareSlugs).some((slug) =>
+        slug.split('-vs-').includes(currentProduct.slug)
+      )
+    ).toBe(true);
     expect(support.supportLinks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -157,6 +184,50 @@ describe('buildProductSemanticCompareSupport', () => {
         }),
       ])
     );
+  });
+
+  it('deduplicates inventory slugs before applying the discovery limit', () => {
+    const currentProduct = makeCandidate({
+      slug: 'current-phone',
+      name: 'Current Phone',
+      brand: 'Current Brand',
+      price: 500_000,
+    });
+    const repeatedProduct = makeCandidate({
+      slug: 'repeated-phone',
+      name: 'Unrelated Budget Device',
+      brand: 'Other Brand',
+      price: 10_000,
+    });
+    const finalUniqueProduct = makeCandidate({
+      slug: 'final-unique-phone',
+      name: 'Current Phone Plus',
+      brand: 'Current Brand',
+      price: 499_999,
+      product_key_specs: {
+        chipset: 'Other Chip',
+        ram_gb: 16,
+        storage_gb: 256,
+      },
+    });
+    const support = buildProductSemanticCompareSupport(
+      makeInput({
+        currentProduct,
+        inventory: [
+          ...Array.from(
+            { length: PRODUCT_SCOPED_COMPARE_DISCOVERY_PRODUCT_LIMIT },
+            () => repeatedProduct
+          ),
+          finalUniqueProduct,
+        ],
+      })
+    );
+
+    expect(
+      Array.from(support.approvedCompareSlugs).some((slug) =>
+        slug.split('-vs-').includes(finalUniqueProduct.slug)
+      )
+    ).toBe(true);
   });
 
   it('normalizes missing category slugs before building support links', () => {

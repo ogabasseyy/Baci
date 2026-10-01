@@ -107,7 +107,7 @@ BEGIN
   WHERE o.id = v_order_id;
 
   BEGIN
-    PERFORM public.update_admin_order(
+    PERFORM public.update_admin_order_with_transaction_discount_metadata(
       v_order_id,
       v_payload || jsonb_build_object(
         'items', v_existing_items || jsonb_build_array(v_foreign_line)
@@ -122,7 +122,7 @@ BEGIN
 
   UPDATE public.orders SET payment_status = 'paid' WHERE id = v_order_id;
   BEGIN
-    PERFORM public.update_admin_order(
+    PERFORM public.update_admin_order_with_transaction_discount_metadata(
       v_order_id,
       v_payload || jsonb_build_object(
         'items', v_existing_items || jsonb_build_array(v_paid_line)
@@ -138,7 +138,7 @@ BEGIN
 
   UPDATE public.orders SET shipping_status = 'delivered' WHERE id = v_order_id;
   BEGIN
-    PERFORM public.update_admin_order(
+    PERFORM public.update_admin_order_with_transaction_discount_metadata(
       v_order_id,
       v_payload || jsonb_build_object(
         'items', v_existing_items || jsonb_build_array(v_paid_line)
@@ -153,7 +153,7 @@ BEGIN
   UPDATE public.orders SET shipping_status = 'pending' WHERE id = v_order_id;
 
   BEGIN
-    PERFORM public.update_admin_order(
+    PERFORM public.update_admin_order_with_transaction_discount_metadata(
       v_order_id,
       v_payload || jsonb_build_object(
         'items', v_existing_items || jsonb_build_array(v_managed_line)

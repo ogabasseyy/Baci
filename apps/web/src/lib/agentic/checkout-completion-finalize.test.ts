@@ -90,7 +90,12 @@ function createUpdateChain(
 }
 
 function createProductsChain(
-  data: Array<{ manage_stock: boolean | null; slug: string }> | null = [],
+  data: Array<{
+    id?: string;
+    inventory_tracking_policy?: string | null;
+    manage_stock: boolean | null;
+    slug: string;
+  }> | null = [],
   error: unknown = null
 ) {
   const chain: {
@@ -107,11 +112,27 @@ function createProductsChain(
   return chain;
 }
 
+function createVariantsChain() {
+  const chain: {
+    eq: ReturnType<typeof vi.fn>;
+    in: ReturnType<typeof vi.fn>;
+    returns: ReturnType<typeof vi.fn>;
+    select: ReturnType<typeof vi.fn>;
+  } = {
+    eq: vi.fn(() => chain),
+    in: vi.fn(() => chain),
+    returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+    select: vi.fn(() => chain),
+  };
+  return chain;
+}
+
 function createSupabaseWithUpdateChains(
   chains: ReturnType<typeof createUpdateChain>[],
   productsChain: ReturnType<typeof createProductsChain> = createProductsChain([
-    { manage_stock: true, slug: 'product-1-slug' },
-  ])
+    { id: 'product-1', manage_stock: true, slug: 'product-1-slug' },
+  ]),
+  variantsChain = createVariantsChain()
 ) {
   const update = vi.fn(() => {
     const chain = chains.shift();
@@ -125,6 +146,9 @@ function createSupabaseWithUpdateChains(
     from: vi.fn((table: string) => {
       if (table === 'products') {
         return productsChain;
+      }
+      if (table === 'product_variants') {
+        return variantsChain;
       }
       if (table !== 'checkout_sessions') {
         throw new Error(`Unexpected table ${table}`);
@@ -389,9 +413,17 @@ describe('finalizeAgenticCheckoutPayment', () => {
       undefined,
       { feedScope: 'merchant' }
     );
-    expect(revalidateProductSlugs).toHaveBeenCalledExactlyOnceWith(
+    expect(revalidateProductSlugs).toHaveBeenCalledTimes(2);
+    expect(revalidateProductSlugs).toHaveBeenNthCalledWith(1, 'merchant-1', [
+      'product-1-slug',
+    ]);
+    // The order-purge helper runs its merchant-independent local
+    // invalidation (hard-expire) even though the slug lookup fails below.
+    expect(revalidateProductSlugs).toHaveBeenNthCalledWith(
+      2,
       'merchant-1',
-      ['product-1-slug']
+      expect.any(Array),
+      { expireImmediately: true }
     );
     expect(markAgenticCheckoutOrderCanceled).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -480,9 +512,17 @@ describe('finalizeAgenticCheckoutPayment', () => {
       undefined,
       { feedScope: 'merchant' }
     );
-    expect(revalidateProductSlugs).toHaveBeenCalledExactlyOnceWith(
+    expect(revalidateProductSlugs).toHaveBeenCalledTimes(2);
+    expect(revalidateProductSlugs).toHaveBeenNthCalledWith(1, 'merchant-1', [
+      'product-1-slug',
+    ]);
+    // The order-purge helper runs its merchant-independent local
+    // invalidation (hard-expire) even though the slug lookup fails below.
+    expect(revalidateProductSlugs).toHaveBeenNthCalledWith(
+      2,
       'merchant-1',
-      ['product-1-slug']
+      expect.any(Array),
+      { expireImmediately: true }
     );
     expect(markAgenticCheckoutOrderCanceled).toHaveBeenCalled();
     expect(releaseChain.contains).not.toHaveBeenCalled();
@@ -538,9 +578,17 @@ describe('finalizeAgenticCheckoutPayment', () => {
       undefined,
       { feedScope: 'merchant' }
     );
-    expect(revalidateProductSlugs).toHaveBeenCalledExactlyOnceWith(
+    expect(revalidateProductSlugs).toHaveBeenCalledTimes(2);
+    expect(revalidateProductSlugs).toHaveBeenNthCalledWith(1, 'merchant-1', [
+      'product-1-slug',
+    ]);
+    // The order-purge helper runs its merchant-independent local
+    // invalidation (hard-expire) even though the slug lookup fails below.
+    expect(revalidateProductSlugs).toHaveBeenNthCalledWith(
+      2,
       'merchant-1',
-      ['product-1-slug']
+      expect.any(Array),
+      { expireImmediately: true }
     );
   });
 
@@ -575,9 +623,16 @@ describe('finalizeAgenticCheckoutPayment', () => {
       undefined,
       { feedScope: 'merchant' }
     );
-    // revalidateProducts() threw synchronously, so per-slug invalidation did
-    // not run.
-    expect(revalidateProductSlugs).not.toHaveBeenCalled();
+    // revalidateProducts() threw synchronously, so the agentic layer's own
+    // per-slug invalidation did not run — but the order-purge helper still
+    // performs its merchant-independent local invalidation (hard-expire) on
+    // both purge paths.
+    expect(revalidateProductSlugs).toHaveBeenCalledTimes(2);
+    expect(revalidateProductSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      expect.any(Array),
+      { expireImmediately: true }
+    );
   });
 
   it('revalidates the touched product slugs after a successful order', async () => {
@@ -585,7 +640,7 @@ describe('finalizeAgenticCheckoutPayment', () => {
     const markerChain = createUpdateChain({ session_id: 'agentic_session_1' });
     const finalChain = createUpdateChain({ session_id: 'agentic_session_1' });
     const productsChain = createProductsChain([
-      { manage_stock: true, slug: 'phone-slug' },
+      { id: 'product-1', manage_stock: true, slug: 'phone-slug' },
     ]);
     const supabase = createSupabaseWithUpdateChains(
       [claimChain, markerChain, finalChain],
@@ -605,11 +660,21 @@ describe('finalizeAgenticCheckoutPayment', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(productsChain.select).toHaveBeenCalledWith('slug, manage_stock');
+    expect(productsChain.select).toHaveBeenCalledWith(
+      'id, slug, manage_stock, inventory_tracking_policy'
+    );
     expect(productsChain.in).toHaveBeenCalledWith('id', ['product-1']);
-    expect(revalidateProductSlugs).toHaveBeenCalledExactlyOnceWith(
+    expect(revalidateProductSlugs).toHaveBeenCalledTimes(2);
+    expect(revalidateProductSlugs).toHaveBeenNthCalledWith(1, 'merchant-1', [
+      'phone-slug',
+    ]);
+    // The order-purge helper runs its merchant-independent local
+    // invalidation (hard-expire) even though the slug lookup fails below.
+    expect(revalidateProductSlugs).toHaveBeenNthCalledWith(
+      2,
       'merchant-1',
-      ['phone-slug']
+      expect.any(Array),
+      { expireImmediately: true }
     );
   });
 
@@ -641,7 +706,15 @@ describe('finalizeAgenticCheckoutPayment', () => {
       undefined,
       { feedScope: 'merchant' }
     );
-    expect(revalidateProductSlugs).not.toHaveBeenCalled();
+    // The agentic layer skips its own per-slug invalidation when the product
+    // read fails, but the order-purge helper still runs its fail-open local
+    // invalidation (hard-expire) for the committed order.
+    expect(revalidateProductSlugs).toHaveBeenCalledTimes(1);
+    expect(revalidateProductSlugs).toHaveBeenCalledWith(
+      'merchant-1',
+      expect.any(Array),
+      { expireImmediately: true }
+    );
   });
 
   it('skips the slug lookup entirely when there are no line items', async () => {
@@ -681,7 +754,12 @@ describe('finalizeAgenticCheckoutPayment', () => {
     const markerChain = createUpdateChain({ session_id: 'agentic_session_1' });
     const finalChain = createUpdateChain({ session_id: 'agentic_session_1' });
     const productsChain = createProductsChain([
-      { manage_stock: false, slug: 'unlimited-phone' },
+      {
+        id: 'product-1',
+        inventory_tracking_policy: 'off',
+        manage_stock: false,
+        slug: 'unlimited-phone',
+      },
     ]);
     const supabase = createSupabaseWithUpdateChains(
       [claimChain, markerChain, finalChain],

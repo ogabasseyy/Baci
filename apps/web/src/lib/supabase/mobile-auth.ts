@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
-import { getSupabaseAnonKey, getSupabaseUrl } from '@/env';
+import { getSupabaseAuthRuntimeConfig } from './supabase-auth-runtime-config';
 
 /**
  * Get the authenticated user from either:
@@ -14,12 +14,7 @@ import { getSupabaseAnonKey, getSupabaseUrl } from '@/env';
  * - Create a properly scoped client for subsequent queries
  */
 export async function getAuthenticatedUser(request: Request) {
-  const url = getSupabaseUrl();
-  const anonKey = getSupabaseAnonKey();
-
-  if (!url || !anonKey) {
-    throw new Error('Supabase configuration is missing');
-  }
+  const { anonKey, url } = getSupabaseAuthRuntimeConfig();
 
   // Check for Bearer token from Authorization header (mobile/API)
   const authHeader = request.headers.get('Authorization');
@@ -45,7 +40,7 @@ export async function getAuthenticatedUser(request: Request) {
     } = await supabase.auth.getUser();
 
     if (!error && user) {
-      return { user, supabase };
+      return { authMode: 'bearer' as const, user, supabase };
     }
   }
 
@@ -66,7 +61,7 @@ export async function getAuthenticatedUser(request: Request) {
     } = await supabase.auth.getUser();
 
     if (!error && user) {
-      return { user, supabase };
+      return { authMode: 'cookie' as const, user, supabase };
     }
   } catch {
     // Cookie access may fail in certain contexts

@@ -10,8 +10,9 @@ const DELIVERY_DATE_FORMATTER: Intl.DateTimeFormat = new Intl.DateTimeFormat(
 
 export function getDeliveryEstimate(
   deliveryLocation: 'Lagos' | 'Outside Lagos',
-  today = new Date()
+  today?: Date
 ) {
+  if (!today) return 'Available shortly';
   const minDays = deliveryLocation === 'Lagos' ? 1 : 3;
   const maxDays = deliveryLocation === 'Lagos' ? 2 : 5;
 

@@ -1,3 +1,4 @@
+import { buildTelLink } from '@baci/shared/lib';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import {
@@ -14,11 +15,12 @@ const bodySchema = z.object({
 });
 
 const NEGOTIATION_RESPONSE_SELECT =
-  'id, merchant_id, customer_id, customer_email, type, item_info, offered_price, status';
+  'id, merchant_id, customer_id, customer_email, customer_phone, type, item_info, offered_price, status';
 
 type ResolvedNegotiation = {
   customer_email: string | null;
   customer_id: string | null;
+  customer_phone: string | null;
   id: string;
   item_info: { name?: string | null; product_slug?: string | null } | null;
   merchant_id: string;
@@ -140,7 +142,12 @@ export async function POST(request: NextRequest) {
       accessMerchantId: access.merchantId,
       negotiation,
     });
-    return NextResponse.json({ status, ...result });
+    const hasManualContact = Boolean(buildTelLink(negotiation.customer_phone));
+    return NextResponse.json({
+      status,
+      ...result,
+      ...(hasManualContact ? { manualContactAvailable: true } : {}),
+    });
   } catch (error) {
     const { data: rolledBack, error: rollbackError } = await supabase
       .from('negotiation_requests')

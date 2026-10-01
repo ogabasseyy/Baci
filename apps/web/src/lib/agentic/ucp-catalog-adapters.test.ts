@@ -7,6 +7,16 @@ import {
   UCP_CATALOG_LOOKUP_CAPABILITY,
 } from './ucp-catalog-adapters';
 
+function expectMappedProduct(
+  product: ReturnType<typeof mapUcpCatalogProductRow>
+) {
+  expect(product).not.toBeNull();
+  if (!product) {
+    throw new Error('Expected a mapped UCP catalog product');
+  }
+  return product;
+}
+
 describe('ucp catalog adapters', () => {
   it('maps a storefront product into a UCP catalog product', () => {
     const product = mapStorefrontProductToUcpCatalogProduct({
@@ -59,7 +69,7 @@ describe('ucp catalog adapters', () => {
       },
     });
 
-    expect(product).toMatchObject({
+    expect(expectMappedProduct(product)).toMatchObject({
       id: 'product-2',
       media: [
         {
@@ -96,7 +106,9 @@ describe('ucp catalog adapters', () => {
       },
     });
 
-    expect(product.url).toBe('https://ogabassey.com/smartphones/pixel-10');
+    expect(expectMappedProduct(product).url).toBe(
+      'https://ogabassey.com/smartphones/pixel-10'
+    );
   });
 
   it('uses a junction category for legacy rows with no direct category', () => {
@@ -116,10 +128,12 @@ describe('ucp catalog adapters', () => {
       },
     });
 
-    expect(product.url).toBe('https://ogabassey.com/laptops/legacy-laptop');
+    expect(expectMappedProduct(product).url).toBe(
+      'https://ogabassey.com/laptops/legacy-laptop'
+    );
   });
 
-  it('keeps legacy category text ahead of a junction category without a direct join', () => {
+  it('keeps an active junction category ahead of legacy text without a direct join', () => {
     const product = mapUcpCatalogProductRow({
       baseUrl: 'https://ogabassey.com',
       currency: 'NGN',
@@ -137,8 +151,39 @@ describe('ucp catalog adapters', () => {
       },
     });
 
-    expect(product.url).toBe(
-      'https://ogabassey.com/laptops/legacy-category-laptop'
+    expect(expectMappedProduct(product).url).toBe(
+      'https://ogabassey.com/featured-laptops/legacy-category-laptop'
+    );
+  });
+
+  it('uses the lowest active junction category id for the UCP URL', () => {
+    const product = mapUcpCatalogProductRow({
+      baseUrl: 'https://ogabassey.com',
+      currency: 'NGN',
+      row: {
+        canonical_url: null,
+        categories: { is_active: false, slug: 'retired' },
+        id: 'multi-category-product',
+        merchant_id: 'merchant-1',
+        name: 'Multi-category product',
+        price: 900_000,
+        product_categories: [
+          {
+            category_id: 'category-z',
+            categories: { is_active: true, slug: 'z-category' },
+          },
+          {
+            category_id: 'category-a',
+            categories: { is_active: true, slug: 'a-category' },
+          },
+        ],
+        slug: 'multi-category-product',
+        status: 'active',
+      },
+    });
+
+    expect(expectMappedProduct(product).url).toBe(
+      'https://ogabassey.com/a-category/multi-category-product'
     );
   });
 
@@ -168,7 +213,9 @@ describe('ucp catalog adapters', () => {
     });
 
     expect(rows).toHaveLength(1);
-    expect(product.variants[0]?.availability).toEqual({ available: true });
+    expect(expectMappedProduct(product).variants[0]?.availability).toEqual({
+      available: true,
+    });
   });
 
   it('builds a UCP capability envelope for product detail responses', () => {

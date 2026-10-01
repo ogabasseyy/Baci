@@ -86,7 +86,7 @@ describe('buildProductSitemapEntry', () => {
     );
   });
 
-  it('keeps legacy category text ahead of a junction category without a direct join', () => {
+  it('keeps an active junction category ahead of legacy text without a direct join', () => {
     const entry = buildProductSitemapEntry({
       product: {
         id: 'product-legacy-text-category',
@@ -103,7 +103,7 @@ describe('buildProductSitemapEntry', () => {
     });
 
     expect(entry.url).toBe(
-      'https://zorvexa.usebaci.com/laptops/legacy-category-laptop'
+      'https://zorvexa.usebaci.com/featured-laptops/legacy-category-laptop'
     );
   });
 

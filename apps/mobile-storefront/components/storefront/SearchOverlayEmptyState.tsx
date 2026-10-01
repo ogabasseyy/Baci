@@ -1,6 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Pressable, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
+import { AdSlot } from '@/components/ads/AdSlot';
 import type Colors from '@/constants/Colors';
 import { BRAND } from '@/constants/Colors';
 import type { Category } from '@/hooks';
@@ -108,6 +109,7 @@ export function SearchOverlayEmptyState({
           </Text>
         </View>
       </View>
+      <AdSlot placement="FOOTER_ANCHOR" />
     </Animated.ScrollView>
   );
 }

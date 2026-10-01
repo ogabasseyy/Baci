@@ -34,7 +34,7 @@ const merchantSlugListSchema = z.array(z.string()).transform((values, ctx) => {
 export const agenticCommerceHealthCronQuerySchema = z.object({
   fail_on_attention: z
     .enum(['true', 'false'])
-    .default('true')
+    .default('false')
     .transform((value) => value === 'true'),
   merchant_slug: merchantSlugListSchema.default([]),
 });

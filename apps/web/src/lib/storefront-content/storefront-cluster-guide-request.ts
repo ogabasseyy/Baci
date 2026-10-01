@@ -34,7 +34,7 @@ const STOREFRONT_CLUSTER_RULES: StorefrontClusterRule[] = Object.entries(
   rule_order: ruleOrder,
 }));
 
-function isSupportedClusterCategory(
+export function isSupportedClusterCategory(
   categorySlug: string
 ): categorySlug is SupportedClusterCategory {
   return Object.hasOwn(CONTENT_CLUSTER_SUPPORT, categorySlug);

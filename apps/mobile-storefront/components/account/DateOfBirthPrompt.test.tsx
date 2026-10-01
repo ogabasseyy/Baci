@@ -42,6 +42,11 @@ function pickDate() {
   // Open the field, then tap the (mocked) native picker to select 1990-05-23.
   fireEvent.press(screen.getByRole('button', { name: 'Date of birth' }));
   fireEvent.press(screen.getByRole('button', { name: 'mock-date-picker' }));
+  // The iOS spinner is presented as a modal so the parent form remains
+  // reachable only after the user confirms the selected value.
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Done selecting Date of birth' })
+  );
 }
 
 describe('DateOfBirthPrompt', () => {

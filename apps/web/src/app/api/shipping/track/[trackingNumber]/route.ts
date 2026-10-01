@@ -26,7 +26,7 @@ type ShipmentLookupResult = {
   carrier_name: string | null;
   estimated_delivery_days: number | null;
   id: string;
-  order_id: string;
+  order_id: string | null;
   provider: string | null;
   receiver_address?: {
     city?: string | null;
@@ -194,6 +194,12 @@ async function persistTrackingResult({
     // Do not fall back to a customer-callable delivered RPC here: a signed-in
     // customer can invoke granted RPCs directly, bypassing the carrier result
     // that this route just verified.
+    return;
+  }
+
+  // Repair pickups are valid orderless shipments. Persist their live carrier
+  // snapshot without attempting order fulfilment or insurance side effects.
+  if (!shipment.order_id) {
     return;
   }
 

@@ -82,11 +82,7 @@ describe('compare page link helpers', () => {
         status: 'active',
       })),
     });
-    expect(mockedInventory).toHaveBeenCalledWith(
-      'merchant-1',
-      'smartphones',
-      'ogabassey'
-    );
+    expect(mockedInventory).toHaveBeenCalledWith('merchant-1', 'smartphones');
   });
 
   it('keeps graph products exact-category scoped and bounded', async () => {

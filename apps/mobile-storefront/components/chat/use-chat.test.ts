@@ -1,17 +1,17 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-const mockAddSantaWishToCart = jest.fn();
+const mockFulfilSantaCartActions = jest.fn();
 const mockRouterPush = jest.fn();
 
 jest.mock('./santa-cart', () => ({
-  addSantaWishToCart: (action: unknown, signal?: AbortSignal) =>
-    mockAddSantaWishToCart(action, signal),
+  fulfilSantaCartActions: (args: unknown) => mockFulfilSantaCartActions(args),
 }));
 
 jest.mock('expo-router', () => ({
   router: { push: (...args: unknown[]) => mockRouterPush(...args) },
 }));
 
+import { SANTA_MERCHANT_SLUG_HEADER } from './constants';
 import { useChat } from './use-chat';
 
 // Mock the UI store
@@ -71,7 +71,11 @@ jest.mock('@/lib/logger', () => ({
 }));
 
 // Create a helper to build a mock streaming response
-function makeMockResponse(text: string, ok = true) {
+function makeMockResponse(
+  text: string,
+  ok = true,
+  headers: Record<string, string> = {}
+) {
   const encoder = new TextEncoder();
   const encoded = encoder.encode(text);
   const stream = new ReadableStream({
@@ -84,6 +88,7 @@ function makeMockResponse(text: string, ok = true) {
   return {
     ok,
     body: stream,
+    headers: new Headers(headers),
     text: async () => text,
   };
 }
@@ -97,7 +102,7 @@ describe('useChat', () => {
     mockChatInitialMessage = null;
     mockClearChatInitialMessage.mockClear();
     mockGetState.mockClear();
-    mockAddSantaWishToCart.mockClear();
+    mockFulfilSantaCartActions.mockClear();
   });
 
   afterEach(() => {
@@ -374,14 +379,14 @@ describe('useChat', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('adds every Santa directive to the cart and strips them from the chat text', async () => {
-    global.fetch = jest
-      .fn()
-      .mockResolvedValue(
-        makeMockResponse(
-          'Granted ACTION:ADD_TO_CART|PRODUCT:Phone|PRICE:450000 and ACTION:ADD_TO_CART|PRODUCT:Case|PRICE:12,000NGN.'
-        )
-      );
+  it('forwards the Santa reply and resolved storefront to cart fulfilment', async () => {
+    const replyText =
+      'Granted ACTION:ADD_TO_CART|PRODUCT:Phone|PRICE:450000 and ACTION:ADD_TO_CART|PRODUCT:Case|PRICE:12,000NGN.';
+    global.fetch = jest.fn().mockResolvedValue(
+      makeMockResponse(replyText, true, {
+        [SANTA_MERCHANT_SLUG_HEADER]: 'ogabassey',
+      })
+    );
     mockIsChatOpen = true;
     const { result } = renderHook(() => useChat(true));
 
@@ -394,19 +399,15 @@ describe('useChat', () => {
     });
 
     await waitFor(() => {
-      expect(mockAddSantaWishToCart).toHaveBeenCalledTimes(2);
+      expect(mockFulfilSantaCartActions).toHaveBeenCalledTimes(1);
     });
 
-    expect(mockAddSantaWishToCart).toHaveBeenNthCalledWith(
-      1,
-      { type: 'ADD_TO_CART', productName: 'Phone', price: 450000 },
-      expect.any(AbortSignal)
-    );
-    expect(mockAddSantaWishToCart).toHaveBeenNthCalledWith(
-      2,
-      { type: 'ADD_TO_CART', productName: 'Case', price: 12000 },
-      expect.any(AbortSignal)
-    );
+    expect(mockFulfilSantaCartActions).toHaveBeenCalledWith({
+      expectedMerchantSlug: 'ogabassey',
+      resolvedMerchantSlug: 'ogabassey',
+      signal: expect.any(AbortSignal),
+      text: replyText,
+    });
 
     await waitFor(() => {
       const aiMsg = result.current.messages.find(
@@ -414,6 +415,39 @@ describe('useChat', () => {
       );
       expect(aiMsg?.text).toBe('Granted and');
     });
+  });
+
+  it('forwards a foreign resolved storefront so fulfilment can ignore it', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(
+        makeMockResponse(
+          'ACTION:ADD_TO_CART|PRODUCT:Phone|PRICE:450000',
+          true,
+          { [SANTA_MERCHANT_SLUG_HEADER]: 'winter-store' }
+        )
+      );
+    mockIsChatOpen = true;
+    const { result } = renderHook(() => useChat(true));
+
+    await waitFor(() => {
+      expect(result.current.messages).toHaveLength(1);
+    });
+
+    await act(async () => {
+      result.current.handleSend('Add the phone');
+    });
+
+    await waitFor(() => {
+      expect(mockFulfilSantaCartActions).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockFulfilSantaCartActions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedMerchantSlug: 'ogabassey',
+        resolvedMerchantSlug: 'winter-store',
+      })
+    );
   });
 
   it('sets isLoading to false after successful response', async () => {

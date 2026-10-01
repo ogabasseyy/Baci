@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Modal } from 'react-native';
 import Colors from '@/constants/Colors';
 import type { CartItem } from '@/stores/cart-store';
 import NegotiationWarningModal from './NegotiationWarningModal';
@@ -138,5 +139,29 @@ describe('NegotiationWarningModal', () => {
     fireEvent.press(negotiateButton);
     expect(onNegotiateItem).not.toHaveBeenCalled();
     expect(triggerHaptic).not.toHaveBeenCalled();
+  });
+
+  it('reports native dismissal through onDismissed', () => {
+    // Regression: the host must keep the cart ad suppressed until the fade
+    // dismissal actually completes, not just until the close handler runs.
+    const onDismissed = jest.fn();
+    const { UNSAFE_getByType } = render(
+      <NegotiationWarningModal
+        visible
+        pendingItem={cartItem}
+        onClose={jest.fn()}
+        onDismissed={onDismissed}
+        onNegotiateItem={jest.fn()}
+        onBulkNegotiate={jest.fn()}
+        triggerHaptic={jest.fn()}
+        colors={Colors.light}
+      />
+    );
+
+    act(() => {
+      UNSAFE_getByType(Modal).props.onDismiss();
+    });
+
+    expect(onDismissed).toHaveBeenCalledTimes(1);
   });
 });

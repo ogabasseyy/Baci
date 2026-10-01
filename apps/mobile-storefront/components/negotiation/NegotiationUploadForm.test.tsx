@@ -45,14 +45,14 @@ describe('NegotiationUploadForm', () => {
     ).toBeTruthy();
   });
 
-  it('renders the optional phone field and reports changes', () => {
+  it('renders the guest-required phone field and reports changes', () => {
     const onPhoneChange = jest.fn();
     render(
       <NegotiationUploadForm {...createProps({ phone: '', onPhoneChange })} />
     );
 
     const phoneInput = screen.getByLabelText(
-      'Phone or WhatsApp number (optional)'
+      'Phone or WhatsApp number (required for guest requests)'
     );
     expect(phoneInput).toBeTruthy();
     fireEvent.changeText(phoneInput, '0803 123 4567');

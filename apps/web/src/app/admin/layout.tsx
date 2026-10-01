@@ -1,15 +1,18 @@
 import { redirect } from 'next/navigation';
+import { AppSansFont } from '@/app/app-sans-font';
 import '@/app/globals.css';
 import { type ReactNode, Suspense } from 'react';
 import { CsrfInitializer } from '@/components/csrf-initializer';
-import { getPlatformAdminAuth } from '@/lib/platform-admin-auth';
+import { getPlatformAdminContextAuth } from '@/lib/platform-admin-auth';
 import { AdminShell } from './admin-shell';
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
-    <Suspense fallback={<AdminLayoutFallback />}>
-      <AdminLayoutContent>{children}</AdminLayoutContent>
-    </Suspense>
+    <AppSansFont>
+      <Suspense fallback={<AdminLayoutFallback />}>
+        <AdminLayoutContent>{children}</AdminLayoutContent>
+      </Suspense>
+    </AppSansFont>
   );
 }
 
@@ -19,7 +22,7 @@ export async function AdminLayoutContent({
 }: {
   children: ReactNode;
 }) {
-  const auth = await getPlatformAdminAuth();
+  const auth = await getPlatformAdminContextAuth();
 
   if (auth.status === 'unauthenticated') {
     redirect('/login?redirect=%2Fadmin');
@@ -32,7 +35,9 @@ export async function AdminLayoutContent({
   return (
     <>
       <CsrfInitializer />
-      <AdminShell adminEmail={auth.user.email}>{children}</AdminShell>
+      <AdminShell adminContext={auth.context} adminEmail={auth.user.email}>
+        {children}
+      </AdminShell>
     </>
   );
 }

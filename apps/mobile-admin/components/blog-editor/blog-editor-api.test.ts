@@ -6,8 +6,12 @@ import {
   uploadBlogEditorImageDetails,
 } from '@/components/blog-editor/blog-editor-api';
 
-vi.mock('@/types/upload', () => ({
-  createUploadFile: (value: unknown) => value,
+const mocks = vi.hoisted(() => ({
+  createUploadFormData: vi.fn(),
+}));
+
+vi.mock('@/lib/upload/createUploadFormData', () => ({
+  createUploadFormData: mocks.createUploadFormData,
 }));
 
 const ACCESS_TOKEN = 'token';
@@ -34,6 +38,7 @@ function stubFetch(body: unknown, status = 200) {
 describe('blog-editor-api', () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
+    mocks.createUploadFormData.mockReturnValue(new FormData());
   });
 
   it('returns AI-edited content on success', async () => {

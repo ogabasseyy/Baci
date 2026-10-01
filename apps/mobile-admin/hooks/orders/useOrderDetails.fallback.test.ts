@@ -40,7 +40,7 @@ vi.mock('@/lib/supabase', () => {
       then: (resolve: (value: QueryResult) => unknown) => Promise<unknown>;
     };
 
-    for (const method of ['select', 'eq', 'in']) {
+    for (const method of ['select', 'eq', 'in', 'order']) {
       chain[method] = () => chain;
     }
 

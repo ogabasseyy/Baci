@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getResponseErrorMessage,
   isConnectivityError,
+  isDnsResolutionError,
   NetworkError,
 } from './api-errors';
 
@@ -58,6 +59,28 @@ describe('api errors', () => {
       expect(isConnectivityError(error)).toBe(true);
     });
 
+    it('detects returned Supabase error objects that are not Error instances', () => {
+      expect(
+        isConnectivityError({
+          message:
+            'fetch failed: A server with the specified hostname could not be found.',
+        })
+      ).toBe(true);
+    });
+
+    it('ignores connectivity text inherited through prototype properties', () => {
+      const inheritedCause = Object.create({
+        cause: new Error('getaddrinfo ENOTFOUND'),
+      });
+      const inheritedMessage = Object.create({
+        message: 'Network request failed',
+      });
+
+      expect(isConnectivityError(inheritedCause)).toBe(false);
+      expect(isDnsResolutionError(inheritedCause)).toBe(false);
+      expect(isConnectivityError(inheritedMessage)).toBe(false);
+    });
+
     it('does not treat server NetworkErrors as connectivity failures', () => {
       const serverError = new NetworkError(
         'Custom domains require Baci Starter or higher',
@@ -73,6 +96,36 @@ describe('api errors', () => {
       );
       expect(isConnectivityError('nope')).toBe(false);
       expect(isConnectivityError(null)).toBe(false);
+    });
+  });
+
+  describe('isDnsResolutionError', () => {
+    it('detects the exact iOS hostname-resolution failure from production', () => {
+      expect(
+        isDnsResolutionError({
+          message:
+            'fetch failed: A server with the specified hostname could not be found.',
+        })
+      ).toBe(true);
+    });
+
+    it('detects Android and Node DNS-resolution codes', () => {
+      expect(
+        isDnsResolutionError(
+          new Error('Unable to resolve host api.example.com')
+        )
+      ).toBe(true);
+      expect(isDnsResolutionError(new Error('getaddrinfo ENOTFOUND'))).toBe(
+        true
+      );
+    });
+
+    it('does not classify ambiguous transport failures as DNS failures', () => {
+      expect(isDnsResolutionError(new Error('Network request failed'))).toBe(
+        false
+      );
+      expect(isDnsResolutionError(new Error('ECONNRESET'))).toBe(false);
+      expect(isDnsResolutionError(new Error('Request timed out'))).toBe(false);
     });
   });
 });

@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { orderGatewayPaymentCompletionSchema } from '@/schemas/order-gateway-payment-completion';
 
 describe('orderGatewayPaymentCompletionSchema', () => {
+  it('accepts a locked merchant invoice balance-change conflict', () => {
+    expect(
+      orderGatewayPaymentCompletionSchema.safeParse({
+        error_code: 'MERCHANT_INVOICE_PARTIAL_BALANCE_CHANGED',
+        transaction_status: 'pending',
+      }).success
+    ).toBe(true);
+  });
+
   it('parses a successful fresh completion payload', () => {
     const result = orderGatewayPaymentCompletionSchema.safeParse({
       actor: 'webhook:BAC-REF',
@@ -45,6 +54,30 @@ describe('orderGatewayPaymentCompletionSchema', () => {
     if (result.success) {
       expect(result.data.already_completed).toBe(true);
       expect(result.data.order_updated).toBe(true);
+    }
+  });
+
+  it('parses an idempotent strict merchant-invoice partial replay', () => {
+    const result = orderGatewayPaymentCompletionSchema.safeParse({
+      actor: 'verify:BAC-REF',
+      already_completed: true,
+      cancelled_at: null,
+      merchant_invoice_partial_recorded: true,
+      order_already_paid: false,
+      order_cancelled: false,
+      order_number: 'ORD-PARTIAL',
+      order_skipped_status: null,
+      order_updated: false,
+      payment_status: 'partially_paid',
+      previous_payment_status: 'partially_paid',
+      previous_shipping_status: 'pending',
+      shipping_status: 'pending',
+      transaction_status: 'completed',
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.merchant_invoice_partial_recorded).toBe(true);
     }
   });
 

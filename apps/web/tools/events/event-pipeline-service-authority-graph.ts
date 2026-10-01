@@ -33,7 +33,10 @@ function allowedFactoryImporter(path: string, kind: FactoryKind): boolean {
   const allowed: readonly string[] =
     kind === 'sdk'
       ? [...authority.factoryModules, ...authority.legacySdkImporters]
-      : authority[`${kind}Importers`];
+      : [
+          ...authority[`${kind}Importers`],
+          ...(kind === 'service' ? authority.operationalServiceImporters : []),
+        ];
   return allowed.includes(path);
 }
 
@@ -41,6 +44,14 @@ function allowsCredentialPath(path: readonly string[]): boolean {
   const allowed: readonly (readonly string[])[] =
     manifest.authority.credentialPaths;
   return allowed.some(
+    (candidate) =>
+      candidate.length === path.length &&
+      candidate.every((segment, index) => segment === path[index])
+  );
+}
+
+function allowsServicePath(path: readonly string[]): boolean {
+  return manifest.authority.servicePaths.some(
     (candidate) =>
       candidate.length === path.length &&
       candidate.every((segment, index) => segment === path[index])
@@ -161,6 +172,7 @@ function collectAuthorityEdges(
         continue;
       for (const path of paths.get(target) ?? []) {
         if (path.length < 2 || (factory && path.length === 2)) continue;
+        if (kind === 'service' && allowsServicePath(path)) continue;
         if (
           factory &&
           path

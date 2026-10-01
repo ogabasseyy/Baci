@@ -26,13 +26,14 @@ export function TypingIndicator() {
               toValue: 1,
               duration: DOT_ANIMATION_MS,
               easing: Easing.out(Easing.ease),
-              useNativeDriver: true,
+              // Avoid legacy native Animated nodes surviving chat unmounts.
+              useNativeDriver: false,
             }),
             Animated.timing(value, {
               toValue: 0.35,
               duration: DOT_ANIMATION_MS,
               easing: Easing.in(Easing.ease),
-              useNativeDriver: true,
+              useNativeDriver: false,
             }),
           ])
         )

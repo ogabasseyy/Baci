@@ -1,16 +1,16 @@
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
-const SUMMARY_SKELETON_COUNT = 5;
-const DIRECTORY_SKELETON_COUNT = 4;
+const SUMMARY_SKELETON_COUNT = 4;
+const DIRECTORY_SKELETON_COUNT = 3;
 const DIRECTORY_ROW_SKELETON_COUNT = 3;
 
-export default function MerchantUsersLoading() {
+export default function Merchant360Loading() {
   return (
     <div
-      role="status"
+      aria-label="Loading merchant operations"
       className="block space-y-6"
-      aria-label="Loading merchant users"
+      role="status"
     >
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="space-y-3">
@@ -21,7 +21,7 @@ export default function MerchantUsersLoading() {
         <Skeleton className="h-9 w-32" />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: SUMMARY_SKELETON_COUNT }).map((_, index) => (
           <Card
             // biome-ignore lint/suspicious/noArrayIndexKey: Loading cards are static placeholders.

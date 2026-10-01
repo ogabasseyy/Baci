@@ -68,6 +68,16 @@ export function renderRootStackScreens({
       }}
     />,
     <Stack.Screen
+      key="quiz/prize-checkout-simulation"
+      name="quiz/prize-checkout-simulation"
+      options={{
+        headerShown: false,
+        presentation: 'card',
+        animation: 'slide_from_right',
+        gestureEnabled: false,
+      }}
+    />,
+    <Stack.Screen
       key="cart"
       name="cart"
       options={{

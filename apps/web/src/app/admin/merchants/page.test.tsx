@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockApiGet = vi.fn();
 const mockToast = vi.fn();
 const mockCreateClient = vi.fn();
-const mockGetAdminMerchantHealthRows = vi.fn();
+const mockGetAdminMerchantHealthPage = vi.fn();
 
 vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
@@ -35,8 +35,8 @@ vi.mock('@/lib/admin-merchant-health', async () => {
 
   return {
     ...actual,
-    getAdminMerchantHealthRows: (...args: unknown[]) =>
-      mockGetAdminMerchantHealthRows(...args),
+    getAdminMerchantHealthPage: (...args: unknown[]) =>
+      mockGetAdminMerchantHealthPage(...args),
   };
 });
 
@@ -59,6 +59,7 @@ const merchantsResponse = {
       merchant_id: 'merchant-1',
       total_gmv: 400,
       total_orders: 2,
+      excluded_non_ngn_or_unknown_paid_orders: 0,
     },
     {
       active_days: 0,
@@ -70,9 +71,11 @@ const merchantsResponse = {
       merchant_id: 'merchant-2',
       total_gmv: 0,
       total_orders: 0,
+      excluded_non_ngn_or_unknown_paid_orders: 0,
     },
   ],
   generatedAt: '2026-03-20T10:00:00.000Z',
+  pagination: { limit: 50, offset: 0, total: 2 },
 };
 
 describe('Admin merchants page', () => {
@@ -80,9 +83,10 @@ describe('Admin merchants page', () => {
     vi.clearAllMocks();
     mockApiGet.mockResolvedValue(merchantsResponse);
     mockCreateClient.mockResolvedValue({ rpc: vi.fn() });
-    mockGetAdminMerchantHealthRows.mockResolvedValue({
+    mockGetAdminMerchantHealthPage.mockResolvedValue({
       data: merchantsResponse.data,
       error: null,
+      total: 2,
     });
   });
 
@@ -140,7 +144,7 @@ describe('Admin merchants page', () => {
     );
 
     expect(await screen.findByText('Baci Store')).toBeInTheDocument();
-    expect(screen.queryByText('Quiet Store')).not.toBeInTheDocument();
+    expect(screen.getByText('Quiet Store')).toBeInTheDocument();
   });
 
   it('falls back to all merchants for invalid or missing health filters', async () => {
@@ -162,16 +166,17 @@ describe('Admin merchants page', () => {
     );
 
     expect(await screen.findByText('Quiet Store')).toBeInTheDocument();
-    expect(screen.queryByText('Baci Store')).not.toBeInTheDocument();
+    expect(screen.getByText('Baci Store')).toBeInTheDocument();
   });
 
   it('renders an empty client state when the server merchant load fails', async () => {
     const errorSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
-    mockGetAdminMerchantHealthRows.mockResolvedValue({
+    mockGetAdminMerchantHealthPage.mockResolvedValue({
       data: null,
       error: { message: 'database unavailable' },
+      total: 0,
     });
 
     render(

@@ -25,6 +25,7 @@ export async function loadShippingStates(params: {
 export async function loadShippingCities(params: {
   apiBaseUrl: string;
   onCitiesLoaded: (cities: string[]) => void;
+  onCitiesUnavailable: () => void;
   setIsLoadingCities: (value: boolean) => void;
   setShippingCities: (cities: string[]) => void;
   signal: AbortSignal;
@@ -33,6 +34,7 @@ export async function loadShippingCities(params: {
   const {
     apiBaseUrl,
     onCitiesLoaded,
+    onCitiesUnavailable,
     setIsLoadingCities,
     setShippingCities,
     signal,
@@ -45,10 +47,14 @@ export async function loadShippingCities(params: {
     const cities = await fetchCheckoutShippingCities(apiBaseUrl, state, signal);
     if (!signal.aborted) {
       setShippingCities(cities);
-      onCitiesLoaded(cities);
+      if (cities.length > 0) onCitiesLoaded(cities);
+      else onCitiesUnavailable();
     }
   } catch {
-    if (!signal.aborted) setShippingCities([]);
+    if (!signal.aborted) {
+      setShippingCities([]);
+      onCitiesUnavailable();
+    }
   } finally {
     if (!signal.aborted) setIsLoadingCities(false);
   }

@@ -1,7 +1,11 @@
 export const WALLET_PAYMENT_ACCOUNT_SELECT =
   'id, merchant_id, customer_id, provider, provider_customer_code, provider_subaccount_code, provider_account_id, account_number, account_name, bank_name, bank_slug, currency, status, metadata, consented_at';
 
+export const CUSTOMER_NAME_REQUIRED_MESSAGE =
+  'Add your first and last name before creating a wallet transfer account';
+
 export type CustomerWalletPaymentAccountErrorCode =
+  | 'CUSTOMER_NAME_REQUIRED'
   | 'CUSTOMER_PHONE_REQUIRED'
   | 'GATEWAY_NOT_CONFIGURED'
   | 'PAYSTACK_CUSTOMER_ERROR'

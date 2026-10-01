@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   loadMobileMerchantStarterFacts: vi.fn(),
   provisionCuratedHomepage: vi.fn(),
   recordContract: vi.fn(),
+  recordSignupLifecycle: vi.fn(),
   afterCallbacks: [] as Array<() => Promise<void>>,
 }));
 
@@ -37,6 +38,9 @@ vi.mock('./load-mobile-merchant-starter-facts', async () => {
 });
 vi.mock('@/lib/posthog/mobile-onboarding-contract-telemetry', () => ({
   recordMobileOnboardingContractInvocation: mocks.recordContract,
+}));
+vi.mock('@/lib/posthog/mobile-signup-lifecycle-telemetry', () => ({
+  recordMobileSignupLifecycle: mocks.recordSignupLifecycle,
 }));
 vi.mock('next/server', async () => {
   const actual =
@@ -116,6 +120,7 @@ describe('POST /api/mobile/merchant-provisioning', () => {
       updatedAt: '2026-08-02T00:00:00Z',
     });
     mocks.recordContract.mockResolvedValue(undefined);
+    mocks.recordSignupLifecycle.mockResolvedValue(undefined);
   });
 
   it('returns 401 before reading JSON when bearer authentication fails', async () => {
@@ -158,7 +163,7 @@ describe('POST /api/mobile/merchant-provisioning', () => {
       code: 'invalid_input',
     });
     expect(json).not.toHaveBeenCalled();
-    expect(mocks.afterCallbacks).toHaveLength(1);
+    expect(mocks.afterCallbacks).toHaveLength(2);
   });
 
   it('counts authenticated invalid data before validation and never calls RPC', async () => {
@@ -174,7 +179,7 @@ describe('POST /api/mobile/merchant-provisioning', () => {
       code: 'invalid_input',
     });
     expect(mocks.provisionAuthenticatedMerchant).not.toHaveBeenCalled();
-    expect(mocks.afterCallbacks).toHaveLength(1);
+    expect(mocks.afterCallbacks).toHaveLength(2);
     await mocks.afterCallbacks[0]?.();
     expect(mocks.recordContract).toHaveBeenCalledOnce();
   });
@@ -206,7 +211,7 @@ describe('POST /api/mobile/merchant-provisioning', () => {
         country: 'NG',
       }),
     });
-    expect(mocks.afterCallbacks).toHaveLength(1);
+    expect(mocks.afterCallbacks).toHaveLength(2);
     await Promise.all(mocks.afterCallbacks.map((callback) => callback()));
     expect(mocks.recordContract).toHaveBeenCalledOnce();
     expect(mocks.provisionCuratedHomepage).toHaveBeenCalledWith(

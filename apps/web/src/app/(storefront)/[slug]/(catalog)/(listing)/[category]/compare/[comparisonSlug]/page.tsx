@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
 import { getIndexableRobotsMetadata } from '@/lib/seo-utils';
 import { loadComparePage } from '@/lib/storefront-compare/load-compare-page';
 import { ComparePageContent } from './compare-page-content';
@@ -27,6 +26,13 @@ const NON_INDEXABLE_COMPARE_ROBOTS: Metadata['robots'] = {
   'max-video-preview': -1,
 };
 
+const COMPARE_NOT_FOUND_METADATA: Metadata = {
+  title: 'Comparison not found',
+  description: 'This product comparison is unavailable or has moved.',
+  alternates: null,
+  robots: NON_INDEXABLE_COMPARE_ROBOTS,
+};
+
 export async function generateMetadata({
   params,
 }: ComparePageRouteProps): Promise<Metadata> {
@@ -38,7 +44,10 @@ export async function generateMetadata({
   });
 
   if (!page || (!page.isIndexable && !page.isLegacyFallback)) {
-    notFound();
+    // Metadata and page content both stream under the storefront PPR shell.
+    // Keep an absent comparison marker-free so React does not abort the
+    // boundary after the shell has flushed (React #419).
+    return COMPARE_NOT_FOUND_METADATA;
   }
 
   return {

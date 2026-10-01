@@ -124,6 +124,37 @@ describe('generateReceiptBlob', () => {
     expect(pdfText).toContain('Line Total');
   });
 
+  it('labels invoice-payment documents as proforma invoices', () => {
+    const order = {
+      ...baseOrder,
+      payment_status: 'unpaid' as const,
+      payment_method: 'invoice',
+      items: [],
+      transactions: [],
+    };
+
+    const pdfText = getPdfText(order, baseMerchant, {
+      documentKind: 'proforma_invoice',
+      invoiceTypeCode: '325',
+    });
+
+    expect(pdfText).toContain('PROFORMA INVOICE');
+    expect(pdfText).not.toContain('Commercial Invoice');
+  });
+
+  it('uses the default invoice label for an unknown invoice type', () => {
+    const pdfText = getPdfText(
+      { ...baseOrder, items: [], transactions: [] },
+      baseMerchant,
+      {
+        documentKind: 'invoice',
+        invoiceTypeCode: 'unknown',
+      }
+    );
+
+    expect(pdfText).toContain('INVOICE');
+  });
+
   it('can render a paid order as an invoice document when requested', () => {
     const order = {
       ...baseOrder,
@@ -444,6 +475,29 @@ describe('generateReceiptBlob', () => {
     expect(pdfText).toContain('card');
     expect(pdfText).toContain('transfer');
     expect(pdfText).toContain('75,000.00');
+  });
+
+  it('uses the manual transaction date when no document date override is supplied', () => {
+    const pdfText = getPdfText(
+      {
+        ...baseOrder,
+        created_at: '2026-09-12T10:00:00.000Z',
+        transaction_date: '2026-03-04T23:30:00.000Z',
+        invoice_issue_date: null,
+        items: [
+          {
+            product_name: 'MacBook Pro',
+            quantity: 1,
+            price: 150000,
+          },
+        ],
+        transactions: [],
+      },
+      baseMerchant
+    );
+
+    expect(pdfText).toContain('5 Mar 2026');
+    expect(pdfText).not.toContain('12 Sep 2026');
   });
 
   it('handles invalid receipt dates without failing', () => {

@@ -1,25 +1,26 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { type NextRequest, NextResponse } from 'next/server';
-import { getPlatformAdminAuth } from '@/lib/platform-admin-auth';
+import { getPlatformAdminAuthForPermission } from '@/lib/platform-admin-auth';
 import { createClient } from '@/lib/supabase/server';
 import {
   type EventDeadLetterQuery,
   eventDeadLetterQuerySchema,
-  eventPipelineListResultSchema,
+  eventPipelineDeliveryListSchema,
+  eventPipelineIngressListSchema,
   eventPipelineOperationsSchema,
 } from '@/schemas/event-dead-letter';
-import type { Database } from '@/types/supabase';
+
+type EventPipelineSupabase = Awaited<ReturnType<typeof createClient>>;
 
 function queryInput(request: NextRequest) {
   return Object.fromEntries(request.nextUrl.searchParams.entries());
 }
 
 async function listIngress(
-  supabase: SupabaseClient<Database>,
+  supabase: EventPipelineSupabase,
   query: EventDeadLetterQuery
 ) {
   const { data, error } = await supabase.rpc(
-    'list_event_pipeline_ingress_failures_v1',
+    'list_event_pipeline_ingress_failures_admin_v3',
     {
       p_error_code: query.error_code ?? undefined,
       p_from: query.from ?? undefined,
@@ -31,18 +32,18 @@ async function listIngress(
   );
   if (error)
     throw new Error('ingress_dead_letter_query_failed', { cause: error });
-  const parsed = eventPipelineListResultSchema.safeParse(data);
+  const parsed = eventPipelineIngressListSchema.safeParse(data);
   if (!parsed.success) throw new Error('ingress_dead_letter_query_invalid');
   return parsed.data;
 }
 
 async function listDeliveries(
-  supabase: SupabaseClient<Database>,
+  supabase: EventPipelineSupabase,
   query: EventDeadLetterQuery,
   status: 'dead_letter' | 'delivery_unknown'
 ) {
   const { data, error } = await supabase.rpc(
-    'list_event_pipeline_deliveries_v1',
+    'list_event_pipeline_deliveries_admin_v3',
     {
       p_destination: query.destination ?? undefined,
       p_error_code: query.error_code ?? undefined,
@@ -56,14 +57,14 @@ async function listDeliveries(
   );
   if (error)
     throw new Error('delivery_dead_letter_query_failed', { cause: error });
-  const parsed = eventPipelineListResultSchema.safeParse(data);
+  const parsed = eventPipelineDeliveryListSchema.safeParse(data);
   if (!parsed.success) throw new Error('delivery_dead_letter_query_invalid');
   return parsed.data;
 }
 
-async function operationalState(supabase: SupabaseClient<Database>) {
+async function operationalState(supabase: EventPipelineSupabase) {
   const { data, error } = await supabase.rpc(
-    'get_event_pipeline_operations_v1'
+    'get_event_pipeline_operations_admin_v3'
   );
   if (error) {
     throw new Error('event_pipeline_operational_state_failed');
@@ -74,7 +75,7 @@ async function operationalState(supabase: SupabaseClient<Database>) {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await getPlatformAdminAuth();
+  const auth = await getPlatformAdminAuthForPermission('operations.read');
   if (auth.status === 'unauthenticated') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -117,8 +118,8 @@ export async function GET(request: NextRequest) {
       operations,
       unknown: unknown.items,
     });
-  } catch (error) {
-    console.error('Event pipeline DLQ query failed:', error);
+  } catch {
+    console.error('Event pipeline DLQ query failed');
     return NextResponse.json(
       { error: 'Failed to load event pipeline failures' },
       { status: 500 }

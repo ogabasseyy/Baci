@@ -16,6 +16,7 @@
       "path": "components/checkout/CheckoutScreenView.tsx",
       "justification": "Reviewed Android hardware-back handling, list virtualization, and monospace font selection."
     },
+    "components/quiz/QuizPrizeCheckoutSimulationScreen.tsx",
     {
       "path": "components/checkout/CheckoutScreenView.styles.ts",
       "justification": "Reviewed platform-specific monospace font selection for the crypto payment address."
@@ -173,6 +174,14 @@
       "justification": "Reviewed CSS box-shadow selection on web while preserving native product-card shadows."
     },
     {
+      "path": "components/storefront/GadgetPattern.tsx",
+      "justification": "Reviewed Android API 28 and older guard that suppresses a decorative SVG implicated in low-end-device ANR evidence while preserving Android 10+, iOS, and web rendering."
+    },
+    {
+      "path": "components/storefront/use-gadget-pattern-attribution.ts",
+      "justification": "Reviewed platform metadata used to attribute rendered GadgetPattern surfaces in native crash breadcrumbs."
+    },
+    {
       "path": "components/home/HomeScreenView.tsx",
       "justification": "Reviewed Android-only navigation bar button style override for dark home-screen system-bar content."
     },
@@ -213,6 +222,10 @@
       "justification": "Reviewed CSS box-shadow selection on web while preserving native snowflake styling."
     },
     {
+      "path": "components/ui/DateTimePickerField.tsx",
+      "justification": "Reviewed native picker lifecycle: Android closes after a selection while iOS remains visible for wheel interaction until confirmation."
+    },
+    {
       "path": "hooks/cart-notifications.ts",
       "justification": "Reviewed Android-specific cart notification behavior extracted from the cart hook."
     },
@@ -237,6 +250,22 @@
       "justification": "Reviewed web and Android notification channel handling."
     },
     {
+      "path": "config/mobile-ad-placements.ts",
+      "justification": "Reviewed Android/iOS default-platform branch for ad unit ID resolution; web and unknown platforms resolve to disabled, and all EXPO_PUBLIC_* reads use static dot notation for release inlining."
+    },
+    {
+      "path": "lib/post-order-interstitial.ts",
+      "justification": "Reviewed web guard that skips the native post-order interstitial off Android/iOS, with cancellation before presentation once checkout completes or the screen unmounts."
+    },
+    {
+      "path": "lib/quiz-start-interstitial.ts",
+      "justification": "Reviewed web guard that skips the native pre-quiz interstitial off Android/iOS, with cancellation before presentation once live play starts or the lobby unmounts."
+    },
+    {
+      "path": "lib/performance-trace.ts",
+      "justification": "Reviewed Android-only native system trace markers; iOS and web intentionally use the no-op fallback because the local trace module is Android-only."
+    },
+    {
       "path": "lib/storage.ts",
       "justification": "Reviewed web SSR guard that avoids browser-backed AsyncStorage access while retaining native startup hydration."
     },
@@ -247,6 +276,10 @@
     {
       "path": "lib/tracking-transparency.ts",
       "justification": "Reviewed iOS-only ATT dynamic import guard so web and Android do not evaluate the native tracking module."
+    },
+    {
+      "path": "lib/auth/open-oauth-session.ts",
+      "justification": "Reviewed Android Custom Tabs browser selection and external URL fallback for Android 10 OAuth launch failures."
     },
     {
       "path": "services/ad-tracking-runtime.ts",
@@ -263,6 +296,10 @@
     {
       "path": "services/quiz-request.ts",
       "justification": "Reviewed quiz request metadata normalization to the backend-supported android, ios, and web platform values."
+    },
+    {
+      "path": "services/quiz-ad-analytics.ts",
+      "justification": "Reviewed quiz ad analytics platform normalization for Android, iOS, and web event metadata."
     },
     {
       "path": "services/savings-reminder-notifications.ts",

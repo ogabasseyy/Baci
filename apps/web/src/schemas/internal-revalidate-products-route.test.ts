@@ -55,6 +55,15 @@ describe('internalRevalidateProductsBodySchema', () => {
     expect(result.data?.merchantSlug).toBeUndefined();
   });
 
+  it('accepts the standalone-worker blog expiry flag', () => {
+    const result = internalRevalidateProductsBodySchema.safeParse({
+      merchantId: 'merchant-1',
+      expireProductBlogCache: true,
+    });
+    expect(result.success).toBe(true);
+    expect(result.data?.expireProductBlogCache).toBe(true);
+  });
+
   it('accepts an explicit whole-storefront purge only with the trusted storefront identifier', () => {
     const result = internalRevalidateProductsBodySchema.safeParse({
       merchantId: 'merchant-1',

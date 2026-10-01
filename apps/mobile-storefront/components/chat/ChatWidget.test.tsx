@@ -44,6 +44,7 @@ jest.mock('./use-draggable-fab', () => ({
     composedGesture: {},
     translateX: { value: 0 },
     translateY: { value: 0 },
+    // Keep the animated scale surface available to the shared FAB mock.
     scale: { get: () => 1, value: 1 },
     isDragging: false,
     isOverDismissZone: false,

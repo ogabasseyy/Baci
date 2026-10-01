@@ -17,6 +17,10 @@ import type {
   MerchantShippingZoneLocation,
   StorefrontShippingRatesPayload,
 } from '@/lib/shipping/merchant-rates/types';
+import {
+  SHIPPING_PROVIDER_CODES,
+  type ShippingProviderCode,
+} from '@/lib/shipping/types';
 
 // Runtime enum tuples — single source of truth is the union types in types.ts;
 // `satisfies` keeps these in lock-step with them.
@@ -70,6 +74,28 @@ const optionalMerchantTextSchema = z.preprocess((value) => {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 }, z.string().optional().catch(undefined));
+
+function isShippingProviderCode(value: string): value is ShippingProviderCode {
+  return (SHIPPING_PROVIDER_CODES as readonly string[]).includes(value);
+}
+
+const optionalShippingProviderCodesSchema = z
+  .unknown()
+  .optional()
+  .transform((value): ShippingProviderCode[] | undefined => {
+    if (value === undefined) return undefined;
+    if (!Array.isArray(value)) return [];
+
+    return Array.from(
+      new Set(
+        value.flatMap((provider) => {
+          if (typeof provider !== 'string') return [];
+          const normalized = provider.trim().toUpperCase();
+          return isShippingProviderCode(normalized) ? [normalized] : [];
+        })
+      )
+    );
+  });
 
 // ---------------------------------------------------------------------------
 // Row schemas (snake_case in -> camelCase out).
@@ -199,6 +225,7 @@ export const storefrontShippingRatesPayloadSchema = z
     rates: dropInvalid(rateSchema),
     merchant_payout_currency: optionalMerchantTextSchema,
     merchant_country: optionalMerchantTextSchema,
+    shipping_providers: optionalShippingProviderCodesSchema,
   })
   .transform(
     (payload): StorefrontShippingRatesPayload => ({
@@ -207,6 +234,7 @@ export const storefrontShippingRatesPayloadSchema = z
       rates: payload.rates,
       merchantPayoutCurrency: payload.merchant_payout_currency,
       merchantCountry: payload.merchant_country,
+      enabledProviderCodes: payload.shipping_providers,
     })
   );
 

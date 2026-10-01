@@ -70,3 +70,22 @@ export function getDateOfBirthValidationError(value: string): string | null {
   if (result.success) return null;
   return result.error.issues[0]?.message ?? 'Enter a valid date of birth';
 }
+
+/**
+ * Returns true only for a well-formed DOB whose owner has reached 18 today.
+ * This is a privacy-safe client hint for age-sensitive SDK configuration; the
+ * quiz API remains authoritative and must re-check the stored DOB.
+ */
+export function isAdultDateOfBirth(
+  value: string | null | undefined,
+  now = new Date()
+): boolean {
+  if (!value || !DateOfBirthSchema.safeParse(value).success) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const eighteenthBirthday = Date.UTC(
+    now.getUTCFullYear() - 18,
+    now.getUTCMonth(),
+    now.getUTCDate()
+  );
+  return Date.UTC(year, month - 1, day) <= eighteenthBirthday;
+}

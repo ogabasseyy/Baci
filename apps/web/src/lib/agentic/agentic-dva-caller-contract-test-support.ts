@@ -5,7 +5,7 @@
  * not scope-aware, so a local binding that shadows an import is not distinguished.
  */
 import { dirname, join, normalize } from 'node:path';
-import ts from 'typescript';
+import ts from '@typescript/typescript6';
 import { resolveImportedBinding } from './agentic-dva-import-binding-resolution-test-support';
 import { collectPrivilegedAliases } from './agentic-dva-privileged-alias-test-support';
 

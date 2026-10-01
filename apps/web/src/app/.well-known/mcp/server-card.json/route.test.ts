@@ -8,7 +8,6 @@ const PUBLIC_TOOL_NAMES = [
   'get_brands',
   'get_product',
   'get_product_variants',
-  'get_recommendations',
   'get_shipping_quote',
   'get_store_info',
   'search_products',
@@ -75,11 +74,17 @@ describe('GET /.well-known/mcp/server-card.json', () => {
       annotations: {
         destructiveHint: false,
         openWorldHint: false,
-        readOnlyHint: false,
+        readOnlyHint: true,
       },
       inputSchema: {
         required: ['product_id'],
+        properties: {
+          quantity: expect.objectContaining({ type: 'integer' }),
+        },
       },
     });
+    expect(
+      toolsByName.get('add_to_cart').inputSchema.properties
+    ).not.toHaveProperty('session_id');
   });
 });

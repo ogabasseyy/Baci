@@ -31,16 +31,19 @@ vi.mock('react-native', () => ({
     accessibilityRole,
     accessibilityState,
     children,
+    disabled,
     onPress,
   }: {
     accessibilityLabel?: string;
     accessibilityRole?: string;
-    accessibilityState?: { checked?: boolean };
+    accessibilityState?: { checked?: boolean; disabled?: boolean };
     children?: ReactNode;
+    disabled?: boolean;
     onPress?: () => void;
   }) => (
     <button
       aria-label={accessibilityLabel}
+      disabled={disabled}
       onClick={onPress}
       {...(accessibilityRole === 'radio'
         ? {
@@ -87,6 +90,31 @@ describe('ExpenseBranchSelector', () => {
     );
 
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    null,
+    'missing-branch',
+  ] as const)('renders a sole available branch when the selected branch is %s', async (selectedBranchId) => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+
+    render(
+      <ExpenseBranchSelector
+        branches={[{ id: 'branch-1', name: 'Lagos main' }]}
+        onSelect={onSelect}
+        selectedBranchId={selectedBranchId}
+      />
+    );
+
+    const branchOption = screen.getByRole('radio', {
+      name: 'Assign expense to Lagos main',
+    });
+    expect(branchOption).toHaveAttribute('aria-checked', 'false');
+
+    await user.click(branchOption);
+
+    expect(onSelect).toHaveBeenCalledWith('branch-1');
   });
 
   it('renders the branch label', () => {
@@ -158,5 +186,31 @@ describe('ExpenseBranchSelector', () => {
     );
 
     expect(onSelect).toHaveBeenCalledWith('branch-2');
+  });
+
+  it('disables every branch option without forwarding a selection', async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+
+    render(
+      <ExpenseBranchSelector
+        branches={[
+          { id: 'branch-1', name: 'Lagos main' },
+          { id: 'branch-2', name: 'Lekki branch' },
+        ]}
+        disabled
+        onSelect={onSelect}
+        selectedBranchId="branch-1"
+      />
+    );
+
+    const branchOption = screen.getByRole('radio', {
+      name: 'Assign expense to Lekki branch',
+    });
+    expect(branchOption).toBeDisabled();
+
+    await user.click(branchOption);
+
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });

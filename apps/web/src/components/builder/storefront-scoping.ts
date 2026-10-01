@@ -27,7 +27,9 @@ export function getStorefrontScopedHref(
   if (
     !normalizedBasePath ||
     trimmedUrl === normalizedBasePath ||
-    trimmedUrl.startsWith(`${normalizedBasePath}/`)
+    trimmedUrl.startsWith(`${normalizedBasePath}/`) ||
+    trimmedUrl.startsWith(`${normalizedBasePath}?`) ||
+    trimmedUrl.startsWith(`${normalizedBasePath}#`)
   ) {
     return trimmedUrl;
   }

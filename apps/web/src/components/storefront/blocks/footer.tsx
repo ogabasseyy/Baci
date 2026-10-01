@@ -2,6 +2,7 @@
 
 import { Facebook, Instagram, Linkedin, Twitter, Youtube } from 'lucide-react';
 import Link from 'next/link';
+import { useStorefrontScopedRoute } from '@/components/builder/use-storefront-scoped-route';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { asRoute } from '@/lib/routes';
@@ -33,6 +34,7 @@ export function Footer({
   backgroundColor,
   textColor,
 }: FooterProps) {
+  const toStorefrontRoute = useStorefrontScopedRoute();
   const socialIcons: Record<
     string,
     React.ComponentType<{ className?: string }>
@@ -79,7 +81,7 @@ export function Footer({
                 {quickLinks.map((link) => (
                   <li key={link.label}>
                     <Link
-                      href={asRoute(link.url)}
+                      href={toStorefrontRoute(link.url)}
                       className="hover:text-white transition-colors"
                     >
                       {link.label}
@@ -152,8 +154,7 @@ export function Footer({
 
         <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-neutral-500 text-sm">
-            {copyrightText ||
-              `© ${new Date().getFullYear()} ${businessName}. Powered by Baci.`}
+            {copyrightText || `© ${businessName}. Powered by Baci.`}
           </p>
           <div className="flex gap-6 text-sm text-neutral-500">
             <Link href="#" className="hover:text-white transition-colors">

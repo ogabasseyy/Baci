@@ -3,22 +3,12 @@
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
+import { walletActionConfig } from './wallet-action-config';
+import { mapWalletTransaction } from './wallet-transaction';
 
-const MIN_WITHDRAWAL_AMOUNT = 1000;
-const MAX_TRANSACTION_LIMIT = 100;
-const VALID_PAYOUT_DAYS = [
-  'monday',
-  'tuesday',
-  'wednesday',
-  'thursday',
-  'friday',
-  'saturday',
-  'sunday',
-] as const;
+export type { Transaction } from './wallet-transaction';
 
-/**
- * Helper to verify the authenticated user owns the given merchantId
- */
+/** Verify the authenticated user owns the given merchant. */
 async function verifyMerchantOwnership(
   supabase: ReturnType<typeof createClient>,
   userId: string,
@@ -65,16 +55,6 @@ export type PendingSettlement = {
   sourceType: string;
   expectedDate: string;
   description: string;
-};
-
-export type Transaction = {
-  id: string;
-  type: 'credit' | 'debit' | 'withdrawal' | 'payout';
-  amount: number;
-  balanceAfter: number;
-  status: 'pending' | 'completed' | 'failed';
-  description: string;
-  createdAt: string;
 };
 
 export async function getWalletData(merchantId: string) {
@@ -209,7 +189,10 @@ export async function getTransactions(merchantId: string, limit = 10) {
   }
 
   // Clamp limit to prevent excessive queries
-  const safeLimit = Math.min(Math.max(1, limit), MAX_TRANSACTION_LIMIT);
+  const safeLimit = Math.min(
+    Math.max(1, limit),
+    walletActionConfig.maxTransactionLimit
+  );
 
   // Verify ownership
   const ownershipCheck = await verifyMerchantOwnership(
@@ -221,32 +204,19 @@ export async function getTransactions(merchantId: string, limit = 10) {
     return [];
   }
 
-  const { data: transactions } = await supabase
-    .from('merchant_transactions')
+  const { data: transactions, error: transactionsError } = await supabase
+    .from('wallet_transactions')
     .select('id, type, amount, balance_after, status, description, created_at')
     .eq('merchant_id', merchantId)
     .order('created_at', { ascending: false })
     .limit(safeLimit);
 
-  // Validate and map transactions with runtime type checking
-  const validTypes = ['credit', 'debit', 'withdrawal', 'payout'] as const;
-  const validStatuses = ['pending', 'completed', 'failed'] as const;
+  if (transactionsError) {
+    console.error('Failed to fetch wallet transactions:', transactionsError);
+    return [];
+  }
 
-  return (transactions || []).map((tx) => {
-    // Runtime validation for type safety
-    const txType = validTypes.includes(tx.type) ? tx.type : 'credit';
-    const txStatus = validStatuses.includes(tx.status) ? tx.status : 'pending';
-
-    return {
-      id: tx.id,
-      type: txType as Transaction['type'],
-      amount: Number(tx.amount),
-      balanceAfter: Number(tx.balance_after),
-      status: txStatus as Transaction['status'],
-      description: tx.description,
-      createdAt: tx.created_at,
-    };
-  });
+  return (transactions || []).map(mapWalletTransaction);
 }
 
 export async function updateWalletSettings(
@@ -288,7 +258,9 @@ export async function updateWalletSettings(
   if (settings.autoPayoutDay) {
     const day = settings.autoPayoutDay.toLowerCase();
     if (
-      !VALID_PAYOUT_DAYS.includes(day as (typeof VALID_PAYOUT_DAYS)[number])
+      !walletActionConfig.validPayoutDays.includes(
+        day as (typeof walletActionConfig.validPayoutDays)[number]
+      )
     ) {
       return { success: false, error: 'Invalid payout day' };
     }
@@ -300,10 +272,10 @@ export async function updateWalletSettings(
     if (!Number.isFinite(settings.minPayoutAmount)) {
       return { success: false, error: 'Invalid payout amount' };
     }
-    if (settings.minPayoutAmount < MIN_WITHDRAWAL_AMOUNT) {
+    if (settings.minPayoutAmount < walletActionConfig.minimumWithdrawalAmount) {
       return {
         success: false,
-        error: `Minimum payout amount must be at least ₦${MIN_WITHDRAWAL_AMOUNT.toLocaleString()}`,
+        error: `Minimum payout amount must be at least ₦${walletActionConfig.minimumWithdrawalAmount.toLocaleString()}`,
       };
     }
     updates.min_payout_amount = settings.minPayoutAmount;

@@ -32,6 +32,7 @@ export const WALLET_FUNDING_TELEMETRY = {
   reasons: {
     // Every member of `CustomerWalletPaymentAccountErrorCode`
     // (@/lib/customer-wallet-payment-account-types) …
+    customerNameRequired: 'CUSTOMER_NAME_REQUIRED',
     customerPhoneRequired: 'CUSTOMER_PHONE_REQUIRED',
     gatewayNotConfigured: 'GATEWAY_NOT_CONFIGURED',
     paystackCustomerError: 'PAYSTACK_CUSTOMER_ERROR',

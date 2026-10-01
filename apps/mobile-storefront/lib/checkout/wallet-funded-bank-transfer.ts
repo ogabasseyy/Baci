@@ -77,7 +77,7 @@ export async function createWalletFundedBankTransferIntent({
       orderId,
     });
     onSuccess(response);
-    return true;
+    return response;
   } catch (error) {
     const errorDetails = getWalletFundingErrorDetails(error);
     if (errorDetails.code !== 'WALLET_DVA_CONSENT_REQUIRED') {
@@ -87,7 +87,7 @@ export async function createWalletFundedBankTransferIntent({
         error: errorDetails.error,
         message: errorDetails.message,
       });
-      return false;
+      return null;
     }
   }
 
@@ -102,7 +102,7 @@ export async function createWalletFundedBankTransferIntent({
       error: errorDetails.error,
       message: errorDetails.message,
     });
-    return false;
+    return null;
   }
   if (!consentGranted) {
     onFallback({
@@ -111,7 +111,7 @@ export async function createWalletFundedBankTransferIntent({
       error: null,
       message: 'User denied wallet consent',
     });
-    return false;
+    return null;
   }
 
   try {
@@ -122,7 +122,7 @@ export async function createWalletFundedBankTransferIntent({
       orderId,
     });
     onSuccess(response);
-    return true;
+    return response;
   } catch (error) {
     const errorDetails = getWalletFundingErrorDetails(error);
     onFallback({
@@ -131,6 +131,6 @@ export async function createWalletFundedBankTransferIntent({
       error: errorDetails.error,
       message: errorDetails.message,
     });
-    return false;
+    return null;
   }
 }

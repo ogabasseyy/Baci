@@ -24,6 +24,29 @@ export class NetworkError extends Error {
 
 const CONNECTIVITY_ERROR_PATTERN =
   /network request failed|fetch failed|connectexception|failed to connect|unable to resolve host|connection (?:reset|refused|abort(?:ed)?)|software caused connection abort|network is unreachable|econnrefused|econnreset|enotfound|etimedout/i;
+const DNS_RESOLUTION_ERROR_PATTERN =
+  /server with the specified hostname could not be found|(?:could not|cannot|unable to) resolve host|dns (?:lookup|resolution).*(?:fail|error)|getaddrinfo|enotfound|eai_again|name or service not known/i;
+
+function getErrorText(error: unknown, seen = new Set<object>()): string {
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  if (!error || typeof error !== 'object' || seen.has(error)) {
+    return '';
+  }
+
+  seen.add(error);
+  const messageValue = Object.hasOwn(error, 'message')
+    ? Reflect.get(error, 'message')
+    : undefined;
+  const causeValue = Object.hasOwn(error, 'cause')
+    ? Reflect.get(error, 'cause')
+    : undefined;
+  const message = typeof messageValue === 'string' ? messageValue : '';
+  const cause = getErrorText(causeValue, seen);
+  return `${message} ${cause}`.trim();
+}
 
 /**
  * React Native surfaces connection failures inconsistently across platforms:
@@ -44,16 +67,20 @@ export function isConnectivityError(error: unknown): boolean {
   ) {
     return true;
   }
-  if (!(error instanceof Error)) {
+  return CONNECTIVITY_ERROR_PATTERN.test(getErrorText(error));
+}
+
+/**
+ * Returns true only for explicit DNS/hostname-resolution failures. This is
+ * intentionally narrower than `isConnectivityError`: requests that time out
+ * or reset after transmission are ambiguous and must not be replayed.
+ */
+export function isDnsResolutionError(error: unknown): boolean {
+  if (error instanceof NetworkError) {
     return false;
   }
-  const cause =
-    error.cause instanceof Error
-      ? error.cause.message
-      : typeof error.cause === 'string'
-        ? error.cause
-        : '';
-  return CONNECTIVITY_ERROR_PATTERN.test(`${error.message} ${cause}`);
+
+  return DNS_RESOLUTION_ERROR_PATTERN.test(getErrorText(error));
 }
 
 export function getResponseErrorMessage(data: unknown, status: number): string {

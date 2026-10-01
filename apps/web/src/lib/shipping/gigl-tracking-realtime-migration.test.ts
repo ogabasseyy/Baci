@@ -24,14 +24,25 @@ function readMigration(filename: string) {
 }
 
 function extractPolicyBody(migration: string, policyName: string) {
-  const policyBody = migration.match(
-    new RegExp(`CREATE POLICY "${policyName}"[\\s\\S]*?;`, 'i')
-  )?.[0];
+  const policyStart = migration
+    .toLowerCase()
+    .indexOf(`create policy "${policyName.toLowerCase()}"`);
+  const policyEnd = migration.indexOf(';', policyStart);
+  const policyBody =
+    policyStart >= 0 && policyEnd >= 0
+      ? migration.slice(policyStart, policyEnd + 1)
+      : undefined;
   expect(policyBody).toBeDefined();
   return policyBody ?? '';
 }
 
 describe('GIGL tracking Realtime migration', () => {
+  it('treats policy names as literal text instead of regular expressions', () => {
+    const migration = 'CREATE POLICY "policy [literal]" ON realtime.messages;';
+
+    expect(extractPolicyBody(migration, 'policy [literal]')).toBe(migration);
+  });
+
   it('keeps the historical source and validates the append-only repair', () => {
     const historicalMigration = readMigration(migrationFiles.historical);
     const repairMigration = readMigration(migrationFiles.repair);

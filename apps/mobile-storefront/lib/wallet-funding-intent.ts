@@ -147,14 +147,20 @@ export async function storeWalletFundingIntent({
  * customer id — `undefined` (signed out, or not resolvable) consumes nothing.
  */
 export async function consumeWalletFundingIntent(
-  customerId: string | undefined
+  customerId: string | undefined,
+  shouldConsume: () => boolean = () => true
 ): Promise<WalletReturnHref | undefined> {
   const raw = await runFundingIntentOperation(async () => {
     try {
       const current = await asyncStorage.getItem(
         WALLET_FUNDING_INTENT_STORAGE_KEY
       );
+      if (!shouldConsume()) return null;
       await asyncStorage.removeItem(WALLET_FUNDING_INTENT_STORAGE_KEY);
+      if (!shouldConsume() && current !== null) {
+        await asyncStorage.setItem(WALLET_FUNDING_INTENT_STORAGE_KEY, current);
+        return null;
+      }
       return current;
     } catch {
       return null;

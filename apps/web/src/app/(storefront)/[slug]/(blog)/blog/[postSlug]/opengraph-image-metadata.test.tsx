@@ -23,8 +23,6 @@ vi.mock(
 import {
   contentType,
   generateImageMetadata,
-  revalidate,
-  runtime,
   size,
 } from '@/app/(storefront)/[slug]/(blog)/blog/[postSlug]/opengraph-image-renderer';
 
@@ -36,8 +34,6 @@ describe('merchant blog post OG image metadata', () => {
   it('exports PNG ImageResponse route metadata', () => {
     expect(size).toEqual({ width: 1200, height: 630 });
     expect(contentType).toBe('image/png');
-    expect(revalidate).toBe(0);
-    expect(runtime).toBe('nodejs');
   });
 
   it('generates lightweight alt metadata for the post image', async () => {

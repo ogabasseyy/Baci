@@ -3,6 +3,7 @@ import {
   getMerchantShippingRates,
   getMerchantShippingRatesOrThrow,
   MerchantShippingRatesLoadError,
+  type MerchantShippingRatesRpcClient,
 } from './get-merchant-shipping-rates';
 
 const RATES_RPC_PAYLOAD = {
@@ -28,10 +29,13 @@ const RATES_RPC_PAYLOAD = {
   ],
 };
 
-function clientWith(result: { data?: unknown; error?: unknown }) {
+function clientWith(result: {
+  data?: unknown;
+  error?: unknown;
+}): MerchantShippingRatesRpcClient {
   return {
     rpc: vi.fn().mockResolvedValue({ data: null, error: null, ...result }),
-  } as never;
+  };
 }
 
 describe('getMerchantShippingRates', () => {
@@ -68,9 +72,7 @@ describe('getMerchantShippingRates', () => {
     const payload = await getMerchantShippingRates(supabase, 'merchant-1');
 
     // Assert
-    expect(
-      (supabase as { rpc: ReturnType<typeof vi.fn> }).rpc
-    ).toHaveBeenCalledWith('get_storefront_shipping_rates', {
+    expect(supabase.rpc).toHaveBeenCalledWith('get_storefront_shipping_rates', {
       p_merchant_id: 'merchant-1',
     });
     expect(payload.zones).toHaveLength(1);
@@ -116,12 +118,21 @@ describe('getMerchantShippingRates', () => {
     expect(payload.merchantCountry).toBe('IN');
   });
 
-  it('fails soft to empty payload on RPC error', async () => {
+  it('fails soft when a retryable RPC result is followed by a transport rejection', async () => {
     // Arrange
     const consoleError = vi
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
-    const supabase = clientWith({ error: new Error('rpc down') });
+    const transportError = new TypeError('fetch failed');
+    const supabase: MerchantShippingRatesRpcClient = {
+      rpc: vi
+        .fn()
+        .mockResolvedValueOnce({
+          data: null,
+          error: { message: 'schema cache reload', code: 'PGRST002' },
+        })
+        .mockRejectedValueOnce(transportError),
+    };
 
     // Act
     const payload = await getMerchantShippingRates(supabase, 'merchant-1');
@@ -142,6 +153,30 @@ describe('getMerchantShippingRates', () => {
     // Assert
     expect(payload).toEqual({ zones: [], locations: [], rates: [] });
   });
+
+  it('retries a transient undici socket close once before returning merchant rates', async () => {
+    // Arrange — Vercel/Node reports this as a fetch failure whose cause is the
+    // undici socket error seen in production (`other side closed`).
+    const socketError = Object.assign(new TypeError('fetch failed'), {
+      cause: Object.assign(new Error('other side closed'), {
+        code: 'UND_ERR_SOCKET',
+      }),
+    });
+    const supabase: MerchantShippingRatesRpcClient = {
+      rpc: vi
+        .fn()
+        .mockRejectedValueOnce(socketError)
+        .mockResolvedValueOnce({ data: RATES_RPC_PAYLOAD, error: null }),
+    };
+
+    // Act
+    const payload = await getMerchantShippingRates(supabase, 'merchant-1');
+
+    // Assert — the read-only RPC is replayed exactly once, preserving the
+    // existing fail-soft boundary while recovering a transient connection.
+    expect(payload.rates[0]?.id).toBe('r1');
+    expect(supabase.rpc).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('getMerchantShippingRatesOrThrow', () => {
@@ -156,25 +191,34 @@ describe('getMerchantShippingRatesOrThrow', () => {
     );
 
     // Assert
-    expect(
-      (supabase as { rpc: ReturnType<typeof vi.fn> }).rpc
-    ).toHaveBeenCalledWith('get_storefront_shipping_rates', {
+    expect(supabase.rpc).toHaveBeenCalledWith('get_storefront_shipping_rates', {
       p_merchant_id: 'merchant-1',
     });
     expect(payload.zones).toHaveLength(1);
     expect(payload.rates[0]?.currency).toBe('NGN');
   });
 
-  it('throws MerchantShippingRatesLoadError on RPC error instead of failing soft', async () => {
+  it('wraps a transport rejection after a retryable RPC error instead of leaking the raw error', async () => {
     // Arrange
-    const supabase = clientWith({
-      error: { message: 'schema cache reload', code: 'PGRST002' },
-    });
+    const transportError = new TypeError('fetch failed');
+    const supabase: MerchantShippingRatesRpcClient = {
+      rpc: vi
+        .fn()
+        .mockResolvedValueOnce({
+          data: null,
+          error: { message: 'schema cache reload', code: 'PGRST002' },
+        })
+        .mockRejectedValueOnce(transportError),
+    };
 
-    // Act + Assert
-    await expect(
-      getMerchantShippingRatesOrThrow(supabase, 'merchant-1')
-    ).rejects.toBeInstanceOf(MerchantShippingRatesLoadError);
+    // Act
+    const request = getMerchantShippingRatesOrThrow(supabase, 'merchant-1');
+
+    // Assert
+    await expect(request).rejects.toBeInstanceOf(
+      MerchantShippingRatesLoadError
+    );
+    expect(supabase.rpc).toHaveBeenCalledTimes(2);
   });
 
   it('surfaces the RPC error code on the thrown load error', async () => {

@@ -1,11 +1,11 @@
-# Gemini 3.5 Flash PR reviewer.
+# Gemini 3.7 Flash PR reviewer.
 #
 # Runs automatically on every same-repo pull request, and on demand via an
 # `@gemini-cli /review` comment (owner/member/collaborator only). It runs
 # Google's official Gemini CLI action as the review engine, then this workflow
 # owns posting + gating so the result is deterministic:
 #   1. Build the PR diff + the Baci review contract into a prompt.
-#   2. Run google-github-actions/run-gemini-cli with model `gemini-3.5-flash`.
+#   2. Run google-github-actions/run-gemini-cli with model `gemini-3.7-flash`.
 #   3. Capture the model's final response (the action's `summary` output),
 #      post it as a PR review, and set a `Gemini review` commit status.
 #   4. Gate: fail + mark the status red on HIGH/CRITICAL findings, with a
@@ -61,9 +61,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      # Pin gemini-3.5-flash by default; allow pinning a different model via the
+      # Pin gemini-3.7-flash by default; allow pinning a different model via the
       # GEMINI_MODEL repository variable (same pattern as CLAUDE_MODEL).
-      GEMINI_MODEL_RESOLVED: ${{ vars.GEMINI_MODEL != '' && vars.GEMINI_MODEL || 'gemini-3.5-flash' }}
+      GEMINI_MODEL_RESOLVED: ${{ vars.GEMINI_MODEL != '' && vars.GEMINI_MODEL || 'gemini-3.7-flash' }}
 
     steps:
       - name: Parse review command
@@ -94,7 +94,7 @@ jobs:
 
       - name: Checkout repository
         if: steps.command.outputs.should_run == 'true'
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           # Check out the PR head so changed files are read from the filesystem
@@ -147,7 +147,7 @@ jobs:
             files_summary="- No file-level diff metadata was returned by the GitHub API."
           fi
 
-          # Unified diff, truncated to a prompt budget. gemini-3.5-flash has a
+          # Unified diff, truncated to a prompt budget. gemini-3.7-flash has a
           # large context window, but keep the action input bounded.
           diff_file="${RUNNER_TEMP}/gemini.diff"
           gh pr diff "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" > "${diff_file}" || true
@@ -317,11 +317,11 @@ jobs:
             printf '\n%s\n' "${prompt_eof}"
           } >> "${GITHUB_OUTPUT}"
 
-      - name: Run Gemini 3.5 Flash review
+      - name: Run Gemini 3.7 Flash review
         id: gemini
         if: steps.command.outputs.should_run == 'true' && steps.diff.outputs.should_review == 'true'
-        # Tolerate flaky Gemini-API runs so the workflow still posts a fallback
-        # review and resolves the commit status instead of hard-failing here.
+        # Keep the step non-fatal long enough to post fallback context; the gate
+        # below still fails when Gemini does not return a usable review.
         continue-on-error: true
         env:
           # The Gemini CLI refuses to run in an "untrusted" workspace (the CI
@@ -410,6 +410,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           HEAD_SHA: ${{ steps.diff.outputs.head_sha }}
+          GEMINI_SUMMARY: ${{ steps.gemini.outputs.summary }}
+          GEMINI_OUTCOME: ${{ steps.gemini.outcome }}
           PR_LABELS: ${{ toJson(github.event.pull_request.labels || github.event.issue.labels) }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -425,6 +427,14 @@ jobs:
               -f target_url="${RUN_URL}" >/dev/null || true
           }
 
+          summary="${GEMINI_SUMMARY:-}"
+          outcome="${GEMINI_OUTCOME:-}"
+          if [[ "${outcome}" != "success" || -z "${summary//[[:space:]]/}" ]]; then
+            echo "::error::Gemini did not produce a successful review summary (step outcome: ${outcome:-unknown})."
+            set_status "failure" "Gemini review failed or returned no summary"
+            exit 1
+          fi
+
           # Escape hatch: human verification can bypass the gate via a label.
           if printf '%s' "${PR_LABELS:-[]}" | jq -e '.[] | select(.name == "bypass-ai-gate")' >/dev/null 2>&1; then
             echo "::notice::Gemini gate bypassed via 'bypass-ai-gate' label."
@@ -433,9 +443,9 @@ jobs:
           fi
 
           if [[ ! -f "${body_file}" ]]; then
-            echo "No review body produced by Gemini. Treating as advisory pass."
-            set_status "success" "No review produced (advisory pass)"
-            exit 0
+            echo "::error::No review body was produced by Gemini."
+            set_status "failure" "Gemini review body missing"
+            exit 1
           fi
 
           # Match only structured HIGH/CRITICAL bullet findings ("- high:", "- critical:",

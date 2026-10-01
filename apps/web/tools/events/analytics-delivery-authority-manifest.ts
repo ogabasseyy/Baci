@@ -12,18 +12,16 @@ export const analyticsDeliveryAuthorityManifest = {
       '8747272f15477bffc36d4bd8b18fa046338f1dbc6e1234bcd2400e11694057e2',
     'apps/web/src/app/api/events/route.ts':
       '3e758b45f0809b919f1a058251bb1acd85e6df6de93df2b63f45f6766be67aab',
-    'apps/web/src/app/api/platform/events/platform-event-forwarding.ts':
-      '78fd66f814bdff4621771fad58965bb9fad5e70d6da1012fa0450faf305bacf6',
     'apps/web/src/lib/analytics/fetch-analytics-platform-config.ts':
       '95cc62af2d374bfed4b9b89b5b745e2dbd4c34ada1f3a25cf0c398e3cb376c1e',
     'apps/web/src/lib/analytics/trusted-server-ad-platform-fanout.ts':
       '2f330fb4efcd9cbcbef7a524f43232572082908e4f73e27d72a8cbb8636380b5',
     'apps/web/src/lib/supabase/service.ts':
-      '13e10a25092e1a53c8f091b3576e804f6e1268f55d63393d2a2231ddc46cc5bc',
+      '6aaad249f5e1635f1ea590d9736b3313f9df0367df1ea02bf6011530d0c309bb',
   },
   callerScopedRouteHashes: {
     'apps/web/src/app/api/analytics/ads/route.ts':
-      'b714f0bedeed7bded973fbe743c74517622ea8e0069dfca35051752dc45571dd',
+      'dc74e421113d3447a816559282bcd0612c49d68d92403cafe5e9cb7001a35e50',
     'apps/web/src/app/api/analytics/facebook-capi/route.ts':
       'f41e1de587645b8fdb2af8af180eb581b2bfeecae688670d7b5c7a80088b7c32',
     'apps/web/src/app/api/analytics/ga4/route.ts':
@@ -42,13 +40,13 @@ export const analyticsDeliveryAuthorityManifest = {
     platformProviderConfig:
       'google_analytics_id, ga4_api_secret, facebook_pixel_id, facebook_capi_token',
   },
-  platformAuthority: {
+  retiredPlatformAuthority: {
     helper: 'apps/web/src/app/api/platform/events/platform-event-forwarding.ts',
     route: 'apps/web/src/app/api/platform/events/route.ts',
   },
   platformRouteHash: {
     path: 'apps/web/src/app/api/platform/events/route.ts',
-    sha256: 'bb3b5ea163f7029bd8a90523ac7944c9e126b2aebc0ce673f82c4e0c48d00161',
+    sha256: '0e62bed087fd29cb290af99f39dbc8589f9739ff06adde55598045945df7b7b1',
   },
   pureFanoutRoots: [
     'apps/web/src/lib/analytics/send-configured-ad-platforms.ts',

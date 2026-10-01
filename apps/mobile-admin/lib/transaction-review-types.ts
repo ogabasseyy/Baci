@@ -23,6 +23,12 @@ export interface TransactionReviewUnitCostRow {
 export interface TransactionReviewOrderRow {
   cancelled_at?: string | null;
   created_at: string;
+  ad_tracking?: unknown;
+  discount_amount?: number | null;
+  discount_code_id?: string | null;
+  tax_amount?: number | string | null;
+  external_source?: string | null;
+  source?: string | null;
   transaction_date?: string | null;
   customer_email: string | null;
   customer_name: string | null;
@@ -31,13 +37,18 @@ export interface TransactionReviewOrderRow {
   id: string;
   order_items: Array<{
     cost_price?: number | null;
+    assurance_fee?: number | string | null;
+    condition?: string | null;
     fulfillment_data: unknown;
     id: string;
+    line_id?: number | string | null;
     name: string | null;
     order_item_unit_costs?: TransactionReviewUnitCostRow[] | null;
     price: number | null;
     product_id: string | null;
     product_match_status?: 'custom' | 'linked' | 'unreviewed' | null;
+    quiz_award_id?: string | null;
+    quiz_award_amount?: number | string | null;
     product_variants?:
       | TransactionReviewVariantRow
       | TransactionReviewVariantRow[]
@@ -48,6 +59,9 @@ export interface TransactionReviewOrderRow {
       | null;
     quantity: number | null;
     supplier_name?: string | null;
+    vat_category_code?: string | null;
+    vat_rate?: number | string | null;
+    variant_attributes?: Record<string, string> | null;
     variant_id?: string | null;
   }> | null;
   order_number: string | null;
@@ -83,6 +97,7 @@ export interface TransactionReviewOrder {
   customerEmail: string | null;
   customerName: string;
   customerPhone: string | null;
+  discountAmount?: number;
   estimatedProfit: number;
   id: string;
   items: TransactionReviewItem[];

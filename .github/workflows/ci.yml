@@ -39,14 +39,13 @@ jobs:
       cwv_runner: ${{ steps.gate.outputs.cwv_runner }}
       deploy_scripts: ${{ steps.gate.outputs.deploy_scripts }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          filter: blob:none
           persist-credentials: false
       # paths-filter can't infer a base on merge_group events, so skip it there
       # and run every gate (the queue validates the full integration anyway).
-      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         if: github.event_name != 'merge_group'
         with:
@@ -100,10 +99,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          filter: blob:none
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
       - name: Run CWV runner contract tests
@@ -120,10 +118,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          filter: blob:none
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
       - name: Run Lint
@@ -144,7 +141,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           filter: blob:none
@@ -172,7 +169,7 @@ jobs:
     # summary and Actions post-job cleanup.
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           filter: blob:none
@@ -234,52 +231,156 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4, 5, 6]
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          filter: blob:none
+          # The full web suite verifies immutable historical event-pipeline
+          # source bytes. Hydrate blobs during checkout because credentials are
+          # deliberately removed before tests and cannot service lazy fetches.
+          filter: ''
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
       - name: Run web vitest shard
         run: pnpm --filter @baci/web exec vitest run --shard=${{ matrix.shard }}/6
 
-  quality-misc:
-    name: Quality Gate - Misc
+  quality-db-replay:
+    name: Quality Gate - DB Replay
     needs: [changes]
-    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_storefront == 'true' || needs.changes.outputs.quiz_db == 'true' || needs.changes.outputs.deploy_scripts == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    if: needs.changes.outputs.quiz_db == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 45
+    env:
+      BACI_REPLAY_COMMAND_TIMEOUT_MS: 1800000
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
-      - name: Test Migration Version Guard
-        run: bash .github/scripts/check-migration-versions.test.sh
-      - name: Test Migration Applier Collision Handling
+      - name: Install Supabase replay toolchain
+        env:
+          SUPABASE_CLI_SHA256: 01a3b8f5861d108a934937cae88e8d503093c3f7d3aa32d959f69b099b4f9ef3
+          SUPABASE_CLI_VERSION: 2.95.4
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl --fail --silent --show-error --location \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-18=18.3-1.pgdg24.04+1
+          SUPABASE_ARCHIVE="${RUNNER_TEMP}/supabase_linux_amd64.tar.gz"
+          curl --fail --silent --show-error --location \
+            "https://github.com/supabase/cli/releases/download/v${SUPABASE_CLI_VERSION}/supabase_linux_amd64.tar.gz" \
+            --output "${SUPABASE_ARCHIVE}"
+          echo "${SUPABASE_CLI_SHA256}  ${SUPABASE_ARCHIVE}" | sha256sum --check
+          sudo tar -xz -f "${SUPABASE_ARCHIVE}" -C /usr/local/bin supabase
+          sudo chmod 0755 /usr/local/bin/supabase
+          test "$(supabase --version)" = "${SUPABASE_CLI_VERSION}"
+          PSQL_BIN="$(command -v psql)"
+          "$PSQL_BIN" --version | grep -Eq '^psql \(PostgreSQL\) 18\.3( \(.+\))?$'
+          echo "PSQL_BIN=$PSQL_BIN" >> "$GITHUB_ENV"
+      - name: Test final order-notification outbox RPC privileges
         run: >-
-          bash .github/scripts/apply-pending-migrations.test.sh &&
-          bash .github/scripts/historical-migration-repair-spec.test.sh &&
-          bash .github/scripts/historical-migration-repair-backfill.test.sh &&
-          bash supabase/tests/run-storefront-order-private-schema-boundary-test.sh &&
-          bash supabase/tests/run-gigl-tracking-retry-repair-test.sh &&
-          bash supabase/tests/run-gigl-monitor-backfill-repair-test.sh &&
-          node --test .github/scripts/split-sql-statements.test.mjs
+          pnpm --filter @baci/web db:replay:chronological
+          --sql-check supabase/tests/order_notification_outbox_rpc_privileges.sql
+          --sql-check supabase/tests/paystack_order_dva_balance_refresh_permissions.sql
+          --sql-check supabase/migrations/tests/immediate_order_notification_claims.sql
+          --sql-check supabase/migrations/tests/immediate_order_notification_proof_claims.sql
+          --sql-check supabase/migrations/tests/sessionless_payment_reference_snapshot.sql
+          --sql-check supabase/migrations/tests/order_notification_delivered_lookup.sql
+          --sql-check supabase/migrations/tests/tracking_order_notification_delivered_token.sql
+          --sql-check supabase/migrations/tests/tracking_order_notification_pending.sql
+          --sql-check supabase/migrations/tests/tracking_order_notification_privileges.sql
+          --sql-check supabase/tests/paystack_order_dva_balance_refresh_history.sql
+          --sql-check supabase/tests/agentic_paystack_dva_alias_conflict.sql
+          --sql-check supabase/tests/shipping_provider_settings.sql
+          --sql-check supabase/tests/negotiation_customer_contact.sql
+          --sql-check supabase/tests/storefront_pdp_preflight_relation_category.sql
+          --sql-check supabase/tests/storefront_cluster_guide_candidates_rpc.sql
+          --sql-check supabase/tests/storefront_cluster_guide_classifier_behavior.sql
+          --sql-check supabase/tests/storefront_comparison_revisions.sql
+          --sql-check supabase/tests/storefront_comparison_revision_trigger_coverage.sql
+          --sql-check supabase/migrations/tests/admin_order_transaction_discount_cleanup.sql
+          --sql-check supabase/migrations/tests/persist_quiz_award_amount_snapshot.sql
+          --sql-check supabase/tests/search_products_not_archived_nulls.sql
+          --sql-check supabase/tests/product_discovery_embeddings_public_boundary.sql
+          --sql-check supabase/migrations/tests/quiz_instant_deadline_publication_v2.sql
+          --sql-check supabase/migrations/tests/quiz_instant_deadline_runtime_gate_v2.sql
+          --sql-check supabase/migrations/tests/quiz_live_score_publication_gate_v2.sql
+          --sql-check supabase/migrations/tests/quiz_instant_live_award_retry_v2.sql
+          --sql-check supabase/migrations/tests/quiz_instant_score_repair_lock_order_v2.sql
+          --sql-check supabase/migrations/tests/quiz_instant_retry_pending_health_v2.sql
+          --sql-check supabase/migrations/tests/quiz_results_wakeup_player_access_v2.sql
+          --sql-check supabase/migrations/tests/quiz_test_publication_control_rls_v2.sql
+          --sql-check supabase/migrations/tests/quiz_start_guard_context_v2.sql
+          --sql-check supabase/migrations/tests/quiz_cascade_score_consistency_v2.sql
+          --sql-check supabase/migrations/tests/quiz_runtime_gate_stale_health_v2.sql
+          --sql-check supabase/migrations/tests/quiz_score_repair_quiescence_gate_v2.sql
+          --sql-check supabase/migrations/tests/public_shipping_sender_projection.sql
+          --sql-check supabase/migrations/tests/repair_pickup_payment_confirmation.sql
+          --sql-check supabase/migrations/tests/repair_pickup_receiver_projection.sql
+          --sql-check supabase/migrations/tests/find_resumable_repair_pickup.sql
+          --sql-check supabase/migrations/tests/mobile_repair_pickup_payment_receipts.sql
+          --sql-check supabase/migrations/tests/mobile_repair_pickup_claim_lease.sql
+          --sql-check supabase/migrations/tests/claim_repair_pickup_booking_terminal.sql
+          --sql-check supabase/migrations/tests/claim_repair_pickup_booking_manual_fulfilled.sql
+          --sql-check supabase/migrations/tests/normalize_nigerian_repair_pickup_receiver_phone.sql
+          --sql-check supabase/migrations/tests/repair_pickup_receiver_fulfillment.sql
+          --sql-check supabase/migrations/tests/gigl_tracking_orderless_repair_unlink.sql
+          --sql-check supabase/tests/uba_redvault_refund_inventory_p1_regressions.sql
+          --sql-check supabase/migrations/tests/manual_order_document_date_sync.sql
+          --sql-check supabase/tests/feed_offer_manifest_offer_change_regressions.sql
+          --sql-check supabase/tests/repair_booking_rpc.sql
+          --sql-check supabase/migrations/tests/normalize_product_key_specs_gpu.sql
+          --sql-check supabase/migrations/tests/santa_catalog_projection.sql
+          --sql-check supabase/migrations/tests/guest_snapshot_inventory_proof.sql
+          --sql-check supabase/migrations/tests/immediate_notification_completion_proof.sql
+          --sql-check supabase/migrations/tests/pr3468_followup_payment_hardening.sql
+          --sql-check supabase/migrations/tests/credit_direct_inventory_proof.sql
+          --sql-check supabase/migrations/tests/jumia_variant_price_optimistic_guard.sql
+          --sql-check supabase/migrations/tests/jumia_submitted_price_update_faults.sql
+          --sql-check supabase/tests/storefront_order_claim_loop_ordering.sql
       - name: Run migration replay regression test
-        if: needs.changes.outputs.quiz_db == 'true'
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
-      - name: Verify Migration Versions
-        run: bash .github/scripts/check-migration-versions.sh
       - name: Test Cache Invalidation Outbox SQL
-        if: needs.changes.outputs.quiz_db == 'true'
         run: >-
           bash supabase/tests/run-cache-invalidation-outbox-test-runner.test.sh &&
           bash supabase/tests/run-cache-invalidation-outbox-test.sh
+
+  quality-misc:
+    name: Quality Gate - Misc
+    needs: [changes]
+    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_storefront == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.quiz_db == 'true' || needs.changes.outputs.deploy_scripts == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm-install-cached
+      - name: Run backfill scripts unit tests
+        run: pnpm exec vitest run scripts/lib
+      - name: Test Migration Version Guard
+        run: bash .github/scripts/check-migration-versions.test.sh
+      - name: Test Migration Applier Collision Handling
+        run: bash .github/scripts/run-migration-applier-tests.sh
+      - name: Verify Migration Versions
+        run: bash .github/scripts/check-migration-versions.sh
+      - name: Test Mobile Gem Floors
+        run: bash .github/scripts/check-mobile-gem-floors.test.sh
+      - name: Verify Mobile Gem Floors
+        run: bash .github/scripts/check-mobile-gem-floors.sh
       - name: Run CI Test Planner Unit Tests
         if: needs.changes.outputs.web == 'true'
-        run: node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs
+        run: node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/quiz-production-approval-workflow.test.mjs
+      - name: Verify iOS native patch contracts
+        uses: ./.github/actions/verify-ios-native-patch-contracts
       - name: Run storefront origin cost-contract tests
         if: needs.changes.outputs.web == 'true'
         run: >-
@@ -291,8 +392,14 @@ jobs:
         run: >-
           pnpm --dir vps-workers test &&
           node --test
+          .github/scripts/current-main-deploy-guard.test.mjs
+          .github/scripts/deploy-mcp-server.test.mjs
+          .github/scripts/deploy-vps-readiness-checkout.test.mjs
+          .github/scripts/deploy-with-retry-current-main.test.mjs
           .github/scripts/deploy-with-retry.test.mjs
           .github/scripts/run-pinned-vercel.test.mjs
+          .github/scripts/assert-vercel-pulled-sensitive-env.test.mjs
+          .github/scripts/ensure-vercel-sensitive-env.test.mjs
           .github/scripts/inject-prebuilt-env-secret.jwk.test.mjs
           .github/scripts/inject-prebuilt-env-secret.test.mjs
           .github/scripts/sync-cloudflare-vercel-production-env.test.mjs
@@ -307,7 +414,7 @@ jobs:
       # with no real work, because every other step is web/mobile/production-only.
       # Run the quiz + orders suites (which exercise the RPC-dependent route
       # logic) so a DB-only change is actually validated here. Migration-specific
-      # PostgreSQL fixtures run above; a full from-scratch Supabase apply remains
+      # PostgreSQL fixtures run in quality-db-replay; a full from-scratch Supabase apply remains
       # out of scope because it depends on Supabase-specific schema and roles.
       - name: Run Quiz Suite for DB-only Changes
         if: needs.changes.outputs.quiz_db == 'true' && needs.changes.outputs.web != 'true'
@@ -317,13 +424,22 @@ jobs:
           src/app/api/orders
           src/app/api/merchant/quiz
           src/app/dashboard/quiz
-      # Hard pre-launch gate: only enforced when the repo is configured for the
-      # production quiz phase (QUIZ_PHASE repo variable = "production"). It
-      # validates NLRC permits, published odds, compliance tracker rows, and the
-      # quiz RPC server secret against the live database. Skipped on normal PRs
-      # so it never blocks unrelated work, but visible as its own named step.
+      # Quiz runtime gate: enforced for either supported quiz phase. Phase 1a
+      # still signs negotiated-checkout proofs, so validate the runtime secret
+      # against the live database there too; production additionally validates
+      # prize approval evidence. Run only on trusted main pushes and merge
+      # queue integration commits so pull requests stay secret-free.
       - name: Verify Quiz Production Approval
-        if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.quiz_db == 'true') && vars.QUIZ_PHASE == 'production'
+        if: >-
+          (
+            (
+              github.event_name == 'push' &&
+              github.ref == 'refs/heads/main'
+            ) ||
+            github.event_name == 'merge_group'
+          ) &&
+          (needs.changes.outputs.web == 'true' || needs.changes.outputs.quiz_db == 'true') &&
+          (vars.QUIZ_PHASE == '1a' || vars.QUIZ_PHASE == 'production')
         env:
           QUIZ_PHASE: ${{ vars.QUIZ_PHASE }}
           QUIZ_PRODUCTION_APPROVED: ${{ vars.QUIZ_PRODUCTION_APPROVED }}
@@ -334,7 +450,7 @@ jobs:
         run: pnpm --filter @baci/web check:quiz-approval
       - name: Run Storefront Guardrail Unit Tests
         if: needs.changes.outputs.mobile_storefront == 'true'
-        run: pnpm --filter @baci/mobile-storefront exec jest scripts/check-platform-drift.test.ts scripts/check-module-size.test.ts scripts/check-ad-tracking-native-config.test.ts --runInBand
+        run: pnpm --filter @baci/mobile-storefront exec jest scripts/check-platform-drift.test.ts scripts/check-module-size.test.ts scripts/check-ad-tracking-native-config.test.ts scripts/validate-fastfile-submit-version-guard.test.ts scripts/validate-fastfile-submit-version-guard-settle.test.ts --runInBand && ruby apps/mobile-storefront/scripts/asc_version_slot_load_test.rb && ruby apps/mobile-storefront/scripts/asc_version_slot_settle_test.rb
       - name: Verify Storefront Ad Tracking Native Config
         if: needs.changes.outputs.mobile_storefront == 'true'
         run: pnpm --filter @baci/mobile-storefront check:ad-tracking-native-config
@@ -347,6 +463,8 @@ jobs:
       - name: Verify Storefront Module Size
         if: needs.changes.outputs.mobile_storefront == 'true'
         run: pnpm --filter @baci/mobile-storefront check:module-size
+      - if: needs.changes.outputs.mobile_storefront == 'true'
+        uses: ./.github/actions/storefront-release-tests
       - name: Run Knip Dead Code Check
         if: needs.changes.outputs.web == 'true'
         run: pnpm knip
@@ -358,10 +476,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          filter: blob:none
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Fetch base branch history
@@ -378,7 +495,7 @@ jobs:
 
   quality:
     name: Quality Gate
-    needs: [changes, cwv-runner-contracts, quality-lint, quality-typecheck, quality-test, quality-test-web, quality-misc, mobile-quality, silent-revert-guard]
+    needs: [changes, cwv-runner-contracts, quality-lint, quality-typecheck, quality-test, quality-test-web, quality-misc, quality-db-replay, mobile-quality, silent-revert-guard]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -391,6 +508,7 @@ jobs:
           TYPECHECK_RESULT: ${{ needs['quality-typecheck'].result }}
           TEST_RESULT: ${{ needs['quality-test'].result }}
           MISC_RESULT: ${{ needs['quality-misc'].result }}
+          DB_REPLAY_RESULT: ${{ needs['quality-db-replay'].result }}
           WEB_TEST_RESULT: ${{ needs['quality-test-web'].result }}
           MOBILE_QUALITY_RESULT: ${{ needs['mobile-quality'].result }}
           SILENT_REVERT_GUARD_RESULT: ${{ needs['silent-revert-guard'].result }}
@@ -402,7 +520,7 @@ jobs:
             exit 1
           fi
 
-          for result in "$CWV_RUNNER_CONTRACTS_RESULT" "$LINT_RESULT" "$TYPECHECK_RESULT" "$TEST_RESULT" "$WEB_TEST_RESULT" "$MISC_RESULT" "$MOBILE_QUALITY_RESULT" "$SILENT_REVERT_GUARD_RESULT"; do
+          for result in "$CWV_RUNNER_CONTRACTS_RESULT" "$LINT_RESULT" "$TYPECHECK_RESULT" "$TEST_RESULT" "$WEB_TEST_RESULT" "$MISC_RESULT" "$DB_REPLAY_RESULT" "$MOBILE_QUALITY_RESULT" "$SILENT_REVERT_GUARD_RESULT"; do
             case "$result" in
               success|skipped)
                 ;;
@@ -422,7 +540,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - if: needs.changes.outputs.mobile_admin == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           filter: blob:none
@@ -453,7 +571,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           filter: blob:none
@@ -471,15 +589,13 @@ jobs:
             nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
             nextjs-${{ runner.os }}-
       - if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
-        run: pnpm turbo build --filter=@baci/web
+        run: pnpm --filter @baci/web build:ci
         env:
-          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
           NODE_OPTIONS: "--max_old_space_size=8192"
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key' }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key' }}
-          SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET || 'placeholder-jwt-secret' }}
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+          SUPABASE_SERVICE_ROLE_KEY: placeholder-service-key
+          SUPABASE_JWT_SECRET: placeholder-jwt-secret
       - name: Save Next.js build cache (main branch only)
         if: >
           needs.changes.outputs.web == 'true' &&

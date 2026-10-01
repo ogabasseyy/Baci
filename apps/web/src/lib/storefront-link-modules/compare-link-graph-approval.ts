@@ -56,36 +56,41 @@ export function selectApprovedCompareGraphEntries<
   }
 
   const approvedEntries: TEntry[] = [];
-  const curatedCompareSlugs = buildCuratedCompareSlugSet({
-    storeUrl,
-    categorySlug,
-    categoryName,
-    requiredProductSlugs,
-    products: policyProducts,
-  });
   const supplementalApprovalCandidateLimit =
     getSupplementalApprovalCandidateLimit(maxLinks);
+  let curatedCompareSlugs: Set<string> | undefined;
   const supplementalCuratedCompareSlugsByComparisonSlug = new Map<
     string,
     Set<string>
   >();
 
   const isApprovedEntry = (entry: TEntry, index: number) => {
+    // buildCompareLinkGraph only passes candidates that already satisfied the
+    // product-pair indexability policy. Rebuilding the full discovery graph for
+    // each of those candidates is redundant: putting the candidate's two
+    // products first in the supplemental window necessarily emits that same
+    // pair. Avoid turning the bounded category graph into nested graph builds.
+    if (
+      candidateEntriesAreIndexable &&
+      index < supplementalApprovalCandidateLimit
+    ) {
+      return true;
+    }
+
+    curatedCompareSlugs ??= buildCuratedCompareSlugSet({
+      storeUrl,
+      categorySlug,
+      categoryName,
+      requiredProductSlugs,
+      products: policyProducts,
+    });
+
     if (isCuratedCompareSlug(entry.comparisonSlug, curatedCompareSlugs)) {
       return true;
     }
 
     if (index >= supplementalApprovalCandidateLimit) {
       return false;
-    }
-
-    // buildCompareLinkGraph only passes candidates that already satisfied the
-    // product-pair indexability policy. Rebuilding the full discovery graph for
-    // each of those candidates is redundant: putting the candidate's two
-    // products first in the supplemental window necessarily emits that same
-    // pair. Avoid turning the bounded category graph into nested graph builds.
-    if (candidateEntriesAreIndexable) {
-      return true;
     }
 
     const supplementalCuratedCompareSlugs =

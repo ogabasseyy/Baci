@@ -9,10 +9,13 @@ describe('STATIC_GENERATION_LIMITS', () => {
   it('activates the shared public-read gate only for production builds', () => {
     const packageJson = JSON.parse(
       readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')
-    ) as { scripts?: { build?: string } };
+    ) as { scripts?: { build?: string; 'build:ci'?: string } };
 
     expect(packageJson.scripts?.build).toBe(
       'BACI_STOREFRONT_BUILD_READS=bounded NODE_ENV=production next build'
+    );
+    expect(packageJson.scripts?.['build:ci']).toBe(
+      'BACI_STOREFRONT_BUILD_READS=offline NODE_ENV=production next build --experimental-build-mode=compile'
     );
   });
 

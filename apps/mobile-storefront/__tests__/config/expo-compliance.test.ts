@@ -50,10 +50,20 @@ describe('Expo compliance', () => {
     const originalFacebookClientToken =
       process.env.STOREFRONT_FACEBOOK_CLIENT_TOKEN;
     const originalPosthogApiKey = process.env.EXPO_PUBLIC_POSTHOG_API_KEY;
+    const originalSentry = {
+      authToken: process.env.SENTRY_AUTH_TOKEN,
+      dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+      org: process.env.SENTRY_ORG,
+      project: process.env.SENTRY_PROJECT,
+    };
 
     process.env.STOREFRONT_FACEBOOK_APP_ID = '123456789';
     process.env.STOREFRONT_FACEBOOK_CLIENT_TOKEN = 'client-token';
     process.env.EXPO_PUBLIC_POSTHOG_API_KEY = 'ph_test';
+    process.env.EXPO_PUBLIC_SENTRY_DSN = 'https://public@example.invalid/1';
+    process.env.SENTRY_AUTH_TOKEN = 'test-auth-token';
+    process.env.SENTRY_ORG = 'test-org';
+    process.env.SENTRY_PROJECT = 'test-project';
 
     try {
       let config: ExpoConfig | undefined;
@@ -94,6 +104,19 @@ describe('Expo compliance', () => {
         delete process.env.EXPO_PUBLIC_POSTHOG_API_KEY;
       } else {
         process.env.EXPO_PUBLIC_POSTHOG_API_KEY = originalPosthogApiKey;
+      }
+
+      for (const [name, value] of Object.entries({
+        EXPO_PUBLIC_SENTRY_DSN: originalSentry.dsn,
+        SENTRY_AUTH_TOKEN: originalSentry.authToken,
+        SENTRY_ORG: originalSentry.org,
+        SENTRY_PROJECT: originalSentry.project,
+      })) {
+        if (value === undefined) {
+          delete process.env[name];
+        } else {
+          process.env[name] = value;
+        }
       }
     }
   });
@@ -144,9 +167,40 @@ describe('Expo compliance', () => {
       ),
       'utf-8'
     );
-
     expect(workflowSource).toMatch(
       /mappingFile: \$\{\{ env\.WORKING_DIR \}\}\/android\/app\/build\/outputs\/mapping\/release\/mapping\.txt/
+    );
+  });
+
+  it('exposes the workspace PostHog CLI before the Android release build', () => {
+    const workflowSource = readFileSync(
+      path.resolve(
+        ROOT,
+        '../../.github/workflows/android-storefront-release.yml'
+      ),
+      'utf-8'
+    );
+    const releaseScriptSource = readFileSync(
+      path.resolve(ROOT, '../../.github/scripts/android-storefront-release.sh'),
+      'utf-8'
+    );
+    const installStep = workflowSource.indexOf('name: Install dependencies');
+    const exposeStep = workflowSource.indexOf(
+      'name: Expose PostHog CLI to Gradle'
+    );
+    const buildStep = workflowSource.indexOf(
+      'name: Build Android App Bundle (storefront)'
+    );
+
+    expect(installStep).toBeGreaterThan(-1);
+    expect(exposeStep).toBeGreaterThan(installStep);
+    expect(buildStep).toBeGreaterThan(exposeStep);
+    expect(releaseScriptSource).toContain(
+      '$GITHUB_WORKSPACE/node_modules/.bin/posthog-cli'
+    );
+    expect(releaseScriptSource).toContain('[ ! -x "$POSTHOG_CLI_BIN" ]');
+    expect(releaseScriptSource).toContain(
+      'dirname "$POSTHOG_CLI_BIN" >> "$GITHUB_PATH"'
     );
   });
 
@@ -170,6 +224,7 @@ describe('Expo compliance', () => {
   it('sets the supported iOS deployment target to 16.4', () => {
     const plugins = createExpoPlugins({
       facebookSdkPlugin: null,
+      sentryPlugin: null,
       tiktokBusinessPlugin: null,
     });
 
@@ -190,6 +245,7 @@ describe('Expo compliance', () => {
   it('configures the Expo splash plugin without a static splash image', () => {
     const plugins = createExpoPlugins({
       facebookSdkPlugin: null,
+      sentryPlugin: null,
       tiktokBusinessPlugin: null,
     });
 

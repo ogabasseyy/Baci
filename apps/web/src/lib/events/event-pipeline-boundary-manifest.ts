@@ -1,9 +1,13 @@
-import ts from 'typescript';
+import ts from '@typescript/typescript6';
 import { EVENT_PIPELINE_BOUNDARY } from './event-pipeline-database';
 
 export { collectProductionImportClosure } from './event-pipeline-import-closure';
 export const eventPipelineBoundaryManifest = {
   ...EVENT_PIPELINE_BOUNDARY,
+  authority: {
+    ...EVENT_PIPELINE_BOUNDARY.authority,
+    credentialPaths: EVENT_PIPELINE_BOUNDARY.authority.credentialPaths,
+  },
   sdkConstructorHashes: {
     'apps/web/src/lib/events/event-ingress-capability.ts':
       '5e0cf13d22315a021e6a122604563777f0ecc22a1a88faed003daa3bee0db64c',
@@ -151,8 +155,18 @@ const factoryExports: Readonly<Record<FactoryKind, readonly string[]>> = {
   server: ['createClient'],
   service: ['createServiceClient'],
 };
+const serviceSentinels: Readonly<Record<string, string>> = {
+  'apps/web/src/lib/ads/server-credential-client.ts': 'ads-credentials',
+  'apps/web/src/lib/jumia/server-credential-client.ts': 'jumia-credentials',
+  'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts':
+    'wallet-funding-recovery',
+  'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts':
+    'immediate-notification-completion',
+  'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts':
+    'shipping-quote-booking-economics',
+};
 // biome-ignore format: exact construction allowlist preserves the 300-line verifier gate.
-const privilegedRouteAdminConstructors = ['apps/web/src/app/api/platform/events/platform-event-forwarding.ts'] as const;
+const privilegedRouteAdminConstructors = [] as const;
 // biome-ignore format: compact signature preserves the 300-line verifier gate.
 export function authorityFindings(path: string, sourceFile: ts.SourceFile): string[] {
   const findings: string[] = [];
@@ -231,9 +245,13 @@ export function authorityFindings(path: string, sourceFile: ts.SourceFile): stri
         node
       ).found;
       if (kind && !shadowed && !exemptFactory) {
+        const requiredSentinel =
+          kind === 'service'
+            ? serviceSentinels[path] ?? 'event-pipeline'
+            : 'event-pipeline';
         const sentinel = node.arguments.some(
           (argument) =>
-            ts.isStringLiteral(argument) && argument.text === 'event-pipeline'
+            ts.isStringLiteral(argument) && argument.text === requiredSentinel
         );
         if (
           kind === 'sdk' &&
@@ -249,7 +267,7 @@ export function authorityFindings(path: string, sourceFile: ts.SourceFile): stri
             path.endsWith('/record-platform-order-created-event.ts')) ||
           (kind === 'server' && path.includes('/api/admin/event-pipeline/'));
         if (sentinelRequired && !sentinel)
-          add(`${kind} factory requires event-pipeline sentinel`);
+          add(`${kind} factory requires ${requiredSentinel} sentinel`);
         // biome-ignore format: compact authority guard preserves the 300-line verifier gate.
         if ((kind === 'service' || kind === 'admin') && path.includes('/app/api/') && !listed(kind === 'service' ? authority.serviceImporters : privilegedRouteAdminConstructors))
           add('privileged route client construction is forbidden');

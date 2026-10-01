@@ -1,4 +1,4 @@
-import ts from 'typescript';
+import ts from '@typescript/typescript6';
 import { describe, expect, it } from 'vitest';
 import { collectPrivilegedAliases } from './agentic-dva-privileged-alias-test-support';
 

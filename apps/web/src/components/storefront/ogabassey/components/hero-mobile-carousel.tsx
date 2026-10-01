@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { asRoute } from '@/lib/routes';
 import { CarouselPlayToggle } from './carousel-play-toggle';
 import { CarouselProgressFill } from './carousel-progress-fill';
+import { HeroMobileControlsSkeleton } from './hero-mobile-controls-skeleton';
 import type { LaunchProductSlide } from './LaunchCarousel';
 import {
   MOBILE_HERO_IMAGE_QUALITY,
@@ -32,12 +33,19 @@ const AUTO_ADVANCE_MS = 5000;
 
 interface HeroMobileCarouselProps {
   /** Launch products (newest-first, pins applied). slides[0]'s image is the
-   *  eager mobile LCP element; the rest lazy-load. Each slide deep-links to
-   *  its PDP and is server-rendered so the links stay crawlable. */
+   *  eager mobile LCP element unless `prioritizeFirstImage` is false; the rest
+   *  lazy-load. Each slide deep-links to its PDP and is server-rendered so the
+   *  links stay crawlable. */
   slides: LaunchProductSlide[];
+  /** Keep the first image eager/high-priority only when it can be LCP.
+   *  Below-fold carousels under a committed text hero must stay lazy. */
+  prioritizeFirstImage?: boolean;
 }
 
-export function HeroMobileCarousel({ slides }: HeroMobileCarouselProps) {
+export function HeroMobileCarousel({
+  prioritizeFirstImage = true,
+  slides,
+}: HeroMobileCarouselProps) {
   const slideCount = slides.length;
   const hasMultipleSlides = slideCount > 1;
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -57,6 +65,12 @@ export function HeroMobileCarousel({ slides }: HeroMobileCarouselProps) {
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
   useEffect(() => {
+    // matchMedia is universal in browsers but absent in some test/SSR
+    // shells; a missing API must not crash the carousel (it only gates the
+    // decorative progress fill). Absent means "no preference expressed".
+    if (typeof window.matchMedia !== 'function') {
+      return;
+    }
     const query = window.matchMedia('(prefers-reduced-motion: reduce)');
     setPrefersReducedMotion(query.matches);
     const handleChange = (event: MediaQueryListEvent) => {
@@ -112,7 +126,10 @@ export function HeroMobileCarousel({ slides }: HeroMobileCarouselProps) {
   }
 
   return (
-    <div className={HERO_MOBILE_WRAPPER_CLASSES}>
+    <div
+      className={HERO_MOBILE_WRAPPER_CLASSES}
+      data-ogabassey-mobile-hero="true"
+    >
       {/** biome-ignore lint/a11y/noStaticElementInteractions: swipe gestures augment the dot/link controls; keyboard users use the buttons below. */}
       <div
         aria-label="Featured launch product carousel"
@@ -137,8 +154,8 @@ export function HeroMobileCarousel({ slides }: HeroMobileCarouselProps) {
       >
         {slides.map((slide, index) => {
           const isCurrent = index === currentSlide;
-          const isMobileLcpImage = index === 0;
-          const shouldRenderImage = isCurrent || isMobileLcpImage;
+          const isPrioritizedMobileImage = index === 0 && prioritizeFirstImage;
+          const shouldRenderImage = isCurrent || isPrioritizedMobileImage;
 
           return (
             <div
@@ -165,7 +182,7 @@ export function HeroMobileCarousel({ slides }: HeroMobileCarouselProps) {
                 </span>
               </div>
               <div className={HERO_MOBILE_IMAGE_COLUMN_CLASSES}>
-                {isMobileLcpImage ? (
+                {isPrioritizedMobileImage ? (
                   <MobileLcpHeroImage
                     alt={slide.imageAlt}
                     imageFit="contain"
@@ -260,7 +277,12 @@ export function HeroMobileCarousel({ slides }: HeroMobileCarouselProps) {
             />
           )}
         </div>
-      ) : null}
+      ) : (
+        // Single slide: no interactive controls, but the streaming reserve
+        // fallback bets on a multi-slide hero — keep its row slot (empty but
+        // sized) so the fallback-to-content swap moves nothing.
+        <HeroMobileControlsSkeleton invisible />
+      )}
     </div>
   );
 }

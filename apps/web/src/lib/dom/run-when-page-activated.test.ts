@@ -25,6 +25,18 @@ describe('runWhenPageActivated', () => {
     expect(callback).toHaveBeenCalledOnce();
   });
 
+  it('does not swallow callback errors when the page is active', () => {
+    // Arrange
+    const error = new Error('unrelated client error');
+
+    // Act and Assert
+    expect(() =>
+      runWhenPageActivated(() => {
+        throw error;
+      })
+    ).toThrow(error);
+  });
+
   it('defers the callback while the document is prerendering', () => {
     // Arrange
     setDocumentPrerendering(true);

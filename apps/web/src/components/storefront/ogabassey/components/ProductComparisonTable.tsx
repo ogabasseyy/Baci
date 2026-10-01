@@ -5,6 +5,8 @@ import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { asRoute } from '@/lib/routes';
 import { getStorefrontLocale } from '@/lib/storefront-localization';
+import { resolveStorefrontProductCategoryName } from '@/lib/storefront-product-category-name';
+import { isUnsupportedSpecValue } from '@/lib/storefront-specs/is-unsupported-spec-value';
 import { buildProductSpecData } from '@/lib/storefront-specs/spec-data';
 import {
     buildProductComparisonMatrix,
@@ -73,9 +75,12 @@ export function ProductComparisonTable({
 
     const addProduct = (rawProduct: SearchResultProduct) => {
         const heroImage = rawProduct.imageLarge || rawProduct.image || '';
+        const categoryName = resolveStorefrontProductCategoryName(rawProduct);
         const specData = buildProductSpecData({
             brand: rawProduct.brand,
             category: rawProduct.category,
+            category_slug: rawProduct.category_slug,
+            categories: rawProduct.categories,
             condition: rawProduct.condition,
             description: rawProduct.description,
             product_key_specs: rawProduct.product_key_specs,
@@ -92,7 +97,12 @@ export function ProductComparisonTable({
             images: [heroImage],
             description: rawProduct.description || '',
             rating: rawProduct.rating || 0,
-            category: rawProduct.category,
+            category: categoryName ?? rawProduct.category,
+            categorySlug:
+                [rawProduct.categories?.slug, rawProduct.category_slug]
+                    .map((value) => value?.trim())
+                    .find((value) => value && !isUnsupportedSpecValue(value)) ||
+                undefined,
             condition: normalizeProductCondition(rawProduct.condition) || 'new',
             brand: rawProduct.brand,
             product_key_specs: rawProduct.product_key_specs,

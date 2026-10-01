@@ -1,3 +1,4 @@
+import { isAirportDeliveryEligible } from '@baci/shared';
 import {
   getPickupStationMode,
   getStationPickupQuote,
@@ -50,13 +51,15 @@ export function getCheckoutAddressShippingOptions({
     stationPickupQuote,
   });
   const airportLocation = watchedCity.trim() || watchedState.trim();
-  const localAirportQuote: ShippingQuote = {
-    carrierName: 'By Air',
-    deliveryRange: AIRPORT_DELIVERY_ESTIMATE,
-    displayName: `${airportLocation ? `${airportLocation} ` : ''}Airport Delivery`,
-    id: AIRPORT_QUOTE_ID,
-    price: AIRPORT_DELIVERY_FEE,
-  };
+  const localAirportQuote = isAirportDeliveryEligible(watchedState)
+    ? {
+        carrierName: 'By Air',
+        deliveryRange: AIRPORT_DELIVERY_ESTIMATE,
+        displayName: `${airportLocation ? `${airportLocation} ` : ''}Airport Delivery`,
+        id: AIRPORT_QUOTE_ID,
+        price: AIRPORT_DELIVERY_FEE,
+      }
+    : undefined;
   const effectiveSelectedQuoteId =
     deliveryMethod === 'airport' && !isGiglGoFasterQuote(selectedQuote)
       ? AIRPORT_QUOTE_ID

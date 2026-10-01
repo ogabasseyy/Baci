@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { TRANSACTION_REVIEW_EXCLUDED_SHIPPING_STATUSES } from './transaction-review-status';
 
 export function fetchTransactionReviewRows({
   endDateFilter,
@@ -30,7 +31,7 @@ export function fetchTransactionReviewRows({
   }
 
   query = query.or(
-    'shipping_status.is.null,shipping_status.not.in.(cancelled,canceled)'
+    `shipping_status.is.null,shipping_status.not.in.(${TRANSACTION_REVIEW_EXCLUDED_SHIPPING_STATUSES.join(',')})`
   );
 
   if (includeTransactionDate) {

@@ -84,26 +84,7 @@ def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
 apply from: new File(["node", "--print", "require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog.gradle')"].execute().text.trim())
 
-// PostHog source-map uploads run after bundling via finalizedBy.
-// Upload failures must not block Play Store release artifacts.
-def disablePostHogAndroidUploadTask = { task ->
-    if (task.name.contains("_PostHogUpload_")) {
-        logger.warn("WARNING: Disabling ${task.name}; PostHog Android source-map upload is best-effort and will not block release builds.")
-        task.enabled = false
-        // PostHog sets enabled true during registration; onlyIf keeps execution skipped.
-        task.onlyIf { false }
-    }
-}
-
-tasks.configureEach { task ->
-    disablePostHogAndroidUploadTask(task)
-}
-
-gradle.projectsEvaluated {
-    tasks.matching { task -> task.name.contains("_PostHogUpload_") }.configureEach { task ->
-        disablePostHogAndroidUploadTask(task)
-    }
-}
+apply from: new File(["node", "--print", "require('path').dirname(require.resolve('@sentry/react-native/package.json'))"].execute().text.trim(), "sentry.gradle.kts")
 
 android {
     ndkVersion rootProject.ext.ndkVersion

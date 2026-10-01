@@ -1,3 +1,5 @@
+import { priceGiglQuote } from '../gigl-platform-pricing';
+import { quoteProviderFailure } from '../quote-provider-failure';
 import type { QuoteRequest, ShippingQuote } from '../types';
 import type { GiglApiClient } from './gigl.auth';
 import {
@@ -53,7 +55,10 @@ export async function getGiglInternationalQuotes(
         envelopeStatus: destinationCountry.envelopeStatus,
         responseStatus: destinationCountry.responseStatus,
       });
-      return [];
+      return quoteProviderFailure.mark(
+        [],
+        new Error('GIGL international destination lookup failed')
+      );
     }
     if (destinationCountry.status === 'not_found') {
       io.log('warn', 'GIGL international destination country not found', {
@@ -97,12 +102,21 @@ export async function getGiglInternationalQuotes(
         status: response.status,
         envelopeStatus: envelope?.status,
       });
-      return [];
+      return quoteProviderFailure.mark(
+        [],
+        new Error('GIGL international quote request failed')
+      );
     }
 
-    const rates = parseInternationalRates(envelope.data, io);
+    const { rates, malformed } = parseInternationalRates(envelope.data, io);
+    if (malformed) {
+      return quoteProviderFailure.mark(
+        [],
+        new Error('GIGL international quote response was malformed')
+      );
+    }
 
-    return rates.flatMap((rate) => {
+    const quotes: ShippingQuote[] = rates.flatMap((rate) => {
       if (!hasInternationalBookingSelectors(rate)) {
         io.log('warn', 'Skipping GIGL international rate without selectors', {
           deliveryType: rate.DeliveryType,
@@ -117,6 +131,7 @@ export async function getGiglInternationalQuotes(
       const logisticsCompany = rate.LogisticCompany;
       const shipmentMethod = rate.ShipmentMethod;
       const serviceTier = internationalServiceTier(deliveryType);
+      const pricing = priceGiglQuote(rate.GrandTotal);
       return [
         {
           id: io.generateQuoteId(),
@@ -125,7 +140,11 @@ export async function getGiglInternationalQuotes(
           carrierName: 'GIG Logistics',
           displayName: `GIG Logistics - ${serviceTier}`,
           estimatedDays: estimatedDays(rate.EstimatedDeliveryDateAndTime),
-          price: Math.round(rate.GrandTotal),
+          price: pricing.price,
+          providerCost: pricing.providerCost,
+          platformMargin: pricing.platformMargin,
+          marginBasisPoints: pricing.marginBasisPoints,
+          pricingVersion: pricing.pricingVersion,
           currency: 'NGN',
           pickupIncluded: true,
           insuranceIncluded: true,
@@ -141,18 +160,33 @@ export async function getGiglInternationalQuotes(
         },
       ];
     });
+    // A non-empty rates list filtered to zero quotes is a provider failure,
+    // not successful no-coverage, so the pickup fallback still engages.
+    if (rates.length > 0 && quotes.length === 0) {
+      io.log('warn', 'GIGL international rates lacked booking selectors', {
+        rateCount: rates.length,
+      });
+      return quoteProviderFailure.mark(
+        [],
+        new Error('GIGL international rates lacked booking selectors')
+      );
+    }
+    return quotes;
   } catch (error) {
     if (signal.aborted || isGiglAbortError(error)) {
       io.log('warn', 'GIGL international quote timed out', {
         timeoutMs: GIGL_QUOTE_TIMEOUT_MS,
       });
-      return [];
+      return quoteProviderFailure.mark(
+        [],
+        new Error('GIGL international quote request timed out')
+      );
     }
 
     io.log('error', 'Failed to get GIGL international quotes', {
       error: String(error),
     });
-    return [];
+    return quoteProviderFailure.mark([], error);
   }
 }
 
@@ -179,15 +213,18 @@ function isRateSelector(value: unknown): value is number {
 function parseInternationalRates(
   data: unknown,
   io: GiglQuoteIo
-): ReturnType<typeof giglSchemas.internationalPriceRate.parse>[] {
+): {
+  rates: ReturnType<typeof giglSchemas.internationalPriceRate.parse>[];
+  malformed: boolean;
+} {
   if (!Array.isArray(data)) {
     io.log('warn', 'Invalid GIGL international price response', {
       reason: 'data is not an array',
     });
-    return [];
+    return { rates: [], malformed: true };
   }
 
-  return data.flatMap((rate, index) => {
+  const rates = data.flatMap((rate, index) => {
     const parsed = giglSchemas.internationalPriceRate.safeParse(rate);
     if (!parsed.success) {
       io.log('warn', 'Skipping invalid GIGL international rate', {
@@ -198,4 +235,7 @@ function parseInternationalRates(
     }
     return [parsed.data];
   });
+  // A non-empty payload with zero usable rates is a provider failure, not a
+  // successful no-coverage response. A genuinely empty list stays unmarked.
+  return { rates, malformed: data.length > 0 && rates.length === 0 };
 }

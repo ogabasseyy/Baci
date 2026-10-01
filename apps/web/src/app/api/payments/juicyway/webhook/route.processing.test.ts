@@ -86,7 +86,7 @@ describe('POST /api/payments/juicyway/webhook processing', () => {
       }
 
       if (table === 'orders') {
-        return {
+        return webhookTest.wrapOrdersTableMock({
           update: vi.fn(() => {
             orderUpdated = true;
             const chain: Record<string, unknown> = {
@@ -101,7 +101,7 @@ describe('POST /api/payments/juicyway/webhook processing', () => {
             chain.select = vi.fn().mockReturnValue(chain);
             return chain;
           }),
-        };
+        });
       }
 
       if (table === 'merchants') {

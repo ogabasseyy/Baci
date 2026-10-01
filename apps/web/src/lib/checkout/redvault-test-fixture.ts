@@ -1,0 +1,38 @@
+export const redvaultTestQuote = {
+  discountKobo: 1000,
+  eligibleSubtotalKobo: 10000,
+  productSubtotalKobo: 10000,
+  lines: [
+    {
+      brand: 'Samsung',
+      name: 'Galaxy S24',
+      condition: 'new',
+      discountKobo: 1000,
+      lineId: 1,
+      productId: '11111111-1111-4111-8111-111111111111',
+      quantity: 1,
+      unitDiscountsKobo: [1000],
+      unitPriceKobo: 10000,
+      variantAttributes: {},
+      variantId: null,
+      vatCategoryCode: 'S',
+      vatRateBp: 750,
+    },
+  ],
+  groups: [
+    {
+      condition: 'new',
+      discountKobo: 1000,
+      key: 'fixture',
+      lineSubtotalKobo: 10000,
+      members: [{ allocationKobo: 1000, lineId: 1, quantity: 1 }],
+      productId: '11111111-1111-4111-8111-111111111111',
+      taxInclusive: false as const,
+      unitPriceKobo: 10000,
+      variantAttributes: {},
+      variantId: null,
+      vatCategoryCode: 'S',
+      vatRateBp: 750,
+    },
+  ],
+};

@@ -29,6 +29,9 @@ describe('paid order normalization', () => {
           ],
           payment_status: 'pending',
           shipping_address: { address: '1 Baci Way', city: 'Lagos' },
+          shipping_funding_source: 'customer_checkout',
+          shipping_platform_retained_amount: '1250.50',
+          shipping_provider: 'GIGL',
           shipping_fee: undefined,
           subtotal: '20000',
           tax_amount: '0',
@@ -78,6 +81,9 @@ describe('paid order normalization', () => {
         },
       ],
       payment_status: 'paid',
+      shipping_funding_source: 'customer_checkout',
+      shipping_platform_retained_amount: 1250.5,
+      shipping_provider: 'GIGL',
       shipping_fee: 0,
       subtotal: 20_000,
       tax_amount: 0,
@@ -104,6 +110,46 @@ describe('paid order normalization', () => {
     ).toMatchObject({
       customer_email: null,
       customer_name: 'Jane Doe',
+    });
+  });
+
+  it('preserves the checkout shipping economics snapshot for settlement', () => {
+    const normalized = toRichPaidOrder(
+      {
+        id: 'order-1',
+        shipping_funding_source: 'merchant_wallet',
+        shipping_platform_retained_amount: '0.00',
+        shipping_provider: ' GIGL ',
+        subtotal: 20_000,
+        total: 20_000,
+      },
+      { merchantId: 'merchant-1' }
+    );
+
+    expect(normalized).toMatchObject({
+      shipping_funding_source: 'merchant_wallet',
+      shipping_platform_retained_amount: 0,
+      shipping_provider: 'GIGL',
+    });
+  });
+
+  it('drops forged shipping funding values instead of treating them as a snapshot', () => {
+    expect(
+      toRichPaidOrder(
+        {
+          id: 'order-1',
+          shipping_funding_source: 'platform',
+          shipping_platform_retained_amount: 'bad',
+          shipping_provider: '   ',
+          subtotal: 20_000,
+          total: 20_000,
+        },
+        { merchantId: 'merchant-1' }
+      )
+    ).toMatchObject({
+      shipping_funding_source: null,
+      shipping_platform_retained_amount: null,
+      shipping_provider: null,
     });
   });
 

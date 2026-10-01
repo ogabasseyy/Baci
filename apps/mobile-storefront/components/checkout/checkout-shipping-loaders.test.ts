@@ -81,12 +81,14 @@ describe('loadShippingCities', () => {
     const setIsLoadingCities = jest.fn<(value: boolean) => void>();
     const setShippingCities = jest.fn<(cities: string[]) => void>();
     const onCitiesLoaded = jest.fn<(cities: string[]) => void>();
+    const onCitiesUnavailable = jest.fn<() => void>();
     const signal = new AbortController().signal;
 
     // Act
     await loadShippingCities({
       apiBaseUrl,
       onCitiesLoaded,
+      onCitiesUnavailable,
       setIsLoadingCities,
       setShippingCities,
       signal,
@@ -97,6 +99,7 @@ describe('loadShippingCities', () => {
     expect(setIsLoadingCities).toHaveBeenNthCalledWith(1, true);
     expect(setShippingCities).toHaveBeenCalledWith(['Ikeja', 'Yaba']);
     expect(onCitiesLoaded).toHaveBeenCalledWith(['Ikeja', 'Yaba']);
+    expect(onCitiesUnavailable).not.toHaveBeenCalled();
     expect(setIsLoadingCities).toHaveBeenLastCalledWith(false);
   });
 
@@ -106,12 +109,14 @@ describe('loadShippingCities', () => {
     const setIsLoadingCities = jest.fn<(value: boolean) => void>();
     const setShippingCities = jest.fn<(cities: string[]) => void>();
     const onCitiesLoaded = jest.fn<(cities: string[]) => void>();
+    const onCitiesUnavailable = jest.fn<() => void>();
     const signal = new AbortController().signal;
 
     // Act
     await loadShippingCities({
       apiBaseUrl,
       onCitiesLoaded,
+      onCitiesUnavailable,
       setIsLoadingCities,
       setShippingCities,
       signal,
@@ -122,7 +127,30 @@ describe('loadShippingCities', () => {
     expect(setIsLoadingCities).toHaveBeenNthCalledWith(1, true);
     expect(setShippingCities).toHaveBeenLastCalledWith([]);
     expect(onCitiesLoaded).not.toHaveBeenCalled();
+    expect(onCitiesUnavailable).toHaveBeenCalledTimes(1);
     expect(setIsLoadingCities).toHaveBeenLastCalledWith(false);
+  });
+
+  it('reports an unavailable city list when the provider returns no cities', async () => {
+    mockFetchCities.mockResolvedValue([]);
+    const setIsLoadingCities = jest.fn<(value: boolean) => void>();
+    const setShippingCities = jest.fn<(cities: string[]) => void>();
+    const onCitiesLoaded = jest.fn<(cities: string[]) => void>();
+    const onCitiesUnavailable = jest.fn<() => void>();
+
+    await loadShippingCities({
+      apiBaseUrl,
+      onCitiesLoaded,
+      onCitiesUnavailable,
+      setIsLoadingCities,
+      setShippingCities,
+      signal: new AbortController().signal,
+      state: 'Lagos',
+    });
+
+    expect(setShippingCities).toHaveBeenCalledWith([]);
+    expect(onCitiesLoaded).not.toHaveBeenCalled();
+    expect(onCitiesUnavailable).toHaveBeenCalledTimes(1);
   });
 
   it('does not mutate state for an already-aborted request', async () => {
@@ -133,11 +161,13 @@ describe('loadShippingCities', () => {
     const setIsLoadingCities = jest.fn<(value: boolean) => void>();
     const setShippingCities = jest.fn<(cities: string[]) => void>();
     const onCitiesLoaded = jest.fn<(cities: string[]) => void>();
+    const onCitiesUnavailable = jest.fn<() => void>();
 
     // Act
     await loadShippingCities({
       apiBaseUrl,
       onCitiesLoaded,
+      onCitiesUnavailable,
       setIsLoadingCities,
       setShippingCities,
       signal: controller.signal,
@@ -148,5 +178,6 @@ describe('loadShippingCities', () => {
     expect(setIsLoadingCities).not.toHaveBeenCalled();
     expect(setShippingCities).not.toHaveBeenCalled();
     expect(onCitiesLoaded).not.toHaveBeenCalled();
+    expect(onCitiesUnavailable).not.toHaveBeenCalled();
   });
 });

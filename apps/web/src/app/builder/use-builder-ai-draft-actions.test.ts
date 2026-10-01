@@ -35,12 +35,13 @@ const builderData: BuilderAiDraftActionsParams['data'] = {
 function createRouter(): BuilderAiDraftActionsParams['router'] {
   return {
     back: vi.fn(),
+    bfcacheId: 'test-bfcache-id',
     forward: vi.fn(),
     prefetch: vi.fn(),
     push: vi.fn(),
     refresh: vi.fn(),
     replace: vi.fn(),
-  };
+  } satisfies BuilderAiDraftActionsParams['router'];
 }
 
 function createParams(

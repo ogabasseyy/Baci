@@ -21,6 +21,7 @@ interface CheckoutStepContentProps {
   items: CartItem[];
   merchantPickupLocation?: MerchantPickupLocation;
   paymentController: CheckoutPaymentController;
+  prizeSimulation?: boolean;
   setStep: (step: CheckoutStep) => void;
   step: CheckoutStep;
   subtotal: number;
@@ -36,6 +37,7 @@ export function CheckoutStepContent({
   items,
   merchantPickupLocation,
   paymentController,
+  prizeSimulation = false,
   setStep,
   step,
   subtotal,
@@ -71,6 +73,7 @@ export function CheckoutStepContent({
           addressState.shipping.handleDeliveryAddressTextChange
         }
         onChangeAccountPassword={addressState.setAccountPassword}
+        onContactEmailSettled={addressState.settleContactEmail}
         onOpenCityPicker={() => addressState.shipping.setShowCityPicker(true)}
         onOpenNewAddressEditor={addressState.openNewAddressEditor}
         onOpenStatePicker={() => addressState.shipping.setShowStatePicker(true)}
@@ -113,6 +116,7 @@ export function CheckoutStepContent({
           addressState.savedAddresses.selectedSavedAddressId
         }
         shippingQuotes={addressState.shipping.shippingQuotes}
+        showLocationPickers={addressState.shipping.showLocationPickers}
         watchedCity={addressState.watchedCity}
         watchedEmail={addressState.watchedEmail}
         watchedState={addressState.watchedState}
@@ -143,6 +147,7 @@ export function CheckoutStepContent({
         onSelectPaymentTab={paymentController.handleSelectPaymentTab}
         onWalletToggle={paymentController.setWalletSelection}
         paymentTab={paymentController.paymentTab}
+        redvaultAvailable={paymentController.redvaultAvailable}
         savingsSelection={paymentController.savings.savingsSelection}
         selectedPayment={paymentController.selectedPayment}
         total={paymentController.total}
@@ -168,6 +173,7 @@ export function CheckoutStepContent({
       merchantPickupLocation={merchantPickupLocation}
       onEditAddress={() => setStep('address')}
       onEditPayment={() => setStep('payment')}
+      prizeSimulation={prizeSimulation}
       selectedPayment={paymentController.selectedPayment}
       selectedQuote={addressState.shipping.selectedQuote}
       subtotal={subtotal}

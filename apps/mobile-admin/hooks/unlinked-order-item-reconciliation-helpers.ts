@@ -95,7 +95,7 @@ export async function fetchCandidatePagesInBatches(
       batch.map((searchTerm) =>
         fetchAdminProductSearchRows<ProductCandidateRow>({
           cursor: 0,
-          filters: { search: searchTerm },
+          filters: { includeArchived: true, search: searchTerm },
           merchantId,
           pageSize: RECONCILIATION_SEARCH_PAGE_SIZE,
           selectColumns: RECONCILIATION_PRODUCT_COLUMNS,

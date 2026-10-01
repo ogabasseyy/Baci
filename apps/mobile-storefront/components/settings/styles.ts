@@ -1,8 +1,8 @@
 import { StyleSheet } from 'react-native';
 import { RADIUS, SHADOWS, SPACING } from '@/constants/Colors';
 
-const SETTINGS_ICON_SIZE = 36;
-const SETTINGS_ICON_RADIUS = RADIUS.xl;
+const SETTINGS_ICON_SIZE = 42;
+const SETTINGS_ICON_RADIUS = 14;
 const SETTINGS_ROW_SUBTITLE_MARGIN_TOP = 2;
 
 export const styles = StyleSheet.create({
@@ -50,6 +50,7 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 72,
     paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.md,
   },
@@ -62,15 +63,28 @@ export const styles = StyleSheet.create({
   rowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
     flex: 1,
+    minWidth: 0,
+    marginRight: SPACING.sm,
+  },
+  rowText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  rowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+    marginLeft: SPACING.sm,
   },
   rowLabel: {
     fontSize: 15,
     fontWeight: '500',
+    flexShrink: 1,
   },
   rowSub: {
     fontSize: 12,
+    flexShrink: 1,
     marginTop: SETTINGS_ROW_SUBTITLE_MARGIN_TOP,
   },
   rowValue: {
@@ -81,6 +95,7 @@ export const styles = StyleSheet.create({
     width: SETTINGS_ICON_SIZE,
     height: SETTINGS_ICON_SIZE,
     borderRadius: SETTINGS_ICON_RADIUS,
+    marginRight: SPACING.sm,
     justifyContent: 'center',
     alignItems: 'center',
   },

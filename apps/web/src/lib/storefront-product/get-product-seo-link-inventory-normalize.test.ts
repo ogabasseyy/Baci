@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  getProductSeoSelect,
   mergeProductCandidates,
   toProductSemanticCandidate,
 } from './get-product-seo-link-inventory-normalize';
@@ -7,6 +8,12 @@ import {
 vi.mock('@/lib/product-key-specs-select', () => ({
   PRODUCT_KEY_SPECS_RELATION_SELECT: 'product_key_specs',
 }));
+
+describe('getProductSeoSelect', () => {
+  it('includes stable recency data for globally merging category scopes', () => {
+    expect(getProductSeoSelect(false)).toContain('created_at');
+  });
+});
 
 describe('toProductSemanticCandidate', () => {
   it('normalizes numeric string prices and prefers the direct category slug', () => {

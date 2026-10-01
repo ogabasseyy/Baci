@@ -33,6 +33,76 @@ describe('usePersistedState', () => {
     );
   });
 
+  it('does not restart the debounce timer on unrelated rerenders', () => {
+    const { result, rerender } = renderHook(() =>
+      usePersistedState('test', 'initial')
+    );
+    act(() => result.current[1]('updated'));
+    // Default debounce is 300ms: rerender before it elapses, then advance
+    // past the original deadline but short of a restarted one (500ms).
+    vi.advanceTimersByTime(200);
+    rerender();
+    vi.advanceTimersByTime(150);
+    expect(JSON.parse(sessionStorage.getItem('test') as string)).toBe(
+      'updated'
+    );
+  });
+
+  it('flushes a pending checkout order before payment navigation', () => {
+    const { result, unmount } = renderHook(() =>
+      usePersistedState('pending-order', '')
+    );
+    act(() => result.current[1]('order-before-redirect'));
+    act(() => window.dispatchEvent(new Event('pagehide')));
+    expect(JSON.parse(sessionStorage.getItem('pending-order') || 'null')).toBe(
+      'order-before-redirect'
+    );
+    unmount();
+    const restored = renderHook(() => usePersistedState('pending-order', ''));
+    expect(restored.result.current[0]).toBe('order-before-redirect');
+  });
+
+  it('flushes unchecked marketing consent on navigation before debounce finishes', () => {
+    const { result, unmount } = renderHook(() =>
+      usePersistedForm('consent', { newsletterOptIn: true })
+    );
+    act(() => result.current.setValue('newsletterOptIn', false));
+    unmount();
+    const restored = renderHook(() =>
+      usePersistedForm('consent', { newsletterOptIn: true })
+    );
+    expect(restored.result.current.values.newsletterOptIn).toBe(false);
+  });
+
+  it('does not resurrect a cleared pending order on unmount or pagehide', () => {
+    const { result, unmount } = renderHook(() =>
+      usePersistedState('pending', '')
+    );
+    act(() => result.current[1]('old-order'));
+    act(() => result.current[2]());
+    act(() => window.dispatchEvent(new Event('pagehide')));
+    unmount();
+    vi.advanceTimersByTime(500);
+    expect(sessionStorage.getItem('pending')).toBeNull();
+  });
+
+  it('bugfix: pagehide after setState flushes the new snapshot, not a stale null', () => {
+    const { result } = renderHook(() =>
+      usePersistedState<string | null>('pending-order', null)
+    );
+    // Simulate the checkout path: sync storage write, then React setter, then
+    // immediate navigation before the debounce effect rebinds flushRef.
+    const snapshot = { orderId: 'order-1' };
+    sessionStorage.setItem('pending-order', JSON.stringify(snapshot));
+    act(() => {
+      result.current[1](JSON.stringify(snapshot));
+      window.dispatchEvent(new Event('pagehide'));
+    });
+    expect(JSON.parse(sessionStorage.getItem('pending-order') || 'null')).toBe(
+      JSON.stringify(snapshot)
+    );
+  });
+
   it('supports localStorage option', () => {
     localStorage.setItem('test', JSON.stringify('from-local'));
     const { result } = renderHook(() =>

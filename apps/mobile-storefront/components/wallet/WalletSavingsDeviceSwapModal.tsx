@@ -4,6 +4,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import type Colors from '@/constants/Colors';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
+import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import type { Product } from '@/types/product';
 import { formatVariantAxisLabel } from '@/types/product';
 import { toSelectedProductChoice } from './savings/start-savings-controller.utils';
@@ -185,9 +186,14 @@ export function WalletSavingsDeviceSwapModal({
                   {row.image ? (
                     <Image
                       accessibilityLabel={row.title}
-                      source={{ uri: row.image }}
+                      source={createSafeBoundedImageSource({
+                        height: 58,
+                        uri: row.image,
+                        width: 48,
+                      })}
                       style={styles.image}
                       contentFit="contain"
+                      autoplay={false}
                     />
                   ) : (
                     <Ionicons

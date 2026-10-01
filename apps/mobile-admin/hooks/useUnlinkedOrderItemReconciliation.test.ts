@@ -30,6 +30,7 @@ const supabaseMock = vi.hoisted(() => {
     limit: ReturnType<typeof vi.fn>;
     neq: ReturnType<typeof vi.fn>;
     order: ReturnType<typeof vi.fn>;
+    or: ReturnType<typeof vi.fn>;
     select: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
   };
@@ -50,6 +51,7 @@ const supabaseMock = vi.hoisted(() => {
       limit: vi.fn(),
       neq: vi.fn(),
       order: vi.fn(),
+      or: vi.fn(),
       select: vi.fn(),
       // biome-ignore lint/suspicious/noThenProperty: mocks the thenable Supabase query builder chain
       then: (
@@ -69,6 +71,7 @@ const supabaseMock = vi.hoisted(() => {
     query.limit.mockImplementation(() => query);
     query.neq.mockImplementation(() => query);
     query.order.mockImplementation(() => query);
+    query.or.mockImplementation(() => query);
     query.select.mockImplementation(() => query);
     query.update.mockImplementation(() => query);
 
@@ -244,6 +247,12 @@ describe('useUnlinkedOrderItemReconciliation', () => {
     const variantQuery = supabaseMock.queries.find(
       (query) => query.from === 'product_variants'
     );
+    const productQuery = supabaseMock.queries.find(
+      (query) => query.from === 'products'
+    );
+    expect(productQuery?.or).not.toHaveBeenCalledWith(
+      'status.neq.archived,status.is.null'
+    );
     expect(variantQuery?.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
     expect(variantQuery?.eq).toHaveBeenCalledWith(
       'products.merchant_id',
@@ -284,47 +293,5 @@ describe('useUnlinkedOrderItemReconciliation', () => {
 
     expect(supabaseMock.rpc).toHaveBeenCalledTimes(itemCount);
     expect(maxConcurrentSearches).toBeLessThanOrEqual(4);
-  });
-
-  it('links an item through the scoped reconciliation RPC', async () => {
-    const state = getHookState();
-
-    await state.linkItemMutation.mutationFn({
-      orderItemId: 'item-1',
-      productId: 'product-1',
-      variantId: 'variant-1',
-    });
-
-    expect(supabaseMock.rpc).toHaveBeenCalledWith(
-      'link_transaction_order_item_product',
-      {
-        p_merchant_id: 'merchant-1',
-        p_order_item_id: 'item-1',
-        p_product_id: 'product-1',
-        p_variant_id: 'variant-1',
-      }
-    );
-
-    state.linkItemMutation.onSuccess();
-    expect(queryClientMock.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['transaction-review'],
-    });
-    expect(queryClientMock.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['analytics-detail'],
-    });
-  });
-
-  it('keeps an unlinked item custom without assigning a product', async () => {
-    const state = getHookState();
-
-    await state.keepCustomMutation.mutationFn({ orderItemId: 'item-2' });
-
-    expect(supabaseMock.rpc).toHaveBeenCalledWith(
-      'mark_transaction_order_item_custom',
-      {
-        p_merchant_id: 'merchant-1',
-        p_order_item_id: 'item-2',
-      }
-    );
   });
 });

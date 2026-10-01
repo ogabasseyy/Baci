@@ -58,7 +58,8 @@ function renderResults(
 
   render(
     <CategoryPageResults
-      canUseClientFilters={true}
+      canShowFilters={true}
+      showPriceFilter={true}
       filters={{} as never}
       availableOptions={{} as never}
       onFilterChange={vi.fn()}

@@ -248,9 +248,10 @@ export async function createOrderWalletFundingIntent(
   } catch (error) {
     if (
       error instanceof CustomerWalletPaymentAccountError &&
-      error.code === 'CUSTOMER_PHONE_REQUIRED'
+      (error.code === 'CUSTOMER_NAME_REQUIRED' ||
+        error.code === 'CUSTOMER_PHONE_REQUIRED')
     ) {
-      return { code: 'CUSTOMER_PHONE_REQUIRED', kind: 'fallback' };
+      return { code: error.code, kind: 'fallback' };
     }
     logger.error({
       customerId: args.customer.id,

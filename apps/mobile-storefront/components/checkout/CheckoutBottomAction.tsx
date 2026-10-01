@@ -13,6 +13,7 @@ type ColorsScheme = (typeof Colors)['light'];
 
 interface CheckoutBottomActionProps {
   animatedCtaArrowStyle: ComponentProps<typeof Animated.View>['style'];
+  canContinue: boolean;
   colors: ColorsScheme;
   displayTotal: number;
   insetsBottom: number;
@@ -20,6 +21,7 @@ interface CheckoutBottomActionProps {
   itemCount: number;
   onContinue: () => void;
   onPlaceOrder: () => void;
+  prizeSimulation?: boolean;
   selectedPayment: PaymentMethodType | null;
   step: CheckoutStep;
   total: number;
@@ -27,6 +29,7 @@ interface CheckoutBottomActionProps {
 
 export function CheckoutBottomAction({
   animatedCtaArrowStyle,
+  canContinue,
   colors,
   displayTotal,
   insetsBottom,
@@ -34,15 +37,24 @@ export function CheckoutBottomAction({
   itemCount,
   onContinue,
   onPlaceOrder,
+  prizeSimulation = false,
   selectedPayment,
   step,
   total,
 }: CheckoutBottomActionProps) {
   const isReview = step === 'review';
-  const isReviewDisabled = isProcessing || !selectedPayment;
-  const reviewLabel =
-    selectedPayment === 'invoice'
-      ? 'Generate Invoice'
+  const isReviewDisabled =
+    isProcessing || (!prizeSimulation && !selectedPayment);
+  const isActionDisabled = isReview ? isReviewDisabled : !canContinue;
+  const useDisabledAppearance = isActionDisabled && !isProcessing;
+  const actionColor = useDisabledAppearance ? colors.muted : BRAND.primary;
+  const actionTextColor = useDisabledAppearance
+    ? colors.textSecondary
+    : BRAND.onPrimary;
+  const reviewLabel = prizeSimulation
+    ? 'Complete test checkout'
+    : selectedPayment === 'invoice'
+      ? 'Get a Proforma Invoice'
       : selectedPayment === 'payforme'
         ? 'Pay for Me'
         : 'Place Order';
@@ -72,33 +84,44 @@ export function CheckoutBottomAction({
         </View>
 
         <Pressable
-          style={[styles.actionButton, { backgroundColor: BRAND.primary }]}
+          style={[styles.actionButton, { backgroundColor: actionColor }]}
           onPress={isReview ? onPlaceOrder : onContinue}
-          disabled={isReview ? isReviewDisabled : false}
+          disabled={isActionDisabled}
           accessibilityRole="button"
           accessibilityLabel={
             isReview
-              ? `${selectedPayment === 'invoice' ? 'Generate invoice' : selectedPayment === 'payforme' ? 'Prepare pay for me order' : 'Place order'} for ${formatPrice(total)}`
+              ? prizeSimulation
+                ? 'Complete test prize checkout'
+                : `${selectedPayment === 'invoice' ? 'Get a proforma invoice' : selectedPayment === 'payforme' ? 'Prepare pay for me order' : 'Place order'} for ${formatPrice(total)}`
               : `Continue to ${step === 'address' ? 'payment' : 'review'}`
           }
-          accessibilityState={
-            isReview
-              ? { disabled: isReviewDisabled, busy: isProcessing }
-              : undefined
-          }
+          accessibilityState={{
+            disabled: isActionDisabled,
+            busy: isReview && isProcessing,
+          }}
         >
           {isReview && isProcessing ? (
             <View style={styles.processingContainer}>
-              <ActivityIndicator color="#FFFFFF" size="small" />
-              <Text style={styles.actionButtonText}>Processing...</Text>
+              <ActivityIndicator color={actionTextColor} size="small" />
+              <Text
+                style={[styles.actionButtonText, { color: actionTextColor }]}
+              >
+                Processing...
+              </Text>
             </View>
           ) : (
             <>
-              <Text style={styles.actionButtonText}>
+              <Text
+                style={[styles.actionButtonText, { color: actionTextColor }]}
+              >
                 {isReview ? reviewLabel : 'Continue'}
               </Text>
               <Animated.View style={animatedCtaArrowStyle}>
-                <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+                <Ionicons
+                  name="arrow-forward"
+                  size={18}
+                  color={actionTextColor}
+                />
               </Animated.View>
             </>
           )}

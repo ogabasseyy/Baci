@@ -7,6 +7,14 @@ vi.mock('@react-native-vector-icons/ionicons', () => ({
   default: () => null,
 }));
 
+vi.mock('expo-linear-gradient', async () => {
+  const React = await import('react');
+  return {
+    LinearGradient: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement('div', null, children),
+  };
+});
+
 // Surface the iOS AutoFill props as data-* attributes so they can be asserted
 // from the DOM. Everything else mirrors the react-native mock used by the other
 // colocated auth tests.

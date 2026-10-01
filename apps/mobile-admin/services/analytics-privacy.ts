@@ -53,6 +53,7 @@ const BUSINESS_IDENTIFIER_CONTEXT_TOKENS = new Set([
   'transaction',
   'variant',
 ]);
+const OPAQUE_BUSINESS_IDENTIFIER_PROPERTY_KEYS = new Set(['signup_attempt_id']);
 const BUSINESS_IDENTIFIER_QUALIFIER_TOKENS = new Set([
   'id',
   'ids',
@@ -112,8 +113,9 @@ function isSensitivePropertyKey(key: string): boolean {
 function isBusinessIdentifierPropertyKey(key: string): boolean {
   const tokens = getPropertyKeyTokens(key);
   return (
-    tokens.some((token) => BUSINESS_IDENTIFIER_CONTEXT_TOKENS.has(token)) &&
-    tokens.some((token) => BUSINESS_IDENTIFIER_QUALIFIER_TOKENS.has(token))
+    OPAQUE_BUSINESS_IDENTIFIER_PROPERTY_KEYS.has(tokens.join('_')) ||
+    (tokens.some((token) => BUSINESS_IDENTIFIER_CONTEXT_TOKENS.has(token)) &&
+      tokens.some((token) => BUSINESS_IDENTIFIER_QUALIFIER_TOKENS.has(token)))
   );
 }
 

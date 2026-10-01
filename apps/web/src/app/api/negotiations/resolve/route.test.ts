@@ -322,6 +322,39 @@ describe('POST /api/negotiations/resolve', () => {
     expect(mockNotifyNegotiationResponse).not.toHaveBeenCalled();
   });
 
+  it('marks phone-only negotiations for manual follow-up', async () => {
+    await setupAuth({
+      authenticated: true,
+      hasAccess: true,
+      merchantId: 'merchant-123',
+    });
+    mockSupabaseUpdates({
+      data: {
+        id: validBody.negotiationId,
+        merchant_id: 'merchant-123',
+        customer_id: null,
+        customer_email: null,
+        customer_phone: '2348031234567',
+        type: 'single',
+        item_info: { name: 'Product' },
+        offered_price: 5000,
+        status: 'accepted',
+      },
+      error: null,
+    });
+
+    const response = await POST(createRequest(validBody));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({
+      status: 'accepted',
+      notified: false,
+      reason: 'no_customer_email',
+      manualContactAvailable: true,
+    });
+  });
+
   it('rolls the status back when notification delivery fails', async () => {
     await setupAuth({
       authenticated: true,

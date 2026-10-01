@@ -31,6 +31,16 @@ describe('vercel error events', () => {
     assert.equal(event.deploymentId, 'dpl_123');
   });
 
+  it('removes query and fragment values from Vercel route evidence', () => {
+    const event = normalizeVercelLogEvent({
+      level: 'error',
+      message: 'Error: stable',
+      path: '/orders?email=alice@example.com&token=secret#profile',
+    });
+
+    assert.equal(event.route, '/orders');
+  });
+
   it('classifies runtime errors and 5xx responses but ignores expected noise', () => {
     assert.equal(
       isErrorEvent(
@@ -73,6 +83,22 @@ describe('vercel error events', () => {
     );
   });
 
+  it('ignores firewall blocks that never reached application code', () => {
+    const groups = groupErrorEvents([
+      {
+        deploymentId: 'dpl_test',
+        level: 'error',
+        message: '',
+        requestId: 'request-test',
+        route: '/api/cron/agentic-commerce-health',
+        source: 'firewall',
+        statusCode: 403,
+      },
+    ]);
+
+    assert.deepEqual(groups, []);
+  });
+
   it('builds stable fingerprints across ids and line numbers', () => {
     const left = normalizeVercelLogEvent({
       message:
@@ -88,6 +114,51 @@ describe('vercel error events', () => {
     });
 
     assert.equal(fingerprintErrorEvent(left), fingerprintErrorEvent(right));
+  });
+
+  it('does not invent a new observation time for timestamp-free drain data', () => {
+    assert.equal(
+      normalizeVercelLogEvent({ level: 'error', message: 'Error: stable' })
+        .timestamp,
+      ''
+    );
+  });
+
+  it('normalizes numeric and string timestamps to ISO observations', () => {
+    assert.equal(
+      normalizeVercelLogEvent({ timestamp: 1_775_563_200_000 }).timestamp,
+      '2026-04-07T12:00:00.000Z'
+    );
+    assert.equal(
+      normalizeVercelLogEvent({ timestamp: '2026-08-04T16:46:50+01:00' })
+        .timestamp,
+      '2026-08-04T15:46:50.000Z'
+    );
+  });
+
+  it('skips out-of-range numeric timestamps instead of throwing', () => {
+    assert.equal(
+      normalizeVercelLogEvent({
+        timestamp: Number.MAX_VALUE,
+        time: '2026-08-04T15:46:50Z',
+      }).timestamp,
+      '2026-08-04T15:46:50.000Z'
+    );
+  });
+
+  it('does not let empty timestamps replace observed group bounds', () => {
+    const [group] = groupErrorEvents([
+      { level: 'error', message: 'Error: stable', timestamp: '' },
+      {
+        level: 'error',
+        message: 'Error: stable',
+        timestamp: '2026-08-04T15:46:50Z',
+      },
+      { level: 'error', message: 'Error: stable', timestamp: '' },
+    ]);
+
+    assert.equal(group.firstSeen, '2026-08-04T15:46:50.000Z');
+    assert.equal(group.lastSeen, '2026-08-04T15:46:50.000Z');
   });
 
   it('groups repeated errors and selects candidates over the threshold', () => {
@@ -111,5 +182,59 @@ describe('vercel error events', () => {
     assert.equal(candidates.length, 1);
     assert.equal(candidates[0].occurrences, 2);
     assert.equal(candidates[0].sample.route, '/api/payments/verify');
+  });
+
+  it('separates runtime exceptions, timeouts, and HTTP 5xx candidates', () => {
+    const candidates = selectRemediationCandidates(
+      groupErrorEvents([
+        { level: 'error', message: 'Unhandled exception', route: '/runtime' },
+        { level: 'error', message: 'Unhandled exception', route: '/runtime' },
+        { level: 'error', message: 'Function timed out', route: '/timeout' },
+        { level: 'error', message: 'Function timed out', route: '/timeout' },
+        {
+          level: 'info',
+          message: 'GET /health 503',
+          route: '/health',
+          statusCode: 503,
+        },
+        {
+          level: 'info',
+          message: 'GET /health 503',
+          route: '/health',
+          statusCode: 503,
+        },
+      ]),
+      { minOccurrences: 2 }
+    );
+
+    assert.deepEqual(candidates.map((candidate) => candidate.category).sort(), [
+      'vercel_http_5xx',
+      'vercel_runtime_exception',
+      'vercel_timeout',
+    ]);
+    assert.equal(
+      candidates.every((candidate) => candidate.source === 'vercel'),
+      true
+    );
+  });
+
+  it('does not merge same-fingerprint events from distinct Vercel categories', () => {
+    const candidates = selectRemediationCandidates(
+      groupErrorEvents([
+        { level: 'error', message: 'Error: request failed', route: '/orders' },
+        {
+          level: 'info',
+          message: 'Error: request failed',
+          route: '/orders',
+          statusCode: 500,
+        },
+      ]),
+      { minOccurrences: 1 }
+    );
+
+    assert.deepEqual(candidates.map((candidate) => candidate.category).sort(), [
+      'vercel_http_5xx',
+      'vercel_runtime_exception',
+    ]);
   });
 });

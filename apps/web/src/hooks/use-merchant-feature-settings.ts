@@ -225,7 +225,7 @@ export function useMerchantFeatures(merchantId: string) {
     orderTrackingEnabled: settings?.order_tracking_enabled ?? true,
     discountCodesEnabled: settings?.discount_codes_enabled ?? true,
     guestCheckoutEnabled: settings?.guest_checkout_enabled ?? true,
-    shippingProviders: settings?.shipping_providers ?? ['gigl', 'topship'],
+    shippingProviders: settings?.shipping_providers ?? [],
     freeShippingThreshold: settings?.free_shipping_threshold ?? null,
     blogEnabled: settings?.blog_enabled ?? false,
     autoBlogEnabled: settings?.auto_blog_enabled ?? false,

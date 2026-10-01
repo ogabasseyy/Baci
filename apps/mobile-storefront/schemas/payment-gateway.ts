@@ -33,6 +33,18 @@ const optionalPositiveAmount = z.preprocess(
     .optional()
 );
 
+// Canonical order total (full order value incl. credits covered server-side).
+// Distinct from `amount`, which is the residual due at the gateway.
+const optionalOrderTotal = z.preprocess(
+  (value) =>
+    typeof value === 'string' && value.trim() === '' ? undefined : value,
+  z.coerce
+    .number({ message: 'Order total must be a valid number' })
+    .finite('Order total cannot be Infinity or NaN')
+    .min(0, 'Order total cannot be negative')
+    .optional()
+);
+
 const paymentGatewayParamsObject = z.object({
   orderId: optionalOrderIdentifier,
   orderNumber: optionalOrderIdentifier,
@@ -44,9 +56,11 @@ const paymentGatewayParamsObject = z.object({
   ),
   reference: trimmedRequiredString('Reference is required'),
   amount: optionalPositiveAmount,
+  orderTotal: optionalOrderTotal,
   paymentKind: z
     .enum(['order', 'vtu', 'wallet', 'savings_auth'])
     .default('order'),
+  paymentMethod: z.literal('uba_redvault').optional(),
   returnTo: sanitizedReturnTo,
   merchantId: trimmedOptionalString('Merchant id cannot be empty'),
   merchantSlug: trimmedOptionalString('Merchant slug cannot be empty'),
@@ -59,6 +73,18 @@ const paymentGatewayParamsObject = z.object({
 
 export const PaymentGatewayParamsSchema = paymentGatewayParamsObject
   .superRefine((data, ctx) => {
+    if (
+      data.paymentMethod === 'uba_redvault' &&
+      (data.gateway !== 'paystack' ||
+        data.paymentKind !== 'order' ||
+        !data.orderId)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Invalid UBA payment context',
+        path: ['paymentMethod'],
+      });
+    }
     if (data.paymentKind === 'vtu') {
       if (!data.utilityType) {
         ctx.addIssue({

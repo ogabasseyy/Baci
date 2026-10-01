@@ -1,163 +1,139 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { POST } from './route';
 
-const mockAuthenticateApiRequest = vi.fn();
-const mockHasPermission = vi.fn();
-const mockCheckCsrfProtection = vi.fn();
-const mockGetMerchantForApiRequest = vi.fn();
-const mockToUserAccess = vi.fn();
-const mockNotifyAdminUserDevices = vi.fn();
+const mocks = vi.hoisted(() => ({
+  getPlatformAdminAuthForPermission: vi.fn(),
+  createClient: vi.fn(),
+  csrf: vi.fn(),
+  deliver: vi.fn(),
+}));
 
-vi.mock('@/lib/api-auth', () => ({
-  authenticateApiRequest: (...args: unknown[]) =>
-    mockAuthenticateApiRequest(...args),
-  hasPermission: (...args: unknown[]) => mockHasPermission(...args),
+vi.mock('@/lib/platform-admin-auth', () => ({
+  getPlatformAdminAuthForPermission: mocks.getPlatformAdminAuthForPermission,
 }));
 
 vi.mock('@/lib/csrf', () => ({
-  checkCsrfProtection: (...args: unknown[]) => mockCheckCsrfProtection(...args),
+  checkCsrfProtection: mocks.csrf,
 }));
 
-vi.mock('@/lib/get-merchant-for-api-request', () => ({
-  getMerchantForApiRequest: (...args: unknown[]) =>
-    mockGetMerchantForApiRequest(...args),
-  toUserAccess: (...args: unknown[]) => mockToUserAccess(...args),
+vi.mock('./admin-push-test-delivery', () => ({
+  deliverAdminPushTest: mocks.deliver,
 }));
+vi.mock('@/lib/supabase/server', () => ({ createClient: mocks.createClient }));
 
-vi.mock('@/lib/expo-push', () => ({
-  notifyAdminUserDevices: (...args: unknown[]) =>
-    mockNotifyAdminUserDevices(...args),
-}));
+import { POST } from './route';
 
 function createRequest(body?: Record<string, unknown>): NextRequest {
   return new NextRequest('http://localhost:3000/api/admin/push/test', {
-    method: 'POST',
     body: JSON.stringify(body ?? {}),
     headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
   });
 }
 
 describe('POST /api/admin/push/test', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockCheckCsrfProtection.mockResolvedValue({ valid: true });
-    mockAuthenticateApiRequest.mockResolvedValue({
-      user: { id: 'user-1' },
-      supabase: { from: vi.fn() },
-      error: null,
+    mocks.getPlatformAdminAuthForPermission.mockResolvedValue({
+      context: { permissions: ['notifications.manage'], role: 'owner' },
+      status: 'authenticated',
+      user: { email: 'admin@example.com', id: 'user-1' },
     });
-    mockGetMerchantForApiRequest.mockResolvedValue({
-      merchantId: 'merchant-1',
-      staffAccess: {
-        isOwner: true,
-        isStaff: false,
-        role: null,
-        permissions: { full_access: { all: true } },
-      },
-    });
-    mockToUserAccess.mockReturnValue({
-      merchantId: 'merchant-1',
-      role: 'owner',
-      isOwner: true,
-      isStaff: false,
-      permissions: { full_access: { all: true } },
-    });
-    mockHasPermission.mockReturnValue(true);
-    mockNotifyAdminUserDevices.mockResolvedValue({
-      sent: 1,
-      failed: 0,
-      errors: [],
-    });
+    mocks.createClient.mockResolvedValue({ from: vi.fn() });
+    mocks.csrf.mockResolvedValue({ valid: true });
+    mocks.deliver.mockResolvedValue({ failed: 0, sent: 1 });
   });
 
-  it('returns 403 when CSRF validation fails', async () => {
-    mockCheckCsrfProtection.mockResolvedValue({
-      valid: false,
-      response: undefined,
-    });
+  it('has no service-role or generic push-pipeline import edge', () => {
+    const routeSource = readFileSync(
+      resolve(process.cwd(), 'src/app/api/admin/push/test/route.ts'),
+      'utf8'
+    );
 
-    const response = await POST(createRequest());
-
-    expect(response.status).toBe(403);
+    expect(routeSource).not.toContain('@/lib/supabase/admin');
+    expect(routeSource).not.toContain('@/lib/expo-push');
+    expect(routeSource).not.toContain('createAdminClient');
   });
 
-  it('returns 401 when the request is unauthenticated', async () => {
-    mockAuthenticateApiRequest.mockResolvedValue({
-      user: null,
-      supabase: null,
-      error: 'Unauthorized',
+  it('authorizes through the shared notification-admin boundary before CSRF or body parsing', async () => {
+    mocks.getPlatformAdminAuthForPermission.mockResolvedValue({
+      status: 'unauthenticated',
     });
 
     const response = await POST(createRequest());
 
     expect(response.status).toBe(401);
+    expect(mocks.csrf).not.toHaveBeenCalled();
+    expect(mocks.createClient).not.toHaveBeenCalled();
+    expect(mocks.deliver).not.toHaveBeenCalled();
   });
 
-  it('returns 403 when the user lacks permission', async () => {
-    mockHasPermission.mockReturnValue(false);
+  it('requires notifications.manage before CSRF validation or delivery', async () => {
+    mocks.getPlatformAdminAuthForPermission.mockResolvedValue({
+      status: 'forbidden',
+    });
 
     const response = await POST(createRequest());
 
     expect(response.status).toBe(403);
+    expect(mocks.csrf).not.toHaveBeenCalled();
+    expect(mocks.createClient).not.toHaveBeenCalled();
+    expect(mocks.deliver).not.toHaveBeenCalled();
   });
 
-  it('sends a push test to the authenticated admin user devices', async () => {
-    const response = await POST(
-      createRequest({ title: 'Admin Push Test', body: 'Check delivery' })
-    );
-    const data = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(data).toEqual({
-      status: 'sent',
-      sent: 1,
-      failed: 0,
-      errors: [],
-    });
-    expect(mockNotifyAdminUserDevices).toHaveBeenCalledWith(
-      'user-1',
-      'Admin Push Test',
-      'Check delivery',
-      expect.objectContaining({
-        type: 'admin_broadcast',
-        source: 'admin_push_test',
-        merchant_id: 'merchant-1',
-      }),
-      'admin'
-    );
-  });
-
-  it('returns skipped_no_tokens when no active admin device is registered', async () => {
-    mockNotifyAdminUserDevices.mockResolvedValue({
-      sent: 0,
-      failed: 0,
-      errors: [],
-    });
+  it('returns 403 when CSRF validation fails after authorization', async () => {
+    mocks.csrf.mockResolvedValue({ valid: false, response: undefined });
 
     const response = await POST(createRequest());
-    const data = await response.json();
 
-    expect(data.status).toBe('skipped_no_tokens');
+    expect(response.status).toBe(403);
+    expect(mocks.createClient).not.toHaveBeenCalled();
+    expect(mocks.deliver).not.toHaveBeenCalled();
   });
 
-  it('returns 400 when the payload fails schema validation', async () => {
+  it('sends only to the authenticated notification manager devices', async () => {
     const response = await POST(
-      createRequest({ title: '', body: 'x'.repeat(300) })
+      createRequest({ body: 'Check delivery', title: 'Admin Push Test' })
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      failed: 0,
+      sent: 1,
+      status: 'sent',
+    });
+    expect(mocks.deliver).toHaveBeenCalledWith(
+      { from: expect.any(Function) },
+      'user-1',
+      'Admin Push Test',
+      'Check delivery'
+    );
+  });
+
+  it('returns a stable error without provider or database details', async () => {
+    mocks.deliver.mockRejectedValue(
+      new Error('provider token database failure')
+    );
+
+    const response = await POST(createRequest());
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Failed to send test notification',
+    });
+  });
+
+  it('returns a stable validation error without Zod details', async () => {
+    const response = await POST(
+      createRequest({ body: 'x'.repeat(300), title: '' })
     );
 
     expect(response.status).toBe(400);
-    const data = await response.json();
-    expect(data.error).toBe('Invalid request data');
-  });
-
-  it('returns 404 when the merchant is not found', async () => {
-    mockGetMerchantForApiRequest.mockResolvedValue(null);
-
-    const response = await POST(createRequest());
-
-    expect(response.status).toBe(404);
-    const data = await response.json();
-    expect(data.error).toBe('Merchant not found');
+    await expect(response.json()).resolves.toEqual({
+      error: 'Invalid request data',
+    });
+    expect(mocks.deliver).not.toHaveBeenCalled();
   });
 });

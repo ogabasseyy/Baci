@@ -17,8 +17,9 @@ import {
 } from 'recharts';
 
 interface ChartProps {
-  data: Record<string, unknown>[];
+  data: object[];
   className?: string;
+  valueFormatter?: (value: number) => string;
 }
 
 interface TooltipProps {
@@ -26,6 +27,7 @@ interface TooltipProps {
   payload?: Array<{ value: number }>;
   label?: string;
   prefix?: string;
+  valueFormatter?: (value: number) => string;
 }
 
 const CustomTooltip = ({
@@ -33,6 +35,7 @@ const CustomTooltip = ({
   payload,
   label,
   prefix = '',
+  valueFormatter,
 }: TooltipProps) => {
   if (active && payload?.length) {
     return (
@@ -41,8 +44,9 @@ const CustomTooltip = ({
           {label}
         </p>
         <p className="text-lg font-bold text-foreground">
-          {prefix}
-          {payload[0].value.toLocaleString()}
+          {valueFormatter
+            ? valueFormatter(payload[0].value)
+            : `${prefix}${payload[0].value.toLocaleString()}`}
         </p>
       </div>
     );
@@ -50,7 +54,7 @@ const CustomTooltip = ({
   return null;
 };
 
-export function RevenueChart({ data, className }: ChartProps) {
+export function RevenueChart({ data, className, valueFormatter }: ChartProps) {
   return (
     <ResponsiveContainer
       width="100%"
@@ -90,11 +94,13 @@ export function RevenueChart({ data, className }: ChartProps) {
           fontSize={12}
           tickLine={false}
           axisLine={false}
-          tickFormatter={(value) => `$${value}`}
+          tickFormatter={(value) =>
+            valueFormatter ? valueFormatter(Number(value)) : `$${value}`
+          }
           className="text-muted-foreground"
         />
         <Tooltip
-          content={<CustomTooltip prefix="$" />}
+          content={<CustomTooltip prefix="$" valueFormatter={valueFormatter} />}
           cursor={{ stroke: '#6366f1', strokeWidth: 2 }}
         />
         <Area
@@ -163,7 +169,11 @@ export function OrdersChart({ data, className }: ChartProps) {
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b'];
 
-export function SalesByChannelChart({ data, className }: ChartProps) {
+export function SalesByChannelChart({
+  data,
+  className,
+  valueFormatter,
+}: ChartProps) {
   return (
     <ResponsiveContainer
       width="100%"
@@ -194,7 +204,11 @@ export function SalesByChannelChart({ data, className }: ChartProps) {
           ))}
         </Pie>
         <Tooltip
-          formatter={(value) => `$${(value as number).toLocaleString()}`}
+          formatter={(value) =>
+            valueFormatter
+              ? valueFormatter(Number(value))
+              : `$${Number(value).toLocaleString()}`
+          }
           contentStyle={{
             borderRadius: '12px',
             border: 'none',

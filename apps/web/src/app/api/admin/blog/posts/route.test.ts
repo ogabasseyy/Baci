@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockGetPlatformAdminAuth = vi.fn();
+const mockGetPlatformAdminAuthForPermission = vi.fn();
 const mockCreateClient = vi.fn();
 const mockCheckCsrfProtection = vi.fn();
 const mockRevalidatePlatformBlog = vi.fn();
 
 vi.mock('@/lib/platform-admin-auth', () => ({
-  getPlatformAdminAuth: (...args: unknown[]) =>
-    mockGetPlatformAdminAuth(...args),
+  getPlatformAdminAuthForPermission: (...args: unknown[]) =>
+    mockGetPlatformAdminAuthForPermission(...args),
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -51,7 +51,7 @@ describe('GET /api/admin/blog/posts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCreateClient.mockResolvedValue(mockSupabase);
-    mockGetPlatformAdminAuth.mockResolvedValue({
+    mockGetPlatformAdminAuthForPermission.mockResolvedValue({
       status: 'authenticated',
       user: { email: 'admin@baci.com', id: 'user-1' },
     });
@@ -63,7 +63,7 @@ describe('GET /api/admin/blog/posts', () => {
   });
 
   it('returns 401 for unauthenticated users', async () => {
-    mockGetPlatformAdminAuth.mockResolvedValueOnce({
+    mockGetPlatformAdminAuthForPermission.mockResolvedValueOnce({
       status: 'unauthenticated',
     });
 
@@ -74,14 +74,19 @@ describe('GET /api/admin/blog/posts', () => {
     expect(response.status).toBe(401);
   });
 
-  it('returns 403 for non-platform admins', async () => {
-    mockGetPlatformAdminAuth.mockResolvedValueOnce({ status: 'forbidden' });
+  it('denies a lower-privilege platform admin without content access', async () => {
+    mockGetPlatformAdminAuthForPermission.mockResolvedValueOnce({
+      status: 'forbidden',
+    });
 
     const response = await GET(
       new NextRequest('http://localhost/api/admin/blog/posts')
     );
 
     expect(response.status).toBe(403);
+    expect(mockGetPlatformAdminAuthForPermission).toHaveBeenCalledWith(
+      'content.manage'
+    );
   });
 
   it('lists platform posts only', async () => {
@@ -106,7 +111,7 @@ describe('POST /api/admin/blog/posts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCreateClient.mockResolvedValue(mockSupabase);
-    mockGetPlatformAdminAuth.mockResolvedValue({
+    mockGetPlatformAdminAuthForPermission.mockResolvedValue({
       status: 'authenticated',
       user: { email: 'admin@baci.com', id: 'user-1' },
     });
@@ -122,7 +127,7 @@ describe('POST /api/admin/blog/posts', () => {
   });
 
   it('checks auth before csrf on write requests', async () => {
-    mockGetPlatformAdminAuth.mockResolvedValueOnce({
+    mockGetPlatformAdminAuthForPermission.mockResolvedValueOnce({
       status: 'unauthenticated',
     });
 
@@ -149,6 +154,23 @@ describe('POST /api/admin/blog/posts', () => {
     );
 
     expect(response.status).toBe(403);
+  });
+
+  it('returns 400 for malformed JSON after auth and CSRF validation', async () => {
+    const response = await POST(
+      new NextRequest('http://localhost/api/admin/blog/posts', {
+        body: '{',
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Invalid JSON body',
+    });
+    expect(mockCheckCsrfProtection).toHaveBeenCalledTimes(1);
+    expect(mockCreateClient).not.toHaveBeenCalled();
   });
 
   it('forces platform post fields and revalidates on successful create', async () => {

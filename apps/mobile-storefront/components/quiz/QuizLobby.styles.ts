@@ -1,12 +1,41 @@
 import { StyleSheet } from 'react-native';
-import type { QuizThemeColors } from './QuizScreen.styles';
+import type { QuizThemeColors } from './quiz-theme';
 
 export function createQuizLobbyStyles(colors: QuizThemeColors) {
   return StyleSheet.create({
-    eventsList: { flex: 1 },
+    eventsList: { flex: 1, overflow: 'hidden' },
     eventsListContent: { gap: 16, padding: 20, paddingBottom: 40 },
+    patternBackground: {
+      bottom: 0,
+      left: 0,
+      pointerEvents: 'none',
+      position: 'absolute',
+      right: 0,
+      top: 0,
+    },
+    emptyState: {
+      alignItems: 'center',
+      backgroundColor: colors.card,
+      borderColor: colors.border,
+      borderRadius: 20,
+      borderWidth: 1,
+      gap: 6,
+      padding: 24,
+    },
+    emptyStateTitle: {
+      color: colors.text,
+      fontSize: 17,
+      fontWeight: '800',
+      textAlign: 'center',
+    },
+    emptyStateText: {
+      color: colors.textSecondary,
+      fontSize: 14,
+      lineHeight: 20,
+      textAlign: 'center',
+    },
     eventCard: {
-      backgroundColor: '#111315',
+      backgroundColor: colors.card,
       borderColor: colors.border,
       borderRadius: 24,
       borderWidth: 1,
@@ -14,7 +43,7 @@ export function createQuizLobbyStyles(colors: QuizThemeColors) {
       overflow: 'hidden',
       padding: 18,
     },
-    eventCardClosed: { opacity: 0.58 },
+    eventCardClosed: { backgroundColor: colors.muted },
     eventTopline: {
       alignItems: 'center',
       flexDirection: 'row',
@@ -115,7 +144,9 @@ export function createQuizLobbyStyles(colors: QuizThemeColors) {
       overflow: 'hidden',
     },
     disabledButtonBox: {
-      backgroundColor: colors.muted,
+      backgroundColor: colors.card,
+      borderColor: colors.border,
+      borderWidth: 1,
       borderRadius: 14,
       overflow: 'hidden',
     },

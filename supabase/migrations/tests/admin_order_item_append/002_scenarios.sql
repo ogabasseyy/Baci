@@ -132,7 +132,7 @@ BEGIN
     'tax_amount', 1250
   );
 
-  v_result := public.update_admin_order(
+  v_result := public.update_admin_order_with_transaction_discount_metadata(
     v_order_id,
     v_payload || jsonb_build_object(
       'items', jsonb_build_array(v_existing_line, v_addon_line)
@@ -178,7 +178,7 @@ BEGIN
   END IF;
 
   BEGIN
-    PERFORM public.update_admin_order(
+    PERFORM public.update_admin_order_with_transaction_discount_metadata(
       v_order_id,
       v_payload || jsonb_build_object(
         'items', jsonb_build_array(v_existing_line)
@@ -192,7 +192,7 @@ BEGIN
   END;
 
   BEGIN
-    PERFORM public.update_admin_order(
+    PERFORM public.update_admin_order_with_transaction_discount_metadata(
       v_order_id,
       v_payload || jsonb_build_object(
         'items', jsonb_build_array(v_existing_line_modified, v_addon_line)
@@ -206,7 +206,7 @@ BEGIN
   END;
 
   BEGIN
-    PERFORM public.update_admin_order(
+    PERFORM public.update_admin_order_with_transaction_discount_metadata(
       v_order_id,
       v_payload || jsonb_build_object(
         'items', jsonb_build_array(
@@ -234,7 +234,7 @@ BEGIN
   ) VALUES (v_order_id, 'Z', 0, 40000, 0, 'Zero-rated supply', 'VAT-ZERO-RATED');
 
   BEGIN
-    PERFORM public.update_admin_order(
+    PERFORM public.update_admin_order_with_transaction_discount_metadata(
       v_order_id,
       v_payload || jsonb_build_object(
         'items', jsonb_build_array(

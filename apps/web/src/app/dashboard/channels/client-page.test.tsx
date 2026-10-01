@@ -13,6 +13,13 @@ vi.mock('@/hooks/use-toast', () => ({
   useToast: vi.fn(() => ({ toast: mockToast })),
 }));
 
+vi.mock('@/hooks/use-merchant-client', () => ({
+  useMerchantSafe: vi.fn(() => ({
+    merchant: { id: 'merchant-1' },
+    hasPermission: vi.fn(() => true),
+  })),
+}));
+
 const mockPush = vi.fn();
 const mockReplace = vi.fn();
 let mockSearchParams = new URLSearchParams();
@@ -45,12 +52,15 @@ const mockRefetch = vi.fn(async (): Promise<JumiaIntegration[]> => []);
 const mockSetIntegrations = vi.fn();
 const mockDisconnectIntegration = vi.fn();
 const mockSyncOrders = vi.fn();
+const mockCheckProductApprovals = vi.fn();
 
 vi.mock('./use-jumia-integrations', () => ({
   useJumiaIntegrations: vi.fn(),
   disconnectIntegration: (...args: unknown[]) =>
     mockDisconnectIntegration(...args),
   syncOrders: (...args: unknown[]) => mockSyncOrders(...args),
+  checkProductApprovals: (...args: unknown[]) =>
+    mockCheckProductApprovals(...args),
 }));
 
 vi.mock('./connect-jumia-dialog', () => ({
@@ -68,6 +78,20 @@ vi.mock('./connect-jumia-dialog', () => ({
           Close
         </button>
       </div>
+    ) : null,
+}));
+
+vi.mock('@/components/products/jumia/publish-products-dialog', () => ({
+  PublishProductsDialog: ({
+    open,
+    integrationId,
+  }: {
+    open: boolean;
+    integrationId: string;
+    onOpenChange: (open: boolean) => void;
+  }) =>
+    open ? (
+      <div data-testid="publish-dialog">Publish for {integrationId}</div>
     ) : null,
 }));
 
@@ -180,6 +204,7 @@ describe('ChannelsClientPage', () => {
         shop_id: 'shop-1',
         shop_name: 'Test Shop',
         country_code: 'NG',
+        marketplace_key: 'jumia-ng-main',
         is_active: true,
         last_sync_at: '2026-01-15T10:30:00Z',
         sync_error: null,
@@ -195,14 +220,17 @@ describe('ChannelsClientPage', () => {
       },
     ];
 
-    it('renders Connected badge instead of Connect button', () => {
+    it('keeps the connect dialog reachable after the first shop is connected', async () => {
       setupHook({ integrations: mockIntegrations });
+      const user = userEvent.setup();
       render(<ChannelsClientPage />);
 
       expect(screen.getByText('Connected')).toBeInTheDocument();
       expect(
         screen.queryByRole('button', { name: /^connect$/i })
       ).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /add shop/i }));
+      expect(screen.getByTestId('connect-dialog')).toBeInTheDocument();
     });
 
     it('renders shop names and country codes', () => {
@@ -210,6 +238,7 @@ describe('ChannelsClientPage', () => {
       render(<ChannelsClientPage />);
 
       expect(screen.getByText('Test Shop')).toBeInTheDocument();
+      expect(screen.getByText(/jumia-ng-main/)).toBeInTheDocument();
       expect(screen.getByText('Second Shop')).toBeInTheDocument();
     });
 
@@ -257,8 +286,14 @@ describe('ChannelsClientPage', () => {
       render(<ChannelsClientPage />);
 
       expect(
-        screen.getByRole('link', { name: /view jumia orders/i })
-      ).toHaveAttribute('href', '/dashboard/orders?source=jumia');
+        screen.getAllByRole('link', { name: /view orders/i })
+      ).toHaveLength(2);
+      expect(
+        screen.getAllByRole('link', { name: /view orders/i })[0]
+      ).toHaveAttribute(
+        'href',
+        '/dashboard/orders?source=jumia&integrationId=int-1'
+      );
       expect(
         screen.getByRole('link', { name: /vendor center/i })
       ).toHaveAttribute('href', 'https://vendorcenter.jumia.com');
@@ -406,6 +441,74 @@ describe('ChannelsClientPage', () => {
     });
   });
 
+  describe('approval and publish actions', () => {
+    const integration: JumiaIntegration = {
+      id: 'int-1',
+      shop_id: 'shop-1',
+      shop_name: 'Test Shop',
+      country_code: 'NG',
+      is_active: true,
+      last_sync_at: null,
+      sync_error: null,
+    };
+
+    it('shows a success toast when approval checks succeed', async () => {
+      mockCheckProductApprovals.mockResolvedValueOnce({
+        ok: true,
+        message: 'Updated 2 product approvals',
+      });
+      setupHook({ integrations: [integration] });
+      const user = userEvent.setup();
+      render(<ChannelsClientPage />);
+
+      await user.click(
+        screen.getByRole('button', { name: /check approvals/i })
+      );
+
+      await waitFor(() => {
+        expect(mockCheckProductApprovals).toHaveBeenCalledWith('int-1');
+      });
+      expect(mockToast).toHaveBeenCalledWith({
+        title: 'Updated 2 product approvals',
+      });
+      expect(mockRefetch).toHaveBeenCalled();
+    });
+
+    it('shows an error toast when approval checks fail', async () => {
+      mockCheckProductApprovals.mockResolvedValueOnce({
+        ok: false,
+        error: 'Feed lookup failed',
+      });
+      setupHook({ integrations: [integration] });
+      const user = userEvent.setup();
+      render(<ChannelsClientPage />);
+
+      await user.click(
+        screen.getByRole('button', { name: /check approvals/i })
+      );
+
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith({
+          title: 'Approval check failed',
+          description: 'Feed lookup failed',
+          variant: 'destructive',
+        });
+      });
+    });
+
+    it('opens the publish dialog for the selected integration', async () => {
+      setupHook({ integrations: [integration] });
+      const user = userEvent.setup();
+      render(<ChannelsClientPage />);
+
+      await user.click(screen.getByRole('button', { name: /add products/i }));
+
+      expect(screen.getByTestId('publish-dialog')).toHaveTextContent(
+        'Publish for int-1'
+      );
+    });
+  });
+
   describe('OAuth callback params', () => {
     it('shows success toast and refetches on success=jumia_connected', async () => {
       mockSearchParams = new URLSearchParams('success=jumia_connected');
@@ -466,6 +569,20 @@ describe('ChannelsClientPage', () => {
       expect(mockToast).toHaveBeenCalledWith({
         title: 'Connection Error',
         description: 'Authorization failed — no code received',
+        variant: 'destructive',
+      });
+      expect(mockReplace).toHaveBeenCalledWith('/dashboard/channels');
+    });
+
+    it('shows incomplete-connection guidance when no shops are discovered', () => {
+      mockSearchParams = new URLSearchParams('error=no_shops_discovered');
+      setupHook({});
+      render(<ChannelsClientPage />);
+
+      expect(mockToast).toHaveBeenCalledWith({
+        title: 'Connection Error',
+        description:
+          'Connected but no active shops discovered — please check your Jumia Vendor Center',
         variant: 'destructive',
       });
       expect(mockReplace).toHaveBeenCalledWith('/dashboard/channels');

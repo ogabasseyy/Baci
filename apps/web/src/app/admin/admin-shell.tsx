@@ -1,17 +1,10 @@
 'use client';
 
 import {
-  BarChart3,
-  Bell,
-  Building2,
-  Database,
-  LayoutDashboard,
-  LayoutTemplate,
   LogOut,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
-  PenSquare,
   Settings,
   Shield,
   User,
@@ -38,46 +31,31 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { getAdminNavigationItems } from '@/config/admin-navigation';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
-
-const navItems: {
-  href: Route;
-  icon: typeof LayoutDashboard;
-  label: string;
-}[] = [
-  { href: '/admin' as Route, icon: LayoutDashboard, label: 'Overview' },
-  { href: '/admin/merchants' as Route, icon: Building2, label: 'Merchants' },
-  { href: '/admin/analytics' as Route, icon: BarChart3, label: 'Analytics' },
-  { href: '/admin/system' as Route, icon: Database, label: 'System Health' },
-  { href: '/admin/blog' as Route, icon: PenSquare, label: 'Blog' },
-  { href: '/admin/notifications' as Route, icon: Bell, label: 'Notifications' },
-  {
-    href: '/admin/templates' as Route,
-    icon: LayoutTemplate,
-    label: 'Templates',
-  },
-  {
-    href: '/admin/settings' as Route,
-    icon: Settings,
-    label: 'Platform Settings',
-  },
-];
+import type { PlatformAdminContext } from '@/schemas/platform-admin-context';
 
 function isActiveAdminPath(pathname: string, href: Route) {
   return pathname === href || (href !== '/admin' && pathname.startsWith(href));
 }
 
 export function AdminShell({
+  adminContext,
   adminEmail,
   children,
 }: {
+  adminContext: PlatformAdminContext;
   adminEmail: string | null;
   children: ReactNode;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const navItems = getAdminNavigationItems(adminContext.permissions);
+  const adminHomeHref = navItems[0]?.href ?? '/admin';
+  const canReadPlatformSettings =
+    adminContext.permissions.includes('settings.read');
 
   const handleSignOut = async () => {
     const supabase = createClient();
@@ -111,7 +89,7 @@ export function AdminShell({
               )}
             >
               <Link
-                href="/admin"
+                href={adminHomeHref}
                 className="flex items-center gap-2 font-semibold"
               >
                 <Logo />
@@ -216,7 +194,7 @@ export function AdminShell({
                   aria-label="Mobile admin navigation"
                 >
                   <Link
-                    href="/admin"
+                    href={adminHomeHref}
                     className="mb-4 flex items-center gap-2 text-lg font-semibold"
                   >
                     <Logo />
@@ -256,6 +234,9 @@ export function AdminShell({
               <div className="flex items-center gap-2">
                 <Shield className="size-4 text-primary" aria-hidden="true" />
                 <span className="text-sm font-medium">Platform Admin</span>
+                <span className="text-xs capitalize text-muted-foreground">
+                  {adminContext.role}
+                </span>
               </div>
             </div>
 
@@ -270,13 +251,17 @@ export function AdminShell({
                 <DropdownMenuLabel>
                   {adminEmail ?? 'Admin Account'}
                 </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => router.push('/dashboard/settings')}
-                >
-                  <Settings className="mr-2 size-4" aria-hidden="true" />
-                  Settings
-                </DropdownMenuItem>
+                {canReadPlatformSettings && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => router.push('/admin/settings')}
+                    >
+                      <Settings className="mr-2 size-4" aria-hidden="true" />
+                      Platform Settings
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={handleSignOut}

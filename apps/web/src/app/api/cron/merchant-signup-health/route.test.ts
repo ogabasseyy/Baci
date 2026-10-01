@@ -2,10 +2,20 @@ import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  after: vi.fn((callback: () => Promise<void>) => {
+    void callback();
+  }),
   createPublicClient: vi.fn(),
   loggerError: vi.fn(),
+  recordHealthTelemetry: vi.fn(),
   rpc: vi.fn(),
 }));
+
+vi.mock('next/server', async () => {
+  const actual =
+    await vi.importActual<typeof import('next/server')>('next/server');
+  return { ...actual, after: mocks.after };
+});
 
 vi.mock('@/lib/logger', () => ({
   logger: { error: mocks.loggerError },
@@ -13,6 +23,10 @@ vi.mock('@/lib/logger', () => ({
 
 vi.mock('@/lib/supabase/public', () => ({
   createPublicClient: mocks.createPublicClient,
+}));
+
+vi.mock('@/lib/posthog/merchant-signup-health-telemetry', () => ({
+  recordMerchantSignupHealthTelemetry: mocks.recordHealthTelemetry,
 }));
 
 import { GET } from './route';
@@ -82,6 +96,7 @@ describe('GET /api/cron/merchant-signup-health', () => {
     vi.stubEnv('CRON_SECRET', 'cron-secret');
     mocks.createPublicClient.mockReturnValue({ rpc: mocks.rpc });
     mocks.rpc.mockResolvedValue({ data: healthyResult, error: null });
+    mocks.recordHealthTelemetry.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -118,6 +133,13 @@ describe('GET /api/cron/merchant-signup-health', () => {
     await expect(response.json()).resolves.toEqual({ healthy: true });
     expect(mocks.rpc).toHaveBeenCalledWith('get_merchant_signup_policy_health');
     expect(mocks.loggerError).not.toHaveBeenCalled();
+    expect(mocks.recordHealthTelemetry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        failedInvariants: [],
+        outcome: 'healthy',
+        reason: 'all_invariants_healthy',
+      })
+    );
   });
 
   it('returns 503 and logs each failed invariant when policy drift is detected', async () => {
@@ -143,6 +165,13 @@ describe('GET /api/cron/merchant-signup-health', () => {
       reason: 'policy_drift_detected',
       failedInvariants: ['auth_can_insert', 'select_policy_is_expected'],
     });
+    expect(mocks.recordHealthTelemetry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        failedInvariants: ['auth_can_insert', 'select_policy_is_expected'],
+        outcome: 'degraded',
+        reason: 'policy_drift_detected',
+      })
+    );
   });
 
   it.each(
@@ -177,6 +206,13 @@ describe('GET /api/cron/merchant-signup-health', () => {
       reason: 'health_rpc_failed',
       pgCode: '42501',
     });
+    expect(mocks.recordHealthTelemetry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: 'unavailable',
+        postgresCode: '42501',
+        reason: 'health_rpc_failed',
+      })
+    );
   });
 
   it('returns 500 instead of reporting healthy for a malformed RPC result', async () => {
@@ -227,7 +263,32 @@ describe('GET /api/cron/merchant-signup-health', () => {
       message: 'mobile-onboarding deployment_fault',
       component: 'merchant_signup_policy_health',
       reason: 'health_rpc_threw',
-      error: 'Public Supabase configuration is missing',
+      errorName: 'Error',
     });
+    expect(mocks.recordHealthTelemetry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: expect.any(Error),
+        outcome: 'unavailable',
+        reason: 'health_rpc_threw',
+      })
+    );
+  });
+
+  it('returns the health failure without waiting for degraded telemetry', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: { code: '42501', message: 'permission denied' },
+    });
+    mocks.recordHealthTelemetry.mockReturnValue(new Promise(() => undefined));
+
+    const response = await GET(cronRequest());
+
+    expect(response.status).toBe(500);
+    expect(mocks.recordHealthTelemetry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: 'unavailable',
+        reason: 'health_rpc_failed',
+      })
+    );
   });
 });

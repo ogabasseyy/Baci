@@ -6,7 +6,7 @@ import {
 } from '@/lib/blog-featured-image-variants';
 import { revalidatePlatformBlog } from '@/lib/cache-revalidation';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { getPlatformAdminAuth } from '@/lib/platform-admin-auth';
+import { getPlatformAdminAuthForPermission } from '@/lib/platform-admin-auth';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { createClient } from '@/lib/supabase/server';
 import {
@@ -26,7 +26,7 @@ const PLATFORM_BLOG_UPLOAD_RATE_LIMIT = 30;
 const PLATFORM_BLOG_UPLOAD_RATE_WINDOW_MINUTES = 1;
 
 export async function POST(request: NextRequest) {
-  const auth = await getPlatformAdminAuth();
+  const auth = await getPlatformAdminAuthForPermission('content.manage');
   if (auth.status !== 'authenticated') {
     return toAuthErrorResponse(auth.status);
   }
@@ -203,7 +203,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const auth = await getPlatformAdminAuth();
+  const auth = await getPlatformAdminAuthForPermission('content.manage');
   if (auth.status !== 'authenticated') {
     return toAuthErrorResponse(auth.status);
   }

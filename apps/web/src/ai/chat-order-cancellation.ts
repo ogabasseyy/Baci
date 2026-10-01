@@ -1,10 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { resolveAgenticChatTenant } from '@/lib/agentic/agentic-chat-tenant';
 import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
 import { getOrderNumberLookupCandidates } from '@/lib/order-number-lookup';
 import type { CancelOrderParams } from './chat-tools';
 
-const OGABASSEY_MERCHANT_ID = '3bc72679-c0f7-4db4-9054-6a4a4a95a498';
-const OGABASSEY_MERCHANT_SLUG = 'ogabassey';
 const CANCELLABLE_PAYMENT_STATUSES = ['pending', 'unpaid'];
 const CANCELLABLE_SHIPPING_STATUSES = ['pending'];
 
@@ -35,10 +34,16 @@ interface CancelledOrderRow {
   shipping_status: string | null;
 }
 
-function createChatOrderCancellationSupabaseClient(): ChatOrderCancellationSupabaseClient {
+function createChatOrderCancellationSupabaseClient({
+  merchantId,
+  merchantSlug,
+}: {
+  merchantId: string;
+  merchantSlug: string;
+}): ChatOrderCancellationSupabaseClient {
   return createAgenticScopedSupabaseClient({
-    merchantId: OGABASSEY_MERCHANT_ID,
-    merchantSlug: OGABASSEY_MERCHANT_SLUG,
+    merchantId,
+    merchantSlug,
   });
 }
 
@@ -65,7 +70,7 @@ function createCancelOrderNotFoundResult(): CancelOrderResult {
     success: false,
     status: 'not_found',
     message:
-      'I could not find an Ogabassey order matching that order reference and email.',
+      'I could not find an order matching that order reference and email.',
   };
 }
 
@@ -75,13 +80,22 @@ export async function handleCancelOrder(
   const customerEmail = normalizeEmail(params.customerEmail);
 
   try {
-    const supabase = createChatOrderCancellationSupabaseClient();
+    const tenant = await resolveAgenticChatTenant();
+    if (!tenant?.agenticCheckoutEnabled) {
+      return createCancelOrderNotFoundResult();
+    }
+
+    const { merchantId, merchantSlug } = tenant;
+    const supabase = createChatOrderCancellationSupabaseClient({
+      merchantId,
+      merchantSlug,
+    });
     let query = supabase
       .from('orders')
       .select(
         'id, order_number, customer_email, payment_status, shipping_status'
       )
-      .eq('merchant_id', OGABASSEY_MERCHANT_ID);
+      .eq('merchant_id', merchantId);
 
     if (params.orderId) {
       query = query.eq('id', params.orderId);
@@ -144,7 +158,7 @@ export async function handleCancelOrder(
         shipping_status: 'cancelled',
       })
       .eq('id', order.id)
-      .eq('merchant_id', OGABASSEY_MERCHANT_ID)
+      .eq('merchant_id', merchantId)
       .eq('customer_email', order.customer_email ?? '')
       .in('payment_status', CANCELLABLE_PAYMENT_STATUSES)
       .in('shipping_status', CANCELLABLE_SHIPPING_STATUSES)

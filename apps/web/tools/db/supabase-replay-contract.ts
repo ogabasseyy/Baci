@@ -7,6 +7,8 @@ import type {
 } from './supabase-history-replay-types';
 
 const DEFAULT_PSQL_BIN = '/opt/homebrew/opt/libpq/bin/psql';
+const DEFAULT_REPLAY_COMMAND_TIMEOUT_MS = 5 * 60_000;
+const MAX_REPLAY_COMMAND_TIMEOUT_MS = 60 * 60_000;
 const STATUS_OUTPUT_LIMIT = 64 * 1024;
 
 function mismatch(tool: string): never {
@@ -15,7 +17,7 @@ function mismatch(tool: string): never {
 
 export function createSupabaseReplayDatabaseEnvironment(
   databaseUrl: string,
-  environment: NodeJS.ProcessEnv = process.env
+  environment: Partial<NodeJS.ProcessEnv> = process.env
 ): NodeJS.ProcessEnv {
   try {
     const parsed = new URL(databaseUrl);
@@ -46,7 +48,7 @@ export function createSupabaseReplayDatabaseEnvironment(
       PGPASSWORD: password,
       PGPORT: parsed.port,
       PGUSER: user,
-    };
+    } as unknown as NodeJS.ProcessEnv;
   } catch {
     throw new Error('Supabase replay database URL is not supported');
   }
@@ -117,6 +119,24 @@ export async function readSupabaseReplayDatabaseUrl(
     throw new Error('Supabase replay status is invalid');
   }
   return matches[0][1];
+}
+
+export function readReplayCommandExecutionTimeoutMs(
+  environment: Partial<NodeJS.ProcessEnv> = process.env
+): number {
+  const raw = environment.BACI_REPLAY_COMMAND_TIMEOUT_MS;
+  if (raw === undefined || raw === '') {
+    return DEFAULT_REPLAY_COMMAND_TIMEOUT_MS;
+  }
+  const parsed = Number(raw);
+  if (
+    !Number.isInteger(parsed) ||
+    parsed < 1_000 ||
+    parsed > MAX_REPLAY_COMMAND_TIMEOUT_MS
+  ) {
+    throw new Error('BACI_REPLAY_COMMAND_TIMEOUT_MS is invalid');
+  }
+  return parsed;
 }
 
 export function parseSupabaseReplayArguments(argv: readonly string[]): {
@@ -231,8 +251,9 @@ export async function verifySupabaseReplayContract(options: {
   }
   const psqlBin = options.psqlBin ?? process.env.PSQL_BIN ?? DEFAULT_PSQL_BIN;
   if (
-    (await stdout(options.runCommand, psqlBin, ['--version'])) !==
-    'psql (PostgreSQL) 18.3'
+    !/^psql \(PostgreSQL\) 18\.3(?: \(.+\))?$/.test(
+      await stdout(options.runCommand, psqlBin, ['--version'])
+    )
   ) {
     mismatch('psql');
   }

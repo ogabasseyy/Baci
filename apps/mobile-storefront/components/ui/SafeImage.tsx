@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { type StyleProp, StyleSheet, View, type ViewStyle } from 'react-native';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { resolveSafeImageSource } from '@/lib/safe-image-source';
 
 // Default blurhash for smooth loading placeholder
 const DEFAULT_BLURHASH = 'L6PZfSi_.AyE_3t7t7RjE1%MWBR*';
@@ -43,6 +44,7 @@ export function SafeImage({
   cachePolicy = 'memory-disk',
   contentFit = 'cover',
   onLoadError,
+  onLoadStart,
   fallbackComponent,
   showFallbackIcon = true,
   fallbackStyle,
@@ -82,12 +84,13 @@ export function SafeImage({
     }
   };
 
-  // Reset error state when source changes
+  // Reset error state when source changes, then forward to any caller callback.
   const handleLoadStart = () => {
     if (hasError) {
       setHasError(false);
       setErrorCount(0);
     }
+    onLoadStart?.();
   };
 
   // If we have a custom fallback component, use it
@@ -118,18 +121,25 @@ export function SafeImage({
 
   // Determine placeholder - use provided or default blurhash
   const effectivePlaceholder = placeholder || { blurhash: DEFAULT_BLURHASH };
+  const safeSource = resolveSafeImageSource(source, {
+    fit: contentFit === 'cover' ? 'cover' : 'inside',
+  });
 
   return (
     <Image
-      source={source}
+      source={safeSource}
       style={style}
       placeholder={effectivePlaceholder}
       transition={transition}
       cachePolicy={cachePolicy}
       contentFit={contentFit}
+      {...rest}
+      // Remote catalog images are untrusted and may be animated GIF/APNG/WebP.
+      // Keep the first frame without starting the native frame decoder loop;
+      // this avoids repeated large bitmap allocations on low-memory Android.
+      autoplay={false}
       onError={handleError}
       onLoadStart={handleLoadStart}
-      {...rest}
     />
   );
 }

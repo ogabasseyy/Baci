@@ -99,6 +99,40 @@ describe('getBrandAuthoritySitemapEntries', () => {
     ]);
   });
 
+  it('includes the Infinix HOT hub with two active matching models', async () => {
+    mockInventory.mockImplementation(
+      async (
+        _merchant: string,
+        _category: string,
+        entry: { brandKey: string }
+      ) => ({
+        productCount: entry.brandKey === 'infinix' ? 5 : 0,
+        latestUpdatedAt: '2026-09-23T00:00:00Z',
+        products:
+          entry.brandKey === 'infinix'
+            ? [
+                { name: 'Infinix Hot 70' },
+                { name: 'Infinix Hot 70 Pro' },
+                { name: 'Infinix Note 60' },
+                { name: 'Infinix Note 60 Pro' },
+                { name: 'Infinix Note 60 Pro Plus' },
+              ]
+            : [],
+      })
+    );
+    const { getBrandAuthoritySitemapEntries } = await import(
+      './brand-authority-sitemap'
+    );
+    const entries = await getBrandAuthoritySitemapEntries({
+      merchant: { id: 'merchant-1', slug: 'store', is_published: true },
+      storeUrl: 'https://store.test',
+    } as never);
+
+    expect(entries.map((entry) => entry.url)).toContain(
+      'https://store.test/smartphones/brands/infinix/families/hot'
+    );
+  });
+
   it('keeps the brand hub when no model family meets its threshold', async () => {
     mockInventory.mockImplementation(
       async (

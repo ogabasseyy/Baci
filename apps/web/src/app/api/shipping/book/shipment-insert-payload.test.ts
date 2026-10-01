@@ -25,7 +25,12 @@ describe('buildShipmentInsertPayload', () => {
         countryCode: 'NG',
       },
       items: [{ name: 'Phone', quantity: 1, weight: 1, value: 100000 }],
-      quote: { price: 4500, currency: 'NGN', estimated_days: 2 },
+      quote: {
+        id: 'quote-1',
+        price: 4500,
+        currency: 'NGN',
+        estimated_days: 2,
+      },
       result: {
         provider: 'GIGL',
         providerShipmentId: 'GIGL-WB-1',
@@ -44,6 +49,7 @@ describe('buildShipmentInsertPayload', () => {
       order_id: 'order-1',
       merchant_id: 'merchant-1',
       provider: 'GIGL',
+      shipping_quote_id: 'quote-1',
       is_station_pickup: true,
       station_name: 'PORT HARCOURT',
       station_address: 'Port Harcourt station',

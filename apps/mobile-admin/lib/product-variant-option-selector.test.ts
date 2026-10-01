@@ -42,12 +42,7 @@ describe('buildVariantOptionGroups', () => {
   it('builds product-first option groups from structured variant rows', () => {
     const groups = buildVariantOptionGroups(variants, {});
 
-    expect(groups.map((group) => group.key)).toEqual([
-      'condition',
-      'ram',
-      'color',
-      'storage',
-    ]);
+    expect(groups.map((group) => group.key)).toEqual(['color', 'storage']);
     expect(groups.find((group) => group.key === 'color')?.values).toEqual([
       { available: true, label: 'Black', selected: false, value: 'Black' },
       { available: true, label: 'Blue', selected: false, value: 'Blue' },
@@ -77,19 +72,18 @@ describe('buildVariantOptionGroups', () => {
     ]);
   });
 
-  it('does not let sparse variants satisfy selected active attributes they lack', () => {
+  it('does not turn a sparse single-value attribute into a required selector', () => {
     const sparseVariants = [
       variant('variant-1', { color: 'Black', storage: '256GB' }),
       variant('variant-2', { color: 'Blue' }),
     ];
-    const groups = buildVariantOptionGroups(sparseVariants, {
-      storage: '256GB',
-    });
+    const groups = buildVariantOptionGroups(sparseVariants, {});
 
     expect(groups.find((group) => group.key === 'color')?.values).toEqual([
       { available: true, label: 'Black', selected: false, value: 'Black' },
-      { available: false, label: 'Blue', selected: false, value: 'Blue' },
+      { available: true, label: 'Blue', selected: false, value: 'Blue' },
     ]);
+    expect(groups.find((group) => group.key === 'storage')).toBeUndefined();
   });
 
   it('canonicalizes equivalent color and colour keys into one group', () => {
@@ -124,11 +118,7 @@ describe('buildVariantOptionGroups', () => {
       {}
     );
 
-    expect(groups.map((group) => group.key)).toEqual([
-      'condition',
-      'color',
-      'storage',
-    ]);
+    expect(groups.map((group) => group.key)).toEqual(['color', 'storage']);
   });
 
   it('sorts storage-style values by capacity instead of insertion order', () => {
@@ -175,6 +165,21 @@ describe('buildVariantOptionGroups', () => {
     ]);
   });
 
+  it('keeps SSD and HDD as distinct selectable storage options', () => {
+    const groups = buildVariantOptionGroups(
+      [
+        variant('variant-ssd', { storage: '1TB SSD' }),
+        variant('variant-hdd', { storage: '1TB HDD' }),
+      ],
+      {}
+    );
+
+    expect(groups.find((group) => group.key === 'storage')?.values).toEqual([
+      { available: true, label: '1TB HDD', selected: false, value: '1TB HDD' },
+      { available: true, label: '1TB SSD', selected: false, value: '1TB SSD' },
+    ]);
+  });
+
   it('sorts camelCase capacity keys by capacity', () => {
     const groups = buildVariantOptionGroups(
       [
@@ -185,16 +190,14 @@ describe('buildVariantOptionGroups', () => {
       {}
     );
 
-    expect(
-      groups.find((group) => group.key === 'storage_capacity')?.values
-    ).toEqual([
+    expect(groups.find((group) => group.key === 'storage')?.values).toEqual([
       { available: true, label: '128GB', selected: false, value: '128GB' },
       { available: true, label: '512GB', selected: false, value: '512GB' },
       { available: true, label: '1TB', selected: false, value: '1TB' },
     ]);
   });
 
-  it('builds groups from nested objects and boolean attribute values', () => {
+  it('does not expose nested specification objects as purchase choices', () => {
     const groups = buildVariantOptionGroups(
       [
         variant('variant-1', {
@@ -207,23 +210,11 @@ describe('buildVariantOptionGroups', () => {
       {}
     );
 
-    expect(groups.find((group) => group.key === 'specs.esim')?.values).toEqual([
-      { available: true, label: 'true', selected: false, value: 'true' },
-      { available: true, label: 'false', selected: false, value: 'false' },
-    ]);
-    expect(
-      groups.find((group) => group.key === 'specs.storage')?.values
-    ).toEqual([
-      { available: true, label: '512GB', selected: false, value: '512GB' },
-      { available: true, label: '1TB', selected: false, value: '1TB' },
-    ]);
+    expect(groups).toEqual([]);
   });
 
-  it('prefills single available option groups', () => {
-    expect(completeSingleValueSelection(variants, {})).toEqual({
-      condition: 'new',
-      ram: '12GB',
-    });
+  it('does not prefill fixed specifications as selections', () => {
+    expect(completeSingleValueSelection(variants, {})).toEqual({});
   });
 });
 

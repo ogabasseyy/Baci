@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Modal } from 'react-native';
 import Colors from '@/constants/Colors';
 import type { CartPriceChange } from '@/services/cart-reprice';
 import PriceChangeModal from './PriceChangeModal';
@@ -83,5 +84,26 @@ describe('PriceChangeModal', () => {
     fireEvent.press(screen.getByLabelText('Continue with updated prices'));
 
     expect(onClose).toHaveBeenCalledTimes(3);
+  });
+
+  it('reports native dismissal through onDismissed', () => {
+    // Regression: the host must keep the cart ad suppressed until the fade
+    // dismissal actually completes, not just until the close handler runs.
+    const onDismissed = jest.fn();
+    const { UNSAFE_getByType } = render(
+      <PriceChangeModal
+        visible
+        changes={priceChanges}
+        onClose={jest.fn()}
+        onDismissed={onDismissed}
+        colors={Colors.light}
+      />
+    );
+
+    act(() => {
+      UNSAFE_getByType(Modal).props.onDismiss();
+    });
+
+    expect(onDismissed).toHaveBeenCalledTimes(1);
   });
 });

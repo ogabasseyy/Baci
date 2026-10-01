@@ -124,7 +124,7 @@ jest.mock('../lib/validation', () => ({
   },
 }));
 
-const mockClearCart = jest.fn();
+const mockClearCart = jest.fn(async () => undefined);
 jest.mock('./cart-store', () => ({
   useCartStore: {
     getState: jest.fn(() => ({ items: [], clearCart: mockClearCart })),
@@ -1381,7 +1381,45 @@ describe('useAuthStore', () => {
       });
 
       expect(supabase.auth.signOut).toHaveBeenCalled();
+    });
+
+    it('does not finish signOut until cart clear persistence resolves', async () => {
+      let resolveClear!: () => void;
+      mockClearCart.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveClear = () => resolve(undefined);
+          })
+      );
+
+      let signOutFinished = false;
+      const signOutPromise = useAuthStore
+        .getState()
+        .signOut()
+        .then(() => {
+          signOutFinished = true;
+        });
+
+      await _flushPromises();
+      expect(signOutFinished).toBe(false);
+      expect(mockClearCart).toHaveBeenCalled();
+
+      resolveClear();
+      await signOutPromise;
+      expect(signOutFinished).toBe(true);
       expect(useAuthStore.getState().user).toBeNull();
+    });
+
+    it('still signs out when cart clear persistence rejects', async () => {
+      mockClearCart.mockRejectedValueOnce(new Error('persist failed'));
+
+      await act(async () => {
+        await useAuthStore.getState().signOut();
+        await _flushPromises();
+      });
+
+      expect(useAuthStore.getState().user).toBeNull();
+      expect(mockClearCart).toHaveBeenCalled();
     });
   });
 

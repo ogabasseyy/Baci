@@ -173,6 +173,27 @@ describe('GET /api/analytics/insights', () => {
     expect(generateObjectWithChain).not.toHaveBeenCalled();
   });
 
+  it('resolves the selected merchant from the request header', async () => {
+    vi.mocked(generateObjectWithChain).mockResolvedValue({
+      object: { insights: [] },
+      providerName: 'test-provider',
+    } as Awaited<ReturnType<typeof generateObjectWithChain>>);
+
+    const requestedMerchantId = '123e4567-e89b-42d3-a456-426614174000';
+    const response = await GET(
+      new Request('https://usebaci.com/api/analytics/insights', {
+        headers: { 'x-baci-merchant-id': requestedMerchantId },
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(getMerchantForApiRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      'user-1',
+      { requestedMerchantId }
+    );
+  });
+
   it('returns 403 when analytics view permission is denied', async () => {
     vi.mocked(hasPermission).mockReturnValueOnce(false);
 

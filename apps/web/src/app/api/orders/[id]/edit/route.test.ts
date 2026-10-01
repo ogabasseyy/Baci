@@ -13,71 +13,12 @@ vi.mock('@/lib/csrf', () => ({
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { PATCH } from './route';
-
-const validPayload = {
-  branch_id: null,
-  customer: {
-    email: 'ada@example.com',
-    id: '22222222-2222-4222-8222-222222222222',
-    name: 'Ada Buyer',
-    phone: '+2348012345678',
-  },
-  discount_amount: 0,
-  gift_wrapping_fee: 0,
-  items: [
-    {
-      condition: 'new',
-      image_url: 'https://cdn.example.test/s26.jpg',
-      item_description: null,
-      name: 'Samsung Galaxy S26',
-      price: 1000000,
-      product_id: '33333333-3333-4333-8333-333333333333',
-      product_match_status: 'linked',
-      quantity: 1,
-      variant_id: null,
-      variant_attributes: { color: 'Black', storage: '512GB' },
-      variant_name: null,
-    },
-  ],
-  notes: null,
-  notify_customer: false,
-  shipping_address: {
-    address: '12 Allen Avenue',
-    city: 'Ikeja',
-    name: 'Ada Buyer',
-    phone: '+2348012345678',
-    state: 'Lagos',
-  },
-  shipping_fee: 2500,
-  source: 'physical',
-  tax_amount: 0,
-};
-
-const editResult = {
-  change_category: 'financial',
-  changed_fields: ['items', 'total'],
-  customer_email: 'ada@example.com',
-  merchant_id: 'merchant-1',
-  notify_customer: false,
-  order_id: '11111111-1111-4111-8111-111111111111',
-};
-
-const updatedOrder = {
-  id: '11111111-1111-4111-8111-111111111111',
-  merchant_id: 'merchant-1',
-  order_number: 'ORD-001',
-  order_items: [
-    {
-      id: 'item-1',
-      image_url: 'https://cdn.example.test/s26.jpg',
-      name: 'Samsung Galaxy S26',
-      price: 1000000,
-      quantity: 1,
-      variant_attributes: { color: 'Black', storage: '512GB' },
-    },
-  ],
-  total: 1002500,
-};
+import {
+  createEditRouteSupabaseMock,
+  editResult,
+  updatedOrder,
+  validPayload,
+} from './route.test-support';
 
 function createMockUser(): User {
   return {
@@ -101,39 +42,6 @@ function createThrowingJsonRequest(): NextRequest {
     headers: new Headers(),
     json: vi.fn().mockRejectedValue(new Error('bad json')),
   } as unknown as NextRequest;
-}
-
-function createSupabaseMock({
-  refreshError = null,
-  rpcError = null,
-}: {
-  refreshError?: { code?: string; message?: string } | null;
-  rpcError?: { code?: string; message?: string } | null;
-} = {}) {
-  const single = vi.fn().mockResolvedValue({
-    data: refreshError ? null : updatedOrder,
-    error: refreshError,
-  });
-  const eq = vi.fn(() => selectBuilder);
-  const selectBuilder = {
-    eq,
-    single,
-  };
-  const select = vi.fn(() => selectBuilder);
-  const from = vi.fn(() => ({
-    select,
-  }));
-  const rpc = vi.fn().mockResolvedValue({
-    data: rpcError ? null : editResult,
-    error: rpcError,
-  });
-
-  return {
-    from,
-    rpc,
-    select,
-    supabase: { from, rpc } as unknown as SupabaseClient,
-  };
 }
 
 function callPatch(request: NextRequest) {
@@ -177,7 +85,7 @@ describe('PATCH /api/orders/[id]/edit', () => {
   });
 
   it('returns 403 when CSRF validation fails', async () => {
-    const { supabase } = createSupabaseMock();
+    const { supabase } = createEditRouteSupabaseMock();
     mockAuthenticated(supabase);
     vi.mocked(checkCsrfProtection).mockResolvedValue({
       valid: false,
@@ -192,7 +100,7 @@ describe('PATCH /api/orders/[id]/edit', () => {
   });
 
   it('returns 400 for invalid JSON', async () => {
-    const { supabase } = createSupabaseMock();
+    const { supabase } = createEditRouteSupabaseMock();
     mockAuthenticated(supabase);
     const response = await callPatch(createThrowingJsonRequest());
 
@@ -200,7 +108,7 @@ describe('PATCH /api/orders/[id]/edit', () => {
   });
 
   it('returns 400 for invalid schema payloads', async () => {
-    const { supabase } = createSupabaseMock();
+    const { supabase } = createEditRouteSupabaseMock();
     mockAuthenticated(supabase);
     const response = await callPatch(
       createRequest({ ...validPayload, customer: { name: '' } })
@@ -212,16 +120,19 @@ describe('PATCH /api/orders/[id]/edit', () => {
   });
 
   it('calls the checked RPC and returns the refreshed mobile order', async () => {
-    const { rpc, select, supabase } = createSupabaseMock();
+    const { rpc, select, supabase } = createEditRouteSupabaseMock();
     mockAuthenticated(supabase);
     const response = await callPatch(createRequest(validPayload));
     const payload = await response.json();
 
     expect(response.status).toBe(200);
-    expect(rpc).toHaveBeenCalledWith('update_admin_order', {
-      p_order_id: '11111111-1111-4111-8111-111111111111',
-      p_payload: validPayload,
-    });
+    expect(rpc).toHaveBeenCalledWith(
+      'update_admin_order_with_transaction_discount_metadata',
+      {
+        p_order_id: '11111111-1111-4111-8111-111111111111',
+        p_payload: validPayload,
+      }
+    );
     expect(select).toHaveBeenCalledWith(
       expect.stringContaining('order_items(')
     );
@@ -263,12 +174,30 @@ describe('PATCH /api/orders/[id]/edit', () => {
         error: 'Add only one new item per edit.',
       },
     ],
+    [
+      'active_shipping_charge_quote_input_edit_blocked',
+      409,
+      {
+        code: 'active_shipping_charge_quote_input_edit_blocked',
+        error:
+          'Shipping quote inputs cannot change while a wallet shipping charge is active.',
+      },
+    ],
+    [
+      'active_shipping_charge_address_edit_blocked',
+      409,
+      {
+        code: 'active_shipping_charge_address_edit_blocked',
+        error:
+          'Shipping address cannot change while a wallet shipping charge is active.',
+      },
+    ],
     ['order_total_negative', 400, undefined],
     ['order_notify_customer_invalid', 400, undefined],
     ['order_item_product_forbidden', 403, undefined],
     ['order_item_variant_forbidden', 403, undefined],
   ] as const)('maps RPC error %s to %i', async (message, status, body) => {
-    const { supabase } = createSupabaseMock({
+    const { supabase } = createEditRouteSupabaseMock({
       rpcError: { message },
     });
     mockAuthenticated(supabase);
@@ -282,7 +211,7 @@ describe('PATCH /api/orders/[id]/edit', () => {
   });
 
   it('returns degraded success when the updated order cannot be refreshed', async () => {
-    const { supabase } = createSupabaseMock({
+    const { supabase } = createEditRouteSupabaseMock({
       refreshError: { message: 'refresh failed' },
     });
     mockAuthenticated(supabase);

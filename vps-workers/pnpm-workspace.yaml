@@ -1,12 +1,12 @@
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   # Security hotfixes for Dependabot alerts opened 2026-06-18.
-  - undici@7.28.0
+  - undici@7.29.0
 
 packages:
   - "."
 
 overrides:
   ws: "8.21.0"
-  # Pin to patched 7.x to mitigate GHSA-vmh5-mc38-953g and GHSA-pr7r-676h-xcf6 without a cross-major Undici 8 upgrade.
-  undici: "7.28.0"
+  # Pin to patched 7.x without forcing a cross-major Undici 8 upgrade.
+  undici: "7.29.0"

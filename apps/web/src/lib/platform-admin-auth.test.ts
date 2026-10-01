@@ -11,60 +11,58 @@ vi.mock('next/navigation', () => ({
   unstable_rethrow: (error: unknown) => mockUnstableRethrow(error),
 }));
 
-import { getPlatformAdminAuth } from './platform-admin-auth';
+import {
+  getPlatformAdminAuth,
+  getPlatformAdminAuthForPermission,
+  getPlatformAdminContextAuth,
+} from './platform-admin-auth';
 
 interface MockUser {
   email?: string | null;
   id: string;
 }
 
-interface MerchantResult {
-  data: { is_platform_admin: boolean } | null;
-  error: { message: string } | null;
-}
-
 function createSupabaseMock({
-  merchantResult,
+  contextResult = { data: [], error: null },
   user,
   userError = null,
 }: {
-  merchantResult?: MerchantResult;
+  contextResult?: {
+    data: unknown;
+    error: { code?: string; message: string } | null;
+  };
   user: MockUser | null;
   userError?: { message: string } | null;
 }) {
-  const maybeSingle = vi.fn().mockResolvedValue(
-    merchantResult ?? {
-      data: { is_platform_admin: true },
-      error: null,
-    }
-  );
-  const eq = vi.fn(() => ({ maybeSingle }));
-  const select = vi.fn(() => ({ eq }));
-  const from = vi.fn(() => ({ select }));
   const getUser = vi.fn().mockResolvedValue({
     data: { user },
     error: userError,
   });
+  const rpc = vi.fn().mockResolvedValue(contextResult);
 
   return {
-    from,
     getUser,
-    maybeSingle,
-    select,
+    rpc,
     supabase: {
       auth: { getUser },
-      from,
+      rpc,
     },
   };
 }
 
-describe('getPlatformAdminAuth', () => {
+describe('platform admin authorization', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('checks the authenticated user before querying admin privileges', async () => {
+  it('checks the authenticated user before resolving platform permissions', async () => {
     const supabaseMock = createSupabaseMock({
+      contextResult: {
+        data: [
+          { role: 'owner', permissions: ['platform.read', 'settings.manage'] },
+        ],
+        error: null,
+      },
       user: { email: 'admin@example.com', id: 'user-1' },
     });
     mockCreateClient.mockResolvedValue(supabaseMock.supabase);
@@ -76,62 +74,153 @@ describe('getPlatformAdminAuth', () => {
       user: { email: 'admin@example.com', id: 'user-1' },
     });
     expect(supabaseMock.getUser).toHaveBeenCalledOnce();
-    expect(mockCreateClient).toHaveBeenCalledWith();
-    expect(supabaseMock.from).toHaveBeenCalledWith('merchants');
-    expect(supabaseMock.select).toHaveBeenCalledWith('is_platform_admin');
+    expect(supabaseMock.rpc).toHaveBeenCalledWith(
+      'get_platform_admin_context_v1'
+    );
   });
 
-  it('does not query merchants when there is no authenticated user', async () => {
+  it('does not call the context RPC when there is no authenticated user', async () => {
     const supabaseMock = createSupabaseMock({ user: null });
     mockCreateClient.mockResolvedValue(supabaseMock.supabase);
 
-    const result = await getPlatformAdminAuth();
-
-    expect(result).toEqual({ status: 'unauthenticated' });
-    expect(supabaseMock.from).not.toHaveBeenCalled();
+    await expect(getPlatformAdminAuth()).resolves.toEqual({
+      status: 'unauthenticated',
+    });
+    expect(supabaseMock.rpc).not.toHaveBeenCalled();
   });
 
-  it('fails closed when the authenticated user is not a platform admin', async () => {
+  it('accepts the live owner context for an account that owns multiple merchants', async () => {
     const supabaseMock = createSupabaseMock({
-      merchantResult: {
-        data: { is_platform_admin: false },
+      contextResult: {
+        data: [
+          {
+            role: 'owner',
+            permissions: ['platform.read', 'financials.manage'],
+          },
+        ],
         error: null,
       },
-      user: { email: 'merchant@example.com', id: 'user-2' },
+      user: { email: 'owner@example.com', id: 'owner-of-many-merchants' },
     });
     mockCreateClient.mockResolvedValue(supabaseMock.supabase);
 
-    const result = await getPlatformAdminAuth();
-
-    expect(result).toEqual({ status: 'forbidden' });
+    await expect(
+      getPlatformAdminAuthForPermission('financials.manage')
+    ).resolves.toMatchObject({
+      context: { role: 'owner' },
+      status: 'authenticated',
+    });
   });
 
-  it('fails closed when admin privilege lookup errors', async () => {
+  it('denies an ordinary merchant that has no platform context', async () => {
     const supabaseMock = createSupabaseMock({
-      merchantResult: {
+      user: { email: 'merchant@example.com', id: 'merchant-user' },
+    });
+    mockCreateClient.mockResolvedValue(supabaseMock.supabase);
+
+    await expect(getPlatformAdminAuth()).resolves.toEqual({
+      status: 'forbidden',
+    });
+  });
+
+  it('denies a revoked platform membership when the live context is empty', async () => {
+    const supabaseMock = createSupabaseMock({
+      user: { email: 'revoked@example.com', id: 'revoked-user' },
+    });
+    mockCreateClient.mockResolvedValue(supabaseMock.supabase);
+
+    await expect(getPlatformAdminContextAuth()).resolves.toEqual({
+      status: 'forbidden',
+    });
+  });
+
+  it('keeps a legacy platform owner authenticated through the compatibility guard', async () => {
+    const supabaseMock = createSupabaseMock({
+      contextResult: {
+        data: [
+          {
+            role: 'owner',
+            permissions: ['platform.read', 'analytics.read'],
+          },
+        ],
+        error: null,
+      },
+      user: { email: 'legacy@example.com', id: 'legacy-owner' },
+    });
+    mockCreateClient.mockResolvedValue(supabaseMock.supabase);
+
+    await expect(getPlatformAdminAuth()).resolves.toEqual({
+      status: 'authenticated',
+      user: { email: 'legacy@example.com', id: 'legacy-owner' },
+    });
+  });
+
+  it('fails closed when a role lacks the named permission', async () => {
+    const supabaseMock = createSupabaseMock({
+      contextResult: {
+        data: [{ role: 'viewer', permissions: ['platform.read'] }],
+        error: null,
+      },
+      user: { email: 'viewer@example.com', id: 'viewer-user' },
+    });
+    mockCreateClient.mockResolvedValue(supabaseMock.supabase);
+
+    await expect(
+      getPlatformAdminAuthForPermission('financials.manage')
+    ).resolves.toEqual({ status: 'forbidden' });
+  });
+
+  it('preserves unauthenticated results for named permission guards', async () => {
+    const supabaseMock = createSupabaseMock({ user: null });
+    mockCreateClient.mockResolvedValue(supabaseMock.supabase);
+
+    await expect(
+      getPlatformAdminAuthForPermission('roles.manage')
+    ).resolves.toEqual({ status: 'unauthenticated' });
+    expect(supabaseMock.rpc).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the RPC errors or returns an invalid DTO', async () => {
+    const rpcErrorMock = createSupabaseMock({
+      contextResult: {
         data: null,
-        error: { message: 'permission denied' },
+        error: { code: '42501', message: 'permission denied' },
       },
       user: { email: 'admin@example.com', id: 'user-1' },
     });
-    mockCreateClient.mockResolvedValue(supabaseMock.supabase);
+    mockCreateClient.mockResolvedValueOnce(rpcErrorMock.supabase);
 
-    const result = await getPlatformAdminAuth();
+    await expect(getPlatformAdminAuth()).resolves.toEqual({
+      status: 'forbidden',
+    });
 
-    expect(result).toEqual({ status: 'forbidden' });
+    const invalidDtoMock = createSupabaseMock({
+      contextResult: {
+        data: [{ role: 'owner', permissions: ['not-a-permission'] }],
+        error: null,
+      },
+      user: { email: 'admin@example.com', id: 'user-1' },
+    });
+    mockCreateClient.mockResolvedValueOnce(invalidDtoMock.supabase);
+
+    await expect(getPlatformAdminAuth()).resolves.toEqual({
+      status: 'forbidden',
+    });
   });
 
-  it('fails closed for ordinary unexpected auth helper errors', async () => {
+  it('fails closed for unexpected auth helper errors while preserving Next bailouts', async () => {
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
     const authError = new Error('Supabase auth unavailable');
     mockCreateClient.mockRejectedValueOnce(authError);
 
-    const result = await getPlatformAdminAuth();
-
-    expect(result).toEqual({ status: 'unauthenticated' });
+    await expect(getPlatformAdminAuth()).resolves.toEqual({
+      status: 'unauthenticated',
+    });
     expect(mockUnstableRethrow).toHaveBeenCalledWith(authError);
-  });
+    expect(errorLog).toHaveBeenCalledWith(
+      '[platform-admin-auth] authorization lookup failed'
+    );
 
-  it('rethrows Next.js dynamic bailout errors from the auth helper', async () => {
     const dynamicBailoutError = new Error('DynamicServerError');
     mockCreateClient.mockRejectedValueOnce(dynamicBailoutError);
     mockUnstableRethrow.mockImplementationOnce((error) => {
@@ -139,6 +228,6 @@ describe('getPlatformAdminAuth', () => {
     });
 
     await expect(getPlatformAdminAuth()).rejects.toBe(dynamicBailoutError);
-    expect(mockUnstableRethrow).toHaveBeenCalledWith(dynamicBailoutError);
+    errorLog.mockRestore();
   });
 });

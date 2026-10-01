@@ -1,5 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AdSlot } from '@/components/ads/AdSlot';
 import { BRAND } from '@/constants/Colors';
 
 interface OrdersListEmptyStateColors {
@@ -42,6 +43,7 @@ export function OrdersListEmptyState({
         >
           <Text style={styles.actionButtonText}>Clear Search</Text>
         </TouchableOpacity>
+        <AdSlot placement="FOOTER_ANCHOR" />
       </View>
     );
   }
@@ -63,6 +65,7 @@ export function OrdersListEmptyState({
       >
         <Text style={styles.actionButtonText}>Start Shopping</Text>
       </TouchableOpacity>
+      <AdSlot placement="FOOTER_ANCHOR" />
     </View>
   );
 }

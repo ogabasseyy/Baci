@@ -6,6 +6,7 @@ import type Colors from '@/constants/Colors';
 import { BRAND } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
+import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
 
 type WalletColors = (typeof Colors)['light'];
@@ -103,9 +104,14 @@ export function WalletSavingsProgressModal({
           {goal.product_image ? (
             <Image
               accessibilityLabel={goal.title}
-              source={{ uri: goal.product_image }}
+              source={createSafeBoundedImageSource({
+                height: 170,
+                uri: goal.product_image,
+                width: 100,
+              })}
               style={styles.deviceImage}
               contentFit="contain"
+              autoplay={false}
             />
           ) : (
             <View style={styles.devicePlaceholder}>

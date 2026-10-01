@@ -6,6 +6,17 @@ export type GroupedExpenseListItem =
       key: string;
       monthKey: string;
       title: string;
+      total: number;
+      count: number;
+    }
+  | {
+      type: 'group-header';
+      key: string;
+      monthKey: string;
+      groupKey: string;
+      title: string;
+      total: number;
+      count: number;
     }
   | {
       type: 'item';
@@ -148,6 +159,11 @@ export function groupExpensesByMonth(
       key: `expenses-header-${monthKey}`,
       monthKey,
       title: getMonthGroupTitle(monthKey, currentMonthKey),
+      total: (groups.get(monthKey) ?? []).reduce(
+        (sum, expense) => sum + expense.amount,
+        0
+      ),
+      count: groups.get(monthKey)?.length ?? 0,
     });
 
     const groupExpenses = [...(groups.get(monthKey) ?? [])]

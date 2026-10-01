@@ -53,6 +53,9 @@ vi.mock('@/lib/slug-alias-cache', () => ({
 vi.mock('@/env', () => ({
   getSupabaseUrl: () => 'https://example.supabase.co',
   getSupabaseAnonKey: () => 'anon-key',
+}));
+
+vi.mock('@/lib/internal-api-secret', () => ({
   getInternalApiSecret: () => 'test-internal-secret',
 }));
 
@@ -829,11 +832,17 @@ describe('Middleware Proxy', () => {
       const req = new NextRequest(`https://${ROOT_DOMAIN}/api/products`);
       req.headers.set('host', ROOT_DOMAIN);
       req.headers.set('user-agent', 'Reserved Relay Test Agent');
+      req.headers.set('authorization', 'Bearer fixture');
 
       const res = await proxyWithReservedRelayPath(req);
 
       expect(res.status).toBe(200);
-      expect(res.headers.get('x-middleware-request-user-agent')).toBeNull();
+      expect(res.headers.get('x-middleware-request-user-agent')).toBe(
+        'Reserved Relay Test Agent'
+      );
+      expect(res.headers.get('x-middleware-request-authorization')).toBe(
+        'Bearer fixture'
+      );
     } finally {
       if (originalRelayPath === undefined) {
         delete process.env.NEXT_PUBLIC_POSTHOG_PROXY_PATH;
@@ -2993,7 +3002,7 @@ describe('Middleware Proxy', () => {
     'https://ogabassey.com/new-category/new-product',
     `https://ogabassey.${ROOT_DOMAIN}/smartphones/samsung-galaxy-z-fold-4`,
     `https://${ROOT_DOMAIN}/ogabassey/smartphones/samsung-galaxy-z-fold-4`,
-  ])('CDN-caches the canonical public PDP shell for %s', async (url) => {
+  ])('retains five-minute downstream PDP freshness until purge qualification for %s', async (url) => {
     const req = new NextRequest(url);
     req.headers.set('host', new URL(url).host);
 

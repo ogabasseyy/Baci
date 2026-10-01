@@ -162,5 +162,15 @@ describe('notifyStorefrontUpdateAvailable', () => {
       expect.any(Object),
       expect.objectContaining({ appType: 'admin', tokenCount: 1 })
     );
+    const sentMessages = mocks.sendPushNotifications.mock.calls[0]?.[0] as {
+      data: Record<string, unknown>;
+    }[];
+    const recordedAttempt = mocks.recordPushAttempt.mock.calls.at(-1)?.[1] as {
+      payload: Record<string, unknown>;
+    };
+    expect(sentMessages[0]?.data.notification_id).toEqual(expect.any(String));
+    expect(recordedAttempt.payload.notification_id).toBe(
+      sentMessages[0]?.data.notification_id
+    );
   });
 });

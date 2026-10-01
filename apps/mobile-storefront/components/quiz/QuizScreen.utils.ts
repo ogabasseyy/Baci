@@ -1,4 +1,5 @@
 import type { QuizEvent } from '@/services/quiz';
+import { QuizServiceError } from '@/services/quiz-types';
 
 export type QuizScreenStatus =
   | 'idle'
@@ -71,6 +72,14 @@ export function getQuizErrorMessage(
   error: unknown,
   fallbackMessage: string
 ): string {
+  if (error instanceof QuizServiceError) {
+    if (error.code === 'QUIZ_ROUTE_PROOF_REQUIRED') {
+      return 'We could not verify this quiz session. Please try again.';
+    }
+    if (error.code === 'QUIZ_TEST_ACCESS_REQUIRED') {
+      return 'This test quiz is only available to approved testers.';
+    }
+  }
   return error instanceof Error ? error.message : fallbackMessage;
 }
 
@@ -136,5 +145,39 @@ export function formatRemainingTime(totalSeconds: number): string {
 }
 
 export function shouldShowEventList(status: QuizScreenStatus): boolean {
-  return status === 'ready' || status === 'starting' || status === 'result';
+  return status === 'ready' || status === 'starting';
+}
+
+export function isQuizRecoveryCurrent(
+  state: { selectedEventId: string | null; status: string },
+  eventId?: string
+): boolean {
+  if (eventId) {
+    if (state.status === 'ready') return true;
+    return (
+      state.selectedEventId === eventId &&
+      ['question', 'submitting', 'result'].includes(state.status)
+    );
+  }
+  return state.status === 'ready';
+}
+
+export function canPlayAnotherQuizAttempt(
+  event: QuizEvent | undefined,
+  serverNow?: string | null
+): boolean {
+  if (
+    !event ||
+    (event.maxAttempts ?? 1) <= 1 ||
+    !['open', 'active'].includes(event.status)
+  ) {
+    return false;
+  }
+  if (!event.endsAt) return true;
+  const endsAt = Date.parse(event.endsAt);
+  if (Number.isNaN(endsAt)) return false;
+  const authoritativeNow = serverNow ?? event.serverNow;
+  if (!authoritativeNow) return true;
+  const now = Date.parse(authoritativeNow);
+  return !Number.isNaN(now) && endsAt > now;
 }

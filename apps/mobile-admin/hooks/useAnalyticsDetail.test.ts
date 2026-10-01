@@ -146,6 +146,13 @@ describe('useAnalyticsDetail', () => {
     ).toEqual([]);
   });
 
+  it('does not fetch order items for metrics without profit context', async () => {
+    renderHook(() => useAnalyticsDetail({ ...options, metric: 'sales' }));
+    await Promise.all(mocks.queryPromises);
+
+    expect(mocks.chains.map((chain) => chain.table)).toEqual(['orders']);
+  });
+
   it('selects order item and variant costs without dropping unlinked items', async () => {
     renderHook(() => useAnalyticsDetail(options));
     await Promise.all(mocks.queryPromises);
@@ -157,6 +164,9 @@ describe('useAnalyticsDetail', () => {
     expect(orderItemsSelect).toEqual(expect.stringContaining('cost_price'));
     expect(orderItemsSelect).toEqual(
       expect.stringContaining('product_variants(cost_price)')
+    );
+    expect(orderItemsSelect).toEqual(
+      expect.stringContaining('order_item_unit_costs(cost_price, unit_index)')
     );
     expect(orderItemsSelect).toEqual(
       expect.stringContaining('products(cost_price)')

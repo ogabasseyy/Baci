@@ -1,5 +1,27 @@
 import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  giglBookingEconomicsProjection,
+  giglQuoteEconomicsFields,
+  prepaidGiglCustomerCheckoutOrderFields,
+} from './route.test-fixtures';
+
+function createSettledRetentionEqChain(
+  retainedAmount = giglBookingEconomicsProjection.shipping_platform_retained_amount
+) {
+  const eqSourceId = vi.fn().mockResolvedValue({
+    data: [
+      {
+        metadata: { retained_shipping_amount: retainedAmount },
+        status: 'completed',
+      },
+    ],
+    error: null,
+  });
+  const eqSourceType = vi.fn(() => ({ eq: eqSourceId }));
+  const eqMerchant = vi.fn(() => ({ eq: eqSourceType }));
+  return { eq: eqMerchant };
+}
 
 const mockCheckCsrfProtection = vi.fn();
 const mockCookies = vi.fn();
@@ -33,17 +55,30 @@ vi.mock('@/lib/api-auth', () => ({
 vi.mock('@/lib/shipping', () => ({
   shippingService: {
     bookShipment: mockBookShipment,
+    getProviderQuotes: vi.fn(),
   },
 }));
 
-function buildSupabaseMock(quoteOverrides: Record<string, unknown> = {}) {
+function buildSupabaseMock(
+  options: {
+    selectedQuoteId?: string | null;
+    provider?: 'GIGL' | 'TOPSHIP';
+    bookingMetadata?: unknown;
+  } = {}
+) {
+  const selectedQuoteId =
+    options.selectedQuoteId === undefined
+      ? '22222222-2222-4222-8222-222222222222'
+      : options.selectedQuoteId;
+  const provider = options.provider ?? 'GIGL';
   const ordersSelectChain = {
     eq: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue({
       data: {
         id: '11111111-1111-4111-8111-111111111111',
         merchant_id: 'merchant-1',
-        selected_quote_id: '22222222-2222-4222-8222-222222222222',
+        selected_quote_id: selectedQuoteId,
+        ...prepaidGiglCustomerCheckoutOrderFields,
         shipping_status: 'pending',
         shipping_address: {
           address: '123 Queen Street West',
@@ -75,7 +110,7 @@ function buildSupabaseMock(quoteOverrides: Record<string, unknown> = {}) {
     single: vi.fn().mockResolvedValue({
       data: {
         id: '22222222-2222-4222-8222-222222222222',
-        provider: 'GIGL',
+        provider,
         provider_rate_id: 'gigl:service-centre:5',
         provider_metadata: { stationId: 5 },
         quote_request: null,
@@ -83,7 +118,7 @@ function buildSupabaseMock(quoteOverrides: Record<string, unknown> = {}) {
         price: 4500,
         currency: 'NGN',
         estimated_days: 2,
-        ...quoteOverrides,
+        ...(provider === 'GIGL' ? giglQuoteEconomicsFields : {}),
       },
       error: null,
     }),
@@ -96,17 +131,56 @@ function buildSupabaseMock(quoteOverrides: Record<string, unknown> = {}) {
   const shipmentInsertChain = {
     select: vi.fn().mockReturnValue(shipmentInsertSelectChain),
   };
-  const updateChain = {
+  const shipmentLookupChain = {
     eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
   };
-  updateChain.eq.mockReturnValue(updateChain);
   const shippingQuoteUpdateChain = {
     error: null,
     eq: vi.fn(),
   };
   shippingQuoteUpdateChain.eq.mockReturnValue(shippingQuoteUpdateChain);
+  const merchantSelectChain = {
+    eq: vi.fn().mockReturnThis(),
+    single: vi.fn().mockResolvedValue({
+      data: {
+        business_name: 'Registered Merchant Store',
+        business_address: '9 Registered Road, Ikeja, Lagos',
+        phone: '+2348012345678',
+        registered_address: {
+          city: 'Ikeja',
+          postal_code: '100001',
+          state: 'Lagos',
+          street: '9 Registered Road',
+        },
+        state_code: 'LA',
+      },
+      error: null,
+    }),
+  };
 
   return {
+    rpc: vi.fn((functionName: string) =>
+      functionName === 'get_shipping_quote_booking_metadata'
+        ? Promise.resolve({
+            data: options.bookingMetadata ?? null,
+            error: null,
+          })
+        : functionName === 'get_shipping_quote_booking_economics'
+          ? Promise.resolve({
+              data: giglBookingEconomicsProjection,
+              error: null,
+            })
+          : Promise.resolve({
+              data: [
+                { claimed: true, shipment_id: null, tracking_number: null },
+              ],
+              error: null,
+            })
+    ),
     auth: {
       getUser: vi.fn().mockResolvedValue({
         data: { user: { id: 'user-1' } },
@@ -119,6 +193,12 @@ function buildSupabaseMock(quoteOverrides: Record<string, unknown> = {}) {
           select: vi.fn(() => ordersSelectChain),
           update: vi.fn(() => ({
             eq: vi.fn().mockReturnThis(),
+            select: vi.fn(() => ({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: { id: 'order-1' },
+                error: null,
+              }),
+            })),
           })),
         };
       }
@@ -131,6 +211,7 @@ function buildSupabaseMock(quoteOverrides: Record<string, unknown> = {}) {
             return quotesSelectChain;
           }),
           update: vi.fn(() => shippingQuoteUpdateChain),
+          upsert: vi.fn().mockResolvedValue({ error: null }),
         };
       }
 
@@ -140,9 +221,32 @@ function buildSupabaseMock(quoteOverrides: Record<string, unknown> = {}) {
             shipmentInsertPayloads.push(payload);
             return shipmentInsertChain;
           }),
+          select: vi.fn(() => shipmentLookupChain),
         };
       }
 
+      if (table === 'merchants') {
+        return {
+          select: vi.fn(() => merchantSelectChain),
+        };
+      }
+
+      if (table === 'merchant_settlements') {
+        return {
+          select: vi.fn(() => createSettledRetentionEqChain()),
+        };
+      }
+
+      if (table === 'order_items') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn().mockResolvedValue({
+              data: [{ name: 'Phone', quantity: 1, price: 500000 }],
+              error: null,
+            }),
+          })),
+        };
+      }
       throw new Error(`Unexpected table: ${table}`);
     }),
   };
@@ -223,6 +327,51 @@ describe('POST /api/shipping/book', () => {
         station_name: 'Lekki Service Centre',
         station_address: '1 Admiralty Way, Lekki',
       })
+    );
+  });
+
+  it('passes sanitized Topship metadata when booking a submitted quote before order selection', async () => {
+    const supabase = buildSupabaseMock({
+      selectedQuoteId: null,
+      provider: 'TOPSHIP',
+      bookingMetadata: {
+        pricingTier: 'Premium',
+        serviceType: 'Express',
+        cost: 12500,
+      },
+    });
+    mockCreateClient.mockReturnValue(supabase);
+    mockBookShipment.mockResolvedValueOnce({
+      provider: 'TOPSHIP',
+      providerShipmentId: 'TOPSHIP-123',
+      trackingNumber: 'TOPSHIP-123',
+      carrierName: 'Topship',
+      status: 'booked',
+      rawResponse: { id: 'TOPSHIP-123' },
+    });
+
+    const { POST } = await import('./route');
+    const response = await POST(buildBookingRequest());
+
+    expect(response.status).toBe(201);
+    expect(mockBookShipment).toHaveBeenCalledWith(
+      'TOPSHIP',
+      expect.objectContaining({
+        quoteId: '22222222-2222-4222-8222-222222222222',
+        quoteMetadata: {
+          pricingTier: 'Premium',
+          serviceType: 'Express',
+          cost: 12500,
+        },
+      })
+    );
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'get_shipping_quote_booking_metadata',
+      {
+        p_merchant_id: 'merchant-1',
+        p_order_id: '11111111-1111-4111-8111-111111111111',
+        p_quote_id: '22222222-2222-4222-8222-222222222222',
+      }
     );
   });
 

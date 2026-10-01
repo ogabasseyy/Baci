@@ -17,9 +17,13 @@ import { createOrderDetailsPaymentActions } from '@/hooks/createOrderDetailsPaym
 import { createOrderDetailsReceiptActions } from '@/hooks/createOrderDetailsReceiptActions';
 import { createOrderDetailsShipmentActions } from '@/hooks/createOrderDetailsShipmentActions';
 import { createOrderDetailsStatusActions } from '@/hooks/createOrderDetailsStatusActions';
+import { handleOrderDetailsProviderBookingError } from '@/hooks/handleOrderDetailsProviderBookingError';
 import { useOrderAuditEvents } from '@/hooks/orders/useOrderAuditEvents';
+import { useAuth } from '@/hooks/useAuth';
+import { useGiglAdminShippingEligibility } from '@/hooks/useGiglAdminShippingEligibility';
 import { useMerchant } from '@/hooks/useMerchant';
 import { useOrderDetailsBackHandler } from '@/hooks/useOrderDetailsBackHandler';
+import { useOrderDetailsGiglShipping } from '@/hooks/useOrderDetailsGiglShipping';
 import { useOrderDetailsStartupEffects } from '@/hooks/useOrderDetailsStartupEffects';
 import { useOrderDetailsUiState } from '@/hooks/useOrderDetailsUiState';
 import {
@@ -32,7 +36,6 @@ import {
 } from '@/hooks/useOrders';
 import { useTheme } from '@/hooks/useTheme';
 import {
-  canUseSelectedShippingProvider,
   formatShippingProviderName,
   getOrderFulfillmentIdentifierItems,
   orderRequiresFulfillment,
@@ -57,8 +60,10 @@ export function useOrderDetailsController() {
   const actionParam = validatedParams?.action;
 
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { data: order, error, isLoading } = useOrder(orderId ?? '');
   const { merchant, storeUrl } = useMerchant();
+  const giglEligibility = useGiglAdminShippingEligibility(merchant);
   const auditEventsQuery = useOrderAuditEvents({
     merchantId: order?.merchant_id ?? merchant?.id,
     orderId: order?.id ?? orderId,
@@ -74,7 +79,19 @@ export function useOrderDetailsController() {
   const shipOnCreditMutation = useShipOnCredit();
   const sendReminderMutation = useSendReminder();
   const recordPaymentMutation = useRecordPayment();
+  const providerLabel = formatShippingProviderName(order?.shipping_provider);
   const uiState = useOrderDetailsUiState();
+  const { effectiveProviderLabel, giglShipping, providerBookingAvailable } =
+    useOrderDetailsGiglShipping({
+      giglEligible: giglEligibility.isEligible,
+      merchant,
+      order,
+      pendingShipmentMode: uiState.pendingShipmentMode,
+      providerLabel,
+      shipmentFlowStep: uiState.shipmentFlowStep,
+      showShipmentFlow: uiState.showShipmentFlow,
+      userId: user?.id,
+    });
 
   const requiresShipmentDetails = orderRequiresFulfillment(
     order?.items,
@@ -84,11 +101,6 @@ export function useOrderDetailsController() {
     order?.items,
     merchant?.business_type
   );
-  const providerLabel = formatShippingProviderName(order?.shipping_provider);
-  const providerBookingAvailable = order
-    ? canUseSelectedShippingProvider(order)
-    : false;
-
   useOrderDetailsBackHandler({
     fulfillmentItemIndex: uiState.fulfillmentItemIndex,
     requiresShipmentDetails,
@@ -160,8 +172,9 @@ export function useOrderDetailsController() {
     merchantId: merchant?.id,
     order,
     pendingShipmentMode: uiState.pendingShipmentMode,
-    providerBookingAvailable,
-    providerLabel,
+    providerBookingAvailable:
+      providerBookingAvailable || Boolean(giglShipping?.wallet?.canBook),
+    providerLabel: effectiveProviderLabel,
     queryClient,
     requiresShipmentDetails,
     riderPhone: uiState.riderPhone,
@@ -177,6 +190,8 @@ export function useOrderDetailsController() {
     shipmentFlowStep: uiState.shipmentFlowStep,
     showShipmentFlow: uiState.showShipmentFlow,
     updateStatus: updateStatusMutation.mutateAsync,
+    onProviderBookingError: (error) =>
+      handleOrderDetailsProviderBookingError(error, giglShipping),
   });
 
   const statusActions = createOrderDetailsStatusActions({
@@ -239,6 +254,7 @@ export function useOrderDetailsController() {
     formatAddress: formatOrderAddress,
     formatDate,
     formatPrice,
+    giglShipping,
     handleCall: contactActions.handleCall,
     handleEmail: contactActions.handleEmail,
     handlePaymentAmountChange: paymentActions.handlePaymentAmountChange,
@@ -267,7 +283,7 @@ export function useOrderDetailsController() {
       shipmentActions.proceedFromFulfillmentDetails,
     proceedFromShipmentMethod: shipmentActions.proceedFromShipmentMethod,
     providerBookingAvailable,
-    providerLabel,
+    providerLabel: effectiveProviderLabel,
     recordPaymentMutation,
     requiresShipmentDetails,
     shipOnCreditMutation,

@@ -1,0 +1,16 @@
+export const BUILDER_AI_EDIT_CONTRACT_VERSION = 'builder-ai-edit-v1' as const;
+export const MAX_AI_EDIT_BODY_BYTES = 1_048_576;
+export const MAX_BUILDER_BLOCKS = 500;
+export const MAX_BUILDER_ZONE_KEYS = 100;
+export const MAX_BUILDER_ARRAY_ITEMS = 100;
+export const MAX_BUILDER_DATA_DEPTH = 12;
+export const MAX_BUILDER_STRING_BYTES = 32 * 1024;
+export const MAX_AI_CANONICAL_SCHEMA_BYTES = 65_536;
+export const MAX_AI_CANONICAL_SCHEMA_DEPTH = 12;
+export const MAX_AI_PLAN_OPERATIONS = 20;
+export const MAX_AI_PLAN_INSERTS = 5;
+export const MAX_AI_PLAN_SERIALIZED_UTF8_BYTES = 4_096;
+export const MAX_AI_PLAN_SUMMARY_OR_REFUSAL_REASON_CHARS = 240;
+export const MAX_AI_COPY_LENGTH = 2_000;
+export const MAX_AI_LABEL_LENGTH = 120;
+export const MAX_AI_URL_LENGTH = 512;

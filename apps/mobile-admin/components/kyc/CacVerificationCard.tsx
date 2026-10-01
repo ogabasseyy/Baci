@@ -6,7 +6,7 @@ import { Alert, Pressable, Text, View } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { apiClient, apiFormData } from '@/lib/api-client';
 import { tryRefreshStoreReadiness } from '@/lib/try-refresh-store-readiness';
-import { createUploadFile } from '@/types/upload';
+import { createUploadFormData } from '@/lib/upload/createUploadFormData';
 import CacResultStep from './CacResultStep';
 import CacSearchStep from './CacSearchStep';
 import CacUploadStep from './CacUploadStep';
@@ -110,24 +110,20 @@ export default function CacVerificationCard({
   });
 
   const uploadMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (!selectedCompany) {
         throw new Error('Missing selected company for upload.');
       }
       if (!selectedDocument) {
         throw new Error('Missing certificate file for upload.');
       }
-      const formData = new FormData();
       const subtype = selectedDocument.mimeType.split('/')[1] || 'jpeg';
       const ext = subtype === 'jpeg' ? 'jpg' : subtype;
-      formData.append(
-        'file',
-        createUploadFile({
-          uri: selectedDocument.uri,
-          name: selectedDocument.name || `cac-certificate.${ext}`,
-          type: selectedDocument.mimeType,
-        }) as unknown as Blob
-      );
+      const formData = await createUploadFormData({
+        uri: selectedDocument.uri,
+        name: selectedDocument.name || `cac-certificate.${ext}`,
+        type: selectedDocument.mimeType,
+      });
       formData.append('rcNumber', selectedCompany.rcNumber);
       formData.append('approvedName', selectedCompany.approvedName);
       formData.append('merchantId', merchantId ?? '');

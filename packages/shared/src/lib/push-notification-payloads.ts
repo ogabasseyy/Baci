@@ -116,6 +116,7 @@ export function getAdminNotificationNavigationTarget(
 
   switch (type) {
     case 'new_order':
+    case 'new_invoice':
     case 'payment_received':
     case 'shipment_tracking': {
       const orderId = readString(payload, 'order_id', 'orderId');

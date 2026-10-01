@@ -1,3 +1,4 @@
+import { resolveKnownOrderItemProfit } from '@baci/shared';
 import {
   type Granularity,
   getBucketIndex,
@@ -17,19 +18,6 @@ interface AggregateAnalyticsDetailArgs {
   orderItems: OrderItemWithJoins[];
   orders: AnalyticsOrder[] | null | undefined;
   timezone: string;
-}
-
-function resolveOrderItemCostPrice(item: OrderItemWithJoins) {
-  const variant = getJoinedRecord(item.product_variants);
-  const product = getJoinedRecord(item.products);
-  const orderItemCostPrice =
-    item.cost_price == null ? null : Number(item.cost_price);
-  const variantCostPrice =
-    variant?.cost_price == null ? null : Number(variant.cost_price);
-  const productCostPrice =
-    product?.cost_price == null ? null : Number(product.cost_price);
-
-  return orderItemCostPrice ?? variantCostPrice ?? productCostPrice ?? 0;
 }
 
 export function aggregateAnalyticsDetail({
@@ -79,9 +67,9 @@ export function aggregateAnalyticsDetail({
       const bucketIndex = getBucketIndex(date, granularity, timezone);
 
       if (bucketIndex >= 0 && bucketIndex < data.length) {
-        const revenue = (item.price || 0) * (item.quantity || 1);
-        const cost = resolveOrderItemCostPrice(item) * (item.quantity || 1);
-        const profit = revenue - cost;
+        const quantity = item.quantity ?? 1;
+        const revenue = (item.price || 0) * quantity;
+        const profit = resolveKnownOrderItemProfit(item, quantity);
 
         if (metric === 'profits') {
           data[bucketIndex].value += profit;

@@ -5,6 +5,7 @@ const mocks = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 
 jest.mock('@/lib/repair-catalog-client', () => ({
   fetchRepairDeviceDetail: (...args: unknown[]) => mocks(...args),
+  RepairCatalogTimeoutError: class RepairCatalogTimeoutError extends Error {},
   RepairCatalogUnavailableError: class RepairCatalogUnavailableError extends Error {},
 }));
 
@@ -75,6 +76,26 @@ describe('useRepairDeviceDetail', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     expect(result.current.error).toBe('network down');
+  });
+
+  it('maps detail timeouts to a friendly retryable error and refetches', async () => {
+    const { RepairCatalogTimeoutError } = jest.requireMock(
+      '@/lib/repair-catalog-client'
+    ) as { RepairCatalogTimeoutError: new () => Error };
+    mocks.mockRejectedValueOnce(new RepairCatalogTimeoutError());
+    mocks.mockResolvedValueOnce(detail);
+
+    const { result } = renderHook(() => useRepairDeviceDetail('d1'));
+
+    await waitFor(() =>
+      expect(result.current.error).toBe(
+        'Repair options took too long to load. Please try again.'
+      )
+    );
+
+    act(() => result.current.refetch());
+    await waitFor(() => expect(result.current.detail).toEqual(detail));
+    expect(mocks).toHaveBeenCalledTimes(2);
   });
 
   it('clears stale detail while loading a new device slug', async () => {

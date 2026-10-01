@@ -1,6 +1,7 @@
-import type {
-  MerchantAnalyticsNamedValue,
-  MerchantAnalyticsTopProduct,
+import {
+  type MerchantAnalyticsNamedValue,
+  type MerchantAnalyticsTopProduct,
+  resolveKnownOrderItemProfit,
 } from '@baci/shared';
 import { sanitizeText } from '@/lib/sanitize-core';
 
@@ -87,58 +88,6 @@ function getJoinedAnalyticsRecord<T>(value: T | T[] | null | undefined) {
   return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
 }
 
-export function resolveOrderItemAnalyticsCost(item: AnalyticsOrderItemRow) {
-  const variant = getJoinedAnalyticsRecord(item.product_variants);
-  const product = getJoinedAnalyticsRecord(item.products);
-
-  return asNumber(
-    item.cost_price ?? variant?.cost_price ?? product?.cost_price
-  );
-}
-
-/**
- * Total cost for an order line, honoring per-unit costs recorded in
- * order_item_unit_costs (supplier/IMEI cost overrides). Units with a recorded
- * per-unit cost use it; the rest fall back to the line/variant/product cost —
- * so the overview Profit/Margin cards stay consistent with the same unit costs
- * the transaction-review and supplier-analytics surfaces show.
- */
-export function resolveOrderItemAnalyticsLineCost(
-  item: AnalyticsOrderItemRow,
-  quantity: number
-) {
-  const fallbackUnitCost = resolveOrderItemAnalyticsCost(item);
-  const unitCosts = item.order_item_unit_costs ?? [];
-  if (unitCosts.length === 0 || quantity <= 0) {
-    return fallbackUnitCost * Math.max(quantity, 0);
-  }
-
-  let recordedTotal = 0;
-  const countedIndexes = new Set<number>();
-  for (const unit of unitCosts) {
-    const index = unit.unit_index;
-    const unitCostPrice =
-      unit.cost_price == null ? null : Number(unit.cost_price);
-    // Only count in-range, unique unit rows so stale/out-of-range data can't
-    // over- or double-count the line cost.
-    if (
-      index == null ||
-      index < 0 ||
-      index >= quantity ||
-      countedIndexes.has(index) ||
-      unitCostPrice == null ||
-      !Number.isFinite(unitCostPrice)
-    ) {
-      continue;
-    }
-    countedIndexes.add(index);
-    recordedTotal += unitCostPrice;
-  }
-
-  const remainingUnits = quantity - countedIndexes.size;
-  return recordedTotal + remainingUnits * fallbackUnitCost;
-}
-
 export function getPercentChange(current: number, previous: number) {
   if (previous === 0) {
     return current > 0 ? 100 : 0;
@@ -217,9 +166,7 @@ export function buildTopEntities(orderItems: AnalyticsOrderItemRow[]) {
     const revenue = quantity * price;
     const joinedProduct = getJoinedAnalyticsRecord(item.products);
     const brand = joinedProduct?.brand?.trim() || 'Unknown';
-    const lineCost = resolveOrderItemAnalyticsLineCost(item, quantity);
-
-    totalProfit += revenue - lineCost;
+    totalProfit += resolveKnownOrderItemProfit(item, quantity);
     totalUnitsSold += quantity;
 
     if (item.product_id) {

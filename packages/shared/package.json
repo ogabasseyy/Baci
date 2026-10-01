@@ -12,12 +12,16 @@
     "./imei": "./src/imei/index.ts",
     "./insurance": "./src/insurance/index.ts",
     "./lib": "./src/lib/index.ts",
+    "./piggyvest": "./src/piggyvest/index.ts",
     "./schemas": "./src/schemas/index.ts",
     "./schemas/merchant-settings": "./src/schemas/merchant-settings.ts",
     "./receipt": "./src/receipt/index.ts",
     "./repairs": "./src/repairs/index.ts",
     "./storefront": "./src/storefront/index.ts",
-    "./gmc-feed": "./src/gmc-feed/index.ts"
+    "./storefront/launch-carousel": "./src/storefront/launch-carousel.ts",
+    "./storefront/prioritize-smartphone-products": "./src/storefront/prioritize-smartphone-products.ts",
+    "./gmc-feed": "./src/gmc-feed/index.ts",
+    "./test-fixtures/builder-ai-edit": "./src/test-fixtures/builder-ai-edit.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -27,9 +31,9 @@
     "zod": "^3.0.0 || ^4.0.0"
   },
   "devDependencies": {
-    "@typescript/native": "npm:typescript@~7.0.2",
-    "typescript": "npm:@typescript/typescript6@~6.0.2",
-    "vitest": "^4.1.9",
+    "decode-uri-component": "0.2.2",
+    "typescript": "~7.0.2",
+    "vitest": "^4.1.11",
     "zod": "^4.4.3"
   }
 }

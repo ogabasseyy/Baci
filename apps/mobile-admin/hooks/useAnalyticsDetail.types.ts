@@ -47,10 +47,16 @@ export interface JoinedOrder {
   created_at: string;
 }
 
+export interface JoinedOrderItemUnitCost {
+  cost_price: number | null;
+  unit_index: number | null;
+}
+
 export interface OrderItemWithJoins {
   cost_price?: number | null;
   quantity: number | null;
   price: number | null;
+  order_item_unit_costs?: JoinedOrderItemUnitCost[] | null;
   product_variants?: JoinedVariant | JoinedVariant[] | null;
   products: JoinedProduct | JoinedProduct[] | null;
   orders: JoinedOrder | JoinedOrder[] | null;

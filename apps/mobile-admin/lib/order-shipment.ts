@@ -76,3 +76,49 @@ export function getDispatchPhoneFromOrder(
 ): string {
   return order.self_fulfillment_data?.dispatchPhone?.trim() ?? '';
 }
+
+export function getOrderGiglInitialAddress(order: {
+  customer_phone?: string | null;
+  shipping_address?:
+    | {
+        address?: string | null;
+        city?: string | null;
+        state?: string | null;
+        phone?: string | null;
+        latitude?: number | null;
+        longitude?: number | null;
+      }
+    | string
+    | null;
+}) {
+  const address = order.shipping_address;
+  const coordinateAddress =
+    typeof address === 'object' && address !== null ? address : undefined;
+  const latitude =
+    typeof coordinateAddress?.latitude === 'number' &&
+    Number.isFinite(coordinateAddress.latitude)
+      ? coordinateAddress.latitude
+      : undefined;
+  const longitude =
+    typeof coordinateAddress?.longitude === 'number' &&
+    Number.isFinite(coordinateAddress.longitude)
+      ? coordinateAddress.longitude
+      : undefined;
+  const recipientPhone =
+    typeof address === 'object' && address?.phone?.trim()
+      ? address.phone.trim()
+      : order.customer_phone?.trim();
+  return {
+    ...(typeof address === 'string'
+      ? { address }
+      : {
+          ...(address?.address ? { address: address.address } : {}),
+          ...(address?.city ? { city: address.city } : {}),
+          ...(address?.state ? { state: address.state } : {}),
+        }),
+    ...(recipientPhone ? { phone: recipientPhone } : {}),
+    ...(latitude !== undefined && longitude !== undefined
+      ? { latitude, longitude }
+      : {}),
+  };
+}

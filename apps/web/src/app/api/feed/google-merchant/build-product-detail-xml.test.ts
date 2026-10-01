@@ -17,6 +17,7 @@ describe('buildGoogleProductDetailXml', () => {
 
   it('emits structured Google product details for phone attributes', () => {
     const xml = buildGoogleProductDetailXml({
+      category: 'Smartphones',
       product_key_specs: {
         screen_size_inches: 6.8,
         display_resolution: '3200 x 1440 (QHD+)',
@@ -165,6 +166,16 @@ describe('buildGoogleProductDetailXml', () => {
     expect(xml).toContain('<g:attribute_value>0.45kg</g:attribute_value>');
   });
 
+  it('retains shipping weight for categorized accessories', () => {
+    const xml = buildGoogleProductDetailXml({
+      category: 'Phone Cases',
+      weight_unit: 'g',
+      weight_value: 45,
+    });
+
+    expect(xml).toContain('<g:attribute_value>45g</g:attribute_value>');
+  });
+
   it('ignores unconfirmed non-positive numeric specs', () => {
     const xml = buildGoogleProductDetailXml({
       product_key_specs: {
@@ -187,6 +198,19 @@ describe('buildGoogleProductDetailXml', () => {
       product_key_specs: {
         display_resolution: '   ',
       },
+    });
+
+    expect(xml).toBe('');
+  });
+
+  it('uses category-aware acceptance and rejects contaminated product details', () => {
+    const xml = buildGoogleProductDetailXml({
+      category: 'PlayStation 5',
+      product_key_specs: {
+        display_resolution: 'N/A',
+        main_camera_mp: 50,
+      },
+      variant_attributes: { ram: 'N/A', storage: '0GB' },
     });
 
     expect(xml).toBe('');
@@ -230,9 +254,23 @@ describe('buildGoogleColorXml', () => {
     ).toBe('        <g:color>Black</g:color>');
   });
 
+  it('emits standalone merchandising colour for categorized accessories', () => {
+    expect(
+      buildGoogleColorXml({
+        category: 'Phone Cases',
+        color: 'Midnight Blue',
+        variant_attributes: { color: 'Coral Red' },
+      })
+    ).toBe('        <g:color>Coral Red</g:color>');
+  });
+
   it('returns an empty string when no color is confirmed', () => {
     expect(buildGoogleColorXml({})).toBe('');
     expect(buildGoogleColorXml({ color: '   ' })).toBe('');
+  });
+
+  it('does not emit direct product color placeholders after normalization', () => {
+    expect(buildGoogleColorXml({ color: '  <b>N/A</b>  ' })).toBe('');
   });
 
   it('matches colour aliases case-insensitively', () => {

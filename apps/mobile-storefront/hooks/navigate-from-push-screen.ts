@@ -20,13 +20,18 @@ import {
  * hydration) before the read: a credit for customer B must never resume — and
  * must not leave armed — an intent that customer A left on a shared device.
  */
-async function resumeStoredWalletFundingIntent() {
+async function resumeStoredWalletFundingIntent(isCurrent: () => boolean) {
   const customerId = await resolveActiveCustomerId();
+  if (!isCurrent()) return;
   if (!customerId) {
     router.push('/wallet');
     return;
   }
-  const storedReturnTo = await consumeWalletFundingIntent(customerId);
+  const storedReturnTo = await consumeWalletFundingIntent(
+    customerId,
+    isCurrent
+  );
+  if (!isCurrent()) return;
   // Consume first: mounting a bare wallet route clears stale intent state.
   // Only navigate after the single-use record is safely read and removed.
   router.push('/wallet');
@@ -39,8 +44,10 @@ async function resumeStoredWalletFundingIntent() {
 // body so the useEffectEvent wrapper stays thin; behavior is unchanged.
 export function navigateFromPushScreen(
   screen: string,
-  params?: Record<string, string>
-) {
+  params?: Record<string, string>,
+  isCurrent: () => boolean = () => true
+): void | Promise<void> {
+  if (!isCurrent()) return;
   switch (screen) {
     case 'order-details':
       // Missing id would push to `/orders/undefined`; fall back to the list.
@@ -109,15 +116,14 @@ export function navigateFromPushScreen(
       }
       // No usable destination in the payload (bank-transfer/DVA credits never
       // carry one) — resume the locally recorded funding intent, if any.
-      resumeStoredWalletFundingIntent().catch((error) => {
+      return resumeStoredWalletFundingIntent(isCurrent).catch((error) => {
         logger.warn(
           'PushNavigation',
           'Failed to resume wallet funding intent:',
           error
         );
-        router.push('/wallet');
+        if (isCurrent()) router.push('/wallet');
       });
-      break;
     }
     case 'utility-history':
       router.push(`/utilities/history?type=${params?.type ?? 'power'}` as Href);

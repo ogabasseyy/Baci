@@ -43,34 +43,44 @@ describe('getExpenseDateSortValue', () => {
 });
 
 describe('groupExpensesByMonth', () => {
+  const makeExpense = (
+    values: Pick<Expense, 'amount' | 'category' | 'date' | 'description' | 'id'>
+  ): Expense => ({
+    ...values,
+    branch_id: null,
+    created_by_user_id: null,
+    group_id: null,
+    merchant_id: 'cae013e3-719e-4baa-9ab9-45d080ce23ea',
+    payment_method: null,
+    receipt_storage_path: null,
+    receipt_url: null,
+    reference: null,
+    updated_at: '2026-06-28T12:00:00.000Z',
+    updated_by_user_id: null,
+    vendor_name: null,
+  });
   const mockExpenses: Expense[] = [
-    {
+    makeExpense({
       id: '1',
       amount: 1000,
       category: 'Office',
       description: 'Pens',
       date: '2026-06-28T12:00:00.000Z',
-      receipt_url: null,
-      branch_id: null,
-    },
-    {
+    }),
+    makeExpense({
       id: '2',
       amount: 2500,
       category: 'Travel',
       description: 'Cab',
       date: '2026-06-01',
-      receipt_url: null,
-      branch_id: null,
-    },
-    {
+    }),
+    makeExpense({
       id: '3',
       amount: 1500,
       category: 'Food',
       description: 'Lunch',
       date: '2026-05-15T09:00:00.000Z',
-      receipt_url: null,
-      branch_id: null,
-    },
+    }),
   ];
 
   it('groups expenses by local month', () => {
@@ -85,9 +95,11 @@ describe('groupExpensesByMonth', () => {
     expect(stickyHeaderIndices).toEqual([0, 3]);
 
     expect(data[0]).toEqual({
+      count: 2,
       type: 'header',
       key: 'expenses-header-2026-06',
       monthKey: '2026-06',
+      total: 3500,
       title: 'This Month',
     });
 
@@ -98,9 +110,11 @@ describe('groupExpensesByMonth', () => {
     expect(data[2].key).toBe('expense-item-2');
 
     expect(data[3]).toEqual({
+      count: 1,
       type: 'header',
       key: 'expenses-header-2026-05',
       monthKey: '2026-05',
+      total: 1500,
       title: 'May 2026',
     });
   });
@@ -118,24 +132,20 @@ describe('groupExpensesByMonth', () => {
 
   it('sorts expenses inside each month newest first', () => {
     const unsortedExpenses: Expense[] = [
-      {
+      makeExpense({
         id: '1',
         amount: 100,
         category: 'Food',
         description: 'Lunch',
         date: '2026-06-01',
-        receipt_url: null,
-        branch_id: null,
-      },
-      {
+      }),
+      makeExpense({
         id: '2',
         amount: 200,
         category: 'Travel',
         description: 'Cab',
         date: '2026-06-28',
-        receipt_url: null,
-        branch_id: null,
-      },
+      }),
     ];
 
     const now = new Date('2026-06-28T20:00:00.000Z');
@@ -154,23 +164,23 @@ describe('groupExpensesByMonth', () => {
 
   it('groups invalid dates under unknown group without crashing', () => {
     const invalidExpenses: Expense[] = [
-      {
+      makeExpense({
         id: '1',
         amount: 100,
         category: 'Food',
         description: 'Lunch',
         date: 'invalid-date-string',
-        receipt_url: null,
-        branch_id: null,
-      },
+      }),
     ];
 
     const { data } = groupExpensesByMonth(invalidExpenses);
     expect(data.length).toBe(2); // Header + item
     expect(data[0]).toEqual({
+      count: 1,
       type: 'header',
       key: 'expenses-header-unknown',
       monthKey: 'unknown',
+      total: 100,
       title: 'Unknown Month',
     });
   });

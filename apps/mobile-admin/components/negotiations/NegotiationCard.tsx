@@ -1,9 +1,4 @@
-import {
-  buildTelLink,
-  buildWhatsAppLink,
-  type NegotiationCartLine,
-  type NegotiationItemInfo,
-} from '@baci/shared';
+import type { NegotiationCartLine, NegotiationItemInfo } from '@baci/shared';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Pressable, Text, View } from 'react-native';
 import { palette } from '@/constants/Colors';
@@ -11,6 +6,7 @@ import { formatCurrency as formatPrice } from '@/utils/format';
 import { formatNegotiationItemMeta } from './format-negotiation-item-meta';
 import { negotiationCardStyles as styles } from './NegotiationCard.styles';
 import { NegotiationCartSnapshot } from './NegotiationCartSnapshot';
+import { NegotiationContactActions } from './NegotiationContactActions';
 import { NegotiationDecisionControls } from './NegotiationDecisionControls';
 import { NegotiationItemMetaChips } from './NegotiationItemMetaChips';
 
@@ -29,6 +25,7 @@ export interface NegotiationCardRequest {
   current_price: number | null;
   item_info: NegotiationItemInfo | null;
   cart_snapshot: NegotiationCartLine[] | null;
+  customer_email: string | null;
   customer_phone: string | null;
   created_at: string;
   evidence_url: string | null;
@@ -62,11 +59,6 @@ interface NegotiationCardProps {
   onToggleCart: (id: string) => void;
 }
 
-function buildFollowUpMessage(request: NegotiationCardRequest): string {
-  const item = request.item_info?.name ?? 'your cart';
-  return `Hi! About your negotiation offer on ${item} — `;
-}
-
 export function NegotiationCard({
   actionLoading,
   actionsDisabled,
@@ -79,12 +71,6 @@ export function NegotiationCard({
   onToggleCart,
 }: NegotiationCardProps) {
   const itemMeta = formatNegotiationItemMeta(item.item_info);
-  const telLink = item.customer_phone
-    ? buildTelLink(item.customer_phone)
-    : null;
-  const whatsAppLink = item.customer_phone
-    ? buildWhatsAppLink(item.customer_phone, buildFollowUpMessage(item))
-    : null;
   const evidenceUrl = item.evidence_url;
 
   return (
@@ -199,38 +185,11 @@ export function NegotiationCard({
         </Pressable>
       ) : null}
 
-      {item.customer_phone ? (
-        <View style={styles.contactRow}>
-          {telLink ? (
-            <Pressable
-              style={[
-                styles.contactButton,
-                styles.callButton,
-                { borderColor: colors.border },
-              ]}
-              onPress={() => void onOpenExternalUrl(telLink)}
-              accessibilityRole="button"
-              accessibilityLabel="Call customer"
-            >
-              <Ionicons name="call" size={16} color={colors.text} />
-              <Text style={[styles.callButtonText, { color: colors.text }]}>
-                Call
-              </Text>
-            </Pressable>
-          ) : null}
-          {whatsAppLink ? (
-            <Pressable
-              style={[styles.contactButton, styles.whatsappButton]}
-              onPress={() => void onOpenExternalUrl(whatsAppLink)}
-              accessibilityRole="button"
-              accessibilityLabel="Message customer on WhatsApp"
-            >
-              <Ionicons name="logo-whatsapp" size={16} color={palette.white} />
-              <Text style={styles.whatsappButtonText}>WhatsApp</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
+      <NegotiationContactActions
+        colors={colors}
+        item={item}
+        onOpenExternalUrl={onOpenExternalUrl}
+      />
 
       <NegotiationDecisionControls
         actionLoading={actionLoading}

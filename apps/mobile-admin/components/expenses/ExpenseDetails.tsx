@@ -17,6 +17,10 @@ export function ExpenseDetails({
   branchName,
   colors,
   formattedAmount,
+  groupName,
+  receiptError = null,
+  receiptLoading = false,
+  receiptUrl,
   cardShadow,
 }: ExpenseDetailsProps) {
   const parsedDate = parseISO(expense.date);
@@ -29,7 +33,6 @@ export function ExpenseDetails({
     0.15
   );
   const handleOpenReceipt = async () => {
-    const receiptUrl = expense.receipt_url;
     if (!receiptUrl) {
       Alert.alert('Receipt unavailable', 'No receipt image is attached.');
       return;
@@ -101,6 +104,39 @@ export function ExpenseDetails({
 
         <View style={styles.infoRow}>
           <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
+            Vendor
+          </Text>
+          <Text style={[styles.infoValue, { color: colors.text }]}>
+            {expense.vendor_name ?? 'None'}
+          </Text>
+        </View>
+
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+        <View style={styles.infoRow}>
+          <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
+            Payment method
+          </Text>
+          <Text style={[styles.infoValue, { color: colors.text }]}>
+            {expense.payment_method ?? 'None'}
+          </Text>
+        </View>
+
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+        <View style={styles.infoRow}>
+          <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
+            Group
+          </Text>
+          <Text style={[styles.infoValue, { color: colors.text }]}>
+            {groupName}
+          </Text>
+        </View>
+
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+        <View style={styles.infoRow}>
+          <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
             Reference
           </Text>
           <Text style={[styles.infoValue, { color: colors.text }]}>
@@ -136,29 +172,39 @@ export function ExpenseDetails({
         </View>
       </View>
 
-      {expense.receipt_url ? (
+      {receiptUrl || expense.receipt_storage_path || expense.receipt_url ? (
         <View style={styles.receiptSection}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
             Receipt
           </Text>
-          <Pressable
-            style={[
-              styles.receiptCard,
-              { backgroundColor: colors.card },
-              cardShadow,
-            ]}
-            onPress={() => {
-              void handleOpenReceipt();
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="View attached receipt"
-            accessibilityHint="Opens the attached receipt image"
-          >
-            <Ionicons name="image-outline" size={24} color={colors.primary} />
-            <Text style={[styles.receiptText, { color: colors.primary }]}>
-              View Attached Receipt
+          {receiptLoading ? (
+            <Text style={[styles.receiptText, { color: colors.textSecondary }]}>
+              Loading receipt…
             </Text>
-          </Pressable>
+          ) : receiptError ? (
+            <Text style={[styles.receiptText, { color: colors.textSecondary }]}>
+              Receipt unavailable. Try again.
+            </Text>
+          ) : (
+            <Pressable
+              style={[
+                styles.receiptCard,
+                { backgroundColor: colors.card },
+                cardShadow,
+              ]}
+              onPress={() => {
+                void handleOpenReceipt();
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="View attached receipt"
+              accessibilityHint="Opens the attached receipt image"
+            >
+              <Ionicons name="image-outline" size={24} color={colors.primary} />
+              <Text style={[styles.receiptText, { color: colors.primary }]}>
+                View Attached Receipt
+              </Text>
+            </Pressable>
+          )}
         </View>
       ) : null}
     </ScrollView>

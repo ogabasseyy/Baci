@@ -1,7 +1,3 @@
-import {
-  resolveGmcAdditionalImages,
-  resolveGmcPrimaryImage,
-} from '@/lib/gmc-feed-images';
 import { getEffectiveStock } from '@/lib/product-stock';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { stripHtmlTags } from '@/lib/sanitize-core';
@@ -17,6 +13,7 @@ import {
 } from './feed-constants';
 import type { OpenAIFeedVariant } from './feed-data';
 import type { Merchant, OpenAIFeedItem, Product } from './feed-types';
+import { resolveLegacyFeedImages } from './legacy-feed-images';
 
 const UNLIMITED_STOCK_QUANTITY = 9999;
 
@@ -31,63 +28,6 @@ function getVariantStockCount(
   return typeof variant.stock_quantity === 'number'
     ? Math.max(0, variant.stock_quantity)
     : 0;
-}
-
-function getManifestEntriesForProductVariant(
-  imageManifest: ImageManifestMap,
-  product: Product,
-  variant?: OpenAIFeedVariant
-) {
-  const manifestEntries = imageManifest[product.id] || [];
-  if (!variant) {
-    return manifestEntries;
-  }
-
-  const variantEntries = manifestEntries.filter(
-    (entry) => entry.variant_id === variant.id
-  );
-  return resolveGmcPrimaryImage(variantEntries)
-    ? variantEntries
-    : manifestEntries;
-}
-
-function getProductImageUrl(
-  product: Product,
-  variant?: OpenAIFeedVariant,
-  imageManifest: ImageManifestMap = {}
-) {
-  const manifestPrimaryImage = resolveGmcPrimaryImage(
-    getManifestEntriesForProductVariant(imageManifest, product, variant)
-  );
-  if (manifestPrimaryImage) {
-    return manifestPrimaryImage;
-  }
-
-  const parentFirstImageRaw = product.images?.[0];
-  const parentFirstImage =
-    typeof parentFirstImageRaw === 'string'
-      ? parentFirstImageRaw
-      : parentFirstImageRaw?.url || '';
-
-  return variant?.primary_image || parentFirstImage;
-}
-
-function getAdditionalImageLinks(
-  product: Product,
-  imageManifest: ImageManifestMap = {},
-  variant?: OpenAIFeedVariant
-) {
-  const manifestAdditionalImages = resolveGmcAdditionalImages(
-    getManifestEntriesForProductVariant(imageManifest, product, variant)
-  );
-  if (manifestAdditionalImages.length > 0) {
-    return manifestAdditionalImages;
-  }
-
-  return product.images
-    ?.slice(1, 11)
-    .map((img) => (typeof img === 'string' ? img : img.url))
-    .filter((url): url is string => typeof url === 'string');
 }
 
 function buildPlainDescription(product: Product) {
@@ -152,12 +92,7 @@ function buildVariantFeedItem({
     condition: product.condition || 'new',
     product_type: product.category || product.google_product_category,
     brand: product.brand || merchant.business_name,
-    image_link: getProductImageUrl(product, variant, imageManifest),
-    additional_image_links: getAdditionalImageLinks(
-      product,
-      imageManifest,
-      variant
-    ),
+    ...resolveLegacyFeedImages(product, variant, imageManifest),
     price: `${finalPrice.toFixed(2)} ${currency}`,
     availability,
     quantity: stockCount,
@@ -223,8 +158,7 @@ function buildSimpleFeedItem({
     condition: product.condition || 'new',
     product_type: product.category || product.google_product_category,
     brand: product.brand || merchant.business_name,
-    image_link: getProductImageUrl(product, undefined, imageManifest),
-    additional_image_links: getAdditionalImageLinks(product, imageManifest),
+    ...resolveLegacyFeedImages(product, undefined, imageManifest),
     price: regularPrice,
     sale_price: salePrice,
     availability,

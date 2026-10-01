@@ -7,6 +7,7 @@ import type {
   TransactionReviewItem,
   TransactionReviewOrder,
 } from '@/hooks/useTransactionReview';
+import { TransactionOrderDiscountBadge } from './TransactionOrderDiscountBadge';
 import { TransactionOrderProfitSummary } from './TransactionOrderProfitSummary';
 import { formatTransactionDisplayText } from './transaction-display-format';
 
@@ -19,7 +20,6 @@ interface TransactionOrderCardProps {
   ) => void;
   order: TransactionReviewOrder;
 }
-
 export function TransactionOrderCard({
   colors,
   formatCurrency,
@@ -48,7 +48,6 @@ export function TransactionOrderCard({
   const detailsActionLabel = expanded
     ? `Close order details for ${customerName}`
     : `View order details for ${customerName}`;
-
   return (
     <View
       style={[
@@ -98,7 +97,6 @@ export function TransactionOrderCard({
             />
           </View>
         </View>
-
         <View style={styles.orderPreview}>
           <Text
             numberOfLines={1}
@@ -147,7 +145,6 @@ export function TransactionOrderCard({
           </View>
         </View>
       </Pressable>
-
       {expanded ? (
         <View style={styles.orderDetails}>
           <View style={styles.orderDetailGrid}>
@@ -177,8 +174,12 @@ export function TransactionOrderCard({
                 {order.customerEmail}
               </Text>
             ) : null}
+            <TransactionOrderDiscountBadge
+              colors={colors}
+              discountAmount={order.discountAmount}
+              formatCurrency={formatCurrency}
+            />
           </View>
-
           {order.items.map((item) => {
             const isLoss = item.profit != null && item.profit < 0;
             const itemName = formatTransactionDisplayText(item.name);
@@ -191,7 +192,6 @@ export function TransactionOrderCard({
                 : isLoss
                   ? `Loss ${formatCurrency(Math.abs(item.profit))}`
                   : `Profit ${formatCurrency(item.profit)}`;
-
             return (
               <Pressable
                 key={item.id}

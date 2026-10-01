@@ -57,4 +57,34 @@ describe('fetchDashboardMerchantViaApi', () => {
       'Failed to load merchant dashboard (500)'
     );
   });
+
+  it('requests an explicitly selected merchant with an abortable scoped header', async () => {
+    const controller = new AbortController();
+    const payload = {
+      merchant: { id: 'merchant-2', country: 'GH', payout_currency: 'GHS' },
+      staffAccess: {
+        isStaff: true,
+        isOwner: false,
+        role: 'marketing',
+        permissions: { analytics: { view: true } },
+      },
+    };
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => payload,
+    });
+
+    const result = await fetchDashboardMerchantViaApi({
+      merchantId: 'merchant-2',
+      signal: controller.signal,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/merchant/me', {
+      credentials: 'same-origin',
+      headers: { 'x-baci-merchant-id': 'merchant-2' },
+      signal: controller.signal,
+    });
+    expect(result).toEqual(payload);
+  });
 });

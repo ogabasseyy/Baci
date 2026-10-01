@@ -7,10 +7,13 @@ import {
 } from '@/lib/cache-revalidation';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { getCurrencyConfig } from '@/lib/currency';
+import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
 import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
+import { isValidUuid } from '@/lib/sanitize-core';
+import { scheduleProductBlogPurgeAfterResponse } from '@/lib/schedule-product-blog-purge-after-response';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
 import type { StorefrontProductPurgeEntry } from '@/lib/storefront-product-purge-urls';
 import { createClient } from '@/lib/supabase/server';
@@ -85,6 +88,7 @@ export async function POST(request: NextRequest) {
     // Product purge targets accumulated across the whole batch so the raised
     // storefront edge TTL never serves a stale listing/PDP after a bulk edit.
     const purgeEntries: StorefrontProductPurgeEntry[] = [];
+    const resolvedProductIds: string[] = [];
     const results = await processBulkUpdateChanges({
       changes: parseResult.data.changes,
       currency,
@@ -94,6 +98,9 @@ export async function POST(request: NextRequest) {
         for (const entry of entries) {
           purgeEntries.push(entry);
         }
+      },
+      onResolvedProductIds: (productIds) => {
+        resolvedProductIds.push(...productIds);
       },
       supabase,
     });
@@ -114,10 +121,35 @@ export async function POST(request: NextRequest) {
         merchantId,
         purgeEntries.map((entry) => entry.slug)
       );
+      const requestedProductIds = parseResult.data.changes
+        .map((change) => change.productId?.trim())
+        .filter(
+          (productId): productId is string =>
+            typeof productId === 'string' && isValidUuid(productId)
+        );
+      const productIds = Array.from(
+        new Set([...requestedProductIds, ...resolvedProductIds])
+      ).filter(isValidUuid);
+      // The immediate purge can refill related articles from the edge before
+      // the post-response enrichment runs, so expire the merchant-scoped blog
+      // data before scheduling the Cloudflare purge.
+      expireProductBlogCache(merchantId);
+      // Keep paginated article fallback reads out of the mutation response.
+      // The after-response helper hard-expires the related-blog cache before
+      // scheduling any linked article URLs.
       scheduleStorefrontProductPurge(
         merchantContext.merchantSlug,
         purgeEntries
       );
+      scheduleProductBlogPurgeAfterResponse({
+        supabase,
+        merchantId,
+        merchantSlug: merchantContext.merchantSlug,
+        productIds,
+        entries: purgeEntries,
+        categorySlugs: purgeEntries.map((entry) => entry.categorySegment),
+        skipProductPurge: true,
+      });
     } catch (purgeError) {
       console.warn('Skipped Cloudflare product purge after bulk update', {
         purgeError,

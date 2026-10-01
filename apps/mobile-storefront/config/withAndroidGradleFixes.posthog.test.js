@@ -50,7 +50,7 @@ function writeMinimalAndroidProject(appBuildGradle) {
   writeProjectFile(mockPlatformProjectRoot, 'app/build.gradle', appBuildGradle);
 }
 
-describe('withAndroidGradleFixes PostHog upload guard', () => {
+describe('withAndroidGradleFixes PostHog uploads', () => {
   afterEach(() => {
     if (mockPlatformProjectRoot) {
       fs.rmSync(mockPlatformProjectRoot, { force: true, recursive: true });
@@ -59,8 +59,17 @@ describe('withAndroidGradleFixes PostHog upload guard', () => {
     mockFinalizedModCalls.length = 0;
   });
 
-  it('upgrades legacy PostHog Android upload guards without duplicating them', () => {
+  it('removes legacy guards that silently disabled source-map uploads', () => {
     writeMinimalAndroidProject(`apply from: new File(["node", "--print", "require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog.gradle')"].execute().text.trim())
+
+// PostHog source-map uploads run after bundling via finalizedBy.
+// Upload failures must not block Play Store release artifacts.
+tasks.configureEach { task ->
+    if (task.name.contains("_PostHogUpload_")) {
+        logger.warn("WARNING: Disabling \${task.name}; PostHog Android source-map upload is best-effort and will not block release builds.")
+        task.enabled = false
+    }
+}
 
 // PostHog source-map uploads run after bundling via finalizedBy.
 // Upload failures must not block Play Store release artifacts.
@@ -107,16 +116,17 @@ android {
       'app/build.gradle'
     );
 
-    expect(
-      appBuildGradle.match(/PostHog Android source-map upload is best-effort/g)
-    ).toHaveLength(1);
-    expect(appBuildGradle).toContain('disablePostHogAndroidUploadTask');
-    expect(appBuildGradle).toContain('gradle.projectsEvaluated');
-    expect(appBuildGradle).toContain('task.onlyIf { false }');
+    expect(appBuildGradle).toContain('posthog.gradle');
+    expect(appBuildGradle).not.toContain(
+      'PostHog Android source-map upload is best-effort'
+    );
+    expect(appBuildGradle).not.toContain('task.enabled = false');
+    expect(appBuildGradle).not.toContain('task.onlyIf { false }');
   });
 
-  it('patches PostHog uploads in the finalized mod after PostHog injects Gradle', async () => {
-    writeMinimalAndroidProject(`apply plugin: "org.jetbrains.kotlin.android"
+  it('keeps PostHog uploads enabled when the finalized mod runs', async () => {
+    writeMinimalAndroidProject(`apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
 
 android {
     signingConfigs {
@@ -173,12 +183,11 @@ apply from: new File(["node", "--print", "require('path').join(require('path').d
       'app/build.gradle'
     );
 
-    expect(appBuildGradle).toContain(
+    expect(appBuildGradle).toContain('posthog.gradle');
+    expect(appBuildGradle).toContain('apply plugin: "com.posthog.android"');
+    expect(appBuildGradle).not.toContain(
       'PostHog Android source-map upload is best-effort'
     );
-    expect(appBuildGradle).toContain('task.name.contains("_PostHogUpload_")');
-    expect(appBuildGradle).toContain('task.enabled = false');
-    expect(appBuildGradle).toContain('task.onlyIf { false }');
-    expect(appBuildGradle).toContain('gradle.projectsEvaluated');
+    expect(appBuildGradle).not.toContain('task.enabled = false');
   });
 });

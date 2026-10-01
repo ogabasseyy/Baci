@@ -76,6 +76,13 @@ export async function POST(
       );
     }
 
+    if (parsedBody.data.serviceType === 'pickup') {
+      return NextResponse.json(
+        { error: 'Courier pickup must be paid before booking.' },
+        { status: 409 }
+      );
+    }
+
     const result = await createRepairBooking(
       parsedBody.data,
       merchant.merchantId

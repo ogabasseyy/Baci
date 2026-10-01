@@ -48,6 +48,8 @@ export interface GenerateTextWithChainOptions {
   prompt?: string;
   messages?: ModelMessage[];
   tools?: ToolSet;
+  /** Creates isolated tool callbacks for each provider attempt. */
+  createToolsForAttempt?: (providerName: string) => ToolSet;
   stopWhen?: StopCondition<ToolSet> | StopCondition<ToolSet>[];
   temperature?: number;
   maxOutputTokens?: number;
@@ -147,6 +149,9 @@ export async function generateTextWithChain(
 
     options.onProviderAttempt?.(provider.name);
     try {
+      const tools = options.createToolsForAttempt
+        ? options.createToolsForAttempt(provider.name)
+        : options.tools;
       const result = await generateText({
         model: provider.model,
         system: options.system,
@@ -155,7 +160,7 @@ export async function generateTextWithChain(
         ...(options.messages
           ? { messages: options.messages }
           : { prompt: options.prompt ?? '' }),
-        ...(options.tools ? { tools: options.tools } : {}),
+        ...(tools ? { tools } : {}),
         ...(options.stopWhen ? { stopWhen: options.stopWhen } : {}),
         temperature: options.temperature,
         maxOutputTokens: options.maxOutputTokens,

@@ -21,6 +21,7 @@ export const mockUsePageConfig = jest.fn();
 export const mockUseColorScheme = jest.fn(() => 'dark');
 export const mockUseIsFocused = jest.fn(() => true);
 export const mockRequestPermission = jest.fn(async () => 'granted');
+export const mockRecordPerformanceSurface = jest.fn();
 export const mockGetTemplateConfig = jest.fn(
   (_businessType?: string, _manualTemplateId?: string) => createTemplateConfig()
 );
@@ -48,18 +49,51 @@ type MockHomeFeedListProps = {
   onRefresh?: () => void;
 };
 
+export const mockSearchDropdown = jest.fn(
+  (_props: {
+    isVisible?: boolean;
+    onClose?: () => void;
+    onQueryChange?: (text: string) => void;
+    onSeeAllResults?: (query: string) => void;
+    query?: string;
+    showMinLengthHint?: boolean;
+  }) => null
+);
+
 const mockHeader = jest.fn(
   ({
     isScrolled,
     onSearchPress,
+    onSearchQueryChange,
+    onSearchSubmit,
+    searchQuery,
   }: {
     isScrolled?: boolean;
     onSearchPress?: () => void;
+    onSearchQueryChange?: (text: string) => void;
+    onSearchSubmit?: () => void;
+    searchQuery?: string;
   }) => (
     <>
       <MockText testID="mock-header">Header {String(isScrolled)}</MockText>
       <Pressable testID="mock-header-search" onPress={onSearchPress}>
         <MockText>Search</MockText>
+      </Pressable>
+      <MockText testID="mock-header-query">{searchQuery ?? ''}</MockText>
+      <Pressable
+        testID="mock-header-query-type"
+        onPress={() => onSearchQueryChange?.('iphone')}
+      >
+        <MockText>Type iphone</MockText>
+      </Pressable>
+      <Pressable
+        testID="mock-header-query-type-short"
+        onPress={() => onSearchQueryChange?.('i')}
+      >
+        <MockText>Type i</MockText>
+      </Pressable>
+      <Pressable testID="mock-header-submit" onPress={onSearchSubmit}>
+        <MockText>Submit search</MockText>
       </Pressable>
     </>
   )
@@ -90,11 +124,13 @@ jest.mock('expo-image', () => ({
 
 jest.mock('expo-router', () => ({
   router: {
-    push: mockRouterPush,
+    // Deferred through a closure: the factory can evaluate before the mock
+    // binding is assigned, which would otherwise bake `push: undefined` in.
+    push: (href: Href) => mockRouterPush(href),
   },
   useIsFocused: () => mockUseIsFocused(),
   useRouter: () => ({
-    push: mockRouterPush,
+    push: (href: Href) => mockRouterPush(href),
   }),
   Stack: {
     Screen: () => null,
@@ -123,7 +159,10 @@ jest.mock('@/components/storefront/Header', () => ({
 }));
 
 jest.mock('@/components/storefront/SearchDropdown', () => ({
-  SearchDropdown: () => null,
+  SearchDropdown: (props: Parameters<typeof mockSearchDropdown>[0]) => {
+    mockSearchDropdown(props);
+    return null;
+  },
 }));
 
 jest.mock('@/components/ui/PermissionModal', () => ({
@@ -182,6 +221,17 @@ jest.mock('@/lib/config', () => ({
   },
 }));
 
+jest.mock('@/lib/performance-attribution', () => ({
+  recordPerformanceSurface: (
+    surface: string,
+    details?: Record<string, unknown>
+  ) => mockRecordPerformanceSurface(surface, details),
+}));
+
+jest.mock('@sentry/react-native', () => ({
+  addBreadcrumb: jest.fn(),
+}));
+
 jest.mock('@/lib/templates', () => ({
   __esModule: true,
   getTemplateConfig: (businessType?: string, manualTemplateId?: string) =>
@@ -222,6 +272,7 @@ export function setupHomeScreenTestState() {
   });
 
   afterEach(() => {
+    mockRecordPerformanceSurface.mockReset();
     jest.runOnlyPendingTimers();
     jest.useRealTimers();
   });

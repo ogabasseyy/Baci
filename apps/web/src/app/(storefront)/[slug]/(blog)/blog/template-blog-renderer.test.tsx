@@ -25,12 +25,14 @@ describe('TemplateBlogRenderer', () => {
     categories,
     category,
     searchQuery,
+    hideFeaturedStory,
   }: {
     storeSlug?: string;
     posts?: Array<{ title: string }>;
     categories?: Array<{ name: string }>;
     category?: string;
     searchQuery?: string;
+    hideFeaturedStory?: boolean;
   }) => (
     <div>
       <div data-testid="store-slug">{storeSlug}</div>
@@ -46,6 +48,9 @@ describe('TemplateBlogRenderer', () => {
       </div>
       <div data-testid="search-query">
         {searchQuery === undefined ? 'undefined' : searchQuery}
+      </div>
+      <div data-testid="hide-featured-story">
+        {hideFeaturedStory ? 'true' : 'false'}
       </div>
     </div>
   );
@@ -81,6 +86,9 @@ describe('TemplateBlogRenderer', () => {
     expect(screen.getByTestId('categories')).toHaveTextContent('News');
     expect(screen.getByTestId('active-category')).toHaveTextContent('News');
     expect(screen.getByTestId('search-query')).toHaveTextContent('pixel');
+    expect(screen.getByTestId('hide-featured-story')).toHaveTextContent(
+      'false'
+    );
     expect(
       container.querySelectorAll('script[type="application/ld+json"]')
     ).toHaveLength(2);
@@ -143,6 +151,25 @@ describe('TemplateBlogRenderer', () => {
       'undefined'
     );
     expect(screen.getByTestId('search-query')).toHaveTextContent('undefined');
+    expect(screen.getByTestId('hide-featured-story')).toHaveTextContent(
+      'false'
+    );
+  });
+
+  it('forwards hideFeaturedStory to the template blog component', () => {
+    render(
+      <TemplateBlogRenderer
+        blogSchema={BLOG_SCHEMA}
+        breadcrumbSchema={BREADCRUMB_SCHEMA}
+        BlogComponent={BlogComponent}
+        basePath="/ogabassey"
+        blogPosts={[]}
+        categories={[]}
+        hideFeaturedStory
+      />
+    );
+
+    expect(screen.getByTestId('hide-featured-story')).toHaveTextContent('true');
   });
 
   it('renders multiple posts and categories', () => {

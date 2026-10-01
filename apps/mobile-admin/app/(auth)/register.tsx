@@ -10,6 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { getMerchantSetupStyles } from '@/components/auth/register/merchant-setup.styles';
 import { RegisterAccountStep } from '@/components/auth/register/RegisterAccountStep';
 import { getStyles } from '@/components/auth/register/register.styles';
 import { AppFormScreen } from '@/components/ui/AppFormScreen';
@@ -52,6 +53,7 @@ const INITIAL_PASSWORD_STATE: PasswordValidationResult = {
 export default function RegisterScreen() {
   const { colors, isDark } = useTheme();
   const styles = getStyles(colors);
+  const setupStyles = getMerchantSetupStyles(colors);
   const router = useRouter();
   const { signUp } = useAuth();
   const submissionLocked = useRef(false);
@@ -130,6 +132,7 @@ export default function RegisterScreen() {
         firstName,
         lastName,
         fullName: `${firstName} ${lastName}`,
+        signupFlow: 'merchant',
       });
 
       if (result.error) {
@@ -151,7 +154,12 @@ export default function RegisterScreen() {
         return;
       }
       if (result.needsEmailConfirmation) {
-        router.replace(`/(auth)/verify?email=${encodeURIComponent(email)}`);
+        const attemptIdQuery = result.signupAttemptId
+          ? `&attemptId=${encodeURIComponent(result.signupAttemptId)}`
+          : '';
+        router.replace(
+          `/(auth)/verify?email=${encodeURIComponent(email)}${attemptIdQuery}&flow=merchant`
+        );
         return;
       }
       if (result.sessionEstablished) {
@@ -175,34 +183,34 @@ export default function RegisterScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      <LinearGradient
-        colors={['#0D0D1A', '#1A1A2E']}
-        style={StyleSheet.absoluteFill}
-      />
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+      {isDark ? (
+        <LinearGradient
+          colors={['#0D0D1A', '#1A1A2E']}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
       <AppFormScreen
         contentContainerStyle={styles.content}
         header={
           <View style={styles.header}>
-            <Pressable
-              onPress={() => router.back()}
-              style={styles.backButton}
-              accessibilityLabel="Back"
-              accessibilityRole="button"
-            >
-              <Ionicons name="arrow-back" size={24} color="#FFF" />
-            </Pressable>
-            <Text style={styles.headerTitle}>Create Account</Text>
-            <View style={{ width: 24 }} />
+            <View style={setupStyles.headerBrand}>
+              <Pressable
+                accessibilityLabel="Back"
+                accessibilityRole="button"
+                onPress={() => router.back()}
+                style={setupStyles.headerMark}
+              >
+                <Ionicons color={colors.primary} name="arrow-back" size={20} />
+              </Pressable>
+              <Text style={styles.headerTitle}>Create Account</Text>
+            </View>
+            <Text style={setupStyles.headerMeta}>About 2 min</Text>
           </View>
         }
         style={styles.safeArea}
       >
-        <View style={styles.progressContainer}>
-          <View style={[styles.progressBar, { width: '50%' }]} />
-        </View>
-        <Text style={styles.stepText}>Step 1 of 2</Text>
         <RegisterAccountStep
           confirmError={confirmError}
           formData={formData}

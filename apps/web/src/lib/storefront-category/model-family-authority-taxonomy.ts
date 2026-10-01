@@ -6,7 +6,7 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = (
     ['samsung', 'galaxy-a', 'Samsung Galaxy A', /^(?:Samsung )?Galaxy A/i],
     ['samsung', 'galaxy-s', 'Samsung Galaxy S', /^(?:Samsung )?Galaxy S/i],
     ['samsung', 'galaxy-z', 'Samsung Galaxy Z', /^(?:Samsung )?Galaxy Z/i],
-    ['infinix', 'hot', 'Infinix HOT', /^(?:Infinix )?Hot/i],
+    ['infinix', 'hot', 'Infinix HOT', /^(?:Infinix )?Hot/i, 2],
     ['infinix', 'note', 'Infinix Note', /^(?:Infinix )?Note/i],
     ['tecno', 'spark', 'Tecno Spark', /^(?:Tecno )?Spark/i],
     ['tecno', 'camon', 'Tecno Camon', /^(?:Tecno )?Camon/i],
@@ -17,14 +17,22 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = (
     ['xiaomi', 'xiaomi-t', 'Xiaomi T Series', /^(?:Xiaomi )?[0-9]+T/i],
     ['oppo', 'a-series', 'Oppo A Series', /^(?:Oppo\s+)?A(?=\s|\d)/i],
   ] as const
-).map(([brandKey, familyKey, displayName, productNamePattern]) => ({
-  brandKey,
-  categorySlug: 'smartphones',
-  displayName,
-  familyKey,
-  minimumProducts: 3,
-  productNamePattern,
-}));
+).map(
+  ([
+    brandKey,
+    familyKey,
+    displayName,
+    productNamePattern,
+    minimumProducts,
+  ]) => ({
+    brandKey,
+    categorySlug: 'smartphones',
+    displayName,
+    familyKey,
+    minimumProducts: minimumProducts ?? 3,
+    productNamePattern,
+  })
+);
 
 function getEntries(categorySlug: string, brandSlug: string) {
   const normalizedCategory = generateSlug(categorySlug);

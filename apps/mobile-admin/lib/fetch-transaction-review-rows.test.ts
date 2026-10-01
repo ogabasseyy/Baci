@@ -55,7 +55,7 @@ describe('fetchTransactionReviewRows', () => {
 
     expect(mocks.is).toHaveBeenCalledWith('cancelled_at', null);
     expect(mocks.or).toHaveBeenCalledWith(
-      'shipping_status.is.null,shipping_status.not.in.(cancelled,canceled)'
+      'shipping_status.is.null,shipping_status.not.in.(cancelled,canceled,returned)'
     );
   });
 
@@ -73,7 +73,7 @@ describe('fetchTransactionReviewRows', () => {
 
     expect(mocks.is).not.toHaveBeenCalled();
     expect(mocks.or).toHaveBeenCalledWith(
-      'shipping_status.is.null,shipping_status.not.in.(cancelled,canceled)'
+      'shipping_status.is.null,shipping_status.not.in.(cancelled,canceled,returned)'
     );
   });
 });

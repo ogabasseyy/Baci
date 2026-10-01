@@ -6,7 +6,7 @@ import {
 
 describe('STOREFRONT_CACHE', () => {
   it('defines storefront product cache durations in seconds', () => {
-    expect(STOREFRONT_CACHE.productsSMaxAge).toBe(300);
+    expect(STOREFRONT_CACHE.productsSMaxAge).toBe(1800);
     expect(STOREFRONT_CACHE.productsStaleWhileRevalidate).toBe(86400);
   });
 
@@ -14,6 +14,7 @@ describe('STOREFRONT_CACHE', () => {
     expect(STOREFRONT_PUBLIC_CACHE_POLICIES).toEqual([
       {
         slug: 'ogabassey',
+        durablePdpPurge: false,
         customHostnames: ['ogabassey.com', 'www.ogabassey.com'],
         cacheableCategorySegments: [
           'accessories',

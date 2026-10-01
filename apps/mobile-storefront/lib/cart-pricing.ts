@@ -47,3 +47,42 @@ export function hasActiveNegotiatedPrice(item: CartPriceInput): boolean {
 export function getCartItemEffectivePrice(item: CartPriceInput): number {
   return getActiveNegotiatedPrice(item) ?? getCartItemBasePrice(item);
 }
+
+/**
+ * Fixed assurance rate for the advisory quote subtotal. The order API
+ * recomputes assurance server-side at this fixed rate ("never trust the
+ * client value"), so the advisory basis must use it too — otherwise a
+ * merchant rate tier sitting between the two subtotals would display a
+ * rate the order endpoint then rejects.
+ */
+const QUOTE_ASSURANCE_RATE = 0.05;
+
+function roundQuoteCurrency(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/**
+ * Advisory merchant-rate subtotal on the order-verification basis: catalog
+ * unit prices plus the same effective-basis assurance fees the order payload
+ * carries, matching `computeCanonicalOrderSubtotal` on the server.
+ */
+export function getCartCatalogSubtotalWithAssurance(
+  items: readonly CartItem[]
+): number {
+  return items.reduce((total, item) => {
+    // Zero-priced quiz voucher lines and below-catalog condition-offer
+    // lines retain the catalog basis so conditional merchant rates still
+    // see the real subtotal.
+    const basePrice =
+      typeof item.catalog_price === 'number' &&
+      isValidCartPrice(item.catalog_price)
+        ? item.catalog_price
+        : getCartItemBasePrice(item);
+    const assuranceFee = item.hasAssurance
+      ? roundQuoteCurrency(
+          getCartItemEffectivePrice(item) * item.quantity * QUOTE_ASSURANCE_RATE
+        )
+      : 0;
+    return total + basePrice * item.quantity + assuranceFee;
+  }, 0);
+}

@@ -1,9 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PlatformAdminAuth } from '@/lib/platform-admin-auth';
+import { platformAdminRolePermissions } from '@/config/platform-admin-rbac';
+import type { PlatformAdminContextAuth } from '@/lib/platform-admin-auth';
 
-const mockGetPlatformAdminAuth = vi.fn<() => Promise<PlatformAdminAuth>>();
+const mockGetPlatformAdminContextAuth =
+  vi.fn<() => Promise<PlatformAdminContextAuth>>();
 const mockRedirect = vi.fn((path: string): never => {
   throw new Error(`NEXT_REDIRECT:${path}`);
 });
@@ -12,23 +14,33 @@ vi.mock('next/navigation', () => ({
   redirect: (path: string) => mockRedirect(path),
 }));
 
+vi.mock('@/app/app-sans-font', () => ({
+  AppSansFont: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+
 vi.mock('@/components/csrf-initializer', () => ({
   CsrfInitializer: () => <div data-testid="csrf-initializer" />,
 }));
 
 vi.mock('@/lib/platform-admin-auth', () => ({
-  getPlatformAdminAuth: () => mockGetPlatformAdminAuth(),
+  getPlatformAdminContextAuth: () => mockGetPlatformAdminContextAuth(),
 }));
 
 vi.mock('./admin-shell', () => ({
   AdminShell: ({
+    adminContext,
     adminEmail,
     children,
   }: {
+    adminContext: { role: string };
     adminEmail: string | null;
     children: ReactNode;
   }) => (
-    <section data-admin-email={adminEmail ?? ''} data-testid="admin-shell">
+    <section
+      data-admin-email={adminEmail ?? ''}
+      data-admin-role={adminContext.role}
+      data-testid="admin-shell"
+    >
       {children}
     </section>
   ),
@@ -39,7 +51,11 @@ import AdminLayout, { AdminLayoutContent } from './layout';
 describe('AdminLayout', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetPlatformAdminAuth.mockResolvedValue({
+    mockGetPlatformAdminContextAuth.mockResolvedValue({
+      context: {
+        permissions: [...platformAdminRolePermissions.owner],
+        role: 'owner',
+      },
       status: 'authenticated',
       user: { email: 'admin@example.com', id: 'user-1' },
     });
@@ -52,18 +68,22 @@ describe('AdminLayout', () => {
 
     render(layout);
 
-    expect(mockGetPlatformAdminAuth).toHaveBeenCalledOnce();
+    expect(mockGetPlatformAdminContextAuth).toHaveBeenCalledOnce();
     expect(screen.getByTestId('csrf-initializer')).toBeInTheDocument();
     expect(screen.getByTestId('admin-shell')).toHaveAttribute(
       'data-admin-email',
       'admin@example.com'
+    );
+    expect(screen.getByTestId('admin-shell')).toHaveAttribute(
+      'data-admin-role',
+      'owner'
     );
     expect(screen.getByText('Admin content')).toBeInTheDocument();
     expect(mockRedirect).not.toHaveBeenCalled();
   });
 
   it('renders a local fallback while server-side admin authorization is pending', () => {
-    mockGetPlatformAdminAuth.mockReturnValueOnce(
+    mockGetPlatformAdminContextAuth.mockReturnValueOnce(
       new Promise(() => {
         // Intentionally unresolved to keep the Suspense fallback visible.
       })
@@ -84,7 +104,9 @@ describe('AdminLayout', () => {
   });
 
   it('redirects unauthenticated users back to login with the admin return path', async () => {
-    mockGetPlatformAdminAuth.mockResolvedValue({ status: 'unauthenticated' });
+    mockGetPlatformAdminContextAuth.mockResolvedValue({
+      status: 'unauthenticated',
+    });
 
     await expect(
       AdminLayoutContent({
@@ -96,7 +118,7 @@ describe('AdminLayout', () => {
   });
 
   it('redirects authenticated non-admin users to the merchant dashboard', async () => {
-    mockGetPlatformAdminAuth.mockResolvedValue({ status: 'forbidden' });
+    mockGetPlatformAdminContextAuth.mockResolvedValue({ status: 'forbidden' });
 
     await expect(
       AdminLayoutContent({

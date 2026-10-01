@@ -31,6 +31,7 @@ describe('fetchQuizLeaderboard', () => {
         JSON.stringify({
           currentPlayer,
           entries: [currentPlayer],
+          participantCount: 1,
           status: 'published',
         }),
         { status: 200 }
@@ -41,6 +42,7 @@ describe('fetchQuizLeaderboard', () => {
     ).resolves.toEqual({
       currentPlayer,
       entries: [currentPlayer],
+      participantCount: 1,
       status: 'published',
     });
     expect(

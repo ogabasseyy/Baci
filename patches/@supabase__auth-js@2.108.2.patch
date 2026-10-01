@@ -1,0 +1,867 @@
+diff --git a/dist/main/GoTrueClient.d.ts b/dist/main/GoTrueClient.d.ts
+index 5e2b19e6237548c849c2e9b2fb7386c9da66004c..54ba582a8a206dba97bafe63117e8739aa34aad2 100644
+--- a/dist/main/GoTrueClient.d.ts
++++ b/dist/main/GoTrueClient.d.ts
+@@ -1936,9 +1936,15 @@ export default class GoTrueClient {
+      */
+     refreshSession(currentSession?: {
+         refresh_token: string;
++        bypass_failure_cache?: boolean;
++        require_storage_match?: boolean;
++        storage_deadline_at?: number;
+     }): Promise<AuthResponse>;
+     protected _refreshSession(currentSession?: {
+         refresh_token: string;
++        bypass_failure_cache?: boolean;
++        require_storage_match?: boolean;
++        storage_deadline_at?: number;
+     }): Promise<AuthResponse>;
+     /**
+      * Gets the session data from a URL string
+diff --git a/dist/main/GoTrueClient.js b/dist/main/GoTrueClient.js
+index 9af56f25432ca2cf0761049df156cf763ae77a48..42426e0216f5c1d28b102f12763ae80fc1d5ae25 100644
+--- a/dist/main/GoTrueClient.js
++++ b/dist/main/GoTrueClient.js
+@@ -122,6 +122,8 @@ class GoTrueClient {
+          * (the post-fetch storage snapshot alone misses that window).
+          */
+         this._sessionRemovalEpoch = 0;
++        /** Monotonic counter for any session replacement, incremented before storage awaits. */
++        this._sessionStorageRevision = 0;
+         /**
+          * Keeps track of the async client initialization.
+          * When null or not yet resolved the auth state is `unknown`
+@@ -3132,15 +3134,23 @@ class GoTrueClient {
+     }
+     async _refreshSession(currentSession) {
+         try {
++            if (currentSession === null || currentSession === void 0 ? void 0 : currentSession.refresh_token) {
++                const { data: session, error } = await this._callRefreshToken(currentSession.refresh_token, currentSession.require_storage_match === true, currentSession.storage_deadline_at, currentSession.bypass_failure_cache === true);
++                if (error) {
++                    return this._returnResult({ data: { user: null, session: null }, error });
++                }
++                return this._returnResult({
++                    data: { user: (session === null || session === void 0 ? void 0 : session.user) || null, session: session || null },
++                    error: null,
++                });
++            }
+             return await this._useSession(async (result) => {
+                 var _a;
+-                if (!currentSession) {
+-                    const { data, error } = result;
+-                    if (error) {
+-                        throw error;
+-                    }
+-                    currentSession = (_a = data.session) !== null && _a !== void 0 ? _a : undefined;
++                const { data, error: sessionError } = result;
++                if (sessionError) {
++                    throw sessionError;
+                 }
++                currentSession = (_a = data.session) !== null && _a !== void 0 ? _a : undefined;
+                 if (!(currentSession === null || currentSession === void 0 ? void 0 : currentSession.refresh_token)) {
+                     throw new errors_1.AuthSessionMissingError();
+                 }
+@@ -3893,7 +3903,7 @@ class GoTrueClient {
+      * Generates a new JWT.
+      * @param refreshToken A valid refresh token that was returned on login.
+      */
+-    async _refreshAccessToken(refreshToken) {
++    async _refreshAccessToken(refreshToken, allowRetry = true, checkoutDeadlineAt) {
+         // Refresh tokens are long-lived bearer credentials; do NOT include any
+         // fragment of the token in the debug tag, even when `debug: true` is
+         // enabled (logs may be forwarded to third-party services).
+@@ -3909,13 +3919,17 @@ class GoTrueClient {
+                 this._debug(debugName, 'refreshing attempt', attempt);
+                 return await (0, fetch_1._request)(this.fetch, 'POST', `${this.url}/token?grant_type=refresh_token`, {
+                     body: { refresh_token: refreshToken },
+-                    headers: this.headers,
++                    headers: Object.assign(Object.assign({}, this.headers), (checkoutDeadlineAt === undefined
++                        ? {}
++                        : { 'x-baci-checkout-auth-deadline': String(checkoutDeadlineAt) })),
+                     xform: fetch_1._sessionResponse,
+                 });
+             }, (attempt, error) => {
+                 const nextBackOffInterval = 200 * Math.pow(2, attempt);
+                 return (error &&
+                     (0, errors_1.isAuthRetryableFetchError)(error) &&
++                    allowRetry &&
++                    error.status !== 408 &&
+                     // retryable only if the request can be sent before the backoff overflows the tick duration
+                     Date.now() + nextBackOffInterval - startedAt < constants_1.AUTO_REFRESH_TICK_DURATION_MS);
+             });
+@@ -4054,7 +4068,7 @@ class GoTrueClient {
+             this._debug(debugName, 'end');
+         }
+     }
+-    async _callRefreshToken(refreshToken) {
++    async _callRefreshToken(refreshToken, requireStorageMatch = false, storageDeadlineAt, bypassFailureCache = false) {
+         var _a, _b;
+         if (!refreshToken) {
+             throw new errors_1.AuthSessionMissingError();
+@@ -4074,7 +4088,8 @@ class GoTrueClient {
+         // Token-keyed so callers with a fresh refresh token (rotation pickup
+         // from another tab, explicit `setSession`/`refreshSession({ refresh_token })`,
+         // multi-account switch) bypass the cache and attempt a real refresh.
+-        if (this.lastRefreshFailure &&
++        if (!bypassFailureCache &&
++            this.lastRefreshFailure &&
+             this.lastRefreshFailure.refreshToken === refreshToken &&
+             Date.now() < this.lastRefreshFailure.expiresAt) {
+             this._debug('#_callRefreshToken()', 'returning cached failure (cooldown active)');
+@@ -4084,6 +4099,13 @@ class GoTrueClient {
+         // fragment of the token in the debug tag, even when `debug: true` is
+         // enabled (logs may be forwarded to third-party services).
+         const debugName = `#_callRefreshToken()`;
++        const storage = storageDeadlineAt === undefined
++            ? this.storage
++            : {
++                getItem: (key) => this.storage.getItem(key, storageDeadlineAt),
++                removeItem: (key) => this.storage.removeItem(key, storageDeadlineAt),
++                setItem: (key, value) => this.storage.setItem(key, value, storageDeadlineAt),
++            };
+         this._debug(debugName, 'begin');
+         try {
+             this.refreshingDeferred = new helpers_1.Deferred();
+@@ -4097,15 +4119,28 @@ class GoTrueClient {
+             // refresh_token differs from the one they're hydrating; in both
+             // cases the guard fires only when storage was *modified between
+             // snapshots*, not when the input token disagrees with what's stored.
+-            const storedAtStart = (await (0, helpers_1.getItemAsync)(this.storage, this.storageKey));
+-            const { data, error } = await this._refreshAccessToken(refreshToken);
++            const epochBeforeRefresh = this._sessionRemovalEpoch;
++            const revisionBeforeRefresh = this._sessionStorageRevision;
++            const storedAtStart = (await (0, helpers_1.getItemAsync)(storage, this.storageKey));
++            if (requireStorageMatch && (storedAtStart === null || storedAtStart === void 0 ? void 0 : storedAtStart.refresh_token) !== refreshToken) {
++                const discarded = {
++                    data: null,
++                    error: new errors_1.AuthRefreshDiscardedError(),
++                };
++                this.refreshingDeferred.resolve(discarded);
++                return discarded;
++            }
++            const { data, error } = await this._refreshAccessToken(refreshToken, !requireStorageMatch, storageDeadlineAt);
+             if (error)
+                 throw error;
+             if (!data.session)
+                 throw new errors_1.AuthSessionMissingError();
+-            const storedAfter = (await (0, helpers_1.getItemAsync)(this.storage, this.storageKey));
++            const storedAfter = (await (0, helpers_1.getItemAsync)(storage, this.storageKey));
+             const storageChangedUnderUs = storedAtStart !== null &&
+-                (storedAfter === null || storedAfter.refresh_token !== storedAtStart.refresh_token);
++                ((storedAfter === null &&
++                    (this._sessionRemovalEpoch !== epochBeforeRefresh ||
++                        this._sessionStorageRevision !== revisionBeforeRefresh)) ||
++                    (storedAfter !== null && storedAfter.refresh_token !== storedAtStart.refresh_token));
+             if (storageChangedUnderUs) {
+                 this._debug(debugName, 'commit guard: storage changed since refresh started, discarding rotated tokens', {
+                     // Presence indicators only — never log refresh token fragments,
+@@ -4128,11 +4163,11 @@ class GoTrueClient {
+             // the save and re-check after; if it advanced, undo the write directly
+             // (do NOT call `_removeSession` — that would emit a duplicate
+             // SIGNED_OUT for the concurrent signOut that already fired one).
+-            const epochBeforeSave = this._sessionRemovalEpoch;
+-            await this._saveSession(data.session);
++            const epochBeforeSave = epochBeforeRefresh;
++            await this._saveSession(data.session, storage);
+             if (this._sessionRemovalEpoch !== epochBeforeSave) {
+                 this._debug(debugName, 'commit guard (post-save): _removeSession ran during _saveSession, undoing write');
+-                await (0, helpers_1.removeItemAsync)(this.storage, this.storageKey);
++                await (0, helpers_1.removeItemAsync)(storage, this.storageKey);
+                 if (this.userStorage) {
+                     await (0, helpers_1.removeItemAsync)(this.userStorage, this.storageKey + '-user');
+                 }
+@@ -4166,13 +4201,13 @@ class GoTrueClient {
+                     // rejected — the session is genuinely dead. `__loadSession`
+                     // mirrors this distinction on the read path so callers see the
+                     // preserved session instead of `session: null`.
+-                    const storedNow = (await (0, helpers_1.getItemAsync)(this.storage, this.storageKey));
++                    const storedNow = (await (0, helpers_1.getItemAsync)(storage, this.storageKey));
+                     const accessTokenStillValid = !!((storedNow === null || storedNow === void 0 ? void 0 : storedNow.expires_at) && storedNow.expires_at * 1000 > Date.now());
+                     if (accessTokenStillValid) {
+                         this._debug(debugName, 'proactive refresh failed, access token still valid — preserving session');
+                     }
+                     else {
+-                        await this._removeSession();
++                        await this._removeSession(storage);
+                     }
+                 }
+                 // Cache the failure so serial callers (and the next auto-refresh
+@@ -4228,12 +4263,20 @@ class GoTrueClient {
+      * set currentSession and currentUser
+      * process to _startAutoRefreshToken if possible
+      */
+-    async _saveSession(session) {
++    async _saveSession(session, storage = this.storage) {
++        this._sessionStorageRevision += 1;
+         this._debug('#_saveSession()', session);
+         // _saveSession is always called whenever a new session has been acquired
+         // so we can safely suppress the warning returned by future getSession calls
+         this.suppressGetSessionWarning = true;
+-        await (0, helpers_1.removeItemAsync)(this.storage, `${this.storageKey}-code-verifier`);
++        const codeVerifierKey = `${this.storageKey}-code-verifier`;
++        let codeVerifierBeforeSave = null;
++        try {
++            codeVerifierBeforeSave = await (0, helpers_1.getItemAsync)(storage, codeVerifierKey);
++        }
++        catch (error) {
++            this._debug('#_saveSession()', 'unable to snapshot PKCE verifier before session save', error);
++        }
+         // Create a shallow copy to work with, to avoid mutating the original session object if it's used elsewhere
+         const sessionToProcess = Object.assign({}, session);
+         const userIsProxy = sessionToProcess.user && sessionToProcess.user.__isUserNotAvailableProxy === true;
+@@ -4255,17 +4298,31 @@ class GoTrueClient {
+             const mainSessionData = Object.assign({}, sessionToProcess);
+             delete mainSessionData.user; // Remove user (real or proxy) before cloning for main storage
+             const clonedMainSessionData = (0, helpers_1.deepClone)(mainSessionData);
+-            await (0, helpers_1.setItemAsync)(this.storage, this.storageKey, clonedMainSessionData);
++            await (0, helpers_1.setItemAsync)(storage, this.storageKey, clonedMainSessionData);
+         }
+         else {
+             // No userStorage is configured.
+             // In this case, session.user should ideally not be a proxy.
+             // If it were, structuredClone would fail. This implies an issue elsewhere if user is a proxy here
+             const clonedSession = (0, helpers_1.deepClone)(sessionToProcess); // sessionToProcess still has its original user property
+-            await (0, helpers_1.setItemAsync)(this.storage, this.storageKey, clonedSession);
++            await (0, helpers_1.setItemAsync)(storage, this.storageKey, clonedSession);
++        }
++        // Clean up only the verifier observed before this save. A concurrent OAuth
++        // flow may have installed a newer verifier while session persistence was
++        // in flight, and cleanup failure must not invalidate a committed session.
++        if (codeVerifierBeforeSave !== null) {
++            try {
++                const currentCodeVerifier = await (0, helpers_1.getItemAsync)(storage, codeVerifierKey);
++                if (currentCodeVerifier === codeVerifierBeforeSave) {
++                    await (0, helpers_1.removeItemAsync)(storage, codeVerifierKey);
++                }
++            }
++            catch (error) {
++                this._debug('#_saveSession()', 'best-effort PKCE verifier cleanup failed', error);
++            }
+         }
+     }
+-    async _removeSession() {
++    async _removeSession(storage = this.storage) {
+         // Bump synchronously, BEFORE any `await`, so that `_callRefreshToken`'s
+         // post-save check sees the increment whenever this method has started —
+         // even if it hasn't finished. Pairs with the epoch check in
+@@ -4276,9 +4333,9 @@ class GoTrueClient {
+         // for a token that no longer exists. Synchronous, before any `await`.
+         this.lastRefreshFailure = null;
+         this.suppressGetSessionWarning = false;
+-        await (0, helpers_1.removeItemAsync)(this.storage, this.storageKey);
+-        await (0, helpers_1.removeItemAsync)(this.storage, this.storageKey + '-code-verifier');
+-        await (0, helpers_1.removeItemAsync)(this.storage, this.storageKey + '-user');
++        await (0, helpers_1.removeItemAsync)(storage, this.storageKey);
++        await (0, helpers_1.removeItemAsync)(storage, this.storageKey + '-code-verifier');
++        await (0, helpers_1.removeItemAsync)(storage, this.storageKey + '-user');
+         if (this.userStorage) {
+             await (0, helpers_1.removeItemAsync)(this.userStorage, this.storageKey + '-user');
+         }
+diff --git a/dist/main/lib/fetch.js b/dist/main/lib/fetch.js
+index 96c52a133ff2a0608e8afeb8b063625484ed926a..91d77386191d28fe0758178b9e361d9a40631bb6 100644
+--- a/dist/main/lib/fetch.js
++++ b/dist/main/lib/fetch.js
+@@ -37,7 +37,7 @@ async function handleError(error) {
+     if (!(0, helpers_1.looksLikeFetchResponse)(error)) {
+         throw new errors_1.AuthRetryableFetchError(_getErrorMessage(error), 0);
+     }
+-    if (NETWORK_ERROR_CODES.includes(error.status)) {
++    if (error.status === 408 || NETWORK_ERROR_CODES.includes(error.status)) {
+         // status in 500...599 range - server had an error, request might be retryed.
+         throw new errors_1.AuthRetryableFetchError(_getErrorMessage(error), error.status);
+     }
+diff --git a/dist/module/GoTrueClient.d.ts b/dist/module/GoTrueClient.d.ts
+index 5e2b19e6237548c849c2e9b2fb7386c9da66004c..54ba582a8a206dba97bafe63117e8739aa34aad2 100644
+--- a/dist/module/GoTrueClient.d.ts
++++ b/dist/module/GoTrueClient.d.ts
+@@ -1936,9 +1936,15 @@ export default class GoTrueClient {
+      */
+     refreshSession(currentSession?: {
+         refresh_token: string;
++        bypass_failure_cache?: boolean;
++        require_storage_match?: boolean;
++        storage_deadline_at?: number;
+     }): Promise<AuthResponse>;
+     protected _refreshSession(currentSession?: {
+         refresh_token: string;
++        bypass_failure_cache?: boolean;
++        require_storage_match?: boolean;
++        storage_deadline_at?: number;
+     }): Promise<AuthResponse>;
+     /**
+      * Gets the session data from a URL string
+diff --git a/dist/module/GoTrueClient.js b/dist/module/GoTrueClient.js
+index 2ec11102fe38c88918cc7abc0d0e2f100938759a..4ceb422a0f9ee593d65299d6448f5dcd8a05cdea 100644
+--- a/dist/module/GoTrueClient.js
++++ b/dist/module/GoTrueClient.js
+@@ -119,6 +119,8 @@ class GoTrueClient {
+          * (the post-fetch storage snapshot alone misses that window).
+          */
+         this._sessionRemovalEpoch = 0;
++        /** Monotonic counter for any session replacement, incremented before storage awaits. */
++        this._sessionStorageRevision = 0;
+         /**
+          * Keeps track of the async client initialization.
+          * When null or not yet resolved the auth state is `unknown`
+@@ -3129,15 +3131,23 @@ class GoTrueClient {
+     }
+     async _refreshSession(currentSession) {
+         try {
++            if (currentSession === null || currentSession === void 0 ? void 0 : currentSession.refresh_token) {
++                const { data: session, error } = await this._callRefreshToken(currentSession.refresh_token, currentSession.require_storage_match === true, currentSession.storage_deadline_at, currentSession.bypass_failure_cache === true);
++                if (error) {
++                    return this._returnResult({ data: { user: null, session: null }, error });
++                }
++                return this._returnResult({
++                    data: { user: (session === null || session === void 0 ? void 0 : session.user) || null, session: session || null },
++                    error: null,
++                });
++            }
+             return await this._useSession(async (result) => {
+                 var _a;
+-                if (!currentSession) {
+-                    const { data, error } = result;
+-                    if (error) {
+-                        throw error;
+-                    }
+-                    currentSession = (_a = data.session) !== null && _a !== void 0 ? _a : undefined;
++                const { data, error: sessionError } = result;
++                if (sessionError) {
++                    throw sessionError;
+                 }
++                currentSession = (_a = data.session) !== null && _a !== void 0 ? _a : undefined;
+                 if (!(currentSession === null || currentSession === void 0 ? void 0 : currentSession.refresh_token)) {
+                     throw new AuthSessionMissingError();
+                 }
+@@ -3890,7 +3900,7 @@ class GoTrueClient {
+      * Generates a new JWT.
+      * @param refreshToken A valid refresh token that was returned on login.
+      */
+-    async _refreshAccessToken(refreshToken) {
++    async _refreshAccessToken(refreshToken, allowRetry = true, checkoutDeadlineAt) {
+         // Refresh tokens are long-lived bearer credentials; do NOT include any
+         // fragment of the token in the debug tag, even when `debug: true` is
+         // enabled (logs may be forwarded to third-party services).
+@@ -3906,13 +3916,17 @@ class GoTrueClient {
+                 this._debug(debugName, 'refreshing attempt', attempt);
+                 return await _request(this.fetch, 'POST', `${this.url}/token?grant_type=refresh_token`, {
+                     body: { refresh_token: refreshToken },
+-                    headers: this.headers,
++                    headers: Object.assign(Object.assign({}, this.headers), (checkoutDeadlineAt === undefined
++                        ? {}
++                        : { 'x-baci-checkout-auth-deadline': String(checkoutDeadlineAt) })),
+                     xform: _sessionResponse,
+                 });
+             }, (attempt, error) => {
+                 const nextBackOffInterval = 200 * Math.pow(2, attempt);
+                 return (error &&
+                     isAuthRetryableFetchError(error) &&
++                    allowRetry &&
++                    error.status !== 408 &&
+                     // retryable only if the request can be sent before the backoff overflows the tick duration
+                     Date.now() + nextBackOffInterval - startedAt < AUTO_REFRESH_TICK_DURATION_MS);
+             });
+@@ -4051,7 +4065,7 @@ class GoTrueClient {
+             this._debug(debugName, 'end');
+         }
+     }
+-    async _callRefreshToken(refreshToken) {
++    async _callRefreshToken(refreshToken, requireStorageMatch = false, storageDeadlineAt, bypassFailureCache = false) {
+         var _a, _b;
+         if (!refreshToken) {
+             throw new AuthSessionMissingError();
+@@ -4071,7 +4085,8 @@ class GoTrueClient {
+         // Token-keyed so callers with a fresh refresh token (rotation pickup
+         // from another tab, explicit `setSession`/`refreshSession({ refresh_token })`,
+         // multi-account switch) bypass the cache and attempt a real refresh.
+-        if (this.lastRefreshFailure &&
++        if (!bypassFailureCache &&
++            this.lastRefreshFailure &&
+             this.lastRefreshFailure.refreshToken === refreshToken &&
+             Date.now() < this.lastRefreshFailure.expiresAt) {
+             this._debug('#_callRefreshToken()', 'returning cached failure (cooldown active)');
+@@ -4081,6 +4096,13 @@ class GoTrueClient {
+         // fragment of the token in the debug tag, even when `debug: true` is
+         // enabled (logs may be forwarded to third-party services).
+         const debugName = `#_callRefreshToken()`;
++        const storage = storageDeadlineAt === undefined
++            ? this.storage
++            : {
++                getItem: (key) => this.storage.getItem(key, storageDeadlineAt),
++                removeItem: (key) => this.storage.removeItem(key, storageDeadlineAt),
++                setItem: (key, value) => this.storage.setItem(key, value, storageDeadlineAt),
++            };
+         this._debug(debugName, 'begin');
+         try {
+             this.refreshingDeferred = new Deferred();
+@@ -4094,15 +4116,28 @@ class GoTrueClient {
+             // refresh_token differs from the one they're hydrating; in both
+             // cases the guard fires only when storage was *modified between
+             // snapshots*, not when the input token disagrees with what's stored.
+-            const storedAtStart = (await getItemAsync(this.storage, this.storageKey));
+-            const { data, error } = await this._refreshAccessToken(refreshToken);
++            const epochBeforeRefresh = this._sessionRemovalEpoch;
++            const revisionBeforeRefresh = this._sessionStorageRevision;
++            const storedAtStart = (await getItemAsync(storage, this.storageKey));
++            if (requireStorageMatch && (storedAtStart === null || storedAtStart === void 0 ? void 0 : storedAtStart.refresh_token) !== refreshToken) {
++                const discarded = {
++                    data: null,
++                    error: new AuthRefreshDiscardedError(),
++                };
++                this.refreshingDeferred.resolve(discarded);
++                return discarded;
++            }
++            const { data, error } = await this._refreshAccessToken(refreshToken, !requireStorageMatch, storageDeadlineAt);
+             if (error)
+                 throw error;
+             if (!data.session)
+                 throw new AuthSessionMissingError();
+-            const storedAfter = (await getItemAsync(this.storage, this.storageKey));
++            const storedAfter = (await getItemAsync(storage, this.storageKey));
+             const storageChangedUnderUs = storedAtStart !== null &&
+-                (storedAfter === null || storedAfter.refresh_token !== storedAtStart.refresh_token);
++                ((storedAfter === null &&
++                    (this._sessionRemovalEpoch !== epochBeforeRefresh ||
++                        this._sessionStorageRevision !== revisionBeforeRefresh)) ||
++                    (storedAfter !== null && storedAfter.refresh_token !== storedAtStart.refresh_token));
+             if (storageChangedUnderUs) {
+                 this._debug(debugName, 'commit guard: storage changed since refresh started, discarding rotated tokens', {
+                     // Presence indicators only — never log refresh token fragments,
+@@ -4125,11 +4160,11 @@ class GoTrueClient {
+             // the save and re-check after; if it advanced, undo the write directly
+             // (do NOT call `_removeSession` — that would emit a duplicate
+             // SIGNED_OUT for the concurrent signOut that already fired one).
+-            const epochBeforeSave = this._sessionRemovalEpoch;
+-            await this._saveSession(data.session);
++            const epochBeforeSave = epochBeforeRefresh;
++            await this._saveSession(data.session, storage);
+             if (this._sessionRemovalEpoch !== epochBeforeSave) {
+                 this._debug(debugName, 'commit guard (post-save): _removeSession ran during _saveSession, undoing write');
+-                await removeItemAsync(this.storage, this.storageKey);
++                await removeItemAsync(storage, this.storageKey);
+                 if (this.userStorage) {
+                     await removeItemAsync(this.userStorage, this.storageKey + '-user');
+                 }
+@@ -4163,13 +4198,13 @@ class GoTrueClient {
+                     // rejected — the session is genuinely dead. `__loadSession`
+                     // mirrors this distinction on the read path so callers see the
+                     // preserved session instead of `session: null`.
+-                    const storedNow = (await getItemAsync(this.storage, this.storageKey));
++                    const storedNow = (await getItemAsync(storage, this.storageKey));
+                     const accessTokenStillValid = !!((storedNow === null || storedNow === void 0 ? void 0 : storedNow.expires_at) && storedNow.expires_at * 1000 > Date.now());
+                     if (accessTokenStillValid) {
+                         this._debug(debugName, 'proactive refresh failed, access token still valid — preserving session');
+                     }
+                     else {
+-                        await this._removeSession();
++                        await this._removeSession(storage);
+                     }
+                 }
+                 // Cache the failure so serial callers (and the next auto-refresh
+@@ -4225,12 +4260,20 @@ class GoTrueClient {
+      * set currentSession and currentUser
+      * process to _startAutoRefreshToken if possible
+      */
+-    async _saveSession(session) {
++    async _saveSession(session, storage = this.storage) {
++        this._sessionStorageRevision += 1;
+         this._debug('#_saveSession()', session);
+         // _saveSession is always called whenever a new session has been acquired
+         // so we can safely suppress the warning returned by future getSession calls
+         this.suppressGetSessionWarning = true;
+-        await removeItemAsync(this.storage, `${this.storageKey}-code-verifier`);
++        const codeVerifierKey = `${this.storageKey}-code-verifier`;
++        let codeVerifierBeforeSave = null;
++        try {
++            codeVerifierBeforeSave = await getItemAsync(storage, codeVerifierKey);
++        }
++        catch (error) {
++            this._debug('#_saveSession()', 'unable to snapshot PKCE verifier before session save', error);
++        }
+         // Create a shallow copy to work with, to avoid mutating the original session object if it's used elsewhere
+         const sessionToProcess = Object.assign({}, session);
+         const userIsProxy = sessionToProcess.user && sessionToProcess.user.__isUserNotAvailableProxy === true;
+@@ -4252,17 +4295,31 @@ class GoTrueClient {
+             const mainSessionData = Object.assign({}, sessionToProcess);
+             delete mainSessionData.user; // Remove user (real or proxy) before cloning for main storage
+             const clonedMainSessionData = deepClone(mainSessionData);
+-            await setItemAsync(this.storage, this.storageKey, clonedMainSessionData);
++            await setItemAsync(storage, this.storageKey, clonedMainSessionData);
+         }
+         else {
+             // No userStorage is configured.
+             // In this case, session.user should ideally not be a proxy.
+             // If it were, structuredClone would fail. This implies an issue elsewhere if user is a proxy here
+             const clonedSession = deepClone(sessionToProcess); // sessionToProcess still has its original user property
+-            await setItemAsync(this.storage, this.storageKey, clonedSession);
++            await setItemAsync(storage, this.storageKey, clonedSession);
++        }
++        // Clean up only the verifier observed before this save. A concurrent OAuth
++        // flow may have installed a newer verifier while session persistence was
++        // in flight, and cleanup failure must not invalidate a committed session.
++        if (codeVerifierBeforeSave !== null) {
++            try {
++                const currentCodeVerifier = await getItemAsync(storage, codeVerifierKey);
++                if (currentCodeVerifier === codeVerifierBeforeSave) {
++                    await removeItemAsync(storage, codeVerifierKey);
++                }
++            }
++            catch (error) {
++                this._debug('#_saveSession()', 'best-effort PKCE verifier cleanup failed', error);
++            }
+         }
+     }
+-    async _removeSession() {
++    async _removeSession(storage = this.storage) {
+         // Bump synchronously, BEFORE any `await`, so that `_callRefreshToken`'s
+         // post-save check sees the increment whenever this method has started —
+         // even if it hasn't finished. Pairs with the epoch check in
+@@ -4273,9 +4330,9 @@ class GoTrueClient {
+         // for a token that no longer exists. Synchronous, before any `await`.
+         this.lastRefreshFailure = null;
+         this.suppressGetSessionWarning = false;
+-        await removeItemAsync(this.storage, this.storageKey);
+-        await removeItemAsync(this.storage, this.storageKey + '-code-verifier');
+-        await removeItemAsync(this.storage, this.storageKey + '-user');
++        await removeItemAsync(storage, this.storageKey);
++        await removeItemAsync(storage, this.storageKey + '-code-verifier');
++        await removeItemAsync(storage, this.storageKey + '-user');
+         if (this.userStorage) {
+             await removeItemAsync(this.userStorage, this.storageKey + '-user');
+         }
+diff --git a/dist/module/lib/fetch.js b/dist/module/lib/fetch.js
+index 1e0b329acbdd79509a646b3251c327e5156249b1..cbee901ac4606a68709c7c75593f842042e2f741 100644
+--- a/dist/module/lib/fetch.js
++++ b/dist/module/lib/fetch.js
+@@ -27,7 +27,7 @@ export async function handleError(error) {
+     if (!looksLikeFetchResponse(error)) {
+         throw new AuthRetryableFetchError(_getErrorMessage(error), 0);
+     }
+-    if (NETWORK_ERROR_CODES.includes(error.status)) {
++    if (error.status === 408 || NETWORK_ERROR_CODES.includes(error.status)) {
+         // status in 500...599 range - server had an error, request might be retryed.
+         throw new AuthRetryableFetchError(_getErrorMessage(error), error.status);
+     }
+diff --git a/src/GoTrueClient.ts b/src/GoTrueClient.ts
+index 9891653c2a4344bb4862d08a1dc33bbc83e873a4..90cf2985a7815da5c932c5597b1575a07a4b6c07 100644
+--- a/src/GoTrueClient.ts
++++ b/src/GoTrueClient.ts
+@@ -316,6 +316,8 @@ export default class GoTrueClient {
+    * (the post-fetch storage snapshot alone misses that window).
+    */
+   protected _sessionRemovalEpoch = 0
++  /** Monotonic counter for any session replacement, incremented before storage awaits. */
++  protected _sessionStorageRevision = 0
+   /**
+    * Keeps track of the async client initialization.
+    * When null or not yet resolved the auth state is `unknown`
+@@ -3689,7 +3691,12 @@ export default class GoTrueClient {
+    * const { session, user } = data
+    * ```
+    */
+-  async refreshSession(currentSession?: { refresh_token: string }): Promise<AuthResponse> {
++  async refreshSession(currentSession?: {
++    refresh_token: string
++    bypass_failure_cache?: boolean
++    require_storage_match?: boolean
++    storage_deadline_at?: number
++  }): Promise<AuthResponse> {
+     await this.initializePromise
+
+     if (this.lock != null) {
+@@ -3704,18 +3711,36 @@ export default class GoTrueClient {
+
+   protected async _refreshSession(currentSession?: {
+     refresh_token: string
++    bypass_failure_cache?: boolean
++    require_storage_match?: boolean
++    storage_deadline_at?: number
+   }): Promise<AuthResponse> {
+     try {
+-      return await this._useSession(async (result) => {
+-        if (!currentSession) {
+-          const { data, error } = result
+-          if (error) {
+-            throw error
+-          }
++      if (currentSession?.refresh_token) {
++        const { data: session, error } = await this._callRefreshToken(
++          currentSession.refresh_token,
++          currentSession.require_storage_match === true,
++          currentSession.storage_deadline_at,
++          currentSession.bypass_failure_cache === true
++        )
++        if (error) {
++          return this._returnResult({ data: { user: null, session: null }, error })
++        }
++
++        return this._returnResult({
++          data: { user: session?.user ?? null, session: session ?? null },
++          error: null,
++        })
++      }
+
+-          currentSession = data.session ?? undefined
++      return await this._useSession(async (result) => {
++        const { data, error: sessionError } = result
++        if (sessionError) {
++          throw sessionError
+         }
+
++        currentSession = data.session ?? undefined
++
+         if (!currentSession?.refresh_token) {
+           throw new AuthSessionMissingError()
+         }
+@@ -4621,7 +4646,11 @@ export default class GoTrueClient {
+    * Generates a new JWT.
+    * @param refreshToken A valid refresh token that was returned on login.
+    */
+-  private async _refreshAccessToken(refreshToken: string): Promise<AuthResponse> {
++  private async _refreshAccessToken(
++    refreshToken: string,
++    allowRetry = true,
++    checkoutDeadlineAt?: number
++  ): Promise<AuthResponse> {
+     // Refresh tokens are long-lived bearer credentials; do NOT include any
+     // fragment of the token in the debug tag, even when `debug: true` is
+     // enabled (logs may be forwarded to third-party services).
+@@ -4642,7 +4671,12 @@ export default class GoTrueClient {
+
+           return await _request(this.fetch, 'POST', `${this.url}/token?grant_type=refresh_token`, {
+             body: { refresh_token: refreshToken },
+-            headers: this.headers,
++            headers: {
++              ...this.headers,
++              ...(checkoutDeadlineAt === undefined
++                ? {}
++                : { 'x-baci-checkout-auth-deadline': String(checkoutDeadlineAt) }),
++            },
+             xform: _sessionResponse,
+           })
+         },
+@@ -4651,6 +4685,8 @@ export default class GoTrueClient {
+           return (
+             error &&
+             isAuthRetryableFetchError(error) &&
++            allowRetry &&
++            error.status !== 408 &&
+             // retryable only if the request can be sent before the backoff overflows the tick duration
+             Date.now() + nextBackOffInterval - startedAt < AUTO_REFRESH_TICK_DURATION_MS
+           )
+@@ -4830,7 +4866,12 @@ export default class GoTrueClient {
+     }
+   }
+
+-  private async _callRefreshToken(refreshToken: string): Promise<CallRefreshTokenResult> {
++  private async _callRefreshToken(
++    refreshToken: string,
++    requireStorageMatch = false,
++    storageDeadlineAt?: number,
++    bypassFailureCache = false
++  ): Promise<CallRefreshTokenResult> {
+     if (!refreshToken) {
+       throw new AuthSessionMissingError()
+     }
+@@ -4852,6 +4893,7 @@ export default class GoTrueClient {
+     // from another tab, explicit `setSession`/`refreshSession({ refresh_token })`,
+     // multi-account switch) bypass the cache and attempt a real refresh.
+     if (
++      !bypassFailureCache &&
+       this.lastRefreshFailure &&
+       this.lastRefreshFailure.refreshToken === refreshToken &&
+       Date.now() < this.lastRefreshFailure.expiresAt
+@@ -4865,6 +4907,34 @@ export default class GoTrueClient {
+     // enabled (logs may be forwarded to third-party services).
+     const debugName = `#_callRefreshToken()`
+
++    const storage =
++      storageDeadlineAt === undefined
++        ? this.storage
++        : {
++            getItem: (key: string) =>
++              (
++                this.storage.getItem as (
++                  key: string,
++                  deadline?: number
++                ) => ReturnType<SupportedStorage['getItem']>
++              )(key, storageDeadlineAt),
++            removeItem: (key: string) =>
++              (
++                this.storage.removeItem as (
++                  key: string,
++                  deadline?: number
++                ) => ReturnType<SupportedStorage['removeItem']>
++              )(key, storageDeadlineAt),
++            setItem: (key: string, value: string) =>
++              (
++                this.storage.setItem as (
++                  key: string,
++                  value: string,
++                  deadline?: number
++                ) => ReturnType<SupportedStorage['setItem']>
++              )(key, value, storageDeadlineAt),
++          }
++
+     this._debug(debugName, 'begin')
+
+     try {
+@@ -4880,16 +4950,34 @@ export default class GoTrueClient {
+       // refresh_token differs from the one they're hydrating; in both
+       // cases the guard fires only when storage was *modified between
+       // snapshots*, not when the input token disagrees with what's stored.
+-      const storedAtStart = (await getItemAsync(this.storage, this.storageKey)) as Session | null
++      const epochBeforeRefresh = this._sessionRemovalEpoch
++      const revisionBeforeRefresh = this._sessionStorageRevision
++      const storedAtStart = (await getItemAsync(storage, this.storageKey)) as Session | null
++
++      if (requireStorageMatch && storedAtStart?.refresh_token !== refreshToken) {
++        const discarded: CallRefreshTokenResult = {
++          data: null,
++          error: new AuthRefreshDiscardedError(),
++        }
++        this.refreshingDeferred.resolve(discarded)
++        return discarded
++      }
+
+-      const { data, error } = await this._refreshAccessToken(refreshToken)
++      const { data, error } = await this._refreshAccessToken(
++        refreshToken,
++        !requireStorageMatch,
++        storageDeadlineAt
++      )
+       if (error) throw error
+       if (!data.session) throw new AuthSessionMissingError()
+
+-      const storedAfter = (await getItemAsync(this.storage, this.storageKey)) as Session | null
++      const storedAfter = (await getItemAsync(storage, this.storageKey)) as Session | null
+       const storageChangedUnderUs =
+         storedAtStart !== null &&
+-        (storedAfter === null || storedAfter.refresh_token !== storedAtStart.refresh_token)
++        ((storedAfter === null &&
++          (this._sessionRemovalEpoch !== epochBeforeRefresh ||
++            this._sessionStorageRevision !== revisionBeforeRefresh)) ||
++          (storedAfter !== null && storedAfter.refresh_token !== storedAtStart.refresh_token))
+
+       if (storageChangedUnderUs) {
+         this._debug(
+@@ -4918,16 +5006,16 @@ export default class GoTrueClient {
+       // the save and re-check after; if it advanced, undo the write directly
+       // (do NOT call `_removeSession` — that would emit a duplicate
+       // SIGNED_OUT for the concurrent signOut that already fired one).
+-      const epochBeforeSave = this._sessionRemovalEpoch
++      const epochBeforeSave = epochBeforeRefresh
+
+-      await this._saveSession(data.session)
++      await this._saveSession(data.session, storage)
+
+       if (this._sessionRemovalEpoch !== epochBeforeSave) {
+         this._debug(
+           debugName,
+           'commit guard (post-save): _removeSession ran during _saveSession, undoing write'
+         )
+-        await removeItemAsync(this.storage, this.storageKey)
++        await removeItemAsync(storage, this.storageKey)
+         if (this.userStorage) {
+           await removeItemAsync(this.userStorage, this.storageKey + '-user')
+         }
+@@ -4967,7 +5055,7 @@ export default class GoTrueClient {
+           // rejected — the session is genuinely dead. `__loadSession`
+           // mirrors this distinction on the read path so callers see the
+           // preserved session instead of `session: null`.
+-          const storedNow = (await getItemAsync(this.storage, this.storageKey)) as Session | null
++          const storedNow = (await getItemAsync(storage, this.storageKey)) as Session | null
+           const accessTokenStillValid = !!(
+             storedNow?.expires_at && storedNow.expires_at * 1000 > Date.now()
+           )
+@@ -4978,7 +5066,7 @@ export default class GoTrueClient {
+               'proactive refresh failed, access token still valid — preserving session'
+             )
+           } else {
+-            await this._removeSession()
++            await this._removeSession(storage)
+           }
+         }
+
+@@ -5046,12 +5134,19 @@ export default class GoTrueClient {
+    * set currentSession and currentUser
+    * process to _startAutoRefreshToken if possible
+    */
+-  private async _saveSession(session: Session) {
++  private async _saveSession(session: Session, storage = this.storage) {
++    this._sessionStorageRevision += 1
+     this._debug('#_saveSession()', session)
+     // _saveSession is always called whenever a new session has been acquired
+     // so we can safely suppress the warning returned by future getSession calls
+     this.suppressGetSessionWarning = true
+-    await removeItemAsync(this.storage, `${this.storageKey}-code-verifier`)
++    const codeVerifierKey = `${this.storageKey}-code-verifier`
++    let codeVerifierBeforeSave: unknown = null
++    try {
++      codeVerifierBeforeSave = await getItemAsync(storage, codeVerifierKey)
++    } catch (error) {
++      this._debug('#_saveSession()', 'unable to snapshot PKCE verifier before session save', error)
++    }
+     // Create a shallow copy to work with, to avoid mutating the original session object if it's used elsewhere
+     const sessionToProcess = { ...session }
+
+@@ -5076,17 +5171,30 @@ export default class GoTrueClient {
+       delete mainSessionData.user // Remove user (real or proxy) before cloning for main storage
+
+       const clonedMainSessionData = deepClone(mainSessionData)
+-      await setItemAsync(this.storage, this.storageKey, clonedMainSessionData)
++      await setItemAsync(storage, this.storageKey, clonedMainSessionData)
+     } else {
+       // No userStorage is configured.
+       // In this case, session.user should ideally not be a proxy.
+       // If it were, structuredClone would fail. This implies an issue elsewhere if user is a proxy here
+       const clonedSession = deepClone(sessionToProcess) // sessionToProcess still has its original user property
+-      await setItemAsync(this.storage, this.storageKey, clonedSession)
++      await setItemAsync(storage, this.storageKey, clonedSession)
++    }
++    // Clean up only the verifier observed before this save. A concurrent OAuth
++    // flow may have installed a newer verifier while session persistence was
++    // in flight, and cleanup failure must not invalidate a committed session.
++    if (codeVerifierBeforeSave !== null) {
++      try {
++        const currentCodeVerifier = await getItemAsync(storage, codeVerifierKey)
++        if (currentCodeVerifier === codeVerifierBeforeSave) {
++          await removeItemAsync(storage, codeVerifierKey)
++        }
++      } catch (error) {
++        this._debug('#_saveSession()', 'best-effort PKCE verifier cleanup failed', error)
++      }
+     }
+   }
+
+-  private async _removeSession() {
++  private async _removeSession(storage = this.storage) {
+     // Bump synchronously, BEFORE any `await`, so that `_callRefreshToken`'s
+     // post-save check sees the increment whenever this method has started —
+     // even if it hasn't finished. Pairs with the epoch check in
+@@ -5100,9 +5208,9 @@ export default class GoTrueClient {
+
+     this.suppressGetSessionWarning = false
+
+-    await removeItemAsync(this.storage, this.storageKey)
+-    await removeItemAsync(this.storage, this.storageKey + '-code-verifier')
+-    await removeItemAsync(this.storage, this.storageKey + '-user')
++    await removeItemAsync(storage, this.storageKey)
++    await removeItemAsync(storage, this.storageKey + '-code-verifier')
++    await removeItemAsync(storage, this.storageKey + '-user')
+
+     if (this.userStorage) {
+       await removeItemAsync(this.userStorage, this.storageKey + '-user')
+diff --git a/src/lib/fetch.ts b/src/lib/fetch.ts
+index cdef4a8a5c0567eeafc69c2592f05952dd99c60e..deed48a3f13fb1508a72baa31a45afd15ede4b50 100644
+--- a/src/lib/fetch.ts
++++ b/src/lib/fetch.ts
+@@ -81,7 +81,7 @@ export async function handleError(error: unknown) {
+     throw new AuthRetryableFetchError(_getErrorMessage(error), 0)
+   }
+
+-  if (NETWORK_ERROR_CODES.includes(error.status)) {
++  if (error.status === 408 || NETWORK_ERROR_CODES.includes(error.status)) {
+     // status in 500...599 range - server had an error, request might be retryed.
+     throw new AuthRetryableFetchError(_getErrorMessage(error), error.status)
+   }

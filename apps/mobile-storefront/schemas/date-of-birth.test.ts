@@ -1,6 +1,7 @@
 import {
   DateOfBirthSchema,
   getDateOfBirthValidationError,
+  isAdultDateOfBirth,
 } from './date-of-birth';
 
 describe('DateOfBirthSchema', () => {
@@ -71,5 +72,19 @@ describe('getDateOfBirthValidationError', () => {
     expect(getDateOfBirthValidationError(`${nextYear}-01-01`)).toBe(
       'Enter a valid date of birth'
     );
+  });
+});
+
+describe('isAdultDateOfBirth', () => {
+  const now = new Date('2026-08-17T12:00:00.000Z');
+
+  it('recognizes a shopper who is already 18', () => {
+    expect(isAdultDateOfBirth('2008-08-17', now)).toBe(true);
+  });
+
+  it('keeps the underage and unknown cases non-adult', () => {
+    expect(isAdultDateOfBirth('2008-08-18', now)).toBe(false);
+    expect(isAdultDateOfBirth(null, now)).toBe(false);
+    expect(isAdultDateOfBirth('not-a-date', now)).toBe(false);
   });
 });

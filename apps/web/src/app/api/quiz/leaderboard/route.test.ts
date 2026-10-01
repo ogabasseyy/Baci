@@ -28,14 +28,22 @@ const ROW = {
 
 function mockSupabase({
   data = { current_player: null, entries: [ROW], status: 'published' },
+  participantCount = 1,
   error = null,
   user = { id: USER_ID },
 }: {
   data?: unknown;
+  participantCount?: number;
   error?: unknown;
   user?: { id: string } | null;
 } = {}) {
-  const rpc = vi.fn().mockResolvedValue({ data, error });
+  const rpc = vi.fn((name: string) =>
+    Promise.resolve(
+      name === 'get_quiz_participant_count_public_v2'
+        ? { data: participantCount, error: null }
+        : { data, error }
+    )
+  );
   const supabase = {
     auth: {
       getUser: vi.fn().mockResolvedValue({ data: { user }, error: null }),
@@ -85,11 +93,15 @@ describe('quiz leaderboard route', () => {
     };
     const { rpc } = mockSupabase({
       data: { current_player: current, entries: [ROW], status: 'published' },
+      participantCount: 101,
     });
     const { GET } = await import('./route');
     const response = await GET(request());
 
     expect(rpc).toHaveBeenCalledWith('get_quiz_leaderboard_public_v2', {
+      p_event_id: EVENT_ID,
+    });
+    expect(rpc).toHaveBeenCalledWith('get_quiz_participant_count_public_v2', {
       p_event_id: EVENT_ID,
     });
     expect(await response.json()).toEqual({
@@ -113,12 +125,13 @@ describe('quiz leaderboard route', () => {
           totalTimeSeconds: 30.5,
         },
       ],
+      participantCount: 101,
       status: 'published',
     });
   });
 
   it('returns live_hidden with no entries before publication', async () => {
-    mockSupabase({
+    const { rpc } = mockSupabase({
       data: { current_player: null, entries: [], status: 'live_hidden' },
     });
     const { GET } = await import('./route');
@@ -127,7 +140,11 @@ describe('quiz leaderboard route', () => {
     expect(body).toEqual({
       currentPlayer: null,
       entries: [],
+      participantCount: 1,
       status: 'live_hidden',
+    });
+    expect(rpc).toHaveBeenCalledWith('get_quiz_live_leaderboard_public_v2', {
+      p_event_id: EVENT_ID,
     });
   });
 

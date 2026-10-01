@@ -33,10 +33,11 @@ function putOctal(header, offset, width, value) {
   checksum(header);
   return Buffer.concat([header, bytes, Buffer.alloc((512 - (bytes.length % 512)) % 512)]);
 } function sourceTar(entries) { return Buffer.concat([...entries.map(({ path, bytes, mode }) => tarEntry(path, bytes, mode)), Buffer.alloc(1024)]); } function fixture({ extra = [], omit } = {}) {
+  const policy = { authority: {}, supplyChain: { node: { ownerDarwinArm64Sha256: '4'.repeat(64) } }, supplyChainProvenance: { node: { checksumsSha256: '1'.repeat(64), keyringSha256: '2'.repeat(64), signatureSha256: '3'.repeat(64) } } }; const policyBytes = Buffer.from(canonicalJson(policy));
   const sourceEntries = [...TASK9_SOURCE_FILES, 'infra/cwv-runner/policy.json']
     .filter((path) => path !== omit)
     .concat(Array.isArray(extra) ? extra : [extra])
-    .map((path) => ({ bytes: authenticClosure.get(path) ?? Buffer.from(path.endsWith('.sh') ? '#!/bin/sh\nexit 64\n' : path.endsWith('policy.json') ? '{"authority":{}}' : path.endsWith('task9-bootstrap-runtime.mjs') ? 'launcher source\n' : path.endsWith('task9-bootstrap.mjs') ? 'bootstrap source\n' : 'export {};\n'), mode: path.endsWith('.sh') ? '100755' : '100644', path }))
+    .map((path) => ({ bytes: authenticClosure.get(path) ?? (path.endsWith('policy.json') ? policyBytes : Buffer.from(path.endsWith('.sh') ? '#!/bin/sh\nexit 64\n' : path.endsWith('task9-bootstrap-runtime.mjs') ? 'launcher source\n' : path.endsWith('task9-bootstrap.mjs') ? 'bootstrap source\n' : 'export {};\n')), mode: path.endsWith('.sh') ? '100755' : '100644', path }))
     .sort((left, right) => left.path.localeCompare(right.path));
   const archive = sourceTar(sourceEntries);
   const node = Buffer.from('pinned node bytes');
@@ -55,12 +56,12 @@ function putOctal(header, offset, width, value) {
     nodeSha256: sha256(node),
     nodeVersion: '24.18.0',
   };
-  const provenance = {
+  const provenance = { archiveSha256: '4'.repeat(64),
     schemaVersion: 1,
     artifact: 'node',
     checksumSha256: '1'.repeat(64),
     keyringSha256: '2'.repeat(64),
-    sha256: runtime.nodeSha256,
+    sha256: runtime.nodeSha256, executableSha256: runtime.nodeSha256,
     signatureSha256: '3'.repeat(64),
     version: runtime.nodeVersion,
   };
@@ -89,7 +90,7 @@ function putOctal(header, offset, width, value) {
     },
     policy: {
       path: 'infra/cwv-runner/policy.json',
-      sha256: sha256(Buffer.from('{"authority":{}}')),
+      sha256: sha256(policyBytes),
     },
     runtime,
     transport: {
@@ -103,8 +104,8 @@ function putOctal(header, offset, width, value) {
     baseSha: 'b'.repeat(40),
     entries: [],
     mergeSha: 'c'.repeat(40),
-    policyCanonicalSha256: sha256(Buffer.from(canonicalJson({ authority: {} }))),
-    policyFileSha256: sha256(Buffer.from('{"authority":{}}')),
+    policyCanonicalSha256: sha256(canonicalJson(policy)),
+    policyFileSha256: sha256(policyBytes),
     prNumber: 9,
     reviewedHeadSha: 'a'.repeat(40),
     schemaVersion: 1,
@@ -125,9 +126,8 @@ function putOctal(header, offset, width, value) {
   };
   envelope.source.manifestSha256 = sha256(manifestBytes);
   envelope.payload = { entries: Object.keys(files).sort().map((name) => ({ mode: files[name].mode, path: `payload/${name}`, sha256: sha256(files[name].bytes), type: 'file' })) };
-  return { archiveEntries, envelope, files, manifest };
+  return { archiveEntries, envelope, files, manifest, policy };
 }
-
 function rechecksum(value) { checksum(value.subarray(0, 512)); }
 test('canonical JSON is deterministic and rejects unsupported values', () => {
   assert.equal(canonicalJson({ b: 2, a: 1 }), '{"a":1,"b":2}');
@@ -136,7 +136,7 @@ test('canonical JSON is deterministic and rejects unsupported values', () => {
 test('declares the only seven permitted offline bootstrap payload entries', () => {
   assert.deepEqual(BUNDLE_ENTRIES, ['manifest.json', 'manifest.sha256', 'source.tar', 'source.tar.sha256', 'task9-bootstrap.mjs', 'node', 'node-provenance.json']);
 });
-test('declares a closed self-contained bootstrap and post-authorization source inventory', async () => { assert.deepEqual(TASK9_SOURCE_FILES, 'infra/cwv-runner/archive-index.mjs infra/cwv-runner/archive-link-validation.mjs infra/cwv-runner/archive-stream.mjs infra/cwv-runner/build-image.mjs infra/cwv-runner/campaign-accounting-contract.mjs infra/cwv-runner/campaign-capture-authority.mjs infra/cwv-runner/campaign-cron-tree.mjs infra/cwv-runner/campaign-lease-holder.sh infra/cwv-runner/campaign-network-contract.mjs infra/cwv-runner/campaign-ownership.mjs infra/cwv-runner/campaign-quiesce.sh infra/cwv-runner/campaign-restore-baseline.mjs infra/cwv-runner/campaign-restore-network.mjs infra/cwv-runner/campaign-restore.sh infra/cwv-runner/campaign-source-closure.mjs infra/cwv-runner/campaign-state-collisions.mjs infra/cwv-runner/campaign-state-journal-lock.mjs infra/cwv-runner/campaign-state.mjs infra/cwv-runner/campaign-terminal-cleanup.mjs infra/cwv-runner/campaign-traffic.mjs infra/cwv-runner/canonical-json.mjs infra/cwv-runner/command-settings-contract.mjs infra/cwv-runner/cron-inventory.json infra/cwv-runner/exact-run-accounting.mjs infra/cwv-runner/exact-run-contract-cli.mjs infra/cwv-runner/exact-run-contract.mjs infra/cwv-runner/exact-run-controller.sh infra/cwv-runner/exact-run-live-sample-contract.mjs infra/cwv-runner/exact-run-process-contract.mjs infra/cwv-runner/exact-run-rearm-contract.mjs infra/cwv-runner/exact-run-terminal-cleanup.sh infra/cwv-runner/exact-run-transition-contract.mjs infra/cwv-runner/image-archive-authority.mjs infra/cwv-runner/image-process-map.mjs infra/cwv-runner/image-projection-config.mjs infra/cwv-runner/image-projection.mjs infra/cwv-runner/install-prepare-acceptance.mjs infra/cwv-runner/install-prepare-content-cleanup-cli.mjs infra/cwv-runner/install-prepare-content-cleanup.mjs infra/cwv-runner/install-prepare-content-safety.mjs infra/cwv-runner/install-prepare-runtime-receipt.mjs infra/cwv-runner/install-prepare-store.mjs infra/cwv-runner/owner-api-transport-cli-state.mjs infra/cwv-runner/owner-api-transport-evidence.mjs infra/cwv-runner/owner-api-transport-failure.mjs infra/cwv-runner/owner-api-transport-hold.mjs infra/cwv-runner/owner-api-transport-http.mjs infra/cwv-runner/owner-api-transport-operation-evidence.mjs infra/cwv-runner/owner-api-transport-pagination.mjs infra/cwv-runner/owner-api-transport-primitives.mjs infra/cwv-runner/owner-api-transport-requests.mjs infra/cwv-runner/owner-api-transport-runtime.mjs infra/cwv-runner/owner-api-transport-security.mjs infra/cwv-runner/owner-api-transport-source.mjs infra/cwv-runner/owner-api-transport-zip.mjs infra/cwv-runner/owner-api-transport.mjs infra/cwv-runner/owner-dispatch.sh infra/cwv-runner/policy.schema.mjs infra/cwv-runner/registration-token-mount.mjs infra/cwv-runner/rootfs-projection-contract.mjs infra/cwv-runner/rootfs-source-inventory.mjs infra/cwv-runner/rootfs-source-membership-input.mjs infra/cwv-runner/rootfs-source-membership.mjs infra/cwv-runner/runner-runtime-archive-snapshot.mjs infra/cwv-runner/runner-runtime-identity-manifest.mjs infra/cwv-runner/runner-runtime-manifest-producer.mjs infra/cwv-runner/runner-runtime-manifest-receipt-reader.mjs infra/cwv-runner/runner-runtime-projection.mjs infra/cwv-runner/runner-runtime-receipt-contract.mjs infra/cwv-runner/source-archive.mjs infra/cwv-runner/source-manifest.mjs infra/cwv-runner/source-tree-projection.mjs infra/cwv-runner/task9-bootstrap-runtime.mjs infra/cwv-runner/task9-bootstrap.mjs infra/cwv-runner/task9-owner-documents.mjs infra/cwv-runner/task9-source-authorization.mjs infra/cwv-runner/verify-owner-cli.sh infra/cwv-runner/vps-ssh.sh'.split(' ')); assert.deepEqual(TRANSPORT_SOURCE_FILES.filter((path) => !TASK9_SOURCE_FILES.includes(path)), []); const source = await (await import('node:fs/promises')).readFile(new URL('./task9-bootstrap.mjs', import.meta.url), 'utf8'); assert.doesNotMatch(source, /from '\.\/task9-ustar\.mjs'|import\('\.\/task9-bootstrap-runtime\.mjs'\)/); });
+test('declares a closed self-contained bootstrap and post-authorization source inventory', async () => { assert.deepEqual(TASK9_SOURCE_FILES, 'infra/cwv-runner/archive-index.mjs infra/cwv-runner/archive-link-validation.mjs infra/cwv-runner/archive-stream.mjs infra/cwv-runner/build-image.mjs infra/cwv-runner/campaign-accounting-contract.mjs infra/cwv-runner/campaign-capture-authority.mjs infra/cwv-runner/campaign-cron-tree.mjs infra/cwv-runner/campaign-lease-holder.sh infra/cwv-runner/campaign-network-contract.mjs infra/cwv-runner/campaign-ownership.mjs infra/cwv-runner/campaign-quiesce.sh infra/cwv-runner/campaign-restore-baseline.mjs infra/cwv-runner/campaign-restore-network.mjs infra/cwv-runner/campaign-restore.sh infra/cwv-runner/campaign-source-closure.mjs infra/cwv-runner/campaign-state-collisions.mjs infra/cwv-runner/campaign-state-journal-lock.mjs infra/cwv-runner/campaign-state.mjs infra/cwv-runner/campaign-terminal-cleanup.mjs infra/cwv-runner/campaign-traffic.mjs infra/cwv-runner/canonical-json.mjs infra/cwv-runner/command-settings-contract.mjs infra/cwv-runner/cron-inventory.json infra/cwv-runner/exact-run-accounting.mjs infra/cwv-runner/exact-run-contract-cli.mjs infra/cwv-runner/exact-run-contract.mjs infra/cwv-runner/exact-run-controller.sh infra/cwv-runner/exact-run-live-sample-contract.mjs infra/cwv-runner/exact-run-process-contract.mjs infra/cwv-runner/exact-run-rearm-contract.mjs infra/cwv-runner/exact-run-terminal-cleanup.sh infra/cwv-runner/exact-run-transition-contract.mjs infra/cwv-runner/image-archive-authority.mjs infra/cwv-runner/image-process-map.mjs infra/cwv-runner/image-projection-config.mjs infra/cwv-runner/image-projection.mjs infra/cwv-runner/install-prepare-acceptance.mjs infra/cwv-runner/install-prepare-content-cleanup-cli.mjs infra/cwv-runner/install-prepare-content-cleanup.mjs infra/cwv-runner/install-prepare-content-safety.mjs infra/cwv-runner/install-prepare-runtime-receipt.mjs infra/cwv-runner/install-prepare-store.mjs infra/cwv-runner/owner-api-transport-cli-state.mjs infra/cwv-runner/owner-api-transport-evidence.mjs infra/cwv-runner/owner-api-transport-failure.mjs infra/cwv-runner/owner-api-transport-hold.mjs infra/cwv-runner/owner-api-transport-http.mjs infra/cwv-runner/owner-api-transport-operation-evidence.mjs infra/cwv-runner/owner-api-transport-pagination.mjs infra/cwv-runner/owner-api-transport-primitives.mjs infra/cwv-runner/owner-api-transport-requests.mjs infra/cwv-runner/owner-api-transport-runtime.mjs infra/cwv-runner/owner-api-transport-security.mjs infra/cwv-runner/owner-api-transport-source.mjs infra/cwv-runner/owner-api-transport-zip.mjs infra/cwv-runner/owner-api-transport.mjs infra/cwv-runner/owner-dispatch.sh infra/cwv-runner/policy.schema.mjs infra/cwv-runner/registration-token-mount.mjs infra/cwv-runner/rootfs-projection-contract.mjs infra/cwv-runner/rootfs-source-inventory.mjs infra/cwv-runner/rootfs-source-membership-input.mjs infra/cwv-runner/rootfs-source-membership.mjs infra/cwv-runner/runner-runtime-archive-snapshot.mjs infra/cwv-runner/runner-runtime-identity-manifest.mjs infra/cwv-runner/runner-runtime-manifest-producer.mjs infra/cwv-runner/runner-runtime-manifest-receipt-reader.mjs infra/cwv-runner/runner-runtime-projection.mjs infra/cwv-runner/runner-runtime-receipt-contract.mjs infra/cwv-runner/source-archive.mjs infra/cwv-runner/source-manifest-git.mjs infra/cwv-runner/source-manifest-objects.mjs infra/cwv-runner/source-manifest-tree.mjs infra/cwv-runner/source-manifest.mjs infra/cwv-runner/source-tree-projection.mjs infra/cwv-runner/task9-bootstrap-runtime.mjs infra/cwv-runner/task9-bootstrap.mjs infra/cwv-runner/task9-owner-documents.mjs infra/cwv-runner/task9-source-authorization.mjs infra/cwv-runner/verify-owner-cli.sh infra/cwv-runner/vps-ssh.sh'.split(' ')); assert.deepEqual(TRANSPORT_SOURCE_FILES.filter((path) => !TASK9_SOURCE_FILES.includes(path)), []); const source = await (await import('node:fs/promises')).readFile(new URL('./task9-bootstrap.mjs', import.meta.url), 'utf8'); assert.doesNotMatch(source, /from '\.\/task9-ustar\.mjs'|import\('\.\/task9-bootstrap-runtime\.mjs'\)/); });
 test('verifies detached digests and complete binding before parsing or publication', () => {
   const value = fixture();
   const envelopeBytes = Buffer.from(canonicalJson(value.envelope));
@@ -251,7 +251,7 @@ test('publishes its sealed authorization, not a caller-modified inspection tree'
   publishAuthorizedTree(authorized, (path, bytes) => writes.set(path, bytes));
   assert.equal(
     writes.get('infra/cwv-runner/policy.json').toString(),
-    '{"authority":{}}'
+    canonicalJson(value.policy)
   );
 });
 

@@ -9,7 +9,7 @@ const MIXED_CART_MESSAGE =
   'Your cart already has items. Check out or empty your cart first, then claim your prize so nothing is lost.';
 
 interface UseQuizPrizeClaimResult {
-  /** Add the won prize to the cart (as a voucher line) and open the cart. */
+  /** Add the won prize as a voucher line and open checkout. */
   claimPrize: () => void;
   /** Retry fetching the prize product after a load failure. */
   retry: () => void;
@@ -32,7 +32,7 @@ interface UseQuizPrizeClaimResult {
  * then added to the cart carrying `voucher_token`/`voucher_award_id` — the
  * existing cart + order pipeline forwards these to `/api/orders`, where the
  * voucher entitlement is verified and priced server-side. Navigation lands the
- * shopper on the cart to complete checkout.
+ * shopper directly in checkout to complete the claim.
  */
 export function useQuizPrizeClaim(
   prizeClaim: QuizPrizeClaim
@@ -84,6 +84,11 @@ export function useQuizPrizeClaim(
       // the web path zeroes it the same way in build-order-items). Keep the
       // catalog price as compare_at so the cart shows the "was" amount.
       price: 0,
+      // Order verification uses variant.price_override ?? product.price.
+      // The normalized variant.price may be display-only when no override exists.
+      catalog_price:
+        product.variants?.find((variant) => variant.id === prizeClaim.variantId)
+          ?.price_override ?? product.price,
       compare_at_price: product.compare_at_price ?? product.price,
       quantity: 1,
       image_url: product.image || product.images?.[0],
@@ -94,7 +99,7 @@ export function useQuizPrizeClaim(
       voucher_award_id: prizeClaim.awardId,
     });
 
-    router.push('/cart');
+    router.push('/checkout');
   };
 
   return {

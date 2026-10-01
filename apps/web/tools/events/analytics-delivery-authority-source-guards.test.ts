@@ -1,4 +1,4 @@
-import ts from 'typescript';
+import ts from '@typescript/typescript6';
 import { describe, expect, it } from 'vitest';
 import { analyticsDeliveryAuthoritySourceGuards as guards } from './analytics-delivery-authority-source-guards';
 

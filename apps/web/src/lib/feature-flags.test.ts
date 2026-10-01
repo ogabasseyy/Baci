@@ -91,32 +91,27 @@ describe('feature flags', () => {
 
   describe('hasPriceNegotiationEntitlement', () => {
     it('returns true for pro, business, and enterprise plans', () => {
-      expect(hasPriceNegotiationEntitlement('pro', 'any-slug')).toBe(true);
-      expect(hasPriceNegotiationEntitlement('business', 'any-slug')).toBe(true);
-      expect(hasPriceNegotiationEntitlement('enterprise', 'any-slug')).toBe(
-        true
-      );
+      expect(hasPriceNegotiationEntitlement('pro')).toBe(true);
+      expect(hasPriceNegotiationEntitlement('business')).toBe(true);
+      expect(hasPriceNegotiationEntitlement('enterprise')).toBe(true);
     });
 
     it('returns false for free and starter plans', () => {
-      expect(hasPriceNegotiationEntitlement('free', 'any-slug')).toBe(false);
-      expect(hasPriceNegotiationEntitlement('starter', 'any-slug')).toBe(false);
+      expect(hasPriceNegotiationEntitlement('free')).toBe(false);
+      expect(hasPriceNegotiationEntitlement('starter')).toBe(false);
     });
 
-    it('falls back to legacy slugs when plan_tier is absent', () => {
-      expect(hasPriceNegotiationEntitlement(null, 'ogabassey')).toBe(true);
-      expect(hasPriceNegotiationEntitlement(undefined, 'demo-premium')).toBe(
-        true
-      );
-      expect(hasPriceNegotiationEntitlement(null, 'other-merchant')).toBe(
-        false
-      );
+    it('returns false when plan_tier is absent instead of consulting a legacy slug allowlist', () => {
+      // Regression: the helper used to grant negotiation to a hardcoded set of
+      // storefront slugs whenever plan_tier was null/undefined. plan_tier is
+      // now NOT NULL in the database, so an absent tier is a data fault and
+      // must fail closed.
+      expect(hasPriceNegotiationEntitlement(null)).toBe(false);
+      expect(hasPriceNegotiationEntitlement(undefined)).toBe(false);
     });
 
     it('returns false when plan_tier is present but malformed/invalid', () => {
-      expect(hasPriceNegotiationEntitlement('invalid_tier', 'ogabassey')).toBe(
-        false
-      );
+      expect(hasPriceNegotiationEntitlement('invalid_tier')).toBe(false);
     });
   });
 });

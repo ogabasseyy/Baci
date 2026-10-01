@@ -6,6 +6,7 @@ import {
   createSupabaseReplayDatabaseEnvironment,
   isSupabaseReplayLoopbackHost,
   parseSupabaseReplayArguments,
+  readReplayCommandExecutionTimeoutMs,
   readSupabaseReplayDatabaseUrl,
   verifySupabaseReplayContract,
 } from './supabase-replay-contract';
@@ -70,15 +71,31 @@ function commandWith(overrides: Partial<typeof outputs> = {}): ReplayCommand {
 
 describe('verifySupabaseReplayContract', () => {
   it('accepts only the frozen Task 3 toolchain', async () => {
-    await expect(
-      verifySupabaseReplayContract({
-        nodeVersion: outputs.node,
-        psqlBin: '/custom/PostgreSQL-18.3/bin/psql',
-        runCommand: commandWith(),
-      })
-    ).resolves.toEqual({
+    const contract = await verifySupabaseReplayContract({
+      nodeVersion: outputs.node,
+      psqlBin: '/custom/PostgreSQL-18.3/bin/psql',
+      runCommand: commandWith(),
+    });
+
+    expect(contract).toEqual({
       nodeMajor: 24,
       psqlBin: '/custom/PostgreSQL-18.3/bin/psql',
+      serverVersionNum: 170006,
+    });
+  });
+
+  it('accepts the Ubuntu PostgreSQL 18.3 client suffix', async () => {
+    const contract = await verifySupabaseReplayContract({
+      nodeVersion: outputs.node,
+      psqlBin: '/usr/bin/psql',
+      runCommand: commandWith({
+        psql: 'psql (PostgreSQL) 18.3 (Ubuntu 18.3-1.pgdg24.04+1)\n',
+      }),
+    });
+
+    expect(contract).toEqual({
+      nodeMajor: 24,
+      psqlBin: '/usr/bin/psql',
       serverVersionNum: 170006,
     });
   });
@@ -249,5 +266,27 @@ describe('parseSupabaseReplayArguments', () => {
     expect(() => parseSupabaseReplayArguments(argv)).toThrow(
       /^Invalid Supabase replay arguments$/
     );
+  });
+});
+
+describe('readReplayCommandExecutionTimeoutMs', () => {
+  it('defaults to five minutes when unset', () => {
+    expect(readReplayCommandExecutionTimeoutMs({})).toBe(300_000);
+  });
+
+  it('reads a bounded timeout from the environment', () => {
+    expect(
+      readReplayCommandExecutionTimeoutMs({
+        BACI_REPLAY_COMMAND_TIMEOUT_MS: '1800000',
+      })
+    ).toBe(1_800_000);
+  });
+
+  it('rejects invalid timeout values', () => {
+    expect(() =>
+      readReplayCommandExecutionTimeoutMs({
+        BACI_REPLAY_COMMAND_TIMEOUT_MS: 'not-a-number',
+      })
+    ).toThrow(/^BACI_REPLAY_COMMAND_TIMEOUT_MS is invalid$/);
   });
 });

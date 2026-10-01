@@ -59,7 +59,7 @@ describe('initializeAdTrackingForStartup', () => {
     );
   });
 
-  it('times out without leaving app startup blocked', async () => {
+  it('defers slow initialization without reporting a failure', async () => {
     jest.spyOn(console, 'error').mockImplementation(() => {});
     mockInitAdTracking.mockReturnValue(new Promise(() => {}));
 
@@ -67,9 +67,54 @@ describe('initializeAdTrackingForStartup', () => {
     await jest.runOnlyPendingTimersAsync();
 
     await expect(initialization).resolves.toBeUndefined();
+    expect(console.error).not.toHaveBeenCalled();
+    expect(mockRecordCrashBreadcrumb).toHaveBeenCalledWith(
+      'root_layout:ad_tracking_deferred'
+    );
+  });
+  it('records eventual success after the startup wait expires', async () => {
+    const errorLog = jest.spyOn(console, 'error').mockImplementation(() => {});
+    let complete!: () => void;
+    mockInitAdTracking.mockReturnValue(
+      new Promise<void>((resolve) => {
+        complete = resolve;
+      })
+    );
+
+    const initialization = initializeAdTrackingForStartup();
+    await jest.advanceTimersByTimeAsync(4000);
+    await initialization;
+    complete();
+    await jest.advanceTimersByTimeAsync(0);
+
+    expect(errorLog).not.toHaveBeenCalled();
+    expect(mockRecordCrashBreadcrumb).toHaveBeenCalledWith(
+      'root_layout:ad_tracking_initialized'
+    );
+  });
+  it('records eventual failure after the startup wait resolves', async () => {
+    const errorLog = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const error = new Error('SDK failed after startup');
+    let fail!: (reason: Error) => void;
+    mockInitAdTracking.mockReturnValue(
+      new Promise<void>((_resolve, reject) => {
+        fail = reject;
+      })
+    );
+
+    const initialization = initializeAdTrackingForStartup();
+    await jest.advanceTimersByTimeAsync(4000);
+    await expect(initialization).resolves.toBeUndefined();
+    fail(error);
+    await jest.advanceTimersByTimeAsync(0);
+
+    expect(errorLog).toHaveBeenCalledWith(
+      'Ad tracking initialization error:',
+      error
+    );
     expect(mockRecordCrashBreadcrumb).toHaveBeenCalledWith(
       'root_layout:ad_tracking_error',
-      { message: 'Ad tracking initialization timed out' }
+      { message: error.message }
     );
   });
 });

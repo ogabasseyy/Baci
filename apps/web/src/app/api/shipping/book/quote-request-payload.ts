@@ -45,12 +45,15 @@ export function resolveBookingQuoteRequestPayload(
     quote.provider,
     quote.provider_rate_id
   );
+  const storedQuoteRequest = parseStoredQuoteRequest(quote.quote_request);
+  const isInternationalQuote =
+    isGiglInternationalQuote ||
+    storedQuoteRequest?.shipmentType === 'international';
 
-  if (!isGiglInternationalQuote) {
+  if (!isInternationalQuote) {
     return { items, receiver };
   }
 
-  const storedQuoteRequest = parseStoredQuoteRequest(quote.quote_request);
   if (!storedQuoteRequest) {
     return null;
   }
@@ -96,6 +99,18 @@ export function validateBookingQuoteRequestPayload(
 ): BookingQuoteValidation {
   if (!payload.storedQuoteRequest) {
     return { ok: true };
+  }
+  if (
+    payload.storedQuoteRequest.shipmentType === 'international' &&
+    !payload.storedQuoteRequest.sender
+  ) {
+    return {
+      ok: false,
+      error:
+        'The saved international shipping quote is missing its sender. Please get a new quote before shipping.',
+      code: 'INTERNATIONAL_QUOTE_SENDER_MISSING',
+      status: 400,
+    };
   }
   if (payload.validationError) {
     return payload.validationError;

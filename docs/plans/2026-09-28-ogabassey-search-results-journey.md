@@ -1,0 +1,53 @@
+# Ogabassey search results journey
+
+Date: 28 September 2026. Status: implementation plan; no code or deployment changes made by this document.
+
+## Goal
+
+When a shopper submits a broad search on ogabassey.com or in the customer app, show a browsable list of matching products. Keep direct product suggestions as shortcuts. Let shoppers refine a broad result set and return to it after inspecting a product.
+
+## Current state
+
+- Web already has a `/search?q=...` results route. The fallback navbar form reaches it, but the loaded autocomplete has no search-submit action; Enter with suggestions opens the first product. The results route displays at most 20 products even when its count is higher. `getStorefrontSearchProducts` already accepts `limit`, `offset`, `sort`, and filters, so the web results page can use the existing search contract. The RPC reports its total only on returned rows; an out-of-range offset therefore appears to have a zero count. The same autocomplete component is also used by the generic storefront header.
+- The customer app has a `/search` screen with a grid and category, brand, condition, price, and rating controls. Its home screen renders `SearchDropdown` over `Header`, with the dropdown's own input hidden. Submitting the visible Header input only dismisses the keyboard. The dropdown shows at most six products and has no "all results" action. The `/search` screen requests 20 products but does not use the existing `useProducts` hook's `total`, `hasMore`, `loadMore`, `isLoadingMore`, or error state. The hook and `search_products_v2` already support paging and sorting.
+- These are source-code findings. The web URL responded successfully during the 28 September check; the production interaction and released app binary still need journey verification before claiming a customer-facing fix.
+- The older [search upgrade plan](../superpowers/plans/2026-06-17-ogabassey-search-2026-upgrade.md) covers wider ranking, analytics, and merchandising work. This plan addresses the submitted-search journey first and reuses its results-page ideas where they fit current code.
+
+## Release 1: complete the browse journey
+
+1. **Web submission.** Give the shared `SearchAutocomplete` an optional explicit submit callback and wire it in Ogabassey's navbar. Check the generic storefront header as the other consumer; preserve its existing behavior unless its own search route and merchant URL contract are verified. In Ogabassey, Enter/Search with no highlighted option opens the encoded `/search?q=...` route even when product suggestions exist. Enter on a highlighted product still opens that product; a highlighted query suggestion should submit that query. Clicking a product suggestion keeps its direct-product behavior. Add a visible, keyboard-accessible "See all results" action for a nonblank query, including when there are no suggestions; keep its semantics valid if rendered beside a suggestion `listbox`. Keep empty and whitespace-only queries on the current page. Preserve blog search routing and custom-domain/path-prefix handling. Make the search action work with both keyboard and touch.
+2. **App submission.** Route the active home `Header` submit to `/search` with the trimmed query (minimum two characters, matching the current search threshold); keep shorter queries in the input with a clear minimum-length hint. Initialize `/search` from an Expo Router query parameter. Add "See all results" to the active `SearchDropdown`, including its no-suggestion state. Pass the current input value separately from the debounced suggestion query into `SearchDropdownList`, so the action submits what the shopper just typed. Recent-search chips can continue to fill the Header query, then use the same submit path. Capture the query, close the dropdown, and release input focus before navigation. Keep tapping a dropdown product as a direct-product shortcut. Prevent a second push while the first navigation is in flight.
+3. **Web results.** Add an in-page search form prefilled with the submitted query so shoppers can edit it without returning home. Page through matching products using a validated `page` query parameter and a bounded offset; keep the query in next/previous links. Validate malformed or repeated `q`/`page` parameters before search. The RPC's total count comes from returned rows, so an empty nonfirst page needs a first-page check before deciding between a real no-results state and an invalid page. Redirect an invalid page to a valid one. Keep result summaries, current-page links, and the `CollectionPage`/`ItemList` structured-data URL and item positions truthful for each page; retain the query-only canonical and `noindex,follow`. Avoid recording page views or recovery queries as new search submissions in `search_analytics`; add an explicit adapter option if required.
+4. **App results.** Read and validate the Expo Router query parameter as a string before using it. Initialize the existing `/search` screen from it, and update the committed search when a new route query arrives on an already-mounted screen without overwriting edits made after that navigation. Save a valid submitted query to the existing `search_history` contract once. Enable `useProducts` only when a valid search is active, so the idle recent-search screen does not fetch an unseen product page. Connect the hook's `total`, `hasMore`, `loadMore`, `isLoadingMore`, and error state to the `FlashList` results and footer. Guard the end event against duplicate fetches; retain loaded results and query when returning from a product.
+5. **Result states.** Show the submitted query and a truthful total or explicit loaded count on both platforms. Distinguish loading, offline/error, and genuine zero matches; offer query editing and an all-products route. Do not call a failed search "no results." Keep the empty-query app screen's recent searches and categories, and the web page's existing "Did you mean" link.
+
+Release 1 is complete when a shopper can submit `iPhone` from the main search control on web and app, move beyond the first 20 matches, open a product, and return to the same query and result position; direct suggestion selection still works.
+
+## Release 2: refine broad results
+
+1. **Web listing.** Add sort and useful filters for electronics, starting with price, brand, condition, and category where supported by `getStorefrontSearchProducts`. Keep query/filter/sort/page state in the URL; changing the query or filters resets the page to one. Validate all filter and price inputs. Preserve noindex/canonical behavior and the merchant's URL prefix; do not count refinements as new search submissions. Check the condition-family path's latency on broad searches before enabling that filter on the page, because it collects and hydrates all ranked candidates in memory.
+2. **App listing.** Keep existing category, brand, condition, price, and rating filters; verify they apply to the full paged result set. Show active filters and make them clearable. Expose sorting through the existing `sortBy` option, with undefined representing relevance. Reset paging when query, filters, or sort change, and distinguish total matches from loaded products.
+3. **Recovery and relevance.** Offer a corrected query where available and a path into categories/all products for empty results. Ensure a broad term such as `phone` produces a list for comparison rather than a forced first-product jump.
+
+Release 2 is complete when a shopper can refine a broad result set on both platforms without losing the query, receiving stale products, or hitting an unexplained empty page.
+
+## Implementation anchors
+
+| Area | Current files to inspect or change |
+| --- | --- |
+| Web entry | `apps/web/src/components/storefront/ogabassey/layout/navbar-search.tsx`, `apps/web/src/components/storefront/header.tsx`, `apps/web/src/components/storefront/search-autocomplete.tsx` and their tests |
+| Web results | `apps/web/src/app/(storefront)/[slug]/(catalog)/(listing)/search/search-page-content.tsx`, `page.tsx`, and their tests |
+| Web search contract | `apps/web/src/lib/storefront-search.ts`; use existing merchant-scoped search, do not introduce a privileged client |
+| App entry | `apps/mobile-storefront/app/(tabs)/index.tsx`, `components/storefront/Header.tsx`, `components/storefront/SearchDropdown.tsx`, `components/storefront/search/SearchDropdownList.tsx`, and their tests |
+| App results | `apps/mobile-storefront/app/search.tsx`, `components/search/SearchScreenView.tsx`, `hooks/use-products.ts`, `hooks/product-pages.ts`, and their tests |
+
+## Verification
+
+- Add regression tests for the exact failure: web Enter from loaded autocomplete and app home Header/SearchDropdown submission. Test empty and one-character queries (including the app's minimum-length hint), highlighted/direct product selection, encoded queries, custom-domain/path-prefix routing, focus cleanup, and no duplicate app navigation. Do not use the currently unmounted `SearchOverlay` tests as evidence that the home journey works.
+- Test result pagination past 20, out-of-range page recovery, search-analytics event count, malformed/repeated URL parameters, page-specific structured data, empty/error distinctions, and return navigation with deterministic fixtures for Release 1. Test an already-mounted app search screen receiving a different route query and preserving edits on product back navigation. Test sort/filter state, reset behavior, and broad-query latency for Release 2. Include merchant isolation for any changed search API behavior. Test both consumers of the shared web autocomplete.
+- Run affected web and mobile-storefront lint, typecheck, and test commands using their package scripts. Use the repository validation guide if shared runtime or API contracts change. Run `coderabbit review --agent -t uncommitted` before committing code and address valid critical/high findings.
+- After an authorized release, verify the web journey on ogabassey.com and the app journey in the released build. A passing local test or web route response alone does not establish that customers can reach the results.
+
+## Scope and sequencing
+
+Ship Release 1 first as the focused customer fix; Release 2 can follow separately. No schema migration or new search engine is required for Release 1. Keep the broader ranking/merchandising work in the older search upgrade plan separate from this journey. Implementation, PR, merge, and production deployment are separate steps; this document authorizes none of them by itself.

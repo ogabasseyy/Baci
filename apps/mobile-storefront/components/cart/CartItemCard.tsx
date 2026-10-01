@@ -11,6 +11,7 @@ import {
   getCartItemEffectivePrice,
   hasActiveNegotiatedPrice,
 } from '@/lib/cart-pricing';
+import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import type { CartItem } from '@/stores/cart-store';
 import AssuranceToggle from './AssuranceToggle';
 import CartQuantityInput from './CartQuantityInput';
@@ -82,9 +83,11 @@ export default function CartItemCard({
           accessibilityLabel={`Open product: ${item.name || item.slug || item.product_id}`}
         >
           <SafeImage
-            source={{
+            source={createSafeBoundedImageSource({
+              height: 64,
               uri: item.image_url || PLACEHOLDER_IMAGE_URL,
-            }}
+              width: 64,
+            })}
             style={styles.productImage}
             contentFit="contain"
           />

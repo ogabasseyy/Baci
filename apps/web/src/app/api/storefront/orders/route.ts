@@ -1,12 +1,15 @@
+import { compareReceiptListDesc } from '@baci/shared/receipt';
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { sanitizePublicOrder } from '@/lib/public-fulfillment-sanitizer';
+import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import {
   getCurrentDocumentKind,
   isReceiptEligible,
   normalizePaymentStatus,
   normalizeShippingStatus,
 } from '@/lib/storefront-account-document-data';
+import { resolveStorefrontOrderPaymentAccounts } from '@/lib/storefront-order-payment-accounts';
 import { storefrontAccountDocumentQuerySchema } from '@/schemas/storefront-account-document';
 
 interface JoinedProduct {
@@ -40,15 +43,7 @@ function normalizeImageUrl(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
-/**
- * Customer Orders API
- *
- * GET - Fetch orders for the authenticated customer
- *
- * Uses authenticateApiRequest to support both:
- * - Mobile apps sending Bearer tokens in the Authorization header
- * - Web browsers using cookie-based Supabase sessions
- */
+/** Customer orders for authenticated web and mobile customers. */
 
 export async function GET(request: NextRequest) {
   try {
@@ -108,6 +103,8 @@ export async function GET(request: NextRequest) {
         id,
         order_number,
         created_at,
+        transaction_date,
+        invoice_issue_date,
         total,
         subtotal,
         shipping_fee,
@@ -123,6 +120,7 @@ export async function GET(request: NextRequest) {
         tracking_number,
         shipping_provider,
         payment_method,
+        invoice_type_code,
         fulfillment_details,
         order_items (
           id,
@@ -143,16 +141,11 @@ export async function GET(request: NextRequest) {
               slug
             )
           )
-        ),
-        order_payment_accounts (
-          account_number,
-          bank_name,
-          account_name,
-          provider
         )
       `)
       .eq('customer_id', customer.id)
       .eq('merchant_id', merchant.id)
+      .order('transaction_date', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false });
 
     if (ordersError) {
@@ -161,6 +154,19 @@ export async function GET(request: NextRequest) {
         { error: 'Failed to fetch orders' },
         { status: 500 }
       );
+    }
+
+    const { paymentAccountsByOrderId, paymentAccountError, transactionError } =
+      await resolveStorefrontOrderPaymentAccounts(supabase, orders ?? []);
+    if (paymentAccountError) {
+      console.error('Orders payment-account fetch error:', paymentAccountError);
+      return NextResponse.json(
+        { error: 'Failed to fetch payment accounts' },
+        { status: 500 }
+      );
+    }
+    if (transactionError) {
+      console.error('Orders transaction fetch error:', transactionError);
     }
 
     // Transform to expected format
@@ -172,6 +178,8 @@ export async function GET(request: NextRequest) {
         id: order.id,
         order_number: order.order_number,
         created_at: order.created_at,
+        transaction_date: order.transaction_date,
+        invoice_issue_date: order.invoice_issue_date,
         total: order.total,
         subtotal: order.subtotal,
         shipping_fee: order.shipping_fee,
@@ -186,7 +194,7 @@ export async function GET(request: NextRequest) {
         shipping_provider: order.shipping_provider,
         payment_method: order.payment_method,
         fulfillment_details: order.fulfillment_details,
-        virtual_account: order.order_payment_accounts?.[0] || null,
+        virtual_account: paymentAccountsByOrderId.get(order.id) ?? null,
         balance: Math.max(
           0,
           Number(order.total || 0) - Number(order.amount_paid || 0)
@@ -196,6 +204,14 @@ export async function GET(request: NextRequest) {
           shippingStatus,
           externalSource: order.external_source,
           importJobId: order.import_job_id,
+        }),
+        invoice_type_code: resolveInvoiceTypeCode({
+          paymentMethod: order.payment_method,
+          isPaid: paymentStatus === 'paid',
+          wasPaid: paymentStatus === 'refunded',
+          paymentStatus,
+          amountPaid: order.amount_paid,
+          storedTypeCode: order.invoice_type_code,
         }),
         receipt_eligible: isReceiptEligible({
           paymentStatus,
@@ -232,6 +248,11 @@ export async function GET(request: NextRequest) {
         }),
       };
     });
+
+    // The database pre-sort above cannot express the display-date fallback
+    // (Supabase orders by column), so file backdated invoices by the same
+    // issue → transaction → creation date the receipt list renders.
+    transformedOrders.sort(compareReceiptListDesc);
 
     return NextResponse.json({
       orders: sanitizePublicOrder(transformedOrders),

@@ -283,7 +283,7 @@ export function StorefrontFooter() {
         <div className="mt-8 pt-8 border-t border-white/10 text-center">
           <p className="text-sm opacity-80">
             <span suppressHydrationWarning>
-              &copy; {new Date().getFullYear()} {merchant.business_name}. All
+              &copy; {merchant.business_name}. All
             </span>
             rights reserved.
           </p>

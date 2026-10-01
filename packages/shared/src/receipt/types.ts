@@ -16,7 +16,7 @@ export interface ReceiptMerchant {
   cac_rc_number: string | null;
   tax_identification_number: string | null;
   legal_entity_name: string | null;
-  brand_colors?: { primary: string; background: string; accent: string };
+  brand_colors?: { primary: string; background?: string; accent: string };
   vat_registration_status: string | null;
   vat_rate: number | null;
   bank_code: string | null;
@@ -55,6 +55,8 @@ export interface ReceiptFulfillmentDetails {
 export interface ReceiptOrder {
   order_number: string;
   created_at: string;
+  transaction_date?: string | null;
+  invoice_issue_date?: string | null;
   currency: string;
   total: number;
   subtotal: number;
@@ -126,9 +128,17 @@ export interface ReceiptOrder {
   }>;
 }
 
+export type ReceiptDocumentKind = 'receipt' | 'invoice' | 'proforma';
+
 export interface ReceiptOptions {
   qrCodeDataUri?: string;
   storeUrl?: string;
   paymentLink?: string;
   svgXml?: string;
+  /**
+   * Explicit document kind. Only `proforma` changes the output today: an
+   * unpaid order opened behind a "View / Download Proforma Invoice" action
+   * must read as a proforma, not a commercial invoice.
+   */
+  documentKind?: ReceiptDocumentKind;
 }

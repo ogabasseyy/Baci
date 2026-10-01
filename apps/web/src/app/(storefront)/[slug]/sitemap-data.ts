@@ -26,6 +26,7 @@ import {
   buildProductSitemapEntry,
   type ProductWithCategory,
 } from './build-product-sitemap-entry';
+import { getGamingGraphicsHubSitemapEntries } from './gaming-graphics-hub-sitemap';
 import { getCommercialSupportCategorySitemapEntries } from './get-commercial-support-category-sitemap-entries';
 import { getStaticSitemapEntries } from './get-static-sitemap-entries';
 import { getTrustPolicySitemapEntries } from './get-trust-policy-sitemap-entries';
@@ -217,10 +218,14 @@ export async function getProductSitemapEntries({
     const { data, error } = (await supabase
       .from('products')
       .select(
-        'id, name, slug, category, canonical_url, images, updated_at, category_id, categories:category_id(slug), product_categories:product_categories(categories(slug))'
+        'id, name, slug, category, canonical_url, images, updated_at, category_id, categories:category_id(slug, is_active), product_categories:product_categories(category_id, categories(slug, is_active))'
       )
       .eq('merchant_id', merchant.id)
       .eq('status', 'active')
+      .order('category_id', {
+        ascending: true,
+        referencedTable: 'product_categories',
+      })
       .order('id', { ascending: true })
       .range(from, from + pageSize - 1)) as {
       data: ProductWithCategory[] | null;
@@ -427,6 +432,12 @@ export async function getCommercialSupportSitemapEntries(
   });
   const commercialEntries: MetadataRoute.Sitemap = [];
   const seenCommercialUrls = new Set<string>();
+  const graphicsHubEntries = await getGamingGraphicsHubSitemapEntries(context);
+
+  for (const entry of graphicsHubEntries) {
+    seenCommercialUrls.add(entry.url);
+    commercialEntries.push(entry);
+  }
 
   for (
     let index = 0;

@@ -205,7 +205,10 @@ function makeCustomer(
 ): CustomerSearchRow {
   return {
     address: null,
+    city: null,
     company_name: null,
+    country: null,
+    country_code: null,
     created_at: '',
     deleted_at: null,
     email: null,
@@ -214,13 +217,17 @@ function makeCustomer(
     id: 'customer-default',
     last_login_at: null,
     last_name: null,
+    latitude: null,
+    longitude: null,
     loyalty_points: 0,
     merchant_id: 'merchant-1',
     phone: null,
+    state: null,
     store_credit: 0,
     total_orders: 0,
     total_spent: 0,
     updated_at: '',
+    zip_code: null,
     ...overrides,
     customer_type: overrides.customer_type ?? 'individual',
   };

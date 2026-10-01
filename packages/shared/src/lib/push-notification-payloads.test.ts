@@ -26,6 +26,18 @@ describe('getAdminNotificationNavigationTarget', () => {
     });
   });
 
+  it('routes new invoice payloads directly to the affected order', () => {
+    expect(
+      getAdminNotificationNavigationTarget({
+        type: 'new_invoice',
+        order_id: 'order-invoice-123',
+      })
+    ).toEqual({
+      screen: 'order',
+      params: { id: 'order-invoice-123' },
+    });
+  });
+
   it('falls back to the orders list when the admin payload lacks an order id', () => {
     expect(
       getAdminNotificationNavigationTarget({

@@ -1,0 +1,159 @@
+CREATE FUNCTION
+DO
+CREATE FUNCTION
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+CREATE TABLE
+INSERT 0 1
+GRANT
+SET
+ test_expect_error 
+-------------------
+ 
+(1 row)
+
+RESET
+SET
+ test_expect_error 
+-------------------
+ 
+(1 row)
+
+                                                                               set_config                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"storefront_redvault_customer_email":"customer@example.test","storefront_order_context":"route","storefront_order_merchant_id":"6b5cb8a4-5575-456c-b936-8cdfae30db74"}
+(1 row)
+
+ test_expect_error 
+-------------------
+ 
+(1 row)
+
+RESET
+UPDATE 1
+ test_expect_error 
+-------------------
+ 
+(1 row)
+
+UPDATE 1
+SELECT 1
+GRANT
+SET
+                                                                                                                                                                                                                                                                                                                                                                                create_storefront_redvault_order_draft                                                                                                                                                                                                                                                                                                                                                                                
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (560d7f9b-21ae-4109-aac5-3a60dffa6612,2cd8630d-86d1-4a1d-a81c-5822abe47475,fecad082b4ea713b436e29887fd0fd1a187d30c727617781a2a7fe88f8a41c69,"{""groups"": [{""key"": ""fixture"", ""members"": [{""lineId"": 1, ""quantity"": 1, ""orderItemId"": ""21dcdb98-5d65-4703-9ec6-89407fa1f08c"", ""allocationKobo"": 500}], ""condition"": ""new"", ""productId"": ""11111111-1111-4111-8111-111111111111"", ""variantId"": null, ""vatRateBp"": 750, ""discountKobo"": 500, ""taxInclusive"": false, ""unitPriceKobo"": 10000, ""vatCategoryCode"": ""S"", ""lineSubtotalKobo"": 10000, ""variantAttributes"": {}}], ""taxBasis"": ""exclusive"", ""discountKobo"": 500, ""applicationId"": ""46de1773-61eb-40a2-bb1d-f960940faa41"", ""productSubtotalKobo"": 10000, ""eligibleSubtotalKobo"": 10000}")
+(1 row)
+
+RESET
+DO
+SELECT 1
+GRANT
+SET
+ attach_storefront_redvault_discount_proof 
+-------------------------------------------
+ pending
+(1 row)
+
+ attach_storefront_redvault_discount_proof 
+-------------------------------------------
+ pending
+(1 row)
+
+ test_expect_error 
+-------------------
+ 
+(1 row)
+
+ test_expect_error 
+-------------------
+ 
+(1 row)
+
+                                                                               set_config                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"storefront_redvault_customer_email":"customer@example.test","storefront_order_context":"route","storefront_order_merchant_id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"}
+(1 row)
+
+ test_expect_error 
+-------------------
+ 
+(1 row)
+
+                                                                                                      set_config                                                                                                      
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"storefront_redvault_customer_email":"customer@example.test","storefront_order_context":"route","storefront_order_merchant_id":"6b5cb8a4-5575-456c-b936-8cdfae30db74","sub":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"}
+(1 row)
+
+ test_expect_error 
+-------------------
+ 
+(1 row)
+
+RESET
+ test_expect_error 
+-------------------
+ 
+(1 row)
+
+ test_expect_error 
+-------------------
+ 
+(1 row)
+
+ test_expect_error 
+-------------------
+ 
+(1 row)
+
+ test_expect_error 
+-------------------
+ 
+(1 row)
+
+ test_expect_error 
+-------------------
+ 
+(1 row)
+
+ test_expect_error 
+-------------------
+ 
+(1 row)
+
+DO
+                  result                  
+------------------------------------------
+ REDVAULT native behavioral checks passed
+(1 row)
+
+                                                                               set_config                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"storefront_redvault_customer_email":"customer@example.test","storefront_order_context":"route","storefront_order_merchant_id":"6b5cb8a4-5575-456c-b936-8cdfae30db74"}
+(1 row)
+
+DO
+ set_config 
+------------
+ 1
+(1 row)
+
+ test_expect_error 
+-------------------
+ 
+(1 row)
+
+ test_expect_error 
+-------------------
+ 
+(1 row)
+
+ test_expect_error 
+-------------------
+ 
+(1 row)
+
+Concurrent fresh-draft retries produced one additional order/application.
+Owned temporary cluster stopped and removed.

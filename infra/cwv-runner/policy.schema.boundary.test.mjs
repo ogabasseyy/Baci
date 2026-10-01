@@ -28,7 +28,7 @@ test('decodes the compact policy wire form to the approved canonical authority',
   );
   assert.equal(
     canonicalSha256(parseRunnerPolicy(wirePolicy)),
-    '6f334b8f616597aab52c8b6e207619605d8237c9ab583a1c71431c066e0f62f3'
+    '5f86590b697a32b3338ff811f4cc7b3111aa4f1d6e23361fdceb6f8af1681eac'
   );
 });
 

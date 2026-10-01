@@ -91,7 +91,7 @@ describe('ProductVariantSelectableGroup', () => {
           values: [],
         }}
         onSelect={onSelect}
-        visibleValues={[
+        values={[
           {
             available: true,
             label: '256GB SSD',
@@ -112,7 +112,7 @@ describe('ProductVariantSelectableGroup', () => {
       screen.getByRole('button', { name: 'Select Storage 256GB SSD' })
     );
 
-    expect(onSelect).toHaveBeenCalledWith('storage', '256GB SSD', true);
+    expect(onSelect).toHaveBeenCalledWith('storage', '256GB SSD');
     expect(
       screen.getByRole('button', { name: 'Select Storage 512GB SSD' })
     ).toHaveAttribute('aria-pressed', 'true');
@@ -122,7 +122,7 @@ describe('ProductVariantSelectableGroup', () => {
     );
   });
 
-  it('marks unavailable option values disabled and ignores their taps', () => {
+  it('lets users switch to an option that will prune conflicting choices', () => {
     const onSelect = vi.fn();
 
     render(
@@ -134,7 +134,7 @@ describe('ProductVariantSelectableGroup', () => {
           values: [],
         }}
         onSelect={onSelect}
-        visibleValues={[
+        values={[
           {
             available: false,
             label: '128GB SSD',
@@ -149,11 +149,10 @@ describe('ProductVariantSelectableGroup', () => {
       name: 'Select Storage 128GB SSD',
     });
 
-    expect(unavailableOption).toBeDisabled();
-    expect(unavailableOption).toHaveAttribute('aria-disabled', 'true');
+    expect(unavailableOption).toBeEnabled();
 
     fireEvent.click(unavailableOption);
 
-    expect(onSelect).not.toHaveBeenCalled();
+    expect(onSelect).toHaveBeenCalledWith('storage', '128GB SSD');
   });
 });

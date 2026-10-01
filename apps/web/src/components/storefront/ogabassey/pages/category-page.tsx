@@ -1,6 +1,5 @@
 'use client';
-// Migrated from temp-source/components/CategoryPage.tsx
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import React, { type ReactNode, useEffect, useState } from 'react';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
@@ -9,6 +8,9 @@ import { yieldToScheduler } from '@/lib/yield-to-scheduler';
 import type { FilterState } from '../components/CategoryFiltersSidebar';
 import { CategoryRecentCarousel } from '../components/CategoryRecentCarousel';
 import type { Product } from '../types';
+import { buildCategoryDisplayTitle } from './category-display-title';
+import { createCategoryAddToCartHandler } from './category-add-to-cart';
+import { shouldRouteGraphicsChangeThroughServer } from './category-graphics-routing';
 import {
   buildAvailableFilterOptions,
   filterCategoryProducts,
@@ -19,7 +21,7 @@ import {
 import { CategoryPageMobileFilterDrawer } from './category-page-mobile-filter-drawer';
 import { CategoryPageResults } from './category-page-results';
 import { CategoryPageToolbar } from './category-page-toolbar';
-import { toRelatedProductsProduct } from './product-details-page/related-product';
+import { useServerCategoryGraphicsFilter } from './use-server-category-graphics-filter';
 
 export interface CategorySEOProps {
   /**
@@ -36,7 +38,14 @@ export interface CategorySEOProps {
   currentPage?: number;
   itemsPerPage?: number;
   productsArePrePaginated?: boolean;
+  /** Demote when a parent route already committed the page H1. */
+  titleHeading?: 'h1' | 'h2';
   totalProductCount?: number;
+  graphicsOptions?: string[];
+  selectedGraphics?: string[];
+  /** Hub overrides: indexable pagination base + cap-validation slug. */
+  paginationBasePath?: string;
+  hubSlug?: string;
 }
 
 export const CategoryPage: React.FC<CategorySEOProps> = ({
@@ -46,39 +55,36 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
   currentPage = 1,
   itemsPerPage = STOREFRONT_PRODUCTS_PER_PAGE,
   productsArePrePaginated = false,
+  titleHeading = 'h1',
   totalProductCount,
+  graphicsOptions = [],
+  selectedGraphics = [],
+  paginationBasePath,
+  hubSlug,
 }) => {
   const params = useParams();
   const categoryName = (params?.category || 'All') as string;
-  // The raw URL slug (kebab-case, e.g. "best-sellers") — distinct from the
-  // human-readable display title. Used for slug-based checks like the
-  // non-recency collection gate below.
   const categorySlug =
     typeof params?.category === 'string' ? params.category : '';
-  const _router = useRouter();
   const { addToCart } = useCart();
   const [addedItems, setAddedItems] = useState<string[]>([]);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-  const merchantContext = useMerchantSafe();
-  const basePath = merchantContext?.basePath ?? '';
+  const basePath = useMerchantSafe()?.basePath ?? '';
+  const serverGraphicsFilter = useServerCategoryGraphicsFilter({
+    availableGraphics: graphicsOptions,
+    basePath,
+    categoryName,
+    selectedGraphics,
+    hubSlug,
+  });
   const safeItemsPerPage =
     Number.isInteger(itemsPerPage) && itemsPerPage > 0
       ? itemsPerPage
       : STOREFRONT_PRODUCTS_PER_PAGE;
-  const [filters, setFilters] = useState<FilterState>(
-    INITIAL_CATEGORY_FILTER_STATE
-  );
+  const { filters, setFilters } = serverGraphicsFilter;
 
-  // Reset filters inline during render when the category changes
-  const [prevCategoryName, setPrevCategoryName] = useState(categoryName);
-  if (categoryName !== prevCategoryName) {
-    setPrevCategoryName(categoryName);
-    setFilters(INITIAL_CATEGORY_FILTER_STATE);
-  }
-
-  // Scroll to top when category changes
   useEffect(() => {
     if (categoryName) {
       window.scrollTo(0, 0);
@@ -102,11 +108,19 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
     Number.isInteger(totalProductCount) &&
     totalProductCount > products.length;
   const canUseClientFilters = !hasPartialPrePaginatedProducts;
+  const hasServerGraphicsFilter = serverGraphicsFilter.enabled;
+  const canShowFilters = canUseClientFilters || hasServerGraphicsFilter;
 
-  const availableOptions = buildAvailableFilterOptions(
+  const clientAvailableOptions = buildAvailableFilterOptions(
     products,
     canUseClientFilters
   );
+  const availableOptions = {
+    ...clientAvailableOptions,
+    graphics: hasServerGraphicsFilter
+      ? graphicsOptions
+      : clientAvailableOptions.graphics,
+  };
   const filteredProducts = filterCategoryProducts(
     products,
     filters,
@@ -153,6 +167,18 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
     section: keyof FilterState,
     value: string | number
   ) => {
+    if (
+      section === 'graphics' &&
+      shouldRouteGraphicsChangeThroughServer({
+        canUseClientFilters,
+        hasServerGraphicsFilter,
+        hasUrlGraphicsSelection: selectedGraphics.length > 0,
+      })
+    ) {
+      serverGraphicsFilter.toggle(String(value), filters.graphics);
+      return;
+    }
+
     if (!canUseClientFilters) return;
 
     // The min/max price fields are controlled <input>s (value={filters.minPrice}
@@ -171,7 +197,6 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
     // scheduler.yield is absent).
     await yieldToScheduler();
 
-    // Checkbox logic
     setFilters((prev) => {
       const list = prev[section] as string[];
       const valStr = value as string;
@@ -182,31 +207,21 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
     });
   };
 
-  const handleAddToCart = (_e: React.MouseEvent, product: Product) => {
-    addToCart(toRelatedProductsProduct(product), 1);
+  const handleAddToCart = createCategoryAddToCartHandler(
+    addToCart,
+    setAddedItems
+  );
 
-    const productId = String(product.id);
-    setAddedItems((prev) => [...prev, productId]);
-    setTimeout(() => {
-      setAddedItems((prev) => prev.filter((id) => id !== productId));
-    }, 2000);
+  const displayTitle = buildCategoryDisplayTitle(categoryName);
+
+  const categoryPath = paginationBasePath ?? serverGraphicsFilter.paginationPath;
+  const clearFilters = () => {
+    if (hasServerGraphicsFilter && selectedGraphics.length > 0) {
+      serverGraphicsFilter.clear();
+    }
+    setFilters(INITIAL_CATEGORY_FILTER_STATE);
   };
 
-  // Clean display title for H1 and Breadcrumb (Koray-approved: no keyword stuffing)
-  const displayTitle = (() => {
-    if (categoryName === 'All') return 'All Products';
-
-    return decodeURIComponent(categoryName)
-      .replace(/-/g, ' ')
-      .replace(/\b\w/g, (l) => l.toUpperCase());
-  })();
-
-  const pageTitle = displayTitle;
-  const categoryPath = `${basePath}/${categoryName}`;
-  const clearFilters = () => setFilters(INITIAL_CATEGORY_FILTER_STATE);
-
-  // Switching grid/list re-renders every ProductCard with a new layout — the
-  // heaviest toggle on the page. Yield first so the click paints before it.
   const handleViewModeChange = async (mode: 'grid' | 'list') => {
     await yieldToScheduler();
     setViewMode(mode);
@@ -236,14 +251,16 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
         basePath={basePath}
         displayTitle={displayTitle}
         paginationProductCount={paginationProductCount}
+        titleHeading={titleHeading}
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
-        canUseClientFilters={canUseClientFilters}
+        canShowFilters={canShowFilters}
         onOpenMobileFilter={() => setIsMobileFilterOpen(true)}
       />
 
       <CategoryPageResults
-        canUseClientFilters={canUseClientFilters}
+        canShowFilters={canShowFilters}
+        showPriceFilter={canUseClientFilters}
         filters={filters}
         availableOptions={availableOptions}
         onFilterChange={handleFilterChange}
@@ -261,13 +278,13 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
         paginationProductCount={paginationProductCount}
         currentPageNumber={currentPageNumber}
         totalPages={totalPages}
-        pageTitle={pageTitle}
+        pageTitle={displayTitle}
         categoryPath={categoryPath}
       />
 
       {hubSections}
 
-      {isMobileFilterOpen && canUseClientFilters && (
+      {isMobileFilterOpen && canShowFilters && (
         <CategoryPageMobileFilterDrawer
           filters={filters}
           availableOptions={availableOptions}
@@ -275,6 +292,7 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
           onClearFilters={clearFilters}
           onClose={() => setIsMobileFilterOpen(false)}
           paginationProductCount={paginationProductCount}
+          showPriceFilter={canUseClientFilters}
         />
       )}
     </div>

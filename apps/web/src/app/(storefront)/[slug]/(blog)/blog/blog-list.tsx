@@ -62,6 +62,9 @@ export function BlogList({
 
   const totalPages = Math.ceil(totalPosts / BLOG_LISTING_PAGE_SIZE);
   const hasMultipleServerPages = totalPages > 1;
+  const firstImageIndex = posts.findIndex((post) =>
+    Boolean(post.featured_image_url)
+  );
   const firstVisiblePostNumber = Math.min(
     totalPosts,
     (initialPage - 1) * BLOG_LISTING_PAGE_SIZE + 1
@@ -74,16 +77,13 @@ export function BlogList({
     firstVisiblePostNumber === lastVisiblePostNumber
       ? String(firstVisiblePostNumber)
       : `${firstVisiblePostNumber}–${lastVisiblePostNumber}`;
-  const firstImagePostIndex = posts.findIndex((post) =>
-    Boolean(post.featured_image_url)
-  );
 
   return (
     <>
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {posts.map((post, index) => {
           const publishedDateLabel = formatBlogListDateLabel(post.published_at);
-          const isListingLcpCandidate = index === firstImagePostIndex;
+          const isListingLcpImage = index === firstImageIndex;
 
           return (
             <Link key={post.id} href={`${basePath}/blog/${post.slug}` as Route}>
@@ -96,8 +96,9 @@ export function BlogList({
                       fill
                       sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
                       className="object-cover transition-transform duration-300 group-hover:scale-105"
-                      // Next.js 16 deprecates priority in favor of preload for LCP images.
-                      preload={isListingLcpCandidate}
+                      {...(isListingLcpImage
+                        ? { fetchPriority: 'high', loading: 'eager' as const }
+                        : { fetchPriority: 'low', loading: 'lazy' as const })}
                     />
                   </div>
                 )}

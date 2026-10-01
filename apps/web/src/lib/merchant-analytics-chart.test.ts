@@ -128,4 +128,23 @@ describe('merchant analytics chart', () => {
       revenue: 200,
     });
   });
+
+  it('does not chart selling price as profit when cost price is missing', () => {
+    const [point] = buildChartData(
+      [order],
+      [
+        item({
+          costPrice: null,
+          price: 100,
+          productCostPrice: null,
+          quantity: 2,
+          variantCostPrice: null,
+        }),
+      ],
+      new Date('2026-05-10T00:00:00.000Z'),
+      new Date('2026-05-10T23:59:59.999Z')
+    );
+
+    expect(point).toMatchObject({ profit: 0, revenue: 200 });
+  });
 });

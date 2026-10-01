@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { getPlatformAdminAuth } from '@/lib/platform-admin-auth';
+import { getPlatformAdminAuthForPermission } from '@/lib/platform-admin-auth';
 import { createClient } from '@/lib/supabase/server';
 import {
   eventDeadLetterReplaySchema,
@@ -9,15 +9,32 @@ import {
 } from '@/schemas/event-dead-letter';
 import type { Database } from '@/types/supabase';
 
+interface ReplayRpcResult {
+  data: unknown;
+  error: { message: string } | null;
+}
+
+type AdminReplayRpc = (
+  functionName:
+    | 'replay_event_deliveries_batch_admin_v2'
+    | 'replay_ingress_dead_letter_admin_v2'
+    | 'select_event_pipeline_replay_ids_admin_v2',
+  args: Record<string, unknown>
+) => Promise<ReplayRpcResult>;
+
+function getAdminReplayRpc(supabase: SupabaseClient<Database>) {
+  return supabase.rpc as unknown as AdminReplayRpc;
+}
+
 async function resolveFilteredDeliveryIds(
-  supabase: SupabaseClient<Database>,
+  rpc: AdminReplayRpc,
   filter: Extract<
     ReturnType<typeof eventDeadLetterReplaySchema.parse>,
     { kind: 'delivery_filter' }
   >
 ) {
-  const { data, error } = await supabase.rpc(
-    'select_event_pipeline_replay_ids_v1',
+  const { data, error } = await rpc(
+    'select_event_pipeline_replay_ids_admin_v2',
     {
       p_destination: filter.destination,
       p_error_code: filter.error_code ?? undefined,
@@ -34,7 +51,7 @@ async function resolveFilteredDeliveryIds(
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await getPlatformAdminAuth();
+  const auth = await getPlatformAdminAuthForPermission('operations.manage');
   if (auth.status === 'unauthenticated') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -65,26 +82,25 @@ export async function POST(request: NextRequest) {
   }
 
   const supabase = await createClient('event-pipeline');
-  let result: { data: unknown; error: { message: string } | null };
+  const rpc = getAdminReplayRpc(supabase);
+  let result: ReplayRpcResult;
   try {
     if (parsed.data.kind === 'ingress') {
-      result = await supabase.rpc('replay_ingress_dead_letter_v1', {
+      result = await rpc('replay_ingress_dead_letter_admin_v2', {
         p_failure_id: parsed.data.failure_id,
         p_replay_reason: parsed.data.reason,
-        p_replayed_by: auth.user.id,
       });
     } else {
       const deliveryIds =
         parsed.data.kind === 'delivery'
           ? parsed.data.delivery_ids
-          : await resolveFilteredDeliveryIds(supabase, parsed.data);
+          : await resolveFilteredDeliveryIds(rpc, parsed.data);
       if (deliveryIds.length === 0) {
         return NextResponse.json({ replayed: 0, success: true });
       }
-      result = await supabase.rpc('replay_event_deliveries_batch_v1', {
+      result = await rpc('replay_event_deliveries_batch_admin_v2', {
         p_delivery_ids: deliveryIds,
         p_replay_reason: parsed.data.reason,
-        p_replayed_by: auth.user.id,
       });
     }
   } catch (error) {

@@ -1,12 +1,13 @@
 // Template preview
-import { LAUNCH_CAROUSEL_LIMIT } from '@baci/shared/storefront';
+import { LAUNCH_CAROUSEL_LIMIT } from '@baci/shared/storefront/launch-carousel';
 import type React from 'react';
 import { Suspense } from 'react';
 import { normalizeRouteBasePath } from '@/lib/routes';
 import type { Product } from '../types';
 import { buildLaunchSlides } from '../components/build-launch-slides';
 import { DeferredAdUnit } from '../components/deferred-ad-unit';
-import { HomeProductGrid } from '../components/HomeProductGrid';
+import { HomeProductGridGate } from '../components/home-product-grid-gate';
+import { HomeProductGridStaticFallback } from '../components/home-product-grid-static-fallback';
 import { Hero } from '../components/Hero';
 import { HOMEPAGE_STRIP_AD_BOOT_DELAY_MS } from '../config/ads';
 
@@ -58,14 +59,25 @@ export const OgabasseyHomePage: React.FC<HomePageProps> = ({
         />
       </div>
 
-      {/* Suspense boundary keeps the featured-products section non-blocking */}
+      {/* Suspense boundary keeps the featured-products section non-blocking.
+          The static fallback server-renders the product cards (links, names,
+          prices) with zero JS; the interactive grid module loads only when
+          the section approaches the viewport, keeping below-fold grid JS out
+          of the initial bundle. */}
       <Suspense>
-        <HomeProductGrid
+        <HomeProductGridGate
           basePath={routeBasePath}
           storeSlug={storeSlug}
           products={products}
           initialDisplayCount={8}
           inlineAdBreakpoints={[12, 24]}
+          fallback={
+            <HomeProductGridStaticFallback
+              basePath={routeBasePath}
+              products={products}
+              initialDisplayCount={8}
+            />
+          }
         />
       </Suspense>
     </>

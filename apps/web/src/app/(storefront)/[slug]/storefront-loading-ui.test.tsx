@@ -121,6 +121,7 @@ describe('storefront-loading-ui', () => {
 
     expect(shell).toHaveStyle({
       background: 'var(--store-background, #ffffff)',
+      color: 'var(--store-background-text, #111827)',
       boxSizing: 'border-box',
       padding: '0.75rem 1rem',
     });

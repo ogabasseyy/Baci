@@ -11,6 +11,7 @@ import {
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useNotifications } from '@/hooks/use-notifications';
+import { notificationActionUrl } from '@/lib/notification-action-url';
 import { cn } from '@/lib/utils';
 import type { ActiveBanner, NotificationType } from '@/types/notifications';
 
@@ -100,9 +101,7 @@ export function NotificationBanner({ className }: NotificationBannerProps) {
   };
 
   const handleAction = () => {
-    if (currentBanner?.action_url) {
-      window.open(currentBanner.action_url, '_blank');
-    }
+    notificationActionUrl.open(currentBanner?.action_url);
   };
 
   // Don't render if no banner or still loading
@@ -112,6 +111,7 @@ export function NotificationBanner({ className }: NotificationBannerProps) {
 
   const style = bannerStyles[currentBanner.notification_type];
   const Icon = style.icon;
+  const actionUrl = notificationActionUrl.parse(currentBanner.action_url);
 
   return (
     <div
@@ -141,7 +141,7 @@ export function NotificationBanner({ className }: NotificationBannerProps) {
           </p>
 
           {/* Action button */}
-          {currentBanner.action_url && currentBanner.action_label && (
+          {actionUrl && currentBanner.action_label && (
             <Button
               variant="link"
               size="sm"
@@ -206,6 +206,7 @@ export function NotificationBannerStack({
         const style = bannerStyles[banner.notification_type];
         const Icon = style.icon;
         const isDismissing = dismissingIds.has(banner.id);
+        const actionUrl = notificationActionUrl.parse(banner.action_url);
 
         return (
           <div
@@ -226,12 +227,12 @@ export function NotificationBannerStack({
                 {banner.message}
               </p>
 
-              {banner.action_url && banner.action_label && (
+              {actionUrl && banner.action_label && (
                 <Button
                   variant="link"
                   size="sm"
                   className="h-auto p-0 mt-2 text-sm"
-                  onClick={() => window.open(banner.action_url ?? '', '_blank')}
+                  onClick={() => notificationActionUrl.open(banner.action_url)}
                 >
                   {banner.action_label}
                   <ExternalLink className="size-3 ml-1" />

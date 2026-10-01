@@ -103,6 +103,8 @@ export interface QuoteRequest {
   items: ShipmentItem[];
   shipmentType: 'domestic' | 'international';
   deliveryPreference?: 'door' | 'pickup_station';
+  /** Server-attested provenance for owner-scoped Admin order quotes. */
+  admin_order_provenance?: 'server_gigl_v1';
 }
 
 export interface ShippingQuote {
@@ -122,6 +124,10 @@ export interface ShippingQuote {
   providerRateId?: string; // For booking with provider
   expiresAt: Date;
   rawResponse?: unknown; // Raw provider response for debugging
+  providerCost?: number;
+  platformMargin?: number;
+  marginBasisPoints?: number;
+  pricingVersion?: string;
 
   // Station pickup (for areas without home delivery)
   isStationPickup?: boolean;

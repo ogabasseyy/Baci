@@ -86,7 +86,7 @@ export function WalletRedeemPanel({
           <Text style={styles.infoEmoji}>🏆</Text>
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
             <Text style={{ fontWeight: 'bold', color: colors.text }}>
-              Super Quiz Entry:
+              SuperQuiz Entry:
             </Text>{' '}
             Free to enter — no points needed. Play high-stake quiz events and
             win huge prizes!

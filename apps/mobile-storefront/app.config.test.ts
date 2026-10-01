@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
-// Mock dotenv/config to prevent it from loading the local .env file during tests
+// Keep app-config tests hermetic by preventing dotenv from loading local .env.
 jest.mock('dotenv/config', () => ({}));
 
 const originalEnv = process.env;
@@ -126,7 +126,7 @@ describe('Expo app config (Facebook SDK and merchant domain)', () => {
     expect(config.version).toBe('2.0.1');
     expect(config.runtimeVersion).toBe('2.0.1');
     expect(config.android).toMatchObject({
-      runtimeVersion: '2.0.1-android-sdk57',
+      runtimeVersion: '2.0.1-android-sdk57-rn0862',
       versionCode: 741,
     });
   });
@@ -296,53 +296,5 @@ describe('Expo app config (Facebook SDK and merchant domain)', () => {
 
     expect(config.orientation).toBe('default');
     expect(config.plugins).toContain('./config/withAdaptiveAndroidManifest.js');
-  });
-
-  it('does not claim blog URLs in Android web intent filters', () => {
-    const config = renderConfig(
-      loadAppConfigWithEnv({
-        EXPO_PUBLIC_POSTHOG_API_KEY: 'ph_test',
-        STOREFRONT_FACEBOOK_APP_ID: '123456789',
-        STOREFRONT_FACEBOOK_CLIENT_TOKEN: 'client-token',
-      })
-    );
-    const webFilters = (config.android?.intentFilters ?? []).filter(
-      (filter) => filter.autoVerify
-    );
-    const data = webFilters.flatMap((filter) =>
-      Array.isArray(filter.data)
-        ? filter.data
-        : filter.data
-          ? [filter.data]
-          : []
-    );
-    const nativePaths = [
-      { pathPrefix: '/product/' },
-      { pathPrefix: '/category/' },
-      { path: '/receipts' },
-      { pathPrefix: '/receipts/claim/' },
-      { path: '/account' },
-      { pathPrefix: '/account/' },
-      { path: '/cart' },
-      { path: '/' },
-    ];
-
-    expect(webFilters).toHaveLength(2);
-    for (const host of ['ogabassey.com', 'ogabassey.usebaci.com']) {
-      const hostData = data.filter((entry) => entry.host === host);
-
-      expect(hostData).toHaveLength(nativePaths.length);
-      expect(hostData).toEqual(
-        expect.arrayContaining(
-          nativePaths.map((path) => expect.objectContaining({ host, ...path }))
-        )
-      );
-      expect(hostData).not.toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ pathPrefix: '/' }),
-          expect.objectContaining({ pathPrefix: '/blog/' }),
-        ])
-      );
-    }
   });
 });

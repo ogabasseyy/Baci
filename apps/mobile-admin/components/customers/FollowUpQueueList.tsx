@@ -1,6 +1,6 @@
 import type { ListRenderItemInfo } from '@shopify/flash-list';
 import { FlashList } from '@shopify/flash-list';
-import { type ReactElement, useEffect } from 'react';
+import { type ReactElement, type RefObject, useEffect } from 'react';
 import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -30,6 +30,9 @@ interface FollowUpQueueListProps {
     currencySymbol: string
   ) => ReactElement | null;
   searchQuery: string;
+  scrollRef?: RefObject<{
+    scrollToOffset: (options: { offset: number; animated?: boolean }) => void;
+  } | null>;
 }
 
 /**
@@ -42,6 +45,7 @@ export function FollowUpQueueList({
   onScroll,
   renderOrder,
   searchQuery,
+  scrollRef,
 }: FollowUpQueueListProps) {
   const { colors } = useTheme();
   const {
@@ -76,6 +80,7 @@ export function FollowUpQueueList({
 
   return (
     <FlashList<GroupedFailedOrderListItem>
+      ref={scrollRef as never}
       data={groupedFailedOrders}
       renderItem={({
         item,

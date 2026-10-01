@@ -1,32 +1,31 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 
 const QUERY = '(prefers-reduced-motion: reduce)';
 
-function getInitialValue(): boolean {
-  if (typeof window === 'undefined') return false;
+function subscribe(onStoreChange: () => void): () => void {
+  const mediaQuery = window.matchMedia(QUERY);
+  mediaQuery.addEventListener('change', onStoreChange);
+  return () => mediaQuery.removeEventListener('change', onStoreChange);
+}
+
+function getSnapshot(): boolean {
   return window.matchMedia(QUERY).matches;
+}
+
+// The server cannot observe a user's media preferences. Keeping this snapshot
+// stable through hydration prevents reduced-motion clients from producing a
+// different first render before the browser snapshot is applied.
+function getServerSnapshot(): boolean {
+  return false;
 }
 
 /**
  * Hook to detect if the user prefers reduced motion.
- * Uses a lazy initializer so the first render reflects the user's preference
- * without a one-frame flash.
+ * Uses a hydration-safe server snapshot, then reflects the browser preference
+ * once the client store is subscribed.
  */
 export function useReducedMotion() {
-  const [shouldReduceMotion, setShouldReduceMotion] = useState(getInitialValue);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia(QUERY);
-
-    const listener = (event: MediaQueryListEvent) => {
-      setShouldReduceMotion(event.matches);
-    };
-
-    mediaQuery.addEventListener('change', listener);
-    return () => mediaQuery.removeEventListener('change', listener);
-  }, []);
-
-  return shouldReduceMotion;
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }

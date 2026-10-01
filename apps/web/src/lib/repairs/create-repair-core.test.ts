@@ -71,6 +71,26 @@ describe('createRepairBooking', () => {
     );
   });
 
+  it('bugfix: pickup create passes service_type so RPC persists awaiting_payment', async () => {
+    const pickupInput: RepairBookingInput = {
+      ...validInput,
+      serviceType: 'pickup',
+      pickupAddress: '12 Station Road, Osogbo, Osun, Nigeria',
+    };
+
+    const result = await createRepairBooking(pickupInput, merchantId);
+
+    expect(result).toEqual({ success: true, id: 'repair-1', ticketNumber: 42 });
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'create_repair_booking',
+      expect.objectContaining({
+        p_merchant_id: merchantId,
+        p_service_type: 'pickup',
+        p_pickup_address: '12 Station Road, Osogbo, Osun, Nigeria',
+      })
+    );
+  });
+
   it('stops before the RPC when the app-layer rate limit is exhausted', async () => {
     mocks.ensureActionRateLimit.mockResolvedValueOnce(false);
 

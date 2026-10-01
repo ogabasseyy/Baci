@@ -1,5 +1,7 @@
 const POSTHOG_ANDROID_UPLOAD_BEST_EFFORT_MARKER =
   'PostHog Android source-map upload is best-effort';
+const POSTHOG_SKIP_ON_CONFLICT_MARKER =
+  'posthogReactNativeSkipOnConflict = true';
 const POSTHOG_ANDROID_UPLOAD_BEST_EFFORT_GRADLE_ENABLED_LEGACY = `// PostHog source-map uploads run after bundling via finalizedBy.
 // Upload failures must not block Play Store release artifacts.
 tasks.configureEach { task ->
@@ -39,55 +41,39 @@ gradle.projectsEvaluated {
     }
 }`;
 
-function ensurePostHogAndroidUploadBestEffort(content) {
-  if (!content.includes('posthog.gradle')) {
-    return content;
-  }
-
-  if (content.includes(POSTHOG_ANDROID_UPLOAD_BEST_EFFORT_GRADLE)) {
-    return content;
-  }
-
-  if (
-    content.includes(POSTHOG_ANDROID_UPLOAD_BEST_EFFORT_GRADLE_ONLY_IF_LEGACY)
-  ) {
-    return content.replace(
-      POSTHOG_ANDROID_UPLOAD_BEST_EFFORT_GRADLE_ONLY_IF_LEGACY,
-      POSTHOG_ANDROID_UPLOAD_BEST_EFFORT_GRADLE
-    );
-  }
-
-  if (
-    content.includes(POSTHOG_ANDROID_UPLOAD_BEST_EFFORT_GRADLE_ENABLED_LEGACY)
-  ) {
-    return content.replace(
-      POSTHOG_ANDROID_UPLOAD_BEST_EFFORT_GRADLE_ENABLED_LEGACY,
-      POSTHOG_ANDROID_UPLOAD_BEST_EFFORT_GRADLE
-    );
-  }
-
-  if (content.includes(POSTHOG_ANDROID_UPLOAD_BEST_EFFORT_MARKER)) {
-    return content;
-  }
-
-  const lines = content.split('\n');
-  const applyFromIndex = lines.findIndex(
-    (line) => line.includes('apply from:') && line.includes('posthog.gradle')
-  );
-
-  if (applyFromIndex === -1) {
-    return content;
-  }
-
-  lines.splice(
-    applyFromIndex + 1,
-    0,
-    '',
+function ensurePostHogAndroidUploadsEnabled(content) {
+  const withoutDisabledUploads = [
     POSTHOG_ANDROID_UPLOAD_BEST_EFFORT_GRADLE,
-    ''
+    POSTHOG_ANDROID_UPLOAD_BEST_EFFORT_GRADLE_ONLY_IF_LEGACY,
+    POSTHOG_ANDROID_UPLOAD_BEST_EFFORT_GRADLE_ENABLED_LEGACY,
+  ].reduce(
+    (updatedContent, disabledUploadBlock) =>
+      updatedContent
+        .replaceAll(disabledUploadBlock, '')
+        .replace(/\n{3,}/g, '\n\n'),
+    content
   );
-
-  return lines.join('\n');
+  const applyAndroidPlugin = 'apply plugin: "com.posthog.android"';
+  let updatedContent = withoutDisabledUploads;
+  if (
+    updatedContent.includes('posthog.gradle') &&
+    !updatedContent.includes(POSTHOG_SKIP_ON_CONFLICT_MARKER)
+  ) {
+    updatedContent = updatedContent.replace(
+      'apply plugin: "com.android.application"',
+      `apply plugin: "com.android.application"\n// Repeated builds can reuse a Hermes debug ID; let PostHog keep the existing symbol set.\next.posthogReactNativeSkipOnConflict = true`
+    );
+  }
+  if (
+    updatedContent.includes('posthog.gradle') &&
+    !updatedContent.includes(applyAndroidPlugin)
+  ) {
+    updatedContent = updatedContent.replace(
+      'apply plugin: "com.android.application"',
+      `apply plugin: "com.android.application"\n${applyAndroidPlugin}`
+    );
+  }
+  return updatedContent;
 }
 
-module.exports = ensurePostHogAndroidUploadBestEffort;
+module.exports = ensurePostHogAndroidUploadsEnabled;

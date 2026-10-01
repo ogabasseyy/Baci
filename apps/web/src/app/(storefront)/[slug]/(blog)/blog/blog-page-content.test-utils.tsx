@@ -1,50 +1,12 @@
 import type React from 'react';
 import { vi } from 'vitest';
-import { BLOG_LISTING_PAGE_SIZE } from '@/lib/blog-listing-page-size';
 import { getCachedBlogListing } from '@/lib/cached-data';
-
-interface MockDefaultBlogUiProps {
-  blogSchema: {
-    publisher?: {
-      '@id'?: string;
-    };
-    blogPost?: unknown;
-  };
-  itemListSchema?: {
-    '@type'?: string;
-    numberOfItems?: number;
-    url?: string;
-    itemListElement?: Array<{
-      '@type'?: string;
-      position?: number;
-      url?: string;
-      name?: string;
-    }>;
-  };
-  categories: string[];
-  categoryGuide?: React.ReactNode;
-  merchant: { business_name: string };
-  posts: Array<{ featured?: boolean; slug: string; title: string }>;
-  totalPosts: number;
-  currentPage?: number;
-}
-
-interface MockTemplateBlogRendererProps {
-  BlogComponent?: React.ComponentType<{
-    categories?: Array<{ name: string; slug: string }>;
-    category?: string;
-    posts?: MockDefaultBlogUiProps['posts'];
-    searchQuery?: string;
-    storeSlug?: string;
-  }>;
-  basePath?: string;
-  blogPosts?: MockDefaultBlogUiProps['posts'];
-  categories?: Array<{ name: string; slug: string }>;
-  categoryGuide?: React.ReactNode;
-  category?: string;
-  itemListSchema?: MockDefaultBlogUiProps['itemListSchema'];
-  searchQuery?: string;
-}
+import type { TemplateBlogPageProps } from '@/templates/registry';
+import { buildListingResult } from './blog-page-content.test-utils.fixtures';
+import type {
+  MockDefaultBlogUiProps,
+  MockTemplateBlogRendererProps,
+} from './blog-page-content.test-utils.types';
 
 const hoistedMocks = vi.hoisted(() => ({
   mockBuildBlogClusterCollections: vi.fn(),
@@ -60,6 +22,14 @@ const hoistedMocks = vi.hoisted(() => ({
     </>
   )),
   mockGetTemplate: vi.fn<(...args: unknown[]) => unknown>(() => null),
+  // Stands in for the directly-imported OgabasseyV2Blog (the route no longer
+  // resolves it through the deleted info-pages map). The optional storeSlug
+  // mirrors the extra prop the renderer probe passes at runtime; tests
+  // configure rendered output per case.
+  mockOgabasseyV2Blog: vi.fn(
+    (_props: TemplateBlogPageProps & { storeSlug?: string }): React.ReactNode =>
+      null
+  ),
   mockHeaders: vi.fn(() => new Headers()),
   mockPreloadBlogListingFeaturedImage: vi.fn(),
   mockNotFound: vi.fn(() => {
@@ -79,6 +49,7 @@ const hoistedMocks = vi.hoisted(() => ({
 export const {
   mockBuildBlogClusterCollections,
   mockDefaultBlogUi,
+  mockOgabasseyV2Blog,
   mockGetTemplate,
   mockHeaders,
   mockNotFound,
@@ -87,6 +58,17 @@ export const {
   mockRedirect,
   mockTemplateBlogRenderer,
 } = hoistedMocks;
+
+export {
+  buildListingResult,
+  clusterCollections,
+  merchant,
+  postsPayload,
+} from './blog-page-content.test-utils.fixtures';
+export type {
+  MockDefaultBlogUiProps,
+  MockTemplateBlogRendererProps,
+} from './blog-page-content.test-utils.types';
 
 vi.mock('@/lib/cached-data', () => ({
   getCachedBlogListing: vi.fn(),
@@ -195,6 +177,11 @@ vi.mock('@/templates/registry', () => ({
   getTemplate: (templateId: unknown) => mockGetTemplate(templateId),
 }));
 
+vi.mock('@/components/storefront/ogabassey/pages/blog', () => ({
+  OgabasseyV2Blog: (props: TemplateBlogPageProps & { storeSlug?: string }) =>
+    mockOgabasseyV2Blog(props),
+}));
+
 vi.mock('./blog-listing-featured-image-preload', () => ({
   preloadBlogListingFeaturedImage: (src: string | null | undefined) =>
     mockPreloadBlogListingFeaturedImage(src),
@@ -229,85 +216,6 @@ vi.mock('./blog-listing-pagination', () => ({
   ),
 }));
 
-export const merchant = {
-  id: 'merchant-1',
-  business_name: 'Ogabassey',
-  slug: 'test-store',
-  custom_domain: undefined as string | undefined,
-  store_url: undefined as string | undefined,
-  logo_url: '',
-  template_id: 'ogabassey',
-  country: 'NG' as string | undefined,
-  social_media: { instagram: '@ogabassey' } as
-    | { instagram?: string; facebook?: string; twitter?: string }
-    | undefined,
-};
-
-export const postsPayload = [
-  {
-    id: 'post-1',
-    title: 'First Post',
-    slug: 'first-post',
-    excerpt: 'Latest store updates',
-    featured: false,
-    featured_image_url: 'https://cdn.example.com/blog-cover.png',
-    featured_image_variants: {
-      landscape_16x9: 'https://cdn.example.com/blog-cover-16x9.png',
-      standard_4x3: 'https://cdn.example.com/blog-cover-4x3.png',
-      square_1x1: 'https://cdn.example.com/blog-cover-1x1.png',
-    },
-    featured_image_alt: 'First Post cover',
-    category: 'News',
-    tags: ['launch'],
-    author_name: 'Ogabassey',
-    published_at: '2026-03-28T10:00:00.000Z',
-    reading_time_minutes: 4,
-    view_count: 10,
-  },
-];
-
-export const clusterCollections = [
-  {
-    categorySlug: 'smartphones',
-    heading: 'Smartphone buying guides',
-    categoryHref: 'https://ogabassey.com/smartphones',
-    guides: [
-      {
-        href: 'https://ogabassey.com/blog/best-phones-in-nigeria',
-        title: 'Best Phones in Nigeria',
-        description: 'Budget and flagship picks.',
-        kind: 'best-in-nigeria' as const,
-      },
-      {
-        href: 'https://ogabassey.com/blog/apple-vs-samsung-buying-guide',
-        title: 'Apple vs Samsung Buying Guide',
-        description: 'Which ecosystem fits you.',
-        kind: 'decision-support' as const,
-      },
-    ],
-  },
-];
-
-export function buildListingResult(
-  overrides?: Partial<{
-    merchant: typeof merchant;
-    posts: typeof postsPayload;
-    totalPosts: number;
-  }>
-) {
-  const posts = overrides?.posts ?? postsPayload;
-  const totalPosts = overrides?.totalPosts ?? posts.length;
-  return {
-    merchant: overrides?.merchant ?? merchant,
-    posts,
-    totalPosts,
-    categories: ['News', 'gcrblw'],
-    currentPage: 1,
-    totalPages: Math.ceil(totalPosts / BLOG_LISTING_PAGE_SIZE),
-    searchQuery: undefined,
-  };
-}
-
 export const mockGetCachedBlogListing = vi.mocked(getCachedBlogListing);
 export const mockResolveBlogCategoryHub = vi.mocked(
   (await import('./blog-category-hub')).resolveBlogCategoryHub
@@ -339,10 +247,10 @@ export function resetBlogPageContentMocks() {
   ));
   mockGetTemplate.mockReset();
   mockGetTemplate.mockReturnValue(null);
+  mockOgabasseyV2Blog.mockReset();
+  mockOgabasseyV2Blog.mockReturnValue(null);
   mockTemplateBlogRenderer.mockReset();
   mockTemplateBlogRenderer.mockImplementation(
     (_props: MockTemplateBlogRendererProps) => <div>Template blog</div>
   );
 }
-
-export type { MockDefaultBlogUiProps, MockTemplateBlogRendererProps };

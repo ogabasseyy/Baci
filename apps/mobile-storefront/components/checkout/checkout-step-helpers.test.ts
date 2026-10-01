@@ -1,7 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 import type { ShippingQuote } from '@/components/checkout/types';
 import {
-  AIRPORT_DELIVERY_FEE,
   findSelectedQuote,
   getDeliveryMethodFee,
   getDeliveryMethodLabel,
@@ -11,6 +10,7 @@ import {
   getQuotePreference,
   getShippingProviderForMethod,
   requiresQuote,
+  resolveDoorDeliveryQuoteId,
 } from './checkout-step-helpers';
 
 const baseQuote: ShippingQuote = {
@@ -56,13 +56,9 @@ describe('checkout-step-helpers', () => {
   });
 
   it('resolves delivery fees by method', () => {
-    expect(getDeliveryMethodFee('airport', baseQuote)).toBe(
-      AIRPORT_DELIVERY_FEE
-    );
+    expect(getDeliveryMethodFee('airport', baseQuote)).toBe(35_000);
     expect(getDeliveryMethodFee('airport', goFasterQuote)).toBe(18500);
-    expect(getDeliveryMethodFee('airport', stationGoFasterQuote)).toBe(
-      AIRPORT_DELIVERY_FEE
-    );
+    expect(getDeliveryMethodFee('airport', stationGoFasterQuote)).toBe(35_000);
     expect(getDeliveryMethodFee('pickup_station', baseQuote)).toBe(0);
     expect(getDeliveryMethodFee('pickup_station', stationPickupQuote)).toBe(
       9493
@@ -205,5 +201,27 @@ describe('checkout-step-helpers', () => {
         false
       )
     ).toBe(true);
+  });
+
+  it('replaces a stale air quote with the road quote when falling back to door', () => {
+    // Regression: an Airport-selected GoFaster quote must not survive a
+    // fallback to door — door pricing treats it as zero while the order
+    // builder could still send its ID.
+    expect(
+      resolveDoorDeliveryQuoteId([baseQuote, goFasterQuote], 'gofaster-quote')
+    ).toBe('quote-1');
+    expect(
+      resolveDoorDeliveryQuoteId(
+        [baseQuote, stationPickupQuote],
+        'station-quote'
+      )
+    ).toBe('quote-1');
+    expect(
+      resolveDoorDeliveryQuoteId([baseQuote, goFasterQuote], 'quote-1')
+    ).toBe('quote-1');
+    expect(resolveDoorDeliveryQuoteId([goFasterQuote], 'gofaster-quote')).toBe(
+      ''
+    );
+    expect(resolveDoorDeliveryQuoteId([], '')).toBe('');
   });
 });

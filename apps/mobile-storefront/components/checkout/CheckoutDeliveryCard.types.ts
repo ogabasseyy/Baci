@@ -27,6 +27,7 @@ export type CheckoutDeliveryCardProps = {
   isLoadingCities: boolean;
   isLoadingLocations: boolean;
   isLoadingSavedAddresses: boolean;
+  showLocationPickers: boolean;
   onAddressSelected: (
     place: PlaceDetails,
     updateAddress: CheckoutDeliveryAddressUpdater

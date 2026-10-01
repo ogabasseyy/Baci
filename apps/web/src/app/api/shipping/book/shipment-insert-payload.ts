@@ -5,6 +5,7 @@ import type {
 } from '@/lib/shipping/types';
 
 interface ShippingQuoteForShipmentInsert {
+  id: string;
   price: number;
   currency: string;
   estimated_days: number | null;
@@ -34,6 +35,7 @@ export function buildShipmentInsertPayload({
     merchant_id: merchantId,
     provider: result.provider,
     provider_shipment_id: result.providerShipmentId,
+    shipping_quote_id: quote.id,
     tracking_number: result.trackingNumber,
     carrier_name: result.carrierName,
     status: result.status,

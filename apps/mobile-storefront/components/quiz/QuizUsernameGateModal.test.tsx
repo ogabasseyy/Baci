@@ -12,7 +12,7 @@ jest.mock('@/components/account/UsernamePrompt', () => ({
 }));
 
 describe('QuizUsernameGateModal', () => {
-  it('renders the gate heading and helper copy when visible', () => {
+  it('presents concise username setup copy for the leaderboard', () => {
     render(
       <QuizUsernameGateModal
         onCancel={jest.fn()}
@@ -23,11 +23,17 @@ describe('QuizUsernameGateModal', () => {
 
     expect(
       screen.getByRole('header', {
-        name: 'Choose a username to appear on the leaderboard',
+        name: 'Choose a username',
       })
     ).toBeTruthy();
+    expect(screen.getByLabelText('Leaderboard identity')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'This name will appear on the leaderboard at the end of the quiz.'
+      )
+    ).toBeTruthy();
     expect(mockRenderUsernamePrompt).toHaveBeenCalledWith(
-      expect.objectContaining({ submitLabel: 'Continue' })
+      expect.objectContaining({ submitLabel: 'Save & continue' })
     );
   });
 
@@ -42,7 +48,7 @@ describe('QuizUsernameGateModal', () => {
 
     expect(
       screen.queryByRole('header', {
-        name: 'Choose a username to appear on the leaderboard',
+        name: 'Choose a username',
       })
     ).toBeNull();
   });

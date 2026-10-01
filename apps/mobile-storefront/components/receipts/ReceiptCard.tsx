@@ -3,7 +3,9 @@ import { Image } from 'expo-image';
 import type React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BRAND, SHADOWS } from '@/constants/Colors';
+import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import type { ReceiptListItem } from '@/types/receipt';
+import { formatReceiptDate } from './receipt-date';
 
 const PAYMENT_STATUS_CONFIG: Record<
   string,
@@ -21,14 +23,6 @@ const PAYMENT_STATUS_CONFIG: Record<
 
 export function getPaymentConfig(status: string) {
   return PAYMENT_STATUS_CONFIG[status] ?? PAYMENT_STATUS_CONFIG.unpaid;
-}
-
-export function formatDate(dateString: string) {
-  return new Date(dateString).toLocaleDateString('en-NG', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
 }
 
 const PRICE_FORMATTER_CACHE = new Map<string, Intl.NumberFormat>();
@@ -84,11 +78,16 @@ export function ReceiptCard({
         <View style={[styles.thumb, { backgroundColor: `${BRAND.primary}12` }]}>
           {firstItem?.image_url ? (
             <Image
-              source={{ uri: firstItem.image_url }}
+              source={createSafeBoundedImageSource({
+                height: 52,
+                uri: firstItem.image_url,
+                width: 52,
+              })}
               style={styles.thumbImage}
               contentFit="contain"
               cachePolicy="memory-disk"
               transition={150}
+              autoplay={false}
               accessibilityLabel={firstItem.product_name}
             />
           ) : (
@@ -111,7 +110,12 @@ export function ReceiptCard({
             style={[styles.metaLine, { color: colors.textSecondary }]}
             numberOfLines={1}
           >
-            #{item.order_number} · {formatDate(item.created_at)}
+            #{item.order_number} ·{' '}
+            {formatReceiptDate(
+              item.invoice_issue_date ??
+                item.transaction_date ??
+                item.created_at
+            )}
           </Text>
         </View>
         <View style={[styles.badge, { backgroundColor: `${config.color}15` }]}>

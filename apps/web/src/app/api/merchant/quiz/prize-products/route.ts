@@ -9,21 +9,16 @@ import {
   quizPrizeProductSearchQuerySchema,
   quizPrizeProductsResponseSchema,
 } from '@/schemas/quiz-prize-product';
-import {
-  isProductRow,
-  isVariantRow,
-  mapBaseProduct,
-  mapVariantProduct,
-} from './prize-product-mapping';
+import { expandPrizeProduct } from './prize-product-expansion';
+import { isProductRow, isVariantRow } from './prize-product-mapping';
 import {
   decodePrizeProductCursor,
   paginatePrizeProducts,
 } from './prize-product-pagination';
-
-const PRODUCT_PROJECTION =
-  'id, merchant_id, name, price, images, condition, default_variant_id, has_variants, manage_stock, stock, stock_quantity';
-const VARIANT_PROJECTION =
-  'id, merchant_id, product_id, attributes, condition, created_at, price_override, stock_quantity, primary_image, images, sku';
+import {
+  PRODUCT_PROJECTION,
+  VARIANT_PROJECTION,
+} from './prize-product-projections';
 
 function prizeProductsResponse(payload: unknown) {
   const response = quizPrizeProductsResponseSchema.safeParse(payload);
@@ -187,6 +182,9 @@ export async function GET(request: Request) {
       .from('product_variants')
       .select(VARIANT_PROJECTION)
       .eq('merchant_id', access.merchantId)
+      // Exclude serialized-inventory anchors in the database, matching the
+      // initial loader, so internal rows never reach variant expansion.
+      .eq('is_inventory_anchor', false)
       .in('product_id', variantProductIds)
       .order('created_at', { ascending: true });
     if (variantError) {
@@ -198,13 +196,9 @@ export async function GET(request: Request) {
     variants = (Array.isArray(variantData) ? variantData : [])
       .filter(isVariantRow)
       .filter((variant) => variant.merchant_id === access.merchantId)
-      // Preserve `created_at` as the primary order and make only tied dates
-      // deterministic by ID before generating a selection cursor.
-      .sort(
-        (left, right) =>
-          (left.created_at ?? '').localeCompare(right.created_at ?? '') ||
-          left.id.localeCompare(right.id)
-      );
+      // Serialized-inventory anchors are internal rows the prize reserve
+      // RPC rejects; never offer them as selectable prize variants.
+      .filter((variant) => variant.is_inventory_anchor !== true);
   }
 
   const productById = new Map(products.map((product) => [product.id, product]));
@@ -216,13 +210,7 @@ export async function GET(request: Request) {
   const groups = candidates.ids.map((id) => {
     const product = productById.get(id);
     if (!product) return [];
-    const productVariants = variantsByProduct.get(id) ?? [];
-    if (product.has_variants === true && productVariants.length > 0) {
-      return productVariants.map((variant) =>
-        mapVariantProduct(product, variant)
-      );
-    }
-    return [mapBaseProduct(product)];
+    return expandPrizeProduct(product, variantsByProduct.get(id) ?? []);
   });
   const page = paginatePrizeProducts({
     groups,

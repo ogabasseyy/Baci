@@ -2,11 +2,13 @@ import type { RepairDeviceBrandGroup } from '@baci/shared/repairs';
 import { useEffect, useRef, useState } from 'react';
 import {
   fetchRepairDevices,
+  RepairCatalogTimeoutError,
   RepairCatalogUnavailableError,
 } from '@/lib/repair-catalog-client';
 
 export interface UseRepairDevicesResult {
   groups: RepairDeviceBrandGroup[];
+  brandGroups: RepairDeviceBrandGroup[];
   isLoading: boolean;
   /** True when the catalogue is disabled/unavailable for this merchant (404) — render the WhatsApp fallback, not an error state. */
   isUnavailable: boolean;
@@ -24,6 +26,7 @@ export interface UseRepairDevicesResult {
  */
 export function useRepairDevices(): UseRepairDevicesResult {
   const [groups, setGroups] = useState<RepairDeviceBrandGroup[]>([]);
+  const [brandGroups, setBrandGroups] = useState<RepairDeviceBrandGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUnavailable, setIsUnavailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +34,7 @@ export function useRepairDevices(): UseRepairDevicesResult {
   const [refetchToken, setRefetchToken] = useState(0);
   const requestIdRef = useRef(0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refetchToken intentionally retriggers the catalogue request.
   useEffect(() => {
     const requestId = ++requestIdRef.current;
     const controller = new AbortController();
@@ -41,6 +45,9 @@ export function useRepairDevices(): UseRepairDevicesResult {
       .then((result) => {
         if (requestIdRef.current !== requestId) return;
         setGroups(result);
+        if (!query.trim()) {
+          setBrandGroups(result);
+        }
         setIsUnavailable(false);
       })
       .catch((err: unknown) => {
@@ -48,6 +55,10 @@ export function useRepairDevices(): UseRepairDevicesResult {
         if (err instanceof RepairCatalogUnavailableError) {
           setIsUnavailable(true);
           setGroups([]);
+          return;
+        }
+        if (err instanceof RepairCatalogTimeoutError) {
+          setError('Repair options took too long to load. Please try again.');
           return;
         }
         setError(err instanceof Error ? err.message : 'Failed to load devices');
@@ -63,6 +74,7 @@ export function useRepairDevices(): UseRepairDevicesResult {
 
   return {
     groups,
+    brandGroups,
     isLoading,
     isUnavailable,
     error,

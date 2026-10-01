@@ -10,6 +10,7 @@ import {
   rpcErrorResponse,
 } from '@/app/api/quiz/_shared/route-helpers';
 import { logger } from '@/lib/logger';
+import { createQuizAwardRpcClient } from '@/lib/quiz/quiz-award-rpc-client';
 import { QuizVoucherTokenConfigError } from '@/lib/quiz-voucher-token';
 import {
   quizAttemptParamsSchema,
@@ -60,7 +61,11 @@ export async function postLegacyQuizAnswer(
   });
   if (proofResponse) return proofResponse;
 
-  const { data, error } = await auth.supabase.rpc('submit_quiz_answer', {
+  const quizRpcClient = createQuizAwardRpcClient({
+    fallbackClient: auth.supabase,
+    userId: auth.user.id,
+  });
+  const { data, error } = await quizRpcClient.rpc('submit_quiz_answer', {
     p_answer: parsed.data.answer,
     p_attempt_id: params.data.attemptId,
     p_client_answered_at: parsed.data.clientAnsweredAt,

@@ -46,6 +46,7 @@ export function ModalSheet({
     <Modal
       visible={visible}
       animationType={animationType}
+      presentationStyle="overFullScreen"
       transparent
       accessibilityViewIsModal
       onRequestClose={onRequestClose}

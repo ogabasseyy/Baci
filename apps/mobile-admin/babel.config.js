@@ -3,18 +3,9 @@ module.exports = (api) => {
   return {
     presets: ['babel-preset-expo'],
     plugins: [
-      [
-        'babel-plugin-react-compiler',
-        {
-          target: '19',
-        },
-      ],
-      // Bundle mode (worklets 0.10 stable) loads worklets from the JS bundle
-      // instead of duplicating them per runtime — recovers the Hermes/Android
-      // memory cost of importing reanimated. No jest gating needed: admin
-      // tests run under vitest, which does not read this babel config.
-      // strictGlobal deliberately NOT enabled yet — separate change.
-      ['react-native-worklets/plugin', { bundleMode: true }],
+      // Keep worklets on the supported transform path. Expo SDK 57.0.9+
+      // includes the Hermes V1 memory fix; bundle mode is experimental.
+      'react-native-worklets/plugin',
     ],
   };
 };

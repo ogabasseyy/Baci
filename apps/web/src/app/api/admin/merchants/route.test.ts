@@ -1,12 +1,14 @@
 import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockGetMerchantForApiRequest = vi.fn();
+const mockGetPlatformAdminAuthForPermission = vi.fn();
 const mockCreateClient = vi.fn();
+const merchantOneId = '123e4567-e89b-42d3-a456-426614174001';
+const merchantTwoId = '123e4567-e89b-42d3-a456-426614174002';
 
-vi.mock('@/lib/get-merchant-for-api-request', () => ({
-  getMerchantForApiRequest: (...args: unknown[]) =>
-    mockGetMerchantForApiRequest(...args),
+vi.mock('@/lib/platform-admin-auth', () => ({
+  getPlatformAdminAuthForPermission: (...args: unknown[]) =>
+    mockGetPlatformAdminAuthForPermission(...args),
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -15,25 +17,9 @@ vi.mock('@/lib/supabase/server', () => ({
 
 type QueryResult<T> = {
   data: T | null;
-  error: { message: string } | null;
+  error: { code?: string; message: string } | null;
 };
 
-let authUser: { id: string } | null = { id: 'user-1' };
-let merchantContext: {
-  merchantId: string;
-  staffAccess: {
-    isStaff: boolean;
-  };
-} | null = {
-  merchantId: 'merchant-1',
-  staffAccess: {
-    isStaff: false,
-  },
-};
-let merchantAdminResult: QueryResult<{ is_platform_admin: boolean }> = {
-  data: { is_platform_admin: true },
-  error: null,
-};
 let rpcResult: QueryResult<
   Array<{
     merchant_id: string;
@@ -42,6 +28,7 @@ let rpcResult: QueryResult<
     joined_at: string;
     total_gmv: number;
     total_orders: number;
+    excluded_non_ngn_or_unknown_paid_orders: number;
     last_order_date: string | null;
     active_days: number;
     health_status: 'healthy' | 'at_risk' | 'churned' | 'new';
@@ -50,7 +37,7 @@ let rpcResult: QueryResult<
 > = {
   data: [
     {
-      merchant_id: 'merchant-1',
+      merchant_id: merchantOneId,
       business_name: 'Baci Store',
       email: 'owner@example.com',
       joined_at: '2026-03-20T10:00:00.000Z',
@@ -58,11 +45,12 @@ let rpcResult: QueryResult<
       total_orders: 2,
       last_order_date: '2026-03-19',
       active_days: 2,
+      excluded_non_ngn_or_unknown_paid_orders: 0,
       health_status: 'healthy',
       storefront_slug: 'baci-store',
     },
     {
-      merchant_id: 'merchant-2',
+      merchant_id: merchantTwoId,
       business_name: 'Another Store',
       email: 'another@example.com',
       joined_at: '2026-03-21T10:00:00.000Z',
@@ -70,6 +58,7 @@ let rpcResult: QueryResult<
       total_orders: 5,
       last_order_date: '2026-03-18',
       active_days: 1,
+      excluded_non_ngn_or_unknown_paid_orders: 1,
       health_status: 'at_risk',
       storefront_slug: 'another-store',
     },
@@ -78,28 +67,9 @@ let rpcResult: QueryResult<
 };
 
 function createMockSupabase() {
-  const merchantsQuery = {
-    eq: vi.fn(() => merchantsQuery),
-    maybeSingle: vi.fn(async () => merchantAdminResult),
-    select: vi.fn(() => merchantsQuery),
-  };
-
   return {
-    auth: {
-      getUser: vi.fn(async () => ({
-        data: { user: authUser },
-        error: authUser ? null : { message: 'Not authenticated' },
-      })),
-    },
-    from: vi.fn((table: string) => {
-      if (table === 'merchants') {
-        return merchantsQuery;
-      }
-
-      throw new Error(`Unexpected table: ${table}`);
-    }),
     rpc: vi.fn((name: string) => {
-      if (name !== 'get_admin_merchant_health') {
+      if (name !== 'get_admin_merchant_health_v2') {
         throw new Error(`Unexpected RPC: ${name}`);
       }
 
@@ -117,21 +87,10 @@ import { GET } from './route';
 describe('/api/admin/merchants', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    authUser = { id: 'user-1' };
-    merchantContext = {
-      merchantId: 'merchant-1',
-      staffAccess: {
-        isStaff: false,
-      },
-    };
-    merchantAdminResult = {
-      data: { is_platform_admin: true },
-      error: null,
-    };
     rpcResult = {
       data: [
         {
-          merchant_id: 'merchant-1',
+          merchant_id: merchantOneId,
           business_name: 'Baci Store',
           email: 'owner@example.com',
           joined_at: '2026-03-20T10:00:00.000Z',
@@ -139,11 +98,12 @@ describe('/api/admin/merchants', () => {
           total_orders: 2,
           last_order_date: '2026-03-19',
           active_days: 2,
+          excluded_non_ngn_or_unknown_paid_orders: 0,
           health_status: 'healthy',
           storefront_slug: 'baci-store',
         },
         {
-          merchant_id: 'merchant-2',
+          merchant_id: merchantTwoId,
           business_name: 'Another Store',
           email: 'another@example.com',
           joined_at: '2026-03-21T10:00:00.000Z',
@@ -151,19 +111,25 @@ describe('/api/admin/merchants', () => {
           total_orders: 5,
           last_order_date: '2026-03-18',
           active_days: 1,
+          excluded_non_ngn_or_unknown_paid_orders: 1,
           health_status: 'at_risk',
           storefront_slug: 'another-store',
         },
       ],
       error: null,
     };
-    mockGetMerchantForApiRequest.mockResolvedValue(merchantContext);
+    mockGetPlatformAdminAuthForPermission.mockResolvedValue({
+      context: { permissions: ['merchants.read'], role: 'support' },
+      status: 'authenticated',
+      user: { email: 'support@example.com', id: 'membership-only-support' },
+    });
     mockCreateClient.mockResolvedValue(createMockSupabase());
   });
 
   it('returns 401 when the user is not authenticated', async () => {
-    authUser = null;
-    mockCreateClient.mockResolvedValue(createMockSupabase());
+    mockGetPlatformAdminAuthForPermission.mockResolvedValueOnce({
+      status: 'unauthenticated',
+    });
 
     const response = await GET(
       createRequest('http://localhost/api/admin/merchants')
@@ -172,6 +138,10 @@ describe('/api/admin/merchants', () => {
 
     expect(response.status).toBe(401);
     expect(body.error).toBe('Unauthorized');
+    expect(mockGetPlatformAdminAuthForPermission).toHaveBeenCalledWith(
+      'merchants.read'
+    );
+    expect(mockCreateClient).not.toHaveBeenCalled();
   });
 
   it('returns 400 for an invalid sort parameter', async () => {
@@ -181,15 +151,14 @@ describe('/api/admin/merchants', () => {
     const body = await response.json();
 
     expect(response.status).toBe(400);
-    expect(body.code).toBe('INVALID_SORT');
+    expect(body.code).toBe('INVALID_MERCHANTS_QUERY');
+    expect(mockCreateClient).not.toHaveBeenCalled();
   });
 
-  it('returns 403 when the user is not a platform admin', async () => {
-    merchantAdminResult = {
-      data: { is_platform_admin: false },
-      error: null,
-    };
-    mockCreateClient.mockResolvedValue(createMockSupabase());
+  it('returns 403 when the caller lacks merchants.read', async () => {
+    mockGetPlatformAdminAuthForPermission.mockResolvedValueOnce({
+      status: 'forbidden',
+    });
 
     const response = await GET(
       createRequest('http://localhost/api/admin/merchants')
@@ -197,7 +166,8 @@ describe('/api/admin/merchants', () => {
     const body = await response.json();
 
     expect(response.status).toBe(403);
-    expect(body.error).toBe('Forbidden - Admin access required');
+    expect(body.error).toBe('Forbidden');
+    expect(mockCreateClient).not.toHaveBeenCalled();
   });
 
   it('returns 500 when the admin merchant health RPC fails', async () => {
@@ -216,7 +186,21 @@ describe('/api/admin/merchants', () => {
     expect(body.error).toBe('Failed to fetch merchant data');
   });
 
-  it('returns sorted merchant rows from the admin-only RPC', async () => {
+  it('returns 403 when the database permission boundary rejects the read', async () => {
+    rpcResult = {
+      data: null,
+      error: { code: '42501', message: 'permission denied' },
+    };
+    mockCreateClient.mockResolvedValue(createMockSupabase());
+
+    const response = await GET(
+      createRequest('http://localhost/api/admin/merchants')
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it('passes the requested sort to the server-sorted bounded RPC', async () => {
     const response = await GET(
       createRequest('http://localhost/api/admin/merchants?sortBy=orders')
     );
@@ -224,16 +208,11 @@ describe('/api/admin/merchants', () => {
 
     expect(response.status).toBe(200);
     expect(body.data).toHaveLength(2);
-    expect(body.data[0]).toMatchObject({
-      merchant_id: 'merchant-2',
-      storefront_slug: 'another-store',
-      total_orders: 5,
-    });
-    expect(body.data[1]).toMatchObject({
-      merchant_id: 'merchant-1',
-      storefront_slug: 'baci-store',
-      total_orders: 2,
-    });
+    expect(body.data[0]).toMatchObject({ merchant_id: merchantOneId });
+    expect(mockCreateClient.mock.results[0]?.value).toBeTruthy();
     expect(body.generatedAt).toBeTypeOf('string');
+    expect(mockGetPlatformAdminAuthForPermission).toHaveBeenCalledWith(
+      'merchants.read'
+    );
   });
 });

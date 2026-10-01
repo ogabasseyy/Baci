@@ -5,6 +5,7 @@ describe('resolveWalletFundingFailureReason', () => {
   // Every `CustomerWalletPaymentAccountErrorCode` member, plus the route-level
   // WALLET_DVA_DISABLED rejection.
   it.each([
+    'CUSTOMER_NAME_REQUIRED',
     'CUSTOMER_PHONE_REQUIRED',
     'GATEWAY_NOT_CONFIGURED',
     'PAYSTACK_CUSTOMER_ERROR',

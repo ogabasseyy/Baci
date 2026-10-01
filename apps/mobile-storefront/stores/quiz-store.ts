@@ -10,16 +10,17 @@ import type {
 } from '@/services/quiz-types';
 import { QuizServiceError } from '@/services/quiz-types';
 import type {
+  QuizTerminalContext,
   QuizV2LifecycleStatus,
   QuizV2StoreActions,
 } from './quiz-recovery-envelope';
 import {
   clearQuizRecoveryEnvelope,
-  createQuizV2StoreActions,
   initialQuizV2State,
 } from './quiz-recovery-envelope';
+import { createQuizV2StoreActions } from './quiz-v2-store-actions';
 
-export { QUIZ_RECONCILIATION_INTERVAL_MS } from './quiz-recovery-envelope';
+export { QUIZ_RECONCILIATION_INTERVAL_MS } from './quiz-v2-store-actions';
 
 type QuizStatus =
   | 'idle'
@@ -38,6 +39,7 @@ interface QuizStore extends QuizV2StoreActions {
   attempt: QuizAttempt | null;
   v2Attempt: QuizV2Attempt | null;
   attemptIntegrityTier: QuizIntegrityTier | null;
+  expiryRetryable: boolean;
   selectedOptionId: string | null;
   lockedOptionId: string | null;
   startRequestId: string | null;
@@ -45,6 +47,7 @@ interface QuizStore extends QuizV2StoreActions {
   result: QuizResult | null;
   v2Result: QuizV2Result | null;
   v2LifecycleStatus: QuizV2LifecycleStatus;
+  terminalContext: QuizTerminalContext | null;
   error: string | null;
   loadEvents: (loader: () => Promise<QuizEvent[]>) => Promise<void>;
   startEvent: (
@@ -59,7 +62,10 @@ interface QuizStore extends QuizV2StoreActions {
     retryOptionId?: string
   ) => Promise<void>;
   setError: (message: string) => void;
+  dismissRecovery: () => Promise<void>;
   reset: () => void;
+  showLobby: () => void;
+  resetForAccountChange: () => void;
 }
 
 const initialState = {
@@ -148,11 +154,21 @@ export const useQuizStore = create<QuizStore>((set, get) => {
   return {
     ...initialState,
     ...v2Actions,
+    startEventV2: (context, starter) => {
+      if (get().status === 'starting' || get().status === 'submitting')
+        return Promise.resolve();
+      set({ attempt: null, selectedOptionId: null, result: null });
+      return v2Actions.startEventV2(context, starter);
+    },
     loadEvents: async (loader) => {
+      const currentGeneration = generation;
       set({ status: 'loading', error: null });
       try {
-        set({ status: 'ready', events: await loader() });
+        const events = await loader();
+        if (generation !== currentGeneration) return;
+        set({ status: 'ready', events });
       } catch (error) {
+        if (generation !== currentGeneration) return;
         set({ status: 'ready', error: getMessage(error) });
       }
     },
@@ -160,6 +176,7 @@ export const useQuizStore = create<QuizStore>((set, get) => {
       if (get().status === 'starting' || get().status === 'submitting') return;
       const currentGeneration = generation;
       set({
+        ...initialQuizV2State,
         status: 'starting',
         attempt: null,
         selectedEventId: eventId,
@@ -197,15 +214,46 @@ export const useQuizStore = create<QuizStore>((set, get) => {
       await performLegacySubmit(submitter);
     },
     setError: (message) => set({ status: 'error', error: message }),
+    dismissRecovery: async () => {
+      const state = get();
+      if (!state.recoveryUserId || !state.selectedEventId) return;
+      await clearQuizRecoveryEnvelope(
+        state.recoveryUserId,
+        state.selectedEventId
+      ).catch(() => undefined);
+    },
     reset: () => {
       const state = get();
       generation += 1;
-      if (state.recoveryUserId && state.selectedEventId)
+      const retainRecovery =
+        Boolean(state.terminalContext?.attemptId) &&
+        (state.v2LifecycleStatus === 'pending_results' ||
+          (state.v2LifecycleStatus === 'final' &&
+            state.v2Result?.availability === 'final' &&
+            Boolean(state.v2Result.prizeClaim)));
+      if (state.recoveryUserId && state.selectedEventId && !retainRecovery)
         void clearQuizRecoveryEnvelope(
           state.recoveryUserId,
           state.selectedEventId
         ).catch(() => undefined);
       set(initialState);
+    },
+    resetForAccountChange: () => {
+      generation += 1;
+      set(initialState);
+    },
+    showLobby: () => {
+      const state = get();
+      // Legacy requests cannot be recovered if their response is discarded.
+      if (
+        !state.v2Attempt &&
+        !state.startRequestId &&
+        (state.status === 'starting' || state.status === 'submitting')
+      )
+        return;
+      generation += 1;
+      // Keep the attempt and persisted request ID for explicit Resume.
+      set({ status: 'ready', error: null });
     },
   };
 });

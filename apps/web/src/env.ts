@@ -4,6 +4,7 @@ import { DEFAULT_ROOT_DOMAIN } from '@/lib/default-root-domain';
 import { normalizeEnvBoolean } from '@/lib/env-boolean';
 import { isNonAgenticWorkerProfile } from '@/lib/is-non-agentic-worker-profile';
 import { buildLlmBearerAuthHeader } from '@/lib/llm-auth';
+import { isNegotiatedCheckoutProofSecretMissing } from '@/lib/quiz/negotiated-checkout-proof-env';
 import { supabaseAgenticJwtPrivateJwkStringSchema } from '@/schemas/supabase-agentic-jwt-private-jwk';
 
 /**
@@ -179,6 +180,7 @@ const serverSchema = z
       .min(1, 'SUPABASE_SERVICE_ROLE_KEY is required'),
     RECOVERY_CODE_PEPPER: recoveryCodePepperSchema,
     SUPABASE_JWT_SECRET: optionalTrimmedStringSchema,
+    SUPABASE_LEGACY_ANON_JWT: optionalTrimmedStringSchema,
     SUPABASE_AGENTIC_JWT_PRIVATE_JWK: supabaseAgenticJwtPrivateJwkStringSchema,
 
     // Blog
@@ -391,6 +393,14 @@ const serverSchema = z
     JUMIA_ENVIRONMENT: z.enum(['staging', 'production']).default('staging'),
     JUMIA_CLIENT_ID: z.string().optional(),
     JUMIA_CLIENT_SECRET: z.string().optional(),
+    JUMIA_AUTHORIZATION_ENCRYPTION_KEY: optionalTrimmedStringSchema.refine(
+      (value) =>
+        value === undefined || Buffer.from(value, 'base64').length === 32,
+      {
+        message:
+          'JUMIA_AUTHORIZATION_ENCRYPTION_KEY must be Base64-encoded 32 bytes',
+      }
+    ),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -427,6 +437,16 @@ const serverSchema = z
         code: z.ZodIssueCode.custom,
         message:
           'QUIZ_RPC_SERVER_SECRET is required when QUIZ_PHASE is production',
+        path: ['QUIZ_RPC_SERVER_SECRET'],
+      });
+    }
+  })
+  .superRefine((value, ctx) => {
+    if (isNegotiatedCheckoutProofSecretMissing(value)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'QUIZ_RPC_SERVER_SECRET is required in production for negotiated checkout proofs',
         path: ['QUIZ_RPC_SERVER_SECRET'],
       });
     }
@@ -589,6 +609,7 @@ const getEnv = () => {
         SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
         RECOVERY_CODE_PEPPER: process.env.RECOVERY_CODE_PEPPER,
         SUPABASE_JWT_SECRET: process.env.SUPABASE_JWT_SECRET,
+        SUPABASE_LEGACY_ANON_JWT: process.env.SUPABASE_LEGACY_ANON_JWT,
         SUPABASE_AGENTIC_JWT_PRIVATE_JWK:
           process.env.SUPABASE_AGENTIC_JWT_PRIVATE_JWK,
         BLOG_PREVIEW_SECRET: process.env.BLOG_PREVIEW_SECRET,
@@ -706,6 +727,8 @@ const getEnv = () => {
         JUMIA_ENVIRONMENT: process.env.JUMIA_ENVIRONMENT,
         JUMIA_CLIENT_ID: process.env.JUMIA_CLIENT_ID,
         JUMIA_CLIENT_SECRET: process.env.JUMIA_CLIENT_SECRET,
+        JUMIA_AUTHORIZATION_ENCRYPTION_KEY:
+          process.env.JUMIA_AUTHORIZATION_ENCRYPTION_KEY,
         INTERNAL_API_SECRET: process.env.INTERNAL_API_SECRET,
         CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN,
         CLOUDFLARE_ZONE_ID: process.env.CLOUDFLARE_ZONE_ID,
@@ -882,6 +905,17 @@ export const getSupabaseJwtSecret = (): string => {
   );
   if (!jwtSecret) throw new Error('SUPABASE_JWT_SECRET is not defined');
   return jwtSecret;
+};
+
+export const getSupabaseLegacyAnonJwt = (): string | undefined => {
+  if (isBrowserRuntime())
+    throw new Error(
+      'SUPABASE_LEGACY_ANON_JWT cannot be accessed on the client'
+    );
+  const legacyAnonJwt = trimSecret(
+    process.env.SUPABASE_LEGACY_ANON_JWT ?? env?.SUPABASE_LEGACY_ANON_JWT
+  );
+  return legacyAnonJwt || undefined;
 };
 
 export const getSupabaseAgenticJwtPrivateJwk = (): string | undefined => {
@@ -1065,6 +1099,15 @@ export const getImeiIdentifierEncryptionKey = () => {
   const key = trimSecret(
     process.env.IMEI_IDENTIFIER_ENCRYPTION_KEY ??
       env?.IMEI_IDENTIFIER_ENCRYPTION_KEY
+  );
+  return key || undefined;
+};
+
+export const getJumiaAuthorizationEncryptionKey = () => {
+  if (isBrowserRuntime()) return undefined;
+  const key = trimSecret(
+    process.env.JUMIA_AUTHORIZATION_ENCRYPTION_KEY ??
+      env?.JUMIA_AUTHORIZATION_ENCRYPTION_KEY
   );
   return key || undefined;
 };

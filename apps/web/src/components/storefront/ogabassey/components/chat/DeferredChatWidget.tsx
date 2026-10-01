@@ -1,9 +1,9 @@
 'use client';
 
-import '@/app/(storefront)/storefront-chat.css';
 import { Sparkles } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
+import { StorefrontChatStyleLoader } from '@/app/(storefront)/storefront-chat-style-loader';
 import { useCart } from '@/hooks/cart';
 import { useV2Theme } from '../../providers/v2-theme-context';
 import { useOgabasseyScrollVisibility } from '../../scroll-visibility-store';
@@ -102,6 +102,7 @@ export function DeferredChatWidget({
       data-mobile-offset={mobileOffset}
       {...CHAT_MOBILE_OFFSET_ATTRIBUTES}
     >
+      <StorefrontChatStyleLoader />
       <div className="relative group">
         <button
           type="button"

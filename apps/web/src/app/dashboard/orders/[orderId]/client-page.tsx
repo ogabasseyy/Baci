@@ -4,7 +4,6 @@ import {
   CheckCircle,
   ChevronLeft,
   Copy,
-  Download,
   Edit,
   Mail,
   MoreVertical,
@@ -36,7 +35,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { apiPatch, apiPost, fetchWithCsrf } from '@/lib/api-client';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
@@ -53,6 +51,8 @@ import ConfirmInsuranceDialog, {
   type ConfirmOrderPayload,
 } from './confirm-insurance-dialog';
 import { summarizeInsuranceConfirmation } from './insurance-confirmation-summary';
+import { OrderPaymentSummary } from './OrderPaymentSummary';
+import { ShipmentDetailsCard } from './shipment-details-card';
 
 // Type definitions
 interface OrderDetailsClientPageProps {
@@ -136,37 +136,6 @@ export default function OrderDetailsClientPage({
 
   const displayItems = getOrderItems(order);
   const orderCurrency = order.currency || 'NGN';
-
-  // Prefer the human name of the merchant-configured shipping rate a shopper
-  // bought (e.g. "Standard", "Express", or the pickup-location name) over the
-  // bare provider label (`MERCHANT`/`MERCHANT_PICKUP`). Fall back to the provider
-  // for carrier orders and older merchant-rate orders that predate rate-name
-  // capture.
-  const shippingMethodLabel =
-    order.shipping_rate_name || order.shipping_provider || null;
-  const shippingMethodHeading = order.shipping_rate_name
-    ? 'Shipping Method'
-    : 'Provider';
-
-  // Surface the merchant pickup collection point so the merchant still knows
-  // where the shopper collects even if the rate is later edited/deleted. Only
-  // merchant-pickup orders (provider MERCHANT_PICKUP) carry this snapshot;
-  // ship/carrier orders leave it null and render nothing.
-  const pickupDetails =
-    order.shipping_provider === 'MERCHANT_PICKUP'
-      ? order.shipping_pickup_details
-      : null;
-  const pickupLabel = pickupDetails?.label?.trim() || '';
-  const pickupAddressLine = pickupDetails
-    ? [pickupDetails.address, pickupDetails.city, pickupDetails.state]
-        .map((part) => part?.trim())
-        .filter((part): part is string => Boolean(part))
-        .join(', ')
-    : '';
-  const pickupInstructions = pickupDetails?.instructions?.trim() || '';
-  const hasPickupDetails = Boolean(
-    pickupLabel || pickupAddressLine || pickupInstructions
-  );
 
   const doesOrderRequireFulfillment = () => {
     // Check for fulfillment fields OR assurance
@@ -297,10 +266,6 @@ export default function OrderDetailsClientPage({
   };
 
   // ... formatCurrency ...
-
-  const shippingFee = 0;
-  const taxes = 0;
-  const totalAmount = order.total + shippingFee + taxes;
 
   const getPrimaryAction = () => {
     switch (order.shippingStatus) {
@@ -540,105 +505,11 @@ export default function OrderDetailsClientPage({
                 )}
               </CardFooter>
             </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Shipment</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {shippingMethodLabel && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">
-                      {shippingMethodHeading}
-                    </p>
-                    <p className="font-semibold">{shippingMethodLabel}</p>
-                  </div>
-                )}
-                {hasPickupDetails && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">
-                      Pickup Location
-                    </p>
-                    {pickupLabel && (
-                      <p className="font-semibold">{pickupLabel}</p>
-                    )}
-                    {pickupAddressLine && (
-                      <p className="text-sm">{pickupAddressLine}</p>
-                    )}
-                    {pickupInstructions && (
-                      <p className="text-sm text-muted-foreground">
-                        {pickupInstructions}
-                      </p>
-                    )}
-                  </div>
-                )}
-                {order.tracking_number ? (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">
-                        Tracking #
-                      </p>
-                      <p className="font-semibold">{order.tracking_number}</p>
-                    </div>
-                    <Button asChild variant="outline" size="sm">
-                      <Link href={`/track/${order.tracking_number}`}>
-                        Track
-                      </Link>
-                    </Button>
-                  </div>
-                ) : (
-                  !shippingMethodLabel && (
-                    <p className="text-sm text-muted-foreground">
-                      No tracking information available.
-                    </p>
-                  )
-                )}
-              </CardContent>
-            </Card>
+            <ShipmentDetailsCard order={order} />
           </div>
 
           <div className="grid auto-rows-max items-start gap-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Payment Summary</CardTitle>
-                <Button variant="outline" size="sm" className="gap-1">
-                  <Download className="size-3.5" />
-                  Download Receipt
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex justify-between">
-                  <span>Sub Total</span>{' '}
-                  <span>{formatCurrency(order.total, orderCurrency)}</span>
-                </div>
-                {order.paymentMethod && (
-                  <div className="flex justify-between">
-                    <span>Payment Method</span>{' '}
-                    <span className="capitalize">{order.paymentMethod}</span>
-                  </div>
-                )}
-                {order.payment_reference && (
-                  <div className="flex justify-between">
-                    <span>Payment Reference</span>{' '}
-                    <span className="font-mono text-xs">
-                      {order.payment_reference}
-                    </span>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span>Shipping Fee</span>{' '}
-                  <span>{formatCurrency(shippingFee, orderCurrency)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Taxes</span>{' '}
-                  <span>{formatCurrency(taxes, orderCurrency)}</span>
-                </div>
-                <Separator />
-                <div className="flex justify-between font-bold text-lg">
-                  <span>Total Amount</span>{' '}
-                  <span>{formatCurrency(totalAmount, orderCurrency)}</span>
-                </div>
-              </CardContent>
-            </Card>
+            <OrderPaymentSummary order={order} />
 
             <Card>
               <CardHeader>

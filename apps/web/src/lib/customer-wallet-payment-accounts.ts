@@ -4,6 +4,7 @@ import {
   resolveCustomerWalletPaymentAccount,
 } from '@/lib/customer-wallet-payment-account-db';
 import {
+  CUSTOMER_NAME_REQUIRED_MESSAGE,
   type CustomerWalletPaymentAccount,
   CustomerWalletPaymentAccountError,
   type CustomerWalletPaymentCustomer,
@@ -67,6 +68,39 @@ function getRequiredCustomerEmail(customer: CustomerWalletPaymentCustomer) {
   }
 
   return customerEmail;
+}
+
+function getOptionalCustomerName(value: string | null | undefined) {
+  const name = value?.trim();
+  return name || undefined;
+}
+
+function getRequiredCustomerNames({
+  customer,
+  paystackCustomer,
+}: {
+  customer: CustomerWalletPaymentCustomer;
+  paystackCustomer: { first_name: string | null; last_name: string | null };
+}) {
+  const localFirstName = getOptionalCustomerName(customer.first_name);
+  const localLastName = getOptionalCustomerName(customer.last_name);
+  const providerFirstName = getOptionalCustomerName(
+    paystackCustomer.first_name
+  );
+  const providerLastName = getOptionalCustomerName(paystackCustomer.last_name);
+
+  if (localFirstName && localLastName) {
+    return { firstName: localFirstName, lastName: localLastName };
+  }
+
+  if (providerFirstName && providerLastName) {
+    return { firstName: providerFirstName, lastName: providerLastName };
+  }
+
+  throw new CustomerWalletPaymentAccountError(
+    'CUSTOMER_NAME_REQUIRED',
+    CUSTOMER_NAME_REQUIRED_MESSAGE
+  );
 }
 
 function normalizePaystackWalletDedicatedAccount({
@@ -181,8 +215,8 @@ export async function ensureCustomerWalletPaymentAccount({
 
   const paystackCustomer = await createOrGetCustomer({
     email: customerEmail,
-    first_name: customer.first_name ?? undefined,
-    last_name: customer.last_name ?? undefined,
+    first_name: getOptionalCustomerName(customer.first_name),
+    last_name: getOptionalCustomerName(customer.last_name),
     phone: customerPhone,
     metadata: {
       customer_id: customer.id,
@@ -215,8 +249,10 @@ export async function ensureCustomerWalletPaymentAccount({
 
   const dedicatedAccount = await createDedicatedAccountForWallet({
     customerCode: paystackCustomer.data.customer_code,
-    firstName: customer.first_name ?? undefined,
-    lastName: customer.last_name ?? undefined,
+    ...getRequiredCustomerNames({
+      customer,
+      paystackCustomer: paystackCustomer.data,
+    }),
     phone: customerPhone,
     subaccount: merchantSubaccount,
   });

@@ -1,6 +1,12 @@
 import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OrderShipmentBookingError } from '@/lib/shipping/order-shipment-booking-utils';
+import { shippingQuoteEnvTestMock } from '@/lib/shipping/shipping-quote-env.test-mock';
+
+vi.mock('@/env', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/env')>();
+  return { ...actual, ...shippingQuoteEnvTestMock };
+});
 
 const mockCheckCsrfProtection = vi.fn();
 const mockCookies = vi.fn();
@@ -104,8 +110,44 @@ function buildSupabaseMock() {
       error: null,
     }),
   };
+  const shipmentLookupChain = {
+    eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+  };
 
   return {
+    rpc: vi.fn().mockImplementation((fn: string) => {
+      if (fn === 'get_shipping_quote_booking_metadata') {
+        return {
+          data: {
+            serviceType: 'Premium_Express',
+            pricingTier: 'International',
+          },
+          error: null,
+        };
+      }
+      if (fn === 'get_shipping_quote_booking_economics') {
+        return {
+          data: {
+            provider_cost: 3600,
+            platform_margin: 900,
+            platform_margin_bps: 2000,
+            pricing_version: 'gigl_platform_margin_v1',
+            shipping_provider_cost: 3600,
+            shipping_platform_margin: 900,
+            shipping_pricing_version: 'gigl_platform_margin_v1',
+          },
+          error: null,
+        };
+      }
+      return {
+        data: [{ claimed: true, shipment_id: null, tracking_number: null }],
+        error: null,
+      };
+    }),
     auth: {
       getUser: vi.fn().mockResolvedValue({
         data: { user: { id: 'user-1' } },
@@ -118,6 +160,36 @@ function buildSupabaseMock() {
       }
       if (table === 'shipping_quotes') {
         return { select: vi.fn(() => quotesSelectChain) };
+      }
+      if (table === 'shipments') {
+        return { select: vi.fn(() => shipmentLookupChain) };
+      }
+      if (table === 'merchants') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: {
+                business_name: 'Merchant Store',
+                business_address: '1 Merchant Road, Ikeja, Lagos',
+                phone: '+2348011111111',
+                registered_address: null,
+                state_code: 'LA',
+              },
+              error: null,
+            }),
+          })),
+        };
+      }
+      if (table === 'order_items') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn().mockResolvedValue({
+              data: [{ name: 'Phone', quantity: 1, price: 500000 }],
+              error: null,
+            }),
+          })),
+        };
       }
       throw new Error(`Unexpected table: ${table}`);
     }),

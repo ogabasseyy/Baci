@@ -163,8 +163,49 @@ describe('quiz migration contracts', () => {
       /quiz_attempt_signal_flags[\s\S]*?severity = 'block'/i
     );
     expect(leaderboardSql).toMatch(
-      /ORDER BY\s+a\.customer_id,\s+a\.score DESC,\s+a\.submitted_at - a\.started_at,\s+a\.submitted_at,\s+a\.id/i
+      /ORDER BY\s+a\.customer_id,\s+a\.score DESC,[\s\S]*?submitted_at,[\s\S]*?a\.id/i
     );
     expect(leaderboardSql).not.toMatch(/'disqualified'/i);
+  });
+
+  it('materializes final v2 rankings once and serves published projections from indexed rows', () => {
+    expect(allQuizMigrationSql).toMatch(
+      /CREATE TABLE(?: IF NOT EXISTS)? public\.quiz_event_results_v2/i
+    );
+    expect(allQuizMigrationSql).toMatch(
+      /CREATE UNIQUE INDEX[\s\S]*?quiz_event_results_v2[\s\S]*?event_id[\s\S]*?rank/i
+    );
+    expect(allQuizMigrationSql).toMatch(
+      /CREATE UNIQUE INDEX[\s\S]*?quiz_event_results_v2[\s\S]*?event_id[\s\S]*?customer_id/i
+    );
+
+    const latestLeaderboardSql = quizMigrationFiles
+      .map(
+        ({ sql }) =>
+          sql.match(
+            /CREATE OR REPLACE FUNCTION public\.get_quiz_leaderboard_public_v2\s*\([\s\S]*?\$\$;/i
+          )?.[0]
+      )
+      .filter((sql): sql is string => Boolean(sql))
+      .at(-1);
+
+    expect(latestLeaderboardSql).toMatch(/public\.quiz_event_results_v2/i);
+    expect(latestLeaderboardSql).not.toMatch(/quiz_ranked_candidates_v2/i);
+  });
+
+  it('uses explicit server-derived milliseconds for speed ties', () => {
+    const latestRankingSql = quizMigrationFiles
+      .map(
+        ({ sql }) =>
+          sql.match(
+            /CREATE OR REPLACE FUNCTION private\.quiz_ranked_candidates_v2\s*\([\s\S]*?\$\$;/i
+          )?.[0]
+      )
+      .filter((sql): sql is string => Boolean(sql))
+      .at(-1);
+
+    expect(latestRankingSql).toMatch(/elapsed_milliseconds/i);
+    expect(latestRankingSql).toMatch(/\* 1000/);
+    expect(latestRankingSql).not.toMatch(/loyalty_points/i);
   });
 });

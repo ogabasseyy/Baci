@@ -8,12 +8,18 @@ const PUBLIC_CALLBACK_URL =
 
 const mockAuthenticateApiRequest = vi.fn();
 const mockGetMerchantIdForApiUser = vi.fn();
+const mockGetUserAccess = vi.fn();
+const { mockHasPermission } = vi.hoisted(() => ({
+  mockHasPermission: vi.fn(
+    (_access: unknown, _resource: string, _action: string) => true
+  ),
+}));
 const mockGetMerchantFeatureAccess = vi.fn();
 const mockExchangeJumiaCode = vi.fn();
 const mockGetShops = vi.fn();
 const mockLoggerError = vi.fn();
 const mockLoggerWarn = vi.fn();
-const mockUpsert = vi.fn().mockResolvedValue({ error: null });
+const mockUpsert = vi.fn().mockResolvedValue({ data: true, error: null });
 let mockExistingIntegrations: Array<{ shop_id: string; is_active: boolean }> =
   [];
 let mockExistingIntegrationsError: unknown = null;
@@ -55,6 +61,7 @@ const { mockGetConfiguredAppUrl, mockGetJumiaRedirectUri } = vi.hoisted(() => {
 });
 
 const mockSupabase = {
+  rpc: (...args: unknown[]) => mockUpsert(...args),
   from: vi.fn((table: string) => {
     if (table !== 'marketplace_integrations') {
       throw new Error(`Unexpected table: ${table}`);
@@ -87,6 +94,8 @@ vi.mock('@/lib/api-auth', () => ({
     mockAuthenticateApiRequest(...args),
   getMerchantIdForApiUser: (...args: unknown[]) =>
     mockGetMerchantIdForApiUser(...args),
+  getUserAccess: (...args: unknown[]) => mockGetUserAccess(...args),
+  hasPermission: mockHasPermission,
 }));
 
 vi.mock('@/lib/jumia/helpers', async () => {
@@ -138,6 +147,7 @@ function makeCallbackRequest({
   state = 'test-state',
   cookieState = 'test-state',
   merchantCookie = '00000000-0000-4000-8000-000000000001',
+  diagnosticCookie,
   ticketCookie,
   platform,
 }: {
@@ -145,6 +155,7 @@ function makeCallbackRequest({
   state?: string;
   cookieState?: string;
   merchantCookie?: string | null;
+  diagnosticCookie?: string;
   ticketCookie?: string | null;
   platform?: 'mobile';
 } = {}) {
@@ -164,6 +175,9 @@ function makeCallbackRequest({
   }
   if (ticketCookie != null) {
     cookieParts.push(`jumia_ticket_id=${ticketCookie}`);
+  }
+  if (diagnosticCookie) {
+    cookieParts.push(`jumia_oauth_diagnostic=${diagnosticCookie}`);
   }
 
   return new NextRequest(url, {
@@ -186,10 +200,19 @@ describe('Jumia callback route', () => {
       error: null,
       supabase: mockSupabase,
     });
-    mockUpsert.mockResolvedValue({ error: null });
+    mockUpsert.mockResolvedValue({ data: true, error: null });
     mockGetMerchantIdForApiUser.mockResolvedValue(
       '00000000-0000-4000-8000-000000000001'
     );
+    mockGetUserAccess.mockResolvedValue({
+      merchantId: '00000000-0000-4000-8000-000000000001',
+      role: 'owner',
+      isOwner: true,
+      isStaff: false,
+      permissions: {},
+    });
+    mockHasPermission.mockReset();
+    mockHasPermission.mockReturnValue(true);
     mockGetMerchantFeatureAccess.mockResolvedValue({
       allowed: true,
       error: null,
@@ -250,24 +273,24 @@ describe('Jumia callback route', () => {
     );
     expect(mockUpsert).toHaveBeenCalledTimes(1);
     expect(mockUpsert).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({
-          merchant_id: '00000000-0000-4000-8000-000000000001',
-          platform: 'jumia',
-          shop_id: 'shop-1',
-          shop_name: 'Jumia Shop',
-          access_token: 'access',
-          refresh_token: 'refresh',
-          is_active: true,
-          sync_config: expect.objectContaining({
-            products: true,
-            orders: true,
-            stock: true,
-          }),
-        }),
-      ]),
+      'persist_jumia_oauth_integrations_atomically',
       expect.objectContaining({
-        onConflict: 'merchant_id,platform,shop_id',
+        p_integrations: expect.arrayContaining([
+          expect.objectContaining({
+            merchant_id: '00000000-0000-4000-8000-000000000001',
+            platform: 'jumia',
+            shop_id: 'shop-1',
+            shop_name: 'Jumia Shop',
+            access_token: 'access',
+            refresh_token: 'refresh',
+            is_active: true,
+            sync_config: expect.objectContaining({
+              products: true,
+              orders: true,
+              stock: true,
+            }),
+          }),
+        ]),
       })
     );
     expect(mockExchangeJumiaCode).toHaveBeenCalledWith(
@@ -321,6 +344,28 @@ describe('Jumia callback route', () => {
     expect(response.headers.get('location')).toContain(
       'success=jumia_connected&shops=shop-2'
     );
+  });
+
+  it('redirects with no_shops_discovered when discovery returns no shops', async () => {
+    mockGetShops.mockResolvedValue([]);
+
+    const response = await GET(makeCallbackRequest());
+
+    expect(response.status).toBe(307);
+    const location = response.headers.get('location') ?? '';
+    expect(location).toContain('error=no_shops_discovered');
+    expect(location).not.toContain('success=jumia_connected');
+  });
+
+  it('keeps the success redirect when reconnecting already-active shops', async () => {
+    mockExistingIntegrations = [{ shop_id: 'shop-1', is_active: true }];
+
+    const response = await GET(makeCallbackRequest());
+
+    expect(response.status).toBe(307);
+    const location = response.headers.get('location') ?? '';
+    expect(location).toContain('success=jumia_connected');
+    expect(location).not.toContain('error=');
   });
 
   it('redirects with invalid_state when the OAuth state does not match', async () => {
@@ -434,6 +479,17 @@ describe('Jumia callback route', () => {
     expect(mockUpsert).not.toHaveBeenCalled();
   });
 
+  it('redirects with forbidden before exchanging when manage permission is revoked', async () => {
+    mockHasPermission.mockReturnValueOnce(false);
+
+    const response = await GET(makeCallbackRequest());
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toContain('error=forbidden');
+    expect(mockExchangeJumiaCode).not.toHaveBeenCalled();
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
   it('logs sanitized Jumia token error details when token exchange is rejected', async () => {
     mockExchangeJumiaCode.mockRejectedValueOnce(
       Object.assign(new Error('Token exchange failed'), {
@@ -543,7 +599,8 @@ describe('Jumia callback route', () => {
   });
 
   it('redirects with database_error when persisting the integration fails', async () => {
-    mockUpsert.mockResolvedValueOnce({
+    mockUpsert.mockResolvedValue({
+      data: null,
       error: { message: 'DB error' },
     });
 
@@ -552,6 +609,6 @@ describe('Jumia callback route', () => {
     expect(response.status).toBe(307);
     expect(response.headers.get('location')).toContain('error=database_error');
     expect(mockExchangeJumiaCode).toHaveBeenCalledTimes(1);
-    expect(mockUpsert).toHaveBeenCalledTimes(1);
+    expect(mockUpsert).toHaveBeenCalledTimes(3);
   });
 });

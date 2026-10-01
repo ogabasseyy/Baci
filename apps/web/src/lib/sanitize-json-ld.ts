@@ -1,17 +1,10 @@
 // JSON-LD Sanitization Utilities
 // Safe escaping and sanitization for structured data (JSON-LD) schemas
 
+import { replaceLoneSurrogates } from './replace-lone-surrogates';
 import { escapeHtml, sanitizeUrl } from './sanitize-core';
 
-const JSON_LD_SCRIPT_ESCAPE_REGEX = /[<>&\u2028\u2029]/g;
-
-const JSON_LD_SCRIPT_ESCAPE_MAP: Record<string, string> = {
-  '<': '\\u003c',
-  '>': '\\u003e',
-  '&': '\\u0026',
-  '\u2028': '\\u2028',
-  '\u2029': '\\u2029',
-};
+export { safeJsonLdStringify } from './json-ld-script-escape';
 
 /**
  * Validate and normalize a URL for use in JSON-LD schemas.
@@ -34,7 +27,7 @@ export function sanitizeSchemaMarkup<T>(obj: T): T {
   }
 
   if (typeof obj === 'string') {
-    return escapeHtml(obj) as T;
+    return escapeHtml(replaceLoneSurrogates(obj)) as T;
   }
 
   if (Array.isArray(obj)) {
@@ -42,10 +35,10 @@ export function sanitizeSchemaMarkup<T>(obj: T): T {
   }
 
   if (typeof obj === 'object') {
-    const result: Record<string, unknown> = {};
+    const result: Record<string, unknown> = Object.create(null);
     for (const key in obj) {
       if (Object.hasOwn(obj, key)) {
-        result[key] = sanitizeSchemaMarkup(
+        result[replaceLoneSurrogates(key)] = sanitizeSchemaMarkup(
           (obj as Record<string, unknown>)[key]
         );
       }
@@ -55,17 +48,4 @@ export function sanitizeSchemaMarkup<T>(obj: T): T {
 
   // Numbers, booleans, etc. pass through unchanged
   return obj;
-}
-
-/**
- * Safely stringify a JSON-LD schema object for use in script tags.
- *
- * Escape the serialized JSON for the HTML script context without changing the
- * data values that JSON parsers, including structured-data crawlers, receive.
- */
-export function safeJsonLdStringify(schema: unknown): string {
-  return JSON.stringify(schema).replace(
-    JSON_LD_SCRIPT_ESCAPE_REGEX,
-    (match) => JSON_LD_SCRIPT_ESCAPE_MAP[match] ?? match
-  );
 }

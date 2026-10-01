@@ -86,6 +86,17 @@ const baseProps = {
   phone: '+2348012345678',
 };
 
+it('hides name fields when the account already has owner names', () => {
+  render(<MerchantSetupOwnerStep {...baseProps} showNameFields={false} />);
+
+  expect(screen.getByText('Your location')).toBeInTheDocument();
+  expect(screen.getByText('Phone Number (Optional)')).toBeInTheDocument();
+  expect(screen.getByLabelText('Phone Number (Optional)')).toHaveValue(
+    '8012345678'
+  );
+  expect(screen.queryByText('Owner Details')).not.toBeInTheDocument();
+});
+
 it('shows country on owner details and a flag-aware phone field', () => {
   render(<MerchantSetupOwnerStep {...baseProps} />);
 

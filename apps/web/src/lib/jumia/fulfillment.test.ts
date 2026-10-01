@@ -26,7 +26,18 @@ function createMockClient(
 
 describe('packOrderV2', () => {
   it('calls POST /v2/orders/pack with packages body', async () => {
-    const mockResponse = { message: 'success', orderItems: ['ITEM-1'] };
+    const mockResponse = {
+      success: {
+        packages: [
+          {
+            orderItems: ['ITEM-1'],
+            trackingCode: 'TRACK-001',
+            countryCode: 'NG',
+          },
+        ],
+        total: 1,
+      },
+    };
     const client = createMockClient(mockResponse);
 
     const packages = [
@@ -75,7 +86,18 @@ describe('packOrderV2', () => {
 
 describe('readyToShip', () => {
   it('calls POST /orders/ready-to-ship with orderItemIds', async () => {
-    const mockResponse = { message: 'success' };
+    const mockResponse = {
+      success: {
+        packages: [
+          {
+            orderItems: ['ITEM-1', 'ITEM-2'],
+            trackingNumber: 'TRACK-001',
+            countryCode: 'NG',
+          },
+        ],
+        total: 1,
+      },
+    };
     const client = createMockClient(mockResponse);
 
     const result = await readyToShip(client, ['ITEM-1', 'ITEM-2']);
@@ -110,7 +132,21 @@ describe('readyToShip', () => {
 
 describe('cancelItems', () => {
   it('calls PUT /orders/cancel with orderItemIds', async () => {
-    const mockResponse = { message: 'cancelled' };
+    const mockResponse = {
+      success: {
+        orderItems: [
+          {
+            id: 'ITEM-3',
+            countryCode: 'NG',
+            cancellationReason: {
+              id: 'reason-1',
+              description: 'Out of stock',
+            },
+          },
+        ],
+        total: 1,
+      },
+    };
     const client = createMockClient(mockResponse);
 
     const result = await cancelItems(client, ['ITEM-3']);
@@ -145,7 +181,19 @@ describe('cancelItems', () => {
 
 describe('printLabels', () => {
   it('calls POST /orders/print-labels with orderItemIds', async () => {
-    const mockResponse = { url: 'https://labels.jumia.com/print/abc' };
+    const mockResponse = {
+      success: {
+        labels: [
+          {
+            orderItemIds: ['ITEM-1', 'ITEM-2'],
+            trackingNumber: 'TRACK-001',
+            countryCode: 'NG',
+            label: 'UERG',
+          },
+        ],
+        total: 1,
+      },
+    };
     const client = createMockClient(mockResponse);
 
     const result = await printLabels(client, ['ITEM-1', 'ITEM-2']);

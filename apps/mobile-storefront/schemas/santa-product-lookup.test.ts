@@ -56,6 +56,22 @@ describe('santaProductLookupResponseSchema', () => {
     ).toBe(true);
   });
 
+  it('accepts the server discount ceiling when present', () => {
+    const result = santaProductLookupResponseSchema.safeParse({
+      product: {
+        id: 'prod-1',
+        name: 'iPhone 15',
+        price: 950_000,
+        max_discount_percentage: 2,
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.product).toMatchObject({
+      max_discount_percentage: 2,
+    });
+  });
+
   it('rejects malformed product payloads', () => {
     expect(
       santaProductLookupResponseSchema.safeParse({

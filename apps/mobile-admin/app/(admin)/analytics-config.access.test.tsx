@@ -8,7 +8,7 @@ import {
   queryMocks,
   resetAnalyticsConfigMocks,
   supabaseMocks,
-} from './analytics-config.test-support';
+} from '../../__tests__/admin/analytics-config.test-support';
 
 describe('bugfix: tracking credentials load through the active merchant RPC (revoked-column 42501)', () => {
   beforeEach(resetAnalyticsConfigMocks);

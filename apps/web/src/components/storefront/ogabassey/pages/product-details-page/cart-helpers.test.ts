@@ -9,7 +9,11 @@ import {
 import type { NormalizedProductDetails } from './product-normalization';
 
 vi.mock('./related-product', () => ({
-  toRelatedProductsProduct: () => ({ id: 'prod-1', name: 'iPhone 15' }),
+  toRelatedProductsProduct: () => ({
+    id: 'prod-1',
+    name: 'iPhone 15',
+    price: 650000,
+  }),
 }));
 
 function productFixture(
@@ -174,6 +178,48 @@ describe('cart helpers', () => {
 });
 
 const offer = { rawPrice: 600000 } as Parameters<typeof buildCartProduct>[1];
+
+describe('buildCartProduct catalog basis', () => {
+  it('retains the catalog price for a non-variant condition offer', () => {
+    const product = buildCartProduct(
+      makeProductData({ condition: 'new' }),
+      offer,
+      0,
+      'used',
+      {}
+    );
+
+    expect(product.price).toBe(600000);
+    expect(product.catalogPrice).toBe(650000);
+  });
+
+  it('omits the catalog price when the condition matches the base', () => {
+    const product = buildCartProduct(
+      makeProductData({ condition: 'new' }),
+      { rawPrice: 650000 } as Parameters<typeof buildCartProduct>[1],
+      0,
+      'new',
+      {}
+    );
+
+    expect(product.catalogPrice).toBeUndefined();
+  });
+
+  it('omits the catalog price when variant pricing applies', () => {
+    const product = buildCartProduct(
+      makeProductData({ condition: 'new' }),
+      offer,
+      0,
+      'used',
+      {},
+      undefined,
+      { hasVariantPricing: true }
+    );
+
+    expect(product.price).toBe(600000);
+    expect(product.catalogPrice).toBeUndefined();
+  });
+});
 
 describe('buildCartProduct image resolution', () => {
   it("uses the selected color's image even when the gallery frame is the default", () => {

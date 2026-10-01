@@ -152,3 +152,34 @@ Cerebras applies rate limits at the *organization* level and its Acceptable Use
 Policy forbids imposing "disproportionately large load" and transferring API
 keys; multi-account free-tier farming is rate-limit circumvention and risks
 suspension of every account, including the one serving production.
+
+## Builder semantic editor
+
+`/api/builder/ai-edit` is intentionally separate from the general chain. It
+generates a validated, non-persisted edit plan rather than a complete storefront
+configuration. Its required, credential-attested target order is Google-hosted
+`gemma-4-31b-it`, then Groq `openai/gpt-oss-120b`; a pinned OpenRouter
+`google/gemma-4-31b-it:free` transport may be appended only after an explicit,
+dated approval for that exact model.
+
+During the staged provider switch, a still-valid Cerebras `gemma-4-31b` plus
+Groq attestation remains a temporary runtime-only fallback. The first deployment
+therefore keeps Builder AI available while the bootstrap route writes the new
+`GOOGLE_BUILDER_*` binding rows for the next deployment snapshot. Once Google
+materializes successfully after that deployment, it takes precedence and the
+Cerebras transition path can be removed.
+
+Both providers in the selected reliable pair require a fresh deployment-bundle attestation:
+non-secret account reference, deployment tier label, exact approved model,
+release timestamp, and a provider-domain-separated HMAC binding tag derived
+from the active key and a deployment-only pepper. This is an integrity binding,
+not provider-verified account or tier truth; confirming provider account/tier
+requires separate, dated management-plane evidence. If either deployment
+attestation is absent, invalid, or stale, the Builder route and the
+paid-provider smoke test refuse before a provider request. The smoke test is externally owner-approved with
+`BACI_APPROVE_PAID_AI_SMOKE=1`; it is not an automatic deployment check.
+
+The Builder path uses `generateText` with JSON transport plus local Zod and
+semantic validation. It never imports the legacy Gemini, generic provider, or
+Ollama chains. The legacy `/api/builder/gemini` endpoint is only a compatibility
+adapter that returns `{ config }` from the same validated candidate handler.

@@ -25,10 +25,6 @@ const mockSavePushTokenToServer =
   jest.fn<
     (token: string, userId: string, merchantId?: string) => Promise<boolean>
   >();
-const mockRouterPush = jest.fn();
-let mockNotificationResponseCallback:
-  | ((response: Record<string, unknown>) => void)
-  | null = null;
 
 const mockEnsureAndroidNotificationChannels = jest.fn<() => Promise<void>>();
 
@@ -40,24 +36,13 @@ const mockIsPushOptedOut = jest.fn<(userId: string) => Promise<boolean>>();
 const mockSetPushOptOut =
   jest.fn<(userId: string, optOut: boolean) => Promise<void>>();
 
-jest.mock('expo-router', () => ({
-  router: {
-    push: mockRouterPush,
-  },
-}));
-
 jest.mock('expo-notifications', () => ({
   addNotificationReceivedListener: jest.fn(() => ({
     remove: mockNotificationListenerRemove,
   })),
-  addNotificationResponseReceivedListener: jest.fn(
-    (callback: (response: Record<string, unknown>) => void) => {
-      mockNotificationResponseCallback = callback;
-      return {
-        remove: mockResponseListenerRemove,
-      };
-    }
-  ),
+  addNotificationResponseReceivedListener: jest.fn(() => ({
+    remove: mockResponseListenerRemove,
+  })),
   getLastNotificationResponseAsync: jest
     .fn<() => Promise<null>>()
     .mockResolvedValue(null),
@@ -67,9 +52,9 @@ jest.mock('@/services/push-notification-channels', () => ({
   ensureAndroidNotificationChannels: mockEnsureAndroidNotificationChannels,
 }));
 
+jest.mock('@/services/analytics', () => ({ trackError: jest.fn() }));
+
 jest.mock('@/services/push-notifications', () => ({
-  clearBadge: jest.fn(),
-  handleNotificationResponse: jest.fn(),
   registerForPushNotifications: mockRegisterForPushNotifications,
   removePushTokenFromServer: mockRemovePushTokenFromServer,
   savePushTokenToServer: mockSavePushTokenToServer,
@@ -95,19 +80,10 @@ const mockedUseAuthStore = (
 
 const { usePushNotifications } =
   require('./use-push-notifications') as typeof import('./use-push-notifications');
-const { handleNotificationResponse } = jest.requireMock(
-  '@/services/push-notifications'
-) as {
-  handleNotificationResponse: jest.MockedFunction<
-    typeof import('@/services/push-notifications')['handleNotificationResponse']
-  >;
-};
 
 describe('usePushNotifications', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    handleNotificationResponse.mockReset();
-    mockNotificationResponseCallback = null;
     mockedUseAuthStore.mockImplementation((selector) =>
       selector({
         merchantId: 'merchant-1',
@@ -404,57 +380,6 @@ describe('usePushNotifications', () => {
     expect(result.current.pushToken).toBeNull();
     expect(result.current.registeredUserId).toBeNull();
     expect(result.current.isRegistered).toBe(false);
-  });
-
-  it('routes token-ready notification taps to utility history', async () => {
-    handleNotificationResponse.mockImplementation(
-      (
-        _response: unknown,
-        navigate: (screen: string, params?: Record<string, string>) => void
-      ) => {
-        navigate('utility-history', { type: 'power' });
-      }
-    );
-
-    renderHook(() => usePushNotifications());
-
-    await waitFor(() => {
-      expect(mockNotificationResponseCallback).not.toBeNull();
-    });
-
-    act(() => {
-      mockNotificationResponseCallback?.({});
-    });
-
-    expect(mockRouterPush).toHaveBeenCalledWith(
-      '/utilities/history?type=power'
-    );
-  });
-
-  it('routes savings reminder notification taps to the wallet savings action', async () => {
-    handleNotificationResponse.mockImplementation(
-      (
-        _response: unknown,
-        navigate: (screen: string, params?: Record<string, string>) => void
-      ) => {
-        navigate('wallet', { action: 'savings' });
-      }
-    );
-
-    renderHook(() => usePushNotifications());
-
-    await waitFor(() => {
-      expect(mockNotificationResponseCallback).not.toBeNull();
-    });
-
-    act(() => {
-      mockNotificationResponseCallback?.({});
-    });
-
-    expect(mockRouterPush).toHaveBeenCalledWith({
-      pathname: '/wallet',
-      params: { action: 'savings' },
-    });
   });
 
   // --- unregister() tests ---

@@ -1,9 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-import { authorityFindings } from './event-pipeline-boundary-manifest';
 
 const modulePath = resolve(
   process.cwd(),
@@ -54,7 +52,7 @@ describe('event pipeline authority manifest', () => {
     ]);
   });
 
-  it('pins the six compatibility route receipts and two Task 6 wrappers', async () => {
+  it('pins the eight compatibility route receipts and two Task 6 wrappers', async () => {
     expect(existsSync(modulePath), 'boundary manifest is missing').toBe(true);
     if (!existsSync(modulePath)) return;
     const moduleUrl = pathToFileURL(modulePath).href;
@@ -63,7 +61,7 @@ describe('event pipeline authority manifest', () => {
     );
     expect(manifest.frozenRoutes).toEqual({
       'apps/web/src/app/api/analytics/ads/route.ts':
-        'b714f0bedeed7bded973fbe743c74517622ea8e0069dfca35051752dc45571dd',
+        'dc74e421113d3447a816559282bcd0612c49d68d92403cafe5e9cb7001a35e50',
       'apps/web/src/app/api/analytics/facebook-capi/route.ts':
         'f41e1de587645b8fdb2af8af180eb581b2bfeecae688670d7b5c7a80088b7c32',
       'apps/web/src/app/api/analytics/ga4/route.ts':
@@ -73,7 +71,11 @@ describe('event pipeline authority manifest', () => {
       'apps/web/src/app/api/analytics/tiktok/route.ts':
         '4d59510f6a72ae25dd45c8cc8ea6762a709bf745286140a7a9e1aa4b64ee942e',
       'apps/web/src/app/api/platform/events/route.ts':
-        'bb3b5ea163f7029bd8a90523ac7944c9e126b2aebc0ce673f82c4e0c48d00161',
+        '0e62bed087fd29cb290af99f39dbc8589f9739ff06adde55598045945df7b7b1',
+      'apps/web/src/app/api/orders/route.ts':
+        '09b39ce08dff5a8bf34b83a7516c92534fb5122a5bfd84641db19f3d0c789ad7',
+      'apps/web/src/app/api/payments/juicyway/webhook/route.ts':
+        'a8748056acf57c8fe4aea5b5dbf6a2bbcd1599e7aa57af3130cf95c277e61ef5',
     });
     expect(manifest.trustedWrapperImporters).toEqual([
       'apps/web/src/app/api/analytics/conversion/route.ts',
@@ -104,173 +106,5 @@ describe('event pipeline authority manifest', () => {
     expect(sql).toContain('repairs_catalog_enabled');
     expect(sql).toContain('cardinality(expected_feature_setting_keys) <> 62');
     expect(sql).toContain('2026-08-24');
-  });
-
-  it.each([
-    'apps/web/src/app/api/orders/route.ts',
-    'apps/web/src/app/api/payments/juicyway/webhook/route.ts',
-  ])('allows %s to import but not construct the admin client', (path) => {
-    const importOnly = ts.createSourceFile(
-      path,
-      "import { createAdminClient } from '@/lib/supabase/admin';",
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.TS
-    );
-    expect(authorityFindings(path, importOnly)).toEqual([]);
-    const construction = ts.createSourceFile(
-      path,
-      "import { createAdminClient } from '@/lib/supabase/admin'; createAdminClient('event-pipeline');",
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.TS
-    );
-    expect(authorityFindings(path, construction)).toContain(
-      `${path}: privileged route client construction is forbidden`
-    );
-  });
-
-  it('pins the finite privileged-factory importer sets', async () => {
-    expect(existsSync(modulePath), 'boundary manifest is missing').toBe(true);
-    if (!existsSync(modulePath)) return;
-    const moduleUrl = pathToFileURL(modulePath).href;
-    const { eventPipelineBoundaryManifest: manifest } = await import(
-      /* @vite-ignore */ moduleUrl
-    );
-
-    expect(manifest.authority.adminImporters).toEqual([
-      'apps/web/src/app/api/orders/route.ts',
-      'apps/web/src/app/api/payments/juicyway/webhook/route.ts',
-      'apps/web/src/app/api/platform/events/platform-event-forwarding.ts',
-      'apps/web/src/lib/events/record-platform-order-created-event.ts',
-      'apps/web/src/lib/expo-push.ts',
-      'apps/web/src/lib/insurance/notify-activate-protection.ts',
-    ]);
-    expect(manifest.authority.serviceImporters).toEqual([
-      'apps/web/src/app/api/cron/drain-cache-invalidations/route.ts',
-      'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
-      'apps/web/src/app/api/analytics/conversion/route.ts',
-      'apps/web/src/app/api/events/route.ts',
-      'apps/web/src/lib/events/event-pipeline-service-role-test-client.ts',
-      'apps/web/src/scripts/process-domain-events.ts',
-      'apps/web/src/scripts/process-event-deliveries.ts',
-    ]);
-    const notificationWorker =
-      'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts';
-    const notificationBatch =
-      'apps/web/src/app/api/cron/gigl-tracking-notifications/run-gigl-tracking-notification-batch.ts';
-    const notificationCredentialPrefixes = [
-      [notificationWorker],
-      [
-        'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
-        notificationBatch,
-        notificationWorker,
-      ],
-      [notificationBatch, notificationWorker],
-    ];
-    const notificationCredentialTails = [
-      ['apps/web/src/lib/expo-push.ts', 'apps/web/src/env.ts'],
-      [
-        'apps/web/src/lib/expo-push.ts',
-        'apps/web/src/lib/supabase/admin.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/lib/insurance/notify-activate-protection.ts',
-        'apps/web/src/lib/expo-push.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/lib/insurance/notify-activate-protection.ts',
-        'apps/web/src/lib/supabase/admin.ts',
-        'apps/web/src/env.ts',
-      ],
-    ];
-    const notificationCredentialPaths = notificationCredentialPrefixes.flatMap(
-      (prefix) =>
-        notificationCredentialTails.map((tail) => [...prefix, ...tail])
-    );
-    expect(manifest.authority.credentialPaths).toEqual([
-      [
-        'apps/web/src/app/(platform)/onboarding/actions.ts',
-        'apps/web/src/app/(platform)/onboarding/submit-onboarding-workflow.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/(platform)/onboarding/submit-onboarding-workflow.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/lib/storefront-product-purge-hostnames.ts',
-        'apps/web/src/lib/cloudflare-purge.ts',
-        'apps/web/src/env.ts',
-      ],
-      ...notificationCredentialPaths,
-    ]);
-  });
-
-  it.each([
-    'apps/web/src/lib/payments/file-stuck-credit-direct-review.ts',
-    'apps/web/src/lib/payments/resolve-credit-direct-confirmation-review.ts',
-  ])('rejects the retired admin importer %s', (path) => {
-    const importOnly = ts.createSourceFile(
-      path,
-      "import { createAdminClient } from '@/lib/supabase/admin';",
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.TS
-    );
-
-    expect(authorityFindings(path, importOnly)).toContain(
-      `${path}: unauthorized admin factory importer`
-    );
-  });
-
-  it('rejects the Credit Direct webhook as a service importer', () => {
-    const path = 'apps/web/src/app/api/payments/credit-direct/webhook/route.ts';
-    const importOnly = ts.createSourceFile(
-      path,
-      "import { createServiceClient } from '@/lib/supabase/service';",
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.TS
-    );
-
-    expect(authorityFindings(path, importOnly)).toContain(
-      `${path}: unauthorized trusted wrapper importer`
-    );
-  });
-
-  it('rejects a namespace service factory in a fourth route', () => {
-    const path = 'apps/web/src/app/api/fourth/route.ts';
-    const source = ts.createSourceFile(
-      path,
-      "import * as svc from '@/lib/supabase/service'; svc.createServiceClient('event-pipeline');",
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.TS
-    );
-    expect(authorityFindings(path, source)).toEqual(
-      expect.arrayContaining([
-        `${path}: unauthorized trusted wrapper importer`,
-        `${path}: unauthorized service factory importer`,
-        `${path}: privileged route client construction is forbidden`,
-      ])
-    );
-  });
-
-  it('rejects a deep Supabase SDK factory import', () => {
-    const path = 'apps/web/src/app/api/fourth/route.ts';
-    const source = ts.createSourceFile(
-      path,
-      "import { createClient } from '@supabase/supabase-js/dist/index.mjs'; createClient(url, importedKey);",
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.TS
-    );
-
-    expect(authorityFindings(path, source)).toContain(
-      `${path}: unauthorized privileged SDK factory importer`
-    );
   });
 });

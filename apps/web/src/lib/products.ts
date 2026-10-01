@@ -160,7 +160,8 @@ export interface ProductKeySpecs {
   model_numbers?: string;
   announced_date?: string;
   release_date?: string;
-  [key: string]: unknown;
+  recommended_for?: string[];
+  [key: string]: string | number | boolean | string[] | null | undefined;
 }
 
 export interface Product {
@@ -200,6 +201,12 @@ export interface Product {
   slug?: string;
   compare_at_price?: number;
   cost_price?: number;
+  /**
+   * Base catalog unit price retained when the cart line prices from a
+   * condition offer or voucher. Quote subtotals prefer it so they match the
+   * server's canonical basis (variant.price_override ?? products.price).
+   */
+  catalogPrice?: number;
   low_stock_threshold?: number; // Default: 5
 
   // Multiple images

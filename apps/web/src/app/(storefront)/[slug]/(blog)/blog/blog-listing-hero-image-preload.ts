@@ -4,8 +4,16 @@ import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { preloadBlogListingFeaturedImage } from './blog-listing-featured-image-preload';
 
 interface BlogListingHeroPost {
+  author_name?: string | null;
+  category?: string | null;
+  excerpt?: string | null;
   featured?: boolean;
   featured_image_url?: string | null;
+  id?: string | number;
+  published_at?: string | null;
+  reading_time_minutes?: number | null;
+  slug?: string | null;
+  title?: string | null;
 }
 
 interface BlogListingHeroImagePreloadOptions {
@@ -15,7 +23,9 @@ interface BlogListingHeroImagePreloadOptions {
   templateId?: string | null;
 }
 
-function getBlogListingHeroPost(posts: readonly BlogListingHeroPost[]) {
+export function getBlogListingHeroPost<T extends BlogListingHeroPost>(
+  posts: readonly T[]
+): T | undefined {
   return posts.find((post) => post.featured === true) ?? posts[0];
 }
 

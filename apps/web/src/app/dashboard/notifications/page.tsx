@@ -1,20 +1,8 @@
 'use client';
 
-import { formatDistanceToNow } from 'date-fns';
-import {
-  AlertCircle,
-  AlertTriangle,
-  Bell,
-  CheckCheck,
-  CheckCircle,
-  ExternalLink,
-  Info,
-  // Loader2,
-  Settings,
-} from 'lucide-react';
+import { Bell, CheckCheck, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
-import { Badge } from '@/components/ui/badge';
 import { BagLoader } from '@/components/ui/bag-loader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,76 +14,34 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useNotifications } from '@/hooks/use-notifications';
-import { cn } from '@/lib/utils';
-import type {
-  MerchantNotificationWithDetails,
-  NotificationType,
-} from '@/types/notifications';
-
-const typeStyles: Record<NotificationType, { bg: string; icon: typeof Info }> =
-  {
-    info: {
-      bg: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-      icon: Info,
-    },
-    success: {
-      bg: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-      icon: CheckCircle,
-    },
-    warning: {
-      bg: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
-      icon: AlertTriangle,
-    },
-    error: {
-      bg: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
-      icon: AlertCircle,
-    },
-  };
+import type { NotificationType } from '@/types/notifications';
+import { NotificationCard } from './notification-card';
 
 export default function NotificationsPage() {
   const {
     notifications,
     unreadCount,
     isLoading,
+    error,
     hasMore,
     markAsRead,
     markAllAsRead,
     dismiss,
     loadMore,
+    refetch,
   } = useNotifications();
-
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [typeFilter, setTypeFilter] = useState<NotificationType | 'all'>('all');
-
-  const filteredNotifications = notifications.filter((n) => {
-    if (filter === 'unread' && n.read_at) return false;
-    if (
-      typeFilter !== 'all' &&
-      n.notification?.notification_type !== typeFilter
-    )
-      return false;
-    return true;
+  const filteredNotifications = notifications.filter((notification) => {
+    if (filter === 'unread' && notification.read_at) return false;
+    return (
+      typeFilter === 'all' ||
+      notification.notification?.notification_type === typeFilter
+    );
   });
-
-  const handleMarkAsRead = async (
-    notification: MerchantNotificationWithDetails
-  ) => {
-    if (!notification.read_at) {
-      await markAsRead(notification.id);
-    }
-  };
-
-  const handleMarkAllAsRead = async () => {
-    await markAllAsRead();
-  };
-
-  const handleDismiss = async (id: string) => {
-    await dismiss(id);
-  };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight bg-linear-to-r from-primary via-purple-500 to-blue-600 bg-clip-text text-transparent">
@@ -109,7 +55,7 @@ export default function NotificationsPage() {
         </div>
         <div className="flex gap-2">
           {unreadCount > 0 && (
-            <Button variant="outline" onClick={handleMarkAllAsRead}>
+            <Button variant="outline" onClick={() => void markAllAsRead()}>
               <CheckCheck className="size-4 mr-2" />
               Mark All Read
             </Button>
@@ -122,8 +68,6 @@ export default function NotificationsPage() {
           </Button>
         </div>
       </div>
-
-      {/* Filters */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -131,9 +75,12 @@ export default function NotificationsPage() {
             <div className="flex gap-2">
               <Select
                 value={filter}
-                onValueChange={(v) => setFilter(v as 'all' | 'unread')}
+                onValueChange={(value) => setFilter(value as 'all' | 'unread')}
               >
-                <SelectTrigger className="w-[120px]">
+                <SelectTrigger
+                  aria-label="Notification read status"
+                  className="w-[120px]"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -141,14 +88,16 @@ export default function NotificationsPage() {
                   <SelectItem value="unread">Unread</SelectItem>
                 </SelectContent>
               </Select>
-
               <Select
                 value={typeFilter}
-                onValueChange={(v) =>
-                  setTypeFilter(v as NotificationType | 'all')
+                onValueChange={(value) =>
+                  setTypeFilter(value as NotificationType | 'all')
                 }
               >
-                <SelectTrigger className="w-[120px]">
+                <SelectTrigger
+                  aria-label="Notification type"
+                  className="w-[120px]"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -164,12 +113,36 @@ export default function NotificationsPage() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="flex items-center justify-center py-12">
+            <div
+              className="flex items-center justify-center py-12"
+              role="status"
+              aria-live="polite"
+            >
               <BagLoader size={32} />
+              <span className="sr-only">Loading notifications</span>
+            </div>
+          ) : error ? (
+            <div
+              role="alert"
+              className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive"
+            >
+              <p className="font-medium">Notifications could not load.</p>
+              <p>{error}</p>
+              <Button
+                className="mt-3"
+                size="sm"
+                variant="outline"
+                onClick={() => void refetch()}
+              >
+                Try again
+              </Button>
             </div>
           ) : filteredNotifications.length === 0 ? (
             <div className="text-center py-12">
-              <Bell className="size-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+              <Bell
+                className="size-12 mx-auto mb-4 text-muted-foreground opacity-50"
+                aria-hidden="true"
+              />
               <h3 className="text-lg font-medium mb-1">No notifications</h3>
               <p className="text-muted-foreground">
                 {filter === 'unread'
@@ -183,14 +156,15 @@ export default function NotificationsPage() {
                 <NotificationCard
                   key={notification.id}
                   notification={notification}
-                  onMarkAsRead={() => handleMarkAsRead(notification)}
-                  onDismiss={() => handleDismiss(notification.id)}
+                  onMarkAsRead={() => {
+                    if (!notification.read_at) void markAsRead(notification.id);
+                  }}
+                  onDismiss={() => void dismiss(notification.id)}
                 />
               ))}
-
               {hasMore && (
                 <div className="pt-4 text-center">
-                  <Button variant="outline" onClick={loadMore}>
+                  <Button variant="outline" onClick={() => void loadMore()}>
                     Load More
                   </Button>
                 </div>
@@ -200,106 +174,5 @@ export default function NotificationsPage() {
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-interface NotificationCardProps {
-  notification: MerchantNotificationWithDetails;
-  onMarkAsRead: () => void;
-  onDismiss: () => void;
-}
-
-function NotificationCard({
-  notification,
-  onMarkAsRead,
-  onDismiss,
-}: NotificationCardProps) {
-  const isUnread = !notification.read_at;
-  const type = notification.notification?.notification_type || 'info';
-  const typeStyle = typeStyles[type];
-  const Icon = typeStyle.icon;
-
-  const handleClick = () => {
-    onMarkAsRead();
-    if (notification.notification?.action_url) {
-      window.open(notification.notification.action_url, '_blank');
-    }
-  };
-
-  return (
-    <button
-      type="button"
-      className={cn(
-        'flex gap-4 p-4 border rounded-lg transition-colors cursor-pointer hover:bg-muted/50 w-full text-left',
-        isUnread && 'bg-muted/30 border-primary/20'
-      )}
-      onClick={handleClick}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          handleClick();
-        }
-      }}
-    >
-      {/* Icon */}
-      <div className={cn('shrink-0 p-2 rounded-full', typeStyle.bg)}>
-        <Icon className="size-4" />
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <h4
-                className={cn(
-                  'font-medium truncate',
-                  isUnread && 'font-semibold'
-                )}
-              >
-                {notification.notification?.title}
-              </h4>
-              {isUnread && (
-                <span className="shrink-0 size-2 bg-primary rounded-full" />
-              )}
-            </div>
-            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-              {notification.notification?.message}
-            </p>
-          </div>
-          <Badge variant="outline" className={cn('shrink-0', typeStyle.bg)}>
-            {type}
-          </Badge>
-        </div>
-
-        <div className="flex items-center justify-between mt-3">
-          <span className="text-xs text-muted-foreground">
-            {formatDistanceToNow(new Date(notification.created_at), {
-              addSuffix: true,
-            })}
-          </span>
-
-          <div className="flex items-center gap-2">
-            {notification.notification?.action_url && (
-              <Button variant="ghost" size="sm" className="h-7 text-xs">
-                <ExternalLink className="size-3 mr-1" />
-                {notification.notification.action_label || 'View'}
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs text-muted-foreground"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDismiss();
-              }}
-            >
-              Dismiss
-            </Button>
-          </div>
-        </div>
-      </div>
-    </button>
   );
 }

@@ -7,6 +7,7 @@ export const quizLeaderboardQuerySchema = z.object({
 
 export const quizLeaderboardStatusSchema = z.enum([
   'published',
+  'live',
   'live_hidden',
   'unavailable',
 ]);
@@ -26,6 +27,7 @@ export type QuizLeaderboardEntry = z.infer<typeof quizLeaderboardEntrySchema>;
 export const quizLeaderboardResponseSchema = z.object({
   currentPlayer: quizLeaderboardEntrySchema.nullable(),
   entries: z.array(quizLeaderboardEntrySchema).max(100),
+  participantCount: z.number().int().nonnegative().nullable(),
   status: quizLeaderboardStatusSchema,
 });
 

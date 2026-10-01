@@ -62,6 +62,20 @@ export default defineConfig({
     alias: [
       { find: '@', replacement: __dirname },
       {
+        find: /^@baci\/shared\/test-fixtures\/builder-ai-edit$/,
+        replacement: path.resolve(
+          __dirname,
+          '../../packages/shared/src/test-fixtures/builder-ai-edit.ts'
+        ),
+      },
+      {
+        find: /^@baci\/shared\/contracts$/,
+        replacement: path.resolve(
+          __dirname,
+          '../../packages/shared/src/contracts/index.ts'
+        ),
+      },
+      {
         find: '@baci/shared',
         replacement: path.resolve(
           __dirname,

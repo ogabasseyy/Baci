@@ -205,26 +205,18 @@ export function getUpgradeCTA(feature: FeatureKey): {
   };
 }
 
-export const LEGACY_NEGOTIATION_SLUGS = new Set(['ogabassey', 'demo-premium']);
-
+/**
+ * Whether a merchant's plan grants price negotiation.
+ *
+ * `merchants.plan_tier` is the single source of truth: it is NOT NULL with a
+ * `'free'` default, so an absent or malformed tier is a data fault rather than
+ * a legacy merchant. Fail closed instead of consulting a slug allowlist.
+ */
 export function hasPriceNegotiationEntitlement(
-  planTier: string | null | undefined,
-  merchantSlug: string | null | undefined
+  planTier: string | null | undefined
 ): boolean {
-  if (isPlanTier(planTier)) {
-    return planHasFeature(planTier, FEATURES.PRICE_NEGOTIATION);
-  }
-
-  // If plan_tier is present but malformed, fail closed.
-  if (planTier != null) {
-    return false;
-  }
-
-  // Maintain legacy storefront entitlement fallback until all
-  // merchants are backfilled with an explicit `plan_tier`.
   return (
-    typeof merchantSlug === 'string' &&
-    LEGACY_NEGOTIATION_SLUGS.has(merchantSlug.toLowerCase())
+    isPlanTier(planTier) && planHasFeature(planTier, FEATURES.PRICE_NEGOTIATION)
   );
 }
 

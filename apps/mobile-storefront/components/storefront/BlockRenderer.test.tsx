@@ -26,7 +26,13 @@ jest.mock('@/lib/templates', () => ({
 jest.mock('./Hero', () => {
   const { Text: MockText } = jest.requireActual('react-native');
   return {
-    Hero: () => <MockText testID="hero-carousel">Hero carousel</MockText>,
+    Hero: ({ trailingAdPlacement }: { trailingAdPlacement?: string }) => (
+      <MockText
+        testID={trailingAdPlacement ? 'hero-carousel-with-ad' : 'hero-carousel'}
+      >
+        Hero carousel
+      </MockText>
+    ),
   };
 });
 
@@ -42,8 +48,12 @@ jest.mock('./UtilityPanel', () => ({
 jest.mock('./JustLaunchedCarousel', () => {
   const { Text: MockText } = jest.requireActual('react-native');
   return {
-    JustLaunchedCarousel: () => (
-      <MockText testID="just-launched">Just launched</MockText>
+    JustLaunchedCarousel: ({ suppressAds }: { suppressAds?: boolean }) => (
+      <MockText
+        testID={suppressAds ? 'just-launched-ads-off' : 'just-launched'}
+      >
+        Just launched
+      </MockText>
     ),
   };
 });
@@ -69,12 +79,16 @@ const configuredHeroBlock: Block = {
   },
 };
 
-function renderBlocks(blocks: Block[]) {
+function renderBlocks(
+  blocks: Block[],
+  extraProps: Partial<Parameters<typeof BlockRenderer>[0]> = {}
+) {
   return render(
     <BlockRenderer
       blocks={blocks}
       selectedCategoryId={null}
       onCategorySelect={jest.fn()}
+      {...extraProps}
     />
   );
 }
@@ -96,6 +110,83 @@ describe('BlockRenderer', () => {
     renderBlocks([{ type: 'JustLaunched', props: { id: 'launches' } }]);
 
     expect(screen.getByText('Just launched')).toBeTruthy();
+  });
+
+  it('withholds ad placements from hero and launch blocks while suppressed', () => {
+    // Regression: an obscured feed (e.g. search open) must propagate ad
+    // suppression into every block that mounts a placement.
+    renderBlocks(
+      [
+        configuredHeroBlock,
+        { type: 'JustLaunched', props: { id: 'launches' } },
+      ],
+      { suppressAds: true }
+    );
+
+    expect(screen.getByTestId('hero-carousel')).toBeTruthy();
+    expect(screen.queryByTestId('hero-carousel-with-ad')).toBeNull();
+    expect(screen.getByTestId('just-launched-ads-off')).toBeTruthy();
+  });
+
+  it('gives HOME_STRIP to only the first hero when a page authors several', () => {
+    // Regression: every HeroCarousel block owned the same placement, so
+    // several banners requested concurrently with split attribution.
+    renderBlocks([
+      emptyHeroBlock,
+      configuredHeroBlock,
+      {
+        type: 'HeroCarousel',
+        props: {
+          id: 'second-hero',
+          slides: [
+            {
+              image: 'https://example.com/banner-2.jpg',
+              title: 'Second hero',
+              subtitle: 'More deals',
+              ctaText: 'Shop',
+              ctaLink: '/category/audio',
+            },
+          ],
+        },
+      } as Block,
+    ]);
+
+    expect(screen.getAllByTestId('hero-carousel-with-ad')).toHaveLength(1);
+    expect(screen.getAllByTestId('hero-carousel')).toHaveLength(1);
+  });
+
+  it('honours a page-level owner from another slice', () => {
+    // Regression: the feed elects one HOME_STRIP owner across its header
+    // and footer slices, so a slice must defer to an owner elected
+    // elsewhere instead of claiming the slot itself.
+    render(
+      <BlockRenderer
+        blocks={[
+          configuredHeroBlock,
+          {
+            type: 'HeroCarousel',
+            props: {
+              id: 'footer-hero',
+              slides: [
+                {
+                  image: 'https://example.com/banner-2.jpg',
+                  title: 'Footer hero',
+                  subtitle: 'More deals',
+                  ctaText: 'Shop',
+                  ctaLink: '/category/audio',
+                },
+              ],
+            },
+          } as Block,
+        ]}
+        selectedCategoryId={null}
+        onCategorySelect={jest.fn()}
+        heroAdOwnerBlockId="footer-hero"
+      />
+    );
+
+    expect(screen.getAllByTestId('hero-carousel-with-ad')).toHaveLength(1);
+    expect(screen.getAllByTestId('hero-carousel')).toHaveLength(1);
   });
 
   it('renders no content for an unknown block type', () => {

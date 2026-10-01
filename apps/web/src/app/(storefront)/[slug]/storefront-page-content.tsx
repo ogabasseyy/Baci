@@ -2,7 +2,7 @@ import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import type { Graph, Thing } from 'schema-dts';
 import { JsonLd } from '@/components/seo/json-ld';
-import { StoreNotPublished } from '@/components/storefront/store-not-published';
+import { loadUnpublishedStorefront } from '@/components/storefront/unpublished-storefront';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 import type { JsonLdStructuredData } from '@/lib/json-ld-types';
 import {
@@ -45,6 +45,8 @@ export async function StorefrontPageContent({
 
   const isDevelopment = process.env.NODE_ENV === 'development';
   if (!merchant.is_published && !isDevelopment) {
+    const StoreNotPublished = await loadUnpublishedStorefront();
+
     return <StoreNotPublished businessName={merchant.business_name} />;
   }
 

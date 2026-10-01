@@ -17,6 +17,7 @@ const VALID_RESPONSE = {
       totalTimeSeconds: 30.5,
     },
   ],
+  participantCount: 1,
   status: 'published',
 };
 

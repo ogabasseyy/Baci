@@ -1,41 +1,14 @@
-import {
-  type ProductWithDefaultVariantLike,
-  resolveDefaultVariantSelection,
-  toGoogleListingCondition,
-} from '@baci/shared/lib';
-import { buildFeedDescription } from '@/app/api/feed/google-merchant/build-feed-description';
-import {
-  resolveGmcAdditionalImages,
-  resolveGmcPrimaryImage,
-} from '@/lib/gmc-feed-images';
-import { getEffectiveStock } from '@/lib/product-stock';
+import { toGoogleListingCondition } from '@baci/shared/lib';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { buildAgentProductUrl } from '@/lib/storefront-agent-urls';
 import { escapeXml } from '@/lib/xml-utils';
+import { buildVariantFeedItems } from '../google-merchant/build-variant-feed-items';
 import type {
   FeedMerchant,
   FeedProduct,
-  FeedVariant,
   ImageManifestMap,
 } from '../google-merchant/feed-builder';
-import { toFeedDefaultVariant } from '../google-merchant/feed-builder';
-
-const UNLIMITED_STOCK_QUANTITY = 9999;
-const FACEBOOK_TITLE_MAX_LENGTH = 150;
-const VALID_FACEBOOK_CONDITIONS = new Set([
-  'new',
-  'used',
-  'refurbished',
-] as const);
-
-function truncate(value: string, maxLength: number): string {
-  const normalized = value.replace(/\s+/g, ' ').trim();
-  if (normalized.length <= maxLength) {
-    return normalized;
-  }
-
-  return `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
-}
+import { buildConditionOfferItems } from './build-condition-offer-items';
 
 function isValidProductUrl(url: string): boolean {
   try {
@@ -51,51 +24,25 @@ function isValidFeedProduct(product: FeedProduct): boolean {
     return false;
   }
 
-  if (product.price > 0) {
+  if (Number.isFinite(product.price) && product.price > 0) {
     return true;
   }
+  if (
+    product.variant_model !== 'sku_matrix' &&
+    product.offers?.some(
+      (offer) =>
+        offer.id &&
+        toGoogleListingCondition(offer.condition) &&
+        Number.isFinite(offer.price) &&
+        offer.price > 0
+    )
+  )
+    return true;
 
   return (
     product.variant_model === 'sku_matrix' &&
     getSkuMatrixFallbackEligibleVariants(product).length > 0
   );
-}
-
-function isUnmanagedStock(manageStock: boolean | null | undefined): boolean {
-  return manageStock === false || manageStock == null;
-}
-
-function getProductStockCount(product: FeedProduct): number {
-  if (isUnmanagedStock(product.manage_stock)) {
-    return UNLIMITED_STOCK_QUANTITY;
-  }
-
-  return getEffectiveStock(product);
-}
-
-function getVariantStockCount(
-  manageStock: boolean | null | undefined,
-  variant: FeedVariant
-): number {
-  if (isUnmanagedStock(manageStock)) {
-    return UNLIMITED_STOCK_QUANTITY;
-  }
-
-  return typeof variant.stock_quantity === 'number'
-    ? Math.max(0, variant.stock_quantity)
-    : 0;
-}
-
-function toFacebookCondition(condition?: string | null) {
-  const normalized = toGoogleListingCondition(condition);
-  return normalized && VALID_FACEBOOK_CONDITIONS.has(normalized)
-    ? normalized
-    : 'new';
-}
-
-function getProductType(product: FeedProduct): string | undefined {
-  const category = product.categories?.name?.trim() || product.category?.trim();
-  return category || product.category_slug?.trim() || undefined;
 }
 
 function getSkuMatrixFallbackEligibleVariants(product: FeedProduct) {
@@ -104,107 +51,6 @@ function getSkuMatrixFallbackEligibleVariants(product: FeedProduct) {
       variant.price_override ?? variant.price ?? product.price;
     return Boolean(variant.id && variant.condition && effectivePrice > 0);
   });
-}
-
-function resolveSkuMatrixFallback(product: FeedProduct) {
-  const eligibleVariants = getSkuMatrixFallbackEligibleVariants(product);
-
-  if (eligibleVariants.length === 0) {
-    return null;
-  }
-
-  const defaultSelection = resolveDefaultVariantSelection({
-    price: product.price,
-    compare_at_price: product.compare_at_price,
-    condition: product.condition,
-    manage_stock: product.manage_stock,
-    variants: eligibleVariants.map((variant) =>
-      toFeedDefaultVariant({
-        ...variant,
-        price_override: variant.price_override ?? variant.price,
-      })
-    ),
-  } satisfies ProductWithDefaultVariantLike<
-    ReturnType<typeof toFeedDefaultVariant>
-  >);
-
-  if (!defaultSelection) {
-    return null;
-  }
-
-  return {
-    availability:
-      getVariantStockCount(product.manage_stock, defaultSelection.variant) > 0
-        ? 'in stock'
-        : 'out of stock',
-    condition: toFacebookCondition(defaultSelection.condition),
-    price: defaultSelection.price,
-  };
-}
-
-function buildPriceLines(args: {
-  compareAtPrice?: number | null;
-  currency: string;
-  price: number;
-}) {
-  const price = args.price.toFixed(2);
-  if (
-    typeof args.compareAtPrice === 'number' &&
-    args.compareAtPrice > args.price
-  ) {
-    return [
-      `        <g:sale_price>${price} ${args.currency}</g:sale_price>`,
-      `        <g:price>${args.compareAtPrice.toFixed(2)} ${args.currency}</g:price>`,
-    ];
-  }
-
-  return [`        <g:price>${price} ${args.currency}</g:price>`];
-}
-
-function buildItemXml(args: {
-  additionalImagesXml: string;
-  availability: string;
-  brandName: string;
-  compareAtPrice?: number | null;
-  condition: string;
-  currency: string;
-  description: string;
-  googleProductCategory?: string;
-  id: string;
-  imageUrl: string;
-  link: string;
-  mpn?: string;
-  gtin?: string;
-  price: number;
-  productType?: string;
-  title: string;
-}) {
-  const lines = [
-    `        <g:id>${escapeXml(args.id)}</g:id>`,
-    `        <g:title>${escapeXml(truncate(args.title, FACEBOOK_TITLE_MAX_LENGTH))}</g:title>`,
-    `        <g:description>${escapeXml(args.description)}</g:description>`,
-    `        <g:availability>${args.availability}</g:availability>`,
-    ...buildPriceLines({
-      compareAtPrice: args.compareAtPrice,
-      currency: args.currency,
-      price: args.price,
-    }),
-    `        <g:link>${escapeXml(args.link)}</g:link>`,
-    `        <g:image_link>${escapeXml(args.imageUrl)}</g:image_link>`,
-    args.additionalImagesXml,
-    `        <g:brand>${escapeXml(args.brandName)}</g:brand>`,
-    `        <g:condition>${args.condition}</g:condition>`,
-    args.gtin ? `        <g:gtin>${escapeXml(args.gtin)}</g:gtin>` : '',
-    args.mpn ? `        <g:mpn>${escapeXml(args.mpn)}</g:mpn>` : '',
-    args.googleProductCategory
-      ? `        <g:google_product_category>${escapeXml(args.googleProductCategory)}</g:google_product_category>`
-      : '',
-    args.productType
-      ? `        <g:product_type>${escapeXml(args.productType)}</g:product_type>`
-      : '',
-  ].filter(Boolean);
-
-  return `    <item>\n${lines.join('\n')}\n    </item>`;
 }
 
 export function generateFacebookCatalogFeed(
@@ -229,43 +75,23 @@ export function generateFacebookCatalogFeed(
       }
 
       const manifestEntries = imageManifest[product.id] || [];
-      const primaryImageUrl = resolveGmcPrimaryImage(manifestEntries);
-      if (!primaryImageUrl) {
-        return null;
+      if (product.variant_model === 'sku_matrix') {
+        return buildVariantFeedItems({
+          product,
+          variants: product.variants || [],
+          manifest: manifestEntries,
+          productUrl,
+          currency,
+          brand: product.brand || brandName,
+          platform: 'facebook',
+        });
       }
-
-      const additionalImagesXml = resolveGmcAdditionalImages(manifestEntries)
-        .map(
-          (url) =>
-            `        <g:additional_image_link>${escapeXml(url)}</g:additional_image_link>`
-        )
-        .join('\n');
-      const fallback =
-        product.variant_model === 'sku_matrix'
-          ? resolveSkuMatrixFallback(product)
-          : null;
-      const stockCount = getProductStockCount(product);
-
-      return buildItemXml({
-        additionalImagesXml,
-        availability:
-          fallback?.availability ||
-          (stockCount > 0 ? 'in stock' : 'out of stock'),
-        brandName: product.brand || brandName,
-        compareAtPrice: product.compare_at_price,
-        condition:
-          fallback?.condition || toFacebookCondition(product.condition),
+      return buildConditionOfferItems({
+        brandName,
         currency,
-        description: buildFeedDescription(product),
-        googleProductCategory: product.google_product_category,
-        gtin: product.gtin,
-        id: product.id,
-        imageUrl: primaryImageUrl,
-        link: productUrl,
-        mpn: product.mpn,
-        price: fallback?.price || product.price,
-        productType: getProductType(product),
-        title: product.name,
+        manifestEntries,
+        product,
+        productUrl,
       });
     })
     .filter(Boolean)

@@ -81,6 +81,43 @@ describe('confirmPaystackDvaByOrderAccount — eligibility', () => {
     expect(state.insertCalls).toHaveLength(0);
   });
 
+  it('does not infer invoice intent for a storefront-created order underpayment', async () => {
+    const { supabase, state } = createSupabaseMock({});
+
+    await expect(
+      confirmPaystackDvaByOrderAccount({
+        supabase: supabase as never,
+        ...ctxBase,
+        verifiedAmount: { amount: 300_000, currency: 'NGN' },
+      })
+    ).resolves.toEqual({ kind: 'none' });
+    expect(state.insertCalls).toHaveLength(0);
+  });
+
+  it('leaves an in-window partial transfer for review when the DVA also belongs to a wallet', async () => {
+    findWalletAccountMock.mockResolvedValue({ id: 'wallet-account-1' });
+    const { supabase, state } = createSupabaseMock({
+      accountRows: [
+        {
+          ...baseAccountRow,
+          orders: {
+            ...baseAccountRow.orders,
+            recorded_by_user_id: 'merchant-user-1',
+          },
+        },
+      ],
+    });
+
+    await expect(
+      confirmPaystackDvaByOrderAccount({
+        supabase: supabase as never,
+        ...ctxBase,
+        verifiedAmount: { amount: 300_000, currency: 'NGN' },
+      })
+    ).resolves.toEqual({ kind: 'none' });
+    expect(state.insertCalls).toHaveLength(0);
+  });
+
   it('returns none before querying for malformed DVA input', async () => {
     const { supabase, state } = createSupabaseMock({});
 

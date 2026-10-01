@@ -83,7 +83,13 @@ export function buildComparisonMatrixExport(
         left.slug.localeCompare(right.slug)
     )
     .map((product) => {
-      const specData = buildProductSpecData(product);
+      // The export input carries the canonical category as a slug rather than
+      // the storefront comparison input's `category` field. Pass it through
+      // so category-aware spec families keep producing the correct taxonomy.
+      const specData = buildProductSpecData({
+        ...product,
+        category: product.category_slug,
+      });
 
       return {
         id: String(product.id),

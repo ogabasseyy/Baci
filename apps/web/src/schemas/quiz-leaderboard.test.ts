@@ -47,9 +47,15 @@ describe('quiz leaderboard schemas', () => {
       quizLeaderboardResponseSchema.parse({
         currentPlayer: null,
         entries: [],
+        participantCount: null,
         status: 'live_hidden',
       })
-    ).toEqual({ currentPlayer: null, entries: [], status: 'live_hidden' });
+    ).toEqual({
+      currentPlayer: null,
+      entries: [],
+      participantCount: null,
+      status: 'live_hidden',
+    });
   });
 
   it('rejects more than 100 public entries', () => {

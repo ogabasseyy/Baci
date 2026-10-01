@@ -62,7 +62,7 @@ esac
       join(binDirectory, 'rsync'),
       `#!/usr/bin/env bash
 touch "\${TEST_RSYNC_MARKER}"
-if [ "\${TEST_SCENARIO:-}" = "remote-preflight-failure" ] || [ "\${TEST_SCENARIO:-}" = "missing-remote-env" ]; then
+if [ "\${TEST_SCENARIO:-}" = "remote-preflight-failure" ] || [ "\${TEST_SCENARIO:-}" = "missing-remote-env" ] || [ "\${TEST_SCENARIO:-}" = "docker-build-failure" ]; then
   exit 0
 fi
 exit 73
@@ -100,6 +100,24 @@ if [ "\${TEST_SCENARIO:-}" = "missing-remote-env" ]; then
       exit 0
       ;;
   esac
+fi
+if [ "\${TEST_SCENARIO:-}" = "docker-build-failure" ]; then
+  payload="$(cat)"
+  case "$* $payload" in
+    *"command -v node"*)
+      echo /usr/bin/node
+      ;;
+    *"find /home/bassey/.local"*)
+      echo /opt/codex/bin/codex
+      ;;
+    *"docker build"*)
+      exit 76
+      ;;
+    *"rsync -a --delete"*)
+      touch "\${TEST_PROMOTION_MARKER}"
+      ;;
+  esac
+  exit 0
 fi
 exit 74
 `
@@ -171,6 +189,15 @@ describe('deploy source guards', () => {
     assert.equal(outcome.promotionCalled, false);
   });
 
+  it('does not replace live workers when the remediator image build fails', () => {
+    const outcome = runDeployGuardScenario('docker-build-failure');
+
+    assert.equal(outcome.result.status, 76);
+    assert.equal(outcome.rsyncCalled, true);
+    assert.equal(outcome.sshCalled, true);
+    assert.equal(outcome.promotionCalled, false);
+  });
+
   it('serializes live promotion and runtime-directory creation under one lock', () => {
     const source = readFileSync(releaseHelper, 'utf8');
     const promotionStart = source.indexOf(
@@ -182,5 +209,16 @@ describe('deploy source guards', () => {
     assert.notEqual(promotionStart, -1);
     assert.match(promotionSource, /rsync -a --delete/);
     assert.match(promotionSource, /mkdir -p.*logs.*locks/);
+  });
+
+  it('validates the direct worker toolchain without allowing pnpm to mutate it', () => {
+    const source = readFileSync(releaseHelper, 'utf8');
+
+    assert.match(
+      source,
+      /tsx_bin="\$repo_dir\/apps\/web\/node_modules\/\.bin\/tsx"/
+    );
+    assert.match(source, /tsx_bin="\$repo_dir\/node_modules\/\.bin\/tsx"/);
+    assert.doesNotMatch(source, /pnpm .*exec tsx/);
   });
 });

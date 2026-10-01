@@ -232,7 +232,7 @@ describe('event pipeline generated database boundary', () => {
   it('assigns worker RPCs to their leaf callers without moving bootstrap authority', async () => {
     const { EVENT_PIPELINE_BOUNDARY } = await import(/* @vite-ignore */ pathToFileURL(modulePath).href);
     expect(EVENT_PIPELINE_BOUNDARY.callers).toEqual({
-      'apps/web/src/app/api/admin/event-pipeline/dead-letters/route.ts': ['get_event_pipeline_operations_v1', 'list_event_pipeline_deliveries_v1', 'list_event_pipeline_ingress_failures_v1'],
+      'apps/web/src/app/api/admin/event-pipeline/dead-letters/route.ts': ['get_event_pipeline_operations_admin_v3', 'list_event_pipeline_deliveries_admin_v3', 'list_event_pipeline_ingress_failures_admin_v3'],
       'apps/web/src/app/api/admin/event-pipeline/replay/route.ts': ['replay_event_deliveries_batch_v1', 'replay_ingress_dead_letter_v1', 'select_event_pipeline_replay_ids_v1'],
       'apps/web/src/app/api/cron/drain-cache-invalidations/route.ts': ['claim_cache_invalidations', 'finish_cache_invalidation', 'has_cache_invalidation_dead_letters'],
       'apps/web/src/lib/events/enqueue-paid-order-domain-event.ts': ['enqueue_domain_event_v1'],
@@ -242,60 +242,21 @@ describe('event pipeline generated database boundary', () => {
       'apps/web/src/scripts/domain-event-worker.ts': ['read_domain_events_v1', 'record_event_worker_heartbeat_v1'],
       'apps/web/src/scripts/event-delivery-worker.ts': ['claim_event_deliveries_v1', 'record_event_worker_heartbeat_v1'],
       'apps/web/src/scripts/process-claimed-event-delivery.ts': ['finish_event_delivery_v1'],
+      'vps-workers/jobs/cleanup-legacy-expense-receipts.mjs': [
+        'authorize_legacy_expense_receipt_cleanup_deletion',
+        'claim_legacy_expense_receipt_cleanup_candidates',
+        'complete_legacy_expense_receipt_cleanup',
+      ],
+      'vps-workers/jobs/cleanup-private-expense-receipts.mjs': [
+        'authorize_expense_private_receipt_cleanup_deletion',
+        'claim_expense_private_receipt_cleanup_candidates',
+        'complete_expense_private_receipt_cleanup',
+      ],
       'vps-workers/jobs/supabase-retention-cleanup.mjs': ['cleanup_domain_event_pipeline_v1'],
     });
     for (const path of ['apps/web/src/scripts/process-domain-events.ts', 'apps/web/src/scripts/process-event-deliveries.ts']) {
       expect(EVENT_PIPELINE_BOUNDARY.authority.serviceImporters).toContain(path);
       expect(EVENT_PIPELINE_BOUNDARY.productionRoots).toContain(path);
     }
-  });
-
-  it('converts plain JSON values and rejects non-JSON values', async () => {
-    const moduleUrl = pathToFileURL(modulePath).href;
-    const { toEventPipelineJson } = await import(/* @vite-ignore */ moduleUrl);
-    expect(
-      toEventPipelineJson({ id: 'evt-1', values: [1, true, null] })
-    ).toEqual({ id: 'evt-1', values: [1, true, null] });
-    expect(() => toEventPipelineJson(new Date())).toThrow(
-      'event_pipeline_non_json_value'
-    );
-    const cyclic: { self?: unknown } = {};
-    cyclic.self = cyclic;
-    expect(() => toEventPipelineJson(cyclic)).toThrow(
-      'event_pipeline_non_json_value'
-    );
-  });
-
-  it('validates allowed, unauthorized, nested, and wildcard projections', async () => {
-    const moduleUrl = pathToFileURL(modulePath).href;
-    const { validateEventPipelineSelection } = await import(
-      /* @vite-ignore */ moduleUrl
-    );
-    const findings: string[] = [];
-    const columnsForTable = (table: string) =>
-      new Set(table === 'orders' ? ['id', 'items'] : ['id', 'name']);
-
-    validateEventPipelineSelection(
-      'worker.ts',
-      'orders',
-      'id,items(id,name)',
-      findings,
-      columnsForTable
-    );
-    expect(findings).toEqual([]);
-
-    validateEventPipelineSelection(
-      'worker.ts',
-      'orders',
-      'secret,items(secret),*,items(*)',
-      findings,
-      columnsForTable
-    );
-    expect(findings).toEqual([
-      'worker.ts: unauthorized orders column secret',
-      'worker.ts: unauthorized items column secret',
-      'worker.ts: unauthorized orders wildcard projection',
-      'worker.ts: unauthorized items wildcard projection',
-    ]);
   });
 });

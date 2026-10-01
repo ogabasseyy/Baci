@@ -222,6 +222,8 @@ describe('Rate Limit — in-memory fallback', () => {
     ['/api/quiz/awards/cash/claim', 10, '12.12.12.12'],
     ['/api/quiz/prizes/grand/claim', 10, '13.13.13.13'],
     ['/api/quiz/attempts/start', 20, '14.14.14.14'],
+    ['/api/quiz/attempts/attempt-1/result', 120, '15.15.15.15'],
+    ['/api/quiz/leaderboard/live', 120, '16.16.16.16'],
   ])('applies the dedicated quiz limit to %s', async (path, limit, ip) => {
     const req = new NextRequest(`http://localhost:3000${path}`);
     req.headers.set('x-forwarded-for', ip);

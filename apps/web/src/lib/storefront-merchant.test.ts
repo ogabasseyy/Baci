@@ -1,15 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { resolveStorefrontMerchantFromRequest } from './storefront-merchant';
 
-const mockGetMerchantByIdentifier = vi.fn();
+const mockGetMerchantByIdentifier = vi.hoisted(() => vi.fn());
+const mockGetCurrentSlugForAlias = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/cached-data', () => ({
   getMerchantByIdentifier: (...args: unknown[]) =>
     mockGetMerchantByIdentifier(...args),
 }));
 
+vi.mock('@/lib/slug-alias-cache', () => ({
+  getCurrentSlugForAlias: (...args: unknown[]) =>
+    mockGetCurrentSlugForAlias(...args),
+}));
+
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.resetModules();
+  mockGetCurrentSlugForAlias.mockResolvedValue(null);
 });
 
 describe('resolveStorefrontMerchantFromRequest', () => {
@@ -25,10 +32,6 @@ describe('resolveStorefrontMerchantFromRequest', () => {
 
       return Promise.resolve(null);
     });
-    const { resolveStorefrontMerchantFromRequest } = await import(
-      '@/lib/storefront-merchant'
-    );
-
     const result = await resolveStorefrontMerchantFromRequest({
       request: new Request(
         'https://www.ogabassey.com/feeds/google-merchant.xml'
@@ -64,10 +67,6 @@ describe('resolveStorefrontMerchantFromRequest', () => {
 
       return Promise.resolve(null);
     });
-    const { resolveStorefrontMerchantFromRequest } = await import(
-      '@/lib/storefront-merchant'
-    );
-
     const result = await resolveStorefrontMerchantFromRequest({
       request: new Request(
         'https://www.ogabassey.com/feeds/google-merchant.xml'
@@ -112,10 +111,6 @@ describe('resolveStorefrontMerchantFromRequest', () => {
 
       return Promise.resolve(null);
     });
-    const { resolveStorefrontMerchantFromRequest } = await import(
-      '@/lib/storefront-merchant'
-    );
-
     const result = await resolveStorefrontMerchantFromRequest({
       request: new Request(
         'https://www.ogabassey.com/feeds/google-merchant.xml'
@@ -144,10 +139,6 @@ describe('resolveStorefrontMerchantFromRequest', () => {
   });
 
   it('returns 404 when the request is not storefront-scoped', async () => {
-    const { resolveStorefrontMerchantFromRequest } = await import(
-      '@/lib/storefront-merchant'
-    );
-
     const result = await resolveStorefrontMerchantFromRequest({
       request: new Request('https://usebaci.com/feeds/google-merchant.xml'),
       rootDomain: 'usebaci.com',
@@ -169,10 +160,6 @@ describe('resolveStorefrontMerchantFromRequest', () => {
       id: 'merchant-1',
       slug: 'ogabassey',
     });
-    const { resolveStorefrontMerchantFromRequest } = await import(
-      '@/lib/storefront-merchant'
-    );
-
     const result = await resolveStorefrontMerchantFromRequest({
       fallbackIdentifier: 'ogabassey',
       lookupError: 'Lookup failed',
@@ -212,10 +199,6 @@ describe('resolveStorefrontMerchantFromRequest', () => {
           : null
       )
     );
-    const { resolveStorefrontMerchantFromRequest } = await import(
-      '@/lib/storefront-merchant'
-    );
-
     const result = await resolveStorefrontMerchantFromRequest({
       fallbackIdentifier: 'another-store',
       lookupError: 'Lookup failed',
@@ -236,10 +219,6 @@ describe('resolveStorefrontMerchantFromRequest', () => {
 
   it('returns 404 when no merchant matches a storefront host', async () => {
     mockGetMerchantByIdentifier.mockResolvedValue(null);
-    const { resolveStorefrontMerchantFromRequest } = await import(
-      '@/lib/storefront-merchant'
-    );
-
     const result = await resolveStorefrontMerchantFromRequest({
       request: new Request('https://ogabassey.com/feeds/google-merchant.xml'),
       rootDomain: 'usebaci.com',
@@ -256,10 +235,6 @@ describe('resolveStorefrontMerchantFromRequest', () => {
   });
 
   it('returns 400 when a storefront identifier fails route validation', async () => {
-    const { resolveStorefrontMerchantFromRequest } = await import(
-      '@/lib/storefront-merchant'
-    );
-
     const result = await resolveStorefrontMerchantFromRequest({
       request: new Request('https://usebaci.com/feeds/google-merchant.xml', {
         headers: { host: '<script>' },
@@ -280,10 +255,6 @@ describe('resolveStorefrontMerchantFromRequest', () => {
   it('returns 500 when merchant lookup throws', async () => {
     const failure = new Error('database unavailable');
     mockGetMerchantByIdentifier.mockRejectedValue(failure);
-    const { resolveStorefrontMerchantFromRequest } = await import(
-      '@/lib/storefront-merchant'
-    );
-
     const result = await resolveStorefrontMerchantFromRequest({
       request: new Request('https://ogabassey.com/feeds/google-merchant.xml'),
       rootDomain: 'usebaci.com',
@@ -313,10 +284,6 @@ describe('resolveStorefrontMerchantFromRequest', () => {
 
       return Promise.resolve(null);
     });
-    const { resolveStorefrontMerchantFromRequest } = await import(
-      '@/lib/storefront-merchant'
-    );
-
     const result = await resolveStorefrontMerchantFromRequest({
       request: new Request(
         'https://www.ogabassey.com/feeds/google-merchant.xml'

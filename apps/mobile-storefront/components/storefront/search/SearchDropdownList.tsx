@@ -3,9 +3,16 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { SafeImage } from '@/components/ui/SafeImage';
 import type Colors from '@/constants/Colors';
 import { BRAND } from '@/constants/Colors';
+import { MIN_SEARCH_QUERY_LENGTH } from '@/constants/search';
 import type { Category } from '@/hooks';
+import {
+  getSearchHintLabel,
+  isSearchableQuery,
+} from '@/hooks/is-searchable-query';
+import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import { formatPrice, type Product } from '@/types/product';
 import { searchDropdownStyles as styles } from './SearchDropdown.styles';
+import { SeeAllResultsButton } from './SeeAllResultsButton';
 
 const MAX_RESULTS = 6;
 type ThemeColors = (typeof Colors)['light'];
@@ -13,32 +20,88 @@ type ThemeColors = (typeof Colors)['light'];
 interface SearchDropdownListProps {
   categories: Category[];
   colors: ThemeColors;
+  /**
+   * The shopper's current raw input. Debounced `query` drives suggestion
+   * states, but the "See all results" action submits this value so it acts
+   * on what was just typed instead of a stale debounced snapshot.
+   */
+  currentQuery?: string;
   isLoading: boolean;
   onCategoryPress: (slug: string) => void;
   onClearHistory: () => void;
   onProductPress: (product: Product) => void;
+  onSeeAllResults?: (query: string) => void;
   onSuggestionPress: (term: string) => void;
   products: Product[];
   query: string;
   recentSearches: string[];
+  showMinLengthHint?: boolean;
 }
 
 export function SearchDropdownList({
   categories,
   colors,
+  currentQuery = '',
   isLoading,
   onCategoryPress,
   onClearHistory,
   onProductPress,
+  onSeeAllResults,
   onSuggestionPress,
   products,
   query,
   recentSearches,
+  showMinLengthHint = false,
 }: SearchDropdownListProps) {
-  const hasQuery = query.length >= 2;
+  const trimmedCurrentQuery = currentQuery.trim();
+  // Mirrors the submit gate exactly (length AND searchable): punctuation-only
+  // input like "!!" passes the length check but normalizes to nothing, so
+  // the action must hide and the hint must show — otherwise the button does
+  // nothing when pressed without explaining why.
+  const isCurrentQuerySubmittable =
+    trimmedCurrentQuery.length >= MIN_SEARCH_QUERY_LENGTH &&
+    isSearchableQuery(trimmedCurrentQuery);
+  const showSeeAllResults =
+    onSeeAllResults !== undefined && isCurrentQuerySubmittable;
+  const showHint = showMinLengthHint === true && !isCurrentQuerySubmittable;
+  // Current-input validation wins over the debounced snapshot: after a
+  // rejected commit (e.g. `!!` typed over settled `iphone` results), the
+  // debounce still reflects the old query until it settles, so the stale
+  // result branches must hide and the hint must explain the rejection
+  // immediately. Searchability, not just length: once the debounce
+  // settles on punctuation-only input, the idle branch (hint + recents)
+  // renders instead of a bare `No results for "!!"` without guidance.
+  const hasQuery =
+    query.length >= MIN_SEARCH_QUERY_LENGTH &&
+    isSearchableQuery(query) &&
+    !showHint;
+  const seeAllButton =
+    showSeeAllResults && onSeeAllResults ? (
+      <SeeAllResultsButton
+        colors={colors}
+        currentQuery={currentQuery}
+        onSeeAllResults={onSeeAllResults}
+      />
+    ) : null;
+  // Same rejection-aware copy as the results header: normalization-empty
+  // input already meets the length rule, so it needs searchable-term
+  // guidance instead of the length message.
+  const hintLabel = getSearchHintLabel(trimmedCurrentQuery);
   if (!hasQuery) {
     return (
       <>
+        {showHint ? (
+          <View
+            style={styles.hintContainer}
+            accessibilityLiveRegion="polite"
+            accessibilityLabel={hintLabel}
+          >
+            <Text style={[styles.hintText, { color: colors.textSecondary }]}>
+              {hintLabel}
+            </Text>
+          </View>
+        ) : null}
+        {seeAllButton}
         {recentSearches.length > 0 ? (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -132,27 +195,33 @@ export function SearchDropdownList({
 
   if (isLoading) {
     return (
-      <View style={styles.statusContainer}>
-        <ActivityIndicator size="small" color={BRAND.primary} />
-        <Text style={[styles.statusText, { color: colors.textSecondary }]}>
-          Searching…
-        </Text>
+      <View>
+        <View style={styles.statusContainer}>
+          <ActivityIndicator size="small" color={BRAND.primary} />
+          <Text style={[styles.statusText, { color: colors.textSecondary }]}>
+            Searching…
+          </Text>
+        </View>
+        {seeAllButton}
       </View>
     );
   }
 
   if (!products || products.length === 0) {
     return (
-      <View style={styles.statusContainer}>
-        <Ionicons
-          name="search-outline"
-          size={32}
-          color={colors.icon}
-          style={{ opacity: 0.4 }}
-        />
-        <Text style={[styles.statusText, { color: colors.textSecondary }]}>
-          No results for "{query}"
-        </Text>
+      <View>
+        <View style={styles.statusContainer}>
+          <Ionicons
+            name="search-outline"
+            size={32}
+            color={colors.icon}
+            style={{ opacity: 0.4 }}
+          />
+          <Text style={[styles.statusText, { color: colors.textSecondary }]}>
+            No results for "{query}"
+          </Text>
+        </View>
+        {seeAllButton}
       </View>
     );
   }
@@ -168,7 +237,12 @@ export function SearchDropdownList({
           accessibilityRole="button"
         >
           <SafeImage
-            source={{ uri: product.image }}
+            source={createSafeBoundedImageSource({
+              fit: 'cover',
+              height: 44,
+              uri: product.image,
+              width: 44,
+            })}
             style={[styles.resultThumb, { backgroundColor: colors.muted }]}
             contentFit="cover"
             fallbackIconSize={20}
@@ -201,6 +275,7 @@ export function SearchDropdownList({
           />
         </Pressable>
       ))}
+      {seeAllButton}
     </View>
   );
 }

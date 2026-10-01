@@ -7,6 +7,7 @@ import { Stack } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BRAND, SPACING, withAlpha } from '@/constants/Colors';
+import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import type { ImeiResult } from '@/lib/validation';
 import { getVerdictColors } from './get-verdict-colors';
 import { styles } from './imei-check.styles';
@@ -158,7 +159,11 @@ function DeviceImage({
     <View style={styles.deviceImageContainer}>
       {result.deviceImage ? (
         <Image
-          source={{ uri: result.deviceImage }}
+          source={createSafeBoundedImageSource({
+            height: 60,
+            uri: result.deviceImage,
+            width: 60,
+          })}
           style={styles.deviceImage}
           contentFit="contain"
         />

@@ -33,6 +33,7 @@ function pickAttempt(value: unknown) {
     resumed: row.resumed,
     serverNow: row.serverNow,
     status: row.status,
+    submittedAt: row.submittedAt,
   };
 }
 
@@ -47,9 +48,11 @@ export function parseQuizV2ActiveAttempt(value: unknown) {
   const row = value as Record<string, unknown>;
   return quizV2ActiveAttemptResponseSchema.safeParse({
     attempt: row.attempt === undefined ? undefined : pickAttempt(row.attempt),
+    attemptId: row.attemptId,
     availability: row.availability,
     eventEndsAt: row.eventEndsAt,
     serverNow: row.serverNow,
+    submittedAt: row.submittedAt,
   });
 }
 

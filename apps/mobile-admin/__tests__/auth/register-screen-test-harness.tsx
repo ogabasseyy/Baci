@@ -179,9 +179,9 @@ export function fillFormAndSubmit() {
     target: { value: 'StrongP@ss123!' },
   });
 
-  // "Next Step" now creates the native account/session. Authenticated merchant
+  // "Continue" now creates the native account/session. Authenticated merchant
   // setup lives on complete-profile and never retains this password.
-  fireEvent.click(screen.getByText('Next Step'));
+  fireEvent.click(screen.getByRole('button', { name: 'Proceed to next step' }));
 }
 
 export function getRegisterScreenMocks() {

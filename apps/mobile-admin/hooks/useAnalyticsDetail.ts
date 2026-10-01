@@ -97,30 +97,38 @@ export function useAnalyticsDetail({
         .lte('created_at', endDateValue.toISOString());
       ordersQuery = applyOrderBranchScope(ordersQuery, scope);
 
-      let orderItemsQuery = supabase
-        .from('order_items')
-        .select(`
-          cost_price,
-          quantity,
-          price,
-          product_variants(cost_price),
-          products(cost_price),
-          orders!inner(id, merchant_id, payment_status, branch_id, created_at)
-        `)
-        .eq('orders.merchant_id', merchant.id)
-        .eq('orders.payment_status', 'paid')
-        .gte('orders.created_at', startDateValue.toISOString())
-        .lte('orders.created_at', endDateValue.toISOString());
-      orderItemsQuery = applyOrderBranchScope(
-        orderItemsQuery,
-        scope,
-        'orders.branch_id'
-      );
+      const needsProfitContext = metric === 'profits' || metric === 'revenue';
+      let orderItemsQuery = null;
+      if (needsProfitContext) {
+        orderItemsQuery = supabase
+          .from('order_items')
+          .select(`
+            cost_price,
+            quantity,
+            price,
+            order_item_unit_costs(cost_price, unit_index),
+            product_variants(cost_price),
+            products(cost_price),
+            orders!inner(id, merchant_id, payment_status, branch_id, created_at)
+          `)
+          .eq('orders.merchant_id', merchant.id)
+          .eq('orders.payment_status', 'paid')
+          .gte('orders.created_at', startDateValue.toISOString())
+          .lte('orders.created_at', endDateValue.toISOString());
+        orderItemsQuery = applyOrderBranchScope(
+          orderItemsQuery,
+          scope,
+          'orders.branch_id'
+        );
+      }
 
       const [
         { data: orders, error: ordersError },
         { data: orderItems, error: orderItemsError },
-      ] = await Promise.all([ordersQuery, orderItemsQuery]);
+      ] = await Promise.all([
+        ordersQuery,
+        orderItemsQuery ?? Promise.resolve({ data: [], error: null }),
+      ]);
 
       if (ordersError) {
         throw new Error(`Failed to fetch orders: ${ordersError.message}`);

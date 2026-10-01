@@ -9,7 +9,7 @@
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import type { NextRequest } from 'next/server';
-import { permissionGrantsAccess } from '@/lib/permission-grant';
+import type { UserAccess } from '@/lib/api-permissions';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { createScopedClient } from '@/lib/supabase/scoped';
 import { createClient } from '@/lib/supabase/server';
@@ -100,17 +100,13 @@ export async function getMerchantIdForApiUser(
   return access?.merchantId ?? null;
 }
 
+export type { UserAccess } from '@/lib/api-permissions';
+
 /**
  * User access information for API authorization.
  * 2026 Best Practice: Use unified access pattern instead of separate owner/staff checks.
  */
-export interface UserAccess {
-  merchantId: string;
-  role: string;
-  isOwner: boolean;
-  isStaff: boolean;
-  permissions: Record<string, Record<string, boolean>>;
-}
+export { hasPermission } from '@/lib/api-permissions';
 
 /**
  * Get full access information for an authenticated API user.
@@ -158,12 +154,3 @@ export async function getUserAccess(
  * @param action - Action name (e.g., 'read', 'write', 'delete')
  * @returns true if user has permission
  */
-export function hasPermission(
-  access: UserAccess,
-  resource: string,
-  action: string
-): boolean {
-  // Owners have full access
-  if (access.isOwner) return true;
-  return permissionGrantsAccess(access.permissions, resource, action);
-}

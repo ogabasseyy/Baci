@@ -102,6 +102,7 @@ const baseItem: NegotiationCardRequest = {
     condition: 'used',
   },
   cart_snapshot: null,
+  customer_email: null,
   customer_phone: '+2348031234567',
   created_at: '2026-07-01T08:00:00Z',
   evidence_url: 'merchant-1/evidence.png',
@@ -189,5 +190,40 @@ describe('NegotiationCard', () => {
     expect(
       screen.queryByRole('button', { name: 'View customer evidence' })
     ).not.toBeInTheDocument();
+  });
+
+  it('renders a captured email and opens a prefilled email draft', () => {
+    const onOpenExternalUrl = vi.fn();
+    renderCard(
+      {
+        ...baseItem,
+        customer_email: ' Buyer@Example.COM ',
+        customer_phone: null,
+      },
+      { onOpenExternalUrl }
+    );
+
+    expect(screen.getByText('buyer@example.com')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Email customer' }));
+
+    expect(onOpenExternalUrl).toHaveBeenCalledWith(
+      'mailto:buyer@example.com?subject=Negotiation%20follow-up%3A%20iPhone%2014%20Pro%20Max&body=Hi!%20About%20your%20negotiation%20offer%20on%20iPhone%2014%20Pro%20Max%20%E2%80%94'
+    );
+  });
+
+  it('warns when no phone, email, or customer account is available', () => {
+    renderCard({
+      ...baseItem,
+      customer_email: null,
+      customer_id: null,
+      customer_phone: null,
+      evidence_url: null,
+    });
+
+    expect(
+      screen.getByText(
+        'No delivery channel captured. The customer will not be notified when this request is resolved.'
+      )
+    ).toBeInTheDocument();
   });
 });

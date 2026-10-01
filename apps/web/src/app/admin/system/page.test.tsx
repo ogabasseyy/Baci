@@ -38,7 +38,7 @@ describe('SystemHealthPage', () => {
     vi.unstubAllGlobals();
   });
 
-  it('uses CSRF-aware refresh requests for analytics view refreshes', async () => {
+  it('uses a CSRF-aware request and accurately labels the analytics cache reload', async () => {
     const user = userEvent.setup();
     render(<SystemHealthPage />);
 
@@ -48,7 +48,7 @@ describe('SystemHealthPage', () => {
       });
     });
 
-    await user.click(screen.getByTestId('header-refresh-analytics-views'));
+    await user.click(screen.getByRole('button', { name: 'Reload Analytics' }));
 
     await waitFor(() => {
       expect(mockFetchWithCsrf).toHaveBeenCalledWith('/api/admin/analytics', {
@@ -56,8 +56,39 @@ describe('SystemHealthPage', () => {
       });
       expect(mockToast).toHaveBeenCalledWith({
         title: 'Success',
-        description: 'Analytics views are being refreshed.',
+        description: 'Live analytics cache has been reloaded.',
       });
     });
+
+    expect(
+      screen.queryByText('Refresh Analytics Views')
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('View Backups')).not.toBeInTheDocument();
+  });
+
+  it('shows a persistent error instead of a zero health score when checks fail', async () => {
+    const user = userEvent.setup();
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce({ ok: false } as Response)
+      .mockResolvedValueOnce({
+        json: async () => ({
+          checkedAt: '2026-03-20T10:00:00.000Z',
+          health: [],
+          indexRecommendations: [],
+          missingIndexes: [],
+        }),
+        ok: true,
+      } as Response);
+
+    render(<SystemHealthPage />);
+
+    expect(
+      await screen.findByText('System health unavailable')
+    ).toBeInTheDocument();
+    expect(screen.queryByText('0%')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+
+    expect(await screen.findByText('Overall Health Score')).toBeInTheDocument();
   });
 });

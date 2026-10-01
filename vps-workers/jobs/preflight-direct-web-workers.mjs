@@ -4,7 +4,9 @@ import { config } from 'dotenv';
 const REQUIRED_ENV = [
   'BACI_REPO_DIR',
   'BACI_WEB_BASE_URL',
+  'INTERNAL_API_SECRET',
   'IMEI_IDENTIFIER_ENCRYPTION_KEY',
+  'JUMIA_AUTHORIZATION_ENCRYPTION_KEY',
   'NEXT_PUBLIC_SUPABASE_ANON_KEY',
   'NEXT_PUBLIC_SUPABASE_URL',
   'PETROCK_API_TOKEN',
@@ -14,6 +16,7 @@ const REQUIRED_ENV = [
   'QUIZ_PHASE',
   'QUIZ_PRODUCTION_APPROVED',
   'SUPABASE_SERVICE_ROLE_KEY',
+  'SUPABASE_JUMIA_CREDENTIAL_KEY',
   'ZEPTOMAIL_TOKEN',
 ];
 const GIGL_REQUIRED_ENV = [
@@ -69,6 +72,23 @@ function isRestrictedGiglWorkerToken(value, now = Date.now()) {
   }
 }
 
+function isBase64Encoded32ByteKey(value) {
+  const normalized = value.trim();
+  if (
+    normalized.length % 4 !== 0 ||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)
+  ) {
+    return false;
+  }
+
+  try {
+    const decoded = Buffer.from(normalized, 'base64');
+    return decoded.length === 32 && decoded.toString('base64') === normalized;
+  } catch {
+    return false;
+  }
+}
+
 export function getDirectWorkerPreflightProblems(env) {
   const problems = [];
   for (const name of REQUIRED_ENV) {
@@ -84,6 +104,15 @@ export function getDirectWorkerPreflightProblems(env) {
         problems.push(`${name} is required`);
       }
     }
+  }
+
+  if (
+    isConfigured(env, 'JUMIA_AUTHORIZATION_ENCRYPTION_KEY') &&
+    !isBase64Encoded32ByteKey(env.JUMIA_AUTHORIZATION_ENCRYPTION_KEY)
+  ) {
+    problems.push(
+      'JUMIA_AUTHORIZATION_ENCRYPTION_KEY must be Base64-encoded 32 bytes'
+    );
   }
 
   if (

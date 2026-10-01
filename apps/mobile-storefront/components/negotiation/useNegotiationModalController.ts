@@ -1,7 +1,6 @@
 import {
   buildCartSnapshot,
   MAX_AUTO_NEGOTIATION_DISCOUNT_RATE,
-  normalizePhoneToE164,
   summarizeCartForItemInfo,
 } from '@baci/shared/lib';
 import type { ImpactFeedbackStyle } from 'expo-haptics';
@@ -11,6 +10,8 @@ import { createLogger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import type { NegotiationStatus } from './NegotiationModalView';
 import { NEGOTIATION_CHEAPER_BUTTON_THRESHOLD } from './negotiation.constants';
+import { getNegotiationCustomerContact } from './negotiation-customer-auth';
+import type { NegotiationCustomerContact } from './negotiation-customer-contact';
 import {
   createNegotiationSessionId,
   uploadNegotiationEvidence,
@@ -141,7 +142,10 @@ export function useNegotiationModalController({
     onAcceptedPrice?.(counterOffer);
   };
 
-  const submitMerchantRequest = async (evidenceUrl?: string) => {
+  const submitMerchantRequest = async (
+    evidenceUrl: string | undefined,
+    customerContact: NegotiationCustomerContact
+  ) => {
     if (!merchantId) {
       Alert.alert('Error', 'Unable to identify merchant. Please try again.');
       return;
@@ -161,12 +165,6 @@ export function useNegotiationModalController({
     };
 
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      // Whole-cart offers snapshot the cart so the merchant can see what's being
-      // negotiated; single offers keep their existing per-product item_info.
       const cartSnapshot =
         type === 'total' && cartItems
           ? buildCartSnapshot(cartItems.map(toNegotiationCartLine))
@@ -182,19 +180,12 @@ export function useNegotiationModalController({
         type === 'total'
           ? summarizeCartForItemInfo(cartSnapshot, currentPrice)
           : null;
-      const normalizedPhone = normalizePhoneToE164(phone);
-      if (phone.trim() && !normalizedPhone) {
-        handleSubmitFailure(
-          new Error('Invalid customer phone'),
-          'Enter a valid Phone / WhatsApp number.'
-        );
-        return;
-      }
 
       const { error } = await supabase.from('negotiation_requests').insert({
         merchant_id: merchantId,
         session_id: createNegotiationSessionId(),
-        customer_id: user?.id ?? null,
+        customer_id: customerContact.userId,
+        customer_email: customerContact.normalizedEmail,
         type,
         item_info: buildNegotiationRequestItemInfo({
           itemInfo,
@@ -204,9 +195,7 @@ export function useNegotiationModalController({
         cart_snapshot: cartSnapshot.length > 0 ? cartSnapshot : null,
         offered_price: offerAmount,
         evidence_url: evidenceUrl || null,
-        // Optional follow-up number (null when blank/invalid) so the merchant
-        // can reach guests who'd otherwise get no decision notification.
-        customer_phone: normalizedPhone,
+        customer_phone: customerContact.normalizedPhone,
         status: 'pending',
       });
 
@@ -233,11 +222,22 @@ export function useNegotiationModalController({
     }
 
     try {
+      if (!merchantId) {
+        Alert.alert('Error', 'Unable to identify merchant. Please try again.');
+        return;
+      }
+      const customerContact = await getNegotiationCustomerContact(phone);
+      if (customerContact.errorMessage) {
+        setStatus('upload');
+        Alert.alert('Error', customerContact.errorMessage);
+        return;
+      }
+
       let evidenceUrl = normalizedLink;
       if (!evidenceUrl && uploadFile) {
         evidenceUrl = await uploadNegotiationEvidence(uploadFile, merchantId);
       }
-      await submitMerchantRequest(evidenceUrl || undefined);
+      await submitMerchantRequest(evidenceUrl || undefined, customerContact);
     } catch (error) {
       log.error('Failed to upload negotiation evidence:', error);
       Alert.alert(

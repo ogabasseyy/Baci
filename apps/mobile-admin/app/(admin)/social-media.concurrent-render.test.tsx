@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { Suspense, startTransition, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { socialMediaTestHarness as harness } from './social-media.test-harness';
+import { socialMediaTestHarness as harness } from '../../__tests__/admin/social-media.test-harness';
 
 describe('SocialMediaScreen concurrent merchant rendering', () => {
   beforeEach(() => harness.reset());

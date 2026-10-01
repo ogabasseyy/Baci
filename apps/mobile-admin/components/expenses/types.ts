@@ -13,9 +13,10 @@ export interface ExpenseDetailColors {
 }
 
 export interface ExpenseStatusShellProps {
-  status: 'loading' | 'error' | 'not-found';
+  status: 'loading' | 'error' | 'not-found' | 'denied';
   colors: ExpenseDetailColors;
   errorMessage?: string;
+  onRetry?: () => void;
 }
 
 export interface ExpenseDetailsProps {
@@ -23,5 +24,9 @@ export interface ExpenseDetailsProps {
   branchName: string;
   colors: ExpenseDetailColors;
   formattedAmount: string;
+  groupName: string;
+  receiptUrl: string | null;
+  receiptLoading?: boolean;
+  receiptError?: Error | null;
   cardShadow?: StyleProp<ViewStyle>;
 }

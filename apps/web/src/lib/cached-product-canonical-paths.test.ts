@@ -34,6 +34,7 @@ function createQueryBuilder(result: {
   const builder = {
     select: vi.fn(() => builder),
     eq: vi.fn(() => builder),
+    order: vi.fn(() => builder),
     in: vi.fn(() =>
       Promise.resolve({
         data: result.data ?? null,
@@ -134,7 +135,7 @@ describe('getCachedProductCanonicalPaths', () => {
     expect(paths['apple-airpods-2']).toBe('/earbuds/apple-airpods-2');
   });
 
-  it('prefers the legacy category text over the junction when the direct join is absent', async () => {
+  it('prefers the active junction category over legacy text when the direct join is absent', async () => {
     const builder = createQueryBuilder({
       data: [
         {
@@ -155,9 +156,44 @@ describe('getCachedProductCanonicalPaths', () => {
       'jbl-clip-4',
     ]);
 
-    // the category route canonicalizes by direct join || legacy text, so the
-    // text-derived path is the one that renders without a redirect
-    expect(paths['jbl-clip-4']).toBe('/audio/jbl-clip-4');
+    // The PDP snapshot canonicalizes by active direct join || active junction,
+    // so content links must target the relation-backed path directly.
+    expect(paths['jbl-clip-4']).toBe('/speakers/jbl-clip-4');
+  });
+
+  it('selects the lowest active junction category id regardless of response order', async () => {
+    const builder = createQueryBuilder({
+      data: [
+        {
+          id: 'p1',
+          name: 'JBL Clip 4',
+          slug: 'jbl-clip-4',
+          category: 'Audio',
+          categories: { is_active: false, slug: 'retired' },
+          product_categories: [
+            {
+              category_id: 'category-z',
+              categories: { is_active: true, slug: 'speakers-z' },
+            },
+            {
+              category_id: 'category-a',
+              categories: { is_active: true, slug: 'speakers-a' },
+            },
+          ],
+        },
+      ],
+    });
+    mockCreatePublicClient.mockReturnValue({ from: vi.fn(() => builder) });
+
+    const paths = await getCachedProductCanonicalPaths('merchant-1', [
+      'jbl-clip-4',
+    ]);
+
+    expect(paths['jbl-clip-4']).toBe('/speakers-a/jbl-clip-4');
+    expect(builder.order).toHaveBeenCalledWith('category_id', {
+      ascending: true,
+      referencedTable: 'product_categories',
+    });
   });
 
   it('falls back to the product_categories junction when direct join and legacy text are both absent', async () => {

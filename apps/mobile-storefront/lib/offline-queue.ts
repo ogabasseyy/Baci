@@ -1,5 +1,6 @@
 import NetInfo from '@react-native-community/netinfo';
 import * as Crypto from 'expo-crypto';
+import { DeferredOfflineMutationError } from './deferred-offline-mutation-error';
 import { createLogger } from './logger';
 import type {
   MutationType,
@@ -30,6 +31,7 @@ class OfflineQueueManager {
   private initPromise: Promise<void> | null = null;
   private failedMutations: QueuedMutation[] = [];
   private errorCallback: ((mutation: QueuedMutation) => void) | null = null;
+  private drainRequested = false;
 
   async initialize(): Promise<void> {
     if (this.initPromise) {
@@ -94,6 +96,14 @@ class OfflineQueueManager {
     this.handlers.set(type, handler);
   }
 
+  processPending(): void {
+    if (this.state.isProcessing) {
+      this.drainRequested = true;
+      return;
+    }
+    void this.processQueue();
+  }
+
   async enqueue<T>(type: MutationType, payload: T): Promise<string> {
     const id = `${type}_${Date.now()}_${Crypto.randomUUID().replace(/-/g, '').substring(0, 9)}`;
 
@@ -154,6 +164,8 @@ class OfflineQueueManager {
 
     log.info(`Processing ${this.state.queue.length} queued mutations`);
 
+    const deferredThisPass = new Set<string>();
+
     // Process mutations in order (FIFO), draining the live queue
     // so items enqueued mid-flight are picked up in the same pass
     while (this.state.queue.length > 0) {
@@ -173,6 +185,22 @@ class OfflineQueueManager {
         await this.remove(mutation.id);
         log.info(`Successfully processed: ${mutation.id}`);
       } catch (error) {
+        if (error instanceof DeferredOfflineMutationError) {
+          log.info(
+            `Deferring ${mutation.id} until the originating account returns`
+          );
+          if (deferredThisPass.has(mutation.id)) {
+            break;
+          }
+          deferredThisPass.add(mutation.id);
+          const deferred = this.state.queue.shift();
+          if (deferred) {
+            this.state.queue.push(deferred);
+          }
+          await this.persistQueue();
+          continue;
+        }
+
         mutation.retryCount++;
         mutation.lastError =
           error instanceof Error ? error.message : 'Unknown error';
@@ -214,6 +242,11 @@ class OfflineQueueManager {
     this.state.lastSyncAt = Date.now();
     await this.persistQueue();
     this.notifyListeners();
+
+    if (this.drainRequested) {
+      this.drainRequested = false;
+      void this.processQueue();
+    }
   }
 
   private async loadQueue(): Promise<void> {

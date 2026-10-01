@@ -25,19 +25,15 @@ import {
 } from '@/lib/staff-invite-pending';
 import { supabase } from '@/lib/supabase';
 
-// 'error' is a transient preview failure (network/RPC) that can be retried;
-// 'invalid' is a terminal verdict (no such/expired/used invite).
+// Preview errors can retry; invalid/expired/used invites are terminal.
 type InviteStatus = 'loading' | 'valid' | 'invalid' | 'error';
 
-// Account-only signup for staff invitees: creates just an auth user (no
-// merchant) so get_user_merchant_context resolves the invited store rather than
-// pinning the user to one of their own. Gated on a verified invite preview.
+// Staff signup creates an auth user without a merchant, gated by invite preview.
 export default function StaffSignupScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const { signUp, isAuthenticating } = useAuth();
   const token = getPendingStaffInviteToken();
-
   const [inviteStatus, setInviteStatus] = useState<InviteStatus>(
     token ? 'loading' : 'invalid'
   );
@@ -51,8 +47,7 @@ export default function StaffSignupScreen() {
   const passwordRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
 
-  // Verify the invite and lock the email to the invited address. Only a
-  // confirmed, still-valid invitation enables account creation.
+  // Only a confirmed, still-valid invitation enables account creation.
   // biome-ignore lint/correctness/useExhaustiveDependencies: retryNonce intentionally starts a fresh verification attempt.
   useEffect(() => {
     let cancelled = false;
@@ -67,8 +62,7 @@ export default function StaffSignupScreen() {
         if (cancelled) {
           return;
         }
-        // A network/RPC error is transient — let the user retry. A successful
-        // response with no row means the token is terminally invalid/expired.
+        // RPC errors can retry; a successful empty response is terminal.
         if (previewError) {
           setInviteStatus('error');
           return;
@@ -118,7 +112,11 @@ export default function StaffSignupScreen() {
       return;
     }
 
-    const result = await signUp({ email: email.trim(), password });
+    const result = await signUp({
+      email: email.trim(),
+      password,
+      signupFlow: 'staff',
+    });
 
     if (result.accountExists) {
       Alert.alert(

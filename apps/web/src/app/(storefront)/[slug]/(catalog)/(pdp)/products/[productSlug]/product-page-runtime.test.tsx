@@ -16,6 +16,7 @@ const {
   getPublicSupabaseClient,
   loadCategoryScopedSemanticInventorySafely,
   loadPublishedClusterPostsSafely,
+  generateBreadcrumbSchema,
   JsonLd,
   ProductDetailClient,
   ProductSemanticSections,
@@ -33,6 +34,7 @@ const {
     getPublicSupabaseClient: vi.fn(neverSettles),
     loadCategoryScopedSemanticInventorySafely: vi.fn(neverSettles),
     loadPublishedClusterPostsSafely: vi.fn(neverSettles),
+    generateBreadcrumbSchema: vi.fn(() => ({ '@type': 'BreadcrumbList' })),
     JsonLd: vi.fn(() => null),
     ProductDetailClient: vi.fn(() => null),
     ProductSemanticSections: vi.fn(() => null),
@@ -75,7 +77,7 @@ vi.mock(
 // not schema content (covered by their own suites).
 vi.mock('@/lib/seo-utils', () => ({
   buildStorefrontAcceptedPaymentMethods: () => [],
-  generateBreadcrumbSchema: () => ({ '@type': 'BreadcrumbList' }),
+  generateBreadcrumbSchema,
   generateFAQSchema: () => ({ '@type': 'FAQPage' }),
   generateProductSchema: () => ({
     '@type': 'Product',
@@ -102,6 +104,10 @@ vi.mock('@/lib/korapay', () => ({ isKorapayConfigured: () => true }));
 vi.mock('@/lib/paystack', () => ({ isPaystackConfigured: () => true }));
 
 import { ProductPageRuntime } from './product-page-runtime';
+
+type ProductPageRuntimeProduct = Parameters<
+  typeof ProductPageRuntime
+>[0]['product'];
 
 const merchant = {
   id: 'merchant-1',
@@ -182,5 +188,100 @@ describe('ProductPageRuntime critical shell', () => {
     const deferredChild = (suspense?.props as { children?: ReactElement })
       .children;
     expect(typeof deferredChild?.type).toBe('function');
+  });
+
+  it('uses a slug-only camera join before stale phone text for PDP and crawl context', async () => {
+    const tree = (await ProductPageRuntime({
+      merchant,
+      product: {
+        // The shared fixture is deliberately cast for the runtime's full
+        // product contract; recover that contract before extending it.
+        ...(product as ProductPageRuntimeProduct),
+        category: 'Smartphones',
+        category_slug: 'smartphones',
+        categories: { slug: 'action-cameras' },
+      },
+      slug: 'ogabassey',
+    })) as ReactElement;
+
+    expect(generateBreadcrumbSchema).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'action-cameras',
+          url: 'https://ogabassey.com/action-cameras',
+        }),
+      ])
+    );
+
+    const suspense = directChildren(tree).find(
+      (child) => child.type === Suspense
+    );
+    const deferredChild = (suspense?.props as { children?: ReactElement })
+      .children;
+    expect(deferredChild?.props).toMatchObject({
+      categoryName: 'action-cameras',
+      categorySlug: 'action-cameras',
+    });
+  });
+
+  it('ignores whitespace-only joined category slugs before falling back to canonical metadata', async () => {
+    const tree = (await ProductPageRuntime({
+      merchant,
+      product: {
+        ...(product as ProductPageRuntimeProduct),
+        category: 'Smartphones',
+        category_slug: 'action-cameras',
+        categories: { name: 'Action Cameras', slug: '   ' },
+      },
+      slug: 'ogabassey',
+    })) as ReactElement;
+
+    expect(generateBreadcrumbSchema).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'Action Cameras',
+          url: 'https://ogabassey.com/action-cameras',
+        }),
+      ])
+    );
+
+    const suspense = directChildren(tree).find(
+      (child) => child.type === Suspense
+    );
+    const deferredChild = (suspense?.props as { children?: ReactElement })
+      .children;
+    expect(deferredChild?.props).toMatchObject({
+      categoryName: 'Action Cameras',
+      categorySlug: 'action-cameras',
+    });
+  });
+
+  it('uses /products for an uncategorized product instead of inventing /all-products', async () => {
+    const tree = (await ProductPageRuntime({
+      merchant,
+      product: {
+        ...(product as ProductPageRuntimeProduct),
+        category: undefined,
+        category_slug: undefined,
+        categories: null,
+      },
+      slug: 'ogabassey',
+    })) as ReactElement;
+
+    expect(generateBreadcrumbSchema).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'All Products',
+          url: 'https://ogabassey.com/products',
+        }),
+      ])
+    );
+
+    const suspense = directChildren(tree).find(
+      (child) => child.type === Suspense
+    );
+    const deferredChild = (suspense?.props as { children?: ReactElement })
+      .children;
+    expect(deferredChild?.props).toMatchObject({ categorySlug: 'products' });
   });
 });

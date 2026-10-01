@@ -6,7 +6,11 @@ import { logger } from '@/lib/logger';
 import { hasPostHogBrowserInitialized } from '@/lib/posthog/browser-state';
 import { getPostHogBrowserEnv } from '@/lib/posthog/config';
 import { isPublicBlogPathname } from '@/lib/posthog/public-blog-path';
-import { scheduleIdleBoot } from '@/lib/posthog/schedule-idle-boot';
+import {
+  type IdleBootReason,
+  scheduleIdleBoot,
+} from '@/lib/posthog/schedule-idle-boot';
+import { waitForLcpWindowEnd } from '@/lib/posthog/wait-for-lcp';
 
 const postHogBrowserEnv = getPostHogBrowserEnv();
 
@@ -18,7 +22,9 @@ const postHogBrowserEnv = getPostHogBrowserEnv();
  */
 async function bootPostHogForPathname(
   currentPathname: string,
-  isCancelled: () => boolean
+  isCancelled: () => boolean,
+  idleReason?: IdleBootReason,
+  getCurrentPathname: () => string | undefined = () => currentPathname
 ): Promise<void> {
   const isPublicBlog = isPublicBlogPathname(currentPathname, {
     hostname: globalThis.location?.hostname,
@@ -29,19 +35,65 @@ async function bootPostHogForPathname(
   }
 
   try {
+    // Keep the 76KB client (plus its transitive chunks) out of the LCP
+    // window: boot once LCP candidates settle, the shopper interacts, or
+    // the backstop elapses. Pre-boot metrics are buffered by the web-vitals
+    // queue, so nothing is lost — it just flushes after boot.
+    //
+    // Exception: when the idle gate fired on an early interaction, the
+    // shopper is already engaging — waiting would install autocapture too
+    // late and lose the follow-up clicks (user events are NOT buffered,
+    // only web-vitals are). Boot immediately instead; the triggering
+    // interaction usually lands after LCP anyway.
+    //
+    // Second exception: once the client is already initialized (client-side
+    // navigations), the heavy chunk is cached and there is no LCP left to
+    // protect on the settled document — re-waiting would only delay
+    // instrumentation for the new route.
+    if (idleReason !== 'interaction' && !hasPostHogBrowserInitialized()) {
+      await waitForLcpWindowEnd();
+    }
+    if (isCancelled()) {
+      return;
+    }
+
+    // The LCP wait is async: a navigation may have landed on a different
+    // route while it pended. Re-resolve so a stale non-blog capture can't
+    // initialize the full client on a public blog destination (or attribute
+    // the boot to the wrong route).
+    const pathname = getCurrentPathname() ?? currentPathname;
+    const resolvedPublicBlog = isPublicBlogPathname(pathname, {
+      hostname: globalThis.location?.hostname,
+    });
+    if (resolvedPublicBlog && !hasPostHogBrowserInitialized()) {
+      return;
+    }
+
     const { initializePostHogBrowser } = await import('@/lib/posthog/browser');
 
     if (isCancelled()) {
       return;
     }
 
+    // The chunk load is async: a navigation may have landed on a public
+    // blog while it pended. Re-resolve again so the stale invocation can't
+    // initialize the full client for the old route after the blog's own
+    // effect already stood down.
+    const postImportPathname = getCurrentPathname() ?? pathname;
+    const postImportPublicBlog = isPublicBlogPathname(postImportPathname, {
+      hostname: globalThis.location?.hostname,
+    });
+    if (postImportPublicBlog && !hasPostHogBrowserInitialized()) {
+      return;
+    }
+
     initializePostHogBrowser(postHogBrowserEnv, console, {
-      lightweight: isPublicBlog,
-      pathname: currentPathname,
+      lightweight: postImportPublicBlog,
+      pathname: postImportPathname,
       hostname: globalThis.location?.hostname,
     });
 
-    if (isPublicBlog) {
+    if (postImportPublicBlog) {
       return;
     }
 
@@ -49,8 +101,19 @@ async function bootPostHogForPathname(
       '@/instrumentation-client'
     );
 
-    if (!isCancelled()) {
-      initializePostHogInstrumentationIfAllowed(currentPathname);
+    if (isCancelled()) {
+      return;
+    }
+
+    // Attribute instrumentation to the latest route, never a stale one —
+    // and stay off it entirely when the latest route is a public blog.
+    const finalPathname = getCurrentPathname() ?? postImportPathname;
+    if (
+      !isPublicBlogPathname(finalPathname, {
+        hostname: globalThis.location?.hostname,
+      })
+    ) {
+      initializePostHogInstrumentationIfAllowed(finalPathname);
     }
   } catch (error) {
     if (!isCancelled()) {
@@ -79,12 +142,17 @@ export function PostHogClientBootstrap() {
     cancelledRef.current = false;
     const isCancelled = () => cancelledRef.current;
 
-    const cancelIdleBoot = scheduleIdleBoot(() => {
+    const cancelIdleBoot = scheduleIdleBoot((reason) => {
       hasIdledRef.current = true;
       const currentPathname =
         pathnameRef.current ?? globalThis.location?.pathname;
       if (!isCancelled() && currentPathname) {
-        void bootPostHogForPathname(currentPathname, isCancelled);
+        void bootPostHogForPathname(
+          currentPathname,
+          isCancelled,
+          reason,
+          () => pathnameRef.current ?? globalThis.location?.pathname
+        );
       }
     });
 

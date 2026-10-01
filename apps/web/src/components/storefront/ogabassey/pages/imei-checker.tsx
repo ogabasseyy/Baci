@@ -10,7 +10,9 @@ import { useEffect, useState } from 'react';
 import { useOptionalCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { OgabasseyImeiEntry } from './imei-checker-entry';
+import { createImeiIdempotencyKey } from './imei-checker-idempotency-key';
 import { performImeiCheck } from './imei-checker-request';
+import { OgabasseyImeiCheckerShell } from './imei-checker-shell';
 import type {
   ImeiRequestIdentity,
   ImeiResult,
@@ -19,32 +21,6 @@ import type {
 import { OgabasseyImeiResults } from './imei-results';
 import { useImeiPendingLookup } from './use-imei-pending-lookup';
 import { useImeiTierSelection } from './use-imei-tier-selection';
-
-const createFallbackUuid = () => {
-  const bytes = new Uint8Array(16);
-  globalThis.crypto.getRandomValues(bytes);
-
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-
-  const hex = Array.from(bytes, (byte) =>
-    byte.toString(16).padStart(2, '0')
-  ).join('');
-
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-};
-
-const createIdempotencyKey = () => {
-  if (globalThis.crypto?.randomUUID) {
-    return globalThis.crypto.randomUUID();
-  }
-
-  if (!globalThis.crypto?.getRandomValues) {
-    throw new Error('Secure crypto unavailable');
-  }
-
-  return createFallbackUuid();
-};
 
 /**
  * Module-scope fetch keeps the try/finally clause out of the component body
@@ -75,7 +51,17 @@ async function fetchDeviceSuggestions(
   }
 }
 
-export const OgabasseyImeiChecker: React.FC = () => {
+interface OgabasseyImeiCheckerProps {
+  /** Set when the parent already committed the IMEI LCP hero. */
+  omitHero?: boolean;
+  /** Set when the parent already owns the page chrome around this island. */
+  omitShell?: boolean;
+}
+
+export const OgabasseyImeiChecker: React.FC<OgabasseyImeiCheckerProps> = ({
+  omitHero = false,
+  omitShell = false,
+}) => {
   const customerAuth = useOptionalCustomerAuth();
   const merchantSlug = useMerchantSafe()?.merchant?.slug;
   const {
@@ -188,7 +174,7 @@ export const OgabasseyImeiChecker: React.FC = () => {
     try {
       idempotencyKey = existingIdentityMatches
         ? requestIdentity.key
-        : createIdempotencyKey();
+        : createImeiIdempotencyKey();
     } catch (err) {
       console.error('IMEI check failed:', err);
       setError('Network error. Please check your connection and try again.');
@@ -237,9 +223,8 @@ export const OgabasseyImeiChecker: React.FC = () => {
     setIsLoading(false);
   };
 
-  return (
-    <div className="min-h-screen bg-linear-to-b from-gray-50 to-white pb-24 md:pb-12 pt-4 md:pt-8 flex flex-col">
-      <div className="max-w-[1400px] mx-auto px-4 md:px-6 w-full flex-1">
+  const body = (
+    <>
         {!result && (
           <OgabasseyImeiEntry
             brand={brand}
@@ -253,6 +238,7 @@ export const OgabasseyImeiChecker: React.FC = () => {
             isLoading={isLoading}
             isPending={pendingLookup.pending !== null}
             needsWalletFunding={needsWalletFunding}
+            omitHero={omitHero}
             onCheck={handleCheck}
             onDeviceQueryChange={(value) => {
               setDeviceQuery(value);
@@ -291,7 +277,12 @@ export const OgabasseyImeiChecker: React.FC = () => {
           lookupId={resultLookupId}
           result={result}
         />
-      </div>
-    </div>
+    </>
+  );
+
+  return (
+    <OgabasseyImeiCheckerShell omitShell={omitShell}>
+      {body}
+    </OgabasseyImeiCheckerShell>
   );
 };

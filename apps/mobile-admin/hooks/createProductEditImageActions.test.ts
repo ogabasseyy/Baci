@@ -234,4 +234,62 @@ describe('createProductEditImageActions', () => {
       .mock.calls.find(([title]) => title === 'Permission Denied');
     expect(denialCall).toBeDefined();
   });
+
+  it('surfaces image-picker failures instead of silently rejecting', async () => {
+    mocks.launchImageLibraryAsync.mockRejectedValueOnce(
+      new Error('picker unavailable')
+    );
+
+    const actions = createProductEditImageActions({
+      merchantId: 'merchant-1',
+      setFormData: vi.fn(),
+      setIsUploading: vi.fn(),
+    });
+
+    actions.handleImagePick();
+    await triggerLibraryFlow();
+
+    expect(mocks.upload).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Image Selection Failed',
+      'picker unavailable'
+    );
+  });
+
+  it('alerts when a picker returns no asset without cancellation', async () => {
+    mocks.launchImageLibraryAsync.mockResolvedValueOnce({
+      assets: [],
+      canceled: false,
+    });
+
+    const actions = createProductEditImageActions({
+      merchantId: 'merchant-1',
+      setFormData: vi.fn(),
+      setIsUploading: vi.fn(),
+    });
+
+    actions.handleImagePick();
+    await triggerLibraryFlow();
+
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Image Selection Failed',
+      'No image was selected. Please try again.'
+    );
+  });
+
+  it('does not open a picker when the merchant context is missing', () => {
+    const actions = createProductEditImageActions({
+      merchantId: undefined,
+      setFormData: vi.fn(),
+      setIsUploading: vi.fn(),
+    });
+
+    actions.handleImagePick();
+
+    expect(mocks.launchImageLibraryAsync).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Error',
+      'Your store is not ready for image uploads. Please try again.'
+    );
+  });
 });

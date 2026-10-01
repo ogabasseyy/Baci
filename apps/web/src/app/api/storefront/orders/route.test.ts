@@ -1,7 +1,5 @@
-import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AuthResult } from '@/lib/api-auth';
 
 vi.mock('@/lib/api-auth', () => ({
   authenticateApiRequest: vi.fn(),
@@ -9,130 +7,10 @@ vi.mock('@/lib/api-auth', () => ({
 
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { GET } from './route';
-
-interface QueryResult<TData> {
-  data: TData | null;
-  error: { message: string } | null;
-}
-
-function createSingleQuery<TData>(result: QueryResult<TData>) {
-  const query = {
-    select: vi.fn(),
-    eq: vi.fn(),
-    single: vi.fn(),
-  };
-  query.select.mockReturnValue(query);
-  query.eq.mockReturnValue(query);
-  query.single.mockResolvedValue(result);
-  return query;
-}
-
-function createOrdersQuery<TData>(result: QueryResult<TData>) {
-  const query = {
-    select: vi.fn(),
-    eq: vi.fn(),
-    order: vi.fn(),
-  };
-  query.select.mockReturnValue(query);
-  query.eq.mockReturnValue(query);
-  query.order.mockResolvedValue(result);
-  return query;
-}
-
-function createSupabaseMock(input?: {
-  merchant?: QueryResult<{ id: string } | null>;
-  customer?: QueryResult<{ id: string } | null>;
-  orders?: QueryResult<
-    Array<{
-      id: string;
-      order_number: string;
-      created_at: string;
-      total: number;
-      subtotal: number;
-      shipping_fee: number;
-      tax_amount: number;
-      discount_amount: number;
-      amount_paid: number;
-      currency: string;
-      external_source?: string | null;
-      import_job_id?: string | null;
-      payment_status: string;
-      shipping_status: string;
-      shipping_address: Record<string, unknown> | null;
-      tracking_number: string | null;
-      shipping_provider: string | null;
-      payment_method: string | null;
-      fulfillment_details?: {
-        imei?: string | null;
-        serialNumber?: string | null;
-        serial_number?: string | null;
-      } | null;
-      order_items: Array<{
-        id: string;
-        product_id: string;
-        image_url?: string | null;
-        condition?: string | null;
-        variant_name?: string | null;
-        name: string;
-        quantity: number;
-        price: number;
-        has_assurance: boolean | null;
-        products?: {
-          slug?: string;
-          category?: string | null;
-          category_slug?: string | null;
-          images?: string[] | null;
-          categories?: { name?: string; slug?: string }[] | null;
-        } | null;
-      }>;
-    }>
-  >;
-}) {
-  const merchantQuery = createSingleQuery(
-    input?.merchant ?? {
-      data: { id: 'merchant-1' },
-      error: null,
-    }
-  );
-  const customerQuery = createSingleQuery(
-    input?.customer ?? {
-      data: { id: 'customer-1' },
-      error: null,
-    }
-  );
-  const ordersQuery = createOrdersQuery(
-    input?.orders ?? {
-      data: [],
-      error: null,
-    }
-  );
-
-  return {
-    from: vi.fn((table: string) => {
-      if (table === 'merchants') {
-        return merchantQuery;
-      }
-
-      if (table === 'customers') {
-        return customerQuery;
-      }
-
-      if (table === 'orders') {
-        return ordersQuery;
-      }
-
-      throw new Error(`Unexpected table: ${table}`);
-    }),
-  } as unknown as SupabaseClient;
-}
-
-function createAuthenticatedAuthResult(supabase: SupabaseClient): AuthResult {
-  return {
-    user: { id: 'user-1' } as User,
-    error: null,
-    supabase,
-  };
-}
+import {
+  createAuthenticatedAuthResult,
+  createSupabaseMock,
+} from './route.test-support';
 
 describe('GET /api/storefront/orders', () => {
   beforeEach(() => {
@@ -322,6 +200,7 @@ describe('GET /api/storefront/orders', () => {
           virtual_account: null,
           balance: 0,
           current_document_kind: 'receipt',
+          invoice_type_code: '380',
           receipt_eligible: true,
           items: [
             {
@@ -342,136 +221,6 @@ describe('GET /api/storefront/orders', () => {
         },
       ],
     });
-  });
-
-  it('treats imported paid orders as receipt-ready even when shipping is still processing', async () => {
-    vi.mocked(authenticateApiRequest).mockResolvedValue(
-      createAuthenticatedAuthResult(
-        createSupabaseMock({
-          orders: {
-            data: [
-              {
-                id: 'order-imported',
-                order_number: 'ORD-2001',
-                created_at: '2026-03-22T10:00:00.000Z',
-                total: 150000,
-                subtotal: 140000,
-                shipping_fee: 5000,
-                tax_amount: 10000,
-                discount_amount: 0,
-                amount_paid: 150000,
-                currency: 'NGN',
-                external_source: 'bumpa',
-                import_job_id: 'job-1',
-                payment_status: 'PAID',
-                shipping_status: 'Processing',
-                shipping_address: { city: 'Lagos' },
-                tracking_number: null,
-                shipping_provider: null,
-                payment_method: 'imported',
-                order_items: [],
-              },
-            ],
-            error: null,
-          },
-        })
-      )
-    );
-
-    const response = await GET(
-      new NextRequest(
-        'http://localhost/api/storefront/orders?merchantSlug=ogabassey'
-      )
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      orders: [
-        expect.objectContaining({
-          id: 'order-imported',
-          shipping_status: 'processing',
-          current_document_kind: 'receipt',
-          receipt_eligible: true,
-        }),
-      ],
-    });
-  });
-
-  it('falls back to joined product images when imported order items have no snapshot image', async () => {
-    vi.mocked(authenticateApiRequest).mockResolvedValue(
-      createAuthenticatedAuthResult(
-        createSupabaseMock({
-          orders: {
-            data: [
-              {
-                id: 'order-imported',
-                order_number: 'ORD-260403-00NN-J',
-                created_at: '2026-04-03T10:00:00.000Z',
-                total: 1283968.38,
-                subtotal: 1283968.38,
-                shipping_fee: 0,
-                tax_amount: 0,
-                discount_amount: 0,
-                amount_paid: 0,
-                currency: 'NGN',
-                external_source: 'bumpa',
-                import_job_id: 'job-1',
-                payment_status: 'UNPAID',
-                shipping_status: 'Processing',
-                shipping_address: null,
-                tracking_number: null,
-                shipping_provider: null,
-                payment_method: 'imported',
-                order_items: [
-                  {
-                    id: 'item-1',
-                    product_id: 'product-1',
-                    image_url: null,
-                    condition: 'used',
-                    variant_name: 'Used',
-                    name: 'Samsung Galaxy S26',
-                    quantity: 1,
-                    price: 1283968.38,
-                    has_assurance: false,
-                    products: {
-                      slug: 'samsung-galaxy-s26',
-                      category: 'smartphones',
-                      images: [
-                        'https://cdn.ogabassey.com/core-assets/products/samsung-galaxy-s25-navy.avif',
-                      ],
-                      categories: [
-                        { name: 'Smartphones', slug: 'smartphones' },
-                      ],
-                    },
-                  },
-                ],
-              },
-            ],
-            error: null,
-          },
-        })
-      )
-    );
-
-    const response = await GET(
-      new NextRequest(
-        'http://localhost/api/storefront/orders?merchantSlug=ogabassey'
-      )
-    );
-
-    expect(response.status).toBe(200);
-    const payload = await response.json();
-    expect(payload.orders[0].items[0]).toEqual(
-      expect.objectContaining({
-        image_url:
-          'https://cdn.ogabassey.com/core-assets/products/samsung-galaxy-s25-navy.avif',
-        condition: 'used',
-        variant_name: 'Used',
-        product_images: [
-          'https://cdn.ogabassey.com/core-assets/products/samsung-galaxy-s25-navy.avif',
-        ],
-      })
-    );
   });
 
   it('returns 500 when the orders query fails', async () => {
@@ -495,6 +244,54 @@ describe('GET /api/storefront/orders', () => {
     expect(response.status).toBe(500);
     await expect(response.json()).resolves.toEqual({
       error: 'Failed to fetch orders',
+    });
+  });
+
+  it('returns 500 when payment accounts cannot be loaded', async () => {
+    vi.mocked(authenticateApiRequest).mockResolvedValue(
+      createAuthenticatedAuthResult(
+        createSupabaseMock({
+          orders: {
+            data: [
+              {
+                id: 'order-1',
+                order_number: 'ORD-1001',
+                created_at: '2026-03-22T10:00:00.000Z',
+                total: 150000,
+                subtotal: 150000,
+                shipping_fee: 0,
+                tax_amount: 0,
+                discount_amount: 0,
+                amount_paid: 0,
+                currency: 'NGN',
+                payment_status: 'UNPAID',
+                shipping_status: 'Pending',
+                shipping_address: null,
+                tracking_number: null,
+                shipping_provider: null,
+                payment_method: 'paystack',
+                order_items: [],
+              },
+            ],
+            error: null,
+          },
+          paymentAccounts: {
+            data: null,
+            error: { message: 'payment account RPC unavailable' },
+          },
+        })
+      )
+    );
+
+    const response = await GET(
+      new NextRequest(
+        'http://localhost/api/storefront/orders?merchantSlug=ogabassey'
+      )
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Failed to fetch payment accounts',
     });
   });
 });

@@ -16,6 +16,10 @@ const { buildStorefrontAndroidIntentFilters } =
   require('./config/android-intent-filters.js') as typeof import('./config/android-intent-filters');
 const { resolveUpdateChannel } =
   require('./config/resolve-update-channel.js') as typeof import('./config/resolve-update-channel');
+const { buildSentryExpoConfiguration } =
+  require('./config/sentry-expo-config') as typeof import('./config/sentry-expo-config');
+const { isSentryConfigurationRequired } =
+  require('./config/sentry-required-environment') as typeof import('./config/sentry-required-environment');
 const {
   DEFAULT_STOREFRONT_TIKTOK_IOS_APP_STORE_ID,
   DEFAULT_STOREFRONT_TIKTOK_IOS_TIKTOK_APP_ID,
@@ -31,7 +35,7 @@ const parsedAndroidVersionCode =
     : Number(rawAndroidVersionCode);
 let androidVersionCode: number | undefined;
 const appVersion = '2.0.1';
-const androidRuntimeVersion = `${appVersion}-android-sdk57`;
+const androidRuntimeVersion = `${appVersion}-android-sdk57-rn0862`;
 const DEFAULT_ANDROID_VERSION_CODE = 741;
 
 // `parsedAndroidVersionCode` is undefined iff `rawAndroidVersionCode` is, so
@@ -121,11 +125,14 @@ const merchantDomain =
   process.env.EXPO_PUBLIC_MERCHANT_DOMAIN?.trim() || 'ogabassey.com';
 const updateChannel = resolveUpdateChannel(process.env);
 
+const isContinuousIntegration =
+  process.env.CI === 'true' || process.env.CI === '1';
 const isRequiredEnv =
-  process.env.CI === 'true' ||
+  isContinuousIntegration ||
   process.env.EAS_BUILD === 'true' ||
   process.env.NODE_ENV === 'production' ||
   process.env.NODE_ENV === 'test';
+const isSentryRequiredEnv = isSentryConfigurationRequired(process.env);
 
 if (!facebookAppId || !facebookClientToken) {
   if (isRequiredEnv) {
@@ -175,6 +182,10 @@ const facebookSdkPlugin: NonNullable<ExpoConfig['plugins']>[number] | null =
         },
       ]
     : null;
+
+const { plugin: sentryPlugin } = buildSentryExpoConfiguration(process.env, {
+  required: isSentryRequiredEnv,
+});
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -240,6 +251,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: createExpoPlugins({
     facebookSdkPlugin,
+    sentryPlugin,
     tiktokBusinessPlugin,
   }),
   web: {

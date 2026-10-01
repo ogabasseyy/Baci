@@ -14,14 +14,14 @@ import {
 import { trackError } from '@/services/analytics';
 import { ensureAndroidNotificationChannels } from '@/services/push-notification-channels';
 import {
-  clearBadge,
-  handleNotificationResponse,
   registerForPushNotifications,
   removePushTokenFromServer,
   savePushTokenToServer,
 } from '@/services/push-notifications';
 import { useAuthStore } from '@/stores/auth-store';
+import { clearLastNotificationResponse } from './clear-last-notification-response';
 import { navigateFromPushScreen } from './navigate-from-push-screen';
+import { processPushNotificationResponse } from './process-push-notification-response';
 
 const log = createLogger('PushNotifications');
 
@@ -81,9 +81,11 @@ export function usePushNotifications(): UsePushNotificationsReturn {
   const isRegistered = Boolean(user?.id && registeredUserId === user.id);
 
   const navigate = useEffectEvent(
-    (screen: string, params?: Record<string, string>) => {
-      navigateFromPushScreen(screen, params);
-    }
+    (
+      screen: string,
+      params?: Record<string, string>,
+      isCurrent?: () => boolean
+    ) => navigateFromPushScreen(screen, params, isCurrent)
   );
 
   const register = async (
@@ -212,8 +214,9 @@ export function usePushNotifications(): UsePushNotificationsReturn {
         Notifications.addNotificationResponseReceivedListener(
           (response: import('expo-notifications').NotificationResponse) => {
             log.info('Notification tapped:', response);
-            handleNotificationResponse(response, navigate);
-            clearBadge();
+            processPushNotificationResponse(response, navigate, () =>
+              clearLastNotificationResponse(Notifications)
+            );
           }
         );
 
@@ -223,7 +226,9 @@ export function usePushNotifications(): UsePushNotificationsReturn {
         ) => {
           if (response && !cancelledRef.current) {
             log.info('App launched from notification:', response);
-            handleNotificationResponse(response, navigate);
+            processPushNotificationResponse(response, navigate, () =>
+              clearLastNotificationResponse(Notifications)
+            );
           }
         }
       );

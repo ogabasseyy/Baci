@@ -1,5 +1,6 @@
 @import "tailwindcss" source(none);
 @import "./storefront-foundation.css";
+@import "./storefront-home-critical.css";
 
 /* stylelint-disable-next-line scss/at-rule-no-unknown -- Tailwind v4 config directive. */
 @config "../../../tailwind.storefront-home.config.mjs";

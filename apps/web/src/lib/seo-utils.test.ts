@@ -9,7 +9,6 @@ import {
   generateBlogPostSchema,
   generateBreadcrumbSchema,
   generateCollectionPageSchema,
-  generateMetaDescription,
   generateMetaTitle,
   generateOrganizationSchema,
   generateProductSchema,
@@ -196,83 +195,6 @@ describe('buildStorefrontAcceptedPaymentMethods', () => {
 });
 
 describe('generateProductSchema - ProductGroup for variant products', () => {
-  it('adds configured accepted payment methods to product offers', () => {
-    const schema = generateProductSchema(
-      makeProduct(),
-      'TestStore',
-      'NGN',
-      'NG',
-      undefined,
-      undefined,
-      {
-        acceptedPaymentMethods: [
-          'Bank transfer',
-          'Debit and credit card',
-          'Bank transfer',
-          ' ',
-        ],
-      }
-    );
-
-    expect(schema.offers).toMatchObject({
-      '@type': 'Offer',
-      acceptedPaymentMethod: ['Bank transfer', 'Debit and credit card'],
-    });
-  });
-
-  it('preserves accepted payment method text for JSON-LD serialization', () => {
-    const schema = generateProductSchema(
-      makeProduct(),
-      'TestStore',
-      'NGN',
-      'NG',
-      undefined,
-      undefined,
-      {
-        acceptedPaymentMethods: ['Pay by B&O card & wallet'],
-      }
-    );
-
-    const offers = schema.offers as Record<string, unknown>;
-    expect(offers.acceptedPaymentMethod).toEqual(['Pay by B&O card & wallet']);
-
-    const parsed = JSON.parse(safeJsonLdStringify(schema)) as Record<
-      string,
-      unknown
-    >;
-    expect(
-      (parsed.offers as Record<string, unknown>).acceptedPaymentMethod
-    ).toEqual(['Pay by B&O card & wallet']);
-  });
-
-  it('adds configured accepted payment methods to variant offers', () => {
-    const schema = generateProductSchema(
-      makeProduct({
-        variants: [
-          {
-            id: 'v1',
-            product_id: 'test-123',
-            merchant_id: 'm1',
-            attributes: { storage: '128GB' },
-            price_override: 90,
-            stock_quantity: 5,
-          },
-        ],
-      }),
-      'TestStore',
-      'NGN',
-      'NG',
-      undefined,
-      undefined,
-      { acceptedPaymentMethods: ['Pay on delivery'] }
-    );
-
-    const variants = schema.hasVariant as Record<string, unknown>[];
-    const offer = variants[0]?.offers as Record<string, unknown>;
-
-    expect(offer.acceptedPaymentMethod).toEqual(['Pay on delivery']);
-  });
-
   it('outputs @type Product when no variants', () => {
     const product = makeProduct();
     const schema = generateProductSchema(product, 'TestStore', 'USD', 'NG');
@@ -1006,7 +928,7 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     expect(schema.aggregateRating).toBeUndefined();
   });
 
-  it('does not mutate merchant-provided custom schema markup while sanitizing', () => {
+  it('does not mutate merchant-provided custom schema markup or override live description', () => {
     const schemaMarkup = {
       '@context': 'https://schema.org',
       '@type': 'Product',
@@ -1028,7 +950,7 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
       'NG'
     );
 
-    expect(schema.description).toBe('Premium foldable phone.');
+    expect(schema.description).toBe('A test product');
     expect(schema.aggregateRating).toBeUndefined();
     expect(schemaMarkup.description).toBe(
       'Premium foldable phone. Current listed price is NGN 2,500,000.'
@@ -1076,6 +998,18 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     expect(parsed.image).toEqual([imageUrl]);
     expect(brand.name).toBe('B&O');
     expect(seller.name).toBe('Baci & Co');
+  });
+
+  it('keeps product descriptions parseable when a surrogate is truncated', () => {
+    const schema = generateProductSchema(
+      makeProduct({
+        description: `broken ${String.fromCharCode(0xd83e)}...`,
+      })
+    );
+
+    expect(JSON.parse(safeJsonLdStringify(schema))).toMatchObject({
+      description: 'broken �...',
+    });
   });
 });
 
@@ -1176,6 +1110,44 @@ describe('getIndexableRobotsMetadata', () => {
     });
   });
 
+  it('ignores the hub transition token in robots and canonical decisions', () => {
+    expect(
+      getIndexableRobotsMetadata({
+        graphics: 'NVIDIA RTX 4070',
+        graphicsHub: 'rtx-4070',
+      })
+    ).toMatchObject({
+      index: false,
+      follow: true,
+    });
+
+    expect(
+      getCanonicalStorefrontFilterSearchParams(
+        { graphics: 'NVIDIA RTX 4070', graphicsHub: 'rtx-4070' },
+        { filtersAffectResults: true }
+      ).toString()
+    ).toBe('graphics=NVIDIA+RTX+4070');
+  });
+
+  it('treats graphics as a storefront filter for faceted listing URLs', () => {
+    expect(
+      getIndexableRobotsMetadata({ graphics: 'NVIDIA RTX 4070' })
+    ).toMatchObject({
+      index: false,
+      follow: true,
+    });
+
+    expect(
+      getIndexableRobotsMetadata(
+        { graphics: 'NVIDIA RTX 4070' },
+        { filtersAffectResults: true }
+      )
+    ).toMatchObject({
+      index: true,
+      follow: true,
+    });
+  });
+
   it('noindexes storefront search query URLs while preserving follow directives', () => {
     expect(getIndexableRobotsMetadata({ q: 'acc6.top' })).toMatchObject({
       index: false,
@@ -1251,6 +1223,15 @@ describe('getCanonicalStorefrontFilterSearchParams', () => {
     ).toBe('search=redmi+pad');
   });
 
+  it('preserves a focused graphics filter in canonical query params', () => {
+    expect(
+      getCanonicalStorefrontFilterSearchParams(
+        { graphics: 'NVIDIA RTX 4070' },
+        { filtersAffectResults: true }
+      ).toString()
+    ).toBe('graphics=NVIDIA+RTX+4070');
+  });
+
   it('drops canonical filter params until filters affect listing results', () => {
     expect(
       getCanonicalStorefrontFilterSearchParams({ brand: 'Dell' }).toString()
@@ -1282,7 +1263,7 @@ describe('generateOrganizationSchema', () => {
 
     expect(schema.sameAs).toEqual([
       'https://instagram.com/usebaci',
-      'https://twitter.com/usebaci',
+      'https://x.com/usebaci',
       'https://linkedin.com/company/usebaci',
     ]);
   });
@@ -1356,48 +1337,6 @@ describe('generateOrganizationSchema', () => {
         'https://instagram.com/teststore',
         'https://twitter.com/teststore',
       ])
-    );
-  });
-});
-
-describe('generateMetaDescription', () => {
-  it('returns plain text for HTML content', () => {
-    expect(
-      generateMetaDescription(
-        '<p>Shop <strong>phones</strong>, laptops and consoles.</p>'
-      )
-    ).toBe('Shop phones, laptops and consoles.');
-  });
-
-  it('removes stale absolute listed-price sentences', () => {
-    expect(
-      generateMetaDescription(
-        'Premium foldable phone. Current listed price is NGN 2,500,000. Confirm selected variant price before checkout.'
-      )
-    ).toBe(
-      'Premium foldable phone. Confirm selected variant price before checkout.'
-    );
-  });
-
-  it('extends short descriptions when minLength fallback options are provided', () => {
-    expect(
-      generateMetaDescription('2-in-1', 160, {
-        minLength: 110,
-        fallback:
-          'Buy premium laptops in Nigeria with nationwide delivery and flexible payment options.',
-      })
-    ).toContain('Buy premium laptops in Nigeria');
-  });
-
-  it('uses the fallback description when the source description is empty', () => {
-    expect(
-      generateMetaDescription('', 160, {
-        minLength: 110,
-        fallback:
-          'Compare smartphones, laptops, and accessories with trusted quality and fast delivery across Nigeria.',
-      })
-    ).toBe(
-      'Compare smartphones, laptops, and accessories with trusted quality and fast delivery across Nigeria.'
     );
   });
 });

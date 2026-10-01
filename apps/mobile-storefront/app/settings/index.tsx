@@ -25,6 +25,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND, SPACING } from '@/constants/Colors';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { useStorefrontInsets } from '@/hooks/use-storefront-insets';
+import { clearQueryCachePreservingObservers } from '@/lib/query-cache-observer-safety';
 import { queryClient } from '@/lib/query-client';
 import { asyncStorage, removeStorageItems } from '@/lib/storage';
 import { type AppearanceMode, useSettingsStore } from '@/stores/settings-store';
@@ -83,7 +84,9 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              queryClient.clear();
+              clearQueryCachePreservingObservers(queryClient, {
+                refetchAccountQueries: true,
+              });
 
               const cacheKeys = getClearableCacheStorageKeys(
                 await asyncStorage.getAllKeys()

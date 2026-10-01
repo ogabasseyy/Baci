@@ -17,7 +17,7 @@ export type ConfirmPaystackWalletDvaTopUpResult =
   | {
       body: { code: 'WALLET_DVA_ORDER_ALIAS_CONFLICT'; error: string };
       kind: 'review';
-      status: 409;
+      status: 200 | 409;
     };
 
 function getCustomerEmail(paystackResponse: Record<string, unknown>) {
@@ -88,18 +88,18 @@ async function fileOrderAliasReview({
   }
 }
 
-async function rereadWalletDvaTransaction({
-  gatewayReference,
+async function readWalletDvaTransaction({
+  transactionId,
   supabase,
 }: {
-  gatewayReference: string;
+  transactionId: string;
   supabase: SupabaseClient;
 }) {
   const { data, error } = await supabase
     .from('transactions')
     .select(AGENTIC_PAYSTACK_DVA_TRANSACTION_SELECT)
-    .eq('gateway_reference', gatewayReference)
-    .maybeSingle();
+    .eq('id', transactionId)
+    .single();
 
   if (error || !data) {
     throw error ?? new Error('Wallet DVA transaction not found after conflict');
@@ -148,6 +148,8 @@ export async function confirmPaystackWalletDvaTopUp({
       supabase,
       verifiedAmount,
     });
+    // Durable review is enough for operators; acknowledge so Paystack stops
+    // redelivering an immutable alias conflict that cannot settle as wallet credit.
     return {
       body: {
         code: 'WALLET_DVA_ORDER_ALIAS_CONFLICT',
@@ -155,7 +157,7 @@ export async function confirmPaystackWalletDvaTopUp({
           'Receiver account is still reserved for an active order payment. Filed for manual reconciliation.',
       },
       kind: 'review',
-      status: 409,
+      status: 200,
     };
   }
 
@@ -170,47 +172,31 @@ export async function confirmPaystackWalletDvaTopUp({
     wallet_payment_account_id: walletAccount.id,
   };
 
-  const { data, error } = await supabase
-    .from('transactions')
-    .insert({
-      amount: verifiedAmount.amount,
-      currency: verifiedAmount.currency ?? 'NGN',
-      description: 'Customer wallet top-up via Paystack DVA',
-      gateway: 'paystack',
-      gateway_reference: gatewayReference,
-      merchant_amount: 0,
-      merchant_id: walletAccount.merchantId,
-      metadata,
-      order_id: null,
-      platform_fee: 0,
-      status: 'pending',
-      transaction_type: 'payment',
-    })
-    .select(AGENTIC_PAYSTACK_DVA_TRANSACTION_SELECT)
-    .single();
+  const { data: transactionId, error: claimError } = await supabase.rpc(
+    'claim_paystack_wallet_dva_transaction',
+    {
+      p_amount: verifiedAmount.amount,
+      p_currency: verifiedAmount.currency ?? 'NGN',
+      p_metadata: metadata,
+      p_merchant_id: walletAccount.merchantId,
+      p_reference: gatewayReference,
+    }
+  );
 
-  if (
-    error &&
-    (error as { code?: string }).code === POSTGRES_UNIQUE_VIOLATION
-  ) {
-    return {
-      kind: 'match',
-      transaction: await rereadWalletDvaTransaction({
-        gatewayReference,
-        supabase,
-      }),
-    };
+  if (claimError || typeof transactionId !== 'string') {
+    throw claimError ?? new Error('Wallet DVA transaction claim failed');
   }
 
-  if (error) {
-    throw error;
-  }
+  const transaction = await readWalletDvaTransaction({
+    transactionId,
+    supabase,
+  });
 
   // No telemetry here: this insert is only the PENDING transaction match. The
   // wallet is actually credited later by `creditWalletTopUp`, which emits
   // `wallet_funding_transfer_credited` on its fresh-credit path.
   return {
     kind: 'match',
-    transaction: normalizeAgenticPaystackDvaTransaction(data),
+    transaction: normalizeAgenticPaystackDvaTransaction(transaction),
   };
 }

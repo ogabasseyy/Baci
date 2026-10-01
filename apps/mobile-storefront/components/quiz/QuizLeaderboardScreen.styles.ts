@@ -1,10 +1,11 @@
 import { StyleSheet } from 'react-native';
-import type { QuizThemeColors } from './QuizScreen.styles';
+import type { QuizThemeColors } from './quiz-theme';
 
 export function createQuizLeaderboardStyles(colors: QuizThemeColors) {
   return StyleSheet.create({
     screen: { backgroundColor: colors.background, flex: 1 },
     content: { gap: 12, padding: 20, paddingBottom: 40 },
+    historyHeader: { gap: 8 },
     intro: { color: colors.textSecondary, fontSize: 14, lineHeight: 20 },
     eventButton: {
       backgroundColor: colors.card,
@@ -14,11 +15,40 @@ export function createQuizLeaderboardStyles(colors: QuizThemeColors) {
       gap: 3,
       padding: 15,
     },
-    eventButtonSelected: { borderColor: colors.primary },
     eventTitle: { color: colors.text, fontSize: 16, fontWeight: '800' },
     eventMeta: { color: colors.textSecondary, fontSize: 12 },
-    board: { gap: 8, marginTop: 8 },
-    boardTitle: { color: colors.text, fontSize: 20, fontWeight: '900' },
+    boardHeader: { gap: 8, paddingBottom: 4 },
+    backButton: { alignSelf: 'flex-start', paddingVertical: 4 },
+    backButtonText: { color: colors.primary, fontSize: 14, fontWeight: '800' },
+    selectedTitle: { color: colors.text, fontSize: 24, fontWeight: '900' },
+    selectedMeta: { color: colors.textSecondary, fontSize: 13 },
+    boardTitle: {
+      color: colors.text,
+      fontSize: 20,
+      fontWeight: '900',
+      marginTop: 8,
+    },
+    participantCount: {
+      color: colors.primary,
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    yourRankCard: {
+      backgroundColor: colors.primaryLowOpacity,
+      borderColor: colors.primary,
+      borderRadius: 12,
+      borderWidth: 1,
+      gap: 2,
+      marginTop: 4,
+      padding: 12,
+    },
+    yourRankLabel: {
+      color: colors.primary,
+      fontSize: 11,
+      fontWeight: '900',
+      letterSpacing: 1,
+    },
+    yourRankValue: { color: colors.text, fontSize: 14, fontWeight: '800' },
     rankRow: {
       alignItems: 'center',
       borderBottomColor: colors.border,
@@ -28,13 +58,35 @@ export function createQuizLeaderboardStyles(colors: QuizThemeColors) {
       minHeight: 48,
       paddingVertical: 8,
     },
+    podiumRow: {
+      backgroundColor: colors.card,
+      borderColor: colors.border,
+      borderRadius: 14,
+      borderWidth: 1,
+      marginVertical: 2,
+      paddingHorizontal: 10,
+    },
+    podiumRank: {
+      backgroundColor: colors.primaryLowOpacity,
+      borderRadius: 8,
+      paddingVertical: 4,
+      textAlign: 'center',
+      width: 42,
+    },
     currentRankRow: {
       backgroundColor: colors.primaryLowOpacity,
       borderRadius: 10,
       paddingHorizontal: 10,
     },
     rank: { color: colors.primary, fontSize: 16, fontWeight: '900', width: 34 },
-    name: { color: colors.text, flex: 1, fontSize: 14, fontWeight: '700' },
+    identity: { flex: 1, gap: 2 },
+    name: { color: colors.text, fontSize: 14, fontWeight: '700' },
+    time: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      fontVariant: ['tabular-nums'],
+      fontWeight: '600',
+    },
     score: { color: colors.textSecondary, fontSize: 13, fontWeight: '700' },
     state: {
       color: colors.textSecondary,

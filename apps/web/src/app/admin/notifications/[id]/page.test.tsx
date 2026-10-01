@@ -74,10 +74,13 @@ const notificationResponse = {
   action_url: null,
   channels: ['in_app'],
   created_at: '2026-03-20T10:00:00.000Z',
-  created_by: 'admin-1',
+  created_by: '00000000-0000-4000-8000-000000000002',
   deliveries: [],
+  delivery_attempts: 0,
+  delivery_last_error: null,
+  delivery_state: 'pending',
   expires_at: null,
-  id: 'notification-1',
+  id: '00000000-0000-4000-8000-000000000001',
   is_system: false,
   message: 'Baci will run maintenance tonight.',
   notification_type: 'info',
@@ -100,6 +103,7 @@ const notificationResponse = {
 describe('NotificationDetailsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
     mockApiDelete.mockResolvedValue({});
     vi.stubGlobal(
       'fetch',
@@ -112,9 +116,10 @@ describe('NotificationDetailsPage', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
-  it('deletes notifications through the CSRF-aware admin API client', async () => {
+  it('cancels pending notifications through the CSRF-aware admin API client', async () => {
     const user = userEvent.setup();
     const params = Promise.resolve({ id: 'notification-1' }) as ResolvedParams;
     params.status = 'fulfilled';
@@ -133,9 +138,11 @@ describe('NotificationDetailsPage', () => {
       })
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /^delete$/i }));
+    await user.click(screen.getByRole('button', { name: /^cancel pending$/i }));
     const dialog = await screen.findByRole('alertdialog');
-    await user.click(within(dialog).getByRole('button', { name: /^delete$/i }));
+    await user.click(
+      within(dialog).getByRole('button', { name: /^cancel notification$/i })
+    );
 
     await waitFor(() => {
       expect(mockApiDelete).toHaveBeenCalledWith(
@@ -170,18 +177,117 @@ describe('NotificationDetailsPage', () => {
       })
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /^delete$/i }));
+    await user.click(screen.getByRole('button', { name: /^cancel pending$/i }));
     const dialog = await screen.findByRole('alertdialog');
-    await user.click(within(dialog).getByRole('button', { name: /^delete$/i }));
+    await user.click(
+      within(dialog).getByRole('button', { name: /^cancel notification$/i })
+    );
 
     await waitFor(() => {
       expect(mockToast).toHaveBeenCalledWith({
-        description: 'Failed to delete notification',
+        description: 'Failed to cancel pending notification',
         title: 'Error',
         variant: 'destructive',
       });
     });
 
     expect(mockRouterPush).not.toHaveBeenCalled();
+  });
+
+  it('does not offer deletion for retained delivery history', async () => {
+    const params = Promise.resolve({ id: 'notification-1' }) as ResolvedParams;
+    params.status = 'fulfilled';
+    params.value = { id: 'notification-1' };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        json: async () => ({
+          ...notificationResponse,
+          delivery_state: 'sent',
+          sent_at: '2026-03-20T10:05:00.000Z',
+        }),
+        ok: true,
+      }) as unknown as typeof fetch
+    );
+
+    render(
+      <Suspense fallback={<div>Loading route</div>}>
+        <NotificationDetailsPage params={params} />
+      </Suspense>
+    );
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Maintenance window',
+      })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /cancel pending/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows a retryable load error instead of a not-found claim after a fetch failure', async () => {
+    const user = userEvent.setup();
+    const params = Promise.resolve({ id: 'notification-1' }) as ResolvedParams;
+    params.status = 'fulfilled';
+    params.value = { id: 'notification-1' };
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValueOnce({
+          json: async () => notificationResponse,
+          ok: true,
+        }) as unknown as typeof fetch
+    );
+
+    render(
+      <Suspense fallback={<div>Loading route</div>}>
+        <NotificationDetailsPage params={params} />
+      </Suspense>
+    );
+
+    expect(
+      await screen.findByText('Notification details could not load.')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Notification Not Found')
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /try again/i }));
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Maintenance window',
+      })
+    ).toBeInTheDocument();
+  });
+
+  it('rejects a malformed successful detail payload instead of rendering it', async () => {
+    const params = Promise.resolve({ id: 'notification-1' }) as ResolvedParams;
+    params.status = 'fulfilled';
+    params.value = { id: 'notification-1' };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        json: async () => ({ id: 'not-a-uuid', stats: {} }),
+        ok: true,
+      }) as unknown as typeof fetch
+    );
+
+    render(
+      <Suspense fallback={<div>Loading route</div>}>
+        <NotificationDetailsPage params={params} />
+      </Suspense>
+    );
+
+    expect(
+      await screen.findByText('Notification details could not load.')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Notification Not Found')
+    ).not.toBeInTheDocument();
   });
 });

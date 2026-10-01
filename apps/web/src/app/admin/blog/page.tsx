@@ -2,11 +2,11 @@ import { redirect } from 'next/navigation';
 import { BlogListClient } from '@/app/admin/blog/blog-list-client';
 import { PLATFORM_BLOG_PAGE_SIZE } from '@/app/admin/blog/blog-pagination';
 import type { PlatformAdminBlogPostSummary } from '@/app/admin/blog/blog-types';
-import { getPlatformAdminAuth } from '@/lib/platform-admin-auth';
+import { getPlatformAdminAuthForPermission } from '@/lib/platform-admin-auth';
 import { createClient } from '@/lib/supabase/server';
 
 export default async function AdminBlogPage() {
-  const auth = await getPlatformAdminAuth();
+  const auth = await getPlatformAdminAuthForPermission('content.manage');
   if (auth.status === 'unauthenticated') {
     redirect('/login?redirect=%2Fadmin');
   }

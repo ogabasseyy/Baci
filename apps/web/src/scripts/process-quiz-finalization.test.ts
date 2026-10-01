@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { runQuizFinalizationCli } from './process-quiz-finalization';
+import {
+  runQuizFinalizationCli,
+  runQuizFinalizationLoop,
+} from './process-quiz-finalization';
 
 const baseEnv = {
   NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon-key',
@@ -35,5 +38,17 @@ describe('process-quiz-finalization', () => {
     await expect(runQuizFinalizationCli({ env: baseEnv, logger,
       runJob: vi.fn().mockRejectedValue(new Error('private database detail')) })).resolves.toBe(1);
     expect(logger.error).toHaveBeenCalledWith('[quiz-finalization] failed');
+  });
+
+  it('runs finalization serially on the one-second deadline cadence', async () => {
+    const runJob = vi.fn().mockResolvedValue({ body: { failed: 0 }, status: 200 });
+    const delay = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('stop'));
+
+    await expect(
+      runQuizFinalizationLoop({ delay, env: baseEnv, logger: { error: vi.fn(), info: vi.fn() }, runJob })
+    ).resolves.toBe(1);
+
+    expect(runJob).toHaveBeenCalledTimes(2);
+    expect(delay).toHaveBeenNthCalledWith(1, 1_000);
   });
 });

@@ -53,6 +53,32 @@ describe('purgeVercelStorefrontPublicationCache', () => {
     ).resolves.toEqual({ ok: false, reason: 'request_failed' });
   });
 
+  it('supports stale-while-revalidate invalidation for ordinary updates', async () => {
+    const invalidateByTag = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      purgeVercelStorefrontPublicationCache(['product:123'], {
+        invalidateByTag,
+        isVercel: true,
+        mode: 'invalidate',
+      })
+    ).resolves.toEqual({ ok: true, reason: 'invalidated' });
+    expect(invalidateByTag).toHaveBeenCalledWith(['product:123']);
+  });
+
+  it('reports an SWR invalidation failure', async () => {
+    const invalidateByTag = vi.fn().mockRejectedValue(new Error('Vercel down'));
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(
+      purgeVercelStorefrontPublicationCache(['product:123'], {
+        invalidateByTag,
+        isVercel: true,
+        mode: 'invalidate',
+      })
+    ).resolves.toEqual({ ok: false, reason: 'request_failed' });
+  });
+
   it('chunks large identity sets within the 16-tag bulk purge bound', async () => {
     const deleteByTag = vi.fn().mockResolvedValue(undefined);
     const tags = Array.from({ length: 17 }, (_, index) => `ps:store-${index}`);

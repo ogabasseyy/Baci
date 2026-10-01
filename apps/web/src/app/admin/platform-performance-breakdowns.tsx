@@ -10,6 +10,7 @@ import {
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatAdminCompactCurrency } from '@/lib/admin-currency';
+import { formatAdminSourceLabel } from '@/lib/admin-source-label';
 import type {
   BusinessTypeBreakdown,
   MerchantActivationStage,
@@ -46,27 +47,6 @@ const ACTIVATION_SKELETON_IDS = [
 
 function formatPercent(value: number): string {
   return `${value.toFixed(value >= 10 ? 0 : 1)}%`;
-}
-
-function formatSourceLabel(source: string): string {
-  const labels: Record<string, string> = {
-    instagram: 'Instagram',
-    mobile_app: 'Mobile App',
-    online_store: 'Online Store',
-    physical: 'Physical Store',
-    storefront: 'Storefront',
-    unknown: 'Unknown',
-    whatsapp: 'WhatsApp',
-  };
-
-  return (
-    labels[source] ??
-    source
-      .split(/[_-]+/)
-      .filter(Boolean)
-      .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-      .join(' ')
-  );
 }
 
 const SIGNUP_SOURCE_LABELS: Record<string, string> = {
@@ -108,7 +88,8 @@ export function PlatformPerformanceBreakdowns({
         <CardHeader>
           <CardTitle>Order Sources</CardTitle>
           <CardDescription>
-            Paid GMV and order mix for the {periodLabel}
+            NGN paid GMV and its matching order mix for the {periodLabel}; other
+            currencies are excluded from this money breakdown
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -129,7 +110,7 @@ export function PlatformPerformanceBreakdowns({
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="font-medium">
-                        {formatSourceLabel(channel.channel)}
+                        {formatAdminSourceLabel(channel.channel)}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {channel.orders} orders,{' '}
@@ -145,7 +126,7 @@ export function PlatformPerformanceBreakdowns({
                     value={Number(channel.shareOfGmv.toFixed(2))}
                   />
                   <p className="text-xs text-muted-foreground">
-                    {formatPercent(channel.shareOfGmv)} of paid GMV
+                    {formatPercent(channel.shareOfGmv)} of NGN paid GMV
                   </p>
                 </div>
               ))}

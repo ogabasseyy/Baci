@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -109,6 +109,42 @@ describe('vercel log drain receiver', () => {
       );
 
       assert.equal(response.status, 401);
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('rotates an oversized active drain before appending new events', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'baci-drain-rotation-'));
+    const logPath = join(directory, 'vercel-drain.jsonl');
+    const rotatedPath = `${logPath}.1`;
+    writeFileSync(logPath, 'x'.repeat(20));
+    writeFileSync(rotatedPath, 'older');
+    const secret = 'secret';
+    const body = Buffer.from('{"level":"error","message":"new"}');
+    const server = createVercelLogDrainServer({
+      logger: silentLogger,
+      logPath,
+      maxLogBytes: 8,
+      maxRotatedLogs: 2,
+      secret,
+    });
+    const port = await listen(server);
+
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${port}/__baci/vercel-log-drain`,
+        {
+          body,
+          headers: { 'x-vercel-signature': sign(body, secret) },
+          method: 'POST',
+        }
+      );
+
+      assert.equal(response.status, 204);
+      assert.match(readFileSync(logPath, 'utf8'), /"message":"new"/);
+      assert.equal(readFileSync(rotatedPath, 'utf8'), 'x'.repeat(20));
+      assert.equal(readFileSync(`${logPath}.2`, 'utf8'), 'older');
     } finally {
       await close(server);
     }

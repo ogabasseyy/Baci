@@ -78,6 +78,30 @@ describe('resolveStorefrontReadResult', () => {
     });
   });
 
+  it.each([
+    521, 522,
+  ])('classifies Cloudflare origin failure HTTP %s as retryable transport', (status) => {
+    const result = resolveStorefrontReadResult({
+      operation: 'pdp_core_snapshot',
+      response: {
+        data: null,
+        error: { message: `upstream returned ${status}` },
+        status,
+      },
+      parse: () => null,
+    });
+
+    expect(result).toEqual({
+      status: 'unavailable',
+      error: expect.objectContaining({
+        httpStatus: status,
+        kind: 'transport',
+        operation: 'pdp_core_snapshot',
+        retryable: true,
+      }),
+    });
+  });
+
   it('classifies PostgREST connection codes (PGRST000-002) as retryable transport, before the stable-code branch', () => {
     const result = resolveStorefrontReadResult({
       operation: 'merchant_snapshot',

@@ -35,7 +35,7 @@ function normalizeTwitterProfileUrl(input: string): string | undefined {
 
     const pathSegments = url.pathname.split('/').filter(Boolean);
     if (pathSegments.length === 0) {
-      return `https://twitter.com${url.search}${url.hash}`;
+      return `https://x.com${url.search}${url.hash}`;
     }
 
     if (pathSegments.length !== 1) {
@@ -47,7 +47,7 @@ function normalizeTwitterProfileUrl(input: string): string | undefined {
       return undefined;
     }
 
-    return `https://twitter.com/${handle}`;
+    return `https://x.com/${handle}`;
   } catch {
     return undefined;
   }
@@ -83,7 +83,7 @@ export function normalizeSocialUrl(
     case 'tiktok':
       return `https://www.tiktok.com/@${handle}`;
     case 'twitter':
-      return `https://twitter.com/${handle}`;
+      return `https://x.com/${handle}`;
     case 'snapchat':
       return `https://www.snapchat.com/@${handle}`;
     case 'youtube':

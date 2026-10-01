@@ -163,8 +163,20 @@ describe('CI workflow quiz asset coverage', () => {
   it('deploys migration-applier dependencies', () => {
     const deployMigrationsFilter = getDeployMigrationsFilter();
 
+    expect(deployFilters).toContain(
+      "- '.github/actions/postdeploy-migrations/**'"
+    );
     expect(deployMigrationsFilter).toContain(
       "- '.github/scripts/apply-pending-migrations.sh'"
+    );
+    expect(deployMigrationsFilter).toContain(
+      "- '.github/scripts/apply-pending-migration.sh'"
+    );
+    expect(ciFilters).toContain(
+      "- '.github/scripts/apply-pending-migration.sh'"
+    );
+    expect(ciFilters).toContain(
+      "- '.github/actions/postdeploy-migrations/**'"
     );
     expect(deployMigrationsFilter).toContain(
       "- '.github/scripts/build-historical-repair-payload.sh'"

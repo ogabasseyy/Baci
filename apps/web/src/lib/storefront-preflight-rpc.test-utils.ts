@@ -22,11 +22,13 @@ export function callRpc(
   fn: string,
   args: Record<string, string>,
   rpcImpl: StorefrontPreflightRpcImpl,
-  contextOverrides: Partial<StorefrontPreflightRpcContext> = {}
+  contextOverrides: Partial<StorefrontPreflightRpcContext> = {},
+  transportOptions: { emptyResult?: 'unknown' } = {}
 ) {
   return callStorefrontPreflightRpc(fn, args, {
     failOpenContext: context(contextOverrides),
     rpcImpl,
+    ...transportOptions,
   });
 }
 

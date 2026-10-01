@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 
 export function calculateQuizServerClockOffset(
   serverNow: string,
@@ -12,25 +12,25 @@ export function useQuizServerClock(
   serverNow: string | null,
   observedAtMs?: number
 ): { offsetMs: number; serverNowMs: number } {
-  const initialObservedAtRef = useRef(observedAtMs ?? Date.now());
-  const effectiveObservedAt = observedAtMs ?? initialObservedAtRef.current;
-  const key = `${serverNow ?? 'none'}:${effectiveObservedAt}`;
-  const [snapshot, setSnapshot] = useState(() => ({
+  const initialObservedAt = observedAtMs ?? Date.now();
+  const key = `${serverNow ?? 'none'}:${observedAtMs ?? 'received'}`;
+  const snapshotRef = useRef({
     key,
     offsetMs: serverNow
-      ? calculateQuizServerClockOffset(serverNow, effectiveObservedAt)
+      ? calculateQuizServerClockOffset(serverNow, initialObservedAt)
       : 0,
-  }));
-  if (snapshot.key !== key) {
-    setSnapshot({
+  });
+  if (snapshotRef.current.key !== key) {
+    const receivedAt = observedAtMs ?? Date.now();
+    snapshotRef.current = {
       key,
       offsetMs: serverNow
-        ? calculateQuizServerClockOffset(serverNow, effectiveObservedAt)
+        ? calculateQuizServerClockOffset(serverNow, receivedAt)
         : 0,
-    });
+    };
   }
   return {
-    offsetMs: snapshot.offsetMs,
-    serverNowMs: Date.now() + snapshot.offsetMs,
+    offsetMs: snapshotRef.current.offsetMs,
+    serverNowMs: Date.now() + snapshotRef.current.offsetMs,
   };
 }

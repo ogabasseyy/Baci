@@ -45,7 +45,7 @@ describe('buildBlogOrganizationSchema', () => {
     expect(schema.sameAs).toEqual([
       'https://facebook.com/ogabassey',
       'https://instagram.com/ogabassey',
-      'https://twitter.com/ogabassey',
+      'https://x.com/ogabassey',
     ]);
   });
 
@@ -69,6 +69,20 @@ describe('buildBlogOrganizationSchema', () => {
       'https://www.tiktok.com/@socialstore',
       'https://www.snapchat.com/@socialstore',
     ]);
+  });
+
+  it('preserves the official X profile URL in organization sameAs', () => {
+    const schema = buildBlogOrganizationSchema(
+      {
+        business_name: 'Ogabassey',
+        social_media: {
+          twitter: 'https://x.com/ogabasseyy',
+        },
+      },
+      'https://ogabassey.com'
+    );
+
+    expect(schema.sameAs).toEqual(['https://x.com/ogabasseyy']);
   });
 
   it('omits logo and sameAs when the merchant has neither', () => {

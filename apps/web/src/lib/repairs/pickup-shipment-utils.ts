@@ -1,5 +1,6 @@
-import { deriveMerchantLocation } from '@/lib/shipping/order-shipment-booking-utils';
 import type { ShipmentItem, ShippingAddress } from '@/lib/shipping/types';
+import { REPAIR_PICKUP_DECLARED_VALUE } from './repair-pickup-constants';
+import { resolveRepairPickupLocation } from './resolve-repair-pickup-location';
 
 /**
  * Minimal repair fields needed to build a courier pickup shipment
@@ -18,13 +19,17 @@ export interface RepairPickupSource {
 /** Why a courier pickup could not be booked automatically. */
 export type PickupFailureReason =
   | 'not_found'
+  | 'lookup_failed'
+  | 'payment_required'
   | 'terminal_status'
   | 'already_booked'
   | 'booking_in_progress'
   | 'missing_pickup_address'
   | 'repair_center_unconfigured'
-  | 'topship_unavailable'
+  | 'gigl_unavailable'
+  | 'quote_increased'
   | 'booking_failed'
+  | 'provider_rejected'
   | 'shipment_save_failed';
 
 export interface BookRepairPickupSuccess {
@@ -55,6 +60,15 @@ const FAILURE_COPY: Record<
     message: 'Repair booking not found.',
     canRetryManually: false,
   },
+  lookup_failed: {
+    message:
+      'Could not load this repair booking right now. Payment is safe — please retry shortly.',
+    canRetryManually: false,
+  },
+  payment_required: {
+    message: 'The customer must pay the pickup fee before courier booking.',
+    canRetryManually: false,
+  },
   terminal_status: {
     message:
       'This repair is completed, cancelled, or rejected — a courier pickup cannot be arranged.',
@@ -79,14 +93,24 @@ const FAILURE_COPY: Record<
       'Add your repair-center pickup address in settings before arranging courier pickup.',
     canRetryManually: true,
   },
-  topship_unavailable: {
+  gigl_unavailable: {
     message:
-      "Courier pickup isn't available for this address right now (Topship covers Lagos & Abuja). You can mark pickup arranged manually.",
+      "GIG Logistics pickup isn't available for this address right now. Ask the customer to drop the device at a GIGL service centre or arrange pickup manually.",
+    canRetryManually: true,
+  },
+  quote_increased: {
+    message:
+      'The current GIG Logistics pickup rate is higher than the amount paid. Please review the new rate before booking.',
     canRetryManually: true,
   },
   booking_failed: {
     message:
-      'The courier booking failed (check your Topship wallet balance). You can mark pickup arranged manually.',
+      'GIG Logistics could not confirm the pickup. Check the GIGL account balance and booking details, or arrange pickup manually.',
+    canRetryManually: true,
+  },
+  provider_rejected: {
+    message:
+      'GIG Logistics rejected this pickup request. Review the booking details or arrange pickup manually.',
     canRetryManually: true,
   },
   shipment_save_failed: {
@@ -110,7 +134,7 @@ export function pickupFailure(
 
 /**
  * Builds the shipment sender from the customer's pickup address (free-text),
- * deriving city/state with the shared address parser. Returns null when the
+ * deriving city/state with the Nigerian repair-location resolver. Returns null when the
  * booking has no pickup address to collect from.
  */
 export function buildPickupSender(
@@ -121,7 +145,7 @@ export function buildPickupSender(
     return null;
   }
 
-  const location = deriveMerchantLocation(pickupAddress);
+  const location = resolveRepairPickupLocation(pickupAddress);
   return {
     name: repair.customer_name?.trim() || 'Customer',
     phone: repair.customer_phone?.trim() || '',
@@ -138,17 +162,14 @@ export function buildPickupItems(repair: RepairPickupSource): ShipmentItem[] {
   const label =
     `${repair.device_type ?? ''} ${repair.device_model ?? ''}`.trim();
   const name = label || 'Device for repair';
-  const declaredValue = Number(repair.quoted_price);
   return [
     {
       name,
       description: name,
       quantity: 1,
       weight: 1,
-      value:
-        Number.isFinite(declaredValue) && declaredValue > 0
-          ? declaredValue
-          : 50_000,
+      // Ignore catalog quoted_price so estimate → pay → book stay rate-aligned.
+      value: REPAIR_PICKUP_DECLARED_VALUE,
     },
   ];
 }

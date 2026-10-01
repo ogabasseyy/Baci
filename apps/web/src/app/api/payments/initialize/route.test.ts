@@ -3,6 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---- Mocks ----
 
+const routeMocks = vi.hoisted(() => ({
+  authenticateApiRequest: vi.fn(),
+  getRedvaultPaymentAvailability: vi.fn(),
+}));
+
 vi.mock('@/env', () => ({
   getSupabaseUrl: () => 'https://test.supabase.co',
   getSupabaseAnonKey: () => 'test-anon-key',
@@ -12,6 +17,14 @@ vi.mock('@/env', () => ({
 
 vi.mock('nanoid', () => ({
   customAlphabet: () => () => 'ABCD12345678',
+}));
+
+vi.mock('@/lib/api-auth', () => ({
+  authenticateApiRequest: routeMocks.authenticateApiRequest,
+}));
+
+vi.mock('@/lib/checkout/redvault-payment-availability', () => ({
+  getRedvaultPaymentAvailability: routeMocks.getRedvaultPaymentAvailability,
 }));
 
 // Juicyway mocks
@@ -99,8 +112,7 @@ vi.mock('@/lib/agentic/paystack', () => ({
     mockCreateDedicatedVirtualAccount(...args),
 }));
 
-// Logger mock — we need to assert logger.warn is invoked when the
-// `order_payment_accounts` upsert fails (B1 warn-and-continue contract).
+// Logger mocks cover both recoverable warnings and fail-closed DVA persistence.
 const mockLoggerWarn = vi.fn();
 const mockLoggerError = vi.fn();
 const mockLoggerInfo = vi.fn();
@@ -120,6 +132,11 @@ const ORDER_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
 
 let rpcResult: { data: unknown; error: unknown };
 let rpcTransactionResult: { data: unknown; error: unknown };
+let rpcDvaReservationResult: { data: unknown; error: unknown };
+let redvaultAttemptInitializeResult: { data: unknown; error: unknown };
+let redvaultAttemptClaimResults: Array<{ data: unknown; error: unknown }>;
+let redvaultAttemptReserveResults: Array<{ data: unknown; error: unknown }>;
+let rpcTokenProofResult: { data: unknown; error: unknown };
 const rpcCalls: Array<{ args?: unknown; name: string }> = [];
 
 function createMockSupabase() {
@@ -128,8 +145,31 @@ function createMockSupabase() {
       rpcCalls.push({ name, args });
       if (name === 'get_order_payment_snapshot')
         return Promise.resolve(rpcResult);
+      if (name === 'verify_order_tracking_token')
+        return Promise.resolve(rpcTokenProofResult);
+      if (name === 'get_storefront_redvault_paystack_subaccount')
+        return Promise.resolve({
+          data:
+            merchantResult.data && typeof merchantResult.data === 'object'
+              ? (merchantResult.data as { paystack_subaccount_code?: unknown })
+                  .paystack_subaccount_code
+              : null,
+          error: null,
+        });
       if (name === 'create_payment_transaction')
         return Promise.resolve(rpcTransactionResult);
+      if (name === 'reserve_paystack_order_payment_account')
+        return Promise.resolve(rpcDvaReservationResult);
+      if (name === 'reserve_storefront_redvault_payment_attempt_v3')
+        return Promise.resolve(redvaultAttemptReserveResults.shift());
+      if (
+        name === 'claim_storefront_redvault_payment_attempt_initialization_v3'
+      )
+        return Promise.resolve(redvaultAttemptClaimResults.shift());
+      if (
+        name === 'record_storefront_redvault_payment_attempt_initialization_v2'
+      )
+        return Promise.resolve(redvaultAttemptInitializeResult);
       return Promise.resolve({ data: null, error: null });
     }),
   };
@@ -138,16 +178,8 @@ function createMockSupabase() {
 let merchantResult: { data: unknown; error: unknown };
 let featureSettingsResult: { data: unknown; error: unknown };
 let orderPaymentResult: { data: unknown; error: unknown };
+let orderTokenResult: { data: unknown; error: unknown };
 let savingsRedemptionsResult: { data: unknown; error: unknown };
-let dvaUpsertResult: { data: unknown; error: unknown };
-
-// B1 (Δ-10): the route persists the DVA assignment via upsert.
-// Capture every upsert payload + onConflict so tests can assert the
-// contract; reset via setupDefaults() before each test.
-const dvaUpsertCalls: Array<{
-  payload: Record<string, unknown>;
-  options: Record<string, unknown> | undefined;
-}> = [];
 
 function createMockAdminClient() {
   return {
@@ -177,6 +209,7 @@ function createMockAdminClient() {
               eq: () => ({
                 single: () => Promise.resolve(orderPaymentResult),
               }),
+              single: () => Promise.resolve(orderTokenResult),
             }),
           }),
         };
@@ -188,19 +221,6 @@ function createMockAdminClient() {
               eq: () => Promise.resolve(savingsRedemptionsResult),
             }),
           }),
-        };
-      }
-      // B1 (Δ-10): DVA initialize upserts the assignment so the webhook
-      // can match it later. Capture the call for contract assertions.
-      if (table === 'order_payment_accounts') {
-        return {
-          upsert: (
-            payload: Record<string, unknown>,
-            options?: Record<string, unknown>
-          ) => {
-            dvaUpsertCalls.push({ payload, options });
-            return Promise.resolve(dvaUpsertResult);
-          },
         };
       }
       return {
@@ -219,6 +239,13 @@ function createMockAdminClient() {
 // and table queries (merchants, feature_settings) can be controlled independently.
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
+    ...createMockSupabase(),
+    ...createMockAdminClient(),
+  }),
+}));
+
+vi.mock('@/lib/supabase/server', () => ({
+  createClient: () => ({
     ...createMockSupabase(),
     ...createMockAdminClient(),
   }),
@@ -271,6 +298,11 @@ function setupDefaults() {
     error: null,
   };
   rpcTransactionResult = { data: null, error: null };
+  rpcDvaReservationResult = { data: 'inserted', error: null };
+  redvaultAttemptInitializeResult = { data: null, error: null };
+  redvaultAttemptClaimResults = [];
+  redvaultAttemptReserveResults = [];
+  rpcTokenProofResult = { data: true, error: null };
   merchantResult = {
     data: {
       id: MERCHANT_ID,
@@ -282,9 +314,16 @@ function setupDefaults() {
   };
   featureSettingsResult = { data: null, error: null };
   orderPaymentResult = { data: { wallet_amount_used: 0 }, error: null };
+  orderTokenResult = {
+    data: { tracking_token: 'track-token-123' },
+    error: null,
+  };
   savingsRedemptionsResult = { data: [], error: null };
-  dvaUpsertResult = { data: null, error: null };
-  dvaUpsertCalls.length = 0;
+  routeMocks.authenticateApiRequest.mockResolvedValue({ user: null });
+  routeMocks.getRedvaultPaymentAvailability.mockReturnValue({
+    available: false,
+    reason: 'provider_evidence_unavailable',
+  });
   rpcCalls.length = 0;
 }
 
@@ -334,6 +373,361 @@ describe('POST /api/payments/initialize', () => {
       const json = await res.json();
       expect(res.status).toBe(400);
       expect(json.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('rejects a requested REDVAULT checkout before any provider or order lookup while provider evidence is unavailable', async () => {
+      const res = await POST(
+        makeRequest({ ...validBody, payment_method: 'uba_redvault' })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(409);
+      expect(json.code).toBe('REDVAULT_UNAVAILABLE');
+      expect(mockInitializePaystack).not.toHaveBeenCalled();
+      expect(rpcCalls).toEqual([]);
+    });
+
+    it('rejects an alternate gateway instead of silently switching a REDVAULT request to Paystack', async () => {
+      const res = await POST(
+        makeRequest({
+          ...validBody,
+          gateway: 'korapay',
+          payment_method: 'uba_redvault',
+        })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('REDVAULT_GATEWAY_UNSUPPORTED');
+      expect(mockInitializeKorapay).not.toHaveBeenCalled();
+      expect(mockInitializePaystack).not.toHaveBeenCalled();
+    });
+
+    it('rejects DVA payment type for a REDVAULT request', async () => {
+      const res = await POST(
+        makeRequest({
+          ...validBody,
+          payment_method: 'uba_redvault',
+          payment_type: 'dva',
+        })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('REDVAULT_PAYMENT_TYPE_UNSUPPORTED');
+      expect(mockCreateDedicatedVirtualAccount).not.toHaveBeenCalled();
+    });
+
+    it('requires the persisted REDVAULT payment method instead of allowing a generic gateway fallback', async () => {
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            payment_method: 'uba_redvault',
+            total: 5000,
+          },
+        ],
+        error: null,
+      };
+
+      const res = await POST(makeRequest(validBody));
+      const json = await res.json();
+
+      expect(res.status).toBe(409);
+      expect(json.code).toBe('REDVAULT_PAYMENT_METHOD_REQUIRED');
+      expect(mockInitializePaystack).not.toHaveBeenCalled();
+    });
+
+    it('does not let a REDVAULT request initialize a non-REDVAULT order', async () => {
+      routeMocks.getRedvaultPaymentAvailability.mockReturnValue({
+        available: true,
+      });
+
+      const res = await POST(
+        makeRequest({ ...validBody, payment_method: 'uba_redvault' })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(409);
+      expect(json.code).toBe('REDVAULT_ORDER_REQUIRED');
+      expect(mockInitializePaystack).not.toHaveBeenCalled();
+    });
+
+    it('initializes from the reserved server attempt and reuses its persisted hosted URL', async () => {
+      routeMocks.getRedvaultPaymentAvailability.mockReturnValue({
+        available: true,
+      });
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            payment_method: 'uba_redvault',
+            total: 5000,
+            tracking_token: 'track-token-123',
+          },
+        ],
+        error: null,
+      };
+      redvaultAttemptReserveResults = [
+        {
+          data: [
+            {
+              amount_kobo: 500000,
+              attempt_id: 'attempt-1',
+              authorization_url: null,
+              bank_code: '033',
+              paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
+              platform_fee_kobo: 10000,
+              reference: 'RV-attempt-1',
+              state: 'created',
+            },
+          ],
+          error: null,
+        },
+        {
+          data: [
+            {
+              amount_kobo: 500000,
+              attempt_id: 'attempt-1',
+              authorization_url: 'https://paystack.test/checkout/1',
+              bank_code: '033',
+              paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
+              platform_fee_kobo: 10000,
+              reference: 'RV-attempt-1',
+              state: 'initialized',
+            },
+          ],
+          error: null,
+        },
+      ];
+      redvaultAttemptClaimResults = [
+        {
+          data: [
+            {
+              amount_kobo: 500000,
+              attempt_id: 'attempt-1',
+              authorization_url: null,
+              bank_code: '033',
+              initialization_claimed: true,
+              paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
+              platform_fee_kobo: 10000,
+              reference: 'RV-attempt-1',
+              state: 'initializing',
+            },
+          ],
+          error: null,
+        },
+      ];
+      redvaultAttemptInitializeResult = {
+        data: [
+          {
+            amount_kobo: 500000,
+            attempt_id: 'attempt-1',
+            authorization_url: 'https://paystack.test/checkout/1',
+            bank_code: '033',
+            paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
+            platform_fee_kobo: 10000,
+            reference: 'RV-attempt-1',
+            state: 'initialized',
+          },
+        ],
+        error: null,
+      };
+      mockInitializePaystack.mockResolvedValue({
+        authorization_url: 'https://paystack.test/checkout/1',
+      });
+      const request = makeRequest({
+        ...validBody,
+        amount: 1,
+        payment_method: 'uba_redvault',
+        tracking_token: 'track-token-123',
+      });
+
+      const first = await POST(request);
+      const second = await POST(
+        makeRequest({
+          ...validBody,
+          payment_method: 'uba_redvault',
+          tracking_token: 'track-token-123',
+        })
+      );
+
+      expect(first.status).toBe(200);
+      expect(await first.json()).toMatchObject({
+        checkout_url: 'https://paystack.test/checkout/1',
+        payment_method: 'uba_redvault',
+        reference: 'RV-attempt-1',
+      });
+      expect(second.status).toBe(200);
+      expect(await second.json()).toMatchObject({
+        checkout_url: 'https://paystack.test/checkout/1',
+        reference: 'RV-attempt-1',
+      });
+      expect(mockInitializePaystack).toHaveBeenCalledTimes(1);
+      expect(mockInitializePaystack).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amount: 500000,
+          channels: ['card'],
+          metadata: expect.objectContaining({
+            custom_filters: {
+              banks: ['033'],
+              card_brands: ['verve', 'visa', 'mastercard'],
+            },
+            merchant_id: MERCHANT_ID,
+            order_id: ORDER_ID,
+          }),
+          reference: 'RV-attempt-1',
+        })
+      );
+      expect(
+        rpcCalls.filter(({ name }) => name === 'create_payment_transaction')
+      ).toHaveLength(0);
+    });
+
+    it('reads the REDVAULT wallet amount from the snapshot when the orders table is RLS-hidden', async () => {
+      routeMocks.getRedvaultPaymentAvailability.mockReturnValue({
+        available: true,
+      });
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            payment_method: 'uba_redvault',
+            total: 5000,
+            tracking_token: 'track-token-123',
+            wallet_amount_used: 0,
+          },
+        ],
+        error: null,
+      };
+      // Guest REDVAULT checkouts run through the scoped storefront client,
+      // which has no grant on public.orders: the direct table read fails.
+      orderPaymentResult = { data: null, error: { message: 'RLS hidden' } };
+      redvaultAttemptReserveResults = [
+        {
+          data: [
+            {
+              amount_kobo: 500000,
+              attempt_id: 'attempt-1',
+              authorization_url: null,
+              bank_code: '033',
+              paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
+              platform_fee_kobo: 10000,
+              reference: 'RV-attempt-1',
+              state: 'created',
+            },
+          ],
+          error: null,
+        },
+        {
+          data: [
+            {
+              amount_kobo: 500000,
+              attempt_id: 'attempt-1',
+              authorization_url: 'https://paystack.test/checkout/1',
+              bank_code: '033',
+              paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
+              platform_fee_kobo: 10000,
+              reference: 'RV-attempt-1',
+              state: 'initialized',
+            },
+          ],
+          error: null,
+        },
+      ];
+      redvaultAttemptClaimResults = [
+        {
+          data: [
+            {
+              amount_kobo: 500000,
+              attempt_id: 'attempt-1',
+              authorization_url: null,
+              bank_code: '033',
+              initialization_claimed: true,
+              paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
+              platform_fee_kobo: 10000,
+              reference: 'RV-attempt-1',
+              state: 'initializing',
+            },
+          ],
+          error: null,
+        },
+      ];
+      redvaultAttemptInitializeResult = {
+        data: [
+          {
+            amount_kobo: 500000,
+            attempt_id: 'attempt-1',
+            authorization_url: 'https://paystack.test/checkout/1',
+            bank_code: '033',
+            paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
+            platform_fee_kobo: 10000,
+            reference: 'RV-attempt-1',
+            state: 'initialized',
+          },
+        ],
+        error: null,
+      };
+      mockInitializePaystack.mockResolvedValue({
+        authorization_url: 'https://paystack.test/checkout/1',
+      });
+
+      const res = await POST(
+        makeRequest({
+          ...validBody,
+          payment_method: 'uba_redvault',
+          tracking_token: 'track-token-123',
+        })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(json).toMatchObject({
+        checkout_url: 'https://paystack.test/checkout/1',
+        payment_method: 'uba_redvault',
+        reference: 'RV-attempt-1',
+      });
+    });
+
+    it.each([
+      { case: 'missing', body: {} },
+      { case: 'mismatched', body: { tracking_token: 'wrong-token' } },
+    ])('rejects a guest REDVAULT initialization with a $case tracking token', async ({
+      body,
+    }) => {
+      routeMocks.getRedvaultPaymentAvailability.mockReturnValue({
+        available: true,
+      });
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            payment_method: 'uba_redvault',
+            total: 5000,
+          },
+        ],
+        error: null,
+      };
+      rpcTokenProofResult = { data: false, error: null };
+
+      const res = await POST(
+        makeRequest({ ...validBody, payment_method: 'uba_redvault', ...body })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(403);
+      expect(json.code).toBe('REDVAULT_TRACKING_TOKEN_INVALID');
+      expect(mockInitializePaystack).not.toHaveBeenCalled();
+      expect(rpcCalls).toContainEqual({
+        name: 'verify_order_tracking_token',
+        args: {
+          p_order_id: ORDER_ID,
+          p_tracking_token:
+            'tracking_token' in body
+              ? (body as { tracking_token: string }).tracking_token
+              : '',
+        },
+      });
     });
 
     it('ignores a client-supplied amount and derives the gateway amount from the order', async () => {
@@ -955,96 +1349,6 @@ describe('POST /api/payments/initialize', () => {
       expect(json.code).toBe('PAYMENT_METHOD_COUNTRY_UNSUPPORTED');
       expect(mockCreateDedicatedVirtualAccount).not.toHaveBeenCalled();
     });
-
-    it('persists the DVA assignment with the expected upsert payload (B1 Δ-10)', async () => {
-      enableDvaForTest();
-
-      const res = await POST(
-        makeRequest({ ...validBody, gateway: 'paystack', payment_type: 'dva' })
-      );
-
-      expect(res.status).toBe(200);
-      expect(dvaUpsertCalls).toHaveLength(1);
-      // Payload contract — these columns are read by
-      // confirmPaystackDvaByOrderAccount + paystackDvaMultiKeyMatch.
-      // created_at is DB-defaulted to now(), not in the upsert body.
-      const { payload, options } = dvaUpsertCalls[0];
-      expect(payload).toMatchObject({
-        order_id: ORDER_ID,
-        account_number: '1234567890',
-        bank_name: 'Wema Bank',
-        account_name: 'Test Store / John Doe',
-        provider: 'paystack',
-        payable_amount: 5000,
-      });
-      // assigned_at is refreshed on retries, and expires_at must be the
-      // current assignment timestamp + 90min.
-      expect(typeof payload.assigned_at).toBe('string');
-      expect(typeof payload.expires_at).toBe('string');
-      const assignedAtMs = Date.parse(payload.assigned_at as string);
-      const expiresAtMs = Date.parse(payload.expires_at as string);
-      expect(Number.isFinite(assignedAtMs)).toBe(true);
-      expect(Number.isFinite(expiresAtMs)).toBe(true);
-      expect(expiresAtMs - assignedAtMs).toBe(90 * 60 * 1000);
-      // Conflict resolution must use the unique constraint
-      // unique_order_account = (order_id, provider).
-      expect(options).toEqual({ onConflict: 'order_id,provider' });
-    });
-
-    it('persists the residual DVA payable amount after wallet and savings credits', async () => {
-      enableDvaForTest();
-      orderPaymentResult = {
-        data: { wallet_amount_used: 1500 },
-        error: null,
-      };
-      savingsRedemptionsResult = {
-        data: [{ amount: 500 }],
-        error: null,
-      };
-
-      const res = await POST(
-        makeRequest({ ...validBody, gateway: 'paystack', payment_type: 'dva' })
-      );
-
-      expect(res.status).toBe(200);
-      expect(dvaUpsertCalls).toHaveLength(1);
-      expect(dvaUpsertCalls[0].payload).toMatchObject({
-        order_id: ORDER_ID,
-        payable_amount: 3000,
-      });
-    });
-
-    it('warns and still returns 200 when the DVA upsert fails (B1 warn-and-continue)', async () => {
-      enableDvaForTest();
-
-      // Simulate a Postgres-side upsert failure (e.g., transient RLS
-      // hiccup). The route must NOT throw — the customer can still pay
-      // and B4 cron/reconciliation will surface the gap.
-      dvaUpsertResult = {
-        data: null,
-        error: { message: 'simulated upsert failure' },
-      };
-
-      const res = await POST(
-        makeRequest({ ...validBody, gateway: 'paystack', payment_type: 'dva' })
-      );
-      const json = await res.json();
-
-      expect(res.status).toBe(200);
-      expect(json.success).toBe(true);
-      expect(json.dva).toBeDefined();
-      // Warn-and-continue: a single warn log mentioning the failure.
-      expect(mockLoggerWarn).toHaveBeenCalled();
-      const warnCalls = mockLoggerWarn.mock.calls.map(
-        (call) => call[0] as Record<string, unknown>
-      );
-      const matched = warnCalls.find((entry) =>
-        typeof entry?.message === 'string'
-          ? /DVA|order_payment_accounts/i.test(entry.message as string)
-          : false
-      );
-      expect(matched).toBeDefined();
-    });
   });
 
   describe('bnpl gateways', () => {
@@ -1066,6 +1370,22 @@ describe('POST /api/payments/initialize', () => {
         'orderId=a1b2c3d4-e5f6-7890-abcd-ef1234567890'
       );
       expect(json.authorization_url).toContain('trackingToken=track-token-123');
+    });
+
+    it('fails closed when the tracking token lookup errors', async () => {
+      orderTokenResult = {
+        data: null,
+        error: { message: 'connection reset' },
+      };
+
+      const res = await POST(
+        makeRequest({ ...validBody, gateway: 'credit_direct' })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(502);
+      expect(json.code).toBe('GATEWAY_INIT_ERROR');
+      expect(json.authorization_url).toBeUndefined();
     });
 
     it('returns GATEWAY_DISABLED when Klump is not enabled for the merchant', async () => {

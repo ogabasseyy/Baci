@@ -165,4 +165,30 @@ describe('ProductBasicInformationCard', () => {
 
     expect(onOpenCategoryModal).toHaveBeenCalledTimes(1);
   });
+
+  it('labels the parent SKU optional for variant products', () => {
+    render(
+      <ProductBasicInformationCard
+        categories={[]}
+        colors={colors}
+        formData={{
+          brand: 'Xiaomi',
+          category: 'Smartphones',
+          category_id: 'smartphones',
+          color: '',
+          description: 'Phone',
+          name: 'Xiaomi Redmi A7',
+          sku: '',
+        }}
+        hasVariants
+        isEditing
+        onChange={vi.fn()}
+        onOpenCategoryModal={vi.fn()}
+        onOpenProduct={vi.fn()}
+        productNameSuggestions={[]}
+      />
+    );
+
+    expect(screen.getByText('SKU (optional)')).toBeInTheDocument();
+  });
 });

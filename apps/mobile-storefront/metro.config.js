@@ -2,6 +2,7 @@
 const path = require('node:path');
 const { getDefaultConfig } = require('expo/metro-config');
 const { getPostHogExpoConfig } = require('posthog-react-native/metro');
+const { getSentryExpoConfig } = require('@sentry/react-native/metro');
 const shouldEnableWorkletsBundleMode = require('./config/shouldEnableWorkletsBundleMode');
 
 /**
@@ -18,7 +19,16 @@ const shouldEnableWorkletsBundleMode = require('./config/shouldEnableWorkletsBun
 const projectRoot = __dirname;
 const workspaceRoot = path.resolve(projectRoot, '../..');
 
-const config = getPostHogExpoConfig(projectRoot, { getDefaultConfig });
+const config = getPostHogExpoConfig(projectRoot, {
+  getDefaultConfig: (root, options) =>
+    getSentryExpoConfig(root, {
+      ...options,
+      autoWrapExpoRouterErrorBoundary: true,
+      getDefaultConfig,
+      includeWebFeedback: false,
+      includeWebReplay: false,
+    }),
+});
 
 const { resolver } = config;
 

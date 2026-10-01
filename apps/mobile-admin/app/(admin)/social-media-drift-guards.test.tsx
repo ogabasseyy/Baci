@@ -1,6 +1,6 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { socialMediaTestHarness as harness } from './social-media.test-harness';
+import { socialMediaTestHarness as harness } from '../../__tests__/admin/social-media.test-harness';
 
 describe('SocialMediaScreen drift guards', () => {
   beforeEach(() => harness.reset());

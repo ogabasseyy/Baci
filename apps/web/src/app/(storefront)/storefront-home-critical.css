@@ -1,60 +1,15 @@
-@import "tailwindcss" source(none);
-/*
-  Register the store color tokens in the render-blocking critical CSS so
-  above-the-fold store-token surfaces (the product hero cards, utility panel)
-  emit with their literal hex fallbacks and paint correctly on the first frame.
-  Without this, `store-*` colors are only registered in the deferred
-  storefront-home.css, so the critical CSS cannot generate `.bg-store-secondary`
-  et al. and the hero first-paints unstyled with the dark shell showing through.
-*/
-@import "./storefront-theme-tokens.css";
-
-/* stylelint-disable-next-line scss/at-rule-no-unknown -- Tailwind v4 config directive. */
-@config "../../../tailwind.storefront-home.config.mjs";
+@import "./storefront-home-critical-product-card.css";
 
 /*
   OgaBassey homepage critical CSS.
 
-  Keep this layout-owned entrypoint limited to the static PPR shell and the
-  above-fold Hero plus the first viewport-visible product grid structure. The
-  complete homepage utility surface belongs to storefront-home.css, imported by
-  the page shell, so deeper below-fold ads, overlays, and commerce widgets do
-  not sit on the layout render-blocking path.
+  Do not import the Tailwind entrypoint here. That compiled a 30KB+
+  utilities chunk on top of storefront-full.css and pinned Slow-4G LCP above
+  the 2.5s Good bar. The committed LCP node is brand title + description,
+  styled by OGABASSEY_HOME_LCP_CRITICAL_CSS. Streamed Hero/carousel/desktop
+  grid utilities live in deferred storefront-home.css. Featured-product
+  geometry below is handwritten so the PPR shell does not need Tailwind.
 */
-/* stylelint-disable scss/at-rule-no-unknown -- Tailwind v4 source discovery directives. */
-@source "./ogabassey/ogabassey-static-home-page-content.tsx";
-@source "./ogabassey/ogabassey-publication-safe-hero-fallback.tsx";
-@source "../../components/storefront/ogabassey/components/Hero.tsx";
-@source "../../components/storefront/ogabassey/components/hero-mobile-carousel.tsx";
-/* Shared geometry class constants consumed by the publication-safe fallback
-   and request-gated carousel. Classes that exist only here must stay
-   discoverable or built CSS silently drops them. */
-@source "../../components/storefront/ogabassey/components/hero-mobile-geometry.ts";
-@source "../../components/storefront/ogabassey/components/carousel-progress-fill.tsx";
-@source "../../components/storefront/ogabassey/components/carousel-play-toggle.tsx";
-@source "../../components/storefront/ogabassey/components/hero-desktop-grid.tsx";
-@source "../../components/storefront/ogabassey/components/hero-utility-panel.tsx";
-@source "../../components/storefront/ogabassey/components/mobile-lcp-hero-image.tsx";
-@source "../../components/storefront/ogabassey/components/ogabassey-empty-mobile-hero.tsx";
-@source "../../components/storefront/ogabassey/pages/home.tsx";
-/*
-  PSI's mobile trace exposes the homepage strip plus the top edge of Featured
-  Products in the initial viewport. Keep that geometry in semantic selectors
-  below instead of sourcing the full product grid/card Tailwind surface on the
-  render-blocking path. The complete product-card utility surface is deferred
-  through storefront-home.css.
-
-  hero-desktop-grid.tsx is sourced above: Hero.tsx renders it directly in the
-  final streamed above-fold server output (it is no longer client-deferred), so
-  its grid / card utilities must be in this critical entrypoint or desktop users
-  first-paint the launch hero unstyled before the deferred homepage stylesheet
-  loads.
-
-  ogabassey-empty-mobile-hero.tsx is the baked mobile geometry used by the
-  request-gated Hero for a published empty launch feed. Its light card
-  backgrounds must stay critical so that state paints styled when streamed.
-*/
-/* stylelint-enable scss/at-rule-no-unknown */
 
 @layer components {
   .ogabassey-home-products {
@@ -143,173 +98,6 @@
     line-height: 1.75rem;
   }
 
-  .ogabassey-home-product-card {
-    background: var(--ogabassey-surface, var(--store-background, #ffffff));
-    border: 1px solid var(--ogabassey-border, var(--store-border, #f3f4f6));
-    border-radius: 1rem;
-    box-shadow: 0 1px 2px 0
-      color-mix(
-        in srgb,
-        var(--ogabassey-surface-text, var(--store-background-text, #111827)) 5%,
-        transparent
-      );
-    box-sizing: border-box;
-    content-visibility: auto;
-    contain-intrinsic-size: auto 360px;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    padding: 0.75rem;
-    position: relative;
-  }
-
-  .ogabassey-home-product-card__media {
-    align-items: center;
-    aspect-ratio: 1 / 1;
-    background: var(
-      --ogabassey-surface-muted,
-      color-mix(
-        in srgb,
-        var(--ogabassey-surface-text, var(--store-background-text, #111827)) 4%,
-        var(--ogabassey-surface, var(--store-background, #ffffff))
-      )
-    );
-    border-radius: 1rem;
-    display: flex;
-    justify-content: center;
-    margin-bottom: 0.75rem;
-    overflow: hidden;
-    pointer-events: none;
-    position: relative;
-    z-index: 10;
-  }
-
-  .ogabassey-home-product-card__condition {
-    background: var(--store-primary, #111827);
-    border-radius: 9999px;
-    color: var(--store-primary-text, var(--store-on-primary, #ffffff));
-    font-size: 9px;
-    font-weight: 700;
-    left: 0.75rem;
-    letter-spacing: 0.025em;
-    line-height: 1;
-    padding: 0.25rem 0.625rem;
-    position: absolute;
-    text-transform: uppercase;
-    top: 0.75rem;
-    white-space: nowrap;
-    z-index: 10;
-  }
-
-  .ogabassey-home-product-card__condition--new {
-    background: var(--ogabassey-condition-new-background, #111827);
-  }
-
-  .ogabassey-home-product-card__condition--open-box {
-    background: var(--ogabassey-condition-open-box-background, #4f46e5);
-  }
-
-  .ogabassey-home-product-card__condition--new-used {
-    background: var(--ogabassey-condition-new-used-background, #9333ea);
-  }
-
-  .ogabassey-home-product-card__condition--default {
-    background: var(--ogabassey-condition-default-background, #78716c);
-  }
-
-  .ogabassey-home-product-card__image {
-    object-fit: contain;
-    padding: 1rem;
-  }
-
-  .ogabassey-home-product-card__placeholder {
-    background: color-mix(
-      in srgb,
-      var(--ogabassey-surface-text, var(--store-background-text, #111827)) 14%,
-      var(--ogabassey-surface, var(--store-background, #ffffff))
-    );
-    border-radius: 0.5rem;
-    height: 66.666667%;
-    width: 66.666667%;
-  }
-
-  .ogabassey-home-product-card__body {
-    display: flex;
-    flex: 1 1 0%;
-    flex-direction: column;
-    padding-left: 0.25rem;
-    padding-right: 0.25rem;
-    padding-top: 0.25rem;
-    pointer-events: none;
-  }
-
-  .ogabassey-home-product-card__title {
-    color: var(--ogabassey-surface-text, var(--store-background-text, #111827));
-    display: -webkit-box;
-    font-size: 1rem;
-    font-weight: 700;
-    -webkit-line-clamp: 2;
-    line-height: 1.25;
-    margin-bottom: 0.25rem;
-    overflow: hidden;
-    -webkit-box-orient: vertical;
-  }
-
-  .ogabassey-home-product-card__spec {
-    align-items: center;
-    background: var(
-      --ogabassey-surface-muted,
-      color-mix(
-        in srgb,
-        var(--ogabassey-surface-text, var(--store-background-text, #111827)) 4%,
-        var(--ogabassey-surface, var(--store-background, #ffffff))
-      )
-    );
-    border: 1px solid var(--ogabassey-border, var(--store-border, #e5e7eb));
-    border-radius: 0.25rem;
-    color: var(
-      --ogabassey-surface-text-muted,
-      color-mix(
-        in srgb,
-        var(--ogabassey-surface-text, var(--store-background-text, #111827)) 64%,
-        transparent
-      )
-    );
-    display: inline-flex;
-    font-size: 10px;
-    font-weight: 500;
-    letter-spacing: 0;
-    line-height: 1;
-    margin-left: 0.5rem;
-    padding: 0.125rem 0.375rem;
-    vertical-align: middle;
-  }
-
-  .ogabassey-home-product-card__footer {
-    align-items: flex-end;
-    border-top: 1px dashed var(--ogabassey-border, var(--store-border, #f3f4f6));
-    display: flex;
-    justify-content: space-between;
-    margin-top: auto;
-    padding-top: 0.75rem;
-  }
-
-  .ogabassey-home-product-card__price {
-    color: var(--store-primary, hsl(var(--primary)));
-    font-size: 1.125rem;
-    font-weight: 800;
-    letter-spacing: -0.025em;
-    line-height: 1.75rem;
-  }
-
-  .ogabassey-home-product-card__details {
-    color: var(--ogabassey-surface-text, var(--store-background-text, #111827));
-    font-size: 0.75rem;
-    font-weight: 600;
-    line-height: 1rem;
-    margin-bottom: 0.125rem;
-  }
-
   @media (min-width: 640px) {
     .ogabassey-home-products__view-all {
       display: block;
@@ -343,14 +131,6 @@
     .ogabassey-home-products__grid {
       gap: 1.5rem;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
-    .ogabassey-home-product-card {
-      padding: 1rem;
-    }
-
-    .ogabassey-home-product-card__media {
-      margin-bottom: 1rem;
     }
   }
 

@@ -5,10 +5,7 @@ import {
   cancelAnimation,
   runOnJS,
   useSharedValue,
-  withRepeat,
-  withSequence,
   withSpring,
-  withTiming,
 } from 'react-native-reanimated';
 import { getOptionalGestureHandlerRuntime } from '@/lib/optional-gesture-handler';
 import {
@@ -56,9 +53,6 @@ export function useDraggableFab(
   // Translation values relative to starting styled location
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
-
-  // Pulse animation scale
-  const scale = useSharedValue(1);
 
   // Reanimated boolean latch for haptic boundary transitions
   const hapticTriggered = useSharedValue(false);
@@ -118,31 +112,6 @@ export function useDraggableFab(
     windowWidth,
     windowWidthSV,
   ]);
-
-  // Pulse animation loop
-  useEffect(() => {
-    if (isDragging) {
-      cancelAnimation(scale);
-      scale.set(withTiming(1.1, { duration: 150 }));
-      return;
-    }
-
-    cancelAnimation(scale);
-    scale.set(
-      withRepeat(
-        withSequence(
-          withTiming(1.05, { duration: 1000 }),
-          withTiming(1, { duration: 1000 })
-        ),
-        -1,
-        true
-      )
-    );
-
-    return () => {
-      cancelAnimation(scale);
-    };
-  }, [isDragging, scale]);
 
   const panGesture = usePanGesture({
     minDistance: GESTURE_MIN_DISTANCE,
@@ -271,7 +240,6 @@ export function useDraggableFab(
     composedGesture,
     translateX,
     translateY,
-    scale,
     isDragging,
     isOverDismissZone,
     isOnRight,

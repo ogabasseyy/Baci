@@ -1,261 +1,19 @@
 import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ExpenseDetail } from '@/components/expenses/types';
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  detailExpenseFixture,
+  detailExpenseId,
+  getExpenseDetailMocks,
+  resetExpenseDetailMocks,
+} from '@/test/expenses/expense-detail.test-fixtures';
 
-const expenseFixture = (): ExpenseDetail => ({
-  amount: 12500,
-  branch_id: 'branch-1',
-  category: 'Inventory',
-  date: '2026-05-05T00:00:00.000Z',
-  description: 'Office internet',
-  id: 'expense-1',
-  receipt_url: null,
-  reference: null,
-});
-
-const mocks = vi.hoisted(() => ({
-  alert: vi.fn(),
-  branches: [{ id: 'branch-1', name: 'Lagos main' }],
-  branchesLoading: false,
-  expenseResult: {
-    data: {
-      amount: 12500,
-      branch_id: 'branch-1',
-      category: 'Inventory',
-      date: '2026-05-05T00:00:00.000Z',
-      description: 'Office internet',
-      id: 'expense-1',
-      receipt_url: null,
-      reference: null,
-    },
-    error: null,
-  } as { data: ExpenseDetail | null; error: Error | null },
-  historicalBranchResult: {
-    data: { id: 'branch-1', name: 'Lagos main' },
-    error: null,
-  } as { data: { id: string; name: string } | null; error: Error | null },
-  queryState: null as {
-    data?: unknown;
-    error?: Error | null;
-    isError?: boolean;
-    isLoading: boolean;
-  } | null,
-  branchQueryOptions: null as {
-    enabled?: boolean;
-    queryKey: readonly unknown[];
-  } | null,
-  queryOptions: null as {
-    enabled?: boolean;
-    queryKey: readonly unknown[];
-  } | null,
-  branchScope: { type: 'branch', branchId: 'branch-1' } as
-    | { type: 'all' }
-    | { type: 'branch'; branchId: string },
-  branchEqCalls: [] as unknown[][],
-  branchMaybeSingleCalls: 0,
-  branchSelectCalls: [] as unknown[][],
-  eqCalls: [] as unknown[][],
-  maybeSingleCalls: 0,
-  linking: {
-    canOpenURL: vi.fn(() => Promise.resolve(true)),
-    openURL: vi.fn(() => Promise.resolve()),
-  },
-  selectCalls: [] as unknown[][],
-  singleCalls: 0,
-}));
-
-function makeExpenseQuery() {
-  const chain: Record<string, unknown> = {};
-  chain.select = (...args: unknown[]) => {
-    mocks.selectCalls.push(args);
-    return chain;
-  };
-  chain.eq = (...args: unknown[]) => {
-    mocks.eqCalls.push(args);
-    return chain;
-  };
-  chain.maybeSingle = () => {
-    mocks.maybeSingleCalls += 1;
-    return Promise.resolve(mocks.expenseResult);
-  };
-  chain.single = () => {
-    mocks.singleCalls += 1;
-    return Promise.resolve({
-      data: null,
-      error: new Error('JSON object requested, multiple (or no) rows returned'),
-    });
-  };
-  return chain;
-}
-
-function makeHistoricalBranchQuery() {
-  const chain: Record<string, unknown> = {};
-  chain.select = (...args: unknown[]) => {
-    mocks.branchSelectCalls.push(args);
-    return chain;
-  };
-  chain.eq = (...args: unknown[]) => {
-    mocks.branchEqCalls.push(args);
-    return chain;
-  };
-  chain.maybeSingle = () => {
-    mocks.branchMaybeSingleCalls += 1;
-    return Promise.resolve(mocks.historicalBranchResult);
-  };
-  return chain;
-}
-
-vi.mock('@tanstack/react-query', () => ({
-  useQuery: ({
-    enabled,
-    queryFn,
-    queryKey,
-  }: {
-    enabled?: boolean;
-    queryFn: () => Promise<unknown>;
-    queryKey: readonly unknown[];
-  }) => {
-    if (queryKey[0] === 'expense-branch') {
-      mocks.branchQueryOptions = { enabled, queryKey };
-      if (enabled) {
-        void queryFn();
-      }
-      return {
-        data: enabled ? mocks.historicalBranchResult.data : undefined,
-        isLoading: false,
-      };
-    }
-
-    mocks.queryOptions = { enabled, queryKey };
-    if (mocks.queryState) {
-      return mocks.queryState;
-    }
-
-    void queryFn();
-    return {
-      data: mocks.expenseResult.data,
-      isLoading: false,
-    };
-  },
-}));
-
-vi.mock('@/lib/supabase', () => ({
-  supabase: {
-    from: (table: string) =>
-      table === 'branches' ? makeHistoricalBranchQuery() : makeExpenseQuery(),
-  },
-}));
-
-vi.mock('@/hooks/useBranches', () => ({
-  useBranches: () => ({
-    data: mocks.branches,
-    isLoading: mocks.branchesLoading,
-  }),
-}));
-
-vi.mock('@/hooks/useBranchScope', () => ({
-  useBranchScope: () => ({ scope: mocks.branchScope }),
-}));
-
-vi.mock('@/hooks/useMerchant', () => ({
-  useMerchant: () => ({
-    merchant: { id: 'merchant-1', payout_currency: 'NGN' },
-  }),
-}));
-
-vi.mock('@/hooks/useTheme', () => ({
-  useTheme: () => ({
-    colors: {
-      background: '#020617',
-      border: '#334155',
-      card: '#111827',
-      primary: '#3b82f6',
-      text: '#f8fafc',
-      textSecondary: '#cbd5e1',
-    },
-    isDark: true,
-    shadows: { sm: {} },
-  }),
-}));
-
-vi.mock('expo-router', () => ({
-  Stack: { Screen: () => null },
-  useLocalSearchParams: () => ({ id: 'expense-1' }),
-}));
-
-vi.mock('@react-native-vector-icons/ionicons', async () => {
-  const { Text } = await import('react-native');
-
-  return {
-    Ionicons: () => <Text>icon</Text>,
-
-    default: () => <Text>icon</Text>,
-    __esModule: true,
-  };
-});
-
-vi.mock('react-native-safe-area-context', () => ({
-  SafeAreaView: ({ children }: { children?: ReactNode }) => (
-    <div>{children}</div>
-  ),
-}));
-
-vi.mock('react-native', () => ({
-  StatusBar: () => null,
-  Alert: { alert: mocks.alert },
-  Linking: mocks.linking,
-  Pressable: ({
-    accessibilityLabel,
-    children,
-    onPress,
-  }: {
-    accessibilityLabel?: string;
-    children?: ReactNode;
-    onPress?: () => void;
-  }) => (
-    <button aria-label={accessibilityLabel} onClick={onPress} type="button">
-      {children}
-    </button>
-  ),
-  ScrollView: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  StyleSheet: {
-    create: (styles: Record<string, unknown>) => styles,
-    hairlineWidth: 1,
-  },
-  Text: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
-  View: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-}));
-
-import ExpenseDetailScreen from './[id]';
+const { default: ExpenseDetailScreen } = await import('./[id]');
+const mocks = getExpenseDetailMocks();
 
 describe('ExpenseDetailScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.branches = [{ id: 'branch-1', name: 'Lagos main' }];
-    mocks.branchesLoading = false;
-    mocks.expenseResult = {
-      data: expenseFixture(),
-      error: null,
-    };
-    mocks.linking.canOpenURL.mockResolvedValue(true);
-    mocks.linking.openURL.mockResolvedValue(undefined);
-    mocks.queryState = null;
-    mocks.branchQueryOptions = null;
-    mocks.queryOptions = null;
-    mocks.branchScope = { type: 'branch', branchId: 'branch-1' };
-    mocks.branchEqCalls.length = 0;
-    mocks.branchMaybeSingleCalls = 0;
-    mocks.branchSelectCalls.length = 0;
-    mocks.eqCalls.length = 0;
-    mocks.historicalBranchResult = {
-      data: { id: 'branch-1', name: 'Lagos main' },
-      error: null,
-    };
-    mocks.maybeSingleCalls = 0;
-    mocks.selectCalls.length = 0;
-    mocks.singleCalls = 0;
+    resetExpenseDetailMocks();
   });
 
   it('selects and displays the expense branch', () => {
@@ -274,7 +32,7 @@ describe('ExpenseDetailScreen', () => {
       'expense',
       'merchant-1',
       'branch-1',
-      'expense-1',
+      detailExpenseId,
     ]);
     expect(mocks.queryOptions?.enabled).toBe(true);
     expect(mocks.eqCalls).toContainEqual(['branch_id', 'branch-1']);
@@ -287,57 +45,59 @@ describe('ExpenseDetailScreen', () => {
     expect(mocks.singleCalls).toBe(0);
   });
 
-  it('shows the loading state while the expense is loading', () => {
-    mocks.queryState = { data: undefined, isLoading: true };
+  it.each([
+    [
+      'loading',
+      { data: undefined, isLoading: true },
+      'Loading expense details...',
+    ],
+    ['missing', { data: null, isLoading: false }, 'Expense not found.'],
+    [
+      'error',
+      {
+        data: undefined,
+        error: new Error('Database error'),
+        isError: true,
+        isLoading: false,
+      },
+      'Could not load expense.',
+    ],
+  ])('shows the %s state from the expense query', (_state, queryState, message) => {
+    mocks.queryState = queryState;
 
     render(<ExpenseDetailScreen />);
 
-    expect(screen.getByText('Loading expense details...')).toBeInTheDocument();
+    expect(screen.getByText(message)).toBeInTheDocument();
   });
 
-  it('shows a missing state when no expense is returned', () => {
-    mocks.queryState = { data: null, isLoading: false };
-
-    render(<ExpenseDetailScreen />);
-
-    expect(screen.getByText('Expense not found.')).toBeInTheDocument();
-  });
-
-  it('shows an error state when the expense cannot be loaded', () => {
-    mocks.queryState = {
-      data: undefined,
-      error: new Error('Database error'),
-      isError: true,
-      isLoading: false,
-    };
-
-    render(<ExpenseDetailScreen />);
-
-    expect(screen.getByText('Could not load expense.')).toBeInTheDocument();
-    expect(screen.getByText('Database error')).toBeInTheDocument();
-  });
-
-  it('labels expenses without a branch as unassigned', () => {
-    mocks.expenseResult.data = {
-      ...expenseFixture(),
-      branch_id: null,
-    };
-
-    render(<ExpenseDetailScreen />);
-
+  it('resolves unavailable and historical branch labels', () => {
+    mocks.expenseResult.data = { ...detailExpenseFixture(), branch_id: null };
+    const { rerender } = render(<ExpenseDetailScreen />);
     expect(screen.getByText('Unassigned')).toBeInTheDocument();
-  });
 
-  it('shows branch loading text while branch metadata is loading', () => {
+    mocks.expenseResult.data = detailExpenseFixture();
     mocks.branches = [];
     mocks.branchesLoading = true;
-
-    render(<ExpenseDetailScreen />);
-
+    rerender(<ExpenseDetailScreen />);
     expect(screen.getByText('Loading branch...')).toBeInTheDocument();
+
+    mocks.branchesLoading = false;
+    mocks.historicalBranchResult = {
+      data: { id: 'branch-1', name: 'Archived Lagos' },
+      error: null,
+    };
+    rerender(<ExpenseDetailScreen />);
+    expect(mocks.branchSelectCalls[0]?.[0]).toBe('id, name');
+    expect(mocks.branchEqCalls).toEqual(
+      expect.arrayContaining([
+        ['id', 'branch-1'],
+        ['merchant_id', 'merchant-1'],
+      ])
+    );
+    expect(screen.getByText('Archived Lagos')).toBeInTheDocument();
   });
 
-  it('shows unknown branch when metadata does not include the expense branch', () => {
+  it('shows Unknown branch when neither active nor historical metadata exists', () => {
     mocks.branches = [];
     mocks.historicalBranchResult = { data: null, error: null };
 
@@ -346,64 +106,80 @@ describe('ExpenseDetailScreen', () => {
     expect(screen.getByText('Unknown branch')).toBeInTheDocument();
   });
 
-  it('resolves inactive historical branch names outside the active branch list', () => {
-    mocks.branches = [];
-    mocks.historicalBranchResult = {
-      data: { id: 'branch-1', name: 'Archived Lagos' },
-      error: null,
+  it('does not label a grouped expense Ungrouped while group metadata is loading or failed', () => {
+    mocks.expenseResult.data = {
+      ...detailExpenseFixture(),
+      group_id: 'group-1',
     };
+    mocks.groupsLoading = true;
+    const { rerender } = render(<ExpenseDetailScreen />);
+    expect(screen.getByText('Loading group...')).toBeInTheDocument();
 
-    render(<ExpenseDetailScreen />);
-
-    expect(mocks.branchSelectCalls[0]?.[0]).toBe('id, name');
-    expect(mocks.branchEqCalls).toContainEqual(['id', 'branch-1']);
-    expect(mocks.branchEqCalls).toContainEqual(['merchant_id', 'merchant-1']);
-    expect(mocks.branchMaybeSingleCalls).toBe(1);
-    expect(screen.getByText('Archived Lagos')).toBeInTheDocument();
-    expect(screen.queryByText('Unknown branch')).not.toBeInTheDocument();
+    mocks.groupsLoading = false;
+    mocks.groupsError = true;
+    rerender(<ExpenseDetailScreen />);
+    expect(screen.getByText('Group unavailable')).toBeInTheDocument();
   });
 
-  it('opens http receipt links from the receipt action', async () => {
-    mocks.expenseResult.data = {
-      ...expenseFixture(),
-      receipt_url: 'https://example.com/receipt.jpg',
-    };
+  it('shows the Edit header action only when canEdit is true', () => {
+    const { unmount } = render(<ExpenseDetailScreen />);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit expense' }));
+    expect(mocks.router.push).toHaveBeenCalledWith(
+      `/expenses/${detailExpenseId}/edit`
+    );
+    unmount();
+    mocks.canEdit = false;
 
     render(<ExpenseDetailScreen />);
 
+    expect(screen.queryByRole('button', { name: 'Edit expense' })).toBeNull();
+  });
+
+  it('opens HTTP receipt links and rejects non-HTTP receipt links', async () => {
+    mocks.expenseResult.data = {
+      ...detailExpenseFixture(),
+      receipt_url: 'https://example.com/receipt.jpg',
+    };
+    mocks.receiptUrl = 'https://example.com/receipt.jpg';
+    const { rerender } = render(<ExpenseDetailScreen />);
     fireEvent.click(
       screen.getByRole('button', { name: 'View attached receipt' })
     );
-
     await waitFor(() => {
-      expect(mocks.linking.canOpenURL).toHaveBeenCalledWith(
-        'https://example.com/receipt.jpg'
-      );
       expect(mocks.linking.openURL).toHaveBeenCalledWith(
         'https://example.com/receipt.jpg'
       );
     });
-  });
 
-  it('rejects non-http receipt links before opening them', async () => {
     mocks.expenseResult.data = {
-      ...expenseFixture(),
+      ...detailExpenseFixture(),
       receipt_url: 'javascript:alert(1)',
     };
-
-    render(<ExpenseDetailScreen />);
-
+    mocks.receiptUrl = 'javascript:alert(1)';
+    rerender(<ExpenseDetailScreen />);
     fireEvent.click(
       screen.getByRole('button', { name: 'View attached receipt' })
     );
-
     await waitFor(() => {
-      expect(mocks.alert).toHaveBeenCalledWith(
-        'Receipt unavailable',
-        'This receipt link cannot be opened.'
-      );
+      expect(mocks.linking.canOpenURL).toHaveBeenCalledTimes(1);
     });
-    expect(mocks.linking.canOpenURL).not.toHaveBeenCalled();
-    expect(mocks.linking.openURL).not.toHaveBeenCalled();
+    expect(mocks.linking.openURL).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['loading', true, true, null],
+    ['denied', false, false, null],
+    ['access error', false, false, new Error('Access unavailable')],
+  ])('does not mount branch, group, receipt, or expense queries while access is %s', (_state, accessLoading, canView, accessError) => {
+    mocks.accessLoading = accessLoading;
+    mocks.canView = canView;
+    mocks.accessError = accessError;
+
+    render(<ExpenseDetailScreen />);
+
+    expect(mocks.selectCalls).toHaveLength(0);
+    expect(mocks.branchHookCalls).toBe(0);
+    expect(mocks.groupHookCalls).toBe(0);
+    expect(mocks.receiptHookCalls).toBe(0);
   });
 });

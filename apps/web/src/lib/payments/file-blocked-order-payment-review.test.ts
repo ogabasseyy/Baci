@@ -26,6 +26,22 @@ beforeEach(() => {
 });
 
 describe('fileBlockedOrderPaymentReview', () => {
+  it('returns an applied strict partial without filing a blocked-order review', async () => {
+    const outcome = await fileBlockedOrderPaymentReview({
+      ...baseArgs,
+      completion: {
+        merchant_invoice_partial_recorded: true,
+        order_number: 'ORD-1',
+      } as never,
+    });
+
+    expect(outcome).toEqual({
+      kind: 'partial_recorded',
+      orderNumber: 'ORD-1',
+    });
+    expect(mocks.handlePaymentForCancelledOrder).not.toHaveBeenCalled();
+  });
+
   it('files and returns the cancelled-order outcome', async () => {
     const outcome = await fileBlockedOrderPaymentReview({
       ...baseArgs,

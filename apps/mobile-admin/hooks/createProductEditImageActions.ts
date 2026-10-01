@@ -3,6 +3,16 @@ import type { Dispatch, SetStateAction } from 'react';
 import { Alert } from 'react-native';
 import type { ProductEditFormData } from '@/components/product/product-edit.types';
 import { supabase } from '@/lib/supabase';
+import { readUploadBytes } from '@/lib/upload/readUploadBytes';
+
+interface PickerResult {
+  assets?: Array<{ uri: string }> | null;
+  canceled: boolean;
+}
+
+interface PermissionResult {
+  status: string;
+}
 
 interface CreateProductEditImageActionsParams {
   merchantId?: string;
@@ -29,9 +39,7 @@ export function createProductEditImageActions({
       const fileExt = ALLOWED_EXTS.includes(rawExt) ? rawExt : 'jpg';
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `${merchantId}/products/${fileName}`;
-      const fileData = await fetch(uri).then((response) =>
-        response.arrayBuffer()
-      );
+      const fileData = await readUploadBytes(uri);
 
       const { error } = await supabase.storage
         .from('media')
@@ -53,63 +61,92 @@ export function createProductEditImageActions({
         images: [...(previous.images || []), publicUrl],
       }));
     } catch (error: unknown) {
-      const nextError = error as Error;
-      console.error('Upload error:', nextError);
-      Alert.alert('Error', nextError.message || 'Failed to upload image');
+      const message =
+        error instanceof Error ? error.message : 'Failed to upload image';
+      console.error('Upload error:', error);
+      Alert.alert('Error', message);
     } finally {
       setIsUploading(false);
     }
   };
 
+  const pickImage = async ({
+    launchPicker,
+    permissionDeniedMessage,
+    requestPermission,
+  }: {
+    launchPicker: () => Promise<PickerResult>;
+    permissionDeniedMessage: string;
+    requestPermission: () => Promise<PermissionResult>;
+  }) => {
+    try {
+      const { status } = await requestPermission();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', permissionDeniedMessage);
+        return;
+      }
+
+      const result = await launchPicker();
+      if (result.canceled) return;
+
+      const asset = result.assets?.[0];
+      if (!asset) {
+        throw new Error('No image was selected. Please try again.');
+      }
+
+      await uploadImage(asset.uri);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to select an image. Please try again.';
+      console.error('Image selection error:', error);
+      Alert.alert('Image Selection Failed', message);
+    }
+  };
+
   const handleImagePick = () => {
+    if (!merchantId) {
+      Alert.alert(
+        'Error',
+        'Your store is not ready for image uploads. Please try again.'
+      );
+      return;
+    }
+
     Alert.alert('Upload Image', 'Choose an option', [
       {
-        onPress: async () => {
-          const { status } = await ImagePicker.requestCameraPermissionsAsync();
-          if (status !== 'granted') {
-            Alert.alert(
-              'Permission Denied',
-              'Camera permission is required to take photos.'
-            );
-            return;
-          }
-
-          const result = await ImagePicker.launchCameraAsync({
-            allowsEditing: true,
-            aspect: [1, 1],
-            mediaTypes: ['images'],
-            quality: 0.8,
-          });
-
-          if (!result.canceled && result.assets?.[0]) {
-            await uploadImage(result.assets[0].uri);
-          }
-        },
+        onPress: () =>
+          pickImage({
+            launchPicker: () =>
+              ImagePicker.launchCameraAsync({
+                allowsEditing: true,
+                aspect: [1, 1],
+                mediaTypes: ['images'],
+                quality: 0.8,
+              }),
+            permissionDeniedMessage:
+              'Camera permission is required to take photos.',
+            requestPermission: () =>
+              ImagePicker.requestCameraPermissionsAsync(),
+          }),
         text: 'Take Photo',
       },
       {
-        onPress: async () => {
-          const { status } =
-            await ImagePicker.requestMediaLibraryPermissionsAsync();
-          if (status !== 'granted') {
-            Alert.alert(
-              'Permission Denied',
-              'Photo library access is required to choose images.'
-            );
-            return;
-          }
-
-          const result = await ImagePicker.launchImageLibraryAsync({
-            allowsEditing: true,
-            aspect: [1, 1],
-            mediaTypes: ['images'],
-            quality: 0.8,
-          });
-
-          if (!result.canceled && result.assets?.[0]) {
-            await uploadImage(result.assets[0].uri);
-          }
-        },
+        onPress: () =>
+          pickImage({
+            launchPicker: () =>
+              ImagePicker.launchImageLibraryAsync({
+                allowsEditing: true,
+                aspect: [1, 1],
+                mediaTypes: ['images'],
+                quality: 0.8,
+              }),
+            permissionDeniedMessage:
+              'Photo library access is required to choose images.',
+            requestPermission: () =>
+              ImagePicker.requestMediaLibraryPermissionsAsync(),
+          }),
         text: 'Choose from Library',
       },
       { text: 'Cancel', style: 'cancel' },

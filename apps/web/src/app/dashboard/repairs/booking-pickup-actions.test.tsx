@@ -66,7 +66,7 @@ describe('BookingPickupActions', () => {
     mocks.requestPickup.mockResolvedValueOnce({
       result: {
         ok: false,
-        reason: 'topship_unavailable',
+        reason: 'gigl_unavailable',
         message: 'No coverage',
         canRetryManually: true,
       },

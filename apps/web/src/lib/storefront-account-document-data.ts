@@ -1,3 +1,7 @@
+import {
+  getPaystackDvaAccountNumberFromTransactions,
+  selectPreferredOrderPaymentAccount,
+} from '@baci/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ORDER_COLUMNS } from '@/lib/order-queries';
 import { buildStorefrontAccountDocumentBundle } from '@/lib/storefront-account-document-bundle';
@@ -10,13 +14,16 @@ import type {
   StorefrontAccountDocumentTaxSubtotalRow,
   StorefrontAccountDocumentTransactionRow,
 } from '@/lib/storefront-account-document-bundle.types';
+import { toOrderPaymentAccount } from '@/lib/storefront-customer-payment-account-adapter';
+import { loadStorefrontCustomerPaymentAccounts } from '@/lib/storefront-customer-payment-accounts';
+import { loadStorefrontCustomerTransactions } from '@/lib/storefront-customer-transactions';
 
 const RECEIPT_READY_STATUSES = new Set(['shipped', 'delivered']);
 
 const MERCHANT_COLUMNS =
   'id, slug, business_name, logo_url, email, phone, support_email, support_phone, rider_phone_number, business_address, cac_rc_number, tax_identification_number, legal_entity_name, brand_colors, vat_registration_status, vat_rate, bank_code, bank_account_number, bank_name, bank_account_name, social_media, pages, registered_address';
 
-const ORDER_SELECT = `${ORDER_COLUMNS}, external_source, import_job_id, is_credit_order, invoice_type_code, invoice_issue_date, tax_point_date, payment_due_date, buyer_reference, purchase_order_reference, tax_exclusive_amount, tax_inclusive_amount, invoice_note, firs_irn, firs_csid, firs_qr_code, payment_terms, shipping_rate_id, shipping_rate_name, shipping_pickup_details`;
+const ORDER_SELECT = `${ORDER_COLUMNS}, transaction_date, external_source, import_job_id, is_credit_order, invoice_type_code, invoice_issue_date, tax_point_date, payment_due_date, buyer_reference, purchase_order_reference, tax_exclusive_amount, tax_inclusive_amount, invoice_note, firs_irn, firs_csid, firs_qr_code, payment_terms, shipping_rate_id, shipping_rate_name, shipping_pickup_details`;
 
 interface StorefrontAccountDocumentParams {
   supabase: SupabaseClient;
@@ -143,16 +150,8 @@ export async function getStorefrontAccountDocumentData({
         'id, product_id, variant_id, condition, variant_name, name, quantity, price, assurance_fee, line_extension_amount, unit_code, vat_category_code, vat_rate, vat_amount, sellers_item_id, fulfillment_data'
       )
       .eq('order_id', orderId),
-    supabase
-      .from('transactions')
-      .select('id, amount, created_at, description, metadata')
-      .eq('order_id', orderId)
-      .order('created_at', { ascending: true }),
-    supabase
-      .from('order_payment_accounts')
-      .select('account_number, bank_name, account_name')
-      .eq('order_id', orderId)
-      .limit(1),
+    loadStorefrontCustomerTransactions(supabase, [orderId]),
+    loadStorefrontCustomerPaymentAccounts(supabase, [orderId]),
     supabase
       .from('order_tax_subtotals')
       .select(
@@ -198,16 +197,28 @@ export async function getStorefrontAccountDocumentData({
     externalSource: order.external_source,
     importJobId: order.import_job_id,
   });
+  const transactionRows = (transactionsResult.data ||
+    []) as StorefrontAccountDocumentTransactionRow[];
 
   return buildStorefrontAccountDocumentBundle({
     merchant: merchant as StorefrontAccountDocumentMerchantRow,
     customer: customer as StorefrontAccountDocumentCustomerRow,
     order: order as StorefrontAccountDocumentOrderRow,
     itemRows: (itemsResult.data || []) as StorefrontAccountDocumentItemRow[],
-    transactions: (transactionsResult.data ||
-      []) as StorefrontAccountDocumentTransactionRow[],
-    paymentAccount: (paymentAccountsResult.data?.[0] ||
-      null) as StorefrontAccountDocumentPaymentAccountRow | null,
+    transactions: transactionRows,
+    paymentAccount: selectPreferredOrderPaymentAccount(
+      paymentAccountsResult.data.map(
+        toOrderPaymentAccount
+      ) as StorefrontAccountDocumentPaymentAccountRow[],
+      new Date(),
+      {
+        allowExpiredPaystackAccount: paymentStatus === 'paid',
+        preferredPaystackAccountNumber:
+          paymentStatus === 'paid'
+            ? getPaystackDvaAccountNumberFromTransactions(transactionRows)
+            : null,
+      }
+    ),
     taxRows: (taxResult.data ||
       []) as StorefrontAccountDocumentTaxSubtotalRow[],
     paymentStatus,

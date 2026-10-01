@@ -2,9 +2,11 @@ import type { Session, User } from '@supabase/supabase-js';
 import { expect, vi } from 'vitest';
 
 const authStoreMocks = vi.hoisted(() => ({
+  captureMobileSignupLifecycle: vi.fn().mockResolvedValue(undefined),
   checkPasswordBreach: vi.fn(async () => ({ isBreached: false })),
   clearAdminQueryCache: vi.fn(),
   getClaims: vi.fn(),
+  generateUUID: vi.fn(() => '123e4567-e89b-42d3-a456-426614174000'),
   getSession: vi.fn(),
   getUser: vi.fn(),
   onAuthStateChange: vi.fn(() => ({
@@ -52,6 +54,10 @@ vi.mock('@/lib/auth/auth-session-storage', () => ({
   removeAuthStorageKeys: authStoreMocks.removeAuthStorageKeys,
 }));
 
+vi.mock('@/utils/uuid', () => ({
+  generateUUID: authStoreMocks.generateUUID,
+}));
+
 vi.mock('@/lib/auth/sign-in-with-apple', () => ({
   signInWithAppleNative: authStoreMocks.signInWithAppleNative,
 }));
@@ -70,6 +76,10 @@ vi.mock('@/stores/revenueCatStore', () => ({
 
 vi.mock('@/services/auth-telemetry', () => ({
   trackAuthTelemetry: authStoreMocks.trackAuthTelemetry,
+}));
+
+vi.mock('@/services/signup-lifecycle-telemetry', () => ({
+  captureMobileSignupLifecycle: authStoreMocks.captureMobileSignupLifecycle,
 }));
 
 vi.mock('@/hooks/useSettingsStore', () => ({

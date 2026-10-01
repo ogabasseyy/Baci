@@ -10,7 +10,7 @@ import {
 } from '@/lib/blog-utils';
 import { revalidatePlatformBlog } from '@/lib/cache-revalidation';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { getPlatformAdminAuth } from '@/lib/platform-admin-auth';
+import { getPlatformAdminAuthForPermission } from '@/lib/platform-admin-auth';
 import { createClient } from '@/lib/supabase/server';
 import { sanitizeBlogPostData } from '@/lib/validations/blog';
 import {
@@ -27,8 +27,12 @@ function toAuthErrorResponse(status: 'unauthenticated' | 'forbidden') {
     : NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 }
 
+function isJsonRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export async function GET(request: NextRequest) {
-  const auth = await getPlatformAdminAuth();
+  const auth = await getPlatformAdminAuthForPermission('content.manage');
   if (auth.status !== 'authenticated') {
     return toAuthErrorResponse(auth.status);
   }
@@ -88,7 +92,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await getPlatformAdminAuth();
+  const auth = await getPlatformAdminAuthForPermission('content.manage');
   if (auth.status !== 'authenticated') {
     return toAuthErrorResponse(auth.status);
   }
@@ -101,8 +105,20 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  let rawBody: unknown;
   try {
-    const rawBody = await request.json();
+    rawBody = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+  if (!isJsonRecord(rawBody)) {
+    return NextResponse.json(
+      { error: 'Invalid request body' },
+      { status: 400 }
+    );
+  }
+
+  try {
     const body = sanitizeBlogPostData(rawBody);
     if (!body.slug && typeof body.title === 'string') {
       body.slug = generateSlug(body.title);

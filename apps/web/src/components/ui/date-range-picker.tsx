@@ -1,6 +1,6 @@
 'use client';
 
-import { format } from 'date-fns';
+import { addDays, format } from 'date-fns';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -20,13 +20,20 @@ interface DateRangePickerProps {
   };
   setDate: (date: { from: Date | undefined; to: Date | undefined }) => void;
   className?: string;
+  maxRangeDays?: number;
 }
 
 export function DateRangePicker({
   date,
   setDate,
   className,
+  maxRangeDays,
 }: DateRangePickerProps) {
+  const maxDate =
+    date.from && !date.to && maxRangeDays && maxRangeDays > 0
+      ? addDays(date.from, Math.floor(maxRangeDays) - 1)
+      : undefined;
+
   return (
     <div className={cn('grid gap-2', className)}>
       <Popover>
@@ -64,6 +71,7 @@ export function DateRangePicker({
               }}
               startDate={date.from}
               endDate={date.to}
+              maxDate={maxDate}
               selectsRange
               inline
               monthsShown={2}

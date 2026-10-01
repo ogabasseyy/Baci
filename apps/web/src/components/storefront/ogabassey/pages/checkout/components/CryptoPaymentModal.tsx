@@ -9,8 +9,8 @@ import {
   Loader2,
   X,
 } from 'lucide-react';
-import { CHAIN_DISPLAY_NAMES } from '../utils';
 import type { CryptoPaymentData, CryptoVerificationStatus } from '../types';
+import { CHAIN_DISPLAY_NAMES } from '../utils';
 
 interface CryptoPaymentModalProps {
   data: CryptoPaymentData;
@@ -60,6 +60,7 @@ export function CryptoPaymentModal({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close crypto payment modal"
             className="size-8 rounded-lg bg-white/20 flex items-center justify-center text-white hover:bg-white/30 transition-colors"
           >
             <X size={16} />
@@ -88,16 +89,13 @@ export function CryptoPaymentModal({
                 </p>
                 <p className="text-2xl font-black text-gray-900 leading-tight">
                   {data.amount.toLocaleString()}{' '}
-                  <span className="text-store-primary">
-                    {data.currency}
-                  </span>
+                  <span className="text-store-primary">{data.currency}</span>
                 </p>
               </div>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 border border-gray-200">
                 <span className="size-1.5 rounded-full bg-green-500 animate-pulse" />
                 <p className="text-xs font-semibold text-gray-700">
-                  Network:{' '}
-                  {CHAIN_DISPLAY_NAMES[data.chain] || data.chain}
+                  Network: {CHAIN_DISPLAY_NAMES[data.chain] || data.chain}
                 </p>
               </div>
             </div>
@@ -120,9 +118,7 @@ export function CryptoPaymentModal({
                     ? 'border-green-300 text-green-600'
                     : 'border-gray-200 hover:border-store-primary/40 hover:text-store-primary'
                 }`}
-                title={
-                  copiedText === data.address ? 'Copied!' : 'Copy Address'
-                }
+                title={copiedText === data.address ? 'Copied!' : 'Copy Address'}
               >
                 {copiedText === data.address ? (
                   <Check size={16} />
@@ -141,8 +137,7 @@ export function CryptoPaymentModal({
               <span className="font-bold">
                 {CHAIN_DISPLAY_NAMES[data.chain] || data.chain}
               </span>{' '}
-              network. Using the wrong network will result in permanent
-              loss.
+              network. Using the wrong network will result in permanent loss.
             </p>
           </div>
 
@@ -155,9 +150,7 @@ export function CryptoPaymentModal({
               <p className="text-sm font-medium text-gray-900">
                 Expected confirmation
               </p>
-              <p className="text-xs text-gray-500">
-                {data.confirmation_time}
-              </p>
+              <p className="text-xs text-gray-500">{data.confirmation_time}</p>
             </div>
           </div>
 
@@ -170,15 +163,12 @@ export function CryptoPaymentModal({
           {isVerifying && (
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
               <div className="flex items-center justify-center gap-2 mb-2">
-                <Loader2
-                  size={18}
-                  className="animate-spin text-blue-600"
-                />
+                <Loader2 size={18} className="animate-spin text-blue-600" />
                 <span className="text-sm font-medium text-blue-800">
                   {verificationStatus === 'checking' &&
-                    'Checking payment status…'}
+                    'Checking payment status...'}
                   {verificationStatus === 'pending' &&
-                    'Waiting for blockchain confirmation…'}
+                    'Waiting for blockchain confirmation...'}
                 </span>
               </div>
               <p className="text-xs text-blue-600">
@@ -225,8 +215,8 @@ export function CryptoPaymentModal({
           </button>
 
           <p className="text-center text-xs text-gray-400">
-            Click the button above after sending. We'll verify the payment
-            on the blockchain.
+            Click the button above after sending. We'll verify the payment on
+            the blockchain.
           </p>
 
           {/* Close without verifying */}

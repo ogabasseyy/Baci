@@ -269,7 +269,7 @@ describe('POST /api/payments/juicyway/webhook', () => {
         };
       }
       if (table === 'orders') {
-        return {
+        return webhookTest.wrapOrdersTableMock({
           select: vi.fn().mockReturnThis(),
           eq: vi.fn().mockReturnThis(),
           maybeSingle: vi.fn().mockResolvedValue({
@@ -280,7 +280,7 @@ describe('POST /api/payments/juicyway/webhook', () => {
             },
             error: null,
           }),
-        };
+        });
       }
       throw new Error(`Unexpected table ${table}`);
     });

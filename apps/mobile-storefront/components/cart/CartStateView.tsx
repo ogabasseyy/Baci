@@ -1,5 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { AdSlot } from '@/components/ads/AdSlot';
 import { PatternedBackground } from '@/components/storefront/PatternedBackground';
 import type Colors from '@/constants/Colors';
 import styles from './styles';
@@ -77,6 +78,7 @@ export default function CartStateView({
             />
           )}
         </Pressable>
+        {hasError ? null : <AdSlot placement="FOOTER_ANCHOR" />}
       </View>
     </View>
   );

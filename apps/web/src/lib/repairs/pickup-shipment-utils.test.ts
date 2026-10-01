@@ -30,6 +30,18 @@ describe('buildPickupSender', () => {
     });
   });
 
+  it('infers Osun when a Google address ends in Osogbo without a state', () => {
+    const sender = buildPickupSender({
+      ...baseRepair,
+      pickup_address: '14 Testing Close, Oke Fia, Osogbo',
+    });
+
+    expect(sender).toMatchObject({
+      city: 'Osogbo',
+      state: 'Osun',
+    });
+  });
+
   it('returns null when there is no pickup address', () => {
     expect(
       buildPickupSender({ ...baseRepair, pickup_address: null })
@@ -56,15 +68,15 @@ describe('buildPickupSender', () => {
 });
 
 describe('buildPickupItems', () => {
-  it('labels the item with device type + model and uses the quoted value', () => {
+  it('labels the item with device type + model and uses the fixed declared value', () => {
     const [item] = buildPickupItems(baseRepair);
     expect(item.name).toBe('Smartphone iPhone 15');
-    expect(item.value).toBe(45_000);
+    expect(item.value).toBe(50_000);
     expect(item.quantity).toBe(1);
   });
 
-  it('defaults the declared value when no quoted price is present', () => {
-    const [item] = buildPickupItems({ ...baseRepair, quoted_price: null });
+  it('keeps the fixed declared value even when a catalog quoted price differs', () => {
+    const [item] = buildPickupItems({ ...baseRepair, quoted_price: 120_000 });
     expect(item.value).toBe(50_000);
   });
 
@@ -81,11 +93,13 @@ describe('buildPickupItems', () => {
 describe('pickupFailure', () => {
   const cases: readonly [PickupFailureReason, boolean][] = [
     ['not_found', false],
+    ['lookup_failed', false],
     ['already_booked', false],
     ['missing_pickup_address', true],
     ['repair_center_unconfigured', true],
-    ['topship_unavailable', true],
+    ['gigl_unavailable', true],
     ['booking_failed', true],
+    ['provider_rejected', true],
     ['shipment_save_failed', false],
   ];
 

@@ -175,7 +175,8 @@ describe('handleNotificationResponse', () => {
   });
 
   it('navigates token-ready notifications to utility history', () => {
-    const navigate = jest.fn();
+    const navigate =
+      jest.fn<Parameters<typeof handleNotificationResponse>[1]>();
     const data = {
       type: 'vtu_token_ready',
       utilityType: 'power',
@@ -207,7 +208,8 @@ describe('handleNotificationResponse', () => {
   });
 
   it('does not navigate when notification payload has no target', () => {
-    const navigate = jest.fn();
+    const navigate =
+      jest.fn<Parameters<typeof handleNotificationResponse>[1]>();
     getStorefrontNotificationNavigationTarget.mockReturnValue(null);
 
     handleNotificationResponse(
@@ -227,7 +229,8 @@ describe('handleNotificationResponse', () => {
   });
 
   it('requests an update check for mobile update notifications instead of navigating', () => {
-    const navigate = jest.fn();
+    const navigate =
+      jest.fn<Parameters<typeof handleNotificationResponse>[1]>();
     const requestUpdateCheck = jest.fn();
 
     handleNotificationResponse(

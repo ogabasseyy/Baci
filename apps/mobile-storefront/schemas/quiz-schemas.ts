@@ -139,6 +139,27 @@ export const quizEventsResponseSchema = z.union([
   legacyQuizEventsResponseSchema,
 ]);
 
+export const quizLeaderboardEntrySchema = z.strictObject({
+  displayName: z.string().trim().min(1),
+  isCurrentCustomer: z.boolean(),
+  rank: z.number().int().positive(),
+  score: z.number().int().nonnegative(),
+  status: z.string().min(1),
+  submittedAt: z.string().nullable(),
+  totalTimeSeconds: z.number().nonnegative().nullable(),
+});
+
+export const quizLeaderboardResponseSchema = z.strictObject({
+  currentPlayer: quizLeaderboardEntrySchema.nullable(),
+  entries: z.array(quizLeaderboardEntrySchema).max(100),
+  participantCount: z.number().int().nonnegative().nullable(),
+  status: z.enum(['published', 'live', 'live_hidden', 'unavailable']),
+});
+
+export const quizParticipantCountResponseSchema = z.strictObject({
+  participantCount: z.number().int().nonnegative(),
+});
+
 export const quizAttemptSchema = z.object({
   attemptId: z.string().min(1),
   eventId: z.string().min(1),

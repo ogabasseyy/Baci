@@ -143,7 +143,8 @@ describe('storefront sitemap SEO indexing', () => {
     ];
     const query = {
       eq: () => query,
-      order: () => ({ range: () => ({ data: rows, error: null }) }),
+      order: () => query,
+      range: () => ({ data: rows, error: null }),
     };
 
     await expect(

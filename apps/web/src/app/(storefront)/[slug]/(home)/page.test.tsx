@@ -215,7 +215,7 @@ describe('Storefront homepage structured data', () => {
         'https://linkedin.com/company/ogabasseyy',
         'https://www.snapchat.com/@ogabassey',
         'https://www.tiktok.com/@ogabasseyy',
-        'https://twitter.com/ogabasseyy',
+        'https://x.com/ogabasseyy',
         'https://youtube.com/@ogabassey',
       ]),
     });

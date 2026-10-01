@@ -1,6 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import { createLogger } from '../lib/logger';
 import { getStoredPushToken } from '../lib/push-token-storage';
+import { clearQueryCachePreservingObservers } from '../lib/query-cache-observer-safety';
 import { queryClient } from '../lib/query-client';
 import { supabase } from '../lib/supabase';
 import { MerchantRowSchema } from '../lib/validation';
@@ -171,12 +172,19 @@ export function createInitializeAction({
             } else if (event === 'SIGNED_OUT') {
               const storedToken = await getStoredPushToken();
               await clearLocalAndDeactivatePushToken(storedToken);
-              queryClient.clear();
-              useCartStore.getState().clearCart();
+              await useCartStore.getState().clearCart();
               useSavedStore.getState().clearSaved();
               useComparisonStore.getState().clearComparison();
               useQuizStore.getState().reset();
-              set({ user: null, session: null, customer: null });
+              set({
+                user: null,
+                session: null,
+                customer: null,
+                isLoading: false,
+                isInitialized: true,
+                _initializationInProgress: false,
+              });
+              clearQueryCachePreservingObservers(queryClient);
             } else if (event === 'TOKEN_REFRESHED' && session) {
               set({ session });
             }

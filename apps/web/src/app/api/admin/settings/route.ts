@@ -1,181 +1,84 @@
-import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
-import z from 'zod';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { getMerchantForApiRequest } from '@/lib/get-merchant-for-api-request';
+import { logger } from '@/lib/logger';
+import { getPlatformAdminAuthForPermission } from '@/lib/platform-admin-auth';
 import { createClient } from '@/lib/supabase/server';
 import {
-  PLATFORM_SETTINGS_SELECT,
-  type PlatformSettingsSecretField,
-} from './constants';
-import { PlatformSettingsUpdateSchema } from './schema';
+  type PlatformSettingsResponse,
+  PlatformSettingsResponseSchema,
+  type PlatformSettingsSecretStatus,
+  PlatformSettingsUpdateSchema,
+} from './schema';
 
-/**
- * Platform Settings API
- *
- * GET - Retrieve platform settings (admin only)
- * PUT - Update platform settings (admin only)
- */
+export type { PlatformSettingsResponse, PlatformSettingsSecretStatus };
 
-export interface PlatformSettings {
-  id: string;
-  // Analytics
-  google_analytics_id: string | null;
-  ga4_api_secret: string | null;
-  facebook_pixel_id: string | null;
-  facebook_capi_token: string | null;
-  tiktok_pixel_id: string | null;
-  tiktok_access_token: string | null;
-  snapchat_pixel_id: string | null;
-  snapchat_capi_token: string | null;
-  twitter_pixel_id: string | null;
-  // Fees
-  platform_fee_percentage: number;
-  platform_fee_flat: number;
-  payment_processor_fee_percentage: number;
-  payment_processor_fee_flat: number;
-  // Branding
-  platform_name: string;
-  platform_logo_url: string | null;
-  support_email: string | null;
-  support_phone: string | null;
-  // Feature Flags
-  enable_merchant_signups: boolean;
-  enable_custom_domains: boolean;
-  enable_analytics_export: boolean;
-  maintenance_mode: boolean;
-  maintenance_message: string | null;
-  // Timestamps
-  created_at: string;
-  updated_at: string;
+type SettingsRpcError = { code?: string | null; message: string };
+type SettingsRpcResult = { data: unknown; error: SettingsRpcError | null };
+type SettingsRpc = {
+  rpc(name: 'get_admin_platform_settings_v1'): Promise<SettingsRpcResult>;
+  rpc(
+    name: 'update_admin_platform_settings_v1',
+    args: { p_settings: Record<string, unknown> }
+  ): Promise<SettingsRpcResult>;
+};
+
+function platformAuthError(status: 'forbidden' | 'unauthenticated') {
+  return NextResponse.json(
+    { error: status === 'unauthenticated' ? 'Unauthorized' : 'Forbidden' },
+    { status: status === 'unauthenticated' ? 401 : 403 }
+  );
 }
 
-export type PlatformSettingsSecretStatus = Record<
-  PlatformSettingsSecretField,
-  boolean
->;
-
-export interface PlatformSettingsResponse
-  extends Omit<PlatformSettings, PlatformSettingsSecretField> {
-  secretStatus: PlatformSettingsSecretStatus;
+function parseSafeSettings(data: unknown): PlatformSettingsResponse | null {
+  const parsed = PlatformSettingsResponseSchema.safeParse(data);
+  if (parsed.success) return parsed.data;
+  logger.error({
+    message: 'Invalid safe platform settings RPC payload',
+    error: parsed.error,
+  });
+  return null;
 }
 
-const PlatformSettingsRowSchema = PlatformSettingsUpdateSchema.extend({
-  created_at: z.string(),
-  id: z.string(),
-  updated_at: z.string(),
-}).required();
-
-function parsePlatformSettings(settings: unknown): PlatformSettings | null {
-  const result = PlatformSettingsRowSchema.safeParse(settings);
-
-  if (!result.success) {
-    console.error('Invalid platform settings payload:', result.error);
-    return null;
-  }
-
-  return result.data;
-}
-
-function serializePlatformSettings(
-  settings: PlatformSettings
-): PlatformSettingsResponse {
-  const {
-    ga4_api_secret,
-    facebook_capi_token,
-    tiktok_access_token,
-    snapchat_capi_token,
-    ...publicSettings
-  } = settings;
-
-  return {
-    ...publicSettings,
-    secretStatus: {
-      ga4_api_secret: Boolean(ga4_api_secret),
-      facebook_capi_token: Boolean(facebook_capi_token),
-      tiktok_access_token: Boolean(tiktok_access_token),
-      snapchat_capi_token: Boolean(snapchat_capi_token),
-    },
-  };
-}
-
-async function checkPlatformAdmin(supabase: ReturnType<typeof createClient>) {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { isAdmin: false, error: 'Unauthorized' };
-  }
-
-  const merchantContext = await getMerchantForApiRequest(supabase, user.id);
-  if (!merchantContext) {
-    return {
-      isAdmin: false,
-      error: 'Forbidden - Platform admin access required',
-    };
-  }
-
-  // Admin routes require being the merchant owner, not staff
-  if (merchantContext.staffAccess.isStaff) {
-    return { isAdmin: false, error: 'Permission denied' };
-  }
-
-  const { data: merchant } = await supabase
-    .from('merchants')
-    .select('is_platform_admin')
-    .eq('id', merchantContext.merchantId)
-    .maybeSingle();
-
-  if (!merchant?.is_platform_admin) {
-    return {
-      isAdmin: false,
-      error: 'Forbidden - Platform admin access required',
-    };
-  }
-
-  return { isAdmin: true, error: null };
+async function readSafeSettings(rpc: SettingsRpc): Promise<{
+  data: PlatformSettingsResponse | null;
+  error: SettingsRpcError | null;
+}> {
+  const result = await rpc.rpc('get_admin_platform_settings_v1');
+  if (result.error) return { data: null, error: result.error };
+  const data = parseSafeSettings(result.data);
+  return data
+    ? { data, error: null }
+    : {
+        data: null,
+        error: {
+          code: 'INVALID_PLATFORM_SETTINGS_PAYLOAD',
+          message: 'Safe platform settings RPC returned an invalid payload.',
+        },
+      };
 }
 
 export async function GET() {
+  const auth = await getPlatformAdminAuthForPermission('settings.read');
+  if (auth.status !== 'authenticated') return platformAuthError(auth.status);
+
   try {
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
-
-    // Check admin access
-    const { isAdmin, error } = await checkPlatformAdmin(supabase);
-    if (!isAdmin) {
-      return NextResponse.json(
-        { error },
-        { status: error === 'Unauthorized' ? 401 : 403 }
-      );
-    }
-
-    // Get platform settings (singleton row)
-    const { data: settings, error: settingsError } = await supabase
-      .from('platform_settings')
-      .select(PLATFORM_SETTINGS_SELECT)
-      .single();
-
-    if (settingsError) {
-      console.error('Failed to fetch platform settings:', settingsError);
+    const supabase = await createClient();
+    const result = await readSafeSettings(supabase as unknown as SettingsRpc);
+    if (result.error || !result.data) {
+      logger.error({
+        message: 'Platform settings safe read failed',
+        error: result.error,
+      });
       return NextResponse.json(
         { error: 'Failed to fetch settings' },
         { status: 500 }
       );
     }
-
-    const parsedSettings = parsePlatformSettings(settings);
-    if (!parsedSettings) {
-      return NextResponse.json(
-        { error: 'Failed to parse settings' },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json(serializePlatformSettings(parsedSettings));
+    return NextResponse.json(result.data, {
+      headers: { 'Cache-Control': 'private, no-store' },
+    });
   } catch (error) {
-    console.error('Platform settings GET error:', error);
+    logger.error({ message: 'Platform settings GET error', error });
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -184,6 +87,9 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
+  const auth = await getPlatformAdminAuthForPermission('settings.manage');
+  if (auth.status !== 'authenticated') return platformAuthError(auth.status);
+
   try {
     const { valid, response } = await checkCsrfProtection(request);
     if (!valid) {
@@ -193,58 +99,61 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
-
-    // Check admin access
-    const { isAdmin, error } = await checkPlatformAdmin(supabase);
-    if (!isAdmin) {
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
       return NextResponse.json(
-        { error },
-        { status: error === 'Unauthorized' ? 401 : 403 }
-      );
-    }
-
-    const body = await request.json();
-
-    const parseResult = PlatformSettingsUpdateSchema.safeParse(body);
-    if (!parseResult.success) {
-      return NextResponse.json(
-        {
-          error: 'Invalid request payload',
-          details: parseResult.error.flatten(),
-        },
+        { error: 'Invalid JSON payload' },
         { status: 400 }
       );
     }
 
-    // Update platform settings
-    const { data: settings, error: updateError } = await supabase
-      .from('platform_settings')
-      .update(parseResult.data)
-      .eq('singleton_key', true)
-      .select(PLATFORM_SETTINGS_SELECT)
-      .single();
+    const parsed = PlatformSettingsUpdateSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid request payload', details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+    if (Object.keys(parsed.data).length === 0) {
+      return NextResponse.json(
+        { error: 'At least one setting must be provided' },
+        { status: 400 }
+      );
+    }
 
-    if (updateError) {
-      console.error('Failed to update platform settings:', updateError);
+    const rpc = (await createClient()) as unknown as SettingsRpc;
+    const update = await rpc.rpc('update_admin_platform_settings_v1', {
+      p_settings: parsed.data,
+    });
+    if (update.error) {
+      logger.error({
+        message: 'Platform settings safe update failed',
+        error: update.error,
+      });
       return NextResponse.json(
         { error: 'Failed to update settings' },
         { status: 500 }
       );
     }
 
-    const parsedSettings = parsePlatformSettings(settings);
-    if (!parsedSettings) {
+    const result = await readSafeSettings(rpc);
+    if (result.error || !result.data) {
+      logger.error({
+        message: 'Platform settings post-update read failed',
+        error: result.error,
+      });
       return NextResponse.json(
-        { error: 'Failed to parse settings' },
+        { error: 'Failed to fetch updated settings' },
         { status: 500 }
       );
     }
-
-    return NextResponse.json(serializePlatformSettings(parsedSettings));
+    return NextResponse.json(result.data, {
+      headers: { 'Cache-Control': 'private, no-store' },
+    });
   } catch (error) {
-    console.error('Platform settings PUT error:', error);
+    logger.error({ message: 'Platform settings PUT error', error });
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

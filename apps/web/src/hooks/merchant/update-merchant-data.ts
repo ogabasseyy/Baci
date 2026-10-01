@@ -21,7 +21,7 @@ interface MerchantUpdateOptions {
 }
 
 interface CreateMerchantUpdateArgs {
-  supabase: SupabaseClient;
+  getSupabase: () => Promise<SupabaseClient>;
   userId: string | null;
   staffAccess: StaffAccess;
   activeMerchantId: string | null | undefined;
@@ -30,7 +30,7 @@ interface CreateMerchantUpdateArgs {
 }
 
 export function createMerchantUpdate({
-  supabase,
+  getSupabase,
   userId,
   staffAccess,
   activeMerchantId,
@@ -78,6 +78,8 @@ export function createMerchantUpdate({
       data: writableData,
     });
 
+    // Resolved after validation so rejected updates never pay the client cost.
+    const supabase = await getSupabase();
     const query = staffAccess.isOwner
       ? supabase
           .from('merchants')

@@ -1,7 +1,10 @@
 import { normalizeProductKeySpecs } from '@/lib/product-key-specs-normalize';
 import { getEffectiveStock } from '@/lib/product-stock';
 import type { Product } from '@/lib/products';
-import { generateSlug } from '@/lib/seo-utils';
+import {
+  resolveMappedStorefrontProductCategorySlug,
+  resolveStorefrontProductCategoryName,
+} from '@/lib/storefront-product-category-name';
 import { normalizeStorefrontProductVariants } from '@/lib/storefront-product-variants';
 import {
   getMappedCanonicalUrl,
@@ -92,17 +95,18 @@ export interface DetailedCachedProduct {
   gtin?: string | null;
   mpn?: string | null;
   category?: string | null;
+  category_slug?: string | null;
   categories?:
     | {
         id: string;
-        name: string;
-        slug: string;
+        name?: string | null;
+        slug?: string | null;
         parent_id?: string | null;
       }
     | Array<{
         id: string;
-        name: string;
-        slug: string;
+        name?: string | null;
+        slug?: string | null;
         parent_id?: string | null;
       }>
     | null;
@@ -144,12 +148,14 @@ export function mapDetailedCachedProductToProduct(
       productId: detailedProduct.id,
     }
   );
-  const categoryName = primaryCategory?.name || detailedProduct.category;
+  const categoryInput = {
+    categories: primaryCategory,
+    category: detailedProduct.category,
+    category_slug: detailedProduct.category_slug,
+  };
+  const categoryName = resolveStorefrontProductCategoryName(categoryInput);
   const categorySlug =
-    primaryCategory?.slug ||
-    (detailedProduct.category
-      ? generateSlug(detailedProduct.category)
-      : undefined);
+    resolveMappedStorefrontProductCategorySlug(categoryInput);
 
   return {
     id: detailedProduct.id,
@@ -195,8 +201,8 @@ export function mapDetailedCachedProductToProduct(
     categories: primaryCategory
       ? {
           id: primaryCategory.id,
-          name: primaryCategory.name,
-          slug: primaryCategory.slug,
+          name: primaryCategory.name ?? undefined,
+          slug: primaryCategory.slug ?? undefined,
           parent_id: primaryCategory.parent_id ?? undefined,
         }
       : null,
@@ -215,7 +221,8 @@ export function mapDetailedCachedProductToProduct(
     variants: normalizedVariants,
     specifications: detailedProduct.specifications as Product['specifications'],
     product_key_specs: normalizeProductKeySpecs(
-      detailedProduct.product_key_specs
+      detailedProduct.product_key_specs,
+      { preserveRecommendationArrays: true }
     ) as Product['product_key_specs'],
   } as Product;
 }

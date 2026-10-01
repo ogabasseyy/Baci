@@ -1,13 +1,13 @@
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
-import type { ComponentType } from 'react';
 import { JsonLd } from '@/components/seo/json-ld';
+import { OgabasseyV2HelpSupport } from '@/components/storefront/ogabassey/pages/help-support';
+import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { getMerchantByIdentifier } from '@/lib/cached-data';
 import { toTemplateMerchantData } from '@/lib/merchant-template-data';
 import { generateOrganizationSchema } from '@/lib/seo-utils';
 import { buildRequestScopedStoreUrl } from '@/lib/store-url';
 import { buildMerchantTrustProfile } from '@/lib/storefront-trust/build-merchant-trust-profile';
-import { getTemplate, type TemplatePageProps } from '@/templates/registry';
 import { ContentPageCrawlSummary } from '../content-page-crawl-summary';
 import { ContactPageClient } from '../pages/contact/contact-page-client';
 
@@ -64,36 +64,22 @@ export async function ContactPageContent({ params }: PageProps) {
 
   const jsonLdScript = <JsonLd data={contactSchema} />;
 
-  const templateId = merchant.template_id;
-  let ContactComponent: ComponentType<TemplatePageProps> | null = null;
-  if (templateId && templateId !== 'default' && templateId !== 'puck') {
-    const template = getTemplate(templateId);
-    if (template) {
-      // try/catch only guards the async component load; the JSX itself is
-      // constructed outside so render errors flow to the route error boundary.
-      try {
-        const components = await template.getComponents();
-        ContactComponent = components.Contact ?? null;
-      } catch (error) {
-        console.error(
-          'Failed to load Contact component for template',
-          templateId,
-          ':',
-          error
-        );
-      }
-    }
-  }
+  // Only the Ogabassey template defines a Contact page; import it directly so
+  // this route's chunk carries exactly this page (the old info-pages map
+  // fanned all ten info pages into every content route's graph). The JSX
+  // itself is constructed outside so render errors flow to the route error
+  // boundary. The direct component takes only `merchant` (it ignores the
+  // storeSlug/isPreview the map used to spread through).
+  const ContactComponent =
+    merchant.template_id === OGABASSEY_TEMPLATE_ID
+      ? OgabasseyV2HelpSupport
+      : null;
 
   if (ContactComponent) {
     return (
       <>
         {jsonLdScript}
-        <ContactComponent
-          merchant={toTemplateMerchantData(merchant)}
-          storeSlug={merchant.slug}
-          isPreview={false}
-        />
+        <ContactComponent merchant={toTemplateMerchantData(merchant)} />
         <ContentPageCrawlSummary
           kind="contact"
           merchantName={merchant.business_name}

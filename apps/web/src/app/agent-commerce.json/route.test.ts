@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetMerchantByIdentifier = vi.fn();
+const mockGetCurrentSlugForAlias = vi.fn();
 const ROUTE_TEST_TIMEOUT_MS = 60_000;
 
 vi.mock('server-only', () => ({}));
@@ -10,6 +11,11 @@ vi.mock('server-only', () => ({}));
 vi.mock('@/lib/cached-data', () => ({
   getMerchantByIdentifier: (...args: unknown[]) =>
     mockGetMerchantByIdentifier(...args),
+}));
+
+vi.mock('@/lib/slug-alias-cache', () => ({
+  getCurrentSlugForAlias: (...args: unknown[]) =>
+    mockGetCurrentSlugForAlias(...args),
 }));
 
 beforeEach(() => {
@@ -25,6 +31,8 @@ beforeEach(() => {
   vi.stubEnv('OPENAI_AGENTIC_SIGNING_KEY', 'signing-key');
   vi.stubEnv('PAYSTACK_SECRET_KEY', 'paystack-secret');
   vi.stubEnv('SUPABASE_JWT_SECRET', 'supabase-jwt-secret');
+
+  mockGetCurrentSlugForAlias.mockResolvedValue(null);
 
   mockGetMerchantByIdentifier.mockResolvedValue({
     id: 'merchant-1',
@@ -190,6 +198,8 @@ describe('GET /agent-commerce.json', () => {
       2,
       'www.ogabassey.com'
     );
+    expect(mockGetCurrentSlugForAlias).toHaveBeenCalledOnce();
+    expect(mockGetCurrentSlugForAlias).toHaveBeenCalledWith('ogabassey.com');
   });
 
   it('resolves localhost subdomains as slug identifiers', async () => {

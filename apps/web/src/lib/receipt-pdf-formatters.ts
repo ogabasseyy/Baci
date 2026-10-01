@@ -38,10 +38,11 @@ export function formatReceiptDate(value: string) {
     return '-';
   }
 
+  const isCalendarDate = /^\d{4}-\d{2}-\d{2}$/.test(value);
   return date.toLocaleDateString('en-GB', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
-    timeZone: 'UTC',
+    timeZone: isCalendarDate ? 'UTC' : 'Africa/Lagos',
   });
 }

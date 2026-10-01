@@ -71,7 +71,9 @@ Some cron work intentionally remains in the web app because it needs web-only ru
 - `/api/cron/merchant-signup-health`, scheduled every 5 minutes. Verifies the
   merchant read/write policy shapes plus every authenticated grant used by
   mobile signup before and during `INSERT ... RETURNING`. Any drift returns non-2xx and logs
-  `mobile-onboarding deployment_fault`. Log:
+  `mobile-onboarding deployment_fault`. Every authorized run also emits the
+  privacy-safe `admin_signup_health` PostHog event; telemetry failure never
+  changes the health response. See `docs/ops/mobile-signup-monitoring.md`. Log:
   `/home/bassey/baci-workers/logs/merchant-signup-health.log`.
 - `/api/cron/reconcile-gateway-paid-orders`, scheduled hourly at :20. Safety net behind the payment webhook's own heal-on-retry: heals "wedged" gateway orders (completed transaction, order never flipped to paid) after re-verifying with the gateway, then drains failed paid-order side effects (settlement / receipt email / ad tracking) for orders that are paid but whose outbox recorded a failure. Log: `/home/bassey/baci-workers/logs/reconcile-gateway-paid-orders.log`.
 - `/api/cron/wallet-payouts`, scheduled daily at 06:00.

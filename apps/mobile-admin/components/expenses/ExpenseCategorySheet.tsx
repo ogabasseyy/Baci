@@ -11,7 +11,7 @@ import { useTheme } from '@/hooks/useTheme';
 interface ExpenseCategorySheetProps {
   onClose: () => void;
   onSelect: (category: ExpenseCategory) => void;
-  selectedCategory: ExpenseCategory;
+  selectedCategory: ExpenseCategory | null;
   visible: boolean;
 }
 

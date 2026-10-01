@@ -48,7 +48,7 @@ The Baci Mobile Admin is a React Native application built with Expo, designed sp
 
 ## Tech Stack
 
-- **Framework**: Expo 54 + React Native 0.81
+- **Framework**: Expo 57 + React Native 0.86
 - **Language**: TypeScript 6.0
 - **Navigation**: Expo Router (file-based routing)
 - **State Management**: Zustand + TanStack Query
@@ -82,7 +82,8 @@ baci-mobile-admin/
 ## Getting Started
 
 ### Prerequisites
-- Node.js 18+ and npm
+- Node.js 24.x (the version required by the workspace)
+- pnpm 11.7.0 via Corepack (do not use npm or Yarn)
 - Expo CLI
 - iOS Simulator (Mac) or Android Emulator
 
@@ -221,6 +222,37 @@ All apps use the same:
 - Supabase database with RLS policies
 - Edge Functions for business logic
 - Shared data models and validation (Zod schemas)
+
+### EAS Update and release policy
+
+The admin app has a production OTA foundation, but local development remains
+Metro/dev-client based. Run `pnpm start` (or
+`pnpm --filter baci-mobile-admin android:metro` for the checked-in LAN Android
+workflow); these commands do not publish updates or consume the EAS Update
+service.
+
+Release builds are isolated by channel:
+
+- `preview` builds receive only the `preview` channel.
+- `production` builds receive only the `production` channel.
+- The `development` profile intentionally has no update channel; Metro is the
+  intended JavaScript source for local development.
+
+Runtime compatibility uses the concrete semantic app-version string required by
+the checked-in bare native projects. The release workflows inject the store
+version into `APP_VERSION`/`IOS_APP_VERSION`, so every store release gets a
+deterministic runtime without depending on release-only native files or secrets.
+When publishing an update, provide the same app version that is embedded in the
+target binary; never publish from a checkout that falls back to `2.0.1`. Release
+updates use `ON_LOAD` with a zero-millisecond fallback timeout: the embedded or
+already-cached bundle starts immediately, while a compatible download is applied
+on the next restart. Hermes bytecode diff support is enabled to reduce subsequent
+update downloads.
+
+Publishing is an owner-approved release action. Before publishing to
+`production`, validate the same update on a preview build, confirm the target
+app version and channel, and record a rollback plan. Never publish from a Metro
+session or commit credentials to this repository.
 
 ## Key Differences from Storefront
 

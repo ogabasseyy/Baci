@@ -12,6 +12,7 @@ import { styles } from './ShipmentFlowSheet.styles';
 interface ShipmentFlowFooterProps {
   colors: ThemeColors;
   isSubmitting: boolean;
+  isPrimaryDisabled?: boolean;
   onBack: () => void;
   onPrimaryAction: () => void;
   primaryActionLabel: string;
@@ -38,6 +39,7 @@ function getPrimaryIconName(
 export function ShipmentFlowFooter({
   colors,
   isSubmitting,
+  isPrimaryDisabled = false,
   onBack,
   onPrimaryAction,
   primaryActionLabel,
@@ -70,15 +72,22 @@ export function ShipmentFlowFooter({
       <Pressable
         accessibilityLabel={primaryActionLabel}
         accessibilityRole="button"
-        accessibilityState={{ disabled: isSubmitting, busy: isSubmitting }}
-        disabled={isSubmitting}
+        accessibilityState={{
+          disabled: isSubmitting || isPrimaryDisabled,
+          busy: isSubmitting,
+        }}
+        disabled={isSubmitting || isPrimaryDisabled}
         onPress={onPrimaryAction}
         style={({ pressed }) => [
           styles.primaryButton,
           { backgroundColor: colors.primary },
           showBack ? null : styles.primaryButtonFull,
-          isSubmitting ? styles.primaryButtonDisabled : null,
-          { opacity: isSubmitting ? 1 : pressed ? 0.7 : 1 },
+          isSubmitting || isPrimaryDisabled
+            ? styles.primaryButtonDisabled
+            : null,
+          {
+            opacity: isSubmitting || isPrimaryDisabled ? 1 : pressed ? 0.7 : 1,
+          },
         ]}
       >
         {isSubmitting ? (

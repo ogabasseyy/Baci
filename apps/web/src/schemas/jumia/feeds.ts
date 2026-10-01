@@ -20,7 +20,9 @@ const JumiaFeedItemError = z.object({
 
 const JumiaFeedItem = z.object({
   status: z.string().min(1),
-  productSid: z.string().min(1),
+  // Rejected feed items may not include a provider product ID. The route
+  // treats an accepted item without one as a provider-contract failure.
+  productSid: z.string().min(1).optional(),
   sellerSKU: z.string().min(1),
   createdAt: z.iso.datetime({ offset: true }),
   updatedAt: z.iso.datetime({ offset: true }),

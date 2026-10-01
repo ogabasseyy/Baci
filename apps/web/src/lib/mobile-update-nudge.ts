@@ -7,6 +7,7 @@ import {
   recordPushAttempt,
   sendPushNotifications,
 } from './expo-push';
+import { preparePushNotificationPayload } from './prepare-push-notification-payload';
 
 const UPDATE_NUDGE_STAMP_CHUNK_SIZE = 100;
 
@@ -89,11 +90,11 @@ export async function notifyStorefrontUpdateAvailable(
     now.getTime() - throttleDays * 24 * 60 * 60 * 1000
   ).toISOString();
 
-  const data: Record<string, unknown> = {
+  const data = preparePushNotificationPayload({
     type: 'mobile_update_available',
     platform,
     storeUrl,
-  };
+  });
 
   const recordSkip = async (
     result: StorefrontUpdateNudgeResult

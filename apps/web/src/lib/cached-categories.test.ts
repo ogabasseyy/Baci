@@ -22,10 +22,7 @@ vi.mock('@supabase/supabase-js', () => ({
 }));
 
 import { cacheLife, cacheTag } from 'next/cache';
-import {
-  getCachedNavigationCategories,
-  getStorefrontNavigationCategories,
-} from './cached-categories';
+import { getCachedNavigationCategories } from './cached-categories';
 import { createPublicClient } from './supabase/public';
 
 describe('getCachedNavigationCategories', () => {
@@ -87,16 +84,21 @@ describe('getCachedNavigationCategories', () => {
     );
   });
 
-  it('shares the bounded build-read envelope with other public storefront clients', async () => {
+  it('takes the priority lane past the bounded build-read envelope', async () => {
     vi.stubEnv('BACI_STOREFRONT_BUILD_READS', 'bounded');
     mockOrder.mockResolvedValueOnce({ data: [], error: null });
     const releases: Array<() => void> = [];
-    const upstream = vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async () =>
-        new Promise<Response>((resolve) => {
-          releases.push(() => resolve(new Response('ok')));
-        })
-    );
+    const upstream = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input) =>
+        // Bulk reads park on manual releases (envelope-bound); the nav URL
+        // resolves immediately to prove it never needed a release.
+        String(input).includes('/nav')
+          ? new Response('ok')
+          : new Promise<Response>((resolve) => {
+              releases.push(() => resolve(new Response('ok')));
+            })
+      );
 
     await getCachedNavigationCategories('merchant-1');
     createPublicClient({ clientInfo: 'baci-storefront-other-read-1' });
@@ -107,58 +109,26 @@ describe('getCachedNavigationCategories', () => {
       ([_url, _key, options]) =>
         (options as { global?: { fetch?: typeof fetch } }).global?.fetch
     );
-    const reads = configuredFetches.map((configuredFetch, index) =>
-      (configuredFetch ?? globalThis.fetch)(`https://example.com/read-${index}`)
+    // Nav client first, then the three bulk clients.
+    const [navFetch, ...bulkFetches] = configuredFetches;
+    const bulkReads = bulkFetches.map((bulkFetch, index) =>
+      (bulkFetch ?? globalThis.fetch)(`https://example.com/bulk-${index}`)
     );
 
     try {
+      // Bulk reads hold all three envelope slots...
       await vi.waitFor(() => expect(upstream).toHaveBeenCalledTimes(3));
-      releases.shift()?.();
-      await vi.waitFor(() => expect(upstream).toHaveBeenCalledTimes(4));
+      // ...yet the nav read sails through with no release: the shell-static
+      // nav must land inside the prerender window, not behind bulk reads.
+      await expect(
+        (navFetch ?? globalThis.fetch)('https://example.com/nav')
+      ).resolves.toBeInstanceOf(Response);
+      expect(upstream).toHaveBeenCalledTimes(4);
     } finally {
       for (const release of releases) release();
     }
 
-    await expect(Promise.all(reads)).resolves.toHaveLength(4);
-  });
-});
-
-describe('getStorefrontNavigationCategories (request-local fail-open boundary)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('passes successful navigation categories straight through', async () => {
-    mockOrder.mockResolvedValueOnce({
-      data: [{ name: 'Smartphones', slug: 'smartphones' }],
-      error: null,
-    });
-
-    await expect(
-      getStorefrontNavigationCategories('merchant-1')
-    ).resolves.toEqual([{ name: 'Smartphones', slug: 'smartphones' }]);
-  });
-
-  it('degrades a transient failure to an empty nav outside the cache scope', async () => {
-    const consoleSpy = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => undefined);
-    mockOrder.mockResolvedValueOnce({
-      data: null,
-      error: { code: '57014', message: 'canceling statement due to timeout' },
-    });
-
-    await expect(
-      getStorefrontNavigationCategories('merchant-1')
-    ).resolves.toEqual([]);
-    expect(consoleSpy).toHaveBeenCalledWith(
-      'Navigation categories query failed outside cache:',
-      expect.objectContaining({ merchantId: 'merchant-1' })
-    );
+    await expect(Promise.all(bulkReads)).resolves.toHaveLength(3);
   });
 });
 

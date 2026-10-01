@@ -1,0 +1,30 @@
+# Storefront middleware architecture research
+
+Read on 2026-09-26. Recommendations below are Baci-specific inferences, not claims that Shopify runs Next.js Proxy or that published performance results transfer to Baci.
+
+## Findings and application
+
+1. **Separate routing from rendering.** Shopify's [2021 routing account](https://shopify.engineering/dynamically-route-storefront-traffic) describes routing rules selecting a renderer, merchant-scoped rollout and sampled parity verification. It also describes simplifying temporary migration rules afterward. For Baci: retain one explicit ordered coordinator and focused security, host-routing and response-policy modules. Do not introduce a remote rule engine or microservices for one merchant.
+2. **Reduce the underlying work before adding caches.** Shopify's [2020 renderer report](https://shopify.engineering/simplify-batch-cache-optimized-server-side-storefront-rendering) describes selective data loading, fewer database round trips and layered caches. This is historical architecture evidence, not a current implementation recipe. Baci already memoizes completed preflight results; proposed single-flight only addresses overlapping cold reads that escape that memo.
+3. **Separate public and personalized data.** Shopify's [data-handling guidance](https://hydrogen.shopify.dev/update/improving-data-handling-in-hydrogen-and-remix?nav=open) separates catalog, price/availability and cart queries by cache policy. Baci must preserve customer/auth/draft isolation and authoritative checkout validation. Longer public TTLs remain gated on reliable invalidation; this research does not authorize enabling durable PDP caching.
+4. **Cache ahead of expensive execution.** Shopify's [Oxygen full-page cache](https://shopify.dev/docs/storefronts/headless/hydrogen/caching/full-page-cache) can answer a fresh cache hit without invoking its storefront worker. In contrast, [Vercel Routing Middleware](https://vercel.com/docs/routing-middleware) executes before Vercel's cache. Baci inference: a correctly isolated Cloudflare hit in front of Vercel can avoid middleware work; a Vercel page-cache hit does not by itself avoid matching middleware. This requires validating all headers and rules that would otherwise be applied by middleware, tenant/cache-key isolation and purge behavior. No live rules were changed.
+5. **Use collapsing selectively, not as doctrine.** eBay describes future-backed cache filling in its [notification streaming platform](https://innovation.ebayinc.com/stories/ebays-notification-streaming-platform-how-ebay-handles-real-time-push-notifications-at-scale/); that is analogous concurrency work, not storefront middleware. [Cloudflare explains request collapsing](https://blog.cloudflare.com/sometimes-i-cache/), and [Vercel already collapses supported ISR regeneration](https://vercel.com/blog/cdn-request-collapsing). Do not duplicate provider-owned locking.
+6. **A current counterexample matters.** Shopify's [July 2026 Hydrogen developer-preview release](https://hydrogen.shopify.dev/update/developer-preview-release-notes-july-8-2026) removed request-local in-flight cache deduplication because it complicated stale-while-revalidate/stale-if-error for little gain. This differs from Baci's proposed cross-request, instance-local transport sharing, but means its benefit must be demonstrated rather than assumed. Preserve existing memo, fail-open and breaker semantics; share only compatible concurrent operations, with bounded tracking and cleanup.
+
+## Recommended destination
+
+Public cacheable request → qualified front-CDN cache → thin proxy (on origin requests) → cache-aware route/data layer → database only when needed.
+
+Protected/session requests bypass shared public caches. Proxy retains routing and defense-in-depth guards; protected handlers remain responsible for authorization. Business eligibility and product loading belong outside the generic router where possible. Moving current authoritative SEO preflights out requires a separate design proving redirects and hard 404s still occur before streaming; it is not part of this behavior-preserving extraction.
+
+## Scope and measurement
+
+Complete the current extraction without changing routing precedence or provider settings. Evaluate cold-RPC coalescing through deterministic tests, then production overlap and RPC-per-request metrics. A synthetic ten-to-one reduction is not a monthly billing forecast. Compare equivalent traffic windows using middleware invocations, active CPU, provisioned memory, upstream cache hits, RPC starts and error rates. [Vercel pricing](https://vercel.com/docs/functions/usage-and-pricing) distinguishes active CPU from provisioned memory; wall-clock duration alone is not CPU cost.
+
+## Read-only matcher audit
+
+Potential later exclusions are exact public discovery paths: `/.well-known/apple-app-site-association`, `/.well-known/http-message-signatures-directory`, `/.well-known/oauth-authorization-server`, `/.well-known/oauth-authorization-server/agent-auth/v1`, `/.well-known/openid-configuration`, and `/.well-known/oauth-protected-resource`. Their canonical ordinary-host requests currently pass through the proxy, and handlers derive metadata from Host rather than injected merchant headers.
+
+These are **conditional candidates, not approved exclusions**. The earlier blog-host migration owns all paths on `blog.ogabassey.com`; bypassing proxy globally changes that redirect. Preserve case/slash normalization, malformed-path handling, GET/HEAD and unsupported-method behavior before changing matcher coverage. API catalog, UCP and agent-native-commerce endpoints additionally receive proxy response headers today. No exclusion was implemented.
+
+Keep tenant RSC/prefetch, API security, merchant favicons/sitemaps/feeds and credential-stripping relay paths covered. Normal static extensions, robots, ads and manifest routes already have matcher exclusions. The effective matcher is a union; inspecting only its broad regex is insufficient. Measure candidate traffic before prioritizing this work: tiny metadata traffic may not justify the complexity.

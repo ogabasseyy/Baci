@@ -1,4 +1,4 @@
-import ts from 'typescript';
+import ts from '@typescript/typescript6';
 import { isTestSourcePath } from './event-pipeline-source-path';
 
 const sourceExtension = '(?:cjs|cts|js|jsx|mjs|mts|ts|tsx)';

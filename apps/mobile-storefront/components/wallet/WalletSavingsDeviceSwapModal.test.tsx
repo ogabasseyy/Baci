@@ -5,9 +5,29 @@ import Colors from '@/constants/Colors';
 import type { Product } from '@/types/product';
 import { WalletSavingsDeviceSwapModal } from './WalletSavingsDeviceSwapModal';
 
-jest.mock('expo-image', () => ({
-  Image: () => null,
-}));
+jest.mock('expo-image', () => {
+  const { View } = jest.requireActual(
+    'react-native'
+  ) as typeof import('react-native');
+
+  return {
+    Image: ({
+      autoplay,
+      accessibilityLabel,
+    }: {
+      autoplay?: boolean;
+      accessibilityLabel?: string;
+    }) => {
+      const viewProps = {
+        autoplay,
+        accessible: true,
+        accessibilityRole: 'image',
+        accessibilityLabel,
+      } as unknown as React.ComponentProps<typeof View>;
+      return <View {...viewProps} />;
+    },
+  };
+});
 
 const products: Product[] = [
   {
@@ -97,6 +117,17 @@ describe('WalletSavingsDeviceSwapModal', () => {
         name: 'Select iPhone 15 Pro Storage: 128GB',
       })
     ).toHaveAccessibilityState({ disabled: true });
+  });
+
+  describe('bugfix: animated wallet product images', () => {
+    it('does not autoplay replacement device images', () => {
+      renderSwapModal();
+
+      expect(
+        screen.getAllByRole('image', { name: 'iPhone 15 Pro' })[0]?.props
+          .autoplay
+      ).toBe(false);
+    });
   });
 
   it('shows loading and empty states', () => {

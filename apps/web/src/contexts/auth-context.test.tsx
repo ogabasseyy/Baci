@@ -28,6 +28,9 @@ function AuthProbe() {
 describe('AuthProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // A stored session takes the immediate boot path (same timing as the
+    // pre-deferral behavior these cases pin down).
+    window.localStorage.setItem('sb-testref-auth-token', '{}');
     mocks.getUser.mockReturnValue(
       new Promise(() => {
         // Intentionally unresolved to verify initialUser is used immediately.
@@ -119,7 +122,10 @@ describe('AuthProvider', () => {
       </AuthProvider>
     );
 
-    expect(pushAuthEvent).not.toBeNull();
+    // The subscription attaches once the lazily imported client resolves.
+    await waitFor(() => {
+      expect(pushAuthEvent).not.toBeNull();
+    });
     // Two-step cast because TS can't narrow `let` re-assigned inside the
     // mockImplementation callback above.
     const push = pushAuthEvent as unknown as (

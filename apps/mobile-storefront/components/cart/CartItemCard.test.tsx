@@ -5,6 +5,7 @@ import type { CartItem } from '@/stores/cart-store';
 import CartItemCard from './CartItemCard';
 
 const mockPush = jest.fn();
+const mockSafeImage = jest.fn((_props: unknown) => null);
 
 jest.mock('expo-router', () => ({
   router: {
@@ -13,9 +14,7 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('@/components/ui/SafeImage', () => ({
-  SafeImage: function MockSafeImage() {
-    return null;
-  },
+  SafeImage: (props: unknown) => mockSafeImage(props),
 }));
 
 function createItem(overrides: Partial<CartItem> = {}): CartItem {
@@ -62,6 +61,24 @@ function renderCard(
 describe('CartItemCard', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('bounds managed catalog images before passing them to SafeImage', () => {
+    renderCard(
+      createItem({
+        image_url: 'https://cdn.ogabassey.com/core-assets/products/phone.avif',
+      })
+    );
+
+    expect(mockSafeImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: {
+          height: 128,
+          uri: 'https://cdn.ogabassey.com/image/width=128,height=128,quality=82,format=webp/core-assets/products/phone.avif',
+          width: 128,
+        },
+      })
+    );
   });
 
   it('renders condition badges for new and used items and navigates when image is pressed', () => {

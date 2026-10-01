@@ -270,7 +270,7 @@ export const OgabasseyFooter: React.FC<FooterProps> = ({ storeSlug, logo }) => {
         </div>
 
         <div className="mt-8 pt-4 border-t border-gray-800 text-center text-[10px] text-gray-500">
-          <span suppressHydrationWarning>&copy; {new Date().getFullYear()} Ogabassey Ltd. All rights reserved.</span>
+          <span>&copy; Ogabassey Ltd. All rights reserved.</span>
         </div>
       </div>
     </footer>

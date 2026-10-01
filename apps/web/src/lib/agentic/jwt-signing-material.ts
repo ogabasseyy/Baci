@@ -1,9 +1,15 @@
 // Namespace import as a value (not type-only) because we use
 // `crypto.createPrivateKey` at runtime and `crypto.KeyObject` as a type.
+import { Buffer } from 'node:buffer';
 import * as crypto from 'node:crypto';
 import 'server-only';
 import type { z } from 'zod';
-import { getSupabaseAgenticJwtPrivateJwk, getSupabaseJwtSecret } from '@/env';
+import {
+  getSupabaseAgenticJwtPrivateJwk,
+  getSupabaseAnonKey,
+  getSupabaseJwtSecret,
+  getSupabaseLegacyAnonJwt,
+} from '@/env';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { supabaseAgenticJwtPrivateJwkSchema } from '@/schemas/supabase-agentic-jwt-private-jwk';
@@ -30,11 +36,17 @@ type CachedPrivateJwkMaterial =
 
 let cachedPrivateJwkMaterial: CachedPrivateJwkMaterial = null;
 
+const PRODUCTION_SIGNING_MATERIAL_ERROR =
+  'SUPABASE_AGENTIC_JWT_PRIVATE_JWK is required in production when the legacy Supabase JWT secret cannot be verified';
+
 export function getAgenticJwtSigningMaterial(): AgenticJwtSigningMaterial {
   const privateJwk = getSupabaseAgenticJwtPrivateJwk();
   if (privateJwk) {
     if (cachedPrivateJwkRaw === privateJwk) {
       if (cachedPrivateJwkMaterial === INVALID_PRIVATE_JWK_MATERIAL) {
+        if (isProductionRuntime()) {
+          throw new Error(PRODUCTION_SIGNING_MATERIAL_ERROR);
+        }
         return { secret: getSupabaseJwtSecret(), type: 'legacy-secret' };
       }
 
@@ -70,13 +82,22 @@ export function getAgenticJwtSigningMaterial(): AgenticJwtSigningMaterial {
             ? { message: error.message, name: error.name }
             : error
         ),
-        message:
-          'Agentic JWT private JWK is invalid; falling back to legacy JWT secret',
+        message: isProductionRuntime()
+          ? 'Agentic JWT private JWK is invalid in production'
+          : 'Agentic JWT private JWK is invalid; falling back to legacy JWT secret',
       });
+      if (isProductionRuntime()) {
+        throw new Error(PRODUCTION_SIGNING_MATERIAL_ERROR);
+      }
     }
   }
 
-  return { secret: getSupabaseJwtSecret(), type: 'legacy-secret' };
+  const legacySecret = getSupabaseJwtSecret();
+  if (isProductionRuntime() && !isLegacySupabaseJwtSecret(legacySecret)) {
+    throw new Error(PRODUCTION_SIGNING_MATERIAL_ERROR);
+  }
+
+  return { secret: legacySecret, type: 'legacy-secret' };
 }
 
 export function hasUsableAgenticJwtSigningMaterial(): boolean {
@@ -100,4 +121,61 @@ function parseSupabaseAgenticPrivateJwk(
   rawPrivateJwk: string
 ): SupabaseAgenticPrivateJwk {
   return supabaseAgenticJwtPrivateJwkSchema.parse(rawPrivateJwk);
+}
+
+function isProductionRuntime(): boolean {
+  return process.env.NODE_ENV === 'production';
+}
+
+/**
+ * A non-empty legacy env value can be a signing-key id or another stale
+ * placeholder. Verify it against the configured legacy anon key before using
+ * it, otherwise the generated capability will be rejected as PGRST301.
+ */
+function isLegacySupabaseJwtSecret(secret: string): boolean {
+  if (typeof secret !== 'string' || secret.length === 0) {
+    return false;
+  }
+
+  let anonKey: string;
+  try {
+    anonKey = (getSupabaseLegacyAnonJwt() ?? getSupabaseAnonKey()).trim();
+  } catch {
+    return false;
+  }
+
+  const parts = anonKey.split('.');
+  if (parts.length !== 3 || parts.some((part) => part.length === 0)) {
+    return false;
+  }
+
+  const [encodedHeader, encodedPayload, encodedSignature] = parts;
+  let header: unknown;
+  try {
+    header = JSON.parse(
+      Buffer.from(encodedHeader, 'base64url').toString('utf8')
+    );
+  } catch {
+    return false;
+  }
+
+  if (
+    typeof header !== 'object' ||
+    header === null ||
+    !('alg' in header) ||
+    header.alg !== 'HS256'
+  ) {
+    return false;
+  }
+
+  const expectedSignature = crypto
+    .createHmac('sha256', secret)
+    .update(`${encodedHeader}.${encodedPayload}`)
+    .digest();
+  const actualSignature = Buffer.from(encodedSignature, 'base64url');
+
+  return (
+    actualSignature.length === expectedSignature.length &&
+    crypto.timingSafeEqual(actualSignature, expectedSignature)
+  );
 }

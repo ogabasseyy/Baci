@@ -8,6 +8,7 @@ describe('buildProductComparisonMatrix', () => {
         {
           id: 'left',
           name: 'Phone A',
+          category: 'Smartphones',
           product_key_specs: {
             screen_size_inches: 6.7,
             refresh_rate_hz: 120,
@@ -19,6 +20,7 @@ describe('buildProductComparisonMatrix', () => {
         {
           id: 'right',
           name: 'Phone B',
+          category: 'Smartphones',
           product_key_specs: {
             screen_size_inches: 6.8,
             refresh_rate_hz: 144,
@@ -54,10 +56,16 @@ describe('buildProductComparisonMatrix', () => {
   it('uses em dash for missing values and keeps available counterpart values', () => {
     const matrix = buildProductComparisonMatrix({
       products: [
-        { id: 'left', name: 'Phone A', product_key_specs: { ram_gb: 8 } },
+        {
+          id: 'left',
+          name: 'Phone A',
+          category: 'Smartphones',
+          product_key_specs: { ram_gb: 8 },
+        },
         {
           id: 'right',
           name: 'Phone B',
+          category: 'Smartphones',
           product_key_specs: { storage_gb: 256 },
         },
       ],
@@ -74,6 +82,28 @@ describe('buildProductComparisonMatrix', () => {
           values: ['—', '256GB'],
           isDifferent: true,
         },
+      ])
+    );
+  });
+
+  it('uses mobile rows for slug-only google-pixel comparison categories', () => {
+    const matrix = buildProductComparisonMatrix({
+      products: [
+        {
+          id: 'pixel',
+          name: 'Google Pixel 10',
+          category: 'google_pixel',
+          product_key_specs: { has_5g: true, ram_gb: 12 },
+        },
+      ],
+    });
+
+    expect(matrix.groups).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          category: 'Network',
+          rows: [{ label: '5G Support', values: ['Yes'], isDifferent: false }],
+        }),
       ])
     );
   });

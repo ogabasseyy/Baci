@@ -1,6 +1,8 @@
 const DATABASE_ERROR_CODE_PATTERN = /^(?:[0-9A-Z]{5}|PGRST\d+)$/;
 const TIMEOUT_ERROR_CODES = new Set(['20', '23', '57014', 'PGRST003']);
-const RETRYABLE_HTTP_STATUSES = new Set([408, 429, 502, 503, 504, 520]);
+const RETRYABLE_HTTP_STATUSES = new Set([
+  408, 429, 502, 503, 504, 520, 521, 522,
+]);
 // PostgREST group-0 codes (PGRST000-002) are 503 connection / schema-cache
 // failures — transient transport, NOT stable database errors. They must be
 // classified before the generic PGRST-code branch so they stay retryable

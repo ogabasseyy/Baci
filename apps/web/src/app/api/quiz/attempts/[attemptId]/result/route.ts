@@ -14,7 +14,13 @@ import {
 } from '@/app/api/quiz/_shared/route-auth';
 import { logger } from '@/lib/logger';
 import { createQuizResultClaimToken } from '@/lib/quiz/quiz-result-claim';
+import { QuizVoucherTokenConfigError } from '@/lib/quiz-voucher-token';
 import { quizAttemptParamsSchema } from '@/schemas/quiz';
+import { getAttemptPrizeAwardClaim } from '../answers/submit-answer-helpers';
+import {
+  addSignedPrizeClaim,
+  voucherTokenConfigResponse,
+} from '../answers/submit-answer-voucher';
 
 export async function GET(
   request: NextRequest,
@@ -42,6 +48,7 @@ export async function GET(
 
   const { claimMetadata, ...publicResult } = raw.data;
   let claim: { expiresAt: string; token: string } | undefined;
+  let prizeClaim: unknown;
   if (raw.data.availability === 'final' && claimMetadata) {
     try {
       const token = createQuizResultClaimToken({
@@ -59,11 +66,56 @@ export async function GET(
       });
       return rpcErrorResponse();
     }
+
+    const award = await getAttemptPrizeAwardClaim(
+      auth.supabase,
+      parsedParams.data.attemptId,
+      auth.user.id
+    );
+    if (award.error || !award.claim) {
+      logger.error({
+        attemptId: parsedParams.data.attemptId,
+        event: 'quiz_result_prize_claim_lookup_failed',
+        message: 'Quiz result prize claim lookup failed',
+        userId: auth.user.id,
+      });
+      return rpcErrorResponse();
+    }
+    if (award.claim.awardId !== claimMetadata.awardId) {
+      logger.error({
+        attemptId: parsedParams.data.attemptId,
+        event: 'quiz_result_prize_claim_mismatch',
+        message: 'Quiz result prize claim did not match the persisted award',
+        userId: auth.user.id,
+      });
+      return rpcErrorResponse();
+    }
+    try {
+      const signedPrize = addSignedPrizeClaim(
+        { prizeClaim: award.claim },
+        auth.user.id,
+        claimMetadata.expiresAt
+      );
+      if (
+        !signedPrize ||
+        typeof signedPrize !== 'object' ||
+        !('prizeClaim' in signedPrize)
+      ) {
+        return rpcErrorResponse();
+      }
+      prizeClaim = signedPrize.prizeClaim;
+    } catch (error) {
+      if (error instanceof QuizVoucherTokenConfigError) {
+        return voucherTokenConfigResponse();
+      }
+      throw error;
+    }
   }
 
   const projection = parseQuizV2PublicResult({
     ...publicResult,
     ...(claim ? { claim } : {}),
+    ...(prizeClaim ? { prizeClaim } : {}),
   });
   if (!projection.success) {
     logger.error({

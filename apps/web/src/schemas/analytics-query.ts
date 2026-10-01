@@ -4,6 +4,10 @@ const isoDateTime = z.iso.datetime({ offset: true });
 
 export const analyticsQuerySchema = z
   .object({
+    cacheBust: z
+      .string()
+      .regex(/^\d{1,10}$/)
+      .optional(),
     endDate: isoDateTime.optional(),
     startDate: isoDateTime.optional(),
     branchId: z.uuid('Invalid branch id').optional(),

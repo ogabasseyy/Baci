@@ -1,0 +1,1 @@
+import '@baci/shared/contracts';

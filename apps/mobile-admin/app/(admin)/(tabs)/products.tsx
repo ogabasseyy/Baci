@@ -23,6 +23,7 @@ import { ProductsTabPage } from '@/components/product/ProductsTabPage';
 import { getCurrencySymbol } from '@/components/product/product.shared';
 import { TopTabBar } from '@/components/ui/TopTabBar';
 import { SPACING, TYPOGRAPHY } from '@/constants/theme';
+import { useAdminTabScrollToTop } from '@/hooks/useAdminTabScrollToTop';
 import { useCollapsibleSearchBar } from '@/hooks/useCollapsibleSearchBar';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useMerchant } from '@/hooks/useMerchant';
@@ -45,6 +46,16 @@ export default function ProductsScreen() {
   const currencySymbol = getCurrencySymbol(merchant?.payout_currency);
 
   const [topTab, setTopTab] = useState<TopTab>('in_stock');
+  const inStockScrollRef = useRef<{
+    scrollToOffset: (options: { offset: number; animated?: boolean }) => void;
+  }>(null);
+  const websiteScrollRef = useRef<{
+    scrollToOffset: (options: { offset: number; animated?: boolean }) => void;
+  }>(null);
+  useAdminTabScrollToTop(
+    'products',
+    topTab === 'in_stock' ? inStockScrollRef : websiteScrollRef
+  );
   // The website page mounts lazily — as soon as a swipe toward it starts.
   const [isWebsiteVisited, setIsWebsiteVisited] = useState(false);
   // Each page owns its sub-tab; the screen only mirrors them for the FAB.
@@ -164,6 +175,7 @@ export default function ProductsScreen() {
       >
         <View key="in_stock" collapsable={false} style={styles.page}>
           <ProductsTabPage
+            scrollRef={inStockScrollRef}
             currencySymbol={currencySymbol}
             onClearSearch={() => setSearchQuery('')}
             onOpenCreateCategory={() => setIsCategoryModalVisible(true)}
@@ -181,6 +193,7 @@ export default function ProductsScreen() {
         <View key="on_website" collapsable={false} style={styles.page}>
           {isWebsiteVisited ? (
             <ProductsTabPage
+              scrollRef={websiteScrollRef}
               currencySymbol={currencySymbol}
               onClearSearch={() => setSearchQuery('')}
               onOpenCreateCategory={() => setIsCategoryModalVisible(true)}

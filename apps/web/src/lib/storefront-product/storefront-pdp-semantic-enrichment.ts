@@ -1,7 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { PublishedClusterPost } from '@/lib/storefront-content/content-cluster-types';
 import type { StorefrontClusterGuideRequest } from '@/lib/storefront-content/storefront-cluster-guide-request';
+import { createStorefrontPdpSemanticCooldownResult } from '@/lib/storefront-product/create-storefront-pdp-semantic-cooldown-result';
 import { PDP_SEMANTIC_INVENTORY_LIMIT } from '@/lib/storefront-product/pdp-semantic-inventory-limit';
+import { runStorefrontPdpSemanticRpcWithCooldown } from '@/lib/storefront-product/run-storefront-pdp-semantic-rpc-with-cooldown';
+import { storefrontPdpSemanticReadCooldown } from '@/lib/storefront-product/storefront-pdp-semantic-read-cooldown-singleton';
 import type { StorefrontDatabase } from '@/types/storefront-database';
 import type { Json } from '@/types/supabase';
 import {
@@ -16,6 +19,7 @@ import {
 import type { ProductSemanticCandidate } from './product-semantic-types';
 
 const PDP_SEMANTIC_ENRICHMENT_TOTAL_DEADLINE_MS = 5_000;
+const PDP_SEMANTIC_ENRICHMENT_TRACE_THRESHOLD_MS = 4_000;
 const PDP_SEMANTIC_CLUSTER_GUIDE_LIMIT = 48;
 const PDP_SEMANTIC_PRODUCT_GUIDE_LIMIT = 8;
 
@@ -212,6 +216,10 @@ export async function readStorefrontPdpSemanticEnrichment(
   client: SupabaseClient<StorefrontDatabase>,
   input: ReadStorefrontPdpSemanticEnrichmentInput
 ): Promise<StorefrontReadResult<ProductSeoLinkData>> {
+  if (storefrontPdpSemanticReadCooldown.isCoolingDown(input.merchantId)) {
+    return createStorefrontPdpSemanticCooldownResult();
+  }
+
   const query = client.rpc('get_storefront_pdp_semantic_enrichment_v1', {
     p_category_slug: input.clusterRequest.p_category_slug,
     p_cluster_guide_limit: PDP_SEMANTIC_CLUSTER_GUIDE_LIMIT,
@@ -223,20 +231,38 @@ export async function readStorefrontPdpSemanticEnrichment(
     p_product_id: input.productId,
     p_search_query: input.clusterRequest.p_search_query,
   });
-  const boundedQuery =
-    typeof query.abortSignal === 'function'
-      ? query.abortSignal(
-          AbortSignal.timeout(PDP_SEMANTIC_ENRICHMENT_TOTAL_DEADLINE_MS)
-        )
-      : query;
-  const response = await boundedQuery;
+  const { response, trace } = await runStorefrontPdpSemanticRpcWithCooldown(
+    query,
+    {
+      deadlineMs: PDP_SEMANTIC_ENRICHMENT_TOTAL_DEADLINE_MS,
+      traceThresholdMs: PDP_SEMANTIC_ENRICHMENT_TRACE_THRESHOLD_MS,
+    },
+    input.merchantId
+  );
+
   const result = resolveStorefrontReadResult({
     operation: 'pdp_semantic_enrichment',
     response,
     parse: (rows) => (Array.isArray(rows) ? (rows[0] ?? null) : null),
   });
 
-  if (result.status === 'unavailable') return result;
+  if (result.status === 'unavailable' && result.error.kind === 'timeout') {
+    trace({
+      errorCode: result.error.code,
+      outcome: 'timeout_response',
+      responseStatus: result.error.httpStatus,
+    });
+  }
+
+  if (result.status === 'unavailable') {
+    if (result.error.retryable) {
+      storefrontPdpSemanticReadCooldown.markFailure(input.merchantId);
+    } else {
+      storefrontPdpSemanticReadCooldown.clear(input.merchantId);
+    }
+    return result;
+  }
+  storefrontPdpSemanticReadCooldown.clear(input.merchantId);
   if (result.status === 'not_found') return unavailableIntegrityResult();
 
   const row = result.value;

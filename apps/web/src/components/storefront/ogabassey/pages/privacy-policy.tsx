@@ -27,6 +27,7 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
   const email = merchant?.email || 'support@ogabassey.com';
   const address = merchant?.business_address || 'Lagos, Nigeria';
   const customContent = merchant?.pages?.privacy;
+  const isOgabassey = !merchant || merchant.slug === 'ogabassey';
 
   const sections = [
     {
@@ -100,7 +101,19 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
     {
       title: 'Sharing Your Information',
       icon: Share2,
-      content: (
+      content: isOgabassey ? (
+        <p>
+          We share only the information needed with our hosting and database
+          providers, payment processors, delivery partners, and support providers
+          to run the store and fulfil orders. When you use our ChatGPT app,
+          OpenAI processes your conversation under its own privacy terms and
+          sends us the tool inputs needed to answer your request. We do not sell
+          your personal information. When semantic catalog search is enabled,
+          we send product search text to Google Gemini to find matching items.
+          We do not deliberately include account, order, or payment records in
+          those requests.
+        </p>
+      ) : (
         <p>
           We do not sell, trade, or otherwise transfer to outside parties your
           Personally Identifiable Information unless we provide users with
@@ -121,6 +134,64 @@ export const OgabasseyV2PrivacyPolicy: React.FC<PrivacyProps> = ({ merchant }) =
         </p>
       ),
     },
+    ...(isOgabassey
+      ? [
+          {
+            title: 'How Long We Keep Your Information',
+            icon: Database,
+            content: (
+              <div className="space-y-3">
+                <p>
+                  We keep account and contact details while they are needed to
+                  provide your account, fulfil orders, and handle support. When
+                  that purpose ends, the NDP Act GAID 2025 generally limits
+                  storage to six calendar months where no other legal period
+                  applies. A legal obligation or claim may justify keeping
+                  specific records longer. We are reviewing our retention
+                  controls against these requirements; you can request deletion
+                  using the contact details below.
+                </p>
+                <p>
+                  Tax-relevant accounting and transaction records are kept for
+                  at least six years after the year of assessment to which they
+                  relate, as required by section 31(5) of the Nigeria Tax
+                  Administration Act, 2025. We limit access to records kept for
+                  legal purposes and delete or de-identify them when that basis
+                  ends.
+                </p>
+                <p>
+                  Catalog searches in our ChatGPT app do not create a saved
+                  Ogabassey account search history. Our server processes the
+                  tool request to return products; ChatGPT controls the
+                  retention of your conversation under OpenAI&apos;s own policy.
+                  When semantic search is enabled, Google may retain the search
+                  request for up to 55 days for abuse monitoring under its
+                  Gemini API terms. Its Paid Tier terms say these requests are
+                  not used to improve Google products.
+                </p>
+              </div>
+            ),
+          },
+          {
+            title: 'Your Privacy Choices',
+            icon: Eye,
+            content: (
+              <p>
+                You can ask us to access, correct, or delete your personal
+                information, or object to or restrict processing where the law
+                allows. You can also withdraw consent for optional processing.
+                Email us at <a href={`mailto:${email}`} className="underline">{email}</a>
+                {' '}from your registered address so we can verify your request.
+                If you cannot use that address, email us and provide other
+                information that can help us verify your identity.
+                We may retain the minimum records required for tax, disputes,
+                fraud prevention, or other legal obligations and will explain
+                any limit that applies to your request.
+              </p>
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (

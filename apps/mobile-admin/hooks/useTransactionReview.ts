@@ -1,8 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMerchant } from '@/hooks/useMerchant';
-import { fetchTransactionReviewRows } from '@/lib/fetch-transaction-review-rows';
-import { filterCancelledTransactionReviewRows } from '@/lib/filter-cancelled-transaction-review-rows';
-import { isTransactionReviewSchemaCacheError } from '@/lib/is-transaction-review-schema-cache-error';
+import { fetchTransactionReviewWithFallbacks } from '@/lib/fetch-transaction-review-with-fallbacks';
+import { filterExcludedTransactionReviewRows } from '@/lib/filter-excluded-transaction-review-rows';
 import {
   buildTransactionReviewRangeFilters,
   mapTransactionOrderRows,
@@ -10,6 +9,7 @@ import {
   type TransactionReviewOrder,
   type TransactionReviewOrderRow,
 } from '@/lib/transaction-review';
+import { TRANSACTION_REVIEW_SELECTORS } from '@/lib/transaction-review-selectors';
 
 interface TransactionReviewRange {
   endDate?: Date;
@@ -18,34 +18,8 @@ interface TransactionReviewRange {
 
 export type { TransactionReviewItem, TransactionReviewOrder };
 
-const TRANSACTION_REVIEW_FULL_SELECT =
-  'id, order_number, created_at, transaction_date, shipping_status, cancelled_at, customer_name, customer_email, customer_phone, payment_method, total, fulfillment_details, order_items(id, product_id, variant_id, product_match_status, name, price, quantity, cost_price, supplier_name, fulfillment_data, order_item_unit_costs(unit_index, cost_price, supplier_name, identifier_type, identifier_value), product_variants(cost_price, sku, attributes, condition), products(cost_price, metadata, sku, fulfillment_details))';
-
 export const TRANSACTION_REVIEW_LEGACY_SELECT =
-  'id, order_number, created_at, transaction_date, shipping_status, cancelled_at, customer_name, customer_email, customer_phone, payment_method, total, fulfillment_details, order_items(id, product_id, variant_id, product_match_status, name, price, quantity, cost_price, supplier_name, fulfillment_data, product_variants(cost_price, sku, attributes, condition), products(cost_price, metadata, sku, fulfillment_details))';
-
-const TRANSACTION_REVIEW_LEGACY_COMPAT_SELECT =
-  'id, order_number, created_at, transaction_date, shipping_status, customer_name, customer_email, customer_phone, payment_method, total, fulfillment_details, order_items(id, product_id, variant_id, product_match_status, name, price, quantity, cost_price, supplier_name, fulfillment_data, product_variants(cost_price, sku, attributes, condition), products(cost_price, metadata, sku, fulfillment_details))';
-
-const TRANSACTION_REVIEW_BASE_SELECT =
-  'id, order_number, created_at, shipping_status, cancelled_at, customer_name, customer_email, customer_phone, payment_method, total, fulfillment_details, order_items(id, product_id, name, price, quantity, fulfillment_data, products(cost_price, metadata, sku, fulfillment_details))';
-
-const TRANSACTION_REVIEW_BASE_COMPAT_SELECT =
-  'id, order_number, created_at, shipping_status, customer_name, customer_email, customer_phone, payment_method, total, fulfillment_details, order_items(id, product_id, name, price, quantity, fulfillment_data, products(cost_price, metadata, sku, fulfillment_details))';
-
-function warnTransactionReviewQueryError(
-  stage: 'Base' | 'Full' | 'Legacy',
-  error: {
-    code?: string;
-    details?: string;
-    hint?: string;
-    message?: string;
-  } | null
-) {
-  if (__DEV__ && error) {
-    console.warn('[TransactionReview] select failed', { error, stage });
-  }
-}
+  TRANSACTION_REVIEW_SELECTORS.legacy;
 
 export function useTransactionReview(range?: TransactionReviewRange) {
   const { merchant } = useMerchant();
@@ -87,93 +61,20 @@ export function useTransactionReview(range?: TransactionReviewRange) {
         throw new Error('Merchant context is not ready');
       }
 
-      let { data, error } = await fetchTransactionReviewRows({
+      const { data, error } = await fetchTransactionReviewWithFallbacks({
         endDateFilter,
         endDateIso,
-        includeCancelledAt: true,
-        includeTransactionDate: true,
         merchantId: merchant.id,
-        selectStatement: TRANSACTION_REVIEW_FULL_SELECT,
         startDateFilter,
         startDateIso,
       });
-
-      warnTransactionReviewQueryError('Full', error);
-
-      if (isTransactionReviewSchemaCacheError(error)) {
-        const legacyResult = await fetchTransactionReviewRows({
-          endDateFilter,
-          endDateIso,
-          includeCancelledAt: true,
-          includeTransactionDate: true,
-          merchantId: merchant.id,
-          selectStatement: TRANSACTION_REVIEW_LEGACY_SELECT,
-          startDateFilter,
-          startDateIso,
-        });
-
-        data = legacyResult.data;
-        error = legacyResult.error;
-
-        warnTransactionReviewQueryError('Legacy', error);
-      }
-
-      if (isTransactionReviewSchemaCacheError(error)) {
-        const baseResult = await fetchTransactionReviewRows({
-          endDateIso,
-          includeCancelledAt: true,
-          includeTransactionDate: false,
-          merchantId: merchant.id,
-          selectStatement: TRANSACTION_REVIEW_BASE_SELECT,
-          startDateIso,
-        });
-
-        data = baseResult.data;
-        error = baseResult.error;
-
-        warnTransactionReviewQueryError('Base', error);
-      }
-
-      if (isTransactionReviewSchemaCacheError(error)) {
-        const legacyCompatResult = await fetchTransactionReviewRows({
-          endDateFilter,
-          endDateIso,
-          includeCancelledAt: false,
-          includeTransactionDate: true,
-          merchantId: merchant.id,
-          selectStatement: TRANSACTION_REVIEW_LEGACY_COMPAT_SELECT,
-          startDateFilter,
-          startDateIso,
-        });
-
-        data = legacyCompatResult.data;
-        error = legacyCompatResult.error;
-
-        warnTransactionReviewQueryError('Legacy', error);
-      }
-
-      if (isTransactionReviewSchemaCacheError(error)) {
-        const baseCompatResult = await fetchTransactionReviewRows({
-          endDateIso,
-          includeCancelledAt: false,
-          includeTransactionDate: false,
-          merchantId: merchant.id,
-          selectStatement: TRANSACTION_REVIEW_BASE_COMPAT_SELECT,
-          startDateIso,
-        });
-
-        data = baseCompatResult.data;
-        error = baseCompatResult.error;
-
-        warnTransactionReviewQueryError('Base', error);
-      }
 
       if (error) {
         throw new Error(error.message);
       }
 
       return mapTransactionOrderRows(
-        filterCancelledTransactionReviewRows(
+        filterExcludedTransactionReviewRows(
           (data ?? []) as unknown as TransactionReviewOrderRow[]
         )
       );

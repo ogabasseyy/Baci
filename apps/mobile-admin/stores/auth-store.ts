@@ -30,6 +30,7 @@ import {
 import { clearAdminQueryCache } from '@/lib/query-client';
 import { supabase, supabaseAuthStorageKey } from '@/lib/supabase';
 import { trackAuthTelemetry } from '@/services/auth-telemetry';
+import type { SignupFlow } from '@/services/signup-lifecycle-telemetry';
 import { useRevenueCatStore } from '@/stores/revenueCatStore';
 
 type AuthProvider = 'password' | SocialAuthProvider;
@@ -57,6 +58,7 @@ interface AuthActions {
     firstName?: string;
     lastName?: string;
     fullName?: string;
+    signupFlow?: SignupFlow;
   }) => Promise<PasswordSignUpResult>;
   signInWithApple: () => Promise<{ cancelled?: boolean; error: string | null }>;
   signInWithGoogle: () => Promise<{
@@ -65,7 +67,9 @@ interface AuthActions {
   }>;
   verifySignupOtp: (
     email: string,
-    token: string
+    token: string,
+    attemptId?: string,
+    flow?: SignupFlow
   ) => Promise<VerifySignupOtpResult>;
   signOut: (onBeforeSignOut?: () => Promise<void>) => Promise<void>;
 }
@@ -181,6 +185,7 @@ export const useAuthStore = create<AuthStore>((set, get) => {
         getCurrentUserId: () => get().user?.id,
         onResetUserStores: () => resetUserStores(),
         setState: (state) => set(state),
+        signupFlow: params.signupFlow ?? 'merchant',
       }),
 
     signInWithGoogle: () => {
@@ -211,9 +216,16 @@ export const useAuthStore = create<AuthStore>((set, get) => {
       });
     },
 
-    verifySignupOtp: (email: string, token: string) =>
+    verifySignupOtp: (
+      email: string,
+      token: string,
+      attemptId?: string,
+      flow?: SignupFlow
+    ) =>
       runSignupOtpVerification({
+        attemptId,
         email,
+        flow,
         token,
         getCurrentUserId: () => get().user?.id,
         onResetUserStores: () => resetUserStores(),

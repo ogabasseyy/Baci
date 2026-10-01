@@ -86,6 +86,7 @@ describe('buildProductSpecData', () => {
 
   it('omits null, undefined, and empty-string product key specs without throwing', () => {
     const result = buildProductSpecData({
+      category: 'Smartphones',
       product_key_specs: {
         display_type: '   ',
         chipset: 'Snapdragon 8 Elite',
@@ -113,8 +114,9 @@ describe('buildProductSpecData', () => {
     );
   });
 
-  it('keeps zero-valued numeric specs and formats them consistently', () => {
+  it('omits zero-valued numeric measurement placeholders', () => {
     const result = buildProductSpecData({
+      category: 'Smartphones',
       product_key_specs: {
         ram_gb: 0,
         storage_gb: 0,
@@ -122,28 +124,13 @@ describe('buildProductSpecData', () => {
       },
     });
 
-    expect(result.detailedSpecs).toEqual(
-      expect.arrayContaining([
-        {
-          category: 'Memory',
-          items: [
-            { label: 'Internal Storage', value: '0GB' },
-            { label: 'RAM', value: '0GB' },
-          ],
-        },
-        {
-          category: 'Battery',
-          items: [{ label: 'Capacity', value: '0mAh' }],
-        },
-      ])
+    const values = result.detailedSpecs.flatMap((section) =>
+      section.items.map((item) => item.value)
     );
-    expect(result.specs).toEqual(
-      expect.arrayContaining([
-        { label: 'RAM', value: '0GB' },
-        { label: 'Storage', value: '0GB' },
-        { label: 'Battery', value: '0mAh' },
-      ])
-    );
+
+    expect(values).not.toContain('0GB');
+    expect(values).not.toContain('0mAh');
+    expect(result.specs).toEqual([]);
   });
 
   it('handles empty variant attributes with a safe General fallback', () => {
@@ -189,5 +176,77 @@ describe('buildProductSpecData', () => {
         ],
       },
     ]);
+  });
+
+  it('retains same-label facts from distinct sections while stored facts win within each section', () => {
+    const result = buildProductSpecData({
+      category: 'Smartphones',
+      detailedSpecs: [
+        {
+          category: 'Display',
+          items: [{ label: 'Protection', value: 'Gorilla Glass Victus 2' }],
+        },
+        {
+          category: 'Body',
+          items: [{ label: 'Protection', value: 'IP68' }],
+        },
+      ],
+      product_key_specs: {
+        display_protection: 'Ceramic Shield',
+        ip_rating: 'IP69',
+      },
+    });
+
+    expect(result.detailedSpecs).toEqual([
+      {
+        category: 'Display',
+        items: [{ label: 'Protection', value: 'Gorilla Glass Victus 2' }],
+      },
+      {
+        category: 'Body',
+        items: [{ label: 'Protection', value: 'IP68' }],
+      },
+    ]);
+  });
+
+  it('uses the mobile taxonomy for a slug-only google-pixel PDP category', () => {
+    const result = buildProductSpecData({
+      categories: { slug: 'google-pixel' },
+      product_key_specs: { has_5g: true, ram_gb: 12 },
+    });
+
+    expect(result.detailedSpecs).toEqual(
+      expect.arrayContaining([
+        {
+          category: 'Network',
+          items: [{ label: '5G Support', value: 'Yes' }],
+        },
+        {
+          category: 'Memory',
+          items: [{ label: 'RAM', value: '12GB' }],
+        },
+      ])
+    );
+  });
+
+  it('keeps a mobile negative card-slot capability after normalization', () => {
+    const result = buildProductSpecData({
+      category: 'Smartphones',
+      specifications: [
+        {
+          category: 'Memory',
+          items: [{ label: 'Card Slot', value: 'No' }],
+        },
+      ],
+      specs: [{ label: 'Card Slot', value: 'No' }],
+    });
+
+    expect(result.detailedSpecs).toEqual([
+      {
+        category: 'Memory',
+        items: [{ label: 'Card Slot', value: 'No' }],
+      },
+    ]);
+    expect(result.specs).toEqual([{ label: 'Card Slot', value: 'No' }]);
   });
 });

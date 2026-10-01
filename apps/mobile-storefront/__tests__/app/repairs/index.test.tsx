@@ -92,7 +92,7 @@ describe('RepairsScreen route', () => {
 
     render(<RepairsScreen />);
 
-    expect(screen.getByText('What needs fixing?')).toBeOnTheScreen();
+    expect(screen.getByText('Find your device')).toBeOnTheScreen();
     expect(screen.getByText('iPhone 13')).toBeOnTheScreen();
   });
 

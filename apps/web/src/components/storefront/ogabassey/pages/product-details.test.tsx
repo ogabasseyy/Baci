@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -85,6 +85,29 @@ describe('OgabasseyV2ProductDetails', () => {
   it('exports a valid component', () => {
     expect(OgabasseyV2ProductDetails).toBeDefined();
     expect(typeof OgabasseyV2ProductDetails).toBe('function');
+  });
+
+  it('uses the shared Lagos timezone delivery estimate at the PDP boundary', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-10T22:30:00Z'));
+
+    try {
+      render(<OgabasseyV2ProductDetails productId="1" />);
+
+      await act(async () => {});
+      expect(
+        screen.getByText('Est. Delivery: Thu, Jan 11 - Fri, Jan 12')
+      ).toBeInTheDocument();
+
+      await act(async () => {
+        vi.advanceTimersByTime(30 * 60 * 1000);
+      });
+      expect(
+        screen.getByText('Est. Delivery: Fri, Jan 12 - Sat, Jan 13')
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('does not submit an enclosing form when adding a product to the wishlist', () => {

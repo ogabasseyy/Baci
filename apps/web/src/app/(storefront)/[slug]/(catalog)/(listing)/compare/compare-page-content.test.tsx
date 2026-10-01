@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -6,6 +6,12 @@ import {
   getCachedCategoryPageData,
   getRequestScopedMerchant,
 } from '@/lib/cached-data';
+import { CompareIndexFallback } from './compare-index-fallback';
+import {
+  categories,
+  categoryPageData,
+  makeMerchant,
+} from './compare-page-content.test-fixtures';
 
 const mockHeaders = vi.fn();
 const mockNotFound = vi.fn(() => {
@@ -62,90 +68,9 @@ vi.mock('@/lib/routes', () => ({
   asRoute: (path: string) => path,
 }));
 
-type RequestScopedMerchant = NonNullable<
-  Awaited<ReturnType<typeof getRequestScopedMerchant>>
->;
-type CachedCategories = Awaited<ReturnType<typeof getCachedCategories>>;
 type CategoryPageData = Awaited<ReturnType<typeof getCachedCategoryPageData>>;
 
-function makeMerchant(
-  overrides: Partial<RequestScopedMerchant> = {}
-): RequestScopedMerchant {
-  return {
-    id: 'merchant-1',
-    business_name: 'Ogabassey',
-    site_title: 'Ogabassey',
-    site_tagline: 'Devices and repairs',
-    site_description: 'Shop devices and repairs.',
-    business_type: 'electronics',
-    logo_url: '',
-    phone: '',
-    email: 'support@ogabassey.com',
-    slug: 'ogabassey',
-    business_address: '',
-    payout_currency: 'NGN',
-    is_published: true,
-    template_id: 'ogabassey',
-    plan_tier: 'free',
-    premium_features: {},
-    country: 'NG',
-    ...overrides,
-  };
-}
-
 const merchant = makeMerchant({ custom_domain: 'ogabassey.com' });
-
-const laptopProducts = [
-  {
-    id: 'macbook-air-15',
-    name: '15" MacBook Air M4 (2025)',
-    slug: 'macbook-air-15-inch-m4-2025',
-    price: 2_000_000,
-    category: 'Laptops',
-    brand: 'Apple',
-    condition: 'new',
-    product_key_specs: {
-      chipset: 'Apple M4',
-      ram_gb: 16,
-      screen_size_inches: 15,
-      storage_gb: 512,
-    },
-  },
-  {
-    id: 'dell-xps-13',
-    name: 'Dell XPS 13 9350',
-    slug: 'dell-xps-13-9350',
-    price: 900_000,
-    category: 'Laptops',
-    brand: 'Dell',
-    condition: 'new',
-    product_key_specs: {
-      chipset: 'Intel Core Ultra 7',
-      ram_gb: 16,
-      screen_size_inches: 13,
-      storage_gb: 1024,
-    },
-  },
-];
-const categories = [
-  {
-    id: 'category-1',
-    name: 'Laptops',
-    slug: 'laptops',
-    description: null,
-    image_url: null,
-    is_active: true,
-    parent_id: null,
-  },
-] satisfies CachedCategories;
-const categoryPageData = {
-  isCollection: false,
-  category: null,
-  fallbackDescription: 'Shop laptops.',
-  fallbackName: 'Laptops',
-  isInactiveCategory: false,
-  products: laptopProducts,
-} satisfies CategoryPageData;
 
 const { ComparePageContent } = await import('./compare-page-content');
 
@@ -217,7 +142,7 @@ describe('ComparePageContent', () => {
     );
   });
 
-  it('uses the resolved merchant name in the compare index description', async () => {
+  it('keeps the resolved introduction identical to the loading introduction', async () => {
     vi.mocked(getRequestScopedMerchant).mockResolvedValueOnce(
       makeMerchant({
         business_name: 'Demo Devices',
@@ -231,8 +156,12 @@ describe('ComparePageContent', () => {
       })
     );
 
+    const description =
+      'Browse this store product comparison pages by category and open side-by-side guides for eligible products.';
+    expect(screen.getByText(description)).toBeInTheDocument();
+    const fallback = render(<CompareIndexFallback />);
     expect(
-      screen.getByText(/Browse Demo Devices product comparison pages/)
+      within(fallback.container).getByText(description)
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/phones, laptops, audio/)
@@ -299,6 +228,19 @@ describe('ComparePageContent', () => {
     ).toBeInTheDocument();
   });
 
+  it('omits the hub intro when the parent already committed LCP copy', async () => {
+    render(
+      await ComparePageContent({
+        omitIntro: true,
+        params: Promise.resolve({ slug: 'ogabassey' }),
+      })
+    );
+
+    expect(
+      screen.queryByRole('heading', { name: 'Compare products' })
+    ).not.toBeInTheDocument();
+  });
+
   it('calls notFound for invalid storefront identifiers', async () => {
     await expect(
       ComparePageContent({
@@ -319,5 +261,29 @@ describe('ComparePageContent', () => {
     ).rejects.toThrow('NEXT_NOT_FOUND');
 
     expect(mockNotFound).toHaveBeenCalledTimes(1);
+  });
+
+  it('scans the full hub discovery window while still capping emitted compare links', async () => {
+    const { COMPARE_HUB_PAGE_PRODUCTS_PER_CATEGORY_LIMIT } = await import(
+      './compare-index-discovery'
+    );
+
+    render(
+      await ComparePageContent({
+        params: Promise.resolve({ slug: 'ogabassey' }),
+      })
+    );
+
+    expect(getCachedCategoryPageData).toHaveBeenCalledWith(
+      merchant.id,
+      'laptops',
+      merchant.slug,
+      0,
+      COMPARE_HUB_PAGE_PRODUCTS_PER_CATEGORY_LIMIT
+    );
+    expect(COMPARE_HUB_PAGE_PRODUCTS_PER_CATEGORY_LIMIT).toBeGreaterThan(5);
+    expect(
+      screen.getAllByRole('link', { name: /Compare / }).length
+    ).toBeLessThanOrEqual(4);
   });
 });

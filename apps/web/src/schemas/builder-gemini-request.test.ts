@@ -1,3 +1,4 @@
+import { builderAiEditTestFixture } from '@baci/shared/test-fixtures/builder-ai-edit';
 import { describe, expect, it } from 'vitest';
 import { builderGeminiRequestSchema } from './builder-gemini-request';
 
@@ -42,5 +43,20 @@ describe('builderGeminiRequestSchema', () => {
         currentConfig: { content: 'Hero' },
       }).success
     ).toBe(false);
+  });
+
+  it('keeps the legacy no-version request separate from the shared v1 fixture', () => {
+    expect(
+      builderGeminiRequestSchema.safeParse({
+        ...builderAiEditTestFixture.request,
+      }).success
+    ).toBe(false);
+    expect(
+      builderGeminiRequestSchema.safeParse({
+        currentConfig: builderAiEditTestFixture.request.currentConfig,
+        merchantId: builderAiEditTestFixture.request.merchantId,
+        prompt: builderAiEditTestFixture.request.prompt,
+      }).success
+    ).toBe(true);
   });
 });

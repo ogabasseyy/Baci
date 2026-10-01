@@ -1,3 +1,4 @@
+import Ionicons from '@react-native-vector-icons/ionicons';
 import { Pressable, Text, View } from 'react-native';
 import type { QuizAttempt } from '@/services/quiz-types';
 import type { createQuizStyles } from './QuizScreen.styles';
@@ -95,6 +96,16 @@ export function QuizQuestionCard({
           ]}
         >
           <Text style={styles.answerText}>{option.label}</Text>
+          <View style={styles.answerSelectionIcon}>
+            {selectedOptionId === option.id ? (
+              <Ionicons
+                accessibilityLabel="Selected answer"
+                name="checkmark-circle"
+                size={23}
+                color={styles.answerButtonSelected.borderColor}
+              />
+            ) : null}
+          </View>
         </Pressable>
       ))}
       <Pressable

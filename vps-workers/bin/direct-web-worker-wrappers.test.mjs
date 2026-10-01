@@ -38,5 +38,10 @@ for (const [wrapper, label, script] of [
     );
     assert.match(source, new RegExp(`run-web-script\\.sh" ${label} ${script}`));
     assert.doesNotMatch(source, /CRON_SECRET|run-web-cron|https?:\/\//);
+    if (wrapper === 'process-quiz-finalization.sh') {
+      assert.match(source, /--once/);
+      assert.match(source, /--loop/);
+      assert.match(source, /src\/scripts\/process-quiz-finalization\.ts "\$@"/);
+    }
   });
 }

@@ -2,9 +2,26 @@ import { describe, expect, it } from 'vitest';
 import {
   isAirportDeliveryEligible,
   isPickupEligible,
+  isStoreOriginDelivery,
   isWebStorefrontDeliveryMethodEligible,
   resolveEligibleWebStorefrontDeliveryMethod,
 } from './delivery-method-eligibility';
+
+describe('isStoreOriginDelivery', () => {
+  it('is true for Lagos city or state (same-city as the store origin)', () => {
+    expect(isStoreOriginDelivery('Ikeja', 'Lagos')).toBe(true);
+    expect(isStoreOriginDelivery('Lagos', 'Lagos')).toBe(true);
+    expect(isStoreOriginDelivery('  lagos ', 'Oyo')).toBe(true);
+    expect(isStoreOriginDelivery('Ibadan', '  LAGOS ')).toBe(true);
+  });
+
+  it('is false for non-Lagos delivery addresses and when unset', () => {
+    expect(isStoreOriginDelivery('Port Harcourt', 'Rivers')).toBe(false);
+    expect(isStoreOriginDelivery('', '')).toBe(false);
+    expect(isStoreOriginDelivery(undefined, undefined)).toBe(false);
+    expect(isStoreOriginDelivery(null, null)).toBe(false);
+  });
+});
 
 describe('isPickupEligible', () => {
   it('is true only for Lagos (case/space-insensitive)', () => {

@@ -1,14 +1,19 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { notifyAdminUserDevices } from '@/lib/expo-push';
-import {
-  getMerchantForApiRequest,
-  toUserAccess,
-} from '@/lib/get-merchant-for-api-request';
+import { getPlatformAdminAuthForPermission } from '@/lib/platform-admin-auth';
+import { createClient } from '@/lib/supabase/server';
 import { adminPushTestSchema } from '@/schemas/push-test';
+import { deliverAdminPushTest } from './admin-push-test-delivery';
 
 export async function POST(request: NextRequest) {
+  const auth = await getPlatformAdminAuthForPermission('notifications.manage');
+  if (auth.status === 'unauthenticated') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (auth.status !== 'authenticated') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const { valid: csrfValid, response: csrfResponse } =
     await checkCsrfProtection(request);
   if (!csrfValid) {
@@ -22,45 +27,22 @@ export async function POST(request: NextRequest) {
   const parsed = adminPushTestSchema.safeParse(body ?? {});
   if (!parsed.success) {
     return NextResponse.json(
-      { error: 'Invalid request data', details: parsed.error.format() },
+      { error: 'Invalid request data' },
       { status: 400 }
     );
   }
 
-  const auth = await authenticateApiRequest(request);
-  if (!auth.user || !auth.supabase) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const merchantContext = await getMerchantForApiRequest(
-    auth.supabase,
-    auth.user.id
-  );
-  if (!merchantContext) {
-    return NextResponse.json({ error: 'Merchant not found' }, { status: 404 });
-  }
-
-  const access = toUserAccess(merchantContext);
-  if (!hasPermission(access, 'settings', 'view')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  let result: Awaited<ReturnType<typeof notifyAdminUserDevices>>;
+  let result: Awaited<ReturnType<typeof deliverAdminPushTest>>;
   try {
-    result = await notifyAdminUserDevices(
+    const supabase = await createClient();
+    result = await deliverAdminPushTest(
+      supabase,
       auth.user.id,
       parsed.data.title,
-      parsed.data.body,
-      {
-        type: 'admin_broadcast',
-        source: 'admin_push_test',
-        merchant_id: merchantContext.merchantId,
-        tested_at: new Date().toISOString(),
-      },
-      'admin'
+      parsed.data.body
     );
-  } catch (err) {
-    console.error('Push test send failed:', err);
+  } catch {
+    console.error('Admin push test delivery failed');
     return NextResponse.json(
       { error: 'Failed to send test notification' },
       { status: 500 }
@@ -80,6 +62,5 @@ export async function POST(request: NextRequest) {
     status,
     sent: result.sent,
     failed: result.failed,
-    errors: result.errors,
   });
 }

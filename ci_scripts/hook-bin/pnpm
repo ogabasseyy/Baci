@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+real_pnpm="${BACI_REAL_PNPM:?BACI_REAL_PNPM is unset}"
+scripts_dir=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd -P)
+
+if sh "$scripts_dir/is-dep-less-worktree.sh"; then
+  case "${1:-}" in
+    install|i|add)
+      exec "$real_pnpm" --config.allowUnusedPatches=true "$@"
+      ;;
+    *)
+      # pnpm's deps-status check re-invokes `pnpm install` without our
+      # allowUnusedPatches override, which fails in sparse worktrees.
+      exec "$real_pnpm" --config.verifyDepsBeforeRun=false "$@"
+      ;;
+  esac
+fi
+
+exec "$real_pnpm" "$@"

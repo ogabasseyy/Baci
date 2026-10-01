@@ -1,10 +1,10 @@
 'use client';
 
 import Autoplay from 'embla-carousel-autoplay';
-import { motion } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useState } from 'react';
+import { useStorefrontScopedRoute } from '@/components/builder/use-storefront-scoped-route';
 import { Button } from '@/components/ui/button';
 import {
   Carousel,
@@ -13,7 +13,6 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from '@/components/ui/carousel';
-import { asRoute } from '@/lib/routes';
 
 export interface HeroCarouselProps {
   slides: {
@@ -32,6 +31,7 @@ export function HeroCarousel({
   autoplayDelay = 5000,
   height = 'fullscreen',
 }: HeroCarouselProps) {
+  const toStorefrontRoute = useStorefrontScopedRoute();
   // Lazy state initializer keeps a stable plugin instance without reading a
   // ref during render (refs cannot be accessed while rendering).
   const [plugin] = useState(() =>
@@ -61,12 +61,7 @@ export function HeroCarousel({
               className="h-full relative overflow-hidden"
             >
               {/* Parallax Background - Elite 2025 Standard */}
-              <motion.div
-                className="absolute inset-0 w-[110%]"
-                style={{
-                  x: '-5%', // Centering the slightly larger image
-                }}
-              >
+              <div className="absolute inset-0 w-[110%] -translate-x-[5%]">
                 <Image
                   src={slide.image}
                   alt={slide.title}
@@ -76,23 +71,11 @@ export function HeroCarousel({
                   sizes="(max-width: 768px) 100vw, 100vw"
                 />
                 <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/40 to-transparent" />
-              </motion.div>
+              </div>
 
               {/* Elite Content Overlay */}
               <div className="absolute inset-0 flex flex-col items-center justify-end pb-24 text-center text-white px-4 z-10">
-                <motion.div
-                  initial={{ opacity: 0, y: 40, scale: 0.95 }}
-                  whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{
-                    type: 'spring',
-                    stiffness: 100,
-                    damping: 20,
-                    mass: 1,
-                    delay: 0.1,
-                  }}
-                  viewport={{ once: true }}
-                  className="max-w-4xl"
-                >
+                <div className="max-w-4xl motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-10 motion-safe:zoom-in-95 motion-safe:duration-500">
                   <h1 className="text-5xl md:text-8xl font-black tracking-tighter mb-6 drop-shadow-2xl">
                     {slide.title}
                   </h1>
@@ -104,9 +87,11 @@ export function HeroCarousel({
                     size="lg"
                     className="rounded-full h-16 px-12 text-xl bg-white text-black hover:bg-white/90 hover:scale-105 transition-all duration-300 shadow-[0_0_40px_rgba(255,255,255,0.3)] border-none"
                   >
-                    <Link href={asRoute(slide.ctaLink)}>{slide.ctaText}</Link>
+                    <Link href={toStorefrontRoute(slide.ctaLink)}>
+                      {slide.ctaText}
+                    </Link>
                   </Button>
-                </motion.div>
+                </div>
               </div>
             </CarouselItem>
           ))}

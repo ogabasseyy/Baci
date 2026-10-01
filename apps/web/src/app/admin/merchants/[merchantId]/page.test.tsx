@@ -1,279 +1,137 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockCreateClient = vi.fn();
-const mockGetAdminMerchantUserDirectory = vi.fn();
+const mockGetAdminMerchant360 = vi.fn();
 const mockNotFound = vi.fn(() => {
   throw new Error('NEXT_NOT_FOUND');
 });
 const MERCHANT_ID = '11111111-1111-4111-8111-111111111111';
 
-vi.mock('next/navigation', () => ({
-  notFound: () => mockNotFound(),
-}));
-
+vi.mock('next/navigation', () => ({ notFound: () => mockNotFound() }));
 vi.mock('next/link', () => ({
   default: ({ children, href }: { children: ReactNode; href: string }) => (
     <a href={href}>{children}</a>
   ),
 }));
-
-vi.mock('@/lib/admin-merchant-users', () => ({
-  getAdminMerchantUserDirectory: (...args: unknown[]) =>
-    mockGetAdminMerchantUserDirectory(...args),
+vi.mock('@/lib/admin-merchant-360', () => ({
+  getAdminMerchant360: (...args: unknown[]) => mockGetAdminMerchant360(...args),
 }));
-
 vi.mock('@/lib/supabase/server', () => ({
   createClient: (...args: unknown[]) => mockCreateClient(...args),
 }));
 
-const directoryResponse = {
+const response = {
+  domain: {
+    hasPrimary: false,
+    primaryDomain: null,
+    sslStatus: null,
+    status: null,
+    verifiedAt: null,
+  },
   generatedAt: '2026-03-20T10:00:00.000Z',
+  moneyCurrency: 'NGN',
+  incidents: {
+    domainEventFailures30d: 0,
+    eventDeliveryDeadLetters30d: 0,
+    shipmentFailures30d: 0,
+  },
   merchant: {
-    businessName: 'Baci Store',
+    businessName: 'Unpublished Store',
     createdAt: '2026-03-20T10:00:00.000Z',
-    email: 'owner@example.com',
     id: MERCHANT_ID,
-    isPublished: true,
-    phone: '+2348000000000',
-    planTier: 'pro',
+    isPublished: false,
+    planTier: 'free',
     signupSource: 'web',
-    slug: 'baci-store',
-    updatedAt: '2026-03-21T10:00:00.000Z',
+    slug: 'unpublished-store',
+    updatedAt: '2026-03-20T10:00:00.000Z',
+  },
+  payouts: {
+    completedAmount: 0,
+    completedCount: 0,
+    failedAmount: 0,
+    failedCount: 0,
+    pendingAmount: 0,
+    pendingCount: 0,
+  },
+  readiness: {
+    hasStorefrontSlug: true,
+    isPublished: false,
+    paymentConfigured: true,
+    shippingConfigured: true,
+    storefrontReady: false,
+  },
+  recentAuditEvents: [],
+  sales: { lastPaidAt: null, paidGmv: 0, paidOrders: 0 },
+  staffAccess: [{ role: 'manager', status: 'active', users: 2 }],
+  settlements: {
+    failedAmount: 0,
+    failedCount: 0,
+    pendingAmount: 0,
+    pendingCount: 0,
+    settledAmount: 0,
+    settledCount: 0,
   },
   summary: {
-    activeAdminAppInstallations: 1,
-    activeStorefrontAppInstallations: 1,
-    customerUsers: 1,
-    staffUsers: 1,
-    unmatchedAppUsers: 1,
-    webUsers: 3,
-  },
-  users: {
-    customers: [
-      {
-        activeAppInstallations: 1,
-        appPlatforms: ['android'],
-        createdAt: '2026-03-24T10:00:00.000Z',
-        email: 'customer@example.com',
-        id: 'customer-1',
-        lastSeenAt: '2026-03-25T10:00:00.000Z',
-        name: 'Customer One',
-        role: 'customer',
-        staffRole: null,
-        status: 'active',
-        surfaces: ['web', 'storefront_app'],
-        userId: 'customer-user',
-      },
-    ],
-    owner: {
-      activeAppInstallations: 0,
-      appPlatforms: [],
-      createdAt: '2026-03-20T10:00:00.000Z',
-      email: 'owner@example.com',
-      id: 'owner-user',
-      lastSeenAt: null,
-      name: 'Baci Store',
-      role: 'owner',
-      staffRole: null,
-      status: 'active',
-      surfaces: ['web'],
-      userId: 'owner-user',
-    },
-    staff: [
-      {
-        activeAppInstallations: 1,
-        appPlatforms: ['ios'],
-        createdAt: '2026-03-22T09:00:00.000Z',
-        email: 'staff@example.com',
-        id: 'staff-1',
-        lastSeenAt: '2026-03-23T10:00:00.000Z',
-        name: 'Staff User',
-        role: 'staff',
-        staffRole: 'manager',
-        status: 'active',
-        surfaces: ['web', 'admin_app'],
-        userId: 'staff-user',
-      },
-    ],
-    unmatchedAppUsers: [
-      {
-        activeAppInstallations: 1,
-        appPlatforms: ['android'],
-        createdAt: '2026-03-26T10:00:00.000Z',
-        email: null,
-        id: 'app-user-1',
-        lastSeenAt: '2026-03-27T10:00:00.000Z',
-        name: null,
-        role: 'app_user',
-        staffRole: null,
-        status: 'app_registered',
-        surfaces: ['admin_app'],
-        userId: 'app-only-user',
-      },
-    ],
+    activeAdminAppInstallations: 0,
+    activeStorefrontAppInstallations: 0,
+    customerUsers: 101,
+    staffUsers: 0,
+    unmatchedAppUsers: 0,
+    webUsers: 102,
   },
 };
 
-import MerchantUsersPage from '@/app/admin/merchants/[merchantId]/page';
+import Merchant360Page from '@/app/admin/merchants/[merchantId]/page';
 
-describe('MerchantUsersPage', () => {
+describe('Merchant360Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockCreateClient.mockResolvedValue({ from: vi.fn() });
-    mockGetAdminMerchantUserDirectory.mockResolvedValue({
-      data: directoryResponse,
-      error: null,
-    });
+    mockCreateClient.mockResolvedValue({ rpc: vi.fn() });
+    mockGetAdminMerchant360.mockResolvedValue({ data: response, error: null });
   });
 
-  it('renders the merchant identity and users across web and app surfaces', async () => {
+  it('renders an unpublished merchant with exact counts but no people-level directory', async () => {
     render(
-      await MerchantUsersPage({
-        params: Promise.resolve({
-          merchantId: MERCHANT_ID,
-        }),
-      })
-    );
-
-    expect(mockGetAdminMerchantUserDirectory).toHaveBeenCalledWith(
-      expect.anything(),
-      MERCHANT_ID
-    );
-    expect(screen.getByRole('heading', { name: /baci store/i })).toBeVisible();
-    expect(
-      within(screen.getByRole('group', { name: 'Owner users' })).getAllByText(
-        'owner@example.com'
-      )
-    ).toHaveLength(2);
-    expect(screen.getByText('Staff User')).toBeVisible();
-    expect(screen.getByText('Customer One')).toBeVisible();
-    expect(screen.getByText('app-only-user')).toBeVisible();
-    expect(screen.getAllByText('Admin app')).toHaveLength(2);
-    expect(screen.getAllByText('Storefront app')).toHaveLength(1);
-    expect(
-      within(
-        screen.getByRole('group', { name: 'Web users summary' })
-      ).getByText('3')
-    ).toBeVisible();
-    expect(
-      within(
-        screen.getByRole('group', { name: 'Staff users summary' })
-      ).getByText('1')
-    ).toBeVisible();
-    expect(
-      within(
-        screen.getByRole('group', { name: 'Admin app installations summary' })
-      ).getByText('1')
-    ).toBeVisible();
-    expect(
-      within(
-        screen.getByRole('group', {
-          name: 'Storefront app installations summary',
-        })
-      ).getByText('1')
-    ).toBeVisible();
-    expect(
-      within(
-        screen.getByRole('group', { name: 'App-only users summary' })
-      ).getByText('1')
-    ).toBeVisible();
-    expect(screen.getByRole('link', { name: /email owner/i })).toHaveAttribute(
-      'href',
-      'mailto:owner@example.com'
-    );
-  });
-
-  it('renders an empty state when a merchant has no staff or customers', async () => {
-    mockGetAdminMerchantUserDirectory.mockResolvedValue({
-      data: {
-        ...directoryResponse,
-        summary: {
-          ...directoryResponse.summary,
-          activeAdminAppInstallations: 0,
-          activeStorefrontAppInstallations: 0,
-          customerUsers: 0,
-          staffUsers: 0,
-          unmatchedAppUsers: 0,
-          webUsers: 1,
-        },
-        users: {
-          customers: [],
-          owner: directoryResponse.users.owner,
-          staff: [],
-          unmatchedAppUsers: [],
-        },
-      },
-      error: null,
-    });
-
-    render(
-      await MerchantUsersPage({
-        params: Promise.resolve({
-          merchantId: MERCHANT_ID,
-        }),
-      })
-    );
-
-    expect(screen.getByText('No staff users yet')).toBeVisible();
-    expect(screen.getByText('No customer users yet')).toBeVisible();
-    expect(screen.getByText('No app-only users found')).toBeVisible();
-  });
-
-  it('omits the email owner action when the merchant has no email', async () => {
-    mockGetAdminMerchantUserDirectory.mockResolvedValue({
-      data: {
-        ...directoryResponse,
-        merchant: {
-          ...directoryResponse.merchant,
-          email: null,
-        },
-      },
-      error: null,
-    });
-
-    render(
-      await MerchantUsersPage({
-        params: Promise.resolve({
-          merchantId: MERCHANT_ID,
-        }),
+      await Merchant360Page({
+        params: Promise.resolve({ merchantId: MERCHANT_ID }),
       })
     );
 
     expect(
-      screen.queryByRole('link', { name: /email owner/i })
-    ).not.toBeInTheDocument();
+      screen.getByRole('heading', { name: /unpublished store/i })
+    ).toBeVisible();
+    expect(
+      screen.getByRole('group', { name: 'Customers summary' })
+    ).toHaveTextContent('101');
+    expect(screen.getByText(/aggregate access counts only/i)).toBeVisible();
+    expect(screen.queryByText('customer@example.com')).not.toBeInTheDocument();
+    expect(screen.queryByText('owner@example.com')).not.toBeInTheDocument();
+    expect(screen.getByText('Manager · Active')).toBeVisible();
+    expect(screen.getAllByText('Needs attention')).not.toHaveLength(0);
   });
 
-  it('uses notFound when the merchant directory is missing', async () => {
-    mockGetAdminMerchantUserDirectory.mockResolvedValue({
+  it('renders a forbidden state when the RPC rejects a non-admin', async () => {
+    mockGetAdminMerchant360.mockResolvedValue({
       data: null,
-      error: null,
+      error: { code: '42501', message: 'platform_admin_required' },
     });
 
-    await expect(
-      MerchantUsersPage({
-        params: Promise.resolve({
-          merchantId: MERCHANT_ID,
-        }),
+    render(
+      await Merchant360Page({
+        params: Promise.resolve({ merchantId: MERCHANT_ID }),
       })
-    ).rejects.toThrow('NEXT_NOT_FOUND');
+    );
 
-    expect(mockNotFound).toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('Access denied');
   });
 
-  it('uses notFound when the merchant id route param is invalid', async () => {
-    await expect(
-      MerchantUsersPage({
-        params: Promise.resolve({
-          merchantId: 'not-a-uuid',
-        }),
-      })
-    ).rejects.toThrow('NEXT_NOT_FOUND');
+  it('uses notFound when the platform-admin RPC cannot find the merchant', async () => {
+    mockGetAdminMerchant360.mockResolvedValue({ data: null, error: null });
 
-    expect(mockNotFound).toHaveBeenCalled();
-    expect(mockCreateClient).not.toHaveBeenCalled();
-    expect(mockGetAdminMerchantUserDirectory).not.toHaveBeenCalled();
+    await expect(
+      Merchant360Page({ params: Promise.resolve({ merchantId: MERCHANT_ID }) })
+    ).rejects.toThrow('NEXT_NOT_FOUND');
   });
 });

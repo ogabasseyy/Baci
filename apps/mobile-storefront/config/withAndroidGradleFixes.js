@@ -24,7 +24,7 @@ const {
   removeKotlinGradlePlugin,
 } = require('../../../.github/scripts/expoAndroidGradleFixes');
 
-const ensurePostHogAndroidUploadBestEffort = require('./withAndroidGradleFixes.posthog');
+const ensurePostHogAndroidUploadsEnabled = require('./withAndroidGradleFixes.posthog');
 
 function getAndroidProjectRoot(modRequest) {
   if (modRequest?.platformProjectRoot) {
@@ -53,7 +53,7 @@ function ensureWorkletsPickFirst(content) {
   );
 }
 
-function ensureFinalizedPostHogAndroidUploadBestEffort(modRequest) {
+function ensureFinalizedPostHogAndroidUploadsEnabled(modRequest) {
   const androidProjectRoot = getAndroidProjectRoot(modRequest);
 
   if (!androidProjectRoot) {
@@ -67,11 +67,37 @@ function ensureFinalizedPostHogAndroidUploadBestEffort(modRequest) {
   }
 
   const content = fs.readFileSync(appBuildGradle, 'utf-8');
-  const updatedContent = ensurePostHogAndroidUploadBestEffort(content);
+  const updatedContent = ensurePostHogAndroidUploadsEnabled(content);
 
   if (updatedContent !== content) {
     fs.writeFileSync(appBuildGradle, updatedContent);
   }
+}
+
+function stripStaticFacebookResources(modRequest) {
+  const stringsXmlPath = path.join(
+    modRequest.platformProjectRoot,
+    'app',
+    'src',
+    'main',
+    'res',
+    'values',
+    'strings.xml'
+  );
+  if (!fs.existsSync(stringsXmlPath)) return;
+
+  let content = fs.readFileSync(stringsXmlPath, 'utf-8');
+  for (const resourceName of [
+    'facebook_app_id',
+    'facebook_client_token',
+    'fb_login_protocol_scheme',
+  ]) {
+    content = content.replace(
+      new RegExp(`\\s*<string name="${resourceName}">.*?<\\/string>\\s*`, 'g'),
+      '\n'
+    );
+  }
+  fs.writeFileSync(stringsXmlPath, content.replace(/\n\s*\n/g, '\n'));
 }
 
 function withAndroidGradleFixes(config) {
@@ -126,7 +152,7 @@ function withAndroidGradleFixes(config) {
 
         content = ensureReleaseSigning(content);
         content = ensureWorkletsPickFirst(content);
-        content = ensurePostHogAndroidUploadBestEffort(content);
+        content = ensurePostHogAndroidUploadsEnabled(content);
 
         // Dynamically inject Facebook SDK resource entries to avoid hardcoding secrets in VCS
         if (!content.includes('resValue "string", "facebook_app_id"')) {
@@ -135,14 +161,28 @@ function withAndroidGradleFixes(config) {
           if (index !== -1) {
             const insertIndex = index + searchStr.length;
             const resValues = `
-        def storefrontFacebookAppId = System.getenv("STOREFRONT_FACEBOOK_APP_ID") ?: ""
-        def storefrontFacebookClientToken = System.getenv("STOREFRONT_FACEBOOK_CLIENT_TOKEN") ?: ""
-        if ((storefrontFacebookAppId && !storefrontFacebookClientToken) || (!storefrontFacebookAppId && storefrontFacebookClientToken)) {
-            throw new GradleException("STOREFRONT_FACEBOOK_APP_ID and STOREFRONT_FACEBOOK_CLIENT_TOKEN must be configured together.")
+        def storefrontFacebookAppId = (System.getenv("STOREFRONT_FACEBOOK_APP_ID") ?: "").trim()
+        def storefrontFacebookClientToken = (System.getenv("STOREFRONT_FACEBOOK_CLIENT_TOKEN") ?: "").trim()
+
+        boolean hasAppId = !storefrontFacebookAppId.isEmpty()
+        boolean hasClientToken = !storefrontFacebookClientToken.isEmpty()
+
+        if (hasAppId && !hasClientToken) {
+            throw new GradleException("STOREFRONT_FACEBOOK_CLIENT_TOKEN is missing but STOREFRONT_FACEBOOK_APP_ID is configured.")
+        } else if (!hasAppId && hasClientToken) {
+            throw new GradleException("STOREFRONT_FACEBOOK_APP_ID is missing but STOREFRONT_FACEBOOK_CLIENT_TOKEN is configured.")
         }
-        resValue "string", "facebook_app_id", storefrontFacebookAppId
-        resValue "string", "facebook_client_token", storefrontFacebookClientToken
-        resValue "string", "fb_login_protocol_scheme", storefrontFacebookAppId ? "fb" + storefrontFacebookAppId : "fb_local_dev"`;
+
+        if (hasAppId && hasClientToken) {
+            resValue "string", "facebook_app_id", storefrontFacebookAppId
+            resValue "string", "facebook_client_token", storefrontFacebookClientToken
+            resValue "string", "fb_login_protocol_scheme", "fb" + storefrontFacebookAppId
+        } else {
+            logger.warn("WARNING: Facebook App ID and Client Token are not configured. Facebook SDK features will not function correctly.")
+            resValue "string", "facebook_app_id", "facebook_app_id_placeholder"
+            resValue "string", "facebook_client_token", "facebook_client_token_placeholder"
+            resValue "string", "fb_login_protocol_scheme", "fb_placeholder"
+        }`;
             content =
               content.slice(0, insertIndex) +
               resValues +
@@ -153,36 +193,7 @@ function withAndroidGradleFixes(config) {
         fs.writeFileSync(appBuildGradle, content);
       }
 
-      // Strip hardcoded Facebook SDK secrets from strings.xml to prevent committing them to VCS
-      const stringsXmlPath = path.join(
-        cfg.modRequest.platformProjectRoot,
-        'app',
-        'src',
-        'main',
-        'res',
-        'values',
-        'strings.xml'
-      );
-
-      if (fs.existsSync(stringsXmlPath)) {
-        let content = fs.readFileSync(stringsXmlPath, 'utf-8');
-        content = content.replace(
-          /\s*<string name="facebook_app_id">.*?<\/string>\s*/g,
-          '\n'
-        );
-        content = content.replace(
-          /\s*<string name="facebook_client_token">.*?<\/string>\s*/g,
-          '\n'
-        );
-        content = content.replace(
-          /\s*<string name="fb_login_protocol_scheme">.*?<\/string>\s*/g,
-          '\n'
-        );
-
-        // Normalize any empty lines/excessive newlines
-        content = content.replace(/\n\s*\n/g, '\n');
-        fs.writeFileSync(stringsXmlPath, content);
-      }
+      stripStaticFacebookResources(cfg.modRequest);
 
       const gradleProperties = path.join(
         cfg.modRequest.platformProjectRoot,
@@ -229,7 +240,8 @@ function withAndroidGradleFixes(config) {
   return withFinalizedMod(updatedConfig, [
     'android',
     (cfg) => {
-      ensureFinalizedPostHogAndroidUploadBestEffort(cfg.modRequest);
+      ensureFinalizedPostHogAndroidUploadsEnabled(cfg.modRequest);
+      stripStaticFacebookResources(cfg.modRequest);
 
       return cfg;
     },

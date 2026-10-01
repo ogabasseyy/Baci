@@ -1,7 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PlatformSettingsResponse } from '@/app/api/admin/settings/route';
 import PlatformSettingsPage from './page';
+import { settingsResponse } from './settings-test-fixture';
 
 const mocks = vi.hoisted(() => ({
   apiPut: vi.fn(),
@@ -15,36 +17,6 @@ vi.mock('@/hooks/use-toast', () => ({
 vi.mock('@/lib/api-client', () => ({
   apiPut: mocks.apiPut,
 }));
-
-const settingsResponse: PlatformSettingsResponse = {
-  created_at: '2026-06-11T00:00:00.000Z',
-  enable_analytics_export: true,
-  enable_custom_domains: true,
-  enable_merchant_signups: true,
-  facebook_pixel_id: '1234567890123456',
-  google_analytics_id: 'G-TEST1234',
-  id: 'platform-settings',
-  maintenance_message: null,
-  maintenance_mode: false,
-  payment_processor_fee_flat: 0,
-  payment_processor_fee_percentage: 1.5,
-  platform_fee_flat: 0,
-  platform_fee_percentage: 2.5,
-  platform_logo_url: null,
-  platform_name: 'Baci',
-  secretStatus: {
-    facebook_capi_token: true,
-    ga4_api_secret: true,
-    snapchat_capi_token: true,
-    tiktok_access_token: true,
-  },
-  snapchat_pixel_id: 'snap-pixel',
-  support_email: 'support@example.com',
-  support_phone: '+2348000000000',
-  tiktok_pixel_id: 'tiktok-pixel',
-  twitter_pixel_id: null,
-  updated_at: '2026-06-11T00:00:00.000Z',
-};
 
 describe('PlatformSettingsPage', () => {
   beforeEach(() => {
@@ -151,5 +123,44 @@ describe('PlatformSettingsPage', () => {
         variant: 'destructive',
       });
     });
+  });
+
+  it('does not expose persisted-only feature switches as working controls', async () => {
+    render(<PlatformSettingsPage />);
+
+    await screen.findByRole('button', { name: 'Show GA4 API secret' });
+
+    expect(screen.getByRole('tab', { name: /branding/i })).toBeInTheDocument();
+    expect(screen.queryByText('Feature Flags')).not.toBeInTheDocument();
+    expect(screen.queryByText('Maintenance Mode')).not.toBeInTheDocument();
+    expect(screen.queryByText('Merchant Signups')).not.toBeInTheDocument();
+  });
+
+  it('reports editable field errors before sending an invalid settings update', async () => {
+    const user = userEvent.setup();
+    render(<PlatformSettingsPage />);
+
+    await user.click(await screen.findByRole('tab', { name: 'Branding' }));
+    fireEvent.change(await screen.findByLabelText('Platform Name'), {
+      target: { value: '' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('platform_name');
+    expect(mocks.apiPut).not.toHaveBeenCalled();
+    expect(mocks.toast).toHaveBeenCalledWith({
+      title: 'Fix validation errors',
+      description: 'Review the highlighted settings and try again.',
+      variant: 'destructive',
+    });
+  });
+
+  it('uses the branding tab trigger to reveal branding settings', async () => {
+    const user = userEvent.setup();
+    render(<PlatformSettingsPage />);
+
+    await user.click(await screen.findByRole('tab', { name: 'Branding' }));
+
+    expect(await screen.findByLabelText('Platform Name')).toBeVisible();
   });
 });

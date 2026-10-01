@@ -191,6 +191,28 @@ export const styles = StyleSheet.create({
     gap: 12,
     padding: 12,
   },
+  quickAddNameInput: {
+    minHeight: 52,
+  },
+  quickAddAmountRow: {
+    alignItems: 'center',
+    borderRadius: 12,
+    flexDirection: 'row',
+    minHeight: 52,
+    paddingHorizontal: 14,
+  },
+  quickAddAmountCurrency: {
+    borderRightWidth: 1,
+    fontSize: 13,
+    fontWeight: '700',
+    minWidth: 48,
+    paddingRight: 12,
+  },
+  quickAddAmountInput: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+  },
   searchBox: {
     alignItems: 'center',
     borderRadius: 8,

@@ -1,5 +1,11 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AnalyticsConfigScreen,
   alertMocks,
@@ -11,7 +17,7 @@ import {
   resetAnalyticsConfigMocks,
   routeMocks,
   supabaseMocks,
-} from './analytics-config.test-support';
+} from '../../__tests__/admin/analytics-config.test-support';
 
 const expandMetaCard = () =>
   fireEvent.click(
@@ -29,6 +35,53 @@ const queryOptions = () =>
 
 describe('AnalyticsConfigScreen — post-save readiness', () => {
   beforeEach(resetAnalyticsConfigMocks);
+
+  it('runs mocked mutation success and settlement callbacks', async () => {
+    const onError = vi.fn();
+    const onSettled = vi.fn();
+    const onSuccess = vi.fn();
+    const onMutate = vi.fn(() => ({ source: 'test' }));
+    const mutationFn = vi.fn(async () => 'saved');
+    const { mutate } = mutationMocks.useMutation({
+      mutationFn,
+      onError,
+      onMutate,
+      onSettled,
+      onSuccess,
+    });
+
+    mutate('value');
+
+    await waitFor(() => {
+      expect(onSuccess).toHaveBeenCalledWith('saved', 'value', {
+        source: 'test',
+      });
+      expect(onSettled).toHaveBeenCalledWith('saved', null, 'value', {
+        source: 'test',
+      });
+    });
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('runs mocked mutation error and settlement callbacks without rejecting', async () => {
+    const failure = new Error('save failed');
+    const onError = vi.fn();
+    const onSettled = vi.fn();
+    const { mutate } = mutationMocks.useMutation({
+      mutationFn: async () => {
+        throw failure;
+      },
+      onError,
+      onSettled,
+    });
+
+    mutate('value');
+
+    await waitFor(() => {
+      expect(onError).toHaveBeenCalledWith(failure, 'value', undefined);
+      expect(onSettled).toHaveBeenCalledWith(null, failure, 'value', undefined);
+    });
+  });
 
   it('marks the saved buffer clean so refetching resumes and repeated saves do not rewrite the same fields', async () => {
     const { rerender } = render(<AnalyticsConfigScreen />);
@@ -153,7 +206,9 @@ describe('AnalyticsConfigScreen — post-save readiness', () => {
     render(<AnalyticsConfigScreen />);
     const context = await mutationMocks.state.options?.onMutate?.();
     // Simulate switching merchants while the first merchant's write is in flight.
-    const { accessMocks } = await import('./analytics-config.test-support');
+    const { accessMocks } = await import(
+      '../../__tests__/admin/analytics-config.test-support'
+    );
     accessMocks.useMerchant.mockReturnValue({
       isLoading: false,
       merchant: { id: 'merchant-2', plan_tier: 'pro', premium_features: [] },

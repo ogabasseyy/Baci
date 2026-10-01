@@ -6,6 +6,10 @@ import {
 } from './wallet-funding-account-error';
 
 describe('walletAccountErrorStatus', () => {
+  it('maps CUSTOMER_NAME_REQUIRED to 400', () => {
+    expect(walletAccountErrorStatus('CUSTOMER_NAME_REQUIRED')).toBe(400);
+  });
+
   it('maps CUSTOMER_PHONE_REQUIRED to 400', () => {
     expect(walletAccountErrorStatus('CUSTOMER_PHONE_REQUIRED')).toBe(400);
   });

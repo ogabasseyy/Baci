@@ -10,6 +10,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { BRAND, palette, RADIUS, SPACING } from '@/constants/Colors';
 import type { Customer } from '@/stores/auth-store';
+import { useQuizBadgeStore } from '@/stores/quiz-badge-store';
+import { ProfileQuizBadge } from './ProfileQuizBadge';
 
 interface ProfileHeaderProps {
   customer: Customer;
@@ -35,6 +37,9 @@ function getTierInfo(tier?: string) {
 
 export function ProfileHeader({ customer, loyaltyPoints }: ProfileHeaderProps) {
   const tier = getTierInfo();
+  const latestQuizBadge = useQuizBadgeStore((state) =>
+    state.getMostRecentBadge(customer.user_id ?? customer.id)
+  );
   const initials =
     customer.first_name?.[0]?.toUpperCase() ||
     customer.email?.[0]?.toUpperCase() ||
@@ -95,6 +100,12 @@ export function ProfileHeader({ customer, loyaltyPoints }: ProfileHeaderProps) {
               {tier.label}
             </Text>
           </View>
+          {latestQuizBadge ? (
+            <ProfileQuizBadge
+              eventTitle={latestQuizBadge.eventTitle}
+              label={latestQuizBadge.label}
+            />
+          ) : null}
         </View>
       </Animated.View>
 

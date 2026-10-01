@@ -85,9 +85,10 @@ describe('compare link graph approval', () => {
 
     expect(candidates).toHaveLength(20);
     expect(result).toEqual(candidates);
-    // One category-level policy build is still required. The prior algorithm
-    // additionally rebuilt the complete discovery graph once per candidate.
-    expect(policySpy).toHaveBeenCalledTimes(1);
+    // The candidates have already passed pair indexability and all are inside
+    // the existing supplemental approval bound, so category-wide discovery is
+    // not needed to produce this approved output.
+    expect(policySpy).not.toHaveBeenCalled();
     policySpy.mockRestore();
   });
 

@@ -6,10 +6,8 @@ import {
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
 import { createClient } from '@/lib/supabase/server';
-import type {
-  MerchantNotificationFilters,
-  MerchantNotificationWithDetails,
-} from '@/types/notifications';
+import { merchantNotificationListResultSchema } from '@/schemas/merchant-notification-list-result';
+import { merchantNotificationListQuerySchema } from '@/schemas/notifications';
 
 /**
  * GET /api/notifications
@@ -48,17 +46,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
     }
 
-    // Parse query params
+    // Validate only the supported query parameters before they reach PostgREST.
     const { searchParams } = new URL(request.url);
-    const cursor = searchParams.get('cursor');
-    const limit = Math.min(
-      Number.parseInt(searchParams.get('limit') || '20', 10),
-      50
-    );
-    const unreadOnly = searchParams.get('unread_only') === 'true';
-    const type = searchParams.get(
-      'type'
-    ) as MerchantNotificationFilters['type'];
+    const queryParams = merchantNotificationListQuerySchema.safeParse({
+      cursor: searchParams.get('cursor') ?? undefined,
+      limit: searchParams.get('limit') ?? undefined,
+      unread_only: searchParams.get('unread_only') ?? undefined,
+      type: searchParams.get('type') ?? undefined,
+    });
+    if (!queryParams.success) {
+      return NextResponse.json(
+        { error: 'Invalid notification query' },
+        { status: 400 }
+      );
+    }
+    const { cursor, limit, unread_only: unreadOnly, type } = queryParams.data;
+    const now = new Date().toISOString();
+    const unexpiredNotificationFilter = `expires_at.is.null,expires_at.gt.${now}`;
 
     // Build query with notification join
     let query = supabase
@@ -70,6 +74,7 @@ export async function GET(request: NextRequest) {
         read_at,
         dismissed_at,
         banner_dismissed_at,
+        in_app_visible,
         created_at,
         notification:notifications!inner (
           id,
@@ -86,7 +91,10 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('merchant_id', merchantId)
-      .is('dismissed_at', null) // Don't show dismissed notifications
+      .eq('in_app_visible', true)
+      .is('dismissed_at', null)
+      .eq('notification.delivery_state', 'sent')
+      .or(unexpiredNotificationFilter, { referencedTable: 'notification' })
       .order('created_at', { ascending: false });
 
     // Cursor-based pagination (older than cursor)
@@ -104,71 +112,81 @@ export async function GET(request: NextRequest) {
       query = query.eq('notification.notification_type', type);
     }
 
-    // PERFORMANCE: Filter expired notifications
-    // const now = new Date().toISOString();
-    // query = query.or(`expires_at.is.null,expires_at.gt.${now}`, {
-    //   foreignTable: 'notification',
-    // });
-
-    // Alternative approach for expiration check on joined table if the above fails:
-    // We can filter in memory or rely on a DB function / view.
-    // For now, let's try without the filter to see if 500 resolves.
-
     // Limit + 1 to check if there are more
     query = query.limit(limit + 1);
 
     const { data: notifications, error } = await query;
 
     if (error) {
-      console.error('SUPABASE_QUERY_ERROR:', JSON.stringify(error, null, 2));
+      console.error('Failed to fetch notifications', {
+        errorCode: error.code || 'unknown',
+      });
       return NextResponse.json(
-        { error: 'Failed to fetch notifications', details: error.message },
-        { status: 500 }
+        { error: 'Failed to fetch notifications' },
+        {
+          status: 500,
+        }
       );
     }
 
-    let filteredNotifications: MerchantNotificationWithDetails[] =
-      (notifications || []) as unknown as MerchantNotificationWithDetails[];
-
-    // In-memory filter for expiration (temporary fix/debug)
-    const nowTime = Date.now();
-    filteredNotifications = filteredNotifications.filter((n) => {
-      if (!n.notification.expires_at) return true;
-      return new Date(n.notification.expires_at).getTime() > nowTime;
-    });
+    const parsedNotifications = merchantNotificationListResultSchema.safeParse(
+      notifications ?? []
+    );
+    if (!parsedNotifications.success) {
+      console.error('Failed to fetch notifications', {
+        errorCode: 'invalid_notification_result',
+      });
+      return NextResponse.json(
+        { error: 'Failed to fetch notifications' },
+        { status: 500 }
+      );
+    }
+    let visibleNotifications = parsedNotifications.data;
 
     // Check if there are more results
-    const hasMore = filteredNotifications.length > limit;
+    const hasMore = visibleNotifications.length > limit;
     if (hasMore) {
-      filteredNotifications = filteredNotifications.slice(0, limit);
+      visibleNotifications = visibleNotifications.slice(0, limit);
     }
 
     // Get cursor for next page
     const nextCursor =
-      hasMore && filteredNotifications.length > 0
-        ? filteredNotifications[filteredNotifications.length - 1].created_at
+      hasMore && visibleNotifications.length > 0
+        ? visibleNotifications[visibleNotifications.length - 1].created_at
         : null;
 
     // Get unread count
     const { count: unreadCount, error: countError } = await supabase
       .from('merchant_notifications')
-      .select('id', { count: 'exact', head: true })
+      .select('id, notification:notifications!inner(id)', {
+        count: 'exact',
+        head: true,
+      })
       .eq('merchant_id', merchantId)
+      .eq('in_app_visible', true)
       .is('read_at', null)
-      .is('dismissed_at', null);
+      .is('dismissed_at', null)
+      .eq('notification.delivery_state', 'sent')
+      .or(unexpiredNotificationFilter, { referencedTable: 'notification' });
 
     if (countError) {
-      console.error('COUNT_ERROR:', countError);
+      console.error('Failed to count unread notifications', {
+        errorCode: countError.code || 'unknown',
+      });
+      return NextResponse.json(
+        { error: 'Failed to fetch notification count' },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
-      data: filteredNotifications,
+      data: visibleNotifications,
       cursor: nextCursor,
       has_more: hasMore,
-      unread_count: unreadCount || 0,
+      unread_count: unreadCount ?? 0,
     });
-  } catch (error) {
-    console.error('Notifications GET CRITICAL error:', error);
+  } catch {
+    console.error('Unexpected failure fetching notifications');
     return NextResponse.json(
       { error: 'Critical failure fetching notifications' },
       { status: 500 }

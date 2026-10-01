@@ -4,7 +4,7 @@ import {
 } from '@/lib/storefront-product-purge-urls';
 
 export const BULK_PURGE_ROW_COLUMNS =
-  'id, slug, category, status, categories:category_id(slug), product_categories(categories(slug))';
+  'id, slug, category, status, categories:category_id(slug, is_active), product_categories(category_id, categories(slug, is_active))';
 
 export interface BulkPurgeProductRow {
   id: string;

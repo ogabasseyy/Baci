@@ -1,4 +1,4 @@
-type ProductKeySpecValue = string | number | boolean | undefined;
+import type { ProductKeySpecValue } from './product-key-specs-normalize';
 
 export type ProductKeySpecsRecord = Record<string, ProductKeySpecValue>;
 

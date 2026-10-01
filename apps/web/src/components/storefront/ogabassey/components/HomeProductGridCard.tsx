@@ -5,9 +5,11 @@ import Link from 'next/link';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import { useViewportActivation } from '@/components/storefront/use-viewport-activation';
 import { PLACEHOLDER_IMAGE } from '@/lib/image-utils';
-import { getProductUrl } from '@/lib/seo-utils';
+import { getProductUrl } from '@/lib/product-url';
 import { asRoute } from '@/lib/routes';
 import type { Product } from '../types';
+import { getProductConditionClass } from './product-condition-class';
+import { HOME_PRODUCT_GRID_CARD_IMAGE_SIZES } from './product-grid-image-sizes';
 import { resolveProductImageSource } from './product-image-source';
 import { ProductRatingRow } from './ProductRatingRow';
 
@@ -15,33 +17,19 @@ interface HomeProductGridCardProps {
   product: Product;
   basePath?: string;
   deferImageLoading?: boolean;
-}
-
-function getCriticalConditionClass(condition: Product['condition']) {
-  const normalizedCondition = String(condition)
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_]+/g, ' ');
-
-  if (normalizedCondition === 'new') {
-    return 'ogabassey-home-product-card__condition--new';
-  }
-
-  if (normalizedCondition === 'open box') {
-    return 'ogabassey-home-product-card__condition--open-box';
-  }
-
-  if (normalizedCondition === 'new & used') {
-    return 'ogabassey-home-product-card__condition--new-used';
-  }
-
-  return 'ogabassey-home-product-card__condition--default';
+  /**
+   * Render the fallback's JPEG tier instead of the AVIF tier: set for
+   * cards the static fallback already rendered, so the swap reuses the
+   * fetched bytes instead of downloading the AVIF tier.
+   */
+  disableAvifTier?: boolean;
 }
 
 export function HomeProductGridCard({
   product,
   basePath = '',
   deferImageLoading = false,
+  disableAvifTier = false,
 }: HomeProductGridCardProps) {
   const { ref: imageViewportRef, isActive: isImageViewportActive } =
     useViewportActivation<HTMLDivElement>({
@@ -50,7 +38,6 @@ export function HomeProductGridCard({
       timeoutMs: 6000,
     });
   const shouldRenderImage = !deferImageLoading || isImageViewportActive;
-  const shouldPrioritizeImage = deferImageLoading === false;
   const productHref = asRoute(
     `${basePath}${getProductUrl({ ...product, id: String(product.id) })}`
   );
@@ -87,7 +74,7 @@ export function HomeProductGridCard({
       >
         {product.condition && (
           <div
-            className={`ogabassey-home-product-card__condition ${getCriticalConditionClass(product.condition)}`}
+            className={`ogabassey-home-product-card__condition ${getProductConditionClass(product.condition)}`}
           >
             {product.condition}
           </div>
@@ -98,9 +85,10 @@ export function HomeProductGridCard({
             src={productImage.src}
             alt={productImageAlt}
             fill
-            sizes="(max-width: 480px) 40vw, (max-width: 768px) 33vw, (max-width: 1200px) 25vw, 20vw"
-            loading={shouldPrioritizeImage ? 'eager' : 'lazy'}
-            fetchPriority={shouldPrioritizeImage ? 'auto' : 'low'}
+            sizes={HOME_PRODUCT_GRID_CARD_IMAGE_SIZES}
+            loading="lazy"
+            fetchPriority="low"
+            disableAvifTier={disableAvifTier}
             className="ogabassey-home-product-card__image"
           />
         ) : (

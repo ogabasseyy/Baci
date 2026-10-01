@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/merchant/use-merchant';
 import { useToast } from '@/hooks/use-toast';
@@ -16,18 +16,17 @@ import {
   getMissingSelectionFields,
 } from './product-details-helpers';
 import { resolveCurrentOffer } from './offer-resolution';
+import { useDeliveryToday } from './use-delivery-today';
 import { shareProductLink } from './product-share';
 import { useProductDetailsBuyAction } from './use-product-details-buy-action';
 import { useProductDetailsCartQuantity } from './use-product-details-cart-quantity';
 import { useProductDetailsSelectionState } from './use-product-details-selection-state';
 
 export type ProductDetailsActiveTab =
-  | 'compare'
-  | 'description'
-  | 'reviews'
-  | 'specs';
+  | 'compare' | 'description' | 'reviews' | 'specs';
 
 export function useProductDetailsState(serverProduct: Product) {
+  const deliveryToday = useDeliveryToday();
   const searchParams = useSearchParams();
   const router = useRouter();
   const merchantContext = useMerchantSafe();
@@ -248,7 +247,7 @@ export function useProductDetailsState(serverProduct: Product) {
     cartHref,
     currentOffer,
     currentVariantDisplaySelection,
-    deliveryEstimate: getDeliveryEstimate(deliveryLocation),
+    deliveryEstimate: getDeliveryEstimate(deliveryLocation, deliveryToday),
     deliveryLocation,
     effectiveAxes,
     formatAxisLabel,

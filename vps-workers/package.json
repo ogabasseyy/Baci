@@ -9,8 +9,11 @@
   "scripts": {
     "cleanup-push-tokens": "node jobs/cleanup-push-tokens.mjs",
     "cleanup-import-uploads": "node jobs/cleanup-import-uploads.mjs",
+    "cleanup-legacy-expense-receipts": "node jobs/cleanup-legacy-expense-receipts.mjs",
+    "cleanup-private-expense-receipts": "node jobs/cleanup-private-expense-receipts.mjs",
     "supabase-retention-cleanup": "node jobs/supabase-retention-cleanup.mjs",
     "cleanup-agentic-request-records": "node jobs/cleanup-agentic-request-records.mjs",
+    "cleanup-remediation-storage": "node jobs/cleanup-remediation-storage.mjs",
     "push-receipts": "node jobs/push-receipts.mjs",
     "sync-gigl-service-centres": "node jobs/sync-gigl-service-centres.mjs",
     "agentic-commerce-health": "node jobs/run-web-cron.mjs /api/cron/agentic-commerce-health",
@@ -24,6 +27,7 @@
     "preflight-direct-web-workers": "node jobs/preflight-direct-web-workers.mjs",
     "run-web-cron": "node jobs/run-web-cron.mjs",
     "ai-storefront-trigger-server": "node jobs/ai-storefront-trigger-server.mjs",
+    "sentry-mobile-error-remediator": "node jobs/sentry-mobile-error-remediator.mjs",
     "vercel-error-remediator": "node jobs/vercel-error-remediator.mjs",
     "vercel-log-drain-receiver": "node jobs/vercel-log-drain-receiver.mjs",
     "test": "node scripts/run-tests.mjs"
@@ -32,5 +36,8 @@
     "@supabase/supabase-js": "^2.103.0",
     "dotenv": "^16.0.0",
     "expo-server-sdk": "^6.1.0"
+  },
+  "devDependencies": {
+    "@typescript/typescript6": "~6.0.2"
   }
 }

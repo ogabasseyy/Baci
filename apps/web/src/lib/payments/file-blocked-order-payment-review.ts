@@ -3,6 +3,7 @@ import { handlePaymentForCancelledOrder } from '@/lib/payments/handle-payment-fo
 import type { OrderGatewayPaymentCompletion } from '@/schemas/order-gateway-payment-completion';
 
 export type BlockedOrderPaymentOutcome =
+  | { kind: 'partial_recorded'; orderNumber: string | null }
   | { kind: 'order_cancelled'; orderNumber: string | null }
   | { kind: 'order_skipped'; paymentStatus: string | null }
   // The captured payment must not reopen the order, but its ops review row
@@ -29,6 +30,13 @@ export async function fileBlockedOrderPaymentReview({
   transactionGatewayReference: string | null;
   transactionId: string;
 }): Promise<BlockedOrderPaymentOutcome | null> {
+  if (completion.merchant_invoice_partial_recorded) {
+    return {
+      kind: 'partial_recorded',
+      orderNumber: completion.order_number ?? null,
+    };
+  }
+
   if (completion.order_cancelled) {
     const filed = await handlePaymentForCancelledOrder({
       gatewayReference: transactionGatewayReference ?? reference,

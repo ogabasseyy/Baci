@@ -1,13 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockCreateClient = vi.fn();
-const mockGetCachedDashboardStats = vi.fn();
 const mockGetMerchantForApiRequest = vi.fn();
-
-vi.mock('@/lib/cached-data', () => ({
-  getCachedDashboardStats: (...args: unknown[]) =>
-    mockGetCachedDashboardStats(...args),
-}));
 
 vi.mock('@/lib/get-merchant-for-api-request', () => ({
   getMerchantForApiRequest: (...args: unknown[]) =>
@@ -72,13 +66,16 @@ function createSupabaseClient(query: ReturnType<typeof createOrdersQuery>) {
   };
 }
 
-function createDashboardSupabaseClient() {
-  return createSupabaseClient(
-    createOrdersQuery({
-      data: [],
-      error: null,
-    })
-  );
+function createDashboardSupabaseClient(rpc = vi.fn()) {
+  return {
+    ...createSupabaseClient(
+      createOrdersQuery({
+        data: [],
+        error: null,
+      })
+    ),
+    rpc,
+  };
 }
 
 function createMonthlyChartSupabaseClient(rpc: ReturnType<typeof vi.fn>) {
@@ -315,8 +312,9 @@ describe('dashboard actions', () => {
     expect(mockCreateClient).not.toHaveBeenCalled();
   });
 
-  it('authorizes cached dashboard metrics before calling service-role stats', async () => {
-    const supabaseClient = createDashboardSupabaseClient();
+  it('authorizes dashboard metrics before calling the RPC with the request client', async () => {
+    const rpc = vi.fn();
+    const supabaseClient = createDashboardSupabaseClient(rpc);
     const metrics = {
       activeNow: { change: 0, value: 2 },
       aov: 625,
@@ -335,7 +333,7 @@ describe('dashboard actions', () => {
         role: null,
       },
     });
-    mockGetCachedDashboardStats.mockResolvedValue(metrics);
+    rpc.mockResolvedValue({ data: metrics, error: null });
 
     const result = await getDashboardMetrics('merchant-tampered');
 
@@ -345,12 +343,9 @@ describe('dashboard actions', () => {
       'user-1',
       { requestedMerchantId: 'merchant-tampered' }
     );
-    expect(mockGetCachedDashboardStats).toHaveBeenCalledWith(
-      'merchant-authorized'
-    );
-    expect(mockGetCachedDashboardStats).not.toHaveBeenCalledWith(
-      'merchant-tampered'
-    );
+    expect(rpc).toHaveBeenCalledWith('get_sales_dashboard_stats', {
+      p_merchant_id: 'merchant-authorized',
+    });
     expect(result).toEqual(metrics);
   });
 
@@ -366,7 +361,7 @@ describe('dashboard actions', () => {
 
     expect(result).toEqual(zeroMetrics);
     expect(mockGetMerchantForApiRequest).not.toHaveBeenCalled();
-    expect(mockGetCachedDashboardStats).not.toHaveBeenCalled();
+    expect(supabaseClient.rpc).not.toHaveBeenCalled();
   });
 
   it('falls back to zeroed metrics when the caller has no merchant access', async () => {
@@ -377,21 +372,36 @@ describe('dashboard actions', () => {
     const result = await getDashboardMetrics('merchant-1');
 
     expect(result).toEqual(zeroMetrics);
-    expect(mockGetCachedDashboardStats).not.toHaveBeenCalled();
+    expect(supabaseClient.rpc).not.toHaveBeenCalled();
   });
 
-  it('falls back to zeroed metrics when cached dashboard stats are unavailable', async () => {
-    mockCreateClient.mockResolvedValue(createDashboardSupabaseClient());
-    mockGetCachedDashboardStats.mockResolvedValue(null);
+  it('falls back to zeroed metrics when dashboard stats are unavailable', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
+    mockCreateClient.mockResolvedValue(createDashboardSupabaseClient(rpc));
 
     const result = await getDashboardMetrics('merchant-1');
 
     expect(result).toEqual(zeroMetrics);
   });
 
-  it('falls back to zeroed metrics when cached dashboard stats throw', async () => {
-    mockCreateClient.mockResolvedValue(createDashboardSupabaseClient());
-    mockGetCachedDashboardStats.mockRejectedValue(new Error('rpc failed'));
+  it('falls back to zeroed metrics when the dashboard RPC shape is invalid', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: { revenue: 'not-a-metric' },
+      error: null,
+    });
+    mockCreateClient.mockResolvedValue(createDashboardSupabaseClient(rpc));
+
+    await expect(getDashboardMetrics('merchant-1')).resolves.toEqual(
+      zeroMetrics
+    );
+  });
+
+  it('falls back to zeroed metrics when the dashboard RPC fails', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { message: 'rpc failed' },
+    });
+    mockCreateClient.mockResolvedValue(createDashboardSupabaseClient(rpc));
 
     const result = await getDashboardMetrics('merchant-1');
 

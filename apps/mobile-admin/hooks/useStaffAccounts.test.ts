@@ -43,7 +43,7 @@ describe('useStaffAccounts', () => {
     );
     expect(mocks.directInsert).not.toHaveBeenCalled();
     expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['branches', 'merchant-1'],
+      queryKey: ['branches', 'merchant-1', false],
     });
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['branch-scope'],

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -11,8 +11,27 @@ import { fetchQuizEvents } from '@/services/quiz';
 import { fetchQuizLeaderboard } from '@/services/quiz-leaderboard';
 import type { QuizEvent, QuizLeaderboard } from '@/services/quiz-types';
 import { useAuthStore } from '@/stores/auth-store';
+import { QuizLeaderboardParticipantCount } from './QuizLeaderboardParticipantCount';
+import { QuizLeaderboardRow } from './QuizLeaderboardRow';
 import { createQuizLeaderboardStyles } from './QuizLeaderboardScreen.styles';
 import { formatQuizClock } from './QuizScreen.utils';
+
+function getLeaderboardRows(leaderboard: QuizLeaderboard | null) {
+  return leaderboard?.entries ?? [];
+}
+
+function isPastQuizEvent(item: QuizEvent): boolean {
+  // Finalizing events have closed for play but their final standings are not
+  // public yet. Keep them out of history until the published board exists.
+  if (item.status === 'finalizing') return Boolean(item.resultsPublishedAt);
+  if (['completed', 'closed', 'cancelled'].includes(item.status)) return true;
+  if (!item.endsAt || !item.serverNow) return false;
+  const endsAt = Date.parse(item.endsAt);
+  const serverNow = Date.parse(item.serverNow);
+  return (
+    Number.isFinite(endsAt) && Number.isFinite(serverNow) && endsAt <= serverNow
+  );
+}
 
 export function QuizLeaderboardScreen() {
   const { colors } = useTheme();
@@ -23,26 +42,38 @@ export function QuizLeaderboardScreen() {
   const [leaderboard, setLeaderboard] = useState<QuizLeaderboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const leaderboardRequestId = useRef(0);
+  const previousUserId = useRef(userId);
 
   useEffect(() => {
+    if (previousUserId.current === userId) return;
+    previousUserId.current = userId;
+    leaderboardRequestId.current += 1;
+    setSelected(null);
+    setLeaderboard(null);
+    setError(null);
+  }, [userId]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Account changes intentionally reload the past-event history.
+  useEffect(() => {
     let active = true;
+    setEvents([]);
+    setLoading(true);
+    setError(null);
     fetchQuizEvents()
       .then((items) => {
         if (!active) return;
-        setEvents(
-          items.filter((item) =>
-            ['completed', 'closed', 'cancelled'].includes(item.status)
-          )
-        );
+        setEvents(items.filter(isPastQuizEvent));
       })
       .catch(() => active && setError('Past leaderboards are unavailable.'))
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
-  }, []);
+  }, [userId]);
 
   const loadLeaderboard = async (event: QuizEvent) => {
+    const requestId = ++leaderboardRequestId.current;
     setSelected(event);
     setLeaderboard(null);
     setError(null);
@@ -52,25 +83,93 @@ export function QuizLeaderboardScreen() {
     }
     setLoading(true);
     try {
-      setLeaderboard(
-        await fetchQuizLeaderboard({
-          eventId: event.id,
-          expectedUserId: userId,
-        })
-      );
+      const result = await fetchQuizLeaderboard({
+        eventId: event.id,
+        expectedUserId: userId,
+      });
+      if (requestId === leaderboardRequestId.current) setLeaderboard(result);
     } catch {
-      setError('This leaderboard is not available yet.');
+      if (requestId === leaderboardRequestId.current)
+        setError('This leaderboard is not available yet.');
     } finally {
-      setLoading(false);
+      if (requestId === leaderboardRequestId.current) setLoading(false);
     }
   };
 
-  const rows = leaderboard
-    ? leaderboard.currentPlayer &&
-      !leaderboard.entries.some((entry) => entry.isCurrentCustomer)
-      ? [...leaderboard.entries, leaderboard.currentPlayer]
-      : leaderboard.entries
-    : [];
+  const rows = getLeaderboardRows(leaderboard);
+
+  if (selected) {
+    return (
+      <View style={styles.screen}>
+        <FlatList
+          contentContainerStyle={styles.content}
+          data={rows}
+          keyExtractor={(entry) => `${entry.rank}-${entry.displayName}`}
+          ListHeaderComponent={
+            <View style={styles.boardHeader}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Choose another quiz"
+                onPress={() => {
+                  leaderboardRequestId.current += 1;
+                  setSelected(null);
+                  setLeaderboard(null);
+                  setError(null);
+                }}
+                style={styles.backButton}
+              >
+                <Text style={styles.backButtonText}>‹ Past quizzes</Text>
+              </Pressable>
+              <Text accessibilityRole="header" style={styles.selectedTitle}>
+                {selected.title}
+              </Text>
+              <Text style={styles.selectedMeta}>
+                {selected.prizeName} · closed{' '}
+                {formatQuizClock(selected.endsAt, undefined, selected.timeZone)}
+              </Text>
+              {leaderboard?.status === 'published' &&
+              leaderboard.participantCount != null ? (
+                <QuizLeaderboardParticipantCount
+                  count={leaderboard.participantCount}
+                  styles={styles}
+                />
+              ) : null}
+              {leaderboard?.currentPlayer &&
+              !leaderboard.entries.some((entry) => entry.isCurrentCustomer) ? (
+                <View style={styles.yourRankCard}>
+                  <Text style={styles.yourRankLabel}>YOUR RANK</Text>
+                  <Text style={styles.yourRankValue}>
+                    #{leaderboard.currentPlayer.rank} ·{' '}
+                    {leaderboard.currentPlayer.displayName} ·{' '}
+                    {leaderboard.currentPlayer.score} pts
+                  </Text>
+                </View>
+              ) : null}
+              {loading ? (
+                <ActivityIndicator accessibilityLabel="Loading quiz leaderboard" />
+              ) : null}
+              {error ? (
+                <Text accessibilityRole="alert" style={styles.error}>
+                  {error}
+                </Text>
+              ) : null}
+              {leaderboard?.status === 'published' ? (
+                <Text style={styles.boardTitle}>Final standings</Text>
+              ) : null}
+            </View>
+          }
+          ListEmptyComponent={
+            loading || error ? null : (
+              <Text style={styles.state}>No standings are available yet.</Text>
+            )
+          }
+          renderItem={({ item }) => (
+            <QuizLeaderboardRow entry={item} styles={styles} />
+          )}
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.screen}>
@@ -79,14 +178,21 @@ export function QuizLeaderboardScreen() {
         data={events}
         keyExtractor={(event) => event.id}
         ListHeaderComponent={
-          <Text style={styles.intro}>
-            Choose a previous quiz to see the final standings.
-          </Text>
+          <View style={styles.historyHeader}>
+            <Text style={styles.intro}>
+              Choose a previous quiz to see the final standings.
+            </Text>
+            {error ? (
+              <Text accessibilityRole="alert" style={styles.error}>
+                {error}
+              </Text>
+            ) : null}
+          </View>
         }
         ListEmptyComponent={
           loading ? (
             <ActivityIndicator accessibilityLabel="Loading past quiz leaderboards" />
-          ) : (
+          ) : error ? null : (
             <Text style={styles.state}>No previous quiz leaderboards yet.</Text>
           )
         }
@@ -95,10 +201,7 @@ export function QuizLeaderboardScreen() {
             accessibilityLabel={`View leaderboard for ${item.title}`}
             accessibilityRole="button"
             onPress={() => void loadLeaderboard(item)}
-            style={[
-              styles.eventButton,
-              selected?.id === item.id ? styles.eventButtonSelected : undefined,
-            ]}
+            style={styles.eventButton}
           >
             <Text style={styles.eventTitle}>{item.title}</Text>
             <Text style={styles.eventMeta}>
@@ -107,41 +210,6 @@ export function QuizLeaderboardScreen() {
             </Text>
           </Pressable>
         )}
-        ListFooterComponent={
-          <View style={styles.board}>
-            {loading && events.length > 0 ? (
-              <ActivityIndicator accessibilityLabel="Loading quiz leaderboard" />
-            ) : null}
-            {error ? (
-              <Text accessibilityRole="alert" style={styles.error}>
-                {error}
-              </Text>
-            ) : null}
-            {selected && leaderboard?.status === 'published' ? (
-              <>
-                <Text accessibilityRole="header" style={styles.boardTitle}>
-                  Final standings
-                </Text>
-                {rows.map((entry) => (
-                  <View
-                    key={`${entry.rank}-${entry.displayName}`}
-                    accessibilityLabel={`Rank ${entry.rank}, ${entry.displayName}, score ${entry.score}`}
-                    style={[
-                      styles.rankRow,
-                      entry.isCurrentCustomer
-                        ? styles.currentRankRow
-                        : undefined,
-                    ]}
-                  >
-                    <Text style={styles.rank}>#{entry.rank}</Text>
-                    <Text style={styles.name}>{entry.displayName}</Text>
-                    <Text style={styles.score}>{entry.score} pts</Text>
-                  </View>
-                ))}
-              </>
-            ) : null}
-          </View>
-        }
       />
     </View>
   );

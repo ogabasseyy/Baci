@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runPasswordSignUp } from './sign-up-with-password';
 
 const mocks = vi.hoisted(() => ({
+  captureMobileSignupLifecycle: vi.fn().mockResolvedValue(undefined),
   checkPasswordBreach: vi.fn(),
+  generateUUID: vi.fn(() => '123e4567-e89b-42d3-a456-426614174000'),
   signUp: vi.fn(),
   trackAuthTelemetry: vi.fn(),
 }));
@@ -14,6 +16,12 @@ vi.mock('@/lib/supabase', () => ({
 vi.mock('@/lib/auth/check-password-breach', () => ({
   checkPasswordBreach: mocks.checkPasswordBreach,
 }));
+
+vi.mock('@/services/signup-lifecycle-telemetry', () => ({
+  captureMobileSignupLifecycle: mocks.captureMobileSignupLifecycle,
+}));
+
+vi.mock('@/utils/uuid', () => ({ generateUUID: mocks.generateUUID }));
 
 vi.mock('@/services/auth-telemetry', () => ({
   trackAuthTelemetry: mocks.trackAuthTelemetry,
@@ -28,6 +36,7 @@ function makeOptions(overrides: Record<string, unknown> = {}) {
   return {
     email: 'staff@example.com',
     password: 'sup3r-secret-pw',
+    signupFlow: 'merchant' as const,
     getCurrentUserId: vi.fn(() => undefined),
     onResetUserStores: vi.fn().mockResolvedValue(undefined),
     setState: vi.fn(),
@@ -51,6 +60,13 @@ describe('runPasswordSignUp', () => {
 
     expect(result.error).toMatch(/12,345 known data breaches/i);
     expect(mocks.signUp).not.toHaveBeenCalled();
+    expect(mocks.captureMobileSignupLifecycle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventCode: 'password_breached',
+        failureClass: 'password_breached',
+        outcome: 'failed',
+      })
+    );
   });
 
   it('commits the session and resets stores for a brand-new user', async () => {
@@ -112,9 +128,34 @@ describe('runPasswordSignUp', () => {
             first_name: 'Ada',
             last_name: 'Lovelace',
             full_name: 'Ada Lovelace',
+            signup_attempt_id: '123e4567-e89b-42d3-a456-426614174000',
+            signup_flow: 'merchant',
           },
         },
       })
+    );
+  });
+
+  it('tags staff account creation so it is excluded from merchant conversion alerts', async () => {
+    mocks.signUp.mockResolvedValue({
+      data: {
+        session: null,
+        user: { id: 'u', identities: [{ id: 'i' }] },
+      },
+      error: null,
+    });
+
+    await runPasswordSignUp(makeOptions({ signupFlow: 'staff' }));
+
+    expect(mocks.signUp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: {
+          data: expect.objectContaining({ signup_flow: 'staff' }),
+        },
+      })
+    );
+    expect(mocks.captureMobileSignupLifecycle).toHaveBeenCalledWith(
+      expect.objectContaining({ flow: 'staff' })
     );
   });
 
@@ -184,7 +225,19 @@ describe('runPasswordSignUp', () => {
 
     const result = await runPasswordSignUp(makeOptions());
 
-    expect(result).toEqual({ error: null, needsEmailConfirmation: true });
+    expect(result).toEqual({
+      error: null,
+      needsEmailConfirmation: true,
+      signupAttemptId: '123e4567-e89b-42d3-a456-426614174000',
+    });
+    expect(mocks.captureMobileSignupLifecycle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attemptId: '123e4567-e89b-42d3-a456-426614174000',
+        eventCode: 'password_signup_verification_required',
+        flow: 'merchant',
+        outcome: 'verification_required',
+      })
+    );
   });
 
   it('returns a friendly message when rate limited', async () => {
@@ -200,6 +253,13 @@ describe('runPasswordSignUp', () => {
     const result = await runPasswordSignUp(makeOptions());
 
     expect(result.error).toMatch(/too many attempts/i);
+    expect(mocks.captureMobileSignupLifecycle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventCode: 'password_signup_rate_limited',
+        failureClass: 'rate_limited',
+        outcome: 'failed',
+      })
+    );
   });
 
   it('passes through other errors', async () => {

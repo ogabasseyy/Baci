@@ -65,7 +65,7 @@ BEGIN
     'shipping_fee', 2500, 'source', 'physical', 'tax_amount', 0
   );
 
-  v_result := public.update_admin_order(
+  v_result := public.update_admin_order_with_transaction_discount_metadata(
     v_order_id,
     v_payload || jsonb_build_object(
       'items', jsonb_build_array(v_existing_line, v_added_line)

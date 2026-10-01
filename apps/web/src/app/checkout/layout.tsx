@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import type { ReactNode } from 'react';
+import { AppSansFont } from '@/app/app-sans-font';
 import '@/app/globals.css';
 import { CartProvider } from '@/hooks/use-cart';
 
@@ -12,10 +14,10 @@ export const metadata: Metadata = {
   },
 };
 
-export default function CheckoutLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return <CartProvider>{children}</CartProvider>;
+export default function CheckoutLayout({ children }: { children: ReactNode }) {
+  return (
+    <AppSansFont>
+      <CartProvider>{children}</CartProvider>
+    </AppSansFont>
+  );
 }

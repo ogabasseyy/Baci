@@ -1,6 +1,5 @@
 import type { OrderSource, PaymentStatus } from '@baci/shared';
 import type { QueryClient } from '@tanstack/react-query';
-import * as Crypto from 'expo-crypto';
 import type { MutableRefObject } from 'react';
 import { Alert } from 'react-native';
 import type {
@@ -9,7 +8,10 @@ import type {
   OrderItem,
   ShippingAddress,
 } from '@/components/orders/new-order.types';
+import { getManualOrderDocumentDates } from '@/lib/manual-order-document-dates';
+import { generateOrderNumber } from '@/lib/manual-order-number';
 import { createManualOrderWithItems } from '@/lib/manual-order-persistence';
+import { validateOrderDate } from '@/lib/manual-order-validation';
 import { normalizeMerchantCurrency } from '@/lib/merchant-currency';
 import {
   sanitizeAddress,
@@ -47,8 +49,6 @@ interface SubmitNewOrderParams {
   userId?: string;
   submittingRef: MutableRefObject<boolean>;
 }
-
-const ORDER_DATE_FUTURE_TOLERANCE_MS = 60_000;
 
 export async function submitNewOrder({
   customer,
@@ -102,6 +102,7 @@ export async function submitNewOrder({
     const now = new Date();
     validateOrderDate(orderDate, now);
     const orderDateIso = orderDate.toISOString();
+    const documentDates = getManualOrderDocumentDates(orderDate);
     const orderNumber = generateOrderNumber(orderDate);
     const sanitizedCustomerName =
       sanitizeCustomerName(customer.name) || 'Walk-in Customer';
@@ -136,6 +137,13 @@ export async function submitNewOrder({
           address: sanitizedCustomerAddress,
           name: sanitizedCustomerName,
           phone: sanitizedCustomerPhone || '',
+          city: sanitizeText(customer.city ?? '', 100),
+          state: sanitizeText(customer.state ?? '', 100),
+          country: sanitizeText(customer.country ?? '', 100),
+          countryCode: sanitizeText(customer.countryCode ?? '', 10),
+          postalCode: sanitizeText(customer.postalCode ?? '', 30),
+          latitude: customer.latitude,
+          longitude: customer.longitude,
         }
       : {
           address: sanitizeAddress(deliveryInfo.address),
@@ -143,6 +151,11 @@ export async function submitNewOrder({
           name: sanitizeCustomerName(deliveryInfo.name),
           phone: sanitizePhone(deliveryInfo.phone),
           state: sanitizeText(deliveryInfo.state, 100),
+          country: sanitizeText(deliveryInfo.country ?? '', 100),
+          countryCode: sanitizeText(deliveryInfo.countryCode ?? '', 10),
+          postalCode: sanitizeText(deliveryInfo.postalCode ?? '', 30),
+          latitude: deliveryInfo.latitude,
+          longitude: deliveryInfo.longitude,
         };
     const validatedBranchId = await validateSelectedBranch(
       selectedBranchId,
@@ -217,6 +230,13 @@ export async function submitNewOrder({
           tax_amount: taxesToUse,
           total,
           transaction_date: orderDateIso,
+          ...documentDates,
+          // The picker selection is explicit user intent, not a derived value:
+          // recomputing these dates from the UTC instant in the merchant
+          // timezone can shift the day when the device is ahead of the
+          // merchant near midnight, so the triggers must preserve them.
+          invoice_issue_date_generated: false,
+          tax_point_date_generated: false,
         },
       }
     );
@@ -265,24 +285,4 @@ async function validateSelectedBranch(
   }
 
   return data.id;
-}
-
-function validateOrderDate(orderDate: Date, now: Date) {
-  if (Number.isNaN(orderDate.getTime())) {
-    throw new Error('Invalid order date');
-  }
-
-  if (orderDate.getTime() > now.getTime() + ORDER_DATE_FUTURE_TOLERANCE_MS) {
-    throw new Error('Order date cannot be in the future');
-  }
-}
-
-function generateOrderNumber(date: Date) {
-  const prefix = 'ORD';
-  const datePart = `${String(date.getDate()).padStart(2, '0')}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getFullYear()).slice(-2)}`;
-  const randomPart = Crypto.randomUUID()
-    .replace(/-/g, '')
-    .substring(0, 6)
-    .toUpperCase();
-  return `${prefix}-${datePart}-${randomPart}`;
 }

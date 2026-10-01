@@ -1,23 +1,18 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getMerchantForApiRequest } from '@/lib/get-merchant-for-api-request';
 import { PATCH } from './route';
 
 const mockCreateClient = vi.fn();
-const mockCookies = vi.fn();
+const mockAuthorizeNotificationAdmin = vi.fn();
 
-vi.mock('next/headers', () => ({
-  cookies: vi.fn(async () => mockCookies()),
+vi.mock('@/lib/admin-notification-auth', () => ({
+  authorizeNotificationAdmin: () => mockAuthorizeNotificationAdmin(),
 }));
 
 const mockCheckCsrfProtection = vi.fn();
 vi.mock('@/lib/csrf', () => ({
   checkCsrfProtection: (...args: unknown[]) => mockCheckCsrfProtection(...args),
-}));
-
-vi.mock('@/lib/get-merchant-for-api-request', () => ({
-  getMerchantForApiRequest: vi.fn(),
 }));
 
 vi.mock('@/lib/logger', () => ({
@@ -43,6 +38,7 @@ function createRequest(
 
 function createMockSupabase(options?: {
   notification?: {
+    delivery_state: string;
     id: string;
     sent_at: string | null;
     target_merchant_ids?: string[] | null;
@@ -54,6 +50,7 @@ function createMockSupabase(options?: {
   updateReturnsRow?: boolean;
 }) {
   const notification = options?.notification ?? {
+    delivery_state: 'pending',
     id: '123e4567-e89b-12d3-a456-426614174000',
     sent_at: null,
     target_merchant_ids: null,
@@ -67,10 +64,9 @@ function createMockSupabase(options?: {
 
   const merchantsQuery = {
     eq: vi.fn(() => merchantsQuery),
-    maybeSingle: vi.fn(async () => ({
-      data: { is_platform_admin: true },
-      error: null,
-    })),
+    in: vi.fn((_: string, ids: string[]) =>
+      Promise.resolve({ data: ids.map((id) => ({ id })), error: null })
+    ),
     select: vi.fn(() => merchantsQuery),
   };
 
@@ -95,16 +91,19 @@ function createMockSupabase(options?: {
   return {
     __notificationUpdates: notificationUpdates,
     __notificationsQuery: notificationsQuery,
-    auth: {
-      getUser: vi.fn().mockResolvedValue({
-        data: { user: { id: 'user-1' } },
-        error: null,
-      }),
-    },
     from: vi.fn((table: string) => {
       if (table === 'merchants') return merchantsQuery;
       if (table === 'notifications') return notificationsQuery;
       throw new Error(`Unexpected table: ${table}`);
+    }),
+    rpc: vi.fn((fn: string) => {
+      if (fn === 'resolve_admin_notification_target_merchant_ids_v1') {
+        return Promise.resolve({
+          data: ['123e4567-e89b-12d3-a456-426614174111'],
+          error: null,
+        });
+      }
+      throw new Error(`Unexpected RPC: ${fn}`);
     }),
   };
 }
@@ -115,13 +114,10 @@ describe('PATCH /api/admin/notifications/[id]', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSupabase = createMockSupabase();
-    mockCookies.mockReturnValue(new Map());
     mockCreateClient.mockReturnValue(mockSupabase);
-    (
-      getMerchantForApiRequest as unknown as ReturnType<typeof vi.fn>
-    ).mockResolvedValue({
-      merchantId: 'merchant-1',
-      staffAccess: { isStaff: false },
+    mockAuthorizeNotificationAdmin.mockResolvedValue({
+      status: 'authorized',
+      userId: 'user-1',
     });
     mockCheckCsrfProtection.mockResolvedValue({ valid: true });
   });
@@ -162,53 +158,26 @@ describe('PATCH /api/admin/notifications/[id]', () => {
     expect(body.error).toBe('Invalid JSON body');
   });
 
-  it('rejects updates that would leave specific targeting without merchants', async () => {
+  it('rejects edits after delivery processing has started', async () => {
     mockSupabase = createMockSupabase({
       notification: {
+        delivery_state: 'processing',
         id: '123e4567-e89b-12d3-a456-426614174000',
         sent_at: null,
-        target_merchant_ids: ['123e4567-e89b-12d3-a456-426614174111'],
+        target_merchant_ids: null,
         target_segment: null,
-        target_type: 'specific',
+        target_type: 'all',
         title: 'Launch update',
       },
     });
     mockCreateClient.mockReturnValue(mockSupabase);
 
-    const response = await PATCH(createRequest({ target_merchant_ids: [] }), {
-      params: Promise.resolve({
-        id: '123e4567-e89b-12d3-a456-426614174000',
-      }),
-    });
-    const body = await response.json();
-
-    expect(response.status).toBe(400);
-    expect(body.error).toBe('Invalid input');
-    expect(body.details.fieldErrors.target_merchant_ids).toContain(
-      'Target merchant IDs required for specific targeting'
-    );
-  });
-
-  it('accepts partial targeting when stored merchant IDs remain valid', async () => {
-    mockSupabase = createMockSupabase({
-      notification: {
-        id: '123e4567-e89b-12d3-a456-426614174000',
-        sent_at: null,
-        target_merchant_ids: ['123e4567-e89b-12d3-a456-426614174111'],
-        target_segment: null,
-        target_type: 'specific',
-        title: 'Launch update',
-      },
-    });
-    mockCreateClient.mockReturnValue(mockSupabase);
-
-    const response = await PATCH(createRequest({ target_type: 'specific' }), {
-      params: Promise.resolve({
-        id: '123e4567-e89b-12d3-a456-426614174000',
-      }),
+    const response = await PATCH(createRequest(), {
+      params: Promise.resolve({ id: '123e4567-e89b-12d3-a456-426614174000' }),
     });
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(409);
+    expect(mockSupabase.__notificationUpdates).toEqual([]);
   });
 
   it('rejects the update when a notification is sent after the preflight read', async () => {
@@ -222,77 +191,17 @@ describe('PATCH /api/admin/notifications/[id]', () => {
     });
     const body = await response.json();
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(409);
     expect(body.error).toBe(
-      'Cannot update a notification that has already been sent'
+      'Notification delivery has already started or completed'
+    );
+    expect(mockSupabase.__notificationsQuery.eq).toHaveBeenCalledWith(
+      'delivery_state',
+      'pending'
     );
     expect(mockSupabase.__notificationsQuery.is).toHaveBeenCalledWith(
       'sent_at',
       null
-    );
-  });
-
-  it('allows all-target notifications to clear stored merchant IDs with null', async () => {
-    mockSupabase = createMockSupabase({
-      notification: {
-        id: '123e4567-e89b-12d3-a456-426614174000',
-        sent_at: null,
-        target_merchant_ids: ['123e4567-e89b-12d3-a456-426614174111'],
-        target_segment: null,
-        target_type: 'specific',
-        title: 'Launch update',
-      },
-      updatedNotification: {
-        id: '123e4567-e89b-12d3-a456-426614174000',
-        sent_at: null,
-        target_merchant_ids: null,
-        target_segment: null,
-        target_type: 'all',
-        title: 'Launch update',
-      },
-    });
-    mockCreateClient.mockReturnValue(mockSupabase);
-
-    const response = await PATCH(
-      createRequest({ target_type: 'all', target_merchant_ids: null }),
-      {
-        params: Promise.resolve({
-          id: '123e4567-e89b-12d3-a456-426614174000',
-        }),
-      }
-    );
-
-    expect(response.status).toBe(200);
-    expect(mockSupabase.__notificationUpdates.at(-1)).toMatchObject({
-      target_merchant_ids: null,
-      target_type: 'all',
-    });
-  });
-
-  it('rejects clearing merchant IDs when effective targeting remains specific', async () => {
-    mockSupabase = createMockSupabase({
-      notification: {
-        id: '123e4567-e89b-12d3-a456-426614174000',
-        sent_at: null,
-        target_merchant_ids: ['123e4567-e89b-12d3-a456-426614174111'],
-        target_segment: null,
-        target_type: 'specific',
-        title: 'Launch update',
-      },
-    });
-    mockCreateClient.mockReturnValue(mockSupabase);
-
-    const response = await PATCH(createRequest({ target_merchant_ids: null }), {
-      params: Promise.resolve({
-        id: '123e4567-e89b-12d3-a456-426614174000',
-      }),
-    });
-    const body = await response.json();
-
-    expect(response.status).toBe(400);
-    expect(body.error).toBe('Invalid input');
-    expect(body.details.fieldErrors.target_merchant_ids).toContain(
-      'Target merchant IDs required for specific targeting'
     );
   });
 });

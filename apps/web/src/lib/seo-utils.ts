@@ -23,13 +23,16 @@ import {
   isPayOnDeliveryCheckoutAvailable,
   isPaystackCheckoutAvailable,
 } from './checkout/payment-gateway-availability';
+import { collectProductSchemaSpecProperties } from './collect-product-schema-spec-properties';
 import { generateStorefrontSlug } from './generate-storefront-slug';
-import { getStorefrontProductPath } from './get-storefront-product-path';
 import {
   isExternalPlaceholderImageUrl,
   PLACEHOLDER_IMAGE,
 } from './image-utils';
+import { generateMetaDescription } from './meta-description';
 import { normalizeOgabasseyCdnImageUrl } from './ogabassey-cdn-image-url';
+import { getProductSchemaSpecKeyForPropertyId } from './product-schema-spec-vocabulary';
+import { shouldIncludeProductSchemaSpec } from './product-schema-specs';
 import type {
   Product,
   ProductSchemaMarkup,
@@ -40,8 +43,9 @@ import type {
 import { escapeHtml, stripHtmlTags } from './sanitize-core';
 import { sanitizeSchemaMarkup, sanitizeSchemaUrl } from './sanitize-json-ld';
 import { normalizeSocialUrl } from './social';
-import { stripVolatileProductPriceSentences } from './storefront-product-description';
+import { resolveStorefrontProductCategoryName } from './storefront-product-category-name';
 import { getValidatedProductUrl as getSerializedValidatedProductUrl } from './storefront-product-url-serialization';
+import { isUnsupportedSpecValue } from './storefront-specs/is-unsupported-spec-value';
 import type {
   MerchantTrustProfile,
   MerchantTrustProfileReturnFee,
@@ -50,7 +54,7 @@ import type {
 
 export { generateStorefrontSlug as generateSlug } from './generate-storefront-slug';
 // Re-export escapeHtml for use in other modules
-export { escapeHtml, getEffectiveProductStock };
+export { escapeHtml, generateMetaDescription, getEffectiveProductStock };
 
 function getSchemaItemCondition(condition?: string | null) {
   if (!condition || condition.trim() === '') {
@@ -123,23 +127,13 @@ export function buildProductUrl(
 }
 
 /**
- * Generates the full product URL path from product data
- * Convenience function combining slug generation and URL building
+ * Generates the full product URL path from product data.
+ * Sourced from the dependency-free `product-url` module so hot client paths
+ * can import it without pulling the sanitize toolchain.
  */
-export function getProductUrl(product: {
-  slug?: string;
-  name: string;
-  category?: string | null;
-  categories?: { name?: string; slug?: string } | null;
-  category_slug?: string | null;
-  categorySlug?: string;
-  canonical_url?: string | null;
-  condition?: 'new' | 'used' | string;
-  condition_detail?: string;
-  id: string;
-}): Route {
-  return getStorefrontProductPath(product);
-}
+import { getProductUrl } from './product-url';
+
+export { getProductUrl };
 
 export function getValidatedProductUrl(
   product: Parameters<typeof getProductUrl>[0],
@@ -481,7 +475,32 @@ function normalizeAcceptedPaymentMethods(
   const methods = [
     ...new Set(
       acceptedPaymentMethods
-        .map((method) => method.trim())
+        .map((method) => {
+          const normalized = method.trim().toLowerCase();
+          if (normalized.includes('bank transfer')) {
+            return 'https://schema.org/ByBankTransferInAdvance';
+          }
+          if (
+            normalized.includes('cash on delivery') ||
+            normalized.includes('pay on delivery')
+          ) {
+            return 'https://schema.org/COD';
+          }
+          if (
+            normalized.includes('debit') ||
+            normalized.includes('credit') ||
+            normalized.includes('card')
+          ) {
+            return 'https://schema.org/CreditCard';
+          }
+          if (normalized.includes('delivery')) {
+            return 'https://schema.org/Cash';
+          }
+          if (normalized === 'ussd') {
+            return 'USSD';
+          }
+          return '';
+        })
         .filter((method) => method.length > 0)
     ),
   ];
@@ -587,18 +606,6 @@ function sanitizeCustomProductSchemaMarkup(
 
   const sanitizedSchema = { ...sanitized } as Record<string, unknown>;
 
-  if (typeof sanitizedSchema.description === 'string') {
-    const description = stripVolatileProductPriceSentences(
-      sanitizedSchema.description
-    );
-
-    if (description) {
-      sanitizedSchema.description = description;
-    } else {
-      delete sanitizedSchema.description;
-    }
-  }
-
   if (
     'aggregateRating' in sanitizedSchema &&
     !hasValidAggregateRatingSchema(sanitizedSchema.aggregateRating)
@@ -628,14 +635,22 @@ export function generateProductSchema(
   // at serialization time so structured-data parsers receive unmodified values.
   const safeName = product.name;
 
-  // Provide a smart fallback for description to prevent "Missing field description" errors
-  const rawDescription = product.meta_description || product.description;
-  const metaDescription = rawDescription
-    ? generateMetaDescription(rawDescription)
+  // Product schema should describe the product itself, not repeat a short
+  // search-snippet template. Prefer the enriched visible description and use
+  // the meta description only when the visible description sanitizes empty.
+  const productDescription = product.description
+    ? generateMetaDescription(product.description, 500)
     : '';
-  const safeDescription = metaDescription
-    ? metaDescription
-    : `Buy ${safeName} from ${merchantName}. Best prices, fast delivery, and secure payments.`;
+  const metaDescription = product.meta_description
+    ? generateMetaDescription(product.meta_description, 500)
+    : '';
+  const visibleDescriptionSupported =
+    productDescription && !isUnsupportedSpecValue(productDescription);
+  const safeDescription = visibleDescriptionSupported
+    ? productDescription
+    : metaDescription
+      ? metaDescription
+      : `Buy ${safeName} from ${merchantName}. Best prices, fast delivery, and secure payments.`;
 
   const safeBrand = product.brand || merchantName;
   const safeMerchantName = merchantName;
@@ -758,9 +773,8 @@ export function generateProductSchema(
     schema.mpn = product.mpn;
   }
 
-  // Category for Google Product Category.
-  // Use joined categories.name from category_id, fallback to legacy TEXT field
-  const categoryName = product.categories?.name || product.category;
+  // Relation-backed category metadata outranks the deprecated text column.
+  const categoryName = resolveStorefrontProductCategoryName(product);
   if (categoryName) {
     schema.category = categoryName;
   }
@@ -775,176 +789,9 @@ export function generateProductSchema(
   }
 
   // Detailed specifications for AI/Crawlers (additionalProperty)
-  // This enables rich snippets and voice assistants to answer spec queries
-  const additionalProperties = [];
-
-  // Extract from product_key_specs (GSM Arena-level specs)
-  const keySpecs = product.product_key_specs;
-
-  if (keySpecs && !Array.isArray(keySpecs)) {
-    interface SpecMapping {
-      key: string;
-      name: string;
-      format?: (v: string | number | boolean | undefined) => string;
-      check?: (v: string | number | boolean | undefined) => boolean;
-    }
-
-    const SPEC_MAPPINGS: SpecMapping[] = [
-      // Network
-      { key: 'network_technology', name: 'Network Technology' },
-      { key: 'has_5g', name: '5G Support', format: (v) => (v ? 'Yes' : 'No') },
-      { key: 'has_nfc', name: 'NFC', format: (v) => (v ? 'Yes' : 'No') },
-
-      // Body
-      { key: 'dimensions_mm', name: 'Dimensions' },
-      { key: 'weight_g', name: 'Weight', format: (v) => `${v}g` },
-      { key: 'build_materials', name: 'Build' },
-      { key: 'ip_rating', name: 'IP Rating' },
-      { key: 'sim_type', name: 'SIM Type' },
-
-      // Display
-      { key: 'display_type', name: 'Display Type' },
-      {
-        key: 'screen_size_inches',
-        name: 'Screen Size',
-        format: (v) => `${v} inches`,
-      },
-      { key: 'display_resolution', name: 'Display Resolution' },
-      { key: 'refresh_rate_hz', name: 'Refresh Rate', format: (v) => `${v}Hz` },
-      { key: 'display_ppi', name: 'Pixel Density', format: (v) => `${v} ppi` },
-      {
-        key: 'display_peak_brightness',
-        name: 'Peak Brightness',
-        format: (v) => `${v} nits`,
-      },
-
-      // Platform
-      {
-        key: 'android_version',
-        name: 'Operating System',
-        format: (v) => `Android ${v}`,
-      },
-      { key: 'chipset', name: 'Chipset' },
-      { key: 'cpu_cores', name: 'CPU' },
-      { key: 'gpu', name: 'GPU' },
-
-      // Memory
-      { key: 'ram_gb', name: 'RAM', format: (v) => `${v}GB` },
-      { key: 'storage_gb', name: 'Internal Storage', format: (v) => `${v}GB` },
-      {
-        key: 'card_slot_type',
-        name: 'Card Slot',
-        check: () => Boolean(keySpecs.has_card_slot),
-      },
-
-      // Camera
-      {
-        key: 'front_camera_mp',
-        name: 'Selfie Camera',
-        format: (v) => `${v}MP`,
-      },
-      { key: 'rear_camera_video', name: 'Video Recording' },
-
-      // Sound
-      {
-        key: 'has_stereo_speakers',
-        name: 'Speakers',
-        format: (v) => (v ? 'Stereo' : 'Mono'),
-      },
-      {
-        key: 'has_headphone_jack',
-        name: '3.5mm Headphone Jack',
-        format: (v) => (v ? 'Yes' : 'No'),
-      },
-
-      // Connectivity
-      { key: 'wifi_bands', name: 'WiFi' },
-      { key: 'bluetooth_version', name: 'Bluetooth' },
-      {
-        key: 'usb_type',
-        name: 'USB',
-        format: (v) => String(v) + (keySpecs.has_usb_otg ? ' (OTG)' : ''),
-      },
-      {
-        key: 'has_fm_radio',
-        name: 'FM Radio',
-        format: () => 'Yes',
-        check: (v) => !!v,
-      },
-
-      // Features
-      { key: 'fingerprint_type', name: 'Fingerprint Sensor' },
-
-      // Battery
-      {
-        key: 'battery_mah',
-        name: 'Battery Capacity',
-        format: (v) => `${v}mAh`,
-      },
-      { key: 'charging_watt', name: 'Fast Charging', format: (v) => `${v}W` },
-      {
-        key: 'wireless_charging_watt',
-        name: 'Wireless Charging',
-        format: (v) => `${v}W`,
-        check: () => Boolean(keySpecs.has_wireless_charging),
-      },
-    ];
-
-    // Handle Main Camera logic separately (too complex for generic map)
-    if (keySpecs.main_camera_mp) {
-      const cameraType = keySpecs.has_quad_camera
-        ? 'Quad'
-        : keySpecs.has_triple_camera
-          ? 'Triple'
-          : keySpecs.has_dual_camera
-            ? 'Dual'
-            : 'Single';
-      additionalProperties.push({
-        '@type': 'PropertyValue',
-        name: 'Main Camera',
-        value: `${cameraType} ${keySpecs.main_camera_mp}MP`,
-      });
-    }
-
-    // Process configuration-driven specs
-    for (const mapping of SPEC_MAPPINGS) {
-      const value = keySpecs[mapping.key] as
-        | string
-        | number
-        | boolean
-        | undefined;
-      const shouldInclude = mapping.check
-        ? mapping.check(value)
-        : value !== null && value !== undefined;
-
-      if (shouldInclude) {
-        additionalProperties.push({
-          '@type': 'PropertyValue',
-          name: mapping.name,
-          value: mapping.format ? mapping.format(value) : String(value),
-        });
-      }
-    }
-  }
-
-  // Also include legacy specifications format if present
-  if (product.specifications && Array.isArray(product.specifications)) {
-    for (const category of product.specifications) {
-      if (category.items && Array.isArray(category.items)) {
-        for (const item of category.items) {
-          additionalProperties.push({
-            '@type': 'PropertyValue',
-            name: item.label,
-            value: item.value,
-          });
-        }
-      }
-    }
-  }
-
-  if (additionalProperties.length > 0) {
-    schema.additionalProperty = additionalProperties;
-  }
+  // This enables rich snippets and voice assistants to answer spec queries.
+  const additionalPropertyCollector =
+    collectProductSchemaSpecProperties(product);
 
   // Dimensions
   if (product.dimensions) {
@@ -1049,9 +896,72 @@ export function generateProductSchema(
     const sanitizedCustomSchema = sanitizeCustomProductSchemaMarkup(
       product.schema_markup
     );
-    // We merge sanitizedCustomSchema into schema
-    // Using Object.assign to override/extend existing fields
-    Object.assign(schema, sanitizedCustomSchema);
+    const customAdditionalProperty = sanitizedCustomSchema.additionalProperty;
+    const customSchemaFields = Object.fromEntries(
+      Object.entries(sanitizedCustomSchema).filter(
+        ([key]) => key !== 'additionalProperty' && key !== 'description'
+      )
+    );
+    Object.assign(schema, customSchemaFields);
+
+    const customProperties = Array.isArray(customAdditionalProperty)
+      ? customAdditionalProperty
+      : [customAdditionalProperty];
+    for (const property of customProperties) {
+      if (
+        !property ||
+        typeof property !== 'object' ||
+        Array.isArray(property)
+      ) {
+        continue;
+      }
+
+      const candidate = property as {
+        name?: unknown;
+        propertyID?: unknown;
+        value?: unknown;
+        minValue?: unknown;
+        maxValue?: unknown;
+      };
+      const candidateValue =
+        candidate.value ??
+        (candidate.minValue !== undefined && candidate.maxValue !== undefined
+          ? `${candidate.minValue} to ${candidate.maxValue}`
+          : (candidate.minValue ?? candidate.maxValue));
+      const propertyId =
+        typeof candidate.propertyID === 'string'
+          ? candidate.propertyID.trim()
+          : undefined;
+      const mappedPropertySpecKey = propertyId
+        ? getProductSchemaSpecKeyForPropertyId(propertyId)
+        : undefined;
+      const candidateName =
+        typeof candidate.name === 'string' ? candidate.name.trim() : undefined;
+      const isPropertyIdOnlyMerchantNegative =
+        propertyId &&
+        !mappedPropertySpecKey &&
+        !candidateName &&
+        candidate.value === false;
+      if (
+        !isPropertyIdOnlyMerchantNegative &&
+        !shouldIncludeProductSchemaSpec(product, {
+          key: mappedPropertySpecKey,
+          label: candidateName,
+          value: candidateValue,
+        })
+      ) {
+        continue;
+      }
+
+      additionalPropertyCollector.addCustomProperty(property);
+    }
+  }
+
+  const additionalProperties = additionalPropertyCollector.getProperties();
+  if (additionalProperties.length > 0) {
+    schema.additionalProperty = additionalProperties;
+  } else {
+    delete schema.additionalProperty;
   }
 
   // ProductGroup transformation for products with variants
@@ -1393,7 +1303,6 @@ export function generateLocalBusinessSchema(
 const ELLIPSIS = '...';
 const ELLIPSIS_LENGTH = ELLIPSIS.length;
 const DEFAULT_MAX_LENGTH = 160;
-const DEFAULT_MIN_LENGTH = 0;
 const DEFAULT_TITLE_MAX_LENGTH = 70;
 
 /**
@@ -1410,6 +1319,7 @@ const STOREFRONT_FILTER_SEARCH_PARAMS: ReadonlyMap<string, string> = new Map([
   ['query', 'search'],
   ['search', 'search'],
   ['displayType', 'displayType'],
+  ['graphics', 'graphics'],
   ['maxPrice', 'price'],
   ['minPrice', 'price'],
   ['ram', 'ram'],
@@ -1423,6 +1333,7 @@ const STOREFRONT_CANONICAL_FILTER_QUERY_KEYS = [
   ['condition', ['condition']],
   ['displaySize', ['displaySize']],
   ['displayType', ['displayType']],
+  ['graphics', ['graphics']],
   ['price', ['minPrice', 'maxPrice']],
   ['ram', ['ram']],
   ['search', ['search', 'q', 'query']],
@@ -1716,64 +1627,6 @@ export function generateMetaTitle(
   }
 
   return `${normalizedTitle.slice(0, maxLength - ELLIPSIS_LENGTH)}${ELLIPSIS}`;
-}
-
-/**
- * Generates a meta description from product description if not provided
- */
-export function generateMetaDescription(
-  description: string,
-  maxLength: number = DEFAULT_MAX_LENGTH,
-  options?: {
-    minLength?: number;
-    fallback?: string;
-  }
-): string {
-  const validMaxLength = validateMaxLength(maxLength);
-  const minLength = Math.max(DEFAULT_MIN_LENGTH, options?.minLength ?? 0);
-
-  const fallbackPlainText = options?.fallback
-    ? stripVolatileProductPriceSentences(normalizePlainText(options.fallback))
-    : '';
-
-  // Strip HTML tags using iterative sanitization to prevent incomplete removal
-  // of nested patterns like <scr<script>ipt>
-  const plainText = stripVolatileProductPriceSentences(
-    normalizePlainText(description)
-  );
-
-  const baseDescription = plainText || fallbackPlainText;
-  if (!baseDescription) {
-    return '';
-  }
-
-  let candidateDescription = baseDescription;
-
-  if (
-    minLength > 0 &&
-    candidateDescription.length < minLength &&
-    fallbackPlainText
-  ) {
-    if (candidateDescription !== fallbackPlainText) {
-      const normalizedBase = /[.!?]$/.test(candidateDescription)
-        ? candidateDescription
-        : `${candidateDescription}.`;
-      const mergedDescription = `${normalizedBase} ${fallbackPlainText}`.trim();
-      candidateDescription =
-        mergedDescription.length > candidateDescription.length
-          ? mergedDescription
-          : candidateDescription;
-    }
-  }
-
-  if (candidateDescription.length <= validMaxLength) {
-    return candidateDescription;
-  }
-
-  return (
-    candidateDescription.substring(0, validMaxLength - ELLIPSIS_LENGTH) +
-    ELLIPSIS
-  );
 }
 
 /**

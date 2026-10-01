@@ -6,12 +6,14 @@ import type { CheckoutStep } from './CheckoutStepper';
 
 interface UseCheckoutNavigationParams {
   isOrderInFlight: MutableRefObject<boolean>;
+  isPrizeSimulation?: boolean;
   setStep: (step: CheckoutStep) => void;
   step: CheckoutStep;
 }
 
 export function useCheckoutNavigation({
   isOrderInFlight,
+  isPrizeSimulation = false,
   setStep,
   step,
 }: UseCheckoutNavigationParams) {
@@ -19,7 +21,7 @@ export function useCheckoutNavigation({
     if (step === 'payment') {
       setStep('address');
     } else if (step === 'review') {
-      setStep('payment');
+      setStep(isPrizeSimulation ? 'address' : 'payment');
     } else {
       router.back();
     }
@@ -46,7 +48,7 @@ export function useCheckoutNavigation({
     if (step === 'payment') {
       setStep('address');
     } else if (step === 'review') {
-      setStep('payment');
+      setStep(isPrizeSimulation ? 'address' : 'payment');
     } else {
       router.back();
     }

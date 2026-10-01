@@ -228,6 +228,25 @@ describe('OgabasseyStorefrontLayout', () => {
     expect(
       screen.getAllByRole('status', { name: 'Loading storefront chrome' })
     ).toHaveLength(2);
+    expect(
+      screen.getAllByRole('status', { name: 'Loading storefront chrome' })[0]
+        ?.parentElement
+    ).toHaveClass('ogabassey-header-chrome-loading');
+  });
+
+  it('does not reserve a hidden header slot when navigation is explicitly disabled', () => {
+    shouldSuspendChrome = true;
+
+    render(
+      <OgabasseyStorefrontLayout merchant={merchant} hideNavigation>
+        <div>Storefront body</div>
+      </OgabasseyStorefrontLayout>
+    );
+
+    expect(screen.getAllByRole('status', { name: 'Loading storefront chrome' })).toHaveLength(1);
+    expect(screen.getByTestId('shell-layout').firstElementChild).not.toHaveClass(
+      'ogabassey-header-chrome-loading'
+    );
   });
 
   it('keeps the shared shell frame mounted while a route-family loader owns the content slot', () => {

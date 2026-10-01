@@ -1,13 +1,12 @@
+import { isAirportDeliveryEligible } from '@baci/shared';
 import type { RefObject } from 'react';
 import type { UseFormSetValue } from 'react-hook-form';
 import { normalizeStateName } from '@/components/checkout/checkout-shipping.helpers';
-import {
-  getDefaultPickupQuoteId,
-  isProviderStationPickupQuote,
-} from '@/components/checkout/checkout-station-pickup';
+import { getDefaultPickupQuoteId } from '@/components/checkout/checkout-station-pickup';
 import {
   AIRPORT_QUOTE_ID,
   isGiglGoFasterQuote,
+  resolveDoorDeliveryQuoteId,
 } from '@/components/checkout/checkout-step-helpers';
 import type {
   DeliveryMethod,
@@ -42,6 +41,8 @@ interface CreateCheckoutShippingHandlersParams {
   };
   shippingQuoteAbortRef: RefObject<AbortController | null>;
   shippingStates: string[];
+  shippingCities?: string[];
+  shippingCitiesState?: string;
   watchedAddress: string;
   watchedCity: string;
   watchedState: string;
@@ -70,6 +71,8 @@ export function createCheckoutShippingHandlers({
   quoteSelection: { selectedQuoteId, shippingQuotes },
   shippingQuoteAbortRef,
   shippingStates,
+  shippingCities = [],
+  shippingCitiesState = '',
   watchedAddress,
   watchedCity,
   watchedState,
@@ -83,8 +86,10 @@ export function createCheckoutShippingHandlers({
       const selectedAddress = place.formattedAddress || '';
       updateAddress(selectedAddress);
       setCommittedAddress(selectedAddress);
+      const hasGoogleCoordinates =
+        Number.isFinite(place.latitude) && Number.isFinite(place.longitude);
       setDeliveryCoordinates(
-        Number.isFinite(place.latitude) && Number.isFinite(place.longitude)
+        hasGoogleCoordinates
           ? {
               latitude: place.latitude as number,
               longitude: place.longitude as number,
@@ -94,16 +99,53 @@ export function createCheckoutShippingHandlers({
       const normalizedState = place.state
         ? normalizeStateName(place.state, shippingStates)
         : '';
+      const selectedCity = place.city?.trim() ?? '';
+      const cityNeedsLoadedListValidation = Boolean(
+        normalizedState &&
+          selectedCity &&
+          normalizedState.toLowerCase() === selectedCity.toLowerCase() &&
+          shippingCitiesState.toLowerCase() !== normalizedState.toLowerCase()
+      );
+      const isAmbiguousGoogleCity = Boolean(
+        normalizedState &&
+          selectedCity &&
+          !cityNeedsLoadedListValidation &&
+          normalizedState.toLowerCase() === selectedCity.toLowerCase() &&
+          shippingCitiesState.toLowerCase() === normalizedState.toLowerCase() &&
+          shippingCities.length > 0 &&
+          !shippingCities.some(
+            (city) => city.toLowerCase() === selectedCity.toLowerCase()
+          )
+      );
+      const hasCompleteGoogleLocation = Boolean(
+        hasGoogleCoordinates &&
+          normalizedState &&
+          selectedCity &&
+          !cityNeedsLoadedListValidation &&
+          !isAmbiguousGoogleCity
+      );
 
-      if (place.city) {
-        const normalizedCity = place.city.trim().toLowerCase();
-        googleSuggestedCityRef.current =
-          normalizedState && normalizedCity === normalizedState.toLowerCase()
-            ? ''
-            : place.city;
+      if (hasCompleteGoogleLocation) {
+        googleSuggestedCityRef.current = null;
+      } else if (selectedCity) {
+        googleSuggestedCityRef.current = isAmbiguousGoogleCity
+          ? ''
+          : selectedCity;
+        if (isAmbiguousGoogleCity) {
+          setCitySearch('');
+          setShowCityPicker(true);
+        }
+      } else {
+        googleSuggestedCityRef.current = normalizedState ? '' : null;
+        if (normalizedState) {
+          setCitySearch('');
+          setShowCityPicker(true);
+        }
       }
 
-      setValue('city', '', { shouldValidate: false });
+      setValue('city', hasCompleteGoogleLocation ? selectedCity : '', {
+        shouldValidate: hasCompleteGoogleLocation,
+      });
       if (normalizedState) {
         setValue('state', normalizedState, { shouldValidate: true });
       }
@@ -164,27 +206,17 @@ export function createCheckoutShippingHandlers({
         const selectedQuote = shippingQuotes.find(
           (quote) => String(quote.id) === String(selectedQuoteId)
         );
+        const goFasterQuote = shippingQuotes.find(isGiglGoFasterQuote);
         setSelectedQuoteId(
           selectedQuote && isGiglGoFasterQuote(selectedQuote)
             ? String(selectedQuote.id)
-            : AIRPORT_QUOTE_ID
+            : !isAirportDeliveryEligible(watchedState) && goFasterQuote
+              ? String(goFasterQuote.id)
+              : AIRPORT_QUOTE_ID
         );
       } else if (method === 'door') {
-        const selectedQuote = shippingQuotes.find(
-          (quote) => String(quote.id) === String(selectedQuoteId)
-        );
-        const roadQuote = shippingQuotes.find(
-          (quote) =>
-            !isProviderStationPickupQuote(quote) && !isGiglGoFasterQuote(quote)
-        );
         setSelectedQuoteId(
-          selectedQuote &&
-            !isProviderStationPickupQuote(selectedQuote) &&
-            !isGiglGoFasterQuote(selectedQuote)
-            ? String(selectedQuote.id)
-            : roadQuote
-              ? String(roadQuote.id)
-              : ''
+          resolveDoorDeliveryQuoteId(shippingQuotes, selectedQuoteId)
         );
       }
       setDeliveryMethod(method);

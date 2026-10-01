@@ -18,6 +18,25 @@ vi.mock('@/ai/chat-order-cancellation', () => ({
 import { createAiSdkAgenticChatTools } from '@/app/api/chat/chat-tool-runtime';
 
 describe('chat tool runtime', () => {
+  it.each([
+    'searchProducts',
+    'addToCart',
+  ] as const)('propagates %s rejection without reporting a product result', async (name) => {
+    const error = new Error('Catalog unavailable');
+    const onToolResult = vi.fn();
+    const tools = createAiSdkAgenticChatTools('session-1', { onToolResult });
+    const handler =
+      name === 'searchProducts'
+        ? mocks.handleSearchProducts
+        : mocks.handleAddToCart;
+    handler.mockRejectedValueOnce(error);
+    const execution =
+      name === 'searchProducts'
+        ? tools.searchProducts.execute({ query: 'iPhone' })
+        : tools.addToCart.execute({ productId: 'p1', quantity: 2 });
+    await expect(execution).rejects.toBe(error);
+    expect(onToolResult).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.handleSearchProducts.mockResolvedValue({
@@ -83,6 +102,35 @@ describe('chat tool runtime', () => {
     );
   });
 
+  it('reports trusted product tool results to the presentation collector', async () => {
+    const onToolResult = vi.fn();
+    const tools = createAiSdkAgenticChatTools('session-1', { onToolResult });
+
+    await tools.searchProducts.execute({ query: 'iPhone' });
+
+    expect(onToolResult).toHaveBeenCalledWith('searchProducts', {
+      products: [{ id: 'p1', name: 'iPhone 11' }],
+      total: 1,
+    });
+  });
+
+  it('passes the validated cart quantity with add-to-cart presentation data', async () => {
+    mocks.handleAddToCart.mockResolvedValueOnce({
+      id: 'p1',
+      name: 'iPhone 11',
+    });
+    const onToolResult = vi.fn();
+    const tools = createAiSdkAgenticChatTools('session-1', { onToolResult });
+
+    await tools.addToCart.execute({ productId: 'p1', quantity: 2 });
+
+    expect(onToolResult).toHaveBeenCalledWith(
+      'addToCart',
+      { id: 'p1', name: 'iPhone 11' },
+      { quantity: 2 }
+    );
+  });
+
   it('executes order cancellation through the AI SDK tools', async () => {
     const tools = createAiSdkAgenticChatTools('session-1');
     const response = await tools.cancelOrder.execute({
@@ -99,6 +147,39 @@ describe('chat tool runtime', () => {
       orderNumber: '#00001234',
       customerEmail: 'buyer@example.com',
     });
+  });
+
+  it('reports a completed commerce side effect to the provider-chain guard', async () => {
+    const onSideEffect = vi.fn();
+    const tools = createAiSdkAgenticChatTools('session-1', { onSideEffect });
+
+    await tools.cancelOrder.execute({
+      orderNumber: '#00001234',
+      customerEmail: 'buyer@example.com',
+    });
+
+    expect(onSideEffect).toHaveBeenCalledWith('cancelOrder');
+  });
+
+  it('reports an inserted chat order even when virtual-account creation is unavailable', async () => {
+    mocks.handleCreateVirtualAccount.mockResolvedValueOnce({
+      success: false,
+      orderId: 'order-1',
+      error: 'Unavailable',
+    });
+    const onSideEffect = vi.fn();
+    const tools = createAiSdkAgenticChatTools('session-1', { onSideEffect });
+
+    await tools.createVirtualAccount.execute({
+      amount: 150000,
+      customerEmail: 'buyer@example.com',
+      customerName: 'Buyer',
+      items: [
+        { productId: 'p1', name: 'iPhone 11', price: 150000, quantity: 1 },
+      ],
+    });
+
+    expect(onSideEffect).toHaveBeenCalledWith('createVirtualAccount');
   });
 
   describe('bugfix: concurrent duplicate side-effecting tool calls', () => {
@@ -215,5 +296,17 @@ describe('chat tool runtime', () => {
       });
       expect(mocks.handleCancelOrder).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('removes commerce tools when agentic checkout is disabled', () => {
+    const tools = createAiSdkAgenticChatTools('session-1', {
+      agenticCheckoutEnabled: false,
+    });
+
+    expect(tools).not.toHaveProperty('cancelOrder');
+    expect(tools).not.toHaveProperty('createVirtualAccount');
+    expect(tools).not.toHaveProperty('checkPaymentStatus');
+    expect(tools).toHaveProperty('searchProducts');
+    expect(tools).toHaveProperty('getProductDetails');
   });
 });

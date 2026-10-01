@@ -111,6 +111,31 @@ describe('order idempotency hashing', () => {
     );
   });
 
+  it('changes the hash when delivery metadata changes', () => {
+    const airportDelivery = buildOrderIdempotencyPayload({
+      ...baseOrder,
+      delivery_method: 'airport',
+      airport_type: 'delivery',
+    });
+    const airportPickup = buildOrderIdempotencyPayload({
+      ...baseOrder,
+      delivery_method: 'airport',
+      airport_type: 'pickup',
+    });
+    const doorDelivery = buildOrderIdempotencyPayload({
+      ...baseOrder,
+      delivery_method: 'door',
+      airport_type: undefined,
+    });
+
+    expect(hashOrderIdempotencyPayload(airportDelivery)).not.toBe(
+      hashOrderIdempotencyPayload(airportPickup)
+    );
+    expect(hashOrderIdempotencyPayload(airportDelivery)).not.toBe(
+      hashOrderIdempotencyPayload(doorDelivery)
+    );
+  });
+
   it('changes the hash when an item price changes', () => {
     const original = buildOrderIdempotencyPayload(baseOrder);
     const changed = buildOrderIdempotencyPayload({

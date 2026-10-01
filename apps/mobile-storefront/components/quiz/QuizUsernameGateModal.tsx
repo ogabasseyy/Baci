@@ -31,13 +31,17 @@ export function QuizUsernameGateModal({
       onBackdropPress={onCancel}
       onRequestClose={onCancel}
     >
-      <View style={styles.header}>
-        <Text
-          accessibilityRole="header"
-          style={[styles.title, { color: colors.text }]}
+      <View style={styles.topRow}>
+        <View
+          accessibilityLabel="Leaderboard identity"
+          accessibilityRole="image"
+          style={[
+            styles.iconBadge,
+            { backgroundColor: colors.primaryLowOpacity },
+          ]}
         >
-          Choose a username to appear on the leaderboard
-        </Text>
+          <Ionicons name="trophy-outline" size={24} color={colors.primary} />
+        </View>
         <Pressable
           accessibilityLabel="Cancel username setup"
           accessibilityRole="button"
@@ -47,11 +51,18 @@ export function QuizUsernameGateModal({
           <Ionicons name="close" size={18} color={colors.textSecondary} />
         </Pressable>
       </View>
-      <Text style={[styles.helperText, { color: colors.textSecondary }]}>
-        Winners are announced by username, not your full name. Set one to start
-        this quiz.
-      </Text>
-      <UsernamePrompt onSuccess={onSuccess} submitLabel="Continue" />
+      <View style={styles.headingGroup}>
+        <Text
+          accessibilityRole="header"
+          style={[styles.title, { color: colors.text }]}
+        >
+          Choose a username
+        </Text>
+        <Text style={[styles.helperText, { color: colors.textSecondary }]}>
+          This name will appear on the leaderboard at the end of the quiz.
+        </Text>
+      </View>
+      <UsernamePrompt onSuccess={onSuccess} submitLabel="Save & continue" />
     </ModalSheet>
   );
 }

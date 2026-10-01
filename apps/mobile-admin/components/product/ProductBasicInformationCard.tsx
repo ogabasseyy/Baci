@@ -27,6 +27,7 @@ interface ProductBasicInformationCardProps {
   categories: CategoryOption[];
   colors: ThemeColors;
   formData: ProductBasicInformationFormData;
+  hasVariants?: boolean;
   hideColorField?: boolean;
   isEditing: boolean;
   onChange: (updates: Partial<ProductBasicInformationFormData>) => void;
@@ -39,6 +40,7 @@ export function ProductBasicInformationCard({
   categories,
   colors,
   formData,
+  hasVariants = false,
   hideColorField = false,
   isEditing,
   onChange,
@@ -88,7 +90,8 @@ export function ProductBasicInformationCard({
       ) : null}
 
       <Text style={[styles.label, { color: colors.textSecondary }]}>
-        SKU <Text style={{ color: colors.error }}>*</Text>
+        {hasVariants ? 'SKU (optional)' : 'SKU'}
+        {!hasVariants ? <Text style={{ color: colors.error }}> *</Text> : null}
       </Text>
       <TextInput
         style={[

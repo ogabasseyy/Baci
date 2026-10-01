@@ -73,7 +73,6 @@ export function ChatWidget({
     composedGesture,
     translateX,
     translateY,
-    scale,
     isDragging,
     isOverDismissZone,
     isOnRight,
@@ -95,12 +94,6 @@ export function ChatWidget({
         { translateX: translateX.value },
         { translateY: translateY.value },
       ],
-    };
-  });
-
-  const animatedIconStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ scale: scale.value }],
     };
   });
 
@@ -208,8 +201,7 @@ export function ChatWidget({
 
         {composedGesture ? (
           <GestureDetector gesture={composedGesture}>
-            <Animated.View
-              style={animatedIconStyle}
+            <View
               accessibilityRole="button"
               accessibilityLabel="Open chat assistant. Drag to move."
               accessibilityHint="Double tap to open chat, or drag to reposition"
@@ -224,11 +216,11 @@ export function ChatWidget({
               }}
               accessible={true}
             >
-              <Animated.View style={fabStyle}>{fabContent}</Animated.View>
-            </Animated.View>
+              <View style={fabStyle}>{fabContent}</View>
+            </View>
           </GestureDetector>
         ) : (
-          <Animated.View style={animatedIconStyle}>
+          <View>
             <Pressable
               style={fabStyle}
               onPress={handleOpen}
@@ -238,7 +230,7 @@ export function ChatWidget({
             >
               {fabContent}
             </Pressable>
-          </Animated.View>
+          </View>
         )}
 
         {isDragging && (

@@ -1,13 +1,17 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { getMerchantSetupStyles } from './merchant-setup.styles';
 
 interface MerchantSetupProgressProps {
+  onAboutYouPress?: () => void;
   step: 1 | 2;
 }
 
-export function MerchantSetupProgress({ step }: MerchantSetupProgressProps) {
+export function MerchantSetupProgress({
+  onAboutYouPress,
+  step,
+}: MerchantSetupProgressProps) {
   const { colors } = useTheme();
   const styles = getMerchantSetupStyles(colors);
 
@@ -23,7 +27,13 @@ export function MerchantSetupProgress({ step }: MerchantSetupProgressProps) {
         <Text style={styles.progressCount}>{step} of 2</Text>
       </View>
       <View style={styles.stageTrack}>
-        <View style={styles.stage}>
+        <Pressable
+          accessibilityLabel="About you"
+          accessibilityRole="button"
+          disabled={step !== 2 || !onAboutYouPress}
+          onPress={onAboutYouPress}
+          style={styles.stage}
+        >
           <View style={[styles.stageDot, styles.stageDotActive]}>
             {step === 2 ? (
               <Ionicons
@@ -40,7 +50,7 @@ export function MerchantSetupProgress({ step }: MerchantSetupProgressProps) {
           <Text style={[styles.stageLabel, styles.stageLabelActive]}>
             About you
           </Text>
-        </View>
+        </Pressable>
         <View style={styles.stageConnector}>
           {step === 2 ? <View style={styles.stageConnectorComplete} /> : null}
         </View>

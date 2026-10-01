@@ -1,47 +1,21 @@
 'use client';
 
 import '@/app/(storefront)/storefront-ogabassey-pdp-deferred.css';
-import dynamic from 'next/dynamic';
-import { useEffect, useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import type { Product } from '../types';
 import { ProductBreadcrumbs } from './product-details-page/product-breadcrumbs';
 import { ProductInteractionPanel } from './product-details-page/product-interaction-panel';
 import { ProductMediaGallery } from './product-details-page/product-media-gallery';
 import { ProductMobileActionBar } from './product-details-page/product-mobile-action-bar';
 import { ProductPurchasePanel } from './product-details-page/product-purchase-panel';
-import { getAvailableOptionsForAxis } from '../variant-attributes';
 import { useProductDetailsState } from './product-details-page/use-product-details-state';
 import { DeferredProductDetailsSectionsLoader } from './product-details-page/deferred-product-details-sections-loader';
 import deferredLayoutStyles from './product-details-page/deferred-product-details-layout.module.css';
-
-const AdUnit = dynamic(
-  () => import('../components/AdUnit').then((mod) => mod.AdUnit),
-  { loading: () => null, ssr: false }
-);
-const BannerCarousel = dynamic(
-  () =>
-    import('../components/BannerCarousel').then((mod) => mod.BannerCarousel),
-  { loading: () => null, ssr: false }
-);
-const NegotiationModal = dynamic(
-  () =>
-    import('../components/NegotiationModal').then((mod) => mod.NegotiationModal),
-  { loading: () => null, ssr: false }
-);
-const FlyToCartAnimation = dynamic(
-  () =>
-    import('../components/FlyToCartAnimation').then(
-      (mod) => mod.FlyToCartAnimation
-    ),
-  { loading: () => null, ssr: false }
-);
-const SelectionRequiredModal = dynamic(
-  () =>
-    import('./product-details-page/selection-required-modal').then(
-      (mod) => mod.SelectionRequiredModal
-    ),
-  { loading: () => null, ssr: false }
-);
+import { AdUnit } from './product-details-page/product-details-lazy-ad-unit';
+import { ProductDetailsBannerSection } from './product-details-page/product-details-banner-section';
+import { ProductDetailsPageOverlays } from './product-details-page/product-details-page-overlays';
+import { useIsDesktopViewport } from './product-details-page/use-is-desktop-viewport';
+import { useProductDetailsAttributeHandlers } from './product-details-page/use-product-details-attribute-handlers';
 
 interface ProductDetailsPageProps {
   mode?: 'full' | 'commerce' | 'belowFold';
@@ -111,28 +85,18 @@ export function ProductDetailsPage({
     variantSelectionAttributes,
   } = useProductDetailsState(product);
 
-  const [isDesktop, setIsDesktop] = useState(false);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(min-width: 768px)');
-    const syncViewport = () => {
-      setIsDesktop(mediaQuery.matches);
-    };
-
-    syncViewport();
-
-    if (typeof mediaQuery.addEventListener === 'function') {
-      mediaQuery.addEventListener('change', syncViewport);
-      return () => {
-        mediaQuery.removeEventListener('change', syncViewport);
-      };
-    }
-
-    mediaQuery.addListener(syncViewport);
-    return () => {
-      mediaQuery.removeListener(syncViewport);
-    };
-  }, []);
+  const isDesktop = useIsDesktopViewport();
+  const {
+    handleAttributeSelection,
+    handleModalAttributeSelection,
+    handleModalColorSelection,
+  } = useProductDetailsAttributeHandlers({
+    formatAxisLabel,
+    handleColorSelection,
+    productData,
+    setMissingFields,
+    setSelectedAttributes,
+  });
 
   const isCommerceMode = mode === 'commerce';
 
@@ -153,38 +117,6 @@ export function ProductDetailsPage({
     );
   }
 
-  const handleAttributeSelection = (axis: string, value: string) => {
-    const hasVariants =
-      Array.isArray(productData.variants) && productData.variants.length > 0;
-    setSelectedAttributes((prev) => {
-      const next = { ...prev, [axis]: value };
-      // When no variant rows exist, preserve all sibling selections
-      if (!hasVariants) return next;
-      // Drop sibling selections that are no longer reachable with the new choice
-      return Object.fromEntries(
-        Object.entries(next).filter(([key, selectedValue]) => {
-          if (key === axis) return true;
-          const reachable = getAvailableOptionsForAxis(
-            key,
-            productData.variants,
-            Object.fromEntries(Object.entries(next).filter(([k]) => k !== key)),
-          );
-          return reachable.includes(selectedValue);
-        }),
-      );
-    });
-  };
-
-  const handleModalColorSelection = (index: number) => {
-    handleColorSelection(index);
-    setMissingFields((prev) => prev.filter((field) => field !== 'Color'));
-  };
-
-  const handleModalAttributeSelection = (axis: string, value: string) => {
-    const label = formatAxisLabel(axis);
-    setSelectedAttributes((prev) => ({ ...prev, [axis]: value }));
-    setMissingFields((prev) => prev.filter((field) => field !== label));
-  };
   return (
     <div
       className={
@@ -192,13 +124,7 @@ export function ProductDetailsPage({
       }
     >
       {isCommerceMode ? null : (
-        <section
-          data-testid="product-banner-carousel"
-          aria-label="Product banner carousel"
-          className="mx-auto mb-8 hidden min-h-[208px] max-w-[1400px] px-4 md:block md:px-6"
-        >
-          {isDesktop ? <BannerCarousel className="h-40 md:h-52" /> : null}
-        </section>
+        <ProductDetailsBannerSection isDesktop={isDesktop} />
       )}
 
       <div
@@ -335,54 +261,37 @@ export function ProductDetailsPage({
         quantityInCart={quantityInCart}
       />
 
-      {animatingParticles.map((rect, index) => (
-        <FlyToCartAnimation
-          key={`${rect.x}-${rect.y}-${index}`}
-          startRect={rect}
-          onComplete={handleAnimationComplete}
-          imageSrc={productData.images[selectedImage] ?? productData.images[0]}
-        />
-      ))}
-
-      <SelectionRequiredModal
+      <ProductDetailsPageOverlays
+        animatingParticles={animatingParticles}
+        currentOfferRawPrice={currentOffer.rawPrice}
+        currentVariantDisplaySelection={currentVariantDisplaySelection}
         effectiveAxes={effectiveAxes}
         formatAxisLabel={formatAxisLabel}
         getAxisOptions={getAxisOptions}
-        isOpen={isSelectionModalOpen}
+        isNegotiationOpen={isNegotiationOpen}
+        isSelectionModalOpen={isSelectionModalOpen}
+        merchantId={merchantId || ''}
+        merchantVatRate={merchantVatRate}
         missingFields={missingFields}
-        onClose={() => setIsSelectionModalOpen(false)}
-        onConfirm={() => {
+        onAnimationComplete={handleAnimationComplete}
+        onCloseNegotiation={() => setIsNegotiationOpen(false)}
+        onCloseSelectionModal={() => setIsSelectionModalOpen(false)}
+        onConfirmSelection={() => {
           if (missingFields.length === 0) {
             setIsSelectionModalOpen(false);
             validateAndAddToCart();
           }
         }}
+        onNegotiationSuccess={handleNegotiationSuccess}
         onSelectAttribute={handleModalAttributeSelection}
         onSelectColor={handleModalColorSelection}
         productData={productData}
         selectedAttributes={selectedAttributes}
         selectedColor={selectedColor}
+        selectedCondition={selectedCondition}
+        selectedImage={selectedImage}
+        variantSelectionAttributes={variantSelectionAttributes}
       />
-
-      {isNegotiationOpen ? (
-        <NegotiationModal
-          isOpen
-          onClose={() => setIsNegotiationOpen(false)}
-          productName={productData.name}
-          productBrand={productData.brand}
-          currentPrice={currentOffer.rawPrice}
-          vatRate={merchantVatRate}
-          onSuccess={handleNegotiationSuccess}
-          type="single"
-          itemId={String(productData.id)}
-          merchantId={merchantId || ''}
-          productSlug={productData.slug}
-          variantId={currentVariantDisplaySelection?.variant.id}
-          variantName={currentVariantDisplaySelection?.variant.name}
-          variantAttributes={variantSelectionAttributes}
-          condition={selectedCondition}
-        />
-      ) : null}
     </div>
   );
 }

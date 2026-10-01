@@ -11,15 +11,9 @@ import type {
   GiglStationResolution,
   NearestGiglDirectoryLookup,
 } from './gigl.directory';
+import { normalizeGiglLocation } from './gigl.location-normalizer';
 import type { GiglServiceCentre, GiglStation } from './gigl.schemas';
 import { giglSchemas } from './gigl.schemas';
-
-function normalizeLocation(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/\b(state|province|region)\b/g, '')
-    .replace(/[^a-z0-9]/g, '');
-}
 
 export class GiglStationsService {
   private stationsCache: GiglStation[] | null = null;
@@ -222,18 +216,18 @@ export class GiglStationsService {
     signal?: AbortSignal
   ): Promise<GiglStation | null> {
     const stations = await this.getStations(timeout, signal);
-    const normalizedCity = normalizeLocation(city);
-    const normalizedState = normalizeLocation(state);
+    const normalizedCity = normalizeGiglLocation(city);
+    const normalizedState = normalizeGiglLocation(state);
 
     let station = stations.find((s) => {
-      const cityName = normalizeLocation(s.City || '');
-      const stationName = normalizeLocation(s.StationName || '');
+      const cityName = normalizeGiglLocation(s.City || '');
+      const stationName = normalizeGiglLocation(s.StationName || '');
       return cityName === normalizedCity || stationName === normalizedCity;
     });
 
     if (!station) {
       station = stations.find((s) => {
-        const stateName = normalizeLocation(s.StateName || s.State || '');
+        const stateName = normalizeGiglLocation(s.StateName || s.State || '');
         return stateName === normalizedState;
       });
     }
@@ -246,16 +240,15 @@ export class GiglStationsService {
     options?: GiglResolutionOptions
   ): Promise<GiglStationResolution | null> {
     const stations = await this.getStations(options?.timeout, options?.signal);
-    const normalizedCity = normalizeLocation(location.city);
+    const normalizedCity = normalizeGiglLocation(location.city);
     const cityStation = stations.find((station) =>
       [station.City, station.StationName]
         .filter((value): value is string => Boolean(value))
-        .some((value) => normalizeLocation(value) === normalizedCity)
+        .some((value) => normalizeGiglLocation(value) === normalizedCity)
     );
 
     const hasCoordinates =
       Number.isFinite(location.latitude) && Number.isFinite(location.longitude);
-    if (cityStation && !options?.preferNearest) return { station: cityStation };
 
     if (hasCoordinates && this.nearestDirectoryLookup) {
       try {
@@ -279,11 +272,11 @@ export class GiglStationsService {
     }
 
     if (cityStation) return { station: cityStation };
-    const normalizedState = normalizeLocation(location.state);
+    const normalizedState = normalizeGiglLocation(location.state);
     const stateStation = stations.find((station) =>
       [station.StateName, station.State]
         .filter((value): value is string => Boolean(value))
-        .some((value) => normalizeLocation(value) === normalizedState)
+        .some((value) => normalizeGiglLocation(value) === normalizedState)
     );
     return stateStation ? { station: stateStation } : null;
   }

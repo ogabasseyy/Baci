@@ -168,6 +168,7 @@ export const quizV2AttemptResponseSchema = z
     resumed: z.boolean().optional(),
     serverNow: quizDateTimeSchema,
     status: quizV2AttemptStatusSchema,
+    submittedAt: quizDateTimeSchema.nullable().optional(),
   })
   .superRefine((value, context) => {
     if (value.status === 'in_progress' && !value.question) {
@@ -189,6 +190,7 @@ export const quizV2AttemptResponseSchema = z
 export const quizV2ActiveAttemptResponseSchema = z
   .strictObject({
     attempt: quizV2AttemptResponseSchema.optional(),
+    attemptId: quizIdSchema.optional(),
     availability: z.enum([
       'none',
       'active',
@@ -198,6 +200,7 @@ export const quizV2ActiveAttemptResponseSchema = z
     ]),
     eventEndsAt: quizDateTimeSchema.nullable(),
     serverNow: quizDateTimeSchema,
+    submittedAt: quizDateTimeSchema.nullable().optional(),
   })
   .superRefine((value, context) => {
     if (value.availability === 'active') {
@@ -226,6 +229,15 @@ export const quizV2ActiveAttemptResponseSchema = z
     }
   });
 
+const quizV2PrizeClaimSchema = z.strictObject({
+  awardId: quizUuidSchema,
+  cartPath: z.string().trim().min(1).max(1024),
+  condition: z.enum(['new', 'used', 'open_box', 'refurbished']).nullable(),
+  productId: quizUuidSchema,
+  variantId: quizUuidSchema.nullable(),
+  voucherToken: z.string().trim().min(1).max(512),
+});
+
 const quizV2FinalResultSchema = z.strictObject({
   attemptId: quizIdSchema,
   availability: z.literal('final'),
@@ -236,6 +248,7 @@ const quizV2FinalResultSchema = z.strictObject({
       token: z.string().trim().min(1).max(2048),
     })
     .optional(),
+  prizeClaim: quizV2PrizeClaimSchema.optional(),
   rank: z.int().positive(),
   score: z.int().nonnegative(),
   totalQuestions: z.int().positive().max(QUIZ_MAX_LOGICAL_QUESTIONS),

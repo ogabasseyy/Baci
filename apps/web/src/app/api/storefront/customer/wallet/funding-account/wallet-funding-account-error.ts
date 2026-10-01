@@ -6,7 +6,7 @@ import type { CustomerWalletPaymentAccountError } from '@/lib/customer-wallet-pa
  * Unknown codes fall back to 500 so a new failure mode never leaks a 2xx.
  */
 export function walletAccountErrorStatus(code: string) {
-  if (code === 'CUSTOMER_PHONE_REQUIRED') {
+  if (code === 'CUSTOMER_NAME_REQUIRED' || code === 'CUSTOMER_PHONE_REQUIRED') {
     return 400;
   }
 

@@ -1,318 +1,298 @@
 import { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { hasPermission } from '@/lib/api-auth';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { checkCsrfProtection } from '@/lib/csrf';
-import {
-  getMerchantForApiRequest,
-  toUserAccess,
-} from '@/lib/get-merchant-for-api-request';
 import { createClient } from '@/lib/supabase/server';
 import { GET, PATCH } from './route';
 
-interface MockSupabaseClient {
-  auth: {
-    getUser: Mock;
-  };
-  from: Mock;
-  select: Mock;
-  eq: Mock;
-  single: Mock;
-  update: Mock;
-  is: Mock;
-}
+const NOTIFICATION_ID = '123e4567-e89b-12d3-a456-426614174000';
+const USER_ID = '123e4567-e89b-12d3-a456-426614174002';
+const visibleNotification = {
+  banner_dismissed_at: null,
+  created_at: '2026-08-05T00:00:00.000Z',
+  dismissed_at: null,
+  id: NOTIFICATION_ID,
+  merchant_id: '123e4567-e89b-12d3-a456-426614174001',
+  notification: {
+    action_label: null,
+    action_url: null,
+    channels: ['in_app'],
+    created_at: '2026-08-05T00:00:00.000Z',
+    delivery_state: 'sent',
+    expires_at: null,
+    id: '123e4567-e89b-12d3-a456-426614174003',
+    is_system: false,
+    message: 'New stock is available.',
+    notification_type: 'info',
+    priority: 'normal',
+    sent_at: '2026-08-05T00:00:00.000Z',
+    title: 'Inventory update',
+  },
+  notification_id: '123e4567-e89b-12d3-a456-426614174003',
+  read_at: null,
+} as const;
 
 vi.mock('next/headers', () => ({
-  cookies: vi.fn(() =>
-    Promise.resolve({
-      get: vi.fn(),
-      set: vi.fn(),
-      getAll: vi.fn(),
-    })
-  ),
+  cookies: vi.fn().mockResolvedValue({ get: vi.fn(), set: vi.fn() }),
 }));
-
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(),
-}));
-
+vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }));
+vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: vi.fn() }));
+vi.mock('@/lib/api-auth', () => ({ hasPermission: vi.fn(() => true) }));
 vi.mock('@/lib/get-merchant-for-api-request', () => ({
-  getMerchantForApiRequest: vi.fn(),
-  toUserAccess: vi.fn(),
+  getMerchantForApiRequest: vi.fn().mockResolvedValue({
+    merchantId: '123e4567-e89b-12d3-a456-426614174001',
+    staffAccess: {},
+  }),
+  toUserAccess: vi.fn(() => ({ role: 'owner' })),
 }));
 
-vi.mock('@/lib/csrf', () => ({
-  checkCsrfProtection: vi.fn(),
-}));
+interface QueryResult {
+  count?: number | null;
+  data?: Record<string, unknown> | Record<string, unknown>[] | null;
+  error?: { message: string } | null;
+}
 
-vi.mock('@/lib/api-auth', () => ({
-  hasPermission: vi.fn().mockReturnValue(true),
-}));
+function makeQuery(result: QueryResult, terminalOr = false) {
+  const query = {
+    eq: vi.fn(),
+    in: vi.fn(),
+    is: vi.fn(),
+    maybeSingle: vi.fn().mockResolvedValue(result),
+    or: vi.fn(),
+    select: vi.fn(),
+    single: vi.fn().mockResolvedValue(result),
+    update: vi.fn(),
+  };
+
+  for (const method of [
+    query.eq,
+    query.in,
+    query.is,
+    query.select,
+    query.update,
+  ]) {
+    method.mockReturnValue(query);
+  }
+  query.or.mockReturnValue(terminalOr ? Promise.resolve(result) : query);
+  return query;
+}
 
 describe('Notifications API: /api/notifications/[id]', () => {
-  let mockSupabase: MockSupabaseClient;
-  const mockUserId = 'user-123';
-  const mockMerchantId = 'merchant-456';
+  let authUser: { id: string } | null;
+  let queryQueue: ReturnType<typeof makeQuery>[];
+
+  const request = (body: unknown) =>
+    new NextRequest(`http://localhost/api/notifications/${NOTIFICATION_ID}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  const routeParams = (id = NOTIFICATION_ID) => ({
+    params: Promise.resolve({ id }),
+  });
+  const getRequest = (id = NOTIFICATION_ID) =>
+    new NextRequest(`http://localhost/api/notifications/${id}`);
 
   beforeEach(() => {
     vi.clearAllMocks();
-
-    const mockIs2 = vi.fn();
-    const mockIs1 = vi.fn().mockReturnValue({ is: mockIs2 });
-
-    mockSupabase = {
+    authUser = { id: USER_ID };
+    queryQueue = [];
+    vi.mocked(checkCsrfProtection).mockResolvedValue({ valid: true });
+    vi.mocked(createClient).mockReturnValue({
       auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: { id: mockUserId } },
-          error: null,
-        }),
+        getUser: vi.fn(() => Promise.resolve({ data: { user: authUser } })),
       },
-      from: vi.fn().mockReturnThis(),
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      single: vi.fn(),
-      update: vi.fn().mockReturnThis(),
-      is: mockIs1,
-    };
+      from: vi.fn(() => queryQueue.shift() ?? makeQuery({ data: null })),
+    } as unknown as ReturnType<typeof createClient>);
+  });
 
-    mockIs2.mockResolvedValue({ count: 5, error: null });
+  it('returns 401 before checking CSRF when PATCH is unauthenticated', async () => {
+    authUser = null;
 
-    vi.mocked(createClient).mockReturnValue(
-      mockSupabase as unknown as ReturnType<typeof createClient>
+    const response = await PATCH(request({ read: true }), routeParams());
+
+    expect(response.status).toBe(401);
+    expect(checkCsrfProtection).not.toHaveBeenCalled();
+  });
+
+  it('rejects a CSRF failure before checking recipient visibility', async () => {
+    vi.mocked(checkCsrfProtection).mockResolvedValue({ valid: false });
+
+    const response = await PATCH(request({ read: true }), routeParams());
+
+    expect(response.status).toBe(403);
+    expect(queryQueue).toHaveLength(0);
+  });
+
+  it('rejects malformed recipient IDs and unrecognized update fields', async () => {
+    const invalidId = await PATCH(
+      request({ read: true }),
+      routeParams('bad-id')
+    );
+    const invalidBody = await PATCH(request({ hidden: true }), routeParams());
+
+    expect(invalidId.status).toBe(400);
+    expect(await invalidId.json()).toEqual({
+      error: 'Invalid notification ID',
+    });
+    expect(invalidBody.status).toBe(400);
+    expect(await invalidBody.json()).toEqual({
+      error: 'Invalid notification update',
+    });
+  });
+
+  it('rejects a no-op recipient update before querying or mutating', async () => {
+    const response = await PATCH(request({}), routeParams());
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Invalid notification update',
+    });
+    expect(queryQueue).toHaveLength(0);
+  });
+
+  it('returns 400 for malformed JSON after authentication and CSRF', async () => {
+    const malformedRequest = new NextRequest(
+      `http://localhost/api/notifications/${NOTIFICATION_ID}`,
+      { body: '{', method: 'PATCH' }
     );
 
-    vi.mocked(getMerchantForApiRequest).mockResolvedValue({
-      merchantId: mockMerchantId,
-      merchantSlug: 'test',
-      businessName: 'Test',
-      staffAccess: {},
-      roles: ['owner'],
-    } as unknown as Awaited<ReturnType<typeof getMerchantForApiRequest>>);
+    const response = await PATCH(malformedRequest, routeParams());
 
-    vi.mocked(toUserAccess).mockReturnValue({
-      role: 'owner',
-    } as unknown as ReturnType<typeof toUserAccess>);
-
-    vi.mocked(checkCsrfProtection).mockResolvedValue({
-      valid: true,
-    } as unknown as Awaited<ReturnType<typeof checkCsrfProtection>>);
-
-    vi.mocked(hasPermission).mockReturnValue(true);
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Invalid notification update',
+    });
+    expect(checkCsrfProtection).toHaveBeenCalled();
   });
 
-  describe('GET', () => {
-    it('returns 401 when unauthenticated', async () => {
-      mockSupabase.auth.getUser.mockResolvedValueOnce({
-        data: { user: null },
-        error: null,
-      });
+  it('does not reveal or mutate an expired or non-final parent', async () => {
+    const recipientQuery = makeQuery({ data: null, error: null });
+    queryQueue.push(recipientQuery);
 
-      const req = new NextRequest('http://localhost/api/notifications/123');
-      const res = await GET(req, { params: Promise.resolve({ id: '123' }) });
+    const response = await PATCH(request({ read: true }), routeParams());
 
-      expect(res.status).toBe(401);
-      const json = await res.json();
-      expect(json).toEqual({ error: 'Unauthorized' });
+    expect(response.status).toBe(404);
+    expect(recipientQuery.update).not.toHaveBeenCalled();
+    expect(recipientQuery.eq).toHaveBeenCalledWith(
+      'notification.delivery_state',
+      'sent'
+    );
+    expect(recipientQuery.or).toHaveBeenCalledWith(
+      expect.stringContaining('expires_at.is.null'),
+      { referencedTable: 'notification' }
+    );
+  });
+
+  it('updates a visible final recipient and counts the same in-app scope', async () => {
+    const recipientQuery = makeQuery({
+      data: { id: NOTIFICATION_ID },
+      error: null,
     });
-
-    it('returns 403 when user lacks permissions', async () => {
-      vi.mocked(hasPermission).mockReturnValueOnce(false);
-
-      const req = new NextRequest('http://localhost/api/notifications/123');
-      const res = await GET(req, { params: Promise.resolve({ id: '123' }) });
-
-      expect(res.status).toBe(403);
-      const json = await res.json();
-      expect(json).toEqual({ error: 'Permission denied' });
+    const updateQuery = makeQuery({
+      data: { id: NOTIFICATION_ID, read_at: '2026-08-05T00:00:00.000Z' },
+      error: null,
     });
+    const countQuery = makeQuery({ count: 3, error: null }, true);
+    queryQueue.push(recipientQuery, updateQuery, countQuery);
 
-    it('returns 404 when notification not found', async () => {
-      mockSupabase.single.mockResolvedValueOnce({
-        data: null,
-        error: { message: 'Not found' },
-      });
+    const response = await PATCH(request({ read: true }), routeParams());
 
-      const req = new NextRequest('http://localhost/api/notifications/123');
-      const res = await GET(req, { params: Promise.resolve({ id: '123' }) });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ unread_count: 3 });
+    expect(updateQuery.select).toHaveBeenCalledWith(
+      expect.stringContaining('banner_dismissed_at')
+    );
+    expect(countQuery.eq).toHaveBeenCalledWith('in_app_visible', true);
+    expect(countQuery.eq).toHaveBeenCalledWith(
+      'notification.delivery_state',
+      'sent'
+    );
+    expect(countQuery.is).toHaveBeenCalledWith('dismissed_at', null);
+  });
 
-      expect(res.status).toBe(404);
-      const json = await res.json();
-      expect(json).toEqual({ error: 'Notification not found' });
+  it('reports a nullable unread count instead of falsely reporting zero', async () => {
+    queryQueue.push(
+      makeQuery({ data: { id: NOTIFICATION_ID }, error: null }),
+      makeQuery({ data: { id: NOTIFICATION_ID }, error: null }),
+      makeQuery({ count: null, error: { message: 'count failed' } }, true)
+    );
+
+    const response = await PATCH(request({ dismissed: true }), routeParams());
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ unread_count: null });
+  });
+
+  it('validates the GET ID and applies final/unexpired parent filters', async () => {
+    const invalid = await GET(getRequest('bad-id'), routeParams('bad-id'));
+    const detailQuery = makeQuery({
+      data: visibleNotification,
+      error: null,
     });
+    queryQueue.push(detailQuery);
+    const response = await GET(getRequest(), routeParams());
 
-    it('returns 500 when an unexpected exception is thrown', async () => {
-      mockSupabase.single.mockRejectedValueOnce(
-        new Error('Unexpected DB Error')
-      );
+    expect(invalid.status).toBe(400);
+    expect(response.status).toBe(200);
+    expect(detailQuery.eq).toHaveBeenCalledWith(
+      'notification.delivery_state',
+      'sent'
+    );
+    expect(detailQuery.or).toHaveBeenCalledWith(
+      expect.stringContaining('expires_at.is.null'),
+      { referencedTable: 'notification' }
+    );
+  });
 
-      const req = new NextRequest('http://localhost/api/notifications/123');
-      const res = await GET(req, { params: Promise.resolve({ id: '123' }) });
+  it('fails closed when the detail join is malformed', async () => {
+    queryQueue.push(makeQuery({ data: { id: NOTIFICATION_ID }, error: null }));
 
-      expect(res.status).toBe(500);
-      const json = await res.json();
-      expect(json).toEqual({ error: 'Failed to fetch notification' });
-    });
+    const response = await GET(getRequest(), routeParams());
 
-    it('returns 200 and notification data on success', async () => {
-      const mockNotification = { id: '123', title: 'Test Notif' };
-      mockSupabase.single.mockResolvedValueOnce({
-        data: mockNotification,
-        error: null,
-      });
-
-      const req = new NextRequest('http://localhost/api/notifications/123');
-      const res = await GET(req, { params: Promise.resolve({ id: '123' }) });
-
-      expect(res.status).toBe(200);
-      const json = await res.json();
-      expect(json).toEqual(mockNotification);
-
-      expect(mockSupabase.from).toHaveBeenCalledWith('merchant_notifications');
-      expect(mockSupabase.eq).toHaveBeenCalledWith('id', '123');
-      expect(mockSupabase.eq).toHaveBeenCalledWith(
-        'merchant_id',
-        mockMerchantId
-      );
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Failed to fetch notification',
     });
   });
 
-  describe('PATCH', () => {
-    it('returns 403 when CSRF validation fails', async () => {
-      vi.mocked(checkCsrfProtection).mockResolvedValueOnce({
-        valid: false,
-      } as unknown as Awaited<ReturnType<typeof checkCsrfProtection>>);
-
-      const req = new NextRequest('http://localhost/api/notifications/123', {
-        method: 'PATCH',
-        body: JSON.stringify({ read: true }),
-      });
-      const res = await PATCH(req, { params: Promise.resolve({ id: '123' }) });
-
-      expect(res.status).toBe(403);
+  it('fails closed without mutating when recipient validation has a database error', async () => {
+    const recipientQuery = makeQuery({
+      data: null,
+      error: { message: 'untrusted database message' },
     });
+    queryQueue.push(recipientQuery);
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
 
-    it('returns 401 when unauthenticated', async () => {
-      mockSupabase.auth.getUser.mockResolvedValueOnce({
-        data: { user: null },
-        error: null,
-      });
+    const response = await PATCH(request({ read: true }), routeParams());
 
-      const req = new NextRequest('http://localhost/api/notifications/123', {
-        method: 'PATCH',
-        body: JSON.stringify({ read: true }),
-      });
-      const res = await PATCH(req, { params: Promise.resolve({ id: '123' }) });
-
-      expect(res.status).toBe(401);
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Failed to update notification',
     });
+    expect(recipientQuery.update).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledWith(
+      'Failed to validate notification recipient',
+      { errorCode: 'unknown' }
+    );
+  });
 
-    it('returns 403 when user lacks permissions', async () => {
-      vi.mocked(hasPermission).mockReturnValueOnce(false);
-
-      const req = new NextRequest('http://localhost/api/notifications/123', {
-        method: 'PATCH',
-        body: JSON.stringify({ read: true }),
-      });
-      const res = await PATCH(req, { params: Promise.resolve({ id: '123' }) });
-
-      expect(res.status).toBe(403);
+  it('does not claim success when the recipient state write fails', async () => {
+    const recipientQuery = makeQuery({
+      data: { id: NOTIFICATION_ID },
+      error: null,
     });
-
-    it('returns 400 when no fields provided to update', async () => {
-      const req = new NextRequest('http://localhost/api/notifications/123', {
-        method: 'PATCH',
-        body: JSON.stringify({}),
-      });
-      const res = await PATCH(req, { params: Promise.resolve({ id: '123' }) });
-
-      expect(res.status).toBe(400);
-      const json = await res.json();
-      expect(json).toEqual({ error: 'No fields to update' });
+    const updateQuery = makeQuery({
+      data: null,
+      error: { message: 'untrusted database message' },
     });
+    queryQueue.push(recipientQuery, updateQuery);
 
-    it('returns 400 when invalid types are provided', async () => {
-      const req = new NextRequest('http://localhost/api/notifications/123', {
-        method: 'PATCH',
-        body: JSON.stringify({ read: 'not-a-boolean' }),
-      });
-      const res = await PATCH(req, { params: Promise.resolve({ id: '123' }) });
+    const response = await PATCH(request({ read: true }), routeParams());
 
-      expect(res.status).toBe(400);
-      const json = await res.json();
-      expect(json).toEqual({ error: 'No fields to update' });
-    });
-
-    it('returns 200 and updates read status successfully', async () => {
-      const mockUpdated = { id: '123', read_at: '2023-01-01T00:00:00.000Z' };
-
-      mockSupabase.single.mockResolvedValueOnce({
-        data: mockUpdated,
-        error: null,
-      });
-
-      const req = new NextRequest('http://localhost/api/notifications/123', {
-        method: 'PATCH',
-        body: JSON.stringify({ read: true }),
-      });
-      const res = await PATCH(req, { params: Promise.resolve({ id: '123' }) });
-
-      expect(res.status).toBe(200);
-      const json = await res.json();
-      expect(json).toEqual({ ...mockUpdated, unread_count: 5 });
-
-      expect(mockSupabase.update).toHaveBeenCalled();
-      expect(mockSupabase.update.mock.calls[0][0]).toHaveProperty('read_at');
-      expect(mockSupabase.eq).toHaveBeenCalledWith('id', '123');
-      expect(mockSupabase.eq).toHaveBeenCalledWith(
-        'merchant_id',
-        mockMerchantId
-      );
-    });
-
-    it('returns 200 and updates dismissed status successfully', async () => {
-      const mockUpdated = {
-        id: '123',
-        dismissed_at: '2023-01-01T00:00:00.000Z',
-      };
-
-      mockSupabase.single.mockResolvedValueOnce({
-        data: mockUpdated,
-        error: null,
-      });
-
-      const req = new NextRequest('http://localhost/api/notifications/123', {
-        method: 'PATCH',
-        body: JSON.stringify({ dismissed: true }),
-      });
-      const res = await PATCH(req, { params: Promise.resolve({ id: '123' }) });
-
-      expect(res.status).toBe(200);
-      const json = await res.json();
-      expect(json).toEqual({ ...mockUpdated, unread_count: 5 });
-
-      expect(mockSupabase.update).toHaveBeenCalled();
-      expect(mockSupabase.update.mock.calls[0][0]).toHaveProperty(
-        'dismissed_at'
-      );
-      expect(mockSupabase.eq).toHaveBeenCalledWith('id', '123');
-      expect(mockSupabase.eq).toHaveBeenCalledWith(
-        'merchant_id',
-        mockMerchantId
-      );
-    });
-
-    it('returns 500 when database update fails', async () => {
-      mockSupabase.single.mockResolvedValueOnce({
-        data: null,
-        error: { message: 'DB Error' },
-      });
-
-      const req = new NextRequest('http://localhost/api/notifications/123', {
-        method: 'PATCH',
-        body: JSON.stringify({ dismissed: true }),
-      });
-      const res = await PATCH(req, { params: Promise.resolve({ id: '123' }) });
-
-      expect(res.status).toBe(500);
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Failed to update notification',
     });
   });
 });

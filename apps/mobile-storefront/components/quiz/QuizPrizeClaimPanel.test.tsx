@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { QuizPrizeClaim } from '@/services/quiz';
 import { QuizPrizeClaimPanel } from './QuizPrizeClaimPanel';
-import { createQuizStyles, type QuizThemeColors } from './QuizScreen.styles';
+import { createQuizStyles } from './QuizScreen.styles';
+import type { QuizThemeColors } from './quiz-theme';
 
 const mockClaimPrize = jest.fn();
 const mockRetry = jest.fn();

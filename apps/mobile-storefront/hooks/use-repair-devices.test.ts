@@ -6,6 +6,7 @@ const mocks = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 jest.mock('@/lib/repair-catalog-client', () => ({
   fetchRepairDevices: (...args: unknown[]) => mocks(...args),
   RepairCatalogUnavailableError: class RepairCatalogUnavailableError extends Error {},
+  RepairCatalogTimeoutError: class RepairCatalogTimeoutError extends Error {},
 }));
 
 import { useRepairDevices } from './use-repair-devices';
@@ -42,8 +43,22 @@ describe('useRepairDevices', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     expect(result.current.groups).toEqual(sampleGroups);
+    expect(result.current.brandGroups).toEqual(sampleGroups);
     expect(result.current.isUnavailable).toBe(false);
     expect(result.current.error).toBeNull();
+  });
+
+  it('preserves the unfiltered brand groups while a search is active', async () => {
+    mocks.mockResolvedValueOnce(sampleGroups);
+    mocks.mockResolvedValueOnce([]);
+
+    const { result } = renderHook(() => useRepairDevices());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    act(() => result.current.setQuery('nokia'));
+    await waitFor(() => expect(result.current.groups).toEqual([]));
+
+    expect(result.current.brandGroups).toEqual(sampleGroups);
   });
 
   it('marks the catalogue unavailable on RepairCatalogUnavailableError', async () => {
@@ -70,6 +85,21 @@ describe('useRepairDevices', () => {
 
     expect(result.current.error).toBe('network down');
     expect(result.current.isUnavailable).toBe(false);
+  });
+
+  it('shows a retryable timeout message when the catalogue request stalls', async () => {
+    const { RepairCatalogTimeoutError } = jest.requireMock(
+      '@/lib/repair-catalog-client'
+    ) as { RepairCatalogTimeoutError: new () => Error };
+    mocks.mockRejectedValueOnce(new RepairCatalogTimeoutError());
+
+    const { result } = renderHook(() => useRepairDevices());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.error).toBe(
+      'Repair options took too long to load. Please try again.'
+    );
   });
 
   it('refetches with the trimmed search query when setQuery is called', async () => {

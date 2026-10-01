@@ -83,6 +83,18 @@ describe('SetupChecklist abandoned renders', () => {
         </Suspense>
       );
     });
+    const summary = await waitFor(() => {
+      const button = screen
+        .getAllByRole('button')
+        .find(
+          (candidate) =>
+            candidate.getAttribute('aria-controls') ===
+            'store-setup-checklist-details'
+        );
+      expect(button).toBeDefined();
+      return button as HTMLElement;
+    });
+    fireEvent.click(summary);
     fireEvent.click(
       await screen.findByRole('button', { name: 'Publish Store' })
     );

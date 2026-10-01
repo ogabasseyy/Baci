@@ -4,6 +4,7 @@ import {
   quizEventSchema,
   quizEventsResponseSchema,
   quizOptionSchema,
+  quizParticipantCountResponseSchema,
   quizQuestionSchema,
   quizResultSchema,
 } from './quiz-schemas';
@@ -108,6 +109,11 @@ describe('quiz response schemas', () => {
     });
     expect(quizAttemptSchema.parse(validAttempt)).toEqual(validAttempt);
     expect(quizResultSchema.parse(completedResult)).toEqual(completedResult);
+    expect(
+      quizParticipantCountResponseSchema.parse({ participantCount: 2 })
+    ).toEqual({
+      participantCount: 2,
+    });
   });
 
   it('rejects empty string identity and display fields', () => {

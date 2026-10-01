@@ -133,57 +133,115 @@ export function QuizPrizeProductPicker({
     <div className="grid gap-2 text-sm font-medium">
       <label htmlFor={`${listboxId}-input`}>Prize product</label>
       <div className="relative">
-        <Search
-          aria-hidden="true"
-          className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-        />
-        <input
-          aria-activedescendant={activeId}
-          aria-autocomplete="list"
-          aria-controls={listboxId}
-          aria-expanded={isOpen}
-          aria-label="Search prize product inventory"
-          autoComplete="off"
-          className="h-11 w-full rounded-md border bg-background pl-9 pr-10 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          disabled={disabled}
-          id={`${listboxId}-input`}
-          onChange={(event) => {
-            setSearch(event.target.value);
-            setIsOpen(true);
-          }}
-          onBlur={() => setIsOpen(false)}
-          onFocus={() => setIsOpen(true)}
-          onKeyDown={(event) => {
-            if (event.key === 'ArrowDown') {
-              event.preventDefault();
-              setIsOpen(true);
-              setHighlightedIndex((current) =>
-                Math.min(current + 1, products.length - 1)
-              );
-            } else if (event.key === 'ArrowUp') {
-              event.preventDefault();
-              setHighlightedIndex((current) => Math.max(current - 1, 0));
-            } else if (event.key === 'Enter' && highlightedIndex >= 0) {
-              event.preventDefault();
-              const product = products[highlightedIndex];
-              if (product?.available && !product.requiresVariantSelection) {
-                selectProduct(product);
-              }
-            } else if (event.key === 'Escape') {
-              setIsOpen(false);
-              setHighlightedIndex(-1);
-            }
-          }}
-          placeholder="Search products, models, or SKU"
-          role="combobox"
-          type="search"
-          value={search}
-        />
-        {isSearching ? (
-          <Loader2
+        <div className="relative">
+          <Search
             aria-hidden="true"
-            className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground"
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
           />
+          <input
+            aria-activedescendant={activeId}
+            aria-autocomplete="list"
+            aria-controls={listboxId}
+            aria-expanded={isOpen}
+            aria-label="Search prize product inventory"
+            autoComplete="off"
+            className="h-11 w-full rounded-md border bg-background pl-9 pr-10 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            disabled={disabled}
+            id={`${listboxId}-input`}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setIsOpen(true);
+            }}
+            onBlur={() => setIsOpen(false)}
+            onFocus={() => setIsOpen(true)}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                setIsOpen(true);
+                setHighlightedIndex((current) =>
+                  Math.min(current + 1, products.length - 1)
+                );
+              } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                setHighlightedIndex((current) => Math.max(current - 1, 0));
+              } else if (event.key === 'Enter' && highlightedIndex >= 0) {
+                event.preventDefault();
+                const product = products[highlightedIndex];
+                if (product?.available && !product.requiresVariantSelection) {
+                  selectProduct(product);
+                }
+              } else if (event.key === 'Escape') {
+                setIsOpen(false);
+                setHighlightedIndex(-1);
+              }
+            }}
+            placeholder="Search products, models, or SKU"
+            role="combobox"
+            type="search"
+            value={search}
+          />
+          {isSearching ? (
+            <Loader2
+              aria-hidden="true"
+              className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground"
+            />
+          ) : null}
+        </div>
+
+        {isOpen ? (
+          <div
+            aria-busy={isSearching || isLoadingMore}
+            aria-label="Prize product results"
+            className="absolute left-0 right-0 top-full z-50 mt-2 max-h-80 overflow-y-auto rounded-xl border bg-popover p-1.5 shadow-lg"
+            id={listboxId}
+            onMouseDown={(event) => event.preventDefault()}
+            role="listbox"
+          >
+            {isSearching ? (
+              <p
+                aria-live="polite"
+                className="px-3 py-4 text-xs text-muted-foreground"
+              >
+                Searching inventory…
+              </p>
+            ) : null}
+            {!isSearching && searchError ? (
+              <p className="px-3 py-4 text-xs text-destructive" role="alert">
+                {searchError}
+              </p>
+            ) : null}
+            {!isSearching && !searchError && products.length === 0 ? (
+              <p className="px-3 py-4 text-xs text-muted-foreground">
+                {normalizedSearch
+                  ? 'No matching active products.'
+                  : 'No active products found.'}
+              </p>
+            ) : null}
+            {!isSearching && !searchError
+              ? products.map((product, index) => (
+                  <QuizPrizeProductResult
+                    highlighted={highlightedIndex === index}
+                    id={`${listboxId}-option-${index}`}
+                    key={product.selectionId}
+                    onSelect={selectProduct}
+                    product={product}
+                    selected={
+                      selectedProduct?.selectionId === product.selectionId
+                    }
+                  />
+                ))
+              : null}
+            {!isSearching && !searchError && nextCursor ? (
+              <button
+                className="mt-1 w-full rounded-md px-3 py-2 text-xs font-semibold text-primary hover:bg-accent disabled:opacity-60"
+                disabled={isLoadingMore}
+                onClick={loadMore}
+                type="button"
+              >
+                {isLoadingMore ? 'Loading more…' : 'Load more inventory'}
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
 
@@ -197,62 +255,6 @@ export function QuizPrizeProductPicker({
               : ''}
           </span>
         </p>
-      ) : null}
-
-      {isOpen ? (
-        <div
-          aria-busy={isSearching || isLoadingMore}
-          aria-label="Prize product results"
-          className="max-h-80 overflow-y-auto rounded-xl border bg-popover p-1.5 shadow-lg"
-          id={listboxId}
-          onMouseDown={(event) => event.preventDefault()}
-          role="listbox"
-        >
-          {isSearching ? (
-            <p
-              aria-live="polite"
-              className="px-3 py-4 text-xs text-muted-foreground"
-            >
-              Searching inventory…
-            </p>
-          ) : null}
-          {!isSearching && searchError ? (
-            <p className="px-3 py-4 text-xs text-destructive" role="alert">
-              {searchError}
-            </p>
-          ) : null}
-          {!isSearching && !searchError && products.length === 0 ? (
-            <p className="px-3 py-4 text-xs text-muted-foreground">
-              {normalizedSearch
-                ? 'No matching active products.'
-                : 'No active products found.'}
-            </p>
-          ) : null}
-          {!isSearching && !searchError
-            ? products.map((product, index) => (
-                <QuizPrizeProductResult
-                  highlighted={highlightedIndex === index}
-                  id={`${listboxId}-option-${index}`}
-                  key={product.selectionId}
-                  onSelect={selectProduct}
-                  product={product}
-                  selected={
-                    selectedProduct?.selectionId === product.selectionId
-                  }
-                />
-              ))
-            : null}
-          {!isSearching && !searchError && nextCursor ? (
-            <button
-              className="mt-1 w-full rounded-md px-3 py-2 text-xs font-semibold text-primary hover:bg-accent disabled:opacity-60"
-              disabled={isLoadingMore}
-              onClick={loadMore}
-              type="button"
-            >
-              {isLoadingMore ? 'Loading more…' : 'Load more inventory'}
-            </button>
-          ) : null}
-        </div>
       ) : null}
     </div>
   );

@@ -191,11 +191,14 @@ export async function removePushTokenFromServer(
 
 export function handleNotificationResponse(
   response: NotificationResponse,
-  navigate: (screen: string, params?: Record<string, string>) => void,
+  navigate: (
+    screen: string,
+    params?: Record<string, string>
+  ) => void | Promise<void>,
   requestUpdateCheck: (
     reason: 'push-notification'
   ) => void = requestMobileUpdateCheck
-): void {
+): void | Promise<void> {
   const data = response.notification.request.content.data as Record<
     string,
     unknown
@@ -210,7 +213,10 @@ export function handleNotificationResponse(
 
   if (!target) return;
 
-  navigate(target.screen, 'params' in target ? target.params : undefined);
+  return navigate(
+    target.screen,
+    'params' in target ? target.params : undefined
+  );
 }
 
 export async function scheduleLocalNotification(

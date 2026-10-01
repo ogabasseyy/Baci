@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  country: 'NG',
+  country: 'NG' as string | null,
   useQuery: vi.fn(),
 }));
 
@@ -137,6 +137,20 @@ describe('KYCScreen country availability', () => {
     ).not.toBeInTheDocument();
     expect(mocks.useQuery).toHaveBeenCalledWith(
       expect.objectContaining({ enabled: false })
+    );
+  });
+
+  it('keeps identity flows enabled for legacy merchants without a country', () => {
+    mocks.country = null;
+
+    render(<KYCScreen />);
+
+    expect(
+      screen.getByRole('button', { name: /verify identity/i })
+    ).toBeVisible();
+    expect(screen.getByRole('button', { name: /verify cac/i })).toBeVisible();
+    expect(mocks.useQuery).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: true })
     );
   });
 });

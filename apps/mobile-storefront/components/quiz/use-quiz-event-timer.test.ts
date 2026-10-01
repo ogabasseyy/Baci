@@ -36,4 +36,51 @@ describe('useQuizEventTimer', () => {
     );
     expect(result.current.remainingSeconds).toBe(55);
   });
+
+  it('does not keep an interval alive for an already expired inactive event', () => {
+    const setIntervalSpy = jest.spyOn(global, 'setInterval');
+
+    const { result } = renderHook(() =>
+      useQuizEventTimer({
+        eventEndsAt: '2026-08-04T09:03:00.000Z',
+        isActive: false,
+        onExpire: jest.fn(),
+      })
+    );
+
+    expect(result.current).toEqual({ hasEnded: true, remainingSeconds: 0 });
+    expect(setIntervalSpy).not.toHaveBeenCalled();
+    setIntervalSpy.mockRestore();
+  });
+
+  it('does not tick a future inactive event', () => {
+    const setIntervalSpy = jest.spyOn(global, 'setInterval');
+
+    renderHook(() =>
+      useQuizEventTimer({
+        eventEndsAt: '2026-08-04T09:05:00.000Z',
+        isActive: false,
+        onExpire: jest.fn(),
+      })
+    );
+
+    expect(setIntervalSpy).not.toHaveBeenCalled();
+    setIntervalSpy.mockRestore();
+  });
+
+  it('can tick an inactive timer when a pending result needs the countdown', () => {
+    const setIntervalSpy = jest.spyOn(global, 'setInterval');
+
+    renderHook(() =>
+      useQuizEventTimer({
+        eventEndsAt: '2026-08-04T09:05:00.000Z',
+        isActive: false,
+        onExpire: jest.fn(),
+        shouldTick: true,
+      })
+    );
+
+    expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+    setIntervalSpy.mockRestore();
+  });
 });

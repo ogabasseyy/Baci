@@ -1,15 +1,44 @@
 import { describe, expect, it } from '@jest/globals';
 import type { QuizEvent } from '@/services/quiz';
+import { QuizServiceError } from '@/services/quiz-types';
 import {
+  canPlayAnotherQuizAttempt,
   formatRemainingTime,
   formatTimeRange,
   getEventStartButtonText,
   getPrizeMomentLabel,
   getQuizErrorMessage,
+  isQuizRecoveryCurrent,
   shouldShowEventList,
 } from './QuizScreen.utils';
 
 describe('QuizScreen utils', () => {
+  it('allows another attempt only while a multi-attempt event remains open', () => {
+    const event: QuizEvent = {
+      endsAt: '2026-08-16T12:05:00.000Z',
+      id: 'event-retry',
+      maxAttempts: 2,
+      prizeName: 'Phone',
+      questionCount: 3,
+      startsAt: '2026-08-16T12:00:00.000Z',
+      status: 'active',
+      title: 'Retryable test',
+    };
+
+    expect(canPlayAnotherQuizAttempt(event, '2026-08-16T12:04:00.000Z')).toBe(
+      true
+    );
+    expect(canPlayAnotherQuizAttempt(event, '2026-08-16T12:05:00.000Z')).toBe(
+      false
+    );
+    expect(
+      canPlayAnotherQuizAttempt({ ...event, maxAttempts: 1 }, event.serverNow)
+    ).toBe(false);
+    expect(canPlayAnotherQuizAttempt({ ...event, status: 'finalizing' })).toBe(
+      false
+    );
+  });
+
   it('formats event time ranges and handles unset times', () => {
     const event: QuizEvent = {
       endsAt: '2026-05-20T11:00:00',
@@ -120,11 +149,34 @@ describe('QuizScreen utils', () => {
     );
   });
 
-  it('keeps the event list visible in list and result states only', () => {
+  it('hides technical quiz authorization errors behind actionable copy', () => {
+    expect(
+      getQuizErrorMessage(
+        new QuizServiceError(
+          'Quiz request is not authorized',
+          'QUIZ_ROUTE_PROOF_REQUIRED',
+          403
+        ),
+        'Quiz action failed'
+      )
+    ).toBe('We could not verify this quiz session. Please try again.');
+  });
+
+  it('keeps the event list out of the result state', () => {
     expect(shouldShowEventList('ready')).toBe(true);
     expect(shouldShowEventList('starting')).toBe(true);
-    expect(shouldShowEventList('result')).toBe(true);
+    expect(shouldShowEventList('result')).toBe(false);
     expect(shouldShowEventList('question')).toBe(false);
     expect(shouldShowEventList('loading')).toBe(false);
+  });
+
+  it('recognizes only the active event as recovery-owned', () => {
+    const state = { selectedEventId: 'event-a', status: 'result' };
+
+    expect(isQuizRecoveryCurrent(state, 'event-a')).toBe(true);
+    expect(isQuizRecoveryCurrent(state, 'event-b')).toBe(false);
+    expect(
+      isQuizRecoveryCurrent({ selectedEventId: null, status: 'ready' })
+    ).toBe(true);
   });
 });

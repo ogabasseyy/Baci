@@ -5,6 +5,7 @@ type ExpoPlugin = NonNullable<ExpoConfig['plugins']>[number];
 
 interface ExpoPluginsOptions {
   facebookSdkPlugin: ExpoPlugin | null;
+  sentryPlugin: ExpoPlugin | null;
   tiktokBusinessPlugin: TikTokBusinessPlugin | null;
 }
 

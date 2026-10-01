@@ -196,7 +196,10 @@ describe('StaffSignupScreen', () => {
 
     await waitFor(() => {
       expect(mocks.signUp).toHaveBeenCalledWith(
-        expect.objectContaining({ email: 'invited@example.com' })
+        expect.objectContaining({
+          email: 'invited@example.com',
+          signupFlow: 'staff',
+        })
       );
     });
     expect(mocks.replace).toHaveBeenCalledWith('/invite/token-abc');

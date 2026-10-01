@@ -201,6 +201,47 @@ const config = {
             transform: 'translateY(-60px) scale(1.5)',
           },
         },
+        // One-shot icon micro-interactions (CSS replacements for the removed
+        // animation runtime; transform/opacity-only, no layout shift).
+        'nudge-up': {
+          '0%, 100%': {
+            transform: 'translateY(0)',
+          },
+          '50%': {
+            transform: 'translateY(-2px)',
+          },
+        },
+        wiggle: {
+          '0%, 100%': {
+            transform: 'rotate(0deg)',
+          },
+          '20%': {
+            transform: 'rotate(-10deg)',
+          },
+          '40%': {
+            transform: 'rotate(10deg)',
+          },
+          '60%': {
+            transform: 'rotate(-10deg)',
+          },
+          '80%': {
+            transform: 'rotate(10deg)',
+          },
+        },
+        shake: {
+          '0%, 13%, 100%': {
+            transform: 'translateX(0)',
+          },
+          '3%': {
+            transform: 'translateX(-2px)',
+          },
+          '6%': {
+            transform: 'translateX(2px)',
+          },
+          '10%': {
+            transform: 'translateX(-2px)',
+          },
+        },
         'slide-right': {
           '0%, 100%': {
             transform: 'translateX(0)',
@@ -222,6 +263,9 @@ const config = {
         'accordion-up': 'accordion-up 0.2s ease-out',
         'float-up': 'float-up 1s ease-out forwards',
         'slide-right': 'slide-right 1.5s ease-in-out infinite',
+        'nudge-up': 'nudge-up 0.3s ease-out',
+        wiggle: 'wiggle 0.5s ease-out',
+        shake: 'shake 2.4s ease-in-out infinite',
       },
     },
   },

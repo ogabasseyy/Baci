@@ -33,9 +33,31 @@ jest.mock('@shopify/flash-list', () => ({
   },
 }));
 
-jest.mock('expo-image', () => ({
-  Image: () => null,
-}));
+jest.mock('expo-image', () => {
+  const { View } = jest.requireActual(
+    'react-native'
+  ) as typeof import('react-native');
+
+  return {
+    Image: ({
+      autoplay,
+      accessibilityLabel,
+      testID,
+    }: {
+      autoplay?: boolean;
+      accessibilityLabel?: string;
+      testID?: string;
+    }) => {
+      const viewProps = {
+        testID: testID ?? 'saved-item-image',
+        accessibilityLabel: accessibilityLabel ?? 'saved item image',
+        accessibilityRole: 'image' as const,
+        autoplay,
+      } as unknown as React.ComponentProps<typeof View>;
+      return <View {...viewProps} />;
+    },
+  };
+});
 
 jest.mock('react-native-reanimated', () => ({
   __esModule: true,
@@ -115,5 +137,19 @@ describe('SavedItemsView', () => {
     expect(props.onRemove).toHaveBeenCalledWith(item);
     expect(props.onAddToCart).toHaveBeenCalledWith(item);
     expect(props.onClearAll).toHaveBeenCalledTimes(1);
+  });
+
+  describe('bugfix: animated catalog images on saved surfaces', () => {
+    it('does not autoplay product images in the saved list', () => {
+      render(
+        <SavedItemsView
+          {...props}
+          items={[makeSavedItem({ image: 'https://example.com/phone.gif' })]}
+        />
+      );
+
+      // Nested under a Pressable button, so role queries hide the image.
+      expect(screen.getByTestId('saved-item-image').props.autoplay).toBe(false);
+    });
   });
 });

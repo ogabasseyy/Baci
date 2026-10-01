@@ -11,10 +11,6 @@
       "lineCount": 307
     },
     {
-      "path": "components/track-order/TrackOrderDetailsContent.tsx",
-      "lineCount": 345
-    },
-    {
       "path": "lib/sanitize-html.ts",
       "lineCount": 324
     }

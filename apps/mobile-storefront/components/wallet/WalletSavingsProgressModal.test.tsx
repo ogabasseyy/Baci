@@ -3,9 +3,29 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
 
-jest.mock('expo-image', () => ({
-  Image: () => null,
-}));
+jest.mock('expo-image', () => {
+  const { View } = jest.requireActual(
+    'react-native'
+  ) as typeof import('react-native');
+
+  return {
+    Image: ({
+      autoplay,
+      accessibilityLabel,
+    }: {
+      autoplay?: boolean;
+      accessibilityLabel?: string;
+    }) => {
+      const viewProps = {
+        autoplay,
+        accessible: true,
+        accessibilityRole: 'image',
+        accessibilityLabel,
+      } as unknown as React.ComponentProps<typeof View>;
+      return <View {...viewProps} />;
+    },
+  };
+});
 
 const goal = {
   contribution_amount: 500,
@@ -71,6 +91,33 @@ describe('WalletSavingsProgressModal', () => {
     expect(onFundWallet).toHaveBeenCalledTimes(1);
     expect(onChangeDevice).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  describe('bugfix: animated wallet product images', () => {
+    it('does not autoplay savings goal product images', () => {
+      render(
+        <WalletSavingsProgressModal
+          addAmount=""
+          colors={Colors.light}
+          goal={{
+            ...goal,
+            product_image: 'https://cdn.example.com/iphone.gif',
+          }}
+          isAdding={false}
+          onAddAmountChange={jest.fn()}
+          onAddSavings={jest.fn()}
+          onChangeDevice={jest.fn()}
+          onClose={jest.fn()}
+          onFundWallet={jest.fn()}
+          visible
+          walletBalance={125000}
+        />
+      );
+
+      expect(
+        screen.getByRole('image', { name: 'iPhone 15 Pro' }).props.autoplay
+      ).toBe(false);
+    });
   });
 
   it('returns no content when there is no active savings goal', () => {

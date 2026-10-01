@@ -33,12 +33,13 @@ export const INITIAL_CATEGORY_FILTER_STATE: FilterState = {
   condition: [],
   storage: [],
   ram: [],
+  graphics: [],
   colors: [],
   simType: [],
   displayType: [],
   displaySize: [],
   minPrice: 0,
-  maxPrice: 3000000,
+  maxPrice: 0,
 };
 
 export const EMPTY_AVAILABLE_FILTER_OPTIONS: AvailableFilterOptions = {
@@ -46,6 +47,7 @@ export const EMPTY_AVAILABLE_FILTER_OPTIONS: AvailableFilterOptions = {
   condition: [],
   storage: [],
   ram: [],
+  graphics: [],
   colors: [],
   simType: [],
   displayType: [],
@@ -71,6 +73,7 @@ export function buildAvailableFilterOptions(
     condition: new Set<string>(),
     storage: new Set<string>(),
     ram: new Set<string>(),
+    graphics: new Set<string>(),
     colors: new Set<string>(),
     simType: new Set<string>(),
     displayType: new Set<string>(),
@@ -90,6 +93,7 @@ export function buildAvailableFilterOptions(
       }
     }
     if (p.ram) options.ram.add(p.ram);
+    if (p.graphics) options.graphics.add(p.graphics);
     if (p.colors) {
       p.colors.forEach((color: CategoryPageColor) => {
         const colorName = getCategoryProductColorName(color);
@@ -108,6 +112,7 @@ export function buildAvailableFilterOptions(
     condition: Array.from(options.condition).sort(),
     storage: Array.from(options.storage).sort(),
     ram: Array.from(options.ram).sort(),
+    graphics: Array.from(options.graphics).sort(),
     colors: Array.from(options.colors).sort(),
     simType: Array.from(options.simType).sort(),
     displayType: Array.from(options.displayType).sort(),
@@ -133,7 +138,8 @@ export function filterCategoryProducts(
     // Price
     if (
       p.rawPrice &&
-      (p.rawPrice < filters.minPrice || p.rawPrice > filters.maxPrice)
+      (p.rawPrice < filters.minPrice ||
+        (filters.maxPrice > 0 && p.rawPrice > filters.maxPrice))
     )
       return false;
 
@@ -156,6 +162,11 @@ export function filterCategoryProducts(
         return false;
     }
     if (filters.ram.length > 0 && (!p.ram || !filters.ram.includes(p.ram)))
+      return false;
+    if (
+      filters.graphics.length > 0 &&
+      (!p.graphics || !filters.graphics.includes(p.graphics))
+    )
       return false;
     if (
       filters.simType.length > 0 &&
@@ -199,6 +210,7 @@ export function hasActiveFilterSelection(
       filters.condition.length > 0 ||
       filters.storage.length > 0 ||
       filters.ram.length > 0 ||
+      filters.graphics.length > 0 ||
       filters.colors.length > 0 ||
       filters.simType.length > 0 ||
       filters.displayType.length > 0 ||

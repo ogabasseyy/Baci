@@ -7,17 +7,20 @@ import { getMerchantSetupStyles } from './merchant-setup.styles';
 interface MerchantSetupHeroProps {
   firstName?: string;
   onBack?: () => void;
+  ownerFocus?: 'identity' | 'location';
   step: 'owner' | 'business';
 }
 
 export function MerchantSetupHero({
   firstName = '',
   onBack,
+  ownerFocus = 'identity',
   step,
 }: MerchantSetupHeroProps) {
   const { colors, isDark } = useTheme();
   const styles = getMerchantSetupStyles(colors);
   const isBusinessStep = step === 'business';
+  const isLocationOwnerStep = !isBusinessStep && ownerFocus === 'location';
   const gradientColors = isDark
     ? (['rgba(74,144,217,0.22)', 'rgba(240,191,88,0.07)'] as const)
     : (['#EFF6FF', '#FFFBEB'] as const);
@@ -45,22 +48,26 @@ export function MerchantSetupHero({
         <Text style={styles.heroTitle}>
           {isBusinessStep
             ? `Welcome${firstName ? `, ${firstName}` : ''}!`
-            : "Let's get to know you"}
+            : isLocationOwnerStep
+              ? 'Where is your business?'
+              : "Let's get to know you"}
         </Text>
         <Text style={styles.heroText}>
           {isBusinessStep
             ? 'Add your business details to launch your store.'
-            : 'Tell us who you are so we can personalize your store and local settings.'}
+            : isLocationOwnerStep
+              ? 'Choose your country so we can set currency and local payment options.'
+              : 'Tell us who you are so we can personalize your store and local settings.'}
         </Text>
         {isBusinessStep && onBack ? (
           <Pressable
-            accessibilityLabel="Back to owner details"
+            accessibilityLabel="Back to about you"
             accessibilityRole="button"
             onPress={onBack}
             style={styles.heroBack}
           >
             <Ionicons color={colors.primary} name="arrow-back" size={16} />
-            <Text style={styles.heroBackText}>Edit owner details</Text>
+            <Text style={styles.heroBackText}>Back to about you</Text>
           </Pressable>
         ) : null}
       </LinearGradient>

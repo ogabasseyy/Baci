@@ -12,4 +12,8 @@ if (typeof global.crypto === 'undefined') {
   };
 }
 
-import 'expo-router/entry';
+const { initializeErrorMonitoring } = require('./services/error-monitoring');
+
+initializeErrorMonitoring();
+
+require('expo-router/entry');

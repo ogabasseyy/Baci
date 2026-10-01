@@ -1,178 +1,127 @@
-// Required for search, sort, filter, refresh, and toast interactions.
+// Required for server-backed search, filters, sorting, pagination, and toast interactions.
 'use client';
 
-import { Building2, Filter, RefreshCw, Search } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import { formatAdminThresholdCurrency } from '@/lib/admin-currency';
 import { apiGet } from '@/lib/api-client';
+import type { AdminMerchantsQuery } from '@/schemas/admin-merchants-query';
 import type {
   AdminMerchantHealthRow,
   AdminMerchantsResponse,
 } from '@/types/admin-merchants';
-import { type HealthFilter, isHealthFilter } from './merchant-health-filter';
-import { type MerchantStats, MerchantStatsGrid } from './merchant-stats-grid';
-import { MerchantTable } from './merchant-table';
+import { MerchantDirectoryCard } from './merchant-directory-card';
+import type { HealthFilter } from './merchant-health-filter';
 
 export type { HealthFilter } from './merchant-health-filter';
 
-type SortBy = 'gmv' | 'orders' | 'joined';
+const MAX_MERCHANT_DIRECTORY_OFFSET = 10_000;
+const SEARCH_DEBOUNCE_MS = 300;
 
-const SORT_OPTIONS = new Set<SortBy>(['gmv', 'orders', 'joined']);
-const SKELETON_ROW_COUNT = 3;
-
-function isSortBy(value: string): value is SortBy {
-  return SORT_OPTIONS.has(value as SortBy);
-}
-
-function safeParseNumber(value: number | string | null | undefined): number {
-  if (value === null || value === undefined) {
-    return 0;
-  }
-
-  const parsedValue =
-    typeof value === 'string' ? Number.parseFloat(value) : value;
-  return Number.isFinite(parsedValue) ? parsedValue : 0;
-}
-
-interface LoadMerchantsCallbacks {
-  setLoading: (value: boolean) => void;
-  setMerchants: (value: AdminMerchantHealthRow[]) => void;
-  setLoadError: (value: string | null) => void;
-  toast: ReturnType<typeof useToast>['toast'];
-  isLatest: () => boolean;
-}
-
-async function loadMerchants(
-  sortBy: SortBy,
-  {
-    setLoading,
-    setMerchants,
-    setLoadError,
-    toast,
-    isLatest,
-  }: LoadMerchantsCallbacks
-): Promise<void> {
-  try {
-    setLoading(true);
-    const params = new URLSearchParams({ sortBy });
-    const response = await apiGet<AdminMerchantsResponse>(
-      `/api/admin/merchants?${params.toString()}`
-    );
-    if (!isLatest()) {
-      return;
-    }
-    setMerchants(response.data);
-    setLoadError(null);
-  } catch (error) {
-    if (!isLatest()) {
-      return;
-    }
-    console.error('Failed to fetch merchants:', error);
-    setLoadError('Failed to load merchant data.');
-    toast({
-      description: 'Failed to load merchant data.',
-      title: 'Error',
-      variant: 'destructive',
-    });
-  } finally {
-    if (isLatest()) {
-      setLoading(false);
-    }
-  }
+function toRequestUrl(query: AdminMerchantsQuery): string {
+  const params = new URLSearchParams({
+    health: query.health,
+    limit: String(query.limit),
+    offset: String(query.offset),
+    sortBy: query.sortBy,
+  });
+  if (query.search) params.set('search', query.search);
+  return `/api/admin/merchants?${params.toString()}`;
 }
 
 export function MerchantsClient({
   initialError = null,
   initialHealthFilter,
   initialMerchants,
+  initialQuery,
+  initialTotal,
 }: {
   initialError?: string | null;
-  initialHealthFilter: HealthFilter;
+  initialHealthFilter?: HealthFilter;
   initialMerchants: AdminMerchantHealthRow[];
+  initialQuery?: AdminMerchantsQuery;
+  initialTotal?: number;
 }) {
-  const [merchants, setMerchants] =
-    useState<AdminMerchantHealthRow[]>(initialMerchants);
+  const [merchants, setMerchants] = useState(initialMerchants);
+  const [query, setQuery] = useState<AdminMerchantsQuery>(
+    initialQuery ?? {
+      health: initialHealthFilter ?? 'all',
+      limit: 50,
+      offset: 0,
+      search: undefined,
+      sortBy: 'gmv',
+    }
+  );
+  const [searchInput, setSearchInput] = useState(query.search ?? '');
+  const [total, setTotal] = useState(initialTotal ?? initialMerchants.length);
   const [loading, setLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [loadError, setLoadError] = useState<string | null>(initialError);
-  const [healthFilter, setHealthFilter] =
-    useState<HealthFilter>(initialHealthFilter);
-  const [sortBy, setSortBy] = useState<SortBy>('gmv');
   const { toast } = useToast();
   const hasMounted = useRef(false);
   const latestLoadId = useRef(0);
 
-  const fetchMerchants = () => {
+  const fetchMerchants = async (requestedQuery = query) => {
     const loadId = latestLoadId.current + 1;
     latestLoadId.current = loadId;
-    return loadMerchants(sortBy, {
-      setLoading,
-      setMerchants,
-      setLoadError,
-      toast,
-      isLatest: () => latestLoadId.current === loadId,
-    });
+    try {
+      setLoading(true);
+      const response = await apiGet<AdminMerchantsResponse>(
+        toRequestUrl(requestedQuery)
+      );
+      if (latestLoadId.current !== loadId) return;
+      setMerchants(response.data);
+      setTotal(response.pagination.total);
+      setLoadError(null);
+    } catch {
+      if (latestLoadId.current !== loadId) return;
+      console.error('Failed to fetch merchants');
+      setLoadError('Failed to load merchant data.');
+      toast({
+        description: 'Failed to load merchant data.',
+        title: 'Error',
+        variant: 'destructive',
+      });
+    } finally {
+      if (latestLoadId.current === loadId) setLoading(false);
+    }
   };
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the first rows are server-loaded, then this refetches only when sortBy changes (toast/setters are stable).
+  const reloadForQuery = useEffectEvent(
+    (requestedQuery: AdminMerchantsQuery) => {
+      void fetchMerchants(requestedQuery);
+    }
+  );
+
   useEffect(() => {
     if (!hasMounted.current) {
       hasMounted.current = true;
       return;
     }
+    reloadForQuery(query);
+  }, [query]);
 
-    const loadId = latestLoadId.current + 1;
-    latestLoadId.current = loadId;
-    void loadMerchants(sortBy, {
-      setLoading,
-      setMerchants,
-      setLoadError,
-      toast,
-      isLatest: () => latestLoadId.current === loadId,
-    });
-  }, [sortBy]);
+  useEffect(() => {
+    if (searchInput === (query.search ?? '')) return;
 
-  const filteredMerchants = merchants.filter((merchant) => {
-    const normalizedSearchQuery = searchQuery.toLowerCase();
-    const matchesSearch =
-      merchant.business_name?.toLowerCase().includes(normalizedSearchQuery) ||
-      merchant.email?.toLowerCase().includes(normalizedSearchQuery);
-    const matchesHealth =
-      healthFilter === 'all' || merchant.health_status === healthFilter;
-    return matchesSearch && matchesHealth;
-  });
+    const timeout = window.setTimeout(() => {
+      setQuery((current) => ({
+        ...current,
+        offset: 0,
+        search: searchInput || undefined,
+      }));
+    }, SEARCH_DEBOUNCE_MS);
 
-  const stats = merchants.reduce<MerchantStats & { totalGmv: number }>(
-    (accumulator, merchant) => {
-      accumulator.total += 1;
-      accumulator.totalGmv += safeParseNumber(merchant.total_gmv);
+    return () => window.clearTimeout(timeout);
+  }, [query.search, searchInput]);
 
-      if (merchant.health_status === 'at_risk') {
-        accumulator.atRisk += 1;
-      } else if (merchant.health_status === 'churned') {
-        accumulator.churned += 1;
-      } else if (merchant.health_status === 'healthy') {
-        accumulator.healthy += 1;
-      } else if (merchant.health_status === 'new') {
-        accumulator.new += 1;
-      }
-
-      return accumulator;
-    },
-    { atRisk: 0, churned: 0, healthy: 0, new: 0, total: 0, totalGmv: 0 }
-  );
+  const updateFilters = (next: Partial<AdminMerchantsQuery>) => {
+    setQuery((current) => ({ ...current, ...next, offset: 0 }));
+  };
+  const shownStart = total === 0 ? 0 : query.offset + 1;
+  const shownEnd = Math.min(query.offset + merchants.length, total);
+  const reachedDirectoryBoundary =
+    query.offset >= MAX_MERCHANT_DIRECTORY_OFFSET;
 
   return (
     <div className="space-y-6">
@@ -180,10 +129,14 @@ export function MerchantsClient({
         <div>
           <h1 className="text-page-title">Merchants</h1>
           <p className="text-muted-foreground">
-            View merchant health, users, and operational status.
+            View paid-sales activity and operational status.
           </p>
         </div>
-        <Button variant="outline" onClick={fetchMerchants} disabled={loading}>
+        <Button
+          variant="outline"
+          onClick={() => void fetchMerchants()}
+          disabled={loading}
+        >
           <RefreshCw
             className={`mr-2 size-4 ${loading ? 'motion-safe:animate-spin' : ''}`}
             aria-hidden="true"
@@ -191,13 +144,6 @@ export function MerchantsClient({
           Refresh
         </Button>
       </div>
-
-      <MerchantStatsGrid
-        activeFilter={healthFilter}
-        onFilterChange={setHealthFilter}
-        stats={stats}
-      />
-
       {loadError ? (
         <div
           className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive"
@@ -207,124 +153,70 @@ export function MerchantsClient({
           <p>{loadError} Use Refresh to try again.</p>
         </div>
       ) : null}
-
-      <Card className="glass">
-        <CardHeader className="pb-4">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="relative max-w-sm flex-1">
-              <Search
-                className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <Input
-                placeholder="Search merchants..."
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Select
-                value={healthFilter}
-                onValueChange={(value) => {
-                  if (isHealthFilter(value)) {
-                    setHealthFilter(value);
-                  }
-                }}
-              >
-                <SelectTrigger className="w-[150px]" aria-label="Health status">
-                  <Filter className="mr-2 size-4" aria-hidden="true" />
-                  <SelectValue placeholder="Health Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="healthy">Healthy</SelectItem>
-                  <SelectItem value="at_risk">At Risk</SelectItem>
-                  <SelectItem value="churned">Churned</SelectItem>
-                  <SelectItem value="new">New</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={sortBy}
-                onValueChange={(value) => {
-                  if (isSortBy(value)) {
-                    setSortBy(value);
-                  }
-                }}
-              >
-                <SelectTrigger
-                  className="w-[150px]"
-                  aria-label="Sort merchants"
-                >
-                  <SelectValue placeholder="Sort by" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="gmv">Highest GMV</SelectItem>
-                  <SelectItem value="orders">Most Orders</SelectItem>
-                  <SelectItem value="joined">Recently Joined</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-4">
-              {Array.from({ length: SKELETON_ROW_COUNT }).map((_, index) => (
-                <div
-                  // biome-ignore lint/suspicious/noArrayIndexKey: Skeleton rows are transient placeholders.
-                  key={index}
-                  className="flex items-center gap-4 rounded-lg border p-4"
-                >
-                  <Skeleton className="size-10 rounded-full" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-4 w-48" />
-                    <Skeleton className="h-3 w-32" />
-                  </div>
-                  <Skeleton className="h-6 w-20" />
-                  <Skeleton className="h-6 w-24" />
-                </div>
-              ))}
-            </div>
-          ) : filteredMerchants.length === 0 ? (
-            <div className="py-12 text-center text-muted-foreground">
-              <Building2
-                className="mx-auto mb-4 size-12 opacity-50"
-                aria-hidden="true"
-              />
-              <p className="font-medium">No merchants found</p>
-              <p className="text-sm">
-                {searchQuery || healthFilter !== 'all'
-                  ? 'Try adjusting your filters'
-                  : 'Merchants will appear here once they sign up'}
-              </p>
-            </div>
-          ) : (
-            <MerchantTable
-              merchants={filteredMerchants}
-              onInvalidStorefrontUrl={() =>
-                toast({
-                  description: 'Could not generate a valid storefront URL.',
-                  title: 'Error',
-                  variant: 'destructive',
-                })
+      <MerchantDirectoryCard
+        filteredMerchants={merchants}
+        healthFilter={query.health}
+        loading={loading}
+        onHealthFilterChange={(health) => updateFilters({ health })}
+        onInvalidStorefrontUrl={() =>
+          toast({
+            description: 'Could not generate a valid storefront URL.',
+            title: 'Error',
+            variant: 'destructive',
+          })
+        }
+        onSearchQueryChange={setSearchInput}
+        onSortByChange={(sortBy) => {
+          if (sortBy === 'gmv' || sortBy === 'orders' || sortBy === 'joined')
+            updateFilters({ sortBy });
+        }}
+        searchQuery={searchInput}
+        sortBy={query.sortBy}
+      />
+      {!loading ? (
+        <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+          <p>
+            Showing {shownStart}–{shownEnd} of {total} merchants
+          </p>
+          {reachedDirectoryBoundary ? (
+            <p className="text-amber-700 dark:text-amber-300">
+              This view stops at the configured 10,000-row merchant directory
+              boundary.
+            </p>
+          ) : null}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setQuery((current) => ({
+                  ...current,
+                  offset: Math.max(0, current.offset - current.limit),
+                }))
               }
-            />
-          )}
-        </CardContent>
-      </Card>
-
-      {!loading && filteredMerchants.length > 0 ? (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <p>
-            Showing {filteredMerchants.length} of {merchants.length} merchants
-          </p>
-          <p>
-            Combined GMV:{' '}
-            <span className="font-medium text-foreground">
-              {formatAdminThresholdCurrency(stats.totalGmv)}
-            </span>
-          </p>
+              disabled={query.offset === 0}
+            >
+              <ChevronLeft className="mr-1 size-4" aria-hidden="true" />
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setQuery((current) => ({
+                  ...current,
+                  offset: Math.min(
+                    MAX_MERCHANT_DIRECTORY_OFFSET,
+                    current.offset + current.limit
+                  ),
+                }))
+              }
+              disabled={shownEnd >= total || reachedDirectoryBoundary}
+            >
+              Next
+              <ChevronRight className="ml-1 size-4" aria-hidden="true" />
+            </Button>
+          </div>
         </div>
       ) : null}
     </div>

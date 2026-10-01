@@ -16,7 +16,7 @@ interface QuizDateOfBirthGateModalProps {
 }
 
 /**
- * Blocks quiz attempts until the customer provides a date of birth — Super Quiz
+ * Blocks quiz attempts until the customer provides a date of birth — SuperQuiz
  * is 18+, and the server age gate reads the stored value to decide eligibility.
  */
 export function QuizDateOfBirthGateModal({
@@ -54,7 +54,7 @@ export function QuizDateOfBirthGateModal({
         </Pressable>
       </View>
       <Text style={[styles.helperText, { color: colors.textSecondary }]}>
-        Super Quiz is 18+. Enter your date of birth to start this quiz.
+        SuperQuiz is 18+. Enter your date of birth to start this quiz.
       </Text>
       {errorMessage ? (
         <Text

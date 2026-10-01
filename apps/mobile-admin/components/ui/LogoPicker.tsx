@@ -12,7 +12,7 @@ import SafeImage from '@/components/ui/SafeImage';
 import { RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { supabase } from '@/lib/supabase';
-import { createUploadFile, type RNFormData } from '@/types/upload';
+import { readUploadBytes } from '@/lib/upload/readUploadBytes';
 
 interface LogoPickerProps {
   merchantId: string | undefined;
@@ -32,7 +32,6 @@ async function uploadLogoToStorage(
   uri: string,
   merchantId: string
 ): Promise<void> {
-  const formData = new FormData() as RNFormData;
   const fileExt = uri.split('.').pop()?.toLowerCase() || 'jpg';
   const fileName = `${Date.now()}.${fileExt}`;
   const filePath = `${merchantId}/${fileName}`;
@@ -43,18 +42,11 @@ async function uploadLogoToStorage(
   else if (fileExt === 'webp') mimeType = 'image/webp';
   else if (fileExt === 'gif') mimeType = 'image/gif';
 
-  formData.append(
-    'file',
-    createUploadFile({
-      uri,
-      name: fileName,
-      type: mimeType,
-    })
-  );
+  const fileData = await readUploadBytes(uri);
 
   const { error: uploadError } = await supabase.storage
     .from('media')
-    .upload(filePath, formData, {
+    .upload(filePath, fileData, {
       contentType: mimeType,
       upsert: true,
     });

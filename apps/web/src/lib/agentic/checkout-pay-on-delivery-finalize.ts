@@ -28,8 +28,8 @@ import {
   buildStoredAgenticIdempotencyResponse,
   persistAgenticIdempotencyResponse,
 } from '@/lib/agentic/idempotency-response-storage';
+import { revalidateAgenticOrderProductCaches } from '@/lib/agentic/revalidate-agentic-order-product-caches';
 import { logger } from '@/lib/logger';
-import { productCacheRevalidation } from '@/lib/product-cache-revalidation';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 
 type CheckoutCalculation = Awaited<ReturnType<typeof calculateCheckoutSession>>;
@@ -167,63 +167,18 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
       return respond({ error: 'Order creation failed' }, 500);
     }
     orderId = createdOrderId;
-
-    // create_storefront_order decrements only products with manage_stock=true.
-    // Resolve that policy before cache work so unlimited-inventory sales cause
-    // no catalog or feed churn.
-    try {
-      const touchedProductIds = Array.from(
-        new Set(
-          orderSessionCalc.lineItems
-            .map((lineItem) => lineItem.item.product_id)
-            .filter(
-              (id): id is string => typeof id === 'string' && id.length > 0
-            )
-        )
-      );
-      if (touchedProductIds.length > 0) {
-        const { data: touchedProducts, error: slugLookupError } = await supabase
-          .from('products')
-          .select('slug, manage_stock')
-          .in('id', touchedProductIds)
-          .eq('merchant_id', merchantId)
-          .returns<Array<{ manage_stock: boolean | null; slug: string }>>();
-        if (slugLookupError) {
-          productCacheRevalidation.revalidateProducts(merchantId, undefined, {
-            feedScope: 'merchant',
-          });
-          logger.error({
-            error: sanitizeForLog(slugLookupError),
-            message:
-              'Failed to look up product slugs for PDP cache revalidation after agentic pay-on-delivery order creation',
-            sessionId: sanitizeForLog(sessionId),
-          });
-        } else {
-          const trackedProducts = (touchedProducts ?? []).filter(
-            (product) => product.manage_stock === true
-          );
-          if (trackedProducts.length > 0) {
-            productCacheRevalidation.revalidateProducts(merchantId, undefined, {
-              feedScope: 'merchant',
-            });
-            productCacheRevalidation.revalidateProductSlugs(
-              merchantId,
-              trackedProducts.map((product) => product.slug)
-            );
-          } else {
-            productCacheRevalidation.revalidateDashboard(merchantId);
-          }
-        }
-      }
-    } catch (revalidateError) {
-      logger.error({
-        error: sanitizeForLog(revalidateError),
-        message:
-          'Failed to revalidate product caches after agentic pay-on-delivery order creation',
-        sessionId: sanitizeForLog(sessionId),
-      });
-    }
-
+    await revalidateAgenticOrderProductCaches({
+      merchantId,
+      productIds: orderSessionCalc.lineItems.map(
+        (lineItem) => lineItem.item.product_id
+      ),
+      sessionId,
+      slugLookupFailureMessage:
+        'Failed to look up product slugs for PDP cache revalidation after agentic pay-on-delivery order creation',
+      outerFailureMessage:
+        'Failed to revalidate product caches after agentic pay-on-delivery order creation',
+      supabase,
+    });
     const marker = await recordPayOnDeliveryOrderCreated({
       finalizationClaim,
       merchantId,
@@ -253,14 +208,12 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
       return respond({ error: 'Database error' }, 500);
     }
   }
-
   const successResponse = buildPayOnDeliveryCheckoutResponse({
     buyer,
     orderId,
     session: orderSession,
     sessionCalc: orderSessionCalc,
   });
-
   const persisted = await persistAgenticIdempotencyResponse({
     idempotencyKey,
     merchantId,
@@ -280,7 +233,6 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
     });
     return respond({ error: 'Idempotency response storage failed' }, 503);
   }
-
   const updatePayload = buildPayOnDeliveryCompletedSessionUpdate({
     buyer,
     metadata: finalizationMetadata,
@@ -302,7 +254,6 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
     })
     .select('session_id')
     .maybeSingle();
-
   if (updateError || !updatedSession) {
     return handlePayOnDeliverySessionCompletionFailure({
       finalizationClaim,
@@ -318,7 +269,6 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
       updateError: updateError ?? 'No checkout session row updated',
     });
   }
-
   const total = orderSessionCalc.totals.find(
     (candidate) => candidate.type === 'total'
   );

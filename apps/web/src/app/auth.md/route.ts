@@ -22,8 +22,8 @@ Ogabassey exposes public catalog and storefront discovery surfaces for agents.
 ## Step 2 - Authenticate
 
 Browser and account APIs use the OAuth/OIDC authorization server advertised in
-the protected-resource metadata. Signed checkout and order routes use the
-bearer_hmac contract described in agent-commerce.json.
+the protected-resource metadata. Agentic catalog, checkout, and order routes
+use the bearer_hmac contract described in agent-commerce.json.
 
 ## agent_auth
 
@@ -42,12 +42,12 @@ Ogabassey currently issues agent checkout credentials only to approved
 integrations after review. Unknown agents should not expect automatic OAuth
 client registration or public credential issuance.
 
-## Step 3 - Use Agentic Checkout Credentials
+## Step 3 - Use Agentic Credentials
 
-Approved agentic checkout clients present \`Authorization: Bearer <credential>\`
-plus the request integrity headers documented in agent-commerce.json. Mutating
-checkout actions require explicit user intent, request integrity headers, and
-idempotency keys.
+Approved agentic clients present \`Authorization: Bearer <credential>\` plus the
+request integrity headers documented in agent-commerce.json. All mutating
+actions also require explicit user intent and idempotency keys;
+read-only catalog queries remain signed but do not require an idempotency key.
 
 ## Errors
 

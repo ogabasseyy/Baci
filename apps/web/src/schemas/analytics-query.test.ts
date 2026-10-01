@@ -17,6 +17,21 @@ describe('analyticsQuerySchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts a bounded numeric cache-bust token', () => {
+    const result = analyticsQuerySchema.safeParse({ cacheBust: '12' });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects non-numeric or oversized cache-bust tokens', () => {
+    expect(
+      analyticsQuerySchema.safeParse({ cacheBust: 'refresh-now' }).success
+    ).toBe(false);
+    expect(
+      analyticsQuerySchema.safeParse({ cacheBust: '12345678901' }).success
+    ).toBe(false);
+  });
+
   it('accepts an optional branch id', () => {
     const result = analyticsQuerySchema.safeParse({
       branchId: '123e4567-e89b-42d3-a456-426614174001',

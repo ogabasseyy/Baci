@@ -65,10 +65,14 @@ describe('RepairDeviceCatalog', () => {
       />
     );
 
-    expect(screen.getByText('Apple')).toBeTruthy();
+    expect(screen.getAllByText('Apple')).toHaveLength(2);
     expect(screen.getByText('iPhone 13')).toBeTruthy();
-    expect(screen.getByText('Samsung')).toBeTruthy();
+    expect(screen.getAllByText('Samsung')).toHaveLength(2);
     expect(screen.getByText('Galaxy S22')).toBeTruthy();
+
+    fireEvent.press(screen.getByLabelText('Filter by Apple'));
+
+    expect(onQueryChange).toHaveBeenCalledWith('Apple');
   });
 
   it('calls onQueryChange as the search input changes', () => {
@@ -121,6 +125,25 @@ describe('RepairDeviceCatalog', () => {
     );
 
     expect(screen.getByText(/No devices found for "nokia"/)).toBeTruthy();
+  });
+
+  it('keeps all brand shortcuts available when the current search is filtered', () => {
+    render(
+      <RepairDeviceCatalog
+        groups={[groups[0]]}
+        brandGroups={groups}
+        query="apple"
+        onQueryChange={onQueryChange}
+        onSelectDevice={onSelectDevice}
+        onDescribeInstead={onDescribeInstead}
+        onChatWhatsapp={onChatWhatsapp}
+      />
+    );
+
+    expect(screen.getByLabelText('Filter by Samsung')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Filter by Samsung'));
+
+    expect(onQueryChange).toHaveBeenCalledWith('Samsung');
   });
 
   it('wires the not-listed CTAs to their callbacks', () => {

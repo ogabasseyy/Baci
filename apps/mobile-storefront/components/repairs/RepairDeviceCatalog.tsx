@@ -4,12 +4,16 @@ import type {
 } from '@baci/shared/repairs';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { repairsCatalogStyles as styles } from '@/components/repairs/repairs-catalog.styles';
+import { repairDeviceCatalogStyles } from '@/components/repairs/repair-device-catalog.styles';
+import { repairsCatalogStyles } from '@/components/repairs/repairs-catalog.styles';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND } from '@/constants/Colors';
 
+const styles = { ...repairsCatalogStyles, ...repairDeviceCatalogStyles };
+
 interface RepairDeviceCatalogProps {
   groups: RepairDeviceBrandGroup[];
+  brandGroups?: RepairDeviceBrandGroup[];
   query: string;
   onQueryChange: (query: string) => void;
   onSelectDevice: (device: RepairDeviceSummary) => void;
@@ -26,6 +30,7 @@ interface RepairDeviceCatalogProps {
  */
 export function RepairDeviceCatalog({
   groups,
+  brandGroups = [],
   query,
   onQueryChange,
   onSelectDevice,
@@ -34,7 +39,9 @@ export function RepairDeviceCatalog({
 }: RepairDeviceCatalogProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const heroForeground = colors.background;
   const hasResults = groups.some((group) => group.devices.length > 0);
+  const brandShortcutGroups = brandGroups.length > 0 ? brandGroups : groups;
 
   return (
     <ScrollView
@@ -43,11 +50,95 @@ export function RepairDeviceCatalog({
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
+      <View
+        style={[styles.heroCard, { backgroundColor: colors.text }]}
+        accessibilityLabel="Premium device repair service"
+      >
+        <View style={styles.heroBadge}>
+          <Ionicons name="sparkles" size={13} color={colors.background} />
+          <Text style={[styles.heroBadgeText, { color: heroForeground }]}>
+            PREMIUM SERVICE
+          </Text>
+        </View>
+        <Text style={[styles.heroTitle, { color: heroForeground }]}>
+          Don't Ditch It.{'\n'}
+          <Text style={{ color: heroForeground }}>Fix It.</Text>
+        </Text>
+        <Text style={[styles.heroDescription, { color: heroForeground }]}>
+          Certified technicians, genuine parts, and clear quotes for your
+          device.
+        </Text>
+        <View style={styles.heroActions}>
+          <View style={styles.heroPrimaryButtonBox}>
+            <Pressable
+              accessibilityLabel="Book a repair"
+              accessibilityRole="button"
+              onPress={onDescribeInstead}
+              style={styles.heroPrimaryButton}
+            >
+              <Text style={styles.heroPrimaryButtonText}>Book a repair</Text>
+              <Ionicons
+                name="arrow-forward"
+                size={17}
+                color={colors.primaryForeground}
+              />
+            </Pressable>
+          </View>
+          <View style={styles.heroSecondaryButtonBox}>
+            <Pressable
+              accessibilityLabel="Chat with a technician"
+              accessibilityRole="button"
+              onPress={onChatWhatsapp}
+              style={styles.heroSecondaryButton}
+            >
+              <Ionicons name="logo-whatsapp" size={16} color={heroForeground} />
+              <Text
+                style={[
+                  styles.heroSecondaryButtonText,
+                  { color: heroForeground },
+                ]}
+              >
+                Chat
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.trustRow}>
+        <View style={styles.trustItem}>
+          <Ionicons
+            name="shield-checkmark-outline"
+            size={16}
+            color={BRAND.primary}
+          />
+          <Text style={[styles.trustText, { color: colors.textSecondary }]}>
+            Certified
+          </Text>
+        </View>
+        <View style={styles.trustItem}>
+          <Ionicons
+            name="checkmark-circle-outline"
+            size={16}
+            color={BRAND.primary}
+          />
+          <Text style={[styles.trustText, { color: colors.textSecondary }]}>
+            Genuine parts
+          </Text>
+        </View>
+        <View style={styles.trustItem}>
+          <Ionicons name="pricetag-outline" size={16} color={BRAND.primary} />
+          <Text style={[styles.trustText, { color: colors.textSecondary }]}>
+            Clear quotes
+          </Text>
+        </View>
+      </View>
+
       <Text style={[styles.introTitle, { color: colors.text }]}>
-        What needs fixing?
+        Find your device
       </Text>
       <Text style={[styles.introSubtitle, { color: colors.textSecondary }]}>
-        Find your device to see repair options and prices.
+        Choose a model to see available repair options and prices.
       </Text>
 
       <View style={[styles.searchBar, { borderColor: colors.border }]}>
@@ -64,6 +155,33 @@ export function RepairDeviceCatalog({
           accessibilityLabel="Search for your device"
         />
       </View>
+
+      {brandShortcutGroups.length > 0 ? (
+        <View style={styles.brandRail}>
+          <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>
+            Popular brands
+          </Text>
+          <ScrollView
+            contentContainerStyle={styles.brandRailContent}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          >
+            {brandShortcutGroups.map((group) => (
+              <Pressable
+                key={group.brand}
+                style={[styles.brandChip, { backgroundColor: colors.muted }]}
+                onPress={() => onQueryChange(group.brand)}
+                accessibilityRole="button"
+                accessibilityLabel={`Filter by ${group.brand}`}
+              >
+                <Text style={[styles.brandChipText, { color: colors.text }]}>
+                  {group.brand}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
 
       {hasResults ? (
         groups.map((group) => (
@@ -122,7 +240,12 @@ export function RepairDeviceCatalog({
         </Text>
       )}
 
-      <View style={[styles.notListedCard, { borderColor: colors.border }]}>
+      <View
+        style={[
+          styles.notListedCard,
+          { backgroundColor: colors.card, borderColor: colors.border },
+        ]}
+      >
         <Text style={[styles.notListedTitle, { color: colors.text }]}>
           Device not listed?
         </Text>
@@ -147,6 +270,26 @@ export function RepairDeviceCatalog({
           <Ionicons name="logo-whatsapp" size={16} color={BRAND.primary} />
           <Text style={styles.secondaryButtonText}>Chat on WhatsApp</Text>
         </Pressable>
+      </View>
+
+      <View style={[styles.careCard, { backgroundColor: colors.muted }]}>
+        <View
+          style={[
+            styles.careIcon,
+            { backgroundColor: colors.primaryLowOpacity },
+          ]}
+        >
+          <Ionicons name="sparkles-outline" size={22} color={BRAND.primary} />
+        </View>
+        <View style={styles.careCopy}>
+          <Text style={[styles.careTitle, { color: colors.text }]}>
+            Free port & speaker cleaning
+          </Text>
+          <Text style={[styles.careText, { color: colors.textSecondary }]}>
+            Sometimes a blocked port only needs a little care. Ask us to check
+            it before replacing anything.
+          </Text>
+        </View>
       </View>
     </ScrollView>
   );

@@ -6,7 +6,7 @@ const mockBlogListClient = vi.fn((_props: unknown) => (
   <div>Platform blog list</div>
 ));
 const mockCreateClient = vi.fn();
-const mockGetPlatformAdminAuth = vi.fn();
+const mockGetPlatformAdminAuthForPermission = vi.fn();
 const mockRedirect = vi.fn((destination: string) => {
   throw new Error(`NEXT_REDIRECT:${destination}`);
 });
@@ -20,8 +20,8 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('@/lib/platform-admin-auth', () => ({
-  getPlatformAdminAuth: (...args: unknown[]) =>
-    mockGetPlatformAdminAuth(...args),
+  getPlatformAdminAuthForPermission: (...args: unknown[]) =>
+    mockGetPlatformAdminAuthForPermission(...args),
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -48,7 +48,7 @@ import AdminBlogPage from './page';
 describe('/admin/blog page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetPlatformAdminAuth.mockResolvedValue({
+    mockGetPlatformAdminAuthForPermission.mockResolvedValue({
       status: 'authenticated',
       user: { email: 'admin@example.com', id: 'admin-1' },
     });
@@ -70,6 +70,9 @@ describe('/admin/blog page', () => {
   it('passes server-loaded posts into BlogListClient', async () => {
     render(await AdminBlogPage());
 
+    expect(mockGetPlatformAdminAuthForPermission).toHaveBeenCalledWith(
+      'content.manage'
+    );
     expect(screen.getByText('Platform blog list')).toBeInTheDocument();
     expect(mockBlogListClient).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -129,7 +132,7 @@ describe('/admin/blog page', () => {
   });
 
   it('redirects unauthenticated users to login', async () => {
-    mockGetPlatformAdminAuth.mockResolvedValueOnce({
+    mockGetPlatformAdminAuthForPermission.mockResolvedValueOnce({
       status: 'unauthenticated',
     });
 
@@ -140,11 +143,16 @@ describe('/admin/blog page', () => {
     expect(mockCreateClient).not.toHaveBeenCalled();
   });
 
-  it('redirects forbidden users to dashboard', async () => {
-    mockGetPlatformAdminAuth.mockResolvedValueOnce({ status: 'forbidden' });
+  it('redirects non-content roles to dashboard', async () => {
+    mockGetPlatformAdminAuthForPermission.mockResolvedValueOnce({
+      status: 'forbidden',
+    });
 
     await expect(AdminBlogPage()).rejects.toThrow('NEXT_REDIRECT:/dashboard');
     expect(mockRedirect).toHaveBeenCalledWith('/dashboard');
+    expect(mockGetPlatformAdminAuthForPermission).toHaveBeenCalledWith(
+      'content.manage'
+    );
     expect(mockCreateClient).not.toHaveBeenCalled();
   });
 });

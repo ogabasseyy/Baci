@@ -7,7 +7,7 @@ import {
   queryMocks,
   resetAnalyticsConfigMocks,
   supabaseMocks,
-} from './analytics-config.test-support';
+} from '../../__tests__/admin/analytics-config.test-support';
 
 const analyticsResult = (analytics = merchantAnalytics) => ({
   data: { analytics: { ...analytics }, isOwner: true },

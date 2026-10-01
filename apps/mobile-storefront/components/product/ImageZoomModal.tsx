@@ -1,14 +1,22 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Image } from 'expo-image';
 import { useState } from 'react';
-import { Modal, Pressable, Text, View } from 'react-native';
+import {
+  Modal,
+  Pressable,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BLURHASH_VARIANTS } from '@/components/storefront/ProductCard';
 import { SPACING } from '@/constants/Colors';
 import { getOptionalGestureHandlerRuntime } from '@/lib/optional-gesture-handler';
+import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import { useImageZoom } from './hooks/useImageZoom';
 import styles from './ImageZoomModal.styles';
+import { getImageZoomDecodeBounds } from './image-zoom-bounds';
 
 interface ImageZoomModalProps {
   visible: boolean;
@@ -26,6 +34,7 @@ export function ImageZoomModal({
   onIndexChange,
 }: ImageZoomModalProps) {
   const insets = useSafeAreaInsets();
+  const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const { Gesture, GestureDetector } = getOptionalGestureHandlerRuntime();
 
@@ -61,6 +70,10 @@ export function ImageZoomModal({
     totalImages: images.length,
     gestureRuntime: { Gesture },
   });
+  const zoomDecodeBounds = getImageZoomDecodeBounds({
+    height: screenHeight * 0.7,
+    width: screenWidth,
+  });
 
   // Reset transforms and restore initial index each time the modal is shown
   const handleModalOpen = () => {
@@ -72,9 +85,13 @@ export function ImageZoomModal({
     <Animated.View style={styles.imageWrapper}>
       <Animated.View style={[styles.imageContainer, animatedImageStyle]}>
         <Image
-          source={{ uri: images[currentIndex] }}
+          source={createSafeBoundedImageSource({
+            ...zoomDecodeBounds,
+            uri: images[currentIndex],
+          })}
           style={styles.image}
           contentFit="contain"
+          autoplay={false}
           transition={200}
           placeholder={{ blurhash: BLURHASH_VARIANTS.default }}
           cachePolicy="memory-disk"
@@ -204,9 +221,15 @@ export function ImageZoomModal({
                   accessibilityRole="button"
                 >
                   <Image
-                    source={{ uri: img }}
+                    source={createSafeBoundedImageSource({
+                      fit: 'cover',
+                      height: 56,
+                      uri: img,
+                      width: 56,
+                    })}
                     style={styles.thumbnailImage}
                     contentFit="cover"
+                    autoplay={false}
                     placeholder={{ blurhash: BLURHASH_VARIANTS.default }}
                     transition={150}
                     cachePolicy="memory-disk"

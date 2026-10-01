@@ -5,13 +5,47 @@ import {
   cancelSavingsReminderNotification,
   scheduleSavingsReminderNotification,
 } from '@/services/savings-reminder-notifications';
-import { getSavingsReminderScheduledAt } from './start-savings.helpers';
-import type { SavingsProductChoice } from './start-savings.types';
+import {
+  getSavingsReminderScheduledAt,
+  type SavingsFrequency,
+} from './start-savings.helpers';
+import type {
+  SavingsProductChoice,
+  SavingsSourceMode,
+} from './start-savings.types';
 import {
   getErrorMessage,
   isInsufficientWalletError,
 } from './start-savings-controller.utils';
-import type { UseStartSavingsSubmitInput } from './use-start-savings-submit';
+export type FundingAccount = {
+  account_number: string;
+} | null;
+
+export type UseStartSavingsSubmitInput = {
+  activeMerchantId?: string;
+  activeMerchantSlug?: string;
+  contributionValue: number;
+  effectiveInitialContribution: number;
+  frequency: SavingsFrequency;
+  fundingAccount: FundingAccount;
+  initialContributionIdempotencyKey: string | null;
+  maturityDate: string;
+  normalizedVariantId?: string;
+  preferredDebitTime: string;
+  refetch: () => Promise<unknown>;
+  requiredTopUpAmount: number;
+  selectedPaymentMethodId: string | null;
+  selectedProduct: SavingsProductChoice | null;
+  setFormError: (value: string | null) => void;
+  setInitialContributionIdempotencyKey: (value: string | null) => void;
+  setShowFundingModal: (value: boolean) => void;
+  setShowPreviewModal: (value: boolean) => void;
+  setShowSuccessModal: (value: boolean) => void;
+  setShowTransferModal: (value: boolean) => void;
+  sourceMode: SavingsSourceMode;
+  startDate: string;
+  targetValue: number;
+};
 
 type ValidatedSavingsInput = {
   formattedStartDate: string;

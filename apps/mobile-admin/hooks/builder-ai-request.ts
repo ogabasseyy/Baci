@@ -30,10 +30,12 @@ export interface BuilderApiResponse {
   lastUpdated?: string;
 }
 
-export interface GeminiResponse {
+export interface LegacyBuilderAiResponse {
   config: BuilderConfig;
   error?: string;
 }
+
+export type GeminiResponse = LegacyBuilderAiResponse;
 
 export interface ChatMessage {
   id: string;

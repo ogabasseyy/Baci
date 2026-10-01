@@ -1,5 +1,6 @@
 'use client';
 
+import { usePathname } from 'next/navigation';
 import { ThemeProvider } from 'next-themes';
 import { CartProvider } from '@/hooks/use-cart';
 
@@ -9,6 +10,8 @@ import { CartProvider } from '@/hooks/use-cart';
  * don't need authentication or product fetching from the API.
  */
 export function PreviewProviders({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  if (pathname === '/template-preview/builder-preview') return children;
   return (
     <ThemeProvider
       attribute="class"

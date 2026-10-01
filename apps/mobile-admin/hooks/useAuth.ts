@@ -10,6 +10,7 @@ import type { Session, User } from '@supabase/supabase-js';
 import { useShallow } from 'zustand/react/shallow';
 import type { PasswordSignUpResult } from '@/lib/auth/sign-up-with-password';
 import type { VerifySignupOtpResult } from '@/lib/auth/verify-signup-otp';
+import type { SignupFlow } from '@/services/signup-lifecycle-telemetry';
 import { useAuthStore } from '@/stores/auth-store';
 
 export interface UseAuthReturn {
@@ -29,6 +30,7 @@ export interface UseAuthReturn {
     firstName?: string;
     lastName?: string;
     fullName?: string;
+    signupFlow?: SignupFlow;
   }) => Promise<PasswordSignUpResult>;
   signInWithApple: () => Promise<{ cancelled?: boolean; error: string | null }>;
   signInWithGoogle: () => Promise<{
@@ -37,7 +39,9 @@ export interface UseAuthReturn {
   }>;
   verifySignupOtp: (
     email: string,
-    token: string
+    token: string,
+    attemptId?: string,
+    flow?: SignupFlow
   ) => Promise<VerifySignupOtpResult>;
   signOut: (onBeforeSignOut?: () => Promise<void>) => Promise<void>;
 }

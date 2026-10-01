@@ -15,6 +15,7 @@ jest.mock('expo-constants', () => ({
 import {
   fetchRepairDeviceDetail,
   fetchRepairDevices,
+  RepairCatalogTimeoutError,
   RepairCatalogUnavailableError,
   submitRepairBooking,
 } from './repair-catalog-client';
@@ -59,6 +60,19 @@ describe('fetchRepairDevices', () => {
     );
   });
 
+  it('passes an already-aborted signal to an immediately cancelled request', async () => {
+    jest.mocked(fetch).mockResolvedValueOnce(jsonResponse(200, { groups: [] }));
+
+    await fetchRepairDevices(undefined, AbortSignal.abort());
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        signal: expect.objectContaining({ aborted: true }),
+      })
+    );
+  });
+
   it('throws RepairCatalogUnavailableError on a 404 (catalogue disabled)', async () => {
     jest
       .mocked(fetch)
@@ -85,6 +99,62 @@ describe('fetchRepairDevices', () => {
       .mockResolvedValueOnce(jsonResponse(200, { groups: 'not-an-array' }));
 
     await expect(fetchRepairDevices()).rejects.toThrow(/invalid/i);
+  });
+
+  it('fails with a typed timeout when the devices request stalls', async () => {
+    jest.useFakeTimers();
+    jest.mocked(fetch).mockImplementationOnce(
+      (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            'abort',
+            () => reject(new Error('aborted')),
+            { once: true }
+          );
+        })
+    );
+
+    try {
+      const request = fetchRepairDevices();
+      const assertion = expect(request).rejects.toBeInstanceOf(
+        RepairCatalogTimeoutError
+      );
+      await jest.advanceTimersByTimeAsync(5_000);
+
+      await assertion;
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('fails with a typed timeout when the devices response body stalls', async () => {
+    jest.useFakeTimers();
+    jest.mocked(fetch).mockImplementationOnce((_input, init) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          new Promise<never>((_resolve, reject) => {
+            init?.signal?.addEventListener(
+              'abort',
+              () => reject(new Error('aborted')),
+              { once: true }
+            );
+          }),
+      } as unknown as Response)
+    );
+
+    try {
+      const request = fetchRepairDevices();
+      const assertion = expect(request).rejects.toBeInstanceOf(
+        RepairCatalogTimeoutError
+      );
+      await jest.advanceTimersByTimeAsync(5_000);
+
+      await assertion;
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
 

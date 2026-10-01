@@ -57,7 +57,6 @@ describe('useDraggableFab', () => {
     expect(result.current).toHaveProperty('composedGesture');
     expect(result.current).toHaveProperty('translateX');
     expect(result.current).toHaveProperty('translateY');
-    expect(result.current).toHaveProperty('scale');
     expect(result.current).toHaveProperty('isDragging');
     expect(result.current).toHaveProperty('isOverDismissZone');
     expect(result.current).toHaveProperty('isOnRight');
@@ -75,11 +74,10 @@ describe('useDraggableFab', () => {
     expect(result.current.isOverDismissZone).toBe(false);
   });
 
-  it('exposes a positive numeric scale shared value', () => {
+  it('does not start a continuously animated scale value while idle', () => {
     const { result } = renderHook(() => useDraggableFab(90));
 
-    expect(typeof result.current.scale.value).toBe('number');
-    expect(result.current.scale.value).toBeGreaterThan(0);
+    expect(result.current).not.toHaveProperty('scale');
   });
 
   it('translateX and translateY start at 0', () => {

@@ -1,14 +1,24 @@
 /**
  * Platform summary metrics for the selected admin window.
- * Monetary fields are reported in the platform's minor-unit normalized currency.
+ * Monetary fields are reported only for the explicit reporting currency.
  */
 export interface PlatformSummary {
   /** Paid GMV only for the selected window. */
   totalGmv: number;
   /** Gross order value across all orders in the selected window, regardless of payment state. */
   grossGmv: number;
+  /** The only currency included in monetary platform aggregates. */
+  reportingCurrency: 'NGN';
+  /** Orders excluded from NGN money metrics because their currency is non-NGN or unknown. */
+  excludedNonNgnOrUnknownGrossOrders: number;
+  /** Paid orders excluded from NGN money metrics because their currency is non-NGN or unknown. */
+  excludedNonNgnOrUnknownPaidOrders: number;
   gmvChange: number;
+  /** Merchants whose owners or active staff logged in or refreshed a session during the selected window. */
   activeMerchants: number;
+  activeMerchantChange: number;
+  /** Merchants with at least one paid order in the selected window. */
+  sellingMerchants: number;
   totalMerchants: number;
   /** Paid order count only for the selected window. */
   totalOrders: number;
@@ -20,22 +30,33 @@ export interface PlatformSummary {
   avgOrderValue: number;
   /** Percentage change in paid-order average order value versus the immediately preceding matching window, on a 0-100 scale. */
   aovChange: number;
+  /** Paid GMV divided by merchants with paid orders in the selected window. */
   avgGmvPerMerchant: number;
-  platformRevenue: number;
-  processorFees: number;
-  netToMerchants: number;
+  /** Unavailable platform-wide: the settlement ledger has no currency code. */
+  recordedPlatformFees: number | null;
+  /** Unavailable platform-wide: the settlement ledger has no currency code. */
+  recordedProcessorFees: number | null;
+  /** Unavailable platform-wide: the settlement ledger has no currency code. */
+  recordedMerchantNet: number | null;
 }
 
 export interface MerchantHealthBreakdown {
+  /** Paid sale in the last 30 days. Legacy API key retained for compatibility. */
   healthy: number;
+  /** Last paid sale 31-90 days ago. Legacy API key retained for compatibility. */
   atRisk: number;
+  /** Last paid sale over 90 days ago. This does not assert subscription churn. */
   churned: number;
+  /** No paid sale since Baci's analytics launch date (18 December 2025, Africa/Lagos). */
   new: number;
 }
 
 export interface GrowthMetrics {
+  /** Merchants created in the current Africa/Lagos calendar month. */
   newMerchantsThisMonth: number;
+  /** Current Africa/Lagos calendar-month sign-ups versus the preceding calendar month. */
   merchantGrowthRate: number;
+  /** Selected rolling reporting window versus its immediately preceding matching window; not meaningful for the all-time view. */
   gmvGrowthRate: number;
 }
 
@@ -94,7 +115,7 @@ export interface OrderStatusBreakdown {
   label: string;
   /** Number of orders currently in this status. */
   orders: number;
-  /** Gross order value in the admin display currency. */
+  /** Gross order value in the NGN reporting currency; counts include all currencies. */
   amount: number;
   /** Percentage of orders in this status, expressed on a 0-100 scale. */
   shareOfOrders: number;

@@ -16,6 +16,7 @@ type PurgeSuiteOptions = {
     merchantSlugRow: unknown;
     merchantThrows: boolean;
     revalidateProductSlugs: Mock;
+    scheduleProductBlogPurgeAfterResponse: Mock;
     scheduleStorefrontProductPurge: Mock;
     selectArgs: string[];
   };
@@ -38,17 +39,33 @@ export function defineArchiveRoutePurgeSuite({
     );
   });
 
+  it('queues linked-article enrichment after the archive response', async () => {
+    await PATCH(makeRequest(), makeContext());
+
+    expect(mocks.scheduleProductBlogPurgeAfterResponse).toHaveBeenCalledWith({
+      supabase: expect.anything(),
+      merchantId,
+      merchantSlug: 'test-store',
+      productIds: ['123e4567-e89b-42d3-a456-426614174000'],
+      entries: [{ slug: 'phone-ultra', categorySegment: 'smartphones' }],
+      categorySlugs: ['smartphones'],
+      skipProductPurge: true,
+    });
+  });
+
   it('reads the category_id join and product_categories junction on the archive select', async () => {
     await PATCH(makeRequest(), makeContext());
 
     expect(
       mocks.selectArgs.some((arg) =>
-        arg.includes('categories:category_id(slug)')
+        arg.includes('categories:category_id(slug, is_active)')
       )
     ).toBe(true);
     expect(
       mocks.selectArgs.some((arg) =>
-        arg.includes('product_categories(categories(slug))')
+        arg.includes(
+          'product_categories(category_id, categories(slug, is_active))'
+        )
       )
     ).toBe(true);
   });

@@ -1,21 +1,17 @@
 /**
- * Account-only email/password sign-up.
- *
- * This is the shared account primitive for merchant and staff registration. It
- * creates and commits only the Supabase Auth identity/session; the caller
- * decides whether authenticated merchant provisioning follows. Keeping this
- * primitive account-only is essential for staff invite acceptance.
- *
- * NOTE: this relies on there being NO auth.users trigger that creates a
- * merchant. handle_new_user() is currently a no-op; if that ever changes this
- * flow silently regresses. See sign-up-with-password.test.ts.
+ * Account-only email/password signup for merchant and staff registration.
+ * Merchant provisioning remains separate; handle_new_user() must stay a no-op.
  */
 
 import { isAuthApiError, type Session, type User } from '@supabase/supabase-js';
-import { isConnectivityError } from '@/lib/api-errors';
+import { isConnectivityError, isDnsResolutionError } from '@/lib/api-errors';
+import { buildPasswordSignUpCredentials } from '@/lib/auth/build-password-sign-up-credentials';
 import { checkPasswordBreach } from '@/lib/auth/check-password-breach';
+import { createPasswordSignupLifecycle } from '@/lib/auth/password-signup-lifecycle';
 import { supabase } from '@/lib/supabase';
 import { trackAuthTelemetry } from '@/services/auth-telemetry';
+import type { SignupFlow } from '@/services/signup-lifecycle-telemetry';
+import { generateUUID } from '@/utils/uuid';
 
 export interface PasswordSignUpResult {
   error: string | null;
@@ -25,6 +21,7 @@ export interface PasswordSignUpResult {
   needsEmailConfirmation?: boolean;
   /** A native session was committed to the global auth store. */
   sessionEstablished?: boolean;
+  signupAttemptId?: string;
 }
 
 interface SignUpStateUpdate {
@@ -46,6 +43,7 @@ interface RunPasswordSignUpOptions {
   getCurrentUserId: () => string | undefined;
   onResetUserStores: () => Promise<void>;
   setState: (state: SignUpStateUpdate) => void;
+  signupFlow: SignupFlow;
 }
 
 function isRateLimited(message: string, status: number | undefined): boolean {
@@ -60,16 +58,6 @@ function isAlreadyRegistered(message: string): boolean {
   );
 }
 
-function toSentenceCase(value: string | undefined): string | undefined {
-  const normalized = value?.trim();
-  if (!normalized) {
-    return undefined;
-  }
-  return `${normalized.charAt(0).toUpperCase()}${normalized
-    .slice(1)
-    .toLowerCase()}`;
-}
-
 export async function runPasswordSignUp({
   email,
   password,
@@ -79,10 +67,19 @@ export async function runPasswordSignUp({
   getCurrentUserId,
   onResetUserStores,
   setState,
+  signupFlow,
 }: RunPasswordSignUpOptions): Promise<PasswordSignUpResult> {
   const startedAt = Date.now();
+  const attemptId = generateUUID();
+  let dnsRetryAttempted = false;
+  const captureLifecycle = createPasswordSignupLifecycle({
+    attemptId,
+    flow: signupFlow,
+    startedAt,
+  });
   setState({ activeAuthProvider: 'password', isAuthenticating: true });
   trackAuthTelemetry({ provider: 'password', stage: 'start' });
+  captureLifecycle('password_signup_started', 'started');
 
   try {
     const { count, isBreached } = await checkPasswordBreach(password);
@@ -93,32 +90,57 @@ export async function runPasswordSignUp({
         provider: 'password',
         stage: 'failure',
       });
+      captureLifecycle('password_breached', 'failed', {
+        failureClass: 'password_breached',
+      });
       return {
         error: `This password has appeared in ${(count ?? 1).toLocaleString()} known data breaches. Please choose a different, more secure password.`,
       };
     }
 
-    const normalizedFirstName = toSentenceCase(firstName);
-    const normalizedLastName = toSentenceCase(lastName);
-    const normalizedFullName =
-      [normalizedFirstName, normalizedLastName].filter(Boolean).join(' ') ||
-      fullName
-        ?.trim()
-        .split(/\s+/)
-        .map((part) => toSentenceCase(part))
-        .filter(Boolean)
-        .join(' ');
-    const metadata = {
-      ...(normalizedFirstName ? { first_name: normalizedFirstName } : {}),
-      ...(normalizedLastName ? { last_name: normalizedLastName } : {}),
-      ...(normalizedFullName ? { full_name: normalizedFullName } : {}),
-    };
-    const { data, error } = await supabase.auth.signUp({
+    const signUpCredentials = buildPasswordSignUpCredentials({
+      attemptId,
       email,
+      firstName,
+      fullName,
+      lastName,
       password,
-      options:
-        Object.keys(metadata).length > 0 ? { data: metadata } : undefined,
+      signupFlow,
     });
+    const trackDnsRetry = (error: unknown) => {
+      dnsRetryAttempted = true;
+      trackAuthTelemetry({
+        code: 'password_signup_dns_retry',
+        durationMs: Date.now() - startedAt,
+        level: 'warn',
+        metadata: { retryAttempted: true },
+        provider: 'password',
+        stage: 'failure',
+      });
+      captureLifecycle('password_signup_dns_retry', 'retrying', {
+        error,
+        failureClass: 'connectivity_dns',
+        retryAttempted: true,
+      });
+    };
+
+    let signUpResult: Awaited<ReturnType<typeof supabase.auth.signUp>>;
+    try {
+      signUpResult = await supabase.auth.signUp(signUpCredentials);
+    } catch (firstSignUpError) {
+      if (!isDnsResolutionError(firstSignUpError)) {
+        throw firstSignUpError;
+      }
+      trackDnsRetry(firstSignUpError);
+      signUpResult = await supabase.auth.signUp(signUpCredentials);
+    }
+
+    if (!dnsRetryAttempted && isDnsResolutionError(signUpResult.error)) {
+      trackDnsRetry(signUpResult.error);
+      signUpResult = await supabase.auth.signUp(signUpCredentials);
+    }
+
+    const { data, error } = signUpResult;
 
     if (error) {
       const status = isAuthApiError(error) ? error.status : undefined;
@@ -129,6 +151,10 @@ export async function runPasswordSignUp({
           provider: 'password',
           stage: 'failure',
         });
+        captureLifecycle('password_signup_rate_limited', 'failed', {
+          error,
+          failureClass: 'rate_limited',
+        });
         return {
           error: 'Too many attempts. Please wait a minute and try again.',
         };
@@ -136,13 +162,39 @@ export async function runPasswordSignUp({
       // Treat an existing account as a non-error so the caller can redirect to
       // sign-in without leaking whether the email is registered.
       if (isAlreadyRegistered(error.message)) {
+        captureLifecycle('password_signup_account_exists', 'account_exists', {
+          error,
+        });
         return { error: null, accountExists: true };
+      }
+      if (isConnectivityError(error)) {
+        const kind = isDnsResolutionError(error) ? 'dns' : 'transport';
+        trackAuthTelemetry({
+          code: 'password_signup_connectivity_error',
+          durationMs: Date.now() - startedAt,
+          metadata: { kind, retryAttempted: dnsRetryAttempted },
+          provider: 'password',
+          stage: 'failure',
+        });
+        captureLifecycle('password_signup_connectivity_error', 'failed', {
+          error,
+          failureClass:
+            kind === 'dns' ? 'connectivity_dns' : 'connectivity_transport',
+          retryAttempted: dnsRetryAttempted,
+        });
+        return {
+          error: 'Unable to connect. Please check your internet connection.',
+        };
       }
       trackAuthTelemetry({
         code: 'password_signup_error',
         durationMs: Date.now() - startedAt,
         provider: 'password',
         stage: 'failure',
+      });
+      captureLifecycle('password_signup_error', 'failed', {
+        error,
+        failureClass: 'auth_provider',
       });
       return { error: error.message };
     }
@@ -154,6 +206,7 @@ export async function runPasswordSignUp({
       Array.isArray(data.user.identities) &&
       data.user.identities.length === 0
     ) {
+      captureLifecycle('password_signup_account_exists', 'account_exists');
       return { error: null, accountExists: true };
     }
 
@@ -171,9 +224,15 @@ export async function runPasswordSignUp({
       });
       trackAuthTelemetry({
         durationMs: Date.now() - startedAt,
-        metadata: { hasSession: true },
+        metadata: {
+          ...(dnsRetryAttempted ? { dnsRetryAttempted: true } : {}),
+          hasSession: true,
+        },
         provider: 'password',
         stage: 'success',
+      });
+      captureLifecycle('password_signup_succeeded', 'succeeded', {
+        retryAttempted: dnsRetryAttempted,
       });
       return { error: null, sessionEstablished: true };
     }
@@ -181,23 +240,59 @@ export async function runPasswordSignUp({
     // New account created but no session — email confirmation is required.
     trackAuthTelemetry({
       durationMs: Date.now() - startedAt,
-      metadata: { hasSession: false },
+      metadata: {
+        ...(dnsRetryAttempted ? { dnsRetryAttempted: true } : {}),
+        hasSession: false,
+      },
       provider: 'password',
       stage: 'success',
     });
-    return { error: null, needsEmailConfirmation: true };
+    captureLifecycle(
+      'password_signup_verification_required',
+      'verification_required',
+      {
+        retryAttempted: dnsRetryAttempted,
+      }
+    );
+    return {
+      error: null,
+      needsEmailConfirmation: true,
+      signupAttemptId: attemptId,
+    };
   } catch (caught) {
-    const message = isConnectivityError(caught)
+    const isConnectivityFailure = isConnectivityError(caught);
+    const message = isConnectivityFailure
       ? 'Unable to connect. Please check your internet connection.'
       : caught instanceof Error
         ? caught.message
         : 'Sign-up failed. Please try again.';
+    const kind = isDnsResolutionError(caught) ? 'dns' : 'transport';
     trackAuthTelemetry({
-      code: 'password_signup_unknown_error',
+      code: isConnectivityFailure
+        ? 'password_signup_connectivity_error'
+        : 'password_signup_unknown_error',
       durationMs: Date.now() - startedAt,
+      ...(isConnectivityFailure && {
+        metadata: { kind, retryAttempted: dnsRetryAttempted },
+      }),
       provider: 'password',
       stage: 'failure',
     });
+    captureLifecycle(
+      isConnectivityFailure
+        ? 'password_signup_connectivity_error'
+        : 'password_signup_unknown_error',
+      'failed',
+      {
+        error: caught,
+        failureClass: isConnectivityFailure
+          ? kind === 'dns'
+            ? 'connectivity_dns'
+            : 'connectivity_transport'
+          : 'unexpected',
+        retryAttempted: dnsRetryAttempted,
+      }
+    );
     return { error: message };
   } finally {
     setState({ activeAuthProvider: null, isAuthenticating: false });

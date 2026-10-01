@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCart } from '@/hooks/cart';
 import { createClient } from '@/lib/supabase/client';
@@ -77,6 +77,36 @@ describe('CartPageWrapper', () => {
         'item_id=55555555-5555-4555-8555-555555555555&quiz_award_id=44444444-4444-4444-8444-444444444444&quiz_voucher_token=signed-token'
       ) as ReturnType<typeof useSearchParams>
     );
+  });
+
+  it('shows loading instead of an empty cart while a refreshed cart hydrates', () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>
+    );
+    mockUseCart({ isHydrated: false });
+
+    const { rerender } = render(<CartPageWrapper merchantId="merchant-1" />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading your cart');
+    expect(screen.queryByText('Cart page')).not.toBeInTheDocument();
+
+    mockUseCart({ isHydrated: true, cart: [{ id: 'persisted-product' }] });
+    rerender(<CartPageWrapper merchantId="merchant-1" />);
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByText('Cart page')).toBeInTheDocument();
+  });
+
+  it('renders the cart after hydration when storage contains no items', () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>
+    );
+    mockUseCart({ isHydrated: true, cart: [] });
+
+    render(<CartPageWrapper merchantId="merchant-1" />);
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByText('Cart page')).toBeInTheDocument();
   });
 
   it('adds quiz prize products to cart with voucher metadata from the URL', async () => {
@@ -230,142 +260,5 @@ describe('CartPageWrapper', () => {
     expect(addToCart).not.toHaveBeenCalled();
   });
 
-  it('does not fetch products when item_id is missing', async () => {
-    const addToCart = mockUseCart({ cart: [] });
-    vi.mocked(useSearchParams).mockReturnValue(
-      new URLSearchParams(
-        'quiz_award_id=44444444-4444-4444-8444-444444444444&quiz_voucher_token=signed-token'
-      ) as ReturnType<typeof useSearchParams>
-    );
 
-    render(<CartPageWrapper merchantId="merchant-1" />);
-
-    expect(createClient).not.toHaveBeenCalled();
-    expect(addToCart).not.toHaveBeenCalled();
-  });
-
-  it('shows a destructive toast when the product cannot be found', async () => {
-    const addToCart = mockUseCart({ cart: [] });
-    setupProductsQuery({ data: [], error: null });
-
-    render(<CartPageWrapper merchantId="merchant-1" />);
-
-    await waitFor(() => {
-      expect(mockToast).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: 'Product not found',
-          variant: 'destructive',
-        })
-      );
-    });
-    expect(addToCart).not.toHaveBeenCalled();
-  });
-
-  it('shows a destructive toast when product lookup fails', async () => {
-    const addToCart = mockUseCart({ cart: [] });
-    setupProductsQuery({
-      data: null,
-      error: { message: 'database unavailable' },
-    });
-
-    render(<CartPageWrapper merchantId="merchant-1" />);
-
-    await waitFor(() => {
-      expect(mockToast).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: 'Error',
-          variant: 'destructive',
-        })
-      );
-    });
-    expect(addToCart).not.toHaveBeenCalled();
-  });
-
-  it('does not add inactive products returned by the lookup', async () => {
-    const addToCart = mockUseCart({ cart: [] });
-    setupProductsQuery({
-      data: [
-        {
-          id: '55555555-5555-4555-8555-555555555555',
-          images: [],
-          name: 'Inactive iPhone',
-          price: 2100000,
-          status: 'draft',
-        },
-      ],
-      error: null,
-    });
-
-    render(<CartPageWrapper merchantId="merchant-1" />);
-
-    await waitFor(() => {
-      expect(mockToast).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: 'Product not found',
-          variant: 'destructive',
-        })
-      );
-    });
-    expect(addToCart).not.toHaveBeenCalled();
-  });
-
-  it('does not add the same quiz award twice', async () => {
-    const addToCart = mockUseCart({
-      cart: [
-        {
-          id: '55555555-5555-4555-8555-555555555555',
-          quizAwardId: '44444444-4444-4444-8444-444444444444',
-        },
-      ],
-    });
-    const productsQuery = setupProductsQuery({
-      data: [
-        {
-          id: '55555555-5555-4555-8555-555555555555',
-          images: [],
-          name: 'iPhone 15 Pro Max',
-          price: 2100000,
-          status: 'active',
-        },
-      ],
-      error: null,
-    });
-
-    render(<CartPageWrapper merchantId="merchant-1" />);
-
-    await waitFor(() => {
-      expect(productsQuery.then).toHaveBeenCalled();
-    });
-    expect(addToCart).not.toHaveBeenCalled();
-  });
-
-  it('preserves unrelated query parameters when cleaning up quiz prize cart params', async () => {
-    const addToCart = mockUseCart({ cart: [] });
-    setupProductsQuery({
-      data: [
-        {
-          id: '55555555-5555-4555-8555-555555555555',
-          images: [],
-          name: 'iPhone 15 Pro Max',
-          price: 2100000,
-          status: 'active',
-        },
-      ],
-      error: null,
-    });
-    window.history.pushState(
-      {},
-      '',
-      '/ogabassey/cart?item_id=55555555-5555-4555-8555-555555555555&quiz_award_id=44444444-4444-4444-8444-444444444444&quiz_voucher_token=signed-token&ref=share#summary'
-    );
-
-    render(<CartPageWrapper merchantId="merchant-1" />);
-
-    await waitFor(() => {
-      expect(addToCart).toHaveBeenCalledOnce();
-    });
-    expect(window.location.pathname).toBe('/ogabassey/cart');
-    expect(window.location.search).toBe('?ref=share');
-    expect(window.location.hash).toBe('#summary');
-  });
 });

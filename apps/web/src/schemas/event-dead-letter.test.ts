@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   eventDeadLetterQuerySchema,
   eventDeadLetterReplaySchema,
-  eventPipelineListResultSchema,
+  eventPipelineDeliveryListSchema,
+  eventPipelineIngressListSchema,
   eventPipelineOperationsSchema,
   eventPipelineReplayIdsSchema,
 } from './event-dead-letter';
@@ -24,16 +25,16 @@ describe('event dead-letter schema facade', () => {
       }).success
     ).toBe(true);
     expect(
-      eventPipelineListResultSchema.safeParse({
-        count: 1,
-        items: [{ id: '1' }],
-      }).success
+      eventPipelineIngressListSchema.safeParse({ count: 0, items: [] }).success
+    ).toBe(true);
+    expect(
+      eventPipelineDeliveryListSchema.safeParse({ count: 0, items: [] }).success
     ).toBe(true);
     expect(
       eventPipelineOperationsSchema.safeParse({
         deliveries: [],
         heartbeats: [],
-        queue: { queue_length: 0 },
+        queue: null,
       }).success
     ).toBe(true);
     expect(eventPipelineReplayIdsSchema.safeParse([ID]).success).toBe(true);

@@ -86,6 +86,7 @@ vi.mock('@/components/notifications/notification-center', () => ({
 }));
 
 import { useMerchant } from '@/hooks/use-merchant-client';
+import { useToast } from '@/hooks/use-toast';
 import DashboardClientLayout from './client-layout';
 
 const defaultMerchant: MerchantData = {
@@ -140,6 +141,14 @@ function setSmartNavUsage(usage: unknown) {
 }
 
 describe('DashboardClientLayout', () => {
+  it('does not subscribe to toast state', () => {
+    renderLayout();
+
+    // The layout never renders toasts; subscribing would re-render the
+    // whole shell on every toast fired anywhere in the dashboard.
+    expect(vi.mocked(useToast)).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     localStorage.clear();
     mockOpenUpgradeModal.mockClear();
@@ -147,8 +156,12 @@ describe('DashboardClientLayout', () => {
     mockUseMerchantForLayout(createMerchantHookValue());
   });
 
-  it('renders core navigation links', () => {
+  it('renders core navigation links after expanding the capsule', async () => {
     renderLayout();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Show all navigation' })
+    );
 
     for (const [name, href] of [
       ['Orders', '/dashboard/orders'],
@@ -164,13 +177,48 @@ describe('DashboardClientLayout', () => {
     }
   });
 
-  it('places Marketing under Products in the main dashboard navigation', () => {
+  it('expands the navigation capsule vertically in place', async () => {
     renderLayout();
 
-    const mainNav = screen.getByRole('navigation', { name: 'Main navigation' });
+    const capsule = screen.getByRole('complementary', {
+      name: 'Quick navigation',
+    });
+
+    expect(
+      within(capsule).getByRole('navigation', {
+        name: 'Navigation shortcuts',
+      })
+    ).toBeInTheDocument();
+    expect(
+      within(capsule).getByRole('link', { name: 'Dashboard' })
+    ).toHaveAttribute('href', '/dashboard');
+    expect(
+      within(capsule).getByRole('link', { name: 'Products' })
+    ).toHaveAttribute('href', '/dashboard/products');
+
+    await userEvent.click(
+      within(capsule).getByRole('button', { name: 'Show all navigation' })
+    );
+
+    expect(
+      within(capsule).getByRole('navigation', { name: 'All navigation' })
+    ).toBeInTheDocument();
+    expect(
+      within(capsule).getByRole('link', { name: 'Migrations' })
+    ).toHaveAttribute('href', '/dashboard/migrations');
+  });
+
+  it('places Marketing after Products in the expanded capsule', async () => {
+    renderLayout();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Show all navigation' })
+    );
+
+    const mainNav = screen.getByRole('navigation', { name: 'All navigation' });
     const navLabels = within(mainNav)
       .getAllByRole('link')
-      .map((link) => link.textContent);
+      .map((link) => link.getAttribute('aria-label'));
 
     expect(navLabels.slice(0, 9)).toEqual([
       'Dashboard',
@@ -187,16 +235,14 @@ describe('DashboardClientLayout', () => {
       within(mainNav).getByRole('link', { name: 'Marketing' })
     ).toHaveAttribute('href', '/dashboard/marketing');
     expect(
-      within(
-        within(mainNav).getByRole('list', { name: 'Marketing submenu' })
-      ).getByRole('link', { name: 'Discount Codes' })
+      within(mainNav).getByRole('link', { name: 'Discount Codes' })
     ).toHaveAttribute('href', '/dashboard/marketing/discount-codes');
     expect(
       within(mainNav).queryByRole('link', { name: 'Integrations' })
     ).not.toBeInTheDocument();
   });
 
-  it('renders smart shortcuts from merchant usage without reordering the full menu', async () => {
+  it('keeps the complete navigation order independent from usage history', async () => {
     setSmartNavUsage({
       'discount-codes': {
         clickCount: 6,
@@ -214,19 +260,13 @@ describe('DashboardClientLayout', () => {
 
     renderLayout();
 
-    const smartNav = await screen.findByRole('navigation', {
-      name: 'Smart shortcuts',
-    });
-    const smartLinks = within(smartNav).getAllByRole('link');
-
-    expect(smartLinks.map((link) => link.textContent)).toEqual([
-      'Discount Codes',
-      'Products',
-      'SEO',
-    ]);
-    expect(
-      screen.getAllByRole('link', { name: 'Migrations' })[0]
-    ).toHaveAttribute('href', '/dashboard/migrations');
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Show all navigation' })
+    );
+    expect(screen.getByRole('link', { name: 'Migrations' })).toHaveAttribute(
+      'href',
+      '/dashboard/migrations'
+    );
   });
 
   it('records dashboard navigation clicks in merchant scoped storage', async () => {
@@ -276,32 +316,6 @@ describe('DashboardClientLayout', () => {
 
     expect(
       screen.queryByRole('link', { name: 'Agentic' })
-    ).not.toBeInTheDocument();
-  });
-
-  it('opens the Pro upgrade flow from the sidebar upgrade card', async () => {
-    renderLayout();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Upgrade' }));
-
-    expect(mockOpenUpgradeModal).toHaveBeenCalledWith(
-      'ai_product_descriptions'
-    );
-  });
-
-  it('shows the active Pro badge instead of the upgrade CTA for Pro merchants', () => {
-    mockUseMerchantForLayout(
-      createMerchantHookValue({
-        merchant: { ...defaultMerchant, plan_tier: 'pro' },
-      })
-    );
-
-    renderLayout();
-
-    expect(screen.getByText('Pro')).toBeInTheDocument();
-    expect(screen.getByText('Active subscription')).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: 'Upgrade' })
     ).not.toBeInTheDocument();
   });
 });

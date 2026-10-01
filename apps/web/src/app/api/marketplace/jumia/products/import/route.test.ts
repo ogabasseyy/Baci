@@ -10,11 +10,52 @@ const {
   mockSupabase,
   mockForIntegration,
   mockGetAllProducts,
+  mockGetUserAccess,
+  mockHasPermission,
   mockRequireMerchantFeatureAccess,
+  mockMappingsEq,
+  mockCurrencyFixtures,
 } = vi.hoisted(() => {
   const mockSelect = vi.fn();
+  const mockMappingsEq = vi.fn();
+  const mockMappingsIn = vi.fn().mockResolvedValue({ data: [], error: null });
+  const mockCurrencyFixtures = { countryCode: 'NG', payoutCurrency: 'NGN' };
   const mockSupabase = {
     from: vi.fn((table: string) => {
+      if (table === 'marketplace_integrations') {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                eq: () => ({
+                  maybeSingle: () =>
+                    Promise.resolve({
+                      data: {
+                        country_code: mockCurrencyFixtures.countryCode,
+                      },
+                      error: null,
+                    }),
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === 'merchants') {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () =>
+                Promise.resolve({
+                  data: {
+                    payout_currency: mockCurrencyFixtures.payoutCurrency,
+                  },
+                  error: null,
+                }),
+            }),
+          }),
+        };
+      }
       if (table === 'products') {
         return {
           select: () => ({
@@ -31,12 +72,15 @@ const {
         };
       }
       if (table === 'jumia_product_mappings') {
+        const chain = {
+          eq: (...args: unknown[]) => {
+            mockMappingsEq(...args);
+            return chain;
+          },
+          in: (...args: unknown[]) => mockMappingsIn(...args),
+        };
         return {
-          select: () => ({
-            eq: () => ({
-              in: vi.fn().mockResolvedValue({ data: [], error: null }),
-            }),
-          }),
+          select: () => chain,
           upsert: vi.fn().mockResolvedValue({ error: null }),
         };
       }
@@ -45,13 +89,19 @@ const {
   };
   const mockForIntegration = vi.fn();
   const mockGetAllProducts = vi.fn();
+  const mockGetUserAccess = vi.fn();
+  const mockHasPermission = vi.fn();
   const mockRequireMerchantFeatureAccess = vi.fn();
   return {
     mockSelect,
     mockSupabase,
     mockForIntegration,
     mockGetAllProducts,
+    mockGetUserAccess,
+    mockHasPermission,
     mockRequireMerchantFeatureAccess,
+    mockMappingsEq,
+    mockCurrencyFixtures,
   };
 });
 
@@ -65,9 +115,8 @@ vi.mock('@/lib/api-auth', () => ({
     error: null,
     supabase: mockSupabase,
   }),
-  getMerchantIdForApiUser: vi
-    .fn()
-    .mockResolvedValue('00000000-0000-4000-8000-000000000001'),
+  getUserAccess: (...args: unknown[]) => mockGetUserAccess(...args),
+  hasPermission: (...args: unknown[]) => mockHasPermission(...args),
 }));
 
 vi.mock('@/lib/jumia/catalog', () => ({
@@ -130,6 +179,16 @@ import { POST } from './route';
 describe('Products Import POST', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCurrencyFixtures.countryCode = 'NG';
+    mockCurrencyFixtures.payoutCurrency = 'NGN';
+    mockGetUserAccess.mockResolvedValue({
+      merchantId: '00000000-0000-4000-8000-000000000001',
+      role: 'owner',
+      isOwner: true,
+      isStaff: false,
+      permissions: {},
+    });
+    mockHasPermission.mockReturnValue(true);
     mockRequireMerchantFeatureAccess.mockResolvedValue(null);
   });
 
@@ -184,6 +243,16 @@ describe('Products Import POST', () => {
     expect(mockGetAllProducts).not.toHaveBeenCalled();
   });
 
+  it('returns 403 before provider work when integrations manage is missing', async () => {
+    mockHasPermission.mockReturnValueOnce(false);
+
+    const res = await POST(makePostRequest({ integrationId: INT_ID }));
+
+    expect(res.status).toBe(403);
+    expect(mockRequireMerchantFeatureAccess).not.toHaveBeenCalled();
+    expect(mockForIntegration).not.toHaveBeenCalled();
+  });
+
   it('returns 404 when JumiaClient.forIntegration throws 404', async () => {
     const { JumiaApiError } = await import('@/lib/jumia/client');
     mockForIntegration.mockRejectedValue(new JumiaApiError(404, 'Not found'));
@@ -196,6 +265,19 @@ describe('Products Import POST', () => {
     mockForIntegration.mockRejectedValue(new JumiaApiError(403, 'Forbidden'));
     const res = await POST(makePostRequest({ integrationId: INT_ID }));
     expect(res.status).toBe(403);
+  });
+
+  it('rejects the import when marketplace and merchant currencies differ', async () => {
+    mockCurrencyFixtures.countryCode = 'GH';
+    mockCurrencyFixtures.payoutCurrency = 'NGN';
+    mockForIntegration.mockResolvedValue({ shopId: 'shop1' });
+    mockGetAllProducts.mockResolvedValue([]);
+
+    const res = await POST(makePostRequest({ integrationId: INT_ID }));
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.error).toContain('does not match merchant payout currency');
   });
 
   it('returns summary with zero totals when Jumia has no products', async () => {
@@ -311,5 +393,51 @@ describe('Products Import POST', () => {
     expect(json.summary.total).toBe(1);
     expect(json.summary.created).toBe(0);
     expect(json.warnings.missingPrice).toBe(2);
+  });
+
+  it('scopes mapped SKU lookups to the active Jumia integration', async () => {
+    mockForIntegration.mockResolvedValue({
+      shopId: 'shop-ng',
+      marketplaceKey: 'NG',
+      getShops: vi.fn().mockResolvedValue([
+        {
+          id: 'shop-ng',
+          businessClients: [{ status: 'active', code: 'NG' }],
+        },
+      ]),
+    });
+    mockGetAllProducts.mockResolvedValue([
+      {
+        id: 'jp-1',
+        name: 'Shared SKU Product',
+        description: 'Desc',
+        images: [],
+        variations: [{ sellerSku: 'SHARED-SKU', globalPrice: { value: 1000 } }],
+      },
+    ]);
+    mockSelect.mockResolvedValue({ data: [], error: null });
+
+    const res = await POST(makePostRequest({ integrationId: INT_ID }));
+
+    expect(res.status).toBe(200);
+    expect(mockGetAllProducts).toHaveBeenCalledWith(
+      expect.objectContaining({ shopId: 'shop-ng' }),
+      expect.objectContaining({ status: 'active', shopId: 'shop-ng' })
+    );
+    expect(mockMappingsEq).toHaveBeenCalledWith('jumia_shop_id', 'shop-ng');
+    expect(mockMappingsEq).toHaveBeenCalledWith('marketplace_key', 'NG');
+  });
+
+  it('does not send the internal oauth fallback as a Jumia shop filter', async () => {
+    mockForIntegration.mockResolvedValue({ shopId: 'oauth' });
+    mockGetAllProducts.mockResolvedValue([]);
+
+    const res = await POST(makePostRequest({ integrationId: INT_ID }));
+
+    expect(res.status).toBe(200);
+    expect(mockGetAllProducts).toHaveBeenCalledWith(
+      expect.objectContaining({ shopId: 'oauth' }),
+      { status: 'active' }
+    );
   });
 });

@@ -95,10 +95,13 @@ do
   fi
 done
 
-if ! (
-  cd "$repo_dir"
-  CI=true PUPPETEER_SKIP_DOWNLOAD=1 pnpm --filter @baci/web exec tsx --version >/dev/null
-); then
+tsx_bin="$repo_dir/apps/web/node_modules/.bin/tsx"
+if [ ! -x "$tsx_bin" ]; then
+  # Mirror run-web-script.sh: a workspace-root install also satisfies the
+  # worker entrypoints, so validate the same fallback before failing.
+  tsx_bin="$repo_dir/node_modules/.bin/tsx"
+fi
+if [ ! -x "$tsx_bin" ] || ! "$tsx_bin" --version >/dev/null; then
   echo "Direct-worker checkout is missing the reviewed web toolchain." >&2
   exit 1
 fi
@@ -109,7 +112,9 @@ REMOTE_SH
     echo "GIGL database capability verification failed; live worker files and crontab were not changed." >&2
     exit 1
   fi
+}
 
+promote_worker_release() {
   echo "==> Promoting validated worker files to $VPS:$REMOTE_DIR"
   ssh "$VPS" "flock -x /tmp/baci-workers-deploy.lock bash -s -- '$STAGING_DIR' '$REMOTE_DIR'" <<'REMOTE_SH'
 set -euo pipefail

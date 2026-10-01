@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockGetMerchant = vi.fn();
 const mockGetCategory = vi.fn();
 const mockGetCachedBrandAuthorityProducts = vi.fn();
+const mockLoadPublishedClusterPostsSafely = vi.fn();
 let mockHeaders = new Headers();
 
 vi.mock('next/headers', () => ({
@@ -30,7 +31,8 @@ vi.mock('@/lib/store-url', () => ({
 }));
 
 vi.mock('@/lib/storefront-content/load-published-cluster-posts-safely', () => ({
-  loadPublishedClusterPostsSafely: () => Promise.resolve([]),
+  loadPublishedClusterPostsSafely: (...args: unknown[]) =>
+    mockLoadPublishedClusterPostsSafely(...args),
 }));
 
 function makeProduct(index: number, brand = 'Samsung') {
@@ -70,6 +72,7 @@ describe('loadBrandAuthorityPage', () => {
     mockGetCachedBrandAuthorityProducts.mockResolvedValue(
       Array.from({ length: 6 }, (_, index) => makeProduct(index))
     );
+    mockLoadPublishedClusterPostsSafely.mockResolvedValue([]);
   });
 
   it('builds a canonical indexable hub from matching active inventory', async () => {
@@ -94,6 +97,72 @@ describe('loadBrandAuthorityPage', () => {
     expect(page?.products).toHaveLength(6);
     expect(page?.breadcrumbItems).toHaveLength(3);
     expect(mockGetCategory).toHaveBeenCalledWith('merchant-1', 'smartphones');
+    expect(mockLoadPublishedClusterPostsSafely).toHaveBeenCalledWith(
+      'merchant-1',
+      expect.objectContaining({
+        pageKind: 'category',
+        categorySlug: 'smartphones',
+        brands: ['Samsung', 'samsung'],
+        productSlugs: Array.from(
+          { length: 6 },
+          (_, index) => `samsung-phone-${index}`
+        ),
+      })
+    );
+  });
+
+  it('passes grouped authority aliases to commercial guide matching', async () => {
+    mockGetCachedBrandAuthorityProducts.mockResolvedValue(
+      Array.from({ length: 6 }, (_, index) => makeProduct(index, 'Redmi'))
+    );
+    const { brandAuthorityPageLoader } = await import(
+      './load-brand-authority-page'
+    );
+
+    await brandAuthorityPageLoader.load(
+      {
+        merchantSlug: 'ogabassey',
+        categorySlug: 'smartphones',
+        brandSlug: 'xiaomi',
+      },
+      { includeRequestPathPrefix: false }
+    );
+
+    expect(mockLoadPublishedClusterPostsSafely).toHaveBeenCalledWith(
+      'merchant-1',
+      expect.objectContaining({
+        brands: ['Xiaomi and Redmi', 'xiaomi', 'Redmi'],
+        productNames: Array.from(
+          { length: 6 },
+          (_, index) => `Redmi Phone ${index}`
+        ),
+      })
+    );
+  });
+
+  it('links the Infinix HOT family when two current models are available', async () => {
+    mockGetCachedBrandAuthorityProducts.mockResolvedValue([
+      { ...makeProduct(1, 'Infinix'), name: 'Infinix Hot 70' },
+      { ...makeProduct(2, 'Infinix'), name: 'Infinix Hot 70 Pro' },
+      { ...makeProduct(3, 'Infinix'), name: 'Infinix Note 60' },
+      { ...makeProduct(4, 'Infinix'), name: 'Infinix Note 60 Pro' },
+      { ...makeProduct(5, 'Infinix'), name: 'Infinix Smart 20' },
+    ]);
+    const { brandAuthorityPageLoader } = await import(
+      './load-brand-authority-page'
+    );
+
+    const page = await brandAuthorityPageLoader.load({
+      merchantSlug: 'ogabassey',
+      categorySlug: 'smartphones',
+      brandSlug: 'infinix',
+    });
+
+    expect(page?.familyLinks).toContainEqual({
+      href: 'https://ogabassey.com/smartphones/brands/infinix/families/hot',
+      label: 'Infinix HOT phones',
+      productCount: 2,
+    });
   });
 
   it('rejects uncurated and thin brand pages', async () => {

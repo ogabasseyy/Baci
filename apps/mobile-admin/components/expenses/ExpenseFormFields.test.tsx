@@ -1,8 +1,27 @@
 import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { ExpenseFormFields } from './ExpenseFormFields';
+
+type ExpenseFormFieldsProps = ComponentProps<typeof ExpenseFormFields>;
+
+const defaultProps: ExpenseFormFieldsProps = {
+  amount: '',
+  description: '',
+  onAmountChange: vi.fn(),
+  onDescriptionChange: vi.fn(),
+  onOpenCategorySheet: vi.fn(),
+  onReceiptPress: vi.fn(),
+  receiptUri: null,
+  selectedCategory: 'Inventory',
+};
+
+function renderExpenseFormFields(
+  overrides: Partial<ExpenseFormFieldsProps> = {}
+) {
+  return render(<ExpenseFormFields {...defaultProps} {...overrides} />);
+}
 
 vi.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({
@@ -27,6 +46,10 @@ vi.mock('@/hooks/useCurrency', () => ({
   }),
 }));
 
+vi.mock('@/components/ui/AppDatePickerField', () => ({
+  AppDatePickerField: () => null,
+}));
+
 vi.mock('@/components/ui/SafeImage', () => ({
   default: ({ source }: { source?: { uri?: string } }) => (
     <img alt="Receipt preview" data-src={source?.uri} />
@@ -48,14 +71,31 @@ vi.mock('react-native', () => ({
   StatusBar: () => null,
   Pressable: ({
     accessibilityLabel,
+    accessibilityRole,
+    accessibilityState,
     children,
+    disabled,
     onPress,
   }: {
     accessibilityLabel?: string;
+    accessibilityRole?: string;
+    accessibilityState?: { checked?: boolean; disabled?: boolean };
     children?: ReactNode;
+    disabled?: boolean;
     onPress?: () => void;
   }) => (
-    <button aria-label={accessibilityLabel} onClick={onPress} type="button">
+    <button
+      aria-label={accessibilityLabel}
+      disabled={disabled}
+      onClick={onPress}
+      {...(accessibilityRole === 'radio'
+        ? {
+            'aria-checked': accessibilityState?.checked ?? false,
+            role: 'radio',
+          }
+        : { role: accessibilityRole })}
+      type="button"
+    >
       {children}
     </button>
   ),
@@ -91,18 +131,15 @@ describe('ExpenseFormFields', () => {
     const onOpenCategorySheet = vi.fn();
     const onReceiptPress = vi.fn();
 
-    render(
-      <ExpenseFormFields
-        amount="12500"
-        description="Office internet"
-        onAmountChange={onAmountChange}
-        onDescriptionChange={onDescriptionChange}
-        onOpenCategorySheet={onOpenCategorySheet}
-        onReceiptPress={onReceiptPress}
-        receiptUri={null}
-        selectedCategory="Marketing"
-      />
-    );
+    renderExpenseFormFields({
+      amount: '12500',
+      description: 'Office internet',
+      onAmountChange,
+      onDescriptionChange,
+      onOpenCategorySheet,
+      onReceiptPress,
+      selectedCategory: 'Marketing',
+    });
 
     const amountInput = screen.getByLabelText('Expense amount');
 
@@ -130,38 +167,16 @@ describe('ExpenseFormFields', () => {
   });
 
   it('shows the receipt preview state when a receipt is selected', () => {
-    render(
-      <ExpenseFormFields
-        amount=""
-        description=""
-        onAmountChange={vi.fn()}
-        onDescriptionChange={vi.fn()}
-        onOpenCategorySheet={vi.fn()}
-        onReceiptPress={vi.fn()}
-        receiptUri="file:///receipt.jpg"
-        selectedCategory="Inventory"
-      />
-    );
+    renderExpenseFormFields({ receiptUri: 'file:///receipt.jpg' });
 
     expect(
       screen.getByRole('img', { name: 'Receipt preview' })
     ).toHaveAttribute('data-src', 'file:///receipt.jpg');
-    expect(screen.getByText('Change')).toBeInTheDocument();
+    expect(screen.getByText('Replace')).toBeInTheDocument();
   });
 
   it('shows the category placeholder and labeled controls when no category is selected', () => {
-    render(
-      <ExpenseFormFields
-        amount=""
-        description=""
-        onAmountChange={vi.fn()}
-        onDescriptionChange={vi.fn()}
-        onOpenCategorySheet={vi.fn()}
-        onReceiptPress={vi.fn()}
-        receiptUri={null}
-        selectedCategory={null}
-      />
-    );
+    renderExpenseFormFields({ selectedCategory: null });
 
     expect(screen.getByText('Select a category')).toBeInTheDocument();
     expect(screen.getByLabelText('Expense amount')).toBeInTheDocument();
@@ -173,18 +188,7 @@ describe('ExpenseFormFields', () => {
   });
 
   it('keeps the category control accessible when the selected category is empty', () => {
-    render(
-      <ExpenseFormFields
-        amount=""
-        description=""
-        onAmountChange={vi.fn()}
-        onDescriptionChange={vi.fn()}
-        onOpenCategorySheet={vi.fn()}
-        onReceiptPress={vi.fn()}
-        receiptUri={null}
-        selectedCategory=""
-      />
-    );
+    renderExpenseFormFields({ selectedCategory: '' });
 
     expect(screen.getByText('Select a category')).toBeInTheDocument();
     expect(

@@ -34,6 +34,16 @@ describe('RegisterScreen', () => {
     vi.restoreAllMocks();
   });
 
+  it('does not repeat the merchant setup progress before account creation', () => {
+    render(<RegisterScreen />);
+
+    expect(screen.getByText("Let's get to know you")).toBeTruthy();
+    expect(screen.getByText('Your details')).toBeTruthy();
+    expect(screen.queryByText('Your store setup')).toBeNull();
+    expect(screen.queryByText('About you')).toBeNull();
+    expect(screen.queryByText('Your business')).toBeNull();
+  });
+
   it('creates the native account exactly once with sentence-cased metadata', async () => {
     render(<RegisterScreen />);
     expect(
@@ -53,7 +63,41 @@ describe('RegisterScreen', () => {
       firstName: 'Test',
       lastName: 'User',
       fullName: 'Test User',
+      signupFlow: 'merchant',
     });
+  });
+
+  it('trims identity fields while preserving password whitespace exactly', async () => {
+    render(<RegisterScreen />);
+    fireEvent.change(screen.getByPlaceholderText('John'), {
+      target: { value: ' mary ann ' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Doe'), {
+      target: { value: ' van buren ' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('you@example.com'), {
+      target: { value: ' person@example.com ' },
+    });
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: ' Strong P@ss123! ' },
+    });
+    fireEvent.change(screen.getByLabelText('Confirm Password'), {
+      target: { value: ' Strong P@ss123! ' },
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Proceed to next step' })
+    );
+
+    await waitFor(() =>
+      expect(mocks.signUp).toHaveBeenCalledWith({
+        email: 'person@example.com',
+        password: ' Strong P@ss123! ',
+        firstName: 'Mary ann',
+        lastName: 'Van buren',
+        fullName: 'Mary ann Van buren',
+        signupFlow: 'merchant',
+      })
+    );
   });
 
   it('routes a returned session to authenticated profile completion', async () => {
@@ -69,13 +113,29 @@ describe('RegisterScreen', () => {
     mocks.signUp.mockResolvedValue({
       error: null,
       needsEmailConfirmation: true,
+      signupAttemptId: '123e4567-e89b-42d3-a456-426614174000',
     });
     render(<RegisterScreen />);
     fillFormAndSubmit();
 
     await waitFor(() => {
       expect(mocks.replace).toHaveBeenCalledWith(
-        '/(auth)/verify?email=test%40example.com'
+        '/(auth)/verify?email=test%40example.com&attemptId=123e4567-e89b-42d3-a456-426614174000&flow=merchant'
+      );
+    });
+  });
+
+  it('routes confirmation-required signup without an attempt ID to email verification', async () => {
+    mocks.signUp.mockResolvedValue({
+      error: null,
+      needsEmailConfirmation: true,
+    });
+    render(<RegisterScreen />);
+    fillFormAndSubmit();
+
+    await waitFor(() => {
+      expect(mocks.replace).toHaveBeenCalledWith(
+        '/(auth)/verify?email=test%40example.com&flow=merchant'
       );
     });
   });

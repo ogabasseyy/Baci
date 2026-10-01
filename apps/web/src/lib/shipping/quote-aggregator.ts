@@ -1,0 +1,141 @@
+/**
+ * Quote Aggregator
+ * Fetches quotes from all enabled providers and ranks them for display
+ */
+
+import { rankQuotes, selectFeaturedQuotes } from './aggregator';
+import { getEmptyQuoteDiagnostics } from './empty-quote-diagnostics';
+import {
+  getNoProviderWarning,
+  selectQuoteProviders,
+} from './provider-allowlist';
+import type { ShippingProviderRegistry } from './providers/base';
+import { quoteProviderFailure } from './quote-provider-failure';
+import type {
+  QuoteRequest,
+  QuoteResponse,
+  ShippingProviderCode,
+  ShippingQuote,
+} from './types';
+
+const QUOTE_TTL_SECONDS =
+  Number(process.env.SHIPPING_QUOTE_TTL_SECONDS) || 3600;
+
+export class QuoteAggregator {
+  constructor(private registry: ShippingProviderRegistry) {}
+
+  /**
+   * Get aggregated quotes from all enabled providers
+   */
+  async getQuotes(
+    request: QuoteRequest,
+    allowedProviderCodes?: readonly ShippingProviderCode[]
+  ): Promise<QuoteResponse> {
+    const availableProviders =
+      request.shipmentType === 'international'
+        ? this.registry.getInternational()
+        : this.registry.getDomestic();
+    const { providers, isRestricted } = selectQuoteProviders(
+      availableProviders,
+      allowedProviderCodes
+    );
+
+    if (providers.length === 0) {
+      // Surface the empty registry instead of serving a silent empty list —
+      // indistinguishable from "no coverage" at the API boundary otherwise.
+      console.warn('[QuoteAggregator] No providers registered for quotes', {
+        shipmentType: request.shipmentType ?? 'domestic',
+      });
+      return createFallbackQuoteResponse(request.sessionId, [
+        getNoProviderWarning(isRestricted),
+      ]);
+    }
+
+    // Fetch from all providers in parallel
+    const results = await Promise.allSettled(
+      providers.map((provider) => provider.getQuotes(request))
+    );
+
+    const allQuotes: ShippingQuote[] = [];
+    const warnings: string[] = [];
+    let failedProviderCount = 0;
+
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        const providerFailure = quoteProviderFailure.get(result.value);
+        if (providerFailure) {
+          failedProviderCount += 1;
+          warnings.push(`${providers[index].name}: ${providerFailure.message}`);
+          console.error('[QuoteAggregator] Provider failed', {
+            provider: providers[index].name,
+            reason: providerFailure,
+          });
+          return;
+        }
+        allQuotes.push(...result.value);
+      } else {
+        failedProviderCount += 1;
+        warnings.push(
+          `${providers[index].name}: ${result.reason?.message || 'Unknown error'}`
+        );
+        console.error('[QuoteAggregator] Provider failed', {
+          provider: providers[index].name,
+          reason: result.reason,
+        });
+      }
+    });
+
+    // A provider can either reject or return an explicitly marked empty result
+    // when its public contract must stay array-shaped. Unmarked empty arrays
+    // mean the provider completed successfully but had no rates.
+    if (allQuotes.length === 0) {
+      const diagnostics = getEmptyQuoteDiagnostics(
+        providers.length,
+        failedProviderCount
+      );
+      // Literal format string: diagnostics.message must never be interpreted
+      // as a format pattern (CWE-134, semgrep unsafe-formatstring).
+      console.warn('%s', diagnostics.message, diagnostics.context);
+      return createFallbackQuoteResponse(request.sessionId, warnings);
+    }
+
+    // Rank and categorize quotes
+    const rankedQuotes = rankQuotes(allQuotes);
+    const featuredQuotes = selectFeaturedQuotes(rankedQuotes);
+
+    // Calculate expiry (use the earliest expiry from all quotes)
+    const earliestExpiry = allQuotes.reduce(
+      (min, q) => (q.expiresAt < min ? q.expiresAt : min),
+      allQuotes[0].expiresAt
+    );
+
+    return {
+      quotes: {
+        featured: featuredQuotes,
+        all: rankedQuotes,
+      },
+      sessionId: request.sessionId,
+      expiresAt: earliestExpiry.toISOString(),
+      warnings: warnings.length > 0 ? warnings : undefined,
+    };
+  }
+}
+
+/**
+ * Create a fallback response when no providers are available
+ * Returns EMPTY quotes to trigger the "Refresh Rates" UI in checkout
+ */
+function createFallbackQuoteResponse(
+  sessionId: string,
+  warnings?: string[]
+): QuoteResponse {
+  return {
+    quotes: {
+      featured: [],
+      all: [],
+    },
+    sessionId,
+    expiresAt: new Date(Date.now() + QUOTE_TTL_SECONDS * 1000).toISOString(),
+    warnings,
+  };
+}

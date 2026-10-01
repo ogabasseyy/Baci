@@ -21,6 +21,7 @@ jest.mock('@expo/config-plugins', () => ({
 }));
 
 const withAndroidGradleFixes = require('./withAndroidGradleFixes');
+const ensurePostHogAndroidUploadsEnabled = require('./withAndroidGradleFixes.posthog');
 
 function writeProjectFile(projectRoot, relativePath, content) {
   const filePath = path.join(projectRoot, relativePath);
@@ -41,7 +42,23 @@ describe('withAndroidGradleFixes', () => {
     mockFinalizedModCalls.length = 0;
   });
 
-  it('applies Gradle fixes while retaining the Kotlin Android plugin', () => {
+  it('sets PostHog skip-on-conflict before the upload plugin is applied', () => {
+    const appBuildGradle =
+      ensurePostHogAndroidUploadsEnabled(`apply plugin: "com.android.application"
+
+apply from: new File(["node", "--print", "require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog.gradle')"].execute().text.trim())
+`);
+
+    expect(appBuildGradle).toContain('posthogReactNativeSkipOnConflict = true');
+    expect(
+      appBuildGradle.match(/posthogReactNativeSkipOnConflict = true/g)
+    ).toHaveLength(1);
+    expect(
+      appBuildGradle.indexOf('posthogReactNativeSkipOnConflict = true')
+    ).toBeLessThan(appBuildGradle.indexOf('posthog.gradle'));
+  });
+
+  it('applies Gradle fixes while retaining the Kotlin Android plugin', async () => {
     mockPlatformProjectRoot = fs.mkdtempSync(
       path.join(os.tmpdir(), 'baci-gradle-')
     );
@@ -123,6 +140,14 @@ android {
     withAndroidGradleFixes({ name: 'Ogabassey', slug: 'ogabassey' });
     withAndroidGradleFixes({ name: 'Ogabassey', slug: 'ogabassey' });
 
+    fs.appendFileSync(
+      path.join(mockPlatformProjectRoot, 'app/src/main/res/values/strings.xml'),
+      '<string name="facebook_client_token">late-plugin-value</string>\n'
+    );
+    await mockFinalizedModCalls[0].action({
+      modRequest: { platformProjectRoot: mockPlatformProjectRoot },
+    });
+
     const rootBuildGradle = readProjectFile(
       mockPlatformProjectRoot,
       'build.gradle'
@@ -157,24 +182,21 @@ android {
     const workletsPickFirstMatches =
       appBuildGradle.match(/pickFirsts \+= \['\*\*\/libworklets\.so'\]/g) ?? [];
     expect(workletsPickFirstMatches).toHaveLength(1);
-    expect(appBuildGradle).toContain(
+    expect(appBuildGradle).toContain('posthog.gradle');
+    expect(appBuildGradle).not.toContain(
       'PostHog Android source-map upload is best-effort'
     );
-    expect(appBuildGradle).toContain('task.name.contains("_PostHogUpload_")');
-    expect(appBuildGradle).toContain('disablePostHogAndroidUploadTask');
-    expect(appBuildGradle).toContain('gradle.projectsEvaluated');
-    expect(appBuildGradle).toContain('task.enabled = false');
-    expect(appBuildGradle).toContain('task.onlyIf { false }');
+    expect(appBuildGradle).not.toContain('task.enabled = false');
 
     // Assert dynamic Facebook resValue injection
     expect(appBuildGradle).toContain(
-      'def storefrontFacebookAppId = System.getenv("STOREFRONT_FACEBOOK_APP_ID") ?: ""'
+      'def storefrontFacebookAppId = (System.getenv("STOREFRONT_FACEBOOK_APP_ID") ?: "").trim()'
     );
     expect(appBuildGradle).toContain(
-      'def storefrontFacebookClientToken = System.getenv("STOREFRONT_FACEBOOK_CLIENT_TOKEN") ?: ""'
+      'def storefrontFacebookClientToken = (System.getenv("STOREFRONT_FACEBOOK_CLIENT_TOKEN") ?: "").trim()'
     );
     expect(appBuildGradle).toContain(
-      'STOREFRONT_FACEBOOK_APP_ID and STOREFRONT_FACEBOOK_CLIENT_TOKEN must be configured together.'
+      'STOREFRONT_FACEBOOK_CLIENT_TOKEN is missing but STOREFRONT_FACEBOOK_APP_ID is configured.'
     );
     expect(appBuildGradle).toContain(
       'resValue "string", "facebook_app_id", storefrontFacebookAppId'
@@ -183,7 +205,10 @@ android {
       'resValue "string", "facebook_client_token", storefrontFacebookClientToken'
     );
     expect(appBuildGradle).toContain(
-      'resValue "string", "fb_login_protocol_scheme", storefrontFacebookAppId ? "fb" + storefrontFacebookAppId : "fb_local_dev"'
+      'resValue "string", "fb_login_protocol_scheme", "fb" + storefrontFacebookAppId'
+    );
+    expect(appBuildGradle).toContain(
+      'resValue "string", "facebook_app_id", "facebook_app_id_placeholder"'
     );
 
     // Assert static Facebook secrets stripping

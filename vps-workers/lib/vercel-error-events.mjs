@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+
+export {
+  MAX_JSONL_READ_BYTES,
+  MAX_JSONL_ROTATED_FILES,
+} from './vercel-error-events-limits.mjs';
+export { readJsonlLogEvents } from './vercel-error-events-reader.mjs';
 
 const ERROR_LEVELS = new Set(['error', 'fatal', 'panic']);
 const ERROR_MESSAGE_RE =
@@ -22,12 +27,37 @@ function firstString(...values) {
 
 function firstNumber(...values) {
   for (const value of values) {
+    if (value == null || value === '') {
+      continue;
+    }
     const parsed = Number(value);
     if (Number.isSafeInteger(parsed)) {
       return parsed;
     }
   }
   return null;
+}
+
+function firstTimestamp(...values) {
+  for (const value of values) {
+    const parsed =
+      typeof value === 'number' && Number.isFinite(value)
+        ? value
+        : typeof value === 'string' && value.trim()
+          ? Date.parse(value.trim())
+          : Number.NaN;
+    if (Number.isFinite(parsed)) {
+      const date = new Date(parsed);
+      if (!Number.isNaN(date.getTime())) {
+        return date.toISOString();
+      }
+    }
+  }
+  return '';
+}
+
+function routeWithoutQueryOrFragment(...values) {
+  return firstString(...values).split(/[?#]/, 1)[0];
 }
 
 export function normalizeVercelLogEvent(raw) {
@@ -42,7 +72,17 @@ export function normalizeVercelLogEvent(raw) {
     error.message,
     entry.stack
   );
-  const route = firstString(
+  const technicalText = [
+    entry.message,
+    entry.msg,
+    entry.text,
+    entry.body,
+    error.message,
+    entry.stack,
+  ]
+    .filter((value) => typeof value === 'string')
+    .join('\n');
+  const route = routeWithoutQueryOrFragment(
     entry.route,
     entry.path,
     entry.pathname,
@@ -53,6 +93,7 @@ export function normalizeVercelLogEvent(raw) {
 
   return {
     deploymentId: firstString(entry.deploymentId, entry.deployment, entry.dpl),
+    errorClass: technicalErrorClass(technicalText),
     fingerprint: '',
     level: firstString(entry.level, entry.severity).toLowerCase(),
     message,
@@ -65,14 +106,15 @@ export function normalizeVercelLogEvent(raw) {
       entry.status,
       entry.response?.statusCode
     ),
-    timestamp:
-      firstString(entry.timestamp, entry.time, entry.createdAt) ||
-      new Date().toISOString(),
+    timestamp: firstTimestamp(entry.timestamp, entry.time, entry.createdAt),
   };
 }
 
 export function isErrorEvent(event) {
   if (!event) {
+    return false;
+  }
+  if (String(event.source || '').toLowerCase() === 'firewall') {
     return false;
   }
   if (ERROR_LEVELS.has(String(event.level || '').toLowerCase())) {
@@ -115,6 +157,25 @@ export function fingerprintErrorEvent(event) {
   return createHash('sha256').update(basis).digest('hex').slice(0, 16);
 }
 
+function categoryForEvent(event) {
+  if (/\btimed out\b|\btimeout\b/i.test(event.message || '')) {
+    return 'vercel_timeout';
+  }
+  if (Number(event.statusCode) >= 500) {
+    return 'vercel_http_5xx';
+  }
+  return 'vercel_runtime_exception';
+}
+
+function technicalErrorClass(message) {
+  const text = String(message || '');
+  return (
+    /\b(TypeError|ReferenceError|RangeError|SyntaxError|URIError)\b/.exec(
+      text
+    )?.[1] || (/\bError\b/.test(text) ? 'Error' : '')
+  );
+}
+
 export function groupErrorEvents(rawEvents) {
   const groups = new Map();
   for (const rawEvent of rawEvents) {
@@ -123,13 +184,16 @@ export function groupErrorEvents(rawEvents) {
       continue;
     }
     const fingerprint = fingerprintErrorEvent(event);
+    const category = categoryForEvent(event);
+    const groupKey = `${category}:${fingerprint}`;
     event.fingerprint = fingerprint;
-    const group = groups.get(fingerprint) || {
+    const group = groups.get(groupKey) || {
+      category,
       deploymentIds: new Set(),
       events: [],
       fingerprint,
-      firstSeen: event.timestamp,
-      lastSeen: event.timestamp,
+      firstSeen: '',
+      lastSeen: '',
       requestIds: new Set(),
       sample: event,
     };
@@ -140,13 +204,15 @@ export function groupErrorEvents(rawEvents) {
     if (event.requestId) {
       group.requestIds.add(event.requestId);
     }
-    if (event.timestamp < group.firstSeen) {
-      group.firstSeen = event.timestamp;
+    if (event.timestamp) {
+      if (!group.firstSeen || event.timestamp < group.firstSeen) {
+        group.firstSeen = event.timestamp;
+      }
+      if (!group.lastSeen || event.timestamp > group.lastSeen) {
+        group.lastSeen = event.timestamp;
+      }
     }
-    if (event.timestamp > group.lastSeen) {
-      group.lastSeen = event.timestamp;
-    }
-    groups.set(fingerprint, group);
+    groups.set(groupKey, group);
   }
   return [...groups.values()].sort(
     (left, right) => right.events.length - left.events.length
@@ -160,30 +226,22 @@ export function selectRemediationCandidates(
   return groups
     .filter((group) => group.events.length >= minOccurrences)
     .map((group) => ({
-      deploymentIds: [...group.deploymentIds],
+      category: group.category,
       fingerprint: group.fingerprint,
       firstSeen: group.firstSeen,
       lastSeen: group.lastSeen,
       occurrences: group.events.length,
-      requestIds: [...group.requestIds].slice(0, 10),
-      sample: group.sample,
+      sample: {
+        deploymentId: group.sample.deploymentId,
+        errorClass: group.sample.errorClass,
+        requestId: group.sample.requestId,
+        route: group.sample.route,
+        source: 'vercel',
+        statusCode:
+          group.sample.statusCode == null
+            ? ''
+            : String(group.sample.statusCode),
+      },
+      source: 'vercel',
     }));
-}
-
-export function readJsonlLogEvents(path) {
-  const content = readFileSync(path, 'utf8');
-  const events = [];
-  for (const [index, line] of content.split(/\r?\n/).entries()) {
-    if (!line.trim()) {
-      continue;
-    }
-    try {
-      events.push(JSON.parse(line));
-    } catch (error) {
-      throw new Error(
-        `Invalid JSONL at ${path}:${index + 1}: ${error.message}`
-      );
-    }
-  }
-  return events;
 }

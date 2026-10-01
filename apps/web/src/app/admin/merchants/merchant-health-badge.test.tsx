@@ -5,10 +5,10 @@ import { MerchantHealthBadge } from '@/app/admin/merchants/merchant-health-badge
 
 describe('MerchantHealthBadge', () => {
   it.each([
-    ['healthy', 'Healthy', 'emerald'],
-    ['at_risk', 'At Risk', 'amber'],
-    ['churned', 'Churned', 'destructive'],
-    ['new', 'New', 'indigo'],
+    ['healthy', 'Selling', 'emerald'],
+    ['at_risk', 'Sales Quiet', 'amber'],
+    ['churned', 'Sales Dormant', 'destructive'],
+    ['new', 'No Paid Sales Since Launch', 'indigo'],
   ] as const)('renders %s as %s with a decorative icon', (status, label, classFragment) => {
     const { container } = render(<MerchantHealthBadge status={status} />);
     const badge = screen.getByRole('status', { name: label });

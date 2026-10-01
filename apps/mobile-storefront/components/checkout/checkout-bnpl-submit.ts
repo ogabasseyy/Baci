@@ -1,17 +1,13 @@
 import { router } from 'expo-router';
 import type { MutableRefObject } from 'react';
 import { Alert } from 'react-native';
+import { toMoneyRouteParam } from '@/components/bnpl-checkout/bnpl-params.schema';
 import type { PaymentMethodType } from '@/components/checkout/PaymentMethodSelector';
 import type {
   DeliveryMethod,
   ShippingQuote,
 } from '@/components/checkout/types';
-import {
-  buildMobileCheckoutOrderFingerprint,
-  clearMobileCheckoutIdempotencyKey,
-  getMobileCheckoutIdempotencyKey,
-  type MobileCheckoutIdempotencyState,
-} from '@/lib/checkout-order-idempotency';
+import type { MobileCheckoutIdempotencyState } from '@/lib/checkout-order-idempotency';
 import {
   buildKlumpBnplRouteParams,
   buildKlumpInitializePayload,
@@ -22,7 +18,7 @@ import type {
   SavingsSelection,
   WalletSelection,
 } from '@/lib/wallet-payment-helpers';
-import { createOrder, OrderError, type OrderResponse } from '@/services/orders';
+import { createOrder, OrderError } from '@/services/orders';
 import type { CartItem } from '@/stores/cart-store';
 import {
   buildCheckoutOrderRequest,
@@ -34,6 +30,10 @@ import {
   CHECKOUT_MERCHANT_ID,
   CHECKOUT_MERCHANT_SLUG,
 } from './checkout-screen.constants';
+import {
+  type PaymentInitializeData,
+  toPaymentInitializeData,
+} from './payment-initialize-data';
 
 const BNPL_PAYMENT_INIT_TIMEOUT_MS = 10_000;
 
@@ -49,7 +49,12 @@ interface SubmitBnplCheckoutParams {
   itemsSnapshot: CartItem[];
   liveSavingsSelection: SavingsSelection | undefined;
   liveWalletSelection: WalletSelection | undefined;
+  checkoutGeneration: string;
   mobileCheckoutIdempotencyRef: MutableRefObject<MobileCheckoutIdempotencyState | null>;
+  /** Called with the committed order id right after createOrder, so the
+   * outer submit can thread it into failure handling when a nested
+   * provider init (e.g. Klump) throws after the order exists. */
+  onOrderCreated?: (orderId: string) => void;
   paymentMethodForOrder: string;
   paymentSettings: Parameters<typeof getKlumpDisabledReason>[0];
   selectedPayment: PaymentMethodType;
@@ -70,7 +75,8 @@ export async function submitBnplCheckout({
   itemsSnapshot,
   liveSavingsSelection,
   liveWalletSelection,
-  mobileCheckoutIdempotencyRef,
+  checkoutGeneration,
+  onOrderCreated,
   paymentMethodForOrder,
   paymentSettings,
   selectedPayment,
@@ -110,46 +116,13 @@ export async function submitBnplCheckout({
     shippingProvider: getShippingProvider(),
     snapshot,
   });
-  const mobileCheckoutFingerprint = buildMobileCheckoutOrderFingerprint({
-    customerEmail,
-    customerName,
-    customerPhone,
-    deliveryMethod,
-    discountAmount: 0,
-    discountCode: appliedDiscountCode,
-    items: orderRequest.items,
-    selectedQuoteId: orderRequest.selected_quote_id,
-    shippingAddress: orderRequest.shipping_address,
-    shippingFee: orderRequest.shipping_fee,
-    shippingProvider: orderRequest.shipping_provider,
-    subtotal: orderRequest.subtotal,
-    taxAmount: orderRequest.tax_amount,
+  // The order service owns durable retry identity across payment methods.
+  // Never rotate it when a completed order rejects reuse.
+  const orderResponse = await createOrder(orderRequest, {
+    analyticsPaymentMethod: selectedPayment,
+    checkoutGeneration,
   });
-  const mobileCheckoutIdempotencyKey = getMobileCheckoutIdempotencyKey(
-    mobileCheckoutIdempotencyRef,
-    mobileCheckoutFingerprint
-  );
-
-  let orderResponse: OrderResponse;
-  try {
-    orderResponse = await createOrder({
-      ...orderRequest,
-      idempotency_key: mobileCheckoutIdempotencyKey,
-    });
-  } catch (error) {
-    if (
-      error instanceof OrderError &&
-      (error.code === 'CHECKOUT_ORDER_NOT_REUSABLE' ||
-        error.code === 'CHECKOUT_IDEMPOTENCY_CONFLICT')
-    ) {
-      clearMobileCheckoutIdempotencyKey(
-        mobileCheckoutIdempotencyRef,
-        mobileCheckoutFingerprint
-      );
-    }
-
-    throw error;
-  }
+  onOrderCreated?.(orderResponse.order.id);
 
   if (selectedPayment === 'klump') {
     await initializeKlumpAndRoute({
@@ -161,18 +134,34 @@ export async function submitBnplCheckout({
       setIsProcessing,
       trackingToken: orderResponse.order.tracking_token,
     });
+    // No start here: initialize only provides the Klump launcher URL — the
+    // provider UI has not opened. The launcher bridges Klump's onOpen over
+    // the WebView bridge and the checkout controller records the start
+    // then, like the other BNPL providers.
     isOrderInFlight.current = false;
     return;
   }
 
+  // No start here: the provider is initialized later inside the BNPL
+  // checkout launcher, where lookup, SDK loading, or popup creation can
+  // still fail. The launcher confirms the opened flow back over the
+  // WebView bridge and the checkout controller records the start then
+  // (the Klump branch above follows the same bridge via onOpen).
+
   isOrderInFlight.current = false;
   setIsProcessing(false);
+  // The provider charges the residual (`amount`), but completion revenue
+  // is the canonical order total: route it separately for attribution.
+  const canonicalOrderTotal = Number(orderResponse.order.total);
   router.push({
     pathname: '/bnpl-checkout',
     params: {
       orderId: orderResponse.order.id,
       gateway: selectedPayment,
-      amount: String(orderResponse.amountDueToGateway),
+      amount: toMoneyRouteParam(orderResponse.amountDueToGateway),
+      ...(Number.isFinite(canonicalOrderTotal)
+        ? { orderTotal: toMoneyRouteParam(canonicalOrderTotal) }
+        : {}),
       customerEmail,
       customerName,
       customerPhone,
@@ -183,6 +172,11 @@ export async function submitBnplCheckout({
       ...(orderResponse.order.tracking_token && {
         trackingToken: orderResponse.order.tracking_token,
       }),
+      // Breakdown snapshot for the approved completion's durable claim
+      // (see use-bnpl-checkout-controller): identity already travels above.
+      subtotal: toMoneyRouteParam(snapshot.subtotal),
+      shipping: toMoneyRouteParam(snapshot.deliveryFee),
+      tax: toMoneyRouteParam(snapshot.taxAmount),
     },
   });
 }
@@ -243,7 +237,15 @@ async function initializeKlumpAndRoute({
     clearTimeout(timeout);
   }
 
-  const initData = await initResponse.json();
+  let initData: PaymentInitializeData;
+  try {
+    initData = toPaymentInitializeData(await initResponse.json());
+  } catch {
+    throw new OrderError(
+      'Failed to initialize Klump payment',
+      'PAYMENT_INIT_ERROR'
+    );
+  }
   if (
     !initResponse.ok ||
     !initData.success ||

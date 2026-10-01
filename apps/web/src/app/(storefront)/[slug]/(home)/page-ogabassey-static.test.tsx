@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import { Fragment, type ReactNode, Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
@@ -28,6 +29,8 @@ vi.mock('@/app/(storefront)/storefront-home-critical.css', () => {
   return {};
 });
 
+vi.mock('@/app/(storefront)/storefront-core.css', () => ({}));
+
 vi.mock('@/app/(storefront)/storefront-full.css', () => {
   mockFullStorefrontCssImport();
   return {};
@@ -36,8 +39,10 @@ vi.mock('@/app/(storefront)/storefront-full.css', () => {
 vi.mock(
   '@/app/(storefront)/ogabassey/ogabassey-static-home-page-content',
   () => ({
-    OgabasseyStaticHomePageContent: ({ pathPrefix }: { pathPrefix: string }) =>
-      mockOgabasseyStaticHomePageContent({ pathPrefix }),
+    OgabasseyStaticHomePageContent: (props: {
+      omitCommittedHero?: boolean;
+      pathPrefix: string;
+    }) => mockOgabasseyStaticHomePageContent(props),
   })
 );
 
@@ -49,14 +54,23 @@ vi.mock('../storefront-page-content', () => ({
   StorefrontPageContent: () => mockStorefrontPageContent(),
 }));
 
+vi.mock('./ogabassey-home-committed-lcp', () => ({
+  OgabasseyHomeCommittedLcp: () => (
+    <div data-testid="ogabassey-home-committed-lcp" />
+  ),
+}));
+
 async function renderStorefrontPage(slug: string) {
   const { default: StorefrontPage } = await import('./page');
+  const ui = StorefrontPage({
+    params: Promise.resolve({ slug }),
+  });
+  const routeElement = ui.props.children[1].props.children as {
+    type: (props: { params: Promise<{ slug: string }> }) => Promise<unknown>;
+    props: { params: Promise<{ slug: string }> };
+  };
 
-  render(
-    await StorefrontPage({
-      params: Promise.resolve({ slug }),
-    })
-  );
+  render((await routeElement.type(routeElement.props)) as ReactNode);
 }
 
 describe('OgaBassey dynamic homepage routing', () => {
@@ -83,25 +97,30 @@ describe('OgaBassey dynamic homepage routing', () => {
     expect(mockFullStorefrontCssImport).not.toHaveBeenCalled();
   });
 
-  it('renders other storefronts through the shared page content path with full storefront CSS', async () => {
+  it('renders other storefronts through the shared page content path without eager full storefront CSS', async () => {
     await renderStorefrontPage('another-shop');
 
-    expect(mockFullStorefrontCssImport).toHaveBeenCalledOnce();
     expect(mockCriticalHomeCssImport).not.toHaveBeenCalled();
-    expect(
-      screen.getByText('Shared storefront page content')
-    ).toBeInTheDocument();
+    expect(mockFullStorefrontCssImport).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(
+        screen.getByText('Shared storefront page content')
+      ).toBeInTheDocument();
+    });
   });
 
   it('renders the path homepage with the OgaBassey static shell', async () => {
     await renderStorefrontPage('ogabassey');
 
-    expect(mockCriticalHomeCssImport).toHaveBeenCalledOnce();
+    await waitFor(() => {
+      expect(mockOgabasseyStaticHomePageContent).toHaveBeenCalledWith({
+        omitCommittedHero: true,
+        pathPrefix: '/ogabassey',
+      });
+    });
+    expect(mockCriticalHomeCssImport).not.toHaveBeenCalled();
     expect(mockFullStorefrontCssImport).not.toHaveBeenCalled();
     expect(mockOgabasseyStaticResourceHints).toHaveBeenCalledOnce();
-    expect(mockOgabasseyStaticHomePageContent).toHaveBeenCalledWith({
-      pathPrefix: '/ogabassey',
-    });
     expect(
       screen.getByText('OgaBassey static home /ogabassey')
     ).toBeInTheDocument();
@@ -111,9 +130,31 @@ describe('OgaBassey dynamic homepage routing', () => {
   it('renders the custom-domain local homepage with root-relative links', async () => {
     await renderStorefrontPage('ogabassey.com');
 
-    expect(mockOgabasseyStaticHomePageContent).toHaveBeenCalledWith({
-      pathPrefix: '',
+    await waitFor(() => {
+      expect(mockOgabasseyStaticHomePageContent).toHaveBeenCalledWith({
+        omitCommittedHero: true,
+        pathPrefix: '',
+      });
     });
     expect(screen.getByText('OgaBassey static home root')).toBeInTheDocument();
+  });
+
+  it('does not await params in the page — children behind Suspense do', async () => {
+    const { default: StorefrontPage } = await import('./page');
+    const { OgabasseyHomeCommittedLcp } = await import(
+      './ogabassey-home-committed-lcp'
+    );
+    const then = vi.fn(() => {
+      throw new Error('request read outside boundary');
+    });
+    const params = { then } as unknown as Promise<{ slug: string }>;
+    const ui = StorefrontPage({ params });
+    const [committedLcp, routeBoundary] = ui.props.children;
+
+    expect(ui.type).toBe(Fragment);
+    expect(committedLcp.type).toBe(OgabasseyHomeCommittedLcp);
+    expect(routeBoundary.type).toBe(Suspense);
+    expect(routeBoundary.props.fallback).toBeNull();
+    expect(then).not.toHaveBeenCalled();
   });
 });

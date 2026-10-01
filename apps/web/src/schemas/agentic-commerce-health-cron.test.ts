@@ -17,13 +17,13 @@ describe('agenticCommerceHealthCronQuerySchema', () => {
     }
   });
 
-  it('defaults to failing on attention and no explicit slugs', () => {
+  it('parses an empty object with the expected defaults', () => {
     const result = agenticCommerceHealthCronQuerySchema.safeParse({});
 
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data).toEqual({
-        fail_on_attention: true,
+        fail_on_attention: false,
         merchant_slug: [],
       });
     }

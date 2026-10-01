@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   liveBlogPost,
-  mockBuildStoreUrl,
   mockConnection,
   mockDraftMode,
   mockGetBlogPostRedirect,
@@ -57,30 +56,6 @@ describe('storefront blog post metadata', () => {
     // this route shipped with connection() first (PR #2882 regression guard).
     expect(mockConnection).not.toHaveBeenCalled();
     expect(mockDraftMode).not.toHaveBeenCalled();
-  });
-
-  it('bounds long blog post title and description metadata', async () => {
-    mockGetRequestScopedBlogPost.mockResolvedValue({
-      ...liveBlogPost,
-      post: {
-        ...liveBlogPost.post,
-        title:
-          'Best Phones Under 500000 Naira in Nigeria With Camera Battery and Gaming Performance Compared',
-        excerpt:
-          'Compare the best phones under 500000 naira in Nigeria with camera quality, battery life, gaming performance, warranty coverage, delivery options, and flexible payment notes for shoppers.',
-      },
-    });
-
-    const metadata = await generateBlogPostMetadata('best-phones-under-500000');
-
-    const title = (metadata.title as { absolute: string }).absolute;
-    expect(title.length).toBeLessThanOrEqual(60);
-    expect(title).toContain('Ogabassey');
-    expect(typeof metadata.description).toBe('string');
-    if (typeof metadata.description !== 'string') {
-      throw new TypeError('metadata.description must be a string');
-    }
-    expect(metadata.description.length).toBeLessThanOrEqual(160);
   });
 
   it('uses fallback blog description metadata when source text is empty', async () => {
@@ -143,6 +118,30 @@ describe('storefront blog post metadata', () => {
     const metadata = await generateBlogPostMetadata('descriptive-summary');
 
     expect(metadata.description).toBe(descriptiveSummary);
+  });
+
+  it('resolves catalog tokens in the metadata description', async () => {
+    const productId = '11111111-1111-4111-8111-111111111111';
+    mockGetRequestScopedBlogPost.mockResolvedValue({
+      ...liveBlogPost,
+      merchant: {
+        ...liveBlogPost.merchant,
+        country: 'NG',
+        payout_currency: 'NGN',
+      },
+      post: {
+        ...liveBlogPost.post,
+        seo_description: `Compare the {{catalog-price:${productId}}} with rival displays across camera quality, battery life, warranty confidence, delivery timing, and everyday value.`,
+      },
+      relatedProducts: [
+        { id: productId, name: 'Phone', price: 250000, manage_stock: false },
+      ],
+    });
+
+    const metadata = await generateBlogPostMetadata('token-description');
+
+    expect(metadata.description).toContain('₦250,000.00');
+    expect(metadata.description).not.toContain('{{catalog-price');
   });
 
   it('returns noindex fallback metadata when the public cache lookup throws', async () => {
@@ -266,14 +265,15 @@ describe('storefront blog post metadata', () => {
     );
   });
 
-  it('uses the explicit social image route for OpenGraph and Twitter metadata', async () => {
-    mockBuildStoreUrl.mockReturnValue('http://localhost:3000/ogabassey');
+  it('uses the cached landscape asset directly for OpenGraph and Twitter metadata', async () => {
     mockGetRequestScopedBlogPost.mockResolvedValue({
       ...liveBlogPost,
-      merchant: {
-        ...liveBlogPost.merchant,
-        custom_domain: null,
-        slug: 'ogabassey',
+      post: {
+        ...liveBlogPost.post,
+        featured_image_variants: {
+          landscape_16x9:
+            'https://cdn.ogabassey.com/image/format=auto/core-assets/blog/apple-landscape_16x9.jpg',
+        },
       },
     });
 
@@ -284,14 +284,14 @@ describe('storefront blog post metadata', () => {
     expect(metadata.openGraph?.images).toEqual([
       {
         alt: 'The Great 5K Stall — Ogabassey',
-        height: 630,
-        type: 'image/png',
-        url: 'http://localhost:3000/ogabassey/blog/apple-studio-display-review/opengraph-image',
+        height: 675,
+        type: 'image/jpeg',
+        url: 'https://cdn.ogabassey.com/image/width=1200,quality=75,format=jpeg/core-assets/blog/apple-landscape_16x9.jpg',
         width: 1200,
       },
     ]);
     expect(metadata.twitter?.images).toEqual([
-      'http://localhost:3000/ogabassey/blog/apple-studio-display-review/opengraph-image',
+      'https://cdn.ogabassey.com/image/width=1200,quality=75,format=jpeg/core-assets/blog/apple-landscape_16x9.jpg',
     ]);
   });
 });

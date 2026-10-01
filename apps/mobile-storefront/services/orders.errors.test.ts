@@ -130,4 +130,17 @@ describe('orders.errors', () => {
     expect(JSON.stringify(diagnostics)).not.toContain('buyer@example.com');
     expect(JSON.stringify(diagnostics)).not.toContain('+2348012345678');
   });
+
+  it('does not map a deferred queued-owner mismatch into an order failure', () => {
+    const { DeferredOfflineMutationError } =
+      require('@/lib/deferred-offline-mutation-error') as typeof import('@/lib/deferred-offline-mutation-error');
+    expect(() =>
+      loadOrdersErrors().mapCreateOrderException(
+        new DeferredOfflineMutationError(
+          'Queued checkout belongs to a different account'
+        ),
+        Date.now()
+      )
+    ).toThrow(DeferredOfflineMutationError);
+  });
 });

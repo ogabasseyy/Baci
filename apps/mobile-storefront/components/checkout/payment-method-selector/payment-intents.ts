@@ -10,8 +10,8 @@ import {
 /**
  * A customer-facing payment *intent* — "how do I want to settle this order?" —
  * projected onto the existing (tab, method) state. Instrument-bearing intents
- * (`full`, `installments`) expand to nested instrument rows; the two `pay_later`
- * intents are terminal (selecting one sets both the tab and its method).
+ * (`full`, `installments`) expand to nested instrument rows; the two terminal
+ * intents are direct method selections.
  *
  * Copy is intentionally plain/benefit-led. "Pay Small Small" is the local
  * (Nigerian) phrasing for installments; keep these strings here so they stay
@@ -22,7 +22,7 @@ export type PaymentIntentId = 'full' | 'installments' | 'payforme' | 'invoice';
 export interface PaymentIntent {
   id: PaymentIntentId;
   tab: PaymentTab;
-  /** Terminal method for `pay_later` intents (payforme/invoice); undefined otherwise. */
+  /** Direct method for terminal intents (payforme/invoice); undefined otherwise. */
   method?: PaymentMethodType;
   label: string;
   subtitle: string;
@@ -55,9 +55,9 @@ export const PAYMENT_INTENTS: readonly PaymentIntent[] = [
   {
     id: 'invoice',
     tab: 'pay_later',
-    label: 'Generate Invoice',
+    label: 'Get a Proforma Invoice',
     method: 'invoice',
-    subtitle: 'Get an invoice to pay later or send to your company',
+    subtitle: 'Send it to your company',
     icon: 'receipt-outline',
   },
 ] as const;

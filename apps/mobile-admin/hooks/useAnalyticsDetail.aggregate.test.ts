@@ -44,6 +44,7 @@ const itemWithCostFallbacks = (
   costs: {
     orderItemCostPrice?: number | null;
     productCostPrice?: number | null;
+    unitCosts?: Array<{ cost_price: number | null; unit_index: number | null }>;
     variantCostPrice?: number | null;
   }
 ): OrderItemWithJoins =>
@@ -56,6 +57,7 @@ const itemWithCostFallbacks = (
       merchant_id: 'merchant-1',
       payment_status: 'paid',
     },
+    order_item_unit_costs: costs.unitCosts ?? null,
     price,
     product_variants:
       costs.variantCostPrice === undefined
@@ -167,6 +169,98 @@ describe('aggregateAnalyticsDetail', () => {
       secondaryValue: 200,
     });
     expect(profits.total).toBe(126);
+  });
+
+  it('does not aggregate selling price as profit when cost price is missing', () => {
+    const orderItems = [
+      itemWithCostFallbacks('2026-01-10T00:00:00.000Z', 50, 2, {
+        orderItemCostPrice: null,
+        productCostPrice: null,
+        variantCostPrice: null,
+      }),
+    ];
+
+    const profits = aggregate('profits', [], orderItems);
+
+    expect(profits.data[0]).toMatchObject({
+      value: 0,
+      secondaryValue: 100,
+    });
+    expect(profits.total).toBe(0);
+  });
+
+  it('keeps missing-cost selling price out of revenue profit context', () => {
+    const orderItems = [
+      itemWithCostFallbacks('2026-01-10T00:00:00.000Z', 50, 2, {
+        orderItemCostPrice: null,
+        productCostPrice: null,
+        variantCostPrice: null,
+      }),
+    ];
+
+    const revenue = aggregate('revenue', [], orderItems);
+
+    expect(revenue.data[0]).toMatchObject({
+      value: 0,
+      secondaryValue: 0,
+    });
+  });
+
+  it('counts only known per-unit profit when remaining costs are pending', () => {
+    const orderItems = [
+      itemWithCostFallbacks('2026-01-10T00:00:00.000Z', 50, 2, {
+        orderItemCostPrice: null,
+        productCostPrice: null,
+        unitCosts: [{ cost_price: 25, unit_index: 0 }],
+        variantCostPrice: null,
+      }),
+    ];
+
+    const profits = aggregate('profits', [], orderItems);
+
+    expect(profits.data[0]).toMatchObject({
+      value: 25,
+      secondaryValue: 100,
+    });
+  });
+
+  it('preserves a recorded zero per-unit cost as known profit', () => {
+    const orderItems = [
+      itemWithCostFallbacks('2026-01-10T00:00:00.000Z', 50, 1, {
+        orderItemCostPrice: null,
+        productCostPrice: null,
+        unitCosts: [{ cost_price: 0, unit_index: 0 }],
+        variantCostPrice: null,
+      }),
+    ];
+
+    expect(aggregate('profits', [], orderItems).total).toBe(50);
+  });
+
+  it('ignores fractional unit indexes instead of applying malformed costs', () => {
+    const orderItems = [
+      itemWithCostFallbacks('2026-01-10T00:00:00.000Z', 50, 1, {
+        orderItemCostPrice: null,
+        productCostPrice: null,
+        unitCosts: [{ cost_price: 10, unit_index: 0.5 }],
+        variantCostPrice: null,
+      }),
+    ];
+
+    expect(aggregate('profits', [], orderItems).total).toBe(0);
+  });
+
+  it('preserves a recorded zero quantity instead of counting one unit', () => {
+    const orderItems = [
+      itemWithCostFallbacks('2026-01-10T00:00:00.000Z', 50, 0, {
+        orderItemCostPrice: 10,
+      }),
+    ];
+
+    const profits = aggregate('profits', [], orderItems);
+
+    expect(profits.data[0]).toMatchObject({ value: 0, secondaryValue: 0 });
+    expect(profits.total).toBe(0);
   });
 
   it('selects best and worst periods from finite bucket values only', () => {

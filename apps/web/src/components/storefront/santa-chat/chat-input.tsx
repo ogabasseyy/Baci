@@ -25,9 +25,15 @@ export function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  const [placeholder] = useState(
-    () => placeholders[Math.floor(Math.random() * placeholders.length)]
-  );
+  // Keep the server/client snapshot deterministic; personalize only after
+  // hydration so Math.random cannot change initial markup.
+  const [placeholder, setPlaceholder] = useState(placeholders[0]);
+  useEffect(() => {
+    setPlaceholder(
+      placeholders[Math.floor(Math.random() * placeholders.length)] ??
+        placeholders[0]
+    );
+  }, []);
 
   // Auto-resize textarea when input changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: input is intentionally used to trigger resize

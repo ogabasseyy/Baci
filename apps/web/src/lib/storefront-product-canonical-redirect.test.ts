@@ -225,4 +225,31 @@ describe('getStorefrontProductCanonicalRedirectResult', () => {
       redirectPath: '/smartphones/tecno-spark-40',
     });
   });
+
+  it('redirects a categoryless PDP to its relation-backed category when the direct category id is null', async () => {
+    const rpcImpl = rpcImplResolving(
+      makeStorefrontPdpPreflightRow({
+        match_kind: 'active',
+        product_id: '5e2fe9d9-dee5-47b4-9bdc-55c8224a7222',
+        product_name: 'Google Pixel 6 Pro',
+        product_slug: 'google-pixel-6-pro',
+        category_id: null,
+        category_name: 'Smartphones',
+        category_slug: 'smartphones',
+      })
+    );
+
+    const result = await getStorefrontProductCanonicalRedirectResult({
+      ...BASE,
+      identifier: 'ogabassey',
+      category: 'products',
+      productSlug: 'google-pixel-6-pro',
+      rpcImpl,
+    });
+
+    expect(result).toEqual({
+      kind: 'redirect',
+      redirectPath: '/smartphones/google-pixel-6-pro',
+    });
+  });
 });

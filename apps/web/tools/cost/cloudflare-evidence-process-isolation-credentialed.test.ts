@@ -29,7 +29,9 @@ let releaseWorkspaceLock: (() => Promise<void>) | undefined;
 beforeEach(async () => {
   releaseWorkspaceLock =
     await holdCloudflareEvidenceWorkspaceTestLock(workspaceRoot);
-}, 30_000);
+  // This lock is shared with the non-credentialed integration suite, whose
+  // integrity walk must be allowed to finish before this case starts.
+}, 120_000);
 
 afterEach(async () => {
   try {
@@ -219,5 +221,8 @@ describe('spawnIsolatedCloudflareEvidenceProcess credential handoff', () => {
       )
     ).rejects.toThrow('does not match the reviewed authority');
     expect(spawn).toHaveBeenCalledTimes(3);
-  }, 30_000);
+    // This integration case verifies and materializes three independent private
+    // dependency closures. Keep a finite timeout, but allow the cryptographic
+    // integrity walk to complete on slower CI and disk-constrained runners.
+  }, 120_000);
 });

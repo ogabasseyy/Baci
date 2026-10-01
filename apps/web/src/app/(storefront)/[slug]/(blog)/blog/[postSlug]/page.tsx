@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { unstable_rethrow } from 'next/navigation';
 import { Suspense } from 'react';
+import { getBlogPostSocialImage } from '@/lib/blog-post-social-image';
 import { getRequestScopedBlogPost } from '@/lib/cached-data';
 import { generateMetaDescription } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
@@ -8,6 +9,7 @@ import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
 import { evaluateStorefrontSlugSafety } from '@/lib/storefront-slug-safety';
 import { BlogPostBodyFallback } from './BlogPostBodyFallback';
 import { BlogPostPageFallback } from './BlogPostPageFallback';
+import { resolveBlogCatalogPlainText } from './blog-catalog-plain-text';
 import {
   buildCanonicalBlogPostUrl,
   getBlogPostTextPreview,
@@ -21,12 +23,6 @@ import { resolveBlogPostStaticParams } from './blog-post-static-params';
 interface PageProps {
   params: Promise<{ slug: string; postSlug: string }>;
 }
-
-const SOCIAL_IMAGE_METADATA = {
-  width: 1200,
-  height: 630,
-  type: 'image/png',
-} as const;
 
 // Missing, retired, and draft-only posts share one cacheable noindex stub.
 // The real HTTP 404/308 for those slugs is owned by the proxy blog-post
@@ -73,18 +69,28 @@ export async function generateMetadata({
     return BLOG_POST_NOINDEX_METADATA;
   }
 
-  const { merchant, post } = data;
+  const { merchant, post, relatedProducts } = data;
   const title = post.seo_title || post.title || 'Blog Post';
   const { metadataTitle, title: metadataTitleText } =
     buildStorefrontMetadataTitle({
       title,
       suffix: merchant.business_name,
       fallback: 'Blog Post',
+      // Google may truncate a title link to device width, but does not impose
+      // a fixed character limit. Keep the full normalized blog title instead
+      // of adding a literal ellipsis before the merchant suffix.
+      maxLength: Number.POSITIVE_INFINITY,
     });
+  // Resolve catalog tokens the same way the article body and JSON-LD do;
+  // otherwise raw {{catalog-price:...}} syntax leaks into search results
+  // and social previews. Pure/sync, so metadata stays prerenderable.
   const description = generateMetaDescription(
-    post.seo_description ||
-      post.excerpt ||
-      getBlogPostTextPreview(post.content),
+    resolveBlogCatalogPlainText(
+      post.seo_description ||
+        post.excerpt ||
+        getBlogPostTextPreview(post.content),
+      { products: relatedProducts ?? [], currencySource: merchant }
+    ),
     160,
     {
       minLength: 110,
@@ -94,11 +100,14 @@ export async function generateMetadata({
 
   const url = buildCanonicalBlogPostUrl(merchant, post.slug);
   const baseUrl = buildStoreUrl(merchant);
-  const storefrontBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-  const socialImageUrl = new URL(
-    `blog/${post.slug}/opengraph-image`,
-    storefrontBaseUrl
-  ).toString();
+  const socialImage = getBlogPostSocialImage(
+    baseUrl,
+    post.slug,
+    post.featured_image_url,
+    post.featured_image_variants,
+    post.featured_image_width,
+    post.featured_image_height
+  );
   const socialImageAlt = post.title
     ? `${post.title} — ${merchant.business_name}`
     : title;
@@ -119,9 +128,11 @@ export async function generateMetadata({
       tags: post.tags,
       images: [
         {
-          url: socialImageUrl,
+          url: socialImage.url,
           alt: socialImageAlt,
-          ...SOCIAL_IMAGE_METADATA,
+          ...(socialImage.width ? { width: socialImage.width } : {}),
+          ...(socialImage.height ? { height: socialImage.height } : {}),
+          ...(socialImage.type ? { type: socialImage.type } : {}),
         },
       ],
     },
@@ -129,7 +140,7 @@ export async function generateMetadata({
       card: 'summary_large_image',
       title: metadataTitleText,
       description,
-      images: [socialImageUrl],
+      images: [socialImage.url],
     },
     alternates: {
       canonical: url,

@@ -1,6 +1,7 @@
 import type { ClusterSupport } from './storefront-content-cluster-shared';
 
 const gamingBrands = {
+  asus: ['asus', 'rog'],
   playstation: ['playstation', 'ps5', 'ps4', 'sony'],
   nintendo: ['nintendo', 'switch'],
   xbox: ['xbox', 'microsoft'],

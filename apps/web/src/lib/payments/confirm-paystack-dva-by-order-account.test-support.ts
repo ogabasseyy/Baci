@@ -2,15 +2,19 @@ import { vi } from 'vitest';
 
 export const baseAccountRow = {
   order_id: '211bcf0e-0795-488f-aeeb-52c5b7a8b9ae',
+  assigned_at: '2026-05-09T10:00:00Z',
   created_at: '2026-05-09T10:00:00Z',
   expires_at: '2026-05-09T11:30:00Z',
   orders: {
+    amount_paid: '0',
     id: '211bcf0e-0795-488f-aeeb-52c5b7a8b9ae',
     merchant_id: 'merchant-1',
     customer_email: 'customer@example.com',
     total: '835000',
+    updated_at: '2026-05-09T09:55:00Z',
     currency: 'NGN',
     payment_status: 'pending',
+    recorded_by_user_id: null,
     shipping_status: 'pending',
   },
 };
@@ -62,7 +66,7 @@ export function createSupabaseMock(opts: {
               const row = state.insertCalls.at(-1);
               return Promise.resolve(
                 opts.reuseLookupResult ?? {
-                  data: row ? { id: 'txn-new', ...row, platform_fee: 0 } : null,
+                  data: row ? { id: 'txn-new', ...row } : null,
                   error: null,
                 }
               );
@@ -93,9 +97,11 @@ export function createSupabaseMock(opts: {
       currency: params.p_currency,
       gateway: params.p_gateway,
       gateway_reference: params.p_reference,
+      merchant_amount: params.p_merchant_amount,
       merchant_id: params.p_merchant_id,
       metadata: params.p_metadata,
       order_id: params.p_order_id,
+      platform_fee: params.p_platform_fee,
       status: 'pending',
       transaction_type: 'payment',
     };

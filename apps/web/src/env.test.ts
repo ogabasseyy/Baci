@@ -10,6 +10,7 @@ function stubBaseEnv() {
   vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'service-role-key');
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://supabase.example.com');
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'anon-key');
+  vi.stubEnv('QUIZ_RPC_SERVER_SECRET', 'quiz-test-secret');
   delete process.env.SUPABASE_JWT_SECRET;
   delete process.env.SUPABASE_AGENTIC_JWT_PRIVATE_JWK;
   delete process.env.BACI_WORKER_PROFILE;
@@ -1101,6 +1102,18 @@ describe('env quiz validation', () => {
 
     expect(env.QUIZ_PHASE).toBe('1a');
     expect(env.QUIZ_PRODUCTION_APPROVED).toBe(false);
+  });
+
+  it('requires the proof secret for negotiated checkout in production phase 1a', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('SUPABASE_JWT_SECRET', 'jwt-secret');
+    vi.stubEnv('QUIZ_PHASE', '1a');
+    delete process.env.QUIZ_RPC_SERVER_SECRET;
+
+    await expect(loadEnvModule()).rejects.toThrow(
+      /QUIZ_RPC_SERVER_SECRET is required in production for negotiated checkout proofs/
+    );
   });
 
   it('accepts production quiz phase and truthy production approval aliases', async () => {

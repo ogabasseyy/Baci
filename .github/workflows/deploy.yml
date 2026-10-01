@@ -27,10 +27,10 @@ jobs:
       migrations: ${{ steps.filter.outputs.migrations }}
       cwv_runner: ${{ steps.filter.outputs.cwv_runner }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
           filters: .github/filters/deploy.yml
@@ -42,10 +42,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          filter: blob:none
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
       - name: Run CWV runner contract tests
@@ -62,27 +61,35 @@ jobs:
   vps-drain-readiness:
     if: github.ref == 'refs/heads/main'
     runs-on: baci-deploy
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          path: .readiness-checkout
           persist-credentials: false
+          sparse-checkout: |
+            vps-workers/bin/verify-cache-invalidation-drain-installed.sh
+            vps-workers/bin/verify-gigl-direct-workers-installed.sh
+          sparse-checkout-cone-mode: false
       - name: Verify production cache-invalidation drain installation
         env:
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
-        run: vps-workers/bin/verify-cache-invalidation-drain-installed.sh
+        run: .readiness-checkout/vps-workers/bin/verify-cache-invalidation-drain-installed.sh
       - name: Verify production GIGL direct-worker installation
         env:
           BACI_EXPECTED_APP_SHA: ${{ github.sha }}
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
-        run: vps-workers/bin/verify-gigl-direct-workers-installed.sh
+        run: .readiness-checkout/vps-workers/bin/verify-gigl-direct-workers-installed.sh
 
   # Apply any pending Supabase migrations AFTER drain readiness and BEFORE the
-  # Vercel deploy so application code never lands ahead of the schema it depends on. Closes
-  # the gap that let 12 Apr 2026 migrations sit unapplied on production for
-  # nearly a week.
+  # Vercel deploy so application code never lands ahead of the schema it depends on. Migrations
+  # that install enforcement requiring a new application claim are explicitly
+  # deferred by the applier until the matching revision is live (see the
+  # postdeploy step in deploy-production). Closes the gap that let 12 Apr 2026
+  # migrations sit unapplied on production for nearly a week without creating
+  # a migration-first checkout outage.
   #
   # Runs on every main-branch deploy (not just PRs that touch
   # supabase/migrations/**) because previous failed pushes can leave drift
@@ -106,10 +113,12 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Apply pending migrations via Management API
+        env:
+          MIGRATION_PHASE: predeploy
         run: .github/scripts/apply-pending-migrations.sh
 
   deploy-production:
@@ -118,7 +127,7 @@ jobs:
     # 'skipped' and 'failure', so a skipped migrations job (e.g. if its `if`
     # condition becomes false in a future change) cannot let a web deploy
     # land against an out-of-date schema.
-    if: always() && github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success' && (needs.cwv-runner-contracts.result == 'success' || needs.cwv-runner-contracts.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.web == 'true')
+    if: always() && github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success' && (needs.cwv-runner-contracts.result == 'success' || needs.cwv-runner-contracts.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.web == 'true' || needs.changes.outputs.migrations == 'true')
     # Run production prebuilt deploys on GitHub-hosted runners while the VPS
     # provider is returning sustained CPU steal. This still uses a local
     # `vercel build --prod` followed by `vercel deploy --prebuilt --prod`, so
@@ -126,7 +135,7 @@ jobs:
     concurrency:
       group: production-prebuilt-deploy
       cancel-in-progress: false
-    runs-on: baci-deploy
+    runs-on: ubuntu-24.04
     environment:
       name: production
       url: https://ogabassey.com
@@ -166,12 +175,20 @@ jobs:
       # Fix OOM error on runner
       NODE_OPTIONS: "--max_old_space_size=8192"
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Pre-run cleanup of stale secrets
         run: |
           rm -rf .vercel
+      - name: Setup Node.js for deployment authority guard
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      - name: Verify exact-main deployment authority before build
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: .github/scripts/current-main-deploy-guard.mjs
       - uses: ./.github/actions/pnpm-install-cached
       # Pin Vercel CLI + allow esbuild postinstall in an isolated runner-temp
       # package so pnpm 10's strict ERR_PNPM_IGNORED_BUILDS does not block
@@ -181,6 +198,17 @@ jobs:
       - run: .github/scripts/run-pinned-vercel.sh pull --yes --environment=production
       - name: Verify GIGL fallback capability in Vercel Production
         run: node .github/scripts/inject-prebuilt-env-secret.mjs GIGL_TRACKING_WORKER_TOKEN .vercel/.env.production.local 'build-time-presence-stand-in-not-used-at-runtime-000000000000'
+      - name: Ensure wallet recovery HMAC Production configuration exists
+        # `vercel pull` omits undefined keys and writes blank placeholders for
+        # defined sensitive values. CLI 57.0.0 can exit 0 after an empty
+        # `env add --sensitive` write, so create the missing Production key once
+        # through the Vercel REST API, then record the blank placeholder.
+        # Never logs the generated runtime value.
+        run: node .github/scripts/ensure-vercel-sensitive-env.mjs MERCHANT_WALLET_FUNDING_RECOVERY_HMAC_SECRET .vercel/.env.production.local
+      - name: Verify wallet recovery HMAC Production configuration is present
+        # Sensitive Vercel values are intentionally blank in the pulled dotenv
+        # file. This proves the Production key is defined, not its runtime value.
+        run: node .github/scripts/assert-vercel-pulled-sensitive-env.mjs MERCHANT_WALLET_FUNDING_RECOVERY_HMAC_SECRET .vercel/.env.production.local
       - name: Synchronize Cloudflare runtime credentials to Vercel Production
         run: .github/scripts/sync-cloudflare-vercel-production-env.sh .github/scripts/run-pinned-vercel.sh
       - name: Ensure build-time presence of runtime-only quiz RPC secret
@@ -233,14 +261,17 @@ jobs:
       # IMPORTANT: --archive=tgz is required to prevent Vercel upload rate limiting.
       # Do NOT remove it — without it, each deploy uploads thousands of individual files.
       - name: Deploy to Vercel (with retry)
-        # Backstop in case a deploy hangs past the script's per-attempt cap
-        # (deploy-with-retry.sh times out each `vercel deploy` and promotes the
-        # created deployment). Sized so the recovery budget -- one capped deploy
-        # (~20m) plus its promote retries (~5m) plus a fallback deploy (~20m) --
-        # fits, while still keeping a stuck deploy from holding the runner and the
-        # concurrency lock for the whole 150-minute job budget.
+        # Backstop for stuck deploys; the retry budget fits the 150-minute job timeout.
         timeout-minutes: 55
-        run: .github/scripts/deploy-with-retry.sh .github/scripts/run-pinned-vercel.sh deploy --yes --prebuilt --prod --archive=tgz
+        env:
+          DEPLOY_CURRENT_MAIN_GUARD: .github/scripts/current-main-deploy-guard.mjs
+          GITHUB_TOKEN: ${{ github.token }}
+        # Stage without production domains; deploy-with-retry verifies exact-main authority.
+        run: .github/scripts/deploy-with-retry.sh .github/scripts/run-pinned-vercel.sh deploy --yes --prebuilt --prod --skip-domain --archive=tgz
+      - uses: ./.github/actions/postdeploy-migrations
+        with:
+          supabase-access-token: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          supabase-project-ref: ${{ secrets.SUPABASE_PROJECT_REF }}
       - name: Purge and verify storefront release HTML
         run: node .github/scripts/storefront-release-coherence.mjs
       - name: Smoke test storefront blog

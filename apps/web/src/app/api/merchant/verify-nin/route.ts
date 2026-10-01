@@ -17,10 +17,13 @@ function namesMatch(
   inputFirst: string,
   inputLast: string,
   returnedFirst: string,
-  returnedLast: string
+  returnedLast: string,
+  returnedMiddle = ''
 ): boolean {
   const inputParts = normalizeNameParts(`${inputFirst} ${inputLast}`);
-  const returnedParts = normalizeNameParts(`${returnedFirst} ${returnedLast}`);
+  const returnedParts = normalizeNameParts(
+    `${returnedFirst} ${returnedMiddle} ${returnedLast}`
+  );
 
   // Exact sorted-word match handles "John Doe" vs "Doe John"
   if (inputParts.join(' ') === returnedParts.join(' ')) return true;
@@ -157,8 +160,15 @@ export async function POST(request: NextRequest) {
 
     const retFirst = data.responseBody.firstName ?? '';
     const retLast = data.responseBody.lastName ?? '';
+    const retMiddle = data.responseBody.middleName ?? '';
 
-    const verified = namesMatch(firstName, lastName, retFirst, retLast);
+    const verified = namesMatch(
+      firstName,
+      lastName,
+      retFirst,
+      retLast,
+      retMiddle
+    );
 
     if (verified) {
       const { error: rpcError } = await auth.supabase.rpc(

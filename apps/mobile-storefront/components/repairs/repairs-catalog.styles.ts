@@ -24,74 +24,10 @@ export const repairsCatalogStyles = StyleSheet.create({
   },
 
   // Intro
-  introTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    marginBottom: SPACING.xs,
-  },
-  introSubtitle: {
-    fontSize: 13,
-    lineHeight: 19,
-    marginBottom: SPACING.md,
-  },
-
-  // Search
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-    borderWidth: 1,
-    borderRadius: RADIUS.lg,
-    paddingHorizontal: SPACING.md,
-    marginBottom: SPACING.lg,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    paddingVertical: SPACING.md,
-  },
-
-  // Brand groups
-  brandGroup: {
-    marginBottom: SPACING.lg,
-  },
-  brandTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: SPACING.sm,
-  },
-  deviceCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: SPACING.md,
-    borderRadius: RADIUS.lg,
-    gap: SPACING.md,
-    marginBottom: SPACING.sm,
-  },
-  deviceThumb: {
-    width: 44,
-    height: 44,
-    borderRadius: RADIUS.md,
-    backgroundColor: `${BRAND.primary}15`,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  deviceInfo: {
-    flex: 1,
-    minWidth: 0,
-  },
-  deviceModel: {
-    fontSize: 15,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
+  // Shared catalogue/detail states
   deviceMeta: {
     fontSize: 12,
   },
-
-  // Empty / not-listed
   emptyText: {
     fontSize: 14,
     textAlign: 'center',

@@ -88,12 +88,18 @@ function createEq(table: string) {
         return {
           data: rows,
           error: response?.error ?? null,
-          order: () => ({
+          order: vi.fn(() => ({
+            order: vi.fn(() => ({
+              range: (from: number, to: number) => ({
+                data: rows.slice(from, to + 1),
+                error: response?.error ?? null,
+              }),
+            })),
             range: (from: number, to: number) => ({
               data: rows.slice(from, to + 1),
               error: response?.error ?? null,
             }),
-          }),
+          })),
           range: (from: number, to: number) => ({
             data: rows.slice(from, to + 1),
             error: response?.error ?? null,
@@ -522,7 +528,7 @@ describe('sitemap-data', () => {
 
     expect(mockSelectCalls.join('\n')).not.toMatch(/\bcategory_slug\b/);
     expect(mockSelectCalls.join('\n')).toContain(
-      'product_categories:product_categories(categories(slug))'
+      'product_categories:product_categories(category_id, categories(slug, is_active))'
     );
   });
 

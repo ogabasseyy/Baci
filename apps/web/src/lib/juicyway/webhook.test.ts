@@ -30,6 +30,23 @@ describe('verifyWebhookSignature', () => {
     reference: 'ref_001',
   };
 
+  it('verifies a provider signature when the configured business ID has surrounding whitespace', async () => {
+    const checksum = await computeHmac(
+      `${event}|${JSON.stringify(data)}`,
+      businessId
+    );
+
+    expect(
+      await verifyWebhookSignature(event, data, checksum, ` ${businessId}\n`)
+    ).toBe(true);
+  });
+
+  it('fails closed when the configured business ID is whitespace only', async () => {
+    expect(await verifyWebhookSignature(event, data, 'abcd', ' \n')).toBe(
+      false
+    );
+  });
+
   it('returns true for a valid signature', async () => {
     const sortedData = {
       amount: 5000,

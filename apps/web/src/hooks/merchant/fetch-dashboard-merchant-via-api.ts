@@ -9,16 +9,22 @@ export interface DashboardMerchantResult {
 /**
  * Client-side loader for the signed-in user's dashboard merchant context.
  *
- * Reads through the `/api/merchant/me` server boundary instead of querying
- * `public.merchants` directly with the browser's `authenticated` client. The
- * dashboard needs sensitive own-merchant columns (nin, bvn, bank_*, tokens);
- * S1 revokes those column grants from the `authenticated` role, so this read
- * must run server-side under the service role behind an ownership check.
+ * Reads through the `/api/merchant/me` server boundary. The implicit dashboard
+ * context can include sensitive own-merchant columns, so it is resolved by the
+ * caller-bound server RPC. Explicit selection returns only a bounded profile
+ * after the server verifies owner/staff access to that exact merchant.
  */
-export async function fetchDashboardMerchantViaApi(): Promise<DashboardMerchantResult> {
-  const response = await fetch('/api/merchant/me', {
-    credentials: 'same-origin',
-  });
+export async function fetchDashboardMerchantViaApi(options?: {
+  merchantId?: string;
+  signal?: AbortSignal;
+}): Promise<DashboardMerchantResult> {
+  const init: RequestInit = { credentials: 'same-origin' };
+  if (options?.merchantId) {
+    init.headers = { 'x-baci-merchant-id': options.merchantId };
+  }
+  if (options?.signal) init.signal = options.signal;
+
+  const response = await fetch('/api/merchant/me', init);
 
   // A missing/expired session is not an error for the provider — it simply
   // means there is no dashboard merchant to show.

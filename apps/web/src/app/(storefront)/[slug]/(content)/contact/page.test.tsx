@@ -146,7 +146,7 @@ describe('contact metadata', () => {
     expect(schema.mainEntity.sameAs).toEqual(
       expect.arrayContaining([
         'https://instagram.com/teststore',
-        'https://twitter.com/teststore',
+        'https://x.com/teststore',
       ])
     );
     expect(schema.mainEntity.hasMerchantReturnPolicy).toMatchObject({

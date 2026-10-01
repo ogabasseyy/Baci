@@ -21,6 +21,7 @@ import type {
   InvoiceLineItem,
   TaxSubtotal,
 } from '@/lib/invoice-generator';
+import { resolveInvoicePaymentAccount } from '@/lib/invoice-payment-account';
 import { deriveTaxSubtotalsFromInvoiceItems } from '@/lib/invoice-tax-subtotals';
 import { ORDER_COLUMNS } from '@/lib/order-queries';
 import {
@@ -31,6 +32,7 @@ import {
   generateReceiptBlob,
   resolveReceiptLogoDataUri,
 } from '@/lib/receipt-pdf-generator';
+import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { createClient } from '@/lib/supabase/server';
 
 const paramsSchema = z.object({
@@ -59,12 +61,6 @@ interface TaxSubtotalRow {
   taxable_amount: number;
   tax_amount: number;
   exemption_reason: string | null;
-}
-
-interface PaymentAccountRow {
-  account_number: string;
-  bank_name: string | null;
-  account_name: string | null;
 }
 
 interface RegisteredAddress {
@@ -123,7 +119,7 @@ export async function GET(
       .from('orders')
       .select(
         `
-        ${ORDER_COLUMNS}, invoice_type_code, invoice_issue_date, tax_point_date, payment_due_date, buyer_reference, purchase_order_reference, tax_exclusive_amount, tax_inclusive_amount, invoice_note, firs_irn, firs_csid, firs_qr_code, payment_terms, is_credit_order,
+        ${ORDER_COLUMNS}, transaction_date, invoice_type_code, invoice_issue_date, tax_point_date, payment_due_date, buyer_reference, purchase_order_reference, tax_exclusive_amount, tax_inclusive_amount, invoice_note, firs_irn, firs_csid, firs_qr_code, payment_terms, is_credit_order,
         merchants!inner (
           id,
           user_id,
@@ -493,23 +489,18 @@ export async function GET(
       );
     }
 
-    const { data: paymentAccounts, error: paymentAccountError } = await supabase
-      .from('order_payment_accounts')
-      .select(
-        'account_number, bank_name, account_name, provider, created_at, expires_at'
-      )
-      .eq('order_id', orderId)
-      .eq('provider', 'paystack')
-      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
-      .order('created_at', { ascending: false })
-      .limit(1);
+    const isPaidOrder = order.payment_status?.trim().toLowerCase() === 'paid';
+    const {
+      error: paymentAccountError,
+      transactionError,
+      paymentAccount,
+    } = await resolveInvoicePaymentAccount(supabase, orderId, isPaidOrder);
 
-    if (paymentAccountError) {
-      console.error(
-        'Error fetching order_payment_accounts for invoice:',
-        orderId,
-        paymentAccountError
-      );
+    if (paymentAccountError || transactionError) {
+      console.error('Error fetching invoice payment account data:', orderId, {
+        paymentAccountError,
+        transactionError,
+      });
       return NextResponse.json(
         {
           error: 'Failed to load invoice payment account',
@@ -518,10 +509,6 @@ export async function GET(
         { status: 500 }
       );
     }
-
-    const paymentAccount = (
-      Array.isArray(paymentAccounts) ? paymentAccounts[0] : null
-    ) as PaymentAccountRow | null;
 
     // Parse shipping address
     const shippingAddr = order.shipping_address as ShippingAddress | null;
@@ -541,10 +528,19 @@ export async function GET(
       // Document identifiers
       invoice_number:
         order.order_number || `INV-${order.id.slice(0, 8).toUpperCase()}`,
-      invoice_type_code: order.invoice_type_code || '380',
+      invoice_type_code: resolveInvoiceTypeCode({
+        paymentMethod: order.payment_method,
+        isPaid: isPaidOrder,
+        wasPaid: order.payment_status?.trim().toLowerCase() === 'refunded',
+        paymentStatus: order.payment_status,
+        amountPaid,
+        storedTypeCode: order.invoice_type_code,
+      }),
       issue_date: order.invoice_issue_date
         ? new Date(order.invoice_issue_date)
-        : new Date(order.created_at),
+        : order.transaction_date
+          ? new Date(order.transaction_date)
+          : new Date(order.created_at),
       tax_point_date: order.tax_point_date
         ? new Date(order.tax_point_date)
         : undefined,
@@ -706,11 +702,18 @@ export async function GET(
       pages: merchant.pages,
     };
     let complianceNote: string | undefined;
-    try {
-      generatePeppolInvoiceXml(invoiceData);
-      complianceNote = PEPPOL_BIS_BILLING_COMPLIANCE_NOTE;
-    } catch (peppolError) {
-      console.error('Failed to generate Peppol UBL invoice XML:', peppolError);
+    // Peppol UBL is a commercial-invoice artifact: proforma (325)
+    // documents skip the XML call and carry no compliance note.
+    if (invoiceData.invoice_type_code !== '325') {
+      try {
+        generatePeppolInvoiceXml(invoiceData);
+        complianceNote = PEPPOL_BIS_BILLING_COMPLIANCE_NOTE;
+      } catch (peppolError) {
+        console.error(
+          'Failed to generate Peppol UBL invoice XML:',
+          peppolError
+        );
+      }
     }
 
     // Generate the branded PDF
@@ -731,7 +734,10 @@ export async function GET(
       buyerReference: invoiceData.buyer_reference,
       complianceNote,
       documentDate: invoiceData.issue_date,
-      documentKind: 'invoice',
+      documentKind:
+        invoiceData.invoice_type_code === '325'
+          ? 'proforma_invoice'
+          : 'invoice',
       dueDate: invoiceData.due_date,
       firsCsid: invoiceData.firs_csid,
       firsIrn: invoiceData.firs_irn,
@@ -750,7 +756,7 @@ export async function GET(
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': buildPdfContentDisposition(
-          'invoice',
+          invoiceData.invoice_type_code === '325' ? 'proforma' : 'invoice',
           invoiceData.invoice_number
         ),
         'Cache-Control': 'no-cache',

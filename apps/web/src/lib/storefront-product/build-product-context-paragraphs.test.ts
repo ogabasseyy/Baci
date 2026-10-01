@@ -115,7 +115,7 @@ describe('buildProductContextParagraphs', () => {
     expect(paragraphs.join(' ')).toContain('Forspoken');
     expect(paragraphs.join(' ')).toContain('Ogabassey');
     expect(paragraphs.join(' ')).toContain('region compatibility');
-    expect(paragraphs.join(' ')).toContain('format: Physical Blu-ray disc');
+    expect(paragraphs.join(' ')).toContain('Format: Physical Blu-ray disc');
     expect(paragraphs.join(' ')).not.toMatch(/price in nigeria|installment/i);
   });
 
@@ -146,6 +146,7 @@ describe('buildProductContextParagraphs', () => {
     expect(copy).toContain('processor or panel class');
     expect(copy).toContain('Open Box condition');
     expect(copy).not.toContain('open_box condition');
+    expect(copy).toContain('Processor: AMD Ryzen 7');
     expect(copy).toContain('RAM: 32GB');
     expect(copy).toContain('Internal Storage: 1024GB');
     expect(copy).not.toContain('created at');
@@ -170,6 +171,9 @@ describe('buildProductContextParagraphs', () => {
             storage_gb: 256,
             battery_mah: 4000,
             has_5g: true,
+            has_ois: true,
+            announced_date: '2024-01-17',
+            release_date: '2024-01-31',
             front_camera_mp: null,
             display_resolution: '   ',
           },
@@ -182,8 +186,96 @@ describe('buildProductContextParagraphs', () => {
     expect(copy).toContain('Internal Storage: 256GB');
     expect(copy).toContain('Capacity: 4000mAh');
     expect(copy).toContain('5G Support: Yes');
+    expect(copy).toContain('OIS: Yes');
+    expect(copy).not.toContain('Announced: 2024-01-17');
     expect(copy).not.toContain('created at');
     expect(copy).not.toContain('nullMP');
     expect(copy).not.toContain('Display resolution');
+  });
+
+  it('retains mobile lifecycle and recommendation facts outside the display taxonomy', () => {
+    const paragraphs = buildProductContextParagraphs(
+      makeInput({
+        categorySlug: 'smartphones',
+        categoryName: 'Smartphones',
+        currentProduct: {
+          slug: 'pixel-8',
+          name: 'Google Pixel 8',
+          price: 800_000,
+          category_slug: 'smartphones',
+          product_key_specs: {
+            announced_date: '2023-10-04',
+            release_date: '2023-10-12',
+            recommended_for: 'Everyday photography',
+          },
+        },
+      })
+    );
+
+    const copy = paragraphs.join(' ');
+    expect(copy).toContain('Announced: 2023-10-04');
+    expect(copy).toContain('Release date: 2023-10-12');
+    expect(copy).toContain('Recommended for: Everyday photography');
+  });
+
+  it('uses camera taxonomy and omits phone-only negative facts from camera crawl copy', () => {
+    const paragraphs = buildProductContextParagraphs(
+      makeInput({
+        categorySlug: 'cameras',
+        categoryName: 'Cameras',
+        currentProduct: {
+          slug: 'canon-eos-r5-mark-ii',
+          name: 'Canon EOS R5 Mark II',
+          price: 4_899_000,
+          brand: 'Canon',
+          condition: 'new',
+          stock: 1,
+          category_slug: 'cameras',
+          product_key_specs: {
+            main_camera_mp: 45,
+            rear_camera_video: '8K RAW',
+            has_5g: false,
+            has_nfc: false,
+            has_headphone_jack: false,
+            has_ois: true,
+            card_slot_type: 'No',
+            usb_type: 'USB-C',
+          },
+        },
+      })
+    );
+
+    const copy = paragraphs.join(' ');
+    expect(copy).toContain('Effective Resolution: 45MP');
+    expect(copy).toContain('Video Recording: 8K RAW');
+    expect(copy).not.toContain('5G Support: No');
+    expect(copy).not.toContain('NFC: No');
+    expect(copy).not.toContain('3.5mm Jack: No');
+    expect(copy).toContain('OIS: Yes');
+    expect(copy).not.toContain('Card Slot: No');
+  });
+
+  it('classifies crawl facts from the stable category slug when the display name is localized', () => {
+    const paragraphs = buildProductContextParagraphs(
+      makeInput({
+        categorySlug: 'action-cameras',
+        categoryName: '相机',
+        currentProduct: {
+          slug: 'hero-action-cam',
+          name: 'Hero Action Cam',
+          price: 250_000,
+          category_slug: 'action-cameras',
+          product_key_specs: {
+            main_camera_mp: 24,
+            has_ois: true,
+          },
+        },
+      })
+    );
+
+    const copy = paragraphs.join(' ');
+    expect(copy).toContain('Effective Resolution: 24MP');
+    expect(copy).toContain('OIS: Yes');
+    expect(copy).toContain('相机');
   });
 });

@@ -1,174 +1,39 @@
 // Use browser ESM bundle to avoid Turbopack resolving jspdf.node.min.js (fflate dynamic worker error).
 import { jsPDF } from 'jspdf/dist/jspdf.es.min.js';
 import autoTable from 'jspdf-autotable';
+import type { AnalyticsCategory } from '@/components/analytics/analytics-category-nav';
 import type { AnalyticsData } from '@/components/analytics/draggable-analytics-grid';
+import { buildAnalyticsCsvContent } from './analytics-export-csv';
+import {
+  formatAnalyticsExportPeriod,
+  formatCurrency,
+} from './analytics-export-formatters';
+import { appendAnalyticsCategoryPdfSection } from './analytics-export-pdf-category';
 
-// Extended jsPDF type with autotable and internal properties (2026 best practice)
 interface JsPDFWithAutoTable extends jsPDF {
   lastAutoTable?: {
     finalY: number;
   };
 }
 
-// Type for accessing jsPDF internal methods (doesn't extend jsPDF to avoid type conflicts)
 interface JsPDFWithInternal {
   internal: {
     getNumberOfPages: () => number;
   };
 }
 
-const USD_CURRENCY_FORMATTER: Intl.NumberFormat = new Intl.NumberFormat(
-  'en-US',
-  {
-    style: 'currency',
-    currency: 'USD',
-  }
-);
-
-/**
- * Format currency for display
- */
-function formatCurrency(value: number): string {
-  return USD_CURRENCY_FORMATTER.format(value);
-}
-
-/**
- * Format percentage for display
- */
-function formatPercentage(value: number): string {
-  return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
-}
-
-/**
- * Format date range for display
- */
-function formatDateRange(from?: Date, to?: Date): string {
-  if (!from || !to) return 'All Time';
-  const options: Intl.DateTimeFormatOptions = {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  };
-  return `${from.toLocaleDateString('en-US', options)} - ${to.toLocaleDateString('en-US', options)}`;
-}
-
-/**
- * Escape a CSV field to prevent CSV injection and handle special characters
- * - Escapes double quotes by doubling them
- * - Wraps in quotes if contains special characters
- * - Prevents formula injection by prefixing dangerous characters with single quote
- */
-function escapeCSVField(field: string): string {
-  if (!field) return '""';
-
-  // Convert to string and trim
-  let escaped = String(field).trim();
-
-  // Prevent formula injection: prefix with single quote if starts with =, +, -, @, tab, or CR
-  if (/^[=+\-@\t\r]/.test(escaped)) {
-    escaped = `'${escaped}`;
-  }
-
-  // Escape existing double quotes by doubling them
-  escaped = escaped.replace(/"/g, '""');
-
-  // Always wrap in quotes for safety
-  return `"${escaped}"`;
-}
-
-/**
- * Export analytics data as CSV
- */
 export function exportAnalyticsAsCSV(
   data: AnalyticsData,
   dateRange?: { from: Date | undefined; to: Date | undefined },
-  merchantName?: string
+  merchantName?: string,
+  category: AnalyticsCategory = 'overview'
 ): void {
-  const {
-    summary,
-    recentSales,
-    // chartData, // Unused
-    salesByChannel,
-    salesByPaymentMethod,
-  } = data;
-
-  // Build CSV content
-  const csvRows: string[] = [];
-
-  // Header
-  csvRows.push(`Analytics Report - ${merchantName || 'Your Store'}`);
-  csvRows.push(`Period: ${formatDateRange(dateRange?.from, dateRange?.to)}`);
-  csvRows.push(`Generated: ${new Date().toLocaleString()}`);
-  csvRows.push(''); // Empty line
-
-  // Summary Section
-  csvRows.push('SUMMARY METRICS');
-  csvRows.push('Metric,Value,Change');
-
-  if (summary) {
-    csvRows.push(
-      `Total Revenue,${formatCurrency(summary.revenue?.value || 0)},${formatPercentage(summary.revenue?.change || 0)}`
-    );
-    csvRows.push(
-      `Total Sales,${summary.sales?.value || 0},${formatPercentage(summary.sales?.change || 0)}`
-    );
-    csvRows.push(`Total Units Sold,${summary.totalUnitsSold || 0},0%`);
-    csvRows.push(
-      `Total Customers,${summary.customers?.value || 0},${formatPercentage(summary.customers?.change || 0)}`
-    );
-    csvRows.push(
-      `Average Order Value,${formatCurrency(summary.aov?.value || 0)},${formatPercentage(summary.aov?.change || 0)}`
-    );
-  }
-
-  csvRows.push(''); // Empty line
-
-  // Financial Breakdown
-  if (summary) {
-    csvRows.push('FINANCIAL BREAKDOWN');
-    csvRows.push('Item,Amount');
-    csvRows.push(`Subtotal,${formatCurrency(summary.subtotal || 0)}`);
-    csvRows.push(`Shipping,${formatCurrency(summary.shipping || 0)}`);
-    csvRows.push(`Tax,${formatCurrency(summary.tax || 0)}`);
-    csvRows.push(`Discounts,${formatCurrency(summary.discounts || 0)}`);
-    csvRows.push(`Net Total,${formatCurrency(summary.revenue?.value || 0)}`);
-    csvRows.push('');
-  }
-
-  // Sales by Channel
-  if (salesByChannel && salesByChannel.length > 0) {
-    csvRows.push('SALES BY CHANNEL');
-    csvRows.push('Channel,Revenue');
-    salesByChannel.forEach((c) => {
-      csvRows.push(`${c.name},${formatCurrency(c.value)}`);
-    });
-    csvRows.push('');
-  }
-
-  // Sales by Payment Method
-  if (salesByPaymentMethod && salesByPaymentMethod.length > 0) {
-    csvRows.push('SALES BY PAYMENT METHOD');
-    csvRows.push('Method,Revenue');
-    salesByPaymentMethod.forEach((p) => {
-      csvRows.push(`${p.name},${formatCurrency(p.value)}`);
-    });
-    csvRows.push('');
-  }
-
-  // Recent Sales Section
-  if (recentSales && recentSales.length > 0) {
-    csvRows.push('RECENT SALES');
-    csvRows.push('Customer,Email,Amount,Date');
-    recentSales.forEach((sale) => {
-      csvRows.push(
-        `${escapeCSVField(sale.name)},${escapeCSVField(sale.email)},${formatCurrency(sale.amount)},${new Date(sale.time).toLocaleDateString()}`
-      );
-    });
-    csvRows.push(''); // Empty line
-  }
-
-  // Create and download CSV file
-  const csvContent = csvRows.join('\n');
+  const csvContent = buildAnalyticsCsvContent(
+    data,
+    dateRange,
+    merchantName,
+    category
+  );
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
   const url = URL.createObjectURL(blob);
@@ -182,13 +47,11 @@ export function exportAnalyticsAsCSV(
   URL.revokeObjectURL(url);
 }
 
-/**
- * Export analytics data as PDF
- */
 export function exportAnalyticsAsPDF(
   data: AnalyticsData,
   dateRange?: { from: Date | undefined; to: Date | undefined },
-  merchantName?: string
+  merchantName?: string,
+  category: AnalyticsCategory = 'overview'
 ): void {
   const {
     summary,
@@ -198,10 +61,8 @@ export function exportAnalyticsAsPDF(
     topProducts,
   } = data;
 
-  // Create new PDF document
   const doc = new jsPDF();
 
-  // Premium Header Styling
   doc.setFillColor(74, 144, 217); // #4A90D9 (Baci Primary)
   doc.rect(0, 0, 210, 40, 'F');
 
@@ -215,7 +76,7 @@ export function exportAnalyticsAsPDF(
   doc.setFont('helvetica', 'normal');
   doc.text(merchantName?.toUpperCase() || 'YOUR STORE', 14, 28);
   doc.text(
-    `PERIOD: ${formatDateRange(dateRange?.from, dateRange?.to).toUpperCase()}`,
+    `PERIOD: ${formatAnalyticsExportPeriod(category, dateRange).toUpperCase()}`,
     14,
     34
   );
@@ -354,6 +215,17 @@ export function exportAnalyticsAsPDF(
 
   yPosition = (doc as JsPDFWithAutoTable).lastAutoTable?.finalY ?? yPosition;
   yPosition += 20;
+
+  if (category !== 'overview') {
+    doc.addPage();
+    yPosition = appendAnalyticsCategoryPdfSection(
+      doc as JsPDFWithAutoTable,
+      data,
+      category,
+      20,
+      formatCurrency
+    );
+  }
 
   // Top Products and Recent Sales on new page
   doc.addPage();

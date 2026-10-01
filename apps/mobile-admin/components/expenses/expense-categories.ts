@@ -12,3 +12,12 @@ export const EXPENSE_CATEGORIES = [
 ] as const;
 
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+
+export function toExpenseCategoryOrNull(
+  value: unknown
+): ExpenseCategory | null {
+  return typeof value === 'string' &&
+    EXPENSE_CATEGORIES.includes(value as ExpenseCategory)
+    ? (value as ExpenseCategory)
+    : null;
+}

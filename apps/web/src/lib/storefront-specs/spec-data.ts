@@ -1,13 +1,24 @@
-import { stripHtmlTags } from '@/lib/sanitize-core';
+import { shouldIncludeProductSchemaSpec } from '@/lib/product-schema-specs';
+import { resolveSupportedStorefrontProductCategoryRelation } from '@/lib/storefront-product-category-name';
+import { buildDescriptionKeySpecs } from './build-description-key-specs';
+import { dedupeSpecItems } from './dedupe-spec-items';
+import { mergeSpecSections } from './merge-spec-sections';
+import { normalizeSpecItems } from './normalize-spec-items';
+import { normalizeSpecSections } from './normalize-spec-sections';
+import { resolveSpecDataCategoryClassification } from './resolve-spec-data-category-classification';
+import { buildDetailedSpecsFromKeySpecs } from './spec-key-specs';
 import {
   type ComparableProductKeySpecs,
-  KEY_SPEC_CATEGORIES,
+  getProductSpecFamily,
   SUMMARY_SPEC_PRIORITIES,
 } from './spec-taxonomy';
+import { normalizeSpecValueText } from './spec-value-normalization';
 import type { VariantAttributeSource } from './variant-attributes';
 import { normalizeVariantAttributes } from './variant-attributes';
 
 export const MAX_SUMMARY_SPECS = 8;
+const CAMERA_MOBILE_ONLY_SECTION_NAMES = new Set(['selfie camera']);
+
 export interface ProductSpecItem {
   label: string;
   value: string;
@@ -21,10 +32,11 @@ export interface ProductSpecSection {
 interface SpecDataSource {
   brand?: string | null;
   categories?:
-    | { name?: string | null }
-    | Array<{ name?: string | null }>
+    | { name?: string | null; slug?: string | null }
+    | Array<{ name?: string | null; slug?: string | null }>
     | null;
   category?: string | null;
+  category_slug?: string | null;
   condition?: string | null;
   description?: string | null;
   detailedSpecs?: ProductSpecSection[] | null;
@@ -37,264 +49,135 @@ interface SpecDataSource {
   variant_attributes?: VariantAttributeSource;
 }
 
-function getSourceCategoryName(source: SpecDataSource) {
-  if (Array.isArray(source.categories)) {
-    return source.categories[0]?.name || source.category || 'General';
-  }
-
-  return source.categories?.name || source.category || 'General';
+function resolveSourceCategory(source: SpecDataSource) {
+  return resolveSpecDataCategoryClassification(source);
 }
 
-const HTML_ENTITY_REPLACEMENTS: Record<string, string> = {
-  '&amp;': '&',
-  '&lt;': '<',
-  '&gt;': '>',
-  '&quot;': '"',
-  '&#39;': "'",
-  '&nbsp;': ' ',
-};
-
-function getFirstVariantValue(
+function getVariantValue(
   variantAttributes: SpecDataSource['variant_attributes'],
   key: string
 ) {
-  const rawValue = normalizeVariantAttributes(variantAttributes)[key];
-  if (Array.isArray(rawValue)) {
-    return rawValue[0];
-  }
-
-  return rawValue || undefined;
+  return normalizeVariantAttributes(variantAttributes)[key];
 }
 
-function decodeHtmlEntities(value: string) {
-  return value
-    .replace(/&#(\d+);/g, (_match, code) =>
-      String.fromCodePoint(Number.parseInt(code, 10))
-    )
-    .replace(/&#x([0-9a-f]+);/gi, (_match, code) =>
-      String.fromCodePoint(Number.parseInt(code, 16))
-    )
-    .replace(
-      /&(amp|lt|gt|quot|nbsp|#39);/g,
-      (match) => HTML_ENTITY_REPLACEMENTS[match] || match
-    );
-}
-
-function normalizeSpecText(value: string) {
-  return decodeHtmlEntities(stripHtmlTags(value)).replace(/\s+/g, ' ').trim();
-}
-
-function normalizeSpecTextValue(value: unknown) {
-  if (typeof value === 'string') {
-    return normalizeSpecText(value);
-  }
-
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return String(value);
-  }
-
-  if (typeof value === 'boolean') {
-    return value ? 'Yes' : 'No';
-  }
-
-  return '';
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
-}
-
-function normalizeSpecItems(value: unknown): ProductSpecItem[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.flatMap((item) => {
-    if (!isRecord(item)) {
-      return [];
-    }
-
-    const label = normalizeSpecTextValue(item.label);
-    const itemValue = normalizeSpecTextValue(item.value);
-
-    return label && itemValue ? [{ label, value: itemValue }] : [];
-  });
-}
-
-function normalizeSpecSections(value: unknown): ProductSpecSection[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.flatMap((section) => {
-    if (!isRecord(section)) {
-      return [];
-    }
-
-    const items = normalizeSpecItems(section.items);
-    if (items.length === 0) {
-      return [];
-    }
-
-    return [
-      {
-        category: normalizeSpecTextValue(section.category) || 'General',
-        items,
-      },
-    ];
-  });
-}
-
-function buildDescriptionKeySpecs(
-  description: SpecDataSource['description']
-): ProductSpecSection[] {
-  if (!description?.includes('<table')) {
-    return [];
-  }
-
-  const keySpecsHeadingIndex = description.search(
-    /<h[1-6][^>]*>\s*Key Specs(?: at a Glance)?\s*<\/h[1-6]>/i
+function getFirstSupportedFallbackValue(...values: unknown[]) {
+  const [item] = dedupeSpecItems(
+    values
+      .flatMap((value) => (Array.isArray(value) ? value : [value]))
+      .map((value) => ({
+        label: 'Fallback value',
+        value: normalizeSpecValueText(value),
+      })),
+    { omitUnsupportedValues: true }
   );
-  const tableSource =
-    keySpecsHeadingIndex >= 0
-      ? description.slice(keySpecsHeadingIndex)
-      : description;
-  const tableMatch = tableSource.match(/<table[\s\S]*?<\/table>/i);
 
-  if (!tableMatch) {
-    return [];
-  }
-
-  const items = [...tableMatch[0].matchAll(/<tr[\s\S]*?>([\s\S]*?)<\/tr>/gi)]
-    .map((rowMatch) => {
-      const cells = [
-        ...rowMatch[1].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi),
-      ]
-        .map((cellMatch) => normalizeSpecText(cellMatch[1]))
-        .filter(Boolean);
-
-      if (cells.length < 2) {
-        return null;
-      }
-
-      const [label, value] = cells;
-      if (!label || !value || /^(feature|what you get)$/i.test(label)) {
-        return null;
-      }
-
-      return { label, value };
-    })
-    .filter((item): item is ProductSpecItem => Boolean(item));
-
-  if (items.length === 0) {
-    return [];
-  }
-
-  return [{ category: 'Key Specs', items }];
+  return item?.value;
 }
 
-function mergeSpecSections(...sections: ProductSpecSection[][]) {
-  const merged: ProductSpecSection[] = [];
+function resolveSchemaCategoryRelation(
+  source: Pick<SpecDataSource, 'categories' | 'category' | 'category_slug'>
+) {
+  return Array.isArray(source.categories)
+    ? resolveSupportedStorefrontProductCategoryRelation(source.categories)
+    : source.categories;
+}
 
-  for (const sectionGroup of sections) {
-    for (const section of sectionGroup) {
-      const existingSection = merged.find(
-        (entry) => entry.category === section.category
-      );
+function filterPdpSpecItems(
+  items: ProductSpecItem[],
+  section: string,
+  source: Pick<SpecDataSource, 'categories' | 'category' | 'category_slug'>,
+  productKeySpecs: ComparableProductKeySpecs | null | undefined
+) {
+  return items.filter((item) =>
+    shouldIncludeProductSchemaSpec(
+      {
+        category: source.category,
+        categories: resolveSchemaCategoryRelation(source),
+        category_slug: source.category_slug,
+        product_key_specs: productKeySpecs ?? undefined,
+      },
+      { label: item.label, section, value: item.value }
+    )
+  );
+}
 
-      if (!existingSection) {
-        merged.push({
-          category: section.category,
-          items: [...section.items],
-        });
-        continue;
-      }
-
-      for (const item of section.items) {
-        if (
-          !existingSection.items.some((entry) => entry.label === item.label)
-        ) {
-          existingSection.items.push(item);
-        }
-      }
+function filterPdpLegacySpecifications(
+  sections: ProductSpecSection[],
+  source: Pick<SpecDataSource, 'categories' | 'category' | 'category_slug'>,
+  classificationName: string,
+  productKeySpecs: ComparableProductKeySpecs | null | undefined
+) {
+  return sections.flatMap((section) => {
+    const normalizedSectionName = section.category
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ');
+    if (
+      getProductSpecFamily(classificationName) === 'camera' &&
+      CAMERA_MOBILE_ONLY_SECTION_NAMES.has(normalizedSectionName)
+    ) {
+      return [];
     }
-  }
 
-  return merged.filter((section) => section.items.length > 0);
-}
+    const items = filterPdpSpecItems(
+      section.items,
+      section.category,
+      source,
+      productKeySpecs
+    );
 
-function isComparableProductKeySpecs(
-  value: SpecDataSource['product_key_specs']
-): value is ComparableProductKeySpecs {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
-}
-
-function buildDetailedSpecsFromKeySpecs(
-  keySpecs: ComparableProductKeySpecs
-): ProductSpecSection[] {
-  return KEY_SPEC_CATEGORIES.map(({ category, fields }) => ({
-    category,
-    items: fields
-      .filter(({ key, condition }) => {
-        const value = keySpecs[key];
-        return (
-          value !== null &&
-          value !== undefined &&
-          (typeof value !== 'string' || value.trim().length > 0) &&
-          (!condition || condition(keySpecs))
-        );
-      })
-      .map((field) => {
-        const value = keySpecs[field.key];
-        return {
-          label: field.dynamicLabel
-            ? field.dynamicLabel(keySpecs)
-            : field.label,
-          value: field.transform
-            ? field.transform(value, keySpecs)
-            : String(value),
-        };
-      }),
-  })).filter((section) => section.items.length > 0);
+    return items.length > 0 ? [{ ...section, items }] : [];
+  });
 }
 
 function buildGeneralFallbackSpecs(
-  source: SpecDataSource
+  source: SpecDataSource,
+  categoryName: string,
+  classificationName: string
 ): ProductSpecSection[] {
-  const storageValue = Array.isArray(source.storage)
-    ? source.storage[0]
-    : source.storage ||
-      getFirstVariantValue(source.variant_attributes, 'storage');
-  const ramValue =
-    source.ram || getFirstVariantValue(source.variant_attributes, 'ram');
-  const simValue = getFirstVariantValue(source.variant_attributes, 'sim_type');
-  const displayValue = source.displaySize;
-  const items: ProductSpecItem[] = [
-    { label: 'Brand', value: source.brand || 'Generic' },
-    { label: 'Condition', value: source.condition || 'New' },
-    {
-      label: 'Category',
-      value: getSourceCategoryName(source),
-    },
-  ];
+  const storageValue = getFirstSupportedFallbackValue(
+    source.storage,
+    getVariantValue(source.variant_attributes, 'storage')
+  );
+  const ramValue = getFirstSupportedFallbackValue(
+    source.ram,
+    getVariantValue(source.variant_attributes, 'ram')
+  );
+  const simValue = getFirstSupportedFallbackValue(
+    getVariantValue(source.variant_attributes, 'sim_type')
+  );
+  const displayValue = getFirstSupportedFallbackValue(source.displaySize);
+  const items = dedupeSpecItems(
+    [
+      {
+        label: 'Brand',
+        value:
+          getFirstSupportedFallbackValue(source.brand, 'Generic') || 'Generic',
+      },
+      {
+        label: 'Condition',
+        value: getFirstSupportedFallbackValue(source.condition, 'New') || 'New',
+      },
+      {
+        label: 'Category',
+        value:
+          getFirstSupportedFallbackValue(categoryName, 'General') || 'General',
+      },
+      ...(displayValue ? [{ label: 'Display', value: displayValue }] : []),
+      ...(ramValue ? [{ label: 'RAM', value: ramValue }] : []),
+      ...(storageValue ? [{ label: 'Storage', value: storageValue }] : []),
+      ...(simValue ? [{ label: 'SIM', value: simValue }] : []),
+    ],
+    { omitUnsupportedValues: true }
+  );
 
-  if (displayValue) {
-    items.push({ label: 'Display', value: displayValue });
-  }
-
-  if (ramValue) {
-    items.push({ label: 'RAM', value: ramValue });
-  }
-
-  if (storageValue) {
-    items.push({ label: 'Storage', value: storageValue });
-  }
-
-  if (simValue) {
-    items.push({ label: 'SIM', value: simValue });
-  }
-
-  return [{ category: 'General', items }];
+  return filterPdpLegacySpecifications(
+    [{ category: 'General', items }],
+    source,
+    classificationName,
+    source.product_key_specs
+  );
 }
 
 function buildSummarySpecsFromSections(
@@ -315,7 +198,7 @@ function buildSummarySpecsFromSections(
     }
   }
 
-  return items.slice(0, MAX_SUMMARY_SPECS);
+  return items;
 }
 
 export function buildProductSpecData(source: SpecDataSource) {
@@ -324,23 +207,79 @@ export function buildProductSpecData(source: SpecDataSource) {
   const normalizedLegacySpecifications = normalizeSpecSections(
     source.specifications
   );
+  const {
+    hasCategory: hasSourceCategory,
+    name: sourceCategoryName,
+    classificationName: sourceClassificationName,
+  } = resolveSourceCategory(source);
+  // Unknown categories fail closed instead of inheriting the phone taxonomy.
+  // This prevents a missing category join from turning camera or accessory
+  // rows into phone-shaped PDP content.
+  const specFamily = hasSourceCategory
+    ? getProductSpecFamily(sourceClassificationName)
+    : 'general';
+  const keySpecSections =
+    source.product_key_specs &&
+    typeof source.product_key_specs === 'object' &&
+    !Array.isArray(source.product_key_specs)
+      ? buildDetailedSpecsFromKeySpecs(
+          source.product_key_specs,
+          specFamily,
+          hasSourceCategory ? sourceCategoryName : undefined
+        )
+      : [];
 
+  const detailedSpecifications = filterPdpLegacySpecifications(
+    normalizedDetailedSpecs,
+    source,
+    sourceClassificationName,
+    source.product_key_specs
+  );
+  const legacySpecifications = filterPdpLegacySpecifications(
+    normalizedLegacySpecifications,
+    source,
+    sourceClassificationName,
+    source.product_key_specs
+  );
+  const descriptionSpecifications = filterPdpLegacySpecifications(
+    descriptionKeySpecs,
+    source,
+    sourceClassificationName,
+    source.product_key_specs
+  );
+
+  const storedSpecifications = mergeSpecSections(
+    detailedSpecifications,
+    legacySpecifications
+  );
+  const usesGeneralFallback =
+    storedSpecifications.length === 0 && keySpecSections.length === 0;
   const structuredSpecs =
-    normalizedDetailedSpecs.length > 0
-      ? normalizedDetailedSpecs
-      : isComparableProductKeySpecs(source.product_key_specs)
-        ? buildDetailedSpecsFromKeySpecs(source.product_key_specs)
-        : normalizedLegacySpecifications.length > 0
-          ? normalizedLegacySpecifications
-          : buildGeneralFallbackSpecs(source);
+    storedSpecifications.length > 0
+      ? mergeSpecSections(storedSpecifications, keySpecSections)
+      : keySpecSections.length > 0
+        ? keySpecSections
+        : buildGeneralFallbackSpecs(
+            source,
+            sourceCategoryName,
+            sourceClassificationName
+          );
 
-  const detailedSpecs = mergeSpecSections(descriptionKeySpecs, structuredSpecs);
+  const detailedSpecs = usesGeneralFallback
+    ? mergeSpecSections(descriptionSpecifications, structuredSpecs)
+    : mergeSpecSections(structuredSpecs, descriptionSpecifications);
   const normalizedSummarySpecs = normalizeSpecItems(source.specs);
+  const summarySpecifications = filterPdpSpecItems(
+    normalizedSummarySpecs,
+    'General',
+    source,
+    source.product_key_specs
+  );
 
-  const specs =
-    normalizedSummarySpecs.length > 0
-      ? normalizedSummarySpecs
-      : buildSummarySpecsFromSections(detailedSpecs);
+  const specs = dedupeSpecItems([
+    ...summarySpecifications,
+    ...buildSummarySpecsFromSections(detailedSpecs),
+  ]).slice(0, MAX_SUMMARY_SPECS);
 
   return {
     detailedSpecs,

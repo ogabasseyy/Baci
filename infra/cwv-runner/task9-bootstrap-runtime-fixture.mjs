@@ -79,12 +79,12 @@ function runtimeSources() {
   }));
 }
 
-function archiveRows(source) {
+function archiveRows(source, policyBytes) {
   return [...TASK9_SOURCE_FILES, ...FINAL_CAMPAIGN_CLOSURE, 'infra/cwv-runner/policy.json']
     .sort()
     .map((path) => ({
       bytes:
-        source[path] ?? Buffer.from(path.endsWith('/policy.json') ? '{"authority":{}}' : '{}\n'),
+        source[path] ?? (path.endsWith('/policy.json') ? policyBytes : Buffer.from('{}\n')),
       mode: path.endsWith('.sh') ? '100755' : '100644',
       path,
     }));
@@ -99,11 +99,13 @@ function envelopeFor({ archive, node, rows, source }) {
     nodeVersion: process.version,
   };
   const provenance = {
+    archiveSha256: '4'.repeat(64),
     artifact: 'node',
     checksumSha256: '1'.repeat(64),
     keyringSha256: '2'.repeat(64),
     schemaVersion: 1,
     sha256: runtime.nodeSha256,
+    executableSha256: runtime.nodeSha256,
     signatureSha256: '3'.repeat(64),
     version: runtime.nodeVersion,
   };
@@ -152,7 +154,14 @@ function envelopeFor({ archive, node, rows, source }) {
   };
 }
 
-export function createExactBootstrapBundle(root) {
+export function createExactBootstrapBundle(
+  root,
+  {
+    policyBytes = Buffer.from(
+      `{"authority":{},"supplyChain":{"node":{"ownerDarwinArm64Sha256":"${'4'.repeat(64)}"}},"supplyChainProvenance":{"node":{"checksumsSha256":"${'1'.repeat(64)}","keyringSha256":"${'2'.repeat(64)}","signatureSha256":"${'3'.repeat(64)}"}}}`
+    ),
+  } = {}
+) {
   const bundleDir = join(root, 'bundle');
   const launcher = join(root, 'task9-bootstrap-launcher.mjs');
   const publishDir = join(root, 'authorized-source');
@@ -160,7 +169,7 @@ export function createExactBootstrapBundle(root) {
   const source = runtimeSources();
   writeFileSync(launcher, source['infra/cwv-runner/task9-bootstrap-runtime.mjs'], { mode: 0o400 });
   chmodSync(launcher, 0o400);
-  const rows = archiveRows(source);
+  const rows = archiveRows(source, policyBytes);
   const archive = Buffer.concat([
     ...rows.map((row) => tarEntry(row.path, row.bytes, row.mode)),
     Buffer.alloc(1024),
@@ -172,7 +181,7 @@ export function createExactBootstrapBundle(root) {
     baseSha: 'a'.repeat(40),
     entries: [],
     mergeSha: 'd'.repeat(40),
-    policyCanonicalSha256: digest(canonicalJson({ authority: {} })),
+    policyCanonicalSha256: digest(canonicalJson(JSON.parse(policyBytes))),
     policyFileSha256: digest(rows.find(({ path }) => path.endsWith('/policy.json')).bytes),
     prNumber: 9,
     reviewedHeadSha: 'e'.repeat(40),

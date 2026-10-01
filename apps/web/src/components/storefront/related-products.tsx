@@ -33,6 +33,7 @@ import { getEffectiveStock } from '@/lib/product-stock';
 import type { Product } from '@/lib/products';
 import { getProductUrl } from '@/lib/seo-utils';
 import { cn } from '@/lib/utils';
+import { findRelatedProducts } from './find-related-products';
 
 interface RelatedProductsProps {
   /** Current product to find related products for */
@@ -275,76 +276,4 @@ export function RelatedProducts({
       </div>
     </section>
   );
-}
-
-/**
- * Find related products based on category, brand, and price similarity
- *
- * Scoring algorithm:
- * - Same category: +10 points
- * - Same brand: +5 points
- * - Similar price (within 30%): +3 points
- * - Similar price (within 50%): +1 point
- *
- * This is a simple algorithm that can be replaced with vector similarity
- * search in the future by calling a dedicated API endpoint.
- */
-function findRelatedProducts(
-  currentProduct: Product,
-  allProducts: Product[],
-  maxResults: number
-): Product[] {
-  // Filter out the current product and inactive products
-  const candidates = allProducts.filter(
-    (p) => p.id !== currentProduct.id && p.status === 'active'
-  );
-
-  if (candidates.length === 0) return [];
-
-  // Score each product
-  const scored = candidates.map((p) => {
-    let score = 0;
-
-    // Category match (highest priority)
-    if (
-      p.category &&
-      currentProduct.category &&
-      p.category === currentProduct.category
-    ) {
-      score += 10;
-    }
-
-    // Brand match
-    if (p.brand && currentProduct.brand && p.brand === currentProduct.brand) {
-      score += 5;
-    }
-
-    // Price similarity
-    const priceDiff =
-      Math.abs(p.price - currentProduct.price) / currentProduct.price;
-    if (priceDiff <= 0.3) {
-      score += 3;
-    } else if (priceDiff <= 0.5) {
-      score += 1;
-    }
-
-    return { product: p, score };
-  });
-
-  // Sort by score (highest first), then by name for consistency
-  scored.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    return a.product.name.localeCompare(b.product.name);
-  });
-
-  // Return top results (only those with score > 0, fallback to random if none)
-  const withScore = scored.filter((s) => s.score > 0);
-
-  if (withScore.length > 0) {
-    return withScore.slice(0, maxResults).map((s) => s.product);
-  }
-
-  // Fallback: return random products if no good matches
-  const shuffled = [...candidates].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, maxResults);
 }

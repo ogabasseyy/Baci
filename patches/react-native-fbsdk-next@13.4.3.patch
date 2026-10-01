@@ -1,0 +1,101 @@
+diff --git a/android/src/main/java/com/facebook/reactnative/androidsdk/FBSettingsModule.java b/android/src/main/java/com/facebook/reactnative/androidsdk/FBSettingsModule.java
+--- a/android/src/main/java/com/facebook/reactnative/androidsdk/FBSettingsModule.java
++++ b/android/src/main/java/com/facebook/reactnative/androidsdk/FBSettingsModule.java
+@@ -12,6 +12,7 @@
+ 
+ import com.facebook.FacebookSdk;
+ import com.facebook.react.bridge.BaseJavaModule;
++import com.facebook.react.bridge.Promise;
+ import com.facebook.react.bridge.ReactMethod;
+ import com.facebook.react.bridge.ReadableArray;
+ import com.facebook.react.module.annotations.ReactModule;
+@@ -51,8 +52,9 @@
+      * [FB SDK Best Practices for GDPR Compliance](https://developers.facebook.com/docs/app-events/gdpr-compliance/)
+      */
+     @ReactMethod
+-    public void initializeSDK() {
++    public void initializeSDK(Promise promise) {
+         FacebookSdk.fullyInitialize();
++        promise.resolve(true);
+     }
+ 
+     /**
+diff --git a/ios/RCTFBSDK/core/RCTFBSDKSettings.m b/ios/RCTFBSDK/core/RCTFBSDKSettings.m
+--- a/ios/RCTFBSDK/core/RCTFBSDKSettings.m
++++ b/ios/RCTFBSDK/core/RCTFBSDKSettings.m
+@@ -43,9 +43,10 @@
+   [FBSDKSettings.sharedSettings setDataProcessingOptions:options country:country state:state];
+ }
+ 
+-RCT_EXPORT_METHOD(initializeSDK)
++RCT_EXPORT_METHOD(initializeSDK:(RCTPromiseResolveBlock)resolve rejector:(RCTPromiseRejectBlock)reject)
+ {
+   [FBSDKApplicationDelegate.sharedInstance initializeSDK];
++  resolve(@(YES));
+ }
+ 
+ RCT_EXPORT_METHOD(setAppID:(NSString *)appID)
+diff --git a/lib/commonjs/FBSettings.js b/lib/commonjs/FBSettings.js
+--- a/lib/commonjs/FBSettings.js
++++ b/lib/commonjs/FBSettings.js
+@@ -55,10 +55,11 @@
+     Settings.setDataProcessingOptions(options, country, state);
+   },
+   /**
+-   * Initialize the sdk
++   * Initialize the sdk. Resolves after native initialization finishes on both
++   * iOS and Android (void bridge methods are not a completion signal).
+    */
+   initializeSDK() {
+-    Settings.initializeSDK();
++    return Settings.initializeSDK();
+   },
+   /**
+    * Set app id
+diff --git a/lib/module/FBSettings.js b/lib/module/FBSettings.js
+--- a/lib/module/FBSettings.js
++++ b/lib/module/FBSettings.js
+@@ -48,10 +48,11 @@
+     Settings.setDataProcessingOptions(options, country, state);
+   },
+   /**
+-   * Initialize the sdk
++   * Initialize the sdk. Resolves after native initialization finishes on both
++   * iOS and Android (void bridge methods are not a completion signal).
+    */
+   initializeSDK() {
+-    Settings.initializeSDK();
++    return Settings.initializeSDK();
+   },
+   /**
+    * Set app id
+diff --git a/lib/typescript/src/FBSettings.d.ts b/lib/typescript/src/FBSettings.d.ts
+--- a/lib/typescript/src/FBSettings.d.ts
++++ b/lib/typescript/src/FBSettings.d.ts
+@@ -16,7 +16,7 @@
+     /**
+      * Initialize the sdk
+      */
+-    initializeSDK(): void;
++    initializeSDK(): Promise<boolean>;
+     /**
+      * Set app id
+      */
+diff --git a/src/FBSettings.ts b/src/FBSettings.ts
+--- a/src/FBSettings.ts
++++ b/src/FBSettings.ts
+@@ -50,10 +50,11 @@
+     Settings.setDataProcessingOptions(options, country, state);
+   },
+   /**
+-   * Initialize the sdk
++   * Initialize the sdk. Resolves after native initialization finishes on both
++   * iOS and Android (void bridge methods are not a completion signal).
+    */
+-  initializeSDK() {
+-    Settings.initializeSDK();
++  initializeSDK(): Promise<boolean> {
++    return Settings.initializeSDK();
+   },
+   /**
+    * Set app id

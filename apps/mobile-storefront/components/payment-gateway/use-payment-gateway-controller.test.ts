@@ -100,8 +100,23 @@ jest.mock('@tanstack/react-query', () => ({
 }));
 
 jest.mock('@/stores/cart-store', () => ({
-  useCartStore: (selector: (state: { clearCart: () => void }) => unknown) =>
-    selector({ clearCart: mockClearCart }),
+  useCartStore: Object.assign(
+    (selector: (state: { clearCart: () => void }) => unknown) =>
+      selector({ clearCart: mockClearCart }),
+    { getState: () => ({ items: [] }) }
+  ),
+}));
+
+let mockAuthUser: { id: string } | null = null;
+let mockAuthCustomer: { id: string } | null = null;
+
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: (
+    selector: (state: {
+      user: { id: string } | null;
+      customer: { id: string } | null;
+    }) => unknown
+  ) => selector({ user: mockAuthUser, customer: mockAuthCustomer }),
 }));
 
 const mockWaitForVtuConfirmation = jest.mocked(waitForVtuConfirmation);
@@ -173,6 +188,8 @@ describe('usePaymentGatewayController', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useRealTimers();
+    mockAuthUser = null;
+    mockAuthCustomer = null;
     mockSearchParams = { ...orderParams };
     mockWaitForVtuConfirmation.mockResolvedValue({
       amount: 2500,
@@ -315,11 +332,11 @@ describe('usePaymentGatewayController', () => {
     expect(mockWaitForVtuConfirmation).not.toHaveBeenCalled();
   });
 
-  it('clears the cart and navigates after order payment completion', () => {
+  it('clears the cart and navigates after order payment completion', async () => {
     jest.useFakeTimers();
     const { result } = renderHook(() => usePaymentGatewayController());
 
-    act(() => {
+    await act(async () => {
       result.current.handleNavigationChange(
         navigation('https://usebaci.com/checkout/success?trxref=ref-123')
       );
@@ -343,7 +360,7 @@ describe('usePaymentGatewayController', () => {
     });
   });
 
-  it('preserves tracking token when routing completed order payments', () => {
+  it('preserves tracking token when routing completed order payments', async () => {
     jest.useFakeTimers();
     mockSearchParams = {
       ...orderParams,
@@ -351,7 +368,7 @@ describe('usePaymentGatewayController', () => {
     };
     const { result } = renderHook(() => usePaymentGatewayController());
 
-    act(() => {
+    await act(async () => {
       result.current.handleNavigationChange(
         navigation('https://usebaci.com/checkout/success?trxref=ref-123')
       );
@@ -389,7 +406,115 @@ describe('usePaymentGatewayController', () => {
     alertSpy.mockRestore();
   });
 
-  it('uses an empty order id when delayed order navigation has no orderId', () => {
+  it('routes non-redvault exits back when leaving the gateway', () => {
+    let leavePress: (() => void) | undefined;
+    const alertSpy = jest
+      .spyOn(Alert, 'alert')
+      .mockImplementation((_title, _message, buttons) => {
+        leavePress = buttons?.find(
+          (button) => button.text === 'Leave'
+        )?.onPress;
+      });
+    const { result } = renderHook(() => usePaymentGatewayController());
+
+    act(() => {
+      result.current.handleClose();
+    });
+    act(() => {
+      leavePress?.();
+    });
+
+    expect(router.back).toHaveBeenCalledTimes(1);
+    expect(router.replace).not.toHaveBeenCalled();
+
+    alertSpy.mockRestore();
+  });
+
+  it('routes redvault exits to the orders flow instead of checkout', () => {
+    mockSearchParams = { ...orderParams, paymentMethod: 'uba_redvault' };
+    let leavePress: (() => void) | undefined;
+    const alertSpy = jest
+      .spyOn(Alert, 'alert')
+      .mockImplementation((_title, _message, buttons) => {
+        leavePress = buttons?.find(
+          (button) => button.text === 'Leave'
+        )?.onPress;
+      });
+    const { result } = renderHook(() => usePaymentGatewayController());
+
+    act(() => {
+      result.current.handleClose();
+    });
+    act(() => {
+      leavePress?.();
+    });
+
+    expect(router.replace).toHaveBeenCalledWith('/orders');
+    expect(router.back).not.toHaveBeenCalled();
+
+    alertSpy.mockRestore();
+  });
+
+  it('routes guest redvault exits to the tracking-token status view', () => {
+    mockSearchParams = {
+      ...orderParams,
+      paymentMethod: 'uba_redvault',
+      trackingToken: 'track-guest-123',
+    };
+    let leavePress: (() => void) | undefined;
+    const alertSpy = jest
+      .spyOn(Alert, 'alert')
+      .mockImplementation((_title, _message, buttons) => {
+        leavePress = buttons?.find(
+          (button) => button.text === 'Leave'
+        )?.onPress;
+      });
+    const { result } = renderHook(() => usePaymentGatewayController());
+
+    act(() => {
+      result.current.handleClose();
+    });
+    act(() => {
+      leavePress?.();
+    });
+
+    expect(router.replace).toHaveBeenCalledWith({
+      pathname: '/track-order',
+      params: { trackingToken: 'track-guest-123' },
+    });
+    expect(router.back).not.toHaveBeenCalled();
+
+    alertSpy.mockRestore();
+  });
+
+  it('routes signed-in redvault exits to the order details view', () => {
+    mockAuthUser = { id: 'user-1' };
+    mockAuthCustomer = { id: 'customer-1' };
+    mockSearchParams = { ...orderParams, paymentMethod: 'uba_redvault' };
+    let leavePress: (() => void) | undefined;
+    const alertSpy = jest
+      .spyOn(Alert, 'alert')
+      .mockImplementation((_title, _message, buttons) => {
+        leavePress = buttons?.find(
+          (button) => button.text === 'Leave'
+        )?.onPress;
+      });
+    const { result } = renderHook(() => usePaymentGatewayController());
+
+    act(() => {
+      result.current.handleClose();
+    });
+    act(() => {
+      leavePress?.();
+    });
+
+    expect(router.replace).toHaveBeenCalledWith('/orders/order-123');
+    expect(router.back).not.toHaveBeenCalled();
+
+    alertSpy.mockRestore();
+  });
+
+  it('uses an empty order id when delayed order navigation has no orderId', async () => {
     jest.useFakeTimers();
     mockSearchParams = {
       ...orderParams,
@@ -398,7 +523,7 @@ describe('usePaymentGatewayController', () => {
     };
     const { result } = renderHook(() => usePaymentGatewayController());
 
-    act(() => {
+    await act(async () => {
       result.current.handleNavigationChange(
         navigation('https://usebaci.com/checkout/success?trxref=ref-123')
       );

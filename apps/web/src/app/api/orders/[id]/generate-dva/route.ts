@@ -1,211 +1,279 @@
-import { customAlphabet } from 'nanoid';
 import { type NextRequest, NextResponse } from 'next/server';
-import {
-  authenticateApiRequest,
-  getMerchantIdForApiUser,
-} from '@/lib/api-auth';
+import { authenticateApiRequest, getUserAccess } from '@/lib/api-auth';
+import { hasPermission } from '@/lib/api-permissions';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
-import { calculatePlatformFee, generatePaymentAccount } from '@/lib/paystack';
-
-const nanoidUppercase = customAlphabet(
-  'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-  12
-);
-
-/**
- * POST /api/orders/[id]/generate-dva
- * Creates a Paystack DVA (Dedicated Virtual Account) for invoice payment collection.
- * Idempotent: returns existing DVA if one already exists for this order.
- * Also creates a pending transaction so the Paystack webhook can match the payment.
- * Supports both cookie-based auth (web) and Bearer token auth (mobile).
- *
- * Uses generatePaymentAccount which checks for existing DVAs before creating new ones.
- */
+import { reservePaystackDvaAssignment } from '@/lib/payments/reserve-paystack-dva-assignment';
+import { resolveChargeCurrency } from '@/lib/payments/resolve-charge-currency';
+import { generatePaymentAccount } from '@/lib/paystack';
+import { orderIdParamsSchema } from '@/schemas/orders';
+import { loadDvaProvisioningContext } from '../load-dva-provisioning-context';
+import {
+  getDvaReservationFailureResponse,
+  getDvaReservationProofFailureResponse,
+} from './generate-dva-reservation-response';
+import { isActivePaymentAccount } from './is-active-payment-account';
+import { isEligibleOrderForPaystackDva } from './is-eligible-order-for-paystack-dva';
+import { isUniqueViolation } from './is-unique-violation';
+import { loadLatestLegacyOrderAccount } from './load-latest-legacy-order-account';
+import { loadLatestPaystackOrderAccount } from './load-latest-paystack-order-account';
+import { toCustomerName } from './to-customer-name';
+import { toVirtualAccount } from './to-virtual-account';
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { valid, response } = await checkCsrfProtection(request);
-    if (!valid) return response as NextResponse;
-
-    const { id: orderId } = await params;
-
-    // 1. Auth check (supports mobile Bearer token + web cookies)
     const auth = await authenticateApiRequest(request);
     if (auth.error || !auth.user || !auth.supabase) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const { valid, response } = await checkCsrfProtection(request);
+    if (!valid) return response as NextResponse;
 
-    // 2. Get merchant ID (supports both owners and staff members)
-    const merchantId = await getMerchantIdForApiUser(auth.supabase);
+    const parsedParams = orderIdParamsSchema.safeParse(await params);
+    if (!parsedParams.success) {
+      return NextResponse.json(
+        { error: 'Invalid order ID', code: 'INVALID_ORDER_ID' },
+        { status: 400 }
+      );
+    }
+    const orderId = parsedParams.data.id;
+    const access = await getUserAccess(auth.supabase);
+    const merchantId = access?.merchantId;
     if (!merchantId) {
       return NextResponse.json(
         { error: 'Merchant not found' },
         { status: 404 }
       );
     }
-
     const supabase = auth.supabase;
-
-    // 3. Fetch order and verify ownership
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .select(
-        'id, order_number, total, customer_name, customer_email, customer_phone, payment_status, merchant_id'
+        'id, order_number, total, amount_paid, wallet_amount_used, customer_name, customer_email, customer_phone, payment_status, shipping_status, cancelled_at, currency, merchant_id'
       )
       .eq('id', orderId)
       .eq('merchant_id', merchantId)
       .single();
-
     if (orderError || !order) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
-
-    // 4. Guard: order must not already be fully paid
     if (order.payment_status === 'paid') {
       return NextResponse.json(
         { error: 'Order is already paid' },
         { status: 400 }
       );
     }
-
-    // 5. Check for existing DVA in our DB (idempotent)
-    const { data: existingVba, error: existingVbaError } = await supabase
-      .from('order_payment_accounts')
-      .select('account_number, bank_name, account_name')
-      .eq('order_id', orderId)
-      .maybeSingle();
+    if (!isEligibleOrderForPaystackDva(order)) {
+      return NextResponse.json(
+        {
+          code: 'ORDER_NOT_ELIGIBLE_FOR_DVA',
+          error: 'Order is not eligible for automatic confirmation',
+        },
+        { status: 400 }
+      );
+    }
+    const currencyResolution = resolveChargeCurrency({
+      clientCurrency: null,
+      gateway: 'paystack',
+      orderCurrency: order.currency,
+    });
+    if (!currencyResolution.ok) {
+      return NextResponse.json(
+        {
+          code: currencyResolution.code,
+          error: currencyResolution.error,
+        },
+        { status: 400 }
+      );
+    }
+    const customerEmail = order.customer_email?.trim();
+    if (!customerEmail) {
+      return NextResponse.json(
+        {
+          code: 'CUSTOMER_EMAIL_REQUIRED',
+          error: 'A customer email is required for automatic confirmation',
+        },
+        { status: 400 }
+      );
+    }
+    const provisioningContext = await loadDvaProvisioningContext({
+      merchantId,
+      orderId,
+      supabase,
+    });
+    if (!provisioningContext.ok) {
+      return NextResponse.json(
+        { code: provisioningContext.code, error: provisioningContext.error },
+        { status: provisioningContext.status }
+      );
+    }
+    const { data: existingVba, error: existingVbaError } =
+      await loadLatestPaystackOrderAccount(supabase, orderId);
 
     if (existingVbaError) {
+      return NextResponse.json(
+        { error: 'Failed to verify existing payment account' },
+        { status: 500 }
+      );
+    }
+    if (existingVba && isActivePaymentAccount(existingVba)) {
+      return NextResponse.json({
+        success: true,
+        virtualAccount: toVirtualAccount(existingVba),
+        existing: true,
+      });
+    }
+    const { data: existingLegacyAccount, error: existingLegacyError } =
+      await loadLatestLegacyOrderAccount(supabase, orderId);
+
+    if (existingLegacyError) {
       logger.error({
-        message: 'Database error checking existing VBA',
-        error: existingVbaError,
+        message: 'Database error checking legacy payment account',
+        error: existingLegacyError,
       });
       return NextResponse.json(
         { error: 'Failed to verify existing payment account' },
         { status: 500 }
       );
     }
-
-    if (existingVba) {
+    if (existingLegacyAccount) {
       return NextResponse.json({
         success: true,
-        virtualAccount: existingVba,
+        virtualAccount: toVirtualAccount(existingLegacyAccount),
         existing: true,
       });
     }
+    if (!hasPermission(access, 'orders', 'edit')) {
+      return NextResponse.json(
+        { code: 'FORBIDDEN', error: 'Forbidden' },
+        { status: 403 }
+      );
+    }
+    if (existingVba) {
+      const { data: released, error: releaseError } = await supabase.rpc(
+        'release_expired_paystack_order_account',
+        { p_order_id: orderId }
+      );
+      if (releaseError) {
+        return NextResponse.json(
+          {
+            code: 'PAYMENT_ACCOUNT_RELEASE_FAILED',
+            error: 'Unable to reprovision the automatic confirmation account',
+          },
+          { status: 500 }
+        );
+      }
+      if (!released) {
+        const { data: racedAccount, error: racedAccountError } =
+          await loadLatestPaystackOrderAccount(supabase, orderId);
 
-    // 6. Parse customer name into first/last
-    const nameParts = (order.customer_name || 'Customer').trim().split(' ');
-    const firstName = nameParts[0] || 'Customer';
-    const lastName = nameParts.slice(1).join(' ') || 'User';
+        if (
+          !racedAccountError &&
+          racedAccount &&
+          isActivePaymentAccount(racedAccount)
+        ) {
+          return NextResponse.json({
+            success: true,
+            virtualAccount: toVirtualAccount(racedAccount),
+            existing: true,
+          });
+        }
 
-    // 6b. Get a valid phone number — wema-bank requires it for DVA creation.
+        return NextResponse.json(
+          {
+            code: 'PAYMENT_ACCOUNT_RELEASE_FAILED',
+            error: 'Unable to reprovision the automatic confirmation account',
+          },
+          { status: 500 }
+        );
+      }
+    }
+
+    const { firstName, lastName } = toCustomerName(order.customer_name);
+
     let phone = order.customer_phone || '';
     if (!phone) {
-      const { data: merchant, error: merchantError } = await supabase
+      const { data: merchant } = await supabase
         .from('merchants')
         .select('phone')
         .eq('id', merchantId)
         .maybeSingle();
-
-      if (merchantError) {
-        logger.error({
-          message: 'Database error fetching merchant phone',
-          error: merchantError,
-        });
-      }
       phone = merchant?.phone || '08000000000';
     }
 
-    // 7. Create Paystack DVA via generatePaymentAccount
-    //    This checks for existing customer DVAs first (GET) before creating new ones (POST)
-    logger.info({
-      message: 'Creating Paystack DVA for order',
-      orderId,
-      customerEmail: order.customer_email,
-      firstName,
-      lastName,
-    });
-
     const dvaResult = await generatePaymentAccount({
-      email: order.customer_email || `${orderId}@orders.usebaci.com`,
+      email: customerEmail,
       firstName,
       lastName,
       phone,
       orderId,
     });
-
     if (!dvaResult.success) {
-      logger.error({
-        message: 'DVA creation failed',
-        orderId,
-        error: dvaResult.error,
-      });
       return NextResponse.json(
         { error: `DVA creation failed: ${dvaResult.error}` },
         { status: 502 }
       );
     }
-
-    // 8. Store in order_payment_accounts
-    const { error: insertError } = await supabase
-      .from('order_payment_accounts')
-      .insert({
-        order_id: orderId,
-        account_number: dvaResult.data.account_number,
-        bank_name: dvaResult.data.bank_name,
-        account_name: dvaResult.data.account_name,
-        provider: 'paystack',
-      });
-
-    if (insertError) {
-      logger.error({
-        message: 'Failed to store DVA in database',
-        orderId,
-        error: insertError,
-      });
-    }
-
-    // 9. Create a pending transaction record so the Paystack webhook can match
-    const reference = `BAC-${nanoidUppercase()}`;
-    const amountInKobo = Math.round(Number(order.total) * 100);
-    const fees = calculatePlatformFee(amountInKobo);
-
-    const { error: txnError } = await supabase.rpc(
-      'create_payment_transaction',
-      {
-        p_merchant_id: merchantId,
-        p_order_id: orderId,
-        p_amount: Number(order.total),
-        p_currency: 'NGN',
-        p_gateway: 'paystack',
-        p_reference: reference,
-        p_platform_fee: fees.platformFee / 100,
-        p_merchant_amount: fees.merchantAmount / 100,
-        p_customer_email: order.customer_email || '',
-        p_customer_name: order.customer_name || '',
-        p_session_id: null,
-      }
-    );
-
-    if (txnError) {
-      logger.warn({
-        message: 'Failed to create transaction record for DVA',
-        orderId,
-        error: txnError,
-      });
-    }
-
-    logger.info({
-      message: 'Paystack DVA created for order',
-      orderId,
+    const reservationResult = await reservePaystackDvaAssignment(supabase, {
+      accountName: dvaResult.data.account_name,
       accountNumber: dvaResult.data.account_number,
       bankName: dvaResult.data.bank_name,
-      reference,
+      customerEmail,
+      orderId,
     });
+    if (reservationResult.proofError) {
+      return getDvaReservationProofFailureResponse();
+    }
+    const { data: reservation, error: insertError } = reservationResult;
+
+    const reservationFailure = getDvaReservationFailureResponse(
+      reservation,
+      insertError
+    );
+    if (reservationFailure) {
+      return reservationFailure;
+    }
+
+    if (insertError) {
+      if (isUniqueViolation(insertError)) {
+        const { data: racedAccount, error: racedAccountError } = await supabase
+          .from('order_payment_accounts')
+          .select(
+            'account_number, bank_name, account_name, provider, assignment_customer_email_source, created_at, assigned_at, expires_at'
+          )
+          .eq('order_id', orderId)
+          .eq('provider', 'paystack')
+          .maybeSingle();
+
+        if (!racedAccountError && racedAccount) {
+          if (isActivePaymentAccount(racedAccount)) {
+            return NextResponse.json({
+              success: true,
+              virtualAccount: toVirtualAccount(racedAccount),
+              existing: true,
+            });
+          }
+
+          return NextResponse.json(
+            {
+              code: 'PAYMENT_ACCOUNT_EXPIRED',
+              error: 'Automatic confirmation account has expired',
+            },
+            { status: 410 }
+          );
+        }
+      }
+
+      return NextResponse.json(
+        {
+          error: 'Failed to save automatic confirmation account',
+          code: 'PAYMENT_ACCOUNT_PERSIST_FAILED',
+        },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
@@ -214,7 +282,7 @@ export async function POST(
         bank_name: dvaResult.data.bank_name,
         account_name: dvaResult.data.account_name,
       },
-      existing: false,
+      existing: reservation === 'existing',
     });
   } catch (error) {
     const errorMessage =

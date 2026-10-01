@@ -164,7 +164,7 @@ describe('buildProductSemanticModel', () => {
     ]);
   });
 
-  it('does not emit PDP compare links for products outside discovery approval bounds', () => {
+  it('reserves the current PDP inside bounded compare discovery approval', () => {
     const inventory = Array.from(
       { length: PRODUCT_SCOPED_COMPARE_DISCOVERY_PRODUCT_LIMIT + 1 },
       (_, index) =>
@@ -195,7 +195,7 @@ describe('buildProductSemanticModel', () => {
 
     expect(
       model.supportLinks.some((link) => link.href.includes('/compare/'))
-    ).toBe(false);
+    ).toBe(true);
     expect(model.supportLinks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -208,7 +208,7 @@ describe('buildProductSemanticModel', () => {
       model.alternatives?.cards.some((card) =>
         card.secondaryHref?.includes('/compare/')
       )
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('only emits semantic card compare CTAs for curated compare pairs', () => {

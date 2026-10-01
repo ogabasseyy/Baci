@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { enrichQuizV2AttemptWithSubmissionTime } from '@/app/api/quiz/_shared/quiz-v2-attempt-submission';
 import {
   requireQuizV2Contract,
   requireQuizV2Runtime,
@@ -81,7 +82,20 @@ export async function postQuizAnswerV2(
     return rpcErrorResponse();
   }
 
-  const projection = parseQuizV2Attempt(data);
+  const enriched = await enrichQuizV2AttemptWithSubmissionTime(
+    auth.supabase,
+    data
+  );
+  if (enriched.error) {
+    logger.error({
+      attemptId: parsedParams.data.attemptId,
+      event: 'submit_quiz_answer_v2_submission_time_failed',
+      message: 'Could not read the authoritative quiz submission time',
+      userId: auth.user.id,
+    });
+    return rpcErrorResponse();
+  }
+  const projection = parseQuizV2Attempt(enriched.attempt);
   if (!projection.success) {
     logger.error({
       attemptId: parsedParams.data.attemptId,

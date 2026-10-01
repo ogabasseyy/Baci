@@ -32,8 +32,18 @@ PROMOTE_TIMEOUT_SECONDS=${PROMOTE_TIMEOUT_SECONDS:-120}
 # fallback deploy attempt room to finish inside the deploy step's timeout-minutes
 # in deploy.yml (~20m + ~5m + ~20m < 55m).
 PROMOTE_ATTEMPTS=${PROMOTE_ATTEMPTS:-2}
+# Optional exact-main authority check. The production workflow binds this to a
+# fail-closed GitHub ref verifier. Tests and non-production callers may omit it.
+DEPLOY_CURRENT_MAIN_GUARD=${DEPLOY_CURRENT_MAIN_GUARD:-}
 deploy_command=("$@")
 last_deployment_target=""
+
+run_current_main_guard() {
+  if [ -z "$DEPLOY_CURRENT_MAIN_GUARD" ]; then
+    return 0
+  fi
+  "$DEPLOY_CURRENT_MAIN_GUARD"
+}
 
 # Run "$@" under a wall-clock cap. `timeout` is coreutils (present on the Linux
 # deploy runners); `gtimeout` is its Homebrew name on macOS. Where neither
@@ -91,6 +101,11 @@ run_promote_command() {
   second_command="${deploy_command[1]:-}"
   third_command="${deploy_command[2]:-}"
 
+  if ! run_current_main_guard; then
+    echo "The current-main deployment guard refused to promote ${last_deployment_target}." >&2
+    return 1
+  fi
+
   if [ "$first_command" = "pnpm" ] && [ "$second_command" = "exec" ] && [ "$third_command" = "vercel" ]; then
     run_with_timeout "$PROMOTE_TIMEOUT_SECONDS" "${deploy_command[0]}" "${deploy_command[1]}" "${deploy_command[2]}" promote "$last_deployment_target" --yes
   elif [ "$first_command" = "npx" ] && [ "$second_command" = "vercel" ]; then
@@ -133,6 +148,13 @@ promote_existing_deployment() {
 }
 
 for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+  if run_current_main_guard; then
+    :
+  else
+    guard_status=$?
+    echo "The current-main deployment guard refused deploy attempt ${attempt}; no production deployment was started." >&2
+    exit "$guard_status"
+  fi
   echo "Deploy attempt $attempt/$MAX_ATTEMPTS..."
   attempt_log="$(mktemp)"
 

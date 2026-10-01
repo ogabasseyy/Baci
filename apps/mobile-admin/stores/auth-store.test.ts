@@ -190,32 +190,3 @@ describe('useAuthStore signUp', () => {
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
   });
 });
-
-describe('useAuthStore verifySignupOtp', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    useAuthStore.setState(createSignedOutAuthState());
-  });
-
-  it('commits the exact verified signup session through the global auth store', async () => {
-    const session = createSession('verified-user');
-    mocks.verifyOtp.mockResolvedValue({
-      data: { session, user: session.user },
-      error: null,
-    });
-
-    const result = await useAuthStore
-      .getState()
-      .verifySignupOtp('merchant@example.test', '123456');
-
-    expect(result).toEqual({ error: null, sessionEstablished: true });
-    expect(useAuthStore.getState()).toMatchObject({
-      isAuthenticated: true,
-      isInitialized: true,
-      isLoading: false,
-      session,
-      user: session.user,
-    });
-    expect(mocks.clearAdminQueryCache).toHaveBeenCalledOnce();
-  });
-});

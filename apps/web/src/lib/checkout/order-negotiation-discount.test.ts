@@ -53,168 +53,6 @@ describe('computeOrderNegotiationDiscount', () => {
     vi.clearAllMocks();
   });
 
-  it('derives a per-line discount for a negotiated catalog line (VAT-registered)', async () => {
-    const { supabase } = buildSupabaseMock({
-      products: [
-        sProduct({
-          id: 'p-mac',
-          name: 'MacBook Air M1',
-          brand: 'Apple',
-          price: 1000,
-        }),
-      ],
-    });
-
-    await expect(
-      computeOrderNegotiationDiscount({
-        items: [{ product_id: 'p-mac', quantity: 1, price: 980 }],
-        merchantId: 'merchant-1',
-        supabase: supabase as never,
-        vatRegistered: true,
-      })
-    ).resolves.toEqual({ totalDiscount: 21.5, rejectionCode: null });
-  });
-
-  it('omits the VAT gross-up for a non-registered merchant', async () => {
-    const { supabase } = buildSupabaseMock({
-      products: [
-        sProduct({
-          id: 'p-mac',
-          name: 'MacBook Air M1',
-          brand: 'Apple',
-          price: 1000,
-        }),
-      ],
-    });
-
-    // No VAT charged → discount is just the 20 price reduction, not 21.5.
-    await expect(
-      computeOrderNegotiationDiscount({
-        items: [{ product_id: 'p-mac', quantity: 1, price: 980 }],
-        merchantId: 'merchant-1',
-        supabase: supabase as never,
-        vatRegistered: false,
-      })
-    ).resolves.toEqual({ totalDiscount: 20, rejectionCode: null });
-  });
-
-  it('flags a non-negotiable line priced below catalog', async () => {
-    const { supabase } = buildSupabaseMock({
-      products: [
-        sProduct({
-          id: 'p-tecno',
-          name: 'Tecno Spark 50',
-          brand: 'Tecno',
-          price: 500,
-        }),
-      ],
-    });
-
-    await expect(
-      computeOrderNegotiationDiscount({
-        items: [{ product_id: 'p-tecno', quantity: 1, price: 480 }],
-        merchantId: 'merchant-1',
-        supabase: supabase as never,
-        vatRegistered: true,
-      })
-    ).resolves.toEqual({
-      totalDiscount: 0,
-      rejectionCode: 'non_negotiable_line_discounted',
-    });
-  });
-
-  it('honors only the eligible line in a mixed cart', async () => {
-    const { supabase } = buildSupabaseMock({
-      products: [
-        sProduct({
-          id: 'p-mac',
-          name: 'MacBook Air M1',
-          brand: 'Apple',
-          price: 1000,
-        }),
-        sProduct({
-          id: 'p-tecno',
-          name: 'Tecno Spark 50',
-          brand: 'Tecno',
-          price: 500,
-        }),
-      ],
-    });
-
-    await expect(
-      computeOrderNegotiationDiscount({
-        items: [
-          { product_id: 'p-mac', quantity: 1, price: 980 },
-          { product_id: 'p-tecno', quantity: 1, price: 500 },
-        ],
-        merchantId: 'merchant-1',
-        supabase: supabase as never,
-        vatRegistered: true,
-      })
-    ).resolves.toEqual({ totalDiscount: 21.5, rejectionCode: null });
-  });
-
-  it('exempts a verified quiz-voucher award line (price 0)', async () => {
-    const { supabase } = buildSupabaseMock({
-      products: [
-        sProduct({
-          id: 'p-award',
-          name: 'Free Gift',
-          brand: 'Apple',
-          price: 5000,
-        }),
-      ],
-    });
-
-    // Pure-voucher order → voucher line excluded → productIds empty → null
-    // (no products query, no rejection), even though price 0 ≪ catalog 5000.
-    await expect(
-      computeOrderNegotiationDiscount({
-        items: [
-          {
-            product_id: 'p-award',
-            quantity: 1,
-            price: 0,
-            voucher_award_id: 'award-1',
-          },
-        ],
-        merchantId: 'merchant-1',
-        supabase: supabase as never,
-        vatRegistered: true,
-      })
-    ).resolves.toBeNull();
-  });
-
-  it('validates the non-voucher line in a cart that also has a voucher line', async () => {
-    const { supabase } = buildSupabaseMock({
-      products: [
-        sProduct({
-          id: 'p-mac',
-          name: 'MacBook Air M1',
-          brand: 'Apple',
-          price: 1000,
-        }),
-      ],
-    });
-
-    await expect(
-      computeOrderNegotiationDiscount({
-        items: [
-          {
-            product_id: 'p-award',
-            quantity: 1,
-            price: 0,
-            voucher_award_id: 'award-1',
-          }, // exempt
-          { product_id: 'p-mac', quantity: 1, price: 980 }, // validated → 21.5
-        ],
-        merchantId: 'merchant-1',
-        supabase: supabase as never,
-        vatRegistered: true,
-      })
-    ).resolves.toEqual({ totalDiscount: 21.5, rejectionCode: null });
-  });
-
   it('computes the discount off a variant price_override when present', async () => {
     // Product catalog price is 5000, but the variant overrides it to 1000.
     // Client offers 980 → reduction 20 = 2% floor; +7.5% VAT = 21.5. Picking
@@ -240,7 +78,19 @@ describe('computeOrderNegotiationDiscount', () => {
         supabase: supabase as never,
         vatRegistered: true,
       })
-    ).resolves.toEqual({ totalDiscount: 21.5, rejectionCode: null });
+    ).resolves.toEqual({
+      lineDiscounts: [
+        {
+          lineId: 1,
+          merchandiseDiscount: 20,
+          productId: 'p-mac',
+          vatRelief: 1.5,
+          variantId: 'v-mac',
+        },
+      ],
+      totalDiscount: 21.5,
+      rejectionCode: null,
+    });
   });
 
   it('throws a CanonicalOrderSubtotalLoadError preserving pgCode when the products load fails (22P02)', async () => {

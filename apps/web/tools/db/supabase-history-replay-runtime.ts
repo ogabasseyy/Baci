@@ -10,7 +10,10 @@ import { replayRepository } from './replay-repository-root';
 import * as configTools from './rewrite-supabase-replay-config';
 import { runProductionOldCancellationProof } from './run-production-old-cancellation-proof';
 import { replayCommandRuntime } from './run-replay-command';
-import { verifySupabaseReplayContract } from './supabase-replay-contract';
+import {
+  readReplayCommandExecutionTimeoutMs,
+  verifySupabaseReplayContract,
+} from './supabase-replay-contract';
 import * as resourceTools from './supabase-replay-expected-resources';
 import { verifySupabaseHistoryReplayManifest } from './verify-supabase-history-replay-manifest';
 import { verifySupabaseReplayBootstrapHistory } from './verify-supabase-replay-bootstrap-history';
@@ -28,7 +31,10 @@ export function createSupabaseHistoryReplayRuntimeDependencies() {
     assertResources: resourceTools.assertSupabaseReplayResources,
     atomicReplace,
     copyBootstrapSource: replayRepository.copyBootstrapSource,
-    createCommand: replayCommandRuntime.create,
+    createCommand: (root: string) =>
+      replayCommandRuntime.create(root, {
+        executionTimeoutMs: readReplayCommandExecutionTimeoutMs(),
+      }),
     createOwnership: ownershipTools.createReplayProjectOwnership,
     expectedResources: resourceTools.expectedSupabaseReplayResources,
     inspectResources: resourceTools.inspectSupabaseReplayResources,

@@ -63,6 +63,12 @@ function reachUploadForm() {
   fireEvent.click(screen.getByText('Negotiate Again'));
   submitLowOffer('1000');
   fireEvent.click(screen.getByRole('button', { name: /i saw it cheaper/i }));
+  // Negotiations now require at least one delivery channel. Keep the shared
+  // upload-form fixture reachable while individual tests override this value
+  // for invalid, blank, or phone-only cases.
+  fireEvent.change(screen.getByLabelText('Email Address (Optional)'), {
+    target: { value: 'buyer@example.com' },
+  });
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -74,7 +80,7 @@ describe('NegotiationModal', () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     vi.spyOn(Math, 'random').mockReturnValue(0.123456);
     mockGetUser.mockResolvedValue({
-      data: { user: { id: 'user-abc' } },
+      data: { user: { email: 'account@example.com', id: 'user-abc' } },
     });
     mockEvidenceFetch.mockResolvedValue({
       json: async () => ({
@@ -412,6 +418,61 @@ describe('NegotiationModal', () => {
     expect(insertPayload.session_id).not.toBe('web-session');
   });
 
+  it('persists account email when signed-in customers omit contact fields', async () => {
+    render(<NegotiationModal {...defaultProps} />);
+
+    reachUploadForm();
+    fireEvent.change(screen.getByLabelText('Email Address (Optional)'), {
+      target: { value: '' },
+    });
+
+    const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
+    const file = new File(['proof'], 'screenshot.png', { type: 'image/png' });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    vi.useRealTimers();
+
+    await act(async () => {
+      fireEvent.submit(fileInput.closest('form') as HTMLFormElement);
+    });
+
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customer_id: 'user-abc',
+        customer_email: 'account@example.com',
+        customer_phone: null,
+      })
+    );
+  });
+
+  it('blocks submission when authentication verification fails unexpectedly', async () => {
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    mockGetUser.mockResolvedValueOnce({
+      data: { user: null },
+      error: new Error('auth unavailable'),
+    });
+    render(<NegotiationModal {...defaultProps} />);
+
+    reachUploadForm();
+
+    const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
+    const file = new File(['proof'], 'screenshot.png', { type: 'image/png' });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    vi.useRealTimers();
+
+    await act(async () => {
+      fireEvent.submit(fileInput.closest('form') as HTMLFormElement);
+    });
+
+    expect(mockEvidenceFetch).not.toHaveBeenCalled();
+    expect(mockInsert).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Unable to verify your account. Please try again.'
+    );
+    alertSpy.mockRestore();
+  });
+
   it('persists selected variant details for single-product merchant review', async () => {
     render(
       <NegotiationModal
@@ -581,6 +642,31 @@ describe('NegotiationModal', () => {
     );
   });
 
+  it('rejects an invalid evidence link before authentication or insert', async () => {
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    render(<NegotiationModal {...defaultProps} />);
+
+    reachUploadForm();
+    fireEvent.change(screen.getByLabelText('Link (Optional)'), {
+      target: { value: 'not-a-url' },
+    });
+
+    vi.useRealTimers();
+
+    const form = screen
+      .getByLabelText('Link (Optional)')
+      .closest('form') as HTMLFormElement;
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+
+    expect(mockGetUser).not.toHaveBeenCalled();
+    expect(mockEvidenceFetch).not.toHaveBeenCalled();
+    expect(mockInsert).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith('Enter a valid http or https URL.');
+    alertSpy.mockRestore();
+  });
+
   it('requires either a proof upload or a link when both are provided', async () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     render(<NegotiationModal {...defaultProps} />);
@@ -687,6 +773,36 @@ describe('NegotiationModal', () => {
     expect(
       screen.getByRole('button', { name: /send for review/i })
     ).toBeInTheDocument();
+    alertSpy.mockRestore();
+  });
+
+  it('does not upload evidence when a signed-in customer has no direct contact', async () => {
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    mockGetUser.mockResolvedValue({
+      data: { user: { email: null, id: 'user-without-contact', phone: null } },
+    });
+    render(<NegotiationModal {...defaultProps} />);
+
+    reachUploadForm();
+
+    const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
+    const file = new File(['proof'], 'screenshot.png', { type: 'image/png' });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    fireEvent.change(screen.getByLabelText('Email Address (Optional)'), {
+      target: { value: '' },
+    });
+
+    vi.useRealTimers();
+
+    await act(async () => {
+      fireEvent.submit(fileInput.closest('form') as HTMLFormElement);
+    });
+
+    expect(mockEvidenceFetch).not.toHaveBeenCalled();
+    expect(mockInsert).not.toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith(
+      "Provide an email address or Phone / WhatsApp number so we can send the merchant's decision."
+    );
     alertSpy.mockRestore();
   });
 

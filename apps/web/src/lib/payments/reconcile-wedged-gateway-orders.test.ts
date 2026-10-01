@@ -51,16 +51,9 @@ function buildSupabase(result: { data?: unknown[]; error?: unknown }) {
   const builder: Record<string, unknown> = {
     update: stampUpdate,
   };
-  for (const method of [
-    'select',
-    'eq',
-    'neq',
-    'not',
-    'lt',
-    'is',
-    'or',
-    'order',
-  ]) {
+  const select = vi.fn().mockReturnValue(builder);
+  builder.select = select;
+  for (const method of ['eq', 'neq', 'not', 'lt', 'is', 'or', 'order']) {
     builder[method] = vi.fn().mockReturnValue(builder);
   }
   // `.limit()` is the terminal call in the sweep's candidate query chain;
@@ -70,8 +63,12 @@ function buildSupabase(result: { data?: unknown[]; error?: unknown }) {
     .mockResolvedValue({ data: null, error: null, ...result });
   return {
     from: vi.fn().mockReturnValue(builder),
+    select,
     stampUpdate,
-  } as unknown as SupabaseClient & { stampUpdate: ReturnType<typeof vi.fn> };
+  } as unknown as SupabaseClient & {
+    select: ReturnType<typeof vi.fn>;
+    stampUpdate: ReturnType<typeof vi.fn>;
+  };
 }
 
 const scheduleAfter = (task: () => Promise<void>) => {
@@ -108,6 +105,76 @@ describe('reconcileWedgedGatewayOrders', () => {
       healed: [],
       reviewsFiled: [],
       skipped: [],
+    });
+  });
+
+  it('disambiguates the order relationship while preserving healable candidates', async () => {
+    const supabase = buildSupabase({ data: [wedgedCandidate] });
+    mocks.verifyPaystackPayment.mockResolvedValue({
+      data: { amount: 5829060, currency: 'NGN', status: 'success' },
+      success: true,
+    });
+    mocks.finalizeOrderGatewayPayment.mockResolvedValue({
+      healed: true,
+      kind: 'completed',
+      orderNumber: 'ORD-1',
+    });
+
+    const summary = await reconcileWedgedGatewayOrders({
+      scheduleAfter,
+      supabase,
+    });
+
+    expect(supabase.select).toHaveBeenCalledWith(
+      'id, created_at, order_id, merchant_id, amount, currency, platform_fee, gateway, gateway_reference, metadata, status, orders!transactions_order_id_fkey!inner(id, payment_status, cancelled_at)'
+    );
+    expect(summary).toMatchObject({
+      checked: 1,
+      healed: [{ orderId: 'order-1', orderNumber: 'ORD-1' }],
+    });
+  });
+
+  it('admits provider-flagged pending rows and heals them after re-verification', async () => {
+    // A guest Paystack payment the verify GET confirmed with the
+    // provider but whose webhook never landed: pending, flagged, order
+    // unpaid. The sweep must pick it up (not only pending Juicyway)
+    // and heal once its own re-verification agrees.
+    const supabase = buildSupabase({
+      data: [
+        {
+          ...wedgedCandidate,
+          metadata: { guest_provider_confirmed: true },
+          status: 'pending',
+        },
+      ],
+    });
+    mocks.verifyPaystackPayment.mockResolvedValue({
+      data: { amount: 5829060, currency: 'NGN', status: 'success' },
+      success: true,
+    });
+    mocks.finalizeOrderGatewayPayment.mockResolvedValue({
+      healed: true,
+      kind: 'completed',
+      orderNumber: 'ORD-1',
+    });
+
+    const summary = await reconcileWedgedGatewayOrders({
+      scheduleAfter,
+      supabase,
+    });
+
+    const builder = vi.mocked(supabase.from).mock.results[0]?.value as {
+      or: ReturnType<typeof vi.fn>;
+    };
+    expect(builder.or).toHaveBeenCalledWith(
+      'status.eq.completed,and(status.eq.pending,gateway.eq.juicyway),and(status.eq.pending,metadata->>guest_provider_confirmed.eq.true)'
+    );
+    expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledWith(
+      expect.objectContaining({ wonTransactionFlip: true })
+    );
+    expect(summary).toMatchObject({
+      checked: 1,
+      healed: [{ orderId: 'order-1', orderNumber: 'ORD-1' }],
     });
   });
 

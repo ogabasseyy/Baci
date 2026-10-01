@@ -1,8 +1,10 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StorefrontHeader } from './header';
+import type { SearchAutocompleteProps } from './search-autocomplete';
 
 const mockUseMerchant = vi.fn();
+const fetchMock = vi.fn();
 
 vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchant: () => mockUseMerchant(),
@@ -24,8 +26,12 @@ vi.mock('@/components/cart', () => ({
   Cart: () => null,
 }));
 
+const capturedAutocompleteProps = vi.hoisted(() => [] as unknown[]);
 vi.mock('./search-autocomplete', () => ({
-  SearchAutocomplete: () => null,
+  SearchAutocomplete: (props: unknown) => {
+    capturedAutocompleteProps.push(props);
+    return null;
+  },
 }));
 
 vi.mock('next/link', () => ({
@@ -50,6 +56,9 @@ const merchant = {
 describe('StorefrontHeader', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    capturedAutocompleteProps.length = 0;
+    fetchMock.mockReset().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
     mockUseMerchant.mockReturnValue({ merchant, basePath: '/ogabassey' });
   });
 
@@ -73,5 +82,23 @@ describe('StorefrontHeader', () => {
     expect(
       screen.queryByRole('link', { name: 'Book Repair' })
     ).not.toBeInTheDocument();
+  });
+
+  it('records popular-search picks through the live autocomplete wiring', () => {
+    render(<StorefrontHeader />);
+    const props = capturedAutocompleteProps[0] as SearchAutocompleteProps;
+    expect(props.onPopularSearchSelect).toBeTypeOf('function');
+    props.onPopularSearchSelect?.('iphone 15');
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+      '/api/search/submissions',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          query: 'iphone 15',
+          pathPrefix: '/ogabassey',
+          source: 'popular-search',
+        }),
+      })
+    );
   });
 });

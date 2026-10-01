@@ -175,6 +175,24 @@ describe('enrichShippingAddressWithQuoteDestination validation', () => {
     });
   });
 
+  it('allows a confirmed replay context when the selected quote was cleaned up', async () => {
+    await expect(
+      enrichShippingAddressWithQuoteDestination(
+        createSupabase({
+          quote: null,
+        }) as unknown as SupabaseClient,
+        'quote-1',
+        shippingAddress,
+        {
+          merchantId: 'merchant-current',
+          items: [{ name: 'Phone', price: 100_000, quantity: 1, weight: 1 }],
+          shippingFee: undefined,
+          shippingProvider: null,
+        }
+      )
+    ).resolves.toEqual(shippingAddress);
+  });
+
   it('enriches checkout addresses missing optional quote destination fields', async () => {
     await expect(
       enrichShippingAddressWithQuoteDestination(

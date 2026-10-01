@@ -64,6 +64,22 @@ function getReadiness(merchantId: string, isReady = false): WebStoreReadiness {
 }
 
 describe('SetupChecklist merchant scope', () => {
+  async function expandDesktopChecklist() {
+    const trigger = await waitFor(() => {
+      const button = screen
+        .getAllByRole('button')
+        .find(
+          (candidate) =>
+            candidate.getAttribute('aria-controls') ===
+            'store-setup-checklist-details'
+        );
+      if (!button) return null;
+      if (button.getAttribute('aria-expanded') === 'true') return null;
+      return button as HTMLElement;
+    });
+    if (trigger) fireEvent.click(trigger);
+  }
+
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -77,7 +93,7 @@ describe('SetupChecklist merchant scope', () => {
     vi.mocked(requestMerchantPublish).mockResolvedValue(new Response('{}'));
 
     render(<SetupChecklist merchantId={selectedMerchantId} compact />);
-
+    await expandDesktopChecklist();
     await screen.findByRole('button', { name: 'Publish Store' });
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
@@ -113,6 +129,7 @@ describe('SetupChecklist merchant scope', () => {
     );
 
     rerender(<SetupChecklist merchantId="merchant-b" compact />);
+    await expandDesktopChecklist();
 
     expect(screen.queryByText('Add payment method for merchant-a')).toBeNull();
     expect(
@@ -191,6 +208,7 @@ describe('SetupChecklist merchant scope', () => {
       <SetupChecklist merchantId="merchant-a" compact />
     );
 
+    await expandDesktopChecklist();
     fireEvent.click(
       await screen.findByRole('button', { name: 'Publish Store' })
     );
@@ -202,7 +220,7 @@ describe('SetupChecklist merchant scope', () => {
     });
 
     rerender(<SetupChecklist merchantId="merchant-a" compact />);
-
+    await expandDesktopChecklist();
     expect(
       await screen.findByRole('button', { name: 'Publish Store' })
     ).toBeEnabled();
@@ -238,12 +256,14 @@ describe('SetupChecklist merchant scope', () => {
       <SetupChecklist merchantId="merchant-a" compact />
     );
 
+    await expandDesktopChecklist();
     fireEvent.click(
       await screen.findByRole('button', { name: 'Publish Store' })
     );
 
     rerender(<SetupChecklist merchantId="merchant-b" compact />);
 
+    await expandDesktopChecklist();
     fireEvent.click(
       await screen.findByRole('button', { name: 'Publish Store' })
     );
@@ -254,6 +274,7 @@ describe('SetupChecklist merchant scope', () => {
 
     rerender(<SetupChecklist merchantId="merchant-a" compact />);
 
+    await expandDesktopChecklist();
     expect(
       await screen.findByRole('button', { name: 'Publish Store' })
     ).toBeDisabled();

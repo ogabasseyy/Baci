@@ -1,0 +1,176 @@
+{
+  "$schema": "https://developers.openai.com/plugins/schemas/chatgpt-app-submission.v1.json",
+  "schema_version": 1,
+  "app_info": {
+    "display_name": "Ogabassey",
+    "subtitle": "Shop tech products",
+    "description": "Find electronics and accessories in the Ogabassey catalog, inspect product options and listed prices, and open a cart handoff on Ogabassey. Check delivery fees and availability before completing checkout on the website.",
+    "category": "SHOPPING"
+  },
+  "tools": {
+    "search_products": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Searches active Ogabassey catalog records and returns matching product data without changing them.",
+        "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
+        "destructive_justification": "Does not delete records, charge a customer, or complete an order."
+      }
+    },
+    "get_product": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Reads public details for a selected Ogabassey product without changing it.",
+        "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
+        "destructive_justification": "Does not delete records, charge a customer, or complete an order."
+      }
+    },
+    "get_product_variants": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Reads public variant and offer details without changing catalog data.",
+        "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
+        "destructive_justification": "Does not delete records, charge a customer, or complete an order."
+      }
+    },
+    "add_to_cart": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Returns a product handoff URL; the item is added only if the shopper opens that URL on Ogabassey.",
+        "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
+        "destructive_justification": "Does not delete records, charge a customer, or complete an order."
+      }
+    },
+    "get_store_info": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Reads public store and policy information without changing records.",
+        "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
+        "destructive_justification": "Does not delete records, charge a customer, or complete an order."
+      }
+    },
+    "browse_categories": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Lists public catalog categories without changing records.",
+        "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
+        "destructive_justification": "Does not delete records, charge a customer, or complete an order."
+      }
+    },
+    "get_brands": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Lists brands in the public Ogabassey catalog without changing records.",
+        "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
+        "destructive_justification": "Does not delete records, charge a customer, or complete an order."
+      }
+    },
+    "get_shipping_quote": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Returns policy guidance for a destination without booking delivery or charging a fee.",
+        "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
+        "destructive_justification": "Does not delete records, charge a customer, or complete an order."
+      }
+    }
+  },
+  "test_cases": [
+    {
+      "description": "Find public accessories without excluding non-phone products.",
+      "user_prompt": "Using Ogabassey, find a fragrance diffuser in Accessories and show its listed price and image.",
+      "file_attachment_urls": null,
+      "tools_triggered": "search_products",
+      "expected_output": "Shows the Moodo Smart Home Fragrance Diffuser listing in Accessories with its current listed price and image, without unrelated phone recommendations. If the listing is no longer active, say so rather than inventing a substitute.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Inspect an exact product and its condition.",
+      "user_prompt": "Using Ogabassey, show the details and current listed price for Redmi 15.",
+      "file_attachment_urls": null,
+      "tools_triggered": "get_product",
+      "expected_output": "Shows the matching product details and labels any condition-specific price; does not promise live stock.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Check selectable options before checkout.",
+      "user_prompt": "Using Ogabassey, what storage and colour options are listed for Redmi 15?",
+      "file_attachment_urls": null,
+      "tools_triggered": "get_product_variants",
+      "expected_output": "Lists actual product options and distinguishes confirmed stock from availability that needs checking.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Prepare a cart handoff for a simple physical product.",
+      "user_prompt": "Using Ogabassey, add one Apple 20W fast charger to my cart and let me review it on the website.",
+      "file_attachment_urls": null,
+      "tools_triggered": "add_to_cart",
+      "expected_output": "Opens an Ogabassey handoff URL for one item; the shopper can review the cart on Ogabassey before checkout.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Explain delivery fees without inventing a quote.",
+      "user_prompt": "Using Ogabassey, how much is delivery to Ikeja, Lagos?",
+      "file_attachment_urls": null,
+      "tools_triggered": "get_shipping_quote",
+      "expected_output": "Explains that the final fee and timing are confirmed at checkout and links the public shipping policy.",
+      "expected_output_url": null
+    }
+  ],
+  "negative_test_cases": [
+    {
+      "description": "Do not search a different retailer.",
+      "user_prompt": "Find a fragrance diffuser on Amazon, not Ogabassey.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "Does not invoke Ogabassey because the buyer specified another retailer.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not handle utility payments.",
+      "user_prompt": "Pay my electricity bill and show me the receipt.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "Does not invoke Ogabassey; utility bill payment is outside this app.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not claim unrelated product availability.",
+      "user_prompt": "Find my private photo library and organize the pictures.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "Does not invoke Ogabassey or claim access to personal photos.",
+      "expected_output_url": null
+    }
+  ]
+}

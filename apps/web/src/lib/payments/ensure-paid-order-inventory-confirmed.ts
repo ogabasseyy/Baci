@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { revalidateProducts } from '@/lib/cache-revalidation';
 import { logger } from '@/lib/logger';
+import { scheduleOrderBlogPurgeForOrderAfterResponse } from '@/lib/schedule-order-blog-purge-for-order-after-response';
 
 export class SerializedInventoryUnavailableError extends Error {
   constructor() {
@@ -71,6 +72,11 @@ export async function ensurePaidOrderInventoryConfirmed(
         orderId,
       });
     }
+    scheduleOrderBlogPurgeForOrderAfterResponse({
+      supabase,
+      merchantId,
+      orderId,
+    });
   }
 
   if (
@@ -94,9 +100,21 @@ export async function rollbackOrderStatusAfterInventoryConfirmationFailure(
   supabase: SupabaseClient,
   merchantId: string,
   orderId: string,
-  previousStatus: OrderStatusRollbackSnapshot
+  previousStatus: OrderStatusRollbackSnapshot,
+  options?: {
+    /**
+     * Fence the restore to these current payment statuses: a
+     * concurrent webhook may settle the order past the state this
+     * caller wrote while inventory confirmation was in flight, and
+     * restoring a stale snapshot would corrupt the settled order.
+     * Zero matching rows resolve silently (another writer owns the
+     * row now); only a real query failure throws.
+     */
+    onlyIfPaymentStatus?: string[];
+  }
 ): Promise<void> {
-  const { error } = await supabase
+  const guard = options?.onlyIfPaymentStatus;
+  const restore = supabase
     .from('orders')
     .update({
       payment_status: previousStatus.payment_status,
@@ -106,9 +124,22 @@ export async function rollbackOrderStatusAfterInventoryConfirmationFailure(
       }),
     })
     .eq('id', orderId)
-    .eq('merchant_id', merchantId)
-    .select('id')
-    .single();
+    .eq('merchant_id', merchantId);
+
+  if (guard && guard.length > 0) {
+    const { error } = await restore
+      .in('payment_status', guard)
+      .select('id')
+      .maybeSingle();
+    if (error) {
+      throw new Error(
+        `rollback_order_status_after_inventory_confirmation_failure failed: ${error.message}`
+      );
+    }
+    return;
+  }
+
+  const { error } = await restore.select('id').single();
 
   if (error) {
     throw new Error(

@@ -1,6 +1,5 @@
 interface ResolveAirportShippingAddressParams {
   airportType: 'delivery' | 'pickup';
-  isProviderBacked: boolean;
   manualAddress: string;
   manualCity: string;
   manualState: string;
@@ -15,7 +14,6 @@ interface ResolvedAirportShippingAddress {
 
 export function resolveAirportShippingAddress({
   airportType,
-  isProviderBacked,
   manualAddress,
   manualCity,
   manualState,
@@ -25,7 +23,7 @@ export function resolveAirportShippingAddress({
   let city = manualCity;
   let state = manualState;
 
-  if (isProviderBacked && !address && savedAddress) {
+  if (!address && savedAddress) {
     address = savedAddress;
     const parts = savedAddress.split(',').map((part) => part.trim());
     if (parts.length >= 2) {

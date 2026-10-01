@@ -28,8 +28,7 @@ export async function loadCompareGraphProducts(input: {
     // snapshot instead of issuing the former second, ~0.5MB Supabase request.
     const inventory = await getCachedCompareCategoryInventory(
       input.merchantId,
-      input.categorySlug,
-      input.storeSlug
+      input.categorySlug
     );
 
     return {

@@ -4,9 +4,9 @@ export interface ValidCartStore {
   items: CartItem[];
   itemCount: () => number;
   subtotal: () => number;
-  updateQuantity: (itemId: string, quantity: number) => void;
-  removeItem: (itemId: string) => void;
-  clearCart: () => void;
+  updateQuantity: (itemId: string, quantity: number) => void | Promise<void>;
+  removeItem: (itemId: string) => void | Promise<void>;
+  clearCart: () => void | Promise<void>;
   toggleAssurance: (itemId: string) => void;
 }
 

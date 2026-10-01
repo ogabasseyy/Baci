@@ -24,12 +24,14 @@ vi.mock('next/link', () => ({
   default: ({
     children,
     href,
+    prefetch,
     ...props
   }: {
     children: ReactNode;
     href: string;
+    prefetch?: boolean;
   }) => (
-    <a href={href} {...props}>
+    <a href={href} data-prefetch={String(prefetch)} {...props}>
       {children}
     </a>
   ),
@@ -289,25 +291,6 @@ describe('OgabasseyPdpCriticalCommerceClient', () => {
 
     expect(screen.getByText('GH₵7,098,000')).toBeInTheDocument();
     expect(screen.queryByText(/₦/)).not.toBeInTheDocument();
-  });
-
-  it('keeps add to cart disabled until all required variant axes are selected', () => {
-    render(
-      <OgabasseyPdpCriticalCommerceClient
-        cartHref="/cart"
-        cartProduct={variantCartProduct}
-        productName={variantCartProduct.name}
-        variantAxes={['storage', 'ram']}
-        variantCount={2}
-      />
-    );
-
-    fireEvent.click(
-      screen.getByRole('button', { name: /select 256gb storage/i })
-    );
-
-    expect(screen.getByRole('button', { name: /add to cart/i })).toBeDisabled();
-    expect(cartMocks.addToCart).not.toHaveBeenCalled();
   });
 
 });

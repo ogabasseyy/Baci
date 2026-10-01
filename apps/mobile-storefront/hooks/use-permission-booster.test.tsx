@@ -7,15 +7,40 @@ import {
   jest,
 } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
+import type { NotificationPermissionsStatus } from 'expo-notifications';
 
 const mockNotificationsModuleLoad = jest.fn();
+const grantedPermissionStatus: NotificationPermissionsStatus = {
+  status: 'granted' as NotificationPermissionsStatus['status'],
+  expires: 'never',
+  granted: true,
+  canAskAgain: true,
+};
 const mockGetPermissionsAsync = jest
-  .fn<() => Promise<{ status: string }>>()
-  .mockResolvedValue({ status: 'granted' });
+  .fn<() => Promise<NotificationPermissionsStatus>>()
+  .mockResolvedValue(grantedPermissionStatus);
 const mockRequestPermissionsAsync = jest
-  .fn<() => Promise<{ status: string }>>()
-  .mockResolvedValue({ status: 'granted' });
+  .fn<() => Promise<NotificationPermissionsStatus>>()
+  .mockResolvedValue(grantedPermissionStatus);
 let mockRejectNextNotificationsModuleLoad = false;
+
+function createBareThenable<T>(value: T): PromiseLike<T> {
+  return {
+    // Intentional: this models Expo SDK 57's native asyncRequire thenable.
+    // biome-ignore lint/suspicious/noThenProperty: regression fixture for Expo's bare thenable
+    then<TResult1 = T, TResult2 = never>(
+      onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | null,
+      _onrejected?:
+        | ((reason: unknown) => TResult2 | PromiseLike<TResult2>)
+        | null
+    ): PromiseLike<TResult1 | TResult2> {
+      if (!onfulfilled) {
+        return Promise.resolve(value) as PromiseLike<TResult1 | TResult2>;
+      }
+      return Promise.resolve(onfulfilled(value));
+    },
+  };
+}
 
 jest.mock('expo-notifications', () => {
   mockNotificationsModuleLoad();
@@ -32,8 +57,8 @@ jest.mock('expo-notifications', () => {
 beforeEach(() => {
   jest.clearAllMocks();
   mockRejectNextNotificationsModuleLoad = false;
-  mockGetPermissionsAsync.mockResolvedValue({ status: 'granted' });
-  mockRequestPermissionsAsync.mockResolvedValue({ status: 'granted' });
+  mockGetPermissionsAsync.mockResolvedValue(grantedPermissionStatus);
+  mockRequestPermissionsAsync.mockResolvedValue(grantedPermissionStatus);
   jest.useRealTimers();
 });
 
@@ -48,24 +73,98 @@ describe('usePermissionBooster native module loading', () => {
     expect(mockNotificationsModuleLoad).not.toHaveBeenCalled();
   });
 
-  it('loads expo-notifications on demand and retries after an import failure', async () => {
+  it('resolves an Expo SDK 57 bare thenable without Promise catch methods', async () => {
+    const { loadNotificationsModule } = await import(
+      './use-permission-booster'
+    );
+    const notifications = {
+      getPermissionsAsync: mockGetPermissionsAsync,
+      requestPermissionsAsync: mockRequestPermissionsAsync,
+    };
+    const thenable = createBareThenable(notifications);
+
+    expect((thenable as { catch?: unknown }).catch).toBeUndefined();
+    expect((thenable as { finally?: unknown }).finally).toBeUndefined();
+
+    await expect(loadNotificationsModule(() => thenable)).resolves.toEqual(
+      notifications
+    );
+  });
+
+  it('retries after a native notification loader throws synchronously', async () => {
+    await jest.isolateModulesAsync(async () => {
+      const { loadNotifications } = await import('./use-permission-booster');
+      const notifications = {
+        getPermissionsAsync: mockGetPermissionsAsync,
+        requestPermissionsAsync: mockRequestPermissionsAsync,
+      };
+      const synchronousFailure = jest.fn<
+        () => PromiseLike<typeof notifications>
+      >(() => {
+        throw new TypeError('native asyncRequire failed');
+      });
+      const successfulLoad = jest
+        .fn<() => PromiseLike<typeof notifications>>()
+        .mockReturnValue(Promise.resolve(notifications));
+      const warnSpy = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+
+      await expect(loadNotifications(synchronousFailure)).resolves.toBeNull();
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Notification permission API failed:',
+        'expo-notifications',
+        expect.any(TypeError)
+      );
+
+      await expect(loadNotifications(successfulLoad)).resolves.toEqual(
+        notifications
+      );
+      expect(synchronousFailure).toHaveBeenCalledTimes(1);
+      expect(successfulLoad).toHaveBeenCalledTimes(1);
+      warnSpy.mockRestore();
+    });
+  });
+
+  it('falls back to denied when expo-notifications cannot load and retries later', async () => {
     mockRejectNextNotificationsModuleLoad = true;
     const { usePermissionBooster } = await import('./use-permission-booster');
     const { result } = renderHook(() => usePermissionBooster());
-    let permissionResult: 'granted' | 'denied' | 'soft-ask-needed' | undefined;
+    const warnSpy = jest
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    let firstPermissionResult:
+      | 'granted'
+      | 'denied'
+      | 'soft-ask-needed'
+      | undefined;
+    let secondPermissionResult:
+      | 'granted'
+      | 'denied'
+      | 'soft-ask-needed'
+      | undefined;
 
     expect(mockNotificationsModuleLoad).not.toHaveBeenCalled();
 
-    await expect(
-      result.current.requestPermission('notifications')
-    ).rejects.toThrow('notification module unavailable');
-
     await act(async () => {
-      permissionResult =
+      firstPermissionResult =
         await result.current.requestPermission('notifications');
     });
 
-    expect(permissionResult).toBe('granted');
+    expect(firstPermissionResult).toBe('denied');
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Notification permission API failed:',
+      'expo-notifications',
+      expect.any(Error)
+    );
+    warnSpy.mockRestore();
+
+    await act(async () => {
+      secondPermissionResult =
+        await result.current.requestPermission('notifications');
+    });
+
+    expect(secondPermissionResult).toBe('granted');
     expect(mockNotificationsModuleLoad).toHaveBeenCalledTimes(2);
     expect(mockGetPermissionsAsync).toHaveBeenCalledTimes(1);
   });

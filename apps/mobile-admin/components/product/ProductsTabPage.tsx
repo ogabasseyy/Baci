@@ -1,6 +1,6 @@
 import type { ListRenderItemInfo } from '@shopify/flash-list';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { type RefObject, useState } from 'react';
 import {
   ActivityIndicator,
   type NativeScrollEvent,
@@ -49,6 +49,9 @@ interface ProductsTabPageProps {
   onSubTabChange: (subTab: ProductsTab) => void;
   searchQuery: string;
   variant: 'in_stock' | 'on_website';
+  scrollRef?: RefObject<{
+    scrollToOffset: (options: { offset: number; animated?: boolean }) => void;
+  } | null>;
 }
 
 export function ProductsTabPage({
@@ -59,6 +62,7 @@ export function ProductsTabPage({
   onSubTabChange,
   searchQuery,
   variant,
+  scrollRef,
 }: ProductsTabPageProps) {
   const { colors } = useTheme();
   const [activeTab, setActiveTab] = useState<ProductsTab>(
@@ -205,6 +209,7 @@ export function ProductsTabPage({
             ) : null
           }
           onScroll={onScroll}
+          scrollRef={scrollRef}
         />
       ) : activeTab === 'top_selling' ? (
         <ProductsListShell
@@ -231,6 +236,7 @@ export function ProductsTabPage({
             )
           }
           onScroll={onScroll}
+          scrollRef={scrollRef}
         />
       ) : (
         <ProductsListShell
@@ -242,6 +248,7 @@ export function ProductsTabPage({
           onRefresh={refetchProducts}
           onEndReached={handleLoadMore}
           onScroll={onScroll}
+          scrollRef={scrollRef}
           footerComponent={
             isFetchingNextPage ? (
               <View style={styles.footerLoader}>

@@ -76,8 +76,6 @@ describe('GiglProvider booking requests', () => {
         ReceiverLocation: { Latitude: 0, Longitude: 0 },
       },
       ShipmentDetails: {
-        PickupOptions: 1,
-        DeliveryType: 0,
         IsPriorityShipment: false,
         PricingStrategy: 3,
         IsCashOnDelivery: false,
@@ -85,6 +83,8 @@ describe('GiglProvider booking requests', () => {
         VehicleType: 1,
       },
     });
+    expect(bookingPayload.ShipmentDetails).not.toHaveProperty('DeliveryType');
+    expect(bookingPayload.ShipmentDetails).not.toHaveProperty('PickupOptions');
     expect(bookingPayload.ShipmentItems[0]).toMatchObject({
       SpecialPackageId: 1,
     });
@@ -121,10 +121,11 @@ describe('GiglProvider booking requests', () => {
       String(fetchMock.mock.calls[2]?.[1]?.body ?? '{}')
     );
     expect(bookingPayload.ShipmentDetails).toMatchObject({
-      DeliveryType: 1,
       IsPriorityShipment: true,
       PricingStrategy: 3,
     });
+    expect(bookingPayload.ShipmentDetails).not.toHaveProperty('DeliveryType');
+    expect(bookingPayload.ShipmentDetails).not.toHaveProperty('PickupOptions');
   });
 
   it('preserves the quoted vehicle type during booking', async () => {
@@ -235,7 +236,10 @@ describe('GiglProvider booking requests', () => {
           state: 'Delta',
         },
       })
-    ).rejects.toThrow('No GIGL station found for pickup location');
+    ).rejects.toMatchObject({
+      code: 'GIGL_STATION_RESOLUTION_FAILED',
+      message: 'No GIGL station found for pickup location',
+    });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 

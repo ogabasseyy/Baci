@@ -1,8 +1,12 @@
 import type { ProductKeySpecs } from '@/lib/products';
 import { stripHtmlTags } from '@/lib/sanitize-core';
 import { escapeXml } from '@/lib/xml-utils';
+import { getFirstAcceptedSpecValue } from './get-first-accepted-spec-value';
 
 interface ProductDetailInput {
+  categories?: { name?: string | null; slug?: string | null } | null;
+  category?: string | null;
+  category_slug?: string | null;
   color?: string | null;
   product_key_specs?: ProductKeySpecs | null;
   variant_attributes?: Record<string, unknown> | null;
@@ -32,6 +36,8 @@ function normalizeText(value: unknown, options?: NormalizeTextOptions) {
 }
 
 function getVariantAttribute(
+  input: ProductDetailInput,
+  specKey: string,
   attributes: ProductDetailInput['variant_attributes'],
   aliases: string[],
   options?: NormalizeTextOptions
@@ -50,7 +56,11 @@ function getVariantAttribute(
     }
 
     const normalizedValue = normalizeText(value, options);
-    if (normalizedValue) {
+    if (
+      normalizedValue &&
+      getFirstAcceptedSpecValue(input, specKey, normalizedValue) ===
+        normalizedValue
+    ) {
       return normalizedValue;
     }
   }
@@ -75,56 +85,104 @@ function isPositiveFiniteNumber(value: unknown): value is number {
 }
 
 function buildWeightLabel(input: ProductDetailInput) {
-  const keySpecWeight = input.product_key_specs?.weight_g;
+  const keySpecWeight = getFirstAcceptedSpecValue(
+    input,
+    'weight_g',
+    input.product_key_specs?.weight_g
+  );
   if (isPositiveFiniteNumber(keySpecWeight)) {
     return `${keySpecWeight}g`;
   }
 
-  if (isPositiveFiniteNumber(input.weight_value) && input.weight_unit) {
-    return `${input.weight_value}${input.weight_unit}`;
+  const shippingWeight = input.weight_value;
+  if (isPositiveFiniteNumber(shippingWeight) && input.weight_unit) {
+    return `${shippingWeight}${input.weight_unit}`;
   }
 
   return undefined;
 }
 
 export function buildGoogleColorXml(input: ProductDetailInput) {
-  const color =
-    getVariantAttribute(input.variant_attributes, ['color', 'colour']) ||
-    normalizeText(input.color);
+  const color = normalizeText(
+    getFirstAcceptedSpecValue(
+      input,
+      'available_colors',
+      getVariantAttribute(input, 'available_colors', input.variant_attributes, [
+        'color',
+        'colour',
+      ]),
+      normalizeText(input.color)
+    )
+  );
 
   return color ? `        <g:color>${escapeXml(color)}</g:color>` : '';
 }
 
 export function buildGoogleProductDetailXml(input: ProductDetailInput) {
   const specs = input.product_key_specs ?? {};
-  const screenSize = isPositiveFiniteNumber(specs.screen_size_inches)
-    ? `${specs.screen_size_inches} inches`
+  const screenSizeValue = getFirstAcceptedSpecValue(
+    input,
+    'screen_size_inches',
+    specs.screen_size_inches
+  );
+  const screenSize = isPositiveFiniteNumber(screenSizeValue)
+    ? `${screenSizeValue} inches`
     : undefined;
-  const screenResolution =
-    typeof specs.display_resolution === 'string'
-      ? normalizeText(specs.display_resolution)
-      : undefined;
-  const ram =
-    getVariantAttribute(input.variant_attributes, ['ram', 'memory'], {
-      formatNumber: formatPositiveGb,
-    }) ||
-    (isPositiveFiniteNumber(specs.ram_gb) ? formatGb(specs.ram_gb) : undefined);
-  const storage =
+  const screenResolutionValue = getFirstAcceptedSpecValue(
+    input,
+    'display_resolution',
+    specs.display_resolution
+  );
+  const screenResolution = normalizeText(screenResolutionValue);
+  const ramValue = getFirstAcceptedSpecValue(
+    input,
+    'ram_gb',
     getVariantAttribute(
+      input,
+      'ram_gb',
+      input.variant_attributes,
+      ['ram', 'memory'],
+      {
+        formatNumber: formatPositiveGb,
+      }
+    ),
+    specs.ram_gb
+  );
+  const ram = isPositiveFiniteNumber(ramValue)
+    ? formatGb(ramValue)
+    : normalizeText(ramValue);
+  const storageValue = getFirstAcceptedSpecValue(
+    input,
+    'storage_gb',
+    getVariantAttribute(
+      input,
+      'storage_gb',
       input.variant_attributes,
       ['storage', 'storage_capacity', 'rom'],
       {
         formatNumber: formatPositiveGb,
       }
-    ) ||
-    (isPositiveFiniteNumber(specs.storage_gb)
-      ? formatGb(specs.storage_gb)
-      : undefined);
-  const rearCamera = isPositiveFiniteNumber(specs.main_camera_mp)
-    ? `${specs.main_camera_mp}MP`
+    ),
+    specs.storage_gb
+  );
+  const storage = isPositiveFiniteNumber(storageValue)
+    ? formatGb(storageValue)
+    : normalizeText(storageValue);
+  const rearCameraValue = getFirstAcceptedSpecValue(
+    input,
+    'main_camera_mp',
+    specs.main_camera_mp
+  );
+  const rearCamera = isPositiveFiniteNumber(rearCameraValue)
+    ? `${rearCameraValue}MP`
     : undefined;
-  const frontCamera = isPositiveFiniteNumber(specs.front_camera_mp)
-    ? `${specs.front_camera_mp}MP`
+  const frontCameraValue = getFirstAcceptedSpecValue(
+    input,
+    'front_camera_mp',
+    specs.front_camera_mp
+  );
+  const frontCamera = isPositiveFiniteNumber(frontCameraValue)
+    ? `${frontCameraValue}MP`
     : undefined;
   const weight = buildWeightLabel(input);
 

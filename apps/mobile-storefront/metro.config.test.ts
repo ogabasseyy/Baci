@@ -40,6 +40,17 @@ jest.mock('posthog-react-native/metro', () => ({
   getPostHogExpoConfig: mockGetPostHogExpoConfig,
 }));
 
+const mockGetSentryExpoConfig = jest.fn(
+  (
+    projectRoot: string,
+    options: { getDefaultConfig: (root: string) => { resolver: object } }
+  ) => options.getDefaultConfig(projectRoot)
+);
+
+jest.mock('@sentry/react-native/metro', () => ({
+  getSentryExpoConfig: mockGetSentryExpoConfig,
+}));
+
 const mockGetBundleModeMetroConfig = jest.fn(
   (inputConfig: { serializer?: Record<string, unknown> }) => ({
     ...inputConfig,
@@ -94,6 +105,18 @@ describe('Metro web runtime resolution', () => {
     expect(mockGetPostHogExpoConfig).toHaveBeenCalledWith(projectRoot, {
       getDefaultConfig: expect.any(Function),
     });
+  });
+
+  it('composes Sentry instrumentation with PostHog source maps', () => {
+    expect(mockGetSentryExpoConfig).toHaveBeenCalledWith(
+      projectRoot,
+      expect.objectContaining({
+        autoWrapExpoRouterErrorBoundary: true,
+        getDefaultConfig: expect.any(Function),
+        includeWebFeedback: false,
+        includeWebReplay: false,
+      })
+    );
   });
 
   it('watches root node_modules so pnpm hoisted dependencies resolve', () => {

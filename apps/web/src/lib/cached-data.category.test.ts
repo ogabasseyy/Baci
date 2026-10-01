@@ -1293,7 +1293,7 @@ describe('getCachedCategoryPageData category routing and fallback logic', () => 
     });
 
     await expect(
-      getCachedCategoryPageShellData('merchant-123', 'maybe-real', 'test-store')
+      getCachedCategoryPageShellData('merchant-123', 'maybe-real')
     ).rejects.toBe(categoryError);
   });
 
@@ -1324,11 +1324,7 @@ describe('getCachedCategoryPageData category routing and fallback logic', () => 
     });
 
     await expect(
-      getCachedCategoryPageShellData(
-        'merchant-123',
-        'active-category',
-        'test-store'
-      )
+      getCachedCategoryPageShellData('merchant-123', 'active-category')
     ).rejects.toBe(scopeError);
   });
 

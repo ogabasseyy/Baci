@@ -42,6 +42,7 @@ export function CheckoutAddressStepView({
   onAddressSelected,
   onAddressTextChanged,
   onChangeAccountPassword,
+  onContactEmailSettled,
   onOpenCityPicker,
   onOpenNewAddressEditor,
   onOpenStatePicker,
@@ -62,6 +63,7 @@ export function CheckoutAddressStepView({
   selectedSavedAddress,
   selectedSavedAddressId,
   shippingQuotes,
+  showLocationPickers,
   watchedCity,
   watchedEmail,
   watchedState,
@@ -103,9 +105,9 @@ export function CheckoutAddressStepView({
           Delivery Address
         </Text>
         <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-          {isAuthenticated
+          {hasContactIdentity
             ? 'Choose how this order should be delivered.'
-            : 'Add your contact and delivery details to continue.'}
+            : 'Complete your contact details to unlock delivery options.'}
         </Text>
       </View>
 
@@ -121,120 +123,130 @@ export function CheckoutAddressStepView({
         isCollapsed={isContactCollapsed}
         isDark={isDark}
         onChangeAccountPassword={onChangeAccountPassword}
+        onContactEmailSettled={onContactEmailSettled}
         onToggleCollapsed={onToggleContactCollapsed}
         onToggleSaveDetails={onToggleSaveDetails}
         phone={phone}
         saveDetails={saveDetails}
       />
 
-      {deliveryMethod !== 'pickup_station' && (
-        <CheckoutDeliveryCard
-          colors={colors}
-          control={control}
-          currentDeliverySummary={currentDeliverySummary}
-          defaultSavedAddress={defaultSavedAddress}
-          errors={errors}
-          hasSavedAddresses={hasSavedAddresses}
-          isAddingNewAddress={isAddingNewAddress}
-          isAuthenticated={isAuthenticated}
-          isCollapsed={isDeliveryCollapsed}
-          isDark={isDark}
-          isLoadingCities={isLoadingCities}
-          isLoadingLocations={isLoadingLocations}
-          isLoadingSavedAddresses={isLoadingSavedAddresses}
-          onAddressSelected={onAddressSelected}
-          onAddressTextChanged={onAddressTextChanged}
-          onOpenCityPicker={onOpenCityPicker}
-          onOpenNewAddressEditor={onOpenNewAddressEditor}
-          onOpenStatePicker={onOpenStatePicker}
-          onToggleCollapsed={onToggleDeliveryCollapsed}
-          onToggleSaveAsDefaultAddress={onToggleSaveAsDefaultAddress}
-          onUseSavedAddress={onUseSavedAddress}
-          saveAsDefaultAddress={saveAsDefaultAddress}
-          savedAddresses={savedAddresses}
-          selectedSavedAddress={selectedSavedAddress}
-          selectedSavedAddressId={selectedSavedAddressId}
-        />
-      )}
+      {hasContactIdentity ? (
+        <>
+          {deliveryMethod !== 'pickup_station' && (
+            <CheckoutDeliveryCard
+              colors={colors}
+              control={control}
+              currentDeliverySummary={currentDeliverySummary}
+              defaultSavedAddress={defaultSavedAddress}
+              errors={errors}
+              hasSavedAddresses={hasSavedAddresses}
+              isAddingNewAddress={isAddingNewAddress}
+              isAuthenticated={isAuthenticated}
+              isCollapsed={isDeliveryCollapsed}
+              isDark={isDark}
+              isLoadingCities={isLoadingCities}
+              isLoadingLocations={isLoadingLocations}
+              isLoadingSavedAddresses={isLoadingSavedAddresses}
+              showLocationPickers={showLocationPickers}
+              onAddressSelected={onAddressSelected}
+              onAddressTextChanged={onAddressTextChanged}
+              onOpenCityPicker={onOpenCityPicker}
+              onOpenNewAddressEditor={onOpenNewAddressEditor}
+              onOpenStatePicker={onOpenStatePicker}
+              onToggleCollapsed={onToggleDeliveryCollapsed}
+              onToggleSaveAsDefaultAddress={onToggleSaveAsDefaultAddress}
+              onUseSavedAddress={onUseSavedAddress}
+              saveAsDefaultAddress={saveAsDefaultAddress}
+              savedAddresses={savedAddresses}
+              selectedSavedAddress={selectedSavedAddress}
+              selectedSavedAddressId={selectedSavedAddressId}
+            />
+          )}
 
-      {canChooseDeliveryMethod && (
-        <DeliveryMethodCard
-          colors={colors}
-          isDark={isDark}
-          selectedMethod={deliveryMethod}
-          onSelectMethod={onSelectDeliveryMethod}
-          deliveryCity={watchedCity}
-          deliveryState={watchedState}
-          doorSubtitle={
-            doorSelectedQuote != null
-              ? getDeliveryMethodSummary(
-                  'door',
-                  doorSelectedQuote,
-                  watchedState
-                )
-              : 'Rates loaded after you enter your address'
-          }
-          airportFee={AIRPORT_DELIVERY_FEE}
-          pickupStationQuote={stationPickupQuote}
-          merchantPickupLocation={merchantPickupLocation}
-        >
-          {deliveryMethod === 'pickup_station' ? (
-            <PickupLocationOptions
+          {canChooseDeliveryMethod && (
+            <DeliveryMethodCard
               colors={colors}
               isDark={isDark}
-              isLoading={isLoadingQuotes}
-              merchantLocation={
-                usesMerchantPickup ? merchantPickupLocation : undefined
+              selectedMethod={deliveryMethod}
+              onSelectMethod={onSelectDeliveryMethod}
+              deliveryCity={watchedCity}
+              deliveryState={watchedState}
+              doorSubtitle={
+                doorSelectedQuote != null
+                  ? getDeliveryMethodSummary(
+                      'door',
+                      doorSelectedQuote,
+                      watchedState
+                    )
+                  : 'Rates loaded after you enter your address'
               }
-              onRetry={onRetryQuotes}
-              onSelect={onSelectQuote}
-              providerQuotes={providerPickupQuotes}
-              selectedQuoteId={
-                selectedQuoteId ||
-                (usesMerchantPickup && merchantPickupLocation
-                  ? MERCHANT_PICKUP_QUOTE_ID
-                  : '')
-              }
-            />
-          ) : shouldShowShippingQuotes ? (
-            <ShippingQuotesCard
-              embedded
-              colors={colors}
-              estimateOverride={
-                deliveryMethod === 'airport'
-                  ? AIRPORT_DELIVERY_ESTIMATE
-                  : watchedState.trim().toLowerCase() === 'lagos'
-                    ? LAGOS_ROAD_DELIVERY_ESTIMATE
-                    : undefined
-              }
-              isDark={isDark}
-              isLoadingQuotes={isLoadingQuotes}
-              shippingQuotes={
-                deliveryMethod === 'airport'
-                  ? [localAirportQuote, ...airShippingQuotes]
-                  : doorShippingQuotes
-              }
-              stationPickupQuote={stationPickupQuote}
-              selectedQuoteId={effectiveSelectedQuoteId}
-              onSelectQuote={onSelectQuote}
-              onRetryQuotes={onRetryQuotes}
-            />
-          ) : undefined}
-        </DeliveryMethodCard>
-      )}
+              airportFee={AIRPORT_DELIVERY_FEE}
+              hasGiglGoFasterQuote={airShippingQuotes.length > 0}
+              pickupStationQuote={stationPickupQuote}
+              merchantPickupLocation={merchantPickupLocation}
+            >
+              {deliveryMethod === 'pickup_station' ? (
+                <PickupLocationOptions
+                  colors={colors}
+                  isDark={isDark}
+                  isLoading={isLoadingQuotes}
+                  merchantLocation={
+                    usesMerchantPickup ? merchantPickupLocation : undefined
+                  }
+                  onRetry={onRetryQuotes}
+                  onSelect={onSelectQuote}
+                  providerQuotes={providerPickupQuotes}
+                  selectedQuoteId={
+                    selectedQuoteId ||
+                    (usesMerchantPickup && merchantPickupLocation
+                      ? MERCHANT_PICKUP_QUOTE_ID
+                      : '')
+                  }
+                />
+              ) : shouldShowShippingQuotes ? (
+                <ShippingQuotesCard
+                  embedded
+                  colors={colors}
+                  estimateOverride={
+                    deliveryMethod === 'airport'
+                      ? AIRPORT_DELIVERY_ESTIMATE
+                      : watchedState.trim().toLowerCase() === 'lagos'
+                        ? LAGOS_ROAD_DELIVERY_ESTIMATE
+                        : undefined
+                  }
+                  isDark={isDark}
+                  isLoadingQuotes={isLoadingQuotes}
+                  shippingQuotes={
+                    deliveryMethod === 'airport'
+                      ? [
+                          ...(localAirportQuote ? [localAirportQuote] : []),
+                          ...airShippingQuotes,
+                        ]
+                      : doorShippingQuotes
+                  }
+                  stationPickupQuote={stationPickupQuote}
+                  selectedQuoteId={effectiveSelectedQuoteId}
+                  onSelectQuote={onSelectQuote}
+                  onRetryQuotes={onRetryQuotes}
+                />
+              ) : undefined}
+            </DeliveryMethodCard>
+          )}
 
-      <DeliveryNotesCard colors={colors} isDark={isDark}>
-        <CheckoutFormField
-          name="notes"
-          label=""
-          placeholder="Any special instructions for delivery"
-          multiline
-          control={control}
-          errors={errors}
-          colors={colors}
-          isDark={isDark}
-        />
-      </DeliveryNotesCard>
+          <DeliveryNotesCard colors={colors} isDark={isDark}>
+            <CheckoutFormField
+              name="notes"
+              label=""
+              placeholder="Any special instructions for delivery"
+              multiline
+              control={control}
+              errors={errors}
+              colors={colors}
+              isDark={isDark}
+            />
+          </DeliveryNotesCard>
+        </>
+      ) : null}
     </ScrollView>
   );
 }

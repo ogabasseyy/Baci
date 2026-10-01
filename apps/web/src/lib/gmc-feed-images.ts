@@ -6,6 +6,8 @@
  * that were prevalidated by an offline backfill/audit job.
  */
 
+import { isOfferClaimedImage } from '@/lib/is-offer-claimed-image';
+
 const GMC_ADDITIONAL_IMAGES_MAX = 10;
 
 /**
@@ -14,6 +16,7 @@ const GMC_ADDITIONAL_IMAGES_MAX = 10;
  * but those are only used by the offline backfill job and never reach this type.
  */
 export interface FeedImageManifestEntry {
+  source_url?: string | null;
   variant_id?: string | null;
   verified_url: string | null;
   verified_format: string | null;
@@ -32,26 +35,50 @@ function isVerifiedWithUrl(e: FeedImageManifestEntry): e is VerifiedEntry {
  * Resolve the primary feed image from manifest entries.
  * Returns the verified URL or null if no valid primary image exists.
  * When null, the feed builder must skip the entire product item.
+ * Entries claimed by offers are excluded when provided, so offer-owned
+ * imagery never leaks into the base product primary image. When the
+ * flagged primary is claimed but other verified entries remain, the
+ * lowest-position safe entry is promoted instead of dropping the row;
+ * callers must keep the returned URL out of the additional-image list.
  */
 export function resolveGmcPrimaryImage(
-  entries: FeedImageManifestEntry[]
+  entries: FeedImageManifestEntry[],
+  excludeUrls: ReadonlySet<string> = new Set()
 ): string | null {
-  const primary = entries
-    .filter((e): e is VerifiedEntry => e.is_primary && isVerifiedWithUrl(e))
+  const candidates = entries.filter(
+    (e): e is VerifiedEntry =>
+      isVerifiedWithUrl(e) && !isOfferClaimedImage(e, excludeUrls, entries)
+  );
+  const primary = candidates
+    .filter((e) => e.is_primary)
     .sort((a, b) => a.position - b.position)[0];
-  return primary?.verified_url ?? null;
+  if (primary) {
+    return primary.verified_url;
+  }
+  const promoted = candidates.sort((a, b) => a.position - b.position)[0];
+  return promoted?.verified_url ?? null;
 }
 
 /**
  * Resolve additional feed images from manifest entries.
  * Returns only verified non-primary URLs, ordered by position, max 10.
+ * Entries claimed by offers are excluded when provided, so offer-owned
+ * imagery never leaks into parent-level additional image lists.
  */
 export function resolveGmcAdditionalImages(
-  entries: FeedImageManifestEntry[]
+  entries: FeedImageManifestEntry[],
+  excludeUrls: ReadonlySet<string> = new Set()
 ): string[] {
-  return entries
-    .filter((e): e is VerifiedEntry => !e.is_primary && isVerifiedWithUrl(e))
+  const urls = entries
+    .filter(
+      (e): e is VerifiedEntry =>
+        !e.is_primary &&
+        isVerifiedWithUrl(e) &&
+        !isOfferClaimedImage(e, excludeUrls, entries)
+    )
     .sort((a, b) => a.position - b.position)
-    .slice(0, GMC_ADDITIONAL_IMAGES_MAX)
     .map((e) => e.verified_url);
+  // Deduplicate before the cap so repeated URLs cannot crowd out later
+  // distinct images.
+  return [...new Set(urls)].slice(0, GMC_ADDITIONAL_IMAGES_MAX);
 }

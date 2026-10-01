@@ -42,12 +42,15 @@ const client = () =>
 
 describe('triggerPurchaseConversion item validation', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-15T12:00:00.000Z'));
     vi.clearAllMocks();
     delete process.env.EVENT_PIPELINE_ENQUEUE_ENABLED;
     mocks.send.mockResolvedValue([]);
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     if (originalPipelineFlag === undefined) {
       delete process.env.EVENT_PIPELINE_ENQUEUE_ENABLED;
     } else {

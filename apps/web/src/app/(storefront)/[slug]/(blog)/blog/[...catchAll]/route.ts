@@ -1,9 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { resolveBlogCatchAllOutcome } from './blog-catch-all-resolution';
 
-// Co-locate with the Supabase primary (eu-west-1 / Dublin) — route handlers
-// and sibling layouts do not inherit the [slug] layout preferredRegion.
-export const preferredRegion = 'dub1';
+// Region pinning lives in vercel.json `regions` (dub1, next to the Supabase
+// primary in eu-west-1 / Dublin) — `preferredRegion` is deprecated and removed.
 
 interface RouteContext {
   params: Promise<{ slug: string; catchAll: string[] }>;

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   internalBlogListingStatusQuerySchema,
   internalBlogPostStatusQuerySchema,
+  internalComparePageStatusBodySchema,
+  internalComparePageStatusQuerySchema,
   internalProductCanonicalRedirectQuerySchema,
   internalSlugSetParamsSchema,
   internalSlugSetQuerySchema,
@@ -173,5 +175,94 @@ describe('internalBlogListingStatusQuerySchema', () => {
         page: '10001',
       }).success
     ).toBe(false);
+  });
+});
+
+describe('internalComparePageStatusQuerySchema', () => {
+  it('accepts a bounded composite comparison slug', () => {
+    const result = internalComparePageStatusQuerySchema.safeParse({
+      category: ' laptops ',
+      comparison: ' left-laptop-vs-right-laptop ',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual({
+      category: 'laptops',
+      comparison: 'left-laptop-vs-right-laptop',
+    });
+  });
+
+  it('enforces the category boundaries', () => {
+    expect(
+      internalComparePageStatusQuerySchema.safeParse({
+        category: '   ',
+        comparison: 'left-vs-right',
+      }).success
+    ).toBe(false);
+    expect(
+      internalComparePageStatusQuerySchema.safeParse({
+        category: 'a'.repeat(255),
+        comparison: 'left-vs-right',
+      }).success
+    ).toBe(true);
+    expect(
+      internalComparePageStatusQuerySchema.safeParse({
+        category: 'a'.repeat(256),
+        comparison: 'left-vs-right',
+      }).success
+    ).toBe(false);
+  });
+
+  it('rejects an over-long comparison slug', () => {
+    expect(
+      internalComparePageStatusQuerySchema.safeParse({
+        category: 'laptops',
+        comparison: 'a'.repeat(1025),
+      }).success
+    ).toBe(false);
+  });
+
+  it('accepts the maximum-length comparison slug and rejects blank input', () => {
+    expect(
+      internalComparePageStatusQuerySchema.safeParse({
+        category: 'laptops',
+        comparison: 'a'.repeat(1024),
+      }).success
+    ).toBe(true);
+    expect(
+      internalComparePageStatusQuerySchema.safeParse({
+        category: 'laptops',
+        comparison: '   ',
+      }).success
+    ).toBe(false);
+  });
+});
+
+describe('internalComparePageStatusBodySchema', () => {
+  it('requires the explicit fail-open bit', () => {
+    expect(
+      internalComparePageStatusBodySchema.safeParse({
+        present: false,
+        hasError: true,
+      }).success
+    ).toBe(true);
+    expect(
+      internalComparePageStatusBodySchema.safeParse({ present: false }).success
+    ).toBe(false);
+  });
+
+  it('requires present to be a boolean', () => {
+    expect(
+      internalComparePageStatusBodySchema.safeParse({
+        present: 'false',
+        hasError: false,
+      }).success
+    ).toBe(false);
+    expect(
+      internalComparePageStatusBodySchema.safeParse({
+        present: false,
+        hasError: true,
+      }).data
+    ).toEqual({ present: false, hasError: true });
   });
 });

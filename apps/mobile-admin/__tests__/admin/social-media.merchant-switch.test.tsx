@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { socialMediaTestHarness as harness } from '../../app/(admin)/social-media.test-harness';
+import { socialMediaTestHarness as harness } from './social-media.test-harness';
 
 describe('SocialMediaScreen merchant-switch save lifecycle', () => {
   beforeEach(() => harness.reset());

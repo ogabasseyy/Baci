@@ -1,21 +1,8 @@
 import 'server-only';
-import { getImageProps } from 'next/image';
 import { preconnect, prefetchDNS, preload } from 'react-dom';
-import { getOgabasseyImagePreloadType } from '@/app/(storefront)/ogabassey/ogabassey-image-preload-type';
-import {
-  MOBILE_HERO_IMAGE_HEIGHT,
-  MOBILE_HERO_IMAGE_QUALITY,
-  MOBILE_HERO_IMAGE_SIZES,
-  MOBILE_HERO_IMAGE_WIDTH,
-  MOBILE_HERO_SOURCE_MEDIA,
-} from '@/components/storefront/ogabassey/components/hero-mobile-image-config';
 import { OGABASSEY_CDN_ORIGIN } from '@/components/storefront/ogabassey/config/storefront-origins';
-import imageLoader from '@/lib/image-loader';
-import {
-  isOgabasseyCdnImageUrl,
-  rewriteOgabasseyTransformUrlFormat,
-} from '@/lib/ogabassey-cdn-image-url';
-import { buildOgabasseyAvifSrcSet } from '@/lib/ogabassey-image-format-sources';
+import { isOgabasseyCdnImageUrl } from '@/lib/ogabassey-cdn-image-url';
+import { ogabasseyHomeHeroResourceHintProjection } from '@/lib/ogabassey-home-hero-resource-hint-projection';
 
 /**
  * Early resource hints for the home hero's slide-0 LCP image.
@@ -43,64 +30,33 @@ import { buildOgabasseyAvifSrcSet } from '@/lib/ogabassey-image-format-sources';
 export function preloadOgabasseyHomeHeroResources(
   src: string | null | undefined
 ): void {
-  const candidate = src?.trim();
-  if (!candidate || !isOgabasseyCdnImageUrl(candidate)) {
-    return;
-  }
-
   try {
+    const candidate = src?.trim();
+    if (!candidate || !isOgabasseyCdnImageUrl(candidate)) {
+      return;
+    }
+    // Preserve the origin hints even if a later image transform fails. The
+    // hints are safe for a canonical CDN candidate; only the image preload
+    // depends on the projection completing successfully.
     prefetchDNS(OGABASSEY_CDN_ORIGIN);
     preconnect(OGABASSEY_CDN_ORIGIN);
 
-    const {
-      props: { srcSet, sizes },
-    } = getImageProps({
-      alt: '',
-      height: MOBILE_HERO_IMAGE_HEIGHT,
-      // Explicit loader for candidate parity with MobileLcpHeroImage's
-      // rendered <source> — relying on the global loaderFile leaves room for
-      // the preload srcset to diverge from what the picture actually requests.
-      loader: imageLoader,
-      quality: MOBILE_HERO_IMAGE_QUALITY,
-      sizes: MOBILE_HERO_IMAGE_SIZES,
-      src: candidate,
-      width: MOBILE_HERO_IMAGE_WIDTH,
-    });
-
-    const href = imageLoader({
-      quality: MOBILE_HERO_IMAGE_QUALITY,
-      src: candidate,
-      width: MOBILE_HERO_IMAGE_WIDTH,
-    });
-    const imageSizes = sizes ?? MOBILE_HERO_IMAGE_SIZES;
-    const fallbackSrcSet = srcSet ?? `${href} ${MOBILE_HERO_IMAGE_WIDTH}w`;
-
-    // Preload the exact tier the picture renders. AVIF-capable browsers get
-    // the `image/avif` source, so the hint must too (candidate + type parity
-    // → one deduped fetch). `null` twins mean an external image with no AVIF
-    // tier: fall back to preloading the decodable fallback for everyone.
-    const avifHref = rewriteOgabasseyTransformUrlFormat(href, 'avif');
-    const avifSrcSet = buildOgabasseyAvifSrcSet(fallbackSrcSet);
-
-    if (avifHref && avifSrcSet) {
-      preload(avifHref, {
-        as: 'image',
-        fetchPriority: 'high',
-        imageSizes,
-        imageSrcSet: avifSrcSet,
-        media: MOBILE_HERO_SOURCE_MEDIA,
-        type: 'image/avif',
+    const projection = ogabasseyHomeHeroResourceHintProjection.build(src);
+    if (!projection) {
+      console.error('Failed to emit home hero preload hints', {
+        error: new Error('Unable to build hero preload projection'),
       });
-    } else {
-      preload(href, {
-        as: 'image',
-        fetchPriority: 'high',
-        imageSizes,
-        imageSrcSet: fallbackSrcSet,
-        media: MOBILE_HERO_SOURCE_MEDIA,
-        type: getOgabasseyImagePreloadType(href),
-      });
+      return;
     }
+
+    preload(projection.href, {
+      as: projection.as,
+      fetchPriority: projection.fetchPriority,
+      imageSizes: projection.imageSizes,
+      imageSrcSet: projection.imageSrcSet,
+      media: projection.media,
+      type: projection.type,
+    });
   } catch (error) {
     // Fail-open: an optimization hint must never break the shell render.
     console.error('Failed to emit home hero preload hints', { error });

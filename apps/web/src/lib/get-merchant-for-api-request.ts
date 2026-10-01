@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { StaffAccess, StaffRole } from '@/hooks/use-merchant';
-import type { UserAccess } from '@/lib/api-auth';
+import type { UserAccess } from '@/lib/api-permissions';
 import { mergeStaffPermissions } from '@/lib/staff-permissions-merge';
 
 export type MerchantContext = NonNullable<

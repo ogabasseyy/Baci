@@ -131,6 +131,7 @@ export interface OrderWalletFundingIntentRepository {
 }
 
 export type OrderWalletFundingIntentFallbackCode =
+  | 'CUSTOMER_NAME_REQUIRED'
   | 'CUSTOMER_PHONE_REQUIRED'
   | 'ORDER_ALREADY_HAS_WALLET_REDEMPTION'
   | 'ORDER_NOT_FOUND'

@@ -3,6 +3,33 @@ import { render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { OrderDetailsItemsCard } from './OrderDetailsItemsCard';
 
+jest.mock('expo-image', () => {
+  const { View } = jest.requireActual(
+    'react-native'
+  ) as typeof import('react-native');
+
+  return {
+    Image: ({
+      autoplay,
+      accessibilityLabel,
+      testID,
+    }: {
+      autoplay?: boolean;
+      accessibilityLabel?: string;
+      testID?: string;
+    }) => {
+      const viewProps = {
+        testID,
+        autoplay,
+        accessible: true,
+        accessibilityRole: 'image',
+        accessibilityLabel,
+      } as unknown as React.ComponentProps<typeof View>;
+      return <View {...viewProps} />;
+    },
+  };
+});
+
 describe('OrderDetailsItemsCard', () => {
   const renderItemsCard = (
     item: Partial<Parameters<typeof OrderDetailsItemsCard>[0]['items'][number]>
@@ -53,5 +80,19 @@ describe('OrderDetailsItemsCard', () => {
 
     expect(screen.queryByText('Open Box')).toBeNull();
     expect(screen.queryByText('512GB')).toBeNull();
+  });
+
+  describe('bugfix: animated order product images', () => {
+    it('does not autoplay product images in order details', () => {
+      renderItemsCard({
+        image_url: 'https://example.com/product.gif',
+      });
+
+      expect(
+        screen.getByRole('image', {
+          name: '13" MacBook Air M2 (2022) image',
+        }).props.autoplay
+      ).toBe(false);
+    });
   });
 });

@@ -8,6 +8,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockGetUser = vi.fn();
 const mockSupabase = { auth: { getUser: mockGetUser } };
 const mockRequireMerchantFeatureAccess = vi.fn();
+const { mockHasPermission } = vi.hoisted(() => ({
+  mockHasPermission: vi.fn().mockReturnValue(true),
+}));
 
 vi.mock('next/headers', () => ({ cookies: vi.fn().mockResolvedValue({}) }));
 vi.mock('@/lib/supabase/server', () => ({
@@ -26,7 +29,7 @@ vi.mock('@/lib/get-merchant-for-api-request', () => ({
 }));
 
 vi.mock('@/lib/api-auth', () => ({
-  hasPermission: vi.fn().mockReturnValue(true),
+  hasPermission: mockHasPermission,
 }));
 
 const mockForIntegration = vi.fn();
@@ -159,8 +162,7 @@ describe('Consignment GET', () => {
 
   it('returns 403 when permission denied', async () => {
     setupAuth();
-    const { hasPermission } = await import('@/lib/api-auth');
-    (hasPermission as ReturnType<typeof vi.fn>).mockReturnValueOnce(false);
+    mockHasPermission.mockReturnValueOnce(false);
     const res = await GET(
       makeGetRequest({
         integrationId: INT_ID,
@@ -169,6 +171,33 @@ describe('Consignment GET', () => {
       })
     );
     expect(res.status).toBe(403);
+  });
+
+  it('returns 403 for view-only staff while requiring integrations.manage', async () => {
+    setupAuth();
+    mockToUserAccess.mockReturnValueOnce({
+      role: 'staff',
+      permissions: { integrations: { view: true, manage: false } },
+    });
+    mockHasPermission.mockImplementationOnce(
+      (_access: unknown, _resource: unknown, action: unknown) =>
+        action === 'view'
+    );
+
+    const res = await GET(
+      makeGetRequest({
+        integrationId: INT_ID,
+        sku: 'S1',
+        businessClientCode: 'BC',
+      })
+    );
+
+    expect(res.status).toBe(403);
+    expect(mockHasPermission).toHaveBeenCalledWith(
+      expect.objectContaining({ role: 'staff' }),
+      'integrations',
+      'manage'
+    );
   });
 
   it('returns 400 for invalid query params', async () => {
@@ -232,6 +261,11 @@ describe('Consignment GET', () => {
     );
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ available: 42 });
+    expect(mockHasPermission).toHaveBeenCalledWith(
+      expect.anything(),
+      'integrations',
+      'manage'
+    );
   });
 
   it('handles JumiaApiError', async () => {
@@ -380,6 +414,48 @@ describe('Consignment POST', () => {
     const res = await POST(makeJsonRequest('POST', body));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ purchaseOrderNumber: 'PO-123' });
+  });
+
+  it('rejects a business client code from another selected marketplace', async () => {
+    setupAuth();
+    mockForIntegration.mockResolvedValue({
+      shopId: 'shop1',
+      marketplaceKey: 'NG-RETAIL',
+    });
+    const body = {
+      integrationId: INT_ID,
+      businessClientCode: 'GH-RETAIL',
+      shippingDate: '2026-04-01',
+      products: [{ sku: 'SKU1', quantity: 10 }],
+    };
+
+    const res = await POST(makeJsonRequest('POST', body));
+
+    expect(res.status).toBe(400);
+    expect(mockCreateOrder).not.toHaveBeenCalled();
+  });
+
+  it('derives the provider business client code from the selected marketplace', async () => {
+    setupAuth();
+    mockForIntegration.mockResolvedValue({
+      shopId: 'shop1',
+      marketplaceKey: 'NG-RETAIL',
+    });
+    mockCreateOrder.mockResolvedValue({ purchaseOrderNumber: 'PO-123' });
+    const body = {
+      integrationId: INT_ID,
+      businessClientCode: 'NG-RETAIL',
+      shippingDate: '2026-04-01',
+      products: [{ sku: 'SKU1', quantity: 10 }],
+    };
+
+    const res = await POST(makeJsonRequest('POST', body));
+
+    expect(res.status).toBe(200);
+    expect(mockCreateOrder).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ businessClientCode: 'NG-RETAIL' })
+    );
   });
 });
 

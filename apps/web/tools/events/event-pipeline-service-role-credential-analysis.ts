@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import ts from 'typescript';
+import ts from '@typescript/typescript6';
 import { parseEventPipelineTypeScriptSource } from '../../src/lib/events/event-pipeline-typescript-source';
 import { resolveLexicalString } from './analytics-delivery-static-string';
 import { isTestSourcePath } from './event-pipeline-source-path';
@@ -13,7 +13,7 @@ type CredentialReaderLedgers = {
 const defaultLedgers: CredentialReaderLedgers = {
   approvedTask6ReaderHashes: {
     'apps/web/src/lib/supabase/service.ts':
-      '13e10a25092e1a53c8f091b3576e804f6e1268f55d63393d2a2231ddc46cc5bc',
+      '6aaad249f5e1635f1ea590d9736b3313f9df0367df1ea02bf6011530d0c309bb',
   },
   // These are pre-existing factory, worker, or route readers. They are not part
   // of the temporary three-edge Task 6 analytics exception. Tracked operational
@@ -21,8 +21,6 @@ const defaultLedgers: CredentialReaderLedgers = {
   preExistingReaderHashes: {
     'apps/web/mcp-server/migrate_images.ts':
       'bd69a87ccb7c68ecef2a49eaaf059465cef2b0a5de45a2dab9bc988381615bd7',
-    'apps/web/mcp-server/server.ts':
-      'b616e48f8a83fd45ae7d12337398a2755d04b4abe929276ac3df2ebfb16b76fe',
     'apps/web/scripts-tmp/bulk-fix-macbooks.ts':
       'b68336dba5c2cb670b48599657f635870aa75786d243fe65568c080ddf82372d',
     'apps/web/scripts-tmp/check-blog-images.ts':
@@ -63,18 +61,20 @@ const defaultLedgers: CredentialReaderLedgers = {
       '5a05fb0b5bcfb445c8527cce70d02912fb050db2fb98604d91c2d43b9c566377',
     'apps/web/src/app/api/ai-jobs/worker/route.ts':
       '3cd51c9f0c4aeba362afd3d37e1a4b2d29107bedb6bdf2f75c9860cdc28fa42a',
-    'apps/web/src/app/api/platform/analytics-config/route.ts':
-      '28a184d0112fcb9d27e9f451252dfddcad8d893a3efe5eb1502e21c95b1587a7',
     'apps/web/src/app/api/shipping/self-fulfill/route.ts':
-      'cb7a3220da0b16017bd9d56c5d1aeeb87438088a0603e03f88bd10958b0209da',
+      'd86b574dac4cf45c72cc54eb7ad1178af4bbb6064a5a3e73e9309ea73d20a221',
     'apps/web/src/app/api/shipping/webhooks/[provider]/route.ts':
       '2a2713042ae099e9deb7ac4be9e05631fbf72d18789689a26fa0e4896f2189d5',
     'apps/web/src/env.ts':
-      'abdc8b4db75777fb98f9d418c44168aed1fbb9f112c674101a579b29ef4664b0',
+      '1f9b49944787721d7cd539287f7107c3da90d2f887a71c540d71715e89e7d4b1',
     'apps/web/src/scripts/process-ai-storefront-jobs.ts':
       '47bea3bc3ac77a939febb07b99c4ec4edf6f16f33f310dddd23ec2a4cbe2c0ad',
     'vps-workers/jobs/cleanup-agentic-request-records.mjs':
       '29d02f20900fe0d476d57b2620dd324a4830ff200a66fc3b4454aaf48047dd19',
+    'vps-workers/jobs/cleanup-legacy-expense-receipts.mjs':
+      '642437579009d3bfcf70dba0ed26b67e49f17eb4ed65f16cf6d6924bc80d4bd4',
+    'vps-workers/jobs/cleanup-private-expense-receipts.mjs':
+      'fa73f2cb71434ab15e08a49326f52cefb3ab02b262b8ed6cb8d5b0175dbd60e5',
     'vps-workers/jobs/cleanup-import-uploads.mjs':
       '00c9de97809d2ba2280276f875506f62a56fea4c4cf89d09ade132df3105a385',
     'vps-workers/jobs/cleanup-push-tokens.mjs':
@@ -102,7 +102,7 @@ const defaultLedgers: CredentialReaderLedgers = {
     'scripts-tmp/upload-game-covers.ts':
       'c54726f6a965a6f318d36d6168e5528cd3722f5db30feff63492ba9d0a482738',
     'scripts/backfill-feed-images.ts':
-      '20a87b3ad4b928ac65efc9d39b0b1ad3f8d1e944c56ac13dc6918baafe1195c6',
+      '886b5b73e584f182375dce74ac4561792d3cbcbea3902b9708f2490d648881e9',
   },
   testSupportReaderHashes: {
     'apps/web/src/lib/events/event-pipeline-service-role-test-client.ts':
@@ -112,13 +112,17 @@ const defaultLedgers: CredentialReaderLedgers = {
 
 function readsCredential(path: string, source: string): boolean {
   const file = parseEventPipelineTypeScriptSource(path, source);
+  const credentialNames = new Set([
+    'SUPABASE_ADS_CREDENTIAL_KEY',
+    'SUPABASE_SERVICE_ROLE_KEY',
+  ]);
   const key = (expression: ts.Expression | undefined, at: ts.Node) =>
-    resolveLexicalString(expression, file, at) === 'SUPABASE_SERVICE_ROLE_KEY';
+    credentialNames.has(resolveLexicalString(expression, file, at) ?? '');
   let found = false;
   function visit(node: ts.Node) {
     if (
       ts.isPropertyAccessExpression(node) &&
-      node.name.text === 'SUPABASE_SERVICE_ROLE_KEY'
+      credentialNames.has(node.name.text)
     ) {
       found = true;
     } else if (
@@ -138,8 +142,7 @@ function readsCredential(path: string, source: string): boolean {
     } else if (ts.isBindingElement(node)) {
       const property = node.propertyName ?? node.name;
       if (
-        (ts.isIdentifier(property) &&
-          property.text === 'SUPABASE_SERVICE_ROLE_KEY') ||
+        (ts.isIdentifier(property) && credentialNames.has(property.text)) ||
         (ts.isComputedPropertyName(property) && key(property.expression, node))
       )
         found = true;

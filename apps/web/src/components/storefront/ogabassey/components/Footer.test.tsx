@@ -104,6 +104,12 @@ describe('Ogabassey Footer', () => {
     expect(pattern).toHaveAttribute('aria-hidden', 'true');
   });
 
+  it('renders the merchant-specific business name in the copyright line', () => {
+    mockBuildMerchantTrustProfile.mockReturnValue({ socialLinks: {}, derivedLinks: {} });
+    render(<Footer storeSlug="other" merchant={{ ...merchantFixture, business_name: 'Acme Devices' }} />);
+    expect(screen.getByText(/Acme Devices.*All rights reserved/)).toBeInTheDocument();
+  });
+
   it('adds trust policy links to the support section when available', () => {
     mockBuildMerchantTrustProfile.mockReturnValue({
       returnPolicy: {

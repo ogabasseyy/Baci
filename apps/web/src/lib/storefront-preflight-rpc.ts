@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { storefrontPreflightRpcMemo } from '@/lib/storefront-preflight-rpc-memo';
 import { createPublicClient } from '@/lib/supabase/public';
 import { createAbortSignalTimeout } from './abort-signal-timeout';
 import type { StorefrontInternalPreflightSurface } from './storefront-internal-preflight';
@@ -8,35 +9,19 @@ import {
 } from './storefront-internal-preflight';
 import { createStorefrontPreflightCircuitBreaker } from './storefront-preflight-circuit-breaker';
 import { classifyRpcErrorReason } from './storefront-preflight-rpc-error';
+import {
+  snapshotStorefrontPreflightRpcArgs,
+  storefrontPreflightRpcFlightKey,
+  storefrontPreflightRpcFlights,
+} from './storefront-preflight-rpc-flight';
 
-/**
- * Direct-Supabase transport for the proxy middleware's storefront preflights.
+/** Direct-Supabase transport for the proxy middleware's storefront preflights.
+ * One anon PostgREST RPC replaces the internal self-fetch. A short verdict memo
+ * and a consecutive-failure breaker bound repeat traffic and brownouts.
  *
- * Replaces the /api/internal self-fetch (middleware → public edge →
- * cold-startable function → data cache → DB) with one anon PostgREST RPC call:
- * the Vercel function region (dub1) and the database (eu-west-1) are
- * co-located, so verdicts resolve in tens of milliseconds and the abort budget
- * becomes headroom instead of a cliff. Verdict semantics live in the
- * SECURITY DEFINER RPCs (supabase/migrations/20260706200000_*).
- *
- * Blast-radius bounds (both required because middleware cannot use 'use cache'
- * and therefore lost the data-cache absorber the route transport had):
- *  - a short-TTL verdict memo collapses the canonical + membership helpers'
- *    identical calls on the same navigation (and same-URL crawl repeats) into
- *    one round trip;
- *  - a consecutive-failure circuit breaker fails every preflight open
- *    instantly during a Supabase brownout instead of stalling each document
- *    navigation for the full budget, twice.
- *
- * ACCEPTED EXPOSURE: the verdict RPCs are anon-GRANTed SECURITY DEFINER
- * functions, so they are directly callable at PostgREST with the public anon
- * key, bypassing this transport's memo/breaker/kill-switch — the same class
- * as the shipped resolve_storefront_auth_merchant and
- * get_merchant_product_slug_resolution RPCs. They expose only public
- * storefront verdict data, are index-backed point reads, and are capped
- * DB-side by the anon role's statement_timeout (a function-level SET could
- * not re-arm the timer for the already-running statement); platform-side
- * anon rate limiting is the control surface for direct abuse.
+ * The RPCs are intentionally anon-GRANTed SECURITY DEFINER public verdict
+ * reads. They remain directly callable with the public key, so platform anon
+ * rate limiting and the DB statement timeout provide the outer safeguards.
  */
 
 export interface StorefrontPreflightRpcContext {
@@ -62,26 +47,17 @@ interface CallStorefrontPreflightRpcOptions {
   timeoutMs?: number;
   /** Injectable for tests. */
   rpcImpl?: StorefrontPreflightRpcImpl;
+  /**
+   * Some established identity RPCs legitimately return no row for unknown
+   * public identifiers. Treat that result as a designed fail-open instead of
+   * reporting a parse incident.
+   */
+  emptyResult?: 'unknown';
 }
 
-// 2s, not the route transport's old 800ms: the RPCs execute in ~20ms
-// server-side, and PostHog `detail` telemetry showed the entire residual
-// timeout class (155 events/19h post-#2980) was OUR client abort firing on
-// transport-tail events (cold TLS + event-loop contention during page-data
-// fanout) — each one a fail-open that forfeits a crawler-facing 404/308
-// verdict. The old prohibition on budget bumps guarded a user-visible stall
-// bound on two SEQUENTIAL slow function hops; here the memo collapses the
-// second call on success, the circuit breaker bounds brownouts, and the
-// extra budget is only ever spent on genuine tail events, converting lost
-// verdicts into slightly-slower correct ones.
+// A 2s budget recovers transport-tail events; memo and breaker bound its cost.
 const DEFAULT_TIMEOUT_MS = 2_000;
-// One navigation's canonical + membership helpers call within ~100ms of each
-// other; 3s also absorbs a crawler re-hitting the same URL without letting a
-// verdict outlive the freshness the no-store route transport guaranteed.
-const MEMO_TTL_MS = 3_000;
-const MEMO_MAX_ENTRIES = 512;
-
-const memo = new Map<string, { expires: number; row: unknown }>();
+// One navigation's helpers call within ~100ms; this short memo absorbs repeats.
 const breaker = createStorefrontPreflightCircuitBreaker();
 
 let client: SupabaseClient | null = null;
@@ -97,33 +73,6 @@ function getClient(): SupabaseClient {
 
 const defaultRpcImpl: StorefrontPreflightRpcImpl = (fn, args, signal) =>
   getClient().rpc(fn, args).abortSignal(signal);
-
-function memoKey(fn: string, args: Record<string, string>): string {
-  return JSON.stringify([
-    fn,
-    Object.keys(args)
-      .sort()
-      .map((key) => [key, args[key]]),
-  ]);
-}
-
-function readMemo(key: string): unknown | undefined {
-  const entry = memo.get(key);
-  if (!entry) return undefined;
-  if (entry.expires <= Date.now()) {
-    memo.delete(key);
-    return undefined;
-  }
-  return entry.row;
-}
-
-function writeMemo(key: string, row: unknown): void {
-  if (memo.size >= MEMO_MAX_ENTRIES) {
-    const oldest = memo.keys().next().value;
-    if (oldest !== undefined) memo.delete(oldest);
-  }
-  memo.set(key, { expires: Date.now() + MEMO_TTL_MS, row });
-}
 
 function isAbortLikeError(error: unknown): boolean {
   return (
@@ -159,17 +108,12 @@ export async function callStorefrontPreflightRpc(
   args: Record<string, string>,
   options: CallStorefrontPreflightRpcOptions
 ): Promise<unknown | null> {
-  const { failOpenContext } = options;
+  const failOpenContext = { ...options.failOpenContext };
+  const emptyResult = options.emptyResult;
+  const attemptOptions = { emptyResult, failOpenContext };
+  const argsSnapshot = snapshotStorefrontPreflightRpcArgs(args);
 
-  const key = memoKey(fn, args);
-  const memoized = readMemo(key);
-  if (memoized !== undefined) {
-    return memoized;
-  }
-
-  // Preview deployments must not resolve verdicts against production data —
-  // parity with the route transport's resolveBaseUrl gate, which returns null
-  // for every non-production VERCEL_ENV.
+  // Preview deployments must not borrow a production memo or hit its data.
   const vercelEnv = process.env.VERCEL_ENV?.trim();
   if (vercelEnv && vercelEnv !== 'production') {
     storefrontInternalPreflight.warnFailOpen({
@@ -179,6 +123,48 @@ export async function callStorefrontPreflightRpc(
     return null;
   }
 
+  const key = storefrontPreflightRpcMemo.key(fn, argsSnapshot, emptyResult);
+  const memoized = storefrontPreflightRpcMemo.read(key);
+  if (
+    storefrontPreflightRpcMemo.isTimeout(memoized) ||
+    storefrontPreflightRpcMemo.isEmptyResult(memoized)
+  ) {
+    return null;
+  }
+  if (memoized !== undefined) {
+    return memoized;
+  }
+
+  const rpcImpl = options.rpcImpl ?? defaultRpcImpl;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const flightKey = storefrontPreflightRpcFlightKey(
+    key,
+    timeoutMs,
+    vercelEnv,
+    rpcImpl
+  );
+
+  return await storefrontPreflightRpcFlights.run(flightKey, () =>
+    runStorefrontPreflightRpcAttempt(
+      fn,
+      argsSnapshot,
+      key,
+      attemptOptions,
+      rpcImpl,
+      timeoutMs
+    )
+  );
+}
+
+async function runStorefrontPreflightRpcAttempt(
+  fn: string,
+  args: Record<string, string>,
+  key: string,
+  options: CallStorefrontPreflightRpcOptions,
+  rpcImpl: StorefrontPreflightRpcImpl,
+  timeoutMs: number
+): Promise<unknown | null> {
+  const { failOpenContext } = options;
   if (breaker.isOpen()) {
     // Console-only: the transition itself was captured once below.
     storefrontInternalPreflight.warnSkip({
@@ -188,19 +174,20 @@ export async function callStorefrontPreflightRpc(
     return null;
   }
 
-  const rpcImpl = options.rpcImpl ?? defaultRpcImpl;
-  const timeout = createAbortSignalTimeout(
-    options.timeoutMs ?? DEFAULT_TIMEOUT_MS
-  );
+  const timeout = createAbortSignalTimeout(timeoutMs);
 
   let result: StorefrontPreflightRpcResult;
   try {
     result = await rpcImpl(fn, args, timeout.signal);
   } catch (error) {
+    const reason = isAbortLikeError(error) ? 'timeout' : 'fetch-error';
+    if (reason === 'timeout') {
+      storefrontPreflightRpcMemo.write(key, storefrontPreflightRpcMemo.timeout);
+    }
     breaker.recordFailure();
     storefrontInternalPreflight.warnFailOpen({
       ...failOpenContext,
-      reason: isAbortLikeError(error) ? 'timeout' : 'fetch-error',
+      reason,
       detail: thrownErrorDetail(error),
     });
     captureBreakerOpenTransition(failOpenContext);
@@ -210,10 +197,14 @@ export async function callStorefrontPreflightRpc(
   }
 
   if (result.error) {
+    const reason = classifyRpcErrorReason(result.error);
+    if (reason === 'timeout') {
+      storefrontPreflightRpcMemo.write(key, storefrontPreflightRpcMemo.timeout);
+    }
     breaker.recordFailure();
     storefrontInternalPreflight.warnFailOpen({
       ...failOpenContext,
-      reason: classifyRpcErrorReason(result.error),
+      reason,
       detail: boundedErrorDetail(
         result.error.code ?? '',
         result.error.message ?? ''
@@ -227,6 +218,17 @@ export async function callStorefrontPreflightRpc(
 
   const row = Array.isArray(result.data) ? result.data[0] : result.data;
   if (row === null || row === undefined || typeof row !== 'object') {
+    if (
+      options.emptyResult === 'unknown' &&
+      Array.isArray(result.data) &&
+      result.data.length === 0
+    ) {
+      storefrontPreflightRpcMemo.write(
+        key,
+        storefrontPreflightRpcMemo.emptyResult
+      );
+      return null;
+    }
     storefrontInternalPreflight.warnFailOpen({
       ...failOpenContext,
       reason: 'parse',
@@ -234,7 +236,7 @@ export async function callStorefrontPreflightRpc(
     return null;
   }
 
-  writeMemo(key, row);
+  storefrontPreflightRpcMemo.write(key, row);
   return row;
 }
 
@@ -282,7 +284,8 @@ export function gateStorefrontPreflightStatus(
 
 /** Test hook: clears the verdict memo, breaker state, and client singleton. */
 export function resetStorefrontPreflightRpcForTests(): void {
-  memo.clear();
+  storefrontPreflightRpcMemo.clear();
+  storefrontPreflightRpcFlights.reset();
   breaker.reset();
   client = null;
 }

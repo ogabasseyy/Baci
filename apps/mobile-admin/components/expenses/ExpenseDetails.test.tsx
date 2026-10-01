@@ -59,11 +59,19 @@ const expense = (overrides: Partial<ExpenseDetail> = {}): ExpenseDetail => ({
   amount: 12_500,
   branch_id: 'branch-1',
   category: 'Inventory',
+  created_by_user_id: null,
   date: '2026-05-05T00:00:00.000Z',
   description: 'Office internet',
+  group_id: null,
   id: 'expense-1',
+  merchant_id: '97e7a9a4-4f82-484d-a0a5-0f2ba07f4e2e',
+  payment_method: null,
+  receipt_storage_path: null,
   receipt_url: null,
   reference: 'EXP-1',
+  updated_at: '2026-05-05T00:00:00.000Z',
+  updated_by_user_id: null,
+  vendor_name: null,
   ...overrides,
 });
 
@@ -81,6 +89,8 @@ describe('ExpenseDetails', () => {
         branchName="Lagos main"
         colors={colors}
         formattedAmount="NGN12,500.00"
+        groupName="Ungrouped"
+        receiptUrl={null}
         cardShadow={{}}
       />
     );
@@ -98,11 +108,48 @@ describe('ExpenseDetails', () => {
         branchName="Lagos main"
         colors={colors}
         formattedAmount="NGN12,500.00"
+        groupName="Ungrouped"
+        receiptUrl={null}
         cardShadow={{}}
       />
     );
 
     expect(screen.getByText('Invalid date')).toBeInTheDocument();
+  });
+
+  it('renders metadata values and explicit None and Ungrouped fallbacks', () => {
+    const { rerender } = render(
+      <ExpenseDetails
+        branchName="Lagos main"
+        cardShadow={{}}
+        colors={colors}
+        expense={expense({
+          payment_method: 'Transfer',
+          reference: 'INV-9',
+          vendor_name: 'ISP Ltd',
+        })}
+        formattedAmount="NGN12,500.00"
+        groupName="Marketing"
+        receiptUrl={null}
+      />
+    );
+    expect(screen.getByText('ISP Ltd')).toBeInTheDocument();
+    expect(screen.getByText('Transfer')).toBeInTheDocument();
+    expect(screen.getByText('INV-9')).toBeInTheDocument();
+    expect(screen.getByText('Marketing')).toBeInTheDocument();
+    rerender(
+      <ExpenseDetails
+        branchName="Lagos main"
+        cardShadow={{}}
+        colors={colors}
+        expense={expense({ reference: null })}
+        formattedAmount="NGN12,500.00"
+        groupName="Ungrouped"
+        receiptUrl={null}
+      />
+    );
+    expect(screen.getAllByText('None')).toHaveLength(3);
+    expect(screen.getByText('Ungrouped')).toBeInTheDocument();
   });
 
   it('opens valid receipt links from the receipt action', async () => {
@@ -112,6 +159,8 @@ describe('ExpenseDetails', () => {
         branchName="Lagos main"
         colors={colors}
         formattedAmount="NGN12,500.00"
+        groupName="Ungrouped"
+        receiptUrl="https://example.com/receipt.jpg"
         cardShadow={{}}
       />
     );
@@ -139,6 +188,8 @@ describe('ExpenseDetails', () => {
         branchName="Lagos main"
         colors={colors}
         formattedAmount="NGN12,500.00"
+        groupName="Ungrouped"
+        receiptUrl="https://example.com/receipt.jpg"
         cardShadow={{}}
       />
     );
@@ -154,5 +205,39 @@ describe('ExpenseDetails', () => {
       );
     });
     expect(mocks.linking.openURL).not.toHaveBeenCalled();
+  });
+
+  it('surfaces private receipt loading and failure states', () => {
+    const { rerender } = render(
+      <ExpenseDetails
+        branchName="Lagos main"
+        colors={colors}
+        expense={expense({
+          receipt_storage_path: 'merchant/expenses/receipt.jpg',
+        })}
+        formattedAmount="NGN12,500.00"
+        groupName="Ungrouped"
+        receiptLoading
+        receiptUrl={null}
+      />
+    );
+    expect(screen.getByText('Loading receipt…')).toBeInTheDocument();
+
+    rerender(
+      <ExpenseDetails
+        branchName="Lagos main"
+        colors={colors}
+        expense={expense({
+          receipt_storage_path: 'merchant/expenses/receipt.jpg',
+        })}
+        formattedAmount="NGN12,500.00"
+        groupName="Ungrouped"
+        receiptError={new Error('signing failed')}
+        receiptUrl={null}
+      />
+    );
+    expect(
+      screen.getByText('Receipt unavailable. Try again.')
+    ).toBeInTheDocument();
   });
 });

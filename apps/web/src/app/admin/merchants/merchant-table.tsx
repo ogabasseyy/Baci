@@ -54,10 +54,12 @@ export function MerchantTable({
         <TableHeader>
           <TableRow>
             <TableHead>Business</TableHead>
-            <TableHead>Health</TableHead>
-            <TableHead className="text-right">Total GMV</TableHead>
-            <TableHead className="text-right">Orders</TableHead>
-            <TableHead>Last Order</TableHead>
+            <TableHead>Paid Sales Activity</TableHead>
+            <TableHead className="text-right">
+              NGN Paid GMV Since Launch
+            </TableHead>
+            <TableHead className="text-right">Paid Orders</TableHead>
+            <TableHead>Latest Paid Order Created</TableHead>
             <TableHead>Joined</TableHead>
             <TableHead className="w-[50px]" />
           </TableRow>
@@ -93,6 +95,12 @@ export function MerchantTable({
                 </TableCell>
                 <TableCell className="text-right font-medium">
                   {formatAdminThresholdCurrency(merchant.total_gmv)}
+                  {merchant.excluded_non_ngn_or_unknown_paid_orders > 0 ? (
+                    <p className="text-xs font-normal text-muted-foreground">
+                      {merchant.excluded_non_ngn_or_unknown_paid_orders}{' '}
+                      non-NGN/unknown paid order(s) excluded
+                    </p>
+                  ) : null}
                 </TableCell>
                 <TableCell className="text-right">
                   {merchant.total_orders || 0}
@@ -117,7 +125,7 @@ export function MerchantTable({
                       <DropdownMenuItem asChild>
                         <Link href={`/admin/merchants/${merchant.merchant_id}`}>
                           <Users className="mr-2 size-4" aria-hidden="true" />
-                          View merchant users
+                          View Merchant 360
                         </Link>
                       </DropdownMenuItem>
                       {merchant.email ? (

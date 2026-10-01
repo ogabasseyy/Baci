@@ -47,12 +47,14 @@ describe('admin analytics privacy', () => {
         merchant_id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
         order_number: '260702195001',
         order_reference: 'ORD-260702-1-9',
+        signup_attempt_id: '123e4567-e89b-42d3-a456-426614174000',
         freeform: 'ORD-260702-1-9',
       })
     ).toEqual({
       merchant_id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
       order_number: '260702195001',
       order_reference: 'ORD-260702-1-9',
+      signup_attempt_id: '123e4567-e89b-42d3-a456-426614174000',
       freeform: 'ORD-[Filtered]',
     });
   });

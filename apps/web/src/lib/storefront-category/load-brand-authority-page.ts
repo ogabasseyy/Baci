@@ -64,7 +64,10 @@ async function loadBrandAuthorityPage(
     categorySlug: string;
     brandSlug: string;
   },
-  options: { includeRequestPathPrefix?: boolean } = {}
+  options: {
+    includeRequestPathPrefix?: boolean;
+    includeGuideLinks?: boolean;
+  } = {}
 ) {
   const merchant = await brandAuthorityPublicData.getMerchant(
     args.merchantSlug
@@ -156,13 +159,23 @@ async function loadBrandAuthorityPage(
     args.categorySlug in CONTENT_CLUSTER_SUPPORT
       ? (args.categorySlug as SupportedClusterCategory)
       : null;
-  const guidePosts = supportedCategory
-    ? await loadPublishedClusterPostsSafely(merchant.id, {
-        pageKind: 'category',
+  const guideContext = supportedCategory
+    ? {
+        pageKind: 'category' as const,
         categorySlug: supportedCategory,
-        brands: [authorityEntry.displayName, authorityEntry.brandKey],
-      })
-    : [];
+        brands: [
+          authorityEntry.displayName,
+          authorityEntry.brandKey,
+          ...(authorityEntry.brandAliases ?? []),
+        ],
+        productNames: normalizedProducts.map((product) => product.name),
+        productSlugs: normalizedProducts.map((product) => product.slug),
+      }
+    : null;
+  const guidePosts =
+    options.includeGuideLinks === false || !guideContext
+      ? []
+      : await loadPublishedClusterPostsSafely(merchant.id, guideContext);
   const familyLinks = modelFamilyAuthorityTaxonomy
     .getEntries(args.categorySlug, authorityEntry.brandKey)
     .flatMap((entry) => {
@@ -194,17 +207,14 @@ async function loadBrandAuthorityPage(
     categoryName,
     brand: authorityEntry,
     products,
-    guideLinks: supportedCategory
-      ? buildCommercialGuideLinks({
-          storeUrl,
-          posts: guidePosts,
-          context: {
-            pageKind: 'category',
-            categorySlug: supportedCategory,
-            brands: [authorityEntry.displayName, authorityEntry.brandKey],
-          },
-        })
-      : [],
+    guideLinks:
+      guideContext && options.includeGuideLinks !== false
+        ? buildCommercialGuideLinks({
+            storeUrl,
+            posts: guidePosts,
+            context: guideContext,
+          })
+        : [],
     familyLinks,
     breadcrumbItems: [
       { name: merchant.business_name, url: storeUrl },

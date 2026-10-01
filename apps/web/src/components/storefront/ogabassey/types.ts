@@ -96,6 +96,7 @@ export interface Product {
   simType?: string;
   displayType?: string;
   displaySize?: string;
+  graphics?: string;
   // New fields for Interactive Grid
   images?: string[];
   spec?: string;
@@ -206,7 +207,8 @@ export interface ProductKeySpecs {
   wireless_charging_watt?: number;
 
   // Allow index access for generic mapping
-  [key: string]: string | number | boolean | undefined;
+  [key: string]: string | number | boolean | string[] | undefined;
+  recommended_for?: string[];
 }
 
 import type { CartItem } from '@/hooks/cart';

@@ -1,85 +1,100 @@
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ExpenseGroup } from '@/schemas/expense-group';
 
-type TestBranchScope = { type: 'all' } | { type: 'branch'; branchId: string };
-
+const merchantId = '97e7a9a4-4f82-484d-a0a5-0f2ba07f4e2e';
+const branchId = '8b3f1444-8890-4b6a-a00f-ae80949f05b2';
+const groupId = 'f4067728-3048-4f49-a6c2-0d6b891c43d7';
 const mocks = vi.hoisted(() => ({
   alert: vi.fn(),
-  expenseFieldsProps: {
-    amount: '',
-    description: '',
-    onAmountChange: ((_: string) => undefined) as (value: string) => void,
-    onDescriptionChange: ((_: string) => undefined) as (value: string) => void,
-    onOpenCategorySheet: (() => undefined) as () => void,
-    onReceiptPress: (() => undefined) as () => void,
-    receiptUri: null as string | null,
-  },
-  imagePicker: vi.fn(),
-  insert: vi.fn(),
-  invalidateQueries: vi.fn(),
-  branches: [] as Array<{
-    id: string;
-    name: string;
-    is_default: boolean;
-    active?: boolean;
-  }>,
-  branchesLoading: false,
-  branchScope: { type: 'branch', branchId: 'branch-1' } as TestBranchScope,
-  merchant: { id: 'merchant-1' },
-  router: { back: vi.fn() },
-  upload: vi.fn(),
-}));
-
-function createMutationMock() {
-  return ({
-    mutationFn,
-    onError,
-    onSuccess,
-  }: {
-    mutationFn: () => Promise<void>;
-    onError?: (error: Error) => void;
-    onSuccess?: () => void;
-  }) => ({
-    isPending: false,
-    mutate: async () => {
-      try {
-        await mutationFn();
-        onSuccess?.();
-      } catch (error) {
-        onError?.(error as Error);
-      }
+  branchScope: {
+    type: 'branch',
+    branchId: '8b3f1444-8890-4b6a-a00f-ae80949f05b2',
+  } as { type: 'all' } | { type: 'branch'; branchId: string },
+  branches: [
+    {
+      active: true,
+      id: '8b3f1444-8890-4b6a-a00f-ae80949f05b2',
+      is_default: true,
+      name: 'Lagos main',
     },
-  });
-}
-
-function Text({ children }: { children?: ReactNode }) {
-  return <span>{children}</span>;
-}
-
-async function invokeAlertButton(title: string, buttonIndex = 0) {
-  await waitFor(() => {
-    expect(
-      mocks.alert.mock.calls.find(([alertTitle]) => alertTitle === title)
-    ).toBeTruthy();
-  });
-
-  const matchingCall = mocks.alert.mock.calls.find(
-    ([alertTitle]) => alertTitle === title
-  );
-  matchingCall?.[2]?.[buttonIndex]?.onPress?.();
-}
-
+  ] as
+    | Array<{
+        active: boolean;
+        id: string;
+        is_default: boolean;
+        name: string;
+      }>
+    | undefined,
+  branchesError: null as Error | null,
+  canCreate: true,
+  error: null as Error | null,
+  groups: [
+    {
+      archived_at: null,
+      created_at: '2026-08-01T00:00:00.000Z',
+      id: 'f4067728-3048-4f49-a6c2-0d6b891c43d7',
+      merchant_id: '97e7a9a4-4f82-484d-a0a5-0f2ba07f4e2e',
+      name: 'Marketing',
+      updated_at: '2026-08-01T00:00:00.000Z',
+    },
+  ] as ExpenseGroup[],
+  groupsError: null as Error | null,
+  hasCachedGroups: true,
+  imagePicker: vi.fn(),
+  isAccessLoading: false,
+  invalidateQueries: vi.fn(),
+  mutate: vi.fn(),
+  router: { back: vi.fn() },
+}));
 vi.mock('@tanstack/react-query', () => ({
-  useMutation: createMutationMock(),
-  useQueryClient: () => ({
-    invalidateQueries: mocks.invalidateQueries,
+  useMutation: () => ({ isPending: false, mutate: vi.fn() }),
+  useQueryClient: () => ({ invalidateQueries: mocks.invalidateQueries }),
+}));
+vi.mock('@/hooks/useExpenseAccess', () => ({
+  useExpenseAccess: () => ({
+    canCreate: mocks.canCreate,
+    canEdit: mocks.canCreate,
+    canView: mocks.canCreate,
+    error: mocks.error,
+    isLoading: mocks.isAccessLoading,
   }),
 }));
-
 vi.mock('@/hooks/useMerchant', () => ({
-  useMerchant: () => ({ merchant: mocks.merchant }),
+  useMerchant: () => ({ merchant: { id: merchantId } }),
+}));
+vi.mock('@/hooks/useBranchScope', () => ({
+  useBranchScope: () => ({ scope: mocks.branchScope }),
+}));
+vi.mock('@/hooks/useBranches', () => ({
+  useBranches: () => ({
+    data: mocks.branches,
+    error: mocks.branchesError,
+    isLoading: false,
+    refetch: vi.fn(),
+  }),
+}));
+vi.mock('@/hooks/useExpenseGroups', () => ({
+  useExpenseGroups: () => ({
+    activeGroups: mocks.groups.filter((group) => group.archived_at === null),
+    allGroups: mocks.groups,
+    archiveGroup: vi.fn(),
+    createGroup: vi.fn(),
+    error: mocks.groupsError,
+    hasCachedGroups: mocks.hasCachedGroups,
+    isLoading: false,
+    refetch: vi.fn(),
+    renameGroup: vi.fn(),
+  }),
+}));
+vi.mock('@/hooks/useSaveExpense', () => ({
+  useSaveExpense: () => ({ isPending: false, mutate: mocks.mutate }),
+}));
+
+vi.mock('@/lib/supabase', () => ({
+  supabase: {},
 }));
 
 vi.mock('@/hooks/useTheme', () => ({
@@ -88,22 +103,11 @@ vi.mock('@/hooks/useTheme', () => ({
       background: '#020617',
       border: '#334155',
       card: '#111827',
-      error: '#ef4444',
       primary: '#3b82f6',
       text: '#f8fafc',
       textOnPrimary: '#ffffff',
+      textSecondary: '#cbd5e1',
     },
-  }),
-}));
-
-vi.mock('@/hooks/useBranchScope', () => ({
-  useBranchScope: () => ({ scope: mocks.branchScope }),
-}));
-
-vi.mock('@/hooks/useBranches', () => ({
-  useBranches: () => ({
-    data: mocks.branches,
-    isLoading: mocks.branchesLoading,
   }),
 }));
 
@@ -115,9 +119,9 @@ vi.mock('@/components/ui/AppFormScreen', () => ({
     children?: ReactNode;
     footer?: ReactNode;
   }) => (
-    <section aria-label="expense-form-screen">
-      <div>{children}</div>
-      <div>{footer}</div>
+    <section aria-label="expense form">
+      {children}
+      {footer}
     </section>
   ),
 }));
@@ -125,132 +129,96 @@ vi.mock('@/components/ui/AppFormScreen', () => ({
 vi.mock('@/components/expenses/ExpenseFormFields', () => ({
   ExpenseFormFields: (props: {
     amount: string;
-    description: string;
+    date: string;
     onAmountChange: (value: string) => void;
+    onDateChange: (value: string) => void;
     onDescriptionChange: (value: string) => void;
-    onOpenCategorySheet: () => void;
-    onReceiptPress: () => void;
-    receiptUri: string | null;
-  }) => {
-    mocks.expenseFieldsProps.amount = props.amount;
-    mocks.expenseFieldsProps.description = props.description;
-    mocks.expenseFieldsProps.onAmountChange = props.onAmountChange;
-    mocks.expenseFieldsProps.onDescriptionChange = props.onDescriptionChange;
-    mocks.expenseFieldsProps.onOpenCategorySheet = props.onOpenCategorySheet;
-    mocks.expenseFieldsProps.onReceiptPress = props.onReceiptPress;
-    mocks.expenseFieldsProps.receiptUri = props.receiptUri;
-
-    return (
-      <>
-        <input
-          aria-label="Expense amount"
-          onChange={(event) => props.onAmountChange(event.target.value)}
-          value={props.amount}
-        />
-        <input
-          aria-label="Expense description"
-          onChange={(event) => props.onDescriptionChange(event.target.value)}
-          value={props.description}
-        />
-        <button
-          aria-label="Select expense category"
-          onClick={props.onOpenCategorySheet}
-          type="button"
-        >
-          <Text>Select category</Text>
-        </button>
-        <button
-          aria-label="Add expense receipt"
-          onClick={props.onReceiptPress}
-          type="button"
-        >
-          <Text>Add receipt</Text>
-        </button>
-      </>
-    );
-  },
+    onGroupChange: (value: string | null) => void;
+    onPaymentMethodChange: (value: string) => void;
+    onReferenceChange: (value: string) => void;
+    onVendorNameChange: (value: string) => void;
+  }) => (
+    <>
+      <output aria-label="default expense date">{props.date}</output>
+      <input
+        aria-label="Expense amount"
+        onChange={(event) => props.onAmountChange(event.target.value)}
+        value={props.amount}
+      />
+      <input
+        aria-label="Expense description"
+        onChange={(event) => props.onDescriptionChange(event.target.value)}
+      />
+      <input
+        aria-label="Expense vendor or payee"
+        onChange={(event) => props.onVendorNameChange(event.target.value)}
+      />
+      <input
+        aria-label="Expense payment method"
+        onChange={(event) => props.onPaymentMethodChange(event.target.value)}
+      />
+      <input
+        aria-label="Expense reference"
+        onChange={(event) => props.onReferenceChange(event.target.value)}
+      />
+      <button onClick={() => props.onDateChange('2026-08-08')} type="button">
+        Choose date
+      </button>
+      <button onClick={() => props.onGroupChange(groupId)} type="button">
+        Choose group
+      </button>
+    </>
+  ),
 }));
 
 vi.mock('@/components/expenses/ExpenseCategorySheet', () => ({
-  ExpenseCategorySheet: ({ visible }: { visible: boolean }) =>
-    visible ? (
-      <div>
-        <Text>Category sheet</Text>
-      </div>
-    ) : null,
+  ExpenseCategorySheet: () => null,
 }));
 
-vi.mock('@/lib/supabase', () => ({
-  supabase: {
-    from: () => ({
-      insert: mocks.insert,
-    }),
-    storage: {
-      from: () => ({
-        getPublicUrl: () => ({
-          data: { publicUrl: 'https://example.com/file' },
-        }),
-        upload: mocks.upload,
-      }),
-    },
-  },
+vi.mock('@/components/expenses/ExpenseGroupManagerSheet', () => ({
+  ExpenseGroupManagerSheet: ({
+    archiveGroup,
+  }: {
+    archiveGroup: (id: string) => Promise<void>;
+  }) => (
+    <button onClick={() => void archiveGroup(groupId)} type="button">
+      Archive selected group
+    </button>
+  ),
 }));
 
 vi.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: mocks.imagePicker,
 }));
 
-vi.mock('expo-router', async () => {
-  const React = await import('react');
-  return {
-    Stack: Object.assign(
-      ({ children }: { children?: React.ReactNode }) => children,
-      {
-        Screen: ({
-          options,
-        }: {
-          options?: { headerLeft?: () => React.ReactNode; title?: string };
-        }) =>
-          React.createElement(
-            'div',
-            null,
-            options?.title
-              ? React.createElement('span', null, options.title)
-              : null,
-            options?.headerLeft ? options.headerLeft() : null
-          ),
-      }
+vi.mock('expo-router', () => ({
+  Stack: {
+    Screen: ({ options }: { options?: { headerLeft?: () => ReactNode } }) => (
+      <>{options?.headerLeft?.()}</>
     ),
-    useRouter: () => mocks.router,
-  };
-});
-
+  },
+  useNavigation: () => ({ dispatch: vi.fn() }),
+  useRouter: () => mocks.router,
+}));
+vi.mock('expo-router/react-navigation', () => ({
+  usePreventRemove: vi.fn(),
+}));
 vi.mock('@react-native-vector-icons/ionicons', () => ({
-  Ionicons: ({ name }: { name?: string }) => (
-    <span aria-hidden="true" data-icon={name} />
-  ),
-
-  default: ({ name }: { name?: string }) => (
-    <span aria-hidden="true" data-icon={name} />
-  ),
+  default: () => null,
+  Ionicons: () => null,
   __esModule: true,
 }));
 
 vi.mock('react-native', () => ({
-  StatusBar: () => null,
-  ActivityIndicator: () => <output aria-label="loading" />,
+  ActivityIndicator: () => <output aria-label="saving" />,
   Alert: { alert: mocks.alert },
   Pressable: ({
     accessibilityLabel,
-    accessibilityRole,
-    accessibilityState,
     children,
     disabled,
     onPress,
   }: {
     accessibilityLabel?: string;
-    accessibilityRole?: string;
-    accessibilityState?: { checked?: boolean; disabled?: boolean };
     children?: ReactNode;
     disabled?: boolean;
     onPress?: () => void;
@@ -258,23 +226,15 @@ vi.mock('react-native', () => ({
     <button
       aria-label={accessibilityLabel}
       disabled={disabled}
-      onClick={() => onPress?.()}
-      {...(accessibilityRole === 'radio'
-        ? {
-            'aria-checked': accessibilityState?.checked ?? false,
-            role: 'radio',
-          }
-        : { role: accessibilityRole })}
+      onClick={onPress}
       type="button"
     >
       {children}
     </button>
   ),
-  StyleSheet: {
-    create: (styles: Record<string, unknown>) => styles,
-  },
   Text: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
   View: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  StyleSheet: { create: (value: unknown) => value },
 }));
 
 import AddExpenseScreen from './new';
@@ -282,225 +242,175 @@ import AddExpenseScreen from './new';
 describe('AddExpenseScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.expenseFieldsProps.amount = '';
-    mocks.expenseFieldsProps.description = '';
-    mocks.expenseFieldsProps.receiptUri = null;
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 9, 11, 0));
+    mocks.branchScope = { type: 'branch', branchId };
     mocks.branches = [
-      { id: 'branch-1', name: 'Lagos main', is_default: true, active: true },
+      {
+        active: true,
+        id: '8b3f1444-8890-4b6a-a00f-ae80949f05b2',
+        is_default: true,
+        name: 'Lagos main',
+      },
     ];
-    mocks.branchesLoading = false;
-    mocks.branchScope = { type: 'branch', branchId: 'branch-1' };
-    mocks.insert.mockResolvedValue({ error: null });
-    mocks.imagePicker.mockResolvedValue({ assets: [], canceled: true });
-    mocks.upload.mockResolvedValue({ error: null });
-  });
-
-  it('renders the add expense screen shell and opens the category sheet', () => {
-    render(<AddExpenseScreen />);
-
-    expect(screen.getByText('Add Expense')).toBeInTheDocument();
-    expect(
-      screen.getByRole('region', { name: 'expense-form-screen' })
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText('Expense amount')).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Save expense' })
-    ).toBeInTheDocument();
-
-    fireEvent.click(screen.getByLabelText('Select expense category'));
-
-    expect(screen.getByText('Category sheet')).toBeInTheDocument();
-  });
-
-  it('rejects invalid amount input and shows the amount validation alert', () => {
-    render(<AddExpenseScreen />);
-
-    const amountInput = screen.getByLabelText('Expense amount');
-    const saveButton = screen.getByRole('button', { name: 'Save expense' });
-
-    fireEvent.change(amountInput, { target: { value: '12a3' } });
-
-    expect((amountInput as HTMLInputElement).value).toBe('');
-
-    fireEvent.change(amountInput, { target: { value: '.' } });
-    fireEvent.click(saveButton);
-
-    expect(saveButton).not.toBeDisabled();
-    expect(mocks.alert).toHaveBeenCalledWith(
-      'Invalid Amount',
-      'Enter a valid amount greater than zero.'
+    mocks.branchesError = null;
+    mocks.groupsError = null;
+    mocks.hasCachedGroups = true;
+    mocks.mutate.mockImplementation(
+      (_input: unknown, options?: { onSuccess?: () => void }) =>
+        options?.onSuccess?.()
     );
-    expect(mocks.insert).not.toHaveBeenCalled();
   });
-
-  it('allows selecting a branch explicitly when all locations is selected', async () => {
-    mocks.branchScope = { type: 'all' };
-    mocks.branches = [
-      { id: 'branch-1', name: 'Lagos main', is_default: true, active: true },
-      { id: 'branch-2', name: 'Lekki branch', is_default: false, active: true },
-    ];
-
+  afterEach(() => vi.useRealTimers());
+  it('uses today and sends every editable field through the save mutation in the authoritative branch', async () => {
     render(<AddExpenseScreen />);
 
-    expect(screen.getByText('Branch')).toBeInTheDocument();
-    expect(
-      screen.getByRole('radio', { name: 'Assign expense to Lagos main' })
-    ).toHaveAttribute('aria-checked', 'true');
-
-    fireEvent.click(
-      screen.getByRole('radio', { name: 'Assign expense to Lekki branch' })
+    expect(screen.getByLabelText('default expense date').textContent).toBe(
+      '2026-08-09'
     );
-    expect(
-      screen.getByRole('radio', { name: 'Assign expense to Lagos main' })
-    ).toHaveAttribute('aria-checked', 'false');
-    expect(
-      screen.getByRole('radio', { name: 'Assign expense to Lekki branch' })
-    ).toHaveAttribute('aria-checked', 'true');
     fireEvent.change(screen.getByLabelText('Expense amount'), {
-      target: { value: '12500' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Save expense' }));
-
-    await waitFor(() => {
-      expect(mocks.insert).toHaveBeenCalledWith(
-        expect.objectContaining({ branch_id: 'branch-2' })
-      );
-    });
-  });
-
-  it('selects a receipt and saves a complete expense payload through the shared form shell', async () => {
-    mocks.imagePicker.mockResolvedValueOnce({
-      assets: [{ uri: 'file:///receipt.jpg' }],
-      canceled: false,
-    });
-
-    render(<AddExpenseScreen />);
-
-    fireEvent.change(screen.getByLabelText('Expense amount'), {
-      target: { value: '12500' },
+      target: { value: '12,500' },
     });
     fireEvent.change(screen.getByLabelText('Expense description'), {
       target: { value: 'Office internet' },
     });
-    fireEvent.click(screen.getByLabelText('Add expense receipt'));
-    await waitFor(() => {
-      expect(mocks.imagePicker).toHaveBeenCalled();
-      expect(mocks.expenseFieldsProps.receiptUri).toBe('file:///receipt.jpg');
+    fireEvent.change(screen.getByLabelText('Expense vendor or payee'), {
+      target: { value: 'ISP Ltd' },
     });
+    fireEvent.change(screen.getByLabelText('Expense payment method'), {
+      target: { value: 'Transfer' },
+    });
+    fireEvent.change(screen.getByLabelText('Expense reference'), {
+      target: { value: 'INV-101' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Choose date' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose group' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save expense' }));
 
-    await waitFor(() => {
-      expect(mocks.upload).toHaveBeenCalled();
-      expect(mocks.insert).toHaveBeenCalledWith({
-        amount: 12500,
-        branch_id: 'branch-1',
-        category: 'Inventory',
-        description: 'Office internet',
-        merchant_id: 'merchant-1',
-        receipt_url: 'https://example.com/file',
-      });
-      expect(mocks.invalidateQueries).toHaveBeenCalledWith({
-        queryKey: ['expenses', 'merchant-1'],
-      });
-    });
-
-    await invokeAlertButton('Success');
-    expect(mocks.router.back).toHaveBeenCalledTimes(1);
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      {
+        merchantId,
+        mode: 'create',
+        receiptChange: { kind: 'unchanged' },
+        values: {
+          amount: 12500,
+          branchId,
+          category: 'Inventory',
+          date: '2026-08-08',
+          description: 'Office internet',
+          groupId,
+          paymentMethod: 'Transfer',
+          reference: 'INV-101',
+          vendorName: 'ISP Ltd',
+        },
+      },
+      expect.any(Object)
+    );
+    expect(mocks.router.back).toHaveBeenCalled();
   });
-
-  it('shows a generic error alert when saving fails', async () => {
-    mocks.insert.mockResolvedValue({
-      error: new Error('Insert failed'),
-    });
-    const consoleErrorSpy = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => undefined);
-
+  it('clears a selected group after it is archived', async () => {
     render(<AddExpenseScreen />);
 
     fireEvent.change(screen.getByLabelText('Expense amount'), {
-      target: { value: '12500' },
+      target: { value: '100' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save expense' }));
-
-    await waitFor(() => {
-      expect(mocks.alert).toHaveBeenCalledWith(
-        'Error',
-        'Something went wrong. Please try again.'
+    fireEvent.click(screen.getByRole('button', { name: 'Choose group' }));
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Archive selected group' })
       );
-      expect(consoleErrorSpy).toHaveBeenCalled();
+      await Promise.resolve();
     });
-    expect(mocks.router.back).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Save expense' }));
 
-    consoleErrorSpy.mockRestore();
-  });
-
-  it('prevents saving when no branch can be selected', () => {
-    mocks.branchScope = { type: 'all' };
-    mocks.branches = [];
-
-    render(<AddExpenseScreen />);
-
-    fireEvent.change(screen.getByLabelText('Expense amount'), {
-      target: { value: '12500' },
-    });
-    const saveButton = screen.getByRole('button', { name: 'Save expense' });
-
-    fireEvent.click(saveButton);
-
-    expect(saveButton).not.toBeDisabled();
-    expect(mocks.alert).toHaveBeenCalledWith(
-      'No branch available',
-      'Create an active branch before saving expenses.'
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        values: expect.objectContaining({ groupId: null }),
+      }),
+      expect.any(Object)
     );
-    expect(mocks.insert).not.toHaveBeenCalled();
   });
 
-  it('shows a loading alert when branches are still loading', () => {
-    mocks.branchScope = { type: 'all' };
-    mocks.branches = [];
-    mocks.branchesLoading = true;
-
-    render(<AddExpenseScreen />);
-
-    fireEvent.change(screen.getByLabelText('Expense amount'), {
-      target: { value: '12500' },
-    });
-    const saveButton = screen.getByRole('button', { name: 'Save expense' });
-
-    fireEvent.click(saveButton);
-
-    expect(saveButton).not.toBeDisabled();
-    expect(mocks.alert).toHaveBeenCalledWith(
-      'Branches loading',
-      'Please wait for branches to finish loading.'
-    );
-    expect(mocks.insert).not.toHaveBeenCalled();
-  });
-
-  it('does not fall back to inactive branches when all locations is selected', () => {
+  it('rejects save when the selected branch is no longer active', () => {
     mocks.branchScope = { type: 'all' };
     mocks.branches = [
       {
-        id: 'branch-inactive',
-        name: 'Archived branch',
-        is_default: true,
         active: false,
+        id: '8b3f1444-8890-4b6a-a00f-ae80949f05b2',
+        is_default: false,
+        name: 'Former Lagos',
       },
     ];
 
     render(<AddExpenseScreen />);
 
     fireEvent.change(screen.getByLabelText('Expense amount'), {
-      target: { value: '12500' },
+      target: { value: '100' },
     });
-
     fireEvent.click(screen.getByRole('button', { name: 'Save expense' }));
 
     expect(mocks.alert).toHaveBeenCalledWith(
-      'No branch available',
-      'Create an active branch before saving expenses.'
+      'Branch unavailable',
+      'Choose an active branch before saving.'
     );
-    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.mutate).not.toHaveBeenCalled();
+  });
+
+  it('rejects save when the selected group is no longer active', () => {
+    mocks.branchScope = { type: 'all' };
+    mocks.branches = [
+      {
+        active: true,
+        id: branchId,
+        is_default: true,
+        name: 'Lagos main',
+      },
+    ];
+    mocks.groups = [
+      {
+        archived_at: null,
+        created_at: '2026-08-01T00:00:00.000Z',
+        id: groupId,
+        merchant_id: merchantId,
+        name: 'Marketing',
+        updated_at: '2026-08-01T00:00:00.000Z',
+      },
+    ];
+
+    const view = render(<AddExpenseScreen />);
+    fireEvent.change(screen.getByLabelText('Expense amount'), {
+      target: { value: '100' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Choose group' }));
+
+    mocks.groups = [
+      {
+        archived_at: '2026-08-10T00:00:00.000Z',
+        created_at: '2026-08-01T00:00:00.000Z',
+        id: groupId,
+        merchant_id: merchantId,
+        name: 'Marketing',
+        updated_at: '2026-08-10T00:00:00.000Z',
+      },
+    ];
+    view.rerender(<AddExpenseScreen />);
+    fireEvent.click(screen.getByRole('button', { name: 'Save expense' }));
+
+    expect(mocks.alert).toHaveBeenCalledWith(
+      'Group unavailable',
+      'Choose an active group before saving.'
+    );
+    expect(mocks.mutate).not.toHaveBeenCalled();
+  });
+
+  it('keeps the create form usable when a branch refetch fails with cached data', () => {
+    mocks.branchesError = new Error('branches refetch failed');
+
+    render(<AddExpenseScreen />);
+
+    expect(
+      screen.queryByText('Could not load branches. Please try again.')
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save expense' })).toBeEnabled();
   });
 });

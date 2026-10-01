@@ -3,9 +3,9 @@ import type {
   RepairQuoteSummary,
 } from '@baci/shared/repairs';
 import * as Haptics from 'expo-haptics';
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -63,8 +63,13 @@ export function RepairsCatalogScreen() {
   const booking = useRepairBooking();
 
   const showSuccess = booking.result !== null;
+  const pickupBack = useRef<(() => void) | null>(null);
 
   const goBackOneStep = () => {
+    if (pickupBack.current) {
+      pickupBack.current();
+      return;
+    }
     if (step === 'form') {
       setStep(device ? 'detail' : 'catalog');
       return;
@@ -106,7 +111,19 @@ export function RepairsCatalogScreen() {
 
   const screen = (
     <Stack.Screen
-      options={{ title: showSuccess ? 'Confirmed' : STEP_TITLES[step] }}
+      options={{
+        title: showSuccess ? 'Confirmed' : STEP_TITLES[step],
+        headerRight: () => (
+          <Pressable
+            accessibilityRole="button"
+            hitSlop={12}
+            style={{ minHeight: 44, justifyContent: 'center' }}
+            onPress={() => router.push('/repairs/status')}
+          >
+            <Text style={{ color: BRAND.primary }}>Track repair</Text>
+          </Pressable>
+        ),
+      }}
     />
   );
 
@@ -142,6 +159,7 @@ export function RepairsCatalogScreen() {
           serverError={booking.error}
           fieldErrors={booking.fieldErrors}
           onSubmit={booking.submit}
+          navigationBackRef={pickupBack}
         />
       </>
     );
@@ -184,6 +202,16 @@ export function RepairsCatalogScreen() {
               ? "We couldn't find that device."
               : (detail.error ?? 'Something went wrong.')}
           </Text>
+          {!detail.isNotFound ? (
+            <Pressable
+              style={styles.secondaryButton}
+              onPress={detail.refetch}
+              accessibilityRole="button"
+              accessibilityLabel="Retry loading device"
+            >
+              <Text style={styles.secondaryButtonText}>Try again</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             style={styles.secondaryButton}
             onPress={goBackOneStep}
@@ -239,6 +267,7 @@ export function RepairsCatalogScreen() {
       {screen}
       <RepairDeviceCatalog
         groups={devices.groups}
+        brandGroups={devices.brandGroups}
         query={devices.query}
         onQueryChange={devices.setQuery}
         onSelectDevice={handleSelectDevice}

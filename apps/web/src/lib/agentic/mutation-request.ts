@@ -44,6 +44,8 @@ export function readAgenticQueryRequest({
 }: {
   request: NextRequest;
 }): Promise<AgenticMutationRequest> {
+  // Non-mutating agentic operations, including POST-based UCP catalog queries,
+  // retain signed request integrity without requiring an idempotency key.
   return readAgenticSignedRequest({ request, requireIdempotency: false });
 }
 

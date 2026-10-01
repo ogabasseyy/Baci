@@ -52,6 +52,28 @@ function mapOrderEditError(error: { code?: string; message?: string }) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  if (message.includes('active_shipping_charge_quote_input_edit_blocked')) {
+    return NextResponse.json(
+      {
+        code: 'active_shipping_charge_quote_input_edit_blocked',
+        error:
+          'Shipping quote inputs cannot change while a wallet shipping charge is active.',
+      },
+      { status: 409 }
+    );
+  }
+
+  if (message.includes('active_shipping_charge_address_edit_blocked')) {
+    return NextResponse.json(
+      {
+        code: 'active_shipping_charge_address_edit_blocked',
+        error:
+          'Shipping address cannot change while a wallet shipping charge is active.',
+      },
+      { status: 409 }
+    );
+  }
+
   if (
     message.includes('order_financial_edit_has_payments') ||
     message.includes('order_financial_edit_after_fulfillment') ||
@@ -152,10 +174,13 @@ export async function PATCH(
     );
   }
 
-  const { data, error } = await supabase.rpc('update_admin_order', {
-    p_order_id: paramsResult.data.id,
-    p_payload: parsed.data,
-  });
+  const { data, error } = await supabase.rpc(
+    'update_admin_order_with_transaction_discount_metadata',
+    {
+      p_order_id: paramsResult.data.id,
+      p_payload: parsed.data,
+    }
+  );
 
   if (error) {
     return mapOrderEditError(error);

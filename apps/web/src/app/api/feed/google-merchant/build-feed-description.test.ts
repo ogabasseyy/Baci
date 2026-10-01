@@ -2,9 +2,43 @@ import { describe, expect, it } from 'vitest';
 import { buildFeedDescription } from './build-feed-description';
 
 describe('buildFeedDescription', () => {
+  it('keeps standalone merchandising colour for categorized accessories', () => {
+    expect(
+      buildFeedDescription({
+        name: 'Protective Phone Case',
+        category: 'Phone Cases',
+        color: 'Midnight Blue',
+        variant_attributes: { color: 'Coral Red' },
+      })
+    ).toContain('Colour: Coral Red');
+  });
+
+  it('keeps shipping weight for categorized accessories', () => {
+    expect(
+      buildFeedDescription({
+        name: 'Protective Phone Case',
+        category: 'Phone Cases',
+        weight_unit: 'g',
+        weight_value: 45,
+      })
+    ).toContain('Weight: 45g');
+  });
+
+  it('omits zero shipping weights from feed descriptions', () => {
+    expect(
+      buildFeedDescription({
+        name: 'Protective Phone Case',
+        category: 'Phone Cases',
+        weight_unit: 'kg',
+        weight_value: 0,
+      })
+    ).not.toContain('Weight: 0kg');
+  });
+
   it('appends the key phone specs Merchant Center flagged as missing', () => {
     const description = buildFeedDescription({
       name: 'iPhone 17 Pro Max',
+      category: 'Smartphones',
       description: '<p>Flagship iPhone with fast performance.</p>',
       color: 'Black Titanium',
       product_key_specs: {
@@ -129,6 +163,7 @@ describe('buildFeedDescription', () => {
   it('prefers variant matrix colour, RAM and storage over product-level values', () => {
     const description = buildFeedDescription({
       name: 'Galaxy S24 Ultra',
+      category: 'Smartphones',
       description: 'Open box Samsung flagship with a large AMOLED display.',
       color: 'Titanium Black',
       product_key_specs: {
@@ -148,6 +183,53 @@ describe('buildFeedDescription', () => {
     expect(description).toContain('Storage capacity: 1TB');
     expect(description).toContain('Rear camera resolution: 200MP');
     expect(description).not.toContain('Colour: Titanium Black');
+    expect(description).not.toContain('Storage capacity: 256GB');
+  });
+
+  it('uses category-aware acceptance and rejects contaminated feed facts', () => {
+    const description = buildFeedDescription({
+      name: 'Action Camera',
+      description: 'Compact camera for outdoor recording.',
+      category: 'Cameras',
+      product_key_specs: {
+        display_resolution: 'N/A',
+        ram_gb: 0,
+        storage_gb: 0,
+        main_camera_mp: 24,
+        front_camera_mp: 12,
+      },
+      variant_attributes: { ram: 'N/A', storage: '0GB' },
+    });
+
+    expect(description).toContain('Rear camera resolution: 24MP');
+    expect(description).not.toContain('Screen resolution: N/A');
+    expect(description).not.toContain('RAM:');
+    expect(description).not.toContain('Storage capacity:');
+    expect(description).not.toContain('Front camera resolution:');
+  });
+
+  it('skips unknown details and invalid leading RAM and storage aliases', () => {
+    const description = buildFeedDescription({
+      name: 'Galaxy S24 Ultra',
+      category: 'Smartphones',
+      description: 'Samsung flagship.',
+      product_key_specs: {
+        display_resolution: 'Unknown',
+        ram_gb: 8,
+        storage_gb: 256,
+      },
+      variant_attributes: {
+        memory: 'N/A',
+        ram: '16GB',
+        storage: 'Unknown',
+        rom: '1TB',
+      },
+    });
+
+    expect(description).toContain('RAM: 16GB');
+    expect(description).toContain('Storage capacity: 1TB');
+    expect(description).not.toContain('Screen resolution: Unknown');
+    expect(description).not.toContain('RAM: 8GB');
     expect(description).not.toContain('Storage capacity: 256GB');
   });
 });

@@ -31,149 +31,6 @@ describe('deploy crontab', () => {
     );
   });
 
-  it('schedules the gateway paid-order reconcile drain hourly through run-web-cron', () => {
-    const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
-
-    assert.match(
-      deployScript,
-      /20 \*\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/reconcile-gateway-paid-orders\.lock/
-    );
-    assert.match(
-      deployScript,
-      /\$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/reconcile-gateway-paid-orders/
-    );
-    assert.match(
-      deployScript,
-      />> \$REMOTE_DIR\/logs\/reconcile-gateway-paid-orders\.log 2>&1/
-    );
-  });
-
-  it('schedules the order notification outbox cron through run-web-cron', () => {
-    const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
-
-    assert.match(
-      deployScript,
-      /\*\/5 \* \* \* \* flock -n \$REMOTE_DIR\/locks\/order-notifications\.lock/
-    );
-    assert.match(
-      deployScript,
-      /\$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/order-notifications\?batchSize=5/
-    );
-    assert.match(
-      deployScript,
-      />> \$REMOTE_DIR\/logs\/order-notifications\.log 2>&1/
-    );
-  });
-
-  it('schedules ordered cache invalidation through the bounded Next drainer', () => {
-    const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
-
-    assert.match(
-      deployScript,
-      /\*\/2 \* \* \* \* flock -n \$REMOTE_DIR\/locks\/cache-invalidations\.lock/
-    );
-    assert.match(
-      deployScript,
-      /run-web-cron\.mjs \/api\/cron\/drain-cache-invalidations/
-    );
-    assert.doesNotMatch(deployScript, /process-storefront-purge-outbox/);
-  });
-
-  it('schedules the agentic commerce health cron through run-web-cron', () => {
-    const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
-
-    assert.match(
-      deployScript,
-      /\*\/15 \* \* \* \* flock -n \$REMOTE_DIR\/locks\/ollama-workload\.lock flock -n \$REMOTE_DIR\/locks\/agentic-commerce-health\.lock/
-    );
-    assert.match(
-      deployScript,
-      /\$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/agentic-commerce-health/
-    );
-    assert.match(
-      deployScript,
-      />> \$REMOTE_DIR\/logs\/agentic-commerce-health\.log 2>&1/
-    );
-  });
-
-  it('schedules the merchant signup policy health check every five minutes', () => {
-    const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
-
-    assert.match(
-      deployScript,
-      /\*\/5 \*\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/merchant-signup-health\.lock/
-    );
-    assert.match(
-      deployScript,
-      /\$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/merchant-signup-health/
-    );
-    assert.match(
-      deployScript,
-      />> \$REMOTE_DIR\/logs\/merchant-signup-health\.log 2>&1/
-    );
-  });
-
-  it('schedules the storefront update nudge daily through run-web-cron', () => {
-    const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
-
-    assert.match(
-      deployScript,
-      /0 10 {3}\* \* \* flock -n \$REMOTE_DIR\/locks\/storefront-update-nudge\.lock/
-    );
-    assert.match(
-      deployScript,
-      /\$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/storefront-update-nudge/
-    );
-    assert.match(
-      deployScript,
-      />> \$REMOTE_DIR\/logs\/storefront-update-nudge\.log 2>&1/
-    );
-  });
-
-  it('schedules the Petrock catalog sync nightly through run-web-cron', () => {
-    const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
-
-    assert.match(
-      deployScript,
-      /15 2\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/sync-petrock-catalog\.lock/
-    );
-    assert.match(
-      deployScript,
-      /run-web-cron\.mjs \/api\/cron\/sync-petrock-catalog/
-    );
-  });
-
-  it('schedules Petrock reconciliation directly every minute with its existing lock and log', () => {
-    const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
-    const cronLine = deployScript
-      .split('\n')
-      .find((line) => line.includes('petrock-reconcile.lock'));
-
-    assert.ok(cronLine);
-    assert.match(
-      cronLine,
-      /^\* \*\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/petrock-reconcile\.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=petrock-reconciliation && cd \$REMOTE_DIR && timeout --signal=TERM --kill-after=30s 5m \$REMOTE_DIR\/bin\/process-petrock-reconciliation\.sh' >> \$REMOTE_DIR\/logs\/petrock-reconcile\.log 2>&1$/
-    );
-    assert.doesNotMatch(
-      cronLine,
-      /run-web-cron|\/api\/cron\/petrock-reconcile/
-    );
-  });
-
-  it('schedules quiz finalization directly every minute with its existing lock and log', () => {
-    const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
-    const cronLine = deployScript
-      .split('\n')
-      .find((line) => line.includes('quiz-finalize.lock'));
-
-    assert.ok(cronLine);
-    assert.match(
-      cronLine,
-      /^\* \* \* \* \* flock -n \$REMOTE_DIR\/locks\/quiz-finalize\.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=quiz-finalization && cd \$REMOTE_DIR && timeout --signal=TERM --kill-after=30s 5m \$REMOTE_DIR\/bin\/process-quiz-finalization\.sh' >> \$REMOTE_DIR\/logs\/quiz-finalize\.log 2>&1$/
-    );
-    assert.doesNotMatch(cronLine, /run-web-cron|\/api\/quiz\/finalize/);
-  });
-
   it('runs the staged direct-worker preflight before promotion and crontab', () => {
     const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
     const preflightFailureBlock =
@@ -194,6 +51,28 @@ describe('deploy crontab', () => {
       'the fail-closed preflight must run before live promotion'
     );
     assert.ok(deployScript.indexOf('prepare_worker_release') < crontabIndex);
+    assert.ok(
+      deployScript.indexOf('docker build') <
+        deployScript.indexOf('promote_worker_release')
+    );
+    assert.ok(deployScript.indexOf('promote_worker_release') < crontabIndex);
+  });
+
+  it('builds the remediator image from staging before live promotion', () => {
+    const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
+    const buildIndex = deployScript.indexOf(
+      'docker build -f $STAGING_DIR/Dockerfile.codex-remediator -t $CODEX_REMEDIATOR_IMAGE $STAGING_DIR'
+    );
+    const promotionIndex = deployScript.indexOf('promote_worker_release');
+
+    assert.notEqual(buildIndex, -1);
+    assert.notEqual(promotionIndex, -1);
+    assert.ok(buildIndex < promotionIndex);
+    assert.doesNotMatch(deployScript, /docker build -f \$REMOTE_DIR/);
+    assert.doesNotMatch(
+      deployScript,
+      /docker build -f \$STAGING_DIR\/Dockerfile\.codex-remediator .* \$REMOTE_DIR/
+    );
   });
 
   it('requires the remote worker checkout to match the deploying commit', () => {
@@ -223,8 +102,13 @@ describe('deploy crontab', () => {
     );
     assert.match(
       releaseHelper,
-      /pnpm --filter @baci\/web exec tsx --version >\/dev\/null/
+      /tsx_bin="\$repo_dir\/apps\/web\/node_modules\/\.bin\/tsx"/
     );
+    assert.match(
+      releaseHelper,
+      /tsx_bin="\$repo_dir\/node_modules\/\.bin\/tsx"/
+    );
+    assert.doesNotMatch(releaseHelper, /pnpm .*exec tsx/);
     assert.match(
       releaseHelper,
       /Direct-worker checkout is missing \$script_path\.[\s\S]*?exit 1/

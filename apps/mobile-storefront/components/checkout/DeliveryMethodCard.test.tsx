@@ -17,7 +17,7 @@ const baseProps = {
   selectedMethod: 'door' as const,
   onSelectMethod: jest.fn(),
   doorSubtitle: 'Delivered to your address',
-  airportFee: 25000,
+  airportFee: 35000,
   merchantPickupLocation: {
     address: '2 Olaide Tomori St, Ikeja, Lagos',
     city: 'Ikeja',
@@ -36,6 +36,22 @@ describe('DeliveryMethodCard', () => {
     expect(screen.getByText('By Road')).toBeTruthy();
     expect(screen.getByText('Delivery to your doorstep')).toBeTruthy();
     expect(screen.getByText('Pickup Station')).toBeTruthy();
+    expect(screen.queryByText('By Air')).toBeNull();
+  });
+
+  it('hides By Air for a Lagos address even with a GIGL GoFaster quote', () => {
+    // Supersedes the pre-gate expectation: Lagos-origin addresses never
+    // offer airport delivery, not even with a GoFaster quote.
+    render(
+      <DeliveryMethodCard
+        {...baseProps}
+        deliveryCity="Ikeja"
+        deliveryState="Lagos"
+        hasGiglGoFasterQuote
+      />
+    );
+
+    expect(screen.getByText('By Road')).toBeTruthy();
     expect(screen.queryByText('By Air')).toBeNull();
   });
 
@@ -184,11 +200,11 @@ describe('DeliveryMethodCard', () => {
       />
     );
     expect(screen.getByText('Port Harcourt Airport Delivery')).toBeTruthy();
-    expect(screen.getByText('₦25,000')).toBeTruthy();
+    expect(screen.getByText('₦35,000')).toBeTruthy();
     expect(screen.getByText('By Air\nWithin 1–48 hours')).toBeTruthy();
     expect(
       screen.getByRole('button', {
-        name: /Select Port Harcourt Airport Delivery.*By Air.*Within 1–48 hours.*₦25,000/,
+        name: /Select Port Harcourt Airport Delivery.*By Air.*Within 1–48 hours.*₦35,000/,
       })
     ).toBeTruthy();
   });

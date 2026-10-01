@@ -17,6 +17,20 @@ describe('serviceRoleCredentialAuthority', () => {
     ).toBe(true);
   });
 
+  it.each([
+    'process.env.SUPABASE_ADS_CREDENTIAL_KEY',
+    "process.env['SUPABASE_' + 'ADS_CREDENTIAL_KEY']",
+    "const key = 'SUPABASE_ADS_CREDENTIAL_KEY'; process.env[key]",
+    "Reflect.get(process.env, 'SUPABASE_' + 'ADS_CREDENTIAL_KEY')",
+    'const { SUPABASE_ADS_CREDENTIAL_KEY: key } = process.env; use(key)',
+    "const { ['SUPABASE_ADS_CREDENTIAL_KEY']: key } = process.env; use(key)",
+    "const name = 'SUPABASE_ADS_CREDENTIAL_KEY'; const { [name]: key } = process.env; use(key)",
+  ])('detects the dedicated Ads credential read: %s', (source) => {
+    expect(
+      serviceRoleCredentialAuthority.readsCredential('worker.ts', source)
+    ).toBe(true);
+  });
+
   it('ignores string literals and comments without a credential read', () => {
     expect(
       serviceRoleCredentialAuthority.readsCredential(
@@ -68,5 +82,22 @@ describe('serviceRoleCredentialAuthority', () => {
         testSupportReaderHashes: {},
       })
     ).toEqual([]);
+  });
+
+  it('retains tracked maintenance authority while retiring the RLS analytics route reader', () => {
+    const paths = Object.keys(
+      serviceRoleCredentialAuthority.ledgers.preExistingReaderHashes
+    );
+
+    expect(paths).toEqual(
+      expect.arrayContaining([
+        'apps/web/scripts-tmp/check-cdn-access.ts',
+        'scripts-tmp/check-cdn-access.ts',
+        'scripts/backfill-feed-images.ts',
+      ])
+    );
+    expect(paths).not.toContain(
+      'apps/web/src/app/api/platform/analytics-config/route.ts'
+    );
   });
 });

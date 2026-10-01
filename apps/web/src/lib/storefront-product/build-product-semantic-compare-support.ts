@@ -67,18 +67,19 @@ function normalizeSemanticInput(
 }
 
 function getCompareApprovalInventory(input: BuildProductSemanticModelInput) {
-  return input.inventory
-    .filter((product) => product.category_slug === input.categorySlug)
-    .slice(0, PRODUCT_SCOPED_COMPARE_DISCOVERY_PRODUCT_LIMIT);
-}
+  const seenSlugs = new Set<string>();
 
-function withCurrentProduct(
-  products: ProductSemanticCandidate[],
-  currentProduct: ProductSemanticCandidate
-) {
-  return products.some((product) => product.slug === currentProduct.slug)
-    ? products
-    : [currentProduct, ...products];
+  return [input.currentProduct, ...input.inventory]
+    .filter((product) => product.category_slug === input.categorySlug)
+    .filter((product) => {
+      if (seenSlugs.has(product.slug)) {
+        return false;
+      }
+
+      seenSlugs.add(product.slug);
+      return true;
+    })
+    .slice(0, PRODUCT_SCOPED_COMPARE_DISCOVERY_PRODUCT_LIMIT);
 }
 
 function extractCategoryCompareSlug(href: string, categorySlug: string) {
@@ -147,16 +148,14 @@ export function buildProductSemanticCompareSupport(
       categoryName: normalizedInput.categoryName,
       includeBrandCompareLinks: false,
       products: compareApprovalInventory,
+      requiredProductSlugs: [normalizedInput.currentProduct.slug],
     }).map((link) => link.canonicalSlug)
   );
   const currentProductHref = buildProductHref(
     normalizedInput.storeUrl,
     normalizedInput.currentProduct
   );
-  const supportLinkProducts = withCurrentProduct(
-    compareApprovalInventory,
-    normalizedInput.currentProduct
-  );
+  const supportLinkProducts = compareApprovalInventory;
   const supportLinks = dedupeLinks([
     buildCategoryHubLink(normalizedInput),
     ...buildProductSupportLinks({

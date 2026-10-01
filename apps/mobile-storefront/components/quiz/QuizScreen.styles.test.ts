@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
-import { createQuizStyles, type QuizThemeColors } from './QuizScreen.styles';
+import { createQuizStyles } from './QuizScreen.styles';
+import type { QuizThemeColors } from './quiz-theme';
 
 const mockColors: QuizThemeColors = {
   background: '#ffffff',
@@ -34,7 +35,7 @@ describe('createQuizStyles', () => {
     expect(styles.answerButtonSelected.backgroundColor).toBe(
       mockColors.primaryLowOpacity
     );
-    expect(styles.progressFill.backgroundColor).toBe(mockColors.success);
+    expect(styles.progressFill.backgroundColor).toBe(mockColors.primary);
     expect(styles.resultTitle.color).toBe(mockColors.success);
   });
 

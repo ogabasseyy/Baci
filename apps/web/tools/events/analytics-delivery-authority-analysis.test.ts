@@ -6,8 +6,6 @@ const events = 'apps/web/src/app/api/events/route.ts';
 const wrapper =
   'apps/web/src/lib/analytics/trusted-server-ad-platform-fanout.ts';
 const config = 'apps/web/src/lib/analytics/fetch-analytics-platform-config.ts';
-const platformHelper =
-  'apps/web/src/app/api/platform/events/platform-event-forwarding.ts';
 const platformRoute = 'apps/web/src/app/api/platform/events/route.ts';
 const wrapperImport =
   "import { trustedServerAdPlatformFanout as fanout } from '@/lib/analytics/trusted-server-ad-platform-fanout'; import { createServiceClient } from '@/lib/supabase/service';";
@@ -28,8 +26,7 @@ function validSources() {
       "import 'server-only'; import { fetchAnalyticsPlatformConfig } from './fetch-analytics-platform-config'; export const trusted = () => fetchAnalyticsPlatformConfig(client, id);",
     ],
     [config, 'export const fetchAnalyticsPlatformConfig = () => null;'],
-    [platformHelper, 'export const forwardToPlatformAnalytics = () => null;'],
-    [platformRoute, "import './platform-event-forwarding';"],
+    [platformRoute, 'export const POST = () => null;'],
   ]);
 }
 describe('analytics delivery authority source analysis', () => {
@@ -282,7 +279,7 @@ describe('analytics delivery authority source analysis', () => {
     );
   });
 
-  it('rejects a fourth route importing the approved platform helper', () => {
+  it('rejects any route importing the retired platform helper', () => {
     const sources = validSources();
     const third = 'apps/web/src/app/api/platform/other/route.ts';
     sources.set(
@@ -290,7 +287,7 @@ describe('analytics delivery authority source analysis', () => {
       "import { forwardToPlatformAnalytics } from '@/app/api/platform/events/platform-event-forwarding';"
     );
     expect(analyzeAnalyticsDeliveryAuthoritySources(sources)).toContain(
-      `${third}: unauthorized platform authority helper importer`
+      `${third}: retired platform authority helper importer`
     );
   });
 });

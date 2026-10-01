@@ -1,4 +1,4 @@
-import ts from 'typescript';
+import ts from '@typescript/typescript6';
 import { describe, expect, it, vi } from 'vitest';
 import { resolveImportedBinding } from './agentic-dva-import-binding-resolution-test-support';
 

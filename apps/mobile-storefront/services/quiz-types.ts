@@ -75,6 +75,7 @@ export interface QuizV2Attempt {
   resumed?: boolean;
   serverNow: string;
   status: QuizV2AttemptStatus;
+  submittedAt?: string | null;
 }
 
 export type QuizActiveAttemptAvailability =
@@ -85,10 +86,12 @@ export type QuizActiveAttemptAvailability =
   | 'unavailable';
 
 export interface QuizActiveAttemptResponse {
+  attemptId?: string;
   attempt?: QuizV2Attempt;
   availability: QuizActiveAttemptAvailability;
   eventEndsAt: string | null;
   serverNow: string;
+  submittedAt?: string | null;
 }
 
 export type QuizPrizeCondition = 'new' | 'used' | 'open_box' | 'refurbished';
@@ -184,6 +187,7 @@ export type QuizV2Result =
       availability: 'final';
       availableAt: string;
       claim?: { expiresAt: string; token: string };
+      prizeClaim?: QuizPrizeClaim;
       rank: number;
       score: number;
       totalQuestions: number;
@@ -207,7 +211,8 @@ export interface QuizLeaderboardEntry {
 export interface QuizLeaderboard {
   currentPlayer: QuizLeaderboardEntry | null;
   entries: QuizLeaderboardEntry[];
-  status: 'published' | 'live_hidden' | 'unavailable';
+  participantCount: number | null;
+  status: 'published' | 'live' | 'live_hidden' | 'unavailable';
 }
 
 type ErrorConstructorWithStackTrace = typeof Error & {

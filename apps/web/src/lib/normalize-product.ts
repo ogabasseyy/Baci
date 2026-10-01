@@ -187,7 +187,9 @@ export function normalizeProduct(
     stock,
     rating: raw.rating ?? 0,
     availability,
-    product_key_specs: normalizeProductKeySpecs(raw.product_key_specs),
+    product_key_specs: normalizeProductKeySpecs(raw.product_key_specs, {
+      preserveRecommendationArrays: true,
+    }),
     merchant_id: raw.merchant_id,
     status: raw.status,
     has_condition_offers: raw.has_condition_offers ?? false,

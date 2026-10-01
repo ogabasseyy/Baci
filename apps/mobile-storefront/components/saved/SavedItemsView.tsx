@@ -5,9 +5,11 @@ import type { Ref } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, Layout } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AdSlot } from '@/components/ads/AdSlot';
 import { BLURHASH_VARIANTS } from '@/components/storefront/ProductCard';
 import type Colors from '@/constants/Colors';
 import { SPACING } from '@/constants/Colors';
+import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import type { SavedItem } from '@/stores/saved-store';
 import { formatPrice, getDiscountPercentage } from '@/types/product';
 import { styles } from './saved-items.styles';
@@ -67,12 +69,18 @@ function SavedItemCard({
           style={[styles.imageContainer, { backgroundColor: colors.muted }]}
         >
           <Image
-            source={{ uri: item.image }}
+            source={createSafeBoundedImageSource({
+              fit: 'cover',
+              height: 100,
+              uri: item.image,
+              width: 100,
+            })}
             style={styles.image}
             contentFit="cover"
             placeholder={{ blurhash: BLURHASH_VARIANTS.default }}
             transition={200}
             cachePolicy="memory-disk"
+            autoplay={false}
           />
           {discountPercentage !== null && discountPercentage > 0 ? (
             <View
@@ -257,6 +265,7 @@ export function SavedItemsView({
                 Browse Products
               </Text>
             </Pressable>
+            <AdSlot placement="FOOTER_ANCHOR" />
           </View>
         )}
         showsVerticalScrollIndicator={false}

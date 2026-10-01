@@ -24,10 +24,10 @@ describe('MerchantStatsGrid', () => {
 
     for (const [label, value] of [
       ['Total Merchants', '6'],
-      ['Healthy', '2'],
-      ['At Risk', '1'],
-      ['Churned', '0'],
-      ['New (No Sales)', '3'],
+      ['Selling', '2'],
+      ['Sales Quiet', '1'],
+      ['Sales Dormant', '0'],
+      ['No Paid Sales Since Launch', '3'],
     ] as const) {
       const card = screen.getByRole('button', {
         name: `Filter merchants by ${label}`,
@@ -36,7 +36,7 @@ describe('MerchantStatsGrid', () => {
       expect(card).toHaveTextContent(value);
       expect(card).toHaveAttribute(
         'aria-pressed',
-        label === 'Healthy' ? 'true' : 'false'
+        label === 'Selling' ? 'true' : 'false'
       );
     }
   });
@@ -55,10 +55,10 @@ describe('MerchantStatsGrid', () => {
 
     for (const [label, filter] of [
       ['Total Merchants', 'all'],
-      ['Healthy', 'healthy'],
-      ['At Risk', 'at_risk'],
-      ['Churned', 'churned'],
-      ['New (No Sales)', 'new'],
+      ['Selling', 'healthy'],
+      ['Sales Quiet', 'at_risk'],
+      ['Sales Dormant', 'churned'],
+      ['No Paid Sales Since Launch', 'new'],
     ] as const) {
       await user.click(
         screen.getByRole('button', { name: `Filter merchants by ${label}` })
@@ -83,10 +83,10 @@ describe('MerchantStatsGrid', () => {
 
     for (const [label, filter] of [
       ['Total Merchants', 'all'],
-      ['Healthy', 'healthy'],
-      ['At Risk', 'at_risk'],
-      ['Churned', 'churned'],
-      ['New (No Sales)', 'new'],
+      ['Selling', 'healthy'],
+      ['Sales Quiet', 'at_risk'],
+      ['Sales Dormant', 'churned'],
+      ['No Paid Sales Since Launch', 'new'],
     ] as const) {
       const card = screen.getByRole('button', {
         name: `Filter merchants by ${label}`,

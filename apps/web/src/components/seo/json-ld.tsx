@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
+import { safeJsonLdStringify } from '@/lib/json-ld-script-escape';
 import type { JsonLdScriptData } from '@/lib/json-ld-types';
-import { safeJsonLdStringify } from '@/lib/sanitize-json-ld';
 
 export type {
   JsonLdData,

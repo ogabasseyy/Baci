@@ -1,8 +1,10 @@
+import { selectPreferredOrderPaymentAccount } from '@baci/shared';
 import { type NextRequest, NextResponse } from 'next/server';
 import {
   authenticateApiRequest,
   getMerchantIdForApiUser,
 } from '@/lib/api-auth';
+import { buildOrderTrackingLink } from '@/lib/build-order-tracking-link';
 import { checkCsrfProtection } from '@/lib/csrf';
 import {
   generatePaymentReminderEmail,
@@ -96,7 +98,7 @@ export async function POST(
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .select(
-        'id, order_number, total, amount_paid, customer_id, customer_name, customer_email, customer_phone, payment_status, currency'
+        'id, order_number, total, amount_paid, customer_id, customer_name, customer_email, customer_phone, payment_status, currency, tracking_token'
       )
       .eq('id', orderId)
       .eq('merchant_id', merchant.id)
@@ -120,16 +122,27 @@ export async function POST(
       .eq('order_id', orderId);
 
     // 5. Get virtual account if exists
-    const { data: virtualAccount } = await supabase
+    const { data: paymentAccounts } = await supabase
       .from('order_payment_accounts')
-      .select('account_number, bank_name, account_name')
+      .select(
+        'account_number, bank_name, account_name, provider, assignment_customer_email_source, created_at, assigned_at, expires_at'
+      )
       .eq('order_id', orderId)
-      .maybeSingle();
+      .order('created_at', { ascending: false });
+    const virtualAccount = selectPreferredOrderPaymentAccount(paymentAccounts);
 
-    // 6. Generate payment link
+    // 6. Generate payment link: the emailed CTA must resolve to a served
+    // page. Prefer the tracking-token form — the only variant that needs no
+    // customer email — so the URL never carries PII; /track-order also
+    // auto-resolves the order id plus email fallback pair. There is no
+    // /checkout/resume route — linking it shipped a 404.
     const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
     const merchantUrl = `https://${merchant.slug}.${rootDomain}`;
-    const paymentLink = `${merchantUrl}/checkout/resume/${orderId}`;
+    const paymentLink = buildOrderTrackingLink(
+      merchantUrl,
+      { id: orderId, tracking_token: order.tracking_token },
+      order.customer_email
+    );
 
     // 7. Determine channel (email by default)
     const channel = parsed.data.channel || 'email';

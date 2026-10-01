@@ -1,10 +1,7 @@
-import {
-  getAdminMerchantHealthRows,
-  sortAdminMerchantHealthRows,
-} from '@/lib/admin-merchant-health';
+import { getAdminMerchantHealthPage } from '@/lib/admin-merchant-health';
 import { getFirstSearchParam } from '@/lib/search-params';
 import { createClient } from '@/lib/supabase/server';
-import { isHealthFilter } from './merchant-health-filter';
+import { adminMerchantsQuerySchema } from '@/schemas/admin-merchants-query';
 import { MerchantsClient } from './merchants-client';
 
 type MerchantsPageProps = {
@@ -15,22 +12,32 @@ export default async function MerchantsPage({
   searchParams,
 }: MerchantsPageProps) {
   const params = await searchParams;
-  const health = getFirstSearchParam(params.health) ?? 'all';
-  const initialHealthFilter = isHealthFilter(health) ? health : 'all';
+  const parsedQuery = adminMerchantsQuerySchema.safeParse({
+    health: getFirstSearchParam(params.health) ?? undefined,
+    limit: getFirstSearchParam(params.limit) ?? undefined,
+    offset: getFirstSearchParam(params.offset) ?? undefined,
+    search: getFirstSearchParam(params.search) ?? undefined,
+    sortBy: getFirstSearchParam(params.sortBy) ?? undefined,
+  });
+  const initialQuery = parsedQuery.success
+    ? parsedQuery.data
+    : adminMerchantsQuerySchema.parse({});
   const supabase = await createClient();
-  const { data, error } = await getAdminMerchantHealthRows(supabase);
+  const { data, error, total } = await getAdminMerchantHealthPage(
+    supabase,
+    initialQuery
+  );
 
   if (error) {
     console.error('Admin merchants initial load error:', error);
   }
 
-  const initialMerchants = sortAdminMerchantHealthRows(data ?? [], 'gmv');
-
   return (
     <MerchantsClient
       initialError={error ? 'Failed to load merchant data.' : null}
-      initialHealthFilter={initialHealthFilter}
-      initialMerchants={initialMerchants}
+      initialMerchants={data ?? []}
+      initialQuery={initialQuery}
+      initialTotal={total}
     />
   );
 }

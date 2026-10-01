@@ -1,0 +1,43 @@
+name: Checkout browser regression
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checkout-browser-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checkout-browser:
+    name: Checkout - Chromium and WebKit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm-install-cached
+      - name: Install browser engines
+        run: pnpm --filter @baci/web exec playwright install --with-deps chromium webkit
+      - name: Build the real checkout in the isolated fixture app
+        run: pnpm --filter @baci/web test:checkout:build
+      - name: Run browser regression suite
+        env:
+          CHECKOUT_BROWSER_ARTIFACTS: ${{ runner.temp }}/checkout-browser
+        run: pnpm --filter @baci/web test:checkout:browser
+      - name: Retain failure traces and screenshots
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: checkout-browser-failures
+          path: ${{ runner.temp }}/checkout-browser
+          retention-days: 7
+          if-no-files-found: ignore

@@ -85,7 +85,7 @@ it('moves index builders out of the exposed schema without changing the serving 
   expect(move).toContain('CREATE OR REPLACE FUNCTION discovery.product_discovery_search_document_v3(');
   expect(move).toContain('CREATE OR REPLACE FUNCTION discovery.product_discovery_search_document_v4(');
   expect(move).toContain('discovery.product_discovery_search_document_v4');
-  expect(move).toContain('USAGE ON SCHEMA discovery TO anon, authenticated');
+  expect(move).toContain('USAGE ON SCHEMA discovery TO anon, authenticated, service_role');
   expect(move).toContain('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts(');
   expect(move).toContain('SECURITY INVOKER');
 });

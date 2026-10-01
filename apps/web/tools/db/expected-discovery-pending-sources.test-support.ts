@@ -27,7 +27,7 @@ export const EXPECTED_DISCOVERY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261001100000_move_discovery_builders.sql',
-    sha256: '32108b997b9261afc4036e233ed9926315f8612e3a2201cdb43bad8a7314322c',
+    sha256: 'efcecabb226837719f0c9821b71c73d5fda0d227bd336aaf73494607e3238c70',
   },
   {
     repositoryPath:

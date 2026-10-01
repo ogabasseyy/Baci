@@ -7,6 +7,10 @@
 -- the SECURITY INVOKER serving query must evaluate the builders at rank time
 -- as its caller.
 --
+-- service_role needs USAGE too: index maintenance evaluates the SECURITY
+-- INVOKER builder as the writing role, so any role inserting or updating
+-- active products must resolve the discovery schema.
+--
 -- The move is staged because this migration runs outside a transaction
 -- (CREATE INDEX CONCURRENTLY): a failure between statements must never leave
 -- the serving RPC pointing at a dropped builder. Stage 1 copies the builders
@@ -15,7 +19,7 @@
 -- statement is idempotent (CREATE OR REPLACE / IF EXISTS), so re-running the
 -- file after a mid-migration failure converges on the same end state.
 CREATE SCHEMA IF NOT EXISTS discovery;
-GRANT USAGE ON SCHEMA discovery TO anon, authenticated;
+GRANT USAGE ON SCHEMA discovery TO anon, authenticated, service_role;
 
 -- Stage 1: copy the v3 builder; public.v3 keeps serving until stage 2.
 -- Body is identical to 20261001070000_keyed_discovery_numeric_facts.sql.

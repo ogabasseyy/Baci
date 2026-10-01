@@ -61,6 +61,10 @@ jobs:
               # The SARIF filter audits the review runner's containment
               # flags, so runner-only changes must trigger the Semgrep
               # job instead of skipping the fail-closed audit.
+              # Intentional SAST gap: the targeted/push scans below do not
+              # scan .sh (runner scripts are structurally constrained by
+              # the drift audit instead); scheduled full `semgrep ci`
+              # scans remain the only rule-based coverage of that tree.
               - '.github/scripts/muse-review/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
@@ -206,8 +210,9 @@ jobs:
       # scoped to its own argv, not the whole shell line. The audit runs
       # even with no SARIF (empty scans must not skip it); the agent
       # step and job env must not receive token expressions under any
-      # key; install.sh version, checksums, verify-before-install order,
-      # and artifact URL are pinned.
+      # key; install.sh version, exact checksums, verify-before-install
+      # order, and every URL literal (pinned host + versioned path) are
+      # pinned.
       - name: Drop audited checkout finding from SARIF
         if: always()
         run: |
@@ -230,6 +235,14 @@ jobs:
           )
           MUSE_PINNED_VERSION = "1.4.1-R4503.1"
           MUSE_PINNED_HOST = "https://lookaside.facebook.com/"
+          MUSE_PINNED_SHA_X86 = (
+              "8b53c9cdbc025bc2d9068bc7016e2c1e51c3a0c608821da1"
+              "7528ad23be900a12"
+          )
+          MUSE_PINNED_SHA_AARCH64 = (
+              "a6d46239975adac282aa829d2a5bd1cd3119334c18ecfa7"
+              "76d4377daebddb595"
+          )
 
           def strip_comments(line):
               buf = []
@@ -764,12 +777,16 @@ jobs:
                       v.strip("\"'") == MUSE_PINNED_VERSION
                       for v in version):
                   drift.append("muse-installer-version")
-              for var in ("SHA_X86_LINUX", "SHA_AARCH64_LINUX"):
+              # Exact values, not just 64-hex shape: a re-pointed
+              # download with freshly computed hashes must fail here.
+              pinned_sha = {"SHA_X86_LINUX": MUSE_PINNED_SHA_X86,
+                            "SHA_AARCH64_LINUX": MUSE_PINNED_SHA_AARCH64}
+              for var, want in pinned_sha.items():
                   vals = [line.strip()[len(var) + 1:]
                           for line in installer
                           if re.match(r"^" + var + r"=", line.strip())]
                   if not vals or not all(
-                          re.fullmatch(r'"[0-9a-f]{64}"', v.strip())
+                          v.strip().strip("\"'") == want
                           for v in vals):
                       drift.append("muse-installer-checksum")
                       break
@@ -806,10 +823,19 @@ jobs:
               if any(re.search(r"\|\s*(?:sudo\s+)?(?:bash|sh)\b", line)
                      for line in installer):
                   drift.append("muse-installer-pipe")
-              installer_text = "\n".join(installer)
-              if MUSE_PINNED_HOST not in installer_text \
-                      or "version=${MUSE_VERSION}" not in installer_text:
-                  drift.append("muse-installer-url")
+              # Every URL literal in the installer must be the pinned
+              # versioned download: a substring check would pass an evil
+              # host alongside a retained unused lookaside string.
+              # Residual: URLs assembled from variables.
+              for line in installer:
+                  for url in re.findall(r"https?://[^\s\"'`]+", line):
+                      if not url.startswith(MUSE_PINNED_HOST) \
+                              or "version=${MUSE_VERSION}" not in url:
+                          drift.append("muse-installer-url")
+                          break
+                  else:
+                      continue
+                  break
           if drift:
               print(f"::error::muse-code-review.yml hardening drifted "
                     f"({', '.join(drift)}); keeping SARIF unfiltered.")

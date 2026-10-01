@@ -193,7 +193,10 @@ jobs:
       # muse invocation). Suppression matching is validated against the
       # pinned semgrep 1.104.0 SARIF shape (suppressions:[{kind:inSource}]);
       # a surviving rule+path result emits a warning annotation instead
-      # of failing silently.
+      # of failing silently. The trusted checkout's action and repo are
+      # pinned, and every consumer of the review scripts must route via
+      # the validated resolver output (no hardcoded scripts paths, no
+      # rebound SCRIPT_DIR, no unbound interpreter invocations).
       - name: Drop audited checkout finding from SARIF
         if: always()
         run: |
@@ -212,6 +215,9 @@ jobs:
               ".pull-request-target-code-checkout"
           )
           AUDITED_PATH = ".github/workflows/muse-code-review.yml"
+          TRUSTED_CHECKOUT_USES = (
+              "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
+          )
 
           def strip_comments(line):
               buf = []
@@ -446,6 +452,20 @@ jobs:
                   drift.append("trusted-scripts-credentials")
               if any(is_pr_ref(line) for line in span):
                   drift.append("trusted-scripts-pr-ref")
+              # The step is located by path: alone, so pin the action and
+              # forbid repository:: either would otherwise silently
+              # re-source the executable tree the token-bearing steps run.
+              uses_values = [
+                  line.strip()[len("uses:"):].strip()
+                  for line in span
+                  if re.match(r"^uses:", line.strip())]
+              if not uses_values or not all(
+                      value == TRUSTED_CHECKOUT_USES
+                      for value in uses_values):
+                  drift.append("trusted-scripts-action")
+              if any(re.match(r"^repository:", line.strip())
+                     for line in span):
+                  drift.append("trusted-scripts-repository")
           resolve = [i for i, line in enumerate(workflow_lines)
                      if re.match(r"^- name:\s*Resolve script directory\s*$",
                                  line.strip())]
@@ -474,6 +494,105 @@ jobs:
                   drift.append("script-resolution-no-output")
               elif not all(value.strip() == expected for value in assigns):
                   drift.append("script-resolution-untrusted-target")
+          # Every executable reference to the review scripts must route
+          # through the validated resolver output: a later edit could
+          # otherwise hardcode the PR-head scripts path in a token step
+          # while the resolver above still looks safe.
+          # (a) Path literals live only in the three steps that own the
+          # trusted tree (collision-clear, trusted checkout, resolver):
+          # consumers name no path (they use ${SCRIPT_DIR}).
+          tree_ok = set()
+          clear = [i for i, line in enumerate(workflow_lines)
+                   if re.match(r"^- name:\s*Clear trusted-scripts collision\s*$",
+                               line.strip())]
+          if trusted:
+              s = step_start(workflow_lines, trusted[0])
+              tree_ok.update(range(s, step_end(workflow_lines, s)))
+          if resolve:
+              tree_ok.update(range(resolve[0],
+                                   step_end(workflow_lines, resolve[0])))
+          if clear:
+              tree_ok.update(range(clear[0],
+                                   step_end(workflow_lines, clear[0])))
+          for i, line in enumerate(workflow_lines):
+              if i in tree_ok:
+                  continue
+              if ".github/scripts" in line or "trusted-scripts" in line:
+                  drift.append("script-consumer-unbound-path")
+                  break
+          # (b) In run: blocks, every bash/sh/source operand naming a
+          # script must route via ${SCRIPT_DIR} (bound in (c) to the
+          # resolver output). Exotic launchers (xargs, find -exec, -c
+          # payloads) are out of scope: adding one needs human review.
+          run_bodies = []
+          i = 0
+          while i < len(code_lines):
+              m = re.match(r"^(\s*)run:\s*([|>])?\s*(.*)$", code_lines[i])
+              if m and (m.group(2) or m.group(3)):
+                  base = len(m.group(1))
+                  if m.group(2):
+                      j = i + 1
+                      while j < len(code_lines) \
+                              and (not code_lines[j].strip()
+                                   or len(code_lines[j])
+                                   - len(code_lines[j].lstrip()) > base):
+                          run_bodies.append(code_lines[j])
+                          j += 1
+                      i = j
+                  else:
+                      run_bodies.append(m.group(3))
+                      i += 1
+              else:
+                  i += 1
+          joined = []
+          buf = ""
+          for raw in run_bodies:
+              stripped = raw.rstrip()
+              if stripped.endswith("\\"):
+                  buf += stripped[:-1] + " "
+              else:
+                  buf += stripped
+                  joined.append(buf)
+                  buf = ""
+          # The operand is a quoted string (which may contain spaces,
+          # e.g. the quoted steps.scriptdir.outputs.dir expression
+          # plus "/x.sh") or a bare token: \S+ alone would stop at
+          # the first inner space.
+          interp = re.compile(
+              r"(?:^|[;&|])\s*(?:timeout\s+(?:-\S+\s+)*[^\s]+\s+)?"
+              r"(?:(?:sudo|command|builtin|exec|time)\s+)?"
+              r"(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*"
+              r"(bash|sh|source|\.)\s+"
+              r"(\"[^\"\n]*\"|'[^'\n]*'|\S+)")
+          for seg in joined:
+              if re.search(r"(?:^|[;&|])\s*SCRIPT_DIR\s*=",
+                           seg) \
+                      and "script-dir-rebound" not in drift:
+                  drift.append("script-dir-rebound")
+              for m in interp.finditer(seg):
+                  op = m.group(2).strip("\"'")
+                  if op.startswith("-"):
+                      continue
+                  if re.match(r"^\$\{?SCRIPT_DIR\}?/", op):
+                      continue
+                  # Concatenated so the raw text never holds an
+                  # expression opener, which actionlint would parse as
+                  # this job's expression (steps.scriptdir is undefined).
+                  if re.sub(r"\s+", "", op).startswith(
+                          "${" "{steps.scriptdir.outputs.dir}}"):
+                      continue
+                  if "script-consumer-unbound-invocation" not in drift:
+                      drift.append("script-consumer-unbound-invocation")
+          # (c) The variable itself: ${SCRIPT_DIR} is only the validated
+          # directory if every binding routes via the resolver output.
+          # A hardcoded SCRIPT_DIR would launder an untrusted path
+          # through check (b).
+          for line in workflow_lines:
+              m = re.match(r"^SCRIPT_DIR:\s*(.+)$", line.strip())
+              if m and re.sub(r"\s+", "", m.group(1)) != \
+                      ("${" "{steps.scriptdir.outputs.dir}}") \
+                      and "script-dir-rebound" not in drift:
+                  drift.append("script-dir-rebound")
           # The data-only premise rests on the agent invocation itself:
           # every muse call in the trusted runner must carry the exact
           # execution-disabling flags (comment mentions do not count) and

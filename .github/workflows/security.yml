@@ -201,7 +201,6 @@ jobs:
               ".pull-request-target-code-checkout"
           )
           AUDITED_PATH = ".github/workflows/muse-code-review.yml"
-          AUDITED_STEP = "- name: Checkout repository"
 
           def strip_comments(line):
               buf = []
@@ -227,7 +226,10 @@ jobs:
           # Block-scalar ref values (ref: >- on its own line) are joined so
           # a folded PR-controlled ref cannot evade the checkout count.
           code_lines = [strip_comments(line) for line in raw_lines]
+          # joined[i] carries the raw 0-based index of its first line so SARIF
+          # line numbers (raw file numbering) stay comparable after folding.
           workflow_lines = []
+          workflow_raw = []
           i = 0
           while i < len(code_lines):
               line = code_lines[i]
@@ -240,22 +242,24 @@ jobs:
                       parts.append(code_lines[j].strip())
                       j += 1
                   workflow_lines.append(" ".join(parts))
+                  workflow_raw.append(i)
                   i = j
               else:
                   workflow_lines.append(line)
+                  workflow_raw.append(i)
                   i += 1
 
-          def step_start(ref_index):
+          def step_start(lines, ref_index):
               for i in range(ref_index, -1, -1):
-                  if workflow_lines[i].lstrip().startswith("- name:"):
+                  if lines[i].lstrip().startswith("- name:"):
                       return i
               return 0
 
-          def step_end(start_index):
-              for i in range(start_index + 1, len(workflow_lines)):
-                  if workflow_lines[i].lstrip().startswith("- name:"):
+          def step_end(lines, start_index):
+              for i in range(start_index + 1, len(lines)):
+                  if lines[i].lstrip().startswith("- name:"):
                       return i
-              return len(workflow_lines)
+              return len(lines)
 
           drift = []
           if not any("head.repo.full_name == github.repository" in line
@@ -263,10 +267,17 @@ jobs:
               drift.append("same-repo-job-guard")
           pr_refs = [i for i, line in enumerate(workflow_lines)
                      if "ref:" in line and "github.event.pull_request" in line]
+          # 1-based inclusive raw line span of the audited checkout step, used
+          # to pin the SARIF exemption to this exact finding (see below).
+          audited_start = audited_end = 0
           if len(pr_refs) != 1:
               drift.append(f"pr-controlled-checkout-count={len(pr_refs)}")
           else:
-              block = "\n".join(workflow_lines[step_start(pr_refs[0]):pr_refs[0]])
+              start = step_start(workflow_lines, pr_refs[0])
+              raw_start = workflow_raw[start]
+              raw_end = step_end(code_lines, workflow_raw[pr_refs[0]])
+              audited_start, audited_end = raw_start + 1, raw_end
+              block = "\n".join(workflow_lines[start:pr_refs[0]])
               if "persist-credentials: false" not in block:
                   drift.append("head-checkout-credentials")
           trusted = [i for i, line in enumerate(workflow_lines)
@@ -274,8 +285,9 @@ jobs:
           if not trusted:
               drift.append("trusted-scripts-checkout-missing")
           else:
-              start = step_start(trusted[0])
-              block = "\n".join(workflow_lines[start:step_end(start)])
+              start = step_start(workflow_lines, trusted[0])
+              block = "\n".join(
+                  workflow_lines[start:step_end(workflow_lines, start)])
               if "default_branch" not in block:
                   drift.append("trusted-scripts-default-branch")
               if "github.event.pull_request" in block:
@@ -301,12 +313,16 @@ jobs:
                          or "")
                   if not uri.endswith(AUDITED_PATH):
                       return False
-                  # Pin the exact audited step, not just the file: a second
-                  # suppressed checkout elsewhere in the workflow must stay
-                  # visible. A step rename fails closed (finding resurfaces).
-                  snippet = ((physical.get("region", {}).get("snippet", {})
-                               .get("text", "")) or "")
-                  if AUDITED_STEP not in snippet:
+                  # Pin the exact audited finding by region, not just the
+                  # file: a second suppressed checkout elsewhere in the
+                  # workflow must stay visible. The span is computed from
+                  # the workflow itself (no hardcoded lines, no snippet
+                  # dependency); anything unlocatable fails closed.
+                  start_line = physical.get("region", {}).get("startLine")
+                  if not isinstance(start_line, int):
+                      return False
+                  if not audited_start or not (audited_start
+                                               <= start_line <= audited_end):
                       return False
               return True
 

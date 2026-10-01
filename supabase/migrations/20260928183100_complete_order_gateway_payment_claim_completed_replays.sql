@@ -1,19 +1,8 @@
 -- Claim refund-recovery watches on gateway completion, including
--- completed replays. Recovery opens a watch and re-scans under a
--- reference advisory lock; the completion claims it under the same
--- lock after the pending->completed flip (cancelled orders flip
--- inline, the rest via _v1), so a verified refund landing after the
--- recovery scan is filed instead of silently acknowledged. The
--- charge webhook flips the row to completed before invoking this
--- RPC, so a completed status here may still be the first
--- completion racing an opener's empty scan: gating the claim on a
--- pending status would skip it and let the charge finalizer mark
--- the order paid and fulfillable while the refund webhook
--- acknowledges. Replays find no open watches and no-op, so
--- claiming unconditionally is safe. Unclaimed watches stay open for
--- the sweep; claiming never fails the completion. The
--- balance-compare-and-swap below is preserved verbatim (see
--- 20260928178000).
+-- completed replays: the charge webhook pre-flips the row, so a
+-- completed status may still be the first completion racing an
+-- opener's empty scan. Replays find no open watches and no-op.
+-- Balance-compare-and-swap preserved verbatim (see 20260928178000).
 
 CREATE OR REPLACE FUNCTION public.complete_order_gateway_payment(
   p_transaction_id uuid,

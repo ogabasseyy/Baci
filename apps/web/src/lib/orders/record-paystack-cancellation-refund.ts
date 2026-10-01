@@ -146,18 +146,32 @@ export async function recordPaystackCancellationRefund({
       // but the unique index spans all transaction types and gateways,
       // so a collision alone proves nothing. Only treat the refund as
       // recorded after verifying the winning row is this provider
-      // refund.
+      // refund for this payment leg: a legacy or corrupt row reusing
+      // the provider refund ID on another leg must not mark this leg
+      // audited while its own refund is never initiated.
       const { data: conflicting, error: conflictLookupError } = await supabase
         .from('transactions')
-        .select('id, transaction_type, gateway, gateway_reference')
+        .select(
+          'id, transaction_type, gateway, gateway_reference, amount, currency, metadata'
+        )
         .eq('order_id', order.id)
         .eq('gateway_reference', String(paystackRefund.data.id))
         .maybeSingle();
+      const conflictingLeg = (
+        conflicting?.metadata as
+          | { payment_transaction_id?: unknown }
+          | null
+          | undefined
+      )?.payment_transaction_id;
       recordedByAnotherWriter =
         !conflictLookupError &&
         conflicting?.transaction_type === 'refund' &&
         conflicting?.gateway === 'paystack' &&
-        conflicting?.gateway_reference === String(paystackRefund.data.id);
+        conflicting?.gateway_reference === String(paystackRefund.data.id) &&
+        conflictingLeg === transaction.id &&
+        Number(conflicting?.amount) === transactionAmount &&
+        conflicting?.currency ===
+          (transaction.currency || order.currency || 'NGN');
     }
     if (!recordedByAnotherWriter) {
       // The provider accepted this refund but no local row exists, so the

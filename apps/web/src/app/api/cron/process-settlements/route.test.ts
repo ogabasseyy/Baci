@@ -9,9 +9,11 @@ const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   in: vi.fn(),
   limit: vi.fn(),
+  lt: vi.fn(),
   loggerError: vi.fn(),
   loggerInfo: vi.fn(),
   loggerWarn: vi.fn(),
+  or: vi.fn(),
   order: vi.fn(),
   rpc: vi.fn(),
   select: vi.fn(),
@@ -180,6 +182,22 @@ describe('POST /api/cron/process-settlements', () => {
     expect(payload.notifications).toEqual({ failed: 0, sent: 1 });
     expect(mocks.eq).toHaveBeenCalledWith('status', 'settled');
     expect(mocks.eq).toHaveBeenCalledWith('settlement_notified', false);
+  });
+
+  it('excludes capped and backoff-deferred rows from the bounded queue', async () => {
+    const response = await POST(makeCronRequest());
+
+    expect(response.status).toBe(200);
+    // Permanently failing rows must not pin the oldest-first batch:
+    // the fetch skips rows past the attempt cap and rows whose retry
+    // is not due yet.
+    expect(mocks.lt).toHaveBeenCalledWith('notification_attempts', 5);
+    expect(mocks.or).toHaveBeenCalledWith(
+      expect.stringContaining('notification_next_retry_at.is.null')
+    );
+    expect(mocks.or).toHaveBeenCalledWith(
+      expect.stringContaining('notification_next_retry_at.lte.')
+    );
   });
 
   it('continues without sending emails when pending notification lookup fails', async () => {

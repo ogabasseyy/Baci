@@ -9,6 +9,7 @@ interface PendingSettlementNotification {
   id: string;
   merchants: unknown;
   net_amount: number | string;
+  notification_attempts: number | null;
 }
 
 interface MerchantSettlementBatch {
@@ -20,8 +21,19 @@ interface MerchantSettlementBatch {
     description: string;
     gateway: string;
     id: string;
+    notificationAttempts: number;
   }>;
   totalAmount: number;
+}
+
+// Rejections past this many attempts leave the bounded queue (the
+// route query excludes them) for operations to dead-letter out of
+// band, instead of pinning the daily run behind permanently failing
+// rows. Mirrors the cancellation-notification retry cap.
+export const SETTLEMENT_NOTIFICATION_MAX_ATTEMPTS = 5;
+
+function notificationRetryDelayMs(attempts: number): number {
+  return Math.min(2 ** (attempts - 1), 14) * 24 * 60 * 60 * 1000;
 }
 
 /**
@@ -66,6 +78,7 @@ export async function sendSettlementNotifications({
           amount: Number(settlement.net_amount),
           gateway: settlement.gateway,
           description: settlement.description || 'Payment',
+          notificationAttempts: Number(settlement.notification_attempts ?? 0),
         });
         existing.totalAmount += Number(settlement.net_amount);
       } else {
@@ -79,6 +92,9 @@ export async function sendSettlementNotifications({
               amount: Number(settlement.net_amount),
               gateway: settlement.gateway,
               description: settlement.description || 'Payment',
+              notificationAttempts: Number(
+                settlement.notification_attempts ?? 0
+              ),
             },
           ],
           totalAmount: Number(settlement.net_amount),
@@ -143,6 +159,53 @@ export async function sendSettlementNotifications({
             merchantId: data.merchantId,
             error: emailResult,
           });
+          // A definite rejection stays unnotified but must not rejoin
+          // the head of the bounded oldest-first queue immediately:
+          // defer each row with backoff, grouped by its next attempt
+          // count since rows in one batch carry different histories.
+          // Past the cap the rows leave the queue (the fetch excludes
+          // them) and the dead-letter log below is operations'
+          // backstop. A failed deferral only logs: the row retries on
+          // the next run, and the rejection is already counted.
+          const retryGroups = new Map<number, string[]>();
+          for (const item of stillSettled) {
+            const attempts = item.notificationAttempts + 1;
+            const ids = retryGroups.get(attempts) ?? [];
+            ids.push(item.id);
+            retryGroups.set(attempts, ids);
+          }
+          for (const [attempts, ids] of retryGroups) {
+            const deadLettered =
+              attempts >= SETTLEMENT_NOTIFICATION_MAX_ATTEMPTS;
+            const { error: retryError } = await supabase
+              .from('merchant_settlements')
+              .update({
+                notification_attempts: attempts,
+                notification_next_retry_at: deadLettered
+                  ? null
+                  : new Date(
+                      Date.now() + notificationRetryDelayMs(attempts)
+                    ).toISOString(),
+              })
+              .eq('status', 'settled')
+              .eq('settlement_notified', false)
+              .in('id', ids);
+            if (retryError) {
+              logger.error({
+                message: 'Failed to schedule settlement notification retry',
+                merchantId: data.merchantId,
+                error: retryError,
+              });
+            } else if (deadLettered) {
+              logger.error({
+                message:
+                  'Settlement notification dead-lettered after repeated rejections',
+                merchantId: data.merchantId,
+                settlementIds: ids,
+                attempts,
+              });
+            }
+          }
           notificationResults.failed++;
           continue;
         }

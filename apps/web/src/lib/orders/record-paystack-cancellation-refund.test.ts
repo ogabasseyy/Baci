@@ -111,9 +111,12 @@ describe('recordPaystackCancellationRefund', () => {
   it('treats a verified concurrent audit row as recorded', async () => {
     const { supabase } = database({
       conflictRow: {
+        amount: 12.5,
+        currency: 'NGN',
         gateway: 'paystack',
         gateway_reference: '101',
         id: 'other-row',
+        metadata: { payment_transaction_id: 'tx-1' },
         transaction_type: 'refund',
       },
       insertError: { code: '23505' },
@@ -129,6 +132,71 @@ describe('recordPaystackCancellationRefund', () => {
 
     expect(refundId).toBe(101);
     expect(mocks.quarantineRefund).not.toHaveBeenCalled();
+  });
+
+  it('quarantines when the conflicting row covers a different leg', async () => {
+    const { supabase } = database({
+      conflictRow: {
+        amount: 12.5,
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: '101',
+        id: 'other-row',
+        metadata: { payment_transaction_id: 'tx-other' },
+        transaction_type: 'refund',
+      },
+      insertError: { code: '23505' },
+    });
+
+    await expect(
+      recordPaystackCancellationRefund({
+        order: initiationOrder,
+        paystackRefund: acceptedRefund(),
+        supabase,
+        transaction: initiationTransaction,
+        transactionAmount: 12.5,
+      })
+    ).rejects.toThrow('quarantined');
+
+    // A legacy row reusing the provider refund ID on another leg must
+    // not mark this leg audited: no retry would ever initiate this
+    // leg's refund while the side effect completes.
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: expect.stringContaining('local audit record failed'),
+      })
+    );
+  });
+
+  it('quarantines when the conflicting row money does not match the leg', async () => {
+    const { supabase } = database({
+      conflictRow: {
+        amount: 99,
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: '101',
+        id: 'other-row',
+        metadata: { payment_transaction_id: 'tx-1' },
+        transaction_type: 'refund',
+      },
+      insertError: { code: '23505' },
+    });
+
+    await expect(
+      recordPaystackCancellationRefund({
+        order: initiationOrder,
+        paystackRefund: acceptedRefund(),
+        supabase,
+        transaction: initiationTransaction,
+        transactionAmount: 12.5,
+      })
+    ).rejects.toThrow('quarantined');
+
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: expect.stringContaining('local audit record failed'),
+      })
+    );
   });
 
   it('quarantines when the audit row cannot be recorded', async () => {

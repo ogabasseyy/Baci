@@ -17,6 +17,8 @@ type RouteMocks = Record<
   | 'from'
   | 'in'
   | 'limit'
+  | 'lt'
+  | 'or'
   | 'order'
   | 'reconcileCompletedPaystackCancellationRefunds'
   | 'reconcilePendingPaystackCancellationRefunds'
@@ -48,6 +50,14 @@ export function stubDefaultSettlementRun(mocks: RouteMocks) {
   mocks.eq.mockReturnValue({
     eq: mocks.eq,
     in: mocks.in,
+    limit: mocks.limit,
+    lt: mocks.lt,
+    order: mocks.order,
+  });
+  mocks.lt.mockReturnValue({
+    or: mocks.or,
+  });
+  mocks.or.mockReturnValue({
     limit: mocks.limit,
     order: mocks.order,
   });

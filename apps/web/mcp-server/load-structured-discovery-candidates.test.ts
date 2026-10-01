@@ -55,7 +55,7 @@ describe('loadStructuredDiscoveryCandidates', () => {
 
   it.each([200, 201])('checks whether a %s-result semantic scan is actually truncated', async (count) => {
     const ids = Array.from({length: count}, (_, index) => `s-${index}`);
-    const fixture = setup({lexicalPages: [[]], products: []});
+    const fixture = setup({lexicalPages: [[]], products: productRows(ids)});
     const semanticSearch = vi.fn(async (_query: string, offset: number) => ids.slice(offset, offset + 40));
     const result = await loadStructuredDiscoveryCandidates({
       query: 'camera', merchantId: 'merchant-1', supabase: fixture.supabase, semanticSearch,
@@ -122,6 +122,15 @@ describe('loadStructuredDiscoveryCandidates', () => {
     });
   });
 
+  it('sends the structured fact query to the facts index instead of shopper wording', async () => {
+    const fixture = setup({ lexicalPages: [[]], products: [] });
+    await loadStructuredDiscoveryCandidates({ query: 'Samsung or Google 256GB under budget',
+      factQuery: 'phone Samsung OR Google 256GB', merchantId: 'merchant-1', supabase: fixture.supabase });
+    expect(fixture.rpc).toHaveBeenCalledWith('search_product_discovery_facts', {
+      merchant_id_param: 'merchant-1', query_text: 'phone Samsung OR Google 256GB', result_limit: 100, result_offset: 0,
+    });
+  });
+
   it('fuses overlapping lexical and semantic candidates and hydrates in fusion order', async () => {
     const { supabase } = setup({
       lexicalPages: [ranked(['lexical-first', 'overlap', 'lexical-third'])],
@@ -137,6 +146,15 @@ describe('loadStructuredDiscoveryCandidates', () => {
       'overlap', 'lexical-first', 'semantic-only', 'lexical-third',
     ]);
     expect(result).toMatchObject({ truncated: false, semanticUnavailable: false });
+  });
+
+  it('marks coverage incomplete when ranked IDs vanish before hydration', async () => {
+    const fixture = setup({ lexicalPages: [ranked(['p-1', 'p-2'])], products: productRows(['p-1']) });
+    const result = await loadStructuredDiscoveryCandidates({
+      query: 'camera', merchantId: 'merchant-1', supabase: fixture.supabase,
+    });
+    expect(result.products.map(({ id }) => id)).toEqual(['p-1']);
+    expect(result.truncated).toBe(true);
   });
 
   it('runs semantic retrieval even when lexical retrieval fills its first page', async () => {

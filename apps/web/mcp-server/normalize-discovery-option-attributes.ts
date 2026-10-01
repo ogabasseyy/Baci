@@ -1,6 +1,6 @@
 const keys: Record<string, string> = {
-  storage: 'storage_gb', storage_gb: 'storage_gb', capacity: 'storage_gb',
-  ram: 'ram_gb', memory: 'ram_gb', ram_gb: 'ram_gb',
+  storage: 'storage_gb', storage_gb: 'storage_gb', capacity: 'storage_gb', storage_capacity: 'storage_gb',
+  ram: 'ram_gb', memory: 'ram_gb', ram_gb: 'ram_gb', ram_options: 'ram_gb',
   color: 'color', colour: 'color', connector: 'connector',
   power: 'power_w', wattage: 'power_w', power_w: 'power_w',
   processor: 'processor', connectivity: 'connectivity',

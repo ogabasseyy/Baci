@@ -25,3 +25,7 @@ it('rejects storage marketing suffixes and media suffixes on other dimensions', 
   expect(normalizeDiscoveryOptionAttributes({ storage: '1TB fast', ram: '1TB SSD', power: '65W HDD' }))
     .toEqual({ storage_gb: null, ram_gb: null, power_w: null });
 });
+it('maps the shared commerce axis aliases storage_capacity and ram_options', () => {
+  expect(normalizeDiscoveryOptionAttributes({ storage_capacity: '256GB', ram_options: '16GB' }))
+    .toEqual({ storage_gb: 256, ram_gb: 16 });
+});

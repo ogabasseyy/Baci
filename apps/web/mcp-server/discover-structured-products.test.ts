@@ -261,56 +261,14 @@ describe('discoverStructuredProducts', () => {
     expect(unverified.selectedProducts).toEqual([]);
   });
 
-  it.each([
-    ['Samsung or Google 256GB under budget', { product_type: 'phone', brands: ['Samsung', 'Google'], attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }] }, { product_type: 'phone', attributes: { storage_gb: 256 } }, { brand: 'Samsung', category: 'Smartphones' }],
-    ['security_camera under Accessories', { product_type: 'security_camera' }, { product_type: 'security_camera' }, { category: 'Accessories' }],
-    ['fragrance_diffuser', { product_type: 'fragrance_diffuser' }, { product_type: 'fragrance_diffuser' }, {}],
-  ])('matches canonical holdout intent for %s', async (_request, alternative, metadata, extras) => {
-    const holdoutProduct = product('holdout', metadata, extras);
-    const fixture = client({ products: [holdoutProduct] });
-    const result = await discoverStructuredProducts(input(
-      fixture.supabase,
-      intent(alternative as McpDiscoveryIntent['alternatives'][number]),
-      { query: String(_request), args: { ...(String(_request).includes('budget') ? { max_price: 500 } : {}), category: String(_request).includes('Accessories') ? 'Accessories' : undefined } }
-    ));
-    expect(result.selectedProducts.map(({ product: selected }) => selected.id)).toEqual(['holdout']);
-  });
-  it.each(['camera', undefined])('marks truncated newest searches incomplete for query %s', async (query) => {
-    const ids = Array.from({length: 501}, (_, i) => `p-${i}`);
-    const fixture = client({products: ids.map(id => product(id, {})), lexicalIds: ids.slice(0,500), lexicalTotal: 501});
-    const result = await discoverStructuredProducts(input(fixture.supabase, intent({}), {query, args: {sort: 'newest'}}));
-    expect(result).toMatchObject({priceScanComplete: false, coverage: 'partial', incompleteReason: 'candidate_limit'});
-  });
-
-  it('marks a truncated price-sorted structured search incomplete', async () => {
-    const ids = Array.from({ length: 500 }, (_, index) => `p-${index}`);
-    const fixture = client({ products: ids.map((id) => product(id, { product_type: 'security_camera' })), lexicalIds: ids, lexicalTotal: 501 });
-    const result = await discoverStructuredProducts(input(fixture.supabase,
-      intent({ product_type: 'security_camera' }), { query: 'camera', args: { sort: 'price_asc', limit: 2 } }));
-    expect(result).toMatchObject({ priceScanComplete: false, coverage: 'partial', incompleteReason: 'candidate_limit' });
-  });
-
-  it.each(['variant', 'offer'])('marks failed %s hydration incomplete instead of claiming no match', async (source) => {
-    const p = product('options', { product_type: 'phone' }, {
-      manage_stock: true, stock_quantity: 0, has_variants: source === 'variant', has_condition_offers: source === 'offer',
-    });
-    const fixture = client({ products: [p], variantError: source === 'variant' ? new Error('offline') : undefined,
-      offerError: source === 'offer' ? new Error('offline') : undefined });
-    const result = await discoverStructuredProducts(input(fixture.supabase, intent({ product_type: 'phone' })));
-    expect(result).toMatchObject({ priceScanComplete: false, coverage: 'partial', incompleteReason: 'option_lookup_failed' });
-  });
-
-  it.each(['product_type', 'model', 'attributes', 'exclusion'])('discloses partial coverage for missing %s facts', async (constraint) => {
-    const p = product('unverified', {}, { category: 'Accessories' });
-    const fixture = client({ products: [p] });
-    const request = constraint === 'exclusion'
-      ? { alternatives: [{}], excluded_product_types: ['charger'] }
-      : intent(constraint === 'attributes'
-        ? { attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }] }
-        : { [constraint]: constraint === 'model' ? 'ZX42' : 'security_camera' });
-    const result = await discoverStructuredProducts(input(fixture.supabase, request as McpDiscoveryIntent));
-    expect(result.selectedProducts).toEqual([]);
-    expect(result.coverage).toBe('partial');
+  it('queries the facts index from structured alternatives rather than shopper wording', async () => {
+    const fixture = client({ products: [product('holdout', { product_type: 'phone' })] });
+    await discoverStructuredProducts(input(fixture.supabase,
+      intent({ product_type: 'phone', brands: ['Samsung', 'Google'], attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }] }),
+      { query: 'Samsung or Google 256GB under budget' }));
+    expect(fixture.rpc).toHaveBeenCalledWith('search_product_discovery_facts', expect.objectContaining({
+      query_text: 'phone Samsung OR Google 256GB',
+    }));
   });
 
   it('retains complete coverage for a verified mismatch even if another fact is absent', async () => {

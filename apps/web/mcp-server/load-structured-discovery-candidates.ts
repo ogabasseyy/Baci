@@ -17,6 +17,7 @@ const MAX_SEMANTIC_CANDIDATES = 200;
 
 type LoadStructuredDiscoveryCandidatesInput = {
   query?: string;
+  factQuery?: string;
   merchantId: string;
   supabase: SupabaseClient;
   semanticSearch?: (query: string, offset: number) => Promise<string[]>;
@@ -147,6 +148,7 @@ function reciprocalRankFusion(...groups: string[][][]) {
 
 export async function loadStructuredDiscoveryCandidates({
   query,
+  factQuery,
   merchantId,
   supabase,
   semanticSearch,
@@ -168,7 +170,7 @@ export async function loadStructuredDiscoveryCandidates({
     )
     : Promise.resolve({ value: { ids: [], truncated: false }, unavailable: false });
   const [lexical, semantic, facts] = await Promise.all([
-    lexicalPromise, semanticPromise, loadDiscoveryFactCandidates(query, merchantId, supabase),
+    lexicalPromise, semanticPromise, loadDiscoveryFactCandidates(factQuery || query, merchantId, supabase),
   ]);
   // Correlated keyword/combined-document matches get one best lexical vote.
   const rankedIds = reciprocalRankFusion([lexical.ids, facts.ids], [semantic.value.ids]);
@@ -195,9 +197,12 @@ export async function loadStructuredDiscoveryCandidates({
     }
   }
 
+  // Ranked IDs that vanish before hydration (RLS filtering, deletes) are silent
+  // coverage loss, so they mark the scan truncated like any other cap.
+  const hydrationDroppedIds = products.length < rankedIds.length;
   return {
     products,
-    truncated: lexical.truncated || semantic.value.truncated || facts.truncated || hydrationFailed,
+    truncated: lexical.truncated || semantic.value.truncated || facts.truncated || hydrationFailed || hydrationDroppedIds,
     semanticUnavailable: semantic.unavailable,
   };
 }

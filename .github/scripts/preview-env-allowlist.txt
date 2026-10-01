@@ -13,10 +13,7 @@
 # non-blank server key fails the workflow until it is allowlisted here
 # with review, marked sensitive, or added to the redact patterns.
 ADDRESS_AUTOCOMPLETE_KV_REST_API_URL
-ADDRESS_AUTOCOMPLETE_KV_URL
-ADDRESS_AUTOCOMPLETE_REDIS_URL
 AUTONOMA_CLIENT_ID
-EDGE_CONFIG
 GO54_EMAIL
 KV_REST_API_URL
 NX_DAEMON

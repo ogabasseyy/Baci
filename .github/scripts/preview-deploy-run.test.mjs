@@ -135,6 +135,36 @@ test('keeps a hostile ref to one sanitized summary line', () => {
   });
 });
 
+test('ignores off-domain lookalikes containing vercel.app', () => {
+  withHarness((harness) => {
+    const result = runDeploy(
+      harness,
+      `echo 'Preview: https://evil.example/x?.vercel.app'; echo 'Preview: ${PREVIEW_URL}'`
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(read(harness.outputs), new RegExp(`preview_url=${PREVIEW_URL}`));
+  });
+  withHarness((harness) => {
+    const result = runDeploy(
+      harness,
+      `echo 'Preview: https://evil.example/x?.vercel.app'`
+    );
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Could not find the Preview URL/);
+  });
+});
+
+test('strips trailing quote characters from the captured URL', () => {
+  withHarness((harness) => {
+    const result = runDeploy(
+      harness,
+      `echo 'Preview: ${PREVIEW_URL}"'`
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(read(harness.outputs), new RegExp(`preview_url=${PREVIEW_URL}`));
+  });
+});
+
 test('fails closed when required env or argv is missing', () => {
   withHarness((harness) => {
     const noArgv = spawnSync('bash', [SCRIPT], {

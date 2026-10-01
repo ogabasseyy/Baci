@@ -4,6 +4,7 @@ import {
   executable,
   jobBlock,
   previewDeployScript,
+  workflow,
 } from './preview-workflow-contract.helpers.mjs';
 
 test('free-form ref never reaches a shell script', () => {
@@ -56,7 +57,7 @@ test('deploy step invokes the trusted runner with prebuilt flags', () => {
 
 test('preview URL parsing anchors on the deploy assignment line', () => {
   assert.match(previewDeployScript, /grep -oiE 'preview:/);
-  assert.match(previewDeployScript, /https:\/\/\[\^ \]\+\\.vercel\\.app/);
+  assert.match(previewDeployScript, /https:\/\/\[A-Za-z0-9-\]\+\\.vercel\\.app/);
   // Last match wins (Vercel prints the assignment after upload echoes;
   // same convention as deploy-with-retry.sh). Never first-match.
   assert.match(previewDeployScript, /\|\s*tail -n 1/);
@@ -142,4 +143,35 @@ test('no checkout persists credentials or takes credential inputs', () => {
     assert.doesNotMatch(step, /^\s*token:/m);
     assert.doesNotMatch(step, /^\s*ssh-key:/m);
   }
+});
+
+test('shallow checkout advertises only the ref forms it supports', () => {
+  assert.match(workflow, /full 40-char SHA/);
+  assert.match(workflow, /abbreviated SHAs fail the shallow fetch/);
+  const build = jobBlock('build');
+  assert.match(build, /fetch-tags:\s*true/);
+});
+
+test('sensitive normalization covers both quote spellings', () => {
+  const prepare = jobBlock('prepare');
+  // Shell-escape sequences sit between the quote characters in-file;
+  // assert the semantic fragments, not the exact quoting dance.
+  assert.match(prepare, /\\\[SENSITIVE\\\]/);
+  assert.match(prepare, /'"'"'/);
+  assert.match(prepare, /\[\[:space:\]\]\*\$/);
+});
+
+test('build exports checked-out commit metadata before building', () => {
+  const build = jobBlock('build');
+  assert.match(build, /VERCEL_GIT_COMMIT_SHA=\$\(git rev-parse HEAD\)/);
+  assert.match(build, /VERCEL_GIT_COMMIT_REF=\$ref/);
+  // Hostile ref spellings fall back to the short SHA, never to GITHUB_ENV
+  // injection: newlines and shell metacharacters are outside the class.
+  assert.match(build, /\*\[\!A-Za-z0-9\._\/-\]\*/);
+  assert.match(build, /git rev-parse --short HEAD/);
+  assert.ok(
+    build.indexOf('VERCEL_GIT_COMMIT_SHA') <
+      build.indexOf('Build for Vercel'),
+    'commit metadata must precede the vercel build step'
+  );
 });

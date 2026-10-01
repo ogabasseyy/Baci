@@ -35,12 +35,13 @@ set -e
 # Last match wins: Vercel prints the deployment assignment at the end of
 # its output, after any file-upload echoes, so tail takes the real URL.
 # Same convention as extract_deployment_target in deploy-with-retry.sh.
-# Residual risk (attacker string echoed after the assignment) is
-# accepted: nothing downstream consumes this URL except the advisory
-# summary link.
+# The host class is anchored: lookalikes such as
+# https://evil.example/x?.vercel.app cannot match, so the captured link
+# always ends at a real .vercel.app host (residual: a planted Vercel URL
+# at worst mislabels the advisory summary link; nothing else consumes it).
 # `|| true`: under pipefail a no-match grep would exit the step here,
 # skipping the status-aware handling below.
-preview_url="$(grep -oiE 'preview:[[:space:]]*https://[^ )]+' preview-deploy.log | grep -oE 'https://[^ ]+\.vercel\.app' | tail -n 1 || true)"
+preview_url="$(grep -oiE 'preview:[[:space:]]*https://[^ )]+' preview-deploy.log | grep -oE 'https://[A-Za-z0-9-]+\.vercel\.app' | tail -n 1 || true)"
 # Only clean exits and timeout kills may carry a usable URL: a nonzero
 # CLI exit means finalization failed even if a Preview line was printed
 # (same ordering as deploy-with-retry.sh).

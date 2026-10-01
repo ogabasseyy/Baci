@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Same-repo branch, tag, or SHA to build and preview
+        description: Same-repo branch, tag, or full 40-char SHA to build and preview (abbreviated SHAs fail the shallow fetch)
         required: true
         type: string
 
@@ -90,9 +90,11 @@ jobs:
         # Pinned CLI >=56.3 writes KEY="[SENSITIVE]" where older CLIs wrote
         # blanks. The injector only substitutes explicit blanks, and build
         # code expects blank-or-real; normalize the literal token (verified
-        # against CLI 57.0.0 output; real values never match it).
+        # against CLI 57.0.0 output; real values never match it). Both
+        # quote spellings plus trailing whitespace match; POSIX class keeps
+        # the pattern portable across GNU/BSD sed.
         run: |
-          sed -i -E 's/="\[SENSITIVE\]"$/=""/' .vercel/.env.preview.local
+          sed -i -E 's/=["'"'"']?\[SENSITIVE\]["'"'"']?[[:space:]]*$/=""/' .vercel/.env.preview.local
       - name: Verify quiz RPC secret is marked sensitive in Preview
         # This proves the marking exists; the injector below additionally
         # refuses any non-blank value before the stand-in replaces it.
@@ -166,7 +168,20 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref }}
+          # Tags resolve without a full clone; abbreviated SHAs stay
+          # unsupported (see the ref input description).
+          fetch-tags: true
           persist-credentials: false
+      - name: Export checked-out commit metadata
+        # posthog release attribution and next.config baking prefer Vercel
+        # git vars over GITHUB_* (which still name the workflow commit);
+        # derive them from this checkout so previews report the target.
+        env:
+          PREVIEW_REF: ${{ inputs.ref }}
+        run: |
+          ref="${PREVIEW_REF#refs/heads/}"; ref="${ref#refs/tags/}"
+          case "$ref" in ''|*[!A-Za-z0-9._/-]*) ref="$(git rev-parse --short HEAD)";; esac
+          { echo "VERCEL_GIT_COMMIT_SHA=$(git rev-parse HEAD)"; echo "VERCEL_GIT_COMMIT_REF=$ref"; } >>"$GITHUB_ENV"
       - name: Checkout trusted ops files
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

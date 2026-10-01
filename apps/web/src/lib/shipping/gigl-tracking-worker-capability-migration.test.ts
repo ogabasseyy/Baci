@@ -79,7 +79,10 @@ describe('GIGL tracking worker capability migration', () => {
     expect(postgrestRepairMigration).toMatch(
       /ALTER ROLE gigl_tracking_worker NOLOGIN CONNECTION LIMIT -1 PASSWORD NULL/
     );
-    expect(postgrestRepairMigration).toMatch(
+    // Membership lands with the request-scope hook in the isolate migration,
+    // never here: granting it earlier would leave the token usable without
+    // the hook if a later migration failed.
+    expect(postgrestRepairMigration).not.toMatch(
       /GRANT gigl_tracking_worker TO authenticator/
     );
     expect(postgrestRepairMigration).not.toMatch(
@@ -109,6 +112,17 @@ describe('GIGL tracking worker capability migration', () => {
       /setting <> 'pgrst\.db_pre_request=public\.enforce_gigl_tracking_worker_request_scope'/
     );
     expect(requestScopeMigration).toMatch(/NOTIFY pgrst, 'reload config'/);
+  });
+
+  it('grants authenticator membership atomically with the hook', () => {
+    expect(requestScopeMigration).toMatch(
+      /GRANT gigl_tracking_worker TO authenticator/
+    );
+    expect(requestScopeMigration.indexOf('pgrst.db_pre_request')).toBeLessThan(
+      requestScopeMigration.indexOf(
+        'GRANT gigl_tracking_worker TO authenticator'
+      )
+    );
   });
 
   it('lets every API role execute the pre-request hook', () => {

@@ -118,5 +118,13 @@ describe('production cache-invalidation drain rollout gate', () => {
       tracking,
       /^  - 'apps\/web\/src\/lib\/shipping\/providers\/gigl\*'$/m
     );
+    assert.match(
+      tracking,
+      /^  - 'apps\/web\/src\/lib\/shipping\/providers\/base\.ts'$/m
+    );
+    assert.match(
+      tracking,
+      /^  - 'packages\/shared\/src\/lib\/gigl-tracking-status\.ts'$/m
+    );
   });
 });

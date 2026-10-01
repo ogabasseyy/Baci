@@ -50,6 +50,8 @@ tracking:
   - 'apps/web/src/lib/verify-gigl-tracking-worker-capability.ts'
   - 'apps/web/src/lib/shipping/gigl*'
   - 'apps/web/src/lib/shipping/providers/gigl*'
+  - 'apps/web/src/lib/shipping/providers/base.ts'
+  - 'packages/shared/src/lib/gigl-tracking-status.ts'
   - 'apps/web/src/scripts/process-gigl-tracking.ts'
   - 'apps/web/src/scripts/verify-gigl-tracking-worker-capability.ts'
   - 'supabase/migrations/*gigl*'

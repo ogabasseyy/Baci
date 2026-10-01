@@ -64,6 +64,12 @@ BEGIN
 END
 $$;
 
+-- Grant authenticator membership LAST and in this same migration: the worker
+-- JWT becomes usable the moment this membership exists, so it must land in
+-- the same transaction as the request-scope hook above. Never move it to an
+-- earlier migration, where a later failure would leave the token unconfined.
+GRANT gigl_tracking_worker TO authenticator;
+
 NOTIFY pgrst, 'reload config';
 -- The new gigl_worker_* wrappers are invisible to PostgREST until its schema
 -- cache is reloaded; 'reload config' alone does not refresh it.

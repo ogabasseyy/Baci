@@ -12,7 +12,8 @@ END
 $$;
 
 ALTER ROLE gigl_tracking_worker NOLOGIN CONNECTION LIMIT -1 PASSWORD NULL;
-GRANT gigl_tracking_worker TO authenticator;
+-- Authenticator membership is granted by the isolate migration together
+-- with the request-scope hook, so the token is never usable unconfined.
 
 COMMENT ON ROLE gigl_tracking_worker IS
   'Signed PostgREST capability for the VPS GIGL poller; no direct login';

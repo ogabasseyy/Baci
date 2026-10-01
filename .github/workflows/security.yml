@@ -182,14 +182,15 @@ jobs:
       # filtering, the step re-asserts the hardening the audit relies on and
       # fails closed (SARIF untouched, alert re-opens) if it drifted.
       # Matching is key-positional on comment-stripped lines (stdlib only:
-      # the scan container has no jq and no PyYAML): the guard must sit in
-      # the audited job's own job-level if: (not another job, step, or run:
-      # string), persist-credentials/ref:/path: must be mapping keys, so
-      # run: echo strings cannot spoof them; folded ref scalars are joined
-      # and unnamed steps delimit spans. Every dir= value assigned to
-      # GITHUB_OUTPUT must resolve under the trusted tree, and the trusted
-      # agent runner must keep its execution-disabling flags and token
-      # isolation (single muse invocation).
+      # the scan container has no jq and no PyYAML): the guard must be a
+      # positive top-level && conjunct of the audited job's own job-level
+      # if: (negations, || fallbacks, lookalikes, and other-job/step/run:
+      # copies all fail closed), persist-credentials/ref:/path: must be
+      # mapping keys; folded ref scalars are joined and unnamed steps
+      # delimit spans. Every dir= value assigned to GITHUB_OUTPUT must
+      # equal the trusted path exactly, and the trusted agent runner must
+      # keep its execution-disabling flags and token isolation (single
+      # muse invocation).
       - name: Drop audited checkout finding from SARIF
         if: always()
         run: |
@@ -333,10 +334,58 @@ jobs:
               drift.append(f"pr-controlled-checkout-count={len(pr_refs)}")
           guard_bodies = (job_if_bodies(workflow_raw[pr_refs[0]])
                           if len(pr_refs) == 1 else None)
-          if len(pr_refs) == 1 and (
-                  not guard_bodies or not any(
-                      "head.repo.full_name == github.repository" in body
-                      for body in guard_bodies)):
+          # The guard must be a positive top-level && conjunct of the job
+          # condition: mere presence would also accept !(guard),
+          # guard || true, or a lookalike comparison. Redundant outer
+          # parens are tolerated; anything else fails closed.
+          guard_expr = ("github.event.pull_request.head.repo.full_name"
+                        " == github.repository")
+
+          def is_guarded(condition):
+              parts, depth, buf = [], 0, ""
+              quote, i = None, 0
+              while i < len(condition):
+                  ch = condition[i]
+                  if quote:
+                      buf += ch
+                      if ch == quote:
+                          quote = None
+                      i += 1
+                  elif ch in ("'", '"'):
+                      quote, buf, i = ch, buf + ch, i + 1
+                  elif ch == "(":
+                      depth, buf, i = depth + 1, buf + ch, i + 1
+                  elif ch == ")":
+                      depth, buf, i = max(0, depth - 1), buf + ch, i + 1
+                  elif ch == "&" and condition[i:i + 2] == "&&" \
+                          and depth == 0:
+                      parts.append(buf)
+                      buf, i = "", i + 2
+                  else:
+                      buf, i = buf + ch, i + 1
+              parts.append(buf)
+              for part in parts:
+                  piece = " ".join(part.split())
+                  while len(piece) >= 2 and piece.startswith("(") \
+                          and piece.endswith(")"):
+                      level, matched = 0, True
+                      for pos, c in enumerate(piece):
+                          if c == "(":
+                              level += 1
+                          elif c == ")":
+                              level -= 1
+                              if level == 0 and pos != len(piece) - 1:
+                                  matched = False
+                                  break
+                      if not matched or level != 0:
+                          break
+                      piece = piece[1:-1].strip()
+                  if piece == guard_expr:
+                      return True
+              return False
+
+          if len(pr_refs) == 1 and not (
+                  guard_bodies and is_guarded(" ".join(guard_bodies))):
               drift.append("same-repo-job-guard")
           # 1-based inclusive raw line span of the audited checkout step, used
           # to pin the SARIF exemption to this exact finding (see below).
@@ -379,6 +428,11 @@ jobs:
               # the trusted checkout: parse every dir= assignment written to
               # GITHUB_OUTPUT (not mere mentions) and require each value to
               # sit under the trusted tree with no parent traversal.
+              # Every assigned value must equal the known trusted path
+              # exactly: a contains-check would accept lookalikes such as
+              # untrusted-scripts/, and also rules out traversal (..).
+              expected = ("${GITHUB_WORKSPACE}/trusted-scripts"
+                          "/.github/scripts/muse-review")
               assigns = []
               for line in span:
                   found = re.search(
@@ -388,10 +442,8 @@ jobs:
                       assigns.append(found.group(1))
               if not assigns:
                   drift.append("script-resolution-no-output")
-              elif not all("trusted-scripts/" in value for value in assigns):
+              elif not all(value.strip() == expected for value in assigns):
                   drift.append("script-resolution-untrusted-target")
-              elif any(".." in value for value in assigns):
-                  drift.append("script-resolution-path-traversal")
           # The data-only premise rests on the agent invocation itself:
           # every muse call in the trusted runner must carry the exact
           # execution-disabling flags (comment mentions do not count) and

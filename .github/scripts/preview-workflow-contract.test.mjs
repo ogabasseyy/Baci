@@ -252,12 +252,41 @@ test('preview URL parsing anchors on the deploy assignment line', () => {
   // same convention as deploy-with-retry.sh). Never first-match.
   assert.match(deploy, /\|\s*tail -n 1/);
   assert.doesNotMatch(deploy, /head -n 1/);
+  // No-match grep must not exit the step under pipefail before the
+  // status-aware handling runs.
+  assert.match(deploy, /tail -n 1 \|\| true/);
   assert.match(deploy, /exit 1/);
 });
 
 test('deploy step fails fast with the true CLI exit code', () => {
   const deploy = jobBlock('deploy');
   assert.match(deploy, /set -euo pipefail/);
+});
+
+test('deploy step survives CLI hangs and captures diagnostics', () => {
+  const deploy = jobBlock('deploy');
+  assert.match(deploy, /2>&1 \| tee preview-deploy\.log/);
+  assert.match(deploy, /timeout[^\n]*run-pinned-vercel\.sh deploy/);
+  assert.match(deploy, /PIPESTATUS\[0\]/);
+  assert.match(deploy, /deploy_status.*124/);
+});
+
+test('deploy job bootstraps pnpm before helpers', () => {
+  const deploy = jobBlock('deploy');
+  assert.match(
+    deploy,
+    /pnpm\/action-setup@0ebf47130e4866e96fce0953f49152a61190b271/
+  );
+  assert.ok(
+    deploy.indexOf('pnpm/action-setup') <
+      deploy.indexOf('pull --yes --environment=preview'),
+    'pnpm setup must precede the first CLI invocation'
+  );
+});
+
+test('handoff artifacts survive reruns', () => {
+  const overwrites = executable.match(/overwrite:\s*true/g) ?? [];
+  assert.equal(overwrites.length, 2);
 });
 
 test('deploy summary neutralizes markdown in the branch name', () => {

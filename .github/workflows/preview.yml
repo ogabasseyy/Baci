@@ -1,10 +1,11 @@
 name: Preview (branch prebuilt)
 
 on:
-  # Dispatch the STABLE file from the default branch and select the target
-  # as an input, so unreviewed branch edits to this workflow can never run
-  # with deployment secrets:
-  #   gh workflow run preview.yml -f ref=<branch>
+  # Intended usage: dispatch the STABLE file from the default branch and
+  # select the target as an input, so routine previews never execute
+  # unreviewed workflow edits with deployment secrets:
+  #   gh workflow run preview.yml -f ref=<branch>   (from default branch;
+  #   -f ref= selects the TARGET, not the workflow file version)
   # PREVIEW ONLY. This workflow must never gain --prod, the production
   # environment, migrations, postdeploy steps, or cache purges.
   workflow_dispatch:
@@ -27,6 +28,15 @@ concurrency:
 # runners, exchanging only inert files via short-lived artifacts. The build
 # sees the Preview backend env (identical to a native Vercel preview build)
 # and the Turbo cache token (already exposed to branch code by PR CI).
+# Dispatchers are trusted collaborators (same model as deploy.yml): --ref
+# selects the workflow FILE version, so a malicious --ref copy bypasses the
+# in-file default-branch guard below — the guard constrains accidental
+# misuse and documents intent. Likewise, Preview deploys the target ref
+# into the secret-bearing Preview environment, so ref authors can read
+# Preview RUNTIME secrets from their deployed code by design: dispatch only
+# refs you trust with those values. No environment approval gates are
+# configured (matches Production); the boundaries are GitHub access
+# control, the tokenless untrusted build, secret stand-ins, and audit.
 
 jobs:
   prepare:
@@ -111,6 +121,8 @@ jobs:
           path: .vercel/
           include-hidden-files: true
           retention-days: 1
+          # Reruns reuse the run ID: allow overwrite of the prior attempt.
+          overwrite: true
       - name: Clean up Vercel secrets
         if: always()
         run: |
@@ -181,6 +193,8 @@ jobs:
           # Serverless function dirs require their hidden .vc-config.json.
           include-hidden-files: true
           retention-days: 1
+          # Reruns reuse the run ID: allow overwrite of the prior attempt.
+          overwrite: true
       - name: Clean up Vercel secrets
         if: always()
         run: |
@@ -206,6 +220,17 @@ jobs:
           sparse-checkout-cone-mode: false
           path: trusted-ops
           persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      - name: Setup pnpm for the pinned CLI installer
+        # run-pinned-vercel.sh installs vercel@57 via pnpm; fresh runners
+        # carry no repo toolchain, so bootstrap it explicitly (same pin the
+        # repo's install action uses). Helper-only: no repo deps installed.
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: "11"
       - name: Pull Preview environment
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -228,17 +253,35 @@ jobs:
           PREVIEW_REF: ${{ inputs.ref }}
         run: |
           set -euo pipefail
-          trusted-ops/.github/scripts/run-pinned-vercel.sh deploy --yes --prebuilt --archive=tgz | tee preview-deploy.log
+          # CLI 57 prints READY then hangs on some CI deploys (production
+          # wraps attempts the same way in deploy-with-retry.sh): cap below
+          # the step timeout and accept a captured URL on timeout. Merge
+          # stderr into the log: the labeled Preview line is diagnostic.
+          set +e
+          timeout -s TERM -k 2m 50m trusted-ops/.github/scripts/run-pinned-vercel.sh deploy --yes --prebuilt --archive=tgz 2>&1 | tee preview-deploy.log
+          deploy_status=${PIPESTATUS[0]}
+          set -e
           # Last match wins: Vercel prints the deployment assignment at the
           # end of its output, after any file-upload echoes, so tail takes
           # the real URL. Same convention as extract_deployment_target in
           # deploy-with-retry.sh. Residual risk (attacker string echoed
           # after the assignment) is accepted: nothing downstream consumes
           # this URL except the advisory summary link.
-          preview_url="$(grep -oiE 'preview:[[:space:]]*https://[^ )]+' preview-deploy.log | grep -oE 'https://[^ ]+\.vercel\.app' | tail -n 1)"
+          # `|| true`: under pipefail a no-match grep would exit the step
+          # here, skipping the status-aware handling below.
+          preview_url="$(grep -oiE 'preview:[[:space:]]*https://[^ )]+' preview-deploy.log | grep -oE 'https://[^ ]+\.vercel\.app' | tail -n 1 || true)"
+          # A captured URL covers both clean success and hang-after-ready.
           if [ -z "$preview_url" ]; then
-            echo 'Could not find the Preview URL in the deploy log; inspect preview-deploy.log.' >&2
-            exit 1
+            if [ "$deploy_status" -eq 124 ] || [ "$deploy_status" -eq 137 ]; then
+              echo 'Deploy timed out without printing a Preview URL; check the Vercel dashboard for an orphaned deployment before retrying.' >&2
+              exit "$deploy_status"
+            elif [ "$deploy_status" -ne 0 ]; then
+              echo "Deploy failed with status $deploy_status; inspect preview-deploy.log." >&2
+              exit "$deploy_status"
+            else
+              echo 'Could not find the Preview URL in the deploy log; inspect preview-deploy.log.' >&2
+              exit 1
+            fi
           fi
           echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
           # Dispatch inputs are free-form: strip newlines and carriage returns

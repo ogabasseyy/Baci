@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { escapeHtmlText } from '@/lib/sanitize';
 import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail-send-budget';
 import { assertRefundNotificationSendTime } from './assert-refund-notification-send-time';
+import { attemptMerchantRefundPush } from './attempt-merchant-refund-push';
 import { awaitRefundNotificationDeadline } from './await-refund-notification-deadline';
 import { refundNotificationLedgerAmount } from './refund-notification-ledger';
 import { resolveContradictoryRefundFailure } from './resolve-contradictory-refund-failure';
@@ -25,6 +26,14 @@ export type RefundEmailSender = (message: {
   };
 }) => Promise<{ deliveryOutcome?: 'unknown'; success: boolean }>;
 
+/**
+ * Merchant push sender for refund notifications. Reject only when
+ * provider dispatch definitely never started (a pre-dispatch setup
+ * failure) — the drain retries those and still runs the merchant-email
+ * fallback. Resolve with `deliveryOutcome: 'unknown'` when dispatch
+ * started but the outcome is unknown; those terminalize without
+ * fallback or retry. Production `notifyMerchant` implements this.
+ */
 export type MerchantRefundPushSender = (
   merchantId: string,
   title: string,
@@ -208,32 +217,24 @@ export async function deliverClaimedRefundNotification({
           ? `Refunds totaling ${amount} have been processed for cancelled order #${orderNumber}.`
           : `Paystack could not complete the refund for order #${orderNumber}. Check the refund in Paystack.`;
         assertRefundNotificationSendTime(deadlineMs);
-        outcome = 'delivery_uncertain';
         if (sendMerchantPush) {
-          const pushPromise = sendMerchantPush(
-            merchant.id,
-            title,
+          const push = await attemptMerchantRefundPush({
             body,
-            {
-              type: completed
-                ? 'paystack_refund_processed'
-                : 'paystack_refund_needs_attention',
-              order_id: order.id,
-              order_number: orderNumber,
-            },
-            'payments'
-          );
-          const pushed = await awaitRefundNotificationDeadline(
-            pushPromise,
-            deadlineMs
-          );
-          if (
-            pushed.deliveryOutcome === 'unknown' ||
-            (pushed.sent > 0 && (pushed.failed > 0 || pushed.errors.length > 0))
-          ) {
+            completed,
+            deadlineMs,
+            merchantId: merchant.id,
+            orderId: order.id,
+            orderNumber,
+            sendMerchantPush,
+            title,
+          });
+          outcome = push.outcome;
+          lastError = push.lastError;
+          // Uncertain dispatch stays terminal: retrying or emailing after
+          // a possibly-delivered push double-notifies the merchant.
+          if (push.outcome === 'delivery_uncertain') {
             throw new Error('refund_merchant_push_uncertain');
           }
-          if (pushed.sent > 0) outcome = 'sent';
         }
         // No active app token: deliver the same notification by email.
         if (outcome !== 'sent' && !merchant.email) {
@@ -278,6 +279,7 @@ export async function deliverClaimedRefundNotification({
           );
           if (result.success) {
             outcome = 'sent';
+            lastError = null;
           } else if (result.deliveryOutcome === 'unknown') {
             outcome = 'delivery_uncertain';
             lastError = 'refund_merchant_email_unknown';

@@ -1,3 +1,7 @@
+/** Rejection message when the wait stops with dispatch possibly in flight. */
+export const REFUND_NOTIFICATION_DELIVERY_DEADLINE =
+  'refund_notification_delivery_deadline';
+
 /** Stop waiting in time to persist an indeterminate delivery outcome. */
 export async function awaitRefundNotificationDeadline<T>(
   work: Promise<T>,
@@ -11,7 +15,7 @@ export async function awaitRefundNotificationDeadline<T>(
       work,
       new Promise<never>((_, reject) => {
         timer = setTimeout(
-          () => reject(new Error('refund_notification_delivery_deadline')),
+          () => reject(new Error(REFUND_NOTIFICATION_DELIVERY_DEADLINE)),
           remainingMs
         );
       }),

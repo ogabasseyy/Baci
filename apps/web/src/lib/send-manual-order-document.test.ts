@@ -339,7 +339,7 @@ describe('send manual order document', () => {
     expect(message.htmlContent).toContain('the store team');
     expect(message.textContent).not.toContain('hello@ogabassey.com');
     expect(message.htmlContent).not.toContain('hello@ogabassey.com');
-    expect(message.replyTo).toBe('hello@ogabassey.com');
+    expect(message.replyTo).toBeUndefined();
   });
 
   it('suppresses naira bank details on foreign-currency invoices', async () => {

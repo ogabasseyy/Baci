@@ -1,10 +1,15 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
+import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
 import {
   CHECKOUT_PENDING_ORDER_STORAGE_KEY,
   type PendingCheckoutOrderSnapshot,
 } from '../pending-checkout-order';
 import { useCheckoutAttemptSession } from './use-checkout-attempt-session';
+
+vi.mock('@/lib/posthog/capture-checkout-funnel-event', () => ({
+  captureCheckoutFunnelEventOnce: vi.fn(),
+}));
 
 const pendingOrder: PendingCheckoutOrderSnapshot = {
   orderId: 'order-1',
@@ -47,6 +52,7 @@ function options(merchantId = 'merchant-1') {
 afterEach(() => {
   sessionStorage.clear();
   vi.unstubAllGlobals();
+  vi.clearAllMocks();
 });
 
 it('uses the matching merchant pending order only as resume email fallback', () => {
@@ -83,4 +89,85 @@ it('clears a pending order from another merchant and keeps the synchronous submi
     expect(result.current.tryBeginSubmission(false)).toBe(false);
   });
   expect(result.current.isOrderInFlightRef.current).toBe(true);
+});
+
+it('gates resumed lookup on hydration, uses stamped display amounts, and stops funnel repeats after order creation', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        id: 'order-1',
+        short_id: 'BACI-1',
+        subtotal: 10_000,
+        shipping_cost: 1_500,
+        tax_amount: 750,
+        total: 12_250,
+        currency: 'usd',
+        customer_name: 'Ada Okon',
+        customer_email: 'ada@example.test',
+        customer_phone: '08000000000',
+        items: [
+          {
+            id: 'line-1',
+            product_id: 'item-1',
+            product_name: 'Stamped item',
+            quantity: 2,
+            price: 5_000,
+          },
+        ],
+      })
+    )
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  const initialOptions = {
+    ...options(),
+    isHydrated: false,
+    searchParams: new URLSearchParams(
+      'orderId=order-1&trackingToken=resume-token'
+    ),
+  };
+  const { result, rerender } = renderHook(
+    (props) => useCheckoutAttemptSession(props),
+    { initialProps: initialOptions }
+  );
+
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(captureCheckoutFunnelEventOnce).not.toHaveBeenCalled();
+
+  rerender({ ...initialOptions, isHydrated: true });
+  await waitFor(() =>
+    expect(result.current.displayModel.summaryOrder?.id).toBe('order-1')
+  );
+  expect(result.current.displayModel).toMatchObject({
+    effectiveCheckoutCartTotal: 12_250,
+    effectiveItemSubtotal: 10_000,
+    summarySubtotal: 10_000,
+    hasCheckoutCartItems: false,
+    displayItems: [
+      expect.objectContaining({
+        kind: 'resumed',
+        id: 'line-1',
+        product_id: 'item-1',
+        product_name: 'Stamped item',
+        price: 5_000,
+        quantity: 2,
+      }),
+    ],
+  });
+  expect(captureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
+    'checkout_started',
+    expect.any(String),
+    expect.objectContaining({
+      currency: 'USD',
+      subtotal: 10_000,
+      total: 12_250,
+    })
+  );
+  expect(captureCheckoutFunnelEventOnce).toHaveBeenCalledOnce();
+
+  act(() => {
+    result.current.setCheckoutOrderCreated(true);
+    result.current.setPendingCheckoutOrder(pendingOrder);
+  });
+  expect(result.current.checkoutOrderCreated).toBe(true);
+  expect(captureCheckoutFunnelEventOnce).toHaveBeenCalledOnce();
 });

@@ -136,6 +136,24 @@ it('filters variant recall by constraints before applying the cap', () => {
     .toBeLessThan(recall.indexOf('LIMIT least'));
 });
 
+it('ranks variant recall by branch identity before branch completeness', () => {
+  const recall = readFileSync(new URL('../../../supabase/migrations/20261001150000_variant_recall_identity_rank.sql', import.meta.url), 'utf8');
+  expect(recall.split('\n').length).toBeLessThanOrEqual(300);
+  expect(recall).toContain(
+    'DROP FUNCTION IF EXISTS public.search_product_variant_recall(uuid, jsonb, integer, integer);'
+  );
+  expect(recall).toContain("p_identity jsonb DEFAULT '[]'::jsonb");
+  expect(recall).toContain('canonical_identity_product_type');
+  expect(recall).toContain('identity_complete');
+  expect(recall).toContain('identity_clear');
+  expect(recall).toContain('jsonb_array_length(p_identity) > 5');
+  expect(recall).toContain('octet_length(p_identity::text) > 32768');
+  expect(recall.lastIndexOf('(NOT best.is_purchasable)'))
+    .toBeLessThan(recall.indexOf('(NOT best.identity_complete)'));
+  expect(recall.lastIndexOf('(NOT best.identity_clear)'))
+    .toBeLessThan(recall.lastIndexOf('best.complete_branch_count DESC'));
+});
+
 it('moves index builders out of the exposed schema without changing the serving contract', () => {
   const move = readFileSync(new URL('../../../supabase/migrations/20261001100000_move_discovery_builders.sql', import.meta.url), 'utf8');
   expect(move.startsWith('-- disable-transaction')).toBe(true);

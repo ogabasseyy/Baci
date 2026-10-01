@@ -67,10 +67,23 @@ export async function loadVariantRecallIds(
     // below the cap: two full pages, then a one-row probe at the window edge
     // discloses whether the RPC window cut the match set.
     const filters = constraints.map(({ key, operator, value, branch }) => ({ key, operator, value, branch }));
+    // Identity rides along per branch: without it the RPC ranks every
+    // attribute-matching variant equally, so wrong-identity products can
+    // fill the capped window ahead of the valid one. Only specified fields
+    // ride; the RPC normalizes and ranks (verified first, unverified next,
+    // contradicted last), never excludes.
+    const identity = (intent?.alternatives ?? []).map((alternative, branch) => ({
+      branch,
+      ...(alternative.product_type === undefined ? {} : { product_type: alternative.product_type }),
+      ...(alternative.brands === undefined ? {} : { brands: alternative.brands }),
+      ...(alternative.model === undefined ? {} : { model: alternative.model }),
+      ...(alternative.compatible_with === undefined ? {} : { compatible_with: alternative.compatible_with }),
+    }));
     const fetchPage = async (limit: number, offset: number) => {
       const { data, error } = await supabase.rpc('search_product_variant_recall', {
         p_merchant_id: merchantId,
         p_filters: filters,
+        p_identity: identity,
         p_limit: limit,
         p_offset: offset,
       });

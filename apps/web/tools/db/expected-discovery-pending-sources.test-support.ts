@@ -64,4 +64,9 @@ export const EXPECTED_DISCOVERY_PENDING_SOURCES = [
       'supabase/migrations/20261001140000_bounded_mcp_search_options.sql',
     sha256: '0eb290e21e3d6dc0ca538106f314c446adddf79dfecd4905b9f3b73905903c17',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261001150000_variant_recall_identity_rank.sql',
+    sha256: 'df520a1bc67c62b360db8747d7a53c2a926213c02ab6304d787dcfe1a249fd76',
+  },
 ] as const;

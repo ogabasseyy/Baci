@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { getProductImageUrl } from './product-image';
 import { formatPrice } from './format-price';
+import { resolveOptionAwareProductUrl } from './option-aware-product-url';
 import type { Product } from './widget-types';
 
 // Product Card Component
@@ -113,7 +114,7 @@ export function ProductCard({
         <button type="button"
           className="btn-buy-now"
           onClick={() => {
-            const url = `https://ogabassey.com/products/${encodeURIComponent(product.slug || product.id)}`;
+            const url = resolveOptionAwareProductUrl(product).url;
             if (window.openai?.openExternal) {
               window.openai.openExternal({ href: url });
             } else {

@@ -26,6 +26,7 @@ export * from './product-default-variant';
 export * from './product-image-alt';
 export * from './product-inventory';
 export * from './product-search';
+export * from './product-selection-param-resolution';
 export * from './product-selection-params';
 export * from './product-selection-required';
 export * from './product-variant-media';

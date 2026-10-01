@@ -32,6 +32,7 @@ function harness() {
 
 function shortClient({
   confirmReview = { txn_id: 'attempt-1' },
+  ownReview = null,
   insertError = null,
   insertErrors = [],
   siblingReview = { id: 'review-9', metadata: {} },
@@ -42,6 +43,7 @@ function shortClient({
   stampError = null,
 }: {
   confirmReview?: unknown;
+  ownReview?: unknown;
   insertError?: unknown;
   insertErrors?: unknown[];
   siblingReview?: unknown;
@@ -56,16 +58,20 @@ function shortClient({
     insert.mockResolvedValueOnce({ error });
   }
   insert.mockResolvedValue({ error: insertError });
-  // Lookup order: own-transaction review, sibling review, append
-  // confirmation.
+  // maybeSingle order: own review by reference, own review by
+  // transaction, append confirmation. The sibling lookup uses
+  // limit(1): multiple open reviews per order are permitted.
   const confirmSingle = vi
     .fn()
     .mockResolvedValueOnce({ data: confirmReview, error: null })
-    .mockResolvedValueOnce({ data: siblingReview, error: null })
+    .mockResolvedValueOnce({ data: ownReview, error: null })
     .mockResolvedValueOnce({
       data: { metadata: { short_captures: confirmCaptures } },
       error: null,
     });
+  const siblingLimit = vi
+    .fn()
+    .mockResolvedValue({ data: [siblingReview], error: null });
   const updateSelect = vi
     .fn()
     .mockResolvedValue({ data: updateRows, error: updateError });
@@ -79,6 +85,7 @@ function shortClient({
     eq: vi.fn().mockReturnThis(),
     insert,
     is: vi.fn().mockReturnThis(),
+    limit: siblingLimit,
     maybeSingle: confirmSingle,
     select: vi.fn().mockReturnThis(),
     update,
@@ -191,6 +198,30 @@ describe('fileShortCaptureAndRetire', () => {
         txn_id: 'attempt-1',
       })
     );
+    expect(db.rpc).toHaveBeenCalled();
+    expect(h.summary.reviewsFiled).toEqual(['attempt-1']);
+    expect(h.summary.failed).toBe(false);
+    expect(h.hold).not.toHaveBeenCalled();
+  });
+
+  it('accepts its own reference-less review filed by an earlier run', async () => {
+    const db = shortClient({
+      confirmReview: null,
+      ownReview: { id: 'review-7' },
+      insertErrors: [{ code: '23505' }, { code: '23505' }],
+    });
+    const h = harness();
+
+    const gate = await fileShortCaptureAndRetire(
+      { ...h, attempt, supabase: db as never },
+      evidence
+    );
+
+    // The earlier run filed before failing to stamp: the review is
+    // already in the operations queue, so retire instead of merging
+    // into a sibling or holding an already-reviewed capture forever.
+    expect(gate).toBe('done');
+    expect(db.update).not.toHaveBeenCalled();
     expect(db.rpc).toHaveBeenCalled();
     expect(h.summary.reviewsFiled).toEqual(['attempt-1']);
     expect(h.summary.failed).toBe(false);

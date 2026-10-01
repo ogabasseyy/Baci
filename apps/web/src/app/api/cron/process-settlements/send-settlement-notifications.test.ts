@@ -286,6 +286,36 @@ describe('sendSettlementNotifications', () => {
     );
   });
 
+  it('leaves rows unnotified when the provider rejects the email', async () => {
+    const sendEmail = vi.fn().mockResolvedValue({ success: false });
+    const fresh = freshQuery([
+      { id: 'set-1', settlement_notified: false, status: 'settled' },
+    ]);
+    const mark = markQuery();
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(fresh)
+      .mockReturnValueOnce({ update: mark.update });
+    const supabase = { from } as unknown as SupabaseClient;
+
+    const result = await sendSettlementNotifications({
+      pendingNotifications: [settlement('set-1', merchantA)],
+      sendEmail,
+      supabase,
+    });
+
+    // Marking notified on a rejected send would lose the email
+    // forever: later runs only select unnotified rows.
+    expect(result).toEqual({ failed: 1, sent: 0 });
+    expect(mark.update).not.toHaveBeenCalled();
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchantId: 'merchant-a',
+        message: 'Settlement notification email rejected',
+      })
+    );
+  });
+
   it('counts a resolved mark error instead of reporting sent', async () => {
     const sendEmail = vi.fn().mockResolvedValue({ success: true });
     const fresh = freshQuery([

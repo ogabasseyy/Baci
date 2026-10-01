@@ -121,13 +121,27 @@ export async function sendSettlementNotifications({
           0
         );
 
-        await sendSettlementEmail(
+        // ZeptoMail resolves definitive rejections (invalid
+        // recipient, exhausted provider retries) instead of throwing:
+        // only mark notified when the send actually succeeded, so a
+        // failed email stays retryable instead of vanishing behind a
+        // success signal.
+        const emailResult = await sendSettlementEmail(
           buildSettlementNotificationEmail({
             ...data,
             settlements: stillSettled,
             totalAmount,
           })
         );
+        if (!emailResult.success) {
+          logger.error({
+            message: 'Settlement notification email rejected',
+            merchantId: data.merchantId,
+            error: emailResult,
+          });
+          notificationResults.failed++;
+          continue;
+        }
 
         // Guard the mark with the same predicates: a reversal racing
         // the send must not be flagged notified. Supabase resolves

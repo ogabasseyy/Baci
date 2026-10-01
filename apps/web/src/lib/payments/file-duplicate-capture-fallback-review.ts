@@ -12,6 +12,48 @@ import type { DuplicateCaptureEvidence } from './file-duplicate-payment-capture'
  * stamp only excludes rows from sweeps, which already exclude
  * completed rows.
  */
+async function tryMergeFallbackCaptureEvidence(
+  supabase: SupabaseClient,
+  attempt: {
+    gateway_reference: string;
+    id: string;
+    merchant_id: string;
+    order_id: string;
+  },
+  evidence: DuplicateCaptureEvidence,
+  detail: string
+): Promise<boolean> {
+  // Mirror the primary filer's conflict path exactly: same RPC, same
+  // params, so the merge accepts what the insert could not.
+  for (let i = 0; i < 2; i++) {
+    try {
+      const { data: merged, error: mergeError } = await supabase.rpc(
+        'merge_duplicate_payment_capture_evidence_v1',
+        {
+          p_order_id: attempt.order_id,
+          p_merchant_id: attempt.merchant_id,
+          p_transaction_id: attempt.id,
+          p_gateway_reference: attempt.gateway_reference,
+          p_gateway: evidence.gateway,
+          p_charge_id: evidence.providerReference,
+          p_reason: `Stale attempt ${attempt.gateway_reference} verified as captured${detail}`,
+          p_provider_amount: evidence.providerAmount,
+          p_provider_currency: evidence.providerCurrency,
+          p_provider_status: evidence.providerStatus,
+        }
+      );
+      // A definitive false means no open review exists for this order
+      // (the conflict is the ref slot, not the order slot): retrying
+      // the idempotent merge is pointless, so report it and let the
+      // caller fall through to the ref-less insert. Only a transport
+      // failure retries.
+      if (!mergeError) return merged === true;
+    } catch {
+      // Transport throw: retry once below, then fall through.
+    }
+  }
+  return false;
+}
 export async function fileDuplicateCaptureFallbackReview({
   attempt,
   evidence,
@@ -63,11 +105,21 @@ export async function fileDuplicateCaptureFallbackReview({
   const { error } = await supabase.from('reconciliation_review').insert(row);
   if (!error) return true;
   if ((error as { code?: string }).code !== '23505') return false;
-  // The ref slot is owned by another order's capture: file without
-  // occupying paystack_ref so this capture keeps its own operations
-  // review instead of colliding forever. The column stays truthful —
-  // this review never claims the reference — while metadata keeps the
-  // full gateway evidence.
+  // The conflict is either this order's open review or another order's
+  // ref slot. A second order-level insert would hit the open-by-order
+  // index again, so merge into the open same-order review first — the
+  // merge never touches paystack_ref, so it lands exactly when the
+  // order slot is the conflict.
+  if (
+    await tryMergeFallbackCaptureEvidence(supabase, attempt, evidence, detail)
+  ) {
+    return true;
+  }
+  // No open review for this order: the ref slot is owned by another
+  // order's capture. File without occupying paystack_ref so this
+  // capture keeps its own operations review instead of colliding
+  // forever. The column stays truthful — this review never claims the
+  // reference — while metadata keeps the full gateway evidence.
   const { error: nullRefError } = await supabase
     .from('reconciliation_review')
     .insert({ ...row, paystack_ref: null });

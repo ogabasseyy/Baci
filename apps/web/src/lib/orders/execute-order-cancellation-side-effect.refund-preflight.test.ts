@@ -111,11 +111,14 @@ describe('cancellation refund preflight quarantine', () => {
         status: 'refund_pending',
       },
     ]);
+    const resetEq = vi.fn().mockReturnThis();
+    const resetUpdate = vi.fn().mockReturnValue({ eq: resetEq });
     const from = vi
       .fn()
       .mockReturnValueOnce(paymentQuery)
       .mockReturnValueOnce(transactionQuery([]))
-      .mockReturnValueOnce(auditReviewsQuery([]));
+      .mockReturnValueOnce(auditReviewsQuery([]))
+      .mockReturnValueOnce({ update: resetUpdate });
 
     await expect(
       executeOrderCancellationSideEffect({
@@ -134,8 +137,10 @@ describe('cancellation refund preflight quarantine', () => {
       'refund_pending',
     ]);
     expect(mocks.initiateRefund).not.toHaveBeenCalled();
-    // No terminal review: payments lookup plus the empty refund lookup.
-    expect(from).toHaveBeenCalledTimes(3);
+    // No terminal review: payments lookup, the empty refund lookup, the
+    // audit lookup, plus the attempt-budget reset behind the defer.
+    expect(from).toHaveBeenCalledTimes(4);
+    expect(resetUpdate).toHaveBeenCalledWith({ attempts: 0 });
   });
 
   it('quarantines a refund-pending leg with no reference to track', async () => {

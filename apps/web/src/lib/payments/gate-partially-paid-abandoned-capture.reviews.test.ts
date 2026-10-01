@@ -111,7 +111,7 @@ describe('gatePartiallyPaidAbandonedCapture reviews', () => {
       supabase: db as never,
     });
 
-    expect(gate).toBe('done');
+    expect(gate).toEqual({ status: 'done' });
     expect(mocks.fileDuplicatePaymentCapture).toHaveBeenCalledWith(
       expect.objectContaining({
         evidence: expect.objectContaining({
@@ -142,7 +142,7 @@ describe('gatePartiallyPaidAbandonedCapture reviews', () => {
       supabase: db as never,
     });
 
-    expect(gate).toBe('done');
+    expect(gate).toEqual({ status: 'done' });
     expect(h.summary.failed).toBe(true);
     expect(h.hold).toHaveBeenCalledWith('duplicate_capture_review_failed');
   });
@@ -161,7 +161,7 @@ describe('gatePartiallyPaidAbandonedCapture reviews', () => {
       supabase: db as never,
     });
 
-    expect(gate).toBe('done');
+    expect(gate).toEqual({ status: 'done' });
     expect(mocks.fileDuplicatePaymentCapture).toHaveBeenCalled();
     expect(h.summary.reviewsFiled).toEqual(['attempt-1']);
   });
@@ -180,7 +180,7 @@ describe('gatePartiallyPaidAbandonedCapture reviews', () => {
       supabase: db as never,
     });
 
-    expect(gate).toBe('proceed');
+    expect(gate).toEqual({ expectedOutstandingMinor: null, status: 'proceed' });
     expect(mocks.fileDuplicatePaymentCapture).not.toHaveBeenCalled();
     expect(h.hold).not.toHaveBeenCalled();
   });
@@ -206,7 +206,7 @@ describe('gatePartiallyPaidAbandonedCapture reviews', () => {
     // Payment-status-only routing would file the overpayment duplicate
     // here, stamping the resolution while leaving the transaction
     // pending so the cancellation-refund workflow never sees the funds.
-    expect(gate).toBe('proceed');
+    expect(gate).toEqual({ expectedOutstandingMinor: null, status: 'proceed' });
     expect(mocks.fileDuplicatePaymentCapture).not.toHaveBeenCalled();
     expect(h.hold).not.toHaveBeenCalled();
     expect(h.summary.reviewsFiled).toEqual([]);
@@ -228,7 +228,7 @@ describe('gatePartiallyPaidAbandonedCapture reviews', () => {
       supabase: db as never,
     });
 
-    expect(gate).toBe('done');
+    expect(gate).toEqual({ status: 'done' });
     expect(db.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_type: 'merchant_invoice_partial_payment_conflict',
@@ -262,7 +262,7 @@ describe('gatePartiallyPaidAbandonedCapture reviews', () => {
       supabase: db as never,
     });
 
-    expect(gate).toBe('done');
+    expect(gate).toEqual({ status: 'done' });
     expect(h.summary.failed).toBe(true);
     expect(h.hold).toHaveBeenCalledWith('partial_conflict_review_failed');
   });
@@ -285,7 +285,7 @@ describe('gatePartiallyPaidAbandonedCapture reviews', () => {
       supabase: db as never,
     });
 
-    expect(gate).toBe('done');
+    expect(gate).toEqual({ status: 'done' });
     expect(db.rpc).not.toHaveBeenCalledWith(
       'stamp_abandoned_sweep_resolution_v1',
       expect.anything()

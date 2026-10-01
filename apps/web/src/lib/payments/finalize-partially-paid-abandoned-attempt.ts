@@ -96,7 +96,7 @@ export async function finalizePartiallyPaidAbandonedAttempt({
     summary,
     supabase,
   });
-  if (gate === 'done') return;
+  if (gate.status === 'done') return;
   // Cancel the finalize itself — not just this wait — when the pass
   // budget runs out: the signal aborts the in-flight paid-email send
   // (ZeptoMail treats aborts as terminal, never retried), so an
@@ -113,6 +113,11 @@ export async function finalizePartiallyPaidAbandonedAttempt({
       finalizePayment({
         actor: 'cron:reconcile-gateway-paid-orders',
         emailMaxAttemptsPerSender: PARTIAL_CAPTURE_EMAIL_ATTEMPTS,
+        // Serialize the gate's exact-balance comparison with
+        // completion: the atomic RPC recomputes the outstanding
+        // under its order lock and returns BALANCE_CHANGED instead
+        // of promoting when a concurrent payment moved it.
+        expectedOutstandingMinor: gate.expectedOutstandingMinor,
         // Match the signal's 10s buffer: the platform-sender fallback
         // declines unless its own attempt fits before the cutoff.
         ...(deadlineMs !== undefined && {
@@ -230,9 +235,15 @@ export async function finalizePartiallyPaidAbandonedAttempt({
     outcome.kind === 'completion_failed' &&
     typeof outcome.error === 'object' &&
     outcome.error !== null &&
-    (outcome.error as { error_code?: unknown }).error_code ===
-      'TRANSACTION_IN_UNEXPECTED_STATE'
+    ((outcome.error as { error_code?: unknown }).error_code ===
+      'TRANSACTION_IN_UNEXPECTED_STATE' ||
+      (outcome.error as { error_code?: unknown }).error_code ===
+        'BALANCE_CHANGED')
   ) {
+    // BALANCE_CHANGED wrote nothing — the transaction stays pending —
+    // so the hold persists and the next sweep re-gates on the fresh
+    // balance (overpayment duplicates, shortfalls retire, exact
+    // matches proceed) instead of promoting into an overcharge.
     await hold('changed_concurrently');
     return;
   }

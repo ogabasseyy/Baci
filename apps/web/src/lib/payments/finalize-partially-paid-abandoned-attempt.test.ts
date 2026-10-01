@@ -31,12 +31,15 @@ function harness() {
 describe('finalizePartiallyPaidAbandonedAttempt', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    gatePartial.mockResolvedValue('proceed');
+    gatePartial.mockResolvedValue({
+      expectedOutstandingMinor: 7000,
+      status: 'proceed',
+    });
   });
 
   it('skips the finalizer when the balance gate handles the capture', async () => {
     const h = harness();
-    gatePartial.mockResolvedValue('done');
+    gatePartial.mockResolvedValue({ status: 'done' });
     await finalizePartiallyPaidAbandonedAttempt({
       ...h,
       attempt,
@@ -66,6 +69,7 @@ describe('finalizePartiallyPaidAbandonedAttempt', () => {
     expect(finalize).toHaveBeenCalledWith(
       expect.objectContaining({
         actor: 'cron:reconcile-gateway-paid-orders',
+        expectedOutstandingMinor: 7000,
         gateway: 'paystack',
         orderId: 'order-1',
         reference: 'BAC-OLD',
@@ -103,6 +107,27 @@ describe('finalizePartiallyPaidAbandonedAttempt', () => {
       providerData: {},
     });
 
+    expect(h.hold).toHaveBeenCalledWith('changed_concurrently');
+    expect(h.summary.failed).toBe(false);
+  });
+
+  it('holds quietly when the locked balance moved since the gate', async () => {
+    const h = harness();
+    finalize.mockResolvedValue({
+      error: { error_code: 'BALANCE_CHANGED' },
+      kind: 'completion_failed',
+    });
+
+    await finalizePartiallyPaidAbandonedAttempt({
+      ...h,
+      attempt,
+      providerData: {},
+    });
+
+    // A concurrent payment landed between the gate's exact-balance
+    // read and the order lock: promoting now would overcharge with
+    // no duplicate review. The RPC wrote nothing, so the hold
+    // persists and the next sweep re-gates on the fresh balance.
     expect(h.hold).toHaveBeenCalledWith('changed_concurrently');
     expect(h.summary.failed).toBe(false);
   });

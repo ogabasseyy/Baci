@@ -28,13 +28,17 @@ vi.mock('@/lib/logger', () => ({
 
 describe('initiatePaystackCancellationRefunds rate-limit exhaustion', () => {
   const insert = vi.fn();
-  const supabase = { from: vi.fn(() => ({ insert })) } as never;
+  const eq = vi.fn();
+  const update = vi.fn();
+  const supabase = { from: vi.fn(() => ({ insert, update })) } as never;
   const order = initiationOrder;
   const transaction = initiationTransaction;
 
   beforeEach(() => {
     vi.resetAllMocks();
     insert.mockResolvedValue({ error: null });
+    eq.mockReturnThis();
+    update.mockReturnValue({ eq });
   });
 
   it('files durable evidence when the last attempt is rate limited', async () => {
@@ -109,6 +113,10 @@ describe('initiatePaystackCancellationRefunds rate-limit exhaustion', () => {
       })
     ).rejects.toBeInstanceOf(DeferredError);
     expect(mocks.quarantineRefund).not.toHaveBeenCalled();
+    // The defer is only safe because the budget reset landed: the
+    // resumed run retries the untouched leg fresh instead of
+    // mistaking its first failure for exhaustion.
+    expect(update).toHaveBeenCalledWith({ attempts: 0 });
   });
 
   it('defers when the last-attempt rate-limit review cannot be filed', async () => {

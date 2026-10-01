@@ -1,8 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { executeCustomerEmailCancellationSideEffect } from '@/lib/orders/execute-customer-email-cancellation-side-effect';
+import { fetchAuditBlockedCancellationLegIds } from '@/lib/orders/fetch-audit-blocked-cancellation-legs';
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
 import { initiatePaystackCancellationRefunds } from '@/lib/orders/initiate-paystack-cancellation-refunds';
 import { isExternalPaymentGateway } from '@/lib/orders/is-external-payment-gateway';
+import { matchCancellationRefundCoverage } from '@/lib/orders/match-cancellation-refund-coverage';
 import type {
   CancellationEmailSender,
   CancellationMerchant,
@@ -75,48 +77,11 @@ export async function executeOrderCancellationSideEffect({
   if (refundLookupError) {
     throw new Error('Unable to verify existing cancellation refunds');
   }
-  // A signed reference-only refund event files an unresolved audit-failed
-  // review when no local refund row exists; the provider refund may
-  // already be real, so legs carrying that evidence wait for operations
-  // instead of initiating a second full provider refund.
-  const { data: auditReviewRows, error: auditReviewError } = await supabase
-    .from('reconciliation_review')
-    .select('candidates, metadata, txn_id')
-    .eq('issue_type', 'order_cancellation_refund_requires_review')
-    .eq('order_id', order.id)
-    .eq('merchant_id', order.merchant_id)
-    .is('resolved_at', null);
-  if (auditReviewError) {
-    throw new Error('Unable to verify refund evidence reviews');
-  }
-  const auditBlockedLegIds = new Set<string>();
-  for (const review of auditReviewRows ?? []) {
-    const metadata = review.metadata as {
-      audit_record_failed?: unknown;
-      payment_transaction_id?: unknown;
-    } | null;
-    if (metadata?.audit_record_failed !== true) continue;
-    const reviewLegIds = new Set<string>();
-    if (typeof review.txn_id === 'string') {
-      reviewLegIds.add(review.txn_id);
-    }
-    if (typeof metadata.payment_transaction_id === 'string') {
-      reviewLegIds.add(metadata.payment_transaction_id);
-    }
-    const candidates = review.candidates as Array<{
-      paymentTransactionId?: unknown;
-    }> | null;
-    if (Array.isArray(candidates)) {
-      for (const candidate of candidates) {
-        if (typeof candidate?.paymentTransactionId === 'string') {
-          reviewLegIds.add(candidate.paymentTransactionId);
-        }
-      }
-    }
-    for (const leg of transactions) {
-      if (reviewLegIds.has(leg.id)) auditBlockedLegIds.add(leg.id);
-    }
-  }
+  const auditBlockedLegIds = await fetchAuditBlockedCancellationLegIds({
+    order,
+    supabase,
+    transactions,
+  });
   const linkedPaymentId = (row: { metadata: unknown }): string | null => {
     const metadata = row.metadata as {
       payment_transaction_id?: unknown;
@@ -141,62 +106,16 @@ export async function executeOrderCancellationSideEffect({
       transactions,
     });
   }
-  // A completed row marks its leg refunded only when it matches the
-  // leg's own gateway and currency and the matched rows cover the full
-  // leg amount: a partial or foreign row must quarantine for
-  // reconciliation instead of silently skipping the remaining balance.
-  // Paystack rows count only after provider verification, mirroring the
-  // completion RPC; unverified rows wait for the verification workers
-  // instead of triggering another provider refund.
-  const normalizeMoneyField = (value: unknown): string =>
-    String(value ?? '')
-      .trim()
-      .toUpperCase();
-  const legById = new Map(transactions.map((leg) => [leg.id, leg]));
-  const matchedRefundKobo = new Map<string, number>();
-  const completedLinkedLegIds = new Set<string>();
-  const unverifiedLinkedLegIds = new Set<string>();
-  for (const row of refundRows ?? []) {
-    if (row.status !== 'completed') continue;
-    const paymentId = linkedPaymentId(row);
-    if (paymentId === null) continue;
-    completedLinkedLegIds.add(paymentId);
-    const leg = legById.get(paymentId);
-    if (!leg) continue;
-    if (
-      normalizeMoneyField(row.gateway) !== normalizeMoneyField(leg.gateway) ||
-      normalizeMoneyField(row.currency) !== normalizeMoneyField(leg.currency)
-    ) {
-      continue;
-    }
-    if (
-      normalizeMoneyField(row.gateway) === 'PAYSTACK' &&
-      (row.metadata as { provider_refund_status?: unknown } | null)
-        ?.provider_refund_status !== 'processed'
-    ) {
-      unverifiedLinkedLegIds.add(paymentId);
-      continue;
-    }
-    const rowKobo = Math.round(Number(row.amount) * 100);
-    if (!Number.isSafeInteger(rowKobo) || rowKobo <= 0) continue;
-    matchedRefundKobo.set(
-      paymentId,
-      (matchedRefundKobo.get(paymentId) ?? 0) + rowKobo
-    );
-  }
-  const refundedPaymentIds = new Set<string>();
-  const mismatchedTransactions: GatewayPaymentTransaction[] = [];
-  for (const leg of transactions) {
-    const legKobo = Math.round(Number(leg.amount) * 100);
-    if ((matchedRefundKobo.get(leg.id) ?? 0) >= legKobo) {
-      refundedPaymentIds.add(leg.id);
-    } else if (completedLinkedLegIds.has(leg.id)) {
-      mismatchedTransactions.push(leg);
-    }
-  }
-  const mismatchedIds = new Set(
-    mismatchedTransactions.map((transaction) => transaction.id)
-  );
+  const {
+    mismatchedIds,
+    mismatchedTransactions,
+    refundedPaymentIds,
+    unverifiedLinkedLegIds,
+  } = matchCancellationRefundCoverage({
+    linkedPaymentId,
+    refundRows,
+    transactions,
+  });
   // Unsupported and reference-less legs quarantine only when uncovered:
   // a fully refunded non-Paystack leg needs no further action, and
   // terminalizing the row for it would strand the remaining Paystack

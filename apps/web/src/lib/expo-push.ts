@@ -216,8 +216,18 @@ export async function notifyMerchant(
   }));
 
   let result: NotificationSendResult;
+  // Chunking and delivery-start failures happen before any Expo request,
+  // so the push definitely was not sent and callers can safely retry or
+  // fall back to email. Anything after dispatch starts stays unknown.
+  let providerDispatchStarted = false;
   try {
-    const tickets = await sendPushNotifications(messages, options);
+    const tickets = await sendPushNotifications(messages, {
+      ...options,
+      onDeliveryStart: async () => {
+        await options?.onDeliveryStart?.();
+        providerDispatchStarted = true;
+      },
+    });
 
     result = await processTickets(tickets, tokens, supabase, {
       merchantId,
@@ -229,7 +239,9 @@ export async function notifyMerchant(
     result = {
       sent: 0,
       failed: tokens.length,
-      deliveryOutcome: 'unknown',
+      ...(providerDispatchStarted
+        ? { deliveryOutcome: 'unknown' as const }
+        : {}),
       errors: [
         error instanceof Error ? error.message : 'Unknown push send error',
       ],

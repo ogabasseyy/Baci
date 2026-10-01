@@ -93,7 +93,7 @@ describe('notifyMerchant delivery outcome', () => {
     });
   });
 
-  it('records a failed attempt when push sending throws before ticket processing', async () => {
+  it('records a definite failure when chunking throws before provider dispatch', async () => {
     const selectChain = createChainableMock([
       { token: 'ExponentPushToken[m1]' },
       { token: 'ExponentPushToken[m2]' },
@@ -115,11 +115,12 @@ describe('notifyMerchant delivery outcome', () => {
       type: 'new_order',
     });
 
+    // No Expo request started, so the push definitely was not sent and
+    // callers keep the email fallback instead of parking delivery_uncertain.
     expect(result).toEqual({
       sent: 0,
       failed: 2,
       errors: ['Chunking failed'],
-      deliveryOutcome: 'unknown',
     });
     expect(attemptInsertChain.insert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -132,5 +133,70 @@ describe('notifyMerchant delivery outcome', () => {
         status: 'failed',
       })
     );
+  });
+
+  it('records a definite failure when the delivery-start hook rejects before dispatch', async () => {
+    const mockChain = createChainableMock([{ token: 'ExponentPushToken[m1]' }]);
+    vi.mocked(createAdminClient).mockReturnValue({
+      from: vi.fn().mockReturnValue(mockChain),
+    } as never);
+    const onDeliveryStart = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('claim failed'));
+
+    const result = await notifyMerchant(
+      'merchant-123',
+      'Test',
+      'Body',
+      {},
+      'general',
+      {
+        onDeliveryStart,
+      }
+    );
+
+    expect(onDeliveryStart).toHaveBeenCalledTimes(1);
+    expect(mockSendPushNotificationsAsync).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      sent: 0,
+      failed: 1,
+      errors: ['claim failed'],
+    });
+  });
+
+  it('marks a post-dispatch hook failure as an unknown delivery', async () => {
+    const mockChain = createChainableMock([{ token: 'ExponentPushToken[m1]' }]);
+    vi.mocked(createAdminClient).mockReturnValue({
+      from: vi.fn().mockReturnValue(mockChain),
+    } as never);
+    mockSendPushNotificationsAsync.mockResolvedValueOnce([
+      {
+        status: 'error',
+        message: 'bad',
+        details: { error: 'DeviceNotRegistered' },
+      },
+    ]);
+    const onDeliveryRejected = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('release failed'));
+
+    const result = await notifyMerchant(
+      'merchant-123',
+      'Test',
+      'Body',
+      {},
+      'general',
+      {
+        onDeliveryRejected,
+      }
+    );
+
+    expect(mockSendPushNotificationsAsync).toHaveBeenCalledTimes(1);
+    expect(onDeliveryRejected).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      sent: 0,
+      failed: 1,
+      deliveryOutcome: 'unknown',
+    });
   });
 });

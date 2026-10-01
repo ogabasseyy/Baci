@@ -2,6 +2,12 @@ import { z } from 'zod';
 import { canonicalizeDiscoveryProductType } from './canonical-discovery-product-type';
 
 const text = z.string().trim().min(1).max(100);
+// Retrieval expands numerics to plain decimals inside a 16,000-char gated
+// tsquery: unbounded magnitudes (Number.MAX_VALUE is 309 digits) would let a
+// schema-valid intent silently exceed the gate and return no rows. Bounds
+// keep every representable intent retrievable; zero stays allowed.
+const MAX_DISCOVERY_NUMERIC_VALUE = 1_000_000_000;
+const MIN_DISCOVERY_NUMERIC_VALUE = 1e-6;
 const attribute = z
   .strictObject({
     key: z.enum([
@@ -34,6 +40,19 @@ const attribute = z
         code: 'custom',
         message:
           'Use numeric values for numeric specifications and equality for text attributes',
+      });
+    }
+    if (
+      typeof value.value === 'number' &&
+      value.value !== 0 &&
+      !(
+        value.value >= MIN_DISCOVERY_NUMERIC_VALUE &&
+        value.value <= MAX_DISCOVERY_NUMERIC_VALUE
+      )
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Numeric specifications must use realistic magnitudes',
       });
     }
   });

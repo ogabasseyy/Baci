@@ -58,32 +58,44 @@ const SEARCH_PRODUCTS_INTENT_SCHEMA = {
             type: 'array',
             maxItems: 10,
             items: {
-              type: 'object',
-              properties: {
-                key: {
-                  type: 'string',
-                  enum: [
-                    'storage_gb',
-                    'ram_gb',
-                    'power_w',
-                    'screen_inches',
-                    'refresh_hz',
-                    'color',
-                    'connector',
-                    'processor',
-                    'connectivity',
-                  ],
+              oneOf: [
+                {
+                  description:
+                    'Numeric specification: numeric keys take a non-negative number with eq/gte/lte.',
+                  type: 'object',
+                  properties: {
+                    key: {
+                      type: 'string',
+                      enum: [
+                        'storage_gb',
+                        'ram_gb',
+                        'power_w',
+                        'screen_inches',
+                        'refresh_hz',
+                      ],
+                    },
+                    operator: { type: 'string', enum: ['eq', 'gte', 'lte'] },
+                    value: { type: 'number', minimum: 0, maximum: 1000000000 },
+                  },
+                  required: ['key', 'operator', 'value'],
+                  additionalProperties: false,
                 },
-                operator: { type: 'string', enum: ['eq', 'gte', 'lte'] },
-                value: {
-                  anyOf: [
-                    SEARCH_PRODUCTS_INTENT_TEXT,
-                    { type: 'number', minimum: 0 },
-                  ],
+                {
+                  description:
+                    'Text attribute: text keys take a string with eq only.',
+                  type: 'object',
+                  properties: {
+                    key: {
+                      type: 'string',
+                      enum: ['color', 'connector', 'processor', 'connectivity'],
+                    },
+                    operator: { type: 'string', enum: ['eq'] },
+                    value: SEARCH_PRODUCTS_INTENT_TEXT,
+                  },
+                  required: ['key', 'operator', 'value'],
+                  additionalProperties: false,
                 },
-              },
-              required: ['key', 'operator', 'value'],
-              additionalProperties: false,
+              ],
             },
           },
         },
@@ -140,6 +152,7 @@ export const PUBLIC_MCP_TOOLS = [
         },
         limit: { default: 10, type: 'number', minimum: 1, maximum: 20 },
       },
+      required: ['intent'],
     },
     annotations: READ_ONLY_TOOL_ANNOTATIONS,
   },

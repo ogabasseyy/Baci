@@ -46,3 +46,13 @@ it('flags truncation past the bounded scan window', async () => {
   expect(result.truncated).toBe(true);
   expect(result.ids).toHaveLength(10);
 });
+
+it('pushes constraints into the recall RPC so filtering precedes the cap', async () => {
+  const supabase = rpc([]);
+  await loadVariantRecallIds(intent(storageEq(256)), 'merchant-1', supabase);
+  expect(supabase.rpc).toHaveBeenCalledWith('search_product_variant_recall', {
+    p_merchant_id: 'merchant-1',
+    p_filters: [{ key: 'storage_gb', operator: 'eq', value: 256 }],
+    p_limit: 2001,
+  });
+});

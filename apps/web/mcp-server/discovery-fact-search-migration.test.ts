@@ -79,6 +79,15 @@ it('serves variant recall through a published-merchant RPC instead of the staff-
   expect(recall).toContain('TO anon, authenticated, service_role');
 });
 
+it('filters variant recall by constraints before applying the cap', () => {
+  const recall = readFileSync(new URL('../../../supabase/migrations/20261001090000_product_variant_recall.sql', import.meta.url), 'utf8');
+  expect(recall).toContain('p_filters jsonb');
+  expect(recall).toContain('recall_variant_filter_verifiably_fails');
+  expect(recall).toContain('recall_variant_parse_numeric');
+  expect(recall.indexOf('recall_variant_filter_verifiably_fails(pv.attributes'))
+    .toBeLessThan(recall.indexOf('LIMIT least'));
+});
+
 it('moves index builders out of the exposed schema without changing the serving contract', () => {
   const move = readFileSync(new URL('../../../supabase/migrations/20261001100000_move_discovery_builders.sql', import.meta.url), 'utf8');
   expect(move.startsWith('-- disable-transaction')).toBe(true);
@@ -94,19 +103,35 @@ it('stages the builder move so a mid-migration failure stays retry-safe', () => 
   const move = readFileSync(new URL('../../../supabase/migrations/20261001100000_move_discovery_builders.sql', import.meta.url), 'utf8');
   const copyV3 = move.indexOf('CREATE OR REPLACE FUNCTION discovery.product_discovery_search_document_v3(');
   const copyV4 = move.indexOf('CREATE OR REPLACE FUNCTION discovery.product_discovery_search_document_v4(');
-  const switchIndex = move.indexOf('CREATE INDEX CONCURRENTLY products_discovery_correlated_search_idx');
+  const buildReplacement = move.indexOf('CREATE INDEX CONCURRENTLY products_discovery_correlated_search_idx_new');
   const switchRpc = move.indexOf('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts(');
+  const dropServingIndex = move.indexOf('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx;');
+  const renameReplacement = move.indexOf('RENAME TO products_discovery_correlated_search_idx;');
   const dropV4 = move.indexOf('DROP FUNCTION IF EXISTS public.product_discovery_search_document_v4(');
   const dropV3 = move.indexOf('DROP FUNCTION IF EXISTS public.product_discovery_search_document_v3(');
   // Copy-first: both discovery copies exist before the serving index or RPC switches.
   expect(copyV3).toBeGreaterThanOrEqual(0);
   expect(copyV4).toBeGreaterThan(copyV3);
-  expect(switchIndex).toBeGreaterThan(copyV4);
-  expect(switchRpc).toBeGreaterThan(switchIndex);
+  expect(buildReplacement).toBeGreaterThan(copyV4);
+  // Build-before-drop: the replacement index finishes before the RPC
+  // switches, and the serving index drops only after the switch.
+  expect(switchRpc).toBeGreaterThan(buildReplacement);
+  expect(dropServingIndex).toBeGreaterThan(switchRpc);
+  expect(renameReplacement).toBeGreaterThan(dropServingIndex);
   // Switch-then-remove: the serving contract moves before the public originals drop.
-  expect(dropV4).toBeGreaterThan(switchRpc);
+  expect(dropV4).toBeGreaterThan(renameReplacement);
   expect(dropV3).toBeGreaterThan(dropV4);
-  expect(move).not.toContain('SET SCHEMA');
+  // Only the non-serving v1/v2 builders may move via SET SCHEMA; the
+  // serving v3/v4 builders move through copy-first staging.
+  const setSchemaLines = move
+    .split('\n')
+    .filter((line) => line.includes('SET SCHEMA'));
+  expect(setSchemaLines).toHaveLength(2);
+  for (const line of setSchemaLines) {
+    expect(line).toMatch(
+      /ALTER FUNCTION public\.product_discovery_search_document(_v2)?\(/
+    );
+  }
 });
 
 it('indexes key-specific identity lexemes for capped retrieval', () => {

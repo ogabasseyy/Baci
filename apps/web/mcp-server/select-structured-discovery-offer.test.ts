@@ -169,9 +169,9 @@ it('reports stock for the matched offer instead of unrelated parent or offer inv
   expect(selected?.stockSummary).toMatchObject({ inStock: true, level: 'Last Units' });
 });
 
-it('preserves the selected condition offer compare-at price and lookup state', () => {
+it('sources the selected condition offer compare-at price from the parent like the PDP', () => {
   const row = makeRow({ has_condition_offers: true, manage_stock: true, basePurchasable: false });
-  row.availableOffers = [{ price: 450, compare_at_price: 600, condition: 'used', stock_quantity: 2 }] as typeof row.availableOffers;
+  row.availableOffers = [{ price: 450, compare_at_price: 700, condition: 'used', stock_quantity: 2 }] as typeof row.availableOffers;
   Object.assign(row, {
     optionsLookupFailed: true,
     variantLookupFailed: false,

@@ -150,3 +150,33 @@ it('disables offers when a filtered-out variant owns the condition axis', () => 
   const selected = selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone' }));
   expect(selected?.selectedOption).toMatchObject({ kind: 'variant', option_id: 'v-plain', price: 500 });
 });
+
+it('merges product metadata under paired-variant attributes with variant override', () => {
+  const row = makeRow({ has_variants: true, condition: 'new',
+    discovery_metadata: { product_type: 'phone', attributes: { processor: 'A17', storage_gb: 128 } } });
+  row.allVariants = [
+    { id: 'v-256', product_id: 'phone', attributes: { storage_gb: 256 }, price_override: 700, stock_quantity: 1 },
+  ] as typeof row.availableVariants;
+  row.availableVariants = [];
+  row.availableOffers = [{ id: 'offer-used', price: 400, condition: 'used', stock_quantity: 1 }] as typeof row.availableOffers;
+  const selected = selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone',
+    attributes: [
+      { key: 'storage_gb', operator: 'eq', value: 256 },
+      { key: 'processor', operator: 'eq', value: 'A17' },
+    ] }));
+  expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'offer-used', price: 400 });
+  expect(selected?.selectedOption.attributes).toMatchObject({ storage_gb: 256, processor: 'A17' });
+});
+
+it('sources paired-offer compare-at from the variant then parent, never the offer', () => {
+  const row = makeRow({ has_variants: true, condition: 'new', discovery_metadata: { product_type: 'phone' } });
+  row.allVariants = [
+    { id: 'v-256', product_id: 'phone', attributes: { storage_gb: 256 }, price_override: 700, stock_quantity: 1, compare_at_price: 800 },
+  ] as typeof row.availableVariants;
+  row.availableVariants = [];
+  row.availableOffers = [{ id: 'offer-used', price: 400, condition: 'used', stock_quantity: 1, compare_at_price: 450 }] as typeof row.availableOffers;
+  const selected = selectStructuredDiscoveryOffer(row, intent({ product_type: 'phone',
+    attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }] }));
+  expect(selected?.displayPrice).toBe(400);
+  expect(selected?.displayCompareAtPrice).toBe(800);
+});

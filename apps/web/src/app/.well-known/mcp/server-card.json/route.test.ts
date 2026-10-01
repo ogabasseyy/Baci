@@ -96,6 +96,9 @@ describe('GET /.well-known/mcp/server-card.json', () => {
     );
 
     expect(searchProducts.description).toContain('intent');
+    expect(searchProducts.inputSchema.required).toEqual(
+      expect.arrayContaining(['intent'])
+    );
     expect(searchProducts.inputSchema.properties.intent).toMatchObject({
       type: 'object',
       required: ['alternatives'],
@@ -106,11 +109,23 @@ describe('GET /.well-known/mcp/server-card.json', () => {
         }),
       },
     });
-    expect(
+    const attributeBranches =
       searchProducts.inputSchema.properties.intent.properties.alternatives.items
-        .properties.attributes.items.properties.key.enum
-    ).toEqual(
-      expect.arrayContaining(['storage_gb', 'ram_gb', 'power_w', 'color'])
-    );
+        .properties.attributes.items.oneOf;
+    expect(attributeBranches).toHaveLength(2);
+    expect(attributeBranches[0]).toMatchObject({
+      properties: {
+        key: { enum: expect.arrayContaining(['storage_gb', 'power_w']) },
+        operator: { enum: ['eq', 'gte', 'lte'] },
+        value: { type: 'number', minimum: 0, maximum: 1000000000 },
+      },
+    });
+    expect(attributeBranches[1]).toMatchObject({
+      properties: {
+        key: { enum: expect.arrayContaining(['color']) },
+        operator: { enum: ['eq'] },
+        value: { type: 'string' },
+      },
+    });
   });
 });

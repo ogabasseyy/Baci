@@ -20777,6 +20777,7 @@ export type Database = {
       };
       search_product_variant_recall: {
         Args: {
+          p_filters?: Json;
           p_limit?: number;
           p_merchant_id: string;
         };

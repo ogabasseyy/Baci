@@ -102,9 +102,11 @@ AS $$
     END);
 $$;
 
--- Stage 2: switch the serving index and RPC to the discovery copies.
-DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx;
-CREATE INDEX CONCURRENTLY products_discovery_correlated_search_idx ON public.products USING gin
+-- Stage 2: build the discovery-backed replacement under a temporary name
+-- while the serving v4 index stays available, so the RPC keeps its index
+-- throughout the concurrent build (and after a failed build, on retry).
+DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx_new;
+CREATE INDEX CONCURRENTLY products_discovery_correlated_search_idx_new ON public.products USING gin
 (discovery.product_discovery_search_document_v4(name, brand, category, description, discovery_metadata))
 WHERE status = 'active';
 
@@ -136,7 +138,29 @@ $$;
 REVOKE ALL ON FUNCTION public.search_product_discovery_facts(uuid, text, integer, integer, text, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.search_product_discovery_facts(uuid, text, integer, integer, text, text) TO anon, authenticated;
 
+-- The repointed RPC resolves the replacement index, so drop the served
+-- index and rename the replacement to the canonical name the v5 migration
+-- expects when it drops the correlated index.
+DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx;
+ALTER INDEX IF EXISTS public.products_discovery_correlated_search_idx_new RENAME TO products_discovery_correlated_search_idx;
+
 -- Stage 3: remove the public originals now that nothing references them.
 -- v4 first: its body depends on v3.
 DROP FUNCTION IF EXISTS public.product_discovery_search_document_v4(text, text, text, text, jsonb);
 DROP FUNCTION IF EXISTS public.product_discovery_search_document_v3(text, text, text, text, jsonb);
+
+-- The superseded v1/v2 builders are referenced by no index or RPC, so they
+-- move atomically instead of the staged copy: there is no serving window to
+-- protect, and any dependent would follow the move by OID. ALTER FUNCTION
+-- has no IF EXISTS clause, so the move is guarded by to_regprocedure and a
+-- retry skips functions that already moved.
+DO $$
+BEGIN
+  IF pg_catalog.to_regprocedure('public.product_discovery_search_document(text, text, text, text, jsonb)') IS NOT NULL THEN
+    ALTER FUNCTION public.product_discovery_search_document(text, text, text, text, jsonb) SET SCHEMA discovery;
+  END IF;
+  IF pg_catalog.to_regprocedure('public.product_discovery_search_document_v2(text, text, text, text, jsonb)') IS NOT NULL THEN
+    ALTER FUNCTION public.product_discovery_search_document_v2(text, text, text, text, jsonb) SET SCHEMA discovery;
+  END IF;
+END
+$$;

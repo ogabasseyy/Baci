@@ -4,7 +4,7 @@ SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 DO $$
 DECLARE document tsvector;
 BEGIN
-  document := public.product_discovery_search_document('Generic item', 'Acme', 'Accessories',
+  document := discovery.product_discovery_search_document('Generic item', 'Acme', 'Accessories',
     'gaming', '{"product_type":"phone","model":"ZX-42","attributes":{"storage_gb":256,"ram_gb":16,"power_w":65}}'::jsonb);
   IF NOT document @@ plainto_tsquery('simple', 'ZX-42 gaming') THEN
     RAISE EXCEPTION 'Combined model/marketing retrieval failed';
@@ -17,7 +17,7 @@ BEGIN
   IF document @@ plainto_tsquery('simple', '512GB phone') THEN
     RAISE EXCEPTION 'Search document fabricated a numeric specification';
   END IF;
-  document := public.product_discovery_search_document_v2('Laptop', 'Acme', 'Laptops', '',
+  document := discovery.product_discovery_search_document_v2('Laptop', 'Acme', 'Laptops', '',
     '{"attributes":{"storage_gb":1024,"ram_gb":8}}'::jsonb);
   IF NOT document @@ plainto_tsquery('simple', '1TB laptop') OR
      NOT document @@ plainto_tsquery('simple', '1 TB laptop') OR

@@ -156,10 +156,13 @@ export function selectStructuredDiscoveryOffer(
     const canonicalOfferCondition = normalizeCanonicalProductCondition(typeof offer.condition === 'string' ? offer.condition : null);
     if (!canonicalOfferCondition || seenOfferConditions.has(canonicalOfferCondition)) continue;
     seenOfferConditions.add(canonicalOfferCondition);
+    // PDP parity: the PDP prices the selected offer but always sources the
+    // comparison price from the selected variant or parent product, never
+    // the offer's own compare-at value.
+    const productCompareAtPrice = finitePrice(product.compare_at_price) ?? null;
     const offerCore = { kind: 'offer' as const,
       condition: normalizeCanonicalProductCondition(typeof offer.condition === 'string' ? offer.condition : null) || baseCondition,
-      price, compareAtPrice: finitePrice(offer.compare_at_price) ?? null,
-      stockQuantity: offer.stock_quantity, sourceOption: rawOffer };
+      price, stockQuantity: offer.stock_quantity, sourceOption: rawOffer };
     // Offers carry no spec attributes, so on variant products each offer pairs
     // with every selectable universe variant (the PDP selects offer and variant
     // independently) and the live variant proves the specification. One bare
@@ -167,9 +170,10 @@ export function selectStructuredDiscoveryOffer(
     const pairings = product.has_variants === true
       ? variantUniverse.filter((rawVariant) => !manageStock || hasPositiveStock(record(rawVariant).stock_quantity))
       : [];
-    if (pairings.length === 0) addCandidate({ ...offerCore, attributes: {} });
+    if (pairings.length === 0) addCandidate({ ...offerCore, attributes: {}, compareAtPrice: productCompareAtPrice });
     for (const rawVariant of pairings) {
       addCandidate({ ...offerCore, pairedVariant: rawVariant,
+        compareAtPrice: finitePrice(record(rawVariant).compare_at_price) ?? productCompareAtPrice,
         attributes: normalizeDiscoveryOptionAttributes(record(record(rawVariant).attributes)) });
     }
   }
@@ -177,10 +181,13 @@ export function selectStructuredDiscoveryOffer(
   const matches = candidates
     .map((candidate) => ({
       ...candidate,
-      // Condition offers carry no spec attributes of their own, and on variant
-      // products the base metadata may describe a different variant, so offers
-      // there must not inherit it for spec matching.
-      attributes: candidate.kind === 'offer' && product.has_variants === true
+      // Paired offers prove specs through their variant exactly like the
+      // variant path, so product metadata merges underneath and the variant
+      // overrides the keys it owns. Only bare offers (no pairing possible)
+      // skip the merge: with no live variant to scope them, the base
+      // metadata may describe a different variant.
+      attributes: candidate.kind === 'offer' && candidate.pairedVariant === undefined
+        && product.has_variants === true
         ? candidate.attributes
         : { ...metadataAttributes, ...candidate.attributes },
     }))

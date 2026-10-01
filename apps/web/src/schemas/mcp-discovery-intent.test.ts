@@ -74,6 +74,33 @@ describe('mcpDiscoveryIntentSchema', () => {
     }
   });
 
+  it('rejects numeric magnitudes retrieval cannot expand within the query gate', () => {
+    for (const value of [Number.MAX_VALUE, 1e12, 1e-7, Number.MIN_VALUE]) {
+      const parsed = mcpDiscoveryIntentSchema.safeParse({
+        alternatives: [
+          { attributes: [{ key: 'storage_gb', operator: 'eq', value }] },
+        ],
+      });
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(parsed.error.issues).toContainEqual(
+          expect.objectContaining({
+            message: 'Numeric specifications must use realistic magnitudes',
+          })
+        );
+      }
+    }
+    for (const value of [0, 1e-6, 256, 1_000_000_000]) {
+      expect(
+        mcpDiscoveryIntentSchema.safeParse({
+          alternatives: [
+            { attributes: [{ key: 'storage_gb', operator: 'eq', value }] },
+          ],
+        }).success
+      ).toBe(true);
+    }
+  });
+
   it('enforces alternative, attribute, and unknown-field contracts', () => {
     expect(
       mcpDiscoveryIntentSchema.safeParse({ alternatives: [] }).success

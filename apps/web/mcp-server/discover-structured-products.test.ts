@@ -119,11 +119,11 @@ describe('discoverStructuredProducts', () => {
   });
 
   it('ignores lookup failures from rows ruled out by verified product facts', async () => {
-    const fixture = client({products: [product('variant-phone', {product_type: 'phone'}, {has_variants: true}), product('base-laptop', {product_type: 'laptop'})], variantError: new Error('x')});
-    const result = await discoverStructuredProducts(input(fixture.supabase, intent({product_type: 'laptop'})));
+    const fixture = client({products: [product('variant-phone', {product_type: 'phone'}, {has_variants: true}), product('base-laptop', {product_type: 'laptop'})], factIds: ['variant-phone', 'base-laptop'], variantError: new Error('x')});
+    const result = await discoverStructuredProducts(input(fixture.supabase, intent({product_type: 'laptop'}), { query: undefined }));
     expect(result.selectedProducts.map(({product}) => product.id)).toEqual(['base-laptop']);
     expect(result.priceScanComplete).toBe(true);
-    expect(result.coverage).toBe('complete');
+    expect(result.coverage).toBe('partial');
   });
 
   it('still vetoes the scan when a failed lookup hides a possible match', async () => {
@@ -287,10 +287,16 @@ describe('discoverStructuredProducts', () => {
     }));
   });
 
-  it('retains complete coverage for a verified mismatch even if another fact is absent', async () => {
+  it('marks a fact-only constrained search partial even when every hydrated row verifies', async () => {
     const fixture = client({ products: [product('phone', { product_type: 'phone' })] });
-    const result = await discoverStructuredProducts(input(fixture.supabase, intent({ product_type: 'charger', model: 'ZX42' })));
+    const result = await discoverStructuredProducts(input(fixture.supabase, intent({ product_type: 'charger', model: 'ZX42' }), { query: undefined }));
     expect(result.selectedProducts).toEqual([]);
+    expect(result.coverage).toBe('partial');
+  });
+
+  it('retains complete coverage for an unconstrained fact-only browse', async () => {
+    const fixture = client({ products: [product('phone', { product_type: 'phone' })] });
+    const result = await discoverStructuredProducts(input(fixture.supabase, intent({}), { query: undefined }));
     expect(result.coverage).toBe('complete');
   });
 

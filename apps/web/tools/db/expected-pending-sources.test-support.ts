@@ -250,16 +250,6 @@ export const EXPECTED_PENDING_SOURCES = [
       'supabase/migrations/20260928080000_product_discovery_embeddings.sql',
     sha256: '2d3dc25857186965c6bdafc8874b57d0ea64452b2ecba5fa14e13bc802272add',
   },
-  {
-    repositoryPath:
-      'supabase/migrations/20260930150000_product_discovery_metadata.sql',
-    sha256: 'ba81896c81b73f23ca8e0c088fd8b163e3e01e0ccb0144e87ec6546a7e2ef11c',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260930210000_product_discovery_fact_search.sql',
-    sha256: '236865212a26b80e0bd5b4859dc92e3c56a1c36e1e323189a04760c3abb78e9b',
-  },
   ...EXPECTED_DISCOVERY_PENDING_SOURCES,
 ]
   .sort((left, right) =>

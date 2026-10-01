@@ -78,13 +78,22 @@ export async function discoverStructuredProducts({ intent, query, args, merchant
     (b.product.created_at ?? '').localeCompare(a.product.created_at ?? '') || a.product.id.localeCompare(b.product.id));
   const orderedCoverageIncomplete = candidates.truncated &&
     (args.min_price !== undefined || args.max_price !== undefined || args.sort === 'price_asc' || args.sort === 'price_desc' || args.sort === 'newest');
+  // Fact-only retrieval (no free-text query) fetches only rows already
+  // carrying the requested facts: products with missing discovery metadata
+  // are never hydrated, so unverified-fact detection cannot run for them.
+  // Claiming complete coverage would be dishonest when constrained
+  // retrieval may have excluded unknown rows, so this path reports partial.
+  const factOnlyConstrained = (query ?? '').trim() === '' && intent.alternatives.some(
+    ({ product_type, brands, model, compatible_with, attributes }) =>
+      product_type !== undefined || (brands ?? []).length > 0 || model !== undefined ||
+      compatible_with !== undefined || (attributes ?? []).length > 0);
   return {
     selectedProducts: selectSearchProductsByPrice(selected, args, Math.min(20, Math.max(1, args.limit ?? 10))),
     sanitizedQuery: query,
     priceScanComplete: !optionsLookupFailed && !orderedCoverageIncomplete,
     incompleteReason: optionsLookupFailed ? 'option_lookup_failed' as const :
       orderedCoverageIncomplete ? 'candidate_limit' as const : undefined,
-    coverage: candidates.truncated || optionsLookupFailed || factsUnverified ? 'partial' as const : 'complete' as const,
+    coverage: candidates.truncated || optionsLookupFailed || factsUnverified || factOnlyConstrained ? 'partial' as const : 'complete' as const,
     semanticUnavailable: candidates.semanticUnavailable,
   };
 }

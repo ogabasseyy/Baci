@@ -174,24 +174,24 @@ describe('discoverStructuredProducts', () => {
   });
 
   it('treats an offer failure as complete when the requested condition rules every missing offer ineligible', async () => {
-    const fixture = client({ products: [product('new-base', { product_type: 'phone' }, { has_condition_offers: true })], offerError: new Error('offline') });
-    const result = await discoverStructuredProducts(input(fixture.supabase, intent({ product_type: 'phone' }), { args: { condition: 'new' } }));
+    const fixture = client({ products: [product('new-base', { product_type: 'phone' }, { has_condition_offers: true })], factIds: ['new-base'], offerError: new Error('offline') });
+    const result = await discoverStructuredProducts(input(fixture.supabase, intent({ product_type: 'phone' }), { query: undefined, args: { condition: 'new' } }));
     expect(result.selectedProducts.map(({ product: s }) => s.id)).toEqual(['new-base']);
-    expect(result).toMatchObject({ priceScanComplete: true, coverage: 'complete' });
+    expect(result).toMatchObject({ priceScanComplete: true, coverage: 'partial' });
   });
 
   it('still vetoes an offer failure when a missing offer could match the requested condition', async () => {
-    const fixture = client({ products: [product('new-base', { product_type: 'phone' }, { has_condition_offers: true })], offerError: new Error('offline') });
+    const fixture = client({ products: [product('new-base', { product_type: 'phone' }, { has_condition_offers: true })], factIds: ['new-base'], offerError: new Error('offline') });
     const result = await discoverStructuredProducts(input(fixture.supabase, intent({ product_type: 'phone' }), { args: { condition: 'used' } }));
     expect(result).toMatchObject({ priceScanComplete: false, coverage: 'partial', incompleteReason: 'option_lookup_failed' });
   });
 
   it('ignores an offer failure when variants own the condition axis', async () => {
     const p = product('axis-phone', { product_type: 'phone' }, { has_variants: true, has_condition_offers: true });
-    const fixture = client({ products: [p], variants: [{ id: 'v-used', product_id: 'axis-phone', condition: 'used', attributes: {}, price_override: 100, stock_quantity: 1 }], offerError: new Error('offline') });
-    const result = await discoverStructuredProducts(input(fixture.supabase, intent({ product_type: 'phone' })));
+    const fixture = client({ products: [p], factIds: ['axis-phone'], variants: [{ id: 'v-used', product_id: 'axis-phone', condition: 'used', attributes: {}, price_override: 100, stock_quantity: 1 }], offerError: new Error('offline') });
+    const result = await discoverStructuredProducts(input(fixture.supabase, intent({ product_type: 'phone' }), { query: undefined }));
     expect(result.selectedProducts.map(({ product: s }) => s.id)).toEqual(['axis-phone']);
-    expect(result).toMatchObject({ priceScanComplete: true, coverage: 'complete' });
+    expect(result).toMatchObject({ priceScanComplete: true, coverage: 'partial' });
   });
 
   it('recalls a variant-only spec the product-level sources miss', async () => {
@@ -201,7 +201,7 @@ describe('discoverStructuredProducts', () => {
     const result = await discoverStructuredProducts(input(fixture.supabase,
       intent({ product_type: 'phone', attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }] }), { query: undefined }));
     expect(result.selectedProducts.map(({ product: s }) => s.id)).toEqual(['variant-spec-phone']);
-    expect(result.coverage).toBe('complete');
+    expect(result.coverage).toBe('partial');
   });
 
   it('recalls variants satisfying range constraints the product sources miss', async () => {
@@ -220,7 +220,7 @@ describe('discoverStructuredProducts', () => {
     const result = await discoverStructuredProducts(input(fixture.supabase,
       intent({ product_type: 'phone', attributes: [{ key: 'storage_gb', operator: 'gte', value: 256 }] }), { query: undefined }));
     expect(result.selectedProducts).toEqual([]);
-    expect(result.coverage).toBe('complete');
+    expect(result.coverage).toBe('partial');
   });
 
   it('boosts exact keyword hits that also satisfy the structured facts', async () => {

@@ -51,9 +51,13 @@ export async function loadVariantRecallIds(
   if (constraints.length === 0) return { ids: [], truncated: false };
   try {
     // product_variants is staff-only under RLS, so recall reads through the
-    // published-merchant RPC instead of the table directly.
+    // published-merchant RPC instead of the table directly. Constraints ride
+    // into the RPC so filtering precedes the cap; a matching variant past
+    // the window would otherwise be unreachable to product-level search.
     const { data, error } = await supabase.rpc('search_product_variant_recall', {
-      p_merchant_id: merchantId, p_limit: VARIANT_SCAN_LIMIT + 1,
+      p_merchant_id: merchantId,
+      p_filters: constraints.map(({ key, operator, value }) => ({ key, operator, value })),
+      p_limit: VARIANT_SCAN_LIMIT + 1,
     });
     if (error) throw error;
     const rows = (Array.isArray(data) ? data : []).slice(0, VARIANT_SCAN_LIMIT);

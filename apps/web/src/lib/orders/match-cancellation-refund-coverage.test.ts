@@ -143,6 +143,41 @@ describe('matchCancellationRefundCoverage', () => {
     expect(coverage.unattributedUnlinkedCount).toBe(0);
   });
 
+  it('mismatches null gateways instead of covering them', () => {
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId,
+      refundRows: [
+        row({
+          gateway: null,
+          metadata: { payment_transaction_id: 'payment-1' },
+        }),
+      ],
+      transactions: [leg({ gateway: null as never })],
+    });
+
+    // The gateway column permits null, but the aggregate claim's
+    // `refund.gateway = payment.gateway` never matches NULL — so
+    // normalizing both sides to '' here would finish the side effect
+    // as completed while the order stays paid and settlement
+    // unreversed. Missing gateways mismatch into quarantine.
+    expect(coverage.refundedPaymentIds).toEqual(new Set());
+    expect(coverage.mismatchedIds).toEqual(new Set(['payment-1']));
+  });
+
+  it('leaves null-gateway attributions unattributed', () => {
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId: () => null,
+      refundRows: [row({ gateway: null })],
+      soleCompletedLegId: 'payment-1',
+      transactions: [leg({ gateway: null as never })],
+    });
+
+    // Exact `===` would equate two missing gateways where the SQL
+    // `=` does not: attribution must not exceed the gate.
+    expect(coverage.refundedPaymentIds).toEqual(new Set());
+    expect(coverage.unattributedUnlinkedCount).toBe(1);
+  });
+
   it('counts a partial attribution as a mismatch for quarantine', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId: () => null,

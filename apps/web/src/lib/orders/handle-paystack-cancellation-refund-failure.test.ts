@@ -68,6 +68,23 @@ describe('handlePaystackCancellationRefundFailure', () => {
     );
   });
 
+  it('quarantines a refund request timeout ambiguously, not as rejected', async () => {
+    await expect(
+      invoke({ code: 'HTTP_408', error: 'request timed out' })
+    ).rejects.toThrow(DeliveryUncertainError);
+
+    // A 408 does not establish whether Paystack accepted the refund
+    // before timing out: recording it as rejected would let
+    // operations mistake a potentially accepted refund for definite
+    // non-acceptance and issue a duplicate replacement.
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ ambiguous_initiation: true }),
+        preflight: false,
+      })
+    );
+  });
+
   it('keeps a definite transient failure review-free while retries remain', async () => {
     await expect(
       invoke({ code: 'HTTP_429', error: 'slow down' })

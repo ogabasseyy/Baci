@@ -69,9 +69,18 @@ export function matchCancellationRefundCoverage({
     // linked path normalizes case, but attribution must never exceed
     // what the gate covers, or the leg would defer forever — covered
     // here, uncovered there — instead of refunding or quarantining.
+    // Both paths stay null-safe like the SQL `=`: the gateway column
+    // permits null, and normalizing missing gateways to '' would mark
+    // a legacy leg covered here while the aggregate claim never
+    // recognizes it — finishing the side effect as completed with
+    // the order paid and settlement unreversed. Missing gateways
+    // mismatch into quarantine instead.
     const gatewayMatches = attributed
-      ? row.gateway === leg.gateway
-      : normalizeMoneyField(row.gateway) === normalizeMoneyField(leg.gateway);
+      ? row.gateway != null &&
+        leg.gateway != null &&
+        row.gateway === leg.gateway
+      : normalizeMoneyField(row.gateway) !== '' &&
+        normalizeMoneyField(row.gateway) === normalizeMoneyField(leg.gateway);
     if (
       !gatewayMatches ||
       normalizeMoneyField(row.currency) !== normalizeMoneyField(leg.currency)

@@ -165,7 +165,7 @@ describe('GET /api/cron/order-notifications', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body).toMatchObject({ claimed: 1, sent: 1 });
+    expect(body).toMatchObject({ claimed: 2, sent: 1 });
     expect(sendOrderFulfillmentNotification).toHaveBeenCalledTimes(1);
   });
 

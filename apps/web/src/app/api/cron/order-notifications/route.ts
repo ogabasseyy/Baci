@@ -84,7 +84,10 @@ export async function GET(request: Request) {
       error: z.flattenError(parsedRow.error),
     });
   }
-  const summary = createOrderNotificationCronSummary(rows.length);
+  // claimed counts the DB-claimed batch (including rows skipped below as
+  // unparseable) so dashboards can spot lease-held rows the summary outcomes
+  // never mention; each skipped row is also logged with its row id.
+  const summary = createOrderNotificationCronSummary(data.length);
   try {
     await processClaimedOrderNotificationRows(supabase, rows, summary);
   } catch (error) {

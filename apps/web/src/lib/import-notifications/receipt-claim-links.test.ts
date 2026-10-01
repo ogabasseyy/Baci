@@ -49,6 +49,15 @@ describe('receipt claim links', () => {
     ).toBe('https://future-merchant.usebaci.com/receipts/claim/token_abc');
   });
 
+  it('normalizes a trailing-dot absolute FQDN to the branded host', () => {
+    expect(
+      buildReceiptClaimUrl({
+        merchant: { slug: 'ogabassey', custom_domain: 'Shop.Example.COM.' },
+        token: 'token_123',
+      })
+    ).toBe('https://shop.example.com/receipts/claim/token_123');
+  });
+
   it('falls back to the slug subdomain for malformed custom domains', () => {
     for (const custom_domain of [
       'evil.com/attacker',
@@ -56,6 +65,7 @@ describe('receipt claim links', () => {
       '10.0.0.1',
       'no-dot-hostname',
       'bad..dots.com',
+      'shop.example.com:443',
     ]) {
       expect(
         buildReceiptClaimUrl({

@@ -488,6 +488,14 @@ describe('send manual order document', () => {
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
+  it('throws for retry when the receipt-date lookup fails', async () => {
+    const db = database({}, { transactionsError: { message: 'db down' } });
+    await expect(
+      sendManualOrderDocument({ supabase: db.client, row })
+    ).rejects.toThrow('Manual document receipt date unavailable');
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
   it('skips without throwing when the claim payload fails validation', async () => {
     const db = database();
     db.rpc.mockResolvedValueOnce({ data: { status: 'bogus' }, error: null });

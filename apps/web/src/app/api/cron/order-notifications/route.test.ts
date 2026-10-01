@@ -233,6 +233,38 @@ describe('GET /api/cron/order-notifications', () => {
     expect(mockSupabase.from).not.toHaveBeenCalled();
   });
 
+  it('dead-letters known-type rows missing permanently required fields', async () => {
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: [
+        {
+          attempt_count: 5,
+          event_type: 'order_shipped',
+          id: 'outbox-corrupt-known',
+          max_attempts: 5,
+        },
+      ],
+      error: null,
+    });
+
+    const response = await GET(cronRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      claimed: 1,
+      skipped: 1,
+      success: true,
+      unparseable: 1,
+    });
+    const updateBuilder = mockSupabase.from.mock.results[0]?.value;
+    expect(updateBuilder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skip_reason: 'unparseable',
+        status: 'skipped',
+      })
+    );
+  });
+
   it('never dead-letters exhausted rows with a valid future event type', async () => {
     mockSupabase.rpc.mockResolvedValueOnce({
       data: [

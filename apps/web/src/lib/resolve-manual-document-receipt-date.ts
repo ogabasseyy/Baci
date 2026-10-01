@@ -20,8 +20,12 @@ export async function resolveManualDocumentReceiptDate(
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+  // A failed lookup must retry through the outbox path, not silently fall
+  // back to the order dates: a sent receipt is terminal, so swallowing the
+  // error here would permanently mis-date a financial document.
+  if (paymentTransaction.error)
+    throw new Error('Manual document receipt date unavailable');
   return paymentTransaction?.data?.created_at &&
-    !paymentTransaction.error &&
     typeof paymentTransaction.data.created_at === 'string'
     ? paymentTransaction.data.created_at
     : null;

@@ -75,6 +75,7 @@ export function database(
     paymentAccountError?: { message: string } | null;
     primaryDomain?: string | null;
     latestPaymentAt?: string | null;
+    transactionsError?: { message: string } | null;
   } = {}
 ) {
   const filters: Record<string, unknown> = {};
@@ -138,7 +139,7 @@ export function database(
               data: options.latestPaymentAt
                 ? { created_at: options.latestPaymentAt }
                 : null,
-              error: null,
+              error: options.transactionsError ?? null,
             });
           return Promise.resolve({
             data:

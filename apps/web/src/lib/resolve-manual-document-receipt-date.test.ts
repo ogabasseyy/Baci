@@ -35,7 +35,7 @@ describe('resolveManualDocumentReceiptDate', () => {
     expect(from).not.toHaveBeenCalled();
   });
 
-  it('returns null when the lookup fails', async () => {
+  it('throws when the lookup fails so the outbox retry re-reads', async () => {
     const { client } = clientReturning({
       data: null,
       error: { message: 'boom' },
@@ -43,6 +43,6 @@ describe('resolveManualDocumentReceiptDate', () => {
 
     await expect(
       resolveManualDocumentReceiptDate(client as never, 'order-1', true)
-    ).resolves.toBeNull();
+    ).rejects.toThrow('Manual document receipt date unavailable');
   });
 });

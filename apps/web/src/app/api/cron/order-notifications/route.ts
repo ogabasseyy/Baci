@@ -14,12 +14,17 @@ import {
 
 export const maxDuration = 60;
 
-// Dead-letters only structurally corrupt claimed rows: a missing or
-// non-string event type can never parse under any producer version, so after
-// max_attempts observations the row is terminalized instead of looping on the
-// lease forever. Rows with an unknown-but-valid event type belong to a newer
-// producer and must keep looping until a worker that understands them
-// deploys; terminalizing those would silently drop deliverable rows.
+// Dead-letters structurally corrupt claimed rows after max_attempts
+// observations instead of looping on the lease forever. Only rows with a
+// valid-but-unknown event type keep looping: they belong to a newer producer
+// and a worker that understands them may still deploy. Every other field the
+// row schema requires (identity, lease owner, attempt accounting) is
+// permanently required — metadata already accepts unknown shapes — so a row
+// that fails parsing with a known (or missing) event type can never be
+// delivered by any worker version. The known set is read off the worker
+// schema so the two cannot drift.
+const knownOutboxEventTypes =
+  claimedOrderNotificationOutboxRowSchema.shape.event_type;
 async function deadLetterCorruptOutboxRow(
   supabase: ReturnType<typeof createServiceClient>,
   workerId: string,
@@ -28,7 +33,11 @@ async function deadLetterCorruptOutboxRow(
   if (typeof row !== 'object' || row === null) return false;
   const raw = row as Record<string, unknown>;
   if (typeof raw.id !== 'string' || raw.id.length === 0) return false;
-  if (typeof raw.event_type === 'string' && raw.event_type.length > 0)
+  if (
+    typeof raw.event_type === 'string' &&
+    raw.event_type.length > 0 &&
+    !knownOutboxEventTypes.safeParse(raw.event_type).success
+  )
     return false;
   const attempts = raw.attempt_count;
   const maxAttempts = raw.max_attempts;

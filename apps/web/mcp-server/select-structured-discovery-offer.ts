@@ -132,9 +132,12 @@ export function selectStructuredDiscoveryOffer(
   // add-to-cart without one), and duplicate canonical conditions resolve to
   // the first row like the PDP find().
   // PDP mirrors over the unfiltered variant set (falling back for rows built
-  // without it): the axis check sees every variant like hasVariantConditionAxis,
-  // and purchasability ignores the requested condition because the PDP lets a
-  // condition offer combine with any selectable variant when offers own the axis.
+  // without it): hydration filters variants by the requested condition with
+  // parent-condition inheritance, so the filtered list can be empty while
+  // selectable variants exist. The axis check sees every variant like
+  // hasVariantConditionAxis, and purchasability ignores the requested condition
+  // because the PDP lets a condition offer combine with any selectable variant
+  // when offers own the axis.
   const variantUniverse = row.allVariants ?? row.availableVariants;
   const variantsOwnConditionAxis = product.has_variants === true && variantUniverse.some((rawVariant) => {
     const variantCondition = record(rawVariant).condition;

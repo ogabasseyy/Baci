@@ -3,8 +3,8 @@
 New manual orders (`recorded_by_user_id` set, no import job/external source) enqueue
 one invoice or paid receipt after their item batch is saved. Missing/invalid email,
 missing customer/items, cancelled/returned orders and inconsistent paid balances
-are not sent. Later full payment queues one receipt. Existing orders are excluded
-from automatic notification backfill.
+are not sent. Later full payment queues one receipt, as do late customer-contact
+corrections. Existing orders are excluded from automatic notification backfill.
 
 The existing CRON_SECRET-authenticated `/api/cron/order-notifications` worker sends
 a branded email with a PDF attachment and a website claim link. Ogabassey also

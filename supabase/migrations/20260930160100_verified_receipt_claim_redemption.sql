@@ -46,6 +46,8 @@ END;
 $$;
 REVOKE ALL ON FUNCTION private.redeem_verified_receipt_claim(text, text)
   FROM PUBLIC, anon, authenticated;
+-- Required for the SECURITY INVOKER public wrappers below: they run as the
+-- caller, so revoking this grant would break redemption for verified users.
 GRANT EXECUTE ON FUNCTION private.redeem_verified_receipt_claim(text, text) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.redeem_receipt_claim_v2(p_token_hash text, p_source text)

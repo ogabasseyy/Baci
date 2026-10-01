@@ -261,7 +261,7 @@ describe('POST /api/storefront/receipts/claims/[token]', () => {
     });
   });
 
-  it('returns 500 when the customer record cannot be linked', async () => {
+  it('returns 403 when the customer record cannot be linked', async () => {
     const supabase = createSupabaseRpcMock({
       data: { status: 'customer_link_failed' },
       error: null,
@@ -271,9 +271,11 @@ describe('POST /api/storefront/receipts/claims/[token]', () => {
     const response = await POST(postRequest(), params);
     const body = await response.json();
 
-    expect(response.status).toBe(500);
-    expect(body).toEqual({ error: 'Failed to redeem receipt claim' });
-    expect(mockConsoleError).toHaveBeenCalled();
+    expect(response.status).toBe(403);
+    expect(body).toEqual({
+      error: 'This receipt link cannot be linked to your account',
+    });
+    expect(mockConsoleError).not.toHaveBeenCalled();
   });
 
   it('returns 500 when redemption RPC data is malformed', async () => {

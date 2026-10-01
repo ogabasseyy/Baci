@@ -88,13 +88,13 @@ export async function sendManualOrderDocument({
   if (!order.customer_id)
     return { status: 'skipped', reason: 'missing_customer' };
   if (!order.order_items.length)
-    throw new Error('Manual order items unavailable');
+    return { status: 'skipped', reason: 'missing_order_items' };
   const isPaid = order.payment_status === 'paid';
   const documentKind = isPaid ? 'receipt' : 'invoice';
   if ((row.event_type === 'manual_order_receipt') !== isPaid)
     return { status: 'skipped', reason: 'document_state_changed' };
   if (isPaid && order.amount_paid < order.total)
-    throw new Error('Paid manual order has an outstanding balance');
+    return { status: 'skipped', reason: 'paid_balance_outstanding' };
   const receiptOrder: ReceiptOrder = {
     ...order,
     currency: order.currency || 'NGN',

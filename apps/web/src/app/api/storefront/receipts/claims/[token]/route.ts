@@ -212,6 +212,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
+    if (result.status === 'customer_link_failed') {
+      return NextResponse.json(
+        { error: 'This receipt link cannot be linked to your account' },
+        { status: 403 }
+      );
+    }
+
     if (result.status === 'unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

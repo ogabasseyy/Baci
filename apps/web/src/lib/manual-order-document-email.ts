@@ -22,6 +22,10 @@ interface ManualDocumentEmailInput {
 export function buildManualOrderDocumentEmail(input: ManualDocumentEmailInput) {
   const escapeText = escapeHtmlAttribute;
   const kind = input.documentKind;
+  // Staff-entered order numbers are untrusted in header-adjacent fields:
+  // strip line breaks that could smuggle extra subject lines, then cap the
+  // reference length.
+  const orderNumber = input.orderNumber.replace(/[\r\n]/g, '').slice(0, 64);
   const color = /^#[a-f0-9]{6}$/i.test(input.brandColor ?? '')
     ? (input.brandColor as string)
     : '#111827';
@@ -41,10 +45,10 @@ export function buildManualOrderDocumentEmail(input: ManualDocumentEmailInput) {
     ? `<p>Optional: download the app, then sign in with the same verified email to see your linked purchases. ${appLinks.map(([label, url]) => `<a href="${escapeText(url ?? '')}">${label}</a>`).join(' | ')}</p>`
     : '';
   return {
-    subject: `Your ${kind} is ready - #${input.orderNumber}`,
+    subject: `Your ${kind} is ready - #${orderNumber}`,
     textContent: [
       `Hello ${input.customerName},`,
-      `Your ${input.merchantName} ${kind} for order #${input.orderNumber} is ready.`,
+      `Your ${input.merchantName} ${kind} for order #${orderNumber} is ready.`,
       kind === 'invoice'
         ? 'Your PDF invoice is attached.'
         : 'Your PDF receipt is attached.',
@@ -61,12 +65,12 @@ export function buildManualOrderDocumentEmail(input: ManualDocumentEmailInput) {
       `Need help? ${input.supportEmail}`,
     ].join('\n\n'),
     htmlContent: renderReceiptEmailHtml({
-      preheader: `Your ${kind} for order #${escapeText(input.orderNumber)} is ready.`,
+      preheader: `Your ${kind} for order #${escapeText(orderNumber)} is ready.`,
       brandWordmark: escapeText(input.merchantName),
       brandColor: color,
       eyebrow: kind.toUpperCase(),
       headline: `Your ${kind} is ready`,
-      subhead: `Order #${escapeText(input.orderNumber)}`,
+      subhead: `Order #${escapeText(orderNumber)}`,
       greetingName: escapeText(input.customerName),
       introHtml: `<p>Your PDF ${kind} is attached.</p><p>${escapeText(disclaimer)}</p><p>${escapeText(verification)}</p>${optionalAppHtml}`,
       sectionLabel: 'Your purchase',

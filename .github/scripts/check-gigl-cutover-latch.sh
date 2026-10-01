@@ -36,9 +36,14 @@ if [ "$latched" = true ]; then
   if "${fetch_env[@]}" -C "$checkout_dir" fetch --quiet --depth 1 origin "$latch_sha" 2>/dev/null; then
     tracking_paths="$(awk '/^tracking:/ { in_group=1; next } /^[^ #]/ { in_group=0 } in_group && $1 == "-" { gsub(/'\''/, "", $2); print $2 }' "$checkout_dir/.github/filters/deploy.yml" 2>/dev/null || true)"
     if [ -n "$tracking_paths" ]; then
-      # Word splitting is safe: filter paths cannot contain spaces.
+      # Word splitting is safe (filter paths cannot contain spaces), but
+      # glob expansion is not: patterns like */gigl* would expand against
+      # the runner cwd and silently drop newly added tracking files from
+      # the diff. Disable globbing so git sees literal pathspecs.
+      set -f
       # shellcheck disable=SC2086
       diff_output="$(git -C "$checkout_dir" diff --name-only "$latch_sha" HEAD -- $tracking_paths 2>/dev/null || echo "stale")"
+      set +f
       if [ -z "$diff_output" ]; then
         tracking_stale=false
       fi

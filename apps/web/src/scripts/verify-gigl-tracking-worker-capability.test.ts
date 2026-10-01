@@ -111,9 +111,29 @@ describe('runGiglTrackingCapabilityVerification', () => {
       })
     ).resolves.toBe(0);
 
-    expect(createClient).not.toHaveBeenCalled();
     expect(logger.info).toHaveBeenCalledWith(
       '[gigl-capability] skipped while GIGL is disabled'
+    );
+    expect(verifyCapability).not.toHaveBeenCalled();
+    expect(verifyScopeProbe).not.toHaveBeenCalled();
+  });
+
+  it('warns when skipping with an unhealthy worker token', async () => {
+    createClient.mockImplementationOnce(() => {
+      throw new Error('GIGL tracking worker database capability is invalid');
+    });
+    const logger = { error: vi.fn(), info: vi.fn() };
+
+    // Still exit 0: a disabled setup may legitimately have no token yet.
+    await expect(
+      runGiglTrackingCapabilityVerification({
+        env: { GIGL_ENABLED: 'off', NODE_ENV: 'test' },
+        logger,
+      })
+    ).resolves.toBe(0);
+
+    expect(logger.info).toHaveBeenCalledWith(
+      '[gigl-capability] worker token missing or expired; provision it before re-enabling GIGL'
     );
   });
 

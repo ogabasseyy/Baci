@@ -34,6 +34,16 @@ export async function runGiglTrackingCapabilityVerification({
 } = {}): Promise<number> {
   if (isExplicitlyDisabled(env.GIGL_ENABLED)) {
     logger.info('[gigl-capability] skipped while GIGL is disabled');
+    try {
+      // A disabled skip still latches the cutover gate, so an unhealthy
+      // token would silently break polling on re-enable. Warn (never
+      // fail): a disabled setup may legitimately have no token yet.
+      createGiglTrackingWorkerClient(env);
+    } catch {
+      logger.info(
+        '[gigl-capability] worker token missing or expired; provision it before re-enabling GIGL'
+      );
+    }
     return 0;
   }
 

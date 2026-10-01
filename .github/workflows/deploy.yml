@@ -201,6 +201,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Recheck installed SHA before smoke
+        # A manual deploy.sh run may have replaced the worker between the
+        # readiness check and this post-migration job; smoking (and
+        # latching) a different revision than readiness verified would
+        # record the workflow SHA against an unverified worker. Recheck
+        # install identity immediately before the smoke/latch sequence.
+        env:
+          BACI_EXPECTED_APP_SHA: ${{ github.sha }}
+          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
+        run: vps-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke
       - name: Smoke the live GIGL wrapper capability
         env:
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}

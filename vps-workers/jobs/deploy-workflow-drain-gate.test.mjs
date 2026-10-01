@@ -69,6 +69,14 @@ describe('production cache-invalidation drain rollout gate', () => {
     // the smoke, or unrelated migrations freeze on worker drift.
     assert.match(capability, /needs\.changes\.outputs\.tracking != 'false'/);
     assert.doesNotMatch(capability, /outputs\.migrations/);
+    // A mid-flight deploy.sh must not let the smoke/latch verify a
+    // different revision than readiness checked: recheck install identity
+    // in this job immediately before smoking.
+    assert.match(capability, /Recheck installed SHA before smoke/);
+    assert.match(
+      capability,
+      /run: vps-workers\/bin\/verify-gigl-direct-workers-installed\.sh --skip-live-smoke/
+    );
     assert.match(
       capability,
       /run: \.github\/scripts\/smoke-gigl-worker-capability\.sh/

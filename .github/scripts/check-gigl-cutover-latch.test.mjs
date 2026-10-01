@@ -35,6 +35,20 @@ function fixture() {
   temporaryDirectories.push(root);
   const origin = join(root, 'origin');
   const remote = join(root, 'workers');
+  // Trap cwd: files matching the real filter globs. If the script ever
+  // lets the shell expand tracking patterns, the diff sees these trap
+  // paths (absent from the fixture repo) instead of literal pathspecs.
+  const trap = join(root, 'trap-cwd');
+  for (const trapFile of [
+    'supabase/migrations/999gigl-trap.ts',
+    'apps/web/src/lib/shipping/gigl-trap.ts',
+    'apps/web/src/lib/shipping/providers/gigl-trap.ts',
+    'apps/web/src/app/api/cron/gigl-tracking/trap.ts',
+  ]) {
+    const full = join(trap, trapFile);
+    mkdirSync(dirname(full), { recursive: true });
+    writeFileSync(full, 'trap\n');
+  }
   mkdirSync(join(origin, '.github', 'filters'), { recursive: true });
   mkdirSync(remote, { recursive: true });
   copyFileSync(realFilter, join(origin, '.github', 'filters', 'deploy.yml'));
@@ -54,12 +68,23 @@ function fixture() {
     );
   mkdirSync(join(origin, 'vps-workers'), { recursive: true });
   writeFileSync(join(origin, 'vps-workers', 'deploy.sh'), 'v1\n');
+  mkdirSync(join(origin, 'supabase', 'migrations'), { recursive: true });
+  writeFileSync(
+    join(origin, 'supabase', 'migrations', '111gigl-fixture.sql'),
+    'select 1;\n'
+  );
   writeFileSync(join(origin, 'docs-notes.md'), 'v1\n');
   git(origin, 'add', '-A');
   commit('base');
   const base = git(origin, 'rev-parse', 'HEAD');
 
-  writeFileSync(join(origin, 'vps-workers', 'deploy.sh'), 'v2\n');
+  // The tracking change touches a GLOB-covered pattern
+  // (supabase/migrations/*gigl*): without noglob, the trap cwd expands the
+  // pattern away and this change is silently dropped from the diff.
+  writeFileSync(
+    join(origin, 'supabase', 'migrations', '111gigl-fixture.sql'),
+    'select 2;\n'
+  );
   git(origin, 'add', '-A');
   commit('tracking change');
   const tracking = git(origin, 'rev-parse', 'HEAD');
@@ -69,7 +94,7 @@ function fixture() {
   commit('non-tracking change');
   const tip = git(origin, 'rev-parse', 'HEAD');
 
-  return { base, origin, remote, root, tip, tracking };
+  return { base, origin, remote, root, tip, tracking, trap };
 }
 
 function checkoutAt(origin, root, name, sha) {
@@ -82,12 +107,14 @@ function checkoutAt(origin, root, name, sha) {
 function check({ latch = null, checkout }) {
   const root = dirname(checkout);
   const remote = join(root, 'workers');
+  const trap = join(root, 'trap-cwd');
   if (latch !== null) {
     writeFileSync(join(remote, '.gigl-capability-smoke-ok'), latch);
   }
   const output = join(root, 'github-output.env');
   writeFileSync(output, '');
   const result = spawnSync('bash', [script, remote, checkout], {
+    cwd: trap,
     encoding: 'utf8',
     env: { ...process.env, GITHUB_OUTPUT: output, GITHUB_TOKEN: '' },
   });

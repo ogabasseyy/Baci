@@ -82,6 +82,9 @@ test('persists the cutover latch only after the smoke succeeds', async () => {
   const workflow = YAML.parse(await readFile(workflowUrl, 'utf8'));
   const capability = workflow.jobs['gigl-worker-capability'];
   const steps = capability.steps;
+  const recheckIndex = steps.findIndex(
+    (step) => step.name === 'Recheck installed SHA before smoke'
+  );
   const smokeIndex = steps.findIndex(
     (step) => step.name === 'Smoke the live GIGL wrapper capability'
   );
@@ -89,6 +92,15 @@ test('persists the cutover latch only after the smoke succeeds', async () => {
     (step) => step.name === 'Persist GIGL cutover latch'
   );
 
+  assert.ok(recheckIndex >= 0, 'missing SHA recheck step');
+  assert.ok(
+    recheckIndex < smokeIndex,
+    'SHA recheck must run before the smoke'
+  );
+  assert.equal(
+    steps[recheckIndex].env.BACI_EXPECTED_APP_SHA,
+    '${{ github.sha }}'
+  );
   assert.ok(smokeIndex >= 0, 'missing capability smoke step');
   assert.ok(
     persistIndex > smokeIndex,

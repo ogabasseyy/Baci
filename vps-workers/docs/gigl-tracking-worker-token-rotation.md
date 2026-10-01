@@ -43,10 +43,13 @@ Production value decodes to the same `exp`.
    a signing key or service-role credential to the worker host).
 2. Write the new token to the VPS `.env`, then update the Vercel
    Production env var to the identical value.
-3. On the worker host, run the capability wrapper to prove the new
+3. Redeploy Vercel production: env values snapshot at deploy time, so
+   the running deployment keeps serving the OLD token until redeployed
+   (a 200 from step 5 beforehand would be false confidence).
+4. On the worker host, run the capability wrapper to prove the new
    token executes a reviewed wrapper without claiming work (same
    environment as the cron and deployment smoke — `run-web-script.sh`
    exits unless `NODE_ENV` is set):
-   `NODE_ENV=production BACI_WORKER_PROFILE=gigl-tracking BACI_WORKER_ENV=$REMOTE_DIR/.env $REMOTE_DIR/bin/verify-gigl-tracking-worker-capability.sh`.
-4. Hit the manual fallback route once and expect 200, not
-   `GIGL tracking worker unavailable`.
+   `REMOTE_DIR=/home/bassey/baci-workers NODE_ENV=production BACI_WORKER_PROFILE=gigl-tracking BACI_WORKER_ENV=$REMOTE_DIR/.env $REMOTE_DIR/bin/verify-gigl-tracking-worker-capability.sh`.
+5. Hit the manual fallback route on the NEW deployment once and expect
+   200, not `GIGL tracking worker unavailable`.

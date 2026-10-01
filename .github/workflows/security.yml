@@ -203,17 +203,20 @@ jobs:
       # rebound SCRIPT_DIR, no unbound interpreter invocations). The
       # audited checkout's action is pinned too; every resolver write
       # to GITHUB_OUTPUT must be the known-safe echo; muse flags are
-      # scoped to its own argv, not the whole shell line.
+      # scoped to its own argv, not the whole shell line. The audit runs
+      # even with no SARIF (empty scans must not skip it); the agent
+      # step and job env must not receive token expressions under any
+      # key; install.sh version, checksums, verify-before-install order,
+      # and artifact URL are pinned.
       - name: Drop audited checkout finding from SARIF
         if: always()
         run: |
-          # Scans that found no targets write no SARIF; nothing to filter then.
-          [ -s semgrep.sarif ] || exit 0
-          # The audited finding lives in the reviewer workflow; if that file
-          # is gone from this tree there is nothing to filter either.
-          [ -f .github/workflows/muse-code-review.yml ] || exit 0
+          # The drift audit below always runs, even when the scan wrote no
+          # SARIF (empty scans must not skip it); only the filtering step
+          # is conditional on a SARIF file existing.
           python3 - <<'EOF'
           import json
+          import os
           import posixpath
           import re
           import sys
@@ -225,6 +228,8 @@ jobs:
           PINNED_CHECKOUT_USES = (
               "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
           )
+          MUSE_PINNED_VERSION = "1.4.1-R4503.1"
+          MUSE_PINNED_HOST = "https://lookaside.facebook.com/"
 
           def strip_comments(line):
               buf = []
@@ -243,8 +248,14 @@ jobs:
                       buf.append(ch)
               return "".join(buf)
 
-          with open(AUDITED_PATH) as fh:
-              raw_lines = fh.read().splitlines()
+          try:
+              with open(AUDITED_PATH) as fh:
+                  raw_lines = fh.read().splitlines()
+          except OSError:
+              # Gone from this tree: pr_refs below is empty, so the audit
+              # takes the removed-checkout exit (nothing executes the
+              # orphaned scripts until a restore PR, which re-audits).
+              raw_lines = []
           # Match on code, never comments: a weakened guard that survives
           # only inside a comment must not satisfy the checks below.
           # Block-scalar ref values (ref: >- on its own line) are joined so
@@ -345,6 +356,8 @@ jobs:
               # No PR-controlled checkout left to exempt (e.g. removed in
               # favor of API-fetched diffs): nothing to filter, and failing
               # here would punish the safest possible change.
+              print("::notice::No PR-controlled checkout in " + AUDITED_PATH
+                    + "; exemption inactive.")
               sys.exit(0)
           if len(pr_refs) != 1:
               drift.append(f"pr-controlled-checkout-count={len(pr_refs)}")
@@ -593,8 +606,15 @@ jobs:
               r"(bash|sh|source|\.)\s+"
               r"(\"[^\"\n]*\"|'[^'\n]*'|\S+)")
           for seg in joined:
-              if re.search(r"(?:^|[;&|])\s*SCRIPT_DIR\s*=",
-                           seg) \
+              # Builtin-qualified (export/local/readonly/declare/typeset,
+              # with optional flags) and prefix-assigned rebindings count
+              # too: `export SCRIPT_DIR=...` evades a bare-assign match.
+              # Residual: read/getopts/printf -v/nameref indirection.
+              if re.search(r"(?:^|[;&|])\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*"
+                           r"(?:(?:export|local|readonly|declare|typeset)\s+"
+                           r"(?:-\S+\s+)*)?"
+                           r"(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*"
+                           r"SCRIPT_DIR\s*=", seg) \
                       and "script-dir-rebound" not in drift:
                   drift.append("script-dir-rebound")
               for m in interp.finditer(seg):
@@ -692,6 +712,104 @@ jobs:
                   elif ("-u GITHUB_TOKEN" not in segment
                         or "-u GH_TOKEN" not in segment):
                       drift.append("agent-token-isolation")
+          # The runner scrubs only the two conventional token variable
+          # names: a token passed to the agent step under another key (or
+          # via job-level env, which the step inherits) would survive into
+          # the third-party process. Forbid token expressions in both.
+          token_expr = re.compile(
+              r"secrets\s*\.\s*github_token\b|github\s*\.\s*token\b",
+              re.IGNORECASE)
+          agent_step = [i for i, line in enumerate(workflow_lines)
+                        if re.match(r"^- name:\s*Run Muse review\s*$",
+                                    line.strip())]
+          agent_span = []
+          if agent_step:
+              s = agent_step[0]
+              agent_span = workflow_lines[s:step_end(workflow_lines, s)]
+          else:
+              drift.append("agent-step-missing")
+          job_env = []
+          in_env = False
+          for line in code_lines:
+              # Job-level env: is 4-space (jobs.<name>.env); step-level
+              # is 8-space and must not start a job-env region.
+              if re.match(r"^    env:\s*$", line):
+                  in_env = True
+              elif re.match(r"^  \S|^    \S", line):
+                  in_env = False
+              elif in_env:
+                  job_env.append(line)
+          for line in agent_span + job_env:
+              if token_expr.search(line):
+                  drift.append("agent-token-expression")
+                  break
+          # install.sh determines the executable that receives META_API_KEY:
+          # pin its version and checksum shape, require verification before
+          # install, forbid pipe-to-shell, and tie the artifact URL to the
+          # pinned version on the pinned host.
+          installer_path = ".github/scripts/muse-review/install.sh"
+          try:
+              with open(installer_path) as fh:
+                  installer_raw = fh.read().splitlines()
+          except OSError:
+              installer_raw = []
+          if not installer_raw:
+              drift.append("muse-installer-missing")
+          else:
+              installer = [strip_comments(line) for line in installer_raw]
+              version = [line.strip()[len("MUSE_VERSION="):]
+                         for line in installer
+                         if re.match(r"^MUSE_VERSION=", line.strip())]
+              if not version or not all(
+                      v.strip("\"'") == MUSE_PINNED_VERSION
+                      for v in version):
+                  drift.append("muse-installer-version")
+              for var in ("SHA_X86_LINUX", "SHA_AARCH64_LINUX"):
+                  vals = [line.strip()[len(var) + 1:]
+                          for line in installer
+                          if re.match(r"^" + var + r"=", line.strip())]
+                  if not vals or not all(
+                          re.fullmatch(r'"[0-9a-f]{64}"', v.strip())
+                          for v in vals):
+                      drift.append("muse-installer-checksum")
+                      break
+              def first_cmd(stripped_line):
+                  rest = stripped_line.strip()
+                  while True:
+                      m = re.match(r"[A-Za-z_][A-Za-z0-9_]*=\S+\s*",
+                                   rest)
+                      if not m:
+                          break
+                      rest = rest[m.end():]
+                  m = re.match(r"\S+", rest)
+                  return m.group(0) if m else ""
+              verify_at = [i for i, line in enumerate(installer)
+                           if re.search(r"(?:^|[\s;&|()$`'\"])"
+                                        r"sha256sum(?:\s|$)", line)
+                           and first_cmd(line) not in ("echo", "printf")]
+              cmp_at = [i for i, line in enumerate(installer)
+                        if "got_sha" in line and "want_sha" in line
+                        and "!=" in line
+                        and first_cmd(line) not in ("echo", "printf")]
+              install_at = [i for i, line in enumerate(installer)
+                            if first_cmd(line) == "install"
+                            and "tmp_bin" in line]
+              if not verify_at:
+                  drift.append("muse-installer-no-verify")
+              if not cmp_at:
+                  drift.append("muse-installer-no-compare")
+              if not install_at:
+                  drift.append("muse-installer-no-install")
+              elif verify_at and cmp_at \
+                      and min(install_at) < max(verify_at + cmp_at):
+                  drift.append("muse-installer-unverified-install")
+              if any(re.search(r"\|\s*(?:sudo\s+)?(?:bash|sh)\b", line)
+                     for line in installer):
+                  drift.append("muse-installer-pipe")
+              installer_text = "\n".join(installer)
+              if MUSE_PINNED_HOST not in installer_text \
+                      or "version=${MUSE_VERSION}" not in installer_text:
+                  drift.append("muse-installer-url")
           if drift:
               print(f"::error::muse-code-review.yml hardening drifted "
                     f"({', '.join(drift)}); keeping SARIF unfiltered.")
@@ -728,6 +846,13 @@ jobs:
                       return False
               return True
 
+          if not (os.path.isfile("semgrep.sarif")
+                  and os.path.getsize("semgrep.sarif") > 0):
+              # Empty scan (e.g. a runner-only PR): the audit above still
+              # ran and passed; there is just nothing to filter.
+              print("::notice::Drift audit passed with no SARIF to filter "
+                    "(empty scan); exemption inactive.")
+              sys.exit(0)
           with open("semgrep.sarif") as fh:
               sarif = json.load(fh)
           for run in sarif.get("runs", []):

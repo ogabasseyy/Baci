@@ -30,6 +30,13 @@ describe('fileReferenceOnlyPaystackRefundReview', () => {
           payment_transaction_id: 'payment-1',
           reference: 'PSK-1',
           reference_only_refund_event: true,
+          refund_evidence: {
+            'reference:PSK-1': expect.objectContaining({
+              audit_record_failed: true,
+              payment_transaction_id: 'payment-1',
+              provider_refund_status: 'failed',
+            }),
+          },
         }),
         order_id: 'order-1',
         // The open-by-paystack-ref index is global: stamping the shared
@@ -262,6 +269,7 @@ describe('fileReferenceOnlyPaystackRefundReview', () => {
         p_merchant_id: 'merchant-1',
         p_order_id: 'order-1',
         p_payment_transaction_id: 'payment-1',
+        p_provider_refund_status: 'failed',
       })
     );
   });

@@ -24,6 +24,7 @@ export async function fileReferenceOnlyPaystackRefundOutsideCancellationReview(
     orderNumber,
     paymentId,
     paymentReference,
+    providerRefundStatus,
   }: {
     amount: number;
     currency: string;
@@ -32,6 +33,7 @@ export async function fileReferenceOnlyPaystackRefundOutsideCancellationReview(
     orderNumber: string | null;
     paymentId: string;
     paymentReference: string;
+    providerRefundStatus: string;
   }
 ): Promise<void> {
   const covered = await referenceOnlyRefundCoveredBySettledRows(supabase, {
@@ -59,11 +61,18 @@ export async function fileReferenceOnlyPaystackRefundOutsideCancellationReview(
     },
   ];
   const evidenceKey = `payment:${paymentId}`;
+  // The verdict rides in the same object the merge path stores
+  // verbatim, so insert and merge produce the identical nested entry:
+  // a definitively failed provider refund moved no money, and audit
+  // blocking excludes failed-only evidence per leg instead of
+  // stranding a later genuine cancellation behind delivery_uncertain.
   const evidence = {
+    audit_record_failed: true,
     payment_transaction_id: paymentId,
     payment_reference: paymentReference,
     payment_amount: amount,
     payment_currency: currency,
+    provider_refund_status: providerRefundStatus,
     reference_only_refund_event: true,
     reason: reason.slice(0, 120),
     observed_at: new Date().toISOString(),
@@ -77,6 +86,9 @@ export async function fileReferenceOnlyPaystackRefundOutsideCancellationReview(
       payment_transaction_id: paymentId,
       reference: paymentReference,
       reference_only_refund_event: true,
+      refund_evidence: {
+        [evidenceKey]: evidence,
+      },
     },
     order_id: orderId,
     // Deliberately unset: a shared or corrupt reference spans orders,

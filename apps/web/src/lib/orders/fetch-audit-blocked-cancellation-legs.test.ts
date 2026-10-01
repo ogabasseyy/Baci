@@ -115,6 +115,30 @@ describe('fetchAuditBlockedCancellationLegIds', () => {
     ).resolves.toEqual(new Set());
   });
 
+  it('ignores an outside reference-only review whose verdict failed', async () => {
+    const { supabase } = buildSupabase([
+      review({
+        metadata: {
+          audit_record_failed: true,
+          payment_transaction_id: 'leg-1',
+          reference: 'PSK-1',
+          reference_only_refund_event: true,
+          refund_evidence: {
+            'payment:leg-1': {
+              audit_record_failed: true,
+              payment_transaction_id: 'leg-1',
+              provider_refund_status: 'failed',
+            },
+          },
+        },
+      }),
+    ]);
+
+    await expect(
+      fetchAuditBlockedCancellationLegIds({ order, supabase, transactions })
+    ).resolves.toEqual(new Set());
+  });
+
   it('still blocks when any outside evidence is not a rejection', async () => {
     const { supabase } = buildSupabase([
       review({
@@ -135,6 +159,115 @@ describe('fetchAuditBlockedCancellationLegIds', () => {
       }),
     ]);
 
+    await expect(
+      fetchAuditBlockedCancellationLegIds({ order, supabase, transactions })
+    ).resolves.toEqual(new Set(['leg-1']));
+  });
+
+  it('ignores a reference-only review whose only evidence failed', async () => {
+    const { supabase } = buildSupabase([
+      review({
+        issue_type: 'order_cancellation_refund_requires_review',
+        metadata: {
+          audit_record_failed: true,
+          payment_transaction_id: 'leg-1',
+          reference: 'PSK-1',
+          reference_only_refund_event: true,
+          refund_evidence: {
+            'reference:PSK-1': {
+              audit_record_failed: true,
+              payment_transaction_id: 'leg-1',
+              provider_refund_status: 'failed',
+            },
+          },
+        },
+        txn_id: 'leg-1',
+      }),
+    ]);
+
+    // The signed event definitively reported failure: no money moved,
+    // so the leg stays clear for a later genuine cancellation.
+    await expect(
+      fetchAuditBlockedCancellationLegIds({ order, supabase, transactions })
+    ).resolves.toEqual(new Set());
+  });
+
+  it('still blocks a reference-only review with a non-failed verdict', async () => {
+    const { supabase } = buildSupabase([
+      review({
+        issue_type: 'order_cancellation_refund_requires_review',
+        metadata: {
+          audit_record_failed: true,
+          payment_transaction_id: 'leg-1',
+          reference: 'PSK-1',
+          reference_only_refund_event: true,
+          refund_evidence: {
+            'reference:PSK-1': {
+              audit_record_failed: true,
+              payment_transaction_id: 'leg-1',
+              provider_refund_status: 'processed',
+            },
+          },
+        },
+        txn_id: 'leg-1',
+      }),
+    ]);
+
+    await expect(
+      fetchAuditBlockedCancellationLegIds({ order, supabase, transactions })
+    ).resolves.toEqual(new Set(['leg-1']));
+  });
+
+  it('ignores a leg-merged entry carrying a failed verdict', async () => {
+    const { supabase } = buildSupabase([
+      review({
+        issue_type: 'order_cancellation_refund_requires_review',
+        metadata: {
+          audit_record_failed: true,
+          payment_transaction_id: 'leg-1',
+          refund_evidence: {
+            'leg:leg-1': {
+              audit_record_failed: true,
+              payment_transaction_id: 'leg-1',
+              provider_refund_status: 'failed',
+            },
+          },
+        },
+        txn_id: 'leg-1',
+      }),
+    ]);
+
+    await expect(
+      fetchAuditBlockedCancellationLegIds({ order, supabase, transactions })
+    ).resolves.toEqual(new Set());
+  });
+
+  it('fails closed when reference and merged verdicts disagree', async () => {
+    const { supabase } = buildSupabase([
+      review({
+        issue_type: 'order_cancellation_refund_requires_review',
+        metadata: {
+          audit_record_failed: true,
+          payment_transaction_id: 'leg-1',
+          refund_evidence: {
+            'reference:PSK-1': {
+              audit_record_failed: true,
+              payment_transaction_id: 'leg-1',
+              provider_refund_status: 'failed',
+            },
+            'leg:leg-1': {
+              audit_record_failed: true,
+              payment_transaction_id: 'leg-1',
+              provider_refund_status: 'processed',
+            },
+          },
+        },
+        txn_id: 'leg-1',
+      }),
+    ]);
+
+    // Conflicting verdicts persist under distinct keys precisely so
+    // neither overwrites the other: mixed evidence blocks.
     await expect(
       fetchAuditBlockedCancellationLegIds({ order, supabase, transactions })
     ).resolves.toEqual(new Set(['leg-1']));

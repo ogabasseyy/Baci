@@ -244,16 +244,18 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
       .fn()
       .mockReturnValueOnce(selectQuery([]))
       .mockReturnValueOnce(selectQuery([]))
-      .mockReturnValueOnce(selectQuery([]))
       .mockReturnValueOnce(selectQuery([]));
     const supabase = { from } as unknown as SupabaseClient;
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
-    // Completed scan, stalled scan, then one completed recheck (a
-    // concurrent charge may have completed between the reads) and a
-    // final stalled scan before acknowledging the unknown refund.
-    expect(from).toHaveBeenCalledTimes(4);
+    // Completed scan, stalled scan, then one confirming completed
+    // recheck: the handoff ends on the completed scan with the ack
+    // immediately after, so a payment completing during the stalled
+    // scan is caught and no query reopens a completion window behind
+    // the confirming scan. A second stalled scan here would let a
+    // concurrent charge complete unseen into an acknowledged refund.
+    expect(from).toHaveBeenCalledTimes(3);
   });
 
   it('records the payment when the recheck finds a concurrent completion', async () => {

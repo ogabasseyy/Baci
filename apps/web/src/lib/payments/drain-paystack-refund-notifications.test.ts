@@ -289,4 +289,25 @@ describe('Paystack refund notifications', () => {
     // operational signal is this preflight count reaching the route.
     expect(summary.exhausted).toBe(2);
   });
+
+  it('reports dead letters even when the send budget is zero', async () => {
+    const db = database('processed_customer_email');
+    db.finish.limit.mockResolvedValueOnce({
+      data: [{ event_type: 'processed_customer_email', order_id: 'order-7' }],
+      count: 2,
+      error: null,
+    });
+
+    const summary = await drainPaystackRefundNotifications(
+      db as never,
+      mocks.sendEmail,
+      0
+    );
+
+    // No send is admitted, but the dead letters are still permanently
+    // undeliverable: suppressing the count would let the caller
+    // return success while notifications rot.
+    expect(summary).toEqual({ claimed: 0, sent: 0, failed: 0, exhausted: 2 });
+    expect(mocks.sendEmail).not.toHaveBeenCalled();
+  });
 });

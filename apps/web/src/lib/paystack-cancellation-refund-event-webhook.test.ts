@@ -188,7 +188,8 @@ describe('handlePaystackCancellationRefundEvent', () => {
 
     expect(mocks.reconcilePaystackRefundEvent).toHaveBeenCalledWith(
       db,
-      'PSK-1'
+      'PSK-1',
+      'unknown'
     );
     expect(response.status).toBe(200);
   });
@@ -203,7 +204,8 @@ describe('handlePaystackCancellationRefundEvent', () => {
 
     expect(mocks.reconcilePaystackRefundEvent).toHaveBeenCalledWith(
       db,
-      'PAYMENT-1'
+      'PAYMENT-1',
+      'unknown'
     );
     expect(response.status).toBe(200);
   });
@@ -221,9 +223,44 @@ describe('handlePaystackCancellationRefundEvent', () => {
 
     expect(mocks.reconcilePaystackRefundEvent).toHaveBeenCalledWith(
       db,
-      'PAYMENT-1'
+      'PAYMENT-1',
+      'unknown'
     );
     expect(response.status).toBe(200);
+  });
+
+  it('passes the failed verdict to the reference-only path', async () => {
+    const db = database(null);
+
+    const response = await handlePaystackCancellationRefundEvent(db, {
+      data: { status: 'failed', transaction_reference: 'PAYMENT-1' },
+      event: 'refund.failed',
+    });
+
+    // A definitively failed provider refund moved no money: the
+    // reference-only reviews filed downstream must carry the verdict
+    // so they never block a later genuine cancellation.
+    expect(mocks.reconcilePaystackRefundEvent).toHaveBeenCalledWith(
+      db,
+      'PAYMENT-1',
+      'failed'
+    );
+    expect(response.status).toBe(200);
+  });
+
+  it('coerces a non-string event verdict to unknown', async () => {
+    const db = database(null);
+
+    await handlePaystackCancellationRefundEvent(db, {
+      data: { status: 42, transaction_reference: 'PAYMENT-1' },
+      event: 'refund.failed',
+    });
+
+    expect(mocks.reconcilePaystackRefundEvent).toHaveBeenCalledWith(
+      db,
+      'PAYMENT-1',
+      'unknown'
+    );
   });
 
   it('acknowledges events without any usable reference', async () => {
@@ -305,7 +342,8 @@ describe('handlePaystackCancellationRefundEvent', () => {
     expect(db.from).not.toHaveBeenCalled();
     expect(mocks.reconcilePaystackRefundEvent).toHaveBeenCalledWith(
       db,
-      'PAYMENT-1'
+      'PAYMENT-1',
+      'unknown'
     );
     expect(response.status).toBe(200);
   });

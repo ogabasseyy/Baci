@@ -175,8 +175,19 @@ export async function handlePaystackCancellationRefundEvent(
     return NextResponse.json({ message: 'Refund event reconciled' });
   }
   if (paymentReference !== undefined) {
+    // The signed event's verdict travels downstream: a definitively
+    // failed provider refund moved no money, so reference-only reviews
+    // filed for it must not block a later genuine cancellation as if
+    // money moved. Coerced — a non-string verdict fails closed as
+    // non-failed rather than poisoning the exclusion check.
+    const eventStatus =
+      typeof data?.status === 'string' ? data.status : 'unknown';
     try {
-      await reconcilePaystackRefundEvent(supabase, paymentReference);
+      await reconcilePaystackRefundEvent(
+        supabase,
+        paymentReference,
+        eventStatus
+      );
     } catch (error) {
       logger.error({
         message: 'Paystack refund reconciliation failed',

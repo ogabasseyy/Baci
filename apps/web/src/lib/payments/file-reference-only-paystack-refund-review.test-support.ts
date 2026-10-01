@@ -27,6 +27,7 @@ export const reviewInput = {
   orderId: 'order-1',
   paymentId: 'payment-1',
   paymentReference: 'PSK-1',
+  providerRefundStatus: 'failed',
 };
 
 export const multiLegPayments = [

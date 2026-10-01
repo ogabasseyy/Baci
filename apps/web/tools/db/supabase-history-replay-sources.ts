@@ -13,6 +13,7 @@ import { GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './supabase-history-replay-
 import { INVENTORY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-inventory-pending-sources';
 import { JUMIA_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-jumia-pending-sources';
 import { NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-negotiation-pending-sources';
+import { PAYSTACK_CANCELLATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-paystack-cancellation-pending-sources';
 import { PRODUCTION_MAPPINGS } from './supabase-history-replay-production-mappings';
 import { REDVAULT_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-redvault-pending-sources';
 import { REPAIR_PICKUP_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-repair-pickup-pending-sources';
@@ -274,6 +275,7 @@ const PENDING_SOURCES = [
   '165332ec8ad70f8917e0faf608cdffee42d3607c252f1ddbc144ac8d13832fc0 20260928177000_requeue_pending_legs_covered_only_by_unlinked_refunds.sql',
   '12dd288fd2e509d80f0d40c8c408428da288faf3a2824aded55f55cab9a1e327 20260928178000_guard_partial_capture_balance_change.sql',
   '637e712088ac32b36a903c38defb4c96c3e5c8c0d74857cbea97302672893606 20260928179000_record_verified_paystack_cancellation_refund.sql',
+  PAYSTACK_CANCELLATION_PENDING_REPLAY_SOURCE_ROWS,
   PENDING_SOURCES_HEAD,
   STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_CLUSTER_GUIDE_PENDING_SOURCES,

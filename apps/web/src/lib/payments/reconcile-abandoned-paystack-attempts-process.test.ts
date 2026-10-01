@@ -72,6 +72,7 @@ function processClient({
   };
   const completedLookup = {
     eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
     neq: vi.fn().mockReturnThis(),
     limit: vi
       .fn()
@@ -180,6 +181,32 @@ describe('processAbandonedPaystackAttempt', () => {
     expect(s.held).toEqual([
       { id: 'attempt-1', reason: 'no_completed_payment_or_unavailable' },
     ]);
+    expect(db.completedLookup.in).toHaveBeenCalledWith('status', [
+      'completed',
+      'refund_pending',
+      'refunded',
+    ]);
+  });
+
+  it('verifies when only a refund-state leg supersedes the attempt', async () => {
+    const db = processClient({ completed: [{ id: 'refund-pending-leg' }] });
+    const s = summary();
+    const verify = vi.fn().mockResolvedValue(verified('failed'));
+
+    await processAbandonedPaystackAttempt(
+      db.client as never,
+      attempt as never,
+      {
+        scheduleAfter: vi.fn(),
+        summary: s,
+        verify: verify as never,
+      }
+    );
+
+    // The funded leg moved to a refund state the cancellation flow
+    // supports: verification still runs so a provider-confirmed
+    // abandoned attempt clears instead of blocking cancellation.
+    expect(verify).toHaveBeenCalledWith('BAC-OLD', expect.any(AbortSignal));
   });
 
   it('holds as unavailable when verification throws', async () => {

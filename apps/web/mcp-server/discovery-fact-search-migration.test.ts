@@ -80,11 +80,11 @@ it('serves variant recall through a published-merchant RPC instead of the staff-
 });
 
 it('moves index builders out of the exposed schema without changing the serving contract', () => {
-  const move = readFileSync(new URL('../../../supabase/migrations/20261001100000_move_discovery_builders_private.sql', import.meta.url), 'utf8');
+  const move = readFileSync(new URL('../../../supabase/migrations/20261001100000_move_discovery_builders.sql', import.meta.url), 'utf8');
   expect(move.startsWith('-- disable-transaction')).toBe(true);
-  expect(move).toContain('SET SCHEMA private');
-  expect(move).toContain('private.product_discovery_search_document_v4');
-  expect(move).toContain('USAGE ON SCHEMA private TO anon, authenticated');
+  expect(move).toContain('SET SCHEMA discovery');
+  expect(move).toContain('discovery.product_discovery_search_document_v4');
+  expect(move).toContain('USAGE ON SCHEMA discovery TO anon, authenticated');
   expect(move).toContain('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts(');
   expect(move).toContain('SECURITY INVOKER');
 });
@@ -96,7 +96,7 @@ it('indexes key-specific identity lexemes for capped retrieval', () => {
   expect(identity).toContain("'type' ||");
   expect(identity).toContain("'brand' ||");
   expect(identity).toContain("'model' ||");
-  expect(identity).toContain('private.discovery_identity_key');
+  expect(identity).toContain('discovery.discovery_identity_key');
   expect(identity).toContain('CREATE INDEX CONCURRENTLY products_discovery_identity_search_idx');
   expect(identity).toContain('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx');
 });

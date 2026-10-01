@@ -24,7 +24,7 @@ BEGIN
      NOT document @@ plainto_tsquery('simple', '8192MB laptop') THEN
     RAISE EXCEPTION 'Equivalent canonical capacity retrieval failed';
   END IF;
-  document := private.product_discovery_search_document_v3('Laptop', 'Acme', 'Laptops', '',
+  document := discovery.product_discovery_search_document_v3('Laptop', 'Acme', 'Laptops', '',
     '{"attributes":{"storage_gb":8,"ram_gb":8}}'::jsonb);
   IF NOT document @@ plainto_tsquery('simple', 'ram8gb') OR
      NOT document @@ plainto_tsquery('simple', 'storage8gb') OR
@@ -35,42 +35,42 @@ BEGIN
   IF document @@ plainto_tsquery('simple', 'ram8.5gb') THEN
     RAISE EXCEPTION 'Keyed numeric lexeme was fabricated';
   END IF;
-  document := private.product_discovery_search_document_v4('Headset', 'Acme', 'Audio',
+  document := discovery.product_discovery_search_document_v4('Headset', 'Acme', 'Audio',
     'USB-C accessory', '{"attributes":{"connector":"  Usb-C  "}}'::jsonb);
   IF NOT document @@ plainto_tsquery('simple',
       'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
         'connector' || pg_catalog.chr(31) || 'usb-c', 'UTF8'), 'sha256'), 'hex')) THEN
     RAISE EXCEPTION 'Correlated text attribute lexeme missed normalized connector value';
   END IF;
-  document := private.product_discovery_search_document_v4('Headset', 'Acme', 'Audio',
+  document := discovery.product_discovery_search_document_v4('Headset', 'Acme', 'Audio',
     'USB-C accessory', '{"attributes":{"connector":"Lightning"}}'::jsonb);
   IF document @@ plainto_tsquery('simple',
       'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
         'connector' || pg_catalog.chr(31) || 'usb-c', 'UTF8'), 'sha256'), 'hex')) THEN
     RAISE EXCEPTION 'Marketing text satisfied a verified connector constraint';
   END IF;
-  document := private.product_discovery_search_document_v4('Headset', 'Acme', 'Audio', '',
+  document := discovery.product_discovery_search_document_v4('Headset', 'Acme', 'Audio', '',
     '{"attributes":{"color":"USB-C"}}'::jsonb);
   IF document @@ plainto_tsquery('simple',
       'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
         'connector' || pg_catalog.chr(31) || 'usb-c', 'UTF8'), 'sha256'), 'hex')) THEN
     RAISE EXCEPTION 'USB-C under another attribute satisfied connector constraint';
   END IF;
-  document := private.product_discovery_search_document_v4('Headset', 'Acme', 'Audio', '',
+  document := discovery.product_discovery_search_document_v4('Headset', 'Acme', 'Audio', '',
     '{"attributes":{"connector":"Café   USB-C"}}'::jsonb);
   IF NOT document @@ plainto_tsquery('simple', 'fact' || pg_catalog.encode(
       extensions.digest(pg_catalog.convert_to('connector' || pg_catalog.chr(31) || pg_catalog.lower(
         pg_catalog.normalize('Café USB-C', 'NFC')), 'UTF8'), 'sha256'), 'hex')) THEN
     RAISE EXCEPTION 'Correlated text lexeme normalization diverged for Unicode or whitespace';
   END IF;
-  document := private.product_discovery_search_document_v3('Headset', 'Acme', 'Audio', '',
+  document := discovery.product_discovery_search_document_v3('Headset', 'Acme', 'Audio', '',
     '{"attributes":{"color":"black"}}'::jsonb);
   IF NOT document @@ plainto_tsquery('simple', 'black') OR
      NOT document @@ plainto_tsquery('simple', 'color') OR
      document @@ plainto_tsquery('simple', 'connector') THEN
     RAISE EXCEPTION 'Attribute key lexemes are missing or fabricated';
   END IF;
-  document := private.product_discovery_search_document_v5('Generic handset', 'Samsung', 'Smartphones',
+  document := discovery.product_discovery_search_document_v5('Generic handset', 'Samsung', 'Smartphones',
     'phone phone phone', '{"product_type":"phone","model":"ZX-42","compatible_with":["USB-C dock"]}'::jsonb);
   IF NOT document @@ plainto_tsquery('simple', 'typephone') OR
      NOT document @@ plainto_tsquery('simple', 'brandsamsung') OR
@@ -78,17 +78,17 @@ BEGIN
      NOT document @@ plainto_tsquery('simple', 'compatusb_c_dock') THEN
     RAISE EXCEPTION 'Keyed identity lexemes are missing';
   END IF;
-  document := private.product_discovery_search_document_v5('phone phone phone', 'Acme', 'Accessories',
+  document := discovery.product_discovery_search_document_v5('phone phone phone', 'Acme', 'Accessories',
     'phone accessory', '{"product_type":"accessory"}'::jsonb);
   IF document @@ plainto_tsquery('simple', 'typephone') THEN
     RAISE EXCEPTION 'Marketing text satisfied a keyed identity constraint';
   END IF;
-  document := private.product_discovery_search_document_v5('Generic', 'Acme', 'Smartphones', '',
+  document := discovery.product_discovery_search_document_v5('Generic', 'Acme', 'Smartphones', '',
     '{}'::jsonb);
   IF NOT document @@ plainto_tsquery('simple', 'typephone') THEN
     RAISE EXCEPTION 'Category fallback did not emit the canonical type lexeme';
   END IF;
-  document := private.product_discovery_search_document_v5('Generic', 'Acme', 'Accessories', '',
+  document := discovery.product_discovery_search_document_v5('Generic', 'Acme', 'Accessories', '',
     '{"product_type":"smartphones"}'::jsonb);
   IF NOT document @@ plainto_tsquery('simple', 'typephone') THEN
     RAISE EXCEPTION 'Type alias did not collapse to the canonical identity lexeme';

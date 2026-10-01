@@ -1,7 +1,7 @@
 import 'server-only';
 
 import type { PlacePrediction } from '@/lib/google-places';
-import { geoapifyAutocompleteResponseSchema } from '@/schemas/places-autocomplete';
+import { geoapifyAutocompleteResponseSchema } from '@/schemas/geoapify-autocomplete-response';
 import { reserveGeoapifyRequest } from './provider-budget';
 
 export class GeoapifyAutocompleteError extends Error {
@@ -40,7 +40,11 @@ export async function fetchGeoapifyPredictions(
     );
     return data.results
       .filter(
-        (result) => !country || result.country_code?.toLowerCase() === country
+        // The request already restricts country; reject only conflicting metadata.
+        (result) =>
+          !country ||
+          !result.country_code ||
+          result.country_code.toLowerCase() === country
       )
       .map((result) => {
         const placeId = `geoapify:${result.place_id}`;

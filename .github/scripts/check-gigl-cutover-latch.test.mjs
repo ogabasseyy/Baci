@@ -104,22 +104,33 @@ function checkoutAt(origin, root, name, sha) {
   return checkout;
 }
 
-function check({ latch = null, checkout }) {
+function check({ latch = null, installed = undefined, omitOutput = false, checkout }) {
   const root = dirname(checkout);
   const remote = join(root, 'workers');
   const trap = join(root, 'trap-cwd');
   if (latch !== null) {
     writeFileSync(join(remote, '.gigl-capability-smoke-ok'), latch);
   }
+  // Default: installed == latch (the bound steady state). Pass an explicit
+  // SHA to simulate drift, or null to simulate a missing marker file.
+  const installedSha = installed === undefined ? latch : installed;
+  if (installedSha !== null) {
+    writeFileSync(join(remote, 'app-checkout.sha'), installedSha);
+  }
   const output = join(root, 'github-output.env');
   writeFileSync(output, '');
+  const env = { ...process.env, GITHUB_OUTPUT: output, GITHUB_TOKEN: '' };
+  if (omitOutput) {
+    delete env.GITHUB_OUTPUT;
+  }
   const result = spawnSync('bash', [script, remote, checkout], {
     cwd: trap,
     encoding: 'utf8',
-    env: { ...process.env, GITHUB_OUTPUT: output, GITHUB_TOKEN: '' },
+    env,
   });
+  const raw = omitOutput ? result.stdout : readFileSync(output, 'utf8');
   const values = Object.fromEntries(
-    readFileSync(output, 'utf8')
+    raw
       .split('\n')
       .filter((line) => line.includes('='))
       .map((line) => {
@@ -191,11 +202,79 @@ describe('GIGL cutover latch check', () => {
   it('fails closed when the latched revision cannot be fetched', () => {
     const { origin, root, tip } = fixture();
     const checkout = checkoutAt(origin, root, 'checkout', tip);
+    const missing = '0'.repeat(40);
 
-    const { result, values } = check({ checkout, latch: '0'.repeat(40) });
+    const { result, values } = check({
+      checkout,
+      latch: missing,
+      installed: missing,
+    });
 
     assert.equal(result.status, 0, result.stderr);
     assert.equal(values.latched, 'true');
     assert.equal(values.tracking_stale, 'true');
+  });
+
+  it('reports unlatched when a promote replaced the smoked worker', () => {
+    const { origin, root, tip, base } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    // Rollback/manual-promote drift: latch proves tip, installed is base.
+    // The tracking diff tip..tip is empty, so only the installed-SHA
+    // binding fails closed here.
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      installed: base,
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'false');
+    assert.equal(values.tracking_stale, 'true');
+  });
+
+  it('reports unlatched when the installed SHA marker is missing', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      installed: null,
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'false');
+    assert.equal(values.tracking_stale, 'true');
+  });
+
+  it('reports unlatched when the installed SHA marker is corrupt', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      installed: 'not-a-sha',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'false');
+    assert.equal(values.tracking_stale, 'true');
+  });
+
+  it('emits the signal on stdout when GITHUB_OUTPUT is unset', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      omitOutput: true,
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'true');
+    assert.equal(values.tracking_stale, 'false');
   });
 });

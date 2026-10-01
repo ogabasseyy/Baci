@@ -110,7 +110,9 @@ jobs:
         # tracking paths changed since that revision. The marker above
         # proves install; the latch proves FUNCTION at a revision — but a
         # later unsmoked tracking commit must still block the bypass, so
-        # the gate requires latched AND NOT tracking_stale. This step
+        # the gate requires latched AND NOT tracking_stale. The latch is
+        # bound to the installed SHA: a manual promote of a different
+        # tree invalidates it until a fresh smoke re-latches. This step
         # never fails: every error reports latched=false / stale=true.
         # Tracking pushes don't need the signal (they run the smoke).
         # GITHUB_TOKEN is the auto-provided read-scoped job token (fetch

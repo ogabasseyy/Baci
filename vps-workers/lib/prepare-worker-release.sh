@@ -135,6 +135,10 @@ mkdir -p "$remote_dir"
 # smoke proved token+hook function, which a worker redeploy (same .env,
 # same token) does not invalidate. Without this exclude, --delete would
 # wipe it every deploy.sh run and re-freeze web pushes until re-smoked.
+# Safety net: check-gigl-cutover-latch.sh binds the latch to
+# app-checkout.sha at read time, so promoting a DIFFERENT tree (rollback
+# or the exit-42 unverified path) invalidates the preserved latch until
+# a fresh smoke re-latches the installed revision.
 rsync -a --delete --exclude='.env*' --exclude='logs' --exclude='locks' --exclude='.gigl-capability-smoke-ok' \
   "$staging_dir/" "$remote_dir/"
 mkdir -p "$remote_dir/logs" "$remote_dir/locks"

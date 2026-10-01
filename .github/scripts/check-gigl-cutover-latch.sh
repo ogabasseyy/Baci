@@ -8,7 +8,11 @@
 # the recorded revision — but a LATER tracking commit may have landed
 # since. The tracking_stale output diffs the latched revision against
 # HEAD over the deploy tracking filter, so a web push cannot bypass the
-# smoke while unsmoked tracking changes are in the tree.
+# smoke while unsmoked tracking changes are in the tree. The latch is
+# also bound to the INSTALLED worker: deploy.sh preserves the latch file
+# on promote, so without an installed-SHA check a manual promote of a
+# different tree (rollback, or the exit-42 unverified path) would leave a
+# latch that still validates while an unsmoked worker polls.
 set -euo pipefail
 
 remote_dir="${1:?remote dir is required}"
@@ -22,6 +26,17 @@ if [ -f "$latch_file" ]; then
   if [[ "$candidate" =~ ^[0-9a-f]{40}$ ]]; then
     latched=true
     latch_sha="$candidate"
+  fi
+fi
+
+if [ "$latched" = true ]; then
+  installed_sha=""
+  if [ -f "$remote_dir/app-checkout.sha" ]; then
+    installed_sha="$(tr -d '\r\n' < "$remote_dir/app-checkout.sha")"
+  fi
+  if [ "$installed_sha" != "$latch_sha" ]; then
+    latched=false
+    latch_sha=""
   fi
 fi
 
@@ -51,5 +66,9 @@ if [ "$latched" = true ]; then
   fi
 fi
 
-echo "latched=$latched" >> "$GITHUB_OUTPUT"
-echo "tracking_stale=$tracking_stale" >> "$GITHUB_OUTPUT"
+# Default to stdout outside the workflow (local debugging, VPS shell),
+# where GITHUB_OUTPUT is unset and `set -u` would abort before the
+# fail-closed outputs are emitted.
+output_file="${GITHUB_OUTPUT:-/dev/stdout}"
+echo "latched=$latched" >> "$output_file"
+echo "tracking_stale=$tracking_stale" >> "$output_file"

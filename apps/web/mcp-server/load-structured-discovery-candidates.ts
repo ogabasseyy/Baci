@@ -182,7 +182,8 @@ export async function loadStructuredDiscoveryCandidates({
     )
     : Promise.resolve({ value: { ids: [], truncated: false }, unavailable: false });
   const [lexical, semantic, facts] = await Promise.all([
-    lexicalPromise, semanticPromise, loadDiscoveryFactCandidates(factQuery || query || '(a & !a)', merchantId, supabase),
+    lexicalPromise, semanticPromise,
+    loadDiscoveryFactCandidates(factQuery || query || '(a & !a)', merchantId, supabase, { brand, category }),
   ]);
   // Correlated keyword/combined-document matches get one best lexical vote.
   const rankedIds = reciprocalRankFusion([lexical.ids, facts.ids], [semantic.value.ids]);

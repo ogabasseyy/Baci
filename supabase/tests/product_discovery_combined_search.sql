@@ -24,7 +24,7 @@ BEGIN
      NOT document @@ plainto_tsquery('simple', '8192MB laptop') THEN
     RAISE EXCEPTION 'Equivalent canonical capacity retrieval failed';
   END IF;
-  IF (SELECT prosecdef FROM pg_proc WHERE oid = 'public.search_product_discovery_facts(uuid,text,integer,integer)'::regprocedure) THEN
+  IF (SELECT prosecdef FROM pg_proc WHERE oid = 'public.search_product_discovery_facts(uuid,text,integer,integer,text,text)'::regprocedure) THEN
     RAISE EXCEPTION 'Fact retrieval must preserve invoker RLS';
   END IF;
 END;
@@ -70,6 +70,12 @@ BEGIN
   WHERE rn = 1;
   IF first_id::text <> 'cb58d110-0000-4000-8000-000000000204' THEN
     RAISE EXCEPTION 'Fact retrieval is not relevance ordered';
+  END IF;
+  SELECT array_agg(product_id) INTO or_ids
+  FROM public.search_product_discovery_facts('cb58d110-0000-4000-8000-000000000201',
+    'phone & 256gb', 100, 0, 'sams');
+  IF or_ids <> ARRAY['cb58d110-0000-4000-8000-000000000202']::uuid[] THEN
+    RAISE EXCEPTION 'Fact retrieval brand filter must narrow before the cap';
   END IF;
 END;
 $$;

@@ -38,9 +38,13 @@ CREATE INDEX CONCURRENTLY products_discovery_capacity_search_idx ON public.produ
 (public.product_discovery_search_document_v2(name, brand, category, description, discovery_metadata))
 WHERE status = 'active';
 
+-- The filter params change the signature, so drop the replaced overload instead
+-- of leaving a stale 4-argument version beside the new one.
+DROP FUNCTION IF EXISTS public.search_product_discovery_facts(uuid, text, integer, integer);
 CREATE OR REPLACE FUNCTION public.search_product_discovery_facts(
   merchant_id_param uuid, query_text text,
-  result_limit integer DEFAULT 100, result_offset integer DEFAULT 0
+  result_limit integer DEFAULT 100, result_offset integer DEFAULT 0,
+  brand_filter text DEFAULT NULL, category_filter text DEFAULT NULL
 ) RETURNS TABLE (product_id uuid, total_count bigint)
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path = ''
 AS $$
@@ -51,9 +55,17 @@ AS $$
   -- emitted terms, so no truncation can split the syntax; the length gate only
   -- rejects oversized non-builder input with an empty set instead of paying
   -- unbounded parse cost (worst-case schema-bound builder output is ~13KB).
+  -- Brand/category narrow before the cap with the same case-insensitive
+  -- substring semantics as post-hydration filters (strpos needs no LIKE
+  -- escaping); condition stays post-hydration because family matching has no
+  -- exact row predicate.
   SELECT p.id, count(*) OVER () FROM public.products p
   WHERE p.merchant_id = merchant_id_param AND p.status = 'active'
     AND pg_catalog.char_length(query_text) <= 16000
+    AND (brand_filter IS NULL OR pg_catalog.strpos(
+      pg_catalog.lower(p.brand), pg_catalog.lower(brand_filter)) > 0)
+    AND (category_filter IS NULL OR pg_catalog.strpos(
+      pg_catalog.lower(p.category), pg_catalog.lower(category_filter)) > 0)
     AND public.product_discovery_search_document_v2(p.name, p.brand, p.category,
       p.description, p.discovery_metadata)
       @@ pg_catalog.to_tsquery('simple'::regconfig, query_text)
@@ -63,7 +75,7 @@ AS $$
   LIMIT least(greatest(coalesce(result_limit, 100), 1), 100)
   OFFSET least(greatest(coalesce(result_offset, 0), 0), 500);
 $$;
-REVOKE ALL ON FUNCTION public.search_product_discovery_facts(uuid, text, integer, integer) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.search_product_discovery_facts(uuid, text, integer, integer) TO anon, authenticated;
+REVOKE ALL ON FUNCTION public.search_product_discovery_facts(uuid, text, integer, integer, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.search_product_discovery_facts(uuid, text, integer, integer, text, text) TO anon, authenticated;
 
 DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_combined_search_idx;

@@ -269,7 +269,10 @@ describe('send manual order document', () => {
     db.rpc.mockResolvedValueOnce({ data: { status: 'created' }, error: null });
     await expect(
       sendManualOrderDocument({ supabase: db.client, row })
-    ).rejects.toThrow();
+    ).resolves.toEqual({
+      status: 'skipped',
+      reason: 'claim_validation_failed',
+    });
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
@@ -455,5 +458,47 @@ describe('send manual order document', () => {
     expect(sendEmail.mock.calls[0][0].htmlContent).not.toContain(
       'play.google.com'
     );
+  });
+
+  it('skips without throwing when the order row fails validation', async () => {
+    const db = database({ total: -5 });
+    const result = await sendManualOrderDocument({
+      supabase: db.client,
+      row,
+    });
+    expect(result).toEqual({
+      status: 'skipped',
+      reason: 'order_validation_failed',
+    });
+    expect(db.rpc).not.toHaveBeenCalled();
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('skips without throwing when the merchant row fails validation', async () => {
+    const db = database({}, { merchantOverride: { slug: 123 } });
+    const result = await sendManualOrderDocument({
+      supabase: db.client,
+      row,
+    });
+    expect(result).toEqual({
+      status: 'skipped',
+      reason: 'merchant_validation_failed',
+    });
+    expect(db.rpc).not.toHaveBeenCalled();
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('skips without throwing when the claim payload fails validation', async () => {
+    const db = database();
+    db.rpc.mockResolvedValueOnce({ data: { status: 'bogus' }, error: null });
+    const result = await sendManualOrderDocument({
+      supabase: db.client,
+      row,
+    });
+    expect(result).toEqual({
+      status: 'skipped',
+      reason: 'claim_validation_failed',
+    });
+    expect(sendEmail).not.toHaveBeenCalled();
   });
 });

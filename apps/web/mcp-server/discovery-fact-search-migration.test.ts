@@ -82,11 +82,31 @@ it('serves variant recall through a published-merchant RPC instead of the staff-
 it('moves index builders out of the exposed schema without changing the serving contract', () => {
   const move = readFileSync(new URL('../../../supabase/migrations/20261001100000_move_discovery_builders.sql', import.meta.url), 'utf8');
   expect(move.startsWith('-- disable-transaction')).toBe(true);
-  expect(move).toContain('SET SCHEMA discovery');
+  expect(move).toContain('CREATE OR REPLACE FUNCTION discovery.product_discovery_search_document_v3(');
+  expect(move).toContain('CREATE OR REPLACE FUNCTION discovery.product_discovery_search_document_v4(');
   expect(move).toContain('discovery.product_discovery_search_document_v4');
   expect(move).toContain('USAGE ON SCHEMA discovery TO anon, authenticated');
   expect(move).toContain('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts(');
   expect(move).toContain('SECURITY INVOKER');
+});
+
+it('stages the builder move so a mid-migration failure stays retry-safe', () => {
+  const move = readFileSync(new URL('../../../supabase/migrations/20261001100000_move_discovery_builders.sql', import.meta.url), 'utf8');
+  const copyV3 = move.indexOf('CREATE OR REPLACE FUNCTION discovery.product_discovery_search_document_v3(');
+  const copyV4 = move.indexOf('CREATE OR REPLACE FUNCTION discovery.product_discovery_search_document_v4(');
+  const switchIndex = move.indexOf('CREATE INDEX CONCURRENTLY products_discovery_correlated_search_idx');
+  const switchRpc = move.indexOf('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts(');
+  const dropV4 = move.indexOf('DROP FUNCTION IF EXISTS public.product_discovery_search_document_v4(');
+  const dropV3 = move.indexOf('DROP FUNCTION IF EXISTS public.product_discovery_search_document_v3(');
+  // Copy-first: both discovery copies exist before the serving index or RPC switches.
+  expect(copyV3).toBeGreaterThanOrEqual(0);
+  expect(copyV4).toBeGreaterThan(copyV3);
+  expect(switchIndex).toBeGreaterThan(copyV4);
+  expect(switchRpc).toBeGreaterThan(switchIndex);
+  // Switch-then-remove: the serving contract moves before the public originals drop.
+  expect(dropV4).toBeGreaterThan(switchRpc);
+  expect(dropV3).toBeGreaterThan(dropV4);
+  expect(move).not.toContain('SET SCHEMA');
 });
 
 it('indexes key-specific identity lexemes for capped retrieval', () => {

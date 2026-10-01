@@ -87,4 +87,30 @@ describe('GET /.well-known/mcp/server-card.json', () => {
       toolsByName.get('add_to_cart').inputSchema.properties
     ).not.toHaveProperty('session_id');
   });
+
+  it('publishes the search_products intent contract', async () => {
+    const { GET } = await import('./route');
+    const body = await GET().json();
+    const searchProducts = body.tools.find(
+      (tool: { name: string }) => tool.name === 'search_products'
+    );
+
+    expect(searchProducts.description).toContain('intent');
+    expect(searchProducts.inputSchema.properties.intent).toMatchObject({
+      type: 'object',
+      required: ['alternatives'],
+      properties: {
+        alternatives: expect.objectContaining({
+          minItems: 1,
+          maxItems: 5,
+        }),
+      },
+    });
+    expect(
+      searchProducts.inputSchema.properties.intent.properties.alternatives.items
+        .properties.attributes.items.properties.key.enum
+    ).toEqual(
+      expect.arrayContaining(['storage_gb', 'ram_gb', 'power_w', 'color'])
+    );
+  });
 });

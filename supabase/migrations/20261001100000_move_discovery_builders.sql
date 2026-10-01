@@ -6,16 +6,66 @@
 -- delegates boundary forbids re-granting API roles USAGE on private, while
 -- the SECURITY INVOKER serving query must evaluate the builders at rank time
 -- as its caller.
+--
+-- The move is staged because this migration runs outside a transaction
+-- (CREATE INDEX CONCURRENTLY): a failure between statements must never leave
+-- the serving RPC pointing at a dropped builder. Stage 1 copies the builders
+-- into discovery while the public originals keep serving; stage 2 switches
+-- the index and RPC to the copies; stage 3 removes the originals. Every
+-- statement is idempotent (CREATE OR REPLACE / IF EXISTS), so re-running the
+-- file after a mid-migration failure converges on the same end state.
 CREATE SCHEMA IF NOT EXISTS discovery;
+GRANT USAGE ON SCHEMA discovery TO anon, authenticated;
 
-DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx;
+-- Stage 1: copy the v3 builder; public.v3 keeps serving until stage 2.
+-- Body is identical to 20261001070000_keyed_discovery_numeric_facts.sql.
+CREATE OR REPLACE FUNCTION discovery.product_discovery_search_document_v3(
+  product_name text, product_brand text, product_category text,
+  product_description text, facts jsonb
+) RETURNS tsvector
+LANGUAGE sql IMMUTABLE PARALLEL SAFE SECURITY INVOKER SET search_path = ''
+AS $$
+  SELECT pg_catalog.to_tsvector('simple'::regconfig,
+    coalesce(product_name, '') || ' ' || coalesce(product_brand, '') || ' ' ||
+    coalesce(product_category, '') || ' ' || coalesce(product_description, ''))
+    || pg_catalog.jsonb_to_tsvector('simple'::regconfig,
+      coalesce(facts, '{}'::jsonb), '["string", "numeric"]'::jsonb)
+    || pg_catalog.to_tsvector('simple'::regconfig, coalesce((
+      SELECT pg_catalog.string_agg(value || ' ' || unit || ' ' || value || unit || ' ' ||
+        attribute_prefix || value || unit || ' ' || attribute_prefix || unit, ' ')
+      FROM (
+        SELECT pg_catalog.trim_scale((facts -> 'attributes' ->> key)::numeric)::text AS value,
+          unit, attribute_prefix
+        FROM (VALUES
+          ('storage_gb', 'GB', 'storage'), ('ram_gb', 'GB', 'ram'),
+          ('power_w', 'W', 'power'), ('screen_inches', 'inch', 'screen'),
+          ('refresh_hz', 'Hz', 'refresh')) AS units(key, unit, attribute_prefix)
+        WHERE pg_catalog.jsonb_typeof(facts -> 'attributes' -> key) = 'number'
+        UNION ALL
+        SELECT pg_catalog.trim_scale((facts -> 'attributes' ->> key)::numeric / 1024)::text,
+          'TB', attribute_prefix
+        FROM (VALUES ('storage_gb', 'storage'), ('ram_gb', 'ram')) AS capacities(key, attribute_prefix)
+        WHERE pg_catalog.jsonb_typeof(facts -> 'attributes' -> key) = 'number'
+        UNION ALL
+        SELECT pg_catalog.trim_scale((facts -> 'attributes' ->> key)::numeric * 1024)::text,
+          'MB', attribute_prefix
+        FROM (VALUES ('storage_gb', 'storage'), ('ram_gb', 'ram')) AS capacities(key, attribute_prefix)
+        WHERE pg_catalog.jsonb_typeof(facts -> 'attributes' -> key) = 'number'
+      ) AS values_with_units
+    ), ''))
+    -- Attribute keys are lexemes too, so a text constraint retrieves only
+    -- documents carrying that key: color=black must not match a document
+    -- that merely mentions black. Keys tokenize the same way as values.
+    || pg_catalog.to_tsvector('simple'::regconfig,
+      CASE WHEN pg_catalog.jsonb_typeof(facts -> 'attributes') = 'object'
+      THEN coalesce((SELECT pg_catalog.string_agg(k, ' ')
+        FROM pg_catalog.jsonb_object_keys(facts -> 'attributes') AS k), '')
+      ELSE '' END);
+$$;
 
-ALTER FUNCTION public.product_discovery_search_document_v3(text, text, text, text, jsonb)
-  SET SCHEMA discovery;
-ALTER FUNCTION public.product_discovery_search_document_v4(text, text, text, text, jsonb)
-  SET SCHEMA discovery;
-
--- v4's body references public.v3; repoint it after the move.
+-- Stage 1: copy the v4 builder over the discovery v3 copy. Body is identical
+-- to 20261001080000_correlated_text_attribute_search.sql except the inner
+-- call, which targets the copy so the pair is self-contained.
 CREATE OR REPLACE FUNCTION discovery.product_discovery_search_document_v4(
   product_name text, product_brand text, product_category text,
   product_description text, facts jsonb
@@ -48,6 +98,8 @@ AS $$
     END);
 $$;
 
+-- Stage 2: switch the serving index and RPC to the discovery copies.
+DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx;
 CREATE INDEX CONCURRENTLY products_discovery_correlated_search_idx ON public.products USING gin
 (discovery.product_discovery_search_document_v4(name, brand, category, description, discovery_metadata))
 WHERE status = 'active';
@@ -80,4 +132,7 @@ $$;
 REVOKE ALL ON FUNCTION public.search_product_discovery_facts(uuid, text, integer, integer, text, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.search_product_discovery_facts(uuid, text, integer, integer, text, text) TO anon, authenticated;
 
-GRANT USAGE ON SCHEMA discovery TO anon, authenticated;
+-- Stage 3: remove the public originals now that nothing references them.
+-- v4 first: its body depends on v3.
+DROP FUNCTION IF EXISTS public.product_discovery_search_document_v4(text, text, text, text, jsonb);
+DROP FUNCTION IF EXISTS public.product_discovery_search_document_v3(text, text, text, text, jsonb);

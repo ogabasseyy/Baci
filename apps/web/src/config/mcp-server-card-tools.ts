@@ -27,16 +27,90 @@ const READ_ONLY_TOOL_ANNOTATIONS = {
   readOnlyHint: true,
 } as const;
 
+const SEARCH_PRODUCTS_INTENT_TEXT = {
+  type: 'string',
+  minLength: 1,
+  maxLength: 100,
+} as const;
+
+const SEARCH_PRODUCTS_INTENT_SCHEMA = {
+  description:
+    'Structured shopper intent. alternatives are OR; each branch is AND. Use singular canonical product types phone/laptop/tablet/charger/cable/security_camera/fragrance_diffuser. Brand means manufacturer, compatible_with means supported device model. Attributes use canonical units (storage_gb/ram_gb in GB, power_w in watts) and eq/gte/lte. Use an empty alternative for broad discovery; never invent unspecified constraints.',
+  type: 'object',
+  properties: {
+    alternatives: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 5,
+      items: {
+        type: 'object',
+        properties: {
+          product_type: SEARCH_PRODUCTS_INTENT_TEXT,
+          brands: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 10,
+            items: SEARCH_PRODUCTS_INTENT_TEXT,
+          },
+          model: SEARCH_PRODUCTS_INTENT_TEXT,
+          compatible_with: SEARCH_PRODUCTS_INTENT_TEXT,
+          attributes: {
+            type: 'array',
+            maxItems: 10,
+            items: {
+              type: 'object',
+              properties: {
+                key: {
+                  type: 'string',
+                  enum: [
+                    'storage_gb',
+                    'ram_gb',
+                    'power_w',
+                    'screen_inches',
+                    'refresh_hz',
+                    'color',
+                    'connector',
+                    'processor',
+                    'connectivity',
+                  ],
+                },
+                operator: { type: 'string', enum: ['eq', 'gte', 'lte'] },
+                value: {
+                  anyOf: [
+                    SEARCH_PRODUCTS_INTENT_TEXT,
+                    { type: 'number', minimum: 0 },
+                  ],
+                },
+              },
+              required: ['key', 'operator', 'value'],
+              additionalProperties: false,
+            },
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+    excluded_product_types: {
+      type: 'array',
+      maxItems: 10,
+      items: SEARCH_PRODUCTS_INTENT_TEXT,
+    },
+  },
+  required: ['alternatives'],
+  additionalProperties: false,
+} as const;
+
 export const PUBLIC_MCP_TOOLS = [
   {
     name: 'search_products',
     title: 'Search Products',
     description:
-      'Search for products in Ogabassey store. Returns rich details including variants, stock confidence, and price trends. Always use this for general product queries.',
+      'Search for products in Ogabassey store. Returns rich details including variants, stock confidence, and price trends. Always use this for general product queries. Always supply intent with explicit shopper constraints and query with retrieval keywords.',
     inputSchema: {
       $schema: DRAFT_07_SCHEMA,
       type: 'object',
       properties: {
+        intent: SEARCH_PRODUCTS_INTENT_SCHEMA,
         query: {
           description: 'Search query (product name, brand, or keywords)',
           type: 'string',

@@ -4,6 +4,7 @@ import { sendOrderFulfillmentNotification } from '@/lib/order-fulfillment-notifi
 import { beginOrderNotificationOutboxDispatch } from '@/lib/order-notification-outbox-dispatch';
 import { resetOrderNotificationOutboxDispatch } from '@/lib/order-notification-outbox-dispatch-reset';
 import { resolveOrderNotificationOutboxShipmentMetadata } from '@/lib/order-notification-outbox-shipment-metadata';
+import { sendManualOrderDocument } from '@/lib/send-manual-order-document';
 import type { createServiceClient } from '@/lib/supabase/service';
 
 const RETRY_BASE_DELAY_MS = 5 * 60 * 1000;
@@ -13,7 +14,12 @@ const PROCESS_CONCURRENCY = 5;
 export const claimedOrderNotificationOutboxRowSchema = z.object({
   attempt_count: z.number().int().nonnegative(),
   claim_owner: z.string().min(1),
-  event_type: z.enum(['order_shipped', 'order_delivered']),
+  event_type: z.enum([
+    'order_shipped',
+    'order_delivered',
+    'manual_order_receipt',
+    'manual_order_invoice',
+  ]),
   event_sequence: z.number().int().positive().optional(),
   id: z.string().min(1),
   max_attempts: z.number().int().positive(),
@@ -173,34 +179,42 @@ async function processClaimedRow(
     const shipmentMetadata = resolveOrderNotificationOutboxShipmentMetadata(
       row.metadata
     );
-    const result = await sendOrderFulfillmentNotification({
-      beforeProviderDispatch: () =>
-        beginOrderNotificationOutboxDispatch({
-          claimId: row.id,
-          claimOwner: row.claim_owner,
-          eventType: row.event_type,
-          merchantId: row.merchant_id,
-          orderId: row.order_id,
-          supabase,
-        }),
-      resetProviderDispatch: () =>
-        resetOrderNotificationOutboxDispatch({
-          claimId: row.id,
-          claimOwner: row.claim_owner,
-          eventType: row.event_type,
-          merchantId: row.merchant_id,
-          orderId: row.order_id,
-          supabase,
-        }),
-      courierName: shipmentMetadata.courierName,
-      estimatedDelivery: shipmentMetadata.estimatedDelivery,
-      eventType: row.event_type,
-      merchantId: row.merchant_id,
-      orderId: row.order_id,
-      supabase,
-      trackingNumber: shipmentMetadata.trackingNumber,
-      trackingToken: shipmentMetadata.trackingToken,
-    });
+    const eventType = row.event_type;
+    const result =
+      eventType === 'manual_order_receipt' ||
+      eventType === 'manual_order_invoice'
+        ? await sendManualOrderDocument({
+            supabase,
+            row: { ...row, event_type: eventType },
+          })
+        : await sendOrderFulfillmentNotification({
+            beforeProviderDispatch: () =>
+              beginOrderNotificationOutboxDispatch({
+                claimId: row.id,
+                claimOwner: row.claim_owner,
+                eventType,
+                merchantId: row.merchant_id,
+                orderId: row.order_id,
+                supabase,
+              }),
+            resetProviderDispatch: () =>
+              resetOrderNotificationOutboxDispatch({
+                claimId: row.id,
+                claimOwner: row.claim_owner,
+                eventType,
+                merchantId: row.merchant_id,
+                orderId: row.order_id,
+                supabase,
+              }),
+            courierName: shipmentMetadata.courierName,
+            estimatedDelivery: shipmentMetadata.estimatedDelivery,
+            eventType,
+            merchantId: row.merchant_id,
+            orderId: row.order_id,
+            supabase,
+            trackingNumber: shipmentMetadata.trackingNumber,
+            trackingToken: shipmentMetadata.trackingToken,
+          });
 
     if (result.status === 'sent') {
       summary.sent += 1;

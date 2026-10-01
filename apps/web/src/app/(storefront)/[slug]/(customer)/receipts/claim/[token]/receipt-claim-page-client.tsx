@@ -187,7 +187,7 @@ export default function ReceiptClaimPageClient({
               </CardTitle>
               <CardDescription className="mt-2 text-base">
                 {preview
-                  ? `${preview.merchantName} has moved your receipt to the mobile app.`
+                  ? `Your ${preview.merchantName} purchase is ready to link to your account.`
                   : 'Loading your receipt claim.'}
               </CardDescription>
             </div>

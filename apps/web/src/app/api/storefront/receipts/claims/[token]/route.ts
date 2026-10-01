@@ -171,6 +171,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const result = parsedResult.data;
 
+    if (result.status === 'email_unverified') {
+      return NextResponse.json(
+        {
+          error: 'Verify your email address before claiming this receipt',
+          code: 'EMAIL_UNVERIFIED',
+        },
+        { status: 403 }
+      );
+    }
+
     if (result.status === 'not_found') {
       return NextResponse.json(
         { error: 'Receipt claim link not found' },

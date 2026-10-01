@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const sendNotification = vi.hoisted(() => vi.fn());
 const beginDispatch = vi.hoisted(() => vi.fn());
+const sendDocument = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/send-manual-order-document', () => ({
+  sendManualOrderDocument: sendDocument,
+}));
 vi.mock('@/lib/order-fulfillment-notification', () => ({
   sendOrderFulfillmentNotification: sendNotification,
 }));
@@ -55,6 +59,52 @@ describe('order notification outbox worker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     beginDispatch.mockResolvedValue(undefined);
+  });
+
+  it('drains a manual receipt through the document sender rather than the shipping sender', async () => {
+    const { client, builder } = createSupabase([null]);
+    sendDocument.mockResolvedValue({
+      status: 'sent',
+      messageId: 'document-message',
+    });
+    const summary = createOrderNotificationCronSummary(1);
+    await processClaimedOrderNotificationRows(
+      client as never,
+      [{ ...row, event_type: 'manual_order_receipt' }],
+      summary
+    );
+    expect(sendDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        row: expect.objectContaining({ order_id: row.order_id }),
+      })
+    );
+    expect(sendNotification).not.toHaveBeenCalled();
+    expect(summary.sent).toBe(1);
+    expect(builder.update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'sent' })
+    );
+  });
+
+  it('does not retry an ambiguous manual receipt delivery', async () => {
+    const { client, builder } = createSupabase([null]);
+    sendDocument.mockResolvedValue({
+      status: 'failed',
+      error: 'timeout',
+      deliveryOutcome: 'unknown',
+    });
+    const summary = createOrderNotificationCronSummary(1);
+    await processClaimedOrderNotificationRows(
+      client as never,
+      [{ ...row, event_type: 'manual_order_invoice' }],
+      summary
+    );
+    expect(summary).toMatchObject({ skipped: 1, retried: 0 });
+    expect(builder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skip_reason: 'delivery_outcome_unknown',
+        status: 'skipped',
+      })
+    );
   });
 
   it('marks successful sends as sent while preserving existing metadata', async () => {

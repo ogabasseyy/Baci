@@ -15,9 +15,14 @@ vi.mock('@/lib/supabase/service', () => ({
 }));
 
 const mockSendOrderFulfillmentNotification = vi.hoisted(() => vi.fn());
+const mockSendManualOrderDocument = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/order-fulfillment-notification', () => ({
   sendOrderFulfillmentNotification: mockSendOrderFulfillmentNotification,
+}));
+
+vi.mock('@/lib/send-manual-order-document', () => ({
+  sendManualOrderDocument: mockSendManualOrderDocument,
 }));
 
 import { sendOrderFulfillmentNotification } from '@/lib/order-fulfillment-notification';
@@ -79,6 +84,10 @@ describe('GET /api/cron/order-notifications', () => {
       error: null,
     });
     mockSupabase.from.mockReturnValue(createUpdateBuilder());
+    mockSendManualOrderDocument.mockResolvedValue({
+      status: 'sent',
+      messageId: 'manual-document-1',
+    });
     mockSendOrderFulfillmentNotification
       .mockResolvedValueOnce({ status: 'sent', messageId: 'msg-1' })
       .mockResolvedValueOnce({
@@ -98,6 +107,7 @@ describe('GET /api/cron/order-notifications', () => {
 
     expect(response.status).toBe(401);
     expect(mockSupabase.rpc).not.toHaveBeenCalled();
+    expect(mockSendManualOrderDocument).not.toHaveBeenCalled();
   });
 
   it('returns 500 when claiming outbox rows fails', async () => {
@@ -169,6 +179,33 @@ describe('GET /api/cron/order-notifications', () => {
       'claim_order_notification_outbox',
       expect.objectContaining({ p_batch_size: 7 })
     );
+  });
+
+  it('dispatches manual documents through the authenticated cron worker', async () => {
+    const row = {
+      claim_owner: 'web-cron-test',
+      attempt_count: 1,
+      event_type: 'manual_order_receipt',
+      id: 'outbox-manual-1',
+      max_attempts: 5,
+      merchant_id: 'merchant-1',
+      order_id: 'order-manual-1',
+    };
+    mockSupabase.rpc.mockResolvedValueOnce({ data: [row], error: null });
+
+    const response = await GET(cronRequest());
+
+    expect(response.status).toBe(200);
+    expect(mockSendManualOrderDocument).toHaveBeenCalledWith({
+      supabase: mockSupabase,
+      row: expect.objectContaining(row),
+    });
+    expect(sendOrderFulfillmentNotification).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toMatchObject({
+      claimed: 1,
+      sent: 1,
+      success: true,
+    });
   });
 
   it('clamps oversized batch sizes', async () => {

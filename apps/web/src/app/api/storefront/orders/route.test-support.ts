@@ -82,6 +82,7 @@ export function createSupabaseMock(input?: {
       currency: string;
       external_source?: string | null;
       import_job_id?: string | null;
+      recorded_by_user_id?: string | null;
       payment_status: string;
       shipping_status: string;
       shipping_address: Record<string, unknown> | null;

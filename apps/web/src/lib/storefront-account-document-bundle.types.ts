@@ -42,6 +42,7 @@ export interface StorefrontAccountDocumentOrderRow {
   order_number: string;
   external_source?: string | null;
   import_job_id?: string | null;
+  recorded_by_user_id?: string | null;
   created_at: string;
   transaction_date?: string | null;
   updated_at: string | null;

@@ -252,6 +252,7 @@ export const redeemReceiptClaimResultSchema = z.object({
     'already_used',
     'customer_link_failed',
     'email_mismatch',
+    'email_unverified',
     'expired',
     'not_found',
     'ok',

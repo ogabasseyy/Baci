@@ -182,6 +182,7 @@ function StandardReceiptsPage({
   const archiveOrders = orders.filter(
     (order) =>
       Boolean(order.receipt_eligible) ||
+      Boolean(order.manual_document_available) ||
       ARCHIVE_STATUSES.has(normalizeShippingStatus(order.shipping_status)) ||
       order.payment_method === 'invoice' ||
       order.paymentMethod === 'invoice'

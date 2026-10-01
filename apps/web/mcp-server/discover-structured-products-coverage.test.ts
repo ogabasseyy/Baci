@@ -159,4 +159,11 @@ describe('discoverStructuredProducts', () => {
     const result = await discoverStructuredProducts(input(fixture.supabase, intent({product_type: 'phone'}), {args: {condition: 'open_box'}}));
     expect(result.selectedProducts.map(({product}) => product.id)).toEqual(['offer-phone']);
   });
+
+  it('hydrates used variants when the parent condition snapshot is stale', async () => {
+    const phone = product('used-variant-phone', { product_type: 'phone' }, { condition: 'new', available_conditions: [], has_variants: true });
+    const fixture = client({ products: [phone], variants: [{ id: 'used-variant', product_id: 'used-variant-phone', condition: 'uk_used', attributes: { storage: '256GB' }, price_override: 100, stock_quantity: 2 }] });
+    const result = await discoverStructuredProducts(input(fixture.supabase, intent({ product_type: 'phone' }), { args: { condition: 'used' } }));
+    expect(result.selectedProducts[0]?.selectedOption).toMatchObject({ kind: 'variant', option_id: 'used-variant', condition: 'used' });
+  });
 });

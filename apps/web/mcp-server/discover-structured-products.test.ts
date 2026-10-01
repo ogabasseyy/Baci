@@ -205,28 +205,6 @@ describe('discoverStructuredProducts', () => {
     expect(result.selectedProducts[0]?.displayCondition).toBe('used');
   });
 
-  it('hydrates used variants when the parent condition snapshot is stale', async () => {
-    const phone = product('used-variant-phone', { product_type: 'phone' }, {
-      condition: 'new', available_conditions: [], has_variants: true,
-    });
-    const fixture = client({
-      products: [phone],
-      variants: [{
-        id: 'used-variant', product_id: 'used-variant-phone', condition: 'uk_used',
-        attributes: { storage: '256GB' }, price_override: 100, stock_quantity: 2,
-      }],
-    });
-    const result = await discoverStructuredProducts(input(
-      fixture.supabase,
-      intent({ product_type: 'phone' }),
-      { args: { condition: 'used' } }
-    ));
-
-    expect(result.selectedProducts[0]?.selectedOption).toMatchObject({
-      kind: 'variant', option_id: 'used-variant', condition: 'used',
-    });
-  });
-
   it('allows a zero-stock matching variant when stock tracking is disabled', async () => {
     const phone = product('untracked-phone', { product_type: 'phone' }, {
       has_variants: true, manage_stock: false,

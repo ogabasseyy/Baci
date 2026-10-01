@@ -152,4 +152,11 @@ describe('discoverStructuredProducts', () => {
     expect(result.selectedProducts).toEqual([]);
     expect(result.coverage).toBe('partial');
   });
+
+  it('hydrates condition offers before condition filtering when the row snapshot is stale', async () => {
+    const row = product('offer-phone', {product_type: 'phone'}, {has_condition_offers: true, available_conditions: []});
+    const fixture = client({products: [row], offers: [{id: 'ob-1', product_id: 'offer-phone', merchant_id: 'merchant-1', status: 'active', condition: 'open_box', price: 400, compare_at_price: null, stock_quantity: 1}]});
+    const result = await discoverStructuredProducts(input(fixture.supabase, intent({product_type: 'phone'}), {args: {condition: 'open_box'}}));
+    expect(result.selectedProducts.map(({product}) => product.id)).toEqual(['offer-phone']);
+  });
 });

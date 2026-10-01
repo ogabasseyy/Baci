@@ -33,6 +33,11 @@ function likeContains(value: string) {
 
 type SearchProductsArgs = { sort: 'relevance' };
 
+// Brand/category narrow server-side for the facts and browse sources, but the
+// lexical RPC keeps the legacy contract (null filters, post-filter with an
+// over-fetch buffer), so highly selective filters can fill the lexical cap
+// with rows the post-filter drops. The scan reports partial coverage instead
+// of silently dropping matches.
 async function loadLexicalIds(
   query: string,
   merchantId: string,

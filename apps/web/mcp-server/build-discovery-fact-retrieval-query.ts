@@ -44,6 +44,16 @@ function attributeTerms(key: string, value: string | number): string[] {
   return sanitizeTerm(value);
 }
 
+// Ranges cannot be tsquery terms, but the combined document carries unit
+// lexemes (gb, w, inch, hz) for every numeric spec, so a range retrieves
+// documents that have any value in those units and the matcher enforces the
+// bound. (Attribute keys themselves are not indexed, only values and units.)
+function rangeTerms(key: string, value: string | number): string[] {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return [];
+  const unit = NUMERIC_UNITS[key];
+  return unit ? [unit.toLowerCase()] : [];
+}
+
 function groupQuery(terms: string[]): string | undefined {
   if (terms.length === 0) return undefined;
   return `(${terms.slice(0, MAX_TERMS_PER_GROUP).join(' & ')})`;
@@ -62,8 +72,8 @@ function typeTerms(productType: string): string[] {
 
 /** tsquery text for the facts index, built from structured alternatives so
  * shopper wording never constrains candidate recall. Groups join with OR and
- * terms with AND, matching the matcher's branch semantics; range bounds are
- * omitted because the matcher, not retrieval, enforces ranges. */
+ * terms with AND, matching the matcher's branch semantics; ranges retrieve
+ * by unit lexeme while the matcher enforces the bound. */
 export function buildDiscoveryFactRetrievalQuery(intent: McpDiscoveryIntent, fallbackQuery = ''): string {
   const groups: string[] = [];
   for (const alternative of intent.alternatives) {
@@ -75,8 +85,9 @@ export function buildDiscoveryFactRetrievalQuery(intent: McpDiscoveryIntent, fal
     if (alternative.model) terms.push(...sanitizeTerm(alternative.model));
     if (alternative.compatible_with) terms.push(...sanitizeTerm(alternative.compatible_with));
     for (const attribute of alternative.attributes ?? []) {
-      if (attribute.operator !== 'eq') continue;
-      terms.push(...attributeTerms(attribute.key, attribute.value));
+      terms.push(...(attribute.operator === 'eq'
+        ? attributeTerms(attribute.key, attribute.value)
+        : rangeTerms(attribute.key, attribute.value)));
     }
     const group = groupQuery(terms);
     if (group) groups.push(group);

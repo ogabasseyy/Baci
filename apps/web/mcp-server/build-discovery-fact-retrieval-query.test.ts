@@ -22,12 +22,18 @@ it('retrieves every spelling selection treats as the same type', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ product_type: 'headphones' }))).toBe('(headphones)');
 });
 
-it('emits unit-suffixed equality values and omits range bounds', () => {
+it('emits unit-suffixed equality values and unit lexemes for ranges', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ attributes: [
     { key: 'power_w', operator: 'eq', value: 30 },
     { key: 'storage_gb', operator: 'gte', value: 256 },
     { key: 'color', operator: 'eq', value: 'black' },
-  ] }))).toBe('(30w & black)');
+  ] }))).toBe('(30w & gb & black)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ attributes: [
+    { key: 'ram_gb', operator: 'gte', value: 16 },
+  ] }))).toBe('(gb)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ attributes: [
+    { key: 'color', operator: 'gte', value: 'black' },
+  ] }))).toBe('(a & !a)');
 });
 
 it('falls back to sanitized shopper wording and never emits empty syntax', () => {

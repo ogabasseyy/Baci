@@ -49,7 +49,7 @@ export async function deliverAdminPushTest(
 
   try {
     const expo = new Expo({ accessToken: readServerExpoAccessToken() });
-    const tickets = await sendPushNotificationChunks(expo, messages);
+    const { tickets } = await sendPushNotificationChunks(expo, messages);
     const failed = tickets.filter((ticket) => ticket.status === 'error').length;
     return { failed, sent: tickets.length - failed };
   } catch {

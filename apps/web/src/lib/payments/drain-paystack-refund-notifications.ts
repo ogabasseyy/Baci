@@ -1,6 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
-import { countDeadLetteredPaystackRefundNotifications } from './count-dead-lettered-paystack-refund-notifications';
+import {
+  countDeadLetteredPaystackRefundNotifications,
+  countUnresolvedUncertainRefundNotifications,
+} from './count-dead-lettered-paystack-refund-notifications';
 import {
   type ClaimedRefundNotification,
   deliverClaimedRefundNotification,
@@ -23,6 +26,7 @@ export async function drainPaystackRefundNotifications(
   sent: number;
   failed: number;
   exhausted: number;
+  uncertain: number;
 }> {
   let claimed = 0;
   let sent = 0;
@@ -35,6 +39,10 @@ export async function drainPaystackRefundNotifications(
   // success while notifications rot.
   const exhausted =
     await countDeadLetteredPaystackRefundNotifications(supabase);
+  // Terminal rows the claim already moved out of every signal: keep
+  // them visible in logs and payload without joining the
+  // 503-triggering exhausted count (see the counter's rationale).
+  const uncertain = await countUnresolvedUncertainRefundNotifications(supabase);
   // Claim serially so a route timeout cannot strand an unsent batch.
   for (let remaining = limit; remaining > 0; remaining -= 1) {
     // Reserve time for the provider call and outcome write.
@@ -159,5 +167,5 @@ export async function drainPaystackRefundNotifications(
     if (outcome === 'sent') sent++;
     else failed++;
   }
-  return { claimed, sent, failed, exhausted };
+  return { claimed, sent, failed, exhausted, uncertain };
 }

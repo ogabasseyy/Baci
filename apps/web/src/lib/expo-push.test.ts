@@ -112,7 +112,7 @@ describe('sendPushNotifications', () => {
       { status: 'ok', id: 'ticket-2' },
     ]);
 
-    const tickets = await sendPushNotifications(messages);
+    const { tickets } = await sendPushNotifications(messages);
 
     // Only valid tokens should be sent
     expect(mockChunkPushNotifications).toHaveBeenCalledWith([
@@ -135,7 +135,7 @@ describe('sendPushNotifications', () => {
       { status: 'ok', id: 'ticket-abc' },
     ]);
 
-    const tickets = await sendPushNotifications(messages);
+    const { tickets } = await sendPushNotifications(messages);
 
     expect(mockChunkPushNotifications).toHaveBeenCalled();
     expect(mockSendPushNotificationsAsync).toHaveBeenCalledWith(messages);
@@ -151,13 +151,17 @@ describe('sendPushNotifications', () => {
       .mockResolvedValueOnce([{ status: 'ok', id: 't1' }])
       .mockResolvedValueOnce([{ status: 'ok', id: 't2' }]);
 
-    const tickets = await sendPushNotifications([msg1, msg2]);
+    const { deliveryUncertain, tickets } = await sendPushNotifications([
+      msg1,
+      msg2,
+    ]);
 
     expect(mockSendPushNotificationsAsync).toHaveBeenCalledTimes(2);
     expect(tickets).toEqual([
       { status: 'ok', id: 't1' },
       { status: 'ok', id: 't2' },
     ]);
+    expect(deliveryUncertain).toBe(false);
   });
 
   it('returns error tickets on SDK exception', async () => {
@@ -170,11 +174,13 @@ describe('sendPushNotifications', () => {
       new Error('Network failure')
     );
 
-    const tickets = await sendPushNotifications(messages);
+    const { deliveryUncertain, tickets } =
+      await sendPushNotifications(messages);
 
     expect(tickets).toHaveLength(1);
     expect(tickets[0].status).toBe('error');
     expect(tickets[0]).toHaveProperty('message', 'Network failure');
+    expect(deliveryUncertain).toBe(true);
   });
 
   it('falls back to per-message sends when Expo rejects a mixed-project chunk', async () => {
@@ -191,7 +197,10 @@ describe('sendPushNotifications', () => {
       .mockResolvedValueOnce([{ status: 'ok', id: 'ticket-a' }])
       .mockResolvedValueOnce([{ status: 'ok', id: 'ticket-b' }]);
 
-    const tickets = await sendPushNotifications([msg1, msg2]);
+    const { deliveryUncertain, tickets } = await sendPushNotifications([
+      msg1,
+      msg2,
+    ]);
 
     expect(mockSendPushNotificationsAsync).toHaveBeenNthCalledWith(1, [
       msg1,
@@ -203,6 +212,7 @@ describe('sendPushNotifications', () => {
       { status: 'ok', id: 'ticket-a' },
       { status: 'ok', id: 'ticket-b' },
     ]);
+    expect(deliveryUncertain).toBe(false);
   });
 
   it('returns a synthesized error ticket when a per-message fallback send fails', async () => {
@@ -219,7 +229,10 @@ describe('sendPushNotifications', () => {
       .mockResolvedValueOnce([{ status: 'ok', id: 'ticket-a' }])
       .mockRejectedValueOnce(new Error('Per-message send failed'));
 
-    const tickets = await sendPushNotifications([msg1, msg2]);
+    const { deliveryUncertain, tickets } = await sendPushNotifications([
+      msg1,
+      msg2,
+    ]);
 
     expect(mockSendPushNotificationsAsync).toHaveBeenNthCalledWith(1, [
       msg1,
@@ -235,11 +248,12 @@ describe('sendPushNotifications', () => {
         details: { error: 'ExpoError' },
       },
     ]);
+    expect(deliveryUncertain).toBe(true);
   });
 
-  it('returns empty array for empty messages', async () => {
-    const tickets = await sendPushNotifications([]);
-    expect(tickets).toEqual([]);
+  it('returns empty delivery for empty messages', async () => {
+    const delivery = await sendPushNotifications([]);
+    expect(delivery).toEqual({ deliveryUncertain: false, tickets: [] });
     expect(mockSendPushNotificationsAsync).not.toHaveBeenCalled();
   });
 });

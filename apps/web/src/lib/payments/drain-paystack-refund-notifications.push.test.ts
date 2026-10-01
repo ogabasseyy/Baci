@@ -26,7 +26,13 @@ describe('merchant refund app notification', () => {
 
     await expect(
       drainPaystackRefundNotifications(db as never, sendEmail, 1, sendPush)
-    ).resolves.toEqual({ claimed: 1, sent: 1, failed: 0, exhausted: 0 });
+    ).resolves.toEqual({
+      claimed: 1,
+      sent: 1,
+      failed: 0,
+      exhausted: 0,
+      uncertain: 0,
+    });
 
     expect(sendPush).toHaveBeenCalledWith(
       'merchant-1',
@@ -68,7 +74,13 @@ describe('merchant refund app notification', () => {
 
     await expect(
       drainPaystackRefundNotifications(db as never, sendEmail, 1, sendPush)
-    ).resolves.toEqual({ claimed: 1, sent: 0, failed: 1, exhausted: 0 });
+    ).resolves.toEqual({
+      claimed: 1,
+      sent: 0,
+      failed: 1,
+      exhausted: 0,
+      uncertain: 0,
+    });
 
     expect(sendEmail).not.toHaveBeenCalled();
     expect(db.finish.update).toHaveBeenCalledWith(
@@ -86,7 +98,13 @@ describe('merchant refund app notification', () => {
 
     await expect(
       drainPaystackRefundNotifications(db as never, sendEmail, 1, sendPush)
-    ).resolves.toEqual({ claimed: 1, sent: 1, failed: 0, exhausted: 0 });
+    ).resolves.toEqual({
+      claimed: 1,
+      sent: 1,
+      failed: 0,
+      exhausted: 0,
+      uncertain: 0,
+    });
 
     expect(sendEmail).toHaveBeenCalledWith(
       expect.objectContaining({ to: 'merchant@example.com' })
@@ -102,7 +120,13 @@ describe('merchant refund app notification', () => {
 
     await expect(
       drainPaystackRefundNotifications(db as never, sendEmail, 1, sendPush)
-    ).resolves.toEqual({ claimed: 1, sent: 1, failed: 0, exhausted: 0 });
+    ).resolves.toEqual({
+      claimed: 1,
+      sent: 1,
+      failed: 0,
+      exhausted: 0,
+      uncertain: 0,
+    });
 
     expect(sendEmail).toHaveBeenCalledTimes(1);
   });
@@ -118,7 +142,13 @@ describe('merchant refund app notification', () => {
 
     await expect(
       drainPaystackRefundNotifications(db as never, sendEmail, 1, sendPush)
-    ).resolves.toEqual({ claimed: 1, sent: 0, failed: 1, exhausted: 0 });
+    ).resolves.toEqual({
+      claimed: 1,
+      sent: 0,
+      failed: 1,
+      exhausted: 0,
+      uncertain: 0,
+    });
 
     expect(sendEmail).not.toHaveBeenCalled();
     expect(db.finish.update).toHaveBeenCalledWith(
@@ -133,7 +163,13 @@ describe('merchant refund app notification', () => {
 
     await expect(
       drainPaystackRefundNotifications(db as never, sendEmail, 1, sendPush)
-    ).resolves.toEqual({ claimed: 1, sent: 1, failed: 0, exhausted: 0 });
+    ).resolves.toEqual({
+      claimed: 1,
+      sent: 1,
+      failed: 0,
+      exhausted: 0,
+      uncertain: 0,
+    });
 
     expect(sendPush).not.toHaveBeenCalled();
     expect(sendEmail).not.toHaveBeenCalled();
@@ -149,7 +185,13 @@ describe('merchant refund app notification', () => {
 
     await expect(
       drainPaystackRefundNotifications(db as never, sendEmail, 1, sendPush)
-    ).resolves.toEqual({ claimed: 1, sent: 1, failed: 0, exhausted: 0 });
+    ).resolves.toEqual({
+      claimed: 1,
+      sent: 1,
+      failed: 0,
+      exhausted: 0,
+      uncertain: 0,
+    });
 
     expect(sendPush).toHaveBeenCalledWith(
       'merchant-1',

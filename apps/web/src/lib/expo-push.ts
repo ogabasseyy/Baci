@@ -20,10 +20,10 @@ import {
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   type DeliveryStartOptions,
+  type PushChunkDelivery,
   sendPushNotificationChunks,
 } from './expo-push-chunk-delivery';
 import { excludeDeliveredTokens, withDeliveredTokens } from './expo-push-retry';
-import { hasUncertainTicketDelivery } from './expo-push-ticket-delivery';
 
 // Module-scope cache: locale + minimumFractionDigits are static; currency varies.
 const _currencyFormatterCache = new Map<string, Intl.NumberFormat>();
@@ -116,7 +116,7 @@ export async function sendPushNotification(
     },
   ];
 
-  const tickets = await sendPushNotifications(messages);
+  const { tickets } = await sendPushNotifications(messages);
   return tickets[0];
 }
 
@@ -126,11 +126,13 @@ export async function sendPushNotification(
  * - Validates tokens with `Expo.isExpoPushToken()`
  * - Chunks messages to stay within Expo API limits
  * - Returns a ticket per original message (invalid tokens get synthetic error tickets)
+ * - Reports `deliveryUncertain` when a provider request threw: the
+ *   outcome is unknown, never inferred from ticket error codes
  */
 export function sendPushNotifications(
   messages: ExpoPushMessage[],
   options?: DeliveryStartOptions
-): Promise<ExpoPushTicket[]> {
+): Promise<PushChunkDelivery> {
   return sendPushNotificationChunks(_getExpo(), messages, {
     onDeliveryStart: options?.onDeliveryStart,
     onDeliveryRejected: options?.onDeliveryRejected,
@@ -221,19 +223,23 @@ export async function notifyMerchant(
   // fall back to email. Anything after dispatch starts stays unknown.
   let providerDispatchStarted = false;
   try {
-    const tickets = await sendPushNotifications(messages, {
-      ...options,
-      onDeliveryStart: async () => {
-        await options?.onDeliveryStart?.();
-        providerDispatchStarted = true;
-      },
-    });
+    const { deliveryUncertain, tickets } = await sendPushNotifications(
+      messages,
+      {
+        ...options,
+        onDeliveryStart: async () => {
+          await options?.onDeliveryStart?.();
+          providerDispatchStarted = true;
+        },
+      }
+    );
 
     result = await processTickets(tickets, tokens, supabase, {
       merchantId,
       appType: 'admin',
       channel: channelId,
       notificationType: readNotificationType(data),
+      deliveryUncertain,
     });
   } catch (error) {
     result = {
@@ -344,10 +350,13 @@ export async function notifyCustomer(
 
   let result: NotificationSendResult;
   try {
-    const tickets = await sendPushNotifications(messages, {
-      onDeliveryStart: options?.onDeliveryStart,
-      onDeliveryRejected: options?.onDeliveryRejected,
-    });
+    const { deliveryUncertain, tickets } = await sendPushNotifications(
+      messages,
+      {
+        onDeliveryStart: options?.onDeliveryStart,
+        onDeliveryRejected: options?.onDeliveryRejected,
+      }
+    );
 
     result = await processTickets(tickets, tokens, supabase, {
       merchantId: options?.merchantId,
@@ -355,6 +364,7 @@ export async function notifyCustomer(
       appType: 'storefront',
       channel: channelId,
       notificationType: readNotificationType(payload),
+      deliveryUncertain,
     });
   } catch (error) {
     result = {
@@ -446,12 +456,14 @@ export async function notifyAdminUserDevices(
 
   let result: NotificationSendResult;
   try {
-    const tickets = await sendPushNotifications(messages);
+    const { deliveryUncertain, tickets } =
+      await sendPushNotifications(messages);
     result = await processTickets(tickets, tokens, supabase, {
       userId,
       appType: 'admin',
       channel: channelId,
       notificationType: readNotificationType(data),
+      deliveryUncertain,
     });
   } catch (error) {
     result = {
@@ -485,6 +497,12 @@ export interface TicketContext {
   appType?: 'admin' | 'storefront';
   channel?: string;
   notificationType?: string;
+  /**
+   * Carried from the chunk-delivery catch path: a provider request
+   * threw without a definitive response. Never inferred from ticket
+   * error codes — Expo's own `ExpoError` tickets are definitive.
+   */
+  deliveryUncertain?: boolean;
 }
 
 /**
@@ -538,7 +556,7 @@ export async function processTickets(
   supabase: ReturnType<typeof createAdminClient>,
   context?: TicketContext
 ): Promise<NotificationSendResult> {
-  const deliveryUnknown = hasUncertainTicketDelivery(tickets);
+  const deliveryUnknown = context?.deliveryUncertain === true;
   let sent = 0;
   let failed = 0;
   const succeededTokens: string[] = [];

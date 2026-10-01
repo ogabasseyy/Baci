@@ -126,6 +126,14 @@ export async function processCancellationDrain(
     notificationResult[0].status === 'fulfilled'
       ? notificationResult[0].value.exhausted
       : 0;
+  // Terminal rows awaiting operations review: visible in the failure
+  // log and the success payload, but not a 503 — there is no
+  // acknowledgement primitive yet, so paging on them would red-light
+  // the route forever and mask fresh failures behind stale ones.
+  const notificationUncertain =
+    notificationResult[0].status === 'fulfilled'
+      ? notificationResult[0].value.uncertain
+      : 0;
   if (
     cancellationResult.status === 'rejected' ||
     refundResult.status === 'rejected' ||
@@ -153,6 +161,7 @@ export async function processCancellationDrain(
         notificationFailures > 0 ||
         notificationExhausted > 0,
       notificationExhausted,
+      notificationUncertain,
     });
     return NextResponse.json(
       { error: 'Cancellation and refund background work incomplete' },

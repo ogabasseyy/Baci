@@ -95,6 +95,24 @@ describe('buildEmailExecutor abort signal', () => {
     });
   });
 
+  it('fails retryably when the signal died before dispatch', async () => {
+    const signal = AbortSignal.abort();
+
+    await expect(
+      buildEmailExecutor({
+        actor: 'cron:reconcile-gateway-paid-orders:drain',
+        merchantDetails,
+        merchantFetchError: null,
+        order,
+        signal,
+      })(null as unknown as StepContext)
+    ).rejects.toThrow('paid_email_aborted_before_dispatch');
+
+    // Nothing was dispatched, so the step stays retryable instead of
+    // terminalizing as delivery-uncertain.
+    expect(mocks.sendEmail).not.toHaveBeenCalled();
+  });
+
   it('still fails retryably when the provider rejects the send', async () => {
     mocks.sendEmail.mockResolvedValue({
       error: 'rejected',

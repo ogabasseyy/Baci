@@ -79,10 +79,12 @@ export async function hydrateSearchProductAvailability(
       return variantCondition === condition;
     });
     const offers = offersMap.get(product.id) ?? [];
-    const basePurchasable = !product.has_variants &&
-      (!condition || normalizeCanonicalProductCondition(product.condition) === condition) &&
-      (product.manage_stock !== true || Number(product.stock_quantity ?? 0) > 0);
+    // A null base condition sells as new on the PDP, so availability must
+    // default it before comparing instead of rejecting it as unrecognized.
     const baseCondition = normalizeCanonicalProductCondition(product.condition) || 'new';
+    const basePurchasable = !product.has_variants &&
+      (!condition || baseCondition === condition) &&
+      (product.manage_stock !== true || Number(product.stock_quantity ?? 0) > 0);
     const pricedOptions = [
       ...variants.filter((variant) => product.manage_stock !== true || Number(variant.stock_quantity ?? 0) > 0)
         .map((variant) => ({

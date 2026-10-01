@@ -28,6 +28,25 @@ describe('hydrateSearchProductAvailability', () => {
     expect(unfiltered).toMatchObject({ displayPrice: 80000, displayCondition: 'used' });
   });
 
+  it('treats a null base condition as new for availability', async () => {
+    const emptyQuery = {
+      select: vi.fn(), eq: vi.fn(), in: vi.fn(),
+      then: (resolve: (value: { data: []; error: null }) => unknown) =>
+        Promise.resolve({ data: [], error: null }).then(resolve),
+    };
+    emptyQuery.select.mockReturnValue(emptyQuery);
+    emptyQuery.eq.mockReturnValue(emptyQuery);
+    emptyQuery.in.mockReturnValue(emptyQuery);
+    const supabase = { from: vi.fn(() => emptyQuery) } as unknown as SupabaseClient;
+    const product = { id: 'legacy-phone', condition: null, price: 50000, manage_stock: false };
+
+    const [asNew] = await hydrateSearchProductAvailability([product], supabase, 'merchant-1', 'new');
+    const [asUsed] = await hydrateSearchProductAvailability([product], supabase, 'merchant-1', 'used');
+
+    expect(asNew).toMatchObject({ basePurchasable: true, displayPrice: 50000, displayCondition: 'new' });
+    expect(asUsed).toMatchObject({ basePurchasable: false });
+  });
+
   it('keeps base stock for its own condition but not alternate offers', async () => {
     const offerQuery = {
       select: vi.fn(), eq: vi.fn(), in: vi.fn(),

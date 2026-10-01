@@ -224,7 +224,21 @@ export async function executeOrderCancellationSideEffect({
     // Defer without consuming a retry attempt: only provider
     // reconciliation can change this condition, and burning the
     // five-attempt budget on it would strand the remaining legs
-    // permanently once the pending refund completes.
+    // permanently once the pending refund completes. Reset the budget
+    // the order-level attempts consumed so the resumed run retries the
+    // outstanding legs fresh instead of mistaking their first failure
+    // for exhaustion. Best-effort — the deferral below still lands if
+    // the write fails, and the resume re-enters this branch while legs
+    // are still awaiting.
+    try {
+      await supabase
+        .from('order_cancellation_side_effects')
+        .update({ attempts: 0 })
+        .eq('order_id', order.id)
+        .eq('step', step);
+    } catch {
+      // The resume retries the reset while legs are still awaiting.
+    }
     throw new DeferredError('cancellation_refund_awaiting_provider_completion');
   }
   // Withhold mismatched legs from initiation: their completed rows do not

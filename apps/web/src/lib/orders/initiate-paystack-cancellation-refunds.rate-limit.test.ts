@@ -71,7 +71,7 @@ describe('initiatePaystackCancellationRefunds rate-limit exhaustion', () => {
     );
   });
 
-  it('attaches accepted legs when the last attempt rate limits a later leg', async () => {
+  it('defers with a fresh budget when the last attempt rate limits a later leg after progress', async () => {
     const secondLeg = {
       ...transaction,
       gateway_reference: 'PSK-2',
@@ -95,6 +95,10 @@ describe('initiatePaystackCancellationRefunds rate-limit exhaustion', () => {
       new DeliveryUncertainError('quarantined')
     );
 
+    // The order-level budget was consumed by the earlier leg: the later
+    // leg may never have been attempted, so terminalizing it as
+    // exhausted would strand an untouched leg. Defer uncapped instead —
+    // the resume retries it with fresh attempts.
     await expect(
       initiatePaystackCancellationRefunds({
         isLastAttempt: true,
@@ -103,16 +107,8 @@ describe('initiatePaystackCancellationRefunds rate-limit exhaustion', () => {
         supabase,
         transactions: [transaction, secondLeg],
       })
-    ).rejects.toBeInstanceOf(DeliveryUncertainError);
-    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
-      expect.objectContaining({
-        metadata: expect.objectContaining({
-          accepted_refund_ids: [101],
-          failed_payment_transaction_id: 'tx-2',
-          rate_limit_exhausted: true,
-        }),
-      })
-    );
+    ).rejects.toBeInstanceOf(DeferredError);
+    expect(mocks.quarantineRefund).not.toHaveBeenCalled();
   });
 
   it('defers when the last-attempt rate-limit review cannot be filed', async () => {

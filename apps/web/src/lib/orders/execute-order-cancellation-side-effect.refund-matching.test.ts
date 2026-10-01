@@ -253,6 +253,8 @@ describe('cancellation refund leg matching', () => {
   });
 
   it('lets an in-flight remainder take precedence over mismatch quarantine', async () => {
+    const eq = vi.fn().mockReturnThis();
+    const update = vi.fn().mockReturnValue({ eq });
     const from = vi
       .fn()
       .mockReturnValueOnce(
@@ -271,7 +273,8 @@ describe('cancellation refund leg matching', () => {
           },
         ])
       )
-      .mockReturnValueOnce(auditReviewsQuery([]));
+      .mockReturnValueOnce(auditReviewsQuery([]))
+      .mockReturnValueOnce({ update });
 
     const error = await executeOrderCancellationSideEffect({
       merchant,
@@ -286,6 +289,12 @@ describe('cancellation refund leg matching', () => {
       'cancellation_refund_awaiting_provider_completion'
     );
     expect(mocks.initiateRefund).not.toHaveBeenCalled();
-    expect(from).toHaveBeenCalledTimes(3);
+    // The order-level budget was consumed before these legs settled:
+    // reset it so the resumed run retries the outstanding legs fresh
+    // instead of mistaking their first failure for exhaustion.
+    expect(from).toHaveBeenCalledTimes(4);
+    expect(update).toHaveBeenCalledWith({ attempts: 0 });
+    expect(eq).toHaveBeenCalledWith('order_id', 'order-1');
+    expect(eq).toHaveBeenCalledWith('step', 'refund');
   });
 });

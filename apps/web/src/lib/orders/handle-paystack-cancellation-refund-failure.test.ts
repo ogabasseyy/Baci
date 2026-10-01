@@ -134,6 +134,37 @@ describe('handlePaystackCancellationRefundFailure', () => {
     );
   });
 
+  it('defers with a budget reset when a transient failure follows same-run progress', async () => {
+    const eq = vi.fn().mockReturnThis();
+    const update = vi.fn().mockReturnValue({ eq });
+    const supabase = {
+      from: vi.fn().mockReturnValue({ update }),
+    } as unknown as Pick<SupabaseClient, 'from' | 'rpc'>;
+
+    // The earlier legs consumed the order-level budget: this leg may
+    // never have been attempted, so exhaustion evidence would
+    // terminalize an untouched leg. Defer uncapped with a fresh budget.
+    await expect(
+      handlePaystackCancellationRefundFailure({
+        isLastAttempt: true,
+        order: initiationOrder,
+        paystackRefund: {
+          code: 'HTTP_429',
+          error: 'slow down',
+          success: false,
+        },
+        refundIds: [101],
+        supabase,
+        transaction: initiationTransaction,
+      })
+    ).rejects.toThrow('cancellation_refund_progress_deferred_for_settlement');
+
+    expect(mocks.quarantineRefund).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledWith({ attempts: 0 });
+    expect(eq).toHaveBeenCalledWith('order_id', 'order-1');
+    expect(eq).toHaveBeenCalledWith('step', 'refund');
+  });
+
   it('carries accepted legs into a later-leg failure review', async () => {
     await expect(
       invoke({ code: 'VALIDATION_ERROR', error: 'bad leg', refundIds: [101] })

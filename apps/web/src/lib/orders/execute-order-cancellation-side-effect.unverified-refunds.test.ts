@@ -90,25 +90,28 @@ async function runWithRefunds(
   payments: ReturnType<typeof payment>[],
   refunds: ReturnType<typeof completedRefund>[]
 ) {
+  const eq = vi.fn().mockReturnThis();
+  const update = vi.fn().mockReturnValue({ eq });
   const from = vi
     .fn()
     .mockReturnValueOnce(transactionQuery(payments))
     .mockReturnValueOnce(transactionQuery(refunds))
-    .mockReturnValueOnce(auditReviewsQuery([]));
+    .mockReturnValueOnce(auditReviewsQuery([]))
+    .mockReturnValueOnce({ update });
   const error = await executeOrderCancellationSideEffect({
     merchant,
     order,
     step: 'refund',
     supabase: { from } as never,
   }).catch((reason: unknown) => reason);
-  return { error, from };
+  return { error, from, update };
 }
 
 describe('cancellation unverified refunds', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('waits for verification of an unverified full-cover row', async () => {
-    const { error, from } = await runWithRefunds(
+    const { error, from, update } = await runWithRefunds(
       [payment('payment-1', 100, 'paystack-ref')],
       [completedRefund('payment-1')]
     );
@@ -120,7 +123,8 @@ describe('cancellation unverified refunds', () => {
       'cancellation_refund_awaiting_provider_completion'
     );
     expect(mocks.initiateRefund).not.toHaveBeenCalled();
-    expect(from).toHaveBeenCalledTimes(3);
+    expect(from).toHaveBeenCalledTimes(4);
+    expect(update).toHaveBeenCalledWith({ attempts: 0 });
   });
 
   it('waits instead of quarantining an unverified partial', async () => {

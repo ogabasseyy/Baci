@@ -166,3 +166,52 @@ REVOKE ALL ON FUNCTION public.cancel_order_as_merchant(uuid, text)
   FROM PUBLIC, anon, authenticated, service_role, postgres;
 GRANT EXECUTE ON FUNCTION public.cancel_order_as_merchant(uuid, text)
   TO authenticated;
+
+-- Backfill the refund step for orders already cancelled under the
+-- previous function: their only external legs sit in refund_pending or
+-- refunded, so no row was ever queued and the drain cannot resume
+-- aggregate finalization, reverse settlement, or enqueue notifications.
+-- Scoped to orders with no completed external leg (completed legs got
+-- rows under the old function; legacy pre-side-effect orders stay out
+-- of scope) and to orders with no refund row in any status, so
+-- terminal, deferred, and in-flight rows are never resurrected.
+INSERT INTO public.order_cancellation_side_effects (
+  order_id, merchant_id, step, status, claim_token, attempts
+)
+SELECT o.id, o.merchant_id, 'refund', 'failed',
+  extensions.gen_random_uuid(), 0
+  FROM public.orders o
+ WHERE (
+   o.shipping_status IN ('cancelled', 'canceled')
+   OR o.cancelled_at IS NOT NULL
+ )
+   AND EXISTS (
+     SELECT 1 FROM public.transactions t
+      WHERE t.order_id = o.id
+        AND t.merchant_id = o.merchant_id
+        AND t.transaction_type = 'payment'
+        AND t.status IN ('refund_pending', 'refunded')
+        AND t.amount > 0
+        AND COALESCE(t.gateway, '') NOT IN (
+          'wallet', 'savings', 'store_credit', 'cash', 'manual',
+          'pay_on_delivery'
+        )
+   )
+   AND NOT EXISTS (
+     SELECT 1 FROM public.transactions t
+      WHERE t.order_id = o.id
+        AND t.merchant_id = o.merchant_id
+        AND t.transaction_type = 'payment'
+        AND t.status = 'completed'
+        AND t.amount > 0
+        AND COALESCE(t.gateway, '') NOT IN (
+          'wallet', 'savings', 'store_credit', 'cash', 'manual',
+          'pay_on_delivery'
+        )
+   )
+   AND NOT EXISTS (
+     SELECT 1 FROM public.order_cancellation_side_effects s
+      WHERE s.order_id = o.id
+        AND s.step = 'refund'
+   )
+ON CONFLICT (order_id, step) DO NOTHING;

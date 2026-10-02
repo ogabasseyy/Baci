@@ -160,6 +160,16 @@ def _audit_line(line, drift, src="", stale=frozenset()):
     if SECRET_EXPAND_RE.search(nosq) \
             and "helper-secret-expand" not in drift:
         drift.append("helper-secret-expand")
+    # Process-environment reads (/proc/<pid>/environ, any pid
+    # spelling): the step's secrets encoded to the log, past
+    # exact-value masking -- whatever the transform (base64,
+    # xxd, cat). Quoting is no defense (cat reads quoted paths),
+    # so echoing the bare path over-approximates; no legit helper
+    # does (comments strip before this runs).
+    if re.search(r"(?:^|[^/\w])/proc/[^/\s]+/environ(?![\w])",
+                 cleaned) \
+            and "helper-env-dump" not in drift:
+        drift.append("helper-env-dump")
     if INDIRECT_RE.search(nosq) \
             and "helper-secret-expand" not in drift:
         drift.append("helper-secret-expand")

@@ -206,6 +206,15 @@ def audit_run_hygiene(ctx, drift):
         if ("`" in nosq or re.search(r"\$\((?!\()", nosq)) \
                 and "run-body-substitution" not in drift:
             drift.append("run-body-substitution")
+        # Process-environment reads (/proc/<pid>/environ, any pid
+        # spelling, quoted or not): step secrets encoded past
+        # exact-value masking, whatever the transform. Quoting is
+        # no defense (cat reads quoted paths), so the raw seg
+        # scans, not nosq.
+        if re.search(r"(?:^|[^/\w])/proc/[^/\s]+/environ(?![\w])",
+                     seg) \
+                and "run-body-environ" not in drift:
+            drift.append("run-body-environ")
         # Deferred execution: single-quoted text is literal NOW but
         # bash evaluates it LATER through PS4 (under set -x),
         # PROMPT_COMMAND, and $((...)) (proven: PWNED). Reject the

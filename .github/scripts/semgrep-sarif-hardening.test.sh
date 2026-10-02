@@ -468,5 +468,17 @@ t toctou-fd 1 "muse-installer-toctou" happy.sarif "$I${FS}tmp_bin=\"\$(mktemp)\"
 t toctou-fd-dup 1 "muse-installer-toctou" happy.sarif "$I${FS}tmp_bin=\"\$(mktemp)\"${FS}a${FS}exec 3<>\"\${tmp_bin}\"${RS}$I${FS}got_sha=${FS}a${FS}cat evil >&3"
 t toctou-fd-stderr-fp 0 "" happy.sarif "$I${FS}got_sha=${FS}a${FS}echo x 2>/dev/null"
 
+# --- alternate shells (Codex P1: dash evil.sh) ---
+t altshell-dash 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}dash evil.sh"
+t altshell-zsh 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}zsh \"\${GITHUB_WORKSPACE}/evil.sh\""
+t altshell-bound-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}dash \"\${SCRIPT_DIR}/guard.sh\""
+
+# --- environment reads (Codex P1: base64 /proc/self/environ) ---
+t environ-b64 1 "helper-env-dump" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}base64 /proc/self/environ"
+t environ-cat 1 "helper-env-dump" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cat /proc/self/environ"
+t environ-dd 1 "helper-env-dump" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}dd if=/proc/1234/environ"
+t environ-quoted 1 "helper-env-dump" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cat \"/proc/self/environ\""
+t environ-comment-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo hi # /proc/self/environ"
+
 printf '\nhardening suite: %d passed, %d failed%s\n' "$pass" "$fail" "${fail_names:+ ($fail_names)}"
 [[ "$fail" -eq 0 ]]

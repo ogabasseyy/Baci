@@ -118,7 +118,11 @@ def _check_command(argv0, rest, pre, drift, src=""):
         # closed, reviewer whitelists if ever needed).
         if "helper-deferred-exec" not in drift:
             drift.append("helper-deferred-exec")
-    elif base in ("bash", "sh", "source", "."):
+    elif base in ("bash", "sh", "source", ".", "dash", "ash",
+                  "zsh", "ksh", "mksh", "pdksh", "lksh", "yash",
+                  "fish", "tcsh", "csh"):
+        # Alternate shells bind like bash (busybox stays in
+        # NET_DENY: its multi-call form obscures argv0).
         bound = script_operand(rest)
         if not bound and base in ("source", ".") and rest \
                 and re.match(RUNNER_PIN, rest[0]):

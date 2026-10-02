@@ -57,6 +57,39 @@ describe('executeOrderCancellationSideEffect', () => {
     );
   });
 
+  it.each([
+    'Paystack',
+    ' paystack ',
+  ])('refunds a legacy leg stored as %s instead of quarantining it as unsupported', async (gateway) => {
+    const supabase = refundClient({
+      payments: [{ ...paystackPayment, gateway }],
+    });
+    mocks.initiateRefund.mockResolvedValue({
+      data: {
+        id: 42,
+        status: 'processed',
+        transaction: { id: 123, reference: 'ref-1' },
+      },
+      success: true,
+    });
+
+    await expect(
+      executeOrderCancellationSideEffect({
+        merchant,
+        order,
+        reason: 'Unavailable',
+        step: 'refund',
+        supabase: supabase as never,
+      })
+    ).resolves.toEqual({ refundIds: [42] });
+    expect(mocks.initiateRefund).toHaveBeenCalled();
+    expect(supabase.insert).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'order_cancellation_refund_requires_review',
+      })
+    );
+  });
+
   it('refunds only the completed gateway-funded portion', async () => {
     const supabase = refundClient({
       payments: [{ ...paystackPayment, amount: 60 }],

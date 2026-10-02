@@ -26,7 +26,7 @@ describe('PAYSTACK_PENDING_SOURCES', () => {
 
     expect(sources).toEqual(EXPECTED_PAYSTACK_PENDING_SOURCES);
     expect(sources.at(-1)?.repositoryPath).toBe(
-      'supabase/migrations/20260928184200_candidate_selection_rpcs.sql'
+      'supabase/migrations/20260928184400_close_reviews_evidence_null_safety.sql'
     );
   });
 

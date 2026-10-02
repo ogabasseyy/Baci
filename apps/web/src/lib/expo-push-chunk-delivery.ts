@@ -63,7 +63,7 @@ export async function sendPushNotificationChunks(
 
   const chunks = expo.chunkPushNotifications(validMessages);
   const sdkTickets: ExpoPushTicket[] = [];
-  const markDeliveryStarted = createDeliveryStartBoundary(
+  const { markDeliveryStarted } = createDeliveryStartBoundary(
     options?.onDeliveryStart
   );
   let allProviderResponsesDefinitive = true;

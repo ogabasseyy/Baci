@@ -18,6 +18,7 @@ import {
   type OrderCancellationSideEffectStep,
 } from '@/lib/orders/run-order-cancellation-side-effect';
 import { unsupportedRefundReasons } from '@/lib/orders/unsupported-refund-reasons';
+import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gateway';
 
 export async function executeOrderCancellationSideEffect({
   deadlineMs,
@@ -150,7 +151,7 @@ export async function executeOrderCancellationSideEffect({
     (transaction) =>
       !refundedPaymentIds.has(transaction.id) &&
       (!transaction.gateway_reference ||
-        (transaction.gateway !== 'paystack' &&
+        (normalizePaymentGateway(transaction.gateway) !== 'PAYSTACK' &&
           transaction.status !== 'refund_pending'))
   );
   if (unsupportedLegs.length > 0) {

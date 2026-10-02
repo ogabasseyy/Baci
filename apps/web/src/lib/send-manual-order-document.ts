@@ -3,7 +3,6 @@ import {
   OGABASSEY_STOREFRONT_APP_STORE_URL,
   OGABASSEY_STOREFRONT_PLAY_STORE_URL,
 } from '@/config/platform';
-import { buildManualOrderDocumentPdfInput } from '@/lib/build-manual-order-document-pdf-input';
 import {
   buildReceiptClaimUrl,
   createReceiptClaimToken,
@@ -12,13 +11,9 @@ import { resolveInvoicePaymentAccount } from '@/lib/invoice-payment-account';
 import { buildManualOrderDocumentEmail } from '@/lib/manual-order-document-email';
 import { markManualDocumentDispatchStarted } from '@/lib/mark-manual-document-dispatch-started';
 import { resolveOrderNotificationRecipient } from '@/lib/order-notification-recipient';
-import {
-  generateReceiptPDF,
-  resolveReceiptLogoDataUri,
-} from '@/lib/receipt-pdf-generator';
+import { renderManualOrderDocumentPdf } from '@/lib/render-manual-order-document-pdf';
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { resolveManualDocumentClaimDomain } from '@/lib/resolve-manual-document-claim-domain';
-import { resolveManualDocumentReceiptDate } from '@/lib/resolve-manual-document-receipt-date';
 import { sendEmail } from '@/lib/zeptomail';
 import {
   assertManualDocumentClaimMatchesOrder,
@@ -55,7 +50,7 @@ export async function sendManualOrderDocument({
     supabase
       .from('orders')
       .select(
-        'id, merchant_id, customer_id, recorded_by_user_id, import_job_id, external_source, order_number, created_at, transaction_date, invoice_issue_date, currency, total, subtotal, shipping_fee, tax_amount, discount_amount, amount_paid, payment_status, payment_method, shipping_status, customer_name, customer_email, customer_phone, shipping_address, invoice_type_code, order_items(id, name, quantity, price, variant_name, condition)'
+        'id, merchant_id, customer_id, recorded_by_user_id, import_job_id, external_source, order_number, created_at, transaction_date, invoice_issue_date, currency, total, subtotal, shipping_fee, tax_amount, discount_amount, amount_paid, payment_status, payment_method, shipping_status, customer_name, customer_email, customer_phone, shipping_address, invoice_type_code, invoice_note, notes, order_items(id, name, quantity, price, variant_name, condition)'
       )
       .eq('id', row.order_id)
       .eq('merchant_id', row.merchant_id)
@@ -137,29 +132,18 @@ export async function sendManualOrderDocument({
     throw new Error('Manual document payment account unavailable');
   }
   const preferredPaymentAccount = invoicePaymentAccount?.paymentAccount ?? null;
-  const { receiptOrder, receiptMerchant } = buildManualOrderDocumentPdfInput({
+  // Staff-recorded orders may omit the customer name; greet with the import
+  // sender's fallback instead of throwing through every retry.
+  const displayCustomerName = order.customer_name || 'there';
+  const pdf = await renderManualOrderDocumentPdf({
+    supabase,
     order,
     merchant,
     recipientEmail: recipient.email,
     preferredPaymentAccount,
-  });
-  // Staff-recorded orders may omit the customer name; greet with the import
-  // sender's fallback instead of throwing through every retry.
-  const displayCustomerName = order.customer_name || 'there';
-  const receiptDate = await resolveManualDocumentReceiptDate(
-    supabase,
-    order.id,
-    isPaid
-  );
-  const logoDataUri = await resolveReceiptLogoDataUri(receiptMerchant);
-  const pdf = generateReceiptPDF(receiptOrder, receiptMerchant, {
-    documentKind: pdfDocumentKind,
+    isPaid,
+    pdfDocumentKind,
     invoiceTypeCode,
-    documentDate:
-      (isPaid
-        ? (receiptDate ?? order.transaction_date)
-        : order.invoice_issue_date) || order.created_at,
-    logoDataUri,
   });
   const claim = createReceiptClaimToken();
   const { data, error } = await supabase.rpc(

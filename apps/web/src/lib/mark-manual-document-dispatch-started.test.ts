@@ -14,7 +14,16 @@ const order = {
   amount_paid: 100,
   payment_status: 'paid',
   shipping_status: 'pending',
-  order_items: [{ id: 'item-1' }],
+  order_items: [
+    {
+      id: 'item-1',
+      name: 'Device',
+      quantity: 1,
+      price: 100,
+      variant_name: null,
+      condition: 'new',
+    },
+  ],
 };
 
 describe('markManualDocumentDispatchStarted', () => {
@@ -36,6 +45,16 @@ describe('markManualDocumentDispatchStarted', () => {
       p_payment_status: 'paid',
       p_shipping_status: 'pending',
       p_item_count: 1,
+      p_items: [
+        {
+          id: 'item-1',
+          name: 'Device',
+          quantity: 1,
+          price: 100,
+          variant_name: null,
+          condition: 'new',
+        },
+      ],
     });
   });
 

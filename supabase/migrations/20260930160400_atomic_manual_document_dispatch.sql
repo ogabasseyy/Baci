@@ -3,9 +3,11 @@
 -- millisecond race between the re-read and the marker; this function holds
 -- the order row (FOR SHARE, matching the claim/trigger lock order) while
 -- comparing, so a payment, contact correction, or item edit landing
--- mid-dispatch aborts instead of sending a stale document. The worker
--- retries after an abort and converges (fresh send or document_state_changed
--- skip). Safe predeploy: only the new worker calls it.
+-- mid-dispatch aborts instead of sending a stale document. The item
+-- comparison covers contents, not just the count: a same-count name, price,
+-- or variant edit aborts too. The worker retries after an abort and
+-- converges (fresh send or document_state_changed skip). Safe predeploy:
+-- only the new worker calls it.
 CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_outbox_id uuid,
   p_claim_owner text,
@@ -15,13 +17,15 @@ CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_amount_paid numeric,
   p_payment_status text,
   p_shipping_status text,
-  p_item_count integer
+  p_item_count integer,
+  p_items jsonb
 )
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   v_notification public.order_notification_outbox%ROWTYPE;
   v_order public.orders%ROWTYPE;
   v_item_count bigint;
+  v_items jsonb;
 BEGIN
   -- Lock the order before the outbox (same order as the claim and trigger
   -- paths) and hold it through the comparison and the mark.
@@ -39,6 +43,12 @@ BEGIN
   END IF;
   SELECT count(*) INTO v_item_count FROM public.order_items AS oi
   WHERE oi.order_id = v_order.id;
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'id', oi.id, 'name', oi.name, 'quantity', oi.quantity, 'price', oi.price,
+    'variant_name', oi.variant_name, 'condition', oi.condition
+  ) ORDER BY oi.id), '[]'::jsonb) INTO v_items
+  FROM public.order_items AS oi
+  WHERE oi.order_id = v_order.id;
   IF v_order.customer_id IS DISTINCT FROM p_customer_id
     OR lower(trim(both from COALESCE(v_order.customer_email, ''))) IS DISTINCT FROM lower(trim(both from COALESCE(p_customer_email, '')))
     OR v_order.total IS DISTINCT FROM p_total
@@ -46,6 +56,7 @@ BEGIN
     OR v_order.payment_status IS DISTINCT FROM p_payment_status
     OR v_order.shipping_status IS DISTINCT FROM p_shipping_status
     OR v_item_count IS DISTINCT FROM p_item_count::bigint
+    OR v_items IS DISTINCT FROM p_items
   THEN
     RETURN jsonb_build_object('status', 'stale');
   END IF;
@@ -55,7 +66,7 @@ BEGIN
   RETURN jsonb_build_object('status', 'marked');
 END;
 $$;
-REVOKE ALL ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, numeric, numeric, text, text, integer)
+REVOKE ALL ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, numeric, numeric, text, text, integer, jsonb)
   FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, numeric, numeric, text, text, integer)
+GRANT EXECUTE ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, numeric, numeric, text, text, integer, jsonb)
   TO service_role;

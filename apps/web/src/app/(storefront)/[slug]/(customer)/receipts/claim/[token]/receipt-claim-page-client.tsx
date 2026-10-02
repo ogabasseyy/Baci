@@ -50,7 +50,11 @@ export default function ReceiptClaimPageClient({
   const redemptionInFlightToken = useRef<string | null>(null);
   const preview = initialClaim;
   const documentLabel =
-    preview?.documentKind === 'invoice' ? 'invoice' : 'receipt';
+    preview?.documentKind === 'invoice'
+      ? 'invoice'
+      : preview?.documentKind === 'proforma_invoice'
+        ? 'proforma invoice'
+        : 'receipt';
   useEffect(() => {
     if (
       !token ||

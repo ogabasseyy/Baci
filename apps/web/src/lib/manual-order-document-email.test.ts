@@ -52,6 +52,15 @@ describe('manual order document email', () => {
     expect(result.textContent).toMatch(/not.*proof of payment/i);
   });
 
+  it('passes phrasing content for the template-owned intro paragraph', () => {
+    const result = buildManualOrderDocumentEmail(input);
+    expect(result.htmlContent).toContain(
+      'Your PDF receipt is attached.<br><br>'
+    );
+    expect(result.htmlContent).not.toContain('<p>Your PDF');
+    expect(result.htmlContent).not.toContain('<p>Optional: download the app');
+  });
+
   it('strips line breaks from staff-entered order numbers in the subject', () => {
     const result = buildManualOrderDocumentEmail({
       ...input,

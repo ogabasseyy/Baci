@@ -17,10 +17,10 @@ CREATE TABLE public.orders (
   customer_id uuid REFERENCES public.customers, customer_email text, customer_name text,
   order_number text, recorded_by_user_id uuid, import_job_id uuid, external_source text,
   created_at timestamptz DEFAULT now(), payment_status text DEFAULT 'unpaid', shipping_status text DEFAULT 'pending',
-  total numeric DEFAULT 100, amount_paid numeric DEFAULT 0,
+  total numeric DEFAULT 100, amount_paid numeric DEFAULT 0, payment_method text, invoice_type_code text,
   fulfillment_notification_cycle_id uuid DEFAULT gen_random_uuid()
 );
-CREATE TABLE public.order_items (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), order_id uuid REFERENCES public.orders ON DELETE CASCADE, name text, quantity integer, price numeric, created_at timestamptz DEFAULT now());
+CREATE TABLE public.order_items (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), order_id uuid REFERENCES public.orders ON DELETE CASCADE, name text, quantity integer, price numeric, variant_name text, condition text, created_at timestamptz DEFAULT now());
 CREATE TABLE public.order_notification_outbox (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), order_id uuid REFERENCES public.orders ON DELETE CASCADE,
   merchant_id uuid REFERENCES public.merchants,

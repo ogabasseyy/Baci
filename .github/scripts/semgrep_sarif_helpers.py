@@ -19,6 +19,7 @@ from semgrep_sarif_cmdfile import (audit_github_cmdfile_body,
 from semgrep_sarif_redirect import (has_socket_redirect,
                                     redirect_targets)
 from semgrep_sarif_scan import (arith_regions, extract_subshells,
+                                has_proc_environ,
                                 subscript_cmdsubst, _write_zone)
 from semgrep_sarif_segments import logical_lines
 from semgrep_sarif_shell import (ENV_POISON, SHELL_KEYWORDS,
@@ -161,13 +162,13 @@ def _audit_line(line, drift, src="", stale=frozenset()):
             and "helper-secret-expand" not in drift:
         drift.append("helper-secret-expand")
     # Process-environment reads (/proc/<pid>/environ, any pid
-    # spelling): the step's secrets encoded to the log, past
-    # exact-value masking -- whatever the transform (base64,
-    # xxd, cat). Quoting is no defense (cat reads quoted paths),
-    # so echoing the bare path over-approximates; no legit helper
-    # does (comments strip before this runs).
-    if re.search(r"(?:^|[^/\w])/proc/[^/\s]+/environ(?![\w])",
-                 cleaned) \
+    # spelling, dot-dot or /root-aliased): the step's secrets
+    # encoded to the log, past exact-value masking -- whatever
+    # the transform (base64, xxd, cat). Quoting is no defense
+    # (cat reads quoted paths), so echoing the bare path
+    # over-approximates; no legit helper does (comments strip
+    # before this runs).
+    if has_proc_environ(cleaned) \
             and "helper-env-dump" not in drift:
         drift.append("helper-env-dump")
     if INDIRECT_RE.search(nosq) \

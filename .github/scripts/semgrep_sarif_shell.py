@@ -88,6 +88,7 @@ ENV_POISON = ("PATH", "LD_PRELOAD", "LD_LIBRARY_PATH",
               "GIT_EDITOR", "GIT_CONFIG_COUNT", "GIT_CONFIG_GLOBAL",
               "GIT_CONFIG_SYSTEM", "GIT_DIR", "GIT_WORK_TREE",
               "GIT_EXTERNAL_DIFF", "GIT_DIFF_OPTS", "GIT_ASKPASS",
+              "GIT_CONFIG_PARAMETERS",
               "PAGER", "GH_HOST")
 # GIT_CONFIG_COUNT gates GIT_CONFIG_KEY_n/VALUE_n (verified: count 0
 # ignores keys), so the COUNT exact-match closes the family.

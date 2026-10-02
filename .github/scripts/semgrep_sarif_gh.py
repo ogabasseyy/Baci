@@ -17,8 +17,9 @@ GH_POST_INPUTS = ("${RUNNER_TEMP}/muse-review-payload.json",
                   "${RUNNER_TEMP}/muse-review-payload.json.summary")
 # Flags consuming the next token (endpoint scan skips both).
 GH_VALUE_FLAGS = {"--method", "-X", "--input", "-H", "--header",
-                  "--hostname", "--jq", "-f", "--field",
-                  "--raw-field", "--cache", "-R", "--repo"}
+                  "--hostname", "--jq", "-q", "-f", "-F",
+                  "--field", "--raw-field", "--template", "-t",
+                  "--preview", "-p", "--cache", "-R", "--repo"}
 
 
 def _gh_flagzone(rest):
@@ -79,10 +80,13 @@ def _gh_operands(rest):
 
 def _gh_values(rest, names):
     # Values of the named flags (separate, --long=, or glued
-    # -f spelling); a glued -f counts even though its value is
-    # unread -- presence alone vetoes the field-free shape.
+    # short spelling); a glued short counts even though its
+    # value is unread -- presence alone vetoes the field-free
+    # shape and implies POST.
     vals, i = [], 0
     zone = _gh_flagzone(rest)
+    shorts = {n for n in names
+              if re.fullmatch(r"-[a-zA-Z]", n)}
     while i < len(zone):
         tok = zone[i]
         if tok in names and i + 1 < len(zone):
@@ -92,8 +96,8 @@ def _gh_values(rest, names):
                  if n.startswith("--")):
             vals.append(tok.split("=", 1)[1])
             i += 1
-        elif "-f" in names and tok.startswith("-f") \
-                and len(tok) > 2:
+        elif any(tok.startswith(s) and len(tok) > 2
+                 for s in shorts):
             vals.append(tok[2:])
             i += 1
         else:
@@ -144,16 +148,22 @@ def audit_gh(rest, drift):
             drift.append("helper-untrusted-exec")
         return
     inputs = _gh_values(rest, {"--input"})
-    if upper in GH_READ_METHODS \
-            or (upper is None and not inputs):
-        return  # GET/HEAD reads pass with any endpoint
-    # Writes (explicit verb, or --input which implies POST):
-    # the review-posting shape only -- reviews endpoint, POST,
-    # pinned payload inputs, no -f fields (body=@file would
-    # post local file bytes as the review).
+    fields = _gh_values(rest, {"-f", "-F", "--field",
+                               "--raw-field"})
+    if upper in GH_READ_METHODS:
+        # Explicit GET/HEAD: gh honors it even with parameters
+        # (fields ride the query string); reads pass with any
+        # endpoint.
+        return
+    if upper is None and not inputs and not fields:
+        return  # parameterless GET
+    # gh POSTs: explicit verb, --input, or inferred from field
+    # parameters (per gh api --help). The review-posting shape
+    # only -- reviews endpoint, POST, pinned payload inputs, no
+    # fields (body=@file would post local file bytes, and any
+    # inferred POST carries unpinned parameters).
     endpoint = ops[1] if len(ops) > 1 else None
-    fields = _gh_values(rest, {"-f", "--field", "--raw-field"})
-    if upper == "POST" and endpoint == GH_API_REVIEWS \
+    if upper in ("POST", None) and endpoint == GH_API_REVIEWS \
             and all(v in GH_POST_INPUTS for v in inputs) \
             and not fields:
         return

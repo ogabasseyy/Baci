@@ -6,7 +6,8 @@ brace skipper back from scan (no cycle: scan never imports
 redirect).
 """
 import re
-from semgrep_sarif_scan import skip_braced
+from semgrep_sarif_scan import (_collapse_proc_root,
+                                skip_braced)
 from semgrep_sarif_shell import _bare_word
 
 
@@ -59,10 +60,12 @@ def redirect_targets(text, inputs=False):
 
 def _is_socket_target(target):
     # Bash /dev/tcp/host/port and /dev/udp/host/port open TCP
-    # sockets (not files). Bare-normalized: /d\ev/tcp/... still
-    # connects.
+    # sockets (not files). Bare-normalized (/d\ev/tcp/... still
+    # connects) and alias-collapsed (/proc/self/root/dev/tcp/...
+    # resolves back to a socket).
     return re.match(r"^/dev/(tcp|udp)/",
-                    _bare_word(target)) is not None
+                    _collapse_proc_root(
+                        _bare_word(target))) is not None
 
 def has_socket_redirect(text):
     # Any redirect operator (in or out) targeting a Bash socket.

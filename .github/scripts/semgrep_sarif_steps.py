@@ -86,7 +86,10 @@ def audit_step_commands(ctx, drift):
     # (runner-local DoS only; no secrets or consumed outputs in
     # rm-bearing steps).
     secret_ref = re.compile(
-        r"secrets\s*\.\s*[A-Za-z_]\w*|github\s*\.\s*token\b",
+        r"secrets\s*\.\s*[A-Za-z_]\w*|secrets\s*\["
+        r"|github\s*\.\s*token\b"
+        r"|github\s*\[\s*['\"]token['\"]\s*\]"
+        r"|github\s*\[(?!\s*['\"])",
         re.IGNORECASE)
     LOOSE_ALLOW = STRICT_ALLOW | {"git", "rm"}
     GIT_SAFE_FLAGS = {"--no-pager", "-v", "--version", "-h",
@@ -238,7 +241,12 @@ def audit_agent_env(ctx, drift):
     # step, in EVERY step that invokes the runner (a second step
     # with an aliased token is the same hole), and in job env.
     token_expr = re.compile(
-        r"secrets\s*\.\s*github_token\b|github\s*\.\s*token\b",
+        r"secrets\s*\.\s*github_token\b"
+        r"|secrets\s*\[\s*['\"]github_token['\"]\s*\]"
+        r"|secrets\s*\[(?!\s*['\"])"
+        r"|github\s*\.\s*token\b"
+        r"|github\s*\[\s*['\"]token['\"]\s*\]"
+        r"|github\s*\[(?!\s*['\"])",
         re.IGNORECASE)
     agent_step = [i for i, line in enumerate(ctx.workflow_lines)
                   if step_name(line) == "Run Muse review"]

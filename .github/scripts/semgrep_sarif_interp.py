@@ -163,7 +163,11 @@ def _check_command(argv0, rest, pre, drift, src=""):
             drift.append("helper-jq-env")
     elif base == "gh":
         audit_gh(rest, drift)
-    elif base == "awk":
+    elif base == "awk" or re.fullmatch(
+            r"(mawk|nawk|gawk|oawk|original-awk)(-\d[\d.]*)?",
+            base):
+        # AWK aliases (and distro-versioned spellings) audit
+        # like awk; -v assignments are part of the program.
         _check_awk(rest, drift)
     elif base in ("python", "python3", "node", "ruby", "php",
                   "lua", "luajit"):

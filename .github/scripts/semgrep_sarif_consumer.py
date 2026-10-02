@@ -11,7 +11,8 @@ from semgrep_sarif_perl import audit_perl_file
 from semgrep_sarif_pins import (PINNED_CHECKOUT_USES,
                                 script_operand)
 from semgrep_sarif_programs import audit_jq_content
-from semgrep_sarif_scan import arith_regions
+from semgrep_sarif_scan import (arith_regions,
+                                has_proc_environ)
 from semgrep_sarif_segments import run_segments
 from semgrep_sarif_shell import (ENV_POISON, INTERP_ALLOW,
                                  _bare_word, map_key_value, peel_prefix,
@@ -207,12 +208,11 @@ def audit_run_hygiene(ctx, drift):
                 and "run-body-substitution" not in drift:
             drift.append("run-body-substitution")
         # Process-environment reads (/proc/<pid>/environ, any pid
-        # spelling, quoted or not): step secrets encoded past
-        # exact-value masking, whatever the transform. Quoting is
-        # no defense (cat reads quoted paths), so the raw seg
-        # scans, not nosq.
-        if re.search(r"(?:^|[^/\w])/proc/[^/\s]+/environ(?![\w])",
-                     seg) \
+        # spelling, dot-dot or /root-aliased, quoted or not):
+        # step secrets encoded past exact-value masking, whatever
+        # the transform. Quoting is no defense (cat reads quoted
+        # paths), so the raw seg scans, not nosq.
+        if has_proc_environ(seg) \
                 and "run-body-environ" not in drift:
             drift.append("run-body-environ")
         # Deferred execution: single-quoted text is literal NOW but

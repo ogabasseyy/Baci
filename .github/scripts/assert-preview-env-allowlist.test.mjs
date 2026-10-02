@@ -113,6 +113,13 @@ test('rejects embedded credentials in allowlisted URLs without echoing them', ()
   });
 });
 
+test('accepts the export-prefixed assignment form', () => {
+  withFiles('export NEXT_PUBLIC_SHOP="ogabassey"\nexport CRON_SECRET=""\n', '# seeded\nCRON_SECRET\n', (envFile, allowFile) => {
+    const result = run(envFile, allowFile);
+    assert.equal(result.status, 0, result.stderr);
+  });
+});
+
 test('rejects userinfo in public URLs but allows public query strings', () => {
   withFiles('NEXT_PUBLIC_API_URL="https://api.example.com/v1?key=public"\n', '', (envFile, allowFile) => {
     assert.equal(run(envFile, allowFile).status, 0);
@@ -143,7 +150,7 @@ test('accepts the real pull-output shape through normalize, redact, and exposure
     // privileged keys, then run the exposure check. No sed -i (BSD/GNU
     // differ); the normalize pattern must mirror preview.yml.
     for (const args of [
-      ['-E', 's/=["\']?\\[SENSITIVE\\]["\']?[[:space:]]*$/=""/', envFile],
+      ['-E', 's/=["\']?\\[SENSITIVE[[:blank:]]*\\]["\']?[[:space:]]*$/=""/', envFile],
       ['-E', '-f', redactPatterns, envFile],
     ]) {
       const sed = spawnSync('sed', args, { encoding: 'utf8' });

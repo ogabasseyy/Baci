@@ -18,15 +18,8 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  # Same-ref redispatch cancels the in-flight run (preview freshness beats
-  # orphan-avoidance; Vercel retains any orphaned deployment as inert
-  # ephemera). A cancelled run never prints the orphan checklist, so before
-  # retrying check the Vercel dashboard for a deployment the cancelled run
-  # may have left behind. Production uses false; previews choose true.
-  group: preview-${{ inputs.ref }}
-  cancel-in-progress: true
-
+# No run-level concurrency: cancellation is scoped per job below so a
+# redispatch cancels a superseded build without orphaning a deploy.
 # Trust boundary: the target ref is build SOURCE only. Untrusted branch code
 # executes solely in `build`, which holds no deployment token; `prepare` and
 # `deploy` run trusted default-branch helpers with the token on fresh
@@ -94,7 +87,7 @@ jobs:
         # quote spellings plus trailing whitespace match; POSIX class keeps
         # the pattern portable across GNU/BSD sed.
         run: |
-          sed -i -E 's/=["'"'"']?\[SENSITIVE\]["'"'"']?[[:space:]]*$/=""/' .vercel/.env.preview.local
+          sed -i -E 's/=["'"'"']?\[SENSITIVE[[:blank:]]*\]["'"'"']?[[:space:]]*$/=""/' .vercel/.env.preview.local
       - name: Verify quiz RPC secret is marked sensitive in Preview
         # This proves the marking exists; the injector below additionally
         # refuses any non-blank value before the stand-in replaces it.
@@ -156,6 +149,10 @@ jobs:
     needs: [prepare]
     runs-on: ubuntu-24.04
     timeout-minutes: 150
+    # Same-ref redispatch cancels a superseded build (freshness where the 150-minute cost lives).
+    concurrency:
+      group: preview-build-${{ inputs.ref }}
+      cancel-in-progress: true
     env:
       VERCEL_CLI_VERSION: "57.0.0"
       BACI_NEXT_DEPLOYMENT_ID_SOURCE: ${{ github.run_id }}_${{ github.run_attempt }}
@@ -168,8 +165,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref }}
-          # Tags resolve without a full clone; abbreviated SHAs stay
-          # unsupported (see the ref input description).
+          # Tags resolve shallowly; abbreviated SHAs unsupported (see input).
           fetch-tags: true
           persist-credentials: false
       - name: Export checked-out commit metadata
@@ -243,6 +239,10 @@ jobs:
     needs: [build]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    # Same-ref deploys serialize and never cancel, so every deploy reaches a logged outcome.
+    concurrency:
+      group: preview-deploy-${{ inputs.ref }}
+      cancel-in-progress: false
     environment: preview
     env:
       VERCEL_CLI_VERSION: "57.0.0"

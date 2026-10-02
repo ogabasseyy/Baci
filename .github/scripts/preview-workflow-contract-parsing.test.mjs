@@ -75,7 +75,7 @@ test('deploy script fails fast with the true CLI exit code', () => {
 
 test('deploy script survives CLI hangs and captures diagnostics', () => {
   assert.match(previewDeployScript, /2>&1 \| tee preview-deploy\.log/);
-  assert.match(previewDeployScript, /timeout -s TERM -k 2m 50m "\$@" 2>&1/);
+  assert.match(previewDeployScript, /timeout -s TERM -k 2m 45m "\$@" 2>&1/);
   assert.match(previewDeployScript, /PIPESTATUS\[0\]/);
   assert.match(previewDeployScript, /deploy_status.*124/);
   // Timeout-with-URL reports success only after the captured deployment
@@ -154,6 +154,17 @@ test('no checkout persists credentials or takes credential inputs', () => {
   }
 });
 
+test('cancellation is scoped per job: builds cancel, deploys complete', () => {
+  const build = jobBlock('build');
+  assert.match(build, /group: preview-build-\$\{\{ inputs\.ref \}\}/);
+  assert.match(build, /cancel-in-progress: true/);
+  const deploy = jobBlock('deploy');
+  assert.match(deploy, /group: preview-deploy-\$\{\{ inputs\.ref \}\}/);
+  assert.match(deploy, /cancel-in-progress: false/);
+  assert.doesNotMatch(jobBlock('prepare'), /concurrency:/);
+  assert.doesNotMatch(executable, /^concurrency:/m);
+});
+
 test('shallow checkout advertises only the ref forms it supports', () => {
   assert.match(workflow, /full 40-char SHA/);
   assert.match(workflow, /abbreviated SHAs fail the shallow fetch/);
@@ -165,7 +176,7 @@ test('sensitive normalization covers both quote spellings', () => {
   const prepare = jobBlock('prepare');
   // Shell-escape sequences sit between the quote characters in-file;
   // assert the semantic fragments, not the exact quoting dance.
-  assert.match(prepare, /\\\[SENSITIVE\\\]/);
+  assert.match(prepare, /\\\[SENSITIVE\[/);
   assert.match(prepare, /'"'"'/);
   assert.match(prepare, /\[\[:space:\]\]\*\$/);
 });

@@ -29,11 +29,12 @@ vercel_runner="$1"
 : "${GITHUB_STEP_SUMMARY:?GITHUB_STEP_SUMMARY must be set}"
 
 # CLI 57 prints READY then hangs on some CI deploys (production wraps
-# attempts the same way in deploy-with-retry.sh): cap below the step
-# timeout and accept a captured URL on timeout. Merge stderr into the
-# log: the labeled Preview line is diagnostic.
+# attempts the same way in deploy-with-retry.sh): cap the deploy at 45m
+# (47m worst case with the KILL grace) so the 5m readiness inspect and
+# job setup still fit the 60m deploy-job budget with margin. Merge
+# stderr into the log: the labeled Preview line is diagnostic.
 set +e
-timeout -s TERM -k 2m 50m "$@" 2>&1 | tee preview-deploy.log
+timeout -s TERM -k 2m 45m "$@" 2>&1 | tee preview-deploy.log
 deploy_status=${PIPESTATUS[0]}
 set -e
 # Last match wins: Vercel prints the deployment assignment at the end of

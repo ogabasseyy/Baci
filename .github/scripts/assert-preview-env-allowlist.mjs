@@ -11,8 +11,11 @@
 // The allowlist grandfathers today's Preview inventory; its value is the
 // ratchet: any future server key added without the sensitive flag breaks
 // the workflow loudly instead of leaking silently to branch builds.
-// dotenv subset: single-line KEY=VALUE assignments. Unparseable lines
-// fail closed (pulled files are machine-generated and clean).
+// Exact pulled-file dialect: single-line KEY=VALUE assignments with an
+// optional `export ` prefix, blank lines, and `#` comments (verified
+// against live `vercel pull` output, which emits only KEY="value").
+// Anything else fails closed via the unparseable bucket: loud, never
+// leaky (line numbers only, since content could be a secret fragment).
 import { readFileSync } from 'node:fs';
 
 const [envFile, allowlistFile] = process.argv.slice(2);
@@ -57,7 +60,7 @@ envText.split('\n').forEach((rawLine, index) => {
   if (line === '' || line.startsWith('#')) {
     return;
   }
-  const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
+  const match = /^(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
   if (!match) {
     // Line number only: the content could be a secret fragment.
     unparseable.push(index + 1);

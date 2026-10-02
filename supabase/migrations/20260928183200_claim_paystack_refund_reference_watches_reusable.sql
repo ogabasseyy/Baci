@@ -7,7 +7,10 @@
 -- open->claimed flip consumes the sweep handoff, and a second
 -- legacy/corrupt payment completing under the same reference still
 -- files instead of finding no open watch. Same signature: OR
--- REPLACE keeps the completion wrapper on the new body.
+-- REPLACE keeps the completion wrapper on the new body. The
+-- completing leg's gateway normalizes like every other recovery
+-- predicate, and a partial claim-lookup index keeps the per-reference
+-- scan indexed as retained claimed rows accumulate.
 CREATE OR REPLACE FUNCTION public.claim_paystack_refund_recovery_watches_v1(
   p_transaction_id uuid,
   p_order_id uuid
@@ -45,7 +48,9 @@ BEGIN
   INTO v_txn_gateway, v_txn_reference, v_txn_amount
   FROM public.transactions AS t
   WHERE t.id = p_transaction_id;
-  IF NOT FOUND OR v_txn_gateway IS DISTINCT FROM 'paystack'
+  IF NOT FOUND
+    OR public.normalized_gateway_name_v1(v_txn_gateway)
+      IS DISTINCT FROM 'PAYSTACK'
     OR v_txn_reference IS NULL THEN
     RETURN 0;
   END IF;
@@ -271,3 +276,15 @@ REVOKE ALL ON FUNCTION public.claim_paystack_refund_recovery_watches_v1(uuid,uui
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.claim_paystack_refund_recovery_watches_v1(uuid,uuid)
   TO service_role;
+
+-- Retained claimed reference rows stay visible to later completions
+-- by design, so the claim scan's candidate set only grows. Index the
+-- exact claim predicate (open rows plus claimed reference-only rows)
+-- so every gateway payment completion locates its reference without
+-- scanning all retained watches. No CONCURRENTLY: the table is new
+-- in this batch and empty at deploy.
+CREATE INDEX IF NOT EXISTS
+  paystack_refund_recovery_watch_claim_lookup_idx
+  ON public.paystack_refund_recovery_watch (paystack_ref, created_at)
+  WHERE status = 'open'
+    OR (status = 'claimed' AND provider_refund_id IS NULL);

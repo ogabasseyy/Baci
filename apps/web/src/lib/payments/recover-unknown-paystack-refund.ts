@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { fetchCompletedPaymentsByReference } from './fetch-completed-payments-by-reference';
 import { fileCancelledPaystackRefundCandidateReviews } from './file-cancelled-paystack-refund-candidate-reviews';
 import { fileInvalidPaystackRefundEvidenceReview } from './file-invalid-paystack-refund-evidence-review';
+import { fileInvalidRefundEvidenceBeforeReject } from './file-invalid-refund-evidence-before-reject';
 import { fileActiveOrderPaystackRefundCandidateReviews } from './file-provider-refund-outside-cancellation-review';
 import { fileStalledPaystackRefundReviews } from './file-stalled-paystack-refund-reviews';
 import { openPaystackRefundRecoveryWatch } from './open-paystack-refund-recovery-watch';
@@ -33,50 +34,11 @@ export async function recoverUnknownPaystackRefund(
       paymentReference
     );
   } catch (error) {
-    // The provider answered for a real refund but its transaction
-    // pointer is malformed — or the resolved payment reference is
-    // missing/outside the recovery alphabet — so no payment can
-    // resolve: throwing bare would 503 every redelivery with no
-    // durable trace, and polling can never rediscover an unknown
-    // refund. File the evidence against the webhook hint (or a
-    // refund-keyed fallback when the event carries none) and still
-    // throw for glitch recovery.
-    if (
-      error instanceof Error &&
-      (error.message === 'paystack_refund_transaction_invalid' ||
-        error.message === 'paystack_refund_payment_reference_invalid')
-    ) {
-      const raw = (error as { providerRefund?: unknown }).providerRefund as
-        | {
-            amount?: unknown;
-            currency?: unknown;
-            status?: unknown;
-            transaction?: unknown;
-          }
-        | null
-        | undefined;
-      const reference = paymentReference ?? `unknown-refund:${refundId}`;
-      const reason =
-        error.message === 'paystack_refund_transaction_invalid'
-          ? `Paystack refund ${refundId} returned a malformed transaction pointer for reference ${reference}`
-          : `Paystack refund ${refundId} resolved a payment reference outside the recovery alphabet for reference ${reference}`;
-      await fileInvalidPaystackRefundEvidenceReview(supabase, {
-        evidence: {
-          providerPaymentTransactionId: raw?.transaction,
-          providerRefundId: refundId,
-          providerRefundStatus:
-            typeof raw?.status === 'string' ? raw.status : 'unknown',
-          reference,
-        },
-        reason,
-        reference,
-        refundId,
-      });
-      await resolvePaystackRefundRecoveryWatch(supabase, {
-        providerRefundId: refundId,
-        reference,
-      });
-    }
+    await fileInvalidRefundEvidenceBeforeReject(supabase, {
+      error,
+      paymentReference,
+      refundId,
+    });
     throw error;
   }
   const { current, resolvedPaymentReference } = verified;

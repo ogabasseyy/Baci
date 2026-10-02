@@ -16,6 +16,7 @@ export type RefundEmailSender = (message: {
   replyTo?: string;
   emailType: 'orders' | 'notifications';
   fromName?: string;
+  maxAttemptsPerSender?: number;
   signal?: AbortSignal;
   fallbackDeadlineMs?: number;
   auditContext: {
@@ -84,6 +85,17 @@ export type RefundNotificationOutcome =
   | 'sent'
   | 'failed'
   | 'delivery_uncertain';
+
+// Worst-case allowance for the merchant-push phase (token read, one
+// Expo request, audit write) before the merchant-email fallback. The
+// 150s row budget cannot cover an unbounded push plus the email send,
+// so the push is skipped unless both phases fit (see below): starting
+// a push that starves the email burns the attempt on a budget-only
+// failure every backlog run until the notification dead-letters, even
+// with healthy delivery. Typical pushes finish in seconds; a push
+// that overruns its allowance still fails the row retryably via the
+// post-push email assert instead of stranding it as uncertain.
+const MERCHANT_PUSH_PHASE_WORST_MS = 30_000;
 
 /**
  * Deliver one claimed refund notification and report its outcome.
@@ -170,7 +182,8 @@ export async function deliverClaimedRefundNotification({
               Math.max(1, deadlineMs - Date.now() - 10_000)
             ),
             // Match the signal's 10s buffer: the platform-sender
-            // fallback declines unless its full retry loop fits.
+            // fallback is a single shot that declines unless one
+            // attempt fits.
             fallbackDeadlineMs: deadlineMs - 10_000,
           }),
           to: order.customer_email,
@@ -216,8 +229,16 @@ export async function deliverClaimedRefundNotification({
         const body = completed
           ? `Refunds totaling ${amount} have been processed for cancelled order #${orderNumber}.`
           : `Paystack could not complete the refund for order #${orderNumber}. Check the refund in Paystack.`;
-        assertRefundNotificationSendTime(deadlineMs);
-        if (sendMerchantPush) {
+        // Skip the push unless the push phase plus the capped fallback
+        // email both fit the remaining row budget: with only email
+        // room left, sending the email directly beats burning the
+        // attempt on a push that starves it.
+        const pushAllowanceMs =
+          MERCHANT_PUSH_PHASE_WORST_MS + zeptomailSendAdmissionBudgetMs(1);
+        const pushFits =
+          deadlineMs === undefined ||
+          deadlineMs - Date.now() >= pushAllowanceMs;
+        if (sendMerchantPush && pushFits) {
           const push = await attemptMerchantRefundPush({
             body,
             completed,
@@ -243,21 +264,26 @@ export async function deliverClaimedRefundNotification({
         }
         if (outcome !== 'sent') {
           outcome = 'failed';
-          // Re-check the FULL sender budget after push consumed part
-          // of the row's reserve.
+          // The fallback email runs capped at one primary attempt
+          // (the verified-wedge precedent): the row budget already
+          // spent the push phase, and the sweep retries transient
+          // failures next tick. Assert the single-attempt budget —
+          // the full four-attempt loop never fits after a push.
           assertRefundNotificationSendTime(
             deadlineMs,
-            zeptomailSendAdmissionBudgetMs()
+            zeptomailSendAdmissionBudgetMs(1)
           );
           outcome = 'delivery_uncertain';
           const result = await awaitRefundNotificationDeadline(
             sendEmail({
+              maxAttemptsPerSender: 1,
               ...(deadlineMs !== undefined && {
                 signal: AbortSignal.timeout(
                   Math.max(1, deadlineMs - Date.now() - 10_000)
                 ),
                 // Match the signal's 10s buffer: the platform-sender
-                // fallback declines unless its full retry loop fits.
+                // fallback is a single shot that declines unless one
+                // attempt fits.
                 fallbackDeadlineMs: deadlineMs - 10_000,
               }),
               to: merchant.email,

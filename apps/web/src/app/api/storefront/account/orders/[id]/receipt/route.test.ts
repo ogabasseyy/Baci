@@ -208,6 +208,13 @@ describe('GET /api/storefront/account/orders/[id]/receipt', () => {
     );
     expect(contentDisposition).not.toContain('\r');
     expect(contentDisposition).not.toContain('\n');
+    // The route serves settled balances whose payment flag is not 'paid',
+    // so the generator must not infer the kind from that flag.
+    expect(vi.mocked(generateReceiptBlob)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      { documentKind: 'receipt' }
+    );
   });
 
   it('maps document access errors to API responses', async () => {

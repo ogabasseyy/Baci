@@ -22,8 +22,12 @@ DECLARE
   v_order public.orders%ROWTYPE;
   v_event text;
 BEGIN
+  -- FOR NO KEY UPDATE still serializes against the claim/mark FOR SHARE
+  -- locks but does not conflict with the FOR KEY SHARE locks foreign-key
+  -- inserts (order_items, transactions, outbox) hold on this row, so two
+  -- concurrent item batches cannot deadlock against each other here.
   SELECT o.* INTO v_order FROM public.orders AS o
-  WHERE o.id = p_order_id FOR UPDATE;
+  WHERE o.id = p_order_id FOR NO KEY UPDATE;
   IF NOT FOUND OR NOT v_order.manual_document_notification_eligible
     OR v_order.recorded_by_user_id IS NULL
     OR v_order.import_job_id IS NOT NULL OR v_order.external_source IS NOT NULL
@@ -80,8 +84,17 @@ END;
 $$;
 REVOKE ALL ON FUNCTION private.enqueue_manual_documents_after_items()
   FROM PUBLIC, anon, authenticated;
+-- AFTER UPDATE keeps item corrections symmetric with order corrections: a
+-- stale/failed dispatch unblocked by an item edit re-arms the same way an
+-- order-field correction does. DELETE needs no trigger: wiping the last item
+-- makes the next claim skip, and re-adding items re-arms via INSERT.
+-- Transition tables cannot be specified on multi-event triggers, so INSERT
+-- and UPDATE get separate triggers over the shared function.
 CREATE TRIGGER enqueue_manual_documents_after_items
   AFTER INSERT ON public.order_items REFERENCING NEW TABLE AS inserted_items
+  FOR EACH STATEMENT EXECUTE FUNCTION private.enqueue_manual_documents_after_items();
+CREATE TRIGGER enqueue_manual_documents_after_item_updates
+  AFTER UPDATE ON public.order_items REFERENCING NEW TABLE AS inserted_items
   FOR EACH STATEMENT EXECUTE FUNCTION private.enqueue_manual_documents_after_items();
 
 CREATE OR REPLACE FUNCTION private.enqueue_manual_document_after_order_update()
@@ -120,6 +133,7 @@ CREATE TRIGGER enqueue_manual_document_after_order_update
 -- manual rows are produced (see docs/manual-order-document-notifications.md
 -- "Activation").
 ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_items;
+ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_item_updates;
 ALTER TABLE public.orders DISABLE TRIGGER enqueue_manual_document_after_order_update;
 
 -- Revoke explicitly, including installations with older authenticated grants.

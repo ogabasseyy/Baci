@@ -77,6 +77,76 @@ describe('GET /api/storefront/orders', () => {
     );
   });
 
+  it.each([
+    {
+      name: 'covered partial',
+      payment_status: 'partially_paid',
+      total: 100,
+      amount_paid: 100,
+    },
+    {
+      name: 'zero-total unpaid',
+      payment_status: 'unpaid',
+      total: 0,
+      amount_paid: 0,
+    },
+  ])('pairs kind receipt with a commercial type code for a settled $name manual order', async ({
+    payment_status,
+    total,
+    amount_paid,
+  }) => {
+    const supabase = createSupabaseMock({
+      orders: {
+        data: [
+          {
+            id: 'manual-order',
+            order_number: 'MANUAL-1',
+            created_at: '2026-09-30T09:00:00Z',
+            total,
+            subtotal: total,
+            shipping_fee: 0,
+            tax_amount: 0,
+            discount_amount: 0,
+            amount_paid,
+            currency: 'NGN',
+            payment_status,
+            shipping_status: 'pending',
+            recorded_by_user_id: 'staff-1',
+            shipping_address: null,
+            tracking_number: null,
+            shipping_provider: null,
+            payment_method: 'invoice',
+            order_items: [
+              {
+                id: 'item-1',
+                product_id: 'product-1',
+                name: 'Device',
+                quantity: 1,
+                price: total,
+                has_assurance: false,
+              },
+            ],
+          },
+        ],
+        error: null,
+      },
+    });
+    vi.mocked(authenticateApiRequest).mockResolvedValue(
+      createAuthenticatedAuthResult(supabase)
+    );
+    const response = await GET(
+      new NextRequest(
+        'http://localhost/api/storefront/orders?merchantSlug=ogabassey'
+      )
+    );
+    const data = await response.json();
+    expect(data.orders[0]).toMatchObject({
+      current_document_kind: 'receipt',
+      invoice_type_code: '380',
+      receipt_eligible: true,
+    });
+  });
+
   it('returns 401 when the customer is not authenticated', async () => {
     vi.mocked(authenticateApiRequest).mockResolvedValue({
       user: null,

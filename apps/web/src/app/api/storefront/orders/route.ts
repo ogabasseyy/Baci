@@ -184,6 +184,10 @@ export async function GET(request: NextRequest) {
         total: order.total,
         amountPaid: order.amount_paid,
       };
+      // A fully-covered manual balance is a receipt in substance even under
+      // a non-paid label; resolve the type code from the same boolean so a
+      // settled order never pairs kind 'receipt' with a proforma code.
+      const receiptEligible = isReceiptEligible(documentEligibility);
 
       return {
         id: order.id,
@@ -213,13 +217,13 @@ export async function GET(request: NextRequest) {
         current_document_kind: getCurrentDocumentKind(documentEligibility),
         invoice_type_code: resolveInvoiceTypeCode({
           paymentMethod: order.payment_method,
-          isPaid: paymentStatus === 'paid',
+          isPaid: paymentStatus === 'paid' || receiptEligible,
           wasPaid: paymentStatus === 'refunded',
           paymentStatus,
           amountPaid: order.amount_paid,
           storedTypeCode: order.invoice_type_code,
         }),
-        receipt_eligible: isReceiptEligible(documentEligibility),
+        receipt_eligible: receiptEligible,
         manual_document_available:
           isManualOrderDocumentAvailable(documentEligibility) &&
           Boolean(order.order_items?.length),

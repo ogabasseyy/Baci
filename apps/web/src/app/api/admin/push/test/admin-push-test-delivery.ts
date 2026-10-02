@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import Expo, { type ExpoPushMessage } from 'expo-server-sdk';
 import { sendPushNotificationChunks } from '@/lib/expo-push-chunk-delivery';
+import { createDeliveryStartBoundary } from '@/lib/push-delivery-boundary';
 
 export type AdminPushTestDeliveryResult = {
   failed: number;
@@ -48,11 +49,13 @@ export async function deliverAdminPushTest(
     to: token,
   }));
 
+  const deliveryBoundary = createDeliveryStartBoundary();
   try {
     const expo = new Expo({ accessToken: readServerExpoAccessToken() });
     const { deliveryUncertain, tickets } = await sendPushNotificationChunks(
       expo,
-      messages
+      messages,
+      { onDeliveryStart: deliveryBoundary.markDeliveryStarted }
     );
     const failed = tickets.filter((ticket) => ticket.status === 'error').length;
     // A provider throw yields synthetic error tickets plus
@@ -63,6 +66,12 @@ export async function deliverAdminPushTest(
     }
     return { failed, sent: tickets.length - failed, uncertain: 0 };
   } catch {
+    // A throw before dispatch (chunking, client setup) definitely
+    // sent nothing; a throw after dispatch started (e.g. the
+    // per-message fallback) may have delivered.
+    if (deliveryBoundary.wasDeliveryStarted()) {
+      return { failed: 0, sent: 0, uncertain: tokens.length };
+    }
     return { failed: tokens.length, sent: 0, uncertain: 0 };
   }
 }

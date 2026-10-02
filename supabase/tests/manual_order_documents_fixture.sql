@@ -8,7 +8,7 @@ CREATE TABLE auth.users (id uuid PRIMARY KEY, email text, email_confirmed_at tim
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
 CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql AS $$ SELECT nullif(current_setting('request.jwt.claim.role', true), '') $$;
 CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql AS $$ SELECT coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
-CREATE TABLE public.merchants (id uuid PRIMARY KEY, user_id uuid, slug text, business_name text, email text, bank_code text, bank_account_number text, bank_name text, bank_account_name text);
+CREATE TABLE public.merchants (id uuid PRIMARY KEY, user_id uuid, slug text, business_name text, email text, bank_code text, bank_account_number text, bank_name text, bank_account_name text, legal_entity_name text, business_address text, registered_address jsonb, cac_rc_number text, tax_identification_number text, vat_registration_status text, vat_rate numeric);
 CREATE TABLE public.customers (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), merchant_id uuid REFERENCES public.merchants, user_id uuid, email text, total_orders integer DEFAULT 0, total_spent numeric DEFAULT 0, last_login_at timestamptz, updated_at timestamptz, deleted_at timestamptz);
 -- Mirror the production unique index (baseline 20260418000000): it covers
 -- soft-deleted rows, so redemption tests prove link-failure handling instead
@@ -50,7 +50,7 @@ GRANT USAGE ON SCHEMA public, auth, private TO service_role, authenticated, anon
 CREATE FUNCTION public.check_staff_permission(uuid, uuid, text, text) RETURNS boolean LANGUAGE sql AS $$ SELECT false $$;
 
 -- An existing manual order must not be mailed just because its items are edited.
-INSERT INTO public.merchants VALUES ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000010', 'fixture', 'Fixture', 'store@example.com');
+INSERT INTO public.merchants (id, user_id, slug, business_name, email, legal_entity_name, business_address, registered_address, cac_rc_number, tax_identification_number, vat_registration_status, vat_rate) VALUES ('10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000010', 'fixture', 'Fixture', 'store@example.com', 'Fixture Ltd', '1 Market St', '{"city": "Lagos"}', 'RC123', 'TIN123', 'registered', 7.5);
 INSERT INTO public.customers (id, merchant_id, email) VALUES ('10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000001', 'buyer@example.com');
 INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, customer_name, order_number, payment_status, amount_paid)
 VALUES ('10000000-0000-4000-8000-000000000099', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'Buyer', 'OLD', 'paid', 100);

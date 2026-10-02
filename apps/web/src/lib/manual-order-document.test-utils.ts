@@ -81,6 +81,8 @@ export function database(
     paymentHistoryError?: { message: string } | null;
     taxSubtotals?: Record<string, unknown>[];
     taxSubtotalsError?: { message: string } | null;
+    dispatchLeaseReset?: boolean;
+    dispatchLeaseError?: boolean;
   } = {}
 ) {
   const filters: Record<string, unknown> = {};
@@ -186,11 +188,21 @@ export function database(
                   ? { ...merchantFixture, ...options.merchantOverride }
                   : table === 'receipt_claims'
                     ? { id: 'claim-1' }
-                    : { id: 'outbox-1' },
+                    : table === 'order_notification_outbox'
+                      ? {
+                          id: 'outbox-1',
+                          dispatch_started_at: options.dispatchLeaseReset
+                            ? null
+                            : '2026-09-30T10:00:00Z',
+                        }
+                      : { id: 'outbox-1' },
             error:
               table === 'receipt_claims' && options.claimMarkerError
                 ? { message: 'failed write' }
-                : null,
+                : table === 'order_notification_outbox' &&
+                    options.dispatchLeaseError
+                  ? { message: 'lease read failed' }
+                  : null,
           });
         }),
       };

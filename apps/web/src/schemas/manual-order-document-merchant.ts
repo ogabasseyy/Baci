@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isSafeClaimSlug } from '@/lib/import-notifications/receipt-claim-links';
 
 const number = z.coerce.number().finite().nonnegative();
 const nullableText = z.string().nullable();
@@ -24,7 +25,11 @@ function normalizeLegacyBrandColors(value: unknown): unknown {
 
 export const manualDocumentMerchantSchema = z.object({
   id: z.string(),
-  slug: z.string(),
+  // The slug becomes a claim-URL subdomain label, validated by the same
+  // predicate the URL builder enforces so the sender never throws below.
+  // Rejections fail closed as merchant_validation_failed and recover
+  // through the merchant re-arm.
+  slug: z.string().refine(isSafeClaimSlug, 'Invalid merchant slug'),
   business_name: nullableText,
   email_sender_name: nullableText,
   logo_url: nullableText,

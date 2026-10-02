@@ -16,6 +16,7 @@ import type {
 } from '@/lib/storefront-account-document-bundle.types';
 import {
   getCurrentDocumentKind,
+  isManualOrder,
   normalizePaymentStatus,
   normalizeShippingStatus,
 } from '@/lib/storefront-account-document-eligibility';
@@ -152,10 +153,16 @@ export async function getStorefrontAccountDocumentData({
   const paymentStatus = normalizePaymentStatus(order.payment_status);
   const shippingStatus = normalizeShippingStatus(order.shipping_status);
   // Treat fully-covered manual orders as paid for Paystack DVA display: the
-  // balance was received even under a non-paid label.
+  // balance was received even under a non-paid label. Imported and
+  // externally sourced orders are excluded like everywhere else: their
+  // historical DVAs must never print as payment instructions.
   const paymentReceived =
     paymentStatus === 'paid' ||
-    (order.recorded_by_user_id != null &&
+    (isManualOrder({
+      externalSource: order.external_source,
+      importJobId: order.import_job_id,
+      recordedByUserId: order.recorded_by_user_id,
+    }) &&
       order.total != null &&
       order.amount_paid != null &&
       Number.isFinite(Number(order.total)) &&
@@ -176,6 +183,7 @@ export async function getStorefrontAccountDocumentData({
       tax_amount: order.tax_amount,
       discount_amount: order.discount_amount,
       amount_paid: order.amount_paid,
+      currency: order.currency,
     },
     items: itemsResult.data || [],
   });

@@ -63,4 +63,44 @@ describe('manualDocumentOrderSchema', () => {
       })
     ).toThrow();
   });
+
+  it('fails closed on null money instead of coercing to zero', () => {
+    for (const field of [
+      'total',
+      'subtotal',
+      'shipping_fee',
+      'tax_amount',
+      'discount_amount',
+      'amount_paid',
+    ] as const) {
+      expect(() =>
+        manualDocumentOrderSchema.parse({ ...baseOrder, [field]: null })
+      ).toThrow();
+    }
+    expect(() =>
+      manualDocumentOrderSchema.parse({
+        ...baseOrder,
+        order_items: [{ ...baseOrder.order_items[0], quantity: null }],
+      })
+    ).toThrow();
+    expect(() =>
+      manualDocumentOrderSchema.parse({
+        ...baseOrder,
+        order_items: [{ ...baseOrder.order_items[0], price: null }],
+      })
+    ).toThrow();
+  });
+
+  it('requires an exact three-letter currency code', () => {
+    for (const currency of ['NGN', 'usd', null, undefined]) {
+      expect(
+        manualDocumentOrderSchema.parse({ ...baseOrder, currency }).currency
+      ).toBe(currency);
+    }
+    for (const currency of ['', 'NG', 'NAIRA', ' NGN', 'NGN ', 'N-G']) {
+      expect(() =>
+        manualDocumentOrderSchema.parse({ ...baseOrder, currency })
+      ).toThrow();
+    }
+  });
 });

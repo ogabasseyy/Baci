@@ -1,12 +1,23 @@
 import { z } from 'zod';
 
-const number = z.coerce.number().finite().nonnegative();
+// Database NULLs must fail closed, never coerce to zero: z.coerce.number()
+// turns null into 0, which would advertise money the claim RPC rejects and
+// loop the dispatch marker stale (SQL null is distinct from coerced zero).
+// Staff set the value and the order triggers re-arm the document.
+const number = z.preprocess(
+  (value) => (value === null ? Number.NaN : value),
+  z.coerce.number().finite().nonnegative()
+);
+const positiveNumber = z.preprocess(
+  (value) => (value === null ? Number.NaN : value),
+  z.coerce.number().finite().positive()
+);
 const nullableText = z.string().nullable();
 
 const manualDocumentOrderItemSchema = z.object({
   id: z.string(),
   name: z.string(),
-  quantity: number.positive(),
+  quantity: positiveNumber,
   price: number,
   variant_name: nullableText,
   condition: nullableText,
@@ -24,7 +35,14 @@ export const manualDocumentOrderSchema = z.object({
   created_at: z.string(),
   transaction_date: nullableText,
   invoice_issue_date: nullableText,
-  currency: z.string().nullish(),
+  // Strictly a 3-letter code on the raw value (no trim/normalize): the
+  // dispatch marker compares the raw column, so normalizing here would loop
+  // it stale, while Intl throws on anything downstream that is not an
+  // exact code. Invalid values fail closed and re-arm on correction.
+  currency: z
+    .string()
+    .regex(/^[A-Za-z]{3}$/, 'Invalid currency code')
+    .nullish(),
   total: number,
   subtotal: number,
   shipping_fee: number,
@@ -70,6 +88,7 @@ export const manualDocumentOrderSchema = z.object({
 // shapes fail closed via safeParse.
 const manualDocumentArchiveMoneySchema = manualDocumentOrderSchema.pick({
   amount_paid: true,
+  currency: true,
   discount_amount: true,
   shipping_fee: true,
   subtotal: true,
@@ -89,6 +108,7 @@ export interface ManualDocumentArchiveMoney {
   tax_amount?: number | string | null;
   discount_amount?: number | string | null;
   amount_paid?: number | string | null;
+  currency?: string | null;
 }
 
 export interface ManualDocumentArchiveItem {

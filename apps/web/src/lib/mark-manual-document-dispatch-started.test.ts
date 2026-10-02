@@ -6,6 +6,7 @@ const row = {
   order_id: 'order-1',
   merchant_id: 'merchant-1',
   claim_owner: 'worker-1',
+  event_type: 'manual_order_receipt_ready',
 };
 const order = {
   customer_id: 'customer-1',
@@ -88,6 +89,17 @@ const payment = {
   virtualAccountName: 'Shop Ltd/ORD',
 };
 
+const merchant = {
+  businessName: 'Shop Ltd',
+  legalEntityName: 'Shop Ltd',
+  businessAddress: '1 Market St',
+  registeredAddress: null,
+  cacRcNumber: 'RC123',
+  taxIdentificationNumber: 'TIN123',
+  vatRegistrationStatus: 'registered',
+  vatRate: 7.5,
+};
+
 describe('markManualDocumentDispatchStarted', () => {
   it('passes the rendered snapshot to the atomic dispatch RPC', async () => {
     const rpc = vi
@@ -102,7 +114,8 @@ describe('markManualDocumentDispatchStarted', () => {
         'receipt',
         payment,
         taxSubtotals,
-        transactions
+        transactions,
+        merchant
       )
     ).resolves.toBeUndefined();
     expect(rpc).toHaveBeenCalledWith('mark_manual_document_dispatch_started', {
@@ -138,6 +151,14 @@ describe('markManualDocumentDispatchStarted', () => {
       p_merchant_bank_account_number: '1234567890',
       p_merchant_bank_name: 'GTBank',
       p_merchant_bank_account_name: 'Shop Ltd',
+      p_merchant_business_name: 'Shop Ltd',
+      p_merchant_legal_entity_name: 'Shop Ltd',
+      p_merchant_business_address: '1 Market St',
+      p_merchant_registered_address: null,
+      p_merchant_cac_rc_number: 'RC123',
+      p_merchant_tax_identification_number: 'TIN123',
+      p_merchant_vat_registration_status: 'registered',
+      p_merchant_vat_rate: 7.5,
       p_va_account_number: '9990001111',
       p_va_bank_name: 'Paystack-Titan',
       p_va_account_name: 'Shop Ltd/ORD',
@@ -200,7 +221,8 @@ describe('markManualDocumentDispatchStarted', () => {
         'receipt',
         payment,
         taxSubtotals,
-        transactions
+        transactions,
+        merchant
       )
     ).rejects.toThrow('Manual document order changed before dispatch');
   });
@@ -218,7 +240,8 @@ describe('markManualDocumentDispatchStarted', () => {
         'receipt',
         payment,
         taxSubtotals,
-        transactions
+        transactions,
+        merchant
       )
     ).rejects.toThrow('Manual document dispatch lease lost');
   });
@@ -236,7 +259,8 @@ describe('markManualDocumentDispatchStarted', () => {
         'receipt',
         payment,
         taxSubtotals,
-        transactions
+        transactions,
+        merchant
       )
     ).rejects.toThrow('Manual document dispatch state unavailable');
   });

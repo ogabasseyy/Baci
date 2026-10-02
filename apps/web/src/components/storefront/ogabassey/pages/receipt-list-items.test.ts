@@ -111,4 +111,16 @@ describe('fetchReceiptListItems', () => {
     expect(item.documentKind).toBeNull();
     expect(item.rawOrder.payment_status).toBe('paid');
   });
+
+  it('falls back to NGN display for a malformed currency code', async () => {
+    mockOrdersResponse([baseOrder({ currency: 'naira' })]);
+
+    const [item] = (await fetchReceiptListItems('ogabassey', customer)) ?? [];
+    mockOrdersResponse([baseOrder({ currency: 'NGN' })]);
+    const [ngnItem] =
+      (await fetchReceiptListItems('ogabassey', customer)) ?? [];
+
+    expect(item.total).toBe(ngnItem.total);
+    expect(item.balance).toBe(ngnItem.balance);
+  });
 });

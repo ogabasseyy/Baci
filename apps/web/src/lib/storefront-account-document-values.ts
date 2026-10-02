@@ -238,3 +238,14 @@ export function buildOrderItems(
     };
   });
 }
+
+export function resolveMoneyValue(
+  value: number | string | null | undefined,
+  fallback: number
+) {
+  return value == null ? fallback : asNumber(value);
+}
+
+export function roundCurrency(value: number) {
+  return Math.round(value * 100) / 100;
+}

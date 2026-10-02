@@ -76,6 +76,16 @@ export function isSafeClaimDomain(domain: string): boolean {
   );
 }
 
+// The slug becomes a claim-URL subdomain label, so it must be a single
+// host-safe label: empty, whitespace-padded, dotted, or underscored values
+// would mint unclaimable token links. Case-insensitive (unlike the
+// lowercased custom-domain check above) because DNS resolves the wire host
+// case-insensitively — rejecting uppercase slugs would fail merchants whose
+// links work. Shared with the manual sender schema so both paths agree.
+export function isSafeClaimSlug(slug: string): boolean {
+  return /^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(slug);
+}
+
 export function buildReceiptClaimUrl({
   merchant,
   token,
@@ -88,10 +98,18 @@ export function buildReceiptClaimUrl({
     .toLowerCase()
     .replace(/\/+$/, '')
     .replace(/\.$/, '');
-  const origin =
-    customDomain && isSafeClaimDomain(customDomain)
-      ? `https://${customDomain}`
-      : `https://${merchant.slug}.${getRootDomain() || 'usebaci.com'}`;
+  if (customDomain && isSafeClaimDomain(customDomain)) {
+    return `https://${customDomain}${DEFAULT_RECEIPT_CLAIM_PATH}/${encodeURIComponent(token)}`;
+  }
+  // No safe fallback exists below the slug: the subdomain carries the
+  // storefront tenant, so a root-domain URL would not resolve the claim.
+  // The manual sender pre-validates through the schema and fails closed
+  // with re-arm instead; the import campaign surfaces this loudly rather
+  // than emailing links no customer could open.
+  if (!isSafeClaimSlug(merchant.slug)) {
+    throw new Error('Invalid merchant slug for receipt claim URL');
+  }
+  const origin = `https://${merchant.slug}.${getRootDomain() || 'usebaci.com'}`;
 
   return `${origin}${DEFAULT_RECEIPT_CLAIM_PATH}/${encodeURIComponent(token)}`;
 }

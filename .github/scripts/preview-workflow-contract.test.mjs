@@ -21,14 +21,17 @@ const DENIED_KEYS = [
   'INTERNAL_API_SECRET',
   'KV_REST_API_TOKEN',
   'SUPABASE_SERVICE_ROLE_KEY',
-  'TURBO_CACHE',
-  'TURBO_REMOTE_ONLY',
   'VERCEL_OIDC_TOKEN',
   'ZEPTOMAIL_MAILAGENT_KEY',
   'ZEPTOMAIL_TOKEN',
   'ZOHO_CLIENT_SECRET',
   'ZOHO_REFRESH_TOKEN',
 ];
+
+// Cache-mode ownership keys are deleted (not blanked) so the build job's
+// explicit TURBO_CACHE owns the mode with no precedence gamble and no
+// reliance on empty-string-means-unset handling.
+const DENIED_ABSENT_KEYS = ['TURBO_CACHE', 'TURBO_REMOTE_ONLY'];
 
 test('preview workflow stays dispatch-only', () => {
   const onBlock = executable.match(/\non:\n([\s\S]*?)\n[a-z]+:/)?.[1];
@@ -262,6 +265,20 @@ test('preview redacts privileged values before the exposure check', () => {
       previewEnvRedact,
       new RegExp(`s/\\^${key}=\\.\\*/${key}=""\\/`),
       `${key} must stay redacted`
+    );
+    assert.doesNotMatch(
+      previewEnvAllowlist,
+      new RegExp(`^${key}$`, 'm'),
+      `${key} must not be allowlisted`
+    );
+  }
+  for (const key of DENIED_ABSENT_KEYS) {
+    assert.match(
+      previewEnvRedact,
+      new RegExp(
+        `/\\^\\(export\\[\\[:blank:\\]\\]\\+\\)\\?${key}=\\.\\*/d`
+      ),
+      `${key} must be deleted (export-prefix-tolerant) so the job owns it`
     );
     assert.doesNotMatch(
       previewEnvAllowlist,

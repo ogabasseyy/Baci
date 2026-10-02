@@ -188,6 +188,10 @@ test('accepts the real pull-output shape through normalize, redact, and exposure
     assert.doesNotMatch(final, /fixture-redacted-secret/);
     assert.match(final, /FIXTURE_SENSITIVE_TOKEN=""/);
     assert.match(final, /fixture-safe-value/);
+    // Cache-mode ownership keys are deleted from the file (not blanked),
+    // so the build job's TURBO_CACHE is uncontested by construction.
+    assert.doesNotMatch(final, /^TURBO_CACHE=/m);
+    assert.doesNotMatch(final, /^TURBO_REMOTE_ONLY=/m);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -214,6 +218,8 @@ test('redacted build env is accepted by turbo with the job cache mode', () => {
     }
     // Offer the redacted file to turbo exactly as `vercel build` would,
     // plus the job-level cache mode (must mirror the build job step).
+    // The file carries no TURBO_CACHE/TURBO_REMOTE_ONLY (deleted, not
+    // blanked), so no step-vs-file precedence is assumed here.
     // Tokens stay unset: --dry must prove hermetic, offline acceptance.
     const env = { ...process.env };
     delete env.TURBO_TOKEN;

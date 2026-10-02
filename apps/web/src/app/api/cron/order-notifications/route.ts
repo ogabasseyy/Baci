@@ -159,7 +159,11 @@ export async function GET(request: Request) {
       summary.skipped += 1;
       continue;
     }
-    logger.error({
+    // Warn, not error: a valid-but-unknown future event type stays
+    // lease-held across polls, and erroring every poll would spam the
+    // dashboard during a normal rollout. Terminal corruption still logs
+    // at error inside deadLetterCorruptOutboxRow.
+    logger.warn({
       message: 'Skipping unparseable claimed outbox row',
       rowId:
         typeof row === 'object' && row !== null && 'id' in row

@@ -1,5 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { createReceiptClaimToken } from '@/lib/import-notifications/receipt-claim-links';
+import {
+  buildReceiptClaimUrl,
+  createReceiptClaimToken,
+} from '@/lib/import-notifications/receipt-claim-links';
 import { resolveInvoicePaymentAccount } from '@/lib/invoice-payment-account';
 import { buildManualOrderDocumentEmailContent } from '@/lib/manual-order-document-email';
 import { markManualDocumentDispatchStarted } from '@/lib/mark-manual-document-dispatch-started';
@@ -169,8 +172,10 @@ export async function sendManualOrderDocument({
     recipientEmail: recipient.email,
     displayCustomerName,
     pdfDocumentKind,
-    claimToken: claim.token,
-    customDomain,
+    claimUrl: buildReceiptClaimUrl({
+      merchant: { slug: merchant.slug, custom_domain: customDomain },
+      token: claim.token,
+    }),
   });
   let dispatchStarted = false;
   let providerAccepted = false;

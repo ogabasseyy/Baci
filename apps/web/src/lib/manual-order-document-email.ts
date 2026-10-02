@@ -8,7 +8,6 @@ import {
   renderReceiptDeviceRows,
   renderReceiptEmailHtml,
 } from '@/lib/import-notifications/import-notification-email-template';
-import { buildReceiptClaimUrl } from '@/lib/import-notifications/receipt-claim-links';
 import { escapeHtmlAttribute } from '@/lib/sanitize';
 import { sanitizeUrl } from '@/lib/sanitize-core';
 import type { manualDocumentMerchantSchema } from '@/schemas/manual-order-document-merchant';
@@ -108,8 +107,7 @@ export interface ManualOrderDocumentContentInput {
   recipientEmail: string;
   displayCustomerName: string;
   pdfDocumentKind: 'invoice' | 'proforma_invoice' | 'receipt';
-  claimToken: string;
-  customDomain: string | null;
+  claimUrl: string;
 }
 
 export function buildManualOrderDocumentEmailContent(
@@ -122,10 +120,7 @@ export function buildManualOrderDocumentEmailContent(
     customerEmail: input.recipientEmail,
     orderNumber: order.order_number,
     documentKind: input.pdfDocumentKind,
-    claimUrl: buildReceiptClaimUrl({
-      merchant: { slug: merchant.slug, custom_domain: input.customDomain },
-      token: input.claimToken,
-    }),
+    claimUrl: input.claimUrl,
     devices: order.order_items.map(
       (item) =>
         `${item.quantity > 1 ? `${item.quantity} x ` : ''}${item.name}${item.variant_name ? ` (${item.variant_name})` : ''}`

@@ -164,10 +164,10 @@ export async function reconcileAbandonedPaystackAttempts({
       continue;
     }
 
-    try {
-      // The order and reference guards prevent a concurrent webhook or retry
-      // from being overwritten after provider verification.
-      const { data: updated, error: updateError } = await supabase
+    // The order and reference guards prevent a concurrent webhook or retry
+    // from being overwritten after provider verification.
+    const retire = async () =>
+      supabase
         .from('transactions')
         .update({ status: 'failed', updated_at: new Date().toISOString() })
         .eq('id', attempt.id)
@@ -178,15 +178,16 @@ export async function reconcileAbandonedPaystackAttempts({
         .eq('gateway_reference', attempt.gateway_reference)
         .eq('status', attempt.status)
         .select('id');
-      if (updateError) {
-        summary.held.push({ id: attempt.id, reason: 'update_failed' });
-      } else if (updated?.length === 1) {
-        summary.retired.push(attempt.id);
-      } else {
-        summary.held.push({ id: attempt.id, reason: 'changed_concurrently' });
-      }
-    } catch {
-      summary.held.push({ id: attempt.id, reason: 'update_failed' });
+    const retirement = await retire().catch(() => {
+      throw new Error('abandoned_paystack_attempt_retirement_failed');
+    });
+    if (retirement.error) {
+      throw new Error('abandoned_paystack_attempt_retirement_failed');
+    }
+    if (retirement.data?.length === 1) {
+      summary.retired.push(attempt.id);
+    } else {
+      summary.held.push({ id: attempt.id, reason: 'changed_concurrently' });
     }
   }
 

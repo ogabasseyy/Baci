@@ -36,12 +36,45 @@ UPDATE public.order_cancellation_side_effects AS side_effect
            WHERE refund.order_id = side_effect.order_id
              AND refund.merchant_id = side_effect.merchant_id
              AND refund.transaction_type = 'refund'
-             AND refund.gateway = payment.gateway
+             -- Normalize gateways exactly like the aggregate coverage
+             -- gate (whitespace-trimmed, uppercased; missing gateways
+             -- never match).
+             AND NULLIF(
+               upper(
+                 regexp_replace(
+                   COALESCE(refund.gateway, ''),
+                   '^\s+|\s+$',
+                   '',
+                   'g'
+                 )
+               ),
+               ''
+             ) = NULLIF(
+               upper(
+                 regexp_replace(
+                   COALESCE(payment.gateway, ''),
+                   '^\s+|\s+$',
+                   '',
+                   'g'
+                 )
+               ),
+               ''
+             )
              AND refund.status = 'completed'
              AND refund.amount > 0
              AND upper(refund.currency) = upper(payment.currency)
              AND (
-               refund.gateway <> 'paystack'
+               NULLIF(
+                 upper(
+                   regexp_replace(
+                     COALESCE(refund.gateway, ''),
+                     '^\s+|\s+$',
+                     '',
+                     'g'
+                   )
+                 ),
+                 ''
+               ) <> 'PAYSTACK'
                OR refund.metadata->>'provider_refund_status' = 'processed'
              )
              AND (

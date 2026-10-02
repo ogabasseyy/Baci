@@ -52,16 +52,18 @@ export async function sweepPaystackRefundRecoveryWatches(
     failed: 0,
     retired: 0,
   };
-  // Oldest first: stale watches always redrive before fresh ones, so
-  // no watch waits past retirement behind a younger backlog.
+  // Least-recently-touched first: failed redrives bump updated_at
+  // below so one bad batch rotates behind the backlog instead of
+  // pinning the bounded sweep; created_at still gates retirement.
   const { data: watches, error: watchError } = await supabase
     .from('paystack_refund_recovery_watch')
     .select('id, paystack_ref, provider_refund_id, created_at, evidence')
     .eq('status', 'open')
-    .order('created_at', { ascending: true })
+    .order('updated_at', { ascending: true })
     .limit(limit);
   if (watchError) throw new Error('refund_recovery_watch_lookup_failed');
   const redrivenIds: string[] = [];
+  const failedIds: string[] = [];
   for (const watch of (watches ?? []) as OpenWatchRow[]) {
     if (shouldYieldReconcileWorker(deadlineMs)) break;
     summary.checked++;
@@ -88,12 +90,30 @@ export async function sweepPaystackRefundRecoveryWatches(
       redrivenIds.push(watch.id);
     } catch (reason) {
       summary.failed++;
+      failedIds.push(watch.id);
       logger.warn({
         message: 'Paystack refund recovery watch needs another attempt',
         watchId: watch.id,
         refundId: watch.provider_refund_id,
         reference: watch.paystack_ref,
         error: reason instanceof Error ? reason.message : 'unknown_sweep_error',
+      });
+    }
+  }
+  // Rotate failed watches behind the backlog: without this the same
+  // failing rows top every oldest-first batch and newer watches
+  // starve. Non-fatal: rows whose bump fails simply retry in place
+  // on the next run.
+  if (failedIds.length > 0) {
+    const { error: rotateError } = await supabase
+      .from('paystack_refund_recovery_watch')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('status', 'open')
+      .in('id', failedIds);
+    if (rotateError) {
+      logger.warn({
+        message: 'Paystack refund recovery watch rotation failed',
+        error: rotateError.message,
       });
     }
   }

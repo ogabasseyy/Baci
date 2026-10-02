@@ -61,9 +61,11 @@ describe('Paystack cancellation refund mismatch evidence', () => {
     const rpc = vi.fn((name: string) =>
       Promise.resolve({
         data:
-          name === 'hold_paystack_cancellation_refund_for_review_v1'
-            ? true
-            : 'processed',
+          name === 'open_paystack_refund_reference_watch_v1'
+            ? []
+            : name === 'hold_paystack_cancellation_refund_for_review_v1'
+              ? true
+              : 'processed',
         error: null,
       })
     );
@@ -97,7 +99,9 @@ describe('Paystack cancellation refund mismatch evidence', () => {
         issue_type: 'order_cancellation_refund_requires_review',
       })
     );
-    expect(rpc).toHaveBeenCalledTimes(2);
+    // Two holds plus the trailing atomic open-and-rescan, which runs
+    // even when the passes handled matches.
+    expect(rpc).toHaveBeenCalledTimes(3);
     expect(rpc).toHaveBeenCalledWith(
       'hold_paystack_cancellation_refund_for_review_v1',
       { p_refund_id: 'refund-1', p_reason: 'paystack_refund_evidence_mismatch' }
@@ -122,7 +126,12 @@ describe('Paystack cancellation refund mismatch evidence', () => {
       .mockReturnValueOnce(buildRefundCandidates([REFUND_FIXTURE]))
       .mockReturnValueOnce(buildPaymentLookup())
       .mockReturnValueOnce(review);
-    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    const rpc = vi.fn((name: string) =>
+      Promise.resolve({
+        data: name === 'open_paystack_refund_reference_watch_v1' ? [] : true,
+        error: null,
+      })
+    );
     provider.fetchRefund.mockResolvedValueOnce({
       success: true,
       data: {
@@ -207,7 +216,7 @@ describe('Paystack cancellation refund mismatch evidence', () => {
         ])
       )
       .mockReturnValueOnce(review);
-    const rpc = vi.fn();
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
 
@@ -253,7 +262,7 @@ describe('Paystack cancellation refund mismatch evidence', () => {
 
   it('ignores references outside the shared alphabet', async () => {
     const from = vi.fn();
-    const rpc = vi.fn();
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
 
     await reconcilePaystackRefundEvent(
       { from, rpc } as never,

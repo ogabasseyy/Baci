@@ -33,6 +33,9 @@ describe('close verified cancellation refund reviews migration', () => {
     const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
 
     expect(migrationSql).toContain(
+      "AND jsonb_typeof( coalesce(review.metadata->'refund_evidence', '{}'::jsonb) ) = 'object'"
+    );
+    expect(migrationSql).toContain(
       "review.metadata->>'audit_record_failed' IS DISTINCT FROM 'true'"
     );
     expect(migrationSql).toContain(

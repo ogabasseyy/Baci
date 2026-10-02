@@ -108,4 +108,49 @@ describe('createOrderDetailsStatusActions paid cancellation', () => {
       expect(Alert.alert).toHaveBeenCalledWith('Error', message);
     });
   });
+
+  it.each([
+    null,
+    undefined,
+    42,
+    'boom',
+  ])('falls back to the generic message on a %s rejection', async (rejection) => {
+    const { actions } = createPaidOrderStatusActions({
+      updateStatus: vi.fn().mockRejectedValue(rejection),
+    });
+
+    await actions.handleStatusUpdate('cancelled');
+    const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
+    const cancelOrder = confirmation?.find(
+      (button) => button.text === 'Cancel Order'
+    );
+    cancelOrder?.onPress?.();
+    await vi.waitFor(() => {
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'Error',
+        'Failed to update status'
+      );
+    });
+  });
+
+  it('falls back to the generic message when the code matches but the message is missing', async () => {
+    const { actions } = createPaidOrderStatusActions({
+      updateStatus: vi
+        .fn()
+        .mockRejectedValue({ code: 'PAYMENT_RECONCILIATION_REQUIRED' }),
+    });
+
+    await actions.handleStatusUpdate('cancelled');
+    const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
+    const cancelOrder = confirmation?.find(
+      (button) => button.text === 'Cancel Order'
+    );
+    cancelOrder?.onPress?.();
+    await vi.waitFor(() => {
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'Error',
+        'Failed to update status'
+      );
+    });
+  });
 });

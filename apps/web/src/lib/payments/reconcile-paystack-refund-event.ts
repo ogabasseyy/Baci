@@ -126,13 +126,13 @@ async function forEachReferencePayment(
   transactionReference: string,
   providerRefundStatus: string,
   stalled: boolean
-): Promise<number> {
+): Promise<Set<string>> {
   // Keyset over the immutable id order: offsets over this
   // status-filtered set would shift when a payment completes (or a
   // stalled row transitions out) between page reads, skipping a later
   // match the caller then acknowledges without reconciling.
   let lastId: string | null = null;
-  let actionable = 0;
+  const handledIds = new Set<string>();
   for (;;) {
     const filtered = supabase
       .from('transactions')
@@ -153,7 +153,7 @@ async function forEachReferencePayment(
     if (paymentError) throw new Error('refund_event_payment_lookup_failed');
     const page = (payments ?? []) as Record<string, unknown>[];
     for (const payment of page) {
-      if (payment.order_id != null) actionable++;
+      if (typeof payment.id === 'string') handledIds.add(payment.id);
       await reconcileSharedReferencePayment(
         supabase,
         transactionReference,
@@ -165,7 +165,7 @@ async function forEachReferencePayment(
     lastId = (page[page.length - 1]?.id as string | undefined) ?? null;
     if (lastId === null) break;
   }
-  return actionable;
+  return handledIds;
 }
 
 export async function reconcilePaystackRefundEvent(
@@ -184,7 +184,7 @@ export async function reconcilePaystackRefundEvent(
   // completed payments: paginate the whole match set before the caller
   // acknowledges the event, so no cancelled order misses
   // reconciliation or its missing-audit review.
-  const completed = await forEachReferencePayment(
+  const completedIds = await forEachReferencePayment(
     supabase,
     transactionReference,
     providerRefundStatus,
@@ -199,26 +199,30 @@ export async function reconcilePaystackRefundEvent(
   // instead of acknowledging after the completed pass alone. (Failed
   // rows ride along: a provider refund proves capture, so a failed
   // local row is a stale wedge the evidence usefully surfaces.)
-  const stalled = await forEachReferencePayment(
+  const stalledIds = await forEachReferencePayment(
     supabase,
     transactionReference,
     providerRefundStatus,
     true
   );
-  if (completed + stalled > 0) return;
-  // Both passes empty — but a payment pending during the completed
-  // scan may have completed before the stalled scan ran, ending both
-  // passes empty around a settled payment. Open the reference watch
-  // and re-scan atomically under the lock the completion path
-  // claims under: late rows are handled and the watch resolves, an
-  // empty set leaves the watch open so the completion files the
-  // evidence instead of acknowledging silently.
+  // Always open the reference watch and re-scan atomically under the
+  // lock the completion path claims under — even when the passes
+  // handled other matches. A payment pending during the completed
+  // scan may have completed before the stalled scan ran, so the
+  // status filters omit it from both passes; without the locked
+  // rescan its completion has no watch to claim and the event is
+  // acknowledged with no evidence for that order. Rows the passes
+  // already handled are skipped so the rescan never reconciles
+  // twice; an empty fresh set leaves the watch open so a later
+  // completion files the evidence instead of acknowledging silently.
+  const handledIds = new Set([...completedIds, ...stalledIds]);
   const late = await openPaystackRefundReferenceWatch(supabase, {
     providerRefundStatus,
     reference: transactionReference,
   });
-  if (late.length === 0) return;
-  for (const payment of late) {
+  const fresh = late.filter((payment) => !handledIds.has(payment.id));
+  if (fresh.length === 0) return;
+  for (const payment of fresh) {
     await reconcileSharedReferencePayment(
       supabase,
       transactionReference,

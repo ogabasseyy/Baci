@@ -34,15 +34,29 @@ describe('refund reference-watch migration', () => {
     const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
 
     expect(migrationSql).toContain(
-      'CREATE FUNCTION public.open_paystack_refund_reference_watch_v1('
+      'CREATE OR REPLACE FUNCTION public.open_paystack_refund_reference_watch_v1('
     );
     // Same reference key the completion path claims under: rows
     // returned mean the payment landed first, an empty set leaves the
     // watch open for the completion to claim.
     expect(migrationSql).toContain("'baci_paystack_refund_watch:'");
     expect(migrationSql).toContain(
-      'CREATE FUNCTION public.resolve_paystack_refund_reference_watch_v1('
+      'CREATE OR REPLACE FUNCTION public.resolve_paystack_refund_reference_watch_v1('
     );
     expect(migrationSql).toContain("status IN ('open', 'claimed')");
+  });
+
+  it('keeps a non-failed verdict when a failed redelivery refreshes the watch', () => {
+    expect(existsSync(migrationPath)).toBe(true);
+    if (!existsSync(migrationPath)) return;
+
+    const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
+
+    // A delayed failed redelivery must not overwrite an earlier
+    // processed observation, or the claim files failed-only evidence
+    // the audit reader excludes and cancellation refunds again.
+    expect(migrationSql).toContain(
+      "SET evidence = p_evidence || jsonb_build_object( 'provider_refund_status', CASE WHEN evidence->>'provider_refund_status' IS DISTINCT FROM 'failed' AND p_evidence->>'provider_refund_status' = 'failed' THEN evidence->>'provider_refund_status' ELSE p_evidence->>'provider_refund_status' END )"
+    );
   });
 });

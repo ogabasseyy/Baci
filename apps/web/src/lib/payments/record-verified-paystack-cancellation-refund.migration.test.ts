@@ -27,7 +27,9 @@ describe('verified paystack cancellation refund migration', () => {
       "IF NOT FOUND AND v_refund.metadata->>'payment_transaction_id' IS NULL THEN"
     );
     expect(migrationSql).toContain('IF v_external_payments = 1 THEN');
-    expect(migrationSql).toContain('AND gateway = v_refund.gateway');
+    expect(migrationSql).toContain(
+      "COALESCE(v_refund.gateway, ''), '^\\s+|\\s+$', '', 'g'"
+    );
   });
 
   it('clears stale review holds whenever provider evidence is accepted', () => {
@@ -189,6 +191,26 @@ describe('verified paystack cancellation refund migration', () => {
     // rows cannot pin the workers' oldest-25 batch.
     expect(migrationSql).toContain(
       'UPDATE public.transactions SET updated_at = now() WHERE id = v_refund.id'
+    );
+  });
+
+  it('normalizes gateways exactly like the aggregate coverage gate', () => {
+    expect(existsSync(migrationPath)).toBe(true);
+    if (!existsSync(migrationPath)) return;
+
+    const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
+
+    // The unlinked legacy path and the completion scan must agree
+    // with the claim gate on a legacy `Paystack` leg and its
+    // `paystack` refund.
+    expect(migrationSql).toContain(
+      "AND NULLIF( upper( regexp_replace( COALESCE(gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' ) = NULLIF( upper( regexp_replace( COALESCE(v_refund.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' )"
+    );
+    expect(migrationSql).toContain(
+      "AND NULLIF( upper( regexp_replace( COALESCE(r.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' ) = NULLIF( upper( regexp_replace( COALESCE(p.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' )"
+    );
+    expect(migrationSql).toContain(
+      "NULLIF( upper( regexp_replace( COALESCE(r.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' ) <> 'PAYSTACK'"
     );
   });
 });

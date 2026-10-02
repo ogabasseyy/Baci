@@ -180,6 +180,12 @@ test('fails a function that loses every usable reference', () => {
         '/gone2.js': 'node_modules/gone/two.js',
       },
     }),
+    '.vercel/output/functions/emptied.func/.vc-config.json': JSON.stringify({
+      filePathMap: {
+        '/p.js': 'trusted-ops/evil.js',
+        '/i.js': 42,
+      },
+    }),
     'node_modules/a/one.js': '1',
     'node_modules/a/two.js': '2',
     'node_modules/a/three.js': '3',
@@ -200,14 +206,20 @@ test('fails a function that loses every usable reference', () => {
 
 test('warns and summarizes phantom drops without failing', () => {
   const configRel = '.vercel/output/functions/a.func/.vc-config.json';
+  const longPhantom = `node_modules/${'x'.repeat(250)}.js`;
   const root = layout({
     [configRel]: JSON.stringify({
       filePathMap: {
         '/gone.js': 'node_modules/gone/index.js',
+        '/long.js': longPhantom,
         '/ok.js': 'node_modules/ok/index.js',
+        '/ok2.js': 'node_modules/ok2/index.js',
+        '/ok3.js': 'node_modules/ok3/index.js',
       },
     }),
     'node_modules/ok/index.js': 'ok',
+    'node_modules/ok2/index.js': 'ok2',
+    'node_modules/ok3/index.js': 'ok3',
   });
   try {
     const summary = join(root, 'summary.md');
@@ -217,10 +229,12 @@ test('warns and summarizes phantom drops without failing', () => {
       env: { ...process.env, GITHUB_STEP_SUMMARY: summary },
     });
     assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stderr, /WARNING: dropped 1 phantom reference/);
+    assert.match(run.stderr, /WARNING: dropped 2 phantom reference/);
     const text = readFileSync(summary, 'utf8');
-    assert.match(text, /staged 1, skipped 1 \(1 phantom\)/);
+    assert.match(text, /staged 3, skipped 2 \(2 phantom\)/);
     assert.match(text, /node_modules\/gone\/index\.js/);
+    assert.ok(!text.includes('x'.repeat(201)));
+    assert.ok(text.includes(`\`${longPhantom.slice(0, 200)}\``));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -245,7 +259,7 @@ test('fails closed when missing refs dominate staged files', () => {
       encoding: 'utf8',
     });
     assert.equal(dominated.status, 1);
-    assert.match(dominated.stderr, /dominate .* staged/);
+    assert.match(dominated.stderr, /dominate .* refusing to ship/);
     const empty = layout({});
     try {
       const noOutput = spawnSync('node', [SCRIPT, empty, join(empty, 's2')], {

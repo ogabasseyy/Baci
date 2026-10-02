@@ -53,10 +53,10 @@ mkdirSync(stage, { recursive: true });
 
 const staged = [];
 const skipped = [];
-const stagedValues = new Set();
-const missingValues = new Set();
 const unusableConfigs = [];
 let stringValues = 0;
+let missingCount = 0;
+let insideOutputCount = 0;
 
 for (const configPath of vcConfigs(outputDir)) {
   let config;
@@ -70,7 +70,7 @@ for (const configPath of vcConfigs(outputDir)) {
   if (!maps || typeof maps !== 'object') continue;
   const kept = {};
   let usable = 0;
-  let missing = 0;
+  let dropped = 0;
   for (const [key, value] of Object.entries(maps)) {
     // Only missing, protected, and invalid values leave the shipped map:
     // the CLI would ENOENT, wrongly upload, or crash on them. Absolute,
@@ -81,6 +81,7 @@ for (const configPath of vcConfigs(outputDir)) {
         value: `${key}=${JSON.stringify(value)?.slice(0, 200) ?? typeof value}`,
         reason: 'invalid',
       });
+      dropped += 1;
       continue;
     }
     stringValues += 1;
@@ -103,6 +104,7 @@ for (const configPath of vcConfigs(outputDir)) {
       skipped.push({ value, reason: 'inside-output' });
       kept[key] = value;
       usable += 1;
+      insideOutputCount += 1;
       continue;
     }
     if (
@@ -112,6 +114,7 @@ for (const configPath of vcConfigs(outputDir)) {
       posixRel.startsWith('.vercel/')
     ) {
       skipped.push({ value, reason: 'protected-path' });
+      dropped += 1;
       continue;
     }
     let srcStat;
@@ -126,34 +129,38 @@ for (const configPath of vcConfigs(outputDir)) {
       // failing the whole build. The guardrail below catches a
       // systematically wrong base, where nothing real stages.
       skipped.push({ value, reason: 'missing' });
-      missingValues.add(value);
-      missing += 1;
+      missingCount += 1;
+      dropped += 1;
       continue;
     }
     const dest = join(stage, rel);
     mkdirSync(dirname(dest), { recursive: true });
     copyFileSync(abs, dest);
     staged.push(posixRel);
-    stagedValues.add(value);
     kept[key] = value;
     usable += 1;
   }
-  if (missing > 0 && usable === 0) unusableConfigs.push(configPath);
+  if (dropped > 0 && usable === 0) unusableConfigs.push(configPath);
   if (Object.keys(kept).length !== Object.keys(maps).length) {
     config.filePathMap = kept;
     writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
   }
 }
 
-// Canary, not a correctness gate: dropped refs are redundant with the
-// self-contained .func dirs (platform git-push deploys never consume
-// filePathMap, and production works), so truncation cannot break the
-// deployment. But phantoms scale ~1 per traced package while staged files
-// scale many per package, so phantoms dominating the staged set smells
-// like a systematically wrong base. Refuse to ship it.
-if (stringValues > 0 && missingValues.size > stagedValues.size) {
+// Dropped refs should be redundant with the self-contained .func dirs:
+// platform git-push deploys never consume filePathMap, and production
+// works. Residual risk: if the phantom classification is wrong (wrong
+// root, pruned deps, case drift), the deploy succeeds here and can fail
+// at runtime (cf. vercel/vercel#15654 for the shape of that failure,
+// though its cause was tracer incompleteness, not map truncation). The
+// guardrails below catch systematic misclassification; preview READY plus
+// served verification catch the rest. Counts are occurrences on both
+// sides (a repeated phantom is repeated evidence); the resolving side
+// counts staged plus output-internal values, which genuinely upload.
+const resolving = staged.length + insideOutputCount;
+if (stringValues > 0 && missingCount > resolving) {
   console.error(
-    `error: ${missingValues.size} missing reference(s) dominate ${stagedValues.size} staged; refusing to ship (wrong base?)`
+    `error: ${missingCount} missing reference(s) dominate ${resolving} resolving; refusing to ship (wrong base?)`
   );
   process.exit(1);
 }
@@ -164,12 +171,13 @@ if (unusableConfigs.length > 0) {
   );
   process.exit(1);
 }
-if (missingValues.size > 0) {
-  const shown = [...missingValues].slice(0, 20);
+if (missingCount > 0) {
+  const missingVals = skipped.filter((s) => s.reason === 'missing').map((s) => s.value);
+  const shown = missingVals.slice(0, 20);
   console.error(
-    `WARNING: dropped ${missingValues.size} phantom reference(s) from shipped maps:\n` +
+    `WARNING: dropped ${missingCount} phantom reference(s) from shipped maps:\n` +
       shown.map((v) => `  ${v}`).join('\n') +
-      (missingValues.size > shown.length ? `\n  ...and ${missingValues.size - shown.length} more` : '')
+      (missingCount > shown.length ? `\n  ...and ${missingCount - shown.length} more` : '')
   );
 }
 
@@ -189,7 +197,7 @@ if (process.env.GITHUB_STEP_SUMMARY) {
   // rule as the deploy helper's ref sanitization).
   const dropped = skipped
     .filter((s) => s.reason === 'missing')
-    .map((s) => s.value.replace(/[`\r\n]/g, ''));
+    .map((s) => s.value.replace(/[`\r\n]/g, '').slice(0, 200));
   appendFileSync(
     process.env.GITHUB_STEP_SUMMARY,
     `### Prebuilt refs\nstaged ${new Set(staged).size}, skipped ${skipped.length} (${dropped.length} phantom)\n` +

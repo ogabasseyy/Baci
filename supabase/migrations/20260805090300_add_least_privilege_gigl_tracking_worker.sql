@@ -35,6 +35,17 @@ BEGIN
   IF auth.role() IS DISTINCT FROM 'gigl_tracking_worker' THEN
     RAISE EXCEPTION 'GIGL worker capability required' USING ERRCODE = '42501';
   END IF;
+  -- Defense in depth: mirror the underlying RPC bounds here so a future
+  -- relaxation of the inner function cannot silently widen worker
+  -- authority, and reject before elevating to service_role.
+  IF p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 100 THEN
+    RAISE EXCEPTION 'GIGL worker claim limit must be between 1 and 100'
+      USING ERRCODE = '22023';
+  END IF;
+  IF nullif(btrim(p_worker_id), '') IS NULL
+    OR char_length(btrim(p_worker_id)) > 128 THEN
+    RAISE EXCEPTION 'GIGL worker id is invalid' USING ERRCODE = '22023';
+  END IF;
   PERFORM set_config('request.jwt.claim.role', 'service_role', true);
   RETURN QUERY SELECT *
   FROM public.claim_due_gigl_tracking_monitors(p_limit, p_worker_id);
@@ -59,6 +70,12 @@ BEGIN
   IF auth.role() IS DISTINCT FROM 'gigl_tracking_worker' THEN
     RAISE EXCEPTION 'GIGL worker capability required' USING ERRCODE = '42501';
   END IF;
+  -- Lease ids are written by the claim wrapper (non-blank, <=128 chars),
+  -- so anything else can never match; reject before elevating.
+  IF nullif(btrim(p_worker_id), '') IS NULL
+    OR char_length(btrim(p_worker_id)) > 128 THEN
+    RAISE EXCEPTION 'GIGL worker id is invalid' USING ERRCODE = '22023';
+  END IF;
   PERFORM set_config('request.jwt.claim.role', 'service_role', true);
   RETURN public.apply_gigl_tracking_result(
     p_shipment_id, p_tracking_epoch_id, p_worker_id, p_status,
@@ -82,6 +99,12 @@ BEGIN
   IF auth.role() IS DISTINCT FROM 'gigl_tracking_worker' THEN
     RAISE EXCEPTION 'GIGL worker capability required' USING ERRCODE = '42501';
   END IF;
+  -- Lease ids are written by the claim wrapper (non-blank, <=128 chars),
+  -- so anything else can never match; reject before elevating.
+  IF nullif(btrim(p_worker_id), '') IS NULL
+    OR char_length(btrim(p_worker_id)) > 128 THEN
+    RAISE EXCEPTION 'GIGL worker id is invalid' USING ERRCODE = '22023';
+  END IF;
   PERFORM set_config('request.jwt.claim.role', 'service_role', true);
   RETURN public.record_gigl_tracking_failure(
     p_shipment_id, p_tracking_epoch_id, p_worker_id, p_error
@@ -102,6 +125,12 @@ AS $$
 BEGIN
   IF auth.role() IS DISTINCT FROM 'gigl_tracking_worker' THEN
     RAISE EXCEPTION 'GIGL worker capability required' USING ERRCODE = '42501';
+  END IF;
+  -- Lease ids are written by the claim wrapper (non-blank, <=128 chars),
+  -- so anything else can never match; reject before elevating.
+  IF nullif(btrim(p_worker_id), '') IS NULL
+    OR char_length(btrim(p_worker_id)) > 128 THEN
+    RAISE EXCEPTION 'GIGL worker id is invalid' USING ERRCODE = '22023';
   END IF;
   PERFORM set_config('request.jwt.claim.role', 'service_role', true);
   RETURN public.release_gigl_tracking_claim(
@@ -124,6 +153,12 @@ AS $$
 BEGIN
   IF auth.role() IS DISTINCT FROM 'gigl_tracking_worker' THEN
     RAISE EXCEPTION 'GIGL worker capability required' USING ERRCODE = '42501';
+  END IF;
+  -- Lease ids are written by the claim wrapper (non-blank, <=128 chars),
+  -- so anything else can never match; reject before elevating.
+  IF nullif(btrim(p_worker_id), '') IS NULL
+    OR char_length(btrim(p_worker_id)) > 128 THEN
+    RAISE EXCEPTION 'GIGL worker id is invalid' USING ERRCODE = '22023';
   END IF;
   PERFORM set_config('request.jwt.claim.role', 'service_role', true);
   RETURN public.pause_gigl_tracking_monitor(

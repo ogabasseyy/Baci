@@ -64,6 +64,32 @@ describe('GIGL tracking worker capability migration', () => {
     ).toHaveLength(5);
   });
 
+  it('validates wrapper inputs before elevating to the service role', () => {
+    const wrappers = migration.split(
+      'CREATE OR REPLACE FUNCTION public.gigl_worker_'
+    );
+
+    expect(wrappers).toHaveLength(6);
+    for (const body of wrappers.slice(1)) {
+      const guardAt = body.indexOf('GIGL worker id is invalid');
+      const elevateAt = body.indexOf(
+        "set_config('request.jwt.claim.role', 'service_role', true)"
+      );
+
+      expect(guardAt).toBeGreaterThanOrEqual(0);
+      expect(elevateAt).toBeGreaterThanOrEqual(0);
+      expect(guardAt).toBeLessThan(elevateAt);
+    }
+    // Only the claim wrapper takes a limit; it mirrors the underlying
+    // 1..100 bound so a future inner relaxation cannot widen authority.
+    expect(
+      migration.match(/GIGL worker claim limit must be between 1 and 100/g)
+    ).toHaveLength(1);
+    expect(
+      migration.match(/char_length\(btrim\(p_worker_id\)\) > 128/g)
+    ).toHaveLength(5);
+  });
+
   it('records the temporary connection-limited login without embedding a password', () => {
     expect(loginMigration).toMatch(
       /REVOKE gigl_tracking_worker FROM authenticator/

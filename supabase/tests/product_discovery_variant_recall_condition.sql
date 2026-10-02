@@ -40,7 +40,14 @@ VALUES
   ('cb58d110-0000-4000-8000-000000000538', 'cb58d110-0000-4000-8000-000000000503',
    'First-stocked bare offer', 'first-stocked-bare-offer', 50000, 'active', false, true, 'new', '{}'),
   ('cb58d110-0000-4000-8000-000000000542', 'cb58d110-0000-4000-8000-000000000503',
-   'Oversized 256GB', 'oversized-256gb', 50000, 'active', true, true, 'new', '{}');
+   'Oversized 256GB', 'oversized-256gb', 50000, 'active', true, true, 'new', '{}'),
+  ('cb58d110-0000-4000-8000-000000000543', 'cb58d110-0000-4000-8000-000000000503',
+   'Depleted new base with used offer', 'depleted-new-base-used-offer', 50000, 'active', false, true, 'new', '{}');
+
+UPDATE public.products SET stock_quantity = 0
+WHERE id = 'cb58d110-0000-4000-8000-000000000543';
+UPDATE public.products SET stock_quantity = 5
+WHERE id = 'cb58d110-0000-4000-8000-000000000514';
 
 INSERT INTO public.product_variants (id, product_id, merchant_id, attributes, stock_quantity, condition)
 VALUES
@@ -70,7 +77,9 @@ VALUES
   ('cb58d110-0000-4000-8000-000000000530', 'cb58d110-0000-4000-8000-000000000520',
    'cb58d110-0000-4000-8000-000000000503', '{"storage_gb":256}', 5, NULL),
   ('cb58d110-0000-4000-8000-000000000539', 'cb58d110-0000-4000-8000-000000000538',
-   'cb58d110-0000-4000-8000-000000000503', '{"storage_gb":256}', 5, NULL);
+   'cb58d110-0000-4000-8000-000000000503', '{"storage_gb":256}', 5, NULL),
+  ('cb58d110-0000-4000-8000-000000000544', 'cb58d110-0000-4000-8000-000000000543',
+   'cb58d110-0000-4000-8000-000000000503', '{"storage_gb":256}', 0, NULL);
 
 -- An oversized parent carries 129 non-anchor variants: hydration drops it
 -- outright, so recall must filter it before the window.
@@ -107,7 +116,9 @@ VALUES
   ('cb58d110-0000-4000-8000-000000000540', 'cb58d110-0000-4000-8000-000000000538',
    'cb58d110-0000-4000-8000-000000000503', 'open_box', 40000, 2, 'active'),
   ('cb58d110-0000-4000-8000-000000000541', 'cb58d110-0000-4000-8000-000000000538',
-   'cb58d110-0000-4000-8000-000000000503', 'refurbished', 40000, 0, 'active');
+   'cb58d110-0000-4000-8000-000000000503', 'refurbished', 40000, 0, 'active'),
+  ('cb58d110-0000-4000-8000-000000000545', 'cb58d110-0000-4000-8000-000000000543',
+   'cb58d110-0000-4000-8000-000000000503', 'used', 40000, 2, 'active');
 
 -- Helper pins run as service_role like the other direct discovery calls;
 -- only the published RPC surface runs as the public caller below.
@@ -141,12 +152,13 @@ BEGIN
     p_limit => 10,
     p_condition => 'used'
   );
-  IF cardinality(recall_ids) IS DISTINCT FROM 4
+  IF cardinality(recall_ids) IS DISTINCT FROM 5
     OR NOT (recall_ids @> ARRAY[
       'cb58d110-0000-4000-8000-000000000512'::uuid,
       'cb58d110-0000-4000-8000-000000000513'::uuid,
       'cb58d110-0000-4000-8000-000000000514'::uuid,
-      'cb58d110-0000-4000-8000-000000000519'::uuid
+      'cb58d110-0000-4000-8000-000000000519'::uuid,
+      'cb58d110-0000-4000-8000-000000000543'::uuid
     ])
     OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000511'::uuid]
     OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000518'::uuid]
@@ -162,11 +174,23 @@ BEGIN
     p_limit => 10,
     p_condition => 'new'
   );
-  IF cardinality(recall_ids) IS DISTINCT FROM 9
+  IF cardinality(recall_ids) IS DISTINCT FROM 3
+    OR NOT (recall_ids @> ARRAY[
+      'cb58d110-0000-4000-8000-000000000511'::uuid,
+      'cb58d110-0000-4000-8000-000000000513'::uuid,
+      'cb58d110-0000-4000-8000-000000000515'::uuid
+    ])
     OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000512'::uuid]
+    OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000514'::uuid]
+    OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000516'::uuid]
+    OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000518'::uuid]
+    OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000519'::uuid]
+    OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000520'::uuid]
     OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000517'::uuid]
-    OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000542'::uuid] THEN
-    RAISE EXCEPTION 'new recall must drop the used-only and open-box-only products, got %', recall_ids;
+    OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000538'::uuid]
+    OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000542'::uuid]
+    OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000543'::uuid] THEN
+    RAISE EXCEPTION 'new recall must drop used-only, open-box-only and unavailable-base products, got %', recall_ids;
   END IF;
   -- A legacy requested spelling canonicalizes before comparing, matching
   -- hydration: refurbished recalls the open-box option, the first-stocked
@@ -193,7 +217,7 @@ BEGIN
     '[{"key":"storage_gb","operator":"eq","value":256}]'::jsonb,
     20
   );
-  IF cardinality(recall_ids) IS DISTINCT FROM 11
+  IF cardinality(recall_ids) IS DISTINCT FROM 12
     OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000542'::uuid] THEN
     RAISE EXCEPTION 'unconditioned recall must stay fail-open, got %', recall_ids;
   END IF;

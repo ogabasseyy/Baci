@@ -54,6 +54,44 @@ it('flags truncation past the bounded scan window', async () => {
   expect(supabase.rpc).toHaveBeenCalledTimes(3);
 });
 
+it('retains the first successful recall page when the next page fails', async () => {
+  const firstPage = Array.from({ length: 1000 }, (_, index) => ({
+    product_id: `first-${index}`,
+    attributes: { Storage: '256GB' },
+  }));
+  const supabase = {
+    rpc: vi.fn()
+      .mockResolvedValueOnce({ data: firstPage, error: null })
+      .mockResolvedValueOnce({ data: null, error: new Error('page unavailable') }),
+  } as unknown as SupabaseClient;
+
+  const result = await loadVariantRecallIds(intent(storageEq(256)), 'merchant-1', supabase);
+
+  expect(result.ids).toHaveLength(1000);
+  expect(result.ids[0]).toBe('first-0');
+  expect(result.truncated).toBe(true);
+});
+
+it('retains both successful recall pages when the truncation probe fails', async () => {
+  const page = (prefix: string) => Array.from({ length: 1000 }, (_, index) => ({
+    product_id: `${prefix}-${index}`,
+    attributes: { Storage: '256GB' },
+  }));
+  const supabase = {
+    rpc: vi.fn()
+      .mockResolvedValueOnce({ data: page('first'), error: null })
+      .mockResolvedValueOnce({ data: page('second'), error: null })
+      .mockResolvedValueOnce({ data: null, error: new Error('probe unavailable') }),
+  } as unknown as SupabaseClient;
+
+  const result = await loadVariantRecallIds(intent(storageEq(256)), 'merchant-1', supabase);
+
+  expect(result.ids).toHaveLength(2000);
+  expect(result.ids[0]).toBe('first-0');
+  expect(result.ids.at(-1)).toBe('second-999');
+  expect(result.truncated).toBe(true);
+});
+
 it('stops paging on a short page without probing', async () => {
   const rows = Array.from({ length: 1500 }, (_, index) => ({
     product_id: `p-${index % 10}`, attributes: { Storage: '256GB' },

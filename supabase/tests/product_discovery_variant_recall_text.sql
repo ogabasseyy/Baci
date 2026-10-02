@@ -175,12 +175,19 @@ BEGIN
     '[{"key":"storage_gb","operator":"gte","value":256}]'::jsonb,
     10
   );
-  IF cardinality(recall_ids) IS DISTINCT FROM 2
-    OR NOT (recall_ids @> ARRAY[
-      'cb58d110-0000-4000-8000-000000000430'::uuid,
-      'cb58d110-0000-4000-8000-000000000433'::uuid
-    ]) THEN
-    RAISE EXCEPTION 'past-range stored numerics must recall as Infinity for ranges, got %', recall_ids;
+  IF recall_ids IS DISTINCT FROM ARRAY['cb58d110-0000-4000-8000-000000000430'::uuid] THEN
+    RAISE EXCEPTION 'float8 overflow must not match a finite range constraint, got %', recall_ids;
+  END IF;
+  IF NOT discovery.recall_variant_filter_verifiably_fails(
+      '{"storage_gb":1e999}'::jsonb,
+      '{"key":"storage_gb","operator":"gte","value":256}'::jsonb)
+    OR discovery.recall_variant_filter_exactly_matches(
+      '{"storage_gb":1e999}'::jsonb,
+      '{"key":"storage_gb","operator":"gte","value":256}'::jsonb)
+    OR discovery.recall_variant_filter_loader_accepts(
+      '{"storage_gb":1e999}'::jsonb,
+      '{"key":"storage_gb","operator":"gte","value":256}'::jsonb) THEN
+    RAISE EXCEPTION 'float8 overflow must fail exact, range and loader-acceptance matching';
   END IF;
   SELECT array_agg(product_id) INTO recall_ids
   FROM public.search_product_variant_recall(

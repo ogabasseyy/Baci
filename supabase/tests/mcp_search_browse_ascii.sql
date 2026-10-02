@@ -65,7 +65,19 @@ VALUES
   ('e5100000-0000-4000-8000-000000000625', 'e5100000-0000-4000-8000-000000000601',
    'Oversized browse', 'oversized-browse', 'Over', 'Audio', 50000, 'active', NULL, 'new', true, true, 5, '{}'),
   ('e5100000-0000-4000-8000-000000000626', 'e5100000-0000-4000-8000-000000000601',
-   'Unmanaged base', 'unmanaged-base', 'Unmg', 'Audio', 50000, 'active', NULL, 'new', false, false, 0, '{}');
+   'Unmanaged base', 'unmanaged-base', 'Unmg', 'Audio', 50000, 'active', NULL, 'new', false, false, 0, '{}'),
+  ('e5100000-0000-4000-8000-000000000627', 'e5100000-0000-4000-8000-000000000601',
+   'Depleted new base with used offer', 'depleted-new-base-used-offer', 'Depl', 'Audio', 50000, 'active', NULL, 'new', false, true, 0, '{}');
+
+INSERT INTO public.product_variants (id, product_id, merchant_id, attributes, stock_quantity, condition)
+VALUES
+  ('e5100000-0000-4000-8000-000000000628', 'e5100000-0000-4000-8000-000000000627',
+   'e5100000-0000-4000-8000-000000000601', '{"color":"black"}', 0, 'used');
+
+INSERT INTO public.product_offers (id, product_id, merchant_id, condition, price, stock_quantity, status)
+VALUES
+  ('e5100000-0000-4000-8000-000000000729', 'e5100000-0000-4000-8000-000000000627',
+   'e5100000-0000-4000-8000-000000000601', 'used', 40000, 2, 'active');
 
 INSERT INTO public.product_variants (id, product_id, merchant_id, attributes, stock_quantity, condition)
 SELECT ('e5100000-0000-4000-8000-' || lpad(to_hex(g), 12, '0'))::uuid,
@@ -154,7 +166,8 @@ WHERE id NOT IN (
   'e5100000-0000-4000-8000-000000000640',
   'e5100000-0000-4000-8000-000000000642',
   'e5100000-0000-4000-8000-000000000644',
-  'e5100000-0000-4000-8000-000000000646'
+  'e5100000-0000-4000-8000-000000000646',
+  'e5100000-0000-4000-8000-000000000627'
 );
 
 SET LOCAL ROLE anon;
@@ -210,7 +223,7 @@ BEGIN
     p_sort => 'newest',
     p_limit => 10
   );
-  IF cardinality(browse_ids) IS DISTINCT FROM 8
+  IF cardinality(browse_ids) IS DISTINCT FROM 9
     OR browse_ids[1] IS DISTINCT FROM 'e5100000-0000-4000-8000-000000000614'::uuid
     OR browse_ids[6] IS DISTINCT FROM 'e5100000-0000-4000-8000-000000000618'::uuid
     OR browse_ids[7] IS DISTINCT FROM 'e5100000-0000-4000-8000-000000000619'::uuid
@@ -239,6 +252,7 @@ BEGIN
   );
   IF cardinality(browse_ids) IS DISTINCT FROM 7
     OR browse_ids @> ARRAY['e5100000-0000-4000-8000-000000000617'::uuid]
+    OR browse_ids @> ARRAY['e5100000-0000-4000-8000-000000000627'::uuid]
     OR browse_ids @> ARRAY['e5100000-0000-4000-8000-000000000624'::uuid]
     OR browse_ids @> ARRAY['e5100000-0000-4000-8000-000000000625'::uuid] THEN
     RAISE EXCEPTION 'new browse must drop the used base, got %', browse_ids;

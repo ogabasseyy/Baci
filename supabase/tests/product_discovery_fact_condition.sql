@@ -57,6 +57,15 @@ VALUES
    'Black paired stocked', 'black-paired-stocked', 'Acme', 50000, 'active', true, 'new',
    '{"product_type":"phone","attributes":{"color":"black"}}');
 
+INSERT INTO public.products
+  (id, merchant_id, name, slug, brand, price, status, has_variants, condition,
+   manage_stock, stock_quantity, discovery_metadata)
+VALUES
+  ('cb58d110-0000-4000-8000-000000000654', 'cb58d110-0000-4000-8000-000000000604',
+   'Black depleted new base with used offer', 'black-depleted-new-base-used-offer', 'Acme',
+   50000, 'active', false, 'new', true, 0,
+   '{"product_type":"phone","attributes":{"color":"black"}}');
+
 -- Exclusion fixtures live on their own merchant: a phone, a tablet, and a
 -- type-less row that drops with the phone under a nonempty exclusion list.
 INSERT INTO public.products
@@ -113,6 +122,8 @@ VALUES
   ('cb58d110-0000-4000-8000-000000000633', 'cb58d110-0000-4000-8000-000000000631',
    'cb58d110-0000-4000-8000-000000000604', 'used', 40000, 2, 'active'),
   ('cb58d110-0000-4000-8000-000000000636', 'cb58d110-0000-4000-8000-000000000634',
+   'cb58d110-0000-4000-8000-000000000604', 'used', 40000, 2, 'active'),
+  ('cb58d110-0000-4000-8000-000000000655', 'cb58d110-0000-4000-8000-000000000654',
    'cb58d110-0000-4000-8000-000000000604', 'used', 40000, 2, 'active');
 
 -- Availability fixtures live on their own merchant: a depleted managed
@@ -186,12 +197,13 @@ BEGIN
     query_text => 'black',
     condition_filter => 'used'
   );
-  IF cardinality(fact_ids) IS DISTINCT FROM 4
+  IF cardinality(fact_ids) IS DISTINCT FROM 5
     OR NOT (fact_ids @> ARRAY[
       'cb58d110-0000-4000-8000-000000000623'::uuid,
       'cb58d110-0000-4000-8000-000000000627'::uuid,
       'cb58d110-0000-4000-8000-000000000629'::uuid,
-      'cb58d110-0000-4000-8000-000000000634'::uuid
+      'cb58d110-0000-4000-8000-000000000634'::uuid,
+      'cb58d110-0000-4000-8000-000000000654'::uuid
     ])
     OR fact_ids @> ARRAY['cb58d110-0000-4000-8000-000000000625'::uuid]
     OR fact_ids @> ARRAY['cb58d110-0000-4000-8000-000000000631'::uuid] THEN
@@ -204,14 +216,15 @@ BEGIN
     condition_filter => 'new'
   );
   IF cardinality(fact_ids) IS DISTINCT FROM 3
-    OR fact_ids @> ARRAY['cb58d110-0000-4000-8000-000000000623'::uuid] THEN
+    OR fact_ids @> ARRAY['cb58d110-0000-4000-8000-000000000623'::uuid]
+    OR fact_ids @> ARRAY['cb58d110-0000-4000-8000-000000000654'::uuid] THEN
     RAISE EXCEPTION 'new facts must drop the used-variant product, got %', fact_ids;
   END IF;
   SELECT array_agg(product_id) INTO fact_ids
   FROM public.search_product_discovery_facts(
     'cb58d110-0000-4000-8000-000000000604', 'black'
   );
-  IF cardinality(fact_ids) IS DISTINCT FROM 6
+  IF cardinality(fact_ids) IS DISTINCT FROM 7
     OR fact_ids @> ARRAY['cb58d110-0000-4000-8000-000000000625'::uuid]
     OR fact_ids @> ARRAY['cb58d110-0000-4000-8000-000000000631'::uuid] THEN
     RAISE EXCEPTION 'unconditioned facts must filter unavailable rows, got %', fact_ids;

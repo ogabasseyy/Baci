@@ -64,6 +64,15 @@ BEGIN
         'connector' || pg_catalog.chr(31) || 'usb-c', 'UTF8'), 'sha256'), 'hex')) THEN
     RAISE EXCEPTION 'USB-C under another attribute satisfied connector constraint';
   END IF;
+  document := discovery.product_discovery_search_document_v5('Headset', 'Acme', 'Audio', '',
+    '{"attributes":{"color":"ÉBÈNE"}}'::jsonb);
+  IF NOT document @@ plainto_tsquery('simple', 'fact' || pg_catalog.encode(
+      extensions.digest(pg_catalog.convert_to(
+        'color' || pg_catalog.chr(31) || pg_catalog.translate(
+          'ÉBÈNE', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'UTF8'),
+        'sha256'), 'hex')) THEN
+    RAISE EXCEPTION 'ASCII-only attribute digest must preserve non-ASCII case';
+  END IF;
   document := discovery.product_discovery_search_document_v4('Headset', 'Acme', 'Audio', '',
     '{"attributes":{"connector":"Café   USB-C"}}'::jsonb);
   IF NOT document @@ plainto_tsquery('simple', 'fact' || pg_catalog.encode(
@@ -203,6 +212,13 @@ VALUES
    'Display fixture', 'screen-six-half', 'Acme', 50000, 'active',
    '{"attributes":{"screen_inches":6.5}}'::jsonb);
 
+INSERT INTO public.products
+  (id, merchant_id, name, slug, price, status, has_variants, manage_stock, discovery_metadata)
+VALUES
+  ('cb58d110-0000-4000-8000-000000000213', 'cb58d110-0000-4000-8000-000000000201',
+   'Metadata only color', 'metadata-only-color', 50000, 'active', false, false,
+   '{"attributes":{"color":"ÉBÈNE"}}'::jsonb);
+
 -- Exercise the RPC as its public storefront caller, under publication RLS.
 SET LOCAL ROLE anon;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
@@ -264,6 +280,14 @@ BEGIN
       'connector' || pg_catalog.chr(31) || 'usb-c', 'UTF8'), 'sha256'), 'hex'));
   IF or_ids IS DISTINCT FROM ARRAY['cb58d110-0000-4000-8000-000000000209']::uuid[] THEN
     RAISE EXCEPTION 'Text equality matched marketing prose or a different attribute';
+  END IF;
+  SELECT array_agg(product_id) INTO or_ids
+  FROM public.search_product_discovery_facts('cb58d110-0000-4000-8000-000000000201',
+    'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+      'color' || pg_catalog.chr(31) || pg_catalog.translate(
+        'ÉBÈNE', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'UTF8'), 'sha256'), 'hex'));
+  IF or_ids IS DISTINCT FROM ARRAY['cb58d110-0000-4000-8000-000000000213']::uuid[] THEN
+    RAISE EXCEPTION 'ASCII-only attribute digest did not recall its metadata-only product';
   END IF;
   SELECT array_agg(product_id) INTO or_ids
   FROM public.search_product_discovery_facts('cb58d110-0000-4000-8000-000000000201',

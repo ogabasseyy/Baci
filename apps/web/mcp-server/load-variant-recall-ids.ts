@@ -59,6 +59,7 @@ export async function loadVariantRecallIds(
     (alternative.attributes ?? []).map((attribute) => ({ ...attribute, branch }))
   );
   if (constraints.length === 0) return { ids: [], truncated: false };
+  const loadedRows: unknown[] = [];
   try {
     // product_variants is staff-only under RLS, so recall reads through the
     // published-merchant RPC instead of the table directly. Constraints ride
@@ -102,10 +103,12 @@ export async function loadVariantRecallIds(
       return Array.isArray(data) ? data : [];
     };
     const first = await fetchPage(POSTGREST_MAX_ROWS, 0);
+    loadedRows.push(...first);
     if (first.length < POSTGREST_MAX_ROWS) {
       return collectRecallIds(first, false);
     }
     const second = await fetchPage(POSTGREST_MAX_ROWS, POSTGREST_MAX_ROWS);
+    loadedRows.push(...second);
     const rows = [...first, ...second];
     if (rows.length < VARIANT_SCAN_LIMIT) {
       return collectRecallIds(rows, false);
@@ -113,7 +116,7 @@ export async function loadVariantRecallIds(
     const probe = await fetchPage(1, VARIANT_SCAN_LIMIT);
     return collectRecallIds(rows, probe.length > 0);
   } catch {
-    return { ids: [], truncated: true };
+    return collectRecallIds(loadedRows, true);
   }
 
   function collectRecallIds(window: unknown[], truncated: boolean) {

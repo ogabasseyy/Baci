@@ -6,12 +6,16 @@ import { EXPECTED_DISCOVERY_PENDING_SOURCES } from './expected-discovery-pending
 import { DISCOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-discovery-pending-sources';
 
 const REPOSITORY_ROOT = path.resolve(__dirname, '../../../..');
-const PROJECTION_MIGRATIONS = [
+const DISCOVERY_MIGRATIONS = [
   '20261002090720_public_variant_option_projection.sql',
   '20261002090721_fact_option_projection.sql',
   '20261002090722_browse_public_option_projection.sql',
   '20261002090723_variant_recall_public_option_projection.sql',
   '20261002090724_bounded_search_option_projection.sql',
+  '20261002090725_discovery_base_option_and_finite_recall_bounds.sql',
+  '20261002090726_variant_recall_base_condition.sql',
+  '20261002090727_browse_base_condition_purchasability.sql',
+  '20261002090728_fact_base_condition_purchasability.sql',
 ] as const;
 
 describe('discovery pending replay sources', () => {
@@ -45,9 +49,7 @@ describe('discovery pending replay sources', () => {
       expect(replayByFilename.get(filename)).toBe(sha256);
     }
     expect(
-      PROJECTION_MIGRATIONS.every((filename) =>
-        expectedByFilename.has(filename)
-      )
+      DISCOVERY_MIGRATIONS.every((filename) => expectedByFilename.has(filename))
     ).toBe(true);
   });
 });

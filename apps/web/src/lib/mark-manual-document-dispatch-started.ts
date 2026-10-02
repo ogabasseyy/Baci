@@ -14,6 +14,9 @@ interface DispatchOrderSnapshot {
   customer_email: string | null;
   customer_name: string | null;
   customer_phone: string | null;
+  recorded_by_user_id: string | null;
+  import_job_id: string | null;
+  external_source: string | null;
   total: number;
   subtotal: number;
   shipping_fee: number;
@@ -48,14 +51,17 @@ interface DispatchOutboxRow {
  * payment, contact correction, or item edit landing mid-dispatch aborts
  * instead of sending a stale document. The snapshot covers every order-row
  * input the renderer reads (identity, money breakdown, notes, address,
- * dates, and item contents), not just the count: a same-total money
- * redistribution or address correction must abort too. Callers must pass the
- * exact values the PDF was rendered from.
+ * dates, and item contents) plus the manual-order origin fields, not just
+ * the count: a same-total money redistribution, address correction, or
+ * eligibility change must abort too. The rendered kind is passed
+ * explicitly so the RPC can snapshot exactly what is being sent. Callers
+ * must pass the exact values the PDF was rendered from.
  */
 export async function markManualDocumentDispatchStarted(
   supabase: SupabaseClient,
   row: DispatchOutboxRow,
-  order: DispatchOrderSnapshot
+  order: DispatchOrderSnapshot,
+  documentKind: 'invoice' | 'proforma_invoice' | 'receipt'
 ): Promise<void> {
   const { data, error } = await supabase.rpc(
     'mark_manual_document_dispatch_started',
@@ -66,6 +72,10 @@ export async function markManualDocumentDispatchStarted(
       p_customer_email: order.customer_email,
       p_customer_name: order.customer_name,
       p_customer_phone: order.customer_phone,
+      p_recorded_by_user_id: order.recorded_by_user_id,
+      p_import_job_id: order.import_job_id,
+      p_external_source: order.external_source,
+      p_document_kind: documentKind,
       p_total: order.total,
       p_subtotal: order.subtotal,
       p_shipping_fee: order.shipping_fee,

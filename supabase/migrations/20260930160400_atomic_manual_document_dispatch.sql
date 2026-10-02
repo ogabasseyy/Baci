@@ -5,11 +5,14 @@
 -- comparing, so a payment, contact correction, or item edit landing
 -- mid-dispatch aborts instead of sending a stale document. The snapshot
 -- covers every order-row input the renderer reads (identity, money
--- breakdown, notes, address, dates, and item contents): a same-total money
--- redistribution or address correction aborts too. Merchant-profile and
--- ledger rows are outside the snapshot; ledger rows derive from the covered
--- payment state, and a merchant edit landing in the dispatch window is
--- accepted as negligible. The worker retries after an abort and converges
+-- breakdown, notes, address, dates, and item contents) plus the manual-order
+-- origin fields: a same-total money redistribution, address correction, or
+-- eligibility change (recorded_by cleared, import/external set) aborts too.
+-- The rendered document kind is snapshotted into the row metadata so claim
+-- previews keep showing the sent kind after later payments. Merchant-profile
+-- and ledger rows are outside the snapshot; ledger rows derive from the
+-- covered payment state, and a merchant edit landing in the dispatch window
+-- is accepted as negligible. The worker retries after an abort and converges
 -- (fresh send or document_state_changed skip). Safe predeploy: only the new
 -- worker calls it.
 CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
@@ -36,6 +39,10 @@ CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_transaction_date timestamptz,
   p_invoice_issue_date date,
   p_shipping_address jsonb,
+  p_recorded_by_user_id uuid,
+  p_import_job_id uuid,
+  p_external_source text,
+  p_document_kind text,
   p_item_count integer,
   p_items jsonb
 )
@@ -68,10 +75,16 @@ BEGIN
   ) ORDER BY oi.id), '[]'::jsonb) INTO v_items
   FROM public.order_items AS oi
   WHERE oi.order_id = v_order.id;
+  IF p_document_kind NOT IN ('receipt', 'invoice', 'proforma_invoice') THEN
+    RAISE EXCEPTION 'unknown manual document kind: %', p_document_kind;
+  END IF;
   IF v_order.customer_id IS DISTINCT FROM p_customer_id
     OR lower(trim(both from COALESCE(v_order.customer_email, ''))) IS DISTINCT FROM lower(trim(both from COALESCE(p_customer_email, '')))
     OR v_order.customer_name IS DISTINCT FROM p_customer_name
     OR v_order.customer_phone IS DISTINCT FROM p_customer_phone
+    OR v_order.recorded_by_user_id IS DISTINCT FROM p_recorded_by_user_id
+    OR v_order.import_job_id IS DISTINCT FROM p_import_job_id
+    OR v_order.external_source IS DISTINCT FROM p_external_source
     OR v_order.total IS DISTINCT FROM p_total
     OR v_order.subtotal IS DISTINCT FROM p_subtotal
     OR v_order.shipping_fee IS DISTINCT FROM p_shipping_fee
@@ -95,12 +108,14 @@ BEGIN
     RETURN jsonb_build_object('status', 'stale');
   END IF;
   UPDATE public.order_notification_outbox AS n
-  SET dispatch_started_at = now(), updated_at = now()
+  SET dispatch_started_at = now(), updated_at = now(),
+    metadata = COALESCE(n.metadata, '{}'::jsonb)
+      || jsonb_build_object('sent_document_kind', p_document_kind)
   WHERE n.id = p_outbox_id;
   RETURN jsonb_build_object('status', 'marked');
 END;
 $$;
-REVOKE ALL ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, integer, jsonb)
+REVOKE ALL ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb)
   FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, integer, jsonb)
+GRANT EXECUTE ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb)
   TO service_role;

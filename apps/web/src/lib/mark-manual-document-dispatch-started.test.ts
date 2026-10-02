@@ -12,6 +12,9 @@ const order = {
   customer_email: 'ada@example.com',
   customer_name: 'Ada',
   customer_phone: null,
+  recorded_by_user_id: 'staff-1',
+  import_job_id: null,
+  external_source: null,
   total: 100,
   subtotal: 100,
   shipping_fee: 0,
@@ -48,7 +51,12 @@ describe('markManualDocumentDispatchStarted', () => {
       .mockResolvedValue({ data: { status: 'marked' }, error: null });
 
     await expect(
-      markManualDocumentDispatchStarted({ rpc } as never, row, order as never)
+      markManualDocumentDispatchStarted(
+        { rpc } as never,
+        row,
+        order as never,
+        'receipt'
+      )
     ).resolves.toBeUndefined();
     expect(rpc).toHaveBeenCalledWith('mark_manual_document_dispatch_started', {
       p_outbox_id: 'outbox-1',
@@ -57,6 +65,10 @@ describe('markManualDocumentDispatchStarted', () => {
       p_customer_email: 'ada@example.com',
       p_customer_name: 'Ada',
       p_customer_phone: null,
+      p_recorded_by_user_id: 'staff-1',
+      p_import_job_id: null,
+      p_external_source: null,
+      p_document_kind: 'receipt',
       p_total: 100,
       p_subtotal: 100,
       p_shipping_fee: 0,
@@ -94,7 +106,12 @@ describe('markManualDocumentDispatchStarted', () => {
       .mockResolvedValue({ data: { status: 'stale' }, error: null });
 
     await expect(
-      markManualDocumentDispatchStarted({ rpc } as never, row, order as never)
+      markManualDocumentDispatchStarted(
+        { rpc } as never,
+        row,
+        order as never,
+        'receipt'
+      )
     ).rejects.toThrow('Manual document order changed before dispatch');
   });
 
@@ -104,7 +121,12 @@ describe('markManualDocumentDispatchStarted', () => {
       .mockResolvedValue({ data: { status: 'lease_lost' }, error: null });
 
     await expect(
-      markManualDocumentDispatchStarted({ rpc } as never, row, order as never)
+      markManualDocumentDispatchStarted(
+        { rpc } as never,
+        row,
+        order as never,
+        'receipt'
+      )
     ).rejects.toThrow('Manual document dispatch lease lost');
   });
 
@@ -114,7 +136,12 @@ describe('markManualDocumentDispatchStarted', () => {
       .mockResolvedValue({ data: null, error: { message: 'boom' } });
 
     await expect(
-      markManualDocumentDispatchStarted({ rpc } as never, row, order as never)
+      markManualDocumentDispatchStarted(
+        { rpc } as never,
+        row,
+        order as never,
+        'receipt'
+      )
     ).rejects.toThrow('Manual document dispatch state unavailable');
   });
 });

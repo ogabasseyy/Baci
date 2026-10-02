@@ -154,3 +154,19 @@ def audit_copy_dest(base, rest, drift, src=""):
     if "workspace" in zones \
             and "helper-workspace-write" not in drift:
         drift.append("helper-workspace-write")
+
+
+def audit_find_output(rest, drift):
+    # find -fls/-fprint/-fprintf write listings into the named
+    # file (attacker-influenced filenames); the file operand
+    # takes the destination rule like any copy target.
+    for i, tok in enumerate(rest):
+        if tok in ("-fls", "-fprint", "-fprint0", "-fprintf") \
+                and i + 1 < len(rest):
+            zone = _write_zone(rest[i + 1])
+            if zone == "trusted" \
+                    and "helper-trusted-write" not in drift:
+                drift.append("helper-trusted-write")
+            if zone == "workspace" \
+                    and "helper-workspace-write" not in drift:
+                drift.append("helper-workspace-write")

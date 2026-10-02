@@ -9,7 +9,7 @@ from semgrep_sarif_pins import (MUSE_PINNED_HOST,
                                 MUSE_PINNED_SHA_AARCH64,
                                 MUSE_PINNED_SHA_X86,
                                 MUSE_PINNED_VERSION)
-from semgrep_sarif_shell import strip_comments
+from semgrep_sarif_shell import split_commands2, strip_comments
 
 
 def _shell_words(text):
@@ -175,6 +175,48 @@ def audit_installer(drift):
         if install_at and verify_at and cmp_at \
                 and min(install_at) < max(verify_at + cmp_at):
             drift.append("muse-installer-unverified-install")
+        if install_at and verify_at \
+                and "muse-installer-toctou" not in drift:
+            # Post-verify immutability: the hash freezes tmp_bin
+            # (the compare reads the stale got_sha, so the hash
+            # line — not the compare — is the freeze point; a
+            # later re-hash re-freezes). Any textual tmp_bin
+            # reference past it with a write shape drifts; the
+            # mktemp value itself is unguessable, so textual
+            # keying is complete. Reads drift too: fail closed.
+            frozen = max(verify_at)
+            hit = False
+            for i in range(frozen + 1, len(installer)):
+                line = installer[i]
+                if not re.search(r"tmp_bin\b", line):
+                    continue
+                if i in install_at:
+                    continue  # blessed install reads it
+                for piece, _, _ in split_commands2(line):
+                    if not re.search(r"tmp_bin\b", piece):
+                        continue
+                    fc = first_cmd(piece)
+                    if re.search(r">\s*\S*tmp_bin\b", piece):
+                        hit = True
+                    elif fc in ("cp", "mv", "ln", "install",
+                                "tee", "patch", "ed", "truncate",
+                                "shred"):
+                        hit = True
+                    elif fc == "curl" and re.search(
+                            r"-o\s*\"?\$?\{?tmp_bin\b", piece):
+                        hit = True
+                    elif fc == "dd" and re.search(
+                            r"\bof=\S*tmp_bin\b", piece):
+                        hit = True
+                    elif fc in ("sed", "perl", "awk") \
+                            and "-i" in piece:
+                        hit = True
+                    if hit:
+                        break
+                if hit:
+                    break
+            if hit:
+                drift.append("muse-installer-toctou")
         if any(re.search(r"\|\s*(?:sudo\s+)?(?:bash|sh)\b", line)
                for line in installer):
             drift.append("muse-installer-pipe")

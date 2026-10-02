@@ -222,8 +222,11 @@ def audit_perl_content(text, drift):
     # Fixed-code backstop for token-adjacent perl: BEGIN/END blocks,
     # process spawning, string eval, dynamic loading, piped/write
     # opens, regex code (?{}), double-eval substitution, and
-    # trailing __DATA__/__END__ sections all drift. `use` of plain
-    # modules stays allowed (@INC is system + poison-guarded -I).
+    # trailing __DATA__/__END__ sections all drift. `use` is
+    # pragma-allowlisted (module capability, not just @INC
+    # substitution, exfiltrates); secret %ENV and socket builtins
+    # drift with it. Creation is the chokepoint, so select/send
+    # need no rule.
     if "helper-perl-danger" in drift:
         return
     danger = re.compile(
@@ -242,6 +245,29 @@ def audit_perl_content(text, drift):
         drift.append("helper-perl-danger")
         return
     if re.search(r"(?<!\$)\bdo\b(?!\s*\{)\s*\S", text):
+        drift.append("helper-perl-danger")
+        return
+    for m in re.finditer(
+            r"(?<![\$>:])\buse\s+([A-Za-z_][\w:.]*)", text):
+        mod = m.group(1)
+        if not re.match(r"v?\d", mod) \
+                and mod not in ("strict", "warnings"):
+            drift.append("helper-perl-danger")
+            return
+    for m in re.finditer(
+            r"(?<![\$>:])\bno\s+([A-Za-z_][\w:.]*)", text):
+        if not re.match(r"v?\d", m.group(1)):
+            drift.append("helper-perl-danger")
+            return
+    if re.search(r"\$ENV\{(?:\s*\$|[^}]*"
+                 r"(?i:TOKEN|SECRET|PRIVATE|PASSWORD|PASSWD))",
+                 text):
+        drift.append("helper-perl-danger")
+        return
+    if re.search(r"(?:(?<=CORE::)|(?<![\w$>:\-%@*]))"
+                 r"(socketpair|getsockopt|setsockopt|shutdown"
+                 r"|socket|connect|bind|listen|accept|syscall"
+                 r"|fcntl|ioctl)(?![\w:])(?!\s*=>)", text):
         drift.append("helper-perl-danger")
         return
     if re.search(r"^__(DATA|END)__", text, re.M):

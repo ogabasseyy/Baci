@@ -245,7 +245,7 @@ jobs:
           filter_dir=.github/scripts
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             filter_dir="${GITHUB_WORKSPACE}/base-filter/.github/scripts"
-            for f in semgrep-sarif-filter.py semgrep_sarif_agent.py semgrep_sarif_audit.py semgrep_sarif_consumer.py semgrep_sarif_copy.py semgrep_sarif_defer.py semgrep_sarif_embeds.py semgrep_sarif_helpers.py semgrep_sarif_heredoc.py semgrep_sarif_install.py semgrep_sarif_interp.py semgrep_sarif_pins.py semgrep_sarif_poison.py semgrep_sarif_programs.py semgrep_sarif_runner.py semgrep_sarif_scan.py semgrep_sarif_shell.py semgrep_sarif_steps.py; do
+            for f in semgrep-sarif-filter.py semgrep_sarif_agent.py semgrep_sarif_audit.py semgrep_sarif_consumer.py semgrep_sarif_copy.py semgrep_sarif_defer.py semgrep_sarif_embeds.py semgrep_sarif_git.py semgrep_sarif_helpers.py semgrep_sarif_heredoc.py semgrep_sarif_install.py semgrep_sarif_interp.py semgrep_sarif_pins.py semgrep_sarif_poison.py semgrep_sarif_programs.py semgrep_sarif_runner.py semgrep_sarif_scan.py semgrep_sarif_shell.py semgrep_sarif_steps.py; do
               [ -f "${filter_dir}/${f}" ] || { echo "::error::base filter copy missing ${f}; failing closed."; exit 1; }
             done
           fi

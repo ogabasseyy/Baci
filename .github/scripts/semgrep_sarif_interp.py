@@ -3,10 +3,13 @@ execution wrappers, privilege primitives, and loader/startup
 rebinding for token-bearing helper content.
 """
 import re
-from semgrep_sarif_copy import COPY_TOOLS, audit_copy_dest
+from semgrep_sarif_copy import (COPY_TOOLS, audit_copy_dest,
+                                audit_find_output)
 from semgrep_sarif_embeds import _check_awk, _check_perl
+from semgrep_sarif_git import audit_git
 from semgrep_sarif_pins import (RUNNER_PIN, SCRIPT_PIN,
                                 _safe_exec_path, _ws_rooted)
+from semgrep_sarif_poison import audit_env_dump
 from semgrep_sarif_programs import jq_program_has_env
 from semgrep_sarif_shell import (ENV_POISON, peel_prefix,
                                  script_operand)
@@ -49,6 +52,23 @@ NET_DENY = {"aria2c", "axel", "busybox", "curl", "ftp", "lftp",
             "openssl", "scp", "sendmail", "sftp", "socat", "ssh",
             "telnet", "tftp", "rsync", "wget"}
 
+# Build/package/container/provisioner drivers: each executes
+# repo-controlled files. Canonical names only (variants fail at
+# exec when absent); mix/stack/rake/port excluded (prose words).
+LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
+             "bazel", "bazelisk", "bmake", "brew", "buck2", "bun",
+             "bundle", "cargo", "choco", "cmake", "conda", "crictl",
+             "ctest", "ctr", "deno", "dnf", "docker", "flatpak",
+             "gem", "gmake", "go", "gradle", "gradlew", "guix",
+             "hatch", "helm", "installer", "invoke", "just",
+             "kubectl", "mamba", "make", "meson", "micromamba",
+             "msiexec", "mvn", "mvnw", "nerdctl", "ninja", "nix",
+             "nox", "npm", "npx", "pacman", "pants", "pex", "pip",
+             "pip3", "pipx", "pkg", "pkg_add", "pnpm", "podman",
+             "poetry", "remake", "rustc", "sbt", "snap", "task",
+             "terraform", "tofu", "tox", "uv", "vagrant", "winget",
+             "yarn", "yum", "zypper", "composer", "conan", "pmake"}
+
 
 def _check_command(argv0, rest, pre, drift, src=""):
     if "sudo" in pre or "doas" in pre \
@@ -65,6 +85,9 @@ def _check_command(argv0, rest, pre, drift, src=""):
             and not (src == "install.sh" and base == "curl") \
             and "helper-network-tool" not in drift:
         drift.append("helper-network-tool")
+    if base in LOAD_DENY \
+            and "helper-code-loader" not in drift:
+        drift.append("helper-code-loader")
     if base in COPY_TOOLS:
         audit_copy_dest(base, rest, drift, src)
     elif base in ("at", "batch", "crontab", "watch"):
@@ -126,7 +149,8 @@ def _check_command(argv0, rest, pre, drift, src=""):
                 break
     elif base == "awk":
         _check_awk(rest, drift)
-    elif base in ("python", "python3", "node", "ruby", "php"):
+    elif base in ("python", "python3", "node", "ruby", "php",
+                  "lua", "luajit"):
         # No helper uses these today; any use fails closed for
         # human review with an auditor lockstep update.
         if "helper-untrusted-exec" not in drift:
@@ -134,18 +158,27 @@ def _check_command(argv0, rest, pre, drift, src=""):
     elif base == "env":
         _check_env(rest, drift, src)
     elif base == "find":
-        if any(t in ("-exec", "-execdir", "-ok", "-okdir")
+        if any(t in ("-exec", "-execdir", "-ok", "-okdir",
+                     "-delete")
                for t in rest) \
                 and "helper-untrusted-exec" not in drift:
             drift.append("helper-untrusted-exec")
+        audit_find_output(rest, drift)
+    elif base == "git":
+        audit_git(rest, drift)
+    elif base in ("printenv", "export", "declare", "typeset",
+                  "readonly", "local", "set"):
+        audit_env_dump(base, rest, drift)
     elif base == "xargs":
         _check_xargs(rest, drift, src)
-    elif base in ("nice", "nohup", "stdbuf", "setsid"):
-        # Execution wrappers obscure the real argv0; none is
-        # used today, so any use fails closed.
+    elif base in ("nice", "nohup", "stdbuf", "setsid", "parallel",
+                  "flock", "chrt", "ionice", "taskset", "sg",
+                  "tmux", "screen"):
+        # Execution wrappers obscure the real argv0; none is used
+        # today, so any use fails closed (exotics stay residual).
         if "helper-untrusted-exec" not in drift:
             drift.append("helper-untrusted-exec")
-    elif base in ("unshare", "chroot"):
+    elif base in ("unshare", "chroot", "nsenter"):
         if "helper-privilege" not in drift:
             drift.append("helper-privilege")
     elif base == "eval":
@@ -199,6 +232,11 @@ def _check_env(rest, drift, src=""):
         else:
             break
     if i >= len(rest):
+        # No command: env dumps the environment (stdout, pipe,
+        # or redirect) instead of executing. --help and signal
+        # listings dump too; fail closed.
+        if "helper-env-dump" not in drift:
+            drift.append("helper-env-dump")
         return
     tail = rest[i:]
     argv0, cmd_rest = peel_prefix(tail)
@@ -253,3 +291,8 @@ def _check_xargs(rest, drift, src=""):
             and not (src == "install.sh" and cmd == "curl") \
             and "helper-network-tool" not in drift:
         drift.append("helper-network-tool")
+    if cmd.rsplit("/", 1)[-1] in LOAD_DENY \
+            and "helper-code-loader" not in drift:
+        drift.append("helper-code-loader")
+    if cmd.rsplit("/", 1)[-1] == "git":
+        audit_git(rest[i + 1:], drift)

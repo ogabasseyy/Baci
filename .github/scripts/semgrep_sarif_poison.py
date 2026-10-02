@@ -129,3 +129,25 @@ def _check_poison_assign(pre, argv0, rest, drift):
             if "helper-env-poison" not in drift:
                 drift.append("helper-env-poison")
     _indirect_poison(argv0, rest, drift)
+
+
+def audit_env_dump(argv0, rest, drift):
+    # Environment disclosure: printenv always prints, bare
+    # export/declare/typeset/readonly/local/set dump state,
+    # and -p prints values. Assignments, flags (set -p is
+    # privileged-mode, not a dump), and -f code listings pass.
+    if "helper-env-dump" in drift:
+        return
+    if argv0 == "printenv" or not rest:
+        drift.append("helper-env-dump")
+        return
+    if argv0 == "set":
+        return
+    for tok in rest:
+        if tok in ("-p", "-P"):
+            break
+        if re.fullmatch(r"-[a-zA-Z]+", tok) and "p" in tok:
+            break
+    else:
+        return
+    drift.append("helper-env-dump")

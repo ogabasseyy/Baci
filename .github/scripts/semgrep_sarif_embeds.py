@@ -5,15 +5,29 @@ import re
 from semgrep_sarif_pins import (SCRIPT_PIN,
                                 _is_home_write,
                                 _safe_exec_path)
+from semgrep_sarif_programs import audit_perl_content
 from semgrep_sarif_scan import _write_zone
+
+
+def _zone_target(target, drift):
+    zone = _write_zone(target)
+    if zone == "trusted" \
+            and "helper-trusted-write" not in drift:
+        drift.append("helper-trusted-write")
+    if zone == "workspace" \
+            and "helper-workspace-write" not in drift:
+        drift.append("helper-workspace-write")
+    if _is_home_write(target) \
+            and "helper-home-write" not in drift:
+        drift.append("helper-home-write")
 
 
 def _check_perl(rest, drift):
     # Flags skipped (-I lib paths and -M module paths must stay
-    # out of the attacker tree); -e/-E inline programs pass
-    # (visible in the file for human review) but -i inplace
-    # mode still guards its file operands. No -e and no pinned
-    # script operand means a stdin program: drift.
+    # out of the attacker tree); -e/-E inline programs skip pin
+    # checks but take content checks (secret/net-adjacent, like
+    # gh --jq); -i inplace mode still guards its file operands.
+    # No -e and no pinned script operand means stdin: drift.
     i, inplace = 0, False
     while i < len(rest):
         tok = rest[i]
@@ -75,21 +89,25 @@ def _check_perl(rest, drift):
                     argv = rest[i + 2:]
                 else:
                     argv = rest[i + 1:]
+                progs = [rest[i + 1] if not attached else attached]
+                j = 0
+                while j < len(argv):
+                    tok2 = argv[j]
+                    nxt = argv[j + 1:j + 2]
+                    if tok2 in ("-e", "-E") and nxt:
+                        progs.append(nxt[0])
+                        j += 2
+                    elif tok2.startswith(("-e", "-E")) \
+                            and len(tok2) > 2:
+                        progs.append(tok2[2:])
+                        j += 1
+                    else:
+                        j += 1
+                for prog in progs:
+                    audit_perl_content(prog, drift)
                 if inplace:
                     for target in argv:
-                        zone = _write_zone(target)
-                        if zone == "trusted" \
-                                and "helper-trusted-write" \
-                                not in drift:
-                            drift.append("helper-trusted-write")
-                        if zone == "workspace" \
-                                and "helper-workspace-write" \
-                                not in drift:
-                            drift.append("helper-workspace-write")
-                        if _is_home_write(target) \
-                                and "helper-home-write" \
-                                not in drift:
-                            drift.append("helper-home-write")
+                        _zone_target(target, drift)
                 return
         elif tok.startswith("-"):
             i += 1
@@ -104,12 +122,32 @@ def _check_perl(rest, drift):
         drift.append("helper-untrusted-exec")
 
 
+def _scan_awk_program(prog, drift):
+    # Inline awk executes: system(), |& coprocesses, pipe
+    # getlines/prints, and program redirects into zoned paths.
+    # Strings blank first (regex alternation and "a|b" pass);
+    # dynamic targets fail closed upward; getline-from-file,
+    # /dev/stdout, and || pass.
+    for m in re.finditer(r">{1,2}\s*\"((?:[^\"\\]|\\.)*)\"",
+                         prog):
+        _zone_target(m.group(1), drift)
+    code = re.sub(r"\"(?:[^\"\\]|\\.)*\"", "\"\"", prog)
+    if re.search(r"(?<![\w$])system\s*\(|\|&"
+                 r"|(?<!\|)\|(?!\|)\s*getline\b"
+                 r"|(?<!\|)\|(?!\|)\s*\"", code) \
+            and "helper-untrusted-exec" not in drift:
+        drift.append("helper-untrusted-exec")
+    if re.search(r">{1,2}\s*[^\"\s=]", code) \
+            and "helper-trusted-write" not in drift:
+        drift.append("helper-trusted-write")
+
+
 def _check_awk(rest, drift):
     # -f program files must be pinned; the positional program
-    # and input files pass (inline code is human-visible,
-    # inputs are data). --source programs are inline too. -i
-    # inplace rewrites its file operands, so those take the
-    # write-zone rule (VAR= operands are assignments, data).
+    # and --source programs take content checks (they execute);
+    # input files are data. -i inplace rewrites its file
+    # operands, so those take the write-zone rule (VAR=
+    # operands are assignments, data).
     i, inplace, program_seen = 0, False, False
     while i < len(rest):
         tok = rest[i]
@@ -137,7 +175,13 @@ def _check_awk(rest, drift):
             i += 1
         elif tok == "--source" \
                 or tok.startswith("--source="):
-            i += 2 if tok == "--source" else 1
+            if tok == "--source":
+                if i + 1 < len(rest):
+                    _scan_awk_program(rest[i + 1], drift)
+                i += 2
+            else:
+                _scan_awk_program(tok[len("--source="):], drift)
+                i += 1
         elif tok == "-i":
             # Bare -i takes an include file: only the inplace
             # extension is known-safe (unpinned code otherwise).
@@ -170,16 +214,11 @@ def _check_awk(rest, drift):
             i += 1
         elif not program_seen:
             program_seen = True
+            _scan_awk_program(tok, drift)
             i += 1
         elif inplace and not re.fullmatch(
                 r"[A-Za-z_][A-Za-z0-9_]*=.*", tok):
-            zone = _write_zone(tok)
-            if zone == "trusted" \
-                    and "helper-trusted-write" not in drift:
-                drift.append("helper-trusted-write")
-            if zone == "workspace" \
-                    and "helper-workspace-write" not in drift:
-                drift.append("helper-workspace-write")
+            _zone_target(tok, drift)
             i += 1
         else:
             i += 1

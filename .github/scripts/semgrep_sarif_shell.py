@@ -83,7 +83,13 @@ ENV_POISON = ("PATH", "LD_PRELOAD", "LD_LIBRARY_PATH",
               "PYTHONHOME", "RUBYLIB", "RUBYOPT", "PERL5LIB",
               "PERL5OPT", "NODE_PATH", "NODE_OPTIONS",
               "DYLD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES",
-              "IFS")
+              "IFS", "GIT_SSH", "GIT_SSH_COMMAND", "GIT_PAGER",
+              "GIT_EDITOR", "GIT_CONFIG_COUNT", "GIT_CONFIG_GLOBAL",
+              "GIT_CONFIG_SYSTEM", "GIT_DIR", "GIT_WORK_TREE",
+              "GIT_EXTERNAL_DIFF", "GIT_DIFF_OPTS", "GIT_ASKPASS",
+              "PAGER")
+# GIT_CONFIG_COUNT gates GIT_CONFIG_KEY_n/VALUE_n (verified: count 0
+# ignores keys), so the COUNT exact-match closes the family.
 
 def split_commands2(text):
     # Quote-aware operator split. Yields (piece,

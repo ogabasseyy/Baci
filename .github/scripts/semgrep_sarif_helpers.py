@@ -39,6 +39,13 @@ BARE_POISON_RE = re.compile(
     r"(?:^|[;&|])\s*" + _POISON_ALT + r"\s*=[^=]"
     r"|(?:^|[;&|])\s*IFS\s*=(?![^;\s]*\s+"
     r"(?:command\s+|builtin\s+)?read\b)[^=]")
+# Helpers authenticate gh via the environment (never expanding
+# the token: the sole legit mention is run.sh's -u scrub), so
+# any $GH_TOKEN/$GITHUB_TOKEN expansion stages a secret into a
+# log, file, or agent input. \b keeps GH_TOKEN_SUFFIX silent.
+SECRET_EXPAND_RE = re.compile(
+    r"\$\{[#!]?GH_TOKEN\b|\$GH_TOKEN\b"
+    r"|\$\{[#!]?GITHUB_TOKEN\b|\$GITHUB_TOKEN\b")
 
 
 CARRY_VARS = ("HOME", "GITHUB_WORKSPACE", "RUNNER_TEMP",
@@ -165,6 +172,21 @@ def _audit_expansions(line, drift, src=""):
         drift.append("helper-arithmetic-sub")
 
 
+def _strip_redirects(words):
+    # Drop redirect ops (+ glued/next-word targets) so rests
+    # hold only operands. Zone checks read line-level targets.
+    redir = re.compile(r"^\d*(>>|>&|>|<<<|<<|<>|<&|<)")
+    kept, j = [], 0
+    while j < len(words):
+        m = redir.match(words[j])
+        if m:
+            j += 1 if len(words[j]) > m.end() else 2
+        else:
+            kept.append(words[j])
+            j += 1
+    return kept
+
+
 def _audit_line(line, drift, src=""):
     cleaned, inners = extract_subshells(line)
     for inner in inners:
@@ -187,6 +209,9 @@ def _audit_line(line, drift, src=""):
     if BARE_POISON_RE.search(line) \
             and "helper-env-poison" not in drift:
         drift.append("helper-env-poison")
+    if SECRET_EXPAND_RE.search(line) \
+            and "helper-secret-expand" not in drift:
+        drift.append("helper-secret-expand")
     for tgt in redirect_targets(cleaned):
         zone = _write_zone(tgt)
         if zone == "trusted" \
@@ -203,6 +228,7 @@ def _audit_line(line, drift, src=""):
     nosub = _strip_case_patterns(nosub)
     for piece, _, _ in split_commands2(nosub):
         words = [unquote(t) for t in tokenize(piece)]
+        words = _strip_redirects(words)
         if not words:
             continue
         argv0, rest = peel_prefix(words)

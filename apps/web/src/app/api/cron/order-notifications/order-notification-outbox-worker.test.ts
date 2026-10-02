@@ -251,7 +251,7 @@ describe('order notification outbox worker', () => {
 
     await processClaimedOrderNotificationRows(client as never, [row], summary);
 
-    expect(summary).toMatchObject({ sent: 1, retried: 0, skipped: 0 });
+    expect(summary).toMatchObject({ sent: 0, retried: 0, skipped: 1 });
     expect(builder.update).toHaveBeenLastCalledWith(
       expect.objectContaining({
         skip_reason: 'delivery_outcome_unknown',
@@ -277,7 +277,7 @@ describe('order notification outbox worker', () => {
 
     await processClaimedOrderNotificationRows(client as never, [row], summary);
 
-    expect(summary).toMatchObject({ sent: 1, retried: 0 });
+    expect(summary).toMatchObject({ sent: 0, retried: 0, skipped: 1 });
     expect(builder.update).toHaveBeenLastCalledWith(
       expect.objectContaining({
         skip_reason: 'delivery_outcome_unknown',
@@ -299,7 +299,7 @@ describe('order notification outbox worker', () => {
 
     await processClaimedOrderNotificationRows(client as never, [row], summary);
 
-    expect(summary).toMatchObject({ sent: 1, retried: 0, skipped: 0 });
+    expect(summary).toMatchObject({ sent: 0, retried: 0, skipped: 1 });
     expect(builder.update).toHaveBeenLastCalledWith(
       expect.objectContaining({
         skip_reason: 'delivery_outcome_unknown',

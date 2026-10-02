@@ -8,8 +8,8 @@ CREATE TABLE auth.users (id uuid PRIMARY KEY, email text, email_confirmed_at tim
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
 CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql AS $$ SELECT nullif(current_setting('request.jwt.claim.role', true), '') $$;
 CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql AS $$ SELECT coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
-CREATE TABLE public.merchants (id uuid PRIMARY KEY, user_id uuid, slug text, business_name text, email text);
-CREATE TABLE public.customers (id uuid PRIMARY KEY, merchant_id uuid REFERENCES public.merchants, user_id uuid, email text, last_login_at timestamptz, updated_at timestamptz, deleted_at timestamptz);
+CREATE TABLE public.merchants (id uuid PRIMARY KEY, user_id uuid, slug text, business_name text, email text, bank_code text, bank_account_number text, bank_name text, bank_account_name text);
+CREATE TABLE public.customers (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), merchant_id uuid REFERENCES public.merchants, user_id uuid, email text, last_login_at timestamptz, updated_at timestamptz, deleted_at timestamptz);
 CREATE TABLE public.staff_members (merchant_id uuid, user_id uuid, status text);
 CREATE TABLE public.import_jobs (id uuid PRIMARY KEY, merchant_id uuid, status text);
 CREATE TABLE public.orders (
@@ -21,9 +21,11 @@ CREATE TABLE public.orders (
   tax_amount numeric DEFAULT 0, discount_amount numeric DEFAULT 0, amount_paid numeric DEFAULT 0,
   currency text DEFAULT 'NGN', payment_method text, invoice_type_code text, invoice_note text, notes text,
   transaction_date timestamptz, invoice_issue_date date, shipping_address jsonb,
-  fulfillment_notification_cycle_id uuid DEFAULT gen_random_uuid()
+  fulfillment_notification_cycle_id uuid DEFAULT gen_random_uuid(),
+  updated_at timestamptz DEFAULT now()
 );
 CREATE TABLE public.order_items (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), order_id uuid REFERENCES public.orders ON DELETE CASCADE, name text, quantity integer, price numeric, variant_name text, condition text, item_description text, created_at timestamptz DEFAULT now());
+CREATE TABLE public.order_payment_accounts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), order_id uuid REFERENCES public.orders ON DELETE CASCADE, account_number text, bank_name text, account_name text, provider text, assignment_customer_email_source text, expires_at timestamptz, created_at timestamptz DEFAULT now());
 CREATE TABLE public.order_notification_outbox (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), order_id uuid REFERENCES public.orders ON DELETE CASCADE,
   merchant_id uuid REFERENCES public.merchants,

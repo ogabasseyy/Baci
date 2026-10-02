@@ -53,25 +53,48 @@ prepare_worker_release() {
     # the worker now (readiness requires it) and let the post-migration
     # workflow smoke verify capability before the web deploy. But the same
     # exit after a smoke has PROVED token+hook function (a non-vacuous
-    # latch exists) means the grant/membership/schema regressed: refuse to
-    # promote over the previously-proven worker instead of deferring.
+    # latch exists) USUALLY means the grant/membership/schema regressed:
+    # refuse to promote over the previously-proven worker instead of
+    # deferring -- UNLESS the candidate tree adds GIGL migrations since
+    # the latched revision, which independently explains the 42 as
+    # schema-behind-code (a coordinated wrapper migration): then defer so
+    # the workflow can apply the migration and verify afterwards.
+    # Without that transition, refusing would deadlock wrapper
+    # migrations (readiness needs the new worker before db-migrations,
+    # but the worker could never promote against the old schema).
     # Latch format is scope:sha:fingerprint; a vacuous latch (disabled
     # scope, empty-sha256 fingerprint) proves no token ever functioned, so
     # it stays deferrable (initial token rollout, disabled-path restore).
     gigl_latch="$(ssh "$VPS" "cat '$REMOTE_DIR/.gigl-capability-smoke-ok' 2>/dev/null" || true)"
     gigl_latch_scope="${gigl_latch%%:*}"
     gigl_latch_fp="${gigl_latch##*:}"
+    gigl_latch_rest="${gigl_latch#*:}"
+    gigl_latch_sha="${gigl_latch_rest%%:*}"
     gigl_defer_ok=""
+    gigl_defer_reason="wrapper RPCs are not deployed yet"
     if [ -z "$gigl_latch" ]; then
       gigl_defer_ok=1
     fi
     if [ "$gigl_latch_scope" = "disabled" ] && [ "$gigl_latch_fp" = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]; then
       gigl_defer_ok=1
     fi
+    if [ -z "$gigl_defer_ok" ] && [[ "$gigl_latch_sha" =~ ^[0-9a-f]{40}$ ]]; then
+      # Completeness: the enforcement-migration naming check forces any
+      # migration that could cause a 42 into a gigl-named file, so
+      # diffing supabase/migrations/*gigl* cannot miss an explanation.
+      # An unresolvable latch SHA defers (old behavior): refusal must
+      # only fire when no migration PROVABLY explains the 42. (A
+      # malformed latch skips this branch and refuses below.)
+      gigl_migration_diff="$(git -C "$WORKER_ROOT/.." diff --name-only "$gigl_latch_sha" "$APP_SHA" -- 'supabase/migrations/*gigl*' 2>/dev/null)" || gigl_migration_diff="unknown"
+      if [ "$gigl_migration_diff" = "unknown" ] || [ -n "$gigl_migration_diff" ]; then
+        gigl_defer_ok=1
+        gigl_defer_reason="candidate adds GIGL migrations since the latched revision"
+      fi
+    fi
     if [ -n "$gigl_defer_ok" ]; then
-      echo "GIGL wrapper RPCs are not deployed yet; deferring capability verification to the post-migration smoke." >&2
+      echo "GIGL $gigl_defer_reason; deferring capability verification to the post-migration smoke." >&2
     else
-      echo "GIGL capability check reports missing RPCs/grant, but a previous smoke proved this worker (latch scope: $gigl_latch_scope); refusing to promote a worker that cannot claim tracking work. Investigate the revoked grant/membership or regressed schema. If the database was restored from a pre-migration backup, remove $REMOTE_DIR/.gigl-capability-smoke-ok on the VPS and rerun this deploy." >&2
+      echo "GIGL capability check reports missing RPCs/grant, but a previous smoke proved this worker (latch scope: $gigl_latch_scope) and no new GIGL migrations since the latched revision explain it; refusing to promote a worker that cannot claim tracking work. Investigate the revoked grant/membership or regressed schema. If the database was restored from a pre-migration backup, remove $REMOTE_DIR/.gigl-capability-smoke-ok on the VPS and rerun this deploy." >&2
       exit 1
     fi
   elif [ "$gigl_capability_status" -ne 0 ]; then

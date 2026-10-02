@@ -44,6 +44,17 @@ case "$*" in
   "rev-parse HEAD")
     echo "0123456789abcdef0123456789abcdef01234567"
     ;;
+  # Leading * swallows the -C <repo> prefix of the migration-diff call
+  # (? matches the space: case patterns cannot hold literal spaces).
+  *diff?--name-only*)
+    if [ "\${TEST_SCENARIO:-}" = "gigl-42-migration-transition" ]; then
+      echo "supabase/migrations/20260806000000_gigl_new_wrapper.sql"
+    fi
+    if [ "\${TEST_SCENARIO:-}" = "gigl-42-unknown-sha" ]; then
+      exit 1
+    fi
+    exit 0
+    ;;
   *)
     exit 0
     ;;
@@ -74,7 +85,7 @@ case "$args" in
       echo "disabled:0123456789abcdef0123456789abcdef01234567:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
       exit 0
     fi
-    if [ "\${TEST_SCENARIO:-}" = "gigl-42-proven-latch" ]; then
+    if [ "\${TEST_SCENARIO:-}" = "gigl-42-proven-latch" ] || [ "\${TEST_SCENARIO:-}" = "gigl-42-migration-transition" ] || [ "\${TEST_SCENARIO:-}" = "gigl-42-unknown-sha" ]; then
       echo "enabled:0123456789abcdef0123456789abcdef01234567:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
       exit 0
     fi
@@ -147,5 +158,24 @@ describe('deploy GIGL exit-42 deferral', () => {
       /remove .*\.gigl-capability-smoke-ok on the VPS and rerun/
     );
     assert.equal(outcome.promotionCalled, false);
+  });
+
+  it('defers exit-42 when the candidate adds GIGL migrations since the latch', () => {
+    const outcome = runGigl42Scenario('gigl-42-migration-transition');
+
+    assert.equal(outcome.result.status, 0, outcome.result.stderr);
+    assert.match(
+      outcome.result.stderr,
+      /adds GIGL migrations since the latched revision/
+    );
+    assert.equal(outcome.promotionCalled, true);
+  });
+
+  it('defers exit-42 when the latch SHA is unresolvable locally', () => {
+    const outcome = runGigl42Scenario('gigl-42-unknown-sha');
+
+    assert.equal(outcome.result.status, 0, outcome.result.stderr);
+    assert.match(outcome.result.stderr, /deferring capability verification/);
+    assert.equal(outcome.promotionCalled, true);
   });
 });

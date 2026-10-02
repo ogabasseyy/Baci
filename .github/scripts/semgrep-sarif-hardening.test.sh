@@ -377,7 +377,7 @@ t cmp-sha256c-fp 0 "" happy.sarif "$I${FS}if [[ \"\${got_sha}\"${FS}r${FS}if [[ 
 t cmp-or-true 1 "muse-installer-no-compare" happy.sarif "$I${FS}if [[ \"\${got_sha}\"${FS}r${FS}if [[ \"\${got_sha}\" != \"\${want_sha}\" ]]; then${FS}if false; then${RS}$I${FS}got_sha=${FS}a${FS}sha256sum -c x || true"
 
 # --- runner command files (Codex P1: GITHUB_ENV/GITHUB_PATH writes) ---
-t cmdf-env-poison 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo \"BASH_ENV=/tmp/evil\" >> \"\$GITHUB_ENV\""
+t cmdf-env-poison 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo \"BASH_ENV=\${GITHUB_WORKSPACE}/evil.sh\" >> \"\${GITHUB_ENV}\""
 t cmdf-env-path 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo \"PATH=/evil\" >> \"\$GITHUB_ENV\""
 t cmdf-env-benign-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo \"MY_VAR=hello\" >> \"\$GITHUB_ENV\""
 t cmdf-env-cat 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cat staged.txt >> \"\$GITHUB_ENV\""
@@ -396,11 +396,12 @@ t alias-query-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}alias leak
 t shopt-expand 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}shopt -s expand_aliases"
 t shopt-query-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}shopt expand_aliases"
 t shopt-other-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}shopt -s nullglob"
+t alias-p1-mutation 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}shopt -s expand_aliases${RS}$H${FS}shopt -s expand_aliases${FS}a${FS}alias leak='bash \"\${GITHUB_WORKSPACE}/evil.sh\"'${RS}$H${FS}alias leak='bash${FS}a${FS}leak"
 
 # --- nameref indirection (Codex P1: declare -n blinds secret/tmp rules) ---
-t nameref-secret 1 "helper-secret-expand" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}declare -n ref=GH_TOKEN${RS}$H${FS}declare -n ref=GH_TOKEN${FS}a${FS}echo \"\$ref\""
+t nameref-secret 1 "helper-secret-expand" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}declare -n secret_ref=GH_TOKEN; printf '%s' \"\$secret_ref\" >> \"\${prompt_file}\""
 t nameref-clean-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}declare -n ref=MY_VAR${RS}$H${FS}declare -n ref=MY_VAR${FS}a${FS}echo \"\$ref\""
-t toctou-alias-nameref 1 "muse-installer-toctou" happy.sarif "$I${FS}got_sha=${FS}a${FS}declare -n replacement=tmp_bin${RS}$I${FS}declare -n replacement=tmp_bin${FS}a${FS}cat /tmp/evil > \"\${replacement}\""
+t toctou-alias-nameref 1 "muse-installer-toctou" happy.sarif "$I${FS}got_sha=${FS}a${FS}declare -n replacement=tmp_bin; cat \"\${GITHUB_WORKSPACE}/evil\" > \"\${replacement}\""
 t toctou-alias-nameref-inert-fp 0 "" happy.sarif "$I${FS}got_sha=${FS}a${FS}declare -n replacement=tmp_bin"
 
 printf '\nhardening suite: %d passed, %d failed%s\n' "$pass" "$fail" "${fail_names:+ ($fail_names)}"

@@ -99,3 +99,57 @@ def _is_home_write(target):
         or target == "/home/runner" \
         or target.startswith("/home/runner/")
 
+
+def script_operand(rest):
+    # Validate an interpreter's script operand. Returns True
+    # when bound (or provably non-executing), False on drift.
+    # --version/--help/-n exit or never execute: safe with any
+    # operand. -c/--command drifts (arbitrary code, review it).
+    # -s/stdin/no-operand drifts (uninspectable script).
+    query = {"--version", "--help", "-n", "--noexec"}
+    if any(t in query for t in rest):
+        return True
+    redir = re.compile(r"^\d*(>>|>|<<|<<<|<|>&|<&)")
+    i = 0
+    while i < len(rest):
+        tok = rest[i]
+        m = redir.match(tok)
+        if m:
+            i += 1 if len(tok) > m.end() else 2
+        elif tok == "--":
+            i += 1
+            break
+        elif tok == "-" or tok in ("-c", "--command",
+                                   "--init-file", "--rcfile"):
+            return False
+        elif re.fullmatch(r"[+-][a-zA-Z]+", tok):
+            if "c" in tok:
+                return False
+            if "s" in tok:
+                return False
+            if tok in ("-o", "+o") \
+                    or re.fullmatch(r"[+-][a-zA-Z]*o", tok):
+                i += 2
+            else:
+                i += 1
+        elif tok.startswith("--"):
+            i += 1
+        else:
+            break
+    if i >= len(rest):
+        return False
+    op = rest[i]
+    if re.match(r"^\$\{?SCRIPT_DIR\}?/", op):
+        return _contained_exec_path(
+            op, r"^\$\{?SCRIPT_DIR\}?/")
+    # Concatenated so the raw text never holds an expression
+    # opener, which actionlint would parse as this job's
+    # expression (steps.scriptdir is undefined here).
+    squashed = re.sub(r"\s+", "", op)
+    anchor = "${{steps.scriptdir.outputs.dir}}"
+    if squashed == anchor:
+        return True
+    if squashed.startswith(anchor + "/"):
+        return _contained_exec_path(
+            squashed, r"^\$\{\{steps\.scriptdir\.outputs\.dir\}\}/")
+    return False

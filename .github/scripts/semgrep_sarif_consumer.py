@@ -8,14 +8,14 @@ from semgrep_sarif_helpers import (DEFERRED_RE, XTRACE_RE,
                                    _audit_shell_file,
                                    invoked_shell_refs)
 from semgrep_sarif_perl import audit_perl_file
-from semgrep_sarif_pins import PINNED_CHECKOUT_USES
+from semgrep_sarif_pins import (PINNED_CHECKOUT_USES,
+                                script_operand)
 from semgrep_sarif_programs import audit_jq_content
 from semgrep_sarif_scan import arith_regions
+from semgrep_sarif_segments import run_segments
 from semgrep_sarif_shell import (ENV_POISON, INTERP_ALLOW,
-                                 map_key_value,
-                                 peel_prefix, run_segments,
-                                 script_operand, split_commands2,
-                                 tokenize, unquote,
+                                 _bare_word, map_key_value, peel_prefix,
+                                 split_commands2, tokenize,
                                  unquote_value)
 from semgrep_sarif_steps import (is_step_boundary, step_end,
                                  step_name, step_start)
@@ -106,7 +106,7 @@ def audit_invocations(ctx, drift):
         nosub = re.sub(r"[A-Za-z_][A-Za-z0-9_]*\(\)\s*\{?", "",
                        seg)
         for piece, _, _ in split_commands2(nosub):
-            words = [unquote(t) for t in tokenize(piece)]
+            words = [_bare_word(t) for t in tokenize(piece)]
             if not words:
                 continue
             argv0, rest = peel_prefix(words)

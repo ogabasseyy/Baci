@@ -7,6 +7,7 @@ different flag, excluded. Carry vars never follow edges.
 Residual: non-name targets (arr[0], $dyn) pop.
 """
 import re
+from semgrep_sarif_shell import _bare_word
 
 
 def _split_top(text, delims):
@@ -57,7 +58,8 @@ def nameref_decl(piece, record, varmap, stale, namerefs):
                   piece)
     if not dm:
         return False
-    words = [w for w in _split_top(dm.group(2), (" ", "\t"))
+    words = [_bare_word(w)
+             for w in _split_top(dm.group(2), (" ", "\t"))
              if w.strip()]
     flags = [w for w in words
              if re.fullmatch(r"[+-][A-Za-z]+", w)]

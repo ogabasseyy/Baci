@@ -1,11 +1,11 @@
-"""Bash/YAML parsing primitives for the SARIF drift audit.
+"""Bash parsing primitives for the SARIF drift audit.
 
-Stdlib only. Quote-aware operator splitting, argv0 peeling with
-timeout/builtin/keyword transparency, interpreter operand
-validation, and run:-block extraction with continuation joining.
+Stdlib only. Quote-aware operator splitting, word tokenizing
+with concatenation, bare-word normalization (quotes/escapes),
+and argv0 peeling with timeout/wrapper/keyword transparency.
+(YAML/run:-block extraction lives in semgrep_sarif_segments.)
 """
 import re
-from semgrep_sarif_pins import _contained_exec_path
 
 def strip_comments(line):
     # Backslash-aware: an escaped hash is literal (echo \#; evil
@@ -116,59 +116,40 @@ def split_commands2(text):
     return parts
 
 def tokenize(text):
-    return re.findall(r"\"[^\"\n]*\"|'[^'\n]*'|\S+", text)
-
-def logical_lines(raw_lines):
-    # Join quote-continued lines (a multi-line string's prose
-    # must not parse as commands), then comment-strip, then
-    # join backslash continuations. A # outside quotes ends
-    # code for quote-tracking, matching strip_comments.
-    chunks = []
-    buf, quote = "", None
-    for raw in raw_lines:
-        if buf:
-            buf += "\n"
-        buf += raw
-        i = 0
-        while i < len(raw):
-            ch = raw[i]
-            if quote == "'":
-                if ch == "'":
-                    quote = None
-            elif quote == '"':
-                if ch == "\\":
-                    i += 1
-                elif ch == '"':
-                    quote = None
-            elif ch == "\\":
-                i += 1
-            elif ch == "#":
-                break
-            elif ch in ("'", '"'):
-                quote = ch
+    # Shell words: split on unquoted whitespace only. Quotes
+    # group (adjacent parts concatenate: "ec""ho" is one word),
+    # backslash escapes the next char (a\ b stays one word, a
+    # backslash-newline joins), and operators are NOT split
+    # (the command splitter and redirect strippers own those).
+    words, buf = [], ""
+    quote, started, i = None, False, 0
+    while i < len(text):
+        ch = text[i]
+        if quote:
+            buf += ch
+            if ch == quote:
+                quote = None
             i += 1
-        if quote is None:
-            chunks.append(buf)
-            buf = ""
-    if buf.strip():
-        chunks.append(buf)
-    logical = []
-    buf = ""
-    for chunk in chunks:
-        # A backslash-newline inside single quotes is literal
-        # in bash; collapsing it can only split tokens, never
-        # merge them, so analysis stays conservative.
-        code = strip_comments(chunk.replace("\\\n", " ")).rstrip()
-        if code.endswith("\\"):
-            buf += code[:-1] + " "
+        elif ch == "\\" and i + 1 < len(text):
+            if text[i + 1] == "\n":
+                i += 2
+            else:
+                buf += text[i:i + 2]
+                started = True
+                i += 2
+        elif ch in ("'", '"'):
+            quote, buf, started = ch, buf + ch, True
+            i += 1
+        elif ch in (" ", "\t", "\n", "\r", "\f", "\v"):
+            if started:
+                words.append(buf)
+                buf, started = "", False
+            i += 1
         else:
-            buf += code
-            logical.append(buf)
-            buf = ""
-    if buf.strip():
-        logical.append(buf)
-    return logical
-
+            buf, started, i = buf + ch, True, i + 1
+    if started:
+        words.append(buf)
+    return words
 
 def unquote(token):
     if len(token) >= 2 and token[0] == token[-1] \
@@ -176,9 +157,72 @@ def unquote(token):
         return token[1:-1]
     return token
 
+def _bare_word(token):
+    # Bash word value: strip quotes, unescape backslashes
+    # (single quotes literal -- same profile as _dequote in
+    # runner.py). Escaped externals still execute (ba\sh runs
+    # bash), so dispatch and denylists match the bare spelling;
+    # escaped builtins/keywords/assigns are dead (verified), so
+    # bare-matching them over-approximates safely.
+    out, quote, i = "", None, 0
+    while i < len(token):
+        ch = token[i]
+        if quote == "'":
+            if ch == "'":
+                quote = None
+            else:
+                out += ch
+            i += 1
+        elif ch == "\\" and quote != "'" and i + 1 < len(token):
+            out += token[i + 1]
+            i += 2
+        elif quote == '"' and ch == '"':
+            quote, i = None, i + 1
+        elif not quote and ch in ("'", '"'):
+            quote, i = ch, i + 1
+        else:
+            out, i = out + ch, i + 1
+    return out
+
+def _peel_exec_opts(words, j):
+    # Index of exec's command past -c/-l/-a name/-- (an
+    # unknown dash word is the command: exec errors on it, so
+    # treating it as argv0 fails closed).
+    while j < len(words):
+        tok = words[j]
+        if tok == "--":
+            return j + 1
+        m = re.fullmatch(r"-([cla]+)", tok)
+        if not m:
+            return j
+        if "a" in m.group(1):
+            rest = m.group(1).split("a", 1)[1]
+            return j + 1 if rest else j + 2
+        j += 1
+    return j
+
+def _peel_command_opts(words, j):
+    # Index of command's command past -p/--, or None for -v/-V
+    # queries (they print, never execute).
+    while j < len(words):
+        tok = words[j]
+        if tok == "--":
+            return j + 1
+        if re.fullmatch(r"-[pVv]+", tok):
+            if "v" in tok or "V" in tok:
+                return None
+            j += 1
+        else:
+            return j
+    return j
+
 def peel_prefix(words):
     # Strip VAR= assigns, timeout + duration, transparent
-    # builtins and control keywords; returns (argv0, rest).
+    # wrappers (with their options: exec -a name, command -p,
+    # -- terminators, time -p) and control keywords; returns
+    # (argv0, rest). sudo/doas peel bare (their pre-words always
+    # drift via the privilege rule). Nesting re-enters: builtin
+    # exec cmd parses exec's options on the next pass.
     i = 0
     timeout_args = {"-s", "--signal", "-k", "--kill-after"}
     while i < len(words):
@@ -192,8 +236,22 @@ def peel_prefix(words):
                     and words[i].startswith("-"):
                 i += 2 if words[i] in timeout_args else 1
             i += 1
-        elif word in ("command", "builtin", "exec",
-                     "sudo", "doas"):
+        elif word == "exec":
+            i = _peel_exec_opts(words, i + 1)
+        elif word == "command":
+            j = _peel_command_opts(words, i + 1)
+            if j is None:
+                return "", []
+            i = j
+        elif word == "builtin":
+            i += 1
+            if i < len(words) and words[i] == "--":
+                i += 1
+        elif word == "time":
+            i += 1
+            while i < len(words) and words[i] == "-p":
+                i += 1
+        elif word in ("sudo", "doas"):
             i += 1
         elif word in STRIP_WORDS:
             i += 1
@@ -203,98 +261,3 @@ def peel_prefix(words):
         return "", []
     return words[i], words[i + 1:]
 
-def script_operand(rest):
-    # Validate an interpreter's script operand. Returns True
-    # when bound (or provably non-executing), False on drift.
-    # --version/--help/-n exit or never execute: safe with any
-    # operand. -c/--command drifts (arbitrary code, review it).
-    # -s/stdin/no-operand drifts (uninspectable script).
-    query = {"--version", "--help", "-n", "--noexec"}
-    if any(t in query for t in rest):
-        return True
-    redir = re.compile(r"^\d*(>>|>|<<|<<<|<|>&|<&)")
-    i = 0
-    while i < len(rest):
-        tok = rest[i]
-        m = redir.match(tok)
-        if m:
-            i += 1 if len(tok) > m.end() else 2
-        elif tok == "--":
-            i += 1
-            break
-        elif tok == "-" or tok in ("-c", "--command",
-                                   "--init-file", "--rcfile"):
-            return False
-        elif re.fullmatch(r"[+-][a-zA-Z]+", tok):
-            if "c" in tok:
-                return False
-            if "s" in tok:
-                return False
-            if tok in ("-o", "+o") \
-                    or re.fullmatch(r"[+-][a-zA-Z]*o", tok):
-                i += 2
-            else:
-                i += 1
-        elif tok.startswith("--"):
-            i += 1
-        else:
-            break
-    if i >= len(rest):
-        return False
-    op = rest[i]
-    if re.match(r"^\$\{?SCRIPT_DIR\}?/", op):
-        return _contained_exec_path(
-            op, r"^\$\{?SCRIPT_DIR\}?/")
-    # Concatenated so the raw text never holds an expression
-    # opener, which actionlint would parse as this job's
-    # expression (steps.scriptdir is undefined here).
-    squashed = re.sub(r"\s+", "", op)
-    anchor = "${{steps.scriptdir.outputs.dir}}"
-    if squashed == anchor:
-        return True
-    if squashed.startswith(anchor + "/"):
-        return _contained_exec_path(
-            squashed, r"^\$\{\{steps\.scriptdir\.outputs\.dir\}\}/")
-    return False
-
-def run_segments(lines):
-    bodies = []
-    i = 0
-    while i < len(lines):
-        # Quoted "run": keys open blocks too: a bare-key match
-        # would leave the whole step unaudited. Unnamed inline
-        # steps (- run: evil) are unwrapped the same way.
-        base = len(lines[i]) - len(lines[i].lstrip(" "))
-        text = lines[i].strip()
-        dash = re.match(r"^-\s+(.*)$", text)
-        if dash:
-            text = dash.group(1).strip()
-        key, rest = map_key_value(text)
-        ind = re.match(r"^([|>]?)\s*(.*)$", rest or "") \
-            if key == "run" else None
-        if ind and (ind.group(1) or ind.group(2)):
-            if ind.group(1):
-                j = i + 1
-                while j < len(lines) \
-                        and (not lines[j].strip()
-                             or len(lines[j])
-                             - len(lines[j].lstrip()) > base):
-                    bodies.append(lines[j])
-                    j += 1
-                i = j
-            else:
-                bodies.append(ind.group(2))
-                i += 1
-        else:
-            i += 1
-    joined = []
-    buf = ""
-    for raw in bodies:
-        stripped = raw.rstrip()
-        if stripped.endswith("\\"):
-            buf += stripped[:-1] + " "
-        else:
-            buf += stripped
-            joined.append(buf)
-            buf = ""
-    return joined

@@ -232,6 +232,24 @@ def audit_installer(drift):
         if any(re.search(r"\|\s*(?:sudo\s+)?(?:bash|sh)\b", line)
                for line in installer):
             drift.append("muse-installer-pipe")
+        # File-descriptor aliases bypass the name-keyed freeze:
+        # exec 3<>$tmp_bin pre-verify plus >/proc/self/fd/3 (or
+        # >&3, {fd} names, >&$var dups) post-verify rewrites the
+        # artifact with no tmp_bin reference. The installer uses
+        # no nonstandard fds, so any explicit fd past 2, any
+        # {name}/$var fd spelling, and any /proc/self/fd or
+        # /dev/fd path drift (standard 0/1/2 redirections pass).
+        fd_num = re.compile(r"(?:^|[^\w\d='\"])(\d+)\s*[<>]"
+                                r"|[<>]&\s*-?(\d+)")
+        fd_sym = re.compile(r"\{\w+\}\s*[<>]|[<>]&\s*[\${]")
+        if any("/proc/self/fd" in line or "/dev/fd" in line
+               or fd_sym.search(line)
+               or any(g and int(g) > 2
+                      for m in fd_num.finditer(line)
+                      for g in m.groups())
+               for line in installer) \
+                and "muse-installer-toctou" not in drift:
+            drift.append("muse-installer-toctou")
         # Every URL literal in the installer must be the pinned
         # versioned download: a substring check would pass an evil
         # host alongside a retained unused lookaside string.

@@ -5,8 +5,8 @@ no later overwrites of the installed binary.
 """
 import re
 from semgrep_sarif_poison import _read_names
-from semgrep_sarif_scan import redirect_targets
-from semgrep_sarif_shell import tokenize
+from semgrep_sarif_redirect import redirect_targets
+from semgrep_sarif_shell import _bare_word, tokenize
 from semgrep_sarif_nameref import _split_top
 
 MUSE_DEST_MARK = "install_dir}/muse"
@@ -87,7 +87,7 @@ def _rebind_names(piece):
     # read/printf -v/for/select targets on one piece. mapfile
     # yields content and getopts single chars, never paths.
     names = []
-    toks = tokenize(piece)
+    toks = [_bare_word(t) for t in tokenize(piece)]
     for i, tok in enumerate(toks):
         if tok == "read":
             names.extend(_read_names(toks[i + 1:])
@@ -115,7 +115,8 @@ def _nameref_edges(text):
                   text)
     if not dm:
         return []
-    words = [w for w in _split_top(dm.group(2), (" ", "\t"))
+    words = [_bare_word(w)
+             for w in _split_top(dm.group(2), (" ", "\t"))
              if w.strip()]
     flags = [w for w in words
              if re.fullmatch(r"[+-][A-Za-z]+", w)]

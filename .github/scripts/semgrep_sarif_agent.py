@@ -9,8 +9,8 @@ from semgrep_sarif_varmap import (CARRY_VARS, _collect_vars,
 from semgrep_sarif_runner import (_dequote, _peel_env,
                                   _shell_words)
 from semgrep_sarif_scan import extract_subshells
-from semgrep_sarif_shell import (logical_lines, peel_prefix,
-                                 split_commands2)
+from semgrep_sarif_segments import logical_lines
+from semgrep_sarif_shell import (peel_prefix, split_commands2)
 
 MUSE_VALUE_FLAGS = {"--prompt-file", "--workspace",
                     "--reasoning-effort", "--max-model-steps",

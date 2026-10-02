@@ -14,15 +14,16 @@ from semgrep_sarif_interp import _check_command
 from semgrep_sarif_pins import _is_home_write
 from semgrep_sarif_poison import _base as _varname
 from semgrep_sarif_poison import _check_poison_assign
-from semgrep_sarif_poison import (audit_github_cmdfile_body,
-                                  audit_github_cmdfile_writes)
+from semgrep_sarif_cmdfile import (audit_github_cmdfile_body,
+                                   audit_github_cmdfile_writes)
+from semgrep_sarif_redirect import (has_socket_redirect,
+                                    redirect_targets)
 from semgrep_sarif_scan import (arith_regions, extract_subshells,
-                                redirect_targets,
                                 subscript_cmdsubst, _write_zone)
+from semgrep_sarif_segments import logical_lines
 from semgrep_sarif_shell import (ENV_POISON, SHELL_KEYWORDS,
-                                 logical_lines, peel_prefix,
-                                 split_commands2, tokenize,
-                                 unquote)
+                                 _bare_word, peel_prefix,
+                                 split_commands2, tokenize)
 from semgrep_sarif_varmap import (_collect_vars, _resolve,
                                   audit_unresolved_argv)
 
@@ -173,6 +174,9 @@ def _audit_line(line, drift, src="", stale=frozenset()):
         if _is_home_write(tgt) \
                 and "helper-home-write" not in drift:
             drift.append("helper-home-write")
+    if has_socket_redirect(cleaned) \
+            and "helper-network-tool" not in drift:
+        drift.append("helper-network-tool")
     nosub = re.sub(r"[A-Za-z_][A-Za-z0-9_]*\(\)\s*\{?", "",
                    cleaned)
     nosub = _strip_case_patterns(nosub)
@@ -193,7 +197,7 @@ def _audit_line(line, drift, src="", stale=frozenset()):
         raw_words = tokenize(piece)
         if "[[" in raw_words:
             in_test = True
-        words = [unquote(t) for t in raw_words]
+        words = [_bare_word(t) for t in raw_words]
         words = _strip_redirects(words)
         if not words:
             if "]]" in raw_words:

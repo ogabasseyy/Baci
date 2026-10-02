@@ -9,11 +9,11 @@ from semgrep_sarif_embeds import _check_awk, _check_perl
 from semgrep_sarif_gh import audit_gh
 from semgrep_sarif_git import audit_git
 from semgrep_sarif_pins import (RUNNER_PIN, SCRIPT_PIN,
-                                _safe_exec_path, _ws_rooted)
+                                _safe_exec_path, _ws_rooted,
+                                script_operand)
 from semgrep_sarif_poison import audit_env_dump
 from semgrep_sarif_programs import jq_program_has_env
-from semgrep_sarif_shell import (ENV_POISON, peel_prefix,
-                                 script_operand)
+from semgrep_sarif_shell import (ENV_POISON, peel_prefix)
 from semgrep_sarif_xargs import audit_xargs
 
 
@@ -203,6 +203,20 @@ def _check_command(argv0, rest, pre, drift, src=""):
                 break
             if re.fullmatch(r"-[a-zA-Z]+", tok) \
                     and ("f" in tok or "n" in tok):
+                danger = True
+                break
+        if danger and "helper-untrusted-exec" not in drift:
+            drift.append("helper-untrusted-exec")
+    elif base == "hash":
+        # hash -p installs an arbitrary path as a command name;
+        # -r/-d/-l/-t queries and bare hash pass. Scanning stops
+        # at -- (verified honored).
+        danger = False
+        for tok in rest:
+            if tok == "--":
+                break
+            if re.fullmatch(r"-[a-zA-Z]+", tok) \
+                    and "p" in tok:
                 danger = True
                 break
         if danger and "helper-untrusted-exec" not in drift:

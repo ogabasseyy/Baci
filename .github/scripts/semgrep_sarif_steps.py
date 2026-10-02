@@ -3,14 +3,15 @@ confinement, PATH-family hijack rejection, and the no-token-
 expression rule for the agent step and job environment.
 """
 import re
-from semgrep_sarif_scan import (is_trusted_write_target,
+from semgrep_sarif_redirect import (has_socket_redirect,
                                     redirect_targets)
+from semgrep_sarif_scan import is_trusted_write_target
+from semgrep_sarif_segments import run_segments
 from semgrep_sarif_shell import (ENV_POISON, SHELL_KEYWORDS,
-                                 STRICT_ALLOW,
+                                 STRICT_ALLOW, _bare_word,
                                  map_key_value, peel_prefix,
-                                 run_segments, split_commands2,
-                                 strip_comments,
-                                 tokenize, unquote, unquote_value)
+                                 split_commands2, strip_comments,
+                                 tokenize, unquote_value)
 
 def _steps_item_indent(lines):
     # Indent of `- ` items under the first block-style steps:
@@ -94,7 +95,10 @@ def audit_step_commands(ctx, drift):
                         "--exec-path", "-p", "--paginate",
                         "--git-dir", "--work-tree"}
     GIT_READ_SUBCOMMANDS = {"cat-file", "help", "version"}
-    poison_alt = "(?:" + "|".join(ENV_POISON) + ")"
+    # Poison names tolerate shell escapes (export P\ATH= unescapes
+    # its operand -- verified); the = stays literal (a\=1 is dead).
+    poison_alt = "(?:" + "|".join(
+        "\\\\?" + "\\\\?".join(v) for v in ENV_POISON) + ")"
     assign_prefix = (r"(?:^|[;&|])\s*(?:[A-Za-z_][A-Za-z0-9_]*"
                      r"=\S+\s+)*")
     builtin_prefix = (r"(?:(?:export|local|readonly|declare|"
@@ -124,7 +128,20 @@ def audit_step_commands(ctx, drift):
                          line) \
                     and "secret-step-untrusted-command" not in drift:
                 drift.append("secret-step-untrusted-command")
+            # Flow-style steps (- {run: ...}) never match the
+            # block-style boundary parser, so their run bodies
+            # audit nowhere: fail closed. Same indent discipline
+            # as is_step_boundary (a dash there dedents any
+            # scalar, so it is a real step either way); with no
+            # block steps key, any indent fails closed.
+            dm = re.match(r"^(\s*)-\s*\{", line)
+            if dm and (indent is None or len(dm.group(1)) == indent) \
+                    and "secret-step-untrusted-command" not in drift:
+                drift.append("secret-step-untrusted-command")
         for seg in run_segments(span):
+            if has_socket_redirect(seg) \
+                    and "secret-step-untrusted-command" not in drift:
+                drift.append("secret-step-untrusted-command")
             for tgt in redirect_targets(seg):
                 if is_trusted_write_target(tgt) \
                         and "step-trusted-write" not in drift:
@@ -155,7 +172,7 @@ def audit_step_commands(ctx, drift):
                     split_commands2(masked):
                 if at_close and not after_open:
                     continue
-                words = [unquote(t) for t in tokenize(piece)]
+                words = [_bare_word(t) for t in tokenize(piece)]
                 if not words:
                     continue
                 argv0, rest = peel_prefix(words)

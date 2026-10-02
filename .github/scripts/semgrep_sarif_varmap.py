@@ -13,7 +13,8 @@ from semgrep_sarif_nameref import (_split_top, follow_nameref,
                                    nameref_decl)
 from semgrep_sarif_poison import _mapfile_name, _read_names
 from semgrep_sarif_scan import arith_regions, _paren_end
-from semgrep_sarif_shell import (strip_comments, tokenize)
+from semgrep_sarif_shell import (_bare_word, strip_comments,
+                                 tokenize)
 
 CARRY_VARS = ("HOME", "GITHUB_WORKSPACE", "RUNNER_TEMP",
               "SCRIPT_DIR", "TMPDIR", "TEMP", "TMP")
@@ -38,7 +39,7 @@ def _pop_later_assigns(piece, varmap, stale):
 
 
 def _pop_indirect(piece, varmap, stale):
-    toks = tokenize(piece)
+    toks = [_bare_word(t) for t in tokenize(piece)]
     for i, tok in enumerate(toks):
         if tok in ("read", "mapfile", "readarray"):
             after = toks[i + 1:]
@@ -81,6 +82,14 @@ def _collect_piece(piece, volatile, indented, carry, varmap,
         return
     m = re.match(r"\s*(?:" + _DECL + r")?([A-Za-z_]\w*)"
                  r"\s*(\+)?=(?![=~])(.*)$", piece)
+    if not m:
+        # Builtins unescape their operands (declare \u=x assigns
+        # u -- verified), while a bare \u=x is dead (verified):
+        # retry letter-unescape only with a declaration prefix.
+        soft = re.sub(r"\\([A-Za-z_])", r"\1", piece)
+        if soft != piece:
+            m = re.match(r"\s*(?:" + _DECL + r")([A-Za-z_]\w*)"
+                         r"\s*(\+)?=(?![=~])(.*)$", soft)
     if m and m.group(1) in namerefs:
         # Write-through: the edge stands, the target's
         # cached value is now wrong. Null the match so the

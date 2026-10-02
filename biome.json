@@ -53,6 +53,8 @@
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-payment-session*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-payment-execution.ts",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-payment-execution.test.ts",
+      "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-payment-execution.session.test.ts",
+      "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-payment-execution.test-support.ts",
       "apps/web/tools/cost/storefront-edge-inventory-snapshot.repository.test.ts",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-order-totals*",
       "apps/web/src/components/storefront/ogabassey/pages/checkout/hooks/use-checkout-step-state*",

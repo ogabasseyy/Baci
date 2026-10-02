@@ -1,6 +1,15 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CheckoutPaymentExecutionOptions } from './use-checkout-payment-execution';
+import {
+  createOptions,
+  crypto,
+  dva,
+  handlePlaceOrder,
+  waitForResolvedCustomerAuth,
+  walletTransfer,
+} from './use-checkout-payment-execution.test-support';
+import type { WalletFundedOrderPaidPayload } from './use-wallet-funded-bank-transfer';
 
 const mocks = vi.hoisted(() => ({
   clearIdempotencyKey: vi.fn(),
@@ -41,133 +50,24 @@ import { useCheckoutDvaSession } from './use-checkout-dva-session';
 import { useCheckoutOrderSubmission } from './use-checkout-order-submission';
 import { useCheckoutPaymentExecution } from './use-checkout-payment-execution';
 import { useStorefrontCustomerSession } from './use-storefront-customer-session';
-import {
-  useWalletFundedBankTransfer,
-  type WalletFundedOrderPaidPayload,
-} from './use-wallet-funded-bank-transfer';
+import { useWalletFundedBankTransfer } from './use-wallet-funded-bank-transfer';
 
-const dva = {
-  closeDvaModal: vi.fn(),
-  dvaData: null,
-  handleDvaConfirmTransfer: vi.fn(),
-  isInitializingDva: false,
-  isVerifyingDva: false,
-  setDvaData: vi.fn(),
-  setIsInitializingDva: vi.fn(),
-};
-const crypto = {
-  setPendingCryptoOrder: vi.fn(),
-  setShowCryptoSelector: vi.fn(),
-  setCryptoPaymentData: vi.fn(),
-};
-const walletTransfer = { start: vi.fn(), account: null, intent: null };
-const handlePlaceOrder = vi.fn();
-const waitForResolvedCustomerAuth = vi.fn(async () => true);
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.useDva.mockReturnValue(dva);
+  mocks.useCrypto.mockReturnValue(crypto);
+  mocks.useCustomer.mockReturnValue({
+    waitForResolvedAuthenticated: waitForResolvedCustomerAuth,
+  });
+  mocks.useTransfer.mockReturnValue(walletTransfer);
+  mocks.useSubmission.mockReturnValue({ handlePlaceOrder });
+});
 
-function createOptions(
-  resumed: Pick<
-    CheckoutPaymentExecutionOptions['attempt'],
-    | 'resumedOrder'
-    | 'preferredGateway'
-    | 'resumeTrackingToken'
-    | 'resumeMerchantSlug'
-  > = {
-    resumedOrder: null,
-    preferredGateway: null,
-    resumeTrackingToken: null,
-    resumeMerchantSlug: null,
-  },
-  identity: CheckoutPaymentExecutionOptions['identity'] = {
-    merchantId: 'merchant-1',
-    merchantSlug: 'test-store',
-    currencyCode: 'NGN',
-  }
-): CheckoutPaymentExecutionOptions {
-  return {
-    identity,
-    form: {
-      session: {
-        values: {
-          customerEmail: 'ada@example.test',
-          customerPhone: '+2348031234567',
-          firstName: 'Ada',
-          lastName: 'Okafor',
-          newsletterOptIn: false,
-          deliveryMethod: 'door',
-          airportType: 'delivery',
-          airportRequiresQuote: false,
-          newAddressStreet: '1 Main St',
-          newAddressCity: 'Lagos',
-          newAddressState: 'Lagos',
-        } as CheckoutPaymentExecutionOptions['form']['session']['values'],
-        clear: vi.fn(),
-      } as unknown as CheckoutPaymentExecutionOptions['form']['session'],
-      account: {
-        createAccount: false,
-        password: '',
-        setCreateAccount: vi.fn(),
-        setPassword: vi.fn(),
-      },
-      user: null,
-    },
-    cart: {
-      cart: [],
-      checkoutCart: [],
-      checkoutCartTotal: 5000,
-      clearCart: vi.fn(),
-      removeFromCart: vi.fn(),
-    },
-    delivery: {} as unknown as CheckoutPaymentExecutionOptions['delivery'],
-    merchant: null,
-    navigation: {
-      flow: {
-        setCurrentStep: vi.fn(),
-        setCompletedSteps: vi.fn(),
-      },
-      pushSuccessRoute: vi.fn(),
-      getHref: (path) => `/shop${path}`,
-    },
-    payment: {
-      session: {
-        method: 'bank_transfer',
-      } as unknown as CheckoutPaymentExecutionOptions['payment']['session'],
-      bankTransferAvailable: true,
-      paystackAvailable: true,
-      korapayAvailable: false,
-      redvaultAvailable: false,
-      currencyCode: 'NGN',
-    },
-    attempt: {
-      ...resumed,
-      pendingCheckoutOrder: null,
-      clearPendingCheckoutOrder: vi.fn(),
-      setPendingCheckoutOrder: vi.fn(),
-      setCheckoutOrderCreated: vi.fn(),
-      setIsProcessing: vi.fn(),
-      isOrderInFlightRef: { current: false },
-      tryBeginSubmission: vi.fn(() => true),
-      releaseSubmission: vi.fn(),
-      handleSubmissionError: vi.fn(),
-    },
-  };
-}
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('useCheckoutPaymentExecution', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.useDva.mockReturnValue(dva);
-    mocks.useCrypto.mockReturnValue(crypto);
-    mocks.useCustomer.mockReturnValue({
-      waitForResolvedAuthenticated: waitForResolvedCustomerAuth,
-    });
-    mocks.useTransfer.mockReturnValue(walletTransfer);
-    mocks.useSubmission.mockReturnValue({ handlePlaceOrder });
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   it('composes fresh checkout resources, authenticated resolution, and overlay sessions', async () => {
     const options = createOptions();
     const { result } = renderHook(() => useCheckoutPaymentExecution(options));
@@ -269,95 +169,6 @@ describe('useCheckoutPaymentExecution', () => {
     );
     act(() => vi.advanceTimersByTime(500));
     expect(options.cart.clearCart).toHaveBeenCalledOnce();
-  });
-
-  it('maps latest persisted form values and attempt callbacks into submission', () => {
-    const initial = createOptions();
-    const { rerender } = renderHook(
-      ({ options }: { options: CheckoutPaymentExecutionOptions }) =>
-        useCheckoutPaymentExecution(options),
-      { initialProps: { options: initial } }
-    );
-    const latestPaymentSession = {
-      method: 'paystack',
-      total: 9600,
-      wallet: { remainingAmount: 8200 },
-    };
-    const latestTryBeginSubmission = vi.fn(() => false);
-    const next = {
-      ...initial,
-      form: {
-        ...initial.form,
-        session: {
-          ...initial.form.session,
-          values: {
-            ...initial.form.session.values,
-            customerEmail: 'new@example.test',
-            customerPhone: '+2348000000000',
-            firstName: 'New',
-            lastName: 'Customer',
-            newsletterOptIn: true,
-            deliveryMethod: 'airport',
-            airportType: 'pickup',
-            airportRequiresQuote: true,
-            newAddressStreet: '2 Main St',
-            newAddressCity: 'Abuja',
-            newAddressState: 'FCT',
-          },
-        },
-      },
-      payment: {
-        ...initial.payment,
-        session:
-          latestPaymentSession as unknown as CheckoutPaymentExecutionOptions['payment']['session'],
-      },
-      attempt: {
-        ...initial.attempt,
-        tryBeginSubmission: latestTryBeginSubmission,
-      },
-    } as unknown as CheckoutPaymentExecutionOptions;
-
-    rerender({ options: next });
-
-    const submission = vi
-      .mocked(useCheckoutOrderSubmission)
-      .mock.calls.at(-1)?.[0];
-    expect(submission?.contact).toEqual({
-      customerEmail: 'new@example.test',
-      customerPhone: '+2348000000000',
-      firstName: 'New',
-      lastName: 'Customer',
-      newsletterOptIn: true,
-    });
-    expect(submission?.delivery).toEqual(
-      expect.objectContaining({
-        method: 'airport',
-        airportType: 'pickup',
-        airportRequiresQuote: true,
-        newAddressStreet: '2 Main St',
-        newAddressCity: 'Abuja',
-        newAddressState: 'FCT',
-      })
-    );
-    expect(submission?.payment.session).toBe(latestPaymentSession);
-    expect(submission?.payment.session.total).toBe(9600);
-    expect(submission?.payment.session.wallet.remainingAmount).toBe(8200);
-    expect(submission?.account.createAccount).toBe(
-      next.form.account.createAccount
-    );
-    expect(submission?.navigation.setCurrentStep).toBe(
-      next.navigation.flow.setCurrentStep
-    );
-    expect(submission?.order.pending).toBe(next.attempt.pendingCheckoutOrder);
-    expect(submission?.order.clearPending).toBe(
-      next.attempt.clearPendingCheckoutOrder
-    );
-    expect(submission?.order.clearCheckoutSession).toBe(
-      next.form.session.clear
-    );
-    expect(submission?.processing.tryBeginSubmission).toBe(
-      latestTryBeginSubmission
-    );
   });
 
   it.each([

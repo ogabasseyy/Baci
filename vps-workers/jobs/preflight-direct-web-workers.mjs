@@ -1,5 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { config } from 'dotenv';
+import { parse } from 'dotenv';
 
 const REQUIRED_ENV = [
   'BACI_REPO_DIR',
@@ -190,8 +191,22 @@ function runDirectWorkerPreflight({
 }
 
 function main() {
-  config({ path: fileURLToPath(new URL('../.env', import.meta.url)) });
-  process.exitCode = runDirectWorkerPreflight();
+  // File-authoritative: validate the staged dotenv as parsed, ignoring
+  // inherited process state. dotenv's default non-overriding load would
+  // let a runner/SSH-exported GIGL_ENABLED=off (or a caller-provided
+  // provider value) satisfy checks that cron reads from the file.
+  // BACI_WORKER_ENV overrides the default staged path (tests;
+  // production callers rely on the fixed staging location).
+  const dotenvPath =
+    process.env.BACI_WORKER_ENV ||
+    fileURLToPath(new URL('../.env', import.meta.url));
+  let parsed = {};
+  try {
+    parsed = parse(readFileSync(dotenvPath, 'utf8'));
+  } catch {
+    // Missing/unreadable file: every required check fails below.
+  }
+  process.exitCode = runDirectWorkerPreflight({ env: parsed });
 }
 
 if (

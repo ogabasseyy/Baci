@@ -1,7 +1,10 @@
 import 'dotenv/config';
 
 import { pathToFileURL } from 'node:url';
-import { createGiglTrackingWorkerClient } from '@/lib/gigl-tracking-worker-client';
+import {
+  GiglWorkerTokenError,
+  createGiglTrackingWorkerClient,
+} from '@/lib/gigl-tracking-worker-client';
 import {
   GiglWrapperSchemaMissingError,
   verifyGiglTrackingWorkerCapability,
@@ -39,7 +42,17 @@ export async function runGiglTrackingCapabilityVerification({
     let client: ReturnType<typeof createGiglTrackingWorkerClient>;
     try {
       client = createGiglTrackingWorkerClient(env);
-    } catch {
+    } catch (error) {
+      // Only an independently verified absent/expired/mis-issued token
+      // is vacuous. Any other construction failure (malformed URL,
+      // plaintext scheme, missing anon key) fails closed: a valid JWT
+      // may still be usable against the correct endpoint, unprobed.
+      if (!(error instanceof GiglWorkerTokenError)) {
+        logger.error(
+          '[gigl-capability] worker client misconfigured while GIGL is disabled; fix the Supabase URL/anon key and re-run'
+        );
+        return 1;
+      }
       // A disabled setup may legitimately have no token yet, and with no
       // usable token there is nothing to abuse: latch vacuously.
       logger.info(

@@ -26,7 +26,11 @@ while IFS= read -r file; do
   case "$(basename "$file")" in
     *gigl*) continue ;;
   esac
-  if grep -E -q "$pattern" "$file"; then
+  # Case-insensitive: PostgreSQL folds unquoted identifiers, so
+  # PUBLIC.ENFORCE_GIGL_TRACKING_WORKER_REQUEST_SCOPE is the same
+  # function as the lowercase form (only the gigl FILENAME rule stays
+  # case-sensitive, matching the tracking glob).
+  if grep -E -i -q "$pattern" "$file"; then
     echo "GIGL enforcement migration must carry gigl in its filename: $file" >&2
     fail=1
   fi

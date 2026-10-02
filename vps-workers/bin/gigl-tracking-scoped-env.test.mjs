@@ -181,6 +181,42 @@ describe('gigl-tracking-scoped-env', () => {
     assert.deepEqual(parseChildEnv(result.stdout), expectedChildEnv());
   });
 
+  it('passes caller-only GIGL knobs in default mode', () => {
+    const result = runFilterProbe({
+      sharedEnv: SHARED_ENV_FIXTURE,
+      extraEnv: { GIGL_TRACKING_TIMEOUT_MS: '10000' },
+    });
+
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.deepEqual(
+      parseChildEnv(result.stdout),
+      expectedChildEnv({ GIGL_TRACKING_TIMEOUT_MS: '10000' })
+    );
+  });
+
+  it('drops caller-only GIGL knobs in file-authoritative mode', () => {
+    const result = runFilterProbe({
+      sharedEnv: SHARED_ENV_FIXTURE,
+      extraEnv: {
+        GIGL_ENV_FILE_AUTHORITATIVE: '1',
+        GIGL_TRACKING_TIMEOUT_MS: '10000',
+      },
+    });
+
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.deepEqual(parseChildEnv(result.stdout), expectedChildEnv());
+  });
+
+  it('never passes the mode flag itself to the child', () => {
+    const result = runFilterProbe({
+      sharedEnv: SHARED_ENV_FIXTURE,
+      extraEnv: { GIGL_ENV_FILE_AUTHORITATIVE: '0' },
+    });
+
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.deepEqual(parseChildEnv(result.stdout), expectedChildEnv());
+  });
+
   it('drops file-absent caller values in file-authoritative mode', () => {
     const fileWithoutUrl = SHARED_ENV_FIXTURE.replace(
       'NEXT_PUBLIC_SUPABASE_URL=https://project.supabase.co\n',

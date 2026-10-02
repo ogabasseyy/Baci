@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { getDirectWorkerPreflightProblems } from './preflight-direct-web-workers.mjs';
@@ -188,4 +192,46 @@ describe('direct worker environment preflight', () => {
       );
     });
   }
+
+  it('validates the staged file, ignoring inherited process state', () => {
+    // The file enables GIGL but omits GIGL_PASSWORD; the process exports
+    // GIGL_ENABLED=off plus a provider password. A process-first load
+    // would skip every GIGL check and pass — cron would then fail every
+    // poll on the file it actually reads.
+    const directory = mkdtempSync(join(tmpdir(), 'baci-preflight-'));
+    try {
+      const dotenvPath = join(directory, '.env');
+      const fileEnv = { ...commonEnv };
+      delete fileEnv.GIGL_PASSWORD;
+      writeFileSync(
+        dotenvPath,
+        Object.entries(fileEnv)
+          .map(([name, value]) => `${name}=${value}`)
+          .join('\n')
+      );
+      const result = spawnSync(
+        process.execPath,
+        [
+          join(
+            dirname(fileURLToPath(import.meta.url)),
+            'preflight-direct-web-workers.mjs'
+          ),
+        ],
+        {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            BACI_WORKER_ENV: dotenvPath,
+            GIGL_ENABLED: 'off',
+            GIGL_PASSWORD: 'runner-provided-password',
+          },
+        }
+      );
+
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stderr, /GIGL_PASSWORD is required/);
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
 });

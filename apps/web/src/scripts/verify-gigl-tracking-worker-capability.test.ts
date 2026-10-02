@@ -9,9 +9,14 @@ const { createClient, verifyCapability, verifyScopeProbe } = vi.hoisted(
   })
 );
 
-vi.mock('@/lib/gigl-tracking-worker-client', () => ({
-  createGiglTrackingWorkerClient: createClient,
-}));
+vi.mock('@/lib/gigl-tracking-worker-client', async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import('@/lib/gigl-tracking-worker-client')>();
+  return {
+    GiglWorkerTokenError: original.GiglWorkerTokenError,
+    createGiglTrackingWorkerClient: createClient,
+  };
+});
 vi.mock('@/lib/verify-gigl-tracking-worker-capability', async (importOriginal) => {
   const original =
     await importOriginal<
@@ -141,8 +146,13 @@ describe('runGiglTrackingCapabilityVerification', () => {
   });
 
   it('warns when skipping with an unhealthy worker token', async () => {
+    const { GiglWorkerTokenError } = await import(
+      '@/lib/gigl-tracking-worker-client'
+    );
     createClient.mockImplementationOnce(() => {
-      throw new Error('GIGL tracking worker database capability is invalid');
+      throw new GiglWorkerTokenError(
+        'GIGL tracking worker database capability is invalid'
+      );
     });
     const logger = { error: vi.fn(), info: vi.fn() };
 
@@ -157,6 +167,29 @@ describe('runGiglTrackingCapabilityVerification', () => {
 
     expect(logger.info).toHaveBeenCalledWith(
       '[gigl-capability] worker token missing or expired; provision it before re-enabling GIGL'
+    );
+    expect(verifyScopeProbe).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when disabled with a non-token client error', async () => {
+    // A valid JWT with a misconfigured URL must not latch vacuously:
+    // the token stays usable against the correct endpoint unprobed.
+    createClient.mockImplementationOnce(() => {
+      throw new Error(
+        'GIGL tracking worker Supabase URL must be a credential-free https:// URL'
+      );
+    });
+    const logger = { error: vi.fn(), info: vi.fn() };
+
+    await expect(
+      runGiglTrackingCapabilityVerification({
+        env: { GIGL_ENABLED: 'off', NODE_ENV: 'test' },
+        logger,
+      })
+    ).resolves.toBe(1);
+
+    expect(logger.error).toHaveBeenCalledWith(
+      '[gigl-capability] worker client misconfigured while GIGL is disabled; fix the Supabase URL/anon key and re-run'
     );
     expect(verifyScopeProbe).not.toHaveBeenCalled();
   });

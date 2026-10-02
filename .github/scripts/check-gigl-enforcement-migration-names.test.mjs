@@ -94,6 +94,16 @@ describe('check-gigl-enforcement-migration-names', () => {
     assert.match(result.stderr, /20260107600000_auth_tune\.sql/);
   });
 
+  it('matches SQL object names case-insensitively (unquoted identifiers fold)', () => {
+    const result = runCheck({
+      '20260107700000_hook_body.sql':
+        'CREATE OR REPLACE FUNCTION PUBLIC.ENFORCE_GIGL_TRACKING_WORKER_REQUEST_SCOPE() RETURNS VOID AS $$ BEGIN END; $$ LANGUAGE plpgsql;\n',
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /20260107700000_hook_body\.sql/);
+  });
+
   it('treats uppercase GIGL as unnamed (the tracking glob is case-sensitive)', () => {
     const result = runCheck({
       '20260108000000_GIGL_hook.sql':

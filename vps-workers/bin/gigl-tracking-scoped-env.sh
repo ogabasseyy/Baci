@@ -14,11 +14,13 @@
 # under a constructed environment (env -i): allowlisted names plus the
 # non-secret infrastructure (NODE_ENV, BACI_WORKER_PROFILE, PATH, HOME),
 # nothing else. A caller-set allowlisted value wins over the file (exact
-# dotenv precedence); every other caller-exported variable -- a service key
-# lingering in a cron/SSH/runner environment, GITHUB_TOKEN in CI -- is
-# dropped at that boundary even though BACI_WORKER_ENV=/dev/null only stops
-# further FILE loads. GIGL_ENV_FILE_AUTHORITATIVE=1 inverts the precedence
-# for allowlisted names (the file always wins; file-absent caller values
+# dotenv precedence, including caller-only GIGL_* knobs the file lacks
+# (enumerated from both the file and the caller environment); every
+# other caller-exported variable -- a service key lingering in a
+# cron/SSH/runner environment, GITHUB_TOKEN in CI -- is dropped at that
+# boundary even though BACI_WORKER_ENV=/dev/null only stops further
+# FILE loads. GIGL_ENV_FILE_AUTHORITATIVE=1 inverts the precedence for
+# allowlisted names (the file always wins; file-absent caller values
 # are dropped): the smoke entry sets it because a smoke certifies the
 # installed dotenv, while the poller keeps caller-wins for manual runs
 # (cron's minimal env makes it a no-op there).
@@ -52,7 +54,10 @@ gigl_tracking_scope_env() {
 
   gigl_tracking_export_from_file() {
     local export_key="$1" export_value
-    GIGL_SCOPED_ENV_NAMES="${GIGL_SCOPED_ENV_NAMES:+$GIGL_SCOPED_ENV_NAMES }$export_key"
+    case " $GIGL_SCOPED_ENV_NAMES " in
+      *" $export_key "*) ;;
+      *) GIGL_SCOPED_ENV_NAMES="${GIGL_SCOPED_ENV_NAMES:+$GIGL_SCOPED_ENV_NAMES }$export_key" ;;
+    esac
     # A set process variable wins even when empty (exact dotenv
     # precedence); printenv exits 0 for set-but-empty on coreutils/BSD.
     # File-authoritative mode (GIGL_ENV_FILE_AUTHORITATIVE=1, set by the
@@ -93,14 +98,28 @@ gigl_tracking_scope_env() {
 $(grep -o -E '^[[:space:]]*(export[[:space:]]+)?GIGL_[A-Za-z0-9_]*' "$shared_env" 2>/dev/null | grep -o -E 'GIGL_[A-Za-z0-9_]*' | sort -u || true)
 EOF
 
+  # Caller GIGL_* names join the candidates (except this filter's own
+  # mode flag): a manual override for a knob the file lacks must win
+  # like any caller value in default mode. In file-authoritative mode
+  # the per-key logic above still drops file-absent caller values, so
+  # the smoke cannot certify runner-injected knobs.
+  while IFS= read -r candidate; do
+    [ -n "$candidate" ] || continue
+    [ "$candidate" = "GIGL_ENV_FILE_AUTHORITATIVE" ] && continue
+    gigl_tracking_export_from_file "$candidate"
+  done <<EOF
+$(env | sed -n 's/^\(GIGL_[A-Za-z0-9_]*\)=.*/\1/p' | sort -u || true)
+EOF
+
   export BACI_WORKER_ENV=/dev/null
 }
 
 # Replace the process image with the child (run-web-script.sh) under a
 # constructed environment instead of the inherited one. Must run after
 # gigl_tracking_scope_env in the same shell. Unset names are skipped, so
-# file-missing keys simply stay absent; set-but-empty values pass through
-# (printenv exits 0 for those). Never returns on success.
+# keys absent from both file and caller stay absent; set-but-empty
+# values pass through (printenv exits 0 for those). Never returns on
+# success.
 gigl_tracking_exec_scoped() {
   : "${GIGL_SCOPED_ENV_NAMES:?gigl_tracking_scope_env must run before gigl_tracking_exec_scoped}"
   local exec_args=() exec_name exec_value

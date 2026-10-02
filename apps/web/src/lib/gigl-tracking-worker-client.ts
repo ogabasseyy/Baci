@@ -5,6 +5,13 @@ import type { Database } from '@/types/supabase';
 
 type GiglTrackingRpcClient = Pick<SupabaseClient<Database>, 'rpc'>;
 
+// The worker token is absent, expired, mis-roled, or mis-signed: there
+// is no usable JWT to abuse. The disabled-branch smoke treats ONLY this
+// class as vacuous; every other construction failure (malformed URL,
+// plaintext scheme, missing anon key) fails closed, because a valid JWT
+// may still be usable against the correct endpoint unprobed.
+export class GiglWorkerTokenError extends Error {}
+
 const EXPECTED_WORKER_ROLE = 'gigl_tracking_worker';
 const RESTRICTED_RPC_NAMES: Readonly<Record<string, string>> = {
   apply_gigl_tracking_result: 'gigl_worker_apply_tracking_result',
@@ -57,12 +64,14 @@ export function createGiglTrackingWorkerClient(
   const url = env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const anonKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
   const workerToken = env.GIGL_TRACKING_WORKER_TOKEN?.trim();
-  if (
-    !url ||
-    !anonKey ||
-    !workerToken ||
-    !hasCurrentWorkerCapability(workerToken)
-  ) {
+  // Token first: a missing/expired token is vacuous even when the URL
+  // is also misconfigured (nothing usable to abuse either way).
+  if (!workerToken || !hasCurrentWorkerCapability(workerToken)) {
+    throw new GiglWorkerTokenError(
+      'GIGL tracking worker database capability is invalid'
+    );
+  }
+  if (!url || !anonKey) {
     throw new Error('GIGL tracking worker database capability is invalid');
   }
   // The worker JWT travels in the Authorization header on every call, so

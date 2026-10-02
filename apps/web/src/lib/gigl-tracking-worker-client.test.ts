@@ -1,6 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createGiglTrackingWorkerClient } from './gigl-tracking-worker-client';
+import {
+  createGiglTrackingWorkerClient,
+  GiglWorkerTokenError,
+} from './gigl-tracking-worker-client';
 
 const rpc = vi.fn();
 vi.mock('@supabase/supabase-js', () => ({
@@ -125,6 +128,56 @@ describe('createGiglTrackingWorkerClient', () => {
       })
     ).toThrow('GIGL tracking worker database capability is invalid');
     expect(createClient).not.toHaveBeenCalled();
+  });
+
+  it('classifies token failures distinctly from config failures', () => {
+    const capture = (build: () => unknown): unknown => {
+      try {
+        build();
+      } catch (error) {
+        return error;
+      }
+      throw new Error('expected construction to throw');
+    };
+
+    // Absent/expired/mis-issued tokens: the only vacuous class.
+    expect(
+      capture(() =>
+        createGiglTrackingWorkerClient({
+          ...configuredEnv,
+          GIGL_TRACKING_WORKER_TOKEN: undefined,
+        })
+      )
+    ).toBeInstanceOf(GiglWorkerTokenError);
+    expect(
+      capture(() =>
+        createGiglTrackingWorkerClient({
+          ...configuredEnv,
+          GIGL_TRACKING_WORKER_TOKEN: token(
+            'gigl_tracking_worker',
+            'ES256',
+            Math.floor(Date.now() / 1000) - 60
+          ),
+        })
+      )
+    ).toBeInstanceOf(GiglWorkerTokenError);
+    // URL/anon failures fail closed, never vacuous.
+    expect(
+      capture(() =>
+        createGiglTrackingWorkerClient({
+          ...configuredEnv,
+          NEXT_PUBLIC_SUPABASE_URL: 'http://project.supabase.co',
+        })
+      )
+    ).not.toBeInstanceOf(GiglWorkerTokenError);
+    expect(
+      capture(() =>
+        createGiglTrackingWorkerClient({
+          ...configuredEnv,
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: '',
+        })
+      )
+    ).not.toBeInstanceOf(GiglWorkerTokenError);
   });
 
   it('rejects operations outside the reviewed five-wrapper capability', () => {

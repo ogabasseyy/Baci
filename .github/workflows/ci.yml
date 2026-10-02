@@ -313,6 +313,7 @@ jobs:
           --sql-check supabase/tests/product_discovery_variant_recall_text.sql
           --sql-check supabase/tests/product_discovery_variant_recall_identity.sql
           --sql-check supabase/tests/product_discovery_variant_recall_identity_exact.sql
+          --sql-check supabase/tests/product_discovery_public_variant_projection.sql
           --sql-check supabase/tests/product_discovery_variant_recall_condition.sql
           --sql-check supabase/tests/mcp_search_browse_ascii.sql
           --sql-check supabase/tests/product_discovery_fact_condition.sql

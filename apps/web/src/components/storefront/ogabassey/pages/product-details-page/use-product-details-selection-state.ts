@@ -2,6 +2,7 @@
 
 import type { SearchParamSource } from '@baci/shared/lib';
 import { useState } from 'react';
+import { projectPublicVariantSelection } from '@/lib/resolve-public-product-option';
 import {
   getVariantConditionOptions,
   hasVariantConditionAxis,
@@ -45,9 +46,9 @@ export function useProductDetailsSelectionState(
     productData,
     effectiveAxes
   );
-  const variantResolutionVariants = applySingleOptionAxisSelectionsToVariants(
-    productData.variants,
-    singleOptionAxisSelections
+  const variantResolutionVariants = projectPublicVariantSelection(
+    { ...productData, price: relatedProductsProduct.price, manage_stock: productData.manage_stock !== false },
+    applySingleOptionAxisSelectionsToVariants(productData.variants, singleOptionAxisSelections)
   );
   const variantResolutionProduct = {
     price: relatedProductsProduct.price,

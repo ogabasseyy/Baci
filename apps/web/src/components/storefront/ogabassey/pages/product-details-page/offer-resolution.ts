@@ -1,5 +1,5 @@
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
-import { getEffectiveStock } from '@/lib/product-stock';
+import { resolvePublicProductOption } from '@/lib/resolve-public-product-option';
 import type { ResolvedProductVariantSelection } from '@baci/shared/lib';
 import { type ConditionType, normalizeConditionType } from './product-condition';
 import type { NormalizedProductDetails } from './product-normalization';
@@ -24,6 +24,7 @@ export function resolveCurrentOffer(
     price_override?: number | null;
     price_modifier?: number | null;
     stock_quantity?: number | null;
+    inventory_tracking_policy?: string | null;
   }> | null
 ): ProductDetailsCurrentOffer {
   let price = productData.rawPrice || 0;
@@ -32,7 +33,7 @@ export function resolveCurrentOffer(
       Number.parseInt(productData.price.replace(/[^0-9]/g, ''), 10) || 0;
   }
 
-  let stock = productData.manage_stock ? getEffectiveStock(productData) : 999;
+  let selectedOffer: { price: number; stock_quantity: number | null } | undefined;
 
   // Canonical on both sides: a legacy-spelled parent (uk_used,
   // refurbished) is the selection's own family, so same-condition offer
@@ -46,14 +47,18 @@ export function resolveCurrentOffer(
     );
 
     if (offer) {
-      price = offer.rawPrice;
-      stock = getEffectiveStock(offer);
+      selectedOffer = { price: offer.rawPrice, stock_quantity: offer.stock_quantity ?? offer.stock ?? null };
     }
   }
 
   if (variantSelection?.variant) {
-    price = variantSelection.price;
-    stock = getEffectiveStock(variantSelection.variant);
+    const option = resolvePublicProductOption(
+      { ...productData, price },
+      { variant: variantSelection.variant, resolvedVariantPrice: variantSelection.price,
+        condition: selectedCondition }
+    );
+    price = option.price ?? price;
+    const stock = option.stockQuantity;
     return {
       price: formatCurrentOfferCurrency(price),
       rawPrice: price,
@@ -76,21 +81,28 @@ export function resolveCurrentOffer(
     });
 
     if (variant) {
-      if (variant.price_override) {
+      if (typeof variant.price_override === 'number') {
         price = variant.price_override;
-      } else if (variant.price_modifier) {
+      } else if (typeof variant.price_modifier === 'number') {
         price += variant.price_modifier;
         price = Math.max(0, price);
       }
 
-      stock = getEffectiveStock(variant);
+      const option = resolvePublicProductOption(
+        { ...productData, price }, { variant, resolvedVariantPrice: price, condition: selectedCondition }
+      );
+      return { price: formatCurrentOfferCurrency(option.price ?? price),
+        rawPrice: option.price ?? price, stock: option.stockQuantity, id: productData.id };
     }
   }
 
+  const option = resolvePublicProductOption(
+    { ...productData, price }, { offer: selectedOffer, condition: selectedCondition }
+  );
   return {
-    price: formatCurrentOfferCurrency(price),
-    rawPrice: price,
-    stock,
+    price: formatCurrentOfferCurrency(option.price ?? price),
+    rawPrice: option.price ?? price,
+    stock: selectedOffer || productData.manage_stock !== false ? option.stockQuantity : 999,
     id: productData.id,
   };
 }

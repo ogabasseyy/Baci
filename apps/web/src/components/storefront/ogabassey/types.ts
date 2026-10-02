@@ -134,6 +134,7 @@ export function normalizeProductCondition(
 
 export interface ProductVariant {
   id: string;
+  inventory_tracking_policy?: string | null;
   name?: string;
   condition?: ProductCondition;
   price_override?: number;

@@ -1,7 +1,7 @@
 import { normalizeCanonicalProductCondition, toGoogleListingCondition } from '@baci/shared/lib';
 import type { McpDiscoveryIntent } from '../src/schemas/mcp-discovery-intent';
-import { isPublicVariantPurchasable } from '../src/lib/is-public-variant-purchasable';
 import { getEffectiveStock } from '../src/lib/product-stock';
+import { resolvePublicProductOption } from '../src/lib/resolve-public-product-option';
 import { normalizeDiscoveryOptionAttributes } from './normalize-discovery-option-attributes';
 import type { hydrateSearchProductAvailability } from './search-product-availability';
 import { structuredDiscoveryIdentity } from './structured-discovery-identity';
@@ -90,16 +90,22 @@ export function selectStructuredDiscoveryOffer(
     stock: typeof product.stock === 'number' ? product.stock : null,
     stock_quantity: typeof product.stock_quantity === 'number' ? product.stock_quantity : null,
   };
-  // PDP rule on the projected effective policy, matching hydration.
-  const purchasableVariant = (rawVariant: unknown): boolean => {
+  const resolveVariant = (rawVariant: unknown) => {
     const variant = record(rawVariant);
-    return isPublicVariantPurchasable(parentStock, {
-      inventory_tracking_policy: typeof variant.effective_policy === 'string'
-        ? variant.effective_policy
-        : undefined,
-      stock_quantity: typeof variant.stock_quantity === 'number' ? variant.stock_quantity : null,
-    });
+    return resolvePublicProductOption(
+      { ...parentStock, price: finitePrice(product.price),
+        compare_at_price: finitePrice(product.compare_at_price),
+        condition: typeof product.condition === 'string' ? product.condition : null },
+      { variant: {
+        price_override: finitePrice(variant.price_override),
+        compare_at_price: finitePrice(variant.compare_at_price),
+        condition: typeof variant.condition === 'string' ? variant.condition : null,
+        inventory_tracking_policy: typeof variant.effective_policy === 'string' ? variant.effective_policy : undefined,
+        stock_quantity: typeof variant.stock_quantity === 'number' ? variant.stock_quantity : null,
+      } }
+    );
   };
+  const purchasableVariant = (rawVariant: unknown) => resolveVariant(rawVariant).purchasable;
   const metadataAttributes = record(discovery.attributes);
   const baseCondition = normalizeCanonicalProductCondition(
     typeof product.condition === 'string' ? product.condition : null
@@ -136,16 +142,15 @@ export function selectStructuredDiscoveryOffer(
     for (const rawVariant of row.availableVariants) {
       const variant = record(rawVariant);
       if (!purchasableVariant(rawVariant)) continue;
-      const price = finitePrice(variant.price_override) ?? finitePrice(product.price);
+      const option = resolveVariant(rawVariant);
+      const price = option.price;
       if (price === undefined) continue;
-      const variantCondition = typeof variant.condition === 'string' ? variant.condition : null;
       // PDP parity: product-detail-client resolves the comparison price as
       // the variant's own value with an unconditional parent fallback, even
       // when an override moved the selling price.
       addCandidate({ kind: 'variant', attributes: normalizedAttributesOf(rawVariant),
-        condition: normalizeCanonicalProductCondition(variantCondition) || baseCondition,
-        price, compareAtPrice: finitePrice(variant.compare_at_price)
-          ?? finitePrice(product.compare_at_price) ?? null,
+        condition: option.condition,
+        price, compareAtPrice: option.compareAtPrice,
         stockQuantity: variant.stock_quantity, sourceOption: rawVariant });
     }
   }
@@ -207,8 +212,8 @@ export function selectStructuredDiscoveryOffer(
       // PDP parity: resolveCurrentOffer replaces any selected offer price
       // with the variant price whenever a variant is selected, so a paired
       // candidate is priced by its variant, never the offer row.
-      const pairedPrice = finitePrice(record(rawVariant).price_override)
-        ?? finitePrice(product.price);
+      const pairedOption = resolveVariant(rawVariant);
+      const pairedPrice = pairedOption.price;
       if (pairedPrice === undefined) continue;
       if (pairedPrice < (budget.min_price ?? Number.NEGATIVE_INFINITY)) continue;
       if (pairedPrice > (budget.max_price ?? Number.POSITIVE_INFINITY)) continue;
@@ -221,7 +226,7 @@ export function selectStructuredDiscoveryOffer(
         continue;
       }
       addCandidate({ ...offerCore, price: pairedPrice, pairedVariant: rawVariant,
-        compareAtPrice: finitePrice(record(rawVariant).compare_at_price) ?? productCompareAtPrice,
+        compareAtPrice: pairedOption.compareAtPrice,
         attributes: normalized });
     }
   }
@@ -260,7 +265,7 @@ export function selectStructuredDiscoveryOffer(
     : pairedOffer ? record(match.pairedVariant).effective_policy : undefined;
   const stockSummary = getMcpProductStockSummary({
     ...product,
-    manage_stock: selectedPolicy === 'serialized_strict' ? true : product.manage_stock,
+    manage_stock: selectedPolicy === 'serialized_strict' ? true : parentStock.manage_stock,
     has_variants: match.kind === 'variant',
     has_condition_offers: match.kind === 'offer' && !pairedOffer,
     stock_quantity: match.kind === 'base' ? stockQuantity(product.stock_quantity)

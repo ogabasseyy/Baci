@@ -10,6 +10,8 @@ export interface ProductDefaultVariantLike {
   compare_at_price?: number | null;
   condition?: string | null;
   in_stock?: boolean | null;
+  /** Canonical eligibility projected by the public option adapter. */
+  is_purchasable?: boolean;
   price?: number | null;
   price_modifier?: number | null;
   price_override?: number | null;
@@ -91,6 +93,10 @@ function isVariantPurchasable(
   manageStock: boolean | null | undefined,
   variant: ProductDefaultVariantLike
 ) {
+  if (typeof variant.is_purchasable === 'boolean') {
+    return variant.is_purchasable;
+  }
+
   if (manageStock === false) {
     return true;
   }

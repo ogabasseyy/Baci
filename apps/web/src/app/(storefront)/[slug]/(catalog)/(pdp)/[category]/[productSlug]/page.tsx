@@ -214,6 +214,7 @@ function toOgabasseyProduct(
           condition?: string | null;
           price_override?: number;
           price_modifier?: number;
+          inventory_tracking_policy?: string | null;
           primary_image?: string | null;
           stock_quantity?: number;
           images?: string[];
@@ -234,6 +235,7 @@ function toOgabasseyProduct(
             attributes: v.attributes,
             price_override: v.price_override,
             price_modifier: v.price_modifier,
+            inventory_tracking_policy: v.inventory_tracking_policy,
             primary_image: v.primary_image,
             // Keep legacy `stock` and canonical `stock_quantity` consumers in sync.
             stock: v.stock_quantity,

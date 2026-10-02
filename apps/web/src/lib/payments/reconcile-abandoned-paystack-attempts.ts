@@ -2,7 +2,6 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { verifyTransaction } from '@/lib/paystack';
 import type { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
-import { normalizePaymentGateway } from './normalize-payment-gateway';
 import { processAbandonedPaystackAttempt } from './reconcile-abandoned-paystack-attempts-process';
 
 const DEFAULT_LIMIT = 25;
@@ -65,34 +64,22 @@ export async function reconcileAbandonedPaystackAttempts({
   const recheckCutoff = new Date(
     Date.now() - RECHECK_AFTER_MINUTES * 60_000
   ).toISOString();
-  // Millis-free stamps for the or() filters below: fractional seconds
-  // would inject dots the OR parser reads as condition separators.
-  const orCutoff = `${cutoff.split('.')[0]}Z`;
-  const orRecheckCutoff = `${recheckCutoff.split('.')[0]}Z`;
-  // Legacy rows may pad or re-case the gateway (` Paystack `) while
-  // cancellation still treats them as in-flight captures: prefilter
-  // case-insensitively server-side, then exact-normalize below.
-  const { data: mainAttempts, error: lookupError } = await supabase
-    .from('transactions')
-    .select(
-      'id, order_id, merchant_id, gateway, gateway_reference, amount, currency, status, metadata, platform_fee, paid_order:orders!transactions_order_id_fkey!inner(payment_status)'
-    )
-    .eq('transaction_type', 'payment')
-    .ilike('gateway', '%paystack%')
-    .in('status', ['pending', 'processing'])
-    .in('paid_order.payment_status', ['paid', 'partially_paid'])
-    .not('order_id', 'is', null)
-    .not('gateway_reference', 'is', null)
-    .is('metadata->abandoned_sweep_resolution', null)
-    // The schema permits null timestamps, and plain < comparisons
-    // exclude legacy/imported rows forever — leaving them pending
-    // while cancellation keeps rejecting the order as in-flight. A
-    // missing timestamp is the stalest possible signal, so nulls
-    // stay eligible for reconciliation.
-    .or(`created_at.lt.${orCutoff},created_at.is.null`)
-    .or(`updated_at.lt.${orRecheckCutoff},updated_at.is.null`)
-    .order('updated_at', { ascending: true })
-    .limit(limit);
+  // Candidate selection runs inside the database: PostgREST cannot
+  // express the normalized gateway predicate legacy rows require
+  // (` Paystack ` must match), and a loose prefilter would both
+  // discard the partial candidate index and let corrupt rows occupy
+  // the bounded batch before exact filtering. The RPC returns the
+  // stale main branch plus the filing-only retry branch
+  // (completed captures with failed duplicate filings, never on
+  // partially-paid orders), oldest first per branch.
+  const { data: attempts, error: lookupError } = await supabase.rpc(
+    'select_abandoned_paystack_attempt_candidates_v1',
+    {
+      p_limit: limit,
+      p_or_cutoff: cutoff,
+      p_or_recheck_cutoff: recheckCutoff,
+    }
+  );
 
   if (lookupError) {
     throw new Error(
@@ -100,43 +87,7 @@ export async function reconcileAbandonedPaystackAttempts({
     );
   }
 
-  // Filing-only retries: completed captures whose duplicate filings
-  // both failed carry the retry marker. Unstamped only, and never on
-  // partially-paid orders — a completed row must not re-enter the
-  // partial-payment finalizer.
-  const { data: pendingRetries, error: pendingError } = await supabase
-    .from('transactions')
-    .select(
-      'id, order_id, merchant_id, gateway, gateway_reference, amount, currency, status, metadata, platform_fee, paid_order:orders!transactions_order_id_fkey!inner(payment_status)'
-    )
-    .eq('transaction_type', 'payment')
-    .ilike('gateway', '%paystack%')
-    .eq('status', 'completed')
-    .neq('paid_order.payment_status', 'partially_paid')
-    .not('order_id', 'is', null)
-    .not('gateway_reference', 'is', null)
-    .is('metadata->abandoned_sweep_resolution', null)
-    .eq('metadata->>duplicate_capture_review_pending', 'true')
-    .or(`created_at.lt.${orCutoff},created_at.is.null`)
-    .or(`updated_at.lt.${orRecheckCutoff},updated_at.is.null`)
-    .order('updated_at', { ascending: true })
-    .limit(limit);
-
-  if (pendingError) {
-    throw new Error(
-      `pending_paystack_attempt_lookup_failed: ${pendingError.message}`
-    );
-  }
-
-  // The ilike prefilter is deliberately loose (casing, padding):
-  // exact-normalize here so only genuine Paystack legs verify.
-  const attempts = [...(mainAttempts ?? []), ...(pendingRetries ?? [])].filter(
-    (attempt) =>
-      normalizePaymentGateway((attempt as PendingAttempt).gateway) ===
-      'PAYSTACK'
-  );
-
-  for (const attempt of attempts as PendingAttempt[]) {
+  for (const attempt of (attempts ?? []) as PendingAttempt[]) {
     // Stop starting attempts at the pass deadline: serial provider
     // verification can outlast the invocation budget, and unstarted rows
     // stay eligible for the next sweep.

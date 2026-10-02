@@ -36,9 +36,11 @@ describe('abandoned Paystack attempts with invalid references', () => {
   }
 
   it('files a durable review instead of rotating an invalid reference', async () => {
-    const { client } = createClient([invalidCandidate()]);
+    const invalidRows = [invalidCandidate()];
+    const { client } = createClient(invalidRows);
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    rpc.mockResolvedValueOnce({ data: invalidRows, error: null });
     withReviewTable(client, reviewInsert);
     Object.assign(client, { rpc });
 
@@ -70,6 +72,7 @@ describe('abandoned Paystack attempts with invalid references', () => {
     const { client } = createClient();
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    rpc.mockResolvedValueOnce({ data: [candidate], error: null });
     withReviewTable(client, reviewInsert);
     Object.assign(client, { rpc });
     const verify = vi.fn().mockResolvedValue({

@@ -26,18 +26,6 @@ const legacyRefund = {
   metadata: { payment_transaction_id: 'payment-1' },
 };
 
-function selectQuery(data: unknown) {
-  return {
-    eq: vi.fn().mockReturnThis(),
-    in: vi.fn().mockReturnThis(),
-    lt: vi.fn().mockReturnThis(),
-    not: vi.fn().mockReturnThis(),
-    or: vi.fn().mockReturnThis(),
-    order: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockResolvedValue({ data, error: null }),
-  };
-}
-
 function updateChain() {
   const chain: { eq: ReturnType<typeof vi.fn> } = {
     eq: vi.fn(),
@@ -55,10 +43,10 @@ describe('legacy completed Paystack cancellation refunds', () => {
   });
 
   it('stops before the deadline so later phases keep their share', async () => {
-    const from = vi
+    const rpc = vi
       .fn()
-      .mockReturnValue({ select: vi.fn(() => selectQuery([legacyRefund])) });
-    const supabase = { from } as never;
+      .mockResolvedValue({ data: [legacyRefund], error: null });
+    const supabase = { from: vi.fn(), rpc } as never;
 
     await expect(
       reconcileCompletedPaystackCancellationRefunds(
@@ -71,7 +59,7 @@ describe('legacy completed Paystack cancellation refunds', () => {
     expect(reconcile).not.toHaveBeenCalled();
   });
 
-  it('re-verifies completed rows only for cancelled orders still awaiting a refund transition', async () => {
+  it('re-verifies completed rows via the candidate RPC', async () => {
     const refund = {
       id: 'refund-1',
       order_id: 'order-1',
@@ -82,105 +70,38 @@ describe('legacy completed Paystack cancellation refunds', () => {
       status: 'completed',
       metadata: { payment_transaction_id: 'payment-1' },
     };
-    const query = {
-      eq: vi.fn().mockReturnThis(),
-      in: vi.fn().mockReturnThis(),
-      lt: vi.fn().mockReturnThis(),
-      not: vi.fn().mockReturnThis(),
-      or: vi.fn().mockReturnThis(),
-      order: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue({ data: [refund], error: null }),
-    };
-    const from = vi
-      .fn()
-      .mockReturnValueOnce({ select: vi.fn(() => query) })
-      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([])) });
-    const supabase = { from } as never;
-
-    await expect(
-      reconcileCompletedPaystackCancellationRefunds(supabase)
-    ).resolves.toEqual({ checked: 1, failed: 0 });
-
-    expect(query.eq).toHaveBeenCalledWith('status', 'completed');
-    expect(query.in).toHaveBeenCalledWith('cancellation_order.payment_status', [
-      'paid',
-      'partially_paid',
-      'pending',
-    ]);
-    expect(query.in).toHaveBeenCalledWith(
-      'cancellation_order.shipping_status',
-      ['cancelled', 'canceled']
-    );
-    expect(query.limit).toHaveBeenCalledWith(25);
-    expect(reconcile).toHaveBeenCalledWith(supabase, refund);
-  });
-
-  it('sweeps stale finalized refunds for contradictions within a small cap', async () => {
-    const finalizedRefund = {
-      ...legacyRefund,
-      id: 'refund-finalized',
-      cancellation_order: {
-        payment_status: 'refunded',
-        shipping_status: 'cancelled',
-        cancelled_at: '2026-09-20T00:00:00Z',
-      },
-    };
-    const finalizedQuery = {
-      eq: vi.fn().mockReturnThis(),
-      in: vi.fn().mockReturnThis(),
-      lt: vi.fn().mockReturnThis(),
-      not: vi.fn().mockReturnThis(),
-      or: vi.fn().mockReturnThis(),
-      order: vi.fn().mockReturnThis(),
-      limit: vi
-        .fn()
-        .mockResolvedValue({ data: [finalizedRefund], error: null }),
-    };
-    const from = vi
-      .fn()
-      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([])) })
-      .mockReturnValueOnce({ select: vi.fn(() => finalizedQuery) });
-    const supabase = { from } as never;
+    const rpc = vi.fn().mockResolvedValue({ data: [refund], error: null });
+    const supabase = { from: vi.fn(), rpc } as never;
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60_000).toISOString();
 
     await expect(
       reconcileCompletedPaystackCancellationRefunds(supabase)
     ).resolves.toEqual({ checked: 1, failed: 0 });
 
-    // Finalized orders stay eligible, but only rows untouched for a
-    // week and only a few per tick, so the sweep never crowds the
-    // pre-finalization batch. Null timestamps compare oldest: a bare
-    // less-than would exclude them from the sweep forever.
-    expect(finalizedQuery.eq).toHaveBeenCalledWith(
-      'cancellation_order.payment_status',
-      'refunded'
+    // Candidate selection is a single RPC: the normalized gateway
+    // predicate, the cancellation joins, and the finalized
+    // contradiction cutoff all live inside the database.
+    expect(rpc).toHaveBeenCalledWith(
+      'select_completed_paystack_cancellation_refund_candidates_v1',
+      expect.objectContaining({ p_finalized_limit: 5, p_limit: 25 })
     );
-    expect(finalizedQuery.lt).not.toHaveBeenCalled();
-    expect(finalizedQuery.or).toHaveBeenCalledWith(
-      expect.stringContaining('updated_at.is.null')
-    );
-    const predicate = finalizedQuery.or.mock.calls[0]?.[0] as string;
-    const cutoff = predicate.split('updated_at.lt.')[1] as string;
-    expect(typeof cutoff).toBe('string');
+    const cutoff = (
+      rpc.mock.calls as unknown as [string, { p_finalized_cutoff: string }][]
+    )[0]?.[1].p_finalized_cutoff as string;
     expect(Math.abs(Date.parse(cutoff) - Date.parse(weekAgo))).toBeLessThan(
       60_000
     );
-    expect(finalizedQuery.limit).toHaveBeenCalledWith(5);
-    expect(reconcile).toHaveBeenCalledWith(supabase, finalizedRefund);
+    expect(reconcile).toHaveBeenCalledWith(supabase, refund);
   });
 
   it('reconciles finalized rows before the pre-finalization batch', async () => {
     const primaryRefund = { ...legacyRefund, id: 'refund-primary' };
     const finalizedRefund = { ...legacyRefund, id: 'refund-finalized' };
-    const from = vi
-      .fn()
-      .mockReturnValueOnce({
-        select: vi.fn(() => selectQuery([primaryRefund])),
-      })
-      .mockReturnValueOnce({
-        select: vi.fn(() => selectQuery([finalizedRefund])),
-      });
-    const supabase = { from } as never;
+    const rpc = vi.fn().mockResolvedValue({
+      data: [finalizedRefund, primaryRefund],
+      error: null,
+    });
+    const supabase = { from: vi.fn(), rpc } as never;
 
     await expect(
       reconcileCompletedPaystackCancellationRefunds(supabase)
@@ -202,11 +123,8 @@ describe('legacy completed Paystack cancellation refunds', () => {
         cancelled_at: '2026-09-27T00:00:00Z',
       },
     };
-    const from = vi
-      .fn()
-      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([refund])) })
-      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([])) });
-    const supabase = { from } as never;
+    const rpc = vi.fn().mockResolvedValue({ data: [refund], error: null });
+    const supabase = { from: vi.fn(), rpc } as never;
 
     await expect(
       reconcileCompletedPaystackCancellationRefunds(supabase)
@@ -224,14 +142,11 @@ describe('legacy completed Paystack cancellation refunds', () => {
     };
     const chain = updateChain();
     const update = vi.fn().mockReturnValue(chain);
-    const from = vi
+    const rpc = vi
       .fn()
-      .mockReturnValueOnce({
-        select: vi.fn(() => selectQuery([auditedRefund])),
-      })
-      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([])) })
-      .mockReturnValueOnce({ update });
-    const supabase = { from } as never;
+      .mockResolvedValue({ data: [auditedRefund], error: null });
+    const from = vi.fn().mockReturnValueOnce({ update });
+    const supabase = { from, rpc } as never;
 
     await expect(
       reconcileCompletedPaystackCancellationRefunds(supabase)
@@ -258,12 +173,11 @@ describe('legacy completed Paystack cancellation refunds', () => {
     isDeterministic.mockReturnValue(true);
     const chain = updateChain();
     const update = vi.fn().mockReturnValue(chain);
-    const from = vi
+    const rpc = vi
       .fn()
-      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([legacyRefund])) })
-      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([])) })
-      .mockReturnValueOnce({ update });
-    const supabase = { from } as never;
+      .mockResolvedValue({ data: [legacyRefund], error: null });
+    const from = vi.fn().mockReturnValueOnce({ update });
+    const supabase = { from, rpc } as never;
 
     await expect(
       reconcileCompletedPaystackCancellationRefunds(supabase)
@@ -291,12 +205,11 @@ describe('legacy completed Paystack cancellation refunds', () => {
     isDeterministic.mockReturnValue(false);
     const chain = updateChain();
     const update = vi.fn().mockReturnValue(chain);
-    const from = vi
+    const rpc = vi
       .fn()
-      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([legacyRefund])) })
-      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([])) })
-      .mockReturnValueOnce({ update });
-    const supabase = { from } as never;
+      .mockResolvedValue({ data: [legacyRefund], error: null });
+    const from = vi.fn().mockReturnValueOnce({ update });
+    const supabase = { from, rpc } as never;
 
     await expect(
       reconcileCompletedPaystackCancellationRefunds(supabase)
@@ -318,23 +231,19 @@ describe('legacy completed Paystack cancellation refunds', () => {
         resolve({ error: new Error('database unavailable') }),
     });
     const update = vi.fn().mockReturnValue(chain);
-    const from = vi
-      .fn()
-      .mockReturnValueOnce({
-        select: vi.fn(() =>
-          selectQuery([
-            {
-              ...legacyRefund,
-              description: 'Refund for cancelled order #B-1',
-            },
-          ])
-        ),
-      })
-      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([])) })
-      .mockReturnValueOnce({ update });
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          ...legacyRefund,
+          description: 'Refund for cancelled order #B-1',
+        },
+      ],
+      error: null,
+    });
+    const from = vi.fn().mockReturnValueOnce({ update });
 
     await expect(
-      reconcileCompletedPaystackCancellationRefunds({ from } as never)
+      reconcileCompletedPaystackCancellationRefunds({ from, rpc } as never)
     ).rejects.toThrow('completed_refund_demote_failed');
     expect(fileReview).toHaveBeenCalled();
   });
@@ -347,14 +256,13 @@ describe('legacy completed Paystack cancellation refunds', () => {
     );
     const chain = updateChain();
     const update = vi.fn().mockReturnValue(chain);
-    const from = vi
+    const rpc = vi
       .fn()
-      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([legacyRefund])) })
-      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([])) })
-      .mockReturnValueOnce({ update });
+      .mockResolvedValue({ data: [legacyRefund], error: null });
+    const from = vi.fn().mockReturnValueOnce({ update });
 
     await expect(
-      reconcileCompletedPaystackCancellationRefunds({ from } as never)
+      reconcileCompletedPaystackCancellationRefunds({ from, rpc } as never)
     ).rejects.toThrow('refund_evidence_review_persistence_failed');
     expect(update).not.toHaveBeenCalled();
   });

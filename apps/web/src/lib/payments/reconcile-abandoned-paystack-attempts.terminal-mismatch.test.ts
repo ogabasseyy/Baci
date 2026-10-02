@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { reconcileAbandonedPaystackAttempts } from './reconcile-abandoned-paystack-attempts';
-import { createClient } from './reconcile-abandoned-paystack-attempts.test-support';
+import {
+  candidate,
+  createClient,
+} from './reconcile-abandoned-paystack-attempts.test-support';
 
 function withReviewTable(
   client: { from: unknown },
@@ -27,6 +30,7 @@ describe('abandoned Paystack attempt terminal mismatches', () => {
     const { client, update } = createClient();
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    rpc.mockResolvedValueOnce({ data: [candidate], error: null });
     withReviewTable(client, reviewInsert);
     Object.assign(client, { rpc });
     const verify = vi.fn().mockResolvedValue({
@@ -67,6 +71,7 @@ describe('abandoned Paystack attempt terminal mismatches', () => {
       .fn()
       .mockResolvedValue({ error: { code: '23505' } });
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    rpc.mockResolvedValueOnce({ data: [candidate], error: null });
     withReviewTable(client, reviewInsert);
     Object.assign(client, { rpc });
     const verify = vi.fn().mockResolvedValue({

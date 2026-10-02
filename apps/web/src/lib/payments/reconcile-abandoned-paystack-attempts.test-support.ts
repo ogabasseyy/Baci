@@ -14,8 +14,7 @@ export const candidate = {
   status: 'pending',
 };
 
-const CANDIDATE_COLUMNS =
-  'id, order_id, merchant_id, gateway, gateway_reference, amount, currency, status, metadata, platform_fee, paid_order:orders!transactions_order_id_fkey!inner(payment_status)';
+export const CANDIDATE_RPC = 'select_abandoned_paystack_attempt_candidates_v1';
 
 export function createClient(
   rows = [candidate],
@@ -31,32 +30,17 @@ export function createClient(
     select: selectUpdated,
   };
   const update = vi.fn(() => updateBuilder);
-  const lookupEqCalls: unknown[][] = [];
-  let lookupEqSeen = 0;
-  const lookup = {
-    eq: vi.fn((...args: unknown[]) => {
-      lookupEqCalls.push(args);
-      return lookup;
-    }),
-    ilike: vi.fn().mockReturnThis(),
-    in: vi.fn().mockReturnThis(),
-    is: vi.fn().mockReturnThis(),
-    neq: vi.fn().mockReturnThis(),
-    not: vi.fn().mockReturnThis(),
-    or: vi.fn().mockReturnThis(),
-    order: vi.fn().mockReturnThis(),
-    // The sweep runs two candidate queries (main, then filing-only
-    // retries): route by the retry marker filter so each resolves its
-    // own canned rows.
-    limit: vi.fn(() => {
-      const queryEqCalls = lookupEqCalls.slice(lookupEqSeen);
-      lookupEqSeen = lookupEqCalls.length;
-      const isPendingRetry = queryEqCalls.some(
-        ([column]) => column === 'metadata->>duplicate_capture_review_pending'
-      );
-      return { data: isPendingRetry ? pendingRows : rows, error: null };
-    }),
-  };
+  // Candidate selection is a single RPC returning the stale main
+  // branch plus the filing-only retry branch. Other RPCs (stamps,
+  // merges) default to success; tests needing specific values
+  // override via mockResolvedValueOnce sequencing or Object.assign
+  // with a name-aware mock.
+  const candidateRpc = vi.fn((fn: string) => {
+    if (fn === CANDIDATE_RPC) {
+      return Promise.resolve({ data: [...rows, ...pendingRows], error: null });
+    }
+    return Promise.resolve({ data: true, error: null });
+  });
   const orderLookup = {
     eq: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
@@ -90,22 +74,16 @@ export function createClient(
   const from = vi.fn((table: string) => ({
     select: vi.fn((columns: string) => {
       if (table === 'orders') return orderLookup;
-      // Candidate queries always resolve the attempt rows and the
-      // completed-payment probe always resolves its own canned rows;
-      // anything else keeps the legacy alternation.
-      if (table === 'transactions' && columns === CANDIDATE_COLUMNS) {
-        return lookup;
-      }
       if (table === 'transactions' && columns === 'id') {
         return completedLookup;
       }
-      return transactionSelects++ % 2 === 0 ? lookup : completedLookup;
+      return transactionSelects++ % 2 === 0 ? orderLookup : completedLookup;
     }),
     update,
   }));
   return {
-    client: { from },
-    lookup,
+    client: { from, rpc: candidateRpc },
+    candidateRpc,
     orderLookup,
     completedLookup,
     update,

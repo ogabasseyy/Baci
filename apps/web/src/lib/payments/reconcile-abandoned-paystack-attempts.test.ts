@@ -30,7 +30,7 @@ describe('reconcileAbandonedPaystackAttempts', () => {
   ])('retires a provider-confirmed %s attempt linked to one order', async (status) => {
     const {
       client,
-      lookup,
+      candidateRpc,
       orderLookup,
       completedLookup,
       update,
@@ -47,20 +47,16 @@ describe('reconcileAbandonedPaystackAttempts', () => {
     });
 
     expect(summary.retired).toEqual(['attempt-1']);
-    expect(lookup.ilike).toHaveBeenCalledWith('gateway', '%paystack%');
-    expect(lookup.in).toHaveBeenCalledWith('status', ['pending', 'processing']);
-    expect(lookup.in).toHaveBeenCalledWith('paid_order.payment_status', [
-      'paid',
-      'partially_paid',
-    ]);
-    // Null timestamps stay eligible: a missing timestamp is the
-    // stalest possible signal, and plain < comparisons would exclude
-    // legacy/imported rows from the sweep forever.
-    expect(lookup.or).toHaveBeenCalledWith(
-      expect.stringMatching(/^created_at\.lt\.\S+Z,created_at\.is\.null$/)
-    );
-    expect(lookup.or).toHaveBeenCalledWith(
-      expect.stringMatching(/^updated_at\.lt\.\S+Z,updated_at\.is\.null$/)
+    // Candidate selection is a single RPC: the normalized gateway
+    // predicate, the paid-order join, and the null-tolerant cutoffs
+    // all live inside the database.
+    expect(candidateRpc).toHaveBeenCalledWith(
+      'select_abandoned_paystack_attempt_candidates_v1',
+      expect.objectContaining({
+        p_limit: 25,
+        p_or_cutoff: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        p_or_recheck_cutoff: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      })
     );
     expect(orderLookup.in).toHaveBeenCalledWith('payment_status', [
       'paid',
@@ -72,9 +68,6 @@ describe('reconcileAbandonedPaystackAttempts', () => {
       'refunded',
     ]);
     expect(completedLookup.neq).toHaveBeenCalledWith('id', 'attempt-1');
-    expect(lookup.order).toHaveBeenCalledWith('updated_at', {
-      ascending: true,
-    });
     expect(verify).toHaveBeenCalledWith('BAC-OLD', expect.any(AbortSignal));
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'failed' })
@@ -110,20 +103,6 @@ describe('reconcileAbandonedPaystackAttempts', () => {
 
     expect(summary.retired).toEqual(['attempt-1']);
     expect(verify).toHaveBeenCalledWith('BAC-OLD', expect.any(AbortSignal));
-  });
-
-  it('skips a foreign-gateway row the loose prefilter admitted', async () => {
-    const { client } = createClient([{ ...candidate, gateway: 'korapay' }]);
-    const verify = vi.fn();
-
-    const summary = await reconcileAbandonedPaystackAttempts({
-      supabase: client as never,
-      verify,
-    });
-
-    expect(summary.checked).toBe(0);
-    expect(summary.retired).toEqual([]);
-    expect(verify).not.toHaveBeenCalled();
   });
 
   it('retires a provider-confirmed processing attempt on a funded order', async () => {
@@ -220,7 +199,7 @@ describe('reconcileAbandonedPaystackAttempts', () => {
   it.each([
     'pending',
   ])('preserves an attempt when Paystack reports %s', async (status) => {
-    const { client, lookup, update } = createClient();
+    const { client, candidateRpc, update } = createClient();
     const verify = vi.fn().mockResolvedValue({
       success: true,
       data: { reference: 'BAC-OLD', status, amount: 10000, currency: 'NGN' },
@@ -239,10 +218,12 @@ describe('reconcileAbandonedPaystackAttempts', () => {
     const rotatedAt = (
       update.mock.calls as unknown as [{ updated_at: string }][]
     )[0]?.[0].updated_at;
-    const retryFilter = lookup.or.mock.calls[1]?.[0] as string;
-    const retryCutoff = retryFilter
-      .split(',')[0]
-      ?.split('updated_at.lt.')[1] as string;
+    const retryCutoff = (
+      candidateRpc.mock.calls as unknown as [
+        string,
+        { p_or_recheck_cutoff: string },
+      ][]
+    )[0]?.[1].p_or_recheck_cutoff as string;
     expect(Date.parse(rotatedAt)).toBeGreaterThan(Date.parse(retryCutoff));
     expect(Date.parse(rotatedAt)).toBeLessThanOrEqual(Date.now());
   });

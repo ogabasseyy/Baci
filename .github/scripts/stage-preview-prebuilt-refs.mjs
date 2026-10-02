@@ -13,10 +13,11 @@
 // Layout rule mirrors the CLI: absolute, escaping, and output-internal
 // values stay in the shipped maps (the CLI rejects or resolves them as
 // in an unmodified map) but never count as usable or resolving. Missing
-// (phantom), symlink, protected, and invalid values drop: symlinks are
-// never followed, so outside-root targets cannot be laundered into the
-// stage artifact. Ties refuse to ship: missing must be strictly
-// outnumbered by resolving. Guardrails are fail-fast UX, not the
+// (phantom), escaped-link, protected, and invalid values drop: every
+// ref resolves through all links and re-validates on the real path,
+// so outside-root targets cannot be laundered into staging. Ties
+// refuse to ship: missing must be strictly outnumbered by resolving.
+// Guardrails are fail-fast UX, not the
 // security boundary: the build job is untrusted, so the deploy-side
 // materializer re-enforces them.
 //
@@ -159,30 +160,9 @@ for (const configPath of vcConfigs(outputDir)) {
       dropped += 1;
       continue;
     }
-    let srcStat = null;
-    try {
-      srcStat = lstatSync(abs);
-    } catch {
-      srcStat = null;
-    }
-    if (!srcStat) {
-      skipped.push({ value, reason: 'missing' });
-      missingCount += 1;
-      dropped += 1;
-      continue;
-    }
-    if (srcStat.isSymbolicLink()) {
-      // A final-component symlink is never followed: its target could
-      // be outside the root or protected, and copying through it would
-      // launder those bytes into the stage artifact as a regular file.
-      skipped.push({ value, reason: 'symlink' });
-      missingCount += 1;
-      dropped += 1;
-      continue;
-    }
-    // Ancestor check: a symlinked intermediate component points the
-    // lexical path somewhere else, so resolve the real path and
-    // re-validate root, protected prefixes, and file type through it.
+    // Resolve through final and ancestor links, then re-validate on
+    // the real path: the lexical value may point anywhere, so root,
+    // protected prefixes, and file type are all checked there.
     const target = resolveReal(abs);
     const targetPosix = target ? toPosix(target.rel) : '..';
     if (!target) {
@@ -192,8 +172,12 @@ for (const configPath of vcConfigs(outputDir)) {
       continue;
     }
     if (escapesRoot(target.rel)) {
-      skipped.push({ value, reason: 'escapes-root' });
-      kept[key] = value;
+      // Unlike lexically-escaping values (which the CLI rejects
+      // itself), a link-escaped value looks innocent, so the CLI would
+      // ENOENT re-adding it in a deploy tree without the link: drop it.
+      skipped.push({ value, reason: 'escaped-link' });
+      missingCount += 1;
+      dropped += 1;
       continue;
     }
     if (protectedPosix(targetPosix)) {
@@ -263,15 +247,28 @@ if (unusableConfigs.length > 0) {
 // any map is touched (rewrites apply last), so any failure in the
 // report leaves the original maps on disk for a retry to see.
 writeReport({ stage, staged, skipped, missingCount });
-// Last step: apply the buffered map rewrites. Serialize every body
-// before touching disk, then write each config via temp-file plus
-// rename, so a mid-loop throw cannot leave a half-written map.
+// Last step: apply the buffered map rewrites. Two phases — serialize
+// and write every temp file before the first rename — so a throw
+// cannot leave a half-written map, only (in the tiny rename window) a
+// mixed config set of individually consistent files. Temp names are
+// deterministic per config, so a retry overwrites rather than piles up
+// stale files, and leftovers from a killed run are swept first.
+const tmpFor = (configPath) => `${configPath}.tmp-stage-refs`;
+for (const { configPath } of pendingRewrites) rmSync(tmpFor(configPath), { force: true });
 const serialized = pendingRewrites.map(({ configPath, config, kept }) => {
   config.filePathMap = kept;
   return { configPath, body: `${JSON.stringify(config, null, 2)}\n` };
 });
-for (const { configPath, body } of serialized) {
-  const tmp = `${configPath}.tmp-${process.pid}`;
-  writeFileSync(tmp, body);
-  renameSync(tmp, configPath);
+try {
+  for (const { configPath, body } of serialized) writeFileSync(tmpFor(configPath), body);
+  for (const { configPath } of serialized) renameSync(tmpFor(configPath), configPath);
+} catch (error) {
+  for (const { configPath } of serialized) {
+    try {
+      rmSync(tmpFor(configPath), { force: true });
+    } catch {
+      // Best-effort: the sweep above removes leftovers on retry.
+    }
+  }
+  throw error;
 }

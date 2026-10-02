@@ -5,10 +5,12 @@
 import { appendFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-export const sanitizeRef = (v) => v.replace(/[\0-\x1f`]/g, '').slice(0, 200);
+const sanitizeRef = (v) => v.replace(/[\0-\x1f\x7f\u202a-\u202e\u2066-\u2069`]/g, '').slice(0, 200);
 
 const isDangling = (s) =>
-  s.reason === 'missing' || s.reason === 'non-file' || s.reason === 'symlink';
+  s.reason === 'missing' ||
+  s.reason === 'non-file' ||
+  s.reason === 'escaped-link';
 
 export function writeReport({ stage, staged, skipped, missingCount }) {
   const droppedProtected = skipped.filter((s) => s.reason === 'protected-path').length;

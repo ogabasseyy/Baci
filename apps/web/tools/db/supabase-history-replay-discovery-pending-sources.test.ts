@@ -7,11 +7,11 @@ import { DISCOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-
 
 const REPOSITORY_ROOT = path.resolve(__dirname, '../../../..');
 const PROJECTION_MIGRATIONS = [
-  '20261001450000_public_variant_option_projection.sql',
-  '20261001460000_fact_option_projection.sql',
-  '20261001470000_browse_public_option_projection.sql',
-  '20261001480000_variant_recall_public_option_projection.sql',
-  '20261001490000_bounded_search_option_projection.sql',
+  '20261002090720_public_variant_option_projection.sql',
+  '20261002090721_fact_option_projection.sql',
+  '20261002090722_browse_public_option_projection.sql',
+  '20261002090723_variant_recall_public_option_projection.sql',
+  '20261002090724_bounded_search_option_projection.sql',
 ] as const;
 
 describe('discovery pending replay sources', () => {

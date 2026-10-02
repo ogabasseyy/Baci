@@ -190,15 +190,14 @@ BEGIN
       AND COALESCE(v_step.status,'') NOT IN ('claimed','delivery_uncertain'));
 END; $$;
 REVOKE ALL ON FUNCTION private.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text)
-  FROM PUBLIC,anon;
-GRANT USAGE ON SCHEMA private TO authenticated;
-GRANT EXECUTE ON FUNCTION private.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text)
-  TO authenticated;
+  FROM PUBLIC,anon,authenticated;
+-- Preserve the repository boundary: authenticated callers have no private-schema usage.
+-- This narrow delegate executes only the private function, which checks auth.uid and permissions.
 CREATE OR REPLACE FUNCTION public.manage_order_refund(
   p_order_id uuid,p_action text DEFAULT 'status',p_amount numeric DEFAULT NULL,
   p_refunded_at timestamptz DEFAULT NULL,p_method text DEFAULT NULL,
   p_reference text DEFAULT NULL,p_note text DEFAULT NULL
-) RETURNS jsonb LANGUAGE sql SECURITY INVOKER SET search_path='' AS $$
+) RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path='' AS $$
  SELECT private.manage_order_refund(p_order_id,p_action,p_amount,p_refunded_at,p_method,p_reference,p_note);
 $$;
 REVOKE ALL ON FUNCTION public.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text)

@@ -170,6 +170,7 @@ export function OrderRefundPanel({
                   variant="outline"
                   disabled={busy}
                   onClick={() => {
+                    setConfirmed(false);
                     setAmount(String(summary.remaining));
                     setShowForm(!showForm);
                   }}

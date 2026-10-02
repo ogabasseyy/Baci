@@ -63,4 +63,6 @@ SELECT assert_refund((SELECT count(*)>0 FROM public.order_refund_events),'owner 
 SELECT set_config('request.jwt.uid','00000000-0000-4000-8000-000000000099',false);
 SELECT assert_refund((SELECT count(*)=0 FROM public.order_refund_events),'refund audit RLS blocks other merchants');
 RESET ROLE;
+SELECT assert_refund(NOT has_schema_privilege('authenticated','private','USAGE'),'private schema boundary preserved');
+SELECT assert_refund(NOT has_function_privilege('authenticated','private.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text)','EXECUTE'),'direct private refund RPC denied');
 SELECT 'authenticated refund access tests passed';

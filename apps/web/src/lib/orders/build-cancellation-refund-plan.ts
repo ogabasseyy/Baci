@@ -13,8 +13,8 @@ interface Refund {
   metadata?: Record<string, unknown> | null;
 }
 
-export function buildCancellationRefundPlan(
-  payments: Payment[],
+export function buildCancellationRefundPlan<T extends Payment>(
+  payments: T[],
   refunds: Refund[],
   amountPaid: number
 ) {

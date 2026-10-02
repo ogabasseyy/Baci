@@ -197,7 +197,10 @@ export async function executeOrderCancellationSideEffect({
   if (refundLookupError) {
     throw new Error('Unable to verify existing cancellation refunds');
   }
-  let refundPlan: ReturnType<typeof buildCancellationRefundPlan>;
+  let refundPlan: Array<{
+    transaction: GatewayPaymentTransaction;
+    transactionAmount: number;
+  }>;
   try {
     refundPlan = buildCancellationRefundPlan(
       transactions,

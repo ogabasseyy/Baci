@@ -1,13 +1,64 @@
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { hasPermission } from '@/lib/api-permissions';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { proposeDiscoveryFacts } from '@/lib/discovery-facts-review';
 import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
 import { createClient } from '@/lib/supabase/server';
 import { updateProductDiscoveryMetadataSchema } from '@/schemas/update-product-discovery-metadata';
+
+export async function GET(request: NextRequest) {
+  const supabase = createClient(await cookies());
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user)
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const merchant = await getMerchantForApiRequest(supabase, user.id);
+  if (!merchant)
+    return NextResponse.json({ error: 'Merchant not found' }, { status: 404 });
+  if (!hasPermission(toUserAccess(merchant), 'products', 'edit'))
+    return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
+  const cursor = request.nextUrl.searchParams.get('cursor');
+  if (cursor && !z.uuid().safeParse(cursor).success)
+    return NextResponse.json({ error: 'Invalid cursor' }, { status: 400 });
+  let query = supabase
+    .from('products')
+    .select(
+      'id,name,category,metadata,discovery_metadata,specifications,mpn,color'
+    )
+    .eq('merchant_id', merchant.merchantId)
+    .order('id')
+    .limit(21);
+  if (cursor) query = query.gt('id', cursor);
+  const { data, error } = await query;
+  if (error)
+    return NextResponse.json(
+      { error: 'Could not load catalog facts' },
+      { status: 500 }
+    );
+  const rows = data ?? [];
+  return NextResponse.json(
+    {
+      products: rows.slice(0, 20).map((row) => ({
+        id: row.id,
+        name: row.name,
+        expectedMetadata: row.discovery_metadata,
+        ...proposeDiscoveryFacts(row),
+        specifications: row.specifications,
+        mpn: row.mpn,
+        color: row.color,
+      })),
+      nextCursor: rows.length > 20 ? rows[19].id : null,
+    },
+    { headers: { 'Cache-Control': 'no-store' } }
+  );
+}
 
 /** Save merchant-verified public search facts; never accept a body-selected tenant.
  * Full replacement: clients must send the complete document, since omitted
@@ -41,13 +92,21 @@ export async function PUT(request: NextRequest) {
   if (!hasPermission(toUserAccess(merchant), 'products', 'edit')) {
     return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
   }
-  const { data, error } = await supabase
+  let update = supabase
     .from('products')
     .update({ discovery_metadata: parsed.data.metadata })
     .eq('merchant_id', merchant.merchantId)
-    .eq('id', parsed.data.productId)
-    .select('id')
-    .maybeSingle();
+    .eq('id', parsed.data.productId);
+  if (parsed.data.expectedMetadata !== undefined) {
+    update =
+      parsed.data.expectedMetadata === null
+        ? update.is('discovery_metadata', null)
+        : update.eq(
+            'discovery_metadata',
+            JSON.stringify(parsed.data.expectedMetadata)
+          );
+  }
+  const { data, error } = await update.select('id').maybeSingle();
   if (
     error?.code === '23514' &&
     error.message?.includes('products_discovery_metadata_object')
@@ -62,7 +121,15 @@ export async function PUT(request: NextRequest) {
       { status: 500 }
     );
   if (!data)
-    return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+    return NextResponse.json(
+      {
+        error:
+          parsed.data.expectedMetadata !== undefined
+            ? 'Facts changed or product unavailable. Reload before saving.'
+            : 'Product not found',
+      },
+      { status: parsed.data.expectedMetadata !== undefined ? 409 : 404 }
+    );
   return NextResponse.json(
     { success: true, productId: data.id },
     { headers: { 'Cache-Control': 'no-store' } }

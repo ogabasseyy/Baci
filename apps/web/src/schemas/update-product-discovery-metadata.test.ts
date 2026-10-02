@@ -36,3 +36,30 @@ describe('updateProductDiscoveryMetadataSchema', () => {
     ).toBe(false);
   });
 });
+
+const schema = updateProductDiscoveryMetadataSchema;
+const productId = '11111111-1111-4111-8111-111111111111';
+it('accepts raw previous facts independently from new validated facts', () => {
+  expect(
+    schema.parse({
+      productId,
+      metadata: { product_type: 'phones' },
+      expectedMetadata: { attributes: { ram_gb: '8' } },
+    })
+  ).toMatchObject({
+    metadata: { product_type: 'phone' },
+    expectedMetadata: { attributes: { ram_gb: '8' } },
+  });
+});
+it('bounds snapshots and rejects body-selected merchants', () => {
+  expect(
+    schema.safeParse({
+      productId,
+      metadata: {},
+      expectedMetadata: { value: 'x'.repeat(65537) },
+    }).success
+  ).toBe(false);
+  expect(
+    schema.safeParse({ productId, metadata: {}, merchantId: 'other' }).success
+  ).toBe(false);
+});

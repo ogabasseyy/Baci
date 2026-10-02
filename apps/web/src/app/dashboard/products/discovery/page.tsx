@@ -5,6 +5,7 @@ import {
   isMerchantPermissionRedirectError,
 } from '@/lib/merchant-server';
 import { DiscoveryBackfillPanel } from './discovery-backfill-panel';
+import { DiscoveryFactsPanel } from './discovery-facts-panel';
 
 export const metadata = {
   title: 'Product search indexing | Baci',
@@ -38,6 +39,7 @@ export default async function DiscoveryBackfillPage() {
         </p>
       </div>
       <DiscoveryBackfillPanel merchantId={merchant.id} />
+      <DiscoveryFactsPanel />
     </main>
   );
 }

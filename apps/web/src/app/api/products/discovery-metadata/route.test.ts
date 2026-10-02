@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   permission: vi.fn(),
   update: vi.fn(),
   eq: vi.fn(),
+  is: vi.fn(),
   maybeSingle: vi.fn(),
 }));
 
@@ -58,6 +59,10 @@ describe('product discovery metadata API', () => {
     mocks.update.mockReturnValue({ eq: mocks.eq });
     mocks.eq.mockReturnValue({
       eq: mocks.eq,
+      is: mocks.is,
+      select: vi.fn().mockReturnValue({ maybeSingle: mocks.maybeSingle }),
+    });
+    mocks.is.mockReturnValue({
       select: vi.fn().mockReturnValue({ maybeSingle: mocks.maybeSingle }),
     });
     mocks.maybeSingle.mockResolvedValue({
@@ -67,6 +72,30 @@ describe('product discovery metadata API', () => {
   });
 
   afterEach(() => vi.restoreAllMocks());
+
+  it('guards a reviewed empty snapshot and reports stale writes without overwriting', async () => {
+    mocks.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
+    const result = await PUT(
+      request(JSON.stringify({ ...validBody, expectedMetadata: null }))
+    );
+    expect(mocks.is).toHaveBeenCalledWith('discovery_metadata', null);
+    expect(result.status).toBe(409);
+  });
+
+  it('compares the full previous facts document atomically', async () => {
+    const previous = { model: 'Known', attributes: { color: 'Black' } };
+    expect(
+      (
+        await PUT(
+          request(JSON.stringify({ ...validBody, expectedMetadata: previous }))
+        )
+      ).status
+    ).toBe(200);
+    expect(mocks.eq).toHaveBeenCalledWith(
+      'discovery_metadata',
+      JSON.stringify(previous)
+    );
+  });
 
   it('authenticates before CSRF validation and rejects invalid CSRF before input processing', async () => {
     mocks.getUser.mockResolvedValueOnce({ data: { user: null }, error: null });

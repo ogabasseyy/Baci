@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Same-repo branch, tag, or full 40-char SHA to build and preview (abbreviated SHAs fail the shallow fetch)
+        description: Same-repo branch, tag, or full 40-char SHA to build and preview (abbreviated SHAs fail the shallow fetch; spell branches canonically — distinct spellings form distinct concurrency groups)
         required: true
         type: string
 

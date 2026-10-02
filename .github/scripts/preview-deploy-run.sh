@@ -46,6 +46,8 @@ set -e
 # match, so a planted URL cannot point the advisory link at live
 # attacker-controlled content; residual is a dead same-namespace link.
 # If Vercel ever changes the form, capture fails closed (exit 1).
+# Rotation: take the new suffix from `vercel ls`, update this pattern
+# plus the contract assertion and the deploy-run fixture/tests.
 # `|| true`: under pipefail a no-match grep would exit the step here,
 # skipping the status-aware handling below.
 preview_url="$(grep -oiE 'preview:[[:space:]]*https://[^ )]+' preview-deploy.log | grep -oE 'https://baci-[A-Za-z0-9-]*-basseys-projects-d7395611\.vercel\.app' | tail -n 1 || true)"

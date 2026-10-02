@@ -8,15 +8,17 @@ import {
 
 describe('reconcileWorkerDeadlineMs', () => {
   it('bounds the reconciliation phase so later drains keep their share', () => {
-    expect(reconcileWorkerDeadlineMs(1_000_000)).toBe(1_052_000);
+    // Two provider-timeout intervals of slack: the recovery-watch
+    // sweep runs two SEQUENTIAL 8s reads per redriven row.
+    expect(reconcileWorkerDeadlineMs(1_000_000)).toBe(1_044_000);
   });
 
   it('stops row starts early enough that the worst-case overrun keeps the reserved step', () => {
-    // The last started row may run one 8s provider timeout past the
-    // row-start gate: at that worst-case phase end the side-effect
-    // drain must still admit its sole reserved step.
+    // The last started row may run two sequential 8s provider
+    // timeouts past the row-start gate: at that worst-case phase end
+    // the side-effect drain must still admit its sole reserved step.
     const rowStartDeadline = reconcileWorkerDeadlineMs(1_000_000);
-    const worstCaseElapsed = rowStartDeadline + 8_000 - 1_000_000;
+    const worstCaseElapsed = rowStartDeadline + 16_000 - 1_000_000;
     expect(worstCaseElapsed).toBe(60_000);
     expect(
       cancellationSideEffectDrainLimit(worstCaseElapsed)

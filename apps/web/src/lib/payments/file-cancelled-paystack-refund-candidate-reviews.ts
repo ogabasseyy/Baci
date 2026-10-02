@@ -33,14 +33,16 @@ function isCancelledOrder(order: CandidateOrder): boolean {
  * cancellation queue would misroute it and let it absorb a future
  * genuine cancellation's evidence. Shared by the ambiguous-match and
  * stalled-payment recovery paths; files nothing when no candidate is
- * on a cancelled order.
+ * on a cancelled order. Returns the filed payment ids so the caller
+ * can retain anything neither queue claimed (order-less or
+ * unknown-order candidates) instead of acknowledging it silently.
  */
 export async function fileCancelledPaystackRefundCandidateReviews(
   supabase: SupabaseClient,
   candidates: CandidatePayment[],
   evidence: RefundRecoveryEvidence,
   reason: string
-): Promise<void> {
+): Promise<string[]> {
   const orderIds = [
     ...new Set(
       candidates
@@ -63,11 +65,12 @@ export async function fileCancelledPaystackRefundCandidateReviews(
     (candidate) =>
       candidate.order_id !== null && cancelled.has(candidate.order_id)
   );
-  if (reviewable.length === 0) return;
+  if (reviewable.length === 0) return [];
   await filePaystackRefundCandidateReviews(
     supabase,
     reviewable,
     evidence,
     reason
   );
+  return reviewable.map((candidate) => candidate.id);
 }

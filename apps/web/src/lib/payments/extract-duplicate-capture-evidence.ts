@@ -52,7 +52,12 @@ export function extractDuplicateCaptureEvidence(
     const payment = asRecord(response.payment);
     if (!payment) return null;
     const providerAmount = asPositiveNumber(payment.amount);
-    const providerStatus = asNonEmptyString(payment.status);
+    // Mirror verification's payment.status/top-level status fallback:
+    // a successful response carrying status only at response.status
+    // would otherwise extract null and drop the duplicate review for
+    // an already-completed capture.
+    const providerStatus =
+      asNonEmptyString(payment.status) ?? asNonEmptyString(response.status);
     const providerReference = asNonEmptyString(payment.id) ?? fallback;
     if (
       providerAmount === null ||

@@ -133,6 +133,9 @@ export async function fileProviderRefundOutsideCancellationReview(
  * must not absorb a future genuine cancellation's evidence), but the
  * verified provider refund still needs operations eyes on every order
  * it might belong to. Files nothing when every candidate is cancelled.
+ * Returns the filed payment ids (every leg of every filed order group
+ * is covered by its group review) so the caller can retain anything
+ * neither queue claimed instead of acknowledging it silently.
  */
 export async function fileActiveOrderPaystackRefundCandidateReviews(
   supabase: SupabaseClient,
@@ -144,7 +147,7 @@ export async function fileActiveOrderPaystackRefundCandidateReviews(
   },
   reason: string,
   refund: { amount: number; currency: string; status: string }
-): Promise<void> {
+): Promise<string[]> {
   const orderIds = [
     ...new Set(
       candidates
@@ -185,6 +188,7 @@ export async function fileActiveOrderPaystackRefundCandidateReviews(
     group.push(candidate);
     byOrder.set(candidate.order_id, group);
   }
+  const filed: string[] = [];
   for (const [orderId, group] of byOrder) {
     const orderNumber = active.get(orderId);
     if (orderNumber === undefined) continue;
@@ -211,5 +215,9 @@ export async function fileActiveOrderPaystackRefundCandidateReviews(
       providerRefundStatus: refund.status,
       reason,
     });
+    // The group review covers every leg: the primary row plus the
+    // rest carried as additional payments.
+    for (const leg of group) filed.push(leg.id);
   }
+  return filed;
 }

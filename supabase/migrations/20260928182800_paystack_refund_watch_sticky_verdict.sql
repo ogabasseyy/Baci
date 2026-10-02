@@ -173,3 +173,62 @@ REVOKE ALL ON FUNCTION public.open_paystack_refund_reference_watch_v1(text,jsonb
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.open_paystack_refund_reference_watch_v1(text,jsonb)
   TO service_role;
+
+-- Retire stale redriven watches whose reference still has no
+-- completed payment. Each watch retires only after a final rescan
+-- under the same advisory reference lock the opener and the payment
+-- completion hook take: retiring outside the lock lets a payment
+-- that completed after the sweep's redrive scan lose the race, and
+-- its completion hook then finds the watch already retired — the
+-- acknowledged provider refund is never attached or filed. Watches
+-- younger than seven days, already resolved, resolved by the redrive
+-- itself, or shadowed by a completed legacy payment stay open.
+CREATE OR REPLACE FUNCTION public.retire_paystack_refund_recovery_watches_v1(
+  p_watch_ids uuid[]
+) RETURNS integer
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v_watch_id uuid;
+  v_reference text;
+  v_created timestamptz;
+  v_status text;
+  v_retired integer := 0;
+BEGIN
+  IF (SELECT auth.role()) IS DISTINCT FROM 'service_role' THEN
+    RAISE EXCEPTION 'unauthorized' USING ERRCODE = '42501';
+  END IF;
+  FOREACH v_watch_id IN ARRAY COALESCE(p_watch_ids, '{}') LOOP
+    SELECT paystack_ref, created_at, status
+      INTO v_reference, v_created, v_status
+      FROM public.paystack_refund_recovery_watch
+      WHERE id = v_watch_id;
+    IF NOT FOUND OR v_status IS DISTINCT FROM 'open'
+      OR v_created > now() - make_interval(days => 7) THEN
+      CONTINUE;
+    END IF;
+    PERFORM pg_advisory_xact_lock(
+      hashtext('paystack-refund-recovery-watch:' || v_reference)
+    );
+    IF EXISTS (
+      SELECT 1 FROM public.transactions AS t
+      WHERE t.gateway_reference = v_reference
+        AND t.transaction_type = 'payment'
+        AND t.status = 'completed'
+        AND public.normalized_gateway_name_v1(t.gateway) = 'PAYSTACK'
+    ) THEN
+      CONTINUE;
+    END IF;
+    UPDATE public.paystack_refund_recovery_watch
+      SET status = 'retired'
+      WHERE id = v_watch_id AND status = 'open';
+    IF FOUND THEN
+      v_retired := v_retired + 1;
+    END IF;
+  END LOOP;
+  RETURN v_retired;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.retire_paystack_refund_recovery_watches_v1(uuid[])
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.retire_paystack_refund_recovery_watches_v1(uuid[])
+  TO service_role;

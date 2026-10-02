@@ -24,8 +24,6 @@ interface OpenWatchRow {
   provider_refund_id: number | null;
 }
 
-const WATCH_RETIREMENT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-
 /**
  * Backstop for the refund-recovery watch handoff. The completion path
  * normally claims watches atomically, but completions outside the
@@ -118,23 +116,21 @@ export async function sweepPaystackRefundRecoveryWatches(
     }
   }
   // Retire only redriven watches that recovery left open: a handled
-  // watch resolves (or claims) during the redrive and the status
-  // filter skips it, while a failed redrive never lands here. The
-  // refund webhook was acknowledged when the watch opened, so
-  // retiring before this final recovery attempt could strand a
-  // completed payment's refund with no durable review.
+  // watch resolves (or claims) during the redrive and the RPC skips
+  // it, while a failed redrive never lands here. The refund webhook
+  // was acknowledged when the watch opened, so retiring before this
+  // final recovery attempt could strand a completed payment's refund
+  // with no durable review. Retirement runs per watch under the
+  // advisory reference lock with a final payment rescan: a bare
+  // update would let a payment completing after the redrive scan lose
+  // the race, and its completion hook would find the watch already
+  // retired with the refund never attached or filed.
   if (redrivenIds.length === 0) return summary;
-  const { data: retired, error: retireError } = await supabase
-    .from('paystack_refund_recovery_watch')
-    .update({ status: 'retired' })
-    .eq('status', 'open')
-    .lt(
-      'created_at',
-      new Date(Date.now() - WATCH_RETIREMENT_AGE_MS).toISOString()
-    )
-    .in('id', redrivenIds)
-    .select('id');
+  const { data: retiredCount, error: retireError } = await supabase.rpc(
+    'retire_paystack_refund_recovery_watches_v1',
+    { p_watch_ids: redrivenIds }
+  );
   if (retireError) throw new Error('refund_recovery_watch_retire_failed');
-  summary.retired = (retired ?? []).length;
+  summary.retired = retiredCount ?? 0;
   return summary;
 }

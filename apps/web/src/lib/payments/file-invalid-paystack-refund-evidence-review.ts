@@ -79,3 +79,47 @@ export async function fileInvalidPaystackRefundEvidenceReview(
     throw new Error('invalid_refund_evidence_review_persistence_failed');
   }
 }
+
+/**
+ * Retain candidates neither order-scoped queue claimed: order-less
+ * payments (the order FK's ON DELETE SET NULL fired) and candidates
+ * whose order is unknown to the orders read are skipped by both
+ * queues, so without this fallback the caller would acknowledge the
+ * webhook while counting them as filed. One generic review lists
+ * every unclaimed payment id; no-ops when both queues claimed all.
+ */
+export async function fileUnclaimedPaystackRefundCandidateReview(
+  supabase: SupabaseClient,
+  {
+    candidates,
+    evidence,
+    filed,
+    reason,
+    reference,
+    refundId,
+  }: {
+    candidates: Array<{ id: string }>;
+    evidence: {
+      providerPaymentTransactionId: unknown;
+      providerRefundId: number;
+      providerRefundStatus: string;
+      reference: string;
+    };
+    filed: string[][];
+    reason: string;
+    reference: string;
+    refundId: number;
+  }
+): Promise<void> {
+  const claimed = new Set(filed.flat());
+  const unclaimed = candidates
+    .map((candidate) => candidate.id)
+    .filter((id) => !claimed.has(id));
+  if (unclaimed.length === 0) return;
+  await fileInvalidPaystackRefundEvidenceReview(supabase, {
+    evidence,
+    reason: `${reason}; ${unclaimed.length} matched payment(s) detached from any order are retained here: ${unclaimed.join(', ')}`,
+    reference,
+    refundId,
+  });
+}

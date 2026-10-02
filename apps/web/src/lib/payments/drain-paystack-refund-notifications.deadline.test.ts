@@ -286,7 +286,38 @@ describe('refund notification cron deadline', () => {
     );
   });
 
-  it('refuses the merchant-email fallback after push consumed the sender budget', async () => {
+  it('skips the push and sends the capped email when only the email fits', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+    const db = database('failed_merchant_push', 'paid');
+    const sendEmail = vi.fn().mockResolvedValue({ success: true });
+    const sendPush = vi.fn().mockResolvedValue({
+      errors: [],
+      failed: 0,
+      sent: 0,
+    });
+
+    // 60s fits the 48s single-attempt email but not the 30s push
+    // phase plus the email: starting the push would starve the
+    // fallback and burn the attempt, so the push stands down and
+    // the capped email sends directly.
+    const result = await drainPaystackRefundNotifications(
+      db as never,
+      sendEmail,
+      1,
+      sendPush,
+      1_060_000
+    );
+
+    expect(result).toMatchObject({ claimed: 1, sent: 1 });
+    expect(sendPush).not.toHaveBeenCalled();
+    expect(sendEmail).toHaveBeenCalledOnce();
+    expect(sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ maxAttemptsPerSender: 1 })
+    );
+  });
+
+  it('refuses both phases when even the capped email cannot fit', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000_000);
     const db = database('failed_merchant_push', 'paid');
@@ -297,19 +328,20 @@ describe('refund notification cron deadline', () => {
       sent: 0,
     });
 
-    // 60s admits the push attempt but not the uncapped email loop
-    // behind it: the fallback must yield retryably, not start a send
-    // the deadline then aborts into delivery_uncertain.
+    // 46s clears the drain's 45s claim floor but fits neither the
+    // push phase nor the 48s single-attempt email: both stand down
+    // and the row fails retryably instead of starting a send the
+    // deadline then aborts into delivery_uncertain.
     const result = await drainPaystackRefundNotifications(
       db as never,
       sendEmail,
       1,
       sendPush,
-      1_060_000
+      1_046_000
     );
 
     expect(result).toMatchObject({ claimed: 1, failed: 1 });
-    expect(sendPush).toHaveBeenCalledOnce();
+    expect(sendPush).not.toHaveBeenCalled();
     expect(sendEmail).not.toHaveBeenCalled();
     expect(db.finish.update).toHaveBeenCalledWith(
       expect.objectContaining({

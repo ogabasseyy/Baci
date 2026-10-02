@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { fileCancelledPaystackRefundCandidateReviews } from './file-cancelled-paystack-refund-candidate-reviews';
+import { fileUnclaimedPaystackRefundCandidateReview } from './file-invalid-paystack-refund-evidence-review';
 import type { RefundRecoveryEvidence } from './file-paystack-refund-candidate-reviews';
 import { fileActiveOrderPaystackRefundCandidateReviews } from './file-provider-refund-outside-cancellation-review';
 import { normalizePaymentGateway } from './normalize-payment-gateway';
@@ -91,19 +92,30 @@ export async function fileStalledPaystackRefundReviews(
     return 0;
   }
   const reason = `Paystack refund ${refundId} matches a non-completed local payment for reference ${gatewayReference}`;
-  await fileCancelledPaystackRefundCandidateReviews(
+  const cancelledFiled = await fileCancelledPaystackRefundCandidateReviews(
     supabase,
     stalled,
     evidence,
     reason
   );
-  await fileActiveOrderPaystackRefundCandidateReviews(
+  const activeFiled = await fileActiveOrderPaystackRefundCandidateReviews(
     supabase,
     stalled,
     evidence,
     reason,
     refund
   );
+  // Order-less matches are skipped by both queues: file them
+  // generically so the returned count (and the marker below) means
+  // every match is durably retained, never silently dropped.
+  await fileUnclaimedPaystackRefundCandidateReview(supabase, {
+    candidates: stalled,
+    evidence,
+    filed: [cancelledFiled, activeFiled],
+    reason,
+    reference: gatewayReference,
+    refundId,
+  });
   logger.info({
     message: 'Unknown Paystack refund event matches a non-completed payment',
     refundId,

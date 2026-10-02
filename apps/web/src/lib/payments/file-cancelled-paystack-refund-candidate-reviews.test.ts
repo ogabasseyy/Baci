@@ -60,7 +60,7 @@ describe('fileCancelledPaystackRefundCandidateReviews', () => {
     );
     const supabase = { from, rpc } as unknown as SupabaseClient;
 
-    await fileCancelledPaystackRefundCandidateReviews(
+    const filed = await fileCancelledPaystackRefundCandidateReviews(
       supabase,
       [
         payment('pay-1', 'order-1', 'merchant-1'),
@@ -76,6 +76,7 @@ describe('fileCancelledPaystackRefundCandidateReviews', () => {
       'file_paystack_refund_recovery_review_v1',
       expect.objectContaining({ p_order_id: 'order-1' })
     );
+    expect(filed).toEqual(['pay-1']);
   });
 
   it('accepts the canceled spelling but requires cancelled_at', async () => {
@@ -120,7 +121,7 @@ describe('fileCancelledPaystackRefundCandidateReviews', () => {
     );
     const supabase = { from, rpc } as unknown as SupabaseClient;
 
-    await fileCancelledPaystackRefundCandidateReviews(
+    const filed = await fileCancelledPaystackRefundCandidateReviews(
       supabase,
       [
         payment('pay-9', 'order-9', 'merchant-9'),
@@ -131,6 +132,7 @@ describe('fileCancelledPaystackRefundCandidateReviews', () => {
     );
 
     expect(rpc).not.toHaveBeenCalled();
+    expect(filed).toEqual([]);
   });
 
   it('skips the order lookup entirely when no candidate has an order', async () => {

@@ -1,0 +1,299 @@
+name: Preview (branch prebuilt)
+
+on:
+  # Intended usage: dispatch the STABLE file from the default branch and
+  # select the target as an input, so routine previews never execute
+  # unreviewed workflow edits with deployment secrets:
+  #   gh workflow run preview.yml -f ref=<branch>   (from default branch;
+  #   -f ref= selects the TARGET, not the workflow file version)
+  # PREVIEW ONLY. This workflow must never gain --prod, the production
+  # environment, migrations, postdeploy steps, or cache purges.
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Same-repo branch, tag, or full 40-char SHA to build and preview (abbreviated SHAs fail the shallow fetch; spell branches canonically — distinct spellings form distinct concurrency groups)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# No run-level concurrency: cancellation is scoped per job below so a
+# redispatch cancels a superseded build without orphaning a deploy.
+# Trust boundary: the target ref is build SOURCE only. Untrusted branch code
+# executes solely in `build`, which holds no deployment token; `prepare` and
+# `deploy` run trusted default-branch helpers with the token on fresh
+# runners, exchanging only inert files via short-lived artifacts. The build
+# sees the Preview backend env (identical to a native Vercel preview build)
+# and the Turbo cache token (already exposed to branch code by PR CI).
+# Dispatchers are trusted collaborators (same model as deploy.yml): --ref
+# selects the workflow FILE version, so a malicious --ref copy bypasses the
+# in-file default-branch guard below — the guard constrains accidental
+# misuse and documents intent. Likewise, Preview deploys the target ref
+# into the secret-bearing Preview environment, so ref authors can read
+# Preview RUNTIME secrets from their deployed code by design: dispatch only
+# refs you trust with those values. No environment approval gates are
+# configured (matches Production); the boundaries are GitHub access
+# control, the tokenless untrusted build, secret stand-ins, and audit.
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: preview
+    env:
+      VERCEL_CLI_VERSION: "57.0.0"
+      # Fix OOM error on runner (mirrors deploy-production).
+      NODE_OPTIONS: "--max_old_space_size=8192"
+    steps:
+      - name: Require default-branch workflow file
+        # Ref names can carry shell metacharacters: pass both sides through
+        # env instead of interpolating expressions into the script.
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [ "$WORKFLOW_REF" != "refs/heads/$DEFAULT_BRANCH" ]; then
+            echo 'Refusing: dispatch the stable file from the default branch: gh workflow run preview.yml -f ref=<branch>' >&2
+            exit 1
+          fi
+      # Full default-branch checkout: this job's root is trusted code, and the
+      # injector imports @next/env, which needs installed dependencies.
+      - name: Checkout trusted source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Pin to the running commit, not the branch name: the guard above
+          # proves dispatch came from the default branch, so this sha is the
+          # reviewed default-branch commit, and it cannot drift if main
+          # advances during this long run.
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      - uses: ./.github/actions/pnpm-install-cached
+      - name: Pull Preview environment
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: .github/scripts/run-pinned-vercel.sh pull --yes --environment=preview
+      - name: Normalize sensitive placeholders to blank
+        # Pinned CLI >=56.3 writes KEY="[SENSITIVE]" where older CLIs wrote
+        # blanks. The injector only substitutes explicit blanks, and build
+        # code expects blank-or-real; normalize the literal token (verified
+        # against CLI 57.0.0 output; real values never match it). Both
+        # quote spellings plus trailing whitespace match; POSIX class keeps
+        # the pattern portable across GNU/BSD sed.
+        run: |
+          sed -i -E 's/=["'"'"']?\[SENSITIVE[[:blank:]]*\]["'"'"']?[[:space:]]*$/=""/' .vercel/.env.preview.local
+      - name: Verify quiz RPC secret is marked sensitive in Preview
+        # This proves the marking exists; the injector below additionally
+        # refuses any non-blank value before the stand-in replaces it.
+        run: node .github/scripts/assert-vercel-pulled-sensitive-env.mjs QUIZ_RPC_SERVER_SECRET .vercel/.env.preview.local
+      - name: Redact privileged Preview values from the build env
+        # Runtime-only keys (see the pattern file): blanked before the
+        # untrusted build; service-role gets a presence stand-in below.
+        run: sed -i -E -f .github/scripts/preview-env-redact.sed .vercel/.env.preview.local
+      - name: Verify Preview env exposes no unexpected server values
+        # Fails closed on any non-blank server key outside NEXT_PUBLIC_* and
+        # the reviewed allowlist, so a future key added without the
+        # sensitive flag breaks loudly instead of leaking silently to the
+        # untrusted build. Runs post-redaction, pre-injection: stand-ins
+        # are ours by then.
+        run: node .github/scripts/assert-preview-env-allowlist.mjs .vercel/.env.preview.local .github/scripts/preview-env-allowlist.txt
+      - name: Ensure build-time presence of runtime-only quiz RPC secret
+        # No real secret passthrough: the stand-in satisfies build validation
+        # and Vercel remains the runtime source, so dispatchable branches
+        # never observe the server secret.
+        run: node .github/scripts/inject-prebuilt-env-secret.mjs QUIZ_RPC_SERVER_SECRET .vercel/.env.preview.local 'build-time-presence-stand-in-not-used-at-runtime-000000000000'
+      - name: Ensure build-time presence of redacted service-role key
+        # Validation requires this key non-blank, but the build never
+        # queries with it (SSG uses the anonymous client): a presence
+        # stand-in satisfies the schema without exposing the RLS-bypassing
+        # credential. Refuses non-blank input like the quiz injection.
+        run: node .github/scripts/inject-prebuilt-env-secret.mjs SUPABASE_SERVICE_ROLE_KEY .vercel/.env.preview.local 'build-time-presence-stand-in-not-a-real-service-key-000000'
+      - name: Ensure JWK stand-in precondition
+        # Preview intentionally carries no signing material, so the legacy
+        # fallback cannot verify there. A blank assignment lets the injector
+        # mint a fresh build-only stand-in; a real value would fail closed.
+        run: |
+          if ! grep -qE '^SUPABASE_AGENTIC_JWT_PRIVATE_JWK=' .vercel/.env.preview.local; then
+            printf '%s\n' 'SUPABASE_AGENTIC_JWT_PRIVATE_JWK=""' >> .vercel/.env.preview.local
+          fi
+      - name: Ensure build-time presence of runtime-only scoped Supabase JWT key
+        # Preview carries no signing material: mint a build-only JWK
+        # stand-in for build validation. Stand-in success never implies
+        # production env readiness (deploy.yml verifies the real fallback).
+        run: node .github/scripts/inject-prebuilt-env-secret.mjs SUPABASE_AGENTIC_JWT_PRIVATE_JWK .vercel/.env.preview.local --generate-es256-jwk-standin
+      # The pulled env file holds Preview values Vercel does not mark
+      # sensitive (sensitive ones pull as blank); NEXT_PUBLIC_* are baked
+      # into the public preview bundles regardless. Minimum retention bounds
+      # the artifact audience window. Keep Preview secrets marked sensitive.
+      - name: Upload Preview Vercel dir
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: preview-vercel-dir
+          path: .vercel/
+          include-hidden-files: true
+          retention-days: 1
+          # Reruns reuse the run ID: allow overwrite of the prior attempt.
+          overwrite: true
+      - name: Clean up Vercel secrets
+        if: always()
+        run: |
+          rm -rf .vercel
+
+  build:
+    needs: [prepare]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    # Same-ref redispatch cancels a superseded build (freshness where the 150-minute cost lives).
+    concurrency:
+      group: preview-build-${{ inputs.ref }}
+      cancel-in-progress: true
+    env:
+      VERCEL_CLI_VERSION: "57.0.0"
+      BACI_NEXT_DEPLOYMENT_ID_SOURCE: ${{ github.run_id }}_${{ github.run_attempt }}
+      # Fix OOM error on runner (mirrors deploy-production).
+      NODE_OPTIONS: "--max_old_space_size=8192"
+    steps:
+      # Source checkout FIRST: a root checkout wipes nested content, so the
+      # trusted-ops checkout below must come second (single checkout per path).
+      - name: Checkout preview source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          # Tags resolve shallowly; abbreviated SHAs unsupported (see input).
+          fetch-tags: true
+          persist-credentials: false
+      - name: Export checked-out commit metadata
+        # posthog release attribution and next.config baking prefer Vercel
+        # git vars over GITHUB_* (which still name the workflow commit);
+        # derive them from this checkout so previews report the target.
+        env:
+          PREVIEW_REF: ${{ inputs.ref }}
+        run: |
+          ref="${PREVIEW_REF#refs/heads/}"; ref="${ref#refs/tags/}"
+          case "$ref" in ''|*[!A-Za-z0-9._/-]*) ref="$(git rev-parse --short HEAD)";; esac
+          { echo "VERCEL_GIT_COMMIT_SHA=$(git rev-parse HEAD)"; echo "VERCEL_GIT_COMMIT_REF=$ref"; } >>"$GITHUB_ENV"
+      - name: Checkout trusted ops files
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Same running-commit pin as the prepare job: no drift if main
+          # advances mid-run.
+          ref: ${{ github.sha }}
+          sparse-checkout: .github
+          sparse-checkout-cone-mode: false
+          path: trusted-ops
+          persist-credentials: false
+      - name: Download Preview Vercel dir
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: preview-vercel-dir
+          path: .vercel
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      # Composite `run` steps execute at the workspace root, so the default
+      # install command would resolve to the UNTRUSTED target ref script.
+      # Point it at the trusted copy explicitly.
+      - uses: ./trusted-ops/.github/actions/pnpm-install-cached
+        with:
+          install-command: ./trusted-ops/.github/scripts/pnpm-install-with-retry.sh --frozen-lockfile --prefer-offline
+      - name: Build for Vercel
+        # No deployment token here: `vercel build` runs offline from the
+        # pulled env (verified: it proceeds with an invalid token), so the
+        # untrusted target-ref build scripts cannot observe or use it.
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+          # Remote cache defaults to read-only in this job so routine
+          # target-ref builds cannot poison shared main-branch entries while
+          # still reading them (needed for a viable build time). This is a
+          # client-side default, not enforcement: the token is visible to
+          # build scripts exactly as in PR CI, and a malicious script could
+          # re-export it or pass write flags. Accepted tradeoff, bounded by
+          # content-addressed keys. (Verified against turbo 2.9.18: comma
+          # form parses; bare `remote:r` would disable every cache.)
+          TURBO_CACHE: "remote:r,local:rw"
+        run: trusted-ops/.github/scripts/run-pinned-vercel.sh build --yes
+      - name: Upload prebuilt output
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: preview-prebuilt-output
+          path: .vercel/output/
+          # Serverless function dirs require their hidden .vc-config.json.
+          include-hidden-files: true
+          retention-days: 1
+          # Reruns reuse the run ID: allow overwrite of the prior attempt.
+          overwrite: true
+      - name: Clean up Vercel secrets
+        if: always()
+        run: |
+          rm -rf .vercel
+
+  deploy:
+    needs: [build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    # Same-ref deploys serialize (cancel:false); burst redispatch may displace a queued run loudly — every started deploy logs its outcome.
+    concurrency:
+      group: preview-deploy-${{ inputs.ref }}
+      cancel-in-progress: false
+    environment: preview
+    env:
+      VERCEL_CLI_VERSION: "57.0.0"
+      # Fix OOM error on runner (mirrors deploy-production).
+      NODE_OPTIONS: "--max_old_space_size=8192"
+    steps:
+      - name: Checkout trusted ops files
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Same running-commit pin as the prepare job: no drift if main
+          # advances mid-run.
+          ref: ${{ github.sha }}
+          sparse-checkout: .github
+          sparse-checkout-cone-mode: false
+          path: trusted-ops
+          persist-credentials: false
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      - name: Setup pnpm for the pinned CLI installer
+        # run-pinned-vercel.sh installs vercel@57 via pnpm; fresh runners
+        # carry no repo toolchain, so bootstrap it explicitly (same pin the
+        # repo's install action uses). Helper-only: no repo deps installed.
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: "11"
+      - name: Pull Preview environment
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: trusted-ops/.github/scripts/run-pinned-vercel.sh pull --yes --environment=preview
+      - name: Download prebuilt output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: preview-prebuilt-output
+          path: .vercel/output
+      # IMPORTANT: --archive=tgz is required to prevent Vercel upload rate limiting.
+      - name: Deploy preview to Vercel
+        id: deploy
+        timeout-minutes: 55
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          PREVIEW_REF: ${{ inputs.ref }}
+        # Shell logic lives in the trusted helper (300-line rule); the step
+        # stays a thin invocation pinned exactly by the contract suite.
+        run: trusted-ops/.github/scripts/preview-deploy-run.sh trusted-ops/.github/scripts/run-pinned-vercel.sh deploy --yes --prebuilt --archive=tgz
+      - name: Clean up Vercel secrets
+        if: always()
+        run: |
+          rm -rf .vercel

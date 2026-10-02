@@ -281,9 +281,18 @@ describe('deploy source guards', () => {
     );
     assert.match(promotionSource, /locks\/\*\.lock/);
     // Each lock is held exclusive on an open fd (released only when
-    // the remote shell exits after the flip), acquired before the sync.
-    const quiesceIndex = promotionSource.indexOf('flock -x "$gigl_quiesce_fd"');
+    // the remote shell exits after the flip), acquired before the sync,
+    // with a bounded wait so a wedged tick fails loudly.
+    const quiesceIndex = promotionSource.indexOf(
+      'flock -w 600 -x "$gigl_quiesce_fd"'
+    );
     assert.notEqual(quiesceIndex, -1);
+    // The outer command already holds the GIGL lock: reopening it would
+    // self-deadlock (flock is per open-file-description, not recursive).
+    assert.match(
+      promotionSource,
+      /\[\s*"\$gigl_quiesce_name"\s*=\s*"gigl-tracking\.lock"\s*\] && continue/
+    );
     assert.ok(quiesceIndex < promotionSource.indexOf('rsync -a --delete'));
     assert.ok(
       promotionSource.indexOf('rsync -a --delete') <

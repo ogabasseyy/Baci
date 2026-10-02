@@ -21,6 +21,7 @@ function token(role: string, alg = 'ES256', exp = 4_102_444_800) {
 }
 
 const configuredEnv = {
+  GIGL_SUPABASE_ORIGIN_ALLOWLIST: 'project.supabase.co',
   GIGL_TRACKING_WORKER_TOKEN: token('gigl_tracking_worker'),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon-key',
   NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co',
@@ -130,6 +131,51 @@ describe('createGiglTrackingWorkerClient', () => {
     expect(createClient).not.toHaveBeenCalled();
   });
 
+  it('accepts the pinned production origin without an allowlist', () => {
+    const { GIGL_SUPABASE_ORIGIN_ALLOWLIST: _dropped, ...prodEnv } =
+      configuredEnv;
+
+    const client = createGiglTrackingWorkerClient({
+      ...prodEnv,
+      NEXT_PUBLIC_SUPABASE_URL: 'https://aivqthbxdshhltbwipbr.supabase.co',
+    });
+
+    expect(createClient).toHaveBeenCalledOnce();
+    expect(client).toBeDefined();
+  });
+
+  it('rejects unlisted https origins before sending the worker token', () => {
+    // A suffix check would pass attacker-project.supabase.co; only the
+    // pinned host and explicit allowlist entries pass.
+    for (const supabaseUrl of [
+      'https://attacker.example',
+      'https://attacker-project.supabase.co',
+      'https://project.supabase.com',
+    ]) {
+      expect(() =>
+        createGiglTrackingWorkerClient({
+          ...configuredEnv,
+          NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
+        })
+      ).toThrow(
+        'GIGL tracking worker Supabase URL host is not an allowed origin'
+      );
+    }
+    expect(createClient).not.toHaveBeenCalled();
+  });
+
+  it('matches allowlist entries case-insensitively with whitespace tolerance', () => {
+    const client = createGiglTrackingWorkerClient({
+      ...configuredEnv,
+      GIGL_SUPABASE_ORIGIN_ALLOWLIST:
+        ' other.supabase.co, PROJECT.supabase.co. ',
+      NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co',
+    });
+
+    expect(createClient).toHaveBeenCalledOnce();
+    expect(client).toBeDefined();
+  });
+
   it('classifies token failures distinctly from config failures', () => {
     const capture = (build: () => unknown): unknown => {
       try {
@@ -175,6 +221,14 @@ describe('createGiglTrackingWorkerClient', () => {
         createGiglTrackingWorkerClient({
           ...configuredEnv,
           NEXT_PUBLIC_SUPABASE_ANON_KEY: '',
+        })
+      )
+    ).not.toBeInstanceOf(GiglWorkerTokenError);
+    expect(
+      capture(() =>
+        createGiglTrackingWorkerClient({
+          ...configuredEnv,
+          NEXT_PUBLIC_SUPABASE_URL: 'https://attacker.example',
         })
       )
     ).not.toBeInstanceOf(GiglWorkerTokenError);

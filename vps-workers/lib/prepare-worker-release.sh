@@ -157,13 +157,20 @@ gigl_quiesce_names="$(
 gigl_quiesce_fd=10
 while IFS= read -r gigl_quiesce_name; do
   [ -n "$gigl_quiesce_name" ] || continue
+  # The outer promote command already holds the GIGL runtime lock, and
+  # flock locks are per open-file-description: reopening it here would
+  # conflict with the inherited hold and self-deadlock instead of
+  # recursing. It stays held for the whole remote script, so skip it.
+  [ "$gigl_quiesce_name" = "gigl-tracking.lock" ] && continue
   # Append mode: open (creating) without truncating, then hold
   # exclusive. Numeric fds via eval (not exec {fd}) stay compatible
   # with bash 3.2; the interpolated fd is arithmetic and the name
-  # charset above excludes `/` and quotes, so no traversal.
+  # charset above excludes `/` and quotes, so no traversal. Each wait
+  # is bounded (600s covers the longest cron timeout plus margin), so a
+  # wedged tick fails the deploy loudly instead of hanging it forever.
   # shellcheck disable=SC2094
   eval "exec ${gigl_quiesce_fd}>>\"\$remote_dir/locks/${gigl_quiesce_name}\"" || exit 1
-  flock -x "$gigl_quiesce_fd" || exit 1
+  flock -w 600 -x "$gigl_quiesce_fd" || exit 1
   gigl_quiesce_fd=$((gigl_quiesce_fd + 1))
 done <<EOF
 $gigl_quiesce_names

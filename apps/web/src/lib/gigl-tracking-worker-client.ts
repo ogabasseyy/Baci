@@ -13,6 +13,18 @@ type GiglTrackingRpcClient = Pick<SupabaseClient<Database>, 'rpc'>;
 export class GiglWorkerTokenError extends Error {}
 
 const EXPECTED_WORKER_ROLE = 'gigl_tracking_worker';
+// Production Supabase project (public: NEXT_PUBLIC_* values ship in
+// client bundles). The worker JWT travels in the Authorization header,
+// so a mistyped or substituted URL would exfiltrate it to an origin
+// that can replay it against the real endpoint; the host pin below is
+// the backstop. GIGL_SUPABASE_ORIGIN_ALLOWLIST (comma-separated
+// hostnames, no scheme or port) EXTENDS this pin for preview, local,
+// and test origins — it can only add origins, never remove the pin.
+const EXPECTED_SUPABASE_HOST = 'aivqthbxdshhltbwipbr.supabase.co';
+
+function normalizeHostname(hostname: string): string {
+  return hostname.trim().toLowerCase().replace(/\.$/, '');
+}
 const RESTRICTED_RPC_NAMES: Readonly<Record<string, string>> = {
   apply_gigl_tracking_result: 'gigl_worker_apply_tracking_result',
   claim_due_gigl_tracking_monitors: 'gigl_worker_claim_due_tracking_monitors',
@@ -93,6 +105,18 @@ export function createGiglTrackingWorkerClient(
   ) {
     throw new Error(
       'GIGL tracking worker Supabase URL must be a credential-free https:// URL'
+    );
+  }
+  const allowedOrigins = new Set(
+    (env.GIGL_SUPABASE_ORIGIN_ALLOWLIST ?? '')
+      .split(',')
+      .map((entry) => normalizeHostname(entry))
+      .filter((entry) => entry !== '')
+  );
+  allowedOrigins.add(EXPECTED_SUPABASE_HOST);
+  if (!allowedOrigins.has(normalizeHostname(parsedUrl.hostname))) {
+    throw new Error(
+      'GIGL tracking worker Supabase URL host is not an allowed origin'
     );
   }
 

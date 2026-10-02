@@ -46,6 +46,18 @@ describe('gigl-dotenv', () => {
     );
   });
 
+  it('expands \\n and \\r inside double quotes, like dotenv', () => {
+    assert.equal(readValue('DQ="a\\nb\\rc"\n', 'DQ'), 'a\nb\rc');
+    // Single-pass like dotenv: `\\n` yields a literal backslash plus
+    // a newline, not two expansions.
+    assert.equal(readValue('ESC="x\\\\ny"\n', 'ESC'), 'x\\\ny');
+  });
+
+  it('leaves backslash sequences literal outside double quotes', () => {
+    assert.equal(readValue("SQ='a\\nb'\n", 'SQ'), 'a\\nb');
+    assert.equal(readValue('UNQ=a\\nb\n', 'UNQ'), 'a\\nb');
+  });
+
   it('strips trailing comments from unquoted values', () => {
     assert.equal(readValue('PLAIN=abc#def\n', 'PLAIN'), 'abc');
     assert.equal(readValue('SPACED=abc # def\n', 'SPACED'), 'abc');

@@ -24,6 +24,15 @@
 # are dropped): the smoke entry sets it because a smoke certifies the
 # installed dotenv, while the poller keeps caller-wins for manual runs
 # (cron's minimal env makes it a no-op there).
+# Threat model: this boundary contains ACCIDENTAL exposure — secrets
+# dumped via errors/logs, inherited by child processes, or auto-loaded
+# from the shared file by dotenv tooling (hence BACI_WORKER_ENV and
+# DOTENV_CONFIG_PATH point at /dev/null). It does NOT contain active
+# code execution as the worker user: such code runs as the same unix
+# principal and can read the shared dotenv directly. That containment
+# needs OS-level isolation (a dedicated poller UID), which the
+# single-user VPS host does not provide; RCE-as-worker compromises
+# every worker on the host equally and is out of scope for this PR.
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   echo 'gigl-tracking-scoped-env.sh must be sourced, not executed' >&2
   exit 2

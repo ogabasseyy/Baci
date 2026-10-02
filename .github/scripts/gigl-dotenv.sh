@@ -7,11 +7,11 @@
 # the capability smoke loads): optional leading whitespace, optional
 # `export` prefix, spaces around `=`, one layer of matched surrounding
 # quotes stripped, otherwise a quote-aware trailing `#` comment stripped.
-# Prints nothing when the file or key is absent. Backslash escapes stay
-# literal in the value (dotenv expands only \n and \r), but inside
-# double quotes an escape never ends the quoted region, so a `#` after
-# `\"` stays data exactly as dotenv parses it. Multiline values are out
-# of subset.
+# Prints nothing when the file or key is absent. Inside double quotes
+# an escape never ends the quoted region (so a `#` after `\"` stays
+# data), and `\n` / `\r` expand exactly as dotenv parses them; every
+# other escape stays literal, as do single-quoted and unquoted values.
+# Multiline values are out of subset.
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   echo 'gigl-dotenv.sh must be sourced, not executed' >&2
   exit 2
@@ -58,7 +58,16 @@ gigl_dotenv_value() {
       first = substr(value, 1, 1)
       last = substr(value, length(value), 1)
       if (length(value) >= 2 && (first == dq || first == sq) && (last == dq || last == sq)) {
+        double_quoted = (first == dq)
         value = substr(value, 2, length(value) - 2)
+        if (double_quoted) {
+          # dotenv expands \n and \r inside double quotes only
+          # (single-quoted and unquoted values stay literal).
+          # gsub scans single-pass like the dotenv replace, so `\\n`
+          # yields a literal backslash plus a newline in both.
+          gsub(/\\n/, "\n", value)
+          gsub(/\\r/, "\r", value)
+        }
       }
       found = value
       have_value = 1

@@ -232,3 +232,31 @@ test('preview stands in the redacted service-role key', () => {
     'service-role stand-in must precede the env artifact upload'
   );
 });
+
+test('preview ships filePathMap refs alongside the prebuilt output', () => {
+  const build = jobBlock('build');
+  const deploy = jobBlock('deploy');
+  const stageAt = build.indexOf('stage-preview-prebuilt-refs.mjs');
+  assert.ok(
+    build.indexOf('run-pinned-vercel.sh build') < stageAt &&
+      stageAt < build.indexOf('name: preview-prebuilt-refs'),
+    'refs must be staged after the build and before the refs upload'
+  );
+  assert.match(
+    build,
+    /name: preview-prebuilt-refs\n(?:[^\n]*\n){1,4}\s*include-hidden-files: true/,
+    'refs upload must include the hidden manifest'
+  );
+  assert.ok(
+    deploy.indexOf('name: preview-prebuilt-refs') <
+      deploy.indexOf('materialize-preview-prebuilt-refs.mjs') &&
+      deploy.indexOf('materialize-preview-prebuilt-refs.mjs') <
+        deploy.indexOf('preview-deploy-run.sh'),
+    'refs must be quarantined and materialized before the deploy runs'
+  );
+  assert.match(
+    deploy,
+    /name: preview-prebuilt-refs\n(\s*#.*\n)*\s*path: \.preview-refs-quarantine$/m,
+    'refs must extract to quarantine, never directly at the deploy root'
+  );
+});

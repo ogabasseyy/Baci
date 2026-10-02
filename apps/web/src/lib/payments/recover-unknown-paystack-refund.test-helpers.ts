@@ -43,7 +43,15 @@ function database({
   racedRow?: unknown;
 } = {}) {
   const insert = vi.fn().mockResolvedValue({ error: insertError });
-  const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+  // The single-candidate path re-scans atomically under the reference
+  // lock before recovering: the watch opener returns the same rows so
+  // existing flows stabilize without behavior change.
+  const rpc = vi.fn((fn: string) => {
+    if (fn === 'open_paystack_refund_recovery_watch_v1') {
+      return Promise.resolve({ data: paymentRows, error: null });
+    }
+    return Promise.resolve({ data: true, error: null });
+  });
   const from = vi.fn().mockReturnValueOnce(selectQuery(paymentRows));
   if (paymentRows.length > 0) {
     // The completed scan repeats until a pass adds nothing: the
@@ -53,7 +61,7 @@ function database({
   from
     .mockReturnValueOnce(selectQuery(orderRow))
     .mockReturnValueOnce({ insert })
-    .mockReturnValueOnce(selectQuery(racedRow));
+    .mockReturnValueOnce(selectQuery(racedRow == null ? [] : [racedRow]));
   return {
     from,
     insert,

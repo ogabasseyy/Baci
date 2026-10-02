@@ -83,8 +83,16 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
     mocks.reconcilePaystackCancellationRefund.mockResolvedValue('updated');
   });
 
-  function reviewRpc(error: unknown = null) {
-    return vi.fn().mockResolvedValue({ data: 'review-1', error });
+  function reviewRpc(error: unknown = null, watchRows: unknown = null) {
+    // Single-candidate flows re-scan atomically under the reference
+    // lock before recovering; multi-candidate flows never open the
+    // watch, so the default only matters for single-path tests.
+    return vi.fn((fn: string) => {
+      if (fn === 'open_paystack_refund_recovery_watch_v1') {
+        return Promise.resolve({ data: watchRows, error: null });
+      }
+      return Promise.resolve({ data: 'review-1', error });
+    });
   }
 
   it('files one review per order when the reference matches two payments', async () => {
@@ -140,6 +148,38 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
     expect(mocks.reconcilePaystackCancellationRefund).not.toHaveBeenCalled();
   });
 
+  it('files ambiguity reviews when the locked rescan reveals a late completion', async () => {
+    const rpc = reviewRpc(null, [firstPayment, secondPayment]);
+    const orders = [order, { ...order, id: 'order-2', order_number: 'B-2' }];
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(selectQuery([firstPayment]))
+      .mockReturnValueOnce(selectQuery([firstPayment]))
+      .mockReturnValueOnce(selectQuery(orders))
+      .mockReturnValueOnce(selectQuery(orders));
+    const supabase = { from, rpc } as unknown as SupabaseClient;
+
+    await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
+
+    // The unlocked scan saw one candidate, but a second payment
+    // completed after the final read: the stabilizing rescan under
+    // the reference lock exposes the ambiguity, so both orders file
+    // instead of finalizing the wrong cancellation.
+    expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_recovery_watch_v1',
+      expect.objectContaining({ p_provider_refund_id: 202 })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'file_paystack_refund_recovery_review_v1',
+      expect.objectContaining({ p_order_id: 'order-1' })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'file_paystack_refund_recovery_review_v1',
+      expect.objectContaining({ p_order_id: 'order-2' })
+    );
+    expect(mocks.reconcilePaystackCancellationRefund).not.toHaveBeenCalled();
+  });
+
   it('merges redelivered ambiguity evidence into the open reviews', async () => {
     const rpc = reviewRpc();
     const orders = [order, { ...order, id: 'order-2', order_number: 'B-2' }];
@@ -177,7 +217,7 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
 
   it('files the provider evidence when the audit collides with a non-refund row', async () => {
     const auditInsert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
-    const rpc = reviewRpc();
+    const rpc = reviewRpc(null, [firstPayment]);
     const from = vi
       .fn()
       .mockReturnValueOnce(selectQuery([firstPayment]))
@@ -189,7 +229,13 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
-    expect(rpc).toHaveBeenCalledTimes(2);
+    // Stabilizing rescan under the reference lock, then the review
+    // filing and the watch resolution.
+    expect(rpc).toHaveBeenCalledTimes(3);
+    expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_recovery_watch_v1',
+      expect.objectContaining({ p_provider_refund_id: 202 })
+    );
     expect(rpc).toHaveBeenCalledWith(
       'resolve_paystack_refund_recovery_watch_v1',
       { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
@@ -212,7 +258,7 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
 
   it('merges a colliding redelivery into the open review instead of failing', async () => {
     const auditInsert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
-    const rpc = reviewRpc();
+    const rpc = reviewRpc(null, [firstPayment]);
     const from = vi
       .fn()
       .mockReturnValueOnce(selectQuery([firstPayment]))
@@ -224,7 +270,7 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
-    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc).toHaveBeenCalledTimes(3);
     expect(rpc).toHaveBeenCalledWith(
       'resolve_paystack_refund_recovery_watch_v1',
       { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
@@ -368,7 +414,7 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
 
   it('throws when the recovery review cannot be persisted', async () => {
     const auditInsert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
-    const rpc = reviewRpc({ code: 'XX000' });
+    const rpc = reviewRpc({ code: 'XX000' }, [firstPayment]);
     const from = vi
       .fn()
       .mockReturnValueOnce(selectQuery([firstPayment]))

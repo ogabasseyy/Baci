@@ -151,8 +151,8 @@ interface SendEmailParams {
   beforeTransportDispatch?: () => Promise<void>;
   resetTransportDispatch?: () => Promise<void>;
   // Absolute epoch-ms cutoff for the platform-sender fallback: when set
-  // and the remaining budget cannot fit another full retry loop, the
-  // fallback is skipped and the primary failure is returned, so a cron
+  // the fallback is a single shot (the primary loop already spent the
+  // retry budget), skipped unless that one attempt fits, so a cron
   // drain keeps a retryable row instead of stranding it mid-send as
   // permanently delivery_uncertain.
   fallbackDeadlineMs?: number;
@@ -502,13 +502,14 @@ export async function sendEmail({
   );
   const dispatch = async (
     activeSender: { address: string; name: string },
-    attemptOffset: number
+    attemptOffset: number,
+    maxAttempts: number = attemptsPerSender
   ): Promise<
     { ok: EmailResult } | { failed: SendFailure; attempts: number }
   > => {
     let failure: SendFailure = { message: 'Unknown error' };
     let attemptsMade = 0;
-    for (let attempt = 0; attempt < attemptsPerSender; attempt++) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
       attemptsMade = attempt + 1;
       try {
         const token = getRequiredToken();
@@ -566,7 +567,7 @@ export async function sendEmail({
         failure = parseError(error);
 
         // Only retry on retryable errors
-        if (attempt + 1 < attemptsPerSender && isRetryableError(failure.code)) {
+        if (attempt + 1 < maxAttempts && isRetryableError(failure.code)) {
           if (resetTransportDispatch) {
             await resetTransportDispatch();
             transportDispatchMarked = false;
@@ -599,10 +600,18 @@ export async function sendEmail({
   // not-yet-verified domain, restricted sender). Order confirmations must not be
   // lost to that, so retry once from the platform domain — mirroring the
   // auth-email hook, which also falls back to the platform sender. When the
-  // caller passes a fallback deadline, skip the second loop unless it fits:
-  // starting it on an exhausted budget aborts mid-send and strands the row
-  // as delivery_uncertain instead of a clean retryable failure.
-  const fallbackWorstMs = senderLoopWorstMs(attemptsPerSender);
+  // caller passes a fallback deadline, the primary loop already spent the
+  // retry budget, so the fallback gets a single shot from the healthy
+  // platform domain (the sweep retries transient failures next tick)
+  // and runs whenever that single attempt fits. Gating on another full
+  // loop would skip the fallback on every retry — admission reserves
+  // exactly one loop plus the cutoff buffer — exhausting the row
+  // solely because the merchant sender is stale. Skipping on a truly
+  // exhausted budget still avoids aborting mid-send and stranding the
+  // row as delivery_uncertain instead of a clean retryable failure.
+  const fallbackAttempts =
+    fallbackDeadlineMs === undefined ? attemptsPerSender : 1;
+  const fallbackWorstMs = senderLoopWorstMs(fallbackAttempts);
   const fallbackBudgetMs =
     fallbackDeadlineMs === undefined
       ? undefined
@@ -624,7 +633,11 @@ export async function sendEmail({
     // Offset the fallback attempt counter by the primary's actual tries (not a
     // fixed maxRetries+1) so a fallback that succeeds on its first send records
     // attempt_count as primary.attempts + 1, not an inflated 5.
-    const fallback = await dispatch(platformSender, primary.attempts);
+    const fallback = await dispatch(
+      platformSender,
+      primary.attempts,
+      fallbackAttempts
+    );
     if ('ok' in fallback) {
       return fallback.ok;
     }

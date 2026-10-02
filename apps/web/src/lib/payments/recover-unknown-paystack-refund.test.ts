@@ -187,6 +187,7 @@ describe('recoverUnknownPaystackRefund', () => {
     const raced = {
       amount: 100,
       currency: 'NGN',
+      gateway: 'paystack',
       gateway_reference: '202',
       id: 'refund-raced',
       merchant_id: 'merchant-1',

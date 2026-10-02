@@ -76,6 +76,116 @@ describe('resolveContradictoryRefundFailure', () => {
     expect(mocks.quarantineRefund).not.toHaveBeenCalled();
   });
 
+  it('requires provider verification for a padded legacy Paystack replacement', async () => {
+    const failedRows = [
+      {
+        amount: 100,
+        created_at: '2026-09-27T12:00:00Z',
+        currency: 'NGN',
+        gateway: ' paystack ',
+        gateway_reference: 'RFD-1',
+        id: 'refund-1',
+        metadata: {
+          payment_transaction_id: 'payment-1',
+          provider_refund_status: 'failed',
+        },
+      },
+    ];
+    const replacement = chain(
+      {
+        data: [
+          {
+            amount: 100,
+            created_at: '2026-09-27T13:00:00Z',
+            currency: 'NGN',
+            gateway: ' paystack ',
+            id: 'refund-2',
+            metadata: {
+              payment_transaction_id: 'payment-1',
+            },
+          },
+        ],
+        error: null,
+      },
+      'limit'
+    );
+    const legs = [
+      {
+        amount: 100,
+        currency: 'NGN',
+        gateway: ' paystack ',
+        gateway_reference: 'PSK-1',
+        id: 'payment-1',
+      },
+    ];
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(chain({ data: failedRows, error: null }, 'limit'))
+      .mockReturnValueOnce(replacement)
+      .mockReturnValueOnce(chain({ data: legs, error: null }, 'in'));
+
+    // The padded pair matches as Paystack, so the unverified local
+    // completion must not suppress the failure alert.
+    await expect(
+      resolveContradictoryRefundFailure({ from } as never, row, order)
+    ).resolves.toBe(false);
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          contradictory_refund_failure: true,
+          failed_refund_ids: ['refund-1'],
+        }),
+      })
+    );
+  });
+
+  it('suppresses when a padded legacy Paystack replacement is provider-verified', async () => {
+    const failedRows = [
+      {
+        amount: 100,
+        created_at: '2026-09-27T12:00:00Z',
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: 'RFD-1',
+        id: 'refund-1',
+        metadata: {
+          payment_transaction_id: 'payment-1',
+          provider_refund_status: 'failed',
+        },
+      },
+    ];
+    const replacement = chain(
+      {
+        data: [
+          {
+            amount: 100,
+            created_at: '2026-09-27T13:00:00Z',
+            currency: 'NGN',
+            gateway: ' Paystack ',
+            id: 'refund-2',
+            metadata: {
+              payment_transaction_id: 'payment-1',
+              provider_refund_status: 'processed',
+            },
+          },
+        ],
+        error: null,
+      },
+      'limit'
+    );
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(chain({ data: failedRows, error: null }, 'limit'))
+      .mockReturnValueOnce(replacement);
+
+    // Mixed `paystack`/` Paystack ` casings still match once
+    // normalized, and verification satisfies the Paystack gate.
+    await expect(
+      resolveContradictoryRefundFailure({ from } as never, row, order)
+    ).resolves.toBe(true);
+    expect(mocks.quarantineRefund).not.toHaveBeenCalled();
+  });
+
   it.each([
     0, -50,
   ])('files when the failed refund amount is %s instead of treating it as covered', async (amount) => {

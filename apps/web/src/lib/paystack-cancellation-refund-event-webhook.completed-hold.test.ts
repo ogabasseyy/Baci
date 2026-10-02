@@ -27,7 +27,10 @@ describe('handlePaystackCancellationRefundEvent completed-row mismatch', () => {
   function database(refund: unknown) {
     const query = {
       eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: refund ?? null }),
+      ilike: vi.fn().mockReturnThis(),
+      limit: vi
+        .fn()
+        .mockResolvedValue({ data: refund == null ? [] : [refund] }),
       select: vi.fn().mockReturnThis(),
     };
     return { from: vi.fn(() => query) } as unknown as SupabaseClient;
@@ -46,6 +49,7 @@ describe('handlePaystackCancellationRefundEvent completed-row mismatch', () => {
         shipping_status: 'cancelled',
       },
       id: 'refund-1',
+      gateway: 'paystack',
       status: 'completed',
     };
     const db = database(refund);

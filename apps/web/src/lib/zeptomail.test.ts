@@ -518,6 +518,7 @@ describe('zeptomail audit logging', () => {
     getActiveMerchantSendingDomainMock.mockResolvedValue('ogabassey.com');
     // Non-retryable rejection for the custom sender; the platform sender
     // would succeed, but the fallback must not start on a short budget.
+    // Single-attempt worst case is 38s, so 20s cannot fit even one shot.
     sendMailMock.mockImplementation((args: { from?: { address?: string } }) => {
       if (args.from?.address === 'orders@ogabassey.com') {
         return Promise.reject({
@@ -534,13 +535,49 @@ describe('zeptomail audit logging', () => {
       htmlContent: '<p>Hello</p>',
       emailType: 'orders',
       auditContext: { merchantId: 'merchant-1', orderId: 'order-1' },
-      fallbackDeadlineMs: Date.now() + 60_000,
+      fallbackDeadlineMs: Date.now() + 20_000,
     });
 
     expect(result.success).toBe(false);
     expect(result).toMatchObject({ errorCode: 'TM_3201' });
     expect(sendMailMock.mock.calls.map((c) => c[0]?.from?.address)).toEqual([
       'orders@ogabassey.com',
+    ]);
+  });
+
+  it('runs a single fallback attempt when one shot fits the remaining budget', async () => {
+    getActiveMerchantSendingDomainMock.mockResolvedValue('ogabassey.com');
+    // 60s cannot fit another full retry loop, but the deadline-driven
+    // fallback is a single 38s shot: it must run instead of skipping
+    // on every retry until the row exhausts.
+    sendMailMock.mockImplementation((args: { from?: { address?: string } }) => {
+      if (args.from?.address === 'orders@ogabassey.com') {
+        return Promise.reject({
+          error: { code: 'TM_3201', message: 'Invalid sender domain' },
+        });
+      }
+      return Promise.reject({
+        error: { code: 'TM_5001', message: 'Server overloaded' },
+      });
+    });
+    const { sendEmail } = await import('./zeptomail');
+
+    const result = await sendEmail({
+      to: 'customer@example.com',
+      subject: 'Order Confirmation',
+      htmlContent: '<p>Hello</p>',
+      emailType: 'orders',
+      auditContext: { merchantId: 'merchant-1', orderId: 'order-1' },
+      fallbackDeadlineMs: Date.now() + 60_000,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result).toMatchObject({ errorCode: 'TM_5001' });
+    // One custom attempt plus exactly one platform attempt: no
+    // in-process retries on the fallback — the sweep retries.
+    expect(sendMailMock.mock.calls.map((c) => c[0]?.from?.address)).toEqual([
+      'orders@ogabassey.com',
+      'orders@usebaci.com',
     ]);
   });
 

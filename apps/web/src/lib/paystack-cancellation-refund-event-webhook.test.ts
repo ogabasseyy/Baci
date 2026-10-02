@@ -33,7 +33,10 @@ describe('handlePaystackCancellationRefundEvent', () => {
   function database(refund: unknown) {
     const query = {
       eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: refund ?? null }),
+      ilike: vi.fn().mockReturnThis(),
+      limit: vi
+        .fn()
+        .mockResolvedValue({ data: refund == null ? [] : [refund] }),
       select: vi.fn().mockReturnThis(),
     };
     return { from: vi.fn(() => query) } as unknown as SupabaseClient;
@@ -52,6 +55,7 @@ describe('handlePaystackCancellationRefundEvent', () => {
         shipping_status: 'cancelled',
       },
       id: 'refund-1',
+      gateway: 'paystack',
     };
     const db = database(refund);
 
@@ -71,10 +75,60 @@ describe('handlePaystackCancellationRefundEvent', () => {
     });
   });
 
+  it('reconciles a held legacy row despite padded gateway casing', async () => {
+    const refund = {
+      cancel_order: {
+        cancelled_at: '2026-09-27T00:00:00Z',
+        shipping_status: 'cancelled',
+      },
+      gateway: ' Paystack ',
+      id: 'refund-1',
+    };
+    const db = database(refund);
+
+    const response = await handlePaystackCancellationRefundEvent(db, {
+      data: { id: 42, status: 'processed', transaction: 123 },
+      event: 'refund.processed',
+    });
+
+    // An exact gateway match would miss this row and enter
+    // unknown-refund recovery, colliding with its own audit row.
+    expect(mocks.reconcilePaystackCancellationRefund).toHaveBeenCalledWith(
+      db,
+      refund
+    );
+    expect(mocks.recoverUnknownPaystackRefund).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+  });
+
+  it('fails retryably when duplicate audit rows share the provider id', async () => {
+    const query = {
+      eq: vi.fn().mockReturnThis(),
+      ilike: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({
+        data: [
+          { gateway: 'paystack', id: 'refund-1' },
+          { gateway: ' Paystack ', id: 'refund-2' },
+        ],
+      }),
+      select: vi.fn().mockReturnThis(),
+    };
+    const db = { from: vi.fn(() => query) } as unknown as SupabaseClient;
+
+    const response = await handlePaystackCancellationRefundEvent(db, {
+      data: { id: 42 },
+      event: 'refund.processed',
+    });
+
+    expect(mocks.reconcilePaystackCancellationRefund).not.toHaveBeenCalled();
+    expect(response.status).toBe(503);
+  });
+
   it('fails retryably when the refund lookup errors', async () => {
     const query = {
       eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({
+      ilike: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({
         data: null,
         error: { message: 'db unavailable' },
       }),
@@ -98,6 +152,7 @@ describe('handlePaystackCancellationRefundEvent', () => {
         shipping_status: 'cancelled',
       },
       id: 'refund-1',
+      gateway: 'paystack',
     });
     mocks.reconcilePaystackCancellationRefund.mockRejectedValue(
       new Error('down')
@@ -121,6 +176,7 @@ describe('handlePaystackCancellationRefundEvent', () => {
       {
         cancel_order: { cancelled_at: null, shipping_status: 'cancelled' },
         id: 'refund-1',
+        gateway: 'paystack',
       },
     ],
     [
@@ -131,6 +187,7 @@ describe('handlePaystackCancellationRefundEvent', () => {
           shipping_status: 'pending',
         },
         id: 'refund-1',
+        gateway: 'paystack',
       },
     ],
   ])('recovers a non-cancellation refund row (%s) through provider verification', async (_label, refund) => {
@@ -162,6 +219,7 @@ describe('handlePaystackCancellationRefundEvent', () => {
     const db = database({
       cancel_order: { cancelled_at: null, shipping_status: 'cancelled' },
       id: 'refund-1',
+      gateway: 'paystack',
     });
     mocks.recoverUnknownPaystackRefund.mockRejectedValue(
       new Error('provider down')
@@ -281,6 +339,7 @@ describe('handlePaystackCancellationRefundEvent', () => {
         shipping_status: 'cancelled',
       },
       id: 'refund-1',
+      gateway: 'paystack',
     };
     const db = database(refund);
     mocks.reconcilePaystackCancellationRefund.mockRejectedValue(
@@ -315,6 +374,7 @@ describe('handlePaystackCancellationRefundEvent', () => {
         shipping_status: 'cancelled',
       },
       id: 'refund-1',
+      gateway: 'paystack',
     });
     mocks.reconcilePaystackCancellationRefund.mockRejectedValue(
       new Error('paystack_refund_evidence_mismatch')

@@ -4,6 +4,7 @@ import { logger } from '@/lib/logger';
 import { fileRefundEvidenceReview } from '@/lib/payments/file-refund-evidence-review';
 import { holdPaystackRefundForReview } from '@/lib/payments/hold-paystack-refund-for-review';
 import { isDeterministicRefundError } from '@/lib/payments/is-deterministic-paystack-refund-error';
+import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gateway';
 import type { RefundRow } from '@/lib/payments/paystack-cancellation-refund-row';
 import { reconcilePaystackCancellationRefund } from '@/lib/payments/reconcile-paystack-cancellation-refund';
 import { reconcilePaystackRefundEvent } from '@/lib/payments/reconcile-paystack-refund-event';
@@ -44,15 +45,20 @@ export async function handlePaystackCancellationRefundEvent(
     Number.isSafeInteger(refundId) &&
     refundId > 0
   ) {
-    const { data: refund, error: lookupError } = await supabase
+    // Legacy rows may pad or re-case the gateway (` Paystack `): an
+    // exact match misses a held legacy row, enters unknown-refund
+    // recovery, and collides with the existing audit row on insert
+    // while the held row never reaches its transition. Prefilter
+    // case-insensitively server-side, then exact-normalize.
+    const { data: refundRows, error: lookupError } = await supabase
       .from('transactions')
       .select(
-        'id, order_id, merchant_id, gateway_reference, amount, currency, metadata, status, cancel_order:orders!transactions_order_id_fkey(cancelled_at,shipping_status)'
+        'id, order_id, merchant_id, gateway, gateway_reference, amount, currency, metadata, status, cancel_order:orders!transactions_order_id_fkey(cancelled_at,shipping_status)'
       )
       .eq('transaction_type', 'refund')
-      .eq('gateway', 'paystack')
+      .ilike('gateway', '%paystack%')
       .eq('gateway_reference', String(refundId))
-      .maybeSingle();
+      .limit(2);
     if (lookupError) {
       logger.error({
         message: 'Paystack refund lookup failed',
@@ -63,6 +69,24 @@ export async function handlePaystackCancellationRefundEvent(
         { status: 503 }
       );
     }
+    const refunds = (refundRows ?? []).filter(
+      (row) =>
+        normalizePaymentGateway((row as { gateway?: unknown }).gateway) ===
+        'PAYSTACK'
+    );
+    if (refunds.length > 1) {
+      // Duplicate audit rows for one provider refund: never guess —
+      // 503 for redelivery like the old maybeSingle multi-row error.
+      logger.error({
+        message: 'Paystack refund lookup ambiguous',
+        refundId,
+      });
+      return NextResponse.json(
+        { error: 'Refund reconciliation unavailable' },
+        { status: 503 }
+      );
+    }
+    const refund = refunds[0] ?? null;
     if (refund) {
       // Mirror the record RPC's cancellation gate: a refund row from any
       // non-cancellation workflow would be rejected downstream, 503ing this

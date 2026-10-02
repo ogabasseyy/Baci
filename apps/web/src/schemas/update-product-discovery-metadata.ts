@@ -3,6 +3,7 @@ import { productDiscoveryMetadataSchema } from './product-discovery-metadata';
 
 export const updateProductDiscoveryMetadataSchema = z.strictObject({
   productId: z.uuid(),
+  merchantId: z.uuid().optional(),
   metadata: productDiscoveryMetadataSchema,
   expectedMetadata: z
     .union([z.null(), z.record(z.string(), z.json())])
@@ -11,4 +12,9 @@ export const updateProductDiscoveryMetadataSchema = z.strictObject({
       'Snapshot too large'
     )
     .optional(),
+});
+
+export const discoveryFactsQuerySchema = z.strictObject({
+  cursor: z.uuid().optional(),
+  merchantId: z.uuid().optional(),
 });

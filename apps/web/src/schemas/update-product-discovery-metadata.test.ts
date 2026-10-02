@@ -51,7 +51,7 @@ it('accepts raw previous facts independently from new validated facts', () => {
     expectedMetadata: { attributes: { ram_gb: '8' } },
   });
 });
-it('bounds snapshots and rejects body-selected merchants', () => {
+it('bounds snapshots and validates merchant identifiers', () => {
   expect(
     schema.safeParse({
       productId,
@@ -62,4 +62,10 @@ it('bounds snapshots and rejects body-selected merchants', () => {
   expect(
     schema.safeParse({ productId, metadata: {}, merchantId: 'other' }).success
   ).toBe(false);
+});
+
+it('accepts explicit UUID merchant scope for server authorization', () => {
+  expect(
+    schema.parse({ productId, metadata: {}, merchantId: productId })
+  ).toMatchObject({ merchantId: productId });
 });

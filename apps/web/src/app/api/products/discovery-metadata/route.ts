@@ -1,6 +1,5 @@
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { hasPermission } from '@/lib/api-permissions';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { proposeDiscoveryFacts } from '@/lib/discovery-facts-review';
@@ -9,7 +8,10 @@ import {
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
 import { createClient } from '@/lib/supabase/server';
-import { updateProductDiscoveryMetadataSchema } from '@/schemas/update-product-discovery-metadata';
+import {
+  discoveryFactsQuerySchema,
+  updateProductDiscoveryMetadataSchema,
+} from '@/schemas/update-product-discovery-metadata';
 
 export async function GET(request: NextRequest) {
   const supabase = createClient(await cookies());
@@ -19,14 +21,19 @@ export async function GET(request: NextRequest) {
   } = await supabase.auth.getUser();
   if (authError || !user)
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const merchant = await getMerchantForApiRequest(supabase, user.id);
+  const parsed = discoveryFactsQuerySchema.safeParse(
+    Object.fromEntries(request.nextUrl.searchParams)
+  );
+  if (!parsed.success)
+    return NextResponse.json({ error: 'Invalid query' }, { status: 400 });
+  const { cursor, merchantId } = parsed.data;
+  const merchant = await getMerchantForApiRequest(supabase, user.id, {
+    requestedMerchantId: merchantId,
+  });
   if (!merchant)
     return NextResponse.json({ error: 'Merchant not found' }, { status: 404 });
   if (!hasPermission(toUserAccess(merchant), 'products', 'edit'))
     return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
-  const cursor = request.nextUrl.searchParams.get('cursor');
-  if (cursor && !z.uuid().safeParse(cursor).success)
-    return NextResponse.json({ error: 'Invalid cursor' }, { status: 400 });
   let query = supabase
     .from('products')
     .select(
@@ -60,7 +67,7 @@ export async function GET(request: NextRequest) {
   );
 }
 
-/** Save merchant-verified public search facts; never accept a body-selected tenant.
+/** Save merchant-verified public search facts; authorize the requested merchant before querying products.
  * Full replacement: clients must send the complete document, since omitted
  * keys are cleared rather than merged. */
 export async function PUT(request: NextRequest) {
@@ -86,7 +93,9 @@ export async function PUT(request: NextRequest) {
   const parsed = updateProductDiscoveryMetadataSchema.safeParse(body);
   if (!parsed.success)
     return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
-  const merchant = await getMerchantForApiRequest(supabase, user.id);
+  const merchant = await getMerchantForApiRequest(supabase, user.id, {
+    requestedMerchantId: parsed.data.merchantId,
+  });
   if (!merchant)
     return NextResponse.json({ error: 'Merchant not found' }, { status: 404 });
   if (!hasPermission(toUserAccess(merchant), 'products', 'edit')) {

@@ -1,11 +1,11 @@
-# Ogabassey verified facts review
+# Agent-performed verified discovery facts research
 
-The discovery dashboard now loads a bounded merchant-scoped review page (20 products plus a pagination sentinel). Product editors see stored category, explicit type/model fields, source references and specifications alongside a draft facts document. No LLM enrichment or catalog writes run on load.
+Codex reads the catalog under normal RLS access, researches authoritative manufacturer evidence in batches, and saves confirmed facts through the authorized merchant session. The owner does not review products individually. No manual dashboard panel is included.
 
-Drafts preserve existing facts and propose only missing exact category type or explicit metadata type/model. Conflicting model fields are flagged rather than arbitrarily selected. MPN/model-number lists, titles, descriptions, parent option specifications and generic numeric specs are not silently promoted to verified facts. Invalid existing documents remain visible for explicit repair.
+GET returns 20 merchant-scoped source records plus a pagination sentinel, existing raw metadata snapshots and conservative drafts. Query input is validated immediately after authentication. An optional merchantId is independently authorized by the existing merchant helper for both GET and PUT; it cannot bypass ownership, staff permissions or product scope.
 
-The reviewer edits the complete JSON document, confirms source review, then saves one product through the existing authenticated/CSRF-protected PUT route. Edits clear the confirmation. The new optional expectedMetadata snapshot applies an atomic JSONB equality (or IS NULL) predicate alongside product and resolved merchant IDs; a stale or inaccessible product returns safe 409. Existing PUT callers without a snapshot retain their documented replacement behavior. GET requires product edit permission and never accepts a merchant ID from the caller.
+Drafts preserve existing facts, propose exact category types or explicit stored type/model fields, and flag conflicting models. Descriptions, arbitrary numeric specifications and model-number lists are not proof. Variant facts remain option-local. Research evidence and unresolved conflicts must be retained separately; uncertain facts remain empty.
 
-This is a per-product review/import control, not an unattended backfill. Saving requires reliable merchant/supplier evidence and option consistency. Embedding coverage remains distinct from verified-fact coverage. Semantic search is unchanged and disabled until separate rollout approval and evaluation.
+PUT replaces the full document. expectedMetadata narrows the atomic product/merchant update with previous JSONB equality or IS NULL; a stale or unavailable row returns safe 409. Existing callers retain optional snapshot behavior.
 
-Validation: affected route/schema/proposal/panel/page tests; web lint and typecheck. No migrations or private environment changes are required. Deployment, authenticated browser QA and verified catalog writes remain separate rollout steps after PR review gates.
+Affected API, schema and proposal tests plus web lint/typecheck are required. No migrations, private environment edits or catalog mutations occur in this PR. Require exact-head CI and clean Codex review before merge, then verify deployed session reads and guarded writes. Fact coverage, semantic activation, MCP deployment, live relevance QA and app submission remain separate gates.

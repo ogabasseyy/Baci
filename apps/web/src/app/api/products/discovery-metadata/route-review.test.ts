@@ -77,8 +77,22 @@ it('scopes pagination to merchant and returns a bounded review page with raw sna
 });
 it('rejects bad cursors and sanitizes database failures', async () => {
   expect((await GET(request('?cursor=bad'))).status).toBe(400);
+  expect(mocks.merchant).not.toHaveBeenCalled();
+  expect(mocks.from).not.toHaveBeenCalled();
   mocks.result.error = { message: 'private database error' };
   const response = await GET(request());
   expect(response.status).toBe(500);
   expect(await response.text()).not.toContain('private database');
+});
+
+it('authorizes requested merchant and rejects inaccessible catalogs', async () => {
+  const merchantId = '11111111-1111-4111-8111-111111111111';
+  expect((await GET(request(`?merchantId=${merchantId}`))).status).toBe(200);
+  expect(mocks.merchant).toHaveBeenCalledWith(expect.anything(), 'user', {
+    requestedMerchantId: merchantId,
+  });
+  mocks.merchant.mockResolvedValueOnce(null);
+  mocks.from.mockClear();
+  expect((await GET(request(`?merchantId=${merchantId}`))).status).toBe(404);
+  expect(mocks.from).not.toHaveBeenCalled();
 });

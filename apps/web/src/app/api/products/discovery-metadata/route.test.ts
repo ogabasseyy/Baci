@@ -97,6 +97,17 @@ describe('product discovery metadata API', () => {
     );
   });
 
+  it('authorizes explicit merchant scope for guarded writes', async () => {
+    const body = { ...validBody, merchantId, expectedMetadata: null };
+    expect((await PUT(request(JSON.stringify(body)))).status).toBe(200);
+    expect(mocks.merchant).toHaveBeenCalledWith(expect.anything(), 'user-1', {
+      requestedMerchantId: merchantId,
+    });
+    mocks.merchant.mockResolvedValueOnce(null);
+    mocks.update.mockClear();
+    expect((await PUT(request(JSON.stringify(body)))).status).toBe(404);
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
   it('authenticates before CSRF validation and rejects invalid CSRF before input processing', async () => {
     mocks.getUser.mockResolvedValueOnce({ data: { user: null }, error: null });
     expect((await PUT(request(JSON.stringify(validBody)))).status).toBe(401);
@@ -113,14 +124,18 @@ describe('product discovery metadata API', () => {
     expect(mocks.getUser).toHaveBeenCalledTimes(2);
   });
 
-  it('rejects invalid JSON, schema-invalid input, and a body-selected merchant', async () => {
+  it('rejects invalid JSON, schema-invalid input, and invalid merchant identifiers', async () => {
     expect((await PUT(request('{'))).status).toBe(400);
     expect(
       (await PUT(request(JSON.stringify({ ...validBody, unexpected: true }))))
         .status
     ).toBe(400);
     expect(
-      (await PUT(request(JSON.stringify({ ...validBody, merchantId })))).status
+      (
+        await PUT(
+          request(JSON.stringify({ ...validBody, merchantId: 'invalid' }))
+        )
+      ).status
     ).toBe(400);
     expect(mocks.merchant).not.toHaveBeenCalled();
     expect(mocks.update).not.toHaveBeenCalled();

@@ -24,6 +24,7 @@ afterEach(() => {
 
 function fixture({
   dirtyCheckout = false,
+  duplicateRepoDir = false,
   duplicateTracking = false,
   staleCheckout = false,
   staleWorkflowSha = false,
@@ -43,7 +44,10 @@ function fixture({
   mkdirSync(repo, { recursive: true });
 
   const deployedSha = 'a'.repeat(40);
-  writeFileSync(join(remote, '.env'), `BACI_REPO_DIR=${repo}\n`);
+  const repoEnv = duplicateRepoDir
+    ? `BACI_REPO_DIR=/stale/checkout\nBACI_REPO_DIR=${repo}\n`
+    : `BACI_REPO_DIR=${repo}\n`;
+  writeFileSync(join(remote, '.env'), repoEnv);
   writeFileSync(join(remote, 'app-checkout.sha'), `${deployedSha}\n`);
 
   const wrapper = join(remote, 'bin', 'process-gigl-tracking.sh');
@@ -87,8 +91,13 @@ function fixture({
   writeFileSync(
     fakeGit,
     `#!/usr/bin/env bash
+# Path-sensitive: only the checkout the fixture wrote answers, so a
+# reader that resolves a duplicate assignment to the wrong directory
+# fails closed instead of certifying the live path.
 case "$*" in
-  *"rev-parse --verify HEAD"*) printf '%s\\n' "$FAKE_REPO_SHA" ;;
+  *"-C $FAKE_REPO_DIR rev-parse --verify HEAD"*)
+    printf '%s\\n' "$FAKE_REPO_SHA"
+    ;;
   *"status --porcelain=v1 --untracked-files=all"*)
     if [ "$FAKE_REPO_DIRTY" = "1" ]; then printf '%s\\n' ' M worker.ts'; fi
     ;;
@@ -103,20 +112,29 @@ esac
     dirtyCheckout,
     fakeBin,
     remote,
+    repo,
     repoSha: staleCheckout ? 'b'.repeat(40) : deployedSha,
     workflowSha: staleWorkflowSha ? 'b'.repeat(40) : deployedSha,
   };
 }
 
 function verify(options, args = []) {
-  const { crontab, dirtyCheckout, fakeBin, remote, repoSha, workflowSha } =
-    fixture(options);
+  const {
+    crontab,
+    dirtyCheckout,
+    fakeBin,
+    remote,
+    repo,
+    repoSha,
+    workflowSha,
+  } = fixture(options);
   return spawnSync('bash', [verifier, ...args], {
     encoding: 'utf8',
     env: {
       ...process.env,
       BACI_EXPECTED_APP_SHA: workflowSha,
       FAKE_CRONTAB: crontab,
+      FAKE_REPO_DIR: repo,
       FAKE_REPO_DIRTY: dirtyCheckout ? '1' : '0',
       FAKE_REPO_SHA: repoSha,
       PATH: `${fakeBin}:${process.env.PATH}`,
@@ -128,6 +146,17 @@ function verify(options, args = []) {
 describe('GIGL direct-worker deployment gate', () => {
   it('accepts exactly one installed tracking schedule', () => {
     const result = verify();
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /GIGL direct tracking worker is installed/);
+  });
+
+  it('certifies the last BACI_REPO_DIR assignment on duplicates', () => {
+    // A stale line above the live one: dotenv, the scoped reader, and
+    // the flip use the last assignment, so the verifier must certify
+    // that same checkout — the path-sensitive fake git answers only
+    // for it, so a first-match reader fails this test.
+    const result = verify({ duplicateRepoDir: true });
 
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /GIGL direct tracking worker is installed/);

@@ -5,13 +5,15 @@ import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const workerRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
-const webSrc = join(workerRoot, '..', 'apps', 'web', 'src');
+const repoRoot = join(workerRoot, '..');
+const webSrc = join(repoRoot, 'apps', 'web', 'src');
+const packagesDir = join(repoRoot, 'packages');
 
 const WORKER_ROOTS = [
-  'scripts/process-gigl-tracking.ts',
-  'scripts/verify-gigl-tracking-worker-capability.ts',
-  'lib/gigl-tracking-worker-client.ts',
-  'lib/verify-gigl-tracking-worker-capability.ts',
+  'apps/web/src/scripts/process-gigl-tracking.ts',
+  'apps/web/src/scripts/verify-gigl-tracking-worker-capability.ts',
+  'apps/web/src/lib/gigl-tracking-worker-client.ts',
+  'apps/web/src/lib/verify-gigl-tracking-worker-capability.ts',
 ];
 
 // Files deliberately excluded from the deploy tracking filter: they must
@@ -20,25 +22,69 @@ const WORKER_ROOTS = [
 // test fails, add the newly reachable file to the tracking filter
 // instead of deleting the assertion.
 const EXCLUDED_RUNTIME_FILES = [
-  'env.ts',
-  'lib/is-non-agentic-worker-profile.ts',
+  'apps/web/src/env.ts',
+  'apps/web/src/lib/is-non-agentic-worker-profile.ts',
 ];
 
-function resolveImport(from, spec) {
-  let candidate;
-  if (spec.startsWith('@/')) {
-    candidate = join(webSrc, spec.slice(2));
-  } else if (spec.startsWith('.')) {
-    candidate = join(dirname(from), spec);
-  } else {
+const workspaceExportsCache = new Map();
+
+// Resolves a `@baci/*` workspace import through the owning package's
+// `exports` map, the same map the tsx poller runtime uses. Only
+// workspace packages resolve here: third-party bare imports are
+// node_modules code, not checkout-freshness sensitive.
+function resolveWorkspaceExport(spec) {
+  const match = spec.match(/^(@[^/]+\/[^/]+)(\/(.*))?$/);
+  const pkgName = match?.[1] ?? '';
+  if (!pkgName.startsWith('@baci/')) {
     return null;
   }
-  for (const probe of [candidate, `${candidate}.ts`, `${candidate}.tsx`]) {
-    if (existsSync(probe) && statSync(probe).isFile()) {
-      return probe;
+  const pkgDir = join(packagesDir, pkgName.slice('@baci/'.length));
+  const pkgJsonPath = join(pkgDir, 'package.json');
+  if (!existsSync(pkgJsonPath)) {
+    return null;
+  }
+  if (!workspaceExportsCache.has(pkgJsonPath)) {
+    try {
+      workspaceExportsCache.set(
+        pkgJsonPath,
+        JSON.parse(readFileSync(pkgJsonPath, 'utf8')).exports ?? {}
+      );
+    } catch {
+      return null;
     }
   }
-  return null;
+  const target =
+    workspaceExportsCache.get(pkgJsonPath)[match[3] ? `./${match[3]}` : '.'];
+  if (typeof target !== 'string') {
+    return null;
+  }
+  return { pkgDir, pkgJsonPath, target };
+}
+
+function resolveImport(from, spec) {
+  const resolved = [];
+  const pushFile = (candidate) => {
+    for (const probe of [candidate, `${candidate}.ts`, `${candidate}.tsx`]) {
+      if (existsSync(probe) && statSync(probe).isFile()) {
+        resolved.push(probe);
+        return;
+      }
+    }
+  };
+  if (spec.startsWith('@/')) {
+    pushFile(join(webSrc, spec.slice(2)));
+  } else if (spec.startsWith('.')) {
+    pushFile(join(dirname(from), spec));
+  } else {
+    const workspace = resolveWorkspaceExport(spec);
+    if (workspace !== null) {
+      // The exports map itself is load-bearing: redirecting it swaps
+      // the executed module without touching the importer.
+      resolved.push(workspace.pkgJsonPath);
+      pushFile(join(workspace.pkgDir, workspace.target));
+    }
+  }
+  return resolved;
 }
 
 // Statements erased before runtime impose no checkout-freshness
@@ -73,7 +119,7 @@ function isTypeOnlyStatement(head) {
 
 function collectReachable() {
   const seen = new Set();
-  const queue = WORKER_ROOTS.map((root) => join(webSrc, root));
+  const queue = WORKER_ROOTS.map((root) => join(repoRoot, root));
   while (queue.length > 0) {
     const file = queue.shift();
     if (seen.has(file) || !existsSync(file)) {
@@ -92,16 +138,17 @@ function collectReachable() {
       if (head !== '' && isTypeOnlyStatement(head)) {
         continue;
       }
-      const resolved = resolveImport(file, specifier);
-      if (resolved !== null && !seen.has(resolved)) {
-        queue.push(resolved);
+      for (const resolved of resolveImport(file, specifier)) {
+        if (!seen.has(resolved)) {
+          queue.push(resolved);
+        }
       }
     }
   }
   return new Set(
     [...seen].map((file) =>
       file
-        .slice(webSrc.length + 1)
+        .slice(repoRoot.length + 1)
         .split(sep)
         .join('/')
     )
@@ -115,6 +162,16 @@ describe('deploy tracking import graph', () => {
     assert.ok(reachable.size > 0, 'expected worker files to exist');
     for (const root of WORKER_ROOTS) {
       assert.ok(reachable.has(root), `expected ${root} to be reachable`);
+    }
+    // Workspace subpath imports resolve through the owning
+    // package.json `exports` map; the map itself is reachable because
+    // redirecting it swaps the executed module.
+    for (const shared of [
+      'packages/shared/package.json',
+      'packages/shared/src/lib/filter-by-location-phrase.ts',
+      'packages/shared/src/lib/gigl-tracking-status.ts',
+    ]) {
+      assert.ok(reachable.has(shared), `expected ${shared} to be reachable`);
     }
     for (const excluded of EXCLUDED_RUNTIME_FILES) {
       assert.equal(
@@ -145,9 +202,13 @@ describe('deploy tracking import graph', () => {
       (entry) => entry[1]
     );
     // paths-filter micromatch subset used by this section: `*` matches
-    // within one path segment.
+    // within one path segment. Runtime code lives under apps/web/src
+    // and in workspace packages; workflow/script entries never match.
     const matchers = entries
-      .filter((entry) => entry.startsWith('apps/web/src/'))
+      .filter(
+        (entry) =>
+          entry.startsWith('apps/web/src/') || entry.startsWith('packages/')
+      )
       .map(
         (entry) =>
           new RegExp(
@@ -161,8 +222,7 @@ describe('deploy tracking import graph', () => {
 
     assert.ok(reachable.length > 0, 'expected worker files to exist');
     const uncovered = reachable.filter(
-      (file) =>
-        !matchers.some((matcher) => matcher.test(`apps/web/src/${file}`))
+      (file) => !matchers.some((matcher) => matcher.test(file))
     );
     assert.deepEqual(
       uncovered,

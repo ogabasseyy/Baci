@@ -5,6 +5,8 @@ import {
   GiglWorkerTokenError,
   createGiglTrackingWorkerClient,
 } from '@/lib/gigl-tracking-worker-client';
+import { GiglApiClient } from '@/lib/shipping/providers/gigl.auth';
+import type { GiglFetchOptions } from '@/lib/shipping/providers/gigl.constants';
 import {
   GiglWrapperSchemaMissingError,
   verifyGiglTrackingWorkerCapability,
@@ -29,13 +31,52 @@ function isExplicitlyDisabled(value: string | undefined) {
   return ['0', 'false', 'off'].includes(value?.trim().toLowerCase() ?? '');
 }
 
+const GIGL_PROVIDER_AUTH_PROBE_TIMEOUT_MS = 15_000;
+
+/**
+ * Bounded, non-mutating provider login against the installed
+ * GIGL_EMAIL/GIGL_PASSWORD/GIGL_BASE_URL. The wrapper checks below
+ * prove the database capability but never touch the provider, so
+ * without this probe stale-but-nonempty credentials would latch and
+ * let vercel.json drop the working Vercel schedule. Redacted by
+ * construction: true/false only, never status or response text.
+ */
+async function verifyGiglProviderAuthDefault(): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(),
+    GIGL_PROVIDER_AUTH_PROBE_TIMEOUT_MS
+  );
+  try {
+    const client = new GiglApiClient({
+      safeFetch: (url: string, options?: GiglFetchOptions) =>
+        fetch(url, {
+          ...options,
+          signal: options?.signal ?? controller.signal,
+        }),
+      log: () => undefined,
+    });
+    await client.getApiToken(
+      GIGL_PROVIDER_AUTH_PROBE_TIMEOUT_MS,
+      controller.signal
+    );
+    return true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Runs the credentialed, non-mutating GIGL capability smoke. */
 export async function runGiglTrackingCapabilityVerification({
   env = process.env,
   logger = console,
+  verifyProviderAuth = verifyGiglProviderAuthDefault,
 }: {
   env?: NodeJS.ProcessEnv;
   logger?: CapabilityLogger;
+  verifyProviderAuth?: () => Promise<boolean>;
 } = {}): Promise<number> {
   if (isExplicitlyDisabled(env.GIGL_ENABLED)) {
     logger.info('[gigl-capability] skipped while GIGL is disabled');
@@ -89,8 +130,17 @@ export async function runGiglTrackingCapabilityVerification({
     const client = createGiglTrackingWorkerClient(env);
     if (await verifyGiglTrackingWorkerCapability(client)) {
       if (await verifyGiglTrackingWorkerScopeProbe(client)) {
-        logger.info('[gigl-capability] restricted wrapper verified');
-        return 0;
+        // Last: the wrapper checks prove the database capability but
+        // never authenticate to the provider. Probe the login before
+        // the latch below can authorize dropping the Vercel schedule.
+        if (await verifyProviderAuth()) {
+          logger.info('[gigl-capability] restricted wrapper verified');
+          return 0;
+        }
+        logger.error(
+          '[gigl-capability] GIGL provider login failed; verify GIGL_EMAIL, GIGL_PASSWORD, and GIGL_BASE_URL, then re-run'
+        );
+        return 1;
       }
       logger.error(
         '[gigl-capability] PostgREST scope hook is not active; reload PostgREST config and re-run'

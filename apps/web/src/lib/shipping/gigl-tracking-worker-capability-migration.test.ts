@@ -9,13 +9,11 @@ const migration = readFileSync(
   ),
   'utf8'
 );
-const loginMigration = readFileSync(
-  join(
-    process.cwd(),
-    '../../supabase/migrations/20260805091000_enable_least_privilege_gigl_tracking_login.sql'
-  ),
-  'utf8'
+const CONVERGE_MIGRATION_PATH = join(
+  process.cwd(),
+  '../../supabase/migrations/20260805091000_converge_gigl_tracking_worker_nologin.sql'
 );
+const convergeMigration = readFileSync(CONVERGE_MIGRATION_PATH, 'utf8');
 const RESTORE_MIGRATION_PATH = join(
   process.cwd(),
   '../../supabase/migrations/20260805113000_restore_gigl_tracking_postgrest_capability.sql'
@@ -90,17 +88,28 @@ describe('GIGL tracking worker capability migration', () => {
     ).toHaveLength(5);
   });
 
-  it('records the temporary connection-limited login without embedding a password', () => {
-    expect(loginMigration).toMatch(
+  it('converges the role to NOLOGIN before the hook phases', () => {
+    // Nothing consumes direct login (the poller authenticates by
+    // worker JWT), and a LOGIN-capable role inherits every PUBLIC
+    // function grant while forging request.jwt.claim.* at will — so
+    // the role must never be login-capable, even between migrations.
+    expect(convergeMigration).toMatch(
       /REVOKE gigl_tracking_worker FROM authenticator/
     );
-    expect(loginMigration).toMatch(
-      /ALTER ROLE gigl_tracking_worker LOGIN CONNECTION LIMIT 2/
+    expect(convergeMigration).toMatch(
+      /ALTER ROLE gigl_tracking_worker NOLOGIN CONNECTION LIMIT -1 PASSWORD NULL/
     );
-    expect(loginMigration).not.toMatch(/ALTER ROLE[\s\S]*PASSWORD\s+'/i);
-    expect(loginMigration).not.toMatch(
+    expect(convergeMigration).not.toMatch(
+      /ALTER ROLE gigl_tracking_worker LOGIN /
+    );
+    expect(convergeMigration).not.toMatch(/ALTER ROLE[\s\S]*PASSWORD\s+'/i);
+    expect(convergeMigration).not.toMatch(
       /GRANT (?:SELECT|INSERT|UPDATE|DELETE|ALL)/
     );
+    // Supabase applies migrations in filename order: the converge
+    // phase (no login possible) sorts before the restore phase (hook
+    // install), so a stall between them leaves no login window.
+    expect(CONVERGE_MIGRATION_PATH < RESTORE_MIGRATION_PATH).toBe(true);
   });
 
   it('removes direct login and restores only signed PostgREST role switching', () => {

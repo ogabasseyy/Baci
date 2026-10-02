@@ -263,8 +263,9 @@ jobs:
         run: .github/scripts/smoke-gigl-worker-capability.sh
       - name: Persist GIGL cutover latch
         # Runs only after the smoke above succeeds (same job, no if): the
-        # latch file proves a live smoke verified token+hook function at
-        # this revision. The gate requires it for tracking=false pushes,
+        # latch file proves a live smoke verified token+hook+provider
+        # function at this revision. The gate requires it for
+        # tracking=false pushes,
         # so a web push after a smoke-failed tracking push cannot deploy
         # the cron removal with a broken worker. The latch records
         # `<scope>:<sha>:<credential-fingerprint>` for the environment the smoke

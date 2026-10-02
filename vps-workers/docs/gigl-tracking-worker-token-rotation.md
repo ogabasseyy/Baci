@@ -57,6 +57,11 @@ Production value decodes to the same `exp`.
    token executes a reviewed wrapper without claiming work (same
    environment as the cron and deployment smoke — `run-web-script.sh`
    exits unless `NODE_ENV` is set):
-   `REMOTE_DIR=/home/bassey/baci-workers NODE_ENV=production BACI_WORKER_PROFILE=gigl-tracking BACI_WORKER_ENV=$REMOTE_DIR/.env $REMOTE_DIR/bin/verify-gigl-tracking-worker-capability.sh`.
+   `REMOTE_DIR=/home/bassey/baci-workers`, then `NODE_ENV=production
+   BACI_WORKER_PROFILE=gigl-tracking BACI_WORKER_ENV=$REMOTE_DIR/.env
+   $REMOTE_DIR/bin/verify-gigl-tracking-worker-capability.sh` as a second
+   command (`$REMOTE_DIR` in a single-line env prefix expands before the
+   temporary assignment takes effect, which would point
+   `BACI_WORKER_ENV` at `/.env`).
 5. Hit the manual fallback route on the NEW deployment once and expect
    200, not `GIGL tracking worker unavailable`.

@@ -11,11 +11,15 @@ expected_sha="${2:?expected SHA is required}"
 
 repo_link="$(
   awk '
+    # Last assignment wins, matching dotenv and the scoped-environment
+    # reader: an operator override appended below a stale line must flip
+    # the same checkout the poller executes.
     /^BACI_REPO_DIR=/ {
-      sub(/^BACI_REPO_DIR=/, "")
-      print
-      exit
+      value = $0
+      sub(/^BACI_REPO_DIR=/, "", value)
+      have_value = 1
     }
+    END { if (have_value) print value }
   ' "$remote_dir/.env"
 )"
 repo_link="${repo_link%\"}"

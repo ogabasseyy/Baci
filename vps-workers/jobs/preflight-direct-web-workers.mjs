@@ -120,6 +120,27 @@ export function findMultilineDotenvAssignments(text) {
   return offenders;
 }
 
+// dotenv expands `\n` inside double quotes, but the shell boundary
+// captures values through command substitution, which strips trailing
+// line feeds: `GIGL_PASSWORD="abc\n"` validates as four bytes while
+// cron exports three. Only a TRAILING line feed diverges (a mid-value
+// escape survives capture on both sides), so reject exactly that:
+// shell-read keys whose parsed value ends with `\n`. Unterminated
+// (true multiline) values are rejected above; this catches the
+// single-line escape the quote check accepts.
+export function findTrailingNewlineValues(env) {
+  const offenders = [];
+  for (const name of Object.keys(env)) {
+    if (!isShellReadKey(name)) {
+      continue;
+    }
+    if ((env[name] ?? '').endsWith('\n')) {
+      offenders.push(name);
+    }
+  }
+  return offenders;
+}
+
 function isBase64Encoded32ByteKey(value) {
   const normalized = value.trim();
   if (
@@ -230,6 +251,11 @@ function runDirectWorkerPreflight({
   for (const offender of findMultilineDotenvAssignments(rawText)) {
     problems.push(
       `${offender} has an unterminated quoted value: use a single line with \\n escapes`
+    );
+  }
+  for (const offender of findTrailingNewlineValues(env)) {
+    problems.push(
+      `${offender} must not end with a newline escape: the shell boundary strips trailing line feeds`
     );
   }
   if (problems.length > 0) {

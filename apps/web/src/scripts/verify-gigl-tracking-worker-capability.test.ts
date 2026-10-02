@@ -35,18 +35,21 @@ describe('runGiglTrackingCapabilityVerification', () => {
   it('passes only after the live restricted wrapper smoke succeeds', async () => {
     verifyCapability.mockResolvedValue(true);
     verifyScopeProbe.mockResolvedValue(true);
+    const verifyProviderAuth = vi.fn(async () => true);
     const logger = { error: vi.fn(), info: vi.fn() };
 
     await expect(
       runGiglTrackingCapabilityVerification({
         env: { NODE_ENV: 'test' },
         logger,
+        verifyProviderAuth,
       })
     ).resolves.toBe(0);
 
     expect(createClient).toHaveBeenCalledOnce();
     expect(verifyCapability).toHaveBeenCalledOnce();
     expect(verifyScopeProbe).toHaveBeenCalledOnce();
+    expect(verifyProviderAuth).toHaveBeenCalledOnce();
     expect(logger.info).toHaveBeenCalledWith(
       '[gigl-capability] restricted wrapper verified'
     );

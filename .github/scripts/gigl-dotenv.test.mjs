@@ -68,6 +68,24 @@ describe('gigl-dotenv', () => {
     assert.equal(readValue('SPACED=abc # def\n', 'SPACED'), 'abc');
   });
 
+  it('treats only a leading quote as a quoted region, like dotenv', () => {
+    // dotenv 17.4.2: a quote past the first non-whitespace character
+    // is data, so the `#` still starts a comment. Opening quote mode
+    // mid-value would preserve `#ghi` here and hand the poller
+    // different credentials than the preflight validated.
+    assert.equal(
+      readValue('GIGL_PASSWORD=abc"def#ghi\n', 'GIGL_PASSWORD'),
+      'abc"def'
+    );
+    assert.equal(readValue("SQMID=a'b#c\n", 'SQMID'), "a'b");
+    assert.equal(
+      readValue('SPACEDQ=abc "def" # x\n', 'SPACEDQ'),
+      'abc "def"'
+    );
+    assert.equal(readValue('REOPEN="a"b#c\n', 'REOPEN'), '"a"b');
+    assert.equal(readValue('NOHASH=a"b"c\n', 'NOHASH'), 'a"b"c');
+  });
+
   it('supports export prefixes, spaces, and last-assignment-wins', () => {
     assert.equal(readValue('export KEY=off\n', 'KEY'), 'off');
     assert.equal(readValue('KEY = "off" # rotated\n', 'KEY'), 'off');

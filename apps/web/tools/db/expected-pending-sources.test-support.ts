@@ -168,8 +168,8 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20260805091000_enable_least_privilege_gigl_tracking_login.sql',
-    sha256: 'eaaaf55f907b3a98a7300cc2f91a932ea2d974b266298f50e5c5edbcb110027f',
+      'supabase/migrations/20260805091000_converge_gigl_tracking_worker_nologin.sql',
+    sha256: '8fd980583ad2252de0585f723a92f89c2f21ee80dd2ef81353fc99067ad2322f',
   },
   {
     repositoryPath:

@@ -273,4 +273,26 @@ describe('immutable per-SHA checkouts', () => {
     assert.notEqual(missing.status, 0);
     assert.match(missing.stderr, /Immutable checkout .* is missing/);
   });
+
+  it('flips the last BACI_REPO_DIR assignment on duplicates', () => {
+    const { base, remote, shas, staging } = immutableCheckoutFixture({
+      commits: [{}],
+    });
+    assert.equal(
+      runCheckoutScript(provisionScript, [staging, shas[0]]).status,
+      0
+    );
+    // A stale line above the live one: dotenv and the scoped reader
+    // use the last assignment, so the flip must too.
+    const envPath = join(remote, '.env');
+    writeFileSync(
+      envPath,
+      `BACI_REPO_DIR=/stale/checkout\n${readFileSync(envPath, 'utf8')}`
+    );
+    assert.equal(runCheckoutScript(flipScript, [remote, shas[0]]).status, 0);
+    assert.equal(
+      readlinkSync(join(base, 'app-live')),
+      join(base, `app-${shas[0]}`)
+    );
+  });
 });

@@ -80,11 +80,15 @@ fi
 if [ "$cutover_marker" -eq 0 ]; then
   repo_dir="$(
     awk '
+      # Last assignment wins, matching dotenv, the scoped-environment
+      # reader, and the flip script: a duplicate must certify the same
+      # checkout promotion flipped.
       /^BACI_REPO_DIR=/ {
-        sub(/^BACI_REPO_DIR=/, "")
-        print
-        exit
+        value = $0
+        sub(/^BACI_REPO_DIR=/, "", value)
+        have_value = 1
       }
+      END { if (have_value) print value }
     ' "$remote_dir/.env"
   )"
   repo_dir="${repo_dir%\"}"

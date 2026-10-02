@@ -7,7 +7,7 @@ only poller. Three gates protect the cutover, in run order:
    well-formed SHA + canonical crontab installed. Fails until
    `deploy.sh` has run at least once post-merge.
 2. **Exact-SHA + capability smoke** (tracking changesets only):
-   worker checkout equals the pushed commit; live token+hook
+   worker checkout equals the pushed commit; live token+hook+provider
    verification after migrations.
 3. **Cutover latch** (gate bypass for tracking=false pushes):
    `.gigl-capability-smoke-ok` on the worker host, written only by a
@@ -122,7 +122,7 @@ stays usable while the grant is live, so the latch must not certify an
 unreloaded hook); with no token it latches vacuously. The moment GIGL is
 re-enabled, that latch stops validating (by design — a disabled run must
 never certify enabled function), so the first non-tracking push after
-re-enabling BLOCKS until a live smoke re-proves the token+hook.
+re-enabling BLOCKS until a live smoke re-proves the token+hook+provider.
 Procedure:
 
 1. Provision/verify `GIGL_TRACKING_WORKER_TOKEN` in the VPS `.env`

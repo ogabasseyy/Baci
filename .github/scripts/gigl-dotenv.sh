@@ -34,6 +34,7 @@ gigl_dotenv_value() {
       # way dotenv does (a `#` inside quotes is data, not a comment).
       uncommented = ""
       quote = ""
+      seen_data = 0
       for (i = 1; i <= length(value); i++) {
         char = substr(value, i, 1)
         if (quote == dq && char == "\\" && i < length(value)) {
@@ -45,7 +46,16 @@ gigl_dotenv_value() {
           uncommented = uncommented char substr(value, i, 1)
         } else if (quote == "") {
           if (char == "#") break
-          if (char == dq || char == sq) quote = char
+          # Only a LEADING quote opens a quoted region: dotenv treats
+          # a quote past the first non-whitespace character as data
+          # (abc"def#ghi parses to abc"def, comment stripped), so
+          # opening mid-value would preserve a `#` dotenv drops and
+          # hand the poller different bytes than the preflight saw.
+          if (char == dq || char == sq) {
+            if (!seen_data) quote = char
+          } else if (char != " " && char != "\t" && char != "\r") {
+            seen_data = 1
+          }
           uncommented = uncommented char
         } else {
           if (char == quote) quote = ""

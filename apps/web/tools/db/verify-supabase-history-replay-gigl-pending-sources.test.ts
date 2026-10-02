@@ -130,8 +130,8 @@ describe('GIGL tracking pending replay sources', () => {
         '5437d3f7573d673192027f9804142925c16767ce20db4bddb1bcb0e1a454818b',
       ],
       [
-        'supabase/migrations/20260805091000_enable_least_privilege_gigl_tracking_login.sql',
-        'eaaaf55f907b3a98a7300cc2f91a932ea2d974b266298f50e5c5edbcb110027f',
+        'supabase/migrations/20260805091000_converge_gigl_tracking_worker_nologin.sql',
+        '8fd980583ad2252de0585f723a92f89c2f21ee80dd2ef81353fc99067ad2322f',
       ],
       [
         'supabase/migrations/20260805113000_restore_gigl_tracking_postgrest_capability.sql',

@@ -91,6 +91,25 @@ def _check_command(argv0, rest, pre, drift, src=""):
         drift.append("helper-code-loader")
     if base in COPY_TOOLS:
         audit_copy_dest(base, rest, drift, src)
+    elif base == "alias":
+        # Alias definitions hide command dispatch (alias
+        # leak='bash evil' + leak runs with no visible argv0).
+        # Bare alias/name queries are read-only and pass.
+        if any("=" in tok for tok in rest) \
+                and "helper-untrusted-exec" not in drift:
+            drift.append("helper-untrusted-exec")
+    elif base == "shopt":
+        # Only expand_aliases matters: it arms alias
+        # expansion in scripts (off by default). Query forms
+        # (no -s), -o set-o names, and other options pass.
+        flags = [t for t in rest
+                 if re.fullmatch(r"-[a-zA-Z]+", t)]
+        names = [t for t in rest if t not in flags]
+        if "-o" not in flags \
+                and any("s" in f[1:] for f in flags) \
+                and "expand_aliases" in names \
+                and "helper-untrusted-exec" not in drift:
+            drift.append("helper-untrusted-exec")
     elif base in ("at", "batch", "crontab", "watch"):
         # Scheduled/repeated execution with no legitimate
         # helper use (list/query spellings drift too: fail

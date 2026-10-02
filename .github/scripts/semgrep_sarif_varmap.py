@@ -1,13 +1,16 @@
 """Top-level variable resolution for helper audits: last
 literal assignment per name (bash last-wins) with fail-closed
 pops on every unmodellable rebinding (compound, conditional,
-piped, arithmetic, indirect, unset). Returns the map plus the
-stale set (names ever assigned but unresolvable) so dynamic
-command dispatch drifts instead of resolving stale. Cross-file
-(sourced lib) union is moot: lib.sh holds no top-level scalar
-literals.
+piped, arithmetic, indirect, unset). Tracks declare/local/
+typeset -n nameref edges (transitively) so $ref resolves to
+its target; plain assigns to a ref-name write through (the
+edge stands, the target pops). Returns map, stale set, and
+edges. Carry vars never follow edges (they stay literal
+anchors). Residual: non-name targets (arr[0], $dyn) pop.
 """
 import re
+from semgrep_sarif_nameref import (_split_top, follow_nameref,
+                                   nameref_decl)
 from semgrep_sarif_poison import _mapfile_name, _read_names
 from semgrep_sarif_scan import arith_regions, _paren_end
 from semgrep_sarif_shell import (strip_comments, tokenize)
@@ -15,42 +18,6 @@ from semgrep_sarif_shell import (strip_comments, tokenize)
 CARRY_VARS = ("HOME", "GITHUB_WORKSPACE", "RUNNER_TEMP",
               "SCRIPT_DIR", "TMPDIR", "TEMP", "TMP")
 _DECL = r"(?:export|declare|local|readonly|typeset)\s+"
-
-
-def _split_top(text, delims):
-    # Quote-aware split on delimiter strings (backslash-aware).
-    # No paren tracking: ;-fragments inside $(...) always pop
-    # (dynamic) or skip (no assign), so outcomes stay correct.
-    parts, buf, quote = [], "", None
-    i, n = 0, len(text)
-    while i < n:
-        ch = text[i]
-        if quote:
-            buf += ch
-            if ch == "\\" and i + 1 < n:
-                buf += text[i + 1]
-                i += 1
-            elif ch == quote:
-                quote = None
-            i += 1
-        elif ch in ("'", '"'):
-            quote, buf = ch, buf + ch
-            i += 1
-        elif ch == "\\" and i + 1 < n:
-            buf += text[i:i + 2]
-            i += 2
-        else:
-            hit = next((d for d in delims
-                        if text.startswith(d, i)), None)
-            if hit is None:
-                buf += ch
-                i += 1
-            else:
-                parts.append(buf)
-                buf = ""
-                i += len(hit)
-    parts.append(buf)
-    return parts
 
 
 def _single_pipe(seg):
@@ -105,11 +72,24 @@ def _pop_indirect(piece, varmap, stale):
 
 
 def _collect_piece(piece, volatile, indented, carry, varmap,
-                   stale):
+                   stale, namerefs):
     if not piece:
+        return
+    if nameref_decl(piece, not volatile and not indented,
+                    varmap, stale, namerefs):
+        _pop_indirect(piece, varmap, stale)
         return
     m = re.match(r"\s*(?:" + _DECL + r")?([A-Za-z_]\w*)"
                  r"\s*(\+)?=(?![=~])(.*)$", piece)
+    if m and m.group(1) in namerefs:
+        # Write-through: the edge stands, the target's
+        # cached value is now wrong. Null the match so the
+        # name itself is never varmap-set below.
+        tgt = follow_nameref(namerefs[m.group(1)], namerefs,
+                             CARRY_VARS)
+        varmap.pop(tgt, None)
+        stale.add(tgt)
+        m = None
     if m and not volatile and not indented and not m.group(2):
         name, val = m.group(1), m.group(3).strip()
         if len(val) >= 2 and val[0] == val[-1] \
@@ -147,7 +127,10 @@ def _collect_piece(piece, volatile, indented, carry, varmap,
     m = re.match(r"\s*(?:command\s+|builtin\s+)?unset\s+(.*)$",
                  piece)
     if m:
-        for word in m.group(1).split():
+        words = m.group(1).split()
+        unref = any(re.fullmatch(r"-[A-Za-z]*n[A-Za-z]*", w)
+                    for w in words)
+        for word in words:
             if word == "--":
                 continue
             if word.startswith("-"):
@@ -155,6 +138,8 @@ def _collect_piece(piece, volatile, indented, carry, varmap,
             name = re.sub(r"\[.*\]$", "",
                           word.strip("\"'"))
             if re.fullmatch(r"[A-Za-z_]\w*", name):
+                if unref:
+                    namerefs.pop(name, None)
                 varmap.pop(name, None)
                 stale.add(name)
     regions = list(arith_regions(piece))
@@ -174,6 +159,15 @@ def _collect_piece(piece, volatile, indented, carry, varmap,
                                region):
             varmap.pop(a or b, None)
             stale.add(a or b)
+    # Write-through redirect: indirect pops (read/printf -v/
+    # for/unset/arith) landing on a ref-name actually clobber
+    # the target; the edge itself still resolves.
+    for name in [n for n in stale if n in namerefs]:
+        tgt = follow_nameref(namerefs[name], namerefs,
+                             CARRY_VARS)
+        varmap.pop(tgt, None)
+        stale.add(tgt)
+        stale.discard(name)
 
 
 def _collect_vars(raw_lines):
@@ -185,7 +179,7 @@ def _collect_vars(raw_lines):
     # or piped (subshell-lost) assigns. Stale names are
     # returned alongside for the unresolved-command rule.
     carry = "(?:" + "|".join(CARRY_VARS) + ")"
-    varmap, stale = {}, set()
+    varmap, stale, namerefs = {}, set(), {}
     for raw in raw_lines:
         line = strip_comments(raw)
         indented = line[:1] in (" ", "\t")
@@ -194,20 +188,28 @@ def _collect_vars(raw_lines):
             chains = _split_top(seg, ("&&", "||"))
             for ci, piece in enumerate(chains):
                 _collect_piece(piece.strip(), ci > 0 or piped,
-                               indented, carry, varmap, stale)
+                               indented, carry, varmap, stale,
+                               namerefs)
     for _ in range(3):
         for key in varmap:
-            varmap[key] = _resolve(varmap[key], varmap)
-    return varmap, stale
+            varmap[key] = _resolve(varmap[key], varmap,
+                                   namerefs)
+    return varmap, stale, namerefs
 
 
-def _resolve(text, varmap):
+def _resolve(text, varmap, namerefs=None):
     # Plain $V and ${V} only; ${V-op...} expansions keep their
-    # literal text (fail closed). Single-quote imprecision is
-    # fail-closed: resolving a literal can only add markers.
+    # literal text (fail closed). Nameref names follow their
+    # edges first, so $ref surfaces the target's text.
+    # Single-quote imprecision is fail-closed: resolving a
+    # literal can only add markers.
+    refs = namerefs or {}
+
     def sub(m):
-        name = m.group(2)
+        name = follow_nameref(m.group(2), refs, CARRY_VARS)
         if name not in varmap:
+            if name != m.group(2):
+                return "$" + name
             return m.group(0)
         if m.group(1):
             if not m.group(3):

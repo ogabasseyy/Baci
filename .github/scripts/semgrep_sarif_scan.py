@@ -177,6 +177,23 @@ def arith_regions(text):
     return regions
 
 
+def github_cmdfile_kind(target):
+    # "env"/"path" when a redirect/copy target is a runner
+    # command file ($GITHUB_ENV/$GITHUB_PATH, braced or bare;
+    # :-style defaults still land in the file when the var is
+    # set, which runners always do). GITHUB_ENVY and friends
+    # fail the boundary.
+    t = target.strip().strip("\"'")
+    m = re.fullmatch(r"\$(GITHUB_(ENV|PATH))", t)
+    if m:
+        return m.group(2).lower()
+    m = re.fullmatch(r"\$\{GITHUB_(ENV|PATH)([^}]*)\}", t)
+    if m and (m.group(2) == ""
+              or m.group(2)[0] in ":}-+=?#%/["):
+        return m.group(1).lower()
+    return None
+
+
 def redirect_targets(text):
     # Output-redirect targets outside quotes: >, >>, >|, &>,
     # &>>, <>, >&file. Inputs (<), heredocs (<<), fd dups

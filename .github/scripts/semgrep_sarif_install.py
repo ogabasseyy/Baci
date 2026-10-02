@@ -7,7 +7,7 @@ import re
 from semgrep_sarif_poison import _read_names
 from semgrep_sarif_scan import redirect_targets
 from semgrep_sarif_shell import tokenize
-from semgrep_sarif_varmap import _split_top
+from semgrep_sarif_nameref import _split_top
 
 MUSE_DEST_MARK = "install_dir}/muse"
 WANT_SOURCE = '"${tmp_bin}"'
@@ -106,13 +106,44 @@ def _rebind_names(piece):
                             n.strip("\"'"))]
 
 
+def _nameref_edges(text):
+    # declare/local/typeset -n name=target pairs on one
+    # piece (quote-aware values; +n drops). Writes through
+    # the ref hit the target, so a ref to a frozen name is
+    # itself frozen.
+    dm = re.match(r"\s*(declare|local|typeset)\s+(.*)$",
+                  text)
+    if not dm:
+        return []
+    words = [w for w in _split_top(dm.group(2), (" ", "\t"))
+             if w.strip()]
+    flags = [w for w in words
+             if re.fullmatch(r"[+-][A-Za-z]+", w)]
+    if not any("n" in w[1:] for w in flags):
+        return []
+    if any(w.startswith("+") and "n" in w[1:]
+           for w in flags):
+        return []
+    edges = []
+    for word in words:
+        if word in flags or "=" not in word:
+            continue
+        name, tgt = word.split("=", 1)
+        name = name.strip("\"'")
+        tgt = tgt.strip("\"'")
+        if re.fullmatch(r"[A-Za-z_]\w*", name or "") \
+                and re.fullmatch(r"[A-Za-z_]\w*", tgt or ""):
+            edges.append((name, tgt))
+    return edges
+
+
 def audit_tmp_aliases(installer):
     # Names whose value derives from $tmp_bin (the frozen
     # artifact path): direct assigns anywhere in the file plus
-    # read/printf -v/for rebinds, closed transitively. Only
-    # $-references count (a bare `replacement` is a literal
-    # filename). got_sha joins textually but is never written
-    # post-verify: harmless.
+    # read/printf -v/for rebinds and -n nameref edges, closed
+    # transitively. Only $-references count (a bare
+    # `replacement` is a literal filename). got_sha joins
+    # textually but is never written post-verify: harmless.
     frozen = {"tmp_bin"}
     changed = True
     while changed:
@@ -129,6 +160,11 @@ def audit_tmp_aliases(installer):
                             and m.group(1) not in frozen:
                         frozen.add(m.group(1))
                         changed = True
+                    for name, tgt in _nameref_edges(text):
+                        if tgt in frozen \
+                                and name not in frozen:
+                            frozen.add(name)
+                            changed = True
                     if _refs_frozen(text, frozen):
                         for name in _rebind_names(text):
                             if name not in frozen:

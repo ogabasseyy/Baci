@@ -376,5 +376,32 @@ t cmp-single-bracket-fp 0 "" happy.sarif "$I${FS}if [[ \"\${got_sha}\"${FS}r${FS
 t cmp-sha256c-fp 0 "" happy.sarif "$I${FS}if [[ \"\${got_sha}\"${FS}r${FS}if [[ \"\${got_sha}\" != \"\${want_sha}\" ]]; then${FS}if false; then${RS}$I${FS}got_sha=${FS}a${FS}sha256sum -c \"\${SCRIPT_DIR}/checksums.txt\""
 t cmp-or-true 1 "muse-installer-no-compare" happy.sarif "$I${FS}if [[ \"\${got_sha}\"${FS}r${FS}if [[ \"\${got_sha}\" != \"\${want_sha}\" ]]; then${FS}if false; then${RS}$I${FS}got_sha=${FS}a${FS}sha256sum -c x || true"
 
+# --- runner command files (Codex P1: GITHUB_ENV/GITHUB_PATH writes) ---
+t cmdf-env-poison 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo \"BASH_ENV=/tmp/evil\" >> \"\$GITHUB_ENV\""
+t cmdf-env-path 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo \"PATH=/evil\" >> \"\$GITHUB_ENV\""
+t cmdf-env-benign-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo \"MY_VAR=hello\" >> \"\$GITHUB_ENV\""
+t cmdf-env-cat 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cat staged.txt >> \"\$GITHUB_ENV\""
+t cmdf-env-cmdsub 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo \"\$(id)\" >> \"\$GITHUB_ENV\""
+t cmdf-env-tee 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}tee \"\$GITHUB_ENV\" < data.txt"
+t cmdf-env-cp 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cp staged.txt \"\$GITHUB_ENV\""
+t cmdf-env-hd 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cat <<EOF >> \"\$GITHUB_ENV\"${RS}$H${FS}cat <<EOF >>${FS}a${FS}BASH_ENV=/evil${RS}$H${FS}BASH_ENV=/evil${FS}a${FS}EOF"
+t cmdf-path-rel 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo rel/bin >> \"\$GITHUB_PATH\""
+t cmdf-path-abs-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo /opt/bin >> \"\$GITHUB_PATH\""
+t cmdf-path-var-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo \"\$HOME/bin\" >> \"\$GITHUB_PATH\""
+t cmdf-path-empty 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo >> \"\$GITHUB_PATH\""
+
+# --- hidden dispatch (Codex P1: alias/shopt expand_aliases) ---
+t alias-def 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}alias leak='bash /tmp/evil'"
+t alias-query-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}alias leak"
+t shopt-expand 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}shopt -s expand_aliases"
+t shopt-query-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}shopt expand_aliases"
+t shopt-other-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}shopt -s nullglob"
+
+# --- nameref indirection (Codex P1: declare -n blinds secret/tmp rules) ---
+t nameref-secret 1 "helper-secret-expand" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}declare -n ref=GH_TOKEN${RS}$H${FS}declare -n ref=GH_TOKEN${FS}a${FS}echo \"\$ref\""
+t nameref-clean-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}declare -n ref=MY_VAR${RS}$H${FS}declare -n ref=MY_VAR${FS}a${FS}echo \"\$ref\""
+t toctou-alias-nameref 1 "muse-installer-toctou" happy.sarif "$I${FS}got_sha=${FS}a${FS}declare -n replacement=tmp_bin${RS}$I${FS}declare -n replacement=tmp_bin${FS}a${FS}cat /tmp/evil > \"\${replacement}\""
+t toctou-alias-nameref-inert-fp 0 "" happy.sarif "$I${FS}got_sha=${FS}a${FS}declare -n replacement=tmp_bin"
+
 printf '\nhardening suite: %d passed, %d failed%s\n' "$pass" "$fail" "${fail_names:+ ($fail_names)}"
 [[ "$fail" -eq 0 ]]

@@ -14,6 +14,8 @@ from semgrep_sarif_interp import _check_command
 from semgrep_sarif_pins import _is_home_write
 from semgrep_sarif_poison import _base as _varname
 from semgrep_sarif_poison import _check_poison_assign
+from semgrep_sarif_poison import (audit_github_cmdfile_body,
+                                  audit_github_cmdfile_writes)
 from semgrep_sarif_scan import (arith_regions, extract_subshells,
                                 redirect_targets,
                                 subscript_cmdsubst, _write_zone)
@@ -229,6 +231,7 @@ def _audit_line(line, drift, src="", stale=frozenset()):
                 or re.match(r"^\d*[<>]", argv0):
             continue
         pre = words[:len(words) - len(rest) - 1]
+        audit_github_cmdfile_writes(line, drift)
         _check_poison_assign(pre, argv0, rest, drift)
         _check_command(argv0, list(rest), list(pre), drift,
                        src)
@@ -241,14 +244,19 @@ def _audit_shell_file(path, drift):
     except OSError:
         drift.append("helper-unreadable")
         return
-    varmap, stale = _collect_vars(raw)
+    varmap, stale, namerefs = _collect_vars(raw)
     src = os.path.basename(path)
-    code, bodies = _strip_heredocs(raw)
+    code, bodies, env_bodies = _strip_heredocs(raw)
     for line in logical_lines(code):
-        _audit_line(_resolve(line, varmap), drift, src, stale)
+        _audit_line(_resolve(line, varmap, namerefs), drift,
+                    src, stale)
     for line in bodies:
-        _audit_expansions(_resolve(line, varmap), drift, src,
-                           stale)
+        _audit_expansions(_resolve(line, varmap, namerefs),
+                           drift, src, stale)
+    for kind, quoted, line in env_bodies:
+        audit_github_cmdfile_body(
+            kind, _resolve(line, varmap, namerefs), drift,
+            quoted)
 
 
 def invoked_shell_refs(raw):

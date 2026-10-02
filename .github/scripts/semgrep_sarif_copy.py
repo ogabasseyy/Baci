@@ -8,10 +8,15 @@ flags (see semgrep_sarif_tar), sed programs (see
 semgrep_sarif_sed), ed/ex (denied:
 unseen stdin scripts with shell escapes), and link sources
 (a trusted/workspace/relative source aliases later writes
-into the protected tree). Residual: GITHUB_ENV/GITHUB_PATH
-writes need value-sensitive rules (follow-up).
+into the protected tree). Copy-class targets that are the
+Actions command files (cp/mv/tee/dd into $GITHUB_ENV or
+$GITHUB_PATH) replace the whole file with unseen bytes, so
+they drift value-insensitively (helper-env-poison);
+shell redirections split by writer (see
+semgrep_sarif_poison).
 """
 from semgrep_sarif_install import _install_operands
+from semgrep_sarif_scan import github_cmdfile_kind
 from semgrep_sarif_scan import _write_zone
 from semgrep_sarif_sed import audit_sed_programs
 from semgrep_sarif_tar import audit_tar_exec
@@ -219,6 +224,10 @@ def audit_copy_dest(base, rest, drift, src=""):
     if "workspace" in zones \
             and "helper-workspace-write" not in drift:
         drift.append("helper-workspace-write")
+    kinds = {github_cmdfile_kind(t) for t in targets}
+    kinds.discard(None)
+    if kinds and "helper-env-poison" not in drift:
+        drift.append("helper-env-poison")
 
 
 def audit_find_output(rest, drift):
@@ -235,3 +244,6 @@ def audit_find_output(rest, drift):
             if zone == "workspace" \
                     and "helper-workspace-write" not in drift:
                 drift.append("helper-workspace-write")
+            if github_cmdfile_kind(rest[i + 1]) is not None \
+                    and "helper-env-poison" not in drift:
+                drift.append("helper-env-poison")

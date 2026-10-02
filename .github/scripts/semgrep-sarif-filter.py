@@ -150,6 +150,7 @@ def main():
         run["results"] = kept
     with open("semgrep.sarif", "w") as fh:
         json.dump(sarif, fh)
+    return 0
 
 
 if __name__ == "__main__":

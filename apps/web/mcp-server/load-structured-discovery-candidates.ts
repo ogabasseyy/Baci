@@ -27,12 +27,13 @@ type LoadStructuredDiscoveryCandidatesInput = {
   intent?: McpDiscoveryIntent;
   brand?: string;
   category?: string;
+  sort?: string;
   merchantId: string;
   supabase: SupabaseClient;
   semanticSearch?: (query: string, offset: number) => Promise<string[]>;
 };
 
-type BrowseFilters = { brand?: string; category?: string };
+type BrowseFilters = { brand?: string; category?: string; sort?: string };
 
 function likeContains(value: string) {
   return `%${value.replace(/[\\%_]/g, '\\$&')}%`;
@@ -124,13 +125,17 @@ async function loadSemanticIds(
 async function loadBrowseRows(merchantId: string, supabase: SupabaseClient, filters: BrowseFilters) {
   // The browse window is an arbitrary UUID slice, so brand/category narrow it
   // server-side with the same substring semantics as post-hydration filters
-  // instead of filtering after the cap.
+  // instead of filtering after the cap. A newest sort orders server-side too:
+  // sorting the capped slice afterward would hide newer rows past the cap.
   const browseQuery = (columns: string) => {
     let query = supabase.from('products').select(columns)
       .eq('merchant_id', merchantId)
       .eq('status', 'active');
     if (filters.brand) query = query.ilike('brand', likeContains(filters.brand));
     if (filters.category) query = query.ilike('category', likeContains(filters.category));
+    if (filters.sort === 'newest') {
+      return query.order('created_at', { ascending: false }).order('id', { ascending: true });
+    }
     return query.order('id', { ascending: true });
   };
   const products: McpSearchProductRow[] = [];
@@ -174,6 +179,7 @@ export async function loadStructuredDiscoveryCandidates({
   intent,
   brand,
   category,
+  sort,
   merchantId,
   supabase,
   semanticSearch,
@@ -183,7 +189,7 @@ export async function loadStructuredDiscoveryCandidates({
   semanticUnavailable: boolean;
 }> {
   if (!query && (!factQuery || factQuery === '(a & !a)')) {
-    const result = await loadBrowseRows(merchantId, supabase, { brand, category });
+    const result = await loadBrowseRows(merchantId, supabase, { brand, category, sort });
     return { products: result.products, truncated: result.truncated, semanticUnavailable: false };
   }
 

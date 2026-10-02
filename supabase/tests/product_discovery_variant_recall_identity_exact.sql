@@ -83,6 +83,23 @@ BEGIN
   ] THEN
     RAISE EXCEPTION 'separator-colliding models must sink below the exact match, got %', recall_ids;
   END IF;
+  SELECT array_agg(product_id ORDER BY rank) INTO recall_ids
+  FROM public.search_product_variant_recall(
+    'cb58d110-0000-4000-8000-000000000211',
+    '[{"key":"storage_gb","operator":"eq","value":256,"branch":0}]'::jsonb,
+    10,
+    0,
+    '[]'::jsonb,
+    '[]'::jsonb,
+    'acm',
+    'phone'
+  ) WITH ORDINALITY AS ranked(product_id, attributes, rank);
+  IF recall_ids IS DISTINCT FROM ARRAY[
+    'cb58d110-0000-4000-8000-000000000661'::uuid,
+    'cb58d110-0000-4000-8000-000000000662'::uuid
+  ] THEN
+    RAISE EXCEPTION 'partial catalog filters must narrow by substring before the cap, got %', recall_ids;
+  END IF;
 END;
 $$;
 ROLLBACK;

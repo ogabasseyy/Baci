@@ -263,4 +263,17 @@ describe('loadStructuredDiscoveryCandidates', () => {
     expect(fixture.queryCalls[0]?.calls).toContainEqual(['ilike', 'brand', '%S\\%ms\\_ng%']);
     expect(fixture.queryCalls[0]?.calls).toContainEqual(['ilike', 'category', '%Phones%']);
   });
+
+  it('orders the browse window newest-first before the cap when requested', async () => {
+    const newest = setup({ lexicalPages: [[]], products: productRows(['p-1']) });
+    await loadStructuredDiscoveryCandidates({
+      merchantId: 'merchant-3', supabase: newest.supabase, sort: 'newest',
+    });
+    expect(newest.queryCalls[0]?.calls).toContainEqual(['order', 'created_at', { ascending: false }]);
+    expect(newest.queryCalls[0]?.calls).toContainEqual(['order', 'id', { ascending: true }]);
+    const stable = setup({ lexicalPages: [[]], products: productRows(['p-1']) });
+    await loadStructuredDiscoveryCandidates({ merchantId: 'merchant-3', supabase: stable.supabase });
+    expect(stable.queryCalls[0]?.calls).toContainEqual(['order', 'id', { ascending: true }]);
+    expect(stable.queryCalls[0]?.calls).not.toContainEqual(['order', 'created_at', { ascending: false }]);
+  });
 });

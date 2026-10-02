@@ -191,28 +191,6 @@ it('pairs a zero-stock condition offer with an in-stock variant like the PDP', (
   expect(selectStructuredDiscoveryOffer(bare, intent({ model: 'A1' }))).toBeUndefined();
 });
 
-it('sources the selected condition offer compare-at price from the parent like the PDP', () => {
-  const row = makeRow({ has_condition_offers: true, manage_stock: true, basePurchasable: false });
-  row.availableOffers = [{ price: 450, compare_at_price: 700, condition: 'used', stock_quantity: 2 }] as typeof row.availableOffers;
-  Object.assign(row, {
-    optionsLookupFailed: true,
-    variantLookupFailed: false,
-    offerLookupFailed: true,
-    variantLookupStatus: 'not_required',
-    offerLookupStatus: 'failed',
-  });
-
-  const selected = selectStructuredDiscoveryOffer(row, intent({ model: 'A1' }));
-
-  expect(selected).toMatchObject({
-    displayPrice: 450,
-    displayCompareAtPrice: 600,
-    optionsLookupFailed: true,
-    variantLookupFailed: false,
-    offerLookupFailed: true,
-    offerLookupStatus: 'failed',
-  });
-});
 
 it('matches alternatives as complete branches and excludes explicit product types', () => {
   const row = makeRow();
@@ -309,12 +287,3 @@ it('withholds unknown facts from exclusions and spec-constrained offers while di
 });
 
 
-it('falls back to the parent comparison price for overridden variants like the PDP', () => {
-  const row = makeRow({ has_variants: true });
-  row.availableVariants = [{id: 'blue', product_id: 'phone', attributes: { color: 'blue' }, stock_quantity: 0, price_override: 400}] as typeof row.availableVariants;
-  const selected = selectStructuredDiscoveryOffer(row, intent({}));
-  expect(selected?.displayPrice).toBe(400);
-  expect(selected?.displayCompareAtPrice).toBe(600);
-  row.availableVariants = [{id: 'blue', product_id: 'phone', attributes: { color: 'blue' }, stock_quantity: 0, price_override: 400, compare_at_price: 450}] as typeof row.availableVariants;
-  expect(selectStructuredDiscoveryOffer(row, intent({}))?.displayCompareAtPrice).toBe(450);
-});

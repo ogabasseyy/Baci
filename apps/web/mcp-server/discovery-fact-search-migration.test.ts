@@ -153,6 +153,8 @@ it('ranks variant recall by joint branch verdicts before attribute tiers', () =>
   expect(recall).toContain('discovery_identity_matcher_normalize');
   expect(recall).not.toContain('discovery_identity_normalize(');
   expect(recall).toContain('p.manage_stock IS FALSE');
+  expect(recall).toContain('pg_catalog.strpos(');
+  expect(recall).not.toContain('pg_catalog.position(');
   expect(recall).toContain('pg_catalog.translate(');
   expect(recall).not.toContain('pg_catalog.lower(');
   expect(recall).toContain('complete_alternative_count');

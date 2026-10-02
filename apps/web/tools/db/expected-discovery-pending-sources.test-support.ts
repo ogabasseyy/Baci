@@ -67,7 +67,7 @@ export const EXPECTED_DISCOVERY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261001150000_variant_recall_identity_rank.sql',
-    sha256: 'c4fc386c8e8fbdfb68513f7248a84809f63f91f4808ff33e474de1274d2551fc',
+    sha256: 'd3362b6537fb1210af3701b8a423af8f8c815d7062d598ef4c508e34e74c62e5',
   },
   {
     repositoryPath:

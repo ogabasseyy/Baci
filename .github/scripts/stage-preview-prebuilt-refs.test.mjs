@@ -88,18 +88,49 @@ test('skips absolute, escaping, internal, and protected references', () => {
   }
 });
 
-test('fails closed on missing references and missing output', () => {
+test('drops phantom references from the shipped maps', () => {
+  const configRel = '.vercel/output/functions/a.func/.vc-config.json';
+  const root = layout({
+    [configRel]: JSON.stringify({
+      filePathMap: {
+        '/gone.js': 'apps/web/.next/node_modules/gone-abc123',
+        '/ok.js': 'node_modules/ok/index.js',
+      },
+    }),
+    'node_modules/ok/index.js': 'ok',
+  });
+  try {
+    const stage = join(root, 'stage');
+    const run = spawnSync('node', [SCRIPT, root, stage], { encoding: 'utf8' });
+    assert.equal(run.status, 0, run.stderr);
+    const rewritten = JSON.parse(readFileSync(join(root, configRel), 'utf8'));
+    assert.deepEqual(rewritten.filePathMap, {
+      '/ok.js': 'node_modules/ok/index.js',
+    });
+    const manifest = JSON.parse(
+      readFileSync(join(stage, '.preview-refs-manifest.json'), 'utf8')
+    );
+    assert.deepEqual(manifest.refs, ['node_modules/ok/index.js']);
+    assert.deepEqual(manifest.skipped, [
+      { value: 'apps/web/.next/node_modules/gone-abc123', reason: 'missing' },
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('fails closed when everything is phantom or output is missing', () => {
   const root = layout({
     '.vercel/output/functions/a.func/.vc-config.json': JSON.stringify({
       filePathMap: { '/gone.js': 'node_modules/gone/index.js' },
     }),
   });
   try {
-    const missing = spawnSync('node', [SCRIPT, root, join(root, 's1')], {
+    const allPhantom = spawnSync('node', [SCRIPT, root, join(root, 's1')], {
       encoding: 'utf8',
     });
-    assert.equal(missing.status, 1);
-    assert.match(missing.stderr, /missing from the source tree/);
+    assert.equal(allPhantom.status, 1);
+    assert.match(allPhantom.stderr, /every filePathMap reference is missing/);
     const empty = layout({});
     try {
       const noOutput = spawnSync('node', [SCRIPT, empty, join(empty, 's2')], {

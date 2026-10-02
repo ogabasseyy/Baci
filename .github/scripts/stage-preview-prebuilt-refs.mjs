@@ -13,7 +13,10 @@
 // Layout rule mirrors the CLI: absolute values and values escaping the root
 // are skipped (the CLI rejects them too). References already inside
 // `.vercel/output` ship via the output artifact and are skipped here.
-// Missing references fail closed: the CLI would ENOENT on them.
+// Only staged values stay in the shipped filePathMaps: missing (phantom)
+// and protected values are dropped so the CLI never re-adds them (it would
+// ENOENT on the former and upload the latter). Fails closed only when
+// EVERYTHING is phantom, which smells like a systematically wrong base.
 // These staging rules are fail-fast UX, not the security boundary: the
 // build job is untrusted, so the deploy-side materializer re-enforces them.
 //
@@ -51,7 +54,9 @@ mkdirSync(stage, { recursive: true });
 
 const staged = [];
 const skipped = [];
-const missing = [];
+const stagedValues = new Set();
+let stringValues = 0;
+let missingValues = 0;
 
 for (const configPath of vcConfigs(outputDir)) {
   let config;
@@ -63,8 +68,10 @@ for (const configPath of vcConfigs(outputDir)) {
   }
   const maps = config?.filePathMap;
   if (!maps || typeof maps !== 'object') continue;
-  for (const value of Object.values(maps)) {
+  const kept = {};
+  for (const [key, value] of Object.entries(maps)) {
     if (typeof value !== 'string' || value === '') continue;
+    stringValues += 1;
     if (isAbsolute(value)) {
       skipped.push({ value, reason: 'absolute' });
       continue;
@@ -96,20 +103,30 @@ for (const configPath of vcConfigs(outputDir)) {
       srcStat = null;
     }
     if (!srcStat?.isFile()) {
-      missing.push(value);
+      // Phantom reference (e.g. transient build files): the CLI would
+      // ENOENT re-adding it, so drop it from the shipped map instead of
+      // failing the whole build. The guardrail below catches a
+      // systematically wrong base, where EVERYTHING is phantom.
+      skipped.push({ value, reason: 'missing' });
+      missingValues += 1;
       continue;
     }
     const dest = join(stage, rel);
     mkdirSync(dirname(dest), { recursive: true });
     copyFileSync(abs, dest);
     staged.push(posixRel);
+    stagedValues.add(value);
+    kept[key] = value;
+  }
+  if (Object.keys(kept).length !== Object.keys(maps).length) {
+    config.filePathMap = kept;
+    writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
   }
 }
 
-if (missing.length > 0) {
+if (stringValues > 0 && stagedValues.size === 0 && missingValues === stringValues) {
   console.error(
-    `error: ${missing.length} referenced file(s) missing from the source tree:\n` +
-      [...new Set(missing)].map((v) => `  ${v}`).join('\n')
+    'error: every filePathMap reference is missing; refusing to ship empty maps (wrong base?)'
   );
   process.exit(1);
 }

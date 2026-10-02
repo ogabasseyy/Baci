@@ -37,6 +37,7 @@ const orderRow = {
       price: 950000,
       variant_name: null,
       condition: null,
+      item_description: 'Desert titanium, sealed box',
     },
   ],
 };
@@ -82,7 +83,10 @@ describe('buildManualOrderDocumentPdfInput', () => {
 
     expect(receiptOrder.balance).toBe(0);
     expect(receiptOrder.items).toEqual([
-      expect.objectContaining({ product_name: 'iPhone 16 Pro Max' }),
+      expect.objectContaining({
+        product_name: 'iPhone 16 Pro Max',
+        description: 'Desert titanium, sealed box',
+      }),
     ]);
     expect(receiptOrder.virtual_account).toEqual({
       account_number: '9876543210',

@@ -96,15 +96,10 @@ export function isManualOrderDocumentAvailable(
 }
 
 export function isReceiptEligible(input: DocumentEligibilityInput) {
-  if (normalizePaymentStatus(input.paymentStatus) !== 'paid') {
-    return false;
-  }
-
-  if (isImportedHistoricalOrder(input)) {
-    return true;
-  }
-
-  if (input.recordedByUserId) {
+  // A fully-covered manual order is substantively paid even under a non-paid
+  // label (e.g. an over-amount partial): mirror the sender/trigger
+  // normalization so the archive agrees with the emailed document.
+  if (input.recordedByUserId && !isImportedHistoricalOrder(input)) {
     return (
       isManualOrderDocumentAvailable(input) &&
       input.total != null &&
@@ -114,6 +109,14 @@ export function isReceiptEligible(input: DocumentEligibilityInput) {
       Number.isFinite(Number(input.amountPaid)) &&
       Number(input.amountPaid) >= Number(input.total)
     );
+  }
+
+  if (normalizePaymentStatus(input.paymentStatus) !== 'paid') {
+    return false;
+  }
+
+  if (isImportedHistoricalOrder(input)) {
+    return true;
   }
 
   return RECEIPT_READY_STATUSES.has(
@@ -230,6 +233,16 @@ export async function getStorefrontAccountDocumentData({
 
   const paymentStatus = normalizePaymentStatus(order.payment_status);
   const shippingStatus = normalizeShippingStatus(order.shipping_status);
+  // Treat fully-covered manual orders as paid for Paystack DVA display: the
+  // balance was received even under a non-paid label.
+  const paymentReceived =
+    paymentStatus === 'paid' ||
+    (order.recorded_by_user_id != null &&
+      order.total != null &&
+      order.amount_paid != null &&
+      Number.isFinite(Number(order.total)) &&
+      Number.isFinite(Number(order.amount_paid)) &&
+      Number(order.amount_paid) >= Number(order.total));
   const currentDocumentKind = getCurrentDocumentKind({
     paymentStatus: order.payment_status,
     shippingStatus: order.shipping_status,
@@ -254,11 +267,10 @@ export async function getStorefrontAccountDocumentData({
       ) as StorefrontAccountDocumentPaymentAccountRow[],
       new Date(),
       {
-        allowExpiredPaystackAccount: paymentStatus === 'paid',
-        preferredPaystackAccountNumber:
-          paymentStatus === 'paid'
-            ? getPaystackDvaAccountNumberFromTransactions(transactionRows)
-            : null,
+        allowExpiredPaystackAccount: paymentReceived,
+        preferredPaystackAccountNumber: paymentReceived
+          ? getPaystackDvaAccountNumberFromTransactions(transactionRows)
+          : null,
       }
     ),
     taxRows: (taxResult.data ||

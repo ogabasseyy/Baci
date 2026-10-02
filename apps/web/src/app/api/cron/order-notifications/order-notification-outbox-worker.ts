@@ -108,10 +108,35 @@ async function markSent(
   row: ClaimedOrderNotificationOutboxRow,
   messageId: string | undefined
 ) {
+  // Re-read: the sender may have snapshotted dispatch metadata (e.g. the
+  // sent document kind) after this row was claimed; merging the message ID
+  // into the live value preserves it instead of clobbering the row with
+  // the stale claim-time copy.
+  const { data: current, error: readError } = await supabase
+    .from('order_notification_outbox')
+    .select('metadata')
+    .match({ id: row.id, locked_by: row.claim_owner, status: 'processing' })
+    .maybeSingle();
+  if (readError || !current) {
+    logger.error({
+      message: 'Failed to re-read order notification outbox row',
+      outboxId: row.id,
+      error: readError,
+    });
+    throw new OutboxStatusUpdateError(row.id, {
+      cause: readError ?? new Error('order notification claim was lost'),
+    });
+  }
+  const liveMetadata =
+    current.metadata &&
+    typeof current.metadata === 'object' &&
+    !Array.isArray(current.metadata)
+      ? (current.metadata as Record<string, unknown>)
+      : {};
   await updateOutboxStatus(supabase, row, {
     last_error: null,
     metadata: {
-      ...(row.metadata ?? {}),
+      ...liveMetadata,
       ...(messageId ? { message_id: messageId } : {}),
     },
     sent_at: new Date().toISOString(),

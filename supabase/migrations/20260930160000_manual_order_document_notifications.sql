@@ -32,7 +32,11 @@ BEGIN
     OR COALESCE(v_order.shipping_status, '') IN ('cancelled', 'canceled', 'returned', 'failed')
     OR NOT EXISTS (SELECT 1 FROM public.order_items AS oi WHERE oi.order_id = v_order.id)
   THEN RETURN; END IF;
-  IF v_order.payment_status = 'paid' AND v_order.amount_paid >= v_order.total THEN
+  -- A fully-covered balance is substantively paid even when staff left a
+  -- non-paid label (e.g. an over-amount partial): queue the receipt the
+  -- customer is owed, never a zero-balance invoice.
+  IF v_order.amount_paid >= v_order.total
+    AND v_order.payment_status IN ('paid', 'unpaid', 'pending', 'partially_paid') THEN
     v_event := 'manual_order_receipt';
   ELSIF v_order.payment_status IN ('unpaid', 'pending', 'partially_paid') THEN
     v_event := 'manual_order_invoice';
@@ -176,9 +180,11 @@ BEGIN
     OR NOT EXISTS (SELECT 1 FROM public.order_items AS oi WHERE oi.order_id = v_order.id)
     OR v_order.total IS NULL OR v_order.amount_paid IS NULL
     OR (v_notification.event_type = 'manual_order_receipt'
-      AND (v_order.payment_status IS DISTINCT FROM 'paid' OR v_order.amount_paid < v_order.total))
+      AND (COALESCE(v_order.payment_status, '') NOT IN ('paid', 'unpaid', 'pending', 'partially_paid')
+        OR v_order.amount_paid < v_order.total))
     OR (v_notification.event_type = 'manual_order_invoice'
-      AND COALESCE(v_order.payment_status, '') NOT IN ('unpaid', 'pending', 'partially_paid'))
+      AND (COALESCE(v_order.payment_status, '') NOT IN ('unpaid', 'pending', 'partially_paid')
+        OR v_order.amount_paid >= v_order.total))
   THEN RETURN jsonb_build_object('status', 'skipped'); END IF;
 
   -- Bind by staff-selected customer identity, not email equality: the order's

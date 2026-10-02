@@ -499,6 +499,36 @@ describe('send manual order document', () => {
     expect(db.rpc).not.toHaveBeenCalled();
   });
 
+  it('treats a fully-covered partial balance as a paid receipt', async () => {
+    const db = database({
+      payment_status: 'partially_paid',
+      amount_paid: 950000,
+      payment_method: 'invoice',
+    });
+    await sendManualOrderDocument({ supabase: db.client, row });
+    const message = sendEmail.mock.calls[0][0];
+    expect(message.subject).toBe('Your receipt is ready - #ORD-42');
+    const pdf = Buffer.from(message.attachments[0].content, 'base64').toString(
+      'latin1'
+    );
+    expect(pdf).toContain('RECEIPT');
+    expect(pdf).not.toContain('PROFORMA');
+  });
+
+  it('skips an obsolete invoice if the partial balance is now covered', async () => {
+    const db = database({
+      payment_status: 'partially_paid',
+      amount_paid: 950000,
+    });
+    expect(
+      await sendManualOrderDocument({
+        supabase: db.client,
+        row: { ...row, event_type: 'manual_order_invoice' },
+      })
+    ).toMatchObject({ status: 'skipped' });
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
   it('never promotes Ogabassey app links for another merchant', async () => {
     const db = database(
       {},

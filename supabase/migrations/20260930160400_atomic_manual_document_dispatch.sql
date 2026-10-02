@@ -5,9 +5,10 @@
 -- comparing, so a payment, contact correction, or item edit landing
 -- mid-dispatch aborts instead of sending a stale document. The snapshot
 -- covers every order-row input the renderer reads (identity, money
--- breakdown, notes, address, dates, and item contents) plus the manual-order
--- origin fields: a same-total money redistribution, address correction, or
--- eligibility change (recorded_by cleared, import/external set) aborts too.
+-- breakdown, notes, address, dates, and item contents including
+-- descriptions) plus the manual-order origin fields: a same-total money
+-- redistribution, address correction, or eligibility change
+-- (recorded_by cleared, import/external set) aborts too.
 -- The rendered document kind is snapshotted into the row metadata so claim
 -- previews keep showing the sent kind after later payments. Merchant-profile
 -- and ledger rows are outside the snapshot; ledger rows derive from the
@@ -71,7 +72,8 @@ BEGIN
   WHERE oi.order_id = v_order.id;
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
     'id', oi.id, 'name', oi.name, 'quantity', oi.quantity, 'price', oi.price,
-    'variant_name', oi.variant_name, 'condition', oi.condition
+    'variant_name', oi.variant_name, 'condition', oi.condition,
+    'item_description', oi.item_description
   ) ORDER BY oi.id), '[]'::jsonb) INTO v_items
   FROM public.order_items AS oi
   WHERE oi.order_id = v_order.id;

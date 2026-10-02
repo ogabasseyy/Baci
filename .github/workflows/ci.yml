@@ -413,6 +413,7 @@ jobs:
           .github/scripts/preview-workflow-redact-contract.test.mjs
           .github/scripts/preview-env-turbo-cache.test.mjs
           .github/scripts/stage-preview-prebuilt-refs.test.mjs
+          .github/scripts/materialize-preview-prebuilt-refs.test.mjs
           .github/scripts/preview-deploy-run.test.mjs
       - name: Verify Quiz Assets
         if: needs.changes.outputs.web == 'true' || needs.changes.outputs.quiz_db == 'true'

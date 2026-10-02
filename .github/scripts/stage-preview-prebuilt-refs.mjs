@@ -14,6 +14,8 @@
 // are skipped (the CLI rejects them too). References already inside
 // `.vercel/output` ship via the output artifact and are skipped here.
 // Missing references fail closed: the CLI would ENOENT on them.
+// These staging rules are fail-fast UX, not the security boundary: the
+// build job is untrusted, so the deploy-side materializer re-enforces them.
 //
 // Usage: stage-preview-prebuilt-refs.mjs [project-root] [staging-dir]
 // Defaults: root = cwd, staging = <root>/.preview-refs-stage (recreated).
@@ -76,6 +78,15 @@ for (const configPath of vcConfigs(outputDir)) {
     const posixRel = rel.split(sep).join('/');
     if (posixRel === '.vercel/output' || posixRel.startsWith('.vercel/output/')) {
       skipped.push({ value, reason: 'inside-output' });
+      continue;
+    }
+    if (
+      posixRel === 'trusted-ops' ||
+      posixRel.startsWith('trusted-ops/') ||
+      posixRel === '.vercel' ||
+      posixRel.startsWith('.vercel/')
+    ) {
+      skipped.push({ value, reason: 'protected-path' });
       continue;
     }
     let srcStat;

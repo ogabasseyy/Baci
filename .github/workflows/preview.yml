@@ -273,8 +273,13 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: preview-prebuilt-refs
-          # Root-relative layout: CLI filePathMap references resolve here.
-          path: .
+          # Quarantined: the materializer below refuses helper/config
+          # overwrites before anything lands at the deploy root.
+          path: .preview-refs-quarantine
+      - name: Materialize prebuilt refs
+        # Untrusted-artifact boundary: only regular files outside
+        # trusted-ops/ and .vercel/ reach the deploy root.
+        run: node trusted-ops/.github/scripts/materialize-preview-prebuilt-refs.mjs
       # IMPORTANT: --archive=tgz is required to prevent Vercel upload rate limiting.
       - name: Deploy preview to Vercel
         id: deploy

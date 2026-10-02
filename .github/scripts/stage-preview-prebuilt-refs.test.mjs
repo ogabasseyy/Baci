@@ -56,13 +56,15 @@ test('stages referenced files preserving root-relative layout', () => {
   }
 });
 
-test('skips absolute, escaping, and output-internal references', () => {
+test('skips absolute, escaping, internal, and protected references', () => {
   const root = layout({
     '.vercel/output/functions/a.func/.vc-config.json': JSON.stringify({
       filePathMap: {
         '/a.js': '/etc/passwd',
         '/b.js': '../../outside.js',
         '/c.js': '.vercel/output/functions/a.func/bundled.js',
+        '/d.js': 'trusted-ops/.github/scripts/preview-deploy-run.sh',
+        '/e.js': '.vercel/project.json',
         '/ok.js': 'node_modules/ok/index.js',
       },
     }),
@@ -79,7 +81,7 @@ test('skips absolute, escaping, and output-internal references', () => {
     assert.deepEqual(manifest.refs, ['node_modules/ok/index.js']);
     assert.deepEqual(
       manifest.skipped.map((s) => s.reason).sort(),
-      ['absolute', 'escapes-root', 'inside-output']
+      ['absolute', 'escapes-root', 'inside-output', 'protected-path', 'protected-path']
     );
   } finally {
     rmSync(root, { recursive: true, force: true });

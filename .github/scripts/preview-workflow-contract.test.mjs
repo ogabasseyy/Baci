@@ -249,12 +249,14 @@ test('preview ships filePathMap refs alongside the prebuilt output', () => {
   );
   assert.ok(
     deploy.indexOf('name: preview-prebuilt-refs') <
-      deploy.indexOf('preview-deploy-run.sh'),
-    'refs must be downloaded before the deploy runs'
+      deploy.indexOf('materialize-preview-prebuilt-refs.mjs') &&
+      deploy.indexOf('materialize-preview-prebuilt-refs.mjs') <
+        deploy.indexOf('preview-deploy-run.sh'),
+    'refs must be quarantined and materialized before the deploy runs'
   );
   assert.match(
     deploy,
-    /name: preview-prebuilt-refs\n(\s*#.*\n)?\s*path: \.$/m,
-    'refs must extract at the deploy root for filePathMap resolution'
+    /name: preview-prebuilt-refs\n(\s*#.*\n)*\s*path: \.preview-refs-quarantine$/m,
+    'refs must extract to quarantine, never directly at the deploy root'
   );
 });

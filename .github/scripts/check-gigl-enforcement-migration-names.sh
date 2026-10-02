@@ -12,10 +12,12 @@ set -euo pipefail
 
 migrations_dir="${1:-supabase/migrations}"
 # Enforcement objects: the pre-request hook, the worker role (membership
-# and SET ROLE target), and the wrapper RPC prefix. Table-only changes
-# (monitors, notifications) are out of scope: they cannot move the hook
-# boundary the smoke proves.
-pattern='enforce_gigl_tracking_worker_request_scope|gigl_tracking_worker|gigl_worker_'
+# and SET ROLE target), the wrapper RPC prefix, and the five underlying
+# RPCs the wrappers delegate to via spoofed service_role (a
+# semantics-widening body edit there must re-prove worker capability just
+# like a wrapper edit). Table-only changes (monitors, notifications) are
+# out of scope: they cannot move the boundary the smoke proves.
+pattern='enforce_gigl_tracking_worker_request_scope|gigl_tracking_worker|gigl_worker_|claim_due_gigl_tracking_monitors|apply_gigl_tracking_result|record_gigl_tracking_failure|release_gigl_tracking_claim|pause_gigl_tracking_monitor'
 fail=0
 while IFS= read -r file; do
   case "$(basename "$file")" in

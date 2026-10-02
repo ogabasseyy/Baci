@@ -91,12 +91,27 @@ do
   fi
 done
 
-if [ ! -x "$repo_dir/apps/web/node_modules/.bin/tsx" ] && [ ! -x "$repo_dir/node_modules/.bin/tsx" ]; then
+# A previous install may have been interrupted after linking tsx, so the
+# executable alone cannot prove completion: a successful install records
+# a marker (inside git-ignored node_modules, invisible to the dirty
+# check above and removed with the worktree), and an existing worktree
+# re-runs the frozen install unless BOTH the marker and the toolchain
+# are present. A failed re-run removes the marker it can no longer
+# vouch for.
+install_marker="$repo_dir/node_modules/.baci-deps-installed"
+install_toolchain_present=0
+if [ -x "$repo_dir/apps/web/node_modules/.bin/tsx" ] || [ -x "$repo_dir/node_modules/.bin/tsx" ]; then
+  install_toolchain_present=1
+fi
+if [ ! -f "$install_marker" ] || [ "$install_toolchain_present" != "1" ]; then
   echo "Installing immutable checkout dependencies (shared pnpm store)."
   if ! (cd "$repo_dir" && CI=true pnpm install --frozen-lockfile); then
+    rm -f "$install_marker"
     echo "Direct-worker checkout dependency install failed." >&2
     exit 1
   fi
+  mkdir -p "$(dirname "$install_marker")"
+  printf '%s\n' "$expected_sha" > "$install_marker"
 fi
 
 tsx_bin="$repo_dir/apps/web/node_modules/.bin/tsx"

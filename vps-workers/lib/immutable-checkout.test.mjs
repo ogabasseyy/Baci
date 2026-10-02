@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import {
-  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -18,6 +17,7 @@ import {
   git,
   immutableCheckoutFixture,
   runCheckoutScript,
+  stubPnpmCalls,
 } from './immutable-checkout.test-fixtures.mjs';
 
 const libDir = dirname(fileURLToPath(import.meta.url));
@@ -52,7 +52,10 @@ describe('immutable per-SHA checkouts', () => {
   it('provisions idempotently for deploy retries', () => {
     const { shas, staging } = immutableCheckoutFixture({ commits: [{}] });
 
-    assert.equal(runCheckoutScript(provisionScript, [staging, shas[0]]).status, 0);
+    assert.equal(
+      runCheckoutScript(provisionScript, [staging, shas[0]]).status,
+      0
+    );
     const retry = runCheckoutScript(provisionScript, [staging, shas[0]]);
 
     assert.equal(retry.status, 0, retry.stderr);
@@ -73,7 +76,10 @@ describe('immutable per-SHA checkouts', () => {
   it('fails closed when the provisioned checkout is dirty', () => {
     const { base, shas, staging } = immutableCheckoutFixture({ commits: [{}] });
 
-    assert.equal(runCheckoutScript(provisionScript, [staging, shas[0]]).status, 0);
+    assert.equal(
+      runCheckoutScript(provisionScript, [staging, shas[0]]).status,
+      0
+    );
     writeFileSync(join(base, `app-${shas[0]}`, 'tampered.txt'), 'x\n');
 
     const retry = runCheckoutScript(provisionScript, [staging, shas[0]]);
@@ -86,32 +92,14 @@ describe('immutable per-SHA checkouts', () => {
     const { shas, staging, root } = immutableCheckoutFixture({
       commits: [{ withTsx: false }, {}],
     });
-    const binDir = join(root, 'stub-bin');
-    mkdirSync(binDir, { recursive: true });
-    const pnpmLog = join(root, 'pnpm-calls.log');
-    writeFileSync(
-      join(binDir, 'pnpm'),
-      [
-        '#!/usr/bin/env bash',
-        'echo "$*" >> "$PNPM_CALLS_LOG"',
-        'mkdir -p apps/web/node_modules/.bin',
-        "printf '#!/usr/bin/env bash\\necho tsx-stub\\n' > apps/web/node_modules/.bin/tsx",
-        'chmod +x apps/web/node_modules/.bin/tsx',
-        '',
-      ].join('\n')
-    );
-    chmodSync(join(binDir, 'pnpm'), 0o755);
-    const stubPath = `${binDir}:${process.env.PATH ?? ''}`;
+    const { pnpmLog, stubPath } = stubPnpmCalls(root);
 
     const installed = runCheckoutScript(provisionScript, [staging, shas[0]], {
       PATH: stubPath,
       PNPM_CALLS_LOG: pnpmLog,
     });
     assert.equal(installed.status, 0, installed.stderr);
-    assert.match(
-      readFileSync(pnpmLog, 'utf8'),
-      /install --frozen-lockfile/
-    );
+    assert.match(readFileSync(pnpmLog, 'utf8'), /install --frozen-lockfile/);
 
     rmSync(pnpmLog, { force: true });
     const cached = runCheckoutScript(provisionScript, [staging, shas[1]], {
@@ -122,11 +110,37 @@ describe('immutable per-SHA checkouts', () => {
     assert.equal(existsSync(pnpmLog), false);
   });
 
+  it('re-runs installation when tsx exists without the success marker', () => {
+    const { base, shas, staging, root } = immutableCheckoutFixture({
+      commits: [{ withInstallMarker: false }],
+    });
+    const { pnpmLog, stubPath } = stubPnpmCalls(root);
+
+    const result = runCheckoutScript(provisionScript, [staging, shas[0]], {
+      PATH: stubPath,
+      PNPM_CALLS_LOG: pnpmLog,
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(readFileSync(pnpmLog, 'utf8'), /install --frozen-lockfile/);
+    // The completed install records the deploying SHA in the marker.
+    assert.equal(
+      readFileSync(
+        join(base, `app-${shas[0]}`, 'node_modules', '.baci-deps-installed'),
+        'utf8'
+      ).trim(),
+      shas[0]
+    );
+  });
+
   it('migrates the legacy checkout to the release symlink once', () => {
     const { base, legacy, remote, shas, staging } = immutableCheckoutFixture({
       commits: [{}, {}],
     });
-    assert.equal(runCheckoutScript(provisionScript, [staging, shas[1]]).status, 0);
+    assert.equal(
+      runCheckoutScript(provisionScript, [staging, shas[1]]).status,
+      0
+    );
 
     const result = runCheckoutScript(flipScript, [remote, shas[1]]);
 
@@ -137,7 +151,10 @@ describe('immutable per-SHA checkouts', () => {
     // git resolves through the symlink: the install verifier and cron
     // keep working with no path changes.
     assert.equal(git(['rev-parse', 'HEAD'], live), shas[1]);
-    assert.equal(readFileSync(join(live, 'marker.txt'), 'utf8'), 'revision-1\n');
+    assert.equal(
+      readFileSync(join(live, 'marker.txt'), 'utf8'),
+      'revision-1\n'
+    );
     // Live .env now names the symlink; the legacy clone stays frozen
     // as the object source.
     assert.match(
@@ -232,16 +249,18 @@ describe('immutable per-SHA checkouts', () => {
         'operator data\n'
       );
     }
-    assert.match(
-      flipped.stderr,
-      /Skipping unregistered checkout during GC/
-    );
+    assert.match(flipped.stderr, /Skipping unregistered checkout during GC/);
     assert.doesNotMatch(flipped.stderr, /app-backup/);
   });
 
   it('refuses to flip to a missing or mismatched checkout', () => {
-    const { remote, shas, staging } = immutableCheckoutFixture({ commits: [{}] });
-    assert.equal(runCheckoutScript(provisionScript, [staging, shas[0]]).status, 0);
+    const { remote, shas, staging } = immutableCheckoutFixture({
+      commits: [{}],
+    });
+    assert.equal(
+      runCheckoutScript(provisionScript, [staging, shas[0]]).status,
+      0
+    );
 
     const missing = runCheckoutScript(flipScript, [
       remote,

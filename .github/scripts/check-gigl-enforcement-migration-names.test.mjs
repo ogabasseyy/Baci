@@ -74,6 +74,16 @@ describe('check-gigl-enforcement-migration-names', () => {
     assert.match(result.stderr, /20260107000000_rpc_perf\.sql/);
   });
 
+  it('fails an underlying RPC body change without gigl in the filename', () => {
+    const result = runCheck({
+      '20260107500000_rpc_perf.sql':
+        'CREATE OR REPLACE FUNCTION public.apply_gigl_tracking_result() RETURNS boolean AS $$ SELECT true; $$ LANGUAGE sql;\n',
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /20260107500000_rpc_perf\.sql/);
+  });
+
   it('treats uppercase GIGL as unnamed (the tracking glob is case-sensitive)', () => {
     const result = runCheck({
       '20260108000000_GIGL_hook.sql':

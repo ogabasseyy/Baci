@@ -52,7 +52,12 @@ is re-pointed to it. Never pull the legacy path again. Roll back by
 re-running `deploy.sh` from the older SHA (missing worktrees are
 re-created from fetch); for an emergency manual rollback,
 `ln -sfn <base>/app-<sha> <base>/app-live` under
-`flock -x /tmp/baci-workers-deploy.lock`, then re-smoke.
+`flock -x /tmp/baci-workers-deploy.lock`, then re-point the SHA marker
+(`printf '<sha>' > $REMOTE_DIR/app-checkout.sha`) and delete the latch
+(`rm -f $REMOTE_DIR/.gigl-capability-smoke-ok` — it certified the newer
+revision, and without this a later non-tracking push would bypass on a
+stale proof while cron runs the old code). Re-smoke afterwards for
+immediate confidence; the next tracking push re-latches.
 
 Known residual window: promote lands new code before the workflow's
 `db-migrations` apply, so a tracking change that needs a new migration

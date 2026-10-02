@@ -103,6 +103,30 @@ describe('createGiglTrackingWorkerClient', () => {
     expect(createClient).not.toHaveBeenCalled();
   });
 
+  it('rejects plaintext and credential-bearing Supabase URLs', () => {
+    for (const supabaseUrl of [
+      'http://project.supabase.co',
+      'https://user:pass@project.supabase.co',
+      'https://user@project.supabase.co',
+    ]) {
+      expect(() =>
+        createGiglTrackingWorkerClient({
+          ...configuredEnv,
+          NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
+        })
+      ).toThrow(
+        'GIGL tracking worker Supabase URL must be a credential-free https:// URL'
+      );
+    }
+    expect(() =>
+      createGiglTrackingWorkerClient({
+        ...configuredEnv,
+        NEXT_PUBLIC_SUPABASE_URL: 'not-a-url',
+      })
+    ).toThrow('GIGL tracking worker database capability is invalid');
+    expect(createClient).not.toHaveBeenCalled();
+  });
+
   it('rejects operations outside the reviewed five-wrapper capability', () => {
     const client = createGiglTrackingWorkerClient(configuredEnv);
 

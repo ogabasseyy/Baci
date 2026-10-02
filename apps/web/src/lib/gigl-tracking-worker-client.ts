@@ -65,6 +65,27 @@ export function createGiglTrackingWorkerClient(
   ) {
     throw new Error('GIGL tracking worker database capability is invalid');
   }
+  // The worker JWT travels in the Authorization header on every call, so
+  // an http: misconfiguration would expose it over plaintext transport
+  // (neither this check's predecessors nor the VPS preflight constrained
+  // the scheme). This constructor is the single choke point for the
+  // poller, the smoke, and the fallback route: refuse to build a client
+  // that would send the token anywhere but a credential-free https: URL.
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    throw new Error('GIGL tracking worker database capability is invalid');
+  }
+  if (
+    parsedUrl.protocol !== 'https:' ||
+    parsedUrl.username !== '' ||
+    parsedUrl.password !== ''
+  ) {
+    throw new Error(
+      'GIGL tracking worker Supabase URL must be a credential-free https:// URL'
+    );
+  }
 
   const client = createClient<Database>(url, anonKey, {
     auth: {

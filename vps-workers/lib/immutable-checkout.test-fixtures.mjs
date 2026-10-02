@@ -84,8 +84,19 @@ export function immutableCheckoutFixture({ commits }) {
       writeFileSync(tsxPath, TSX_STUB);
       chmodSync(tsxPath, 0o755);
     }
+    // A tracked marker simulates a completed prior install (production
+    // markers are untracked-but-ignored inside node_modules, so the
+    // provisioner dirty check never sees either form).
+    if (commit.withInstallMarker !== false) {
+      const markerPath = join(origin, 'node_modules', '.baci-deps-installed');
+      mkdirSync(dirname(markerPath), { recursive: true });
+      writeFileSync(markerPath, 'fixture-install-marker\n');
+    }
     git(['add', '-A'], origin);
-    git(['commit', '--quiet', '--no-gpg-sign', '-m', `revision ${index}`], origin);
+    git(
+      ['commit', '--quiet', '--no-gpg-sign', '-m', `revision ${index}`],
+      origin
+    );
     shas.push(git(['rev-parse', 'HEAD'], origin));
   }
 
@@ -108,6 +119,28 @@ export function immutableCheckoutFixture({ commits }) {
   writeFileSync(join(remote, '.env'), `BACI_REPO_DIR=${legacy}\n`);
 
   return { base, legacy, origin, remote, root, staging, shas };
+}
+
+// Stubs pnpm so provision runs stay hermetic: every invocation is logged
+// and the stub links a tsx executable exactly like a real install would
+// (the provisioner itself writes the success marker afterwards).
+export function stubPnpmCalls(root) {
+  const binDir = join(root, 'stub-bin');
+  mkdirSync(binDir, { recursive: true });
+  const pnpmLog = join(root, 'pnpm-calls.log');
+  writeFileSync(
+    join(binDir, 'pnpm'),
+    [
+      '#!/usr/bin/env bash',
+      'echo "$*" >> "$PNPM_CALLS_LOG"',
+      'mkdir -p apps/web/node_modules/.bin',
+      "printf '#!/usr/bin/env bash\\necho tsx-stub\\n' > apps/web/node_modules/.bin/tsx",
+      'chmod +x apps/web/node_modules/.bin/tsx',
+      '',
+    ].join('\n')
+  );
+  chmodSync(join(binDir, 'pnpm'), 0o755);
+  return { pnpmLog, stubPath: `${binDir}:${process.env.PATH ?? ''}` };
 }
 
 export function runCheckoutScript(script, args, extraEnv = {}) {

@@ -81,11 +81,34 @@ describe('legacy completed Paystack cancellation refunds', () => {
     expect(query.in).toHaveBeenCalledWith('cancellation_order.payment_status', [
       'paid',
       'partially_paid',
+      'pending',
     ]);
     expect(query.in).toHaveBeenCalledWith(
       'cancellation_order.shipping_status',
       ['cancelled', 'canceled']
     );
+    expect(reconcile).toHaveBeenCalledWith(supabase, refund);
+  });
+
+  it('sends completed refunds on payment-pending orders for verification', async () => {
+    const refund = {
+      ...legacyRefund,
+      id: 'refund-wedged',
+      cancellation_order: {
+        payment_status: 'pending',
+        shipping_status: 'cancelled',
+        cancelled_at: '2026-09-27T00:00:00Z',
+      },
+    };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce({ select: vi.fn(() => selectQuery([refund])) });
+    const supabase = { from } as never;
+
+    await expect(
+      reconcileCompletedPaystackCancellationRefunds(supabase)
+    ).resolves.toEqual({ checked: 1, failed: 0 });
+
     expect(reconcile).toHaveBeenCalledWith(supabase, refund);
   });
 

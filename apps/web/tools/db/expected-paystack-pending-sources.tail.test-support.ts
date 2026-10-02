@@ -174,4 +174,9 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
       'supabase/migrations/20260927151500_merge_paystack_cancellation_refund_leg_evidence.sql',
     sha256: 'd30897c5cc96af65d90fee9684c078d1015370b72ba871f3884badbae74d1d0b',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928120000_backfill_paystack_dva_attempt_markers.sql',
+    sha256: 'a61ec98a5bde936a3fc4520e2b4d2d0abcd14a0ca82cea2351ca9723210b3148',
+  },
 ];

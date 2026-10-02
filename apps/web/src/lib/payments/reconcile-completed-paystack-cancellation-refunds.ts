@@ -17,7 +17,16 @@ export async function reconcileCompletedPaystackCancellationRefunds(
     .eq('transaction_type', 'refund')
     .eq('gateway', 'paystack')
     .eq('status', 'completed')
-    .in('cancellation_order.payment_status', ['paid', 'partially_paid'])
+    // Wedged orders (completed legs never flipped to paid) cancel and verify
+    // like paid orders: without 'pending' their completed refunds never reach
+    // the transition RPC. The per-row reconcile resolves the linked payment
+    // and the RPC admits only funded legs, so unfunded rows still fail
+    // deterministically with a review instead of transitioning.
+    .in('cancellation_order.payment_status', [
+      'paid',
+      'partially_paid',
+      'pending',
+    ])
     .in('cancellation_order.shipping_status', ['cancelled', 'canceled'])
     .not('cancellation_order.cancelled_at', 'is', null)
     .order('updated_at', { ascending: true })

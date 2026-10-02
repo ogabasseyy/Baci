@@ -1,13 +1,20 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
-import {
-  OGABASSEY_DESCRIPTION,
-  OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL,
-  OGABASSEY_TITLE,
-} from '@/config/ogabassey';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { OGABASSEY_DESCRIPTION, OGABASSEY_TITLE } from '@/config/ogabassey';
 import { OgabasseyHomeCommittedLcp } from './ogabassey-home-committed-lcp';
 
+const mockResolveHeroShell = vi.hoisted(() => vi.fn());
+vi.mock('@/app/(storefront)/ogabassey/ogabassey-home-hero-shell-data', () => ({
+  resolveOgabasseyHomeHeroShell: (...args: unknown[]) =>
+    mockResolveHeroShell(...args),
+}));
+
 describe('OgabasseyHomeCommittedLcp', () => {
+  beforeEach(() => {
+    mockResolveHeroShell.mockReset();
+    mockResolveHeroShell.mockResolvedValue(null);
+  });
+
   it('provides document semantics without a second visible banner', async () => {
     render(
       await OgabasseyHomeCommittedLcp({
@@ -31,28 +38,21 @@ describe('OgabasseyHomeCommittedLcp', () => {
     });
 
     expect(ui).toBeNull();
+    expect(mockResolveHeroShell).not.toHaveBeenCalled();
   });
 
-  it('emits the committed slide-0 preload hint without awaiting backend data', async () => {
-    render(
-      await OgabasseyHomeCommittedLcp({
-        params: Promise.resolve({ slug: 'ogabassey.com' }),
-      })
-    );
+  it('streams the critical shell without waiting for the shell lookup', async () => {
+    mockResolveHeroShell.mockReturnValue(new Promise(() => {}));
+    // The slot itself awaits params only, so this resolves while the
+    // lookup is still pending.
+    const ui = await OgabasseyHomeCommittedLcp({
+      params: Promise.resolve({ slug: 'ogabassey.com' }),
+    });
+    render(ui);
 
-    const preload = document.head.querySelector(
-      'link[data-ogabassey-home-hero-preload]'
-    );
-    expect(preload).not.toBeNull();
-    expect(preload?.getAttribute('rel')).toBe('preload');
-    expect(preload?.getAttribute('as')).toBe('image');
-    expect(preload?.getAttribute('fetchpriority')).toBe('high');
-    expect(preload?.getAttribute('href')).toContain(
-      'dell-alienware-m18-r2.jpg'
-    );
-    expect(OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL).toContain(
-      'dell-alienware-m18-r2.jpg'
-    );
+    expect(
+      screen.getByRole('heading', { level: 1, name: OGABASSEY_TITLE })
+    ).toBeInTheDocument();
   });
 
   it('emits hint bytes only, never a renderable image', async () => {

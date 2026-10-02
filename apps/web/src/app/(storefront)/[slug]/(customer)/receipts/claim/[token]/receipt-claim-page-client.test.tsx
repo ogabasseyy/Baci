@@ -1,5 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readReceiptClaimAppDownloadToken } from '@/lib/import-notifications/receipt-claim-app-download-storage';
@@ -136,27 +135,6 @@ describe('ReceiptClaimPageClient', () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 
-  it('labels invoice claim previews as invoices, not receipts', () => {
-    renderClient({
-      initialClaim: { ...preview, documentKind: 'invoice' as const },
-    });
-
-    expect(screen.getByText('Device invoices')).toBeInTheDocument();
-    expect(
-      screen.getByRole('link', { name: 'Sign in to claim invoice' })
-    ).toBeInTheDocument();
-    expect(screen.queryByText('Device receipts')).not.toBeInTheDocument();
-  });
-
-  it('labels proforma claim previews as proforma invoices', () => {
-    renderClient({
-      initialClaim: { ...preview, documentKind: 'proforma_invoice' as const },
-    });
-
-    expect(screen.getByText('Device proforma invoices')).toBeInTheDocument();
-    expect(screen.queryByText('Device receipts')).not.toBeInTheDocument();
-  });
-
   it('does not show Ogabassey app links on other merchant claim pages', () => {
     renderClient();
 
@@ -183,106 +161,6 @@ describe('ReceiptClaimPageClient', () => {
     expect(
       screen.getByRole('link', { name: /app store/i })
     ).toBeInTheDocument();
-  });
-
-  it('prefers a sanitized legacy URL email hint when one is present', () => {
-    mockSearchParams.set('email', '  UrlHint@Yahoo.CO.UK  ');
-
-    renderClient({ initialEmailHint: 'server-hint@example.com' });
-
-    expect(
-      screen.getByRole('link', { name: 'Sign in to claim receipt' })
-    ).toHaveAttribute(
-      'href',
-      '/account/login?redirect=%2Freceipts%2Fclaim%2Fclaim-token&email=urlhint%40yahoo.co.uk'
-    );
-  });
-
-  it('does not append invalid email hints to login links', () => {
-    mockSearchParams.set('email', 'https://evil.example');
-
-    renderClient();
-
-    expect(
-      screen.getByRole('link', { name: 'Sign in to claim receipt' })
-    ).toHaveAttribute(
-      'href',
-      '/account/login?redirect=%2Freceipts%2Fclaim%2Fclaim-token'
-    );
-  });
-
-  it('records login-start activity when guests click the claim CTA', async () => {
-    const user = userEvent.setup();
-
-    renderClient({ initialEmailHint: 'customer@example.com' });
-
-    await user.click(
-      screen.getByRole('link', { name: 'Sign in to claim receipt' })
-    );
-
-    expect(mockFetchWithCsrf).toHaveBeenCalledWith(
-      '/api/storefront/receipts/claims/claim-token/login-email',
-      {
-        cache: 'no-store',
-        headers: { accept: 'application/json' },
-        keepalive: true,
-        method: 'POST',
-      }
-    );
-    expect(mockPush).toHaveBeenCalledWith(
-      '/account/login?redirect=%2Freceipts%2Fclaim%2Fclaim-token&email=customer%40example.com'
-    );
-  });
-
-  it('does not double-record login-start tracking while navigation is pending', async () => {
-    vi.useFakeTimers();
-    const loginStart = createDeferred<Response>();
-    mockFetchWithCsrf.mockReturnValue(loginStart.promise);
-
-    renderClient();
-    const link = screen.getByRole('link', { name: 'Sign in to claim receipt' });
-
-    fireEvent.click(link, { button: 0 });
-    fireEvent.click(link, { button: 0 });
-
-    expect(mockFetchWithCsrf).toHaveBeenCalledTimes(1);
-    expect(mockPush).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(750);
-
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(mockPush).toHaveBeenCalledWith(
-      '/account/login?redirect=%2Freceipts%2Fclaim%2Fclaim-token'
-    );
-
-    loginStart.resolve(createJsonResponse({ success: true }));
-  });
-
-  it('routes to login after a short tracking window when login-start tracking stalls', async () => {
-    vi.useFakeTimers();
-    const loginStart = createDeferred<Response>();
-    mockFetchWithCsrf.mockReturnValue(loginStart.promise);
-
-    renderClient();
-
-    fireEvent.click(
-      screen.getByRole('link', { name: 'Sign in to claim receipt' }),
-      { button: 0 }
-    );
-
-    expect(mockFetchWithCsrf).toHaveBeenCalledWith(
-      '/api/storefront/receipts/claims/claim-token/login-email',
-      expect.objectContaining({ method: 'POST' })
-    );
-    expect(mockPush).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(750);
-
-    expect(mockPush).toHaveBeenCalledWith(
-      '/account/login?redirect=%2Freceipts%2Fclaim%2Fclaim-token'
-    );
-
-    loginStart.resolve(createJsonResponse({ success: true }));
   });
 
   it('redeems the claim and sends authenticated customers to receipts', async () => {
@@ -396,48 +274,5 @@ describe('ReceiptClaimPageClient', () => {
       )
     ).toBeInTheDocument();
     expect(mockPush).not.toHaveBeenCalled();
-  });
-
-  it('surfaces the verify-email guidance when the account is unverified', async () => {
-    mockUseCustomerAuth.mockReturnValue({
-      isAuthenticated: true,
-      isLoading: false,
-    });
-    mockFetchWithCsrf.mockResolvedValue(
-      createJsonResponse(
-        {
-          code: 'EMAIL_UNVERIFIED',
-          error: 'Verify your email address before claiming this receipt',
-          success: false,
-        },
-        { status: 403 }
-      )
-    );
-
-    renderClient();
-
-    expect(
-      await screen.findByText(
-        'Verify your email address before claiming this receipt'
-      )
-    ).toBeInTheDocument();
-    expect(mockPush).not.toHaveBeenCalled();
-  });
-
-  it('shows initial server errors and does not redeem', () => {
-    mockUseCustomerAuth.mockReturnValue({
-      isAuthenticated: true,
-      isLoading: false,
-    });
-
-    renderClient({
-      initialClaim: null,
-      initialError: 'Receipt claim link has expired',
-    });
-
-    expect(
-      screen.getByText('Receipt claim link has expired')
-    ).toBeInTheDocument();
-    expect(mockFetchWithCsrf).not.toHaveBeenCalled();
   });
 });

@@ -36,4 +36,29 @@ describe('isArchiveOrder', () => {
   it('excludes ordinary pending orders', () => {
     expect(isArchiveOrder(baseOrder)).toBe(false);
   });
+
+  it('fails invalid manual orders closed before the legacy branches', () => {
+    const invalidManual = {
+      ...baseOrder,
+      is_manual_order: true,
+      receipt_eligible: false,
+      manual_document_available: false,
+    };
+    expect(
+      isArchiveOrder({ ...invalidManual, shipping_status: 'shipped' })
+    ).toBe(false);
+    expect(
+      isArchiveOrder({ ...invalidManual, payment_method: 'invoice' })
+    ).toBe(false);
+  });
+
+  it('keeps valid manual orders admitted by the availability gate', () => {
+    expect(
+      isArchiveOrder({
+        ...baseOrder,
+        is_manual_order: true,
+        manual_document_available: true,
+      })
+    ).toBe(true);
+  });
 });

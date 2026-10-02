@@ -194,4 +194,25 @@ describe('resolveInvoicePaymentAccount', () => {
     expect(result.transactionError).toBe(transactionError);
     expect(result.error).toBeNull();
   });
+
+  it('breaks created_at ties by account number like the dispatch recheck', async () => {
+    const query = createQuery({ data: [], error: null });
+    const supabase = {
+      from: vi.fn(() => query),
+    } as unknown as SupabaseClient<Database>;
+
+    await resolveInvoicePaymentAccount(
+      supabase,
+      'order-1',
+      false,
+      new Date('2026-08-27T10:15:00.000Z')
+    );
+
+    expect(query.order).toHaveBeenNthCalledWith(1, 'created_at', {
+      ascending: false,
+    });
+    expect(query.order).toHaveBeenNthCalledWith(2, 'account_number', {
+      ascending: false,
+    });
+  });
 });

@@ -133,7 +133,10 @@ BEGIN
       AND (opa.assignment_customer_email_source IS NULL
         OR opa.assignment_customer_email_source <> 'legacy_untrusted')
       AND (opa.expires_at IS NULL OR opa.expires_at > now())
-    ORDER BY opa.created_at DESC LIMIT 1 FOR SHARE;
+    -- created_at ties when accounts share a transaction (now() is
+    -- transaction-stable): break them by account number, exactly like the
+    -- renderer lookup, so rechecks never flap between two live accounts.
+    ORDER BY opa.created_at DESC, opa.account_number DESC LIMIT 1 FOR SHARE;
   END IF;
   -- The PDF tax breakdown renders the same five columns; both sides sort
   -- rows by id (uuid text order matches byte order), so the canonical order

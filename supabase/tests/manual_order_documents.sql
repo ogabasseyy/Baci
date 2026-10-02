@@ -285,9 +285,11 @@ VALUES ('10000000-0000-4000-8000-000000000042', '10000000-0000-4000-8000-0000000
 INSERT INTO public.order_items (order_id, name, quantity, price) SELECT id, 'Device', 1, 100 FROM public.orders WHERE id IN ('10000000-0000-4000-8000-000000000042', '10000000-0000-4000-8000-000000000043');
 SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000042' AND event_type = 'manual_order_receipt'), 'empty source queues receipt');
 SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000043' AND event_type = 'manual_order_receipt'), 'whitespace source queues receipt');
--- An expired claim previews as nothing, even through a direct RPC call.
+-- An expired claim previews as a non-sensitive sentinel, even through a
+-- direct RPC call: the loader keeps its 410 contract, details stay hidden.
 UPDATE public.receipt_claims SET expires_at = now() - interval '1 second' WHERE token_hash = repeat('9', 64);
-SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('9', 64)) IS NULL), 'expired manual claim previews as nothing');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('9', 64))->>'expired' = 'true'), 'expired manual claim previews as expired');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('9', 64))->>'customer_email' IS NULL AND public.preview_receipt_claim(repeat('9', 64))->>'orders' IS NULL), 'expired preview hides claim details');
 -- Commit, not rollback: the database is disposable (dropped after the run),
 -- and the redemption/dispatch script reuses this state (enabled triggers,
 -- merchants, customers, orders) in the same session.

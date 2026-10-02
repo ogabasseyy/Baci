@@ -10,6 +10,10 @@ CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql AS $$ SELECT nullif(curren
 CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql AS $$ SELECT coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
 CREATE TABLE public.merchants (id uuid PRIMARY KEY, user_id uuid, slug text, business_name text, email text, bank_code text, bank_account_number text, bank_name text, bank_account_name text);
 CREATE TABLE public.customers (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), merchant_id uuid REFERENCES public.merchants, user_id uuid, email text, total_orders integer DEFAULT 0, total_spent numeric DEFAULT 0, last_login_at timestamptz, updated_at timestamptz, deleted_at timestamptz);
+-- Mirror the production unique index (baseline 20260418000000): it covers
+-- soft-deleted rows, so redemption tests prove link-failure handling instead
+-- of silently double-linking.
+CREATE UNIQUE INDEX idx_customers_merchant_user ON public.customers (merchant_id, user_id) WHERE user_id IS NOT NULL;
 CREATE TABLE public.staff_members (merchant_id uuid, user_id uuid, status text);
 CREATE TABLE public.import_jobs (id uuid PRIMARY KEY, merchant_id uuid, status text);
 CREATE TABLE public.orders (

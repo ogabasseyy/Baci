@@ -87,6 +87,17 @@ BEGIN
                                        WHERE rco.receipt_claim_id = v_claim.id) THEN
     RETURN jsonb_build_object('status', 'customer_link_failed');
   END IF;
+  -- A soft-deleted row still holds its user_id under the unique index, so
+  -- assigning p_user_id to a different row would 500 on conflict: when the
+  -- owner isn't already the linked row, any other holder fails the link.
+  IF v_owner.user_id IS DISTINCT FROM p_user_id AND EXISTS (
+    SELECT 1 FROM public.customers AS c
+    WHERE c.merchant_id IS NOT DISTINCT FROM v_claim.merchant_id
+      AND c.user_id = p_user_id
+      AND c.id IS DISTINCT FROM v_owner.id
+  ) THEN
+    RETURN jsonb_build_object('status', 'customer_link_failed');
+  END IF;
   UPDATE public.customers AS c
   SET user_id = p_user_id, last_login_at = now(), updated_at = now()
   WHERE c.id = v_owner.id AND (c.user_id IS NULL OR c.user_id = p_user_id);
@@ -182,13 +193,14 @@ BEGIN
   -- claimed orders instead of delegating to the row-linking core. A user
   -- already linked to a DIFFERENT row takes the same path even when the
   -- claim row's email matches: the row-linking core would assign the same
-  -- user_id twice and violate idx_customers_merchant_user.
+  -- user_id twice and violate idx_customers_merchant_user. The unique
+  -- index covers soft-deleted rows too, so a deleted holder diverts as
+  -- well; the order-scoped path reuses a live link and fails a dead one.
   IF v_claim.manual_notification_id IS NOT NULL
     AND (lower(btrim(v_customer.email)) IS DISTINCT FROM v_email
       OR EXISTS (SELECT 1 FROM public.customers AS c
                  WHERE c.merchant_id IS NOT DISTINCT FROM v_claim.merchant_id
                    AND c.user_id = v_user_id
-                   AND c.deleted_at IS NULL
                    AND c.id IS DISTINCT FROM v_customer.id)) THEN
     RETURN private.redeem_manual_order_claim_order_scoped(
       v_claim.id, v_user_id, v_email, p_source);

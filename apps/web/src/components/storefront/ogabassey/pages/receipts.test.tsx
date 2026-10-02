@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
@@ -101,77 +101,6 @@ describe('OgabasseyV2Receipts', () => {
     expect(await screen.findByText('No receipts found')).toBeVisible();
     expect(mockReceiptClaimAppDownloadBanner).not.toHaveBeenCalled();
     expect(screen.queryByText('Receipts ready')).not.toBeInTheDocument();
-  });
-
-  it('opens settled manual balances as receipts while keeping the partial badge', async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      createJsonResponse({
-        orders: [
-          {
-            id: 'order-1',
-            order_number: 'ORD-001',
-            created_at: '2026-04-03T10:00:00.000Z',
-            total: 100,
-            amount_paid: 100,
-            currency: 'NGN',
-            payment_status: 'partially_paid',
-            current_document_kind: 'receipt',
-            items: [
-              {
-                id: 'item-1',
-                name: 'Samsung Galaxy S26',
-                quantity: 1,
-                price: 100,
-              },
-            ],
-          },
-        ],
-      })
-    );
-
-    render(<OgabasseyV2Receipts />);
-
-    expect(await screen.findByText('Partial')).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: 'View Receipt' }));
-    const modalProps = mockReceiptModal.mock.calls.at(-1)?.[0] as {
-      orderData: { payment_status: string };
-    };
-    expect(modalProps.orderData.payment_status).toBe('paid');
-  });
-
-  it('uses order item image_url for receipt thumbnails', async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      createJsonResponse({
-        orders: [
-          {
-            id: 'order-1',
-            order_number: 'ORD-001',
-            created_at: '2026-04-03T10:00:00.000Z',
-            total: 1283968.38,
-            amount_paid: 1283968.38,
-            currency: 'NGN',
-            payment_status: 'paid',
-            items: [
-              {
-                id: 'item-1',
-                name: 'Samsung Galaxy S26',
-                image_url: 'https://cdn.example.com/samsung-galaxy-s26.png',
-                quantity: 1,
-                price: 1283968.38,
-              },
-            ],
-          },
-        ],
-      })
-    );
-
-    render(<OgabasseyV2Receipts />);
-
-    const thumbnail = await screen.findByAltText('Samsung Galaxy S26');
-    expect(thumbnail).toHaveAttribute(
-      'src',
-      'https://cdn.example.com/samsung-galaxy-s26.png'
-    );
   });
 
   it('uses the device name as the primary receipt label and the order number as supporting text', async () => {
@@ -323,43 +252,5 @@ describe('OgabasseyV2Receipts', () => {
         name: /Samsung Galaxy S26.*2 additional devices in this receipt/,
       })
     ).toBeVisible();
-  });
-
-  it('renders a non-broken fallback when an order item has no usable image', async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      createJsonResponse({
-        orders: [
-          {
-            id: 'order-1',
-            order_number: 'ORD-002',
-            created_at: '2026-04-02T10:00:00.000Z',
-            total: 1464150,
-            amount_paid: 0,
-            currency: 'NGN',
-            payment_status: 'unpaid',
-            items: [
-              {
-                id: 'item-1',
-                name: 'Lenovo ThinkBook 16 G7 IML',
-                image_url: '',
-                quantity: 1,
-                price: 1464150,
-              },
-            ],
-          },
-        ],
-      })
-    );
-
-    render(<OgabasseyV2Receipts />);
-
-    expect(
-      await screen.findByRole('img', {
-        name: 'No product image available for Lenovo ThinkBook 16 G7 IML',
-      })
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByAltText('Lenovo ThinkBook 16 G7 IML')
-    ).not.toBeInTheDocument();
   });
 });

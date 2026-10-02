@@ -81,6 +81,17 @@ async function loadReceiptClaimRecord({
     return { error: 'Receipt claim link not found', ok: false, status: 404 };
   }
 
+  // The preview RPC answers expired claims with a non-sensitive sentinel
+  // (no identity or order details) so direct RPC calls past expiry reveal
+  // nothing while the documented 410 contract survives.
+  if (
+    typeof data === 'object' &&
+    data !== null &&
+    (data as { expired?: unknown }).expired === true
+  ) {
+    return { error: 'Receipt claim link has expired', ok: false, status: 410 };
+  }
+
   const parsedClaim = receiptClaimRecordSchema.safeParse(data);
   if (!parsedClaim.success) {
     throw new Error('Failed to load receipt claim: invalid response structure');

@@ -5,6 +5,7 @@ import { sanitizePublicOrder } from '@/lib/public-fulfillment-sanitizer';
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import {
   getCurrentDocumentKind,
+  isManualOrder,
   isManualOrderDocumentAvailable,
   isReceiptEligible,
   normalizePaymentStatus,
@@ -235,6 +236,9 @@ export async function GET(request: NextRequest) {
         receipt_eligible: receiptEligible,
         manual_document_available:
           isManualOrderDocumentAvailable(documentEligibility),
+        // Staff-recorded marker without the staff identity: lets archive
+        // filters fail invalid manual orders closed before legacy branches.
+        is_manual_order: isManualOrder(documentEligibility),
         items: (order.order_items || []).map((item) => {
           const product = extractJoinedProduct(item.products);
           const productImages = extractProductImages(product);

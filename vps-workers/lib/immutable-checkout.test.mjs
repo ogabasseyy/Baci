@@ -5,141 +5,34 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   readlinkSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import {
+  cleanupImmutableCheckoutFixtures,
+  git,
+  immutableCheckoutFixture,
+  runCheckoutScript,
+} from './immutable-checkout.test-fixtures.mjs';
 
 const libDir = dirname(fileURLToPath(import.meta.url));
 const provisionScript = join(libDir, 'provision-immutable-checkout.sh');
 const flipScript = join(libDir, 'flip-immutable-checkout.sh');
 
-const TS_ENTRYPOINTS = [
-  'apps/web/src/scripts/process-gigl-tracking.ts',
-  'apps/web/src/scripts/process-petrock-reconciliation.ts',
-  'apps/web/src/scripts/process-quiz-finalization.ts',
-];
-const WRAPPERS = [
-  'process-gigl-tracking.sh',
-  'verify-gigl-tracking-worker-capability.sh',
-  'process-petrock-reconciliation.sh',
-  'process-quiz-finalization.sh',
-];
-const TSX_STUB = '#!/usr/bin/env bash\necho "tsx-stub"\n';
-
-const gitEnv = {
-  ...process.env,
-  GIT_AUTHOR_NAME: 'baci-test',
-  GIT_AUTHOR_EMAIL: 'baci-test@example.com',
-  GIT_COMMITTER_NAME: 'baci-test',
-  GIT_COMMITTER_EMAIL: 'baci-test@example.com',
-};
-
-function git(args, cwd, extraEnv = {}) {
-  return execFileSync('git', args, {
-    cwd,
-    encoding: 'utf8',
-    env: { ...gitEnv, ...extraEnv },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  }).trim();
-}
-
-let fixtureRoots = [];
-afterEach(() => {
-  for (const root of fixtureRoots) {
-    rmSync(root, { force: true, recursive: true });
-  }
-  fixtureRoots = [];
-});
-
-// Builds a fixture VPS layout: an origin repo with commits carrying
-// distinct marker content, a legacy object-source clone, and worker
-// staging/remote dirs. Every commit carries the TS entrypoints and a
-// tsx stub unless withTsx is false for that commit.
-function fixture({ commits }) {
-  const root = mkdtempSync(join(tmpdir(), 'baci-immutable-'));
-  fixtureRoots.push(root);
-  const origin = join(root, 'origin');
-  mkdirSync(origin, { recursive: true });
-  git(['init', '-b', 'main', '--quiet'], origin);
-
-  const shas = [];
-  for (const [index, commit] of commits.entries()) {
-    writeFileSync(join(origin, 'marker.txt'), `revision-${index}\n`);
-    for (const entrypoint of TS_ENTRYPOINTS) {
-      const path = join(origin, entrypoint);
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, '// entrypoint\n');
-    }
-    if (commit.withTsx !== false) {
-      const tsxPath = join(
-        origin,
-        'apps',
-        'web',
-        'node_modules',
-        '.bin',
-        'tsx'
-      );
-      mkdirSync(dirname(tsxPath), { recursive: true });
-      writeFileSync(tsxPath, TSX_STUB);
-      chmodSync(tsxPath, 0o755);
-    }
-    git(['add', '-A'], origin);
-    git(['commit', '--quiet', '--no-gpg-sign', '-m', `revision ${index}`], origin);
-    shas.push(git(['rev-parse', 'HEAD'], origin));
-  }
-
-  const base = join(root, 'base');
-  mkdirSync(base, { recursive: true });
-  const legacy = join(base, 'app');
-  git(['clone', '--quiet', origin, legacy], root);
-
-  const staging = join(root, 'staging');
-  mkdirSync(join(staging, 'bin'), { recursive: true });
-  writeFileSync(join(staging, '.env'), `BACI_REPO_DIR=${legacy}\n`);
-  for (const wrapper of WRAPPERS) {
-    const path = join(staging, 'bin', wrapper);
-    writeFileSync(path, '#!/usr/bin/env bash\n');
-    chmodSync(path, 0o755);
-  }
-
-  const remote = join(root, 'remote');
-  mkdirSync(remote, { recursive: true });
-  writeFileSync(join(remote, '.env'), `BACI_REPO_DIR=${legacy}\n`);
-
-  return { base, legacy, origin, remote, root, staging, shas };
-}
-
-function runScript(script, args, extraEnv = {}) {
-  try {
-    const stdout = execFileSync('bash', [script, ...args], {
-      encoding: 'utf8',
-      env: { ...gitEnv, ...extraEnv },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    return { status: 0, stdout: stdout.trim(), stderr: '' };
-  } catch (error) {
-    return {
-      status: error.status ?? 1,
-      stdout: String(error.stdout ?? '').trim(),
-      stderr: String(error.stderr ?? '').trim(),
-    };
-  }
-}
+afterEach(cleanupImmutableCheckoutFixtures);
 
 describe('immutable per-SHA checkouts', () => {
   it('provisions a detached worktree at the deploying SHA', () => {
-    const { base, shas, staging } = fixture({
+    const { base, shas, staging } = immutableCheckoutFixture({
       commits: [{}, {}],
     });
 
-    const result = runScript(provisionScript, [staging, shas[1]]);
+    const result = runCheckoutScript(provisionScript, [staging, shas[1]]);
 
     assert.equal(result.status, 0, result.stderr);
     const immutable = join(base, `app-${shas[1]}`);
@@ -157,18 +50,18 @@ describe('immutable per-SHA checkouts', () => {
   });
 
   it('provisions idempotently for deploy retries', () => {
-    const { shas, staging } = fixture({ commits: [{}] });
+    const { shas, staging } = immutableCheckoutFixture({ commits: [{}] });
 
-    assert.equal(runScript(provisionScript, [staging, shas[0]]).status, 0);
-    const retry = runScript(provisionScript, [staging, shas[0]]);
+    assert.equal(runCheckoutScript(provisionScript, [staging, shas[0]]).status, 0);
+    const retry = runCheckoutScript(provisionScript, [staging, shas[0]]);
 
     assert.equal(retry.status, 0, retry.stderr);
   });
 
   it('fails closed when the SHA cannot be fetched', () => {
-    const { staging } = fixture({ commits: [{}] });
+    const { staging } = immutableCheckoutFixture({ commits: [{}] });
 
-    const result = runScript(provisionScript, [
+    const result = runCheckoutScript(provisionScript, [
       staging,
       '0123456789abcdef0123456789abcdef01234567',
     ]);
@@ -178,19 +71,19 @@ describe('immutable per-SHA checkouts', () => {
   });
 
   it('fails closed when the provisioned checkout is dirty', () => {
-    const { base, shas, staging } = fixture({ commits: [{}] });
+    const { base, shas, staging } = immutableCheckoutFixture({ commits: [{}] });
 
-    assert.equal(runScript(provisionScript, [staging, shas[0]]).status, 0);
+    assert.equal(runCheckoutScript(provisionScript, [staging, shas[0]]).status, 0);
     writeFileSync(join(base, `app-${shas[0]}`, 'tampered.txt'), 'x\n');
 
-    const retry = runScript(provisionScript, [staging, shas[0]]);
+    const retry = runCheckoutScript(provisionScript, [staging, shas[0]]);
 
     assert.notEqual(retry.status, 0);
     assert.match(retry.stderr, /checkout is dirty/);
   });
 
   it('installs dependencies only when the toolchain is absent', () => {
-    const { shas, staging, root } = fixture({
+    const { shas, staging, root } = immutableCheckoutFixture({
       commits: [{ withTsx: false }, {}],
     });
     const binDir = join(root, 'stub-bin');
@@ -210,7 +103,7 @@ describe('immutable per-SHA checkouts', () => {
     chmodSync(join(binDir, 'pnpm'), 0o755);
     const stubPath = `${binDir}:${process.env.PATH ?? ''}`;
 
-    const installed = runScript(provisionScript, [staging, shas[0]], {
+    const installed = runCheckoutScript(provisionScript, [staging, shas[0]], {
       PATH: stubPath,
       PNPM_CALLS_LOG: pnpmLog,
     });
@@ -221,7 +114,7 @@ describe('immutable per-SHA checkouts', () => {
     );
 
     rmSync(pnpmLog, { force: true });
-    const cached = runScript(provisionScript, [staging, shas[1]], {
+    const cached = runCheckoutScript(provisionScript, [staging, shas[1]], {
       PATH: stubPath,
       PNPM_CALLS_LOG: pnpmLog,
     });
@@ -230,12 +123,12 @@ describe('immutable per-SHA checkouts', () => {
   });
 
   it('migrates the legacy checkout to the release symlink once', () => {
-    const { base, legacy, remote, shas, staging } = fixture({
+    const { base, legacy, remote, shas, staging } = immutableCheckoutFixture({
       commits: [{}, {}],
     });
-    assert.equal(runScript(provisionScript, [staging, shas[1]]).status, 0);
+    assert.equal(runCheckoutScript(provisionScript, [staging, shas[1]]).status, 0);
 
-    const result = runScript(flipScript, [remote, shas[1]]);
+    const result = runCheckoutScript(flipScript, [remote, shas[1]]);
 
     assert.equal(result.status, 0, result.stderr);
     const live = join(base, 'app-live');
@@ -258,7 +151,7 @@ describe('immutable per-SHA checkouts', () => {
   });
 
   it('flips steady-state releases and retires only old checkouts', () => {
-    const { base, remote, shas, staging } = fixture({
+    const { base, remote, shas, staging } = immutableCheckoutFixture({
       commits: [{}, {}, {}],
     });
     const [shaA, shaB, shaC] = shas;
@@ -274,21 +167,21 @@ describe('immutable per-SHA checkouts', () => {
       );
     };
 
-    assert.equal(runScript(provisionScript, [staging, shaA]).status, 0);
-    assert.equal(runScript(flipScript, [remote, shaA]).status, 0);
+    assert.equal(runCheckoutScript(provisionScript, [staging, shaA]).status, 0);
+    assert.equal(runCheckoutScript(flipScript, [remote, shaA]).status, 0);
     // Age A past the rapid-redeploy guard.
     execFileSync('touch', ['-t', '202001010000', dirA]);
 
     refreshStagingEnv();
-    assert.equal(runScript(provisionScript, [staging, shaB]).status, 0);
-    assert.equal(runScript(flipScript, [remote, shaB]).status, 0);
+    assert.equal(runCheckoutScript(provisionScript, [staging, shaB]).status, 0);
+    assert.equal(runCheckoutScript(flipScript, [remote, shaB]).status, 0);
     // B is current, A is previous: both stay.
     assert.equal(existsSync(dirA), true);
     assert.equal(existsSync(dirB), true);
 
     refreshStagingEnv();
-    assert.equal(runScript(provisionScript, [staging, shaC]).status, 0);
-    assert.equal(runScript(flipScript, [remote, shaC]).status, 0);
+    assert.equal(runCheckoutScript(provisionScript, [staging, shaC]).status, 0);
+    assert.equal(runCheckoutScript(flipScript, [remote, shaC]).status, 0);
     // A is older than previous and aged: retired. The release link,
     // the legacy clone, and B/C survive.
     assert.equal(existsSync(dirA), false);
@@ -302,11 +195,55 @@ describe('immutable per-SHA checkouts', () => {
     );
   });
 
-  it('refuses to flip to a missing or mismatched checkout', () => {
-    const { remote, shas, staging } = fixture({ commits: [{}] });
-    assert.equal(runScript(provisionScript, [staging, shas[0]]).status, 0);
+  it('leaves non-release and unregistered directories alone', () => {
+    const { base, remote, shas, staging } = immutableCheckoutFixture({
+      commits: [{}, {}, {}],
+    });
+    const [shaA, shaB, shaC] = shas;
 
-    const missing = runScript(flipScript, [
+    assert.equal(runCheckoutScript(provisionScript, [staging, shaA]).status, 0);
+    assert.equal(runCheckoutScript(flipScript, [remote, shaA]).status, 0);
+    // Age A past the rapid-redeploy guard so it retires next flip.
+    execFileSync('touch', ['-t', '202001010000', join(base, `app-${shaA}`)]);
+
+    assert.equal(runCheckoutScript(provisionScript, [staging, shaB]).status, 0);
+    assert.equal(runCheckoutScript(flipScript, [remote, shaB]).status, 0);
+
+    // Decoys an operator might plausibly leave in the checkout base.
+    const backup = join(base, 'app-backup');
+    const unregisteredSha = join(base, `app-${'f'.repeat(40)}`);
+    const nonHex = join(base, `app-${'z'.repeat(40)}`);
+    for (const decoy of [backup, unregisteredSha, nonHex]) {
+      mkdirSync(decoy, { recursive: true });
+      writeFileSync(join(decoy, 'sentinel.txt'), 'operator data\n');
+      execFileSync('touch', ['-t', '202001010000', decoy]);
+    }
+
+    assert.equal(runCheckoutScript(provisionScript, [staging, shaC]).status, 0);
+    const flipped = runCheckoutScript(flipScript, [remote, shaC]);
+
+    assert.equal(flipped.status, 0, flipped.stderr);
+    // A retires (registered, aged, older than previous)...
+    assert.equal(existsSync(join(base, `app-${shaA}`)), false);
+    // ...while every decoy survives with its contents.
+    for (const decoy of [backup, unregisteredSha, nonHex]) {
+      assert.equal(
+        readFileSync(join(decoy, 'sentinel.txt'), 'utf8'),
+        'operator data\n'
+      );
+    }
+    assert.match(
+      flipped.stderr,
+      /Skipping unregistered checkout during GC/
+    );
+    assert.doesNotMatch(flipped.stderr, /app-backup/);
+  });
+
+  it('refuses to flip to a missing or mismatched checkout', () => {
+    const { remote, shas, staging } = immutableCheckoutFixture({ commits: [{}] });
+    assert.equal(runCheckoutScript(provisionScript, [staging, shas[0]]).status, 0);
+
+    const missing = runCheckoutScript(flipScript, [
       remote,
       '0123456789abcdef0123456789abcdef01234567',
     ]);

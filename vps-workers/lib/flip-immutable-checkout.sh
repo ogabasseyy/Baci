@@ -69,16 +69,33 @@ if [ "$(readlink "$repo_link")" != "$immutable_dir" ]; then
 fi
 # Retire checkouts older than the previous release: the current and
 # previous dirs stay (a poll may still be executing the previous
-# revision), and the age guard covers rapid redeploys. Symlinks are
-# never candidates (the release link itself matches the glob).
-# Worktree removal unregisters from the object source; the rm fallback
-# covers partial state (only this script's app-* directories can match).
+# revision), and the age guard covers rapid redeploys. A candidate must
+# be named EXACTLY app-<40-hex-sha> (never a loose app-* match: an
+# operator directory like app-backup is silently skipped) AND be a
+# registered worktree of the object source. Exact-SHA names that are
+# not registered (failed-provision residue) warn and stay for the
+# operator to inspect and remove by hand.
+registered_worktrees="$(git -C "$immutable_dir" worktree list --porcelain 2>/dev/null | awk '/^worktree /{print substr($0, 10)}' || true)"
 for old_checkout in "$checkout_base"/app-*; do
   [ -L "$old_checkout" ] && continue
   [ -d "$old_checkout" ] || continue
+  old_base="$(basename "$old_checkout")"
+  old_suffix="${old_base#app-}"
+  case "$old_suffix" in
+    ????????????????????????????????????????)
+      case "$old_suffix" in
+        *[!0-9a-f]*) continue ;;
+      esac
+      ;;
+    *) continue ;;
+  esac
   [ "$old_checkout" != "$immutable_dir" ] || continue
   [ "$old_checkout" != "$previous_target" ] || continue
+  if ! printf '%s\n' "$registered_worktrees" | grep -F -x -q "$old_checkout"; then
+    echo "Skipping unregistered checkout during GC (inspect and remove by hand): $old_checkout" >&2
+    continue
+  fi
   if [ -n "$(find "$old_checkout" -maxdepth 0 -mmin +60 2>/dev/null)" ]; then
-    git -C "$immutable_dir" worktree remove --force "$old_checkout" 2>/dev/null || rm -rf "$old_checkout"
+    git -C "$immutable_dir" worktree remove --force "$old_checkout"
   fi
 done

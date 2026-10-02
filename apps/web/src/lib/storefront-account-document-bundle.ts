@@ -85,9 +85,15 @@ function alignSingleZeroTaxSubtotalWithDocumentTotal(
 // Statuses representing provider-confirmed value movement. Only these
 // belong in customer payment surfaces (history card, receipt listing):
 // pending/processing attempts never moved money, failed/cancelled ones
-// never will. A refunded row is still a genuine historical receipt — the
-// order-level status already shows the reversal.
-const PROVIDER_CONFIRMED_TRANSACTION_STATUSES = ['completed', 'refunded'];
+// never will. Paystack-backed payments settle as 'success' (the sender's
+// history query includes it), so the archive must too or downloads omit
+// payments the emailed PDF shows. A refunded row is still a genuine
+// historical receipt — the order-level status already shows the reversal.
+const PROVIDER_CONFIRMED_TRANSACTION_STATUSES = [
+  'completed',
+  'refunded',
+  'success',
+];
 
 export function isProviderConfirmedTransaction(row: {
   status?: string | null;

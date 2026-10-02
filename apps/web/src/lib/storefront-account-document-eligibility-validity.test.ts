@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   getCurrentDocumentKind,
+  isManualOrder,
   isManualOrderDocumentAvailable,
   isReceiptEligible,
 } from '@/lib/storefront-account-document-eligibility';
@@ -106,5 +107,16 @@ describe('storefront account document content validity', () => {
     expect(
       isManualOrderDocumentAvailable(manualInput({ externalSource }))
     ).toBe(true);
+  });
+
+  it('identifies staff-recorded non-imported orders as manual', () => {
+    expect(isManualOrder({ recordedByUserId: 'staff-1' })).toBe(true);
+    expect(isManualOrder({})).toBe(false);
+    expect(
+      isManualOrder({ recordedByUserId: 'staff-1', externalSource: 'bumpa' })
+    ).toBe(false);
+    expect(
+      isManualOrder({ recordedByUserId: 'staff-1', importJobId: 'job-1' })
+    ).toBe(false);
   });
 });

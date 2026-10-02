@@ -23,6 +23,14 @@ function isImportedHistoricalOrder(input: {
   return Boolean(input.externalSource?.trim() || input.importJobId);
 }
 
+export function isManualOrder(input: {
+  externalSource?: string | null;
+  importJobId?: string | null;
+  recordedByUserId?: string | null;
+}) {
+  return Boolean(input.recordedByUserId) && !isImportedHistoricalOrder(input);
+}
+
 interface DocumentEligibilityInput {
   paymentStatus: string | null | undefined;
   shippingStatus: string | null | undefined;

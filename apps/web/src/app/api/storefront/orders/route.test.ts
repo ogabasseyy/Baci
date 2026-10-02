@@ -203,6 +203,7 @@ describe('GET /api/storefront/orders', () => {
           invoice_type_code: '380',
           receipt_eligible: true,
           manual_document_available: false,
+          is_manual_order: false,
           items: [
             {
               id: 'item-1',

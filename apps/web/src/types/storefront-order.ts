@@ -156,6 +156,7 @@ export interface StorefrontOrder {
   invoice_type_code?: string;
   receipt_eligible?: boolean;
   manual_document_available?: boolean;
+  is_manual_order?: boolean;
   /**
    * Server-derived gate for the customer "Cancel Order" CTA. Authoritative
    * because it is computed by the `customer_order_can_cancel` RPC (the

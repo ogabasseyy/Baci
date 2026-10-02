@@ -162,4 +162,40 @@ describe('OgabasseyV2Receipts document kind', () => {
     expect(modalProps.documentKind).toBeNull();
     expect(modalProps.orderData.payment_status).toBe('paid');
   });
+
+  it('opens settled manual balances as receipts while keeping the partial badge', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      createJsonResponse({
+        orders: [
+          {
+            id: 'order-1',
+            order_number: 'ORD-001',
+            created_at: '2026-04-03T10:00:00.000Z',
+            total: 100,
+            amount_paid: 100,
+            currency: 'NGN',
+            payment_status: 'partially_paid',
+            current_document_kind: 'receipt',
+            items: [
+              {
+                id: 'item-1',
+                name: 'Samsung Galaxy S26',
+                quantity: 1,
+                price: 100,
+              },
+            ],
+          },
+        ],
+      })
+    );
+
+    render(<OgabasseyV2Receipts />);
+
+    expect(await screen.findByText('Partial')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'View Receipt' }));
+    const modalProps = mockReceiptModal.mock.calls.at(-1)?.[0] as {
+      orderData: { payment_status: string };
+    };
+    expect(modalProps.orderData.payment_status).toBe('paid');
+  });
 });

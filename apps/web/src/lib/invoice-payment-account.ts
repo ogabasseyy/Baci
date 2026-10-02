@@ -57,9 +57,12 @@ export async function resolveInvoicePaymentAccount(
     );
   }
 
-  const orderedPaymentAccountQuery = paymentAccountQuery.order('created_at', {
-    ascending: false,
-  });
+  // created_at ties when accounts share a transaction (now() is
+  // transaction-stable): break them by account number, exactly like the
+  // atomic dispatch recheck, so renderer and recheck never pick apart.
+  const orderedPaymentAccountQuery = paymentAccountQuery
+    .order('created_at', { ascending: false })
+    .order('account_number', { ascending: false });
   const { data, error } = isPaidOrder
     ? await orderedPaymentAccountQuery
     : await orderedPaymentAccountQuery.limit(1);

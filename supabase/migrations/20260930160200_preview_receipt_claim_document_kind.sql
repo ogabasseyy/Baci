@@ -23,9 +23,11 @@ BEGIN
   END IF;
 
   -- The RPC is directly invocable via PostgREST, so the loader's 410 check
-  -- alone cannot hide an expired claim: return nothing past expiry.
+  -- alone cannot hide an expired claim. Return a non-sensitive sentinel
+  -- instead of NULL so the documented expired-link (410) contract survives
+  -- while identity, merchant, and order details stay hidden.
   IF v_claim.expires_at IS NOT NULL AND v_claim.expires_at <= now() THEN
-    RETURN NULL;
+    RETURN jsonb_build_object('expired', true);
   END IF;
 
   SELECT jsonb_build_object(

@@ -40,9 +40,11 @@ test('free-form ref never reaches a shell script', () => {
 });
 
 test('artifacts expire at minimum retention', () => {
+  const uploads = executable.match(/uses: actions\/upload-artifact@/g) ?? [];
   const retentions =
     executable.match(/retention-days:\s*1\b/g) ?? [];
-  assert.equal(retentions.length, 2);
+  assert.ok(uploads.length > 0);
+  assert.equal(retentions.length, uploads.length);
 });
 
 test('deploy step invokes the trusted runner with prebuilt flags', () => {
@@ -104,8 +106,9 @@ test('deploy job bootstraps pnpm before helpers', () => {
 });
 
 test('handoff artifacts survive reruns', () => {
+  const uploads = executable.match(/uses: actions\/upload-artifact@/g) ?? [];
   const overwrites = executable.match(/overwrite:\s*true/g) ?? [];
-  assert.equal(overwrites.length, 2);
+  assert.equal(overwrites.length, uploads.length);
 });
 
 test('deploy summary neutralizes markdown in the branch name', () => {

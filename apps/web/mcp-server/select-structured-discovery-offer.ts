@@ -76,7 +76,9 @@ export function selectStructuredDiscoveryOffer(
   const discovery = structuredDiscoveryIdentity.metadataOf(product);
   const excludedTypes = structuredDiscoveryIdentity.excludedTypesOf(intent);
   const candidates: Candidate[] = [];
-  const manageStock = product.manage_stock === true;
+  // PDP parity: legacy null manage_stock is managed inventory (only an
+  // absent flag stays fail-open); a null-managed bare offer needs stock.
+  const manageStock = product.manage_stock === true || product.manage_stock === null;
   const parentStock = {
     manage_stock: product.manage_stock === null || typeof product.manage_stock === 'boolean'
       ? product.manage_stock

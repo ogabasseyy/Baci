@@ -274,4 +274,24 @@ export const EXPECTED_DISCOVERY_PENDING_SOURCES = [
       'supabase/migrations/20261002090734_condition_offer_first_row_restore.sql',
     sha256: '66261213ed8026a422b1d69ad559b1e1951cd6616b0cf7873d7c64e7fcdcc0f8',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261002090735_fact_offer_nullable_manage_restriction.sql',
+    sha256: '5c11805bfff463d951ecc8e796513dabcc9b59e25c6b1f7456bf58f44d760ac2',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261002090736_browse_nullable_manage_offset_bounds.sql',
+    sha256: '292bf50bc21bfd150a8b8662dd4fb060a540220642ba84b049754dad749ceba0',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261002090737_variant_recall_offset_bound.sql',
+    sha256: '88ab1289ea1e725d098091cfc71201c4c0e5776ef9ea29d21a8114fe5f2c2f36',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261002090738_metadata_product_type_nfkc_length.sql',
+    sha256: '02d5bb16003b418d31efccaf5e542e708fc87f71c19c9acbf9fec08400bf8feb',
+  },
 ] as const;

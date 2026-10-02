@@ -64,6 +64,18 @@ VALUES
    'cb58d110-0000-4000-8000-000000000675',
    'cb58d110-0000-4000-8000-000000000670', 'used', 90, 5, 'active');
 
+-- Nullable-managed bare products take the stock-gated offer branch like
+-- managed ones: only the stocked twin selects.
+INSERT INTO public.product_offers
+  (id, product_id, merchant_id, condition, price, stock_quantity, status)
+VALUES
+  ('cb58d110-0000-4000-8000-000000000681',
+   'cb58d110-0000-4000-8000-000000000678',
+   'cb58d110-0000-4000-8000-000000000670', 'used', 90, 0, 'active'),
+  ('cb58d110-0000-4000-8000-000000000682',
+   'cb58d110-0000-4000-8000-000000000679',
+   'cb58d110-0000-4000-8000-000000000670', 'used', 90, 5, 'active');
+
 -- A legacy stored child must not create a selectable variant condition when
 -- the real product is variantless, even if the caller claims otherwise.
 INSERT INTO public.product_variants
@@ -77,6 +89,9 @@ SET LOCAL ROLE anon;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
 
 DO $$
+DECLARE
+  fact_ids uuid[];
+  browse_ids uuid[];
 BEGIN
   IF current_user <> 'anon' THEN
     RAISE EXCEPTION 'publication regression must run under anon RLS role';
@@ -119,6 +134,33 @@ BEGIN
   IF discovery.product_condition_option_matches(
       'cb58d110-0000-4000-8000-000000000675', false, 'new', 'used', true) IS DISTINCT FROM TRUE THEN
     RAISE EXCEPTION 'published stocked offer within the first 16 rows must remain selectable';
+  END IF;
+  IF discovery.condition_offer_selectable(
+      'cb58d110-0000-4000-8000-000000000678', false, 'used', NULL) IS DISTINCT FROM FALSE THEN
+    RAISE EXCEPTION 'NULL stock management must reject a depleted bare offer';
+  END IF;
+  IF discovery.condition_offer_selectable(
+      'cb58d110-0000-4000-8000-000000000679', false, 'used', NULL) IS DISTINCT FROM TRUE THEN
+    RAISE EXCEPTION 'NULL stock management must allow a stocked bare offer';
+  END IF;
+  SELECT array_agg(product_id) INTO fact_ids
+  FROM public.search_product_discovery_facts(
+    'cb58d110-0000-4000-8000-000000000670', 'base');
+  IF cardinality(fact_ids) IS DISTINCT FROM 2
+    OR NOT (fact_ids @> ARRAY[
+      'cb58d110-0000-4000-8000-000000000679'::uuid,
+      'cb58d110-0000-4000-8000-000000000680'::uuid]) THEN
+    RAISE EXCEPTION 'nullable facts must keep stocked and unmanaged bases only, got %', fact_ids;
+  END IF;
+  SELECT array_agg(id) INTO browse_ids
+  FROM public.search_products_browse(
+    p_merchant_id => 'cb58d110-0000-4000-8000-000000000670',
+    p_condition => 'used', p_limit => 10);
+  IF cardinality(browse_ids) IS DISTINCT FROM 2
+    OR NOT (browse_ids @> ARRAY[
+      'cb58d110-0000-4000-8000-000000000675'::uuid,
+      'cb58d110-0000-4000-8000-000000000679'::uuid]) THEN
+    RAISE EXCEPTION 'nullable used browse must keep stocked offers only, got %', browse_ids;
   END IF;
 END;
 $$;

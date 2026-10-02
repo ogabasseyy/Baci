@@ -59,3 +59,27 @@ it('summarizes a paired offer through the null-stock variant parent fallback', (
   expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'used-1' });
   expect(selected?.stockSummary).toMatchObject({ inStock: true });
 });
+
+it('rejects a zero-stock bare offer under null stock management like the PDP', () => {
+  const row = makeRow({ has_variants: false, has_condition_offers: true,
+    manage_stock: null, stock_quantity: 0 });
+  row.availableOffers = [
+    { id: 'used-1', price: 450, condition: 'used', stock_quantity: 0 },
+  ] as typeof row.availableOffers;
+  const selected = selectStructuredDiscoveryOffer(row, intent({ attributes: [
+    { key: 'storage_gb', operator: 'eq', value: 128 },
+  ] }));
+  expect(selected).toBeUndefined();
+});
+
+it('admits a stocked bare offer under null stock management', () => {
+  const row = makeRow({ has_variants: false, has_condition_offers: true,
+    manage_stock: null, stock_quantity: 0 });
+  row.availableOffers = [
+    { id: 'used-1', price: 450, condition: 'used', stock_quantity: 2 },
+  ] as typeof row.availableOffers;
+  const selected = selectStructuredDiscoveryOffer(row, intent({ attributes: [
+    { key: 'storage_gb', operator: 'eq', value: 128 },
+  ] }));
+  expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'used-1' });
+});

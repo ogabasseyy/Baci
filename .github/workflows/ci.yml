@@ -309,6 +309,7 @@ jobs:
           --sql-check supabase/tests/search_products_not_archived_nulls.sql
           --sql-check supabase/tests/product_discovery_embeddings_public_boundary.sql
           --sql-check supabase/tests/product_discovery_combined_search.sql
+          --sql-check supabase/tests/product_discovery_search_document_units.sql
           --sql-check supabase/tests/product_discovery_variant_recall.sql
           --sql-check supabase/tests/product_discovery_variant_recall_text.sql
           --sql-check supabase/tests/product_discovery_variant_recall_identity.sql
@@ -317,9 +318,11 @@ jobs:
           --sql-check supabase/tests/product_discovery_condition_offer_publication_bounds.sql
           --sql-check supabase/tests/product_discovery_attribute_digest_v6.sql
           --sql-check supabase/tests/product_discovery_variant_recall_condition.sql
+          --sql-check supabase/tests/product_discovery_variant_recall_input_bounds.sql
           --sql-check supabase/tests/mcp_search_browse_ascii.sql
           --sql-check supabase/tests/mcp_search_browse_anchors.sql
           --sql-check supabase/tests/product_discovery_fact_condition.sql
+          --sql-check supabase/tests/product_discovery_fact_excluded_types.sql
           --sql-check supabase/migrations/tests/quiz_instant_deadline_publication_v2.sql
           --sql-check supabase/migrations/tests/quiz_instant_deadline_runtime_gate_v2.sql
           --sql-check supabase/migrations/tests/quiz_live_score_publication_gate_v2.sql

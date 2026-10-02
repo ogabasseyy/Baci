@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -169,6 +169,15 @@ test('accepts the real pull-output shape through normalize, redact, and exposure
   try {
     const envFile = join(directory, '.env.preview.local');
     copyFileSync(fixture, envFile);
+    // Hostile spellings the fixture (faithful to Vercel pull output) never
+    // carries: export-prefixed and indented cache-mode lines must still die.
+    appendFileSync(
+      envFile,
+      'export TURBO_CACHE="hostile-export-value"\n' +
+        '  TURBO_CACHE="hostile-indented-value"\n' +
+        '\tTURBO_REMOTE_ONLY="hostile-tabbed-value"\n' +
+        '  export TURBO_REMOTE_ONLY="hostile-both-value"\n'
+    );
     // Same order as the workflow: normalize sensitive tokens, redact
     // privileged keys, then run the exposure check. No sed -i (BSD/GNU
     // differ); the normalize pattern must mirror preview.yml.
@@ -188,6 +197,11 @@ test('accepts the real pull-output shape through normalize, redact, and exposure
     assert.doesNotMatch(final, /fixture-redacted-secret/);
     assert.match(final, /FIXTURE_SENSITIVE_TOKEN=""/);
     assert.match(final, /fixture-safe-value/);
+    // Cache-mode ownership keys are deleted from the file (not blanked),
+    // so the build job's TURBO_CACHE is uncontested by construction.
+    assert.doesNotMatch(final, /^TURBO_CACHE=/m);
+    assert.doesNotMatch(final, /^TURBO_REMOTE_ONLY=/m);
+    assert.doesNotMatch(final, /hostile-(export|indented|tabbed|both)-value/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

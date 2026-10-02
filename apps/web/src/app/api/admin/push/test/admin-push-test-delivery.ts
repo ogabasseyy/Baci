@@ -5,6 +5,7 @@ import { sendPushNotificationChunks } from '@/lib/expo-push-chunk-delivery';
 export type AdminPushTestDeliveryResult = {
   failed: number;
   sent: number;
+  uncertain: number;
 };
 
 function readServerExpoAccessToken(): string | undefined {
@@ -34,7 +35,7 @@ export async function deliverAdminPushTest(
   }
 
   if (!tokens || tokens.length === 0) {
-    return { failed: 0, sent: 0 };
+    return { failed: 0, sent: 0, uncertain: 0 };
   }
 
   const messages: ExpoPushMessage[] = tokens.map(({ token }) => ({
@@ -49,10 +50,19 @@ export async function deliverAdminPushTest(
 
   try {
     const expo = new Expo({ accessToken: readServerExpoAccessToken() });
-    const { tickets } = await sendPushNotificationChunks(expo, messages);
+    const { deliveryUncertain, tickets } = await sendPushNotificationChunks(
+      expo,
+      messages
+    );
     const failed = tickets.filter((ticket) => ticket.status === 'error').length;
-    return { failed, sent: tickets.length - failed };
+    // A provider throw yields synthetic error tickets plus
+    // deliveryUncertain: report them as uncertain instead of
+    // definitive failures so a test push is never misreported.
+    if (deliveryUncertain) {
+      return { failed: 0, sent: tickets.length - failed, uncertain: failed };
+    }
+    return { failed, sent: tickets.length - failed, uncertain: 0 };
   } catch {
-    return { failed: tokens.length, sent: 0 };
+    return { failed: tokens.length, sent: 0, uncertain: 0 };
   }
 }

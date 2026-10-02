@@ -20,21 +20,14 @@ permissions:
 
 # No run-level concurrency: cancellation is scoped per job below so a
 # redispatch cancels a superseded build without orphaning a deploy.
-# Trust boundary: the target ref is build SOURCE only. Untrusted branch code
-# executes solely in `build`, which holds no deployment token; `prepare` and
-# `deploy` run trusted default-branch helpers with the token on fresh
-# runners, exchanging only inert files via short-lived artifacts. The build
-# sees the Preview backend env (identical to a native Vercel preview build)
-# and the Turbo cache token (already exposed to branch code by PR CI).
-# Dispatchers are trusted collaborators (same model as deploy.yml): --ref
-# selects the workflow FILE version, so a malicious --ref copy bypasses the
-# in-file default-branch guard below — the guard constrains accidental
-# misuse and documents intent. Likewise, Preview deploys the target ref
-# into the secret-bearing Preview environment, so ref authors can read
-# Preview RUNTIME secrets from their deployed code by design: dispatch only
-# refs you trust with those values. No environment approval gates are
-# configured (matches Production); the boundaries are GitHub access
-# control, the tokenless untrusted build, secret stand-ins, and audit.
+# Trust boundary: the target ref is build SOURCE only. Untrusted code
+# executes solely in tokenless `build`; `prepare`/`deploy` run trusted
+# default-branch helpers with the token, exchanging only inert files via
+# 1-day artifacts. Build sees Preview backend env (as any native preview
+# build) and the Turbo token (already exposed by PR CI). Dispatchers are
+# trusted (same model as deploy.yml): a malicious --ref copy bypasses the
+# in-file guard; target-ref code can read Preview RUNTIME secrets by
+# design — dispatch only trusted refs. No approval gates (as Production).
 
 jobs:
   prepare:
@@ -47,8 +40,7 @@ jobs:
       NODE_OPTIONS: "--max_old_space_size=8192"
     steps:
       - name: Require default-branch workflow file
-        # Ref names can carry shell metacharacters: pass both sides through
-        # env instead of interpolating expressions into the script.
+        # Ref names may carry shell metacharacters: compare via env, not interpolation.
         env:
           WORKFLOW_REF: ${{ github.ref }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
@@ -62,10 +54,8 @@ jobs:
       - name: Checkout trusted source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Pin to the running commit, not the branch name: the guard above
-          # proves dispatch came from the default branch, so this sha is the
-          # reviewed default-branch commit, and it cannot drift if main
-          # advances during this long run.
+          # Pin the running commit, not the branch: reviewed and drift-free
+          # if main advances during this long run.
           ref: ${{ github.sha }}
           persist-credentials: false
       - name: Setup Node.js
@@ -80,28 +70,21 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: .github/scripts/run-pinned-vercel.sh pull --yes --environment=preview
       - name: Normalize sensitive placeholders to blank
-        # Pinned CLI >=56.3 writes KEY="[SENSITIVE]" where older CLIs wrote
-        # blanks. The injector only substitutes explicit blanks, and build
-        # code expects blank-or-real; normalize the literal token (verified
-        # against CLI 57.0.0 output; real values never match it). Both
-        # quote spellings plus trailing whitespace match; POSIX class keeps
-        # the pattern portable across GNU/BSD sed.
+        # CLI >=56.3 writes KEY="[SENSITIVE]" where older CLIs wrote blanks;
+        # normalize the literal (both quote spellings; verified on 57.0.0)
+        # so the injector and build see blank-or-real.
         run: |
           sed -i -E 's/=["'"'"']?\[SENSITIVE[[:blank:]]*\]["'"'"']?[[:space:]]*$/=""/' .vercel/.env.preview.local
       - name: Verify quiz RPC secret is marked sensitive in Preview
-        # This proves the marking exists; the injector below additionally
-        # refuses any non-blank value before the stand-in replaces it.
+        # Proves the marking; the injector also refuses non-blank values.
         run: node .github/scripts/assert-vercel-pulled-sensitive-env.mjs QUIZ_RPC_SERVER_SECRET .vercel/.env.preview.local
       - name: Redact privileged Preview values from the build env
         # Runtime-only keys (see the pattern file): blanked before the
         # untrusted build; service-role gets a presence stand-in below.
         run: sed -i -E -f .github/scripts/preview-env-redact.sed .vercel/.env.preview.local
       - name: Verify Preview env exposes no unexpected server values
-        # Fails closed on any non-blank server key outside NEXT_PUBLIC_* and
-        # the reviewed allowlist, so a future key added without the
-        # sensitive flag breaks loudly instead of leaking silently to the
-        # untrusted build. Runs post-redaction, pre-injection: stand-ins
-        # are ours by then.
+        # Fails closed on non-blank server keys outside the allowlist, so a
+        # future unmarked key breaks loudly. Runs post-redaction, pre-injection.
         run: node .github/scripts/assert-preview-env-allowlist.mjs .vercel/.env.preview.local .github/scripts/preview-env-allowlist.txt
       - name: Ensure build-time presence of runtime-only quiz RPC secret
         # No real secret passthrough: the stand-in satisfies build validation
@@ -109,10 +92,9 @@ jobs:
         # never observe the server secret.
         run: node .github/scripts/inject-prebuilt-env-secret.mjs QUIZ_RPC_SERVER_SECRET .vercel/.env.preview.local 'build-time-presence-stand-in-not-used-at-runtime-000000000000'
       - name: Ensure build-time presence of redacted service-role key
-        # Validation requires this key non-blank, but the build never
-        # queries with it (SSG uses the anonymous client): a presence
-        # stand-in satisfies the schema without exposing the RLS-bypassing
-        # credential. Refuses non-blank input like the quiz injection.
+        # Build validation needs this key non-blank but never queries with
+        # it: a presence stand-in satisfies the schema without exposing
+        # the RLS-bypassing credential. Refuses non-blank input.
         run: node .github/scripts/inject-prebuilt-env-secret.mjs SUPABASE_SERVICE_ROLE_KEY .vercel/.env.preview.local 'build-time-presence-stand-in-not-a-real-service-key-000000'
       - name: Ensure JWK stand-in precondition
         # Preview intentionally carries no signing material, so the legacy
@@ -197,29 +179,26 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
-      # Composite `run` steps execute at the workspace root, so the default
-      # install command would resolve to the UNTRUSTED target ref script.
-      # Point it at the trusted copy explicitly.
+      # Composite `run` steps resolve at the root: point the install at
+      # the trusted copy, not the UNTRUSTED target ref script.
       - uses: ./trusted-ops/.github/actions/pnpm-install-cached
         with:
           install-command: ./trusted-ops/.github/scripts/pnpm-install-with-retry.sh --frozen-lockfile --prefer-offline
       - name: Build for Vercel
         # No deployment token here: `vercel build` runs offline from the
-        # pulled env (verified: it proceeds with an invalid token), so the
-        # untrusted target-ref build scripts cannot observe or use it.
+        # pulled env, so untrusted build scripts cannot observe or use it.
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-          # Remote cache defaults to read-only in this job so routine
-          # target-ref builds cannot poison shared main-branch entries while
-          # still reading them (needed for a viable build time). This is a
-          # client-side default, not enforcement: the token is visible to
-          # build scripts exactly as in PR CI, and a malicious script could
-          # re-export it or pass write flags. Accepted tradeoff, bounded by
-          # content-addressed keys. (Verified against turbo 2.9.18: comma
-          # form parses; bare `remote:r` would disable every cache.)
+          # Remote cache read-only: target-ref builds cannot poison shared
+          # entries (client-side default, not enforcement; comma form
+          # verified on turbo 2.9.18).
           TURBO_CACHE: "remote:r,local:rw"
         run: trusted-ops/.github/scripts/run-pinned-vercel.sh build --yes
+      - name: Stage prebuilt file references
+        # `vercel deploy --prebuilt` re-uploads NFT-traced source files
+        # named by filePathMap, so ship them alongside the output.
+        run: node trusted-ops/.github/scripts/stage-preview-prebuilt-refs.mjs
       - name: Upload prebuilt output
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -229,6 +208,15 @@ jobs:
           include-hidden-files: true
           retention-days: 1
           # Reruns reuse the run ID: allow overwrite of the prior attempt.
+          overwrite: true
+      - name: Upload prebuilt refs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: preview-prebuilt-refs
+          path: .preview-refs-stage/
+          # The manifest is hidden; without it an empty refs set uploads nothing.
+          include-hidden-files: true
+          retention-days: 1
           overwrite: true
       - name: Clean up Vercel secrets
         if: always()
@@ -281,6 +269,12 @@ jobs:
         with:
           name: preview-prebuilt-output
           path: .vercel/output
+      - name: Download prebuilt refs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: preview-prebuilt-refs
+          # Root-relative layout: CLI filePathMap references resolve here.
+          path: .
       # IMPORTANT: --archive=tgz is required to prevent Vercel upload rate limiting.
       - name: Deploy preview to Vercel
         id: deploy

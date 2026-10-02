@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {
-  executable,
-  jobBlock,
-  previewDeployScript,
-  workflow,
-} from './preview-workflow-contract.helpers.mjs';
+import { previewWorkflowContract } from './preview-workflow-contract.helpers.mjs';
+
+const { executable, jobBlock, previewDeployScript, workflow } =
+  previewWorkflowContract;
 
 test('free-form ref never reaches a shell script', () => {
   const lines = executable.split('\n');

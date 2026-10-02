@@ -38,7 +38,9 @@ const previewEnvRedact = readFileSync(
   'utf8'
 );
 
-export {
+// Single primary export per the repo modularity rule: one cohesive
+// fixture object for the contract suites, not a utility module.
+export const previewWorkflowContract = {
   executable,
   jobBlock,
   previewDeployScript,

@@ -1,12 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {
-  executable,
-  jobBlock,
-  previewEnvAllowlist,
-  previewEnvRedact,
-  workflow,
-} from './preview-workflow-contract.helpers.mjs';
+import { previewWorkflowContract } from './preview-workflow-contract.helpers.mjs';
+
+const { executable, jobBlock, previewEnvAllowlist, previewEnvRedact, workflow } =
+  previewWorkflowContract;
 
 const DENIED_KEYS = [
   'ADDRESS_AUTOCOMPLETE_KV_REST_API_READ_ONLY_TOKEN',

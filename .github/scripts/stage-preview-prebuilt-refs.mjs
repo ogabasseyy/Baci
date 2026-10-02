@@ -16,6 +16,9 @@
 // missing (phantom), protected, and invalid values are dropped: the CLI
 // would ENOENT, wrongly upload, or crash on them. Fails closed when
 // nothing stages while references are missing (wrong-base smell).
+// Absolute and escaping values stay in the map but never count as usable
+// or resolving: the CLI rejects them, so a function kept alive only by
+// such entries would ship with zero genuinely resolving references.
 // These staging rules are fail-fast UX, not the security boundary: the
 // build job is untrusted, so the deploy-side materializer re-enforces them.
 //
@@ -88,7 +91,6 @@ for (const configPath of vcConfigs(outputDir)) {
     if (isAbsolute(value)) {
       skipped.push({ value, reason: 'absolute' });
       kept[key] = value;
-      usable += 1;
       continue;
     }
     const abs = resolve(root, value);
@@ -96,11 +98,25 @@ for (const configPath of vcConfigs(outputDir)) {
     if (rel === '' || rel === '.' || rel.startsWith(`..${sep}`) || rel === '..' || isAbsolute(rel)) {
       skipped.push({ value, reason: 'escapes-root' });
       kept[key] = value;
-      usable += 1;
       continue;
     }
     const posixRel = rel.split(sep).join('/');
     if (posixRel === '.vercel/output' || posixRel.startsWith('.vercel/output/')) {
+      // Lexically inside the output dir is not enough: a stale asset
+      // reference points at nothing the output upload carries, so verify
+      // it is a real file before treating it as resolving.
+      let outStat;
+      try {
+        outStat = statSync(abs);
+      } catch {
+        outStat = null;
+      }
+      if (!outStat?.isFile()) {
+        skipped.push({ value, reason: 'missing' });
+        missingCount += 1;
+        dropped += 1;
+        continue;
+      }
       skipped.push({ value, reason: 'inside-output' });
       kept[key] = value;
       usable += 1;
@@ -127,8 +143,11 @@ for (const configPath of vcConfigs(outputDir)) {
       // Phantom reference (e.g. transient build files): the CLI would
       // ENOENT re-adding it, so drop it from the shipped map instead of
       // failing the whole build. The guardrail below catches a
-      // systematically wrong base, where nothing real stages.
-      skipped.push({ value, reason: 'missing' });
+      // systematically wrong base, where nothing real stages. An existing
+      // non-file (directory, FIFO) is a different condition from an
+      // absent phantom, so it gets its own manifest reason while still
+      // counting as unresolved on both guardrails.
+      skipped.push({ value, reason: srcStat ? 'non-file' : 'missing' });
       missingCount += 1;
       dropped += 1;
       continue;
@@ -156,7 +175,11 @@ for (const configPath of vcConfigs(outputDir)) {
 // guardrails below catch systematic misclassification; preview READY plus
 // served verification catch the rest. Counts are occurrences on both
 // sides (a repeated phantom is repeated evidence); the resolving side
-// counts staged plus output-internal values, which genuinely upload.
+// counts staged plus verified output-internal values, which genuinely
+// upload. Observed incident motivating this shape: 21 transient
+// `apps/web/.next/node_modules/*` refs alongside a normally staged tree.
+// The per-config total-loss check is the primary guard; the global
+// majority rule below is the backstop for a systematically wrong base.
 const resolving = staged.length + insideOutputCount;
 if (stringValues > 0 && missingCount > resolving) {
   console.error(
@@ -172,10 +195,12 @@ if (unusableConfigs.length > 0) {
   process.exit(1);
 }
 if (missingCount > 0) {
-  const missingVals = skipped.filter((s) => s.reason === 'missing').map((s) => s.value);
+  const missingVals = skipped
+    .filter((s) => s.reason === 'missing' || s.reason === 'non-file')
+    .map((s) => s.value);
   const shown = missingVals.slice(0, 20);
   console.error(
-    `WARNING: dropped ${missingCount} phantom reference(s) from shipped maps:\n` +
+    `WARNING: dropped ${missingCount} dangling reference(s) from shipped maps:\n` +
       shown.map((v) => `  ${v}`).join('\n') +
       (missingCount > shown.length ? `\n  ...and ${missingCount - shown.length} more` : '')
   );
@@ -196,11 +221,11 @@ if (process.env.GITHUB_STEP_SUMMARY) {
   // Values are build-controlled: strip span-breaking characters (same
   // rule as the deploy helper's ref sanitization).
   const dropped = skipped
-    .filter((s) => s.reason === 'missing')
+    .filter((s) => s.reason === 'missing' || s.reason === 'non-file')
     .map((s) => s.value.replace(/[`\r\n]/g, '').slice(0, 200));
   appendFileSync(
     process.env.GITHUB_STEP_SUMMARY,
-    `### Prebuilt refs\nstaged ${new Set(staged).size}, skipped ${skipped.length} (${dropped.length} phantom)\n` +
+    `### Prebuilt refs\nstaged ${new Set(staged).size}, skipped ${skipped.length} (${dropped.length} dangling)\n` +
       dropped.slice(0, 20).map((v) => `- \`${v}\``).join('\n') +
       (dropped.length > 0 ? '\n' : '')
   );

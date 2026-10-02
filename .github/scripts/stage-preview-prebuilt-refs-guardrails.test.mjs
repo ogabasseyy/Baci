@@ -1,0 +1,146 @@
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+const SCRIPT = fileURLToPath(
+  new URL('./stage-preview-prebuilt-refs.mjs', import.meta.url),
+);
+
+function layout(files) {
+  const root = mkdtempSync(join(tmpdir(), 'preview-refs-guard-'));
+  for (const [rel, contents] of Object.entries(files)) {
+    const full = join(root, rel);
+    mkdirSync(join(full, '..'), { recursive: true });
+    writeFileSync(full, contents);
+  }
+  return root;
+}
+
+test('counts repeated phantom occurrences, not distinct values', () => {
+  // Same phantom twice plus one staged file must fail: 2 occurrences
+  // dominate 1 resolving. A deduped (Set-based) guard would see 1 vs 1
+  // and ship, so this pins the occurrence-counting behavior.
+  const root = layout({
+    '.vercel/output/functions/a.func/.vc-config.json': JSON.stringify({
+      filePathMap: {
+        '/x.js': 'node_modules/gone/index.js',
+        '/y.js': 'node_modules/gone/index.js',
+      },
+    }),
+    '.vercel/output/functions/b.func/.vc-config.json': JSON.stringify({
+      filePathMap: { '/ok.js': 'node_modules/ok/index.js' },
+    }),
+    'node_modules/ok/index.js': 'ok',
+  });
+  try {
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], {
+      encoding: 'utf8',
+    });
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /dominate .* refusing to ship/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('drops stale output-internal refs instead of counting them', () => {
+  const configRel = '.vercel/output/functions/a.func/.vc-config.json';
+  const root = layout({
+    [configRel]: JSON.stringify({
+      filePathMap: {
+        '/stale.js': '.vercel/output/functions/a.func/missing.js',
+        '/ok.js': 'node_modules/ok/index.js',
+      },
+    }),
+    'node_modules/ok/index.js': 'ok',
+  });
+  try {
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], {
+      encoding: 'utf8',
+    });
+    assert.equal(run.status, 0, run.stderr);
+    const rewritten = JSON.parse(readFileSync(join(root, configRel), 'utf8'));
+    assert.deepEqual(rewritten.filePathMap, {
+      '/ok.js': 'node_modules/ok/index.js',
+    });
+    const manifest = JSON.parse(
+      readFileSync(join(root, 'stage', '.preview-refs-manifest.json'), 'utf8')
+    );
+    assert.deepEqual(manifest.skipped, [
+      {
+        value: '.vercel/output/functions/a.func/missing.js',
+        reason: 'missing',
+      },
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('traces directory refs as non-file, still unresolved', () => {
+  const configRel = '.vercel/output/functions/a.func/.vc-config.json';
+  const root = layout({
+    [configRel]: JSON.stringify({
+      filePathMap: {
+        '/dir.js': 'node_modules/ok',
+        '/ok.js': 'node_modules/ok/index.js',
+      },
+    }),
+    'node_modules/ok/index.js': 'ok',
+  });
+  try {
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], {
+      encoding: 'utf8',
+    });
+    assert.equal(run.status, 0, run.stderr);
+    const rewritten = JSON.parse(readFileSync(join(root, configRel), 'utf8'));
+    assert.deepEqual(rewritten.filePathMap, {
+      '/ok.js': 'node_modules/ok/index.js',
+    });
+    const manifest = JSON.parse(
+      readFileSync(join(root, 'stage', '.preview-refs-manifest.json'), 'utf8')
+    );
+    assert.deepEqual(manifest.skipped, [
+      { value: 'node_modules/ok', reason: 'non-file' },
+    ]);
+    assert.match(run.stderr, /WARNING: dropped 1 dangling reference/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('absolute and escaping refs do not satisfy the usable guard', () => {
+  // Global ratio passes (1 missing vs 2 staged); the broken function is
+  // kept only by CLI-rejected absolute/escaping entries, so the
+  // per-config total-loss check must fire.
+  const root = layout({
+    '.vercel/output/functions/healthy.func/.vc-config.json': JSON.stringify({
+      filePathMap: {
+        '/1.js': 'node_modules/a/one.js',
+        '/2.js': 'node_modules/a/two.js',
+      },
+    }),
+    '.vercel/output/functions/broken.func/.vc-config.json': JSON.stringify({
+      filePathMap: {
+        '/abs.js': '/etc/passwd',
+        '/esc.js': '../../outside.js',
+        '/gone.js': 'node_modules/gone/index.js',
+      },
+    }),
+    'node_modules/a/one.js': '1',
+    'node_modules/a/two.js': '2',
+  });
+  try {
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], {
+      encoding: 'utf8',
+    });
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /lost every usable reference/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

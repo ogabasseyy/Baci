@@ -276,7 +276,7 @@ test('preview redacts privileged values before the exposure check', () => {
     assert.match(
       previewEnvRedact,
       new RegExp(
-        `/\\^\\(export\\[\\[:blank:\\]\\]\\+\\)\\?${key}=\\.\\*/d`
+        `/\\^\\[\\[:blank:\\]\\]\\*\\(export\\[\\[:blank:\\]\\]\\+\\)\\?${key}=\\.\\*/d`
       ),
       `${key} must be deleted (export-prefix-tolerant) so the job owns it`
     );

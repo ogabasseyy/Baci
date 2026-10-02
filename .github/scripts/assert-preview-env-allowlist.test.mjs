@@ -255,19 +255,34 @@ test('redacted build env is accepted by turbo with the job cache mode', () => {
     }
     env.TURBO_CACHE = cacheModes[0];
     const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
-    const dry = spawnSync(
-      'pnpm',
-      ['exec', 'turbo', 'build', '--filter=@baci/web', '--dry=json'],
-      {
-        cwd: repoRoot,
-        env,
-        encoding: 'utf8',
-        timeout: 180000,
-        maxBuffer: 64 * 1024 * 1024,
+    // Requires installed deps (pnpm exec turbo); runs in CI after install.
+    // Prove every sibling-flag state, not just the fixture's true/true.
+    for (const download of ['true', 'false']) {
+      for (const summary of ['true', 'false']) {
+        env.TURBO_DOWNLOAD_LOCAL_ENABLED = download;
+        env.TURBO_RUN_SUMMARY = summary;
+        const dry = spawnSync(
+          'pnpm',
+          ['exec', 'turbo', 'build', '--filter=@baci/web', '--dry=json'],
+          {
+            cwd: repoRoot,
+            env,
+            encoding: 'utf8',
+            timeout: 180000,
+            maxBuffer: 64 * 1024 * 1024,
+          }
+        );
+        assert.equal(
+          dry.status,
+          0,
+          `flags ${download}/${summary}: ${(dry.stderr || '').slice(-2000)}`
+        );
+        assert.doesNotMatch(
+          dry.stderr || '',
+          /Cannot set `cache` config/
+        );
       }
-    );
-    assert.equal(dry.status, 0, (dry.stderr || '').slice(-2000));
-    assert.doesNotMatch(dry.stderr || '', /Cannot set `cache` config/);
+    }
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

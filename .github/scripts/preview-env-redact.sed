@@ -19,8 +19,8 @@ s/^export[[:blank:]][[:blank:]]*//
 # with cache config (verified failure). Delete both (not blank) so the
 # job owns the mode with no precedence gamble and no reliance on
 # empty-string-means-unset handling.
-/^(export[[:blank:]]+)?TURBO_CACHE=.*/d
-/^(export[[:blank:]]+)?TURBO_REMOTE_ONLY=.*/d
+/^[[:blank:]]*(export[[:blank:]]+)?TURBO_CACHE=.*/d
+/^[[:blank:]]*(export[[:blank:]]+)?TURBO_REMOTE_ONLY=.*/d
 s/^ADDRESS_AUTOCOMPLETE_KV_REST_API_READ_ONLY_TOKEN=.*/ADDRESS_AUTOCOMPLETE_KV_REST_API_READ_ONLY_TOKEN=""/
 s/^ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN=.*/ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN=""/
 s/^ADDRESS_AUTOCOMPLETE_KV_URL=.*/ADDRESS_AUTOCOMPLETE_KV_URL=""/

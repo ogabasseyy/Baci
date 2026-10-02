@@ -28,12 +28,13 @@ describe('recovery-review marker preservation migration', () => {
     expect(migrationSql).toContain("'audit_record_failed'");
     expect(migrationSql).toContain("'reference_only_refund_event'");
     // OR, never overwrite: a marker once raised stays until
-    // operations resolves the review.
+    // operations resolves the review. Text comparison, not a cast: a
+    // corrupt marker must stay raised, not raise.
     expect(migrationSql).toContain(
-      "(v_metadata->>'audit_record_failed')::boolean, false) OR"
+      "coalesce(v_metadata->>'audit_record_failed', 'false') <> 'false'"
     );
     expect(migrationSql).toContain(
-      "(v_metadata->>'reference_only_refund_event')::boolean, false ) OR"
+      "coalesce(v_metadata->>'reference_only_refund_event', 'false') <> 'false'"
     );
   });
 });

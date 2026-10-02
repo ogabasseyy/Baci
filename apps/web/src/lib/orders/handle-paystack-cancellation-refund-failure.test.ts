@@ -68,6 +68,21 @@ describe('handlePaystackCancellationRefundFailure', () => {
     );
   });
 
+  it('treats a malformed success payload as ambiguous, never retryable', async () => {
+    await expect(
+      invoke({
+        code: 'MALFORMED_RESPONSE',
+        error: 'Paystack refund response was missing refund data',
+      })
+    ).rejects.toThrow(DeliveryUncertainError);
+
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ ambiguous_initiation: true }),
+      })
+    );
+  });
+
   it('quarantines a refund request timeout ambiguously, not as rejected', async () => {
     await expect(
       invoke({ code: 'HTTP_408', error: 'request timed out' })

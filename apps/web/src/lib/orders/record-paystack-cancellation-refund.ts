@@ -36,6 +36,23 @@ export async function recordPaystackCancellationRefund({
   transaction: GatewayPaymentTransaction;
   transactionAmount: number;
 }): Promise<number> {
+  // Defense in depth behind initiateRefund's payload validation: a
+  // successful response without a refund object may still have
+  // created the refund, so quarantine delivery-uncertain (never
+  // retryable) instead of throwing before any evidence persists.
+  if (paystackRefund.data == null || typeof paystackRefund.data !== 'object') {
+    await quarantineRefund({
+      metadata: {
+        malformed_refund_response: true,
+        payment_transaction_id: transaction.id,
+      },
+      order,
+      reason:
+        'Paystack returned a successful refund response without refund data',
+      supabase,
+      transactions: [transaction],
+    });
+  }
   const providerStatus = String(paystackRefund.data.status ?? '')
     .trim()
     .toLowerCase();

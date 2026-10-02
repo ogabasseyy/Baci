@@ -103,4 +103,30 @@ describe('initiateRefund', () => {
       method: 'POST',
     });
   });
+
+  it.each([null, undefined, 'ok', 42])(
+    'reports a successful envelope without refund data as ambiguous (%s)',
+    async (data) => {
+      mocks.paystackRequest.mockResolvedValue({ data, success: true });
+
+      await expect(initiateRefund('PSK-1', 10000)).resolves.toMatchObject({
+        code: 'MALFORMED_RESPONSE',
+        success: false,
+      });
+    }
+  );
+
+  it('passes a well-formed success payload through', async () => {
+    const data = {
+      id: 101,
+      status: 'queued',
+      transaction: { id: 55, reference: 'PSK-1' },
+    };
+    mocks.paystackRequest.mockResolvedValue({ data, success: true });
+
+    await expect(initiateRefund('PSK-1', 10000)).resolves.toEqual({
+      data,
+      success: true,
+    });
+  });
 });

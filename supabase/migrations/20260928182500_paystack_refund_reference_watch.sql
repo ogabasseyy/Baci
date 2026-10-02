@@ -118,11 +118,16 @@ BEGIN
   IF (SELECT auth.role()) IS DISTINCT FROM 'service_role' THEN
     RAISE EXCEPTION 'unauthorized' USING ERRCODE = '42501';
   END IF;
+  -- Resolve only the open handoff: the open-watch unique index
+  -- admits one per reference, so this is exactly the caller's watch.
+  -- Claimed watches stay for future matching completions — resolving
+  -- them here would leave a later legacy/corrupt payment sharing the
+  -- reference with no watch to file its refund evidence.
   UPDATE public.paystack_refund_recovery_watch
     SET status = 'resolved', updated_at = now()
     WHERE paystack_ref = nullif(btrim(coalesce(p_paystack_ref, '')), '')
       AND provider_refund_id IS NULL
-      AND status IN ('open', 'claimed');
+      AND status = 'open';
   RETURN FOUND;
 END;
 $$;

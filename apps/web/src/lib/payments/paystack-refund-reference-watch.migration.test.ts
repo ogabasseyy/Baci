@@ -43,7 +43,10 @@ describe('refund reference-watch migration', () => {
     expect(migrationSql).toContain(
       'CREATE OR REPLACE FUNCTION public.resolve_paystack_refund_reference_watch_v1('
     );
-    expect(migrationSql).toContain("status IN ('open', 'claimed')");
+    // The resolver keeps claimed watches for future matching
+    // completions; only the open handoff resolves.
+    expect(migrationSql).toContain("AND status = 'open';");
+    expect(migrationSql).not.toContain("status IN ('open', 'claimed')");
   });
 
   it('keeps a non-failed verdict when a failed redelivery refreshes the watch', () => {

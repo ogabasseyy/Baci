@@ -72,14 +72,30 @@ export async function initiateRefund(
       transaction,
       error: result.error,
     });
-  } else {
-    logger.info({
-      message: 'Paystack refund initiated',
-      transaction,
-      refundId: result.data?.id,
-      status: result.data?.status,
-    });
+    return result;
   }
+  // A successful envelope without a refund object may still have
+  // created the refund: never hand it downstream as an auditable
+  // accept (the recorder would throw before persisting evidence and
+  // the executor would retry a duplicate /refund). Report it as an
+  // ambiguous failure so the handler quarantines delivery-uncertain.
+  if (result.data == null || typeof result.data !== 'object') {
+    logger.error({
+      message: 'Paystack refund response was missing refund data',
+      transaction,
+    });
+    return {
+      success: false,
+      error: 'Paystack refund response was missing refund data',
+      code: 'MALFORMED_RESPONSE',
+    };
+  }
+  logger.info({
+    message: 'Paystack refund initiated',
+    transaction,
+    refundId: result.data.id,
+    status: result.data.status,
+  });
 
   return result;
 }

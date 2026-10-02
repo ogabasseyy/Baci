@@ -183,6 +183,7 @@ export async function GET(request: NextRequest) {
         recordedByUserId: order.recorded_by_user_id,
         total: order.total,
         amountPaid: order.amount_paid,
+        itemCount: order.order_items?.length ?? 0,
       };
       // A fully-covered manual balance is a receipt in substance even under
       // a non-paid label; resolve the type code from the same boolean so a
@@ -225,8 +226,7 @@ export async function GET(request: NextRequest) {
         }),
         receipt_eligible: receiptEligible,
         manual_document_available:
-          isManualOrderDocumentAvailable(documentEligibility) &&
-          Boolean(order.order_items?.length),
+          isManualOrderDocumentAvailable(documentEligibility),
         items: (order.order_items || []).map((item) => {
           const product = extractJoinedProduct(item.products);
           const productImages = extractProductImages(product);

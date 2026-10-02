@@ -66,6 +66,7 @@ interface DocumentEligibilityInput {
   recordedByUserId?: string | null;
   total?: number | string | null;
   amountPaid?: number | string | null;
+  itemCount?: number | null;
 }
 
 export function isManualOrderDocumentAvailable(
@@ -91,7 +92,13 @@ export function isManualOrderDocumentAvailable(
     ['paid', 'unpaid', 'pending', 'partially_paid'].includes(
       normalizePaymentStatus(input.paymentStatus)
     ) &&
-    paidBalanceSettled
+    paidBalanceSettled &&
+    // Items commit separately from the order: an itemless manual order is
+    // not a document yet, and the enqueue trigger refuses it too, so both
+    // the archive flag and the receipt gate below stay false until the
+    // batch lands. Unknown counts fail closed for the same reason.
+    typeof input.itemCount === 'number' &&
+    input.itemCount > 0
   );
 }
 
@@ -251,6 +258,7 @@ export async function getStorefrontAccountDocumentData({
     recordedByUserId: order.recorded_by_user_id,
     total: order.total,
     amountPaid: order.amount_paid,
+    itemCount: (itemsResult.data || []).length,
   });
   const transactionRows = (transactionsResult.data ||
     []) as StorefrontAccountDocumentTransactionRow[];

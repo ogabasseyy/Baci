@@ -14,10 +14,16 @@
 -- payment instructions are snapshotted too (merchant bank fields plus the
 -- preferred virtual account): a bank-detail edit landing mid-dispatch would
 -- otherwise email obsolete instructions and misdirect the customer's
--- transfer. Cosmetic merchant fields (name, logo, colors) stay outside the
--- snapshot, as do ledger rows, which derive from the covered payment state.
--- The worker retries after an abort and converges (fresh send or
--- document_state_changed skip). Safe predeploy: only the new worker calls it.
+-- transfer. Receipts render no payment instructions, so the payment
+-- comparison (including the virtual-account lookup) only runs for invoice
+-- and proforma kinds; otherwise every receipt for an order with an assigned
+-- account would spuriously abort. Cosmetic merchant fields (name, logo,
+-- colors) stay outside the snapshot, as do ledger rows, which derive from
+-- the covered payment state. The rendered VAT subtotals are snapshotted
+-- (count plus canonical rows) since a same-total category correction would
+-- otherwise email a stale tax breakdown. The worker retries after an abort
+-- and converges (fresh send or document_state_changed skip). Safe predeploy:
+-- only the new worker calls it.
 CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_outbox_id uuid,
   p_claim_owner text,
@@ -54,7 +60,9 @@ CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_merchant_bank_account_name text,
   p_va_account_number text,
   p_va_bank_name text,
-  p_va_account_name text
+  p_va_account_name text,
+  p_tax_count integer,
+  p_tax_subtotals jsonb
 )
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
@@ -69,6 +77,9 @@ DECLARE
   v_va_account_number text;
   v_va_bank_name text;
   v_va_account_name text;
+  v_compare_payment boolean;
+  v_tax_count bigint;
+  v_tax_subtotals jsonb;
 BEGIN
   -- Lock the order before the outbox (same order as the claim and trigger
   -- paths) and hold it through the comparison and the mark.
@@ -93,25 +104,42 @@ BEGIN
   ) ORDER BY oi.id), '[]'::jsonb) INTO v_items
   FROM public.order_items AS oi
   WHERE oi.order_id = v_order.id;
+  IF p_document_kind NOT IN ('receipt', 'invoice', 'proforma_invoice') THEN
+    RAISE EXCEPTION 'unknown manual document kind: %', p_document_kind;
+  END IF;
+  -- Receipts render no payment instructions, so the payment snapshot only
+  -- applies to invoice and proforma kinds.
+  v_compare_payment := p_document_kind <> 'receipt';
   -- The preferred virtual account mirrors the sender's resolution (latest
   -- unexpired non-legacy paystack row); a missing row leaves NULLs, which
   -- match a null snapshot. FOR SHARE narrows the open-transaction window
   -- the same way the order lock does.
-  SELECT m.bank_code, m.bank_account_number, m.bank_name, m.bank_account_name
-  INTO v_merchant_bank_code, v_merchant_bank_account_number,
-    v_merchant_bank_name, v_merchant_bank_account_name
-  FROM public.merchants AS m WHERE m.id = v_order.merchant_id FOR SHARE;
-  SELECT opa.account_number, opa.bank_name, opa.account_name
-  INTO v_va_account_number, v_va_bank_name, v_va_account_name
-  FROM public.order_payment_accounts AS opa
-  WHERE opa.order_id = v_order.id AND opa.provider = 'paystack'
-    AND (opa.assignment_customer_email_source IS NULL
-      OR opa.assignment_customer_email_source <> 'legacy_untrusted')
-    AND (opa.expires_at IS NULL OR opa.expires_at > now())
-  ORDER BY opa.created_at DESC LIMIT 1 FOR SHARE;
-  IF p_document_kind NOT IN ('receipt', 'invoice', 'proforma_invoice') THEN
-    RAISE EXCEPTION 'unknown manual document kind: %', p_document_kind;
+  IF v_compare_payment THEN
+    SELECT m.bank_code, m.bank_account_number, m.bank_name, m.bank_account_name
+    INTO v_merchant_bank_code, v_merchant_bank_account_number,
+      v_merchant_bank_name, v_merchant_bank_account_name
+    FROM public.merchants AS m WHERE m.id = v_order.merchant_id FOR SHARE;
+    SELECT opa.account_number, opa.bank_name, opa.account_name
+    INTO v_va_account_number, v_va_bank_name, v_va_account_name
+    FROM public.order_payment_accounts AS opa
+    WHERE opa.order_id = v_order.id AND opa.provider = 'paystack'
+      AND (opa.assignment_customer_email_source IS NULL
+        OR opa.assignment_customer_email_source <> 'legacy_untrusted')
+      AND (opa.expires_at IS NULL OR opa.expires_at > now())
+    ORDER BY opa.created_at DESC LIMIT 1 FOR SHARE;
   END IF;
+  -- The PDF tax breakdown renders the same five columns; both sides sort
+  -- rows by id (uuid text order matches byte order), so the canonical order
+  -- is collation-independent.
+  SELECT count(*) INTO v_tax_count FROM public.order_tax_subtotals AS ts
+  WHERE ts.order_id = v_order.id;
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'vat_category_code', ts.vat_category_code, 'vat_rate', ts.vat_rate,
+    'taxable_amount', ts.taxable_amount, 'tax_amount', ts.tax_amount,
+    'exemption_reason', ts.exemption_reason
+  ) ORDER BY ts.id), '[]'::jsonb) INTO v_tax_subtotals
+  FROM public.order_tax_subtotals AS ts
+  WHERE ts.order_id = v_order.id;
   IF v_order.customer_id IS DISTINCT FROM p_customer_id
     OR lower(trim(both from COALESCE(v_order.customer_email, ''))) IS DISTINCT FROM lower(trim(both from COALESCE(p_customer_email, '')))
     OR v_order.customer_name IS DISTINCT FROM p_customer_name
@@ -138,13 +166,16 @@ BEGIN
     OR v_order.shipping_address IS DISTINCT FROM p_shipping_address
     OR v_item_count IS DISTINCT FROM p_item_count::bigint
     OR v_items IS DISTINCT FROM p_items
-    OR v_merchant_bank_code IS DISTINCT FROM p_merchant_bank_code
-    OR v_merchant_bank_account_number IS DISTINCT FROM p_merchant_bank_account_number
-    OR v_merchant_bank_name IS DISTINCT FROM p_merchant_bank_name
-    OR v_merchant_bank_account_name IS DISTINCT FROM p_merchant_bank_account_name
-    OR v_va_account_number IS DISTINCT FROM p_va_account_number
-    OR v_va_bank_name IS DISTINCT FROM p_va_bank_name
-    OR v_va_account_name IS DISTINCT FROM p_va_account_name
+    OR (v_compare_payment AND (
+      v_merchant_bank_code IS DISTINCT FROM p_merchant_bank_code
+      OR v_merchant_bank_account_number IS DISTINCT FROM p_merchant_bank_account_number
+      OR v_merchant_bank_name IS DISTINCT FROM p_merchant_bank_name
+      OR v_merchant_bank_account_name IS DISTINCT FROM p_merchant_bank_account_name
+      OR v_va_account_number IS DISTINCT FROM p_va_account_number
+      OR v_va_bank_name IS DISTINCT FROM p_va_bank_name
+      OR v_va_account_name IS DISTINCT FROM p_va_account_name))
+    OR v_tax_count IS DISTINCT FROM p_tax_count::bigint
+    OR v_tax_subtotals IS DISTINCT FROM p_tax_subtotals
   THEN
     RETURN jsonb_build_object('status', 'stale');
   END IF;
@@ -156,7 +187,7 @@ BEGIN
   RETURN jsonb_build_object('status', 'marked');
 END;
 $$;
-REVOKE ALL ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text)
+REVOKE ALL ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb)
   FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text)
+GRANT EXECUTE ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb)
   TO service_role;

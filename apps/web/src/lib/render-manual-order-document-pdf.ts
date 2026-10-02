@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { z } from 'zod';
 import { buildManualOrderDocumentPdfInput } from '@/lib/build-manual-order-document-pdf-input';
+import type { DispatchTaxSubtotal } from '@/lib/mark-manual-document-dispatch-started';
 import {
   generateReceiptPDF,
   resolveReceiptLogoDataUri,
@@ -15,7 +16,10 @@ import type { manualDocumentOrderSchema } from '@/schemas/manual-order-document-
  * the invoice's tax breakdown, and the merchant's invoice notes. A failed
  * lookup throws into outbox retry like the receipt-date lookup: a sent
  * document is terminal, so swallowing the error would permanently mis-render
- * a financial document.
+ * a financial document. The normalized tax rows are returned alongside the
+ * PDF so the dispatch marker snapshots exactly what was rendered; a separate
+ * sender-side re-read could land on either side of a mid-dispatch tax
+ * correction and either miss the staleness or cry stale on a fresh render.
  */
 export async function renderManualOrderDocumentPdf({
   supabase,
@@ -51,7 +55,7 @@ export async function renderManualOrderDocumentPdf({
     supabase
       .from('order_tax_subtotals')
       .select(
-        'vat_category_code, vat_rate, taxable_amount, tax_amount, exemption_reason'
+        'id, vat_category_code, vat_rate, taxable_amount, tax_amount, exemption_reason'
       )
       .eq('order_id', order.id),
   ]);
@@ -59,6 +63,16 @@ export async function renderManualOrderDocumentPdf({
     throw new Error('Manual document payment history unavailable');
   if (taxResult.error)
     throw new Error('Manual document tax breakdown unavailable');
+  const taxSubtotals: DispatchTaxSubtotal[] = (taxResult.data ?? []).map(
+    (row) => ({
+      id: String(row.id ?? ''),
+      exemption_reason: (row.exemption_reason as string | null) ?? null,
+      taxable_amount: Number(row.taxable_amount ?? 0),
+      tax_amount: Number(row.tax_amount ?? 0),
+      vat_category_code: String(row.vat_category_code ?? ''),
+      vat_rate: Number(row.vat_rate ?? 0),
+    })
+  );
   const { receiptOrder, receiptMerchant } = buildManualOrderDocumentPdfInput({
     order,
     merchant,
@@ -77,7 +91,7 @@ export async function renderManualOrderDocumentPdf({
     isPaid
   );
   const logoDataUri = await resolveReceiptLogoDataUri(receiptMerchant);
-  return generateReceiptPDF(receiptOrder, receiptMerchant, {
+  const pdf = generateReceiptPDF(receiptOrder, receiptMerchant, {
     documentKind: pdfDocumentKind,
     invoiceTypeCode,
     documentDate:
@@ -86,12 +100,7 @@ export async function renderManualOrderDocumentPdf({
         : order.invoice_issue_date) || order.created_at,
     logoDataUri,
     invoiceNotes: order.invoice_note || order.notes || undefined,
-    taxSubtotals: (taxResult.data ?? []).map((row) => ({
-      exemption_reason: (row.exemption_reason as string | null) ?? null,
-      taxable_amount: Number(row.taxable_amount ?? 0),
-      tax_amount: Number(row.tax_amount ?? 0),
-      vat_category_code: String(row.vat_category_code ?? ''),
-      vat_rate: Number(row.vat_rate ?? 0),
-    })),
+    taxSubtotals: taxSubtotals.map(({ id: _id, ...breakdown }) => breakdown),
   });
+  return { pdf, taxSubtotals };
 }

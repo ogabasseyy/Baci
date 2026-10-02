@@ -83,8 +83,11 @@ export async function sendManualOrderDocument({
     !order.recorded_by_user_id ||
     order.import_job_id ||
     order.external_source ||
+    // The database has no shipping-status constraint: normalize legacy
+    // spellings (Cancelled, CANCELED, padded) like the enqueue trigger so
+    // a canceled order can never slip through this final guard.
     ['cancelled', 'canceled', 'returned', 'failed'].includes(
-      order.shipping_status
+      order.shipping_status.trim().toLowerCase()
     ) ||
     !['paid', 'unpaid', 'pending', 'partially_paid'].includes(
       order.payment_status
@@ -135,7 +138,7 @@ export async function sendManualOrderDocument({
   // Staff-recorded orders may omit the customer name; greet with the import
   // sender's fallback instead of throwing through every retry.
   const displayCustomerName = order.customer_name || 'there';
-  const pdf = await renderManualOrderDocumentPdf({
+  const { pdf, taxSubtotals } = await renderManualOrderDocumentPdf({
     supabase,
     order,
     merchant,
@@ -196,7 +199,8 @@ export async function sendManualOrderDocument({
           virtualAccountNumber: preferredPaymentAccount?.account_number ?? null,
           virtualAccountBankName: preferredPaymentAccount?.bank_name ?? null,
           virtualAccountName: preferredPaymentAccount?.account_name ?? null,
-        }
+        },
+        taxSubtotals
       );
       dispatchStarted = true;
       return;

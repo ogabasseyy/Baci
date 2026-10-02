@@ -44,6 +44,24 @@ const order = {
     },
   ],
 };
+const taxSubtotals = [
+  {
+    id: 'tax-2',
+    vat_category_code: 'E',
+    vat_rate: 0,
+    taxable_amount: 50000,
+    tax_amount: 0,
+    exemption_reason: 'exports',
+  },
+  {
+    id: 'tax-1',
+    vat_category_code: 'S',
+    vat_rate: 7.5,
+    taxable_amount: 100000,
+    tax_amount: 7500,
+    exemption_reason: null,
+  },
+];
 const payment = {
   merchantBankCode: '058',
   merchantBankAccountNumber: '1234567890',
@@ -66,7 +84,8 @@ describe('markManualDocumentDispatchStarted', () => {
         row,
         order as never,
         'receipt',
-        payment
+        payment,
+        taxSubtotals
       )
     ).resolves.toBeUndefined();
     expect(rpc).toHaveBeenCalledWith('mark_manual_document_dispatch_started', {
@@ -116,6 +135,23 @@ describe('markManualDocumentDispatchStarted', () => {
           item_description: 'Sealed box',
         },
       ],
+      p_tax_count: 2,
+      p_tax_subtotals: [
+        {
+          vat_category_code: 'S',
+          vat_rate: 7.5,
+          taxable_amount: 100000,
+          tax_amount: 7500,
+          exemption_reason: null,
+        },
+        {
+          vat_category_code: 'E',
+          vat_rate: 0,
+          taxable_amount: 50000,
+          tax_amount: 0,
+          exemption_reason: 'exports',
+        },
+      ],
     });
   });
 
@@ -130,7 +166,8 @@ describe('markManualDocumentDispatchStarted', () => {
         row,
         order as never,
         'receipt',
-        payment
+        payment,
+        taxSubtotals
       )
     ).rejects.toThrow('Manual document order changed before dispatch');
   });
@@ -146,7 +183,8 @@ describe('markManualDocumentDispatchStarted', () => {
         row,
         order as never,
         'receipt',
-        payment
+        payment,
+        taxSubtotals
       )
     ).rejects.toThrow('Manual document dispatch lease lost');
   });
@@ -162,7 +200,8 @@ describe('markManualDocumentDispatchStarted', () => {
         row,
         order as never,
         'receipt',
-        payment
+        payment,
+        taxSubtotals
       )
     ).rejects.toThrow('Manual document dispatch state unavailable');
   });

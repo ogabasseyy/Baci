@@ -142,6 +142,54 @@ describe('GET /api/storefront/orders order-list cases', () => {
     ]);
   });
 
+  it('hides itemless manual orders from the archive until the item batch lands', async () => {
+    vi.mocked(authenticateApiRequest).mockResolvedValue(
+      createAuthenticatedAuthResult(
+        createSupabaseMock({
+          orders: {
+            data: [
+              {
+                id: 'manual-itemless',
+                order_number: 'MANUAL-2',
+                created_at: '2026-09-30T09:00:00Z',
+                total: 100,
+                subtotal: 100,
+                shipping_fee: 0,
+                tax_amount: 0,
+                discount_amount: 0,
+                amount_paid: 100,
+                currency: 'NGN',
+                payment_status: 'paid',
+                shipping_status: 'pending',
+                recorded_by_user_id: 'staff-1',
+                shipping_address: null,
+                tracking_number: null,
+                shipping_provider: null,
+                payment_method: 'bank_transfer',
+                order_items: [],
+              },
+            ],
+            error: null,
+          },
+        })
+      )
+    );
+
+    const response = await GET(
+      new NextRequest(
+        'http://localhost/api/storefront/orders?merchantSlug=ogabassey'
+      )
+    );
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.orders[0]).toMatchObject({
+      manual_document_available: false,
+      receipt_eligible: false,
+      current_document_kind: 'invoice',
+    });
+  });
+
   it('falls back to joined product images when imported order items have no snapshot image', async () => {
     vi.mocked(authenticateApiRequest).mockResolvedValue(
       createAuthenticatedAuthResult(

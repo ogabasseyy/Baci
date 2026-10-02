@@ -87,7 +87,14 @@ This ordering matters because old revisions 500 the whole claimed batch
 expiry) when a batch contains a manual event type. Watch the cron 5xx rate
 and outbox lock age while the new worker rolls out; any `manual_order_*`
 500 means an old revision is still draining, so hold further deploys until
-the batches clear. No new email provider,
+the batches clear. In steady state, alert on sustained growth of the
+`unparseable` summary counter: id-less rows and valid-but-unknown event
+types loop on the lease by design (never dead-lettered, so a future
+producer or a transient claim-payload bug cannot lose notifications), and
+only a dashboard alert surfaces a poison payload churning the cron.
+Shipping rows with dropped fields heal on the next parse once the producer
+is fixed; manual rows with dropped fields dead-letter on first sight and
+re-arm on the next order touch. No new email provider,
 cron schedule, app release or environment variable is required. Use a disposable
 staging merchant and test inbox to verify actual provider acceptance, PDF rendering,
 verified sign-in and account receipt access before a production release. No live

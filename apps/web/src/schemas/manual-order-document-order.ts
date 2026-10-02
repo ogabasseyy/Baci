@@ -44,7 +44,10 @@ export const manualDocumentOrderSchema = z.object({
       // Mobile staff app persists camelCase; the PDF builder normalizes it.
       postalCode: z.string().optional(),
       country: z.string().optional(),
+      // Passthrough: the dispatch marker compares the stored address key
+      // set exactly, so unknown keys must survive parsing.
     })
+    .passthrough()
     .nullable(),
   order_items: z.array(
     z.object({

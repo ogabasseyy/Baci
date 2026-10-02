@@ -236,7 +236,7 @@ describe('send manual order document', () => {
   });
 
   it('does not cross the provider boundary with a lost lease', async () => {
-    const db = database({}, { dispatchMissing: true });
+    const db = database({}, { dispatchStatus: 'lease_lost' });
     const provider = vi.fn();
     sendEmail.mockImplementationOnce(async (message) => {
       await message.beforeTransportDispatch();
@@ -247,9 +247,6 @@ describe('send manual order document', () => {
       sendManualOrderDocument({ supabase: db.client, row })
     ).rejects.toThrow('lease lost');
     expect(provider).not.toHaveBeenCalled();
-    expect(db.filters['order_notification_outbox.dispatch_started_at']).toBe(
-      null
-    );
   });
 
   it('leaves definite rejected sends retryable', async () => {
@@ -316,6 +313,17 @@ describe('send manual order document', () => {
       sendManualOrderDocument({ supabase: db.client, row })
     ).rejects.toThrow('changed during preparation');
     expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('never rewrites the dispatch marker the atomic RPC already set', async () => {
+    const db = database();
+    const result = await sendManualOrderDocument({ supabase: db.client, row });
+    expect(result.status).toBe('sent');
+    // The RPC commits dispatch_started_at, so a second conditional write
+    // filtered by IS NULL would match zero rows and fail every real send.
+    expect(
+      db.filters['order_notification_outbox.dispatch_started_at']
+    ).toBeUndefined();
   });
 
   it('retries instead of dispatching when the dispatch marker reports a stale order', async () => {

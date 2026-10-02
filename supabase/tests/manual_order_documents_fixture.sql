@@ -15,9 +15,12 @@ CREATE TABLE public.import_jobs (id uuid PRIMARY KEY, merchant_id uuid, status t
 CREATE TABLE public.orders (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), merchant_id uuid REFERENCES public.merchants,
   customer_id uuid REFERENCES public.customers, customer_email text, customer_name text,
-  order_number text, recorded_by_user_id uuid, import_job_id uuid, external_source text,
+  customer_phone text, order_number text, recorded_by_user_id uuid, import_job_id uuid, external_source text,
   created_at timestamptz DEFAULT now(), payment_status text DEFAULT 'unpaid', shipping_status text DEFAULT 'pending',
-  total numeric DEFAULT 100, amount_paid numeric DEFAULT 0, payment_method text, invoice_type_code text,
+  total numeric DEFAULT 100, subtotal numeric DEFAULT 0, shipping_fee numeric DEFAULT 0,
+  tax_amount numeric DEFAULT 0, discount_amount numeric DEFAULT 0, amount_paid numeric DEFAULT 0,
+  currency text DEFAULT 'NGN', payment_method text, invoice_type_code text, invoice_note text, notes text,
+  transaction_date timestamptz, invoice_issue_date date, shipping_address jsonb,
   fulfillment_notification_cycle_id uuid DEFAULT gen_random_uuid()
 );
 CREATE TABLE public.order_items (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), order_id uuid REFERENCES public.orders ON DELETE CASCADE, name text, quantity integer, price numeric, variant_name text, condition text, created_at timestamptz DEFAULT now());

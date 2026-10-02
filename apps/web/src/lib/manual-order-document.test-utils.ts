@@ -69,7 +69,6 @@ export function database(
   options: {
     claimMarkerError?: boolean;
     claimMarkerThrows?: boolean;
-    dispatchMissing?: boolean;
     merchantOverride?: Record<string, unknown>;
     paymentAccounts?: Record<string, unknown>[];
     paymentAccountError?: { message: string } | null;
@@ -84,14 +83,18 @@ export function database(
   } = {}
 ) {
   const filters: Record<string, unknown> = {};
+  // Models the RPC-committed dispatch marker: once marked, a second
+  // conditional write filtered by dispatch_started_at IS NULL matches zero
+  // rows, so the suite fails if the sender ever re-adds one.
+  let dispatchMarked = false;
   const effectiveOrder = { ...orderFixture, ...orderOverride };
   const client = {
     rpc: vi.fn().mockImplementation((fn: string) => {
-      if (fn === 'mark_manual_document_dispatch_started')
-        return Promise.resolve({
-          data: { status: options.dispatchStatus ?? 'marked' },
-          error: null,
-        });
+      if (fn === 'mark_manual_document_dispatch_started') {
+        const status = options.dispatchStatus ?? 'marked';
+        if (status === 'marked') dispatchMarked = true;
+        return Promise.resolve({ data: { status }, error: null });
+      }
       return Promise.resolve({
         data: {
           status: 'created',
@@ -147,6 +150,12 @@ export function database(
         maybeSingle: vi.fn(() => {
           if (table === 'receipt_claims' && options.claimMarkerThrows)
             return Promise.reject(new Error('network lost'));
+          if (
+            table === 'order_notification_outbox' &&
+            dispatchMarked &&
+            filters['order_notification_outbox.dispatch_started_at'] === null
+          )
+            return Promise.resolve({ data: null, error: null });
           if (table === 'domains')
             return Promise.resolve({
               data: options.primaryDomain
@@ -169,9 +178,7 @@ export function database(
                   ? { ...merchantFixture, ...options.merchantOverride }
                   : table === 'receipt_claims'
                     ? { id: 'claim-1' }
-                    : options.dispatchMissing
-                      ? null
-                      : { id: 'outbox-1' },
+                    : { id: 'outbox-1' },
             error:
               table === 'receipt_claims' && options.claimMarkerError
                 ? { message: 'failed write' }

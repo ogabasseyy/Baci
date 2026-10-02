@@ -3,20 +3,39 @@
 -- millisecond race between the re-read and the marker; this function holds
 -- the order row (FOR SHARE, matching the claim/trigger lock order) while
 -- comparing, so a payment, contact correction, or item edit landing
--- mid-dispatch aborts instead of sending a stale document. The item
--- comparison covers contents, not just the count: a same-count name, price,
--- or variant edit aborts too. The worker retries after an abort and
--- converges (fresh send or document_state_changed skip). Safe predeploy:
--- only the new worker calls it.
+-- mid-dispatch aborts instead of sending a stale document. The snapshot
+-- covers every order-row input the renderer reads (identity, money
+-- breakdown, notes, address, dates, and item contents): a same-total money
+-- redistribution or address correction aborts too. Merchant-profile and
+-- ledger rows are outside the snapshot; ledger rows derive from the covered
+-- payment state, and a merchant edit landing in the dispatch window is
+-- accepted as negligible. The worker retries after an abort and converges
+-- (fresh send or document_state_changed skip). Safe predeploy: only the new
+-- worker calls it.
 CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_outbox_id uuid,
   p_claim_owner text,
   p_customer_id uuid,
   p_customer_email text,
+  p_customer_name text,
+  p_customer_phone text,
   p_total numeric,
+  p_subtotal numeric,
+  p_shipping_fee numeric,
+  p_tax_amount numeric,
+  p_discount_amount numeric,
   p_amount_paid numeric,
+  p_currency text,
+  p_order_number text,
   p_payment_status text,
+  p_payment_method text,
   p_shipping_status text,
+  p_invoice_type_code text,
+  p_invoice_note text,
+  p_notes text,
+  p_transaction_date timestamptz,
+  p_invoice_issue_date date,
+  p_shipping_address jsonb,
   p_item_count integer,
   p_items jsonb
 )
@@ -51,10 +70,25 @@ BEGIN
   WHERE oi.order_id = v_order.id;
   IF v_order.customer_id IS DISTINCT FROM p_customer_id
     OR lower(trim(both from COALESCE(v_order.customer_email, ''))) IS DISTINCT FROM lower(trim(both from COALESCE(p_customer_email, '')))
+    OR v_order.customer_name IS DISTINCT FROM p_customer_name
+    OR v_order.customer_phone IS DISTINCT FROM p_customer_phone
     OR v_order.total IS DISTINCT FROM p_total
+    OR v_order.subtotal IS DISTINCT FROM p_subtotal
+    OR v_order.shipping_fee IS DISTINCT FROM p_shipping_fee
+    OR v_order.tax_amount IS DISTINCT FROM p_tax_amount
+    OR v_order.discount_amount IS DISTINCT FROM p_discount_amount
     OR v_order.amount_paid IS DISTINCT FROM p_amount_paid
+    OR v_order.currency IS DISTINCT FROM p_currency
+    OR v_order.order_number IS DISTINCT FROM p_order_number
     OR v_order.payment_status IS DISTINCT FROM p_payment_status
+    OR v_order.payment_method IS DISTINCT FROM p_payment_method
     OR v_order.shipping_status IS DISTINCT FROM p_shipping_status
+    OR v_order.invoice_type_code IS DISTINCT FROM p_invoice_type_code
+    OR v_order.invoice_note IS DISTINCT FROM p_invoice_note
+    OR v_order.notes IS DISTINCT FROM p_notes
+    OR v_order.transaction_date IS DISTINCT FROM p_transaction_date
+    OR v_order.invoice_issue_date IS DISTINCT FROM p_invoice_issue_date
+    OR v_order.shipping_address IS DISTINCT FROM p_shipping_address
     OR v_item_count IS DISTINCT FROM p_item_count::bigint
     OR v_items IS DISTINCT FROM p_items
   THEN
@@ -66,7 +100,7 @@ BEGIN
   RETURN jsonb_build_object('status', 'marked');
 END;
 $$;
-REVOKE ALL ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, numeric, numeric, text, text, integer, jsonb)
+REVOKE ALL ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, integer, jsonb)
   FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, numeric, numeric, text, text, integer, jsonb)
+GRANT EXECUTE ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, integer, jsonb)
   TO service_role;

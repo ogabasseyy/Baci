@@ -16,7 +16,9 @@ export async function resolveManualDocumentReceiptDate(
     .select('created_at')
     .eq('order_id', orderId)
     .eq('transaction_type', 'payment')
-    .eq('status', 'completed')
+    // Paystack-backed payments settle as 'success', manual ones as
+    // 'completed': the DVA reservation paths treat both as settled.
+    .in('status', ['completed', 'success'])
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();

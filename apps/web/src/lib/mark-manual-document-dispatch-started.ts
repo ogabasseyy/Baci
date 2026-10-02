@@ -64,6 +64,14 @@ export interface DispatchTaxSubtotal {
   exemption_reason: string | null;
 }
 
+export interface DispatchTransaction {
+  id: string;
+  amount: number | null;
+  created_at: string | null;
+  description: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
 /**
  * Atomically validates the rendered snapshot and marks dispatch start. A
  * check-then-mark in application code leaves a millisecond race between the
@@ -80,9 +88,11 @@ export interface DispatchTaxSubtotal {
  * instructions, so comparing them would spuriously abort every receipt for
  * an order with an assigned account. The rendered VAT subtotals are covered
  * too (count plus canonical rows) since a same-total category correction
- * would otherwise email a stale tax breakdown. The rendered kind is passed
- * explicitly so the RPC can snapshot exactly what is being sent. Callers
- * must pass the exact values the PDF was rendered from.
+ * would otherwise email a stale tax breakdown, as is the rendered payment
+ * history: a payment inserted or corrected mid-dispatch must abort rather
+ * than email a stale Payment table. The rendered kind is passed explicitly
+ * so the RPC can snapshot exactly what is being sent. Callers must pass
+ * the exact values the PDF was rendered from.
  */
 export async function markManualDocumentDispatchStarted(
   supabase: SupabaseClient,
@@ -90,7 +100,8 @@ export async function markManualDocumentDispatchStarted(
   order: DispatchOrderSnapshot,
   documentKind: 'invoice' | 'proforma_invoice' | 'receipt',
   payment: DispatchPaymentSnapshot,
-  taxSubtotals: readonly DispatchTaxSubtotal[]
+  taxSubtotals: readonly DispatchTaxSubtotal[],
+  transactions: readonly DispatchTransaction[]
 ): Promise<void> {
   const { data, error } = await supabase.rpc(
     'mark_manual_document_dispatch_started',
@@ -150,6 +161,15 @@ export async function markManualDocumentDispatchStarted(
           taxable_amount: tax.taxable_amount,
           tax_amount: tax.tax_amount,
           exemption_reason: tax.exemption_reason,
+        })),
+      p_txn_count: transactions.length,
+      p_transactions: [...transactions]
+        .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        .map((txn) => ({
+          amount: txn.amount,
+          created_at: txn.created_at,
+          description: txn.description,
+          metadata: txn.metadata,
         })),
     }
   );

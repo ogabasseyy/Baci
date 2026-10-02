@@ -28,12 +28,14 @@ describe('render manual order document pdf', () => {
       {
         paymentHistory: [
           {
+            id: 'txn-1',
             amount: 500000,
             created_at: '2026-09-29T09:00:00Z',
             description: null,
             metadata: { payment_method: 'bank_transfer' },
           },
           {
+            id: 'txn-2',
             amount: 450000,
             created_at: '2026-09-30T09:00:00Z',
             description: 'balance',
@@ -97,6 +99,25 @@ describe('render manual order document pdf', () => {
       },
     ]);
     expect(options?.invoiceNotes).toBe('Call before delivery');
+    // Paystack-backed payments settle as 'success': both settled statuses
+    // must reach the payment table, not just manual 'completed' rows.
+    expect(db.filters['transactions.status']).toEqual(['completed', 'success']);
+    expect(rendered.transactions).toEqual([
+      {
+        id: 'txn-1',
+        amount: 500000,
+        created_at: '2026-09-29T09:00:00Z',
+        description: null,
+        metadata: { payment_method: 'bank_transfer' },
+      },
+      {
+        id: 'txn-2',
+        amount: 450000,
+        created_at: '2026-09-30T09:00:00Z',
+        description: 'balance',
+        metadata: null,
+      },
+    ]);
   });
 
   it('prefers the explicit invoice note over staff order notes', async () => {

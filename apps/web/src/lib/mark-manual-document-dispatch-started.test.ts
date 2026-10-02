@@ -62,6 +62,22 @@ const taxSubtotals = [
     exemption_reason: null,
   },
 ];
+const transactions = [
+  {
+    id: 'txn-2',
+    amount: 50000,
+    created_at: '2026-09-30T09:00:00+00:00',
+    description: 'balance',
+    metadata: null,
+  },
+  {
+    id: 'txn-1',
+    amount: 50000,
+    created_at: '2026-09-29T09:00:00+00:00',
+    description: null,
+    metadata: { payment_method: 'bank_transfer' },
+  },
+];
 const payment = {
   merchantBankCode: '058',
   merchantBankAccountNumber: '1234567890',
@@ -85,7 +101,8 @@ describe('markManualDocumentDispatchStarted', () => {
         order as never,
         'receipt',
         payment,
-        taxSubtotals
+        taxSubtotals,
+        transactions
       )
     ).resolves.toBeUndefined();
     expect(rpc).toHaveBeenCalledWith('mark_manual_document_dispatch_started', {
@@ -152,6 +169,21 @@ describe('markManualDocumentDispatchStarted', () => {
           exemption_reason: 'exports',
         },
       ],
+      p_txn_count: 2,
+      p_transactions: [
+        {
+          amount: 50000,
+          created_at: '2026-09-29T09:00:00+00:00',
+          description: null,
+          metadata: { payment_method: 'bank_transfer' },
+        },
+        {
+          amount: 50000,
+          created_at: '2026-09-30T09:00:00+00:00',
+          description: 'balance',
+          metadata: null,
+        },
+      ],
     });
   });
 
@@ -167,7 +199,8 @@ describe('markManualDocumentDispatchStarted', () => {
         order as never,
         'receipt',
         payment,
-        taxSubtotals
+        taxSubtotals,
+        transactions
       )
     ).rejects.toThrow('Manual document order changed before dispatch');
   });
@@ -184,7 +217,8 @@ describe('markManualDocumentDispatchStarted', () => {
         order as never,
         'receipt',
         payment,
-        taxSubtotals
+        taxSubtotals,
+        transactions
       )
     ).rejects.toThrow('Manual document dispatch lease lost');
   });
@@ -201,7 +235,8 @@ describe('markManualDocumentDispatchStarted', () => {
         order as never,
         'receipt',
         payment,
-        taxSubtotals
+        taxSubtotals,
+        transactions
       )
     ).rejects.toThrow('Manual document dispatch state unavailable');
   });

@@ -77,21 +77,20 @@ export async function sendManualOrderDocument({
     return { status: 'skipped', reason: 'merchant_validation_failed' };
   const order = orderParsed.data;
   const merchant = merchantParsed.data;
+  // Neither status column has a database constraint: normalize legacy
+  // spellings (Paid, CANCELLED, padded) like the enqueue trigger so the
+  // sender agrees with the trigger on what is terminal, paid, or eligible.
+  const paymentStatus = order.payment_status.trim().toLowerCase();
   if (
     order.merchant_id !== row.merchant_id ||
     merchant.id !== row.merchant_id ||
     !order.recorded_by_user_id ||
     order.import_job_id ||
     order.external_source ||
-    // The database has no shipping-status constraint: normalize legacy
-    // spellings (Cancelled, CANCELED, padded) like the enqueue trigger so
-    // a canceled order can never slip through this final guard.
     ['cancelled', 'canceled', 'returned', 'failed'].includes(
       order.shipping_status.trim().toLowerCase()
     ) ||
-    !['paid', 'unpaid', 'pending', 'partially_paid'].includes(
-      order.payment_status
-    )
+    !['paid', 'unpaid', 'pending', 'partially_paid'].includes(paymentStatus)
   ) {
     return { status: 'skipped', reason: 'ineligible_manual_order' };
   }
@@ -104,8 +103,7 @@ export async function sendManualOrderDocument({
   // A fully-covered balance is substantively paid even under a non-paid
   // label (e.g. an over-amount partial): mirror the trigger so a settled
   // order renders a receipt, never a zero-balance invoice.
-  const isPaid =
-    order.payment_status === 'paid' || order.amount_paid >= order.total;
+  const isPaid = paymentStatus === 'paid' || order.amount_paid >= order.total;
   const documentKind = isPaid ? 'receipt' : 'invoice';
   if ((row.event_type === 'manual_order_receipt') !== isPaid)
     return { status: 'skipped', reason: 'document_state_changed' };
@@ -120,7 +118,7 @@ export async function sendManualOrderDocument({
         paymentMethod: order.payment_method,
         isPaid,
         wasPaid: false,
-        paymentStatus: order.payment_status,
+        paymentStatus,
         amountPaid: order.amount_paid,
         storedTypeCode: order.invoice_type_code,
       });
@@ -138,16 +136,17 @@ export async function sendManualOrderDocument({
   // Staff-recorded orders may omit the customer name; greet with the import
   // sender's fallback instead of throwing through every retry.
   const displayCustomerName = order.customer_name || 'there';
-  const { pdf, taxSubtotals } = await renderManualOrderDocumentPdf({
-    supabase,
-    order,
-    merchant,
-    recipientEmail: recipient.email,
-    preferredPaymentAccount,
-    isPaid,
-    pdfDocumentKind,
-    invoiceTypeCode,
-  });
+  const { pdf, taxSubtotals, transactions } =
+    await renderManualOrderDocumentPdf({
+      supabase,
+      order,
+      merchant,
+      recipientEmail: recipient.email,
+      preferredPaymentAccount,
+      isPaid,
+      pdfDocumentKind,
+      invoiceTypeCode,
+    });
   const claim = createReceiptClaimToken();
   const { data, error } = await supabase.rpc(
     'create_manual_order_document_claim',
@@ -200,7 +199,8 @@ export async function sendManualOrderDocument({
           virtualAccountBankName: preferredPaymentAccount?.bank_name ?? null,
           virtualAccountName: preferredPaymentAccount?.account_name ?? null,
         },
-        taxSubtotals
+        taxSubtotals,
+        transactions
       );
       dispatchStarted = true;
       return;

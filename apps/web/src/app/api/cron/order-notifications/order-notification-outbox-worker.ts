@@ -69,6 +69,12 @@ async function markSkipped(
 ) {
   await updateOutboxStatus(supabase, row, {
     last_error: null,
+    // A previously retried row carries a future next_attempt_at: leaving it
+    // set on a terminal row confuses janitor queries and dashboards.
+    // dispatch_started_at is deliberately NOT cleared here: a skip after a
+    // lost-claim race can carry a live marker, and clearing it would destroy
+    // the at-most-once evidence the stale-dispatch terminalizer keys on.
+    next_attempt_at: null,
     skip_reason: reason,
     skipped_at: new Date().toISOString(),
     status: 'skipped' satisfies OrderNotificationOutboxStatus,

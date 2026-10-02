@@ -127,7 +127,10 @@ export function database(
           updates.push({ table, values });
           return builder;
         }),
-        in: vi.fn(() => builder),
+        in: vi.fn((key: string, value: unknown) => {
+          filters[`${table}.${key}`] = value;
+          return builder;
+        }),
         or: vi.fn(() => builder),
         order: vi.fn(() => builder),
         limit: vi.fn(() => builder),

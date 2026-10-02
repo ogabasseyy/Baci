@@ -32,17 +32,6 @@ BEGIN
   WHERE o.id IN (SELECT rco.order_id FROM public.receipt_claim_orders AS rco
                  WHERE rco.receipt_claim_id = v_claim.id)
   FOR UPDATE;
-  SELECT count(*) INTO v_order_count
-  FROM public.orders AS o
-  WHERE o.id IN (SELECT rco.order_id FROM public.receipt_claim_orders AS rco
-                 WHERE rco.receipt_claim_id = v_claim.id)
-    AND o.merchant_id IS NOT DISTINCT FROM v_claim.merchant_id
-    AND o.customer_id IS NOT DISTINCT FROM v_claim.customer_id;
-  IF v_order_count = 0
-    OR v_order_count IS DISTINCT FROM (SELECT count(*) FROM public.receipt_claim_orders AS rco
-                                       WHERE rco.receipt_claim_id = v_claim.id) THEN
-    RETURN jsonb_build_object('status', 'customer_link_failed');
-  END IF;
   -- Reuse the verified user's existing row first: after an auth-email
   -- change the email lookup below would create a second row and the user_id
   -- assignment would violate idx_customers_merchant_user, 500ing the
@@ -76,6 +65,26 @@ BEGIN
     RETURN jsonb_build_object('status', 'customer_link_failed');
   END IF;
   IF v_owner.user_id IS NOT NULL AND v_owner.user_id IS DISTINCT FROM p_user_id THEN
+    RETURN jsonb_build_object('status', 'customer_link_failed');
+  END IF;
+  -- Every claimed order must still sit on the claimed row, or already sit
+  -- on the redeemer-linked owner row: an invoice claim and a receipt claim
+  -- for the same order both start on the stale row, and the first redeem
+  -- moves the order, so the sibling must accept the post-move state
+  -- instead of stranding its own document. Accepting only the
+  -- redeemer-linked row keeps this safe: orders on anyone else's row
+  -- still fail closed above or here.
+  SELECT count(*) INTO v_order_count
+  FROM public.orders AS o
+  WHERE o.id IN (SELECT rco.order_id FROM public.receipt_claim_orders AS rco
+                 WHERE rco.receipt_claim_id = v_claim.id)
+    AND o.merchant_id IS NOT DISTINCT FROM v_claim.merchant_id
+    AND (o.customer_id IS NOT DISTINCT FROM v_claim.customer_id
+      OR (o.customer_id IS NOT DISTINCT FROM v_owner.id
+        AND v_owner.user_id = p_user_id));
+  IF v_order_count = 0
+    OR v_order_count IS DISTINCT FROM (SELECT count(*) FROM public.receipt_claim_orders AS rco
+                                       WHERE rco.receipt_claim_id = v_claim.id) THEN
     RETURN jsonb_build_object('status', 'customer_link_failed');
   END IF;
   UPDATE public.customers AS c

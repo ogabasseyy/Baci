@@ -23,7 +23,10 @@
 -- (count plus canonical rows) since a same-total category correction would
 -- otherwise email a stale tax breakdown. The worker retries after an abort
 -- and converges (fresh send or document_state_changed skip). Safe predeploy:
--- only the new worker calls it.
+-- only the new worker calls it. The rendered payment-history rows are
+-- snapshotted the same way (count plus canonical rows over the sender's
+-- settled-status filter): a payment inserted or corrected mid-dispatch
+-- would otherwise email a stale Payment table.
 CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_outbox_id uuid,
   p_claim_owner text,
@@ -62,7 +65,9 @@ CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_va_bank_name text,
   p_va_account_name text,
   p_tax_count integer,
-  p_tax_subtotals jsonb
+  p_tax_subtotals jsonb,
+  p_txn_count integer,
+  p_transactions jsonb
 )
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
@@ -80,6 +85,8 @@ DECLARE
   v_compare_payment boolean;
   v_tax_count bigint;
   v_tax_subtotals jsonb;
+  v_txn_count bigint;
+  v_transactions jsonb;
 BEGIN
   -- Lock the order before the outbox (same order as the claim and trigger
   -- paths) and hold it through the comparison and the mark.
@@ -140,6 +147,19 @@ BEGIN
   ) ORDER BY ts.id), '[]'::jsonb) INTO v_tax_subtotals
   FROM public.order_tax_subtotals AS ts
   WHERE ts.order_id = v_order.id;
+  -- The settled-status filter mirrors the sender's read exactly
+  -- (payment type, completed/success): a row flipping out of the filter
+  -- changes the count and aborts, and unsettled rows never count.
+  SELECT count(*) INTO v_txn_count FROM public.transactions AS t
+  WHERE t.order_id = v_order.id AND t.transaction_type = 'payment'
+    AND t.status IN ('completed', 'success');
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'amount', t.amount, 'created_at', t.created_at,
+    'description', t.description, 'metadata', t.metadata
+  ) ORDER BY t.id), '[]'::jsonb) INTO v_transactions
+  FROM public.transactions AS t
+  WHERE t.order_id = v_order.id AND t.transaction_type = 'payment'
+    AND t.status IN ('completed', 'success');
   IF v_order.customer_id IS DISTINCT FROM p_customer_id
     OR lower(trim(both from COALESCE(v_order.customer_email, ''))) IS DISTINCT FROM lower(trim(both from COALESCE(p_customer_email, '')))
     OR v_order.customer_name IS DISTINCT FROM p_customer_name
@@ -176,6 +196,8 @@ BEGIN
       OR v_va_account_name IS DISTINCT FROM p_va_account_name))
     OR v_tax_count IS DISTINCT FROM p_tax_count::bigint
     OR v_tax_subtotals IS DISTINCT FROM p_tax_subtotals
+    OR v_txn_count IS DISTINCT FROM p_txn_count::bigint
+    OR v_transactions IS DISTINCT FROM p_transactions
   THEN
     RETURN jsonb_build_object('status', 'stale');
   END IF;
@@ -187,7 +209,7 @@ BEGIN
   RETURN jsonb_build_object('status', 'marked');
 END;
 $$;
-REVOKE ALL ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb)
+REVOKE ALL ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb)
   FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb)
+GRANT EXECUTE ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb)
   TO service_role;

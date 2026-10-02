@@ -110,6 +110,20 @@ def audit_step_commands(ctx, drift):
         strict = name == "Install Muse Code" or any(
             secret_ref.search(line) for line in span)
         allowed = STRICT_ALLOW if strict else LOOSE_ALLOW
+        for line in span:
+            # Alias-valued run fields (run: *payload): GitHub
+            # resolves the anchor before executing, while the
+            # argv0 rules below skip *-leading words as globs. Fail
+            # closed on the alias itself (optional &anchor/!!tag
+            # prefixes included); quoted '*x' is a literal string
+            # and block-scalar bodies cannot be alias nodes, so
+            # only a same-line bare alias matches.
+            if re.match(r"""\s*(?:-\s+)?(?:"run"|'run'|run)\s*:"""
+                         r"""\s*(?:(?:&\S+|!!\S+)\s+)*"""
+                         r"""\*[A-Za-z0-9_-]+\s*(?:#.*)?$""",
+                         line) \
+                    and "secret-step-untrusted-command" not in drift:
+                drift.append("secret-step-untrusted-command")
         for seg in run_segments(span):
             for tgt in redirect_targets(seg):
                 if is_trusted_write_target(tgt) \

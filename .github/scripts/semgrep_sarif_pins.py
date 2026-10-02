@@ -8,6 +8,7 @@ Also home to the helper path predicates: they decide purely
 from the pins above, so the trust anchors and their tests
 stay in one reviewable place.
 """
+import posixpath
 import re
 
 AUDITED_RULE_ID = (
@@ -41,28 +42,53 @@ def _ws_rooted(token):
     return WS_MARKER in token and TRUSTED_MARKER not in token
 
 
+def _contained_exec_path(path, root_re):
+    # True when a root-anchored operand stays beneath its root
+    # after lexical normalization: normpath first (a .. that
+    # eats the root fails the re-match), then re-match. The
+    # remainder must hold no $/backtick/backslash (an unresolved
+    # var or escape can smuggle .. past the split). An empty
+    # remainder (the bare root) passes: it cannot escape.
+    m = re.match(root_re, path)
+    if not m:
+        return False
+    if any(ch in path[m.end():] for ch in ("$", "`", "\\")):
+        return False
+    if not path[m.end():]:
+        return True
+    return re.match(root_re, posixpath.normpath(path)) \
+        is not None
+
+
 def _safe_exec_path(path):
     # Allow iff the target cannot be attacker-planted: the
     # trusted tree, install-audited $HOME, and absolute system
     # paths (helpers never run as root, so those are unowned).
     # Relative paths resolve under the PR-head checkout;
-    # temp dirs and the runner temp dir hold job data.
+    # temp dirs and the runner temp dir hold job data. Every
+    # branch normalizes before matching, so .. spellings
+    # (${SCRIPT_DIR}/../../evil, /usr/../home/evil) cannot
+    # escape their root into an allowed prefix.
     if re.match(SCRIPT_PIN, path):
-        return True
+        return _contained_exec_path(path, SCRIPT_PIN)
     if re.match(HOME_PIN, path):
+        return _contained_exec_path(path, HOME_PIN)
+    if path == "~":
         return True
-    if path == "~" or path.startswith("~/"):
-        return True
+    if path.startswith("~/"):
+        return _contained_exec_path(path, r"^~/")
     if path.startswith("~"):
         return False
-    if path == "/home/runner" \
-            or path.startswith("/home/runner/"):
+    if path == "/home/runner":
         return True
+    if path.startswith("/home/runner/"):
+        return _contained_exec_path(path, r"^/home/runner/")
     if path.startswith("/"):
-        if re.match(r"^/(usr|bin|sbin|opt|etc)/", path) \
-                or re.match(r"^/lib[^/]*/", path) \
-                or path == "/":
-            return True
+        norm = posixpath.normpath(path)
+        if re.match(r"^/(usr|bin|sbin|opt|etc)/", norm) \
+                or re.match(r"^/lib[^/]*/", norm) \
+                or norm == "/":
+            return not any(ch in path for ch in ("$", "`", "\\"))
         return False
     return False
 

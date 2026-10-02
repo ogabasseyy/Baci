@@ -6,6 +6,7 @@ import re
 from semgrep_sarif_copy import (COPY_TOOLS, audit_copy_dest,
                                 audit_find_output)
 from semgrep_sarif_embeds import _check_awk, _check_perl
+from semgrep_sarif_gh import audit_gh
 from semgrep_sarif_git import audit_git
 from semgrep_sarif_pins import (RUNNER_PIN, SCRIPT_PIN,
                                 _safe_exec_path, _ws_rooted)
@@ -44,8 +45,9 @@ def _jq_program(rest):
 
 # Bare network-capable commands: no audited helper needs them —
 # install.sh's pinned download curl is the single exemption
-# (the installer URL rule constrains its target), and gh/git
-# stay allowed (load-bearing; programs audit separately). A bare
+# (the installer URL rule constrains its target); git stays
+# allowed (load-bearing, audited separately) and gh is confined
+# to its load-bearing api shapes (see semgrep_sarif_gh). A bare
 # curl/nc/ssh falls past every path rule while exfiltrating
 # GH_TOKEN, so any other use drifts for human review.
 NET_DENY = {"aria2c", "axel", "busybox", "curl", "ftp", "lftp",
@@ -156,17 +158,7 @@ def _check_command(argv0, rest, pre, drift, src=""):
                 and "helper-jq-env" not in drift:
             drift.append("helper-jq-env")
     elif base == "gh":
-        # gh --jq programs are jq: scan the value, not the API path.
-        for i, tok in enumerate(rest):
-            prog = None
-            if tok == "--jq" and i + 1 < len(rest):
-                prog = rest[i + 1]
-            elif tok.startswith("--jq="):
-                prog = tok[len("--jq="):]
-            if prog is not None and jq_program_has_env(prog) \
-                    and "helper-jq-env" not in drift:
-                drift.append("helper-jq-env")
-                break
+        audit_gh(rest, drift)
     elif base == "awk":
         _check_awk(rest, drift)
     elif base in ("python", "python3", "node", "ruby", "php",
@@ -193,10 +185,27 @@ def _check_command(argv0, rest, pre, drift, src=""):
         audit_xargs(rest, drift, src, _check_command)
     elif base in ("nice", "nohup", "stdbuf", "setsid", "parallel",
                   "flock", "chrt", "ionice", "taskset", "sg",
-                  "tmux", "screen"):
+                  "tmux", "screen", "coproc"):
         # Execution wrappers obscure the real argv0; none is used
         # today, so any use fails closed (exotics stay residual).
+        # coproc counts: it runs its command asynchronously with
+        # helper tokens (command/builtin/exec/sudo peel instead,
+        # so the inner argv0 audits normally).
         if "helper-untrusted-exec" not in drift:
+            drift.append("helper-untrusted-exec")
+    elif base == "enable":
+        # Dynamic builtins load attacker .so into the shell
+        # (-f); disabling (-n) drops builtins to PATH lookup.
+        # Queries (-p/-s/-a/-d, bare) pass; scanning stops at --.
+        danger = False
+        for tok in rest:
+            if tok == "--":
+                break
+            if re.fullmatch(r"-[a-zA-Z]+", tok) \
+                    and ("f" in tok or "n" in tok):
+                danger = True
+                break
+        if danger and "helper-untrusted-exec" not in drift:
             drift.append("helper-untrusted-exec")
     elif base in ("unshare", "chroot", "nsenter"):
         if "helper-privilege" not in drift:

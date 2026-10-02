@@ -5,6 +5,7 @@ timeout/builtin/keyword transparency, interpreter operand
 validation, and run:-block extraction with continuation joining.
 """
 import re
+from semgrep_sarif_pins import _contained_exec_path
 
 def strip_comments(line):
     # Backslash-aware: an escaped hash is literal (echo \#; evil
@@ -87,7 +88,7 @@ ENV_POISON = ("PATH", "LD_PRELOAD", "LD_LIBRARY_PATH",
               "GIT_EDITOR", "GIT_CONFIG_COUNT", "GIT_CONFIG_GLOBAL",
               "GIT_CONFIG_SYSTEM", "GIT_DIR", "GIT_WORK_TREE",
               "GIT_EXTERNAL_DIFF", "GIT_DIFF_OPTS", "GIT_ASKPASS",
-              "PAGER")
+              "PAGER", "GH_HOST")
 # GIT_CONFIG_COUNT gates GIT_CONFIG_KEY_n/VALUE_n (verified: count 0
 # ignores keys), so the COUNT exact-match closes the family.
 
@@ -242,12 +243,19 @@ def script_operand(rest):
         return False
     op = rest[i]
     if re.match(r"^\$\{?SCRIPT_DIR\}?/", op):
-        return True
+        return _contained_exec_path(
+            op, r"^\$\{?SCRIPT_DIR\}?/")
     # Concatenated so the raw text never holds an expression
     # opener, which actionlint would parse as this job's
     # expression (steps.scriptdir is undefined here).
-    return re.sub(r"\s+", "", op).startswith(
-        "${{steps.scriptdir.outputs.dir}}")
+    squashed = re.sub(r"\s+", "", op)
+    anchor = "${{steps.scriptdir.outputs.dir}}"
+    if squashed == anchor:
+        return True
+    if squashed.startswith(anchor + "/"):
+        return _contained_exec_path(
+            squashed, r"^\$\{\{steps\.scriptdir\.outputs\.dir\}\}/")
+    return False
 
 def run_segments(lines):
     bodies = []

@@ -20809,6 +20809,7 @@ export type Database = {
           p_brand?: string;
           p_category?: string;
           p_condition?: string;
+          p_excluded_types?: Json;
           p_limit?: number;
           p_merchant_id: string;
           p_offset?: number;

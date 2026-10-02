@@ -10,7 +10,9 @@ VALUES
   ('e5100000-0000-4000-8000-000000000601', 'browse-ascii@example.test',
    'Browse ASCII Merchant', 'browse-ascii-merchant', true),
   ('e5100000-0000-4000-8000-000000000602', 'browse-hidden@example.test',
-   'Browse Hidden Merchant', 'browse-hidden-merchant', false);
+   'Browse Hidden Merchant', 'browse-hidden-merchant', false),
+  ('e5100000-0000-4000-8000-000000000603', 'browse-exclusion@example.test',
+   'Browse Exclusion Merchant', 'browse-exclusion-merchant', true);
 
 INSERT INTO public.products
   (id, merchant_id, name, slug, brand, category, price, status, created_at, discovery_metadata)
@@ -50,6 +52,35 @@ VALUES
    'e5100000-0000-4000-8000-000000000601', '{"storage_gb":128}', 5, 'new'),
   ('e5100000-0000-4000-8000-000000000632', 'e5100000-0000-4000-8000-000000000619',
    'e5100000-0000-4000-8000-000000000601', '{"storage_gb":256}', 5, 'new');
+
+-- Exclusion fixtures live on their own merchant: a phone, a tablet, and a
+-- type-less row that must stay reachable (unverified, never excluded).
+INSERT INTO public.products
+  (id, merchant_id, name, slug, brand, category, price, status, created_at, discovery_metadata)
+VALUES
+  ('e5100000-0000-4000-8000-000000000620', 'e5100000-0000-4000-8000-000000000603',
+   'Exclusion phone', 'exclusion-phone', 'Excl', 'Audio', 50000, 'active', '2024-01-01T00:00:00Z', '{"product_type":"phone"}'),
+  ('e5100000-0000-4000-8000-000000000621', 'e5100000-0000-4000-8000-000000000603',
+   'Exclusion tablet', 'exclusion-tablet', 'Excl', 'Audio', 50000, 'active', '2024-01-01T00:00:00Z', '{"product_type":"tablet"}'),
+  ('e5100000-0000-4000-8000-000000000622', 'e5100000-0000-4000-8000-000000000603',
+   'Exclusion typeless', 'exclusion-typeless', 'Excl', 'Audio', 50000, 'active', '2024-01-01T00:00:00Z', '{}'),
+  ('e5100000-0000-4000-8000-000000000623', 'e5100000-0000-4000-8000-000000000603',
+   'Windowed offers', 'windowed-offers', 'Excl', 'Audio', 50000, 'active', '2024-01-01T00:00:00Z', '{"product_type":"phone"}');
+
+-- Sixteen new offers order ahead of the used one, so the match falls
+-- outside hydration's 16-row window and must not admit the product.
+INSERT INTO public.product_offers (id, product_id, merchant_id, condition, price, stock_quantity, status)
+SELECT ('e5100000-0000-4000-8000-' || lpad(to_hex(700 + g), 12, '0'))::uuid,
+  'e5100000-0000-4000-8000-000000000623',
+  'e5100000-0000-4000-8000-000000000603', 'new', 40000, 2, 'active'
+FROM pg_catalog.generate_series(1, 16) AS g;
+
+INSERT INTO public.product_offers (id, product_id, merchant_id, condition, price, stock_quantity, status)
+VALUES (
+  ('e5100000-0000-4000-8000-' || lpad(to_hex(717), 12, '0'))::uuid,
+  'e5100000-0000-4000-8000-000000000623',
+  'e5100000-0000-4000-8000-000000000603', 'used', 40000, 2, 'active'
+);
 
 SET LOCAL ROLE anon;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
@@ -171,6 +202,48 @@ BEGIN
       p_merchant_id => 'e5100000-0000-4000-8000-000000000601',
       p_condition => repeat('n', 51));
     RAISE EXCEPTION 'over-long condition filters must be rejected';
+  EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
+  END;
+  -- Intent-level excluded types filter before paging; the type-less row
+  -- stays reachable and the unexcluded browse keeps all three.
+  SELECT array_agg(id) INTO browse_ids
+  FROM public.search_products_browse(
+    p_merchant_id => 'e5100000-0000-4000-8000-000000000603',
+    p_excluded_types => '["phone"]'::jsonb,
+    p_limit => 10
+  );
+  IF cardinality(browse_ids) IS DISTINCT FROM 2
+    OR NOT (browse_ids @> ARRAY[
+      'e5100000-0000-4000-8000-000000000621'::uuid,
+      'e5100000-0000-4000-8000-000000000622'::uuid
+    ])
+    OR browse_ids @> ARRAY['e5100000-0000-4000-8000-000000000620'::uuid] THEN
+    RAISE EXCEPTION 'excluded browse must drop the phone only, got %', browse_ids;
+  END IF;
+  SELECT array_agg(id) INTO browse_ids
+  FROM public.search_products_browse(
+    p_merchant_id => 'e5100000-0000-4000-8000-000000000603',
+    p_limit => 10
+  );
+  IF cardinality(browse_ids) IS DISTINCT FROM 4 THEN
+    RAISE EXCEPTION 'unexcluded browse must keep all four rows, got %', browse_ids;
+  END IF;
+  -- A condition match past the 16-row offer window stays unresolvable.
+  SELECT array_agg(id) INTO browse_ids
+  FROM public.search_products_browse(
+    p_merchant_id => 'e5100000-0000-4000-8000-000000000603',
+    p_condition => 'used',
+    p_limit => 10
+  );
+  IF browse_ids IS NOT NULL THEN
+    RAISE EXCEPTION 'windowed-out offer matches must admit nothing, got %', browse_ids;
+  END IF;
+  BEGIN
+    PERFORM * FROM public.search_products_browse(
+      p_merchant_id => 'e5100000-0000-4000-8000-000000000603',
+      p_excluded_types => (SELECT pg_catalog.jsonb_agg('phone'::text)
+        FROM pg_catalog.generate_series(1, 11)));
+    RAISE EXCEPTION 'over-count excluded types must be rejected';
   EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
   END;
 END;

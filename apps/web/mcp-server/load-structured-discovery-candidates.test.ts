@@ -245,6 +245,19 @@ describe('loadStructuredDiscoveryCandidates', () => {
     });
   });
 
+  it('forwards excluded product types to the browse boundary', async () => {
+    const fixture = setup({ lexicalPages: [[]], products: productRows(['p-1']) });
+    fixture.rpc.mockImplementation(async (name: string) => ({
+      data: name === 'search_products_browse' ? productRows(['p-1']) : [], error: null,
+    }));
+    await loadStructuredDiscoveryCandidates({
+      merchantId: 'merchant-3', supabase: fixture.supabase,
+      intent: { alternatives: [{}], excluded_product_types: ['phone'] },
+    });
+    expect(fixture.rpc).toHaveBeenCalledWith('search_products_browse',
+      expect.objectContaining({ p_excluded_types: ['phone'] }));
+  });
+
   it('orders the browse window newest-first before the cap when requested', async () => {
     const newest = setup({ lexicalPages: [[]], products: productRows(['p-1']) });
     await loadStructuredDiscoveryCandidates({

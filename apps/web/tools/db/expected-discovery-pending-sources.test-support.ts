@@ -116,8 +116,13 @@ export const EXPECTED_DISCOVERY_PENDING_SOURCES = [
   },
   {
     repositoryPath:
+      'supabase/migrations/20261001245000_variant_recall_input_bounds.sql',
+    sha256: '35bf59830e88d4293921244b8064a85bcc20a67771e0a0c803c2071009779e10',
+  },
+  {
+    repositoryPath:
       'supabase/migrations/20261001250000_variant_recall_scalar_bounds.sql',
-    sha256: 'ab57dce2ea016b00ea25faa871e73dbfbce567d2d7182c13c37b37a1439e57db',
+    sha256: '5969e6472660cf82dd829715d770b50ddc8fdcf83ca58c166b55a024b09a95d6',
   },
   {
     repositoryPath:
@@ -128,5 +133,30 @@ export const EXPECTED_DISCOVERY_PENDING_SOURCES = [
     repositoryPath:
       'supabase/migrations/20261001270000_fact_condition_bounds.sql',
     sha256: '413395898c9a458c37d3204b886f02d3adb0c1690a068f135ac57e0c899b9e01',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261001290000_fact_condition_purchasable_gate.sql',
+    sha256: '209d7581d753e485285edf8455cc4944ade60cf55cf8bdf70ea298a183ecc17f',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261001300000_browse_excluded_types.sql',
+    sha256: '713f6753cc9551d31ec9bd009fc448381a401cd318f1b7b63c3b7dacefb91f67',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261001310000_variant_recall_truncation_filter.sql',
+    sha256: 'd54b0034495f2cebc6d19e1310cae0b2e3faa17779c213ef8d8a9b5df0c3280b',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261001320000_condition_offer_first_row_gate.sql',
+    sha256: '795e613a92758fdd4567994b5e46575f9f1ff4b279efb72141e7844d410f51ed',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261001330000_browse_option_gate_reuse.sql',
+    sha256: '87cdeaaa1737ea4ba1cbe97b0b98cc674039ea876cfadb9489cda62fd0d40c53',
   },
 ] as const;

@@ -25,12 +25,40 @@ VALUES
    '{"product_type":"phone","attributes":{"color":"black"}}'),
   ('cb58d110-0000-4000-8000-000000000623', 'cb58d110-0000-4000-8000-000000000604',
    'Black widget', 'black-widget', 'Acme', 50000, 'active', true, 'new',
+   '{"product_type":"phone","attributes":{"color":"black"}}'),
+  ('cb58d110-0000-4000-8000-000000000625', 'cb58d110-0000-4000-8000-000000000604',
+   'Black depleted widget', 'black-depleted-widget', 'Acme', 50000, 'active', true, 'new',
+   '{"product_type":"phone","attributes":{"color":"black"}}'),
+  ('cb58d110-0000-4000-8000-000000000627', 'cb58d110-0000-4000-8000-000000000604',
+   'Black unlimited widget', 'black-unlimited-widget', 'Acme', 50000, 'active', true, 'new',
+   '{"product_type":"phone","attributes":{"color":"black"}}'),
+  ('cb58d110-0000-4000-8000-000000000629', 'cb58d110-0000-4000-8000-000000000604',
+   'Black strict widget', 'black-strict-widget', 'Acme', 50000, 'active', true, 'new',
    '{"product_type":"phone","attributes":{"color":"black"}}');
 
 INSERT INTO public.product_variants (id, product_id, merchant_id, attributes, stock_quantity, condition)
 VALUES (
   'cb58d110-0000-4000-8000-000000000624', 'cb58d110-0000-4000-8000-000000000623',
   'cb58d110-0000-4000-8000-000000000604', '{"storage_gb":256}', 5, 'used'
+);
+
+-- A depleted untracked used variant satisfies nothing; the serialized
+-- twins qualify through their policies (unlimited needs no units).
+INSERT INTO public.product_variants
+  (id, product_id, merchant_id, attributes, stock_quantity, condition, inventory_tracking_policy)
+VALUES
+  ('cb58d110-0000-4000-8000-000000000626', 'cb58d110-0000-4000-8000-000000000625',
+   'cb58d110-0000-4000-8000-000000000604', '{"storage_gb":256}', 0, 'used', 'off'),
+  ('cb58d110-0000-4000-8000-000000000628', 'cb58d110-0000-4000-8000-000000000627',
+   'cb58d110-0000-4000-8000-000000000604', '{"storage_gb":256}', 0, 'used', 'serialized_then_unlimited'),
+  ('cb58d110-0000-4000-8000-000000000630', 'cb58d110-0000-4000-8000-000000000629',
+   'cb58d110-0000-4000-8000-000000000604', '{"storage_gb":256}', 0, 'used', 'serialized_strict');
+
+INSERT INTO public.variant_inventory
+  (variant_id, merchant_id, identifier_type, identifier_value, status)
+VALUES (
+  'cb58d110-0000-4000-8000-000000000630', 'cb58d110-0000-4000-8000-000000000604',
+  'serial', 'STRICT-UNIT-1', 'available'
 );
 
 SET LOCAL ROLE anon;
@@ -49,9 +77,14 @@ BEGIN
     query_text => 'black',
     condition_filter => 'used'
   );
-  IF cardinality(fact_ids) IS DISTINCT FROM 1
-    OR fact_ids[1] IS DISTINCT FROM 'cb58d110-0000-4000-8000-000000000623'::uuid THEN
-    RAISE EXCEPTION 'used facts must keep the used-variant product only, got %', fact_ids;
+  IF cardinality(fact_ids) IS DISTINCT FROM 3
+    OR NOT (fact_ids @> ARRAY[
+      'cb58d110-0000-4000-8000-000000000623'::uuid,
+      'cb58d110-0000-4000-8000-000000000627'::uuid,
+      'cb58d110-0000-4000-8000-000000000629'::uuid
+    ])
+    OR fact_ids @> ARRAY['cb58d110-0000-4000-8000-000000000625'::uuid] THEN
+    RAISE EXCEPTION 'used facts must keep purchasable used variants only, got %', fact_ids;
   END IF;
   SELECT array_agg(product_id) INTO fact_ids
   FROM public.search_product_discovery_facts(
@@ -67,7 +100,7 @@ BEGIN
   FROM public.search_product_discovery_facts(
     'cb58d110-0000-4000-8000-000000000604', 'black'
   );
-  IF cardinality(fact_ids) IS DISTINCT FROM 3 THEN
+  IF cardinality(fact_ids) IS DISTINCT FROM 6 THEN
     RAISE EXCEPTION 'unconditioned facts must stay fail-open, got %', fact_ids;
   END IF;
   -- Scalar filters beyond the public schema limits narrow to no rows.

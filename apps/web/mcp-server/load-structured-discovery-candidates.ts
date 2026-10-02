@@ -34,7 +34,7 @@ type LoadStructuredDiscoveryCandidatesInput = {
   semanticSearch?: (query: string, offset: number) => Promise<string[]>;
 };
 
-type BrowseFilters = { brand?: string; category?: string; condition?: string; sort?: string };
+type BrowseFilters = { brand?: string; category?: string; condition?: string; sort?: string; excludedTypes?: string[] };
 
 type SearchProductsArgs = { sort: 'relevance' };
 
@@ -125,6 +125,8 @@ async function loadBrowseRows(merchantId: string, supabase: SupabaseClient, filt
   // server-side too. The RPC applies the same ASCII-only substring
   // comparison as the post-hydration filter (ilike would fold non-ASCII
   // case per the database locale and strand genuine matches past the cap).
+  // Intent-level excluded types ride along for the same reason: hydration
+  // rejects them, so admitting them would strand valid rows past the cap.
   const fetchPage = async (limit: number, offset: number) => {
     const { data, error } = await supabase.rpc('search_products_browse', {
       p_merchant_id: merchantId,
@@ -132,6 +134,7 @@ async function loadBrowseRows(merchantId: string, supabase: SupabaseClient, filt
       p_category: filters.category,
       p_sort: filters.sort,
       p_condition: filters.condition,
+      p_excluded_types: filters.excludedTypes,
       p_limit: limit,
       p_offset: offset,
     });
@@ -185,7 +188,7 @@ export async function loadStructuredDiscoveryCandidates({
   semanticUnavailable: boolean;
 }> {
   if (!query && (!factQuery || factQuery === '(a & !a)')) {
-    const result = await loadBrowseRows(merchantId, supabase, { brand, category, condition, sort });
+    const result = await loadBrowseRows(merchantId, supabase, { brand, category, condition, sort, excludedTypes: intent?.excluded_product_types });
     return { products: result.products, truncated: result.truncated, semanticUnavailable: false };
   }
 

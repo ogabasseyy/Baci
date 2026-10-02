@@ -1,10 +1,11 @@
--- Variant recall input bounds plus the bare-offer stock gate. Argument
--- bounds live in the shared assertion helper (JSON payloads by element
--- count and worst-case bytes, scalars by the public schema limits), so a
--- raw caller cannot feed oversized values through the query. The offer leg
--- threads the parent stock-management state into the four-argument gate,
--- requiring positive offer stock for bare offers on managed products. Same
--- nine-argument signature: CREATE OR REPLACE, no drop.
+-- Variant recall snapshot-truncation filter. Hydration serves at most
+-- the 128 cheapest non-anchor variants per product and the selector drops
+-- truncated rows outright, so oversized parents admitted here only consume
+-- the capped window ahead of servable matches. Products with more than 128
+-- non-anchor variants now filter before ranking; the count mirrors the
+-- projection exactly (same merchant scope, same anchor exclusion), so no
+-- servable row is lost. Same nine-argument signature: CREATE OR REPLACE,
+-- no drop.
 CREATE OR REPLACE FUNCTION public.search_product_variant_recall(
   p_merchant_id uuid,
   p_filters jsonb DEFAULT '[]'::jsonb,
@@ -95,6 +96,15 @@ BEGIN
       )
     GROUP BY vi.variant_id
   ),
+  variant_counts AS (
+    -- Non-anchor variants per merchant product, mirroring the hydration
+    -- projection's counted set exactly.
+    SELECT pv.product_id, count(*)::integer AS visible
+    FROM public.product_variants AS pv
+    WHERE pv.merchant_id = p_merchant_id
+      AND pv.is_inventory_anchor IS NOT TRUE
+    GROUP BY pv.product_id
+  ),
   eligible AS (
     SELECT pv.product_id, pv.attributes, pv.created_at, pv.id,
       -- Branch-grouped exactness: a hybrid matching one constraint per
@@ -134,6 +144,7 @@ BEGIN
     JOIN public.products AS p ON p.id = pv.product_id
     JOIN public.merchants AS m ON m.id = p.merchant_id
     LEFT JOIN available_units AS units ON units.variant_id = pv.id
+    LEFT JOIN variant_counts AS vc ON vc.product_id = p.id
     CROSS JOIN LATERAL (
       SELECT CASE
         WHEN COALESCE(pv.inventory_tracking_policy, 'inherit') IN ('off', 'serialized_strict', 'serialized_then_unlimited')
@@ -208,6 +219,9 @@ BEGIN
       AND p.merchant_id = p_merchant_id
       AND p.status = 'active'
       AND pv.is_inventory_anchor IS NOT TRUE
+      -- Snapshot-truncated parents never serve, so they filter before the
+      -- window instead of consuming it.
+      AND COALESCE(vc.visible, 0) <= 128
       AND (
         COALESCE(m.is_published, FALSE) = TRUE
         OR COALESCE(m.is_platform_admin, FALSE) = TRUE

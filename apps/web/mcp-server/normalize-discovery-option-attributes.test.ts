@@ -5,6 +5,9 @@ it('normalizes catalog keys and canonical units without interpreting prose', () 
   expect(normalizeDiscoveryOptionAttributes({ Storage: '1 TB', RAM: '8192MB', Colour: ' Blue ', Power: '20W' }))
     .toEqual({ storage_gb: 1024, ram_gb: 8, color: 'blue', power_w: 20 });
 });
+it('parses numerics edged with JavaScript-only whitespace the SQL parser must match', () => {
+  expect(normalizeDiscoveryOptionAttributes({ storage: '\uFEFF512GB' })).toEqual({ storage_gb: 512 });
+});
 it('invalid overrides clear inherited facts and incompatible units remain unknown', () => {
   expect(normalizeDiscoveryOptionAttributes({ storage: 'up to 128GB', ram: '20W', color: null }))
     .toEqual({ storage_gb: null, ram_gb: null, color: null });

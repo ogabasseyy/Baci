@@ -24,10 +24,11 @@ BEGIN
   IF pg_catalog.jsonb_typeof(raw) IS DISTINCT FROM 'string' THEN RETURN NULL; END IF;
   -- Mirror the loader's unit grammar exactly: optional ram prefix, decimal,
   -- optional unit, optional stock label. NULL means unparseable (keep row).
+  -- Whitespace is the explicit JavaScript set: PostgreSQL \s omits U+FEFF.
   match := pg_catalog.regexp_match(raw #>> '{}',
-    '^\s*(ram\s*)?(\d+(?:\.\d+)?)\s*(gb|tb|mb|w|hz|inches|inch|in)?(\s+(ram|memory|ssd|hdd|nvme|emmc))?\s*$', 'i');
+    '^[[:space:]   -     　﻿]*(ram[[:space:]   -     　﻿]*)?(\d+(?:\.\d+)?)[[:space:]   -     　﻿]*(gb|tb|mb|w|hz|inches|inch|in)?([[:space:]   -     　﻿]+(ram|memory|ssd|hdd|nvme|emmc))?[[:space:]   -     　﻿]*$', 'i');
   IF match IS NULL THEN RETURN NULL; END IF;
-  IF (raw #>> '{}') ~* '^\s*ram([^a-z0-9_]|$)' AND filter_key IS DISTINCT FROM 'ram_gb' THEN
+  IF (raw #>> '{}') ~* '^[[:space:]   -     　﻿]*ram([^a-z0-9_]|$)' AND filter_key IS DISTINCT FROM 'ram_gb' THEN
     RETURN NULL;
   END IF;
   label := pg_catalog.lower(match[5]);

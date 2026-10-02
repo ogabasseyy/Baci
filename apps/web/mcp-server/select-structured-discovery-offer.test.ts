@@ -170,6 +170,27 @@ it('reports stock for the matched offer instead of unrelated parent or offer inv
   expect(selected?.stockSummary).toMatchObject({ inStock: true, level: 'Last Units' });
 });
 
+it('pairs a zero-stock condition offer with an in-stock variant like the PDP', () => {
+  const row = makeRow({ has_variants: true, has_condition_offers: true, manage_stock: true, discovery_metadata: {
+    product_type: 'smartphone', attributes: { color: 'black' },
+  } });
+  row.allVariants = [
+    { id: 'variant-256', product_id: 'phone', attributes: { Storage: '256GB' }, price_override: 700, stock_quantity: 2 },
+  ] as typeof row.availableVariants;
+  row.availableVariants = [];
+  row.availableOffers = [
+    { id: 'used-1', price: 450, condition: 'used', stock_quantity: 0 },
+  ] as typeof row.availableOffers;
+  const selected = selectStructuredDiscoveryOffer(row, intent({ attributes: [
+    { key: 'storage_gb', operator: 'eq', value: 256 },
+  ] }));
+  expect(selected?.selectedOption).toMatchObject({ kind: 'offer', option_id: 'used-1', variantId: 'variant-256' });
+  expect(selected?.stockSummary).toMatchObject({ inStock: true, level: 'Last Units' });
+  const bare = makeRow({ has_condition_offers: true, manage_stock: true, basePurchasable: false });
+  bare.availableOffers = [{ id: 'used-1', price: 450, condition: 'used', stock_quantity: 0 }] as typeof bare.availableOffers;
+  expect(selectStructuredDiscoveryOffer(bare, intent({ model: 'A1' }))).toBeUndefined();
+});
+
 it('sources the selected condition offer compare-at price from the parent like the PDP', () => {
   const row = makeRow({ has_condition_offers: true, manage_stock: true, basePurchasable: false });
   row.availableOffers = [{ price: 450, compare_at_price: 700, condition: 'used', stock_quantity: 2 }] as typeof row.availableOffers;

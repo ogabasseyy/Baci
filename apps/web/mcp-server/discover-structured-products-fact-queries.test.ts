@@ -29,7 +29,7 @@ describe('discoverStructuredProducts fact queries', () => {
       intent({ product_type: 'phone', brands: ['Samsung', 'Google'], attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }] }),
       { query: 'Samsung or Google 256GB under budget' }));
     expect(fixture.rpc).toHaveBeenCalledWith('search_product_discovery_facts', expect.objectContaining({
-      query_text: '(typephone & (brandsamsung | brandgoogle) & storage256gb)',
+      query_text: '(typephone & (factefcbcece42d483cba20a3e4b8ad31ef9018371555aaf4c8fe8894325471c9a2a | factbe456a1af3a8c8dd8cf23ac0f11ca2d2ae90957d6a65af44732a6665be835d6a) & storage256gb)',
     }));
   });
 });

@@ -21,9 +21,9 @@ const MAX_FALLBACK_TERMS = 12;
 const FALLBACK_STOPWORDS = new Set(['or', 'and', 'a', 'the']);
 // Identity constraints retrieve through key-specific lexemes derived from the
 // same authoritative fields the matcher verifies, so marketing prose can no
-// longer fill the capped fact window ahead of identity matches. Both sides
-// normalize identically (NFKC, trim, lower, separators to underscores, then
-// drop anything outside letters, digits, and underscores).
+// longer fill the capped fact window ahead of identity matches. Brand, model,
+// and compatibility keys are exact digests of the final matcher
+// normalization; only canonical type keys stay coarse.
 
 function sanitizeTerm(value: string): string[] {
   // Dots survive inside version-like lexemes ('1.5' parses), but a dot-only
@@ -93,11 +93,23 @@ function groupQuery(terms: string[]): string | undefined {
 const MAX_IDENTITY_LEXEME_CHARS = 64;
 
 function identityKey(prefix: string, value: string): string | undefined {
+  // Brand, model, and compatibility keys are exact digests of the FINAL
+  // matcher normalization (shared, not reimplemented): coarse NFKC keys
+  // folded separators the matcher distinguishes ('A B' vs 'A-B'), so
+  // collisions filled the capped fact window ahead of the true match with
+  // no recovery source for identity-only searches. The digest input keeps
+  // the tag + unit-separator shape so tags stay distinct.
+  if (prefix === 'brand' || prefix === 'model' || prefix === 'compat') {
+    const matcher = structuredDiscoveryIdentity.normalizeText(value);
+    if (!matcher) return undefined;
+    return `fact${createHash('sha256').update(`${prefix}\u001f${matcher}`, 'utf8').digest('hex')}`;
+  }
+  // Type keys stay coarse: both sides canonicalize through the shared
+  // canonicalizer, so the key already equals the matcher comparison.
   // ASCII allowlist: PostgreSQL has no Unicode property escapes inside
   // bracket expressions, so both sides strip identically to stay in
-  // agreement. Folded keys can only collide (the matcher disambiguates).
-  // Fully stripped values fall back to a correlated digest both sides
-  // derive identically (tag + unit separator + normalized identity):
+  // agreement. Fully stripped values fall back to a correlated digest both
+  // sides derive identically (tag + unit separator + normalized identity):
   // skipping the term would strand exact matches past the browse window.
   // Overlong lexemes digest identically: the stripped key is ASCII-only,
   // so code-point length equals SQL char_length exactly.

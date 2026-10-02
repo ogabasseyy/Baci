@@ -18,24 +18,43 @@ AS $$
     '[[:space:]   -     　﻿-]+', '_', 'g');
 $$;
 
--- Identity lexeme with a Unicode-safe fallback: fully non-ASCII values
--- (model 三星手机) strip to nothing, which would skip retrieval and strand
--- exact matches past the browse window. Such values emit a correlated
--- digest both sides derive identically (tag + unit separator + normalized
--- identity), mirroring the v4 text-attribute convention. The tag keeps
--- brand/model/compat digests distinct from each other and from v4's.
+-- Exact mirror of the final matcher normalization (NFC, JavaScript trim,
+-- lowercase, interior whitespace to one space): brand/model/compat lexemes
+-- digest this so retrieval agrees with post-hydration verdicts bit for bit.
+CREATE OR REPLACE FUNCTION discovery.discovery_identity_matcher_normalize(raw text)
+RETURNS text
+LANGUAGE sql IMMUTABLE PARALLEL SAFE SECURITY INVOKER SET search_path = ''
+AS $$
+  SELECT pg_catalog.regexp_replace(
+    pg_catalog.lower(pg_catalog.regexp_replace(
+      pg_catalog.normalize(raw, 'NFC'),
+      '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
+    '[[:space:]   -     　﻿]+', ' ', 'g');
+$$;
+
+-- Identity lexeme: brand/model/compat always emit an exact digest of the
+-- matcher normalization (tag + unit separator + normalized identity),
+-- mirroring the v4 text-attribute convention, because coarse keys folded
+-- separators the final matcher distinguishes. The tag keeps digests
+-- distinct from each other and from v4's. Canonical type keys stay coarse
+-- with the Unicode-safe digest fallback for fully stripped values.
 CREATE OR REPLACE FUNCTION discovery.discovery_identity_lexeme(tag text, raw text)
 RETURNS text
 LANGUAGE sql IMMUTABLE PARALLEL SAFE SECURITY INVOKER SET search_path = ''
 AS $$
   SELECT CASE
+    WHEN tag IN ('brand', 'model', 'compat') THEN
+      CASE WHEN matcher IS NULL OR matcher = '' THEN NULL
+      ELSE 'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+        tag || pg_catalog.chr(31) || matcher, 'UTF8'), 'sha256'), 'hex') END
     WHEN normalized IS NULL OR normalized = '' THEN NULL
     WHEN cleaned = '' OR pg_catalog.char_length(cleaned) > 64
       THEN 'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
         tag || pg_catalog.chr(31) || normalized, 'UTF8'), 'sha256'), 'hex')
     ELSE tag || cleaned
   END
-  FROM (SELECT discovery.discovery_identity_normalize(raw) AS normalized) AS input,
+  FROM (SELECT discovery.discovery_identity_normalize(raw) AS normalized,
+               discovery.discovery_identity_matcher_normalize(raw) AS matcher) AS input,
     LATERAL (SELECT pg_catalog.regexp_replace(normalized, '[^a-z0-9_]', '', 'g') AS cleaned) AS stripped;
 $$;
 

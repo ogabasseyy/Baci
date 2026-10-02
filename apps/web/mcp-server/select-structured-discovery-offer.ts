@@ -157,16 +157,13 @@ export function selectStructuredDiscoveryOffer(
   const parentListingCondition = toGoogleListingCondition(
     typeof product.condition === 'string' ? product.condition : null) ?? 'new';
   // PDP parity: variants owning the condition axis disable offers entirely,
-  // offers on variant products need a purchasable variant (the PDP blocks
-  // add-to-cart without one), and duplicate canonical conditions resolve to
-  // the first row like the PDP find().
-  // PDP mirrors over the unfiltered variant set (falling back for rows built
-  // without it): hydration filters variants by the requested condition with
-  // parent-condition inheritance, so the filtered list can be empty while
-  // selectable variants exist. The axis check sees every variant like
-  // hasVariantConditionAxis, and purchasability ignores the requested condition
-  // because the PDP lets a condition offer combine with any selectable variant
-  // when offers own the axis.
+  // Variant products need a purchasable variant for offers (the PDP blocks
+  // add-to-cart without one); duplicate canonical conditions resolve to the
+  // first row like the PDP find(). The universe check sees every variant
+  // like hasVariantConditionAxis (hydration filters by condition, so the
+  // filtered list can be empty while selectable variants exist), and
+  // purchasability ignores the requested condition because the PDP lets a
+  // condition offer combine with any selectable variant when offers own it.
   const variantUniverse = row.allVariants ?? row.availableVariants;
   const offersSelectable = !structuredDiscoveryIdentity.variantsOwnConditionAxis(product, variantUniverse) &&
     (!product.has_variants || variantUniverse.some((rawVariant) => {
@@ -174,6 +171,12 @@ export function selectStructuredDiscoveryOffer(
       if (!purchasableVariant(rawVariant)) return false;
       return (finitePrice(variant.price_override) ?? finitePrice(product.price)) !== undefined;
     }));
+  // Paired offers skip the offer-stock rejection: the PDP replaces offer
+  // stock with the selected variant's stock (bare offers keep the check).
+  const pairings = product.has_variants === true
+    ? variantUniverse.filter((rawVariant) => purchasableVariant(rawVariant))
+    : [];
+  const rejectBareOfferStock = manageStock && pairings.length === 0;
   const seenOfferConditions = new Set<string>();
   for (const rawOffer of offersSelectable ? row.availableOffers ?? [] : []) {
     const offer = record(rawOffer);
@@ -184,7 +187,7 @@ export function selectStructuredDiscoveryOffer(
     const canonicalOfferCondition = normalizeCanonicalProductCondition(typeof offer.condition === 'string' ? offer.condition : null);
     if (!canonicalOfferCondition || seenOfferConditions.has(canonicalOfferCondition)) continue;
     seenOfferConditions.add(canonicalOfferCondition);
-    if (manageStock && !hasPositiveStock(offer.stock_quantity)) continue;
+    if (rejectBareOfferStock && !hasPositiveStock(offer.stock_quantity)) continue;
     const price = finitePrice(offer.price);
     if (price === undefined) continue;
     // PDP parity: the PDP prices the selected offer but always sources the
@@ -203,9 +206,6 @@ export function selectStructuredDiscoveryOffer(
     // search. Normalization is memoized per variant and only matching pairs
     // become candidates, so the match-then-sort below sees exactly the set
     // the eager version would have kept.
-    const pairings = product.has_variants === true
-      ? variantUniverse.filter((rawVariant) => purchasableVariant(rawVariant))
-      : [];
     if (pairings.length === 0) addCandidate({ ...offerCore, attributes: {}, compareAtPrice: productCompareAtPrice });
     for (const rawVariant of pairings) {
       // PDP parity: resolveCurrentOffer replaces any selected offer price
@@ -254,17 +254,17 @@ export function selectStructuredDiscoveryOffer(
   const match = matches[0];
   if (!match) return undefined;
 
-  // A paired offer needs its variant for purchase like the PDP, so the pair's
-  // availability is the tighter of the two inventories and the paired variant
-  // stays visible; bare offers keep the offer-only summary.
+  // A paired offer needs its variant for purchase like the PDP, where the
+  // variant's stock replaces the offer's, so the pair summarizes the
+  // variant alone; bare offers keep the offer-only summary.
   const pairedOffer = match.kind === 'offer' && match.pairedVariant !== undefined;
   const stockSummary = getMcpProductStockSummary({
     ...product,
     has_variants: match.kind === 'variant',
     has_condition_offers: match.kind === 'offer' && !pairedOffer,
     stock_quantity: match.kind === 'base' ? stockQuantity(product.stock_quantity)
-      : pairedOffer ? Math.min(stockQuantity(match.stockQuantity) ?? 0,
-        stockQuantity(record(match.pairedVariant).stock_quantity) ?? 0)
+      : pairedOffer
+        ? stockQuantity(record(match.pairedVariant).stock_quantity) ?? 0
       : 0,
   }, match.kind === 'variant' ? [{ stock_quantity: stockQuantity(match.stockQuantity) }] : undefined,
   match.kind === 'offer' && !pairedOffer ? [{ stock_quantity: stockQuantity(match.stockQuantity) }] : undefined);

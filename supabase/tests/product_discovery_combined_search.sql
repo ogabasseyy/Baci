@@ -81,10 +81,21 @@ BEGIN
   document := discovery.product_discovery_search_document_v5('Generic handset', 'Samsung', 'Smartphones',
     'phone phone phone', '{"product_type":"phone","model":"ZX-42","compatible_with":["USB-C dock"]}'::jsonb);
   IF NOT document @@ plainto_tsquery('simple', 'typephone') OR
-     NOT document @@ plainto_tsquery('simple', 'brandsamsung') OR
-     NOT document @@ plainto_tsquery('simple', 'modelzx_42') OR
-     NOT document @@ plainto_tsquery('simple', 'compatusb_c_dock') THEN
+     NOT document @@ plainto_tsquery('simple',
+      'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+        'brand' || pg_catalog.chr(31) || 'samsung', 'UTF8'), 'sha256'), 'hex')) OR
+     NOT document @@ plainto_tsquery('simple',
+      'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+        'model' || pg_catalog.chr(31) || 'zx-42', 'UTF8'), 'sha256'), 'hex')) OR
+     NOT document @@ plainto_tsquery('simple',
+      'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+        'compat' || pg_catalog.chr(31) || 'usb-c dock', 'UTF8'), 'sha256'), 'hex')) THEN
     RAISE EXCEPTION 'Keyed identity lexemes are missing';
+  END IF;
+  IF document @@ plainto_tsquery('simple',
+      'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+        'model' || pg_catalog.chr(31) || 'zx 42', 'UTF8'), 'sha256'), 'hex')) THEN
+    RAISE EXCEPTION 'Model digest collided across a separator the matcher keeps';
   END IF;
   document := discovery.product_discovery_search_document_v5('phone phone phone', 'Acme', 'Accessories',
     'phone accessory', '{"product_type":"accessory"}'::jsonb);
@@ -109,9 +120,13 @@ BEGIN
   END IF;
   document := discovery.product_discovery_search_document_v5('Generic', 'Acme', 'Accessories', '',
     '{"model":"¨phone"}'::jsonb);
-  IF NOT document @@ plainto_tsquery('simple', 'modelphone') OR
-     document @@ plainto_tsquery('simple', 'model_phone') THEN
-    RAISE EXCEPTION 'Compatibility-whitespace model did not use the post-NFKC trim lexeme';
+  IF NOT document @@ plainto_tsquery('simple',
+      'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+        'model' || pg_catalog.chr(31) || '¨phone', 'UTF8'), 'sha256'), 'hex')) OR
+     document @@ plainto_tsquery('simple',
+      'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+        'model' || pg_catalog.chr(31) || 'phone', 'UTF8'), 'sha256'), 'hex')) THEN
+    RAISE EXCEPTION 'Model digest folded a compatibility character the matcher keeps';
   END IF;
   document := discovery.product_discovery_search_document_v5('Generic', 'Acme', 'Accessories', '',
     ('{"attributes":{"color":"black' || chr(65279) || '"}}')::jsonb);
@@ -252,7 +267,8 @@ BEGIN
   END IF;
   SELECT array_agg(product_id) INTO or_ids
   FROM public.search_product_discovery_facts('cb58d110-0000-4000-8000-000000000201',
-    'typephone & brandsamsung');
+    'typephone & fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+      'brand' || pg_catalog.chr(31) || 'samsung', 'UTF8'), 'sha256'), 'hex'));
   IF or_ids IS DISTINCT FROM ARRAY['cb58d110-0000-4000-8000-000000000202']::uuid[] THEN
     RAISE EXCEPTION 'Keyed identity retrieval matched marketing prose or missed the phone';
   END IF;

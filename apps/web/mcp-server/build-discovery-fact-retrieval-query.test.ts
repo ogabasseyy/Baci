@@ -8,18 +8,18 @@ it('builds grouped tsquery text with brand alternation', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({
     product_type: 'phone', brands: ['Samsung', 'Google'],
     attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }],
-  }))).toBe('(typephone & (brandsamsung | brandgoogle) & storage256gb)');
+  }))).toBe('(typephone & (factefcbcece42d483cba20a3e4b8ad31ef9018371555aaf4c8fe8894325471c9a2a | factbe456a1af3a8c8dd8cf23ac0f11ca2d2ae90957d6a65af44732a6665be835d6a) & storage256gb)');
 });
 
 it('joins alternatives with OR and strips tsquery operators from terms', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'ZX-42' }, { product_type: 'charger' })))
-    .toBe('(modelzx_42) | (typecharger)');
+    .toBe('(factca629594f18aab194fa4c526f17d47ed86e3b67664eb11ab27d315e38464667c) | (typecharger)');
 });
 
 it('keys multi-word brands as one lexeme before OR-ing across brands', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ brands: ['Hewlett Packard', 'Dell'] })))
-    .toBe('((brandhewlett_packard | branddell))');
-  expect(buildDiscoveryFactRetrievalQuery(intent({ brands: ['Samsung Galaxy'] }))).toBe('(brandsamsung_galaxy)');
+    .toBe('((fact8eebc823e37f8be85101b97cb1cc7e55135c7030e4e2dff4d2a4fcb657f55e27 | factdb84dd0833e94d94fe170f1c8593ba7f720eafcd1281aa55276f70d0ce5a3ff6))');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ brands: ['Samsung Galaxy'] }))).toBe('(facte1028a61bf9c5550e05160cabc300df6b4012042995bfa54c48d3f9512b23077)');
 });
 
 it('keys every spelling selection treats as the same type to one canonical lexeme', () => {
@@ -72,18 +72,27 @@ it('falls back to sanitized shopper wording and never emits empty syntax', () =>
   expect(buildDiscoveryFactRetrievalQuery(intent({}), 'or and the')).toBe('(a & !a)');
 });
 
-it('folds Unicode identity terms to ASCII-safe keys both sides agree on', () => {
+it('digests brand, model, and compatibility exactly like the final matcher', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ brands: ['Mömax'], model: 'Café Pro | !' })))
-    .toBe('(brandmmax & modelcaf_pro__)');
+    .toBe('(fact455c26834d2c251dd3fda344c39c862ea241e0a7eda56896c649b8c55f83be8a & fact5d9ee8daa29fc3d263c7d4aeb210ddae271c9aa0480c57c5d87ec5c87c3efa56)');
   expect(buildDiscoveryFactRetrievalQuery(intent({ model: '三星手机' })))
     .toBe('(fact1dcf18b552623ad2401d64b631bd9f4fa97e9fc1a0aa174514dfbdd406e452a2)');
   expect(buildDiscoveryFactRetrievalQuery(intent({ compatible_with: '三星' })))
     .toBe('(factbb1bdab90230c0d7d60bd6e9016c5357bf3eb7bf3b8a58b9be181828eec3c879)');
 });
 
-it('digests overlong identity lexemes so worst-case queries stay under the gate', () => {
+it('distinguishes separators the matcher keeps apart', () => {
+  expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'A B' })))
+    .toBe('(fact30e73134aeeac105b298f75d72cc78649c474f946c9c7a1751322ecfc5033251)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'A-B' })))
+    .toBe('(fact03957e76777cae39ed459095e665374b34ffb547e9f062bb354eda8f79a19028)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'A B' })))
+    .not.toBe(buildDiscoveryFactRetrievalQuery(intent({ model: 'A-B' })));
+});
+
+it('digests brand, model, and compatibility at any length so queries stay under the gate', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ brands: ['a'.repeat(64)] })))
-    .toBe(`(brand${'a'.repeat(64)})`);
+    .toBe('(factff82832fbb27efd6448e70e8f8334756f11a032538cfe1933d1e2e867dd7d241)');
   expect(buildDiscoveryFactRetrievalQuery(intent({ brands: ['a'.repeat(65)] })))
     .toBe('(fact3ed6eb2031e94b76633bc7b2f85a5c618fb6568a90ee878996448e7d78bfc9d4)');
   // Five alternatives of max-length identities: every term digested, the
@@ -104,7 +113,7 @@ it('keeps every constraint in retrieval past the old twelve-term budget', () => 
       { key: 'ram_gb', operator: 'gte', value: 16 },
       { key: 'color', operator: 'eq', value: 'midnight blue deep dark shade tone' },
     ],
-  }))).toBe('(typelaptop & brandacme & modelzx_42_ultra_pro_max_plus_x_y_z & storage256gb & ramgb & fact9d4b15b3a2abd3add7dda96fe84fa0be4bbb8666e10bb3c3fc807d7c68e9ddc8)');
+  }))).toBe('(typelaptop & fact77b6e11805e6ddb7923895b0ef16dd0ef14e332643dba34f5d5a0681e45dcc87 & fact121b1470695917b8dc77cf320173ccc7d06e16f7ec8f7d0db6c873a5efa6bf3f & storage256gb & ramgb & fact9d4b15b3a2abd3add7dda96fe84fa0be4bbb8666e10bb3c3fc807d7c68e9ddc8)');
 });
 
 it('keeps the maximum structured text-attribute query under the database length bound', () => {
@@ -120,7 +129,7 @@ it('keeps the maximum structured text-attribute query under the database length 
 });
 
 it('normalizes decomposed Unicode before building retrieval terms', () => {
-  expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'Café Pro' }))).toBe('(modelcaf_pro)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'Café Pro' }))).toBe('(factc8bb588eab645f67633d88b03232308d9dafcbb414a3d8cc8518dc5748f80c51)');
 });
 
 it('renders exponent-notation numbers as plain decimals like the SQL index', () => {
@@ -139,12 +148,12 @@ it('digests overlong product types exactly like the SQL identity lexeme', () => 
 
 it('keys long models as one digest lexeme instead of truncating the tail', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'Alpha Bravo Charlie Delta Echo Foxtrot Golf Hotel India Juliett Kilo Lima Mike November Oscar Papa' })))
-    .toBe('(factcb93feba5d3baa95c7f29c8373096a2db0d08f18a7740b1a6b2d7025543facff)');
+    .toBe('(factdf33557e0beca612bb6051ce42d36a8994acc21707a45a4d933298b008d575c3)');
 });
 
-it('keeps keyed identity terms free of dots so groups stay valid', () => {
+it('digests dotted models exactly so groups stay valid', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ model: '...' })))
     .toBe('(factb4ae896383178edd76f0571298f566c14dd9c2dc32a6a4cf372cb8618478bce0)');
-  expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'ZX-42.' }))).toBe('(modelzx_42)');
-  expect(buildDiscoveryFactRetrievalQuery(intent({ model: '1.5' }))).toBe('(model15)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'ZX-42.' }))).toBe('(fact4836bcbf87c036abd8c4bf097ca8fab1d05e26cf04db6b67a8baf056a9c1f981)');
+  expect(buildDiscoveryFactRetrievalQuery(intent({ model: '1.5' }))).toBe('(facta4c8c29af6e09cfd7bfbb54720e0f072d56417c2124b0f31a626756bee37264f)');
 });

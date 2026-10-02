@@ -100,6 +100,7 @@ it('keeps the recall matchers in the helper migration under the size limit', () 
   expect(helpers).toContain('recall_variant_filter_verifiably_fails');
   expect(helpers).toContain('recall_variant_filter_exactly_matches');
   expect(helpers).toContain('recall_variant_filter_loader_accepts');
+  expect(helpers).toContain('(ram[[:space:]');
   expect(helpers).not.toContain('search_product_variant_recall(');
 });
 
@@ -147,6 +148,9 @@ it('ranks variant recall by joint branch verdicts before attribute tiers', () =>
   expect(recall).toContain('p_brand text DEFAULT NULL');
   expect(recall).toContain('p_category text DEFAULT NULL');
   expect(recall).toContain('canonical_identity_product_type');
+  expect(recall).toContain('discovery_identity_matcher_normalize');
+  expect(recall).not.toContain('discovery_identity_normalize(');
+  expect(recall).toContain('p.manage_stock IS FALSE');
   expect(recall).toContain('complete_alternative_count');
   expect(recall).toContain('clear_branch_count');
   expect(recall).toContain('identity_excluded');
@@ -246,6 +250,8 @@ it('indexes key-specific identity lexemes for capped retrieval', () => {
   expect(identity.startsWith('-- disable-transaction')).toBe(true);
   expect(identity).toContain('product_discovery_search_document_v5');
   expect(identity).toContain('discovery.discovery_identity_lexeme');
+  expect(identity).toContain('discovery.discovery_identity_matcher_normalize');
+  expect(identity).toContain("tag IN ('brand', 'model', 'compat')");
   expect(identity).toContain("'fact' || pg_catalog.encode(extensions.digest");
   expect(identity).toContain("tag || pg_catalog.chr(31) || normalized");
   expect(identity).toContain('CREATE INDEX CONCURRENTLY products_discovery_identity_search_idx_new');

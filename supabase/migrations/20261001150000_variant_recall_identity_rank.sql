@@ -75,13 +75,13 @@ BEGIN
       END AS branch,
       discovery.canonical_identity_product_type(identity_element.value ->> 'product_type', NULL) AS product_type,
       (SELECT coalesce(pg_catalog.array_agg(DISTINCT brand.norm), '{}'::text[])
-       FROM (SELECT nullif(discovery.discovery_identity_normalize(brand_elem), '') AS norm
+       FROM (SELECT nullif(discovery.discovery_identity_matcher_normalize(brand_elem), '') AS norm
              FROM pg_catalog.jsonb_array_elements_text(
                CASE WHEN pg_catalog.jsonb_typeof(identity_element.value -> 'brands') = 'array'
                THEN identity_element.value -> 'brands' ELSE '[]'::jsonb END) AS brand_elem) AS brand
        WHERE brand.norm IS NOT NULL) AS brands,
-      nullif(discovery.discovery_identity_normalize(identity_element.value ->> 'model'), '') AS model,
-      nullif(discovery.discovery_identity_normalize(identity_element.value ->> 'compatible_with'), '') AS compatible_with
+      nullif(discovery.discovery_identity_matcher_normalize(identity_element.value ->> 'model'), '') AS model,
+      nullif(discovery.discovery_identity_matcher_normalize(identity_element.value ->> 'compatible_with'), '') AS compatible_with
     FROM pg_catalog.jsonb_array_elements(
       CASE WHEN pg_catalog.jsonb_typeof(p_identity) = 'array' THEN p_identity ELSE '[]'::jsonb END
     ) AS identity_element
@@ -153,8 +153,10 @@ BEGIN
       -- variant policy wins, else a serialized product policy, else off.
       -- Serialized policies replace stored stock with public available
       -- units; serialized_then_unlimited stays purchasable at zero units.
+      -- Legacy NULL parents count as managed (IS FALSE, not IS NOT TRUE),
+      -- matching isPublicVariantPurchasable.
       ((policy.effective_policy = 'off'
-          AND (p.manage_stock IS NOT TRUE OR COALESCE(pv.stock_quantity, 0) > 0))
+          AND (p.manage_stock IS FALSE OR COALESCE(pv.stock_quantity, 0) > 0))
         OR policy.effective_policy = 'serialized_then_unlimited'
         OR (policy.effective_policy = 'serialized_strict' AND COALESCE(units.available, 0) > 0)) AS is_purchasable
     FROM public.product_variants AS pv
@@ -179,10 +181,10 @@ BEGIN
     CROSS JOIN LATERAL (
       SELECT
         discovery.canonical_identity_product_type(meta.facts ->> 'product_type', p.category) AS product_type,
-        nullif(discovery.discovery_identity_normalize(p.brand), '') AS brand,
-        nullif(discovery.discovery_identity_normalize(meta.facts ->> 'model'), '') AS model,
+        nullif(discovery.discovery_identity_matcher_normalize(p.brand), '') AS brand,
+        nullif(discovery.discovery_identity_matcher_normalize(meta.facts ->> 'model'), '') AS model,
         (SELECT coalesce(pg_catalog.array_agg(DISTINCT compat.norm), '{}'::text[])
-         FROM (SELECT nullif(discovery.discovery_identity_normalize(compat_elem), '') AS norm
+         FROM (SELECT nullif(discovery.discovery_identity_matcher_normalize(compat_elem), '') AS norm
                FROM pg_catalog.jsonb_array_elements_text(
                  CASE WHEN pg_catalog.jsonb_typeof(meta.facts -> 'compatible_with') = 'array'
                  THEN meta.facts -> 'compatible_with' ELSE '[]'::jsonb END) AS compat_elem) AS compat

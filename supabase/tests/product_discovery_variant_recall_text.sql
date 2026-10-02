@@ -101,6 +101,48 @@ VALUES
   ('cb58d110-0000-4000-8000-000000000453', 'cb58d110-0000-4000-8000-000000000452',
    'cb58d110-0000-4000-8000-000000000208', '{"color":"black"}', 0, 'off');
 
+-- Legacy NULL parents count as managed (matching isPublicVariantPurchasable):
+-- a depleted effective-off child must sink below a stocked control instead
+-- of ranking purchasable. The depleted product sorts first by id so the
+-- old order would surface it ahead of the match.
+INSERT INTO public.merchants (id, email, business_name, slug, is_published)
+VALUES (
+  'cb58d110-0000-4000-8000-000000000210',
+  'legacy-test@example.test',
+  'Legacy Test Merchant',
+  'legacy-test-merchant',
+  true
+);
+
+INSERT INTO public.products
+  (id, merchant_id, name, slug, brand, price, status, has_variants, manage_stock, inventory_tracking_policy, discovery_metadata)
+VALUES
+  ('cb58d110-0000-4000-8000-000000000460', 'cb58d110-0000-4000-8000-000000000210',
+   'Legacy depleted', 'legacy-depleted', 'Acme', 50000, 'active', true, NULL, 'off', '{}'),
+  ('cb58d110-0000-4000-8000-000000000462', 'cb58d110-0000-4000-8000-000000000210',
+   'Legacy control', 'legacy-control', 'Acme', 50000, 'active', true, true, 'off', '{}');
+
+INSERT INTO public.product_variants (id, product_id, merchant_id, attributes, stock_quantity)
+VALUES
+  ('cb58d110-0000-4000-8000-000000000461', 'cb58d110-0000-4000-8000-000000000460',
+   'cb58d110-0000-4000-8000-000000000210', '{"color":"black"}', 0),
+  ('cb58d110-0000-4000-8000-000000000463', 'cb58d110-0000-4000-8000-000000000462',
+   'cb58d110-0000-4000-8000-000000000210', '{"color":"black"}', 2);
+
+-- The numeric parser must accept the JavaScript whitespace the loader does:
+-- a BOM-edged unit parses downstream, so NULL here would strand the match.
+DO $$
+BEGIN
+  IF discovery.recall_variant_parse_numeric('storage_gb',
+      ('"' || chr(65279) || '512GB"')::jsonb) IS DISTINCT FROM 512 THEN
+    RAISE EXCEPTION 'numeric parser rejected JavaScript whitespace the loader accepts';
+  END IF;
+  IF discovery.recall_variant_parse_numeric('storage_gb', '"512GB"'::jsonb) IS DISTINCT FROM 512 THEN
+    RAISE EXCEPTION 'numeric parser control regressed';
+  END IF;
+END;
+$$;
+
 
 -- Exercise the recall RPC as its public storefront caller, under publication RLS.
 SET LOCAL ROLE anon;
@@ -171,6 +213,18 @@ BEGIN
     'cb58d110-0000-4000-8000-000000000450'::uuid
   ] THEN
     RAISE EXCEPTION 'depleted strict variants must rank below purchasable matches, got %', recall_ids;
+  END IF;
+  SELECT array_agg(product_id) INTO recall_ids
+  FROM public.search_product_variant_recall(
+    'cb58d110-0000-4000-8000-000000000210',
+    '[{"key":"color","operator":"eq","value":"black"}]'::jsonb,
+    10
+  );
+  IF recall_ids IS DISTINCT FROM ARRAY[
+    'cb58d110-0000-4000-8000-000000000462'::uuid,
+    'cb58d110-0000-4000-8000-000000000460'::uuid
+  ] THEN
+    RAISE EXCEPTION 'depleted variants under legacy NULL parents must rank below purchasable matches, got %', recall_ids;
   END IF;
 END;
 $$;

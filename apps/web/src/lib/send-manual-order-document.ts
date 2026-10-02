@@ -1,14 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import {
-  OGABASSEY_STOREFRONT_APP_STORE_URL,
-  OGABASSEY_STOREFRONT_PLAY_STORE_URL,
-} from '@/config/platform';
-import {
-  buildReceiptClaimUrl,
-  createReceiptClaimToken,
-} from '@/lib/import-notifications/receipt-claim-links';
+import { createReceiptClaimToken } from '@/lib/import-notifications/receipt-claim-links';
 import { resolveInvoicePaymentAccount } from '@/lib/invoice-payment-account';
-import { buildManualOrderDocumentEmail } from '@/lib/manual-order-document-email';
+import { buildManualOrderDocumentEmailContent } from '@/lib/manual-order-document-email';
 import { markManualDocumentDispatchStarted } from '@/lib/mark-manual-document-dispatch-started';
 import { resolveOrderNotificationRecipient } from '@/lib/order-notification-recipient';
 import { renderManualOrderDocumentPdf } from '@/lib/render-manual-order-document-pdf';
@@ -170,31 +163,14 @@ export async function sendManualOrderDocument({
     supabase,
     row.merchant_id
   );
-  const content = buildManualOrderDocumentEmail({
-    merchantName: merchant.business_name || merchant.slug,
-    customerName: displayCustomerName,
-    customerEmail: recipient.email,
-    orderNumber: order.order_number,
-    documentKind: pdfDocumentKind,
-    claimUrl: buildReceiptClaimUrl({
-      merchant: { slug: merchant.slug, custom_domain: customDomain },
-      token: claim.token,
-    }),
-    devices: order.order_items.map(
-      (item) =>
-        `${item.quantity > 1 ? `${item.quantity} x ` : ''}${item.name}${item.variant_name ? ` (${item.variant_name})` : ''}`
-    ),
-    brandColor: merchant.brand_colors?.primary,
-    // Visible support copy shows the public support address only: merchant.email
-    // is the private login address and never renders on customer documents.
-    supportEmail: merchant.support_email || 'the store team',
-    appLinks:
-      merchant.slug === 'ogabassey'
-        ? {
-            appStoreUrl: OGABASSEY_STOREFRONT_APP_STORE_URL,
-            playStoreUrl: OGABASSEY_STOREFRONT_PLAY_STORE_URL,
-          }
-        : null,
+  const content = buildManualOrderDocumentEmailContent({
+    order,
+    merchant,
+    recipientEmail: recipient.email,
+    displayCustomerName,
+    pdfDocumentKind,
+    claimToken: claim.token,
+    customDomain,
   });
   let dispatchStarted = false;
   let providerAccepted = false;

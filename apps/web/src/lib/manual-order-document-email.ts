@@ -1,10 +1,18 @@
+import type { z } from 'zod';
+import {
+  OGABASSEY_STOREFRONT_APP_STORE_URL,
+  OGABASSEY_STOREFRONT_PLAY_STORE_URL,
+} from '@/config/platform';
 import {
   renderReceiptCta,
   renderReceiptDeviceRows,
   renderReceiptEmailHtml,
 } from '@/lib/import-notifications/import-notification-email-template';
+import { buildReceiptClaimUrl } from '@/lib/import-notifications/receipt-claim-links';
 import { escapeHtmlAttribute } from '@/lib/sanitize';
 import { sanitizeUrl } from '@/lib/sanitize-core';
+import type { manualDocumentMerchantSchema } from '@/schemas/manual-order-document-merchant';
+import type { manualDocumentOrderSchema } from '@/schemas/manual-order-document-order';
 
 interface ManualDocumentEmailInput {
   merchantName: string;
@@ -92,4 +100,46 @@ export function buildManualOrderDocumentEmail(input: ManualDocumentEmailInput) {
       footerNote: escapeText(input.merchantName),
     }),
   };
+}
+
+export interface ManualOrderDocumentContentInput {
+  order: z.infer<typeof manualDocumentOrderSchema>;
+  merchant: z.infer<typeof manualDocumentMerchantSchema>;
+  recipientEmail: string;
+  displayCustomerName: string;
+  pdfDocumentKind: 'invoice' | 'proforma_invoice' | 'receipt';
+  claimToken: string;
+  customDomain: string | null;
+}
+
+export function buildManualOrderDocumentEmailContent(
+  input: ManualOrderDocumentContentInput
+) {
+  const { order, merchant } = input;
+  return buildManualOrderDocumentEmail({
+    merchantName: merchant.business_name || merchant.slug,
+    customerName: input.displayCustomerName,
+    customerEmail: input.recipientEmail,
+    orderNumber: order.order_number,
+    documentKind: input.pdfDocumentKind,
+    claimUrl: buildReceiptClaimUrl({
+      merchant: { slug: merchant.slug, custom_domain: input.customDomain },
+      token: input.claimToken,
+    }),
+    devices: order.order_items.map(
+      (item) =>
+        `${item.quantity > 1 ? `${item.quantity} x ` : ''}${item.name}${item.variant_name ? ` (${item.variant_name})` : ''}`
+    ),
+    brandColor: merchant.brand_colors?.primary,
+    // Visible support copy shows the public support address only: merchant.email
+    // is the private login address and never renders on customer documents.
+    supportEmail: merchant.support_email || 'the store team',
+    appLinks:
+      merchant.slug === 'ogabassey'
+        ? {
+            appStoreUrl: OGABASSEY_STOREFRONT_APP_STORE_URL,
+            playStoreUrl: OGABASSEY_STOREFRONT_PLAY_STORE_URL,
+          }
+        : null,
+  });
 }

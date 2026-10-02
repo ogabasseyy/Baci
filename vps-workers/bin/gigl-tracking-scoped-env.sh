@@ -4,15 +4,20 @@
 # run-web-script.sh; do not execute. Usage:
 #   . "$SCRIPT_DIR/gigl-tracking-scoped-env.sh"
 #   gigl_tracking_scope_env
+#   gigl_tracking_exec_scoped "$SCRIPT_DIR/run-web-script.sh" <label> <script>
 #
 # The shared worker .env holds every worker's secrets (SUPABASE_SERVICE_ROLE_KEY,
 # petrock/jumia/quiz credentials, encryption keys...). The provider-facing GIGL
 # poller must never see them: code execution in that process would bypass all
 # five wrapper restrictions. This filter exports ONLY the GIGL allowlist below,
-# then points BACI_WORKER_ENV at /dev/null so dotenv/config loads nothing
-# further. Caller-exported variables (NODE_ENV, BACI_WORKER_PROFILE, PATH,
-# ...) pass through untouched, and a caller-set value wins over the file
-# (exact dotenv precedence).
+# records its names, then the exec helper below replaces the process image
+# under a constructed environment (env -i): allowlisted names plus the
+# non-secret infrastructure (NODE_ENV, BACI_WORKER_PROFILE, PATH, HOME),
+# nothing else. A caller-set allowlisted value wins over the file (exact
+# dotenv precedence); every other caller-exported variable -- a service key
+# lingering in a cron/SSH/runner environment, GITHUB_TOKEN in CI -- is
+# dropped at that boundary even though BACI_WORKER_ENV=/dev/null only stops
+# further FILE loads.
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   echo 'gigl-tracking-scoped-env.sh must be sourced, not executed' >&2
   exit 2
@@ -33,8 +38,17 @@ gigl_tracking_scope_env() {
     return 1
   fi
 
+  # Allowlisted names for gigl_tracking_exec_scoped, space-separated.
+  # Append-only inside gigl_tracking_export_from_file; never exported, so
+  # the bookkeeping itself cannot leak into the child. The three fixed
+  # names below and the GIGL_* enumeration cannot overlap each other or
+  # the exec helper's infrastructure list (NODE_ENV, BACI_WORKER_PROFILE,
+  # PATH, HOME), so no name can appear twice.
+  GIGL_SCOPED_ENV_NAMES=""
+
   gigl_tracking_export_from_file() {
     local export_key="$1" export_value
+    GIGL_SCOPED_ENV_NAMES="${GIGL_SCOPED_ENV_NAMES:+$GIGL_SCOPED_ENV_NAMES }$export_key"
     # A set process variable wins even when empty (exact dotenv
     # precedence); printenv exits 0 for set-but-empty on coreutils/BSD.
     if printenv "$export_key" >/dev/null 2>&1; then
@@ -67,4 +81,24 @@ $(grep -o -E '^[[:space:]]*(export[[:space:]]+)?GIGL_[A-Za-z0-9_]*' "$shared_env
 EOF
 
   export BACI_WORKER_ENV=/dev/null
+}
+
+# Replace the process image with the child (run-web-script.sh) under a
+# constructed environment instead of the inherited one. Must run after
+# gigl_tracking_scope_env in the same shell. Unset names are skipped, so
+# file-missing keys simply stay absent; set-but-empty values pass through
+# (printenv exits 0 for those). Never returns on success.
+gigl_tracking_exec_scoped() {
+  : "${GIGL_SCOPED_ENV_NAMES:?gigl_tracking_scope_env must run before gigl_tracking_exec_scoped}"
+  local exec_args=() exec_name exec_value
+  # Word splitting is intentional: the names list is space-separated.
+  # shellcheck disable=SC2086
+  for exec_name in $GIGL_SCOPED_ENV_NAMES NODE_ENV BACI_WORKER_PROFILE PATH HOME; do
+    if printenv "$exec_name" >/dev/null 2>&1; then
+      exec_value="$(printenv "$exec_name")"
+      exec_args+=("$exec_name=$exec_value")
+    fi
+  done
+  exec_args+=("BACI_WORKER_ENV=/dev/null")
+  exec env -i "${exec_args[@]}" "$@"
 }

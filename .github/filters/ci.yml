@@ -169,6 +169,8 @@ deploy_scripts:
   - '.github/scripts/sync-cloudflare-vercel-production-env.sh'
   - '.github/scripts/sync-cloudflare-vercel-production-env.test.mjs'
   - '.github/scripts/check-gigl-cutover-latch.sh'
+  - '.github/scripts/check-gigl-enforcement-migration-names.sh'
+  - '.github/scripts/check-gigl-enforcement-migration-names.test.mjs'
   - '.github/scripts/check-gigl-cutover-latch.test.mjs'
   - '.github/scripts/check-gigl-cutover-latch-scope.test.mjs'
   - '.github/scripts/check-gigl-cutover-latch.test-fixtures.mjs'

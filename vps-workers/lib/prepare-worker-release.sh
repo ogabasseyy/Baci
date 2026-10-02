@@ -47,11 +47,33 @@ prepare_worker_release() {
   gigl_capability_status=0
   ssh "$VPS" "NODE_ENV=production BACI_WORKER_PROFILE=gigl-tracking BACI_WORKER_ENV='$STAGING_DIR/.env' '$STAGING_DIR/bin/verify-gigl-tracking-worker-capability.sh'" || gigl_capability_status=$?
   if [ "$gigl_capability_status" -eq 42 ]; then
-    # Exit 42 means the wrapper RPCs predate the migration (initial rollout):
-    # the RPCs land via db-migrations minutes later, so install the worker
-    # now (readiness requires it) and let the post-migration workflow smoke
-    # verify capability before the web deploy.
-    echo "GIGL wrapper RPCs are not deployed yet; deferring capability verification to the post-migration smoke." >&2
+    # Exit 42 means the wrapper RPCs or the worker grant are missing. That
+    # is expected ONLY before the isolation migrations land (initial
+    # rollout): the RPCs land via db-migrations minutes later, so install
+    # the worker now (readiness requires it) and let the post-migration
+    # workflow smoke verify capability before the web deploy. But the same
+    # exit after a smoke has PROVED token+hook function (a non-vacuous
+    # latch exists) means the grant/membership/schema regressed: refuse to
+    # promote over the previously-proven worker instead of deferring.
+    # Latch format is scope:sha:fingerprint; a vacuous latch (disabled
+    # scope, empty-sha256 fingerprint) proves no token ever functioned, so
+    # it stays deferrable (initial token rollout, disabled-path restore).
+    gigl_latch="$(ssh "$VPS" "cat '$REMOTE_DIR/.gigl-capability-smoke-ok' 2>/dev/null" || true)"
+    gigl_latch_scope="${gigl_latch%%:*}"
+    gigl_latch_fp="${gigl_latch##*:}"
+    gigl_defer_ok=""
+    if [ -z "$gigl_latch" ]; then
+      gigl_defer_ok=1
+    fi
+    if [ "$gigl_latch_scope" = "disabled" ] && [ "$gigl_latch_fp" = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]; then
+      gigl_defer_ok=1
+    fi
+    if [ -n "$gigl_defer_ok" ]; then
+      echo "GIGL wrapper RPCs are not deployed yet; deferring capability verification to the post-migration smoke." >&2
+    else
+      echo "GIGL capability check reports missing RPCs/grant, but a previous smoke proved this worker (latch scope: $gigl_latch_scope); refusing to promote a worker that cannot claim tracking work. Investigate the revoked grant/membership or regressed schema. If the database was restored from a pre-migration backup, remove $REMOTE_DIR/.gigl-capability-smoke-ok on the VPS and rerun this deploy." >&2
+      exit 1
+    fi
   elif [ "$gigl_capability_status" -ne 0 ]; then
     echo "GIGL database capability verification failed; live worker files and crontab were not changed." >&2
     exit 1
@@ -60,7 +82,14 @@ prepare_worker_release() {
 
 promote_worker_release() {
   echo "==> Promoting validated worker files to $VPS:$REMOTE_DIR"
-  ssh "$VPS" "flock -x /tmp/baci-workers-deploy.lock bash -s -- '$STAGING_DIR' '$REMOTE_DIR' '$APP_SHA'" <<'REMOTE_SH'
+  # Promote also holds the GIGL runtime lock exclusive across the file
+  # sync and the checkout flip: the cron takes it non-blocking, so a tick
+  # that would land between new wrappers and the old checkout (or vice
+  # versa) skips instead of running mixed-revision. A running poll delays
+  # promote by at most one tick (its own timeout + kill-after); lock order
+  # is deploy-then-gigl while cron takes gigl only, so no cycle. The
+  # locks dir is pre-created because flock will not create parents.
+  ssh "$VPS" "mkdir -p '$REMOTE_DIR/locks' && flock -x /tmp/baci-workers-deploy.lock flock -x '$REMOTE_DIR/locks/gigl-tracking.lock' bash -s -- '$STAGING_DIR' '$REMOTE_DIR' '$APP_SHA'" <<'REMOTE_SH'
 set -euo pipefail
 
 staging_dir="$1"

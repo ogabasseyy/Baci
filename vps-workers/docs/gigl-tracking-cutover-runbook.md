@@ -38,7 +38,10 @@ capability smoke complete. `deploy.sh` therefore never pulls in place:
 - Promote flips the `BACI_REPO_DIR` symlink (`<base>/app-live`) to the
   new worktree atomically, inside the same deploy lock as the file
   promote — wrappers, SHA marker, and executed code change together,
-  and no poll can straddle two revisions mid-run.
+  and no poll can straddle two revisions mid-run. Promote additionally
+  holds the GIGL runtime lock exclusive, so a cron tick that would start
+  between the file sync and the flip skips (one missed poll at most)
+  instead of running mixed-revision wrappers against the old checkout.
 - Old worktrees retire automatically (current + previous kept, older
   ones removed past a one-hour guard).
 

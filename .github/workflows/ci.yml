@@ -372,6 +372,8 @@ jobs:
         run: bash .github/scripts/run-migration-applier-tests.sh
       - name: Verify Migration Versions
         run: bash .github/scripts/check-migration-versions.sh
+      - name: Verify GIGL Enforcement Migration Names
+        run: bash .github/scripts/check-gigl-enforcement-migration-names.sh
       - name: Test Mobile Gem Floors
         run: bash .github/scripts/check-mobile-gem-floors.test.sh
       - name: Verify Mobile Gem Floors
@@ -409,6 +411,7 @@ jobs:
           .github/scripts/storefront-release-config.test.mjs
           .github/scripts/storefront-release-marker.test.mjs
           .github/scripts/check-gigl-cutover-latch.test.mjs
+          .github/scripts/check-gigl-enforcement-migration-names.test.mjs
           .github/scripts/check-gigl-cutover-latch-scope.test.mjs
           .github/scripts/resolve-gigl-latch-identity.test.mjs
           .github/scripts/verify-gigl-fallback-token.test.mjs

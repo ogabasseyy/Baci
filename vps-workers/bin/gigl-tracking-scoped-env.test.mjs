@@ -16,7 +16,7 @@ const binDir = dirname(fileURLToPath(import.meta.url));
 const workerRoot = join(binDir, '..');
 const repoRoot = join(workerRoot, '..');
 
-const EXPECTED_PASSWORD = 'p#a s$s`x\'y\\\\z';
+const EXPECTED_PASSWORD = "p#a s$s`x'y\\\\z";
 
 const SHARED_ENV_FIXTURE = [
   '#GIGL_COMMENTED_OUT=smuggled',
@@ -42,43 +42,23 @@ const SHARED_ENV_FIXTURE = [
   '',
 ].join('\n');
 
+// Secrets a caller environment may already carry (cron daemon, SSH
+// session, self-hosted runner service, CI step env). The exec boundary
+// must drop all of them even though they are exported before scoping.
+const ADVERSARIAL_CALLER_ENV = {
+  GITHUB_TOKEN: 'ghs_runner-secret',
+  JUMIA_AUTHORIZATION_ENCRYPTION_KEY: 'caller-jumia-secret',
+  SUPABASE_SERVICE_ROLE_KEY: 'caller-service-role-secret',
+};
+
+// The probe execs into `env -0` through the same helper the entries use,
+// so the assertions below observe the CHILD environment, not the
+// pre-exec shell. NUL separation keeps tricky values unambiguous.
 const PROBE_SCRIPT = [
   'set -u',
   '. "$FILTER_UNDER_TEST"',
   'gigl_tracking_scope_env',
-  'fail=0',
-  'check_exported() {',
-  '  if ! printenv "$1" >/dev/null 2>&1; then echo "MISSING:$1"; fail=1; return; fi',
-  '  actual="$(printenv "$1")"',
-  '  if [ "$actual" != "$2" ]; then echo "MISMATCH:$1"; fail=1; fi',
-  '}',
-  'check_absent() {',
-  '  if printenv "$1" >/dev/null 2>&1; then echo "LEAKED:$1"; fail=1; fi',
-  '}',
-  'check_exported GIGL_ENABLED 1',
-  'check_exported GIGL_BASE_URL https://api.gigl.example',
-  'check_exported GIGL_EMAIL "$FILTER_EXPECT_EMAIL"',
-  'check_exported GIGL_PASSWORD "$FILTER_EXPECT_PASSWORD"',
-  'check_exported GIGL_TRACKING_WORKER_TOKEN aaa.bbb.ccc',
-  'check_exported GIGL_TRACKING_BATCH_TIMEOUT_MS 5000',
-  'check_exported GIGL_QUOTE_TIMEOUT_MS 7000',
-  'check_exported GIGL_DUP second',
-  'check_exported NEXT_PUBLIC_SUPABASE_URL https://project.supabase.co',
-  'check_exported NEXT_PUBLIC_SUPABASE_ANON_KEY anon-key-value',
-  'check_exported BACI_REPO_DIR /opt/baci/app',
-  'check_exported BACI_WORKER_ENV /dev/null',
-  'check_absent GIGL_COMMENTED_OUT',
-  'check_absent MYGIGL_NOT_NAMESPACE',
-  'check_absent SUPABASE_SERVICE_ROLE_KEY',
-  'check_absent PETROCK_API_TOKEN',
-  'check_absent INTERNAL_API_SECRET',
-  'check_absent ZEPTOMAIL_TOKEN',
-  'check_absent QUIZ_RPC_SERVER_SECRET',
-  'check_absent JUMIA_AUTHORIZATION_ENCRYPTION_KEY',
-  // Caller-exported infrastructure passes through untouched.
-  'check_exported NODE_ENV production',
-  'check_exported BACI_WORKER_PROFILE gigl-tracking',
-  'exit $fail',
+  'gigl_tracking_exec_scoped env -0',
 ].join('\n');
 
 function runFilterProbe({ extraEnv = {}, sharedEnv = null } = {}) {
@@ -101,10 +81,9 @@ function runFilterProbe({ extraEnv = {}, sharedEnv = null } = {}) {
         ...process.env,
         BACI_WORKER_ENV: sharedEnvPath,
         BACI_WORKER_PROFILE: 'gigl-tracking',
-        FILTER_EXPECT_EMAIL: 'gigl-poller@example.com',
-        FILTER_EXPECT_PASSWORD: EXPECTED_PASSWORD,
         FILTER_UNDER_TEST: filterCopy,
         NODE_ENV: 'production',
+        ...ADVERSARIAL_CALLER_ENV,
         ...extraEnv,
       },
     });
@@ -113,25 +92,80 @@ function runFilterProbe({ extraEnv = {}, sharedEnv = null } = {}) {
   }
 }
 
+function parseChildEnv(stdout) {
+  const entries = stdout.split('\0').filter((line) => line !== '');
+  return Object.fromEntries(
+    entries.map((line) => {
+      const separator = line.indexOf('=');
+      assert.notEqual(separator, -1, `malformed env line: ${line}`);
+      return [line.slice(0, separator), line.slice(separator + 1)];
+    })
+  );
+}
+
+function expectedChildEnv(overrides = {}) {
+  // Unset infrastructure names stay absent (the exec helper skips them),
+  // so only expect HOME/PATH when the runner actually exports them.
+  const expected = {
+    BACI_REPO_DIR: '/opt/baci/app',
+    BACI_WORKER_ENV: '/dev/null',
+    BACI_WORKER_PROFILE: 'gigl-tracking',
+    GIGL_BASE_URL: 'https://api.gigl.example',
+    GIGL_DUP: 'second',
+    GIGL_EMAIL: 'gigl-poller@example.com',
+    GIGL_ENABLED: '1',
+    GIGL_PASSWORD: EXPECTED_PASSWORD,
+    GIGL_QUOTE_TIMEOUT_MS: '7000',
+    GIGL_TRACKING_BATCH_TIMEOUT_MS: '5000',
+    GIGL_TRACKING_WORKER_TOKEN: 'aaa.bbb.ccc',
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon-key-value',
+    NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co',
+    NODE_ENV: 'production',
+  };
+  for (const name of ['HOME', 'PATH']) {
+    if (process.env[name] !== undefined) {
+      expected[name] = process.env[name];
+    }
+  }
+  return { ...expected, ...overrides };
+}
+
 describe('gigl-tracking-scoped-env', () => {
-  it('exports only the GIGL allowlist and unpoints the shared dotenv', () => {
+  it('execs the child with exactly the allowlist environment', () => {
     const result = runFilterProbe({ sharedEnv: SHARED_ENV_FIXTURE });
 
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.equal(result.stdout, '');
+    assert.deepEqual(parseChildEnv(result.stdout), expectedChildEnv());
+  });
+
+  it('drops caller-exported secrets at the exec boundary', () => {
+    const result = runFilterProbe({ sharedEnv: SHARED_ENV_FIXTURE });
+
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const childEnv = parseChildEnv(result.stdout);
+    for (const leaked of Object.keys(ADVERSARIAL_CALLER_ENV)) {
+      assert.equal(
+        Object.hasOwn(childEnv, leaked),
+        false,
+        `caller secret reached the child: ${leaked}`
+      );
+    }
+    // The probe's own bookkeeping must not reach the child either.
+    assert.equal(Object.hasOwn(childEnv, 'FILTER_UNDER_TEST'), false);
+    assert.equal(Object.hasOwn(childEnv, 'GIGL_SCOPED_ENV_NAMES'), false);
   });
 
   it('lets a caller-set value win over the file (dotenv precedence)', () => {
     const result = runFilterProbe({
       sharedEnv: SHARED_ENV_FIXTURE,
-      extraEnv: {
-        FILTER_EXPECT_EMAIL: 'caller-override@example.com',
-        GIGL_EMAIL: 'caller-override@example.com',
-      },
+      extraEnv: { GIGL_EMAIL: 'caller-override@example.com' },
     });
 
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.equal(result.stdout, '');
+    assert.deepEqual(
+      parseChildEnv(result.stdout),
+      expectedChildEnv({ GIGL_EMAIL: 'caller-override@example.com' })
+    );
   });
 
   it('fails closed when the shared env file is missing', () => {
@@ -139,6 +173,22 @@ describe('gigl-tracking-scoped-env', () => {
 
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /Missing shared worker env file/);
+  });
+
+  it('refuses to exec before scoping', () => {
+    const result = spawnSync(
+      'bash',
+      [
+        '-c',
+        '. "$1"; gigl_tracking_exec_scoped true',
+        'probe',
+        join(binDir, 'gigl-tracking-scoped-env.sh'),
+      ],
+      { encoding: 'utf8' }
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /must run before gigl_tracking_exec_scoped/);
   });
 
   it('refuses direct execution', () => {
@@ -168,15 +218,18 @@ describe('gigl-tracking-scoped-env', () => {
       const source = readFileSync(join(binDir, entry), 'utf8');
       const sourceIndex = source.indexOf('gigl-tracking-scoped-env.sh');
       const callIndex = source.indexOf('gigl_tracking_scope_env');
-      const execIndex = source.indexOf(
+      const execIndex = source.indexOf('gigl_tracking_exec_scoped');
+      const delegateIndex = source.indexOf(
         `run-web-script.sh" ${label} ${script}`
       );
 
       assert.notEqual(sourceIndex, -1);
       assert.notEqual(callIndex, -1);
       assert.notEqual(execIndex, -1);
+      assert.notEqual(delegateIndex, -1);
       assert.ok(sourceIndex < callIndex);
       assert.ok(callIndex < execIndex);
+      assert.ok(execIndex < delegateIndex);
     });
   }
 
@@ -188,7 +241,7 @@ describe('gigl-tracking-scoped-env', () => {
 
     assert.match(
       releaseHelper,
-      /\.github\/scripts\/gigl-dotenv\.sh"\ "\$VPS:\$STAGING_DIR\/bin\/gigl-dotenv\.sh/
+      /\.github\/scripts\/gigl-dotenv\.sh" "\$VPS:\$STAGING_DIR\/bin\/gigl-dotenv\.sh/
     );
   });
 });

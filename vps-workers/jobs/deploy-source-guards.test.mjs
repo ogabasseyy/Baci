@@ -62,7 +62,7 @@ esac
       join(binDirectory, 'rsync'),
       `#!/usr/bin/env bash
 touch "\${TEST_RSYNC_MARKER}"
-if [ "\${TEST_SCENARIO:-}" = "remote-preflight-failure" ] || [ "\${TEST_SCENARIO:-}" = "missing-remote-env" ] || [ "\${TEST_SCENARIO:-}" = "docker-build-failure" ]; then
+if [ "\${TEST_SCENARIO:-}" = "remote-preflight-failure" ] || [ "\${TEST_SCENARIO:-}" = "missing-remote-env" ] || [ "\${TEST_SCENARIO:-}" = "docker-build-failure" ] || [ "\${TEST_SCENARIO:-}" = "gigl-42-no-latch" ] || [ "\${TEST_SCENARIO:-}" = "gigl-42-vacuous-latch" ] || [ "\${TEST_SCENARIO:-}" = "gigl-42-proven-latch" ]; then
   exit 0
 fi
 exit 73
@@ -112,6 +112,40 @@ if [ "\${TEST_SCENARIO:-}" = "docker-build-failure" ]; then
       ;;
     *"docker build"*)
       exit 76
+      ;;
+    *"rsync -a --delete"*)
+      touch "\${TEST_PROMOTION_MARKER}"
+      ;;
+  esac
+  exit 0
+fi
+if [ "\${TEST_SCENARIO:-}" = "gigl-42-no-latch" ] || [ "\${TEST_SCENARIO:-}" = "gigl-42-vacuous-latch" ] || [ "\${TEST_SCENARIO:-}" = "gigl-42-proven-latch" ]; then
+  args="$*"
+  payload="$(cat)"
+  # The latch name also appears in the promote payload (rsync exclude),
+  # so match the smoke and the latch READ on the arguments only.
+  case "$args" in
+    *"verify-gigl-tracking-worker-capability.sh"*)
+      exit 42
+      ;;
+    *".gigl-capability-smoke-ok"*)
+      if [ "\${TEST_SCENARIO:-}" = "gigl-42-vacuous-latch" ]; then
+        echo "disabled:0123456789abcdef0123456789abcdef01234567:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        exit 0
+      fi
+      if [ "\${TEST_SCENARIO:-}" = "gigl-42-proven-latch" ]; then
+        echo "enabled:0123456789abcdef0123456789abcdef01234567:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+        exit 0
+      fi
+      exit 1
+      ;;
+  esac
+  case "$args $payload" in
+    *"command -v node"*)
+      echo /usr/bin/node
+      ;;
+    *"find /home/bassey/.local"*)
+      echo /opt/codex/bin/codex
       ;;
     *"rsync -a --delete"*)
       touch "\${TEST_PROMOTION_MARKER}"
@@ -198,6 +232,34 @@ describe('deploy source guards', () => {
     assert.equal(outcome.promotionCalled, false);
   });
 
+  it('defers exit-42 capability verification when no latch exists yet', () => {
+    const outcome = runDeployGuardScenario('gigl-42-no-latch');
+
+    assert.equal(outcome.result.status, 0, outcome.result.stderr);
+    assert.match(outcome.result.stderr, /deferring capability verification/);
+    assert.equal(outcome.promotionCalled, true);
+  });
+
+  it('defers exit-42 when the latch is vacuous (no token ever proved)', () => {
+    const outcome = runDeployGuardScenario('gigl-42-vacuous-latch');
+
+    assert.equal(outcome.result.status, 0, outcome.result.stderr);
+    assert.match(outcome.result.stderr, /deferring capability verification/);
+    assert.equal(outcome.promotionCalled, true);
+  });
+
+  it('refuses to promote on exit-42 after a smoke proved the worker', () => {
+    const outcome = runDeployGuardScenario('gigl-42-proven-latch');
+
+    assert.equal(outcome.result.status, 1);
+    assert.match(outcome.result.stderr, /refusing to promote/);
+    assert.match(
+      outcome.result.stderr,
+      /remove .*\.gigl-capability-smoke-ok on the VPS and rerun/
+    );
+    assert.equal(outcome.promotionCalled, false);
+  });
+
   it('serializes live promotion and runtime-directory creation under one lock', () => {
     const source = readFileSync(releaseHelper, 'utf8');
     const promotionStart = source.indexOf(
@@ -214,6 +276,19 @@ describe('deploy source guards', () => {
     assert.match(
       promotionSource,
       /lib\/flip-immutable-checkout\.sh" "\$remote_dir" "\$expected_sha"/
+    );
+    // Promote nests the GIGL runtime lock inside the deploy lock, so a
+    // cron tick (non-blocking) skips instead of running mixed-revision
+    // wrappers against the pre-flip checkout. The slice starts at the
+    // deploy lock, so the nested lock on the same command line is in it;
+    // the locks-dir pre-create sits before the slice and pins separately.
+    assert.match(
+      promotionSource,
+      /flock -x '\$REMOTE_DIR\/locks\/gigl-tracking\.lock'/
+    );
+    assert.match(
+      source,
+      /mkdir -p '\$REMOTE_DIR\/locks' && flock -x \/tmp\/baci-workers-deploy\.lock/
     );
   });
 
@@ -240,10 +315,7 @@ describe('deploy source guards', () => {
       provisioner,
       /tsx_bin="\$repo_dir\/apps\/web\/node_modules\/\.bin\/tsx"/
     );
-    assert.match(
-      provisioner,
-      /tsx_bin="\$repo_dir\/node_modules\/\.bin\/tsx"/
-    );
+    assert.match(provisioner, /tsx_bin="\$repo_dir\/node_modules\/\.bin\/tsx"/);
     assert.doesNotMatch(provisioner, /pnpm .*exec tsx/);
     assert.match(provisioner, /worktree add --detach/);
     assert.match(provisioner, /pnpm install --frozen-lockfile/);

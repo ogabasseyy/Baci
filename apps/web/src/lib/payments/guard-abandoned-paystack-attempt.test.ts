@@ -106,6 +106,25 @@ describe('guardAbandonedPaystackAttempt', () => {
     expect(h.summary.failed).toBe(false);
   });
 
+  it('proceeds on a partially paid order without another payment row', async () => {
+    const h = harness({ id: 'order-1', payment_status: 'partially_paid' }, []);
+
+    await expect(
+      guardAbandonedPaystackAttempt({
+        attempt,
+        hold: h.hold,
+        isCompletedRetry: false,
+        summary: h.summary,
+        supabase: { from: h.from } as never,
+      })
+    ).resolves.toBe('proceed');
+    // The validated partial balance is sufficient: wallet/savings
+    // value leaves no transaction leg for the funded-leg lookup.
+    expect(h.from).toHaveBeenCalledTimes(1);
+    expect(h.hold).not.toHaveBeenCalled();
+    expect(h.summary.failed).toBe(false);
+  });
+
   it('skips the paid filter for a completed retry', async () => {
     const h = harness({ id: 'order-1' }, [{ id: 'paid-attempt' }]);
 

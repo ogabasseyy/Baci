@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { assertRefundNotificationSendTime } from '@/lib/payments/assert-refund-notification-send-time';
 import { awaitRefundNotificationDeadline } from '@/lib/payments/await-refund-notification-deadline';
 import {
+  clearDuplicateCaptureReviewPending,
   DUPLICATE_CAPTURE_REVIEW_PENDING_KEY,
   setDuplicateCaptureReviewPending,
 } from '@/lib/payments/duplicate-capture-review-pending';
@@ -81,9 +82,12 @@ export async function finalizeVerifiedWedge({
   // normalized amount — so the review carries the gateway's own
   // charge total, charge id, and status vocabulary, falling back to
   // the verified gateway reference when the response omits the id.
-  // When both filings fail the row is already completed, so the main
-  // sweep queries reselect nothing: mark it for a filing-only retry
-  // instead of losing the review with this tick.
+  // The row is already completed, so the main sweep queries reselect
+  // nothing: persist the filing-only retry marker BEFORE attempting
+  // the filings (a marker written after both filings fail is lost in
+  // the same outage that failed them) and clear it once the evidence
+  // is durable. A failed clear only reselects a reviewed row whose
+  // refiling dedupes.
   const resolveDuplicateCapture = async (): Promise<void> => {
     const responseEvidence = extractDuplicateCaptureEvidence(
       candidate.gateway,
@@ -97,6 +101,7 @@ export async function finalizeVerifiedWedge({
       });
       return;
     }
+    await setDuplicateCaptureReviewPending(supabase, candidate.id);
     const duplicateEvidence = {
       gateway: candidate.gateway,
       providerCurrency: verification.currency ?? candidate.currency ?? 'NGN',
@@ -119,6 +124,7 @@ export async function finalizeVerifiedWedge({
         transactionId: candidate.id,
       });
       await stampResolution(supabase, candidate, 'duplicate_capture_reviewed');
+      await clearDuplicateCaptureReviewPending(supabase, candidate.id);
       return;
     }
     const fallbackFiled = await fileDuplicateCaptureFallbackReview({
@@ -137,9 +143,9 @@ export async function finalizeVerifiedWedge({
         transactionId: candidate.id,
       });
       await stampResolution(supabase, candidate, 'duplicate_capture_reviewed');
+      await clearDuplicateCaptureReviewPending(supabase, candidate.id);
       return;
     }
-    await setDuplicateCaptureReviewPending(supabase, candidate.id);
     summary.failed.push({
       reason: 'duplicate_capture_review_failed',
       transactionId: candidate.id,

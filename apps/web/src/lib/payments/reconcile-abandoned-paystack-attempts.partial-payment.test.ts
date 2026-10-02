@@ -56,6 +56,34 @@ describe('abandoned Paystack attempts on partially paid orders', () => {
     expect(fileCapture).not.toHaveBeenCalled();
   });
 
+  it('verifies a partially paid order with no other payment row', async () => {
+    const { client, completedLookup, orderLookup } = createClient([
+      partialCandidate(),
+    ]);
+    // Wallet/savings value leaves no payment transaction leg: the
+    // validated partial balance alone must admit verification.
+    orderLookup.maybeSingle.mockResolvedValue({
+      data: { id: 'order-1', payment_status: 'partially_paid' },
+      error: null,
+    });
+    completedLookup.limit.mockResolvedValue({ data: [], error: null });
+    const verify = vi.fn().mockResolvedValue(verifiedCapture);
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      finalizePayment: vi.fn(),
+      supabase: client as never,
+      verify,
+    });
+
+    expect(verify).toHaveBeenCalledWith('BAC-OLD', expect.any(AbortSignal));
+    expect(finalizePartial).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attempt: expect.objectContaining({ id: 'attempt-1' }),
+      })
+    );
+    expect(summary.held).toEqual([]);
+  });
+
   it('routes a verified processing capture through the order finalizer', async () => {
     const { client } = createClient([
       { ...partialCandidate(), status: 'processing' },

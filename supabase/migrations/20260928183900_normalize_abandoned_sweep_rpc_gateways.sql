@@ -24,8 +24,13 @@ BEGIN
   IF (SELECT auth.role()) IS DISTINCT FROM 'service_role' THEN
     RAISE EXCEPTION 'unauthorized' USING ERRCODE = '42501';
   END IF;
+  -- A NULL expected reference stamps a missing-reference row (the
+  -- worker files those without verifying); blank-but-present
+  -- references still reject. Non-null callers behave exactly as
+  -- before via IS NOT DISTINCT FROM below.
   IF p_transaction_id IS NULL
-    OR nullif(btrim(coalesce(p_expected_reference, '')), '') IS NULL
+    OR (p_expected_reference IS NOT NULL
+        AND nullif(btrim(p_expected_reference), '') IS NULL)
     OR nullif(btrim(coalesce(p_resolution, '')), '') IS NULL THEN
     RETURN false;
   END IF;
@@ -52,7 +57,7 @@ BEGIN
       ),
       ''
     ) = 'PAYSTACK'
-    AND gateway_reference = p_expected_reference
+    AND gateway_reference IS NOT DISTINCT FROM p_expected_reference
     AND status IN ('pending', 'processing')
     AND metadata->>'abandoned_sweep_resolution' IS NULL;
   IF FOUND THEN RETURN true; END IF;
@@ -81,9 +86,13 @@ BEGIN
   IF (SELECT auth.role()) IS DISTINCT FROM 'service_role' THEN
     RAISE EXCEPTION 'unauthorized' USING ERRCODE = '42501';
   END IF;
+  -- NULL references merge like any other: left(NULL, 120) stores a
+  -- JSON null, and the transaction key (not the reference) identifies
+  -- the entry. Blank-but-present references still reject.
   IF p_order_id IS NULL OR p_merchant_id IS NULL
     OR p_transaction_id IS NULL
-    OR nullif(btrim(coalesce(p_gateway_reference, '')), '') IS NULL
+    OR (p_gateway_reference IS NOT NULL
+        AND nullif(btrim(p_gateway_reference), '') IS NULL)
     OR nullif(btrim(p_reason), '') IS NULL THEN
     RETURN false;
   END IF;

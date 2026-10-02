@@ -10,13 +10,16 @@
 -- equivalents (same key columns, same remaining predicates) and drop
 -- the old ones: the abandoned-attempt sweep, the pending-refund
 -- worker, and the completed-refund worker are the only readers.
--- Build concurrently to avoid blocking live transaction writes.
+-- Keys order NULLS FIRST to match the candidate RPCs: null
+-- timestamps are the oldest eligible rows and must sort ahead of
+-- the bounded limit. Build concurrently to avoid blocking live
+-- transaction writes.
 
 DROP INDEX CONCURRENTLY IF EXISTS
   paystack_abandoned_attempt_candidates_idx;
 CREATE INDEX CONCURRENTLY IF NOT EXISTS
   paystack_abandoned_attempt_candidates_normalized_idx
-  ON public.transactions (updated_at, id)
+  ON public.transactions (updated_at ASC NULLS FIRST, id)
   WHERE transaction_type = 'payment'
     AND public.normalized_gateway_name_v1(gateway) = 'PAYSTACK'
     AND status IN ('pending', 'processing')
@@ -31,7 +34,7 @@ DROP INDEX CONCURRENTLY IF EXISTS
   paystack_pending_cancellation_refunds_idx;
 CREATE INDEX CONCURRENTLY IF NOT EXISTS
   paystack_pending_cancellation_refunds_normalized_idx
-  ON public.transactions (updated_at, id)
+  ON public.transactions (updated_at ASC NULLS FIRST, id)
   WHERE transaction_type = 'refund'
     AND public.normalized_gateway_name_v1(gateway) = 'PAYSTACK'
     AND status IN ('refund_pending', 'pending')
@@ -41,7 +44,7 @@ DROP INDEX CONCURRENTLY IF EXISTS
   paystack_completed_cancellation_refund_recheck_idx;
 CREATE INDEX CONCURRENTLY IF NOT EXISTS
   paystack_completed_cancellation_refund_recheck_normalized_idx
-  ON public.transactions (updated_at, id)
+  ON public.transactions (updated_at ASC NULLS FIRST, id)
   WHERE transaction_type = 'refund'
     AND public.normalized_gateway_name_v1(gateway) = 'PAYSTACK'
     AND status = 'completed';

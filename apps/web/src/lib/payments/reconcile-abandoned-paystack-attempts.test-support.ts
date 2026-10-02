@@ -7,7 +7,7 @@ export const candidate = {
   order_id: 'order-1',
   merchant_id: 'merchant-1',
   gateway: 'paystack',
-  gateway_reference: 'BAC-OLD',
+  gateway_reference: 'BAC-OLD' as string | null,
   metadata: {},
   paid_order: { payment_status: 'paid' },
   platform_fee: null as number | null,
@@ -27,6 +27,7 @@ export function createClient(
   });
   const updateBuilder = {
     eq: vi.fn().mockReturnThis(),
+    is: vi.fn().mockReturnThis(),
     select: selectUpdated,
   };
   const update = vi.fn(() => updateBuilder);

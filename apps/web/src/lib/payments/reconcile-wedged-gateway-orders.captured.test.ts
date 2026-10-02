@@ -114,6 +114,33 @@ describe('reconcileWedgedGatewayOrders late outcomes', () => {
         p_transaction_id: 'txn-1',
       })
     );
+    // The retry marker persists BEFORE the filings (a marker written
+    // after both filings fail is lost in the same outage) and clears
+    // only after the evidence is durable.
+    const markerCalls = supabase.rpc.mock.calls
+      .map((call, index) => ({
+        args: call[1] as { p_pending: boolean },
+        call,
+        index,
+      }))
+      .filter(
+        ({ call }) => call[0] === 'set_duplicate_capture_review_pending_v1'
+      );
+    const setCall = markerCalls.find(({ args }) => args.p_pending === true);
+    const clearCall = markerCalls.find(({ args }) => args.p_pending === false);
+    expect(setCall).toBeDefined();
+    expect(clearCall).toBeDefined();
+    const order = supabase.rpc.mock.invocationCallOrder;
+    expect(order[setCall?.index ?? -1]).toBeLessThan(
+      mocks.fileDuplicatePaymentCapture.mock.invocationCallOrder[0] ??
+        Number.MAX_SAFE_INTEGER
+    );
+    const stampIndex = supabase.rpc.mock.calls.findIndex(
+      (call) => call[0] === 'stamp_wedge_sweep_resolution_v1'
+    );
+    expect(order[clearCall?.index ?? -1]).toBeGreaterThan(
+      order[stampIndex] ?? -1
+    );
   });
 
   it('attributes the duplicate review to the gateway reference when the charge id is missing', async () => {
@@ -192,6 +219,18 @@ describe('reconcileWedgedGatewayOrders late outcomes', () => {
     expect(supabase.rpc).not.toHaveBeenCalledWith(
       'stamp_wedge_sweep_resolution_v1',
       expect.anything()
+    );
+    // The marker is the durable retry handoff: it must persist before
+    // the filings it protects, not after they fail.
+    const setIndex = supabase.rpc.mock.calls.findIndex(
+      (call) =>
+        call[0] === 'set_duplicate_capture_review_pending_v1' &&
+        (call[1] as { p_pending: boolean }).p_pending === true
+    );
+    expect(setIndex).toBeGreaterThanOrEqual(0);
+    expect(supabase.rpc.mock.invocationCallOrder[setIndex]).toBeLessThan(
+      mocks.fileDuplicatePaymentCapture.mock.invocationCallOrder[0] ??
+        Number.MAX_SAFE_INTEGER
     );
   });
 

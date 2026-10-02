@@ -337,6 +337,35 @@ describe('recoverUnknownPaystackRefund', () => {
     expect(mocks.fetchPaystackPaymentById).not.toHaveBeenCalled();
   });
 
+  it('files invalid evidence before rejecting an unusable payment reference', async () => {
+    mocks.fetchPaystackPaymentById.mockResolvedValue({
+      data: { id: 555, reference: 'not a valid ref!' },
+      success: true,
+    });
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const rpc = vi.fn().mockResolvedValue({ error: null });
+    const from = vi.fn().mockReturnValue({ insert });
+    const supabase = { from, rpc } as never;
+
+    await expect(
+      recoverUnknownPaystackRefund(supabase, 202, 'PSK-1')
+    ).rejects.toThrow('paystack_refund_payment_reference_invalid');
+    // The provider refund is real but its payment reference cannot
+    // drive recovery: file it before rejecting so redeliveries stop
+    // 503ing with no durable trace.
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'paystack_refund_evidence_invalid',
+        paystack_ref: 'PSK-1',
+        reason: expect.stringContaining('outside the recovery alphabet'),
+      })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_paystack_refund_recovery_watch_v1',
+      expect.objectContaining({ p_provider_refund_id: 202 })
+    );
+  });
+
   it('keys the malformed-transaction review by refund when the event carries no reference', async () => {
     mocks.fetchRefund.mockResolvedValue({
       data: {

@@ -68,6 +68,44 @@ describe('abandoned Paystack attempts with invalid references', () => {
     );
   });
 
+  it('files a missing-reference attempt without verifying or guarding', async () => {
+    const missingRows = [{ ...candidate, gateway_reference: null }];
+    const { client } = createClient(missingRows);
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    rpc.mockResolvedValueOnce({ data: missingRows, error: null });
+    withReviewTable(client, reviewInsert);
+    Object.assign(client, { rpc });
+    const verify = vi.fn();
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify,
+    });
+
+    // No reference to check, yet the row blocks merchant
+    // cancellation: file the evidence and stamp without verifying.
+    expect(verify).not.toHaveBeenCalled();
+    expect(summary.reviewsFiled).toEqual(['attempt-1']);
+    expect(summary.held).toEqual([]);
+    expect(summary.failed).toBe(false);
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'abandoned_attempt_evidence_mismatch',
+        paystack_ref: null,
+        reason: expect.stringContaining('carries no gateway reference'),
+      })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
+      expect.objectContaining({
+        p_expected_reference: null,
+        p_resolution: 'missing_reference',
+        p_transaction_id: 'attempt-1',
+      })
+    );
+  });
+
   it('files a durable review when Paystack deterministically rejects the reference', async () => {
     const { client } = createClient();
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });

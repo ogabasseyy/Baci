@@ -4,6 +4,7 @@ import { updateProductDiscoveryMetadataSchema } from './update-product-discovery
 describe('updateProductDiscoveryMetadataSchema', () => {
   const valid = {
     productId: '22222222-2222-4222-8222-222222222222',
+    expectedMetadata: null,
     metadata: {
       product_type: 'Smartphones',
       attributes: { storage_gb: 256, supplier_variant: 'A-1' },
@@ -60,12 +61,30 @@ it('bounds snapshots and validates merchant identifiers', () => {
     }).success
   ).toBe(false);
   expect(
-    schema.safeParse({ productId, metadata: {}, merchantId: 'other' }).success
+    schema.safeParse({
+      productId,
+      metadata: {},
+      merchantId: 'other',
+      expectedMetadata: null,
+    }).success
   ).toBe(false);
 });
 
 it('accepts explicit UUID merchant scope for server authorization', () => {
   expect(
-    schema.parse({ productId, metadata: {}, merchantId: productId })
+    schema.parse({
+      productId,
+      metadata: {},
+      merchantId: productId,
+      expectedMetadata: null,
+    })
   ).toMatchObject({ merchantId: productId });
+});
+
+it('rejects omitted snapshots instead of allowing unguarded overwrites', () => {
+  expect(schema.safeParse({ productId, metadata: {} }).success).toBe(false);
+  expect(
+    schema.safeParse({ productId, metadata: {}, expectedMetadata: null })
+      .success
+  ).toBe(true);
 });

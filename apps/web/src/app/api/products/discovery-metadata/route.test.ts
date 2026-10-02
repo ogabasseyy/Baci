@@ -36,6 +36,7 @@ const merchantId = '11111111-1111-4111-8111-111111111111';
 const productId = '22222222-2222-4222-8222-222222222222';
 const validBody = {
   productId,
+  expectedMetadata: null,
   metadata: {
     product_type: 'Laptop',
     attributes: { ram_gb: 16 },
@@ -166,28 +167,41 @@ describe('product discovery metadata API', () => {
     expect(mocks.update).not.toHaveBeenCalled();
   });
 
-  it('uses exact merchant and product guards, returns safe errors, and reports missing products', async () => {
-    mocks.eq.mockReturnValue({
-      eq: mocks.eq,
-      select: vi.fn().mockReturnValue({ maybeSingle: mocks.maybeSingle }),
-    });
+  it('uses exact merchant and product RPC guards and returns safe errors', async () => {
     mocks.maybeSingle.mockResolvedValueOnce({
       data: null,
       error: new Error('private db detail'),
     });
     const failed = await PUT(request(JSON.stringify(validBody)));
     expect(failed.status).toBe(500);
-    const failureBody = await failed.json();
-    expect(failureBody).toEqual({ error: 'Could not update discovery facts' });
-    expect(JSON.stringify(failureBody)).not.toContain('private db detail');
-
-    mocks.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
-    expect((await PUT(request(JSON.stringify(validBody)))).status).toBe(404);
-    expect(mocks.update).toHaveBeenCalledWith({
-      discovery_metadata: { ...validBody.metadata, product_type: 'laptop' },
+    expect(await failed.json()).toEqual({
+      error: 'Could not update discovery facts',
     });
-    expect(mocks.eq).toHaveBeenCalledWith('merchant_id', merchantId);
-    expect(mocks.eq).toHaveBeenCalledWith('id', productId);
+    mocks.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
+    expect((await PUT(request(JSON.stringify(validBody)))).status).toBe(409);
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'update_product_discovery_metadata_guarded',
+      {
+        p_product_id: productId,
+        p_merchant_id: merchantId,
+        p_metadata: { ...validBody.metadata, product_type: 'laptop' },
+        p_expected_metadata: null,
+      }
+    );
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects omitted snapshots before merchant lookup or database writes', async () => {
+    expect(
+      (
+        await PUT(
+          request(JSON.stringify({ productId, metadata: validBody.metadata }))
+        )
+      ).status
+    ).toBe(400);
+    expect(mocks.merchant).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
   });
 
   it('maps only the metadata storage constraint to a safe client error', async () => {
@@ -220,18 +234,17 @@ describe('product discovery metadata API', () => {
   it('replaces the whole metadata document on PUT rather than merging omitted facts', async () => {
     const body = {
       productId: validBody.productId,
+      expectedMetadata: { model: 'old model' },
       metadata: { product_type: 'phone' },
     };
     const response = await PUT(request(JSON.stringify(body)));
     expect(response.status).toBe(200);
-    expect(mocks.update).toHaveBeenCalledWith({
-      discovery_metadata: { product_type: 'phone' },
-    });
-    expect(mocks.update.mock.calls[0][0].discovery_metadata).not.toHaveProperty(
-      'model'
-    );
-    expect(mocks.update.mock.calls[0][0].discovery_metadata).not.toHaveProperty(
-      'attributes'
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'update_product_discovery_metadata_guarded',
+      expect.objectContaining({
+        p_metadata: { product_type: 'phone' },
+        p_expected_metadata: { model: 'old model' },
+      })
     );
   });
 

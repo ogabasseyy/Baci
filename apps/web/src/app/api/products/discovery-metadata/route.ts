@@ -110,24 +110,15 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
   }
   // RPC sends the snapshot in the POST body, avoiding URL length limits.
-  const { data, error } =
-    parsed.data.expectedMetadata !== undefined
-      ? await supabase
-          .rpc('update_product_discovery_metadata_guarded', {
-            p_product_id: parsed.data.productId,
-            p_merchant_id: merchant.merchantId,
-            p_metadata: parsed.data.metadata,
-            p_expected_metadata: parsed.data.expectedMetadata,
-          })
-          .returns<{ id: string }[]>()
-          .maybeSingle()
-      : await supabase
-          .from('products')
-          .update({ discovery_metadata: parsed.data.metadata })
-          .eq('merchant_id', merchant.merchantId)
-          .eq('id', parsed.data.productId)
-          .select('id')
-          .maybeSingle();
+  const { data, error } = await supabase
+    .rpc('update_product_discovery_metadata_guarded', {
+      p_product_id: parsed.data.productId,
+      p_merchant_id: merchant.merchantId,
+      p_metadata: parsed.data.metadata,
+      p_expected_metadata: parsed.data.expectedMetadata,
+    })
+    .returns<{ id: string }[]>()
+    .maybeSingle();
   if (
     error?.code === '23514' &&
     error.message?.includes('products_discovery_metadata_object')
@@ -143,13 +134,8 @@ export async function PUT(request: NextRequest) {
     );
   if (!data)
     return NextResponse.json(
-      {
-        error:
-          parsed.data.expectedMetadata !== undefined
-            ? 'Facts changed or product unavailable. Reload before saving.'
-            : 'Product not found',
-      },
-      { status: parsed.data.expectedMetadata !== undefined ? 409 : 404 }
+      { error: 'Facts changed or product unavailable. Reload before saving.' },
+      { status: 409 }
     );
   return NextResponse.json(
     { success: true, productId: data.id },

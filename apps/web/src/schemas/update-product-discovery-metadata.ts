@@ -10,8 +10,7 @@ export const updateProductDiscoveryMetadataSchema = z.strictObject({
     .refine(
       (value) => JSON.stringify(value).length <= 65536,
       'Snapshot too large'
-    )
-    .optional(),
+    ),
 });
 
 export const discoveryFactsQuerySchema = z.strictObject({

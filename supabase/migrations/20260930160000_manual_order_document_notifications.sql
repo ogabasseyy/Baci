@@ -33,7 +33,7 @@ BEGIN
     OR v_order.import_job_id IS NOT NULL OR v_order.external_source IS NOT NULL
     OR v_order.customer_id IS NULL
     OR COALESCE(btrim(v_order.customer_email), '') = ''
-    OR COALESCE(v_order.shipping_status, '') IN ('cancelled', 'canceled', 'returned', 'failed')
+    OR lower(btrim(COALESCE(v_order.shipping_status, ''))) IN ('cancelled', 'canceled', 'returned', 'failed')
     OR NOT EXISTS (SELECT 1 FROM public.order_items AS oi WHERE oi.order_id = v_order.id)
   THEN RETURN; END IF;
   -- A fully-covered balance is substantively paid even when staff left a
@@ -109,11 +109,22 @@ BEGIN
   -- late customer-contact corrections all re-evaluate eligibility; an order
   -- created without an email/customer still sends once staff fix the contact
   -- details, and a touched total re-queues a document that a correction
-  -- invalidated. Re-evaluation is idempotent, so shipping transitions that
-  -- change nothing simply re-confirm the existing row.
+  -- invalidated. Every other order field the sender strictly validates
+  -- (money breakdown, order number, shipping address) re-arms the same way
+  -- when staff repair a database-permitted invalid value; the remaining
+  -- snapshot fields are either immutable (ids), unvalidated-nullable
+  -- (names, notes, dates, method), or covered by the item triggers.
+  -- Re-evaluation is idempotent, so shipping transitions that change
+  -- nothing simply re-confirm the existing row.
   IF NEW.payment_status IS DISTINCT FROM OLD.payment_status
     OR NEW.amount_paid IS DISTINCT FROM OLD.amount_paid
     OR NEW.total IS DISTINCT FROM OLD.total
+    OR NEW.subtotal IS DISTINCT FROM OLD.subtotal
+    OR NEW.shipping_fee IS DISTINCT FROM OLD.shipping_fee
+    OR NEW.tax_amount IS DISTINCT FROM OLD.tax_amount
+    OR NEW.discount_amount IS DISTINCT FROM OLD.discount_amount
+    OR NEW.order_number IS DISTINCT FROM OLD.order_number
+    OR NEW.shipping_address IS DISTINCT FROM OLD.shipping_address
     OR NEW.customer_email IS DISTINCT FROM OLD.customer_email
     OR NEW.customer_id IS DISTINCT FROM OLD.customer_id
     OR NEW.recorded_by_user_id IS DISTINCT FROM OLD.recorded_by_user_id
@@ -128,8 +139,36 @@ $$;
 REVOKE ALL ON FUNCTION private.enqueue_manual_document_after_order_update()
   FROM PUBLIC, anon, authenticated;
 CREATE TRIGGER enqueue_manual_document_after_order_update
-  AFTER UPDATE OF payment_status, amount_paid, total, customer_email, customer_id, recorded_by_user_id, import_job_id, external_source, shipping_status ON public.orders
+  AFTER UPDATE OF payment_status, amount_paid, total, subtotal, shipping_fee, tax_amount, discount_amount, order_number, shipping_address, customer_email, customer_id, recorded_by_user_id, import_job_id, external_source, shipping_status ON public.orders
   FOR EACH ROW EXECUTE FUNCTION private.enqueue_manual_document_after_order_update();
+
+CREATE OR REPLACE FUNCTION private.rearm_manual_documents_after_merchant_update()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  -- Completing a merchant profile (slug, VAT rate) re-arms rows the worker
+  -- terminally skipped as merchant_validation_failed: only order and item
+  -- changes invoke the order re-enqueue, so without this the corrected
+  -- document is permanently lost. Other skip reasons keep their own re-arm
+  -- paths; sent and possibly-dispatched rows stay terminal. The worker
+  -- re-validates the merchant on the next attempt, so a still-invalid
+  -- profile simply skips again until staff finish the correction.
+  UPDATE public.order_notification_outbox AS n
+  SET status = 'pending', attempt_count = 0, next_attempt_at = NULL,
+    locked_by = NULL, locked_at = NULL, last_error = NULL,
+    skip_reason = NULL, skipped_at = NULL, updated_at = now()
+  WHERE n.merchant_id = NEW.id
+    AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
+    AND n.status = 'skipped'
+    AND n.skip_reason = 'merchant_validation_failed'
+    AND n.dispatch_started_at IS NULL;
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.rearm_manual_documents_after_merchant_update()
+  FROM PUBLIC, anon, authenticated;
+CREATE TRIGGER rearm_manual_documents_after_merchant_update
+  AFTER UPDATE ON public.merchants
+  FOR EACH ROW EXECUTE FUNCTION private.rearm_manual_documents_after_merchant_update();
 
 -- Ship disabled: enabling here would let rows enqueue while an older cron
 -- binary (whole-batch parse) is still live, stalling the queue with 500s.
@@ -141,6 +180,7 @@ ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_it
 ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_item_updates;
 ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_item_deletes;
 ALTER TABLE public.orders DISABLE TRIGGER enqueue_manual_document_after_order_update;
+ALTER TABLE public.merchants DISABLE TRIGGER rearm_manual_documents_after_merchant_update;
 
 -- Revoke explicitly, including installations with older authenticated grants.
 REVOKE ALL ON FUNCTION public.claim_order_notification_outbox(integer, text)
@@ -196,7 +236,7 @@ BEGIN
     OR v_order.recorded_by_user_id IS NULL
     OR v_order.import_job_id IS NOT NULL OR v_order.external_source IS NOT NULL
     OR COALESCE(btrim(v_order.customer_email), '') = ''
-    OR COALESCE(v_order.shipping_status, '') IN ('cancelled', 'canceled', 'returned', 'failed')
+    OR lower(btrim(COALESCE(v_order.shipping_status, ''))) IN ('cancelled', 'canceled', 'returned', 'failed')
     OR NOT EXISTS (SELECT 1 FROM public.order_items AS oi WHERE oi.order_id = v_order.id)
     OR v_order.total IS NULL OR v_order.amount_paid IS NULL
     OR (v_notification.event_type = 'manual_order_receipt'

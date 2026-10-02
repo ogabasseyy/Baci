@@ -42,6 +42,7 @@ describe('render manual order document pdf', () => {
         ],
         taxSubtotals: [
           {
+            id: 'tax-1',
             vat_category_code: 'S',
             vat_rate: 7.5,
             taxable_amount: 883721,
@@ -58,7 +59,7 @@ describe('render manual order document pdf', () => {
     });
     const merchant = manualDocumentMerchantSchema.parse(merchantFixture);
 
-    await renderManualOrderDocumentPdf({
+    const rendered = await renderManualOrderDocumentPdf({
       supabase: db.client,
       order,
       merchant,
@@ -70,6 +71,16 @@ describe('render manual order document pdf', () => {
     });
 
     expect(mockedPdf).toHaveBeenCalledOnce();
+    expect(rendered.taxSubtotals).toEqual([
+      {
+        id: 'tax-1',
+        exemption_reason: null,
+        taxable_amount: 883721,
+        tax_amount: 66279,
+        vat_category_code: 'S',
+        vat_rate: 7.5,
+      },
+    ]);
     const [receiptOrder, , options] = mockedPdf.mock.calls[0];
     expect(receiptOrder.transactions).toHaveLength(2);
     expect(receiptOrder.transactions?.[0]).toMatchObject({

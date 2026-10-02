@@ -55,6 +55,15 @@ export interface DispatchPaymentSnapshot {
   virtualAccountName: string | null;
 }
 
+export interface DispatchTaxSubtotal {
+  id: string;
+  vat_category_code: string;
+  vat_rate: number;
+  taxable_amount: number;
+  tax_amount: number;
+  exemption_reason: string | null;
+}
+
 /**
  * Atomically validates the rendered snapshot and marks dispatch start. A
  * check-then-mark in application code leaves a millisecond race between the
@@ -66,17 +75,22 @@ export interface DispatchPaymentSnapshot {
  * the count: a same-total money redistribution, address correction, or
  * eligibility change must abort too. The rendered payment instructions
  * (merchant bank fields plus the preferred virtual account) are covered
- * the same way so a bank-detail edit cannot silently misdirect a transfer.
- * The rendered kind is passed explicitly so the RPC can snapshot exactly
- * what is being sent. Callers must pass the exact values the PDF was
- * rendered from.
+ * the same way so a bank-detail edit cannot silently misdirect a transfer,
+ * but only for invoice and proforma kinds: receipts render no payment
+ * instructions, so comparing them would spuriously abort every receipt for
+ * an order with an assigned account. The rendered VAT subtotals are covered
+ * too (count plus canonical rows) since a same-total category correction
+ * would otherwise email a stale tax breakdown. The rendered kind is passed
+ * explicitly so the RPC can snapshot exactly what is being sent. Callers
+ * must pass the exact values the PDF was rendered from.
  */
 export async function markManualDocumentDispatchStarted(
   supabase: SupabaseClient,
   row: DispatchOutboxRow,
   order: DispatchOrderSnapshot,
   documentKind: 'invoice' | 'proforma_invoice' | 'receipt',
-  payment: DispatchPaymentSnapshot
+  payment: DispatchPaymentSnapshot,
+  taxSubtotals: readonly DispatchTaxSubtotal[]
 ): Promise<void> {
   const { data, error } = await supabase.rpc(
     'mark_manual_document_dispatch_started',
@@ -126,6 +140,16 @@ export async function markManualDocumentDispatchStarted(
           variant_name: item.variant_name,
           condition: item.condition,
           item_description: item.item_description,
+        })),
+      p_tax_count: taxSubtotals.length,
+      p_tax_subtotals: [...taxSubtotals]
+        .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        .map((tax) => ({
+          vat_category_code: tax.vat_category_code,
+          vat_rate: tax.vat_rate,
+          taxable_amount: tax.taxable_amount,
+          tax_amount: tax.tax_amount,
+          exemption_reason: tax.exemption_reason,
         })),
     }
   );

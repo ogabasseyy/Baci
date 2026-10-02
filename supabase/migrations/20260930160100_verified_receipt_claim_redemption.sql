@@ -43,21 +43,33 @@ BEGIN
                                        WHERE rco.receipt_claim_id = v_claim.id) THEN
     RETURN jsonb_build_object('status', 'customer_link_failed');
   END IF;
+  -- Reuse the verified user's existing row first: after an auth-email
+  -- change the email lookup below would create a second row and the user_id
+  -- assignment would violate idx_customers_merchant_user, 500ing the
+  -- redemption. The row's stale email is harmless: the order email stays
+  -- the contact channel.
   SELECT c.* INTO v_owner FROM public.customers AS c
   WHERE c.merchant_id IS NOT DISTINCT FROM v_claim.merchant_id
-    AND lower(btrim(COALESCE(c.email, ''))) = p_email
-  ORDER BY c.deleted_at NULLS FIRST
+    AND c.user_id = p_user_id
+    AND c.deleted_at IS NULL
   LIMIT 1 FOR UPDATE;
   IF NOT FOUND THEN
-    INSERT INTO public.customers (merchant_id, email)
-    VALUES (v_claim.merchant_id, v_claim.customer_email)
-    ON CONFLICT DO NOTHING
-    RETURNING * INTO v_owner;
+    SELECT c.* INTO v_owner FROM public.customers AS c
+    WHERE c.merchant_id IS NOT DISTINCT FROM v_claim.merchant_id
+      AND lower(btrim(COALESCE(c.email, ''))) = p_email
+    ORDER BY c.deleted_at NULLS FIRST
+    LIMIT 1 FOR UPDATE;
     IF NOT FOUND THEN
-      SELECT c.* INTO v_owner FROM public.customers AS c
-      WHERE c.merchant_id IS NOT DISTINCT FROM v_claim.merchant_id
-        AND lower(btrim(COALESCE(c.email, ''))) = p_email
-      LIMIT 1 FOR UPDATE;
+      INSERT INTO public.customers (merchant_id, email)
+      VALUES (v_claim.merchant_id, v_claim.customer_email)
+      ON CONFLICT DO NOTHING
+      RETURNING * INTO v_owner;
+      IF NOT FOUND THEN
+        SELECT c.* INTO v_owner FROM public.customers AS c
+        WHERE c.merchant_id IS NOT DISTINCT FROM v_claim.merchant_id
+          AND lower(btrim(COALESCE(c.email, ''))) = p_email
+        LIMIT 1 FOR UPDATE;
+      END IF;
     END IF;
   END IF;
   IF v_owner.id IS NULL OR v_owner.deleted_at IS NOT NULL THEN
@@ -74,6 +86,19 @@ BEGIN
   SET customer_id = v_owner.id, updated_at = now()
   WHERE o.id IN (SELECT rco.order_id FROM public.receipt_claim_orders AS rco
                  WHERE rco.receipt_claim_id = v_claim.id);
+  -- update_customer_stats_trigger recalculates only the NEW customer row
+  -- on UPDATE, so refresh the previous row explicitly with the same
+  -- aggregates: without this it permanently retains the moved orders in
+  -- total_orders and, for paid orders, total_spent.
+  UPDATE public.customers AS c
+  SET total_orders = (SELECT count(*) FROM public.orders AS o
+                      WHERE o.customer_id = v_claim.customer_id),
+    total_spent = COALESCE((SELECT sum(o.total) FROM public.orders AS o
+                            WHERE o.customer_id = v_claim.customer_id
+                              AND o.payment_status = 'paid'), 0),
+    updated_at = now()
+  WHERE c.id = v_claim.customer_id
+    AND v_claim.customer_id IS DISTINCT FROM v_owner.id;
   UPDATE public.receipt_claims AS rc
   SET customer_id = v_owner.id,
     claimed_at = COALESCE(claimed_at, now()),

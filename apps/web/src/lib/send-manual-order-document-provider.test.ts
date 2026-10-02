@@ -212,4 +212,38 @@ describe('send manual order document provider and validation', () => {
       'Your receipt is ready - #ORD-42'
     );
   });
+
+  it('folds internal whitespace in legacy payment statuses like the trigger', async () => {
+    const db = database({ payment_status: 'Partially Paid' });
+    const result = await sendManualOrderDocument({ supabase: db.client, row });
+    expect(result.status).toBe('sent');
+    expect(sendEmail.mock.calls[0][0].subject).toBe(
+      'Your receipt is ready - #ORD-42'
+    );
+  });
+
+  it.each([
+    '',
+    '   ',
+  ])('treats a blank external source as a manual order', async (external_source) => {
+    const db = database({ external_source });
+    const result = await sendManualOrderDocument({ supabase: db.client, row });
+    expect(result.status).toBe('sent');
+  });
+
+  it('omits a malformed legacy support address instead of failing the send', async () => {
+    const db = database(
+      {},
+      { merchantOverride: { support_email: 'not-an-email' } }
+    );
+    const result = await sendManualOrderDocument({ supabase: db.client, row });
+    expect(result.status).toBe('sent');
+    expect(sendEmail.mock.calls[0][0].replyTo).toBeUndefined();
+  });
+
+  it('passes a valid support address as the reply target', async () => {
+    const db = database();
+    await sendManualOrderDocument({ supabase: db.client, row });
+    expect(sendEmail.mock.calls[0][0].replyTo).toBe('support@ogabassey.com');
+  });
 });

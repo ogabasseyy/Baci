@@ -68,7 +68,7 @@ describe('verifyGiglTrackingWorkerCapability', () => {
 });
 
 describe('verifyGiglTrackingWorkerScopeProbe', () => {
-  it('passes only on the hook denial message over a HEAD request', async () => {
+  it('passes only on the hook denial message over a GET request', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: null,
       error: {
@@ -80,23 +80,29 @@ describe('verifyGiglTrackingWorkerScopeProbe', () => {
     await expect(
       verifyGiglTrackingWorkerScopeProbe({ rpc } as never)
     ).resolves.toBe(true);
+    // GET — never HEAD: HEAD responses have no body, so supabase-js
+    // surfaces a codeless `{ message: '' }` no matcher could pass.
     expect(rpc).toHaveBeenCalledWith(
       'claim_due_gigl_tracking_monitors',
       {
         p_limit: 0,
         p_worker_id: 'gigl-capability-scope-probe',
       },
-      { head: true }
+      { get: true }
     );
   });
 
   it('fails closed when the wrapper answers without the hook', async () => {
     // 22023 is the missed-reload shape: the wrapper itself validated the
     // input, which proves the request reached it without hook enforcement.
+    // The codeless empty message is the HEAD no-body shape: it must fail
+    // closed too, so a future HEAD regression fails loudly instead of
+    // latching on an unreadable denial.
     for (const error of [
       { code: '22023', message: 'bounded validation failure' },
       { code: '42501', message: 'permission denied for function foo' },
       { code: 'PGRST301', message: 'invalid JWT' },
+      { message: '' },
       null,
     ]) {
       const rpc = vi.fn().mockResolvedValue({ data: null, error });

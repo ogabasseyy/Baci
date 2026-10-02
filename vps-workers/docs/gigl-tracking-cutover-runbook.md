@@ -49,10 +49,14 @@ full smoke live and re-latches on success).
 
 A smoke that runs while `GIGL_ENABLED` is `0`/`false`/`off` writes a
 DISABLED-scoped latch, which authorizes web pushes only while the worker
-stays disabled. The moment GIGL is re-enabled, that latch stops
-validating (by design — a disabled run must never certify enabled
-function), so the first non-tracking push after re-enabling BLOCKS until
-a live smoke re-proves the token+hook. Procedure:
+stays disabled. If a usable worker token is already provisioned, the
+disabled smoke still probes the scope hook first (an already-issued JWT
+stays usable while the grant is live, so the latch must not certify an
+unreloaded hook); with no token it latches vacuously. The moment GIGL is
+re-enabled, that latch stops validating (by design — a disabled run must
+never certify enabled function), so the first non-tracking push after
+re-enabling BLOCKS until a live smoke re-proves the token+hook.
+Procedure:
 
 1. Provision/verify `GIGL_TRACKING_WORKER_TOKEN` in the VPS `.env`
    (decode: `role` claim `gigl_tracking_worker`, ≥14 days runway),
@@ -70,9 +74,10 @@ until some smoke succeeds — that is the gate working, not a malfunction.
 Before this PR, production sat mid-rollout: the worker role was
 LOGIN-capable with a password and the scope hook/isolate grant were not
 yet applied. The merge's `db-migrations` closes that window
-(`NOLOGIN` + `PASSWORD NULL` + hook + grant, asserted by the
-least-privilege final-state step on every run), which neuters the old
-credential — but defense in depth says remove it anyway:
+(`NOLOGIN` + `PASSWORD NULL` + hook installed and active in
+`pg_db_role_setting` + grant, asserted by the least-privilege
+final-state step on every run), which neuters the old credential — but
+defense in depth says remove it anyway:
 
 1. After the merge deploy lands green, delete the interim database
    credential from the VPS `.env` (no code in the tree reads a worker DB

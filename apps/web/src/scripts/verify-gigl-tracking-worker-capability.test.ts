@@ -101,7 +101,8 @@ describe('runGiglTrackingCapabilityVerification', () => {
     );
   });
 
-  it('does not require credentials when GIGL is explicitly disabled', async () => {
+  it('probes the scope hook when disabled with a usable token', async () => {
+    verifyScopeProbe.mockResolvedValue(true);
     const logger = { error: vi.fn(), info: vi.fn() };
 
     await expect(
@@ -114,8 +115,29 @@ describe('runGiglTrackingCapabilityVerification', () => {
     expect(logger.info).toHaveBeenCalledWith(
       '[gigl-capability] skipped while GIGL is disabled'
     );
+    expect(logger.info).toHaveBeenCalledWith(
+      '[gigl-capability] scope hook verified active'
+    );
     expect(verifyCapability).not.toHaveBeenCalled();
-    expect(verifyScopeProbe).not.toHaveBeenCalled();
+    expect(verifyScopeProbe).toHaveBeenCalledOnce();
+  });
+
+  it('fails closed when disabled with a token but an inactive hook', async () => {
+    verifyScopeProbe.mockResolvedValue(false);
+    const logger = { error: vi.fn(), info: vi.fn() };
+
+    await expect(
+      runGiglTrackingCapabilityVerification({
+        env: { GIGL_ENABLED: '0', NODE_ENV: 'test' },
+        logger,
+      })
+    ).resolves.toBe(1);
+
+    // A disabled latch must not certify a token that reaches beyond the
+    // five reviewed RPCs while the hook reload is still pending.
+    expect(logger.error).toHaveBeenCalledWith(
+      '[gigl-capability] PostgREST scope hook is not active; reload PostgREST config and re-run'
+    );
   });
 
   it('warns when skipping with an unhealthy worker token', async () => {
@@ -124,7 +146,8 @@ describe('runGiglTrackingCapabilityVerification', () => {
     });
     const logger = { error: vi.fn(), info: vi.fn() };
 
-    // Still exit 0: a disabled setup may legitimately have no token yet.
+    // Still exit 0: a disabled setup may legitimately have no token yet,
+    // and with no usable token there is nothing to abuse.
     await expect(
       runGiglTrackingCapabilityVerification({
         env: { GIGL_ENABLED: 'off', NODE_ENV: 'test' },
@@ -134,6 +157,29 @@ describe('runGiglTrackingCapabilityVerification', () => {
 
     expect(logger.info).toHaveBeenCalledWith(
       '[gigl-capability] worker token missing or expired; provision it before re-enabling GIGL'
+    );
+    expect(verifyScopeProbe).not.toHaveBeenCalled();
+  });
+
+  it('exits 42 when disabled and the wrapper RPCs predate the migration', async () => {
+    const { GiglWrapperSchemaMissingError } = await import(
+      '@/lib/verify-gigl-tracking-worker-capability'
+    );
+    verifyScopeProbe.mockRejectedValueOnce(
+      new GiglWrapperSchemaMissingError()
+    );
+    const logger = { error: vi.fn(), info: vi.fn() };
+
+    await expect(
+      runGiglTrackingCapabilityVerification({
+        env: { GIGL_ENABLED: 'false', NODE_ENV: 'test' },
+        logger,
+      })
+    ).resolves.toBe(42);
+
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith(
+      '[gigl-capability] wrapper RPCs not deployed yet or role grant pending; deferring to the post-migration smoke'
     );
   });
 

@@ -64,7 +64,7 @@ const SCOPE_HOOK_DENIAL_MESSAGE =
 
 /**
  * Proves the PostgREST pre-request hook is ACTIVE, not merely installed.
- * The same reviewed wrapper is requested with HEAD, which only the hook
+ * The same reviewed wrapper is requested with GET, which only the hook
  * discriminates on (it requires POST): the hook's denial message proves
  * enforcement is live. Any other outcome fails the smoke — including the
  * 22023 the wrapper itself returns when reached without the hook, which
@@ -72,6 +72,12 @@ const SCOPE_HOOK_DENIAL_MESSAGE =
  * fire-and-forget: if PostgREST is down during the migration apply, the
  * catalog setting commits but the hook never activates, and the
  * allowed-path smoke above cannot detect that broader authority.
+ *
+ * GET — never HEAD — because the denial must be READABLE: HEAD
+ * responses carry no body, so supabase-js surfaces `{ message: '' }`
+ * with no code and the matcher below could never pass. (See
+ * PostgrestBuilder.processResponse: an empty body fails JSON.parse and
+ * yields a codeless error.)
  */
 export async function verifyGiglTrackingWorkerScopeProbe(
   client: GiglTrackingRpcClient
@@ -82,7 +88,7 @@ export async function verifyGiglTrackingWorkerScopeProbe(
       p_limit: 0,
       p_worker_id: 'gigl-capability-scope-probe',
     },
-    { head: true }
+    { get: true }
   );
   if (isGiglWrapperSchemaMissing(error)) {
     throw new GiglWrapperSchemaMissingError();

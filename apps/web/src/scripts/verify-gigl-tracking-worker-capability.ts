@@ -36,17 +36,40 @@ export async function runGiglTrackingCapabilityVerification({
 } = {}): Promise<number> {
   if (isExplicitlyDisabled(env.GIGL_ENABLED)) {
     logger.info('[gigl-capability] skipped while GIGL is disabled');
+    let client: ReturnType<typeof createGiglTrackingWorkerClient>;
     try {
-      // A disabled skip still latches the cutover gate, so an unhealthy
-      // token would silently break polling on re-enable. Warn (never
-      // fail): a disabled setup may legitimately have no token yet.
-      createGiglTrackingWorkerClient(env);
+      client = createGiglTrackingWorkerClient(env);
     } catch {
+      // A disabled setup may legitimately have no token yet, and with no
+      // usable token there is nothing to abuse: latch vacuously.
       logger.info(
         '[gigl-capability] worker token missing or expired; provision it before re-enabling GIGL'
       );
+      return 0;
     }
-    return 0;
+    // A usable token exists while polling is off. Already-issued JWTs
+    // still authenticate while the grant is live, so a scope hook that
+    // has not reloaded would leave this token reaching beyond the five
+    // reviewed RPCs. Prove the hook is ACTIVE before latching — a
+    // disabled latch must not certify that broader authority.
+    try {
+      if (await verifyGiglTrackingWorkerScopeProbe(client)) {
+        logger.info('[gigl-capability] scope hook verified active');
+        return 0;
+      }
+    } catch (error) {
+      if (error instanceof GiglWrapperSchemaMissingError) {
+        logger.info(
+          '[gigl-capability] wrapper RPCs not deployed yet or role grant pending; deferring to the post-migration smoke'
+        );
+        return GIGL_CAPABILITY_SCHEMA_MISSING_EXIT_CODE;
+      }
+      // Keep credential and provider errors out of release logs.
+    }
+    logger.error(
+      '[gigl-capability] PostgREST scope hook is not active; reload PostgREST config and re-run'
+    );
+    return 1;
   }
 
   try {

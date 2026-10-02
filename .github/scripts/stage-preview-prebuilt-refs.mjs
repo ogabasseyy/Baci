@@ -59,7 +59,7 @@ const skipped = [];
 const unusableConfigs = [];
 let stringValues = 0;
 let missingCount = 0;
-let insideOutputCount = 0;
+const insideOutputValues = [];
 const pendingRewrites = [];
 
 for (const configPath of vcConfigs(outputDir)) {
@@ -125,7 +125,7 @@ for (const configPath of vcConfigs(outputDir)) {
       skipped.push({ value, reason: 'inside-output' });
       kept[key] = value;
       usable += 1;
-      insideOutputCount += 1;
+      insideOutputValues.push(value);
       continue;
     }
     if (
@@ -180,14 +180,15 @@ for (const configPath of vcConfigs(outputDir)) {
 // at runtime (cf. vercel/vercel#15654 for the shape of that failure,
 // though its cause was tracer incompleteness, not map truncation). The
 // guardrails below catch systematic misclassification; preview READY plus
-// served verification catch the rest. Counts are occurrences on both
-// sides (a repeated phantom is repeated evidence); the resolving side
-// counts staged plus verified output-internal values, which genuinely
-// upload. Observed incident motivating this shape: 21 transient
-// `apps/web/.next/node_modules/*` refs alongside a normally staged tree.
-// The per-config total-loss check is the primary guard; the global
-// majority rule below is the backstop for a systematically wrong base.
-const resolving = staged.length + insideOutputCount;
+// served verification catch the rest. The missing side counts
+// occurrences (a repeated phantom is repeated evidence); the resolving
+// side counts distinct files, so one heavily-referenced file cannot mask
+// many distinct drops. Observed incident motivating this shape: 21
+// transient `apps/web/.next/node_modules/*` refs alongside a normally
+// staged tree. The per-config total-loss check is the primary guard; the
+// global majority rule below is the backstop for a systematically wrong
+// base.
+const resolving = new Set(staged).size + new Set(insideOutputValues).size;
 if (stringValues > 0 && missingCount > resolving) {
   console.error(
     `error: ${missingCount} missing reference(s) dominate ${resolving} resolving; refusing to ship (wrong base?)`
@@ -226,7 +227,8 @@ if (missingCount > 0) {
   console.error(
     `WARNING: dropped ${missingCount} dangling reference(s) from shipped maps:\n` +
       shown.map((v) => `  ${v}`).join('\n') +
-      (missingCount > shown.length ? `\n  ...and ${missingCount - shown.length} more` : '')
+      (missingCount > shown.length ? `\n  ...and ${missingCount - shown.length} more` : '') +
+      '\nDropped refs can fail at request time: serve-verify this preview (fonts, hero payload), do not trust READY alone.'
   );
 }
 
@@ -258,6 +260,9 @@ if (process.env.GITHUB_STEP_SUMMARY) {
     process.env.GITHUB_STEP_SUMMARY,
     `### Prebuilt refs\nstaged ${new Set(staged).size}, skipped ${skipped.length} ${danglingLabel}\n` +
       dropped.slice(0, 20).map((v) => `- \`${v}\``).join('\n') +
-      (dropped.length > 0 ? '\n' : '')
+      (dropped.length > 0 ? '\n' : '') +
+      (dropped.length > 0
+        ? 'Dropped refs can fail at request time: serve-verify this preview, do not trust READY alone.\n'
+        : '')
   );
 }

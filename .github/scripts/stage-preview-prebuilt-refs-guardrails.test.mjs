@@ -197,6 +197,33 @@ test('warns about protected and invalid drops that pass the guards', () => {
   }
 });
 
+test('duplicate staged refs do not mask distinct phantoms', () => {
+  // One real file referenced three times plus two distinct phantoms
+  // must fail: resolving counts distinct files (1), not occurrences
+  // (3), so the 2 missing dominate.
+  const root = layout({
+    '.vercel/output/functions/a.func/.vc-config.json': JSON.stringify({
+      filePathMap: {
+        '/a.js': 'node_modules/ok/index.js',
+        '/b.js': 'node_modules/ok/index.js',
+        '/c.js': 'node_modules/ok/index.js',
+        '/gone.js': 'node_modules/gone/index.js',
+        '/gone2.js': 'node_modules/gone2/index.js',
+      },
+    }),
+    'node_modules/ok/index.js': 'ok',
+  });
+  try {
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], {
+      encoding: 'utf8',
+    });
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /dominate .* refusing to ship/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('rejects an array filePathMap instead of coercing it', () => {
   const configRel = '.vercel/output/functions/a.func/.vc-config.json';
   const original = JSON.stringify({ filePathMap: ['node_modules/ok/index.js'] });

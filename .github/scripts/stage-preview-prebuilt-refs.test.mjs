@@ -230,8 +230,10 @@ test('warns and summarizes phantom drops without failing', () => {
     });
     assert.equal(run.status, 0, run.stderr);
     assert.match(run.stderr, /WARNING: dropped 2 dangling reference/);
+    assert.match(run.stderr, /serve-verify this preview/);
     const text = readFileSync(summary, 'utf8');
     assert.match(text, /staged 3, skipped 2 \(2 dangling\)/);
+    assert.match(text, /do not trust READY alone/);
     assert.match(text, /node_modules\/gone\/index\.js/);
     assert.ok(!text.includes('x'.repeat(201)));
     assert.ok(text.includes(`\`${longPhantom.slice(0, 200)}\``));

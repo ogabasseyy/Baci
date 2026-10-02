@@ -123,6 +123,10 @@ test('drops invalid entries with a manifest trace', () => {
       manifest.skipped.map((s) => s.reason).sort(),
       ['invalid', 'invalid']
     );
+    assert.deepEqual(
+      manifest.skipped.map((s) => s.value).sort(),
+      ['/e.js=""', '/n.js=42']
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -159,7 +163,7 @@ test('drops phantom references from the shipped maps', () => {
   }
 });
 
-test('fails closed when nothing stages while refs are missing', () => {
+test('fails closed when missing refs dominate staged files', () => {
   const root = layout({
     '.vercel/output/functions/a.func/.vc-config.json': JSON.stringify({
       filePathMap: { '/gone.js': 'node_modules/gone/index.js' },
@@ -168,15 +172,17 @@ test('fails closed when nothing stages while refs are missing', () => {
       filePathMap: {
         '/gone2.js': 'node_modules/gone2/index.js',
         '/abs.js': '/etc/passwd',
+        '/ok.js': 'node_modules/ok/index.js',
       },
     }),
+    'node_modules/ok/index.js': 'ok',
   });
   try {
-    const allPhantom = spawnSync('node', [SCRIPT, root, join(root, 's1')], {
+    const dominated = spawnSync('node', [SCRIPT, root, join(root, 's1')], {
       encoding: 'utf8',
     });
-    assert.equal(allPhantom.status, 1);
-    assert.match(allPhantom.stderr, /nothing staged while references are missing/);
+    assert.equal(dominated.status, 1);
+    assert.match(dominated.stderr, /dominate .* staged/);
     const empty = layout({});
     try {
       const noOutput = spawnSync('node', [SCRIPT, empty, join(empty, 's2')], {

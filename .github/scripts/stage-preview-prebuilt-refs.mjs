@@ -74,7 +74,10 @@ for (const configPath of vcConfigs(outputDir)) {
     // escaping, and output-internal values stay: the CLI rejects or
     // resolves them exactly as in an unmodified map.
     if (typeof value !== 'string' || value === '') {
-      skipped.push({ value: String(value), reason: 'invalid' });
+      skipped.push({
+        value: `${key}=${JSON.stringify(value)?.slice(0, 200) ?? typeof value}`,
+        reason: 'invalid',
+      });
       continue;
     }
     stringValues += 1;
@@ -133,9 +136,14 @@ for (const configPath of vcConfigs(outputDir)) {
   }
 }
 
-if (stringValues > 0 && stagedValues.size === 0 && missingValues > 0) {
+// Canary, not a correctness gate: dropped refs are redundant with the
+// self-contained .func dirs (platform deploys prove it), so truncation
+// cannot break the deployment. But phantoms scale ~1 per traced package
+// while staged files scale many per package, so phantoms dominating the
+// staged set smells like a systematically wrong base. Refuse to ship it.
+if (stringValues > 0 && missingValues > staged.length) {
   console.error(
-    'error: nothing staged while references are missing; refusing to ship (wrong base?)'
+    `error: ${missingValues} missing reference(s) dominate ${staged.length} staged; refusing to ship (wrong base?)`
   );
   process.exit(1);
 }

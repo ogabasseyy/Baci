@@ -71,8 +71,10 @@ for (const configPath of vcConfigs(outputDir)) {
     process.exit(1);
   }
   const maps = config?.filePathMap;
-  if (!maps || typeof maps !== 'object') continue;
-  if (Array.isArray(maps)) {
+  // A missing map is normal (static configs); a present-but-malformed
+  // one is corrupt either way, so fail closed for any non-object.
+  if (maps === undefined || maps === null) continue;
+  if (typeof maps !== 'object' || Array.isArray(maps)) {
     console.error(`error: filePathMap is not an object in ${configPath}`);
     process.exit(1);
   }
@@ -125,7 +127,9 @@ for (const configPath of vcConfigs(outputDir)) {
       skipped.push({ value, reason: 'inside-output' });
       kept[key] = value;
       usable += 1;
-      insideOutputValues.push(value);
+      // Dedupe by normalized path: alias spellings of one file must
+      // not each count as resolving.
+      insideOutputValues.push(posixRel);
       continue;
     }
     if (
@@ -256,13 +260,19 @@ if (process.env.GITHUB_STEP_SUMMARY) {
     `(${dropped.length} dangling` +
     (guardedCounts.length > 0 ? `, ${guardedCounts.join(', ')}` : '') +
     ')';
-  appendFileSync(
-    process.env.GITHUB_STEP_SUMMARY,
-    `### Prebuilt refs\nstaged ${new Set(staged).size}, skipped ${skipped.length} ${danglingLabel}\n` +
-      dropped.slice(0, 20).map((v) => `- \`${v}\``).join('\n') +
-      (dropped.length > 0 ? '\n' : '') +
-      (dropped.length > 0
-        ? 'Dropped refs can fail at request time: serve-verify this preview, do not trust READY alone.\n'
-        : '')
-  );
+  // Best-effort annotation: maps are already rewritten and the manifest
+  // written, so a broken summary path must not fail the build.
+  try {
+    appendFileSync(
+      process.env.GITHUB_STEP_SUMMARY,
+      `### Prebuilt refs\nstaged ${new Set(staged).size}, skipped ${skipped.length} ${danglingLabel}\n` +
+        dropped.slice(0, 20).map((v) => `- \`${v}\``).join('\n') +
+        (dropped.length > 0 ? '\n' : '') +
+        (dropped.length > 0
+          ? 'Dropped refs can fail at request time: serve-verify this preview, do not trust READY alone.\n'
+          : '')
+    );
+  } catch (error) {
+    console.error(`WARNING: could not write step summary: ${error.message}`);
+  }
 }

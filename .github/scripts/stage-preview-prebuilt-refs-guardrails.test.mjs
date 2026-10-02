@@ -37,9 +37,7 @@ test('counts repeated phantom occurrences, not distinct values', () => {
     'node_modules/ok/index.js': 'ok',
   });
   try {
-    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], {
-      encoding: 'utf8',
-    });
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], { encoding: 'utf8' });
     assert.equal(run.status, 1);
     assert.match(run.stderr, /dominate .* refusing to ship/);
   } finally {
@@ -59,9 +57,7 @@ test('drops stale output-internal refs instead of counting them', () => {
     'node_modules/ok/index.js': 'ok',
   });
   try {
-    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], {
-      encoding: 'utf8',
-    });
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], { encoding: 'utf8' });
     assert.equal(run.status, 0, run.stderr);
     const rewritten = JSON.parse(readFileSync(join(root, configRel), 'utf8'));
     assert.deepEqual(rewritten.filePathMap, {
@@ -93,9 +89,7 @@ test('traces directory refs as non-file, still unresolved', () => {
     'node_modules/ok/index.js': 'ok',
   });
   try {
-    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], {
-      encoding: 'utf8',
-    });
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], { encoding: 'utf8' });
     assert.equal(run.status, 0, run.stderr);
     const rewritten = JSON.parse(readFileSync(join(root, configRel), 'utf8'));
     assert.deepEqual(rewritten.filePathMap, {
@@ -135,9 +129,7 @@ test('absolute and escaping refs do not satisfy the usable guard', () => {
     'node_modules/a/two.js': '2',
   });
   try {
-    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], {
-      encoding: 'utf8',
-    });
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], { encoding: 'utf8' });
     assert.equal(run.status, 1);
     assert.match(run.stderr, /lost every usable reference/);
   } finally {
@@ -155,9 +147,7 @@ test('leaves maps untouched when a guardrail fails', () => {
   });
   const root = layout({ [configRel]: original });
   try {
-    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], {
-      encoding: 'utf8',
-    });
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], { encoding: 'utf8' });
     assert.equal(run.status, 1);
     // A same-workspace retry must see the original maps, not truncated ones.
     assert.equal(readFileSync(join(root, configRel), 'utf8'), original);
@@ -214,11 +204,67 @@ test('duplicate staged refs do not mask distinct phantoms', () => {
     'node_modules/ok/index.js': 'ok',
   });
   try {
-    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], {
-      encoding: 'utf8',
-    });
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], { encoding: 'utf8' });
     assert.equal(run.status, 1);
     assert.match(run.stderr, /dominate .* refusing to ship/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('normalizes output-internal aliases in the resolving count', () => {
+  // Two alias spellings of one file plus two missing refs must fail:
+  // normalized resolving is 1, so the 2 missing dominate.
+  const root = layout({
+    '.vercel/output/functions/a.func/.vc-config.json': JSON.stringify({
+      filePathMap: {
+        '/a.js': '.vercel/output/functions/a.func/bundled.js',
+        '/b.js': '.vercel/output/functions/a.func/sub/../bundled.js',
+        '/gone.js': 'node_modules/gone/index.js',
+        '/gone2.js': 'node_modules/gone2/index.js',
+      },
+    }),
+    '.vercel/output/functions/a.func/bundled.js': 'bundled',
+  });
+  try {
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], { encoding: 'utf8' });
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /dominate .* refusing to ship/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('rejects a non-object filePathMap', () => {
+  const configRel = '.vercel/output/functions/a.func/.vc-config.json';
+  const root = layout({
+    [configRel]: JSON.stringify({ filePathMap: 'node_modules/ok/index.js' }),
+    'node_modules/ok/index.js': 'ok',
+  });
+  try {
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], { encoding: 'utf8' });
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /filePathMap is not an object/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('tolerates an unwritable step summary', () => {
+  const root = layout({
+    '.vercel/output/functions/a.func/.vc-config.json': JSON.stringify({
+      filePathMap: { '/ok.js': 'node_modules/ok/index.js' },
+    }),
+    'node_modules/ok/index.js': 'ok',
+  });
+  try {
+    // A directory summary path makes the append throw; best-effort only.
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], {
+      encoding: 'utf8',
+      env: { ...process.env, GITHUB_STEP_SUMMARY: root },
+    });
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /WARNING: could not write step summary/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -232,9 +278,7 @@ test('rejects an array filePathMap instead of coercing it', () => {
     'node_modules/ok/index.js': 'ok',
   });
   try {
-    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], {
-      encoding: 'utf8',
-    });
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], { encoding: 'utf8' });
     assert.equal(run.status, 1);
     assert.match(run.stderr, /filePathMap is not an object/);
     assert.equal(readFileSync(join(root, configRel), 'utf8'), original);

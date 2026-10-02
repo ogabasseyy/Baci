@@ -83,8 +83,14 @@ for (const full of walk(quarantine)) {
 
 console.log(`materialized ${count} referenced file(s) from quarantine`);
 if (process.env.GITHUB_STEP_SUMMARY) {
-  appendFileSync(
-    process.env.GITHUB_STEP_SUMMARY,
-    `Prebuilt refs materialized: ${count} file(s) (manifest: .preview-refs-manifest.json)\n`
-  );
+  // Best-effort annotation: files are already materialized, so a
+  // broken summary path must not fail the deploy.
+  try {
+    appendFileSync(
+      process.env.GITHUB_STEP_SUMMARY,
+      `Prebuilt refs materialized: ${count} file(s) (manifest: .preview-refs-manifest.json)\n`
+    );
+  } catch (error) {
+    console.error(`WARNING: could not write step summary: ${error.message}`);
+  }
 }

@@ -101,6 +101,24 @@ test('reports the materialized count to the step summary', () => {
   }
 });
 
+test('tolerates an unwritable step summary', () => {
+  const root = layout({ 'node_modules/ok/index.js': 'ok' });
+  try {
+    const result = spawnSync('node', [SCRIPT, root], {
+      encoding: 'utf8',
+      env: { ...process.env, GITHUB_STEP_SUMMARY: root },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /WARNING: could not write step summary/);
+    assert.equal(
+      readFileSync(join(root, 'node_modules/ok/index.js'), 'utf8'),
+      'ok'
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('fails closed on a missing quarantine dir', () => {
   const root = mkdtempSync(join(tmpdir(), 'preview-materialize-empty-'));
   try {

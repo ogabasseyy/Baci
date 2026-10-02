@@ -10,13 +10,12 @@
 // every referenced file into a staging dir preserving root-relative layout,
 // so the deploy job can extract it at root and the CLI's references resolve.
 //
-// Layout rule mirrors the CLI: absolute values and values escaping the root
-// are skipped (the CLI rejects them too). References already inside
-// `.vercel/output` ship via the output artifact and are skipped here.
-// Only staged values stay in the shipped filePathMaps: missing (phantom)
-// and protected values are dropped so the CLI never re-adds them (it would
-// ENOENT on the former and upload the latter). Fails closed only when
-// EVERYTHING is phantom, which smells like a systematically wrong base.
+// Layout rule mirrors the CLI: absolute, escaping, and output-internal
+// values are skipped from staging but stay in the shipped maps, where the
+// CLI rejects or resolves them exactly as in an unmodified map. Only
+// missing (phantom), protected, and invalid values are dropped: the CLI
+// would ENOENT, wrongly upload, or crash on them. Fails closed when
+// nothing stages while references are missing (wrong-base smell).
 // These staging rules are fail-fast UX, not the security boundary: the
 // build job is untrusted, so the deploy-side materializer re-enforces them.
 //
@@ -70,21 +69,31 @@ for (const configPath of vcConfigs(outputDir)) {
   if (!maps || typeof maps !== 'object') continue;
   const kept = {};
   for (const [key, value] of Object.entries(maps)) {
-    if (typeof value !== 'string' || value === '') continue;
+    // Only missing, protected, and invalid values leave the shipped map:
+    // the CLI would ENOENT, wrongly upload, or crash on them. Absolute,
+    // escaping, and output-internal values stay: the CLI rejects or
+    // resolves them exactly as in an unmodified map.
+    if (typeof value !== 'string' || value === '') {
+      skipped.push({ value: String(value), reason: 'invalid' });
+      continue;
+    }
     stringValues += 1;
     if (isAbsolute(value)) {
       skipped.push({ value, reason: 'absolute' });
+      kept[key] = value;
       continue;
     }
     const abs = resolve(root, value);
     const rel = relative(root, abs);
     if (rel === '' || rel === '.' || rel.startsWith(`..${sep}`) || rel === '..' || isAbsolute(rel)) {
       skipped.push({ value, reason: 'escapes-root' });
+      kept[key] = value;
       continue;
     }
     const posixRel = rel.split(sep).join('/');
     if (posixRel === '.vercel/output' || posixRel.startsWith('.vercel/output/')) {
       skipped.push({ value, reason: 'inside-output' });
+      kept[key] = value;
       continue;
     }
     if (
@@ -106,7 +115,7 @@ for (const configPath of vcConfigs(outputDir)) {
       // Phantom reference (e.g. transient build files): the CLI would
       // ENOENT re-adding it, so drop it from the shipped map instead of
       // failing the whole build. The guardrail below catches a
-      // systematically wrong base, where EVERYTHING is phantom.
+      // systematically wrong base, where nothing real stages.
       skipped.push({ value, reason: 'missing' });
       missingValues += 1;
       continue;
@@ -124,9 +133,9 @@ for (const configPath of vcConfigs(outputDir)) {
   }
 }
 
-if (stringValues > 0 && stagedValues.size === 0 && missingValues === stringValues) {
+if (stringValues > 0 && stagedValues.size === 0 && missingValues > 0) {
   console.error(
-    'error: every filePathMap reference is missing; refusing to ship empty maps (wrong base?)'
+    'error: nothing staged while references are missing; refusing to ship (wrong base?)'
   );
   process.exit(1);
 }

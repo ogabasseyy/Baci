@@ -26,7 +26,7 @@ describe('PAYSTACK_PENDING_SOURCES', () => {
 
     expect(sources).toEqual(EXPECTED_PAYSTACK_PENDING_SOURCES);
     expect(sources.at(-1)?.repositoryPath).toBe(
-      'supabase/migrations/20260927151500_merge_paystack_cancellation_refund_leg_evidence.sql'
+      'supabase/migrations/20260928120000_backfill_paystack_dva_attempt_markers.sql'
     );
   });
 

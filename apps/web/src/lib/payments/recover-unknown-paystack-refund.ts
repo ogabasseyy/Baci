@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { verifyTransaction } from '@/lib/verify-paystack-transaction';
 import { fetchPaystackPaymentById } from './fetch-paystack-payment-by-id';
 import { fetchRefund } from './fetch-paystack-refund';
+import { filePaystackRefundRecoveryReview } from './file-paystack-refund-recovery-review';
 import { fileRefundEvidenceReview } from './file-refund-evidence-review';
 import { holdPaystackRefundForReview } from './hold-paystack-refund-for-review';
 import { isDeterministicRefundError } from './is-deterministic-paystack-refund-error';
@@ -46,46 +47,6 @@ async function reconcileRecoveredRow(
     if (!isDeterministicRefundError(reason)) throw reason;
     await fileRefundEvidenceReview(supabase, refund, reason.message);
     await holdPaystackRefundForReview(supabase, refund.id, reason.message);
-  }
-}
-
-// File a recovery review when no local refund row exists to attach it to.
-// Redeliveries and concurrent events converge on the single open review per
-// order instead of refiling: the open-by-order unique index turns a lost
-// race into a no-op, so deterministic conditions never become retry storms.
-async function fileRecoveryReviewOnce(
-  supabase: SupabaseClient,
-  review: {
-    candidates: Record<string, unknown>[];
-    merchantId: string;
-    metadata: Record<string, unknown>;
-    orderId: string;
-    paystackRef: string | null;
-    reason: string;
-  }
-): Promise<void> {
-  const { data: open, error: openError } = await supabase
-    .from('reconciliation_review')
-    .select('id')
-    .eq('issue_type', 'order_cancellation_refund_requires_review')
-    .eq('order_id', review.orderId)
-    .is('resolved_at', null)
-    .limit(1);
-  if (openError) throw new Error('refund_recovery_review_failed');
-  if (open && (open as unknown[]).length > 0) return;
-  const { error: insertError } = await supabase
-    .from('reconciliation_review')
-    .insert({
-      issue_type: 'order_cancellation_refund_requires_review',
-      order_id: review.orderId,
-      merchant_id: review.merchantId,
-      paystack_ref: review.paystackRef,
-      reason: review.reason,
-      candidates: review.candidates,
-      metadata: review.metadata,
-    });
-  if (insertError && (insertError as { code?: string }).code !== '23505') {
-    throw new Error('refund_recovery_review_failed');
   }
 }
 
@@ -182,7 +143,7 @@ export async function recoverUnknownPaystackRefund(
     // ops can route the verified provider refund, then acknowledge.
     for (const candidate of candidates) {
       if (!candidate.order_id) continue;
-      await fileRecoveryReviewOnce(supabase, {
+      await filePaystackRefundRecoveryReview(supabase, {
         candidates: candidates.map((entry) => ({
           payment_transaction_id: entry.id,
           order_id: entry.order_id,
@@ -269,7 +230,7 @@ export async function recoverUnknownPaystackRefund(
       // The order/reference slot is held by a row that is not this Paystack
       // refund, so redelivery would collide forever: persist the verified
       // provider evidence for reconciliation, then acknowledge.
-      await fileRecoveryReviewOnce(supabase, {
+      await filePaystackRefundRecoveryReview(supabase, {
         candidates: [
           {
             payment_transaction_id: payment.id,

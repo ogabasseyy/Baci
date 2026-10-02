@@ -114,6 +114,13 @@ BEGIN
     RAISE EXCEPTION 'Compatibility-whitespace model did not use the post-NFKC trim lexeme';
   END IF;
   document := discovery.product_discovery_search_document_v5('Generic', 'Acme', 'Accessories', '',
+    ('{"attributes":{"color":"black' || chr(65279) || '"}}')::jsonb);
+  IF NOT document @@ plainto_tsquery('simple',
+      'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+        'color' || pg_catalog.chr(31) || 'black', 'UTF8'), 'sha256'), 'hex')) THEN
+    RAISE EXCEPTION 'BOM-suffixed attribute value did not digest to the trimmed lexeme';
+  END IF;
+  document := discovery.product_discovery_search_document_v5('Generic', 'Acme', 'Accessories', '',
     '{"model":"三星手机","product_type":"手机"}'::jsonb);
   IF NOT document @@ plainto_tsquery('simple',
       'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(

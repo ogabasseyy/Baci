@@ -90,12 +90,12 @@ AS $$
               pg_catalog.regexp_replace(
                 pg_catalog.regexp_replace(
                   pg_catalog.normalize(attribute.value #>> '{}', 'NFC'),
-                  '^[[:space:]]+|[[:space:]]+$', '', 'g'),
-                '[[:space:]]+', ' ', 'g'), 'NFC')) AS normalized_value
+                  '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g'),
+                '[[:space:]   -     　﻿]+', ' ', 'g'), 'NFC')) AS normalized_value
           FROM pg_catalog.jsonb_each(facts -> 'attributes') AS attribute(key, value)
           WHERE attribute.key IN ('color', 'connector', 'processor', 'connectivity')
             AND pg_catalog.jsonb_typeof(attribute.value) = 'string'
-            AND pg_catalog.btrim(attribute.value #>> '{}') <> ''
+            AND pg_catalog.regexp_replace(attribute.value #>> '{}', '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g') <> ''
         ) AS pair
       ), '')
       ELSE ''

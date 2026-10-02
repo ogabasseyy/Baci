@@ -131,6 +131,34 @@ VALUES
   ('cb58d110-0000-4000-8000-000000000441', 'cb58d110-0000-4000-8000-000000000440',
    'cb58d110-0000-4000-8000-000000000207', ('{"color":"black' || chr(65279) || '"}')::jsonb, 5);
 
+-- Effective-policy purchasability fixtures: a depleted serialized_strict
+-- variant under an unmanaged parent must rank below a purchasable match
+-- instead of short-circuiting on the parent flag. The depleted product
+-- sorts first by id so the old order would surface it ahead of the match.
+INSERT INTO public.merchants (id, email, business_name, slug, is_published)
+VALUES (
+  'cb58d110-0000-4000-8000-000000000208',
+  'strict-test@example.test',
+  'Strict Test Merchant',
+  'strict-test-merchant',
+  true
+);
+
+INSERT INTO public.products
+  (id, merchant_id, name, slug, brand, price, status, has_variants, manage_stock, inventory_tracking_policy, discovery_metadata)
+VALUES
+  ('cb58d110-0000-4000-8000-000000000450', 'cb58d110-0000-4000-8000-000000000208',
+   'Depleted strict', 'depleted-strict', 'Acme', 50000, 'active', true, false, 'off', '{}'),
+  ('cb58d110-0000-4000-8000-000000000452', 'cb58d110-0000-4000-8000-000000000208',
+   'Available control', 'available-control', 'Acme', 50000, 'active', true, false, 'off', '{}');
+
+INSERT INTO public.product_variants (id, product_id, merchant_id, attributes, stock_quantity, inventory_tracking_policy)
+VALUES
+  ('cb58d110-0000-4000-8000-000000000451', 'cb58d110-0000-4000-8000-000000000450',
+   'cb58d110-0000-4000-8000-000000000208', '{"color":"black"}', 0, 'serialized_strict'),
+  ('cb58d110-0000-4000-8000-000000000453', 'cb58d110-0000-4000-8000-000000000452',
+   'cb58d110-0000-4000-8000-000000000208', '{"color":"black"}', 0, 'off');
+
 DO $$
 BEGIN
   BEGIN
@@ -320,6 +348,18 @@ BEGIN
   IF cardinality(recall_ids) IS DISTINCT FROM 1
     OR recall_ids[1] IS DISTINCT FROM 'cb58d110-0000-4000-8000-000000000440'::uuid THEN
     RAISE EXCEPTION 'values with JavaScript-only trim characters must recall trimmed, got %', recall_ids;
+  END IF;
+  SELECT array_agg(product_id) INTO recall_ids
+  FROM public.search_product_variant_recall(
+    'cb58d110-0000-4000-8000-000000000208',
+    '[{"key":"color","operator":"eq","value":"black"}]'::jsonb,
+    10
+  );
+  IF recall_ids IS DISTINCT FROM ARRAY[
+    'cb58d110-0000-4000-8000-000000000452'::uuid,
+    'cb58d110-0000-4000-8000-000000000450'::uuid
+  ] THEN
+    RAISE EXCEPTION 'depleted strict variants must rank below purchasable matches, got %', recall_ids;
   END IF;
 END;
 $$;

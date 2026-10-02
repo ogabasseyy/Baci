@@ -47,7 +47,7 @@ export const EXPECTED_DISCOVERY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261001100000_move_discovery_builders.sql',
-    sha256: '149b24fcbb40a5519798fbc3ffa53a80a2fd92b17f6302a22fb0b528b5d0a758',
+    sha256: 'b93085b5328f68ff4f3501365be1d428856fac18a914b1daab19c570d82169ee',
   },
   {
     repositoryPath:
@@ -67,7 +67,7 @@ export const EXPECTED_DISCOVERY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261001150000_variant_recall_identity_rank.sql',
-    sha256: '18b43a36a923d3c7b5a1673d381acd5cf1725182937557d8f6d5dca0bf024d2e',
+    sha256: '75be0586e58da5481e029fb579ecc43678b7d79ab246a1a99a2327fa285aef71',
   },
   {
     repositoryPath:

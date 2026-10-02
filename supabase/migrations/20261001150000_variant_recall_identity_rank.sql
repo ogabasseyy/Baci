@@ -150,10 +150,10 @@ BEGIN
       -- variant policy wins, else a serialized product policy, else off.
       -- Serialized policies replace stored stock with public available
       -- units; serialized_then_unlimited stays purchasable at zero units.
-      (p.manage_stock IS NOT TRUE
+      ((policy.effective_policy = 'off'
+          AND (p.manage_stock IS NOT TRUE OR COALESCE(pv.stock_quantity, 0) > 0))
         OR policy.effective_policy = 'serialized_then_unlimited'
-        OR (policy.effective_policy = 'serialized_strict' AND COALESCE(units.available, 0) > 0)
-        OR (policy.effective_policy = 'off' AND COALESCE(pv.stock_quantity, 0) > 0)) AS is_purchasable
+        OR (policy.effective_policy = 'serialized_strict' AND COALESCE(units.available, 0) > 0)) AS is_purchasable
     FROM public.product_variants AS pv
     JOIN public.products AS p ON p.id = pv.product_id
     JOIN public.merchants AS m ON m.id = p.merchant_id

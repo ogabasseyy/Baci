@@ -6,7 +6,11 @@
 -- was observed for. Known non-failed verdicts now survive later
 -- failed (or verdict-less) refreshes, mirroring the leg-merge truth
 -- table. Same signatures: OR REPLACE keeps every existing call on
--- the new bodies.
+-- the new bodies. Both locked rescans normalize the gateway like
+-- fetchCompletedPaymentsByReference: an exact match would miss a
+-- completed legacy ` Paystack ` row, and the second-pass empty
+-- branch would acknowledge the event with an open watch no
+-- completion ever claims.
 
 CREATE OR REPLACE FUNCTION public.open_paystack_refund_recovery_watch_v1(
   p_paystack_ref text,
@@ -72,7 +76,7 @@ BEGIN
         'amount', t.amount
       ) AS row
       FROM public.transactions AS t
-      WHERE t.gateway = 'paystack'
+      WHERE public.normalized_gateway_name_v1(t.gateway) = 'PAYSTACK'
         AND t.gateway_reference = v_reference
         AND t.transaction_type = 'payment'
         AND t.status = 'completed'
@@ -157,7 +161,7 @@ BEGIN
       ) AS row
       FROM public.transactions AS t
       LEFT JOIN public.orders AS o ON o.id = t.order_id
-      WHERE t.gateway = 'paystack'
+      WHERE public.normalized_gateway_name_v1(t.gateway) = 'PAYSTACK'
         AND t.gateway_reference = v_reference
         AND t.transaction_type = 'payment'
         AND t.status = 'completed'

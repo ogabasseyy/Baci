@@ -259,6 +259,83 @@ describe('deliverClaimedRefundNotification', () => {
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
+  it('skips the push when only the capped email fits the remaining budget', async () => {
+    const { supabase } = buildSupabase();
+    const sendEmail = vi.fn().mockResolvedValue({ success: true });
+    const sendMerchantPush = vi.fn().mockResolvedValue({
+      errors: [],
+      failed: 0,
+      sent: 1,
+    });
+
+    // 60s fits the 48s single-attempt email but not the 30s push
+    // phase plus the email: starting the push would starve the
+    // fallback and burn the attempt every backlog run.
+    await expect(
+      deliverClaimedRefundNotification({
+        deadlineMs: Date.now() + 60_000,
+        row: claimed('processed_merchant_push'),
+        sendEmail,
+        sendMerchantPush,
+        supabase,
+      })
+    ).resolves.toEqual({ lastError: null, outcome: 'sent' });
+
+    expect(sendMerchantPush).not.toHaveBeenCalled();
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        emailType: 'notifications',
+        maxAttemptsPerSender: 1,
+      })
+    );
+  });
+
+  it('runs the push when both phases fit and caps the fallback email', async () => {
+    const { supabase } = buildSupabase();
+    const sendEmail = vi.fn().mockResolvedValue({ success: true });
+    const sendMerchantPush = vi
+      .fn()
+      .mockRejectedValue(new Error('admin client unavailable'));
+
+    await expect(
+      deliverClaimedRefundNotification({
+        deadlineMs: Date.now() + 140_000,
+        row: claimed('processed_merchant_push'),
+        sendEmail,
+        sendMerchantPush,
+        supabase,
+      })
+    ).resolves.toEqual({ lastError: null, outcome: 'sent' });
+
+    expect(sendMerchantPush).toHaveBeenCalledTimes(1);
+    expect(sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ maxAttemptsPerSender: 1 })
+    );
+  });
+
+  it('fails without sending when even the capped email cannot fit', async () => {
+    const { supabase } = buildSupabase();
+    const sendEmail = vi.fn();
+    const sendMerchantPush = vi.fn();
+
+    await expect(
+      deliverClaimedRefundNotification({
+        deadlineMs: Date.now() + 30_000,
+        row: claimed('processed_merchant_push'),
+        sendEmail,
+        sendMerchantPush,
+        supabase,
+      })
+    ).resolves.toEqual({
+      lastError: 'refund_notification_deadline_before_send',
+      outcome: 'failed',
+    });
+
+    expect(sendMerchantPush).not.toHaveBeenCalled();
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
   it('treats a superseded contradictory failure as sent', async () => {
     const { supabase } = buildSupabase();
     mocks.resolveContradictoryRefundFailure.mockResolvedValue(true);

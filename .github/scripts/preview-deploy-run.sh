@@ -60,12 +60,19 @@ if [ "$deploy_status" -ne 0 ] && [ "$deploy_status" -ne 124 ] && [ "$deploy_stat
 fi
 # A timeout kill cannot distinguish 'hung after READY' from 'killed
 # mid-finalization after an early Preview line' (production answers the
-# same question by promoting; previews verify with a read-only inspect).
-# No timeout wrapper: one fast read, and the step timeout bounds it.
+# same question by promoting; previews verify with a bounded read-only
+# inspect). Bare inspect proves existence only, so wait for completion
+# (self-bounding --timeout; verified: exit 0 on Ready, 1 on Error) and
+# require the Ready marker too, so an exit-semantics drift cannot sell
+# a failed deployment as success. Either failure keeps the timeout
+# status: loud and retryable, never a false 'Preview ready'.
 if [ "$deploy_status" -eq 124 ] || [ "$deploy_status" -eq 137 ]; then
-  if [ -n "$preview_url" ] && ! "$vercel_runner" inspect "$preview_url" >/dev/null 2>&1; then
-    echo "Deploy timed out and $preview_url did not inspect as a live deployment; check the Vercel dashboard for an orphaned deployment before retrying." >&2
-    exit "$deploy_status"
+  if [ -n "$preview_url" ]; then
+    inspect_output="$("$vercel_runner" inspect --wait --timeout 5m "$preview_url" 2>&1)" || inspect_failed=1
+    if [ "${inspect_failed:-0}" -ne 0 ] || ! printf '%s' "$inspect_output" | grep -qiE '^status[[:space:]]+.*ready'; then
+      echo "Deploy timed out and $preview_url did not verify as a Ready deployment; check the Vercel dashboard for an orphaned deployment before retrying." >&2
+      exit "$deploy_status"
+    fi
   fi
 fi
 if [ -z "$preview_url" ]; then

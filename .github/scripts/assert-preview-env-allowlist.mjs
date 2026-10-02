@@ -44,12 +44,14 @@ const isBlankValue = (value) =>
 // Allowlisted *_URL values must stay credential-free endpoints: reject
 // userinfo (user:pass@host) and query strings (?token=). A future legit
 // query-bearing URL fails loud with a review path instead of leaking.
+const hasUserinfoCredential = (value) => /:\/\/[^/\s"']*@/.test(value);
 const hasEmbeddedCredential = (value) =>
-  /:\/\/[^/\s"']*@/.test(value) || value.includes('?');
+  hasUserinfoCredential(value) || value.includes('?');
 
 const offenders = [];
 const unparseable = [];
 const tainted = [];
+const taintedPublic = [];
 envText.split('\n').forEach((rawLine, index) => {
   const line = rawLine.trim();
   if (line === '' || line.startsWith('#')) {
@@ -63,13 +65,15 @@ envText.split('\n').forEach((rawLine, index) => {
   }
   const [, key, rawValue] = match;
   if (key.startsWith('NEXT_PUBLIC_') || allowed.has(key)) {
-    if (
-      allowed.has(key) &&
-      /_URL$/.test(key) &&
-      !isBlankValue(rawValue.trim()) &&
-      hasEmbeddedCredential(rawValue)
-    ) {
-      tainted.push(key);
+    // Userinfo is never legit, even in public values; query strings are
+    // only suspicious in allowlisted server URLs (public URLs may carry
+    // legitimate query params, and they are public by design anyway).
+    if (/_URL$/.test(key) && !isBlankValue(rawValue.trim())) {
+      if (key.startsWith('NEXT_PUBLIC_')) {
+        if (hasUserinfoCredential(rawValue)) taintedPublic.push(key);
+      } else if (hasEmbeddedCredential(rawValue)) {
+        tainted.push(key);
+      }
     }
     return;
   }
@@ -78,7 +82,12 @@ envText.split('\n').forEach((rawLine, index) => {
   }
 });
 
-if (unparseable.length > 0 || offenders.length > 0 || tainted.length > 0) {
+if (
+  unparseable.length > 0 ||
+  offenders.length > 0 ||
+  tainted.length > 0 ||
+  taintedPublic.length > 0
+) {
   for (const lineNumber of unparseable) {
     console.error(`Unparseable line ${lineNumber} (failing closed; content withheld).`);
   }
@@ -86,6 +95,12 @@ if (unparseable.length > 0 || offenders.length > 0 || tainted.length > 0) {
     console.error(
       `${key} is allowlisted as a plain endpoint but its Preview value embeds credentials. ` +
         'Move it to the redact set or re-scope the value in Vercel.',
+    );
+  }
+  for (const key of taintedPublic) {
+    console.error(
+      `${key} is public by design but its Preview value embeds userinfo credentials, ` +
+        'which would bake a secret into client bundles. Re-scope the value in Vercel.',
     );
   }
   for (const key of offenders) {

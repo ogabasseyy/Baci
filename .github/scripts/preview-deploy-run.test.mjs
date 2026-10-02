@@ -43,10 +43,11 @@ function withHarness(callback) {
 function runDeploy({ cwd, stub, outputs, summary }, stubBody, extraEnv = {}) {
   // argv[1] doubles as the CLI runner: the deploy phase invokes the stub
   // argless, while the timeout-path readiness check calls it with
-  // `inspect <url>` (FAKE_INSPECT_EXIT defaults to live).
+  // `inspect <url>` (FAKE_INSPECT_EXIT defaults to live, status line
+  // defaults to Ready; FAKE_INSPECT_STATUS overrides the line).
   writeFileSync(
     stub,
-    `#!/usr/bin/env bash\nif [ "\${1:-}" = inspect ]; then exit "\${FAKE_INSPECT_EXIT:-0}"; fi\n${stubBody}\n`,
+    `#!/usr/bin/env bash\nif [ "\${1:-}" = inspect ]; then printf '%s\\n' "\${FAKE_INSPECT_STATUS:-status Ready}"; exit "\${FAKE_INSPECT_EXIT:-0}"; fi\n${stubBody}\n`,
     { mode: 0o755 }
   );
   return spawnSync('bash', [SCRIPT, stub], {
@@ -100,8 +101,33 @@ test('fails a hung deploy whose URL does not inspect as live', () => {
       FAKE_INSPECT_EXIT: '1',
     });
     assert.equal(result.status, 124);
-    assert.match(result.stderr, /did not inspect as a live deployment/);
+    assert.match(result.stderr, /did not verify as a Ready deployment/);
     assert.equal(read(harness.outputs), '');
+  });
+});
+
+test('fails a hung deploy whose inspect exits clean but never reports Ready', () => {
+  withHarness((harness) => {
+    const result = runDeploy(harness, `echo 'Preview: ${PREVIEW_URL}'`, {
+      FAKE_TIMEOUT_EXIT: '124',
+      FAKE_INSPECT_EXIT: '0',
+      FAKE_INSPECT_STATUS: 'status ● Error',
+    });
+    assert.equal(result.status, 124);
+    assert.match(result.stderr, /did not verify as a Ready deployment/);
+    assert.equal(read(harness.outputs), '');
+  });
+});
+
+test('accepts a hung deploy whose inspect reports the Ready marker', () => {
+  withHarness((harness) => {
+    const result = runDeploy(harness, `echo 'Preview: ${PREVIEW_URL}'`, {
+      FAKE_TIMEOUT_EXIT: '124',
+      FAKE_INSPECT_EXIT: '0',
+      FAKE_INSPECT_STATUS: 'status\t● Ready',
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(read(harness.outputs), new RegExp(`preview_url=${PREVIEW_URL}`));
   });
 });
 

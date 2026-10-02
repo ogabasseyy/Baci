@@ -113,6 +113,18 @@ test('rejects embedded credentials in allowlisted URLs without echoing them', ()
   });
 });
 
+test('rejects userinfo in public URLs but allows public query strings', () => {
+  withFiles('NEXT_PUBLIC_API_URL="https://api.example.com/v1?key=public"\n', '', (envFile, allowFile) => {
+    assert.equal(run(envFile, allowFile).status, 0);
+  });
+  withFiles('NEXT_PUBLIC_API_URL="https://user:pass@api.example.com"\n', '', (envFile, allowFile) => {
+    const result = run(envFile, allowFile);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /NEXT_PUBLIC_API_URL/);
+    assert.doesNotMatch(result.stderr, /user:pass/);
+  });
+});
+
 test('accepts the real pull-output shape through normalize, redact, and exposure check', () => {
   const fixture = fileURLToPath(
     new URL('./fixtures/preview-env-pull-shape.fixture.env', import.meta.url),

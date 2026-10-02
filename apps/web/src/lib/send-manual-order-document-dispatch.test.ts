@@ -206,6 +206,51 @@ describe('send manual order document dispatch', () => {
     });
   });
 
+  it('snapshots the rendered payment history in the dispatch marker', async () => {
+    const db = database(
+      {},
+      {
+        paymentHistory: [
+          {
+            id: 'txn-2',
+            amount: 450000,
+            created_at: '2026-09-30T09:00:00Z',
+            description: 'balance',
+            metadata: null,
+          },
+          {
+            id: 'txn-1',
+            amount: 500000,
+            created_at: '2026-09-29T09:00:00Z',
+            description: null,
+            metadata: { payment_method: 'bank_transfer' },
+          },
+        ],
+      }
+    );
+    await sendManualOrderDocument({ supabase: db.client, row });
+    const markCall = db.rpc.mock.calls.find(
+      ([fn]) => fn === 'mark_manual_document_dispatch_started'
+    );
+    expect(markCall?.[1]).toMatchObject({
+      p_txn_count: 2,
+      p_transactions: [
+        {
+          amount: 500000,
+          created_at: '2026-09-29T09:00:00Z',
+          description: null,
+          metadata: { payment_method: 'bank_transfer' },
+        },
+        {
+          amount: 450000,
+          created_at: '2026-09-30T09:00:00Z',
+          description: 'balance',
+          metadata: null,
+        },
+      ],
+    });
+  });
+
   it('retries instead of dispatching when the dispatch marker reports a stale order', async () => {
     const db = database({}, { dispatchStatus: 'stale' });
     // The marker runs as beforeTransportDispatch, so the provider mock is

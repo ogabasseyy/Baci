@@ -1,7 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { z } from 'zod';
 import { buildManualOrderDocumentPdfInput } from '@/lib/build-manual-order-document-pdf-input';
-import type { DispatchTaxSubtotal } from '@/lib/mark-manual-document-dispatch-started';
+import type {
+  DispatchTaxSubtotal,
+  DispatchTransaction,
+} from '@/lib/mark-manual-document-dispatch-started';
 import {
   generateReceiptPDF,
   resolveReceiptLogoDataUri,
@@ -16,10 +19,11 @@ import type { manualDocumentOrderSchema } from '@/schemas/manual-order-document-
  * the invoice's tax breakdown, and the merchant's invoice notes. A failed
  * lookup throws into outbox retry like the receipt-date lookup: a sent
  * document is terminal, so swallowing the error would permanently mis-render
- * a financial document. The normalized tax rows are returned alongside the
- * PDF so the dispatch marker snapshots exactly what was rendered; a separate
- * sender-side re-read could land on either side of a mid-dispatch tax
- * correction and either miss the staleness or cry stale on a fresh render.
+ * a financial document. The normalized tax and payment-history rows are
+ * returned alongside the PDF so the dispatch marker snapshots exactly what
+ * was rendered; a separate sender-side re-read could land on either side
+ * of a mid-dispatch correction and either miss the staleness or cry stale
+ * on a fresh render.
  */
 export async function renderManualOrderDocumentPdf({
   supabase,
@@ -47,10 +51,12 @@ export async function renderManualOrderDocumentPdf({
   const [historyResult, taxResult] = await Promise.all([
     supabase
       .from('transactions')
-      .select('amount, created_at, description, metadata')
+      .select('id, amount, created_at, description, metadata')
       .eq('order_id', order.id)
       .eq('transaction_type', 'payment')
-      .eq('status', 'completed')
+      // Paystack-backed payments settle as 'success', manual ones as
+      // 'completed': the DVA reservation paths treat both as settled.
+      .in('status', ['completed', 'success'])
       .order('created_at', { ascending: true }),
     supabase
       .from('order_tax_subtotals')
@@ -71,6 +77,17 @@ export async function renderManualOrderDocumentPdf({
       tax_amount: Number(row.tax_amount ?? 0),
       vat_category_code: String(row.vat_category_code ?? ''),
       vat_rate: Number(row.vat_rate ?? 0),
+    })
+  );
+  // Null-preserving, unlike the PDF input below: the snapshot must compare
+  // exactly what the database holds, so display fallbacks stay out.
+  const transactions: DispatchTransaction[] = (historyResult.data ?? []).map(
+    (row) => ({
+      id: String(row.id ?? ''),
+      amount: (row.amount as number | null) ?? null,
+      created_at: (row.created_at as string | null) ?? null,
+      description: (row.description as string | null) ?? null,
+      metadata: (row.metadata as Record<string, unknown> | null) ?? null,
     })
   );
   const { receiptOrder, receiptMerchant } = buildManualOrderDocumentPdfInput({
@@ -102,5 +119,5 @@ export async function renderManualOrderDocumentPdf({
     invoiceNotes: order.invoice_note || order.notes || undefined,
     taxSubtotals: taxSubtotals.map(({ id: _id, ...breakdown }) => breakdown),
   });
-  return { pdf, taxSubtotals };
+  return { pdf, taxSubtotals, transactions };
 }

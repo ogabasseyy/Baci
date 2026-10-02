@@ -38,11 +38,14 @@ BEGIN
   THEN RETURN; END IF;
   -- A fully-covered balance is substantively paid even when staff left a
   -- non-paid label (e.g. an over-amount partial): queue the receipt the
-  -- customer is owed, never a zero-balance invoice.
+  -- customer is owed, never a zero-balance invoice. The column has no
+  -- status constraint, so legacy spellings (Paid, PAID, padded) normalize
+  -- like the sender and storefront guards; otherwise the archive shows a
+  -- document the trigger never queues.
   IF v_order.amount_paid >= v_order.total
-    AND v_order.payment_status IN ('paid', 'unpaid', 'pending', 'partially_paid') THEN
+    AND lower(btrim(COALESCE(v_order.payment_status, ''))) IN ('paid', 'unpaid', 'pending', 'partially_paid') THEN
     v_event := 'manual_order_receipt';
-  ELSIF v_order.payment_status IN ('unpaid', 'pending', 'partially_paid') THEN
+  ELSIF lower(btrim(COALESCE(v_order.payment_status, ''))) IN ('unpaid', 'pending', 'partially_paid') THEN
     v_event := 'manual_order_invoice';
   ELSE RETURN; END IF;
 
@@ -240,10 +243,10 @@ BEGIN
     OR NOT EXISTS (SELECT 1 FROM public.order_items AS oi WHERE oi.order_id = v_order.id)
     OR v_order.total IS NULL OR v_order.amount_paid IS NULL
     OR (v_notification.event_type = 'manual_order_receipt'
-      AND (COALESCE(v_order.payment_status, '') NOT IN ('paid', 'unpaid', 'pending', 'partially_paid')
+      AND (lower(btrim(COALESCE(v_order.payment_status, ''))) NOT IN ('paid', 'unpaid', 'pending', 'partially_paid')
         OR v_order.amount_paid < v_order.total))
     OR (v_notification.event_type = 'manual_order_invoice'
-      AND (COALESCE(v_order.payment_status, '') NOT IN ('unpaid', 'pending', 'partially_paid')
+      AND (lower(btrim(COALESCE(v_order.payment_status, ''))) NOT IN ('unpaid', 'pending', 'partially_paid')
         OR v_order.amount_paid >= v_order.total))
   THEN RETURN jsonb_build_object('status', 'skipped'); END IF;
 

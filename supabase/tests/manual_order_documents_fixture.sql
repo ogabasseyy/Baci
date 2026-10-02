@@ -27,6 +27,7 @@ CREATE TABLE public.orders (
 CREATE TABLE public.order_items (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), order_id uuid REFERENCES public.orders ON DELETE CASCADE, name text, quantity integer, price numeric, variant_name text, condition text, item_description text, created_at timestamptz DEFAULT now());
 CREATE TABLE public.order_payment_accounts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), order_id uuid REFERENCES public.orders ON DELETE CASCADE, account_number text, bank_name text, account_name text, provider text, assignment_customer_email_source text, expires_at timestamptz, created_at timestamptz DEFAULT now());
 CREATE TABLE public.order_tax_subtotals (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), order_id uuid REFERENCES public.orders ON DELETE CASCADE, vat_category_code text, vat_rate numeric, taxable_amount numeric, tax_amount numeric, exemption_reason text, created_at timestamptz DEFAULT now());
+CREATE TABLE public.transactions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), order_id uuid REFERENCES public.orders ON DELETE CASCADE, transaction_type text, amount numeric, currency text, status text, gateway text, gateway_reference text, description text, metadata jsonb, created_at timestamptz DEFAULT now());
 CREATE TABLE public.order_notification_outbox (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), order_id uuid REFERENCES public.orders ON DELETE CASCADE,
   merchant_id uuid REFERENCES public.merchants,

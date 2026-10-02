@@ -127,6 +127,7 @@ describe('order notification outbox worker', () => {
     expect(summary).toMatchObject({ skipped: 1, retried: 0, sent: 0 });
     expect(builder.update).toHaveBeenCalledWith(
       expect.objectContaining({
+        next_attempt_at: null,
         skip_reason: 'missing_customer_email',
         status: 'skipped',
       })

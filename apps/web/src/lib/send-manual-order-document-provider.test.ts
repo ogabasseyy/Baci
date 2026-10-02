@@ -203,4 +203,13 @@ describe('send manual order document provider and validation', () => {
     });
     expect(sendEmail).not.toHaveBeenCalled();
   });
+
+  it('sends a receipt for legacy payment-status spellings', async () => {
+    const db = database({ payment_status: ' Paid ' });
+    const result = await sendManualOrderDocument({ supabase: db.client, row });
+    expect(result.status).toBe('sent');
+    expect(sendEmail.mock.calls[0][0].subject).toBe(
+      'Your receipt is ready - #ORD-42'
+    );
+  });
 });

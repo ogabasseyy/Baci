@@ -35,23 +35,55 @@ function cronRequest(path = '/api/cron/order-notifications') {
   });
 }
 
-function createUpdateBuilder() {
+function createUpdateBuilder(
+  storedIdentities: {
+    event_type: string;
+    merchant_id: string | null;
+    order_id: string | null;
+  } | null = {
+    event_type: 'manual_order_receipt',
+    merchant_id: null,
+    order_id: null,
+  }
+) {
   let matchedId = '';
+  const select = vi.fn();
   const maybeSingle = vi.fn<
     () => Promise<{
-      data: { id: string; metadata?: Record<string, unknown> } | null;
+      data: {
+        id: string;
+        metadata?: Record<string, unknown>;
+        event_type?: string;
+        merchant_id?: string | null;
+        order_id?: string | null;
+      } | null;
       error: unknown;
     }>
-  >(async () => ({ data: { id: matchedId }, error: null }));
+  >(async () => {
+    const calls = select.mock.calls;
+    // The dead-letter path re-reads stored identities before terminalizing;
+    // answer that projection from the per-test stored row.
+    if (calls[calls.length - 1]?.[0] === 'event_type, merchant_id, order_id') {
+      return {
+        data: storedIdentities && {
+          id: matchedId,
+          ...storedIdentities,
+        },
+        error: null,
+      };
+    }
+    return { data: { id: matchedId }, error: null };
+  });
   const builder = {
     match: vi.fn((values: { id: string }) => {
       matchedId = values.id;
       return builder;
     }),
     maybeSingle,
-    select: vi.fn(() => builder),
+    select,
     update: vi.fn(() => builder),
   };
+  select.mockImplementation(() => builder);
   return builder;
 }
 
@@ -193,6 +225,42 @@ describe('GET /api/cron/order-notifications parsing and dead-letter', () => {
         status: 'processing',
       })
     );
+  });
+
+  it('loops when the claim projection drops fields the stored row still has', async () => {
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: [
+        {
+          attempt_count: 1,
+          event_type: 'manual_order_receipt',
+          id: 'outbox-projection-glitch',
+          max_attempts: 5,
+        },
+      ],
+      error: null,
+    });
+    mockSupabase.from.mockReturnValue(
+      createUpdateBuilder({
+        event_type: 'manual_order_receipt',
+        merchant_id: 'merchant-1',
+        order_id: 'order-1',
+      })
+    );
+
+    const response = await GET(cronRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      claimed: 1,
+      skipped: 0,
+      unparseable: 1,
+    });
+    const updateBuilder = mockSupabase.from.mock.results[0]?.value;
+    expect(updateBuilder.select).toHaveBeenCalledWith(
+      'event_type, merchant_id, order_id'
+    );
+    expect(updateBuilder.update).not.toHaveBeenCalled();
   });
 
   it('never dead-letters shipping rows missing identity fields', async () => {

@@ -6,16 +6,17 @@ function clientReturning(result: unknown) {
   const chain = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnValue(terminal),
   };
   const from = vi.fn().mockReturnValue(chain);
-  return { client: { from }, from };
+  return { client: { from }, from, chain };
 }
 
 describe('resolveManualDocumentReceiptDate', () => {
   it('returns the newest completed payment timestamp', async () => {
-    const { client, from } = clientReturning({
+    const { client, from, chain } = clientReturning({
       data: { created_at: '2026-09-29T12:00:00Z' },
       error: null,
     });
@@ -24,6 +25,7 @@ describe('resolveManualDocumentReceiptDate', () => {
       resolveManualDocumentReceiptDate(client as never, 'order-1', true)
     ).resolves.toBe('2026-09-29T12:00:00Z');
     expect(from).toHaveBeenCalledWith('transactions');
+    expect(chain.in).toHaveBeenCalledWith('status', ['completed', 'success']);
   });
 
   it('returns null without querying for unpaid orders', async () => {

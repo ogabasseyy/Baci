@@ -15,10 +15,13 @@ import {
 export const maxDuration = 60;
 
 // Dead-letters provably unrecoverable MANUAL rows on first observation
-// instead of looping on the lease forever: a manual row with no usable
-// merchant or order can never be delivered by any worker version (no tenant
-// scope, no order to fetch), and manual rows re-arm on the next order touch
-// if the data is ever repaired. Shipping rows are never dead-lettered here:
+// instead of looping on the lease forever: a manual row whose STORED
+// identities are unusable can never be delivered by any worker version (no
+// tenant scope, no order to fetch), and manual rows re-arm on the next
+// order touch if the data is ever repaired. The stored row is re-read by
+// id first: a claim projection that transiently drops fields is not proof
+// of corruption, and dead-lettering it would silently lose a document.
+// Shipping rows are never dead-lettered here:
 // they have no re-arm path, so a transient claim-payload bug that drops
 // their fields must loop on the lease (and page via the unparseable
 // counter) instead of permanently losing the notification. Rows failing
@@ -54,6 +57,23 @@ async function deadLetterCorruptOutboxRow(
   if (hasUsableIdentity(raw.merchant_id) && hasUsableIdentity(raw.order_id))
     return false;
   try {
+    // The claim projection may transiently drop fields during a
+    // producer/worker rollout while the stored row is intact: verify the
+    // stored identities before terminalizing, or a claim-payload bug
+    // silently loses a document no later edit re-arms.
+    const { data: stored, error: readError } = await supabase
+      .from('order_notification_outbox')
+      .select('event_type, merchant_id, order_id')
+      .match({ id: raw.id, locked_by: workerId, status: 'processing' })
+      .maybeSingle();
+    if (
+      readError ||
+      !stored ||
+      !isManualOutboxEventType(stored.event_type) ||
+      hasUsableIdentity(stored.merchant_id) ||
+      hasUsableIdentity(stored.order_id)
+    )
+      return false;
     const { data, error } = await supabase
       .from('order_notification_outbox')
       .update({

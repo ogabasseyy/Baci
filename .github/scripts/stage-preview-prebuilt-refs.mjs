@@ -22,9 +22,9 @@
 //
 // Usage: stage-preview-prebuilt-refs.mjs [project-root] [staging-dir]
 // Defaults: root = cwd, staging = <root>/.preview-refs-stage (recreated).
-const sanitizeRef = (v) => v.replace(/[\0-\x1f`]/g, '').slice(0, 200);
-import { appendFileSync, copyFileSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { writeReport } from './stage-preview-prebuilt-refs-report.mjs';
 
 const root = resolve(process.argv[2] ?? process.cwd());
 const stage = resolve(process.argv[3] ?? join(root, '.preview-refs-stage'));
@@ -52,6 +52,33 @@ if (!outputStat?.isDirectory()) {
 
 rmSync(stage, { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
+
+// realRoot is safe to resolve here: the output-dir check above already
+// exited unless the root tree exists.
+const realRoot = realpathSync(root);
+const escapesRoot = (r) =>
+  r === '' || r === '.' || r === '..' || r.startsWith(`..${sep}`) || isAbsolute(r);
+const protectedPosix = (p) =>
+  p === 'trusted-ops' || p.startsWith('trusted-ops/') || p === '.vercel' || p.startsWith('.vercel/');
+const toPosix = (r) => r.split(sep).join('/');
+// Resolve through every ancestor: lstat alone only sees the final
+// component, so a symlinked ancestor could otherwise launder
+// outside-root or protected bytes into the stage artifact.
+function resolveReal(abs) {
+  try {
+    const real = realpathSync(abs);
+    return { real, rel: relative(realRoot, real) };
+  } catch {
+    return null;
+  }
+}
+function isRegularFile(p) {
+  try {
+    return lstatSync(p).isFile();
+  } catch {
+    return false;
+  }
+}
 
 const staged = [];
 const skipped = [];
@@ -101,23 +128,19 @@ for (const configPath of vcConfigs(outputDir)) {
     }
     const abs = resolve(root, value);
     const rel = relative(root, abs);
-    if (rel === '' || rel === '.' || rel.startsWith(`..${sep}`) || rel === '..' || isAbsolute(rel)) {
+    if (escapesRoot(rel)) {
       skipped.push({ value, reason: 'escapes-root' });
       kept[key] = value;
       continue;
     }
-    const posixRel = rel.split(sep).join('/');
+    const posixRel = toPosix(rel);
     if (posixRel === '.vercel/output' || posixRel.startsWith('.vercel/output/')) {
-      // Stale or linked asset refs point at nothing the output upload
-      // carries, so only a real file counts as resolving. lstat, not
-      // stat: never resolve through a symlink here.
-      let outStat;
-      try {
-        outStat = lstatSync(abs);
-      } catch {
-        outStat = null;
-      }
-      if (!outStat?.isFile()) {
+      // Only a real file genuinely under the output dir counts as
+      // resolving: resolve through every ancestor, since a symlinked
+      // ancestor could point at nothing the output upload carries.
+      const out = resolveReal(abs);
+      const outPosix = out ? toPosix(out.rel) : '..';
+      if (!out || !outPosix.startsWith('.vercel/output/') || !isRegularFile(out.real)) {
         skipped.push({ value, reason: 'missing' });
         missingCount += 1;
         dropped += 1;
@@ -126,43 +149,69 @@ for (const configPath of vcConfigs(outputDir)) {
       skipped.push({ value, reason: 'inside-output' });
       kept[key] = value;
       usable += 1;
-      // Dedupe by normalized path: alias spellings of one file must
+      // Dedupe by resolved path: alias spellings of one file must
       // not each count as resolving.
-      insideOutputValues.push(posixRel);
+      insideOutputValues.push(outPosix);
       continue;
     }
-    if (
-      posixRel === 'trusted-ops' ||
-      posixRel.startsWith('trusted-ops/') ||
-      posixRel === '.vercel' ||
-      posixRel.startsWith('.vercel/')
-    ) {
+    if (protectedPosix(posixRel)) {
       skipped.push({ value, reason: 'protected-path' });
       dropped += 1;
       continue;
     }
-    let srcStat;
+    let srcStat = null;
     try {
       srcStat = lstatSync(abs);
     } catch {
       srcStat = null;
     }
-    if (!srcStat?.isFile() || srcStat?.isSymbolicLink()) {
-      // Phantom refs (e.g. transient build files) drop from the shipped
-      // map instead of failing the build; the guardrail below catches a
-      // systematically wrong base. lstat, not stat: a symlink (even to a
-      // real file) must never be followed here, or an outside-root or
-      // protected target would be laundered into the stage artifact as a
-      // regular file. Distinct reasons, all unresolved on both guardrails.
-      const reason = !srcStat ? 'missing' : srcStat.isSymbolicLink() ? 'symlink' : 'non-file';
-      skipped.push({ value, reason });
+    if (!srcStat) {
+      skipped.push({ value, reason: 'missing' });
       missingCount += 1;
       dropped += 1;
       continue;
     }
+    if (srcStat.isSymbolicLink()) {
+      // A final-component symlink is never followed: its target could
+      // be outside the root or protected, and copying through it would
+      // launder those bytes into the stage artifact as a regular file.
+      skipped.push({ value, reason: 'symlink' });
+      missingCount += 1;
+      dropped += 1;
+      continue;
+    }
+    // Ancestor check: a symlinked intermediate component points the
+    // lexical path somewhere else, so resolve the real path and
+    // re-validate root, protected prefixes, and file type through it.
+    const target = resolveReal(abs);
+    const targetPosix = target ? toPosix(target.rel) : '..';
+    if (!target) {
+      skipped.push({ value, reason: 'missing' });
+      missingCount += 1;
+      dropped += 1;
+      continue;
+    }
+    if (escapesRoot(target.rel)) {
+      skipped.push({ value, reason: 'escapes-root' });
+      kept[key] = value;
+      continue;
+    }
+    if (protectedPosix(targetPosix)) {
+      skipped.push({ value, reason: 'protected-path' });
+      dropped += 1;
+      continue;
+    }
+    if (!isRegularFile(target.real)) {
+      skipped.push({ value, reason: 'non-file' });
+      missingCount += 1;
+      dropped += 1;
+      continue;
+    }
+    // Stage from the resolved path at the lexical layout: the shipped
+    // map keeps the lexical value, so the CLI looks it up there.
     const dest = join(stage, rel);
     mkdirSync(dirname(dest), { recursive: true });
-    copyFileSync(abs, dest);
+    copyFileSync(target.real, dest);
     staged.push(posixRel);
     kept[key] = value;
     usable += 1;
@@ -211,78 +260,9 @@ if (unusableConfigs.length > 0) {
   process.exit(1);
 }
 // Guardrails passed. Warnings, manifest, and summary all land before
-// any map is touched (rewrites apply last), so any failure above
-// leaves the original maps on disk for a same-workspace retry.
-const droppedProtected = skipped.filter((s) => s.reason === 'protected-path').length;
-const droppedInvalid = skipped.filter((s) => s.reason === 'invalid').length;
-if (droppedProtected > 0 || droppedInvalid > 0) {
-  const parts = [];
-  if (droppedProtected > 0) parts.push(`${droppedProtected} protected-path`);
-  if (droppedInvalid > 0) parts.push(`${droppedInvalid} invalid`);
-  const total = droppedProtected + droppedInvalid;
-  console.error(
-    `WARNING: dropped ${parts.join(' and ')} ${total === 1 ? 'entry' : 'entries'} from shipped maps (see .preview-refs-manifest.json)`
-  );
-  console.error(
-    `::warning::Dropped ${parts.join(' and ')} filePathMap ${total === 1 ? 'entry' : 'entries'} from shipped preview maps; serve-verify this preview.`
-  );
-}
-if (missingCount > 0) {
-  const missingVals = skipped
-    .filter((s) => s.reason === 'missing' || s.reason === 'non-file' || s.reason === 'symlink')
-    .map((s) => sanitizeRef(s.value));
-  const shown = missingVals.slice(0, 20);
-  console.error(
-    `WARNING: dropped ${missingCount} dangling reference(s) from shipped maps:\n` +
-      shown.map((v) => `  ${v}`).join('\n') +
-      (missingCount > shown.length ? `\n  ...and ${missingCount - shown.length} more` : '') +
-      '\nDropped refs can fail at request time: serve-verify this preview (fonts, hero payload), do not trust READY alone.'
-  );
-  console.error(
-    `::warning::Dropped ${missingCount} dangling filePathMap reference(s) from shipped preview maps; serve-verify this preview, do not trust READY alone.`
-  );
-}
-
-staged.sort();
-writeFileSync(
-  join(stage, '.preview-refs-manifest.json'),
-  `${JSON.stringify({ refs: [...new Set(staged)], skipped }, null, 2)}\n`
-);
-console.log(
-  `staged ${new Set(staged).size} referenced file(s), skipped ${skipped.length}`
-);
-// Surface truncation on the build summary (same convention as the deploy
-// helper): dropped refs are listed in the job output and the manifest,
-// and this line makes the counts visible without opening either.
-if (process.env.GITHUB_STEP_SUMMARY) {
-  // Values are build-controlled: strip span-breaking characters (same
-  // rule as the deploy helper's ref sanitization).
-  const dropped = skipped
-    .filter((s) => s.reason === 'missing' || s.reason === 'non-file' || s.reason === 'symlink')
-    .map((s) => sanitizeRef(s.value));
-  const guardedCounts = [];
-  if (droppedProtected > 0) guardedCounts.push(`${droppedProtected} protected`);
-  if (droppedInvalid > 0) guardedCounts.push(`${droppedInvalid} invalid`);
-  const danglingLabel =
-    `(${dropped.length} dangling` +
-    (guardedCounts.length > 0 ? `, ${guardedCounts.join(', ')}` : '') +
-    ')';
-  // Best-effort annotation: the manifest is written and no map is
-  // touched yet, so a broken summary path must not fail the build.
-  try {
-    appendFileSync(
-      process.env.GITHUB_STEP_SUMMARY,
-      `### Prebuilt refs\nstaged ${new Set(staged).size}, skipped ${skipped.length} ${danglingLabel}\n` +
-        dropped.slice(0, 20).map((v) => `- \`${v}\``).join('\n') +
-        (dropped.length > 0 ? '\n' : '') +
-        (dropped.length > 0
-          ? 'Dropped refs can fail at request time: serve-verify this preview, do not trust READY alone.\n'
-          : '')
-    );
-  } catch (error) {
-    console.error(`WARNING: could not write step summary: ${error.message}`);
-  }
-}
+// any map is touched (rewrites apply last), so any failure in the
+// report leaves the original maps on disk for a retry to see.
+writeReport({ stage, staged, skipped, missingCount });
 // Last step: apply the buffered map rewrites. Serialize every body
 // before touching disk, then write each config via temp-file plus
 // rename, so a mid-loop throw cannot leave a half-written map.

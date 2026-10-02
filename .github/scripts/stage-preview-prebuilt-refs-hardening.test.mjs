@@ -52,6 +52,64 @@ test('refuses to stage through symlinks', () => {
   }
 });
 
+test('refuses ancestor symlinks escaping the root', () => {
+  // lstat alone only sees the final component: an intermediate symlink
+  // to an outside-root target must not launder bytes into staging.
+  const configRel = '.vercel/output/functions/a.func/.vc-config.json';
+  const root = layout({
+    [configRel]: JSON.stringify({
+      filePathMap: {
+        '/leak.js': 'node_modules/leak/secret.txt',
+        '/ok.js': 'node_modules/ok/index.js',
+        '/ok2.js': 'node_modules/ok2/index.js',
+      },
+    }),
+    'node_modules/ok/index.js': 'ok',
+    'node_modules/ok2/index.js': 'ok2',
+  });
+  const outside = mkdtempSync(join(tmpdir(), 'preview-refs-outside-'));
+  writeFileSync(join(outside, 'secret.txt'), 'secret');
+  symlinkSync(outside, join(root, 'node_modules/leak'));
+  try {
+    const stage = join(root, 'stage');
+    const run = spawnSync('node', [SCRIPT, root, stage], { encoding: 'utf8' });
+    assert.equal(run.status, 0, run.stderr);
+    const manifest = JSON.parse(readFileSync(join(stage, '.preview-refs-manifest.json'), 'utf8'));
+    assert.deepEqual(manifest.skipped, [{ value: 'node_modules/leak/secret.txt', reason: 'escapes-root' }]);
+    assert.deepEqual(manifest.refs, ['node_modules/ok/index.js', 'node_modules/ok2/index.js']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test('stages through inside-root ancestor symlinks', () => {
+  // pnpm-style layouts link package dirs inside the root: resolving
+  // through them still stages bytes at the lexical map path.
+  const configRel = '.vercel/output/functions/a.func/.vc-config.json';
+  const root = layout({
+    [configRel]: JSON.stringify({
+      filePathMap: {
+        '/linked.js': 'node_modules/pkg/index.js',
+        '/ok.js': 'node_modules/ok/index.js',
+      },
+    }),
+    'node_modules/ok/index.js': 'ok',
+    'real/pkg/index.js': 'linked-bytes',
+  });
+  symlinkSync(join(root, 'real/pkg'), join(root, 'node_modules/pkg'));
+  try {
+    const stage = join(root, 'stage');
+    const run = spawnSync('node', [SCRIPT, root, stage], { encoding: 'utf8' });
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(readFileSync(join(stage, 'node_modules/pkg/index.js'), 'utf8'), 'linked-bytes');
+    const manifest = JSON.parse(readFileSync(join(stage, '.preview-refs-manifest.json'), 'utf8'));
+    assert.deepEqual(manifest.skipped, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('refuses to ship on a phantom tie', () => {
   // One phantom plus one resolving file is a tie: wrong drops surface
   // as runtime failures, so ties fail closed.

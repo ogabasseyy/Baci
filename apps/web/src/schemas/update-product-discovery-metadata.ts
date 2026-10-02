@@ -8,7 +8,8 @@ export const updateProductDiscoveryMetadataSchema = z.strictObject({
   expectedMetadata: z
     .union([z.null(), z.record(z.string(), z.json())])
     .refine(
-      (value) => JSON.stringify(value).length <= 65536,
+      (value) =>
+        new TextEncoder().encode(JSON.stringify(value)).byteLength <= 65536,
       'Snapshot too large'
     ),
 });

@@ -88,3 +88,18 @@ it('rejects omitted snapshots instead of allowing unguarded overwrites', () => {
       .success
   ).toBe(true);
 });
+
+it('bounds Unicode snapshots in UTF-8 bytes rather than code units', () => {
+  const expectedMetadata = { source: '漢'.repeat(22000) };
+  expect(JSON.stringify(expectedMetadata).length).toBeLessThan(65536);
+  expect(
+    schema.safeParse({ productId, metadata: {}, expectedMetadata }).success
+  ).toBe(false);
+  expect(
+    schema.safeParse({
+      productId,
+      metadata: {},
+      expectedMetadata: { source: '漢'.repeat(21000) },
+    }).success
+  ).toBe(true);
+});

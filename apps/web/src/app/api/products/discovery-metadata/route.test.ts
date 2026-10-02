@@ -117,9 +117,9 @@ describe('product discovery metadata API', () => {
       requestedMerchantId: merchantId,
     });
     mocks.merchant.mockResolvedValueOnce(null);
-    mocks.update.mockClear();
+    mocks.rpc.mockClear();
     expect((await PUT(request(JSON.stringify(body)))).status).toBe(404);
-    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
   });
   it('authenticates before CSRF validation and rejects invalid CSRF before input processing', async () => {
     mocks.getUser.mockResolvedValueOnce({ data: { user: null }, error: null });

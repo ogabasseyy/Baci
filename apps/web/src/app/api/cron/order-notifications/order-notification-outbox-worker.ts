@@ -162,7 +162,6 @@ async function processClaimedRow(
           });
 
     if (result.status === 'sent') {
-      summary.sent += 1;
       try {
         await markOutboxNotificationSent(supabase, row, result.messageId);
       } catch (error) {
@@ -172,7 +171,12 @@ async function processClaimedRow(
           row,
           'sent_outcome_persistence_failed'
         );
+        // The durable state is skipped/outcome-unknown, not sent: count the
+        // terminalized fallback like the other unknown-delivery branch.
+        summary.skipped += 1;
+        return;
       }
+      summary.sent += 1;
       return;
     }
 

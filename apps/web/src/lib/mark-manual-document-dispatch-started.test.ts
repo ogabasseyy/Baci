@@ -44,6 +44,15 @@ const order = {
     },
   ],
 };
+const payment = {
+  merchantBankCode: '058',
+  merchantBankAccountNumber: '1234567890',
+  merchantBankName: 'GTBank',
+  merchantBankAccountName: 'Shop Ltd',
+  virtualAccountNumber: '9990001111',
+  virtualAccountBankName: 'Paystack-Titan',
+  virtualAccountName: 'Shop Ltd/ORD',
+};
 
 describe('markManualDocumentDispatchStarted', () => {
   it('passes the rendered snapshot to the atomic dispatch RPC', async () => {
@@ -56,7 +65,8 @@ describe('markManualDocumentDispatchStarted', () => {
         { rpc } as never,
         row,
         order as never,
-        'receipt'
+        'receipt',
+        payment
       )
     ).resolves.toBeUndefined();
     expect(rpc).toHaveBeenCalledWith('mark_manual_document_dispatch_started', {
@@ -88,6 +98,13 @@ describe('markManualDocumentDispatchStarted', () => {
       p_invoice_issue_date: null,
       p_shipping_address: { city: 'Lagos', postalCode: '100001' },
       p_item_count: 1,
+      p_merchant_bank_code: '058',
+      p_merchant_bank_account_number: '1234567890',
+      p_merchant_bank_name: 'GTBank',
+      p_merchant_bank_account_name: 'Shop Ltd',
+      p_va_account_number: '9990001111',
+      p_va_bank_name: 'Paystack-Titan',
+      p_va_account_name: 'Shop Ltd/ORD',
       p_items: [
         {
           id: 'item-1',
@@ -112,7 +129,8 @@ describe('markManualDocumentDispatchStarted', () => {
         { rpc } as never,
         row,
         order as never,
-        'receipt'
+        'receipt',
+        payment
       )
     ).rejects.toThrow('Manual document order changed before dispatch');
   });
@@ -127,7 +145,8 @@ describe('markManualDocumentDispatchStarted', () => {
         { rpc } as never,
         row,
         order as never,
-        'receipt'
+        'receipt',
+        payment
       )
     ).rejects.toThrow('Manual document dispatch lease lost');
   });
@@ -142,7 +161,8 @@ describe('markManualDocumentDispatchStarted', () => {
         { rpc } as never,
         row,
         order as never,
-        'receipt'
+        'receipt',
+        payment
       )
     ).rejects.toThrow('Manual document dispatch state unavailable');
   });

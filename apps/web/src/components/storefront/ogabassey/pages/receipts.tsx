@@ -194,6 +194,15 @@ async function fetchReceiptListItems(
     const formatCurrency = (val: number) =>
       getCurrencyFormatter(currency).format(val);
 
+    // The modal and print renderer infer the document from payment_status;
+    // a settled manual balance reports kind receipt under a non-paid label,
+    // so normalize the renderer input to match the emailed/downloaded kind.
+    // The list badge below keeps the truthful staff-facing label.
+    const rendererPaymentStatus =
+      (order.current_document_kind as string) === 'receipt'
+        ? 'paid'
+        : paymentStatus;
+
     const rawOrder: ReceiptOrder = {
       order_number:
         (order.order_number as string) ||
@@ -209,7 +218,7 @@ async function fetchReceiptListItems(
       discount_amount: Number(order.discount_amount ?? 0),
       amount_paid: amountPaid,
       balance: Number(order.balance ?? total - amountPaid),
-      payment_status: paymentStatus,
+      payment_status: rendererPaymentStatus,
       payment_method: (order.payment_method as string) ?? null,
       is_credit_order: (order.is_credit_order as boolean) ?? false,
       customer_name: customerName,

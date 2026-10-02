@@ -1,10 +1,11 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { OgabasseyV2Receipts } from './receipts';
 
 const mockReceiptClaimAppDownloadBanner = vi.hoisted(() => vi.fn());
+const mockReceiptModal = vi.hoisted(() => vi.fn());
 
 vi.mock('@/contexts/customer-auth-context', () => ({
   useCustomerAuth: vi.fn(),
@@ -15,7 +16,10 @@ vi.mock('@/hooks/use-merchant-client', () => ({
 }));
 
 vi.mock('../components/ReceiptModal', () => ({
-  ReceiptModal: () => <div data-testid="receipt-modal" />,
+  ReceiptModal: (props: unknown) => {
+    mockReceiptModal(props);
+    return <div data-testid="receipt-modal" />;
+  },
 }));
 
 vi.mock('./receipt-claim-app-download-banner', () => ({
@@ -97,6 +101,42 @@ describe('OgabasseyV2Receipts', () => {
     expect(await screen.findByText('No receipts found')).toBeVisible();
     expect(mockReceiptClaimAppDownloadBanner).not.toHaveBeenCalled();
     expect(screen.queryByText('Receipts ready')).not.toBeInTheDocument();
+  });
+
+  it('opens settled manual balances as receipts while keeping the partial badge', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      createJsonResponse({
+        orders: [
+          {
+            id: 'order-1',
+            order_number: 'ORD-001',
+            created_at: '2026-04-03T10:00:00.000Z',
+            total: 100,
+            amount_paid: 100,
+            currency: 'NGN',
+            payment_status: 'partially_paid',
+            current_document_kind: 'receipt',
+            items: [
+              {
+                id: 'item-1',
+                name: 'Samsung Galaxy S26',
+                quantity: 1,
+                price: 100,
+              },
+            ],
+          },
+        ],
+      })
+    );
+
+    render(<OgabasseyV2Receipts />);
+
+    expect(await screen.findByText('Partial')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'View Receipt' }));
+    const modalProps = mockReceiptModal.mock.calls.at(-1)?.[0] as {
+      orderData: { payment_status: string };
+    };
+    expect(modalProps.orderData.payment_status).toBe('paid');
   });
 
   it('uses order item image_url for receipt thumbnails', async () => {

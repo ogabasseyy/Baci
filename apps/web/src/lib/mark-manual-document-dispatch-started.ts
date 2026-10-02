@@ -45,6 +45,16 @@ interface DispatchOutboxRow {
   claim_owner: string;
 }
 
+export interface DispatchPaymentSnapshot {
+  merchantBankCode: string | null;
+  merchantBankAccountNumber: string | null;
+  merchantBankName: string | null;
+  merchantBankAccountName: string | null;
+  virtualAccountNumber: string | null;
+  virtualAccountBankName: string | null;
+  virtualAccountName: string | null;
+}
+
 /**
  * Atomically validates the rendered snapshot and marks dispatch start. A
  * check-then-mark in application code leaves a millisecond race between the
@@ -54,15 +64,19 @@ interface DispatchOutboxRow {
  * input the renderer reads (identity, money breakdown, notes, address,
  * dates, and item contents) plus the manual-order origin fields, not just
  * the count: a same-total money redistribution, address correction, or
- * eligibility change must abort too. The rendered kind is passed
- * explicitly so the RPC can snapshot exactly what is being sent. Callers
- * must pass the exact values the PDF was rendered from.
+ * eligibility change must abort too. The rendered payment instructions
+ * (merchant bank fields plus the preferred virtual account) are covered
+ * the same way so a bank-detail edit cannot silently misdirect a transfer.
+ * The rendered kind is passed explicitly so the RPC can snapshot exactly
+ * what is being sent. Callers must pass the exact values the PDF was
+ * rendered from.
  */
 export async function markManualDocumentDispatchStarted(
   supabase: SupabaseClient,
   row: DispatchOutboxRow,
   order: DispatchOrderSnapshot,
-  documentKind: 'invoice' | 'proforma_invoice' | 'receipt'
+  documentKind: 'invoice' | 'proforma_invoice' | 'receipt',
+  payment: DispatchPaymentSnapshot
 ): Promise<void> {
   const { data, error } = await supabase.rpc(
     'mark_manual_document_dispatch_started',
@@ -95,6 +109,13 @@ export async function markManualDocumentDispatchStarted(
       p_invoice_issue_date: order.invoice_issue_date,
       p_shipping_address: order.shipping_address,
       p_item_count: order.order_items.length,
+      p_merchant_bank_code: payment.merchantBankCode,
+      p_merchant_bank_account_number: payment.merchantBankAccountNumber,
+      p_merchant_bank_name: payment.merchantBankName,
+      p_merchant_bank_account_name: payment.merchantBankAccountName,
+      p_va_account_number: payment.virtualAccountNumber,
+      p_va_bank_name: payment.virtualAccountBankName,
+      p_va_account_name: payment.virtualAccountName,
       p_items: [...order.order_items]
         .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
         .map((item) => ({

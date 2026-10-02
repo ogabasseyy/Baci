@@ -206,7 +206,16 @@ export async function sendManualOrderDocument({
         supabase,
         row,
         order,
-        pdfDocumentKind
+        pdfDocumentKind,
+        {
+          merchantBankCode: merchant.bank_code,
+          merchantBankAccountNumber: merchant.bank_account_number,
+          merchantBankName: merchant.bank_name,
+          merchantBankAccountName: merchant.bank_account_name,
+          virtualAccountNumber: preferredPaymentAccount?.account_number ?? null,
+          virtualAccountBankName: preferredPaymentAccount?.bank_name ?? null,
+          virtualAccountName: preferredPaymentAccount?.account_name ?? null,
+        }
       );
       dispatchStarted = true;
       return;

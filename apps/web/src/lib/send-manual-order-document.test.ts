@@ -365,6 +365,36 @@ describe('send manual order document', () => {
     expect(markCall?.[1]).toMatchObject({ p_document_kind: 'receipt' });
   });
 
+  it('snapshots the rendered payment instructions in the dispatch marker', async () => {
+    const db = database(
+      { payment_status: 'partially_paid', amount_paid: 100000 },
+      {
+        merchantOverride: {
+          bank_code: '058',
+          bank_account_number: '1234567890',
+          bank_name: 'GTBank',
+          bank_account_name: 'Shop Ltd',
+        },
+      }
+    );
+    await sendManualOrderDocument({
+      supabase: db.client,
+      row: { ...row, event_type: 'manual_order_invoice' },
+    });
+    const markCall = db.rpc.mock.calls.find(
+      ([fn]) => fn === 'mark_manual_document_dispatch_started'
+    );
+    expect(markCall?.[1]).toMatchObject({
+      p_merchant_bank_code: '058',
+      p_merchant_bank_account_number: '1234567890',
+      p_merchant_bank_name: 'GTBank',
+      p_merchant_bank_account_name: 'Shop Ltd',
+      p_va_account_number: null,
+      p_va_bank_name: null,
+      p_va_account_name: null,
+    });
+  });
+
   it('retries instead of dispatching when the dispatch marker reports a stale order', async () => {
     const db = database({}, { dispatchStatus: 'stale' });
     // The marker runs as beforeTransportDispatch, so the provider mock is

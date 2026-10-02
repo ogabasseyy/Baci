@@ -86,15 +86,20 @@ REVOKE ALL ON FUNCTION private.enqueue_manual_documents_after_items()
   FROM PUBLIC, anon, authenticated;
 -- AFTER UPDATE keeps item corrections symmetric with order corrections: a
 -- stale/failed dispatch unblocked by an item edit re-arms the same way an
--- order-field correction does. DELETE needs no trigger: wiping the last item
--- makes the next claim skip, and re-adding items re-arms via INSERT.
--- Transition tables cannot be specified on multi-event triggers, so INSERT
--- and UPDATE get separate triggers over the shared function.
+-- order-field correction does. AFTER DELETE covers the partial correction:
+-- removing one invalid line from a multi-item order leaves a valid nonempty
+-- order that must re-evaluate too, not just the wipe-and-reinsert cycle.
+-- Transition tables cannot be specified on multi-event triggers, so each
+-- event gets its own trigger over the shared function (NEW TABLE for
+-- INSERT/UPDATE, OLD TABLE for DELETE).
 CREATE TRIGGER enqueue_manual_documents_after_items
   AFTER INSERT ON public.order_items REFERENCING NEW TABLE AS inserted_items
   FOR EACH STATEMENT EXECUTE FUNCTION private.enqueue_manual_documents_after_items();
 CREATE TRIGGER enqueue_manual_documents_after_item_updates
   AFTER UPDATE ON public.order_items REFERENCING NEW TABLE AS inserted_items
+  FOR EACH STATEMENT EXECUTE FUNCTION private.enqueue_manual_documents_after_items();
+CREATE TRIGGER enqueue_manual_documents_after_item_deletes
+  AFTER DELETE ON public.order_items REFERENCING OLD TABLE AS inserted_items
   FOR EACH STATEMENT EXECUTE FUNCTION private.enqueue_manual_documents_after_items();
 
 CREATE OR REPLACE FUNCTION private.enqueue_manual_document_after_order_update()
@@ -134,6 +139,7 @@ CREATE TRIGGER enqueue_manual_document_after_order_update
 -- "Activation").
 ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_items;
 ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_item_updates;
+ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_item_deletes;
 ALTER TABLE public.orders DISABLE TRIGGER enqueue_manual_document_after_order_update;
 
 -- Revoke explicitly, including installations with older authenticated grants.

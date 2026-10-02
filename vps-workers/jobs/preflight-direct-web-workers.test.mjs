@@ -5,7 +5,10 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { getDirectWorkerPreflightProblems } from './preflight-direct-web-workers.mjs';
+import {
+  findMultilineDotenvAssignments,
+  getDirectWorkerPreflightProblems,
+} from './preflight-direct-web-workers.mjs';
 
 const commonEnv = {
   BACI_REPO_DIR: fileURLToPath(new URL('../..', import.meta.url)),
@@ -230,6 +233,66 @@ describe('direct worker environment preflight', () => {
 
       assert.equal(result.status, 1, result.stdout + result.stderr);
       assert.match(result.stderr, /GIGL_PASSWORD is required/);
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
+
+  it('rejects multiline values for keys the shell boundary reads', () => {
+    // dotenv joins `"line1` with a later line, while the line-oriented
+    // shell reader hands the poller the first line only.
+    assert.deepEqual(
+      findMultilineDotenvAssignments('GIGL_PASSWORD="line1\nline2"\n'),
+      ['GIGL_PASSWORD (line 1)']
+    );
+    assert.deepEqual(
+      findMultilineDotenvAssignments("GIGL_PASSWORD='abc\ndef'\n"),
+      ['GIGL_PASSWORD (line 1)']
+    );
+    assert.deepEqual(
+      findMultilineDotenvAssignments(
+        'NEXT_PUBLIC_SUPABASE_URL="https://x\n"\n'
+      ),
+      ['NEXT_PUBLIC_SUPABASE_URL (line 1)']
+    );
+    // Terminated quotes (escapes honored), unquoted values, comments,
+    // and other workers' keys are not flagged.
+    assert.deepEqual(
+      findMultilineDotenvAssignments(
+        [
+          'GIGL_PASSWORD="abc\\"#def"',
+          "GIGL_EMAIL='a#b'",
+          'GIGL_BASE_URL=https://x#y',
+          '# GIGL_PASSWORD="unterminated',
+          'OTHER_WORKER_KEY="line1',
+          'line2"',
+          '',
+        ].join('\n')
+      ),
+      []
+    );
+  });
+
+  it('fails the staged-file preflight on a multiline GIGL value', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'baci-preflight-'));
+    try {
+      const dotenvPath = join(directory, '.env');
+      const fileEnv = { ...commonEnv, GIGL_PASSWORD: '"first\nsecond"' };
+      const lines = Object.entries(fileEnv).map(([n, v]) => `${n}=${v}`);
+      writeFileSync(dotenvPath, lines.join('\n'));
+      const script = join(
+        dirname(fileURLToPath(import.meta.url)),
+        'preflight-direct-web-workers.mjs'
+      );
+      const result = spawnSync(process.execPath, [script], {
+        encoding: 'utf8',
+        env: { ...process.env, BACI_WORKER_ENV: dotenvPath },
+      });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(
+        result.stderr,
+        /GIGL_PASSWORD \(line \d+\) has an unterminated quoted value/
+      );
     } finally {
       rmSync(directory, { force: true, recursive: true });
     }

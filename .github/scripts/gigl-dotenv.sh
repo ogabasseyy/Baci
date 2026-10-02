@@ -57,7 +57,11 @@ gigl_dotenv_value() {
       sub(/[ \t\r]+$/, "", value)
       first = substr(value, 1, 1)
       last = substr(value, length(value), 1)
-      if (length(value) >= 2 && (first == dq || first == sq) && (last == dq || last == sq)) {
+      # Strip only MATCHED pairs: dotenv preserves mismatched wrapping
+      # quotes (a double-quote opener with a single-quote closer stays
+      # literal), so stripping them would hand the poller different
+      # bytes than the preflight validated.
+      if (length(value) >= 2 && (first == dq || first == sq) && last == first) {
         double_quoted = (first == dq)
         value = substr(value, 2, length(value) - 2)
         if (double_quoted) {

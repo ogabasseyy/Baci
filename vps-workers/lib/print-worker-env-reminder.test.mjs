@@ -25,6 +25,29 @@ describe('worker env reminder', () => {
     assert.match(output, /silently skips that platform/);
   });
 
+  it('keeps explanations off assignment lines for raw readers', () => {
+    // provision/flip/run-web-script extract BACI_REPO_DIR with a raw
+    // `^KEY=` match that keeps trailing text, so an inline `# ...`
+    // comment would become part of the path. Explanations must live on
+    // their own comment lines instead.
+    const output = execFileSync(
+      'bash',
+      [
+        '-c',
+        'source "$1" && print_worker_env_reminder /home/bassey/baci-workers',
+        'bash',
+        join(directory, 'print-worker-env-reminder.sh'),
+      ],
+      { encoding: 'utf8' }
+    );
+
+    const offenders = output
+      .split('\n')
+      .filter((line) => /^\s*[A-Za-z_][A-Za-z0-9_]*=/.test(line))
+      .filter((line) => line.includes('#'));
+    assert.deepEqual(offenders, []);
+  });
+
   it('is sourced and called by the deploy script', () => {
     const deployScript = readFileSync(
       join(directory, '..', 'deploy.sh'),

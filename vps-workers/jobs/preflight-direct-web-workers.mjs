@@ -73,6 +73,53 @@ function isRestrictedGiglWorkerToken(value, now = Date.now()) {
   }
 }
 
+// dotenv accepts multiline quoted values, but the shell reader
+// (gigl-dotenv.sh) is line-oriented: it would hand the poller the
+// first line while dotenv-based checks validated the whole value (or
+// a spanning value swallowing later assignments). The keys below are
+// exactly the ones the shell boundary reads (the filter allowlist
+// plus the latch/fallback identity keys); an unterminated quote on
+// any of their lines fails the preflight loudly instead of diverging
+// silently. Other workers may keep multiline values.
+const SHELL_READ_KEYS = new Set([
+  'BACI_REPO_DIR',
+  'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+  'NEXT_PUBLIC_SUPABASE_URL',
+]);
+
+function isShellReadKey(name) {
+  return SHELL_READ_KEYS.has(name) || name.startsWith('GIGL_');
+}
+
+export function findMultilineDotenvAssignments(text) {
+  const offenders = [];
+  for (const [index, line] of text.split('\n').entries()) {
+    const match = line.match(
+      /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(['"`])/
+    );
+    if (match === null || !isShellReadKey(match[1])) {
+      continue;
+    }
+    const quote = match[2];
+    let escaped = false;
+    let closed = false;
+    for (const char of line.slice(match[0].length)) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === quote) {
+        closed = true;
+        break;
+      }
+    }
+    if (!closed) {
+      offenders.push(`${match[1]} (line ${index + 1})`);
+    }
+  }
+  return offenders;
+}
+
 function isBase64Encoded32ByteKey(value) {
   const normalized = value.trim();
   if (
@@ -176,9 +223,15 @@ export function getDirectWorkerPreflightProblems(env) {
 
 function runDirectWorkerPreflight({
   env = process.env,
+  rawText = '',
   logger = console,
 } = {}) {
   const problems = getDirectWorkerPreflightProblems(env);
+  for (const offender of findMultilineDotenvAssignments(rawText)) {
+    problems.push(
+      `${offender} has an unterminated quoted value: use a single line with \\n escapes`
+    );
+  }
   if (problems.length > 0) {
     logger.error(`[direct-worker-preflight] ${problems.join(', ')}`);
     return 1;
@@ -200,13 +253,15 @@ function main() {
   const dotenvPath =
     process.env.BACI_WORKER_ENV ||
     fileURLToPath(new URL('../.env', import.meta.url));
+  let rawText = '';
   let parsed = {};
   try {
-    parsed = parse(readFileSync(dotenvPath, 'utf8'));
+    rawText = readFileSync(dotenvPath, 'utf8');
+    parsed = parse(rawText);
   } catch {
     // Missing/unreadable file: every required check fails below.
   }
-  process.exitCode = runDirectWorkerPreflight({ env: parsed });
+  process.exitCode = runDirectWorkerPreflight({ env: parsed, rawText });
 }
 
 if (

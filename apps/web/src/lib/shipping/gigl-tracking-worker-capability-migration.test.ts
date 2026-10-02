@@ -157,6 +157,16 @@ describe('GIGL tracking worker capability migration', () => {
     // usability, so activation stays in the earlier phase.
     expect(requestScopeMigration).not.toMatch(/pgrst\.db_pre_request/);
     expect(requestScopeMigration).not.toMatch(/CREATE OR REPLACE FUNCTION/);
+    // PostgREST reloads asynchronously after the restore commit, so the
+    // grant waits out a reload grace first; without it, an issued token
+    // could land in a post-commit window ahead of the reloaded hook.
+    const sleepAt = requestScopeMigration.indexOf('SELECT pg_sleep(');
+    const grantAt = requestScopeMigration.indexOf(
+      'GRANT gigl_tracking_worker TO authenticator'
+    );
+    expect(sleepAt).toBeGreaterThanOrEqual(0);
+    expect(grantAt).toBeGreaterThanOrEqual(0);
+    expect(sleepAt).toBeLessThan(grantAt);
     // Supabase applies migrations in filename order: the restore phase
     // (hook install) sorts before the isolate phase (membership grant).
     expect(RESTORE_MIGRATION_PATH < ISOLATE_MIGRATION_PATH).toBe(true);

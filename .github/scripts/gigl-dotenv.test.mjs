@@ -58,6 +58,11 @@ describe('gigl-dotenv', () => {
     assert.equal(readValue('UNQ=a\\nb\n', 'UNQ'), 'a\\nb');
   });
 
+  it('preserves mismatched wrapping quotes, like dotenv', () => {
+    assert.equal(readValue('MM="abc\'\n', 'MM'), '"abc\'');
+    assert.equal(readValue("MM2='abc\"\n", 'MM2'), '\'abc"');
+  });
+
   it('strips trailing comments from unquoted values', () => {
     assert.equal(readValue('PLAIN=abc#def\n', 'PLAIN'), 'abc');
     assert.equal(readValue('SPACED=abc # def\n', 'SPACED'), 'abc');

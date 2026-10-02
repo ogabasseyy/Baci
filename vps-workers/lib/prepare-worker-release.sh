@@ -115,8 +115,10 @@ promote_worker_release() {
   # (parsed from the installed crontab) across the same window, because
   # the flipped checkout symlink is shared: without that, a Petrock,
   # quiz, or other tick could read half-synced wrappers or straddle two
-  # revisions. The locks dir is pre-created because flock will not
-  # create parents.
+  # revisions. The three persistent `--loop` systemd services are
+  # stopped first (they hold locks for life) and restarted by an EXIT
+  # trap that also covers abort paths. The locks dir is pre-created
+  # because flock will not create parents.
   ssh "$VPS" "mkdir -p '$REMOTE_DIR/locks' && flock -x /tmp/baci-workers-deploy.lock flock -x '$REMOTE_DIR/locks/gigl-tracking.lock' bash -s -- '$STAGING_DIR' '$REMOTE_DIR' '$APP_SHA'" <<'REMOTE_SH'
 set -euo pipefail
 
@@ -135,16 +137,42 @@ mkdir -p "$remote_dir"
 # a fresh smoke re-latches the installed revision.
 mkdir -p "$remote_dir/logs" "$remote_dir/locks"
 
+# Stop the persistent systemd user services before quiescing: their
+# `--loop` workers hold runtime locks for life, so waiting on those
+# locks would stall every promote until the 600s timeout and then fail
+# the deploy. Only services that are actually active are stopped (fresh
+# hosts skip cleanly), and the EXIT trap restarts exactly those after
+# the flip — including on abort paths, so a failed promote never leaves
+# workers down. A cron `--once` fallback may tick while a service is
+# down, but the quiesce below holds the same lock, so it skips instead.
+gigl_stopped_services=""
+gigl_restart_services() {
+  for gigl_service in $gigl_stopped_services; do
+    systemctl --user start "$gigl_service" || true
+  done
+  return 0
+}
+trap gigl_restart_services EXIT
+for gigl_service in baci-domain-event-router baci-event-delivery-worker baci-quiz-finalization; do
+  if systemctl --user is-active -q "$gigl_service" 2>/dev/null; then
+    systemctl --user stop "$gigl_service" || exit 1
+    gigl_stopped_services="$gigl_stopped_services $gigl_service"
+  fi
+done
+
 # Quiesce every scheduled worker across the sync and flip: the checkout
 # symlink is shared, so a non-GIGL tick that lands mid-promote could
 # read half-synced wrappers or straddle two revisions. Lock names come
 # from the installed crontab (promote runs before the crontab install,
 # so these are exactly the entries that can tick now) plus any lock
-# file already present, in sorted order. Cron takes each lock
-# non-blocking, so ticks skip instead of queueing; blocking here waits
-# for at most one in-flight tick per worker, and crons never block, so
-# no lock cycle can form. Each fd stays open (hence held) until this
-# remote shell exits, which is after the flip below.
+# file already present. Acquisition order is crontab first-appearance
+# (then alphabetical leftovers), NOT alphabetical: nested acquirers
+# (cron lines, AI trigger server) all take ollama-workload before
+# ai-storefront-jobs/agentic-commerce-health, and sharing that global
+# order is what keeps promote out of a deadlock cycle with them.
+# Single-lock cron takes are non-blocking, so ticks skip instead of
+# queueing. Each fd stays open (hence held) until this remote shell
+# exits, which is after the flip below.
 gigl_quiesce_names="$(
   {
     crontab -l 2>/dev/null | grep -o -E 'locks/[A-Za-z0-9_.-]+\.lock' | sed 's|^locks/||' || true
@@ -152,7 +180,7 @@ gigl_quiesce_names="$(
       [ -e "$gigl_quiesce_path" ] || continue
       basename "$gigl_quiesce_path"
     done
-  } | sort -u
+  } | awk '!seen[$0]++'
 )"
 gigl_quiesce_fd=10
 while IFS= read -r gigl_quiesce_name; do

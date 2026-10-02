@@ -202,37 +202,9 @@ describe('deploy source guards', () => {
   // deploy-gigl-42-deferral.test.mjs (extracted to keep both suites under
   // the 300-line limit).
 
-  it('serializes live promotion and runtime-directory creation under one lock', () => {
-    const source = readFileSync(releaseHelper, 'utf8');
-    const promotionStart = source.indexOf(
-      'flock -x /tmp/baci-workers-deploy.lock'
-    );
-    const promotionEnd = source.indexOf('REMOTE_SH\n\n', promotionStart);
-    const promotionSource = source.slice(promotionStart, promotionEnd);
-
-    assert.notEqual(promotionStart, -1);
-    assert.match(promotionSource, /rsync -a --delete/);
-    assert.match(promotionSource, /mkdir -p.*logs.*locks/);
-    // The checkout flip shares the deploy lock with the file promote,
-    // so wrappers, SHA marker, and executed code change together.
-    assert.match(
-      promotionSource,
-      /lib\/flip-immutable-checkout\.sh" "\$remote_dir" "\$expected_sha"/
-    );
-    // Promote nests the GIGL runtime lock inside the deploy lock, so a
-    // cron tick (non-blocking) skips instead of running mixed-revision
-    // wrappers against the pre-flip checkout. The slice starts at the
-    // deploy lock, so the nested lock on the same command line is in it;
-    // the locks-dir pre-create sits before the slice and pins separately.
-    assert.match(
-      promotionSource,
-      /flock -x '\$REMOTE_DIR\/locks\/gigl-tracking\.lock'/
-    );
-    assert.match(
-      source,
-      /mkdir -p '\$REMOTE_DIR\/locks' && flock -x \/tmp\/baci-workers-deploy\.lock/
-    );
-  });
+  // Promotion locking/quiesce coverage lives in
+  // deploy-promotion-guards.test.mjs (extracted to keep both suites
+  // under the 300-line limit).
 
   it('provisions the immutable checkout before smoking it', () => {
     const source = readFileSync(releaseHelper, 'utf8');
@@ -263,40 +235,4 @@ describe('deploy source guards', () => {
     assert.match(provisioner, /pnpm install --frozen-lockfile/);
   });
 
-  it('quiesces every scheduled worker lock across the sync and flip', () => {
-    const source = readFileSync(releaseHelper, 'utf8');
-    const promotionStart = source.indexOf(
-      'flock -x /tmp/baci-workers-deploy.lock'
-    );
-    const promotionEnd = source.indexOf('REMOTE_SH\n\n', promotionStart);
-    const promotionSource = source.slice(promotionStart, promotionEnd);
-
-    // Lock names come from the installed crontab (promote runs before
-    // the crontab install, so these are exactly the entries that can
-    // tick) plus any lock file already present: no enumerated list to
-    // drift when workers are added.
-    assert.match(
-      promotionSource,
-      /crontab -l.*locks\/\[A-Za-z0-9_.-\]\+\\.lock/
-    );
-    assert.match(promotionSource, /locks\/\*\.lock/);
-    // Each lock is held exclusive on an open fd (released only when
-    // the remote shell exits after the flip), acquired before the sync,
-    // with a bounded wait so a wedged tick fails loudly.
-    const quiesceIndex = promotionSource.indexOf(
-      'flock -w 600 -x "$gigl_quiesce_fd"'
-    );
-    assert.notEqual(quiesceIndex, -1);
-    // The outer command already holds the GIGL lock: reopening it would
-    // self-deadlock (flock is per open-file-description, not recursive).
-    assert.match(
-      promotionSource,
-      /\[\s*"\$gigl_quiesce_name"\s*=\s*"gigl-tracking\.lock"\s*\] && continue/
-    );
-    assert.ok(quiesceIndex < promotionSource.indexOf('rsync -a --delete'));
-    assert.ok(
-      promotionSource.indexOf('rsync -a --delete') <
-        promotionSource.indexOf('flip-immutable-checkout.sh')
-    );
-  });
 });

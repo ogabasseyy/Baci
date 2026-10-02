@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  rpc: vi.fn(),
   csrf: vi.fn(),
   getUser: vi.fn(),
   merchant: vi.fn(),
@@ -17,6 +18,7 @@ vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
 vi.mock('@/lib/supabase/server', () => ({
   createClient: () => ({
     auth: { getUser: mocks.getUser },
+    rpc: mocks.rpc,
     from: () => ({
       update: mocks.update,
     }),
@@ -56,6 +58,9 @@ describe('product discovery metadata API', () => {
     });
     mocks.merchant.mockResolvedValue({ merchantId, role: 'owner' });
     mocks.permission.mockReturnValue(true);
+    mocks.rpc.mockReturnValue({
+      returns: () => ({ maybeSingle: mocks.maybeSingle }),
+    });
     mocks.update.mockReturnValue({ eq: mocks.eq });
     mocks.eq.mockReturnValue({
       eq: mocks.eq,
@@ -78,7 +83,10 @@ describe('product discovery metadata API', () => {
     const result = await PUT(
       request(JSON.stringify({ ...validBody, expectedMetadata: null }))
     );
-    expect(mocks.is).toHaveBeenCalledWith('discovery_metadata', null);
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'update_product_discovery_metadata_guarded',
+      expect.objectContaining({ p_expected_metadata: null })
+    );
     expect(result.status).toBe(409);
   });
 
@@ -91,10 +99,14 @@ describe('product discovery metadata API', () => {
         )
       ).status
     ).toBe(200);
-    expect(mocks.eq).toHaveBeenCalledWith(
-      'discovery_metadata',
-      JSON.stringify(previous)
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'update_product_discovery_metadata_guarded',
+      expect.objectContaining({
+        p_expected_metadata: previous,
+        p_merchant_id: merchantId,
+      })
     );
+    expect(mocks.eq).not.toHaveBeenCalled();
   });
 
   it('authorizes explicit merchant scope for guarded writes', async () => {
@@ -221,5 +233,42 @@ describe('product discovery metadata API', () => {
     expect(mocks.update.mock.calls[0][0].discovery_metadata).not.toHaveProperty(
       'attributes'
     );
+  });
+
+  it('rejects oversized streamed JSON without Content-Length before merchant lookup', async () => {
+    mocks.getUser.mockResolvedValue({
+      data: { user: { id: 'user-1' } },
+      error: null,
+    });
+    mocks.csrf.mockResolvedValue({ valid: true });
+    mocks.merchant.mockClear();
+    const response = await PUT(
+      request(JSON.stringify({ padding: 'x'.repeat(96 * 1024) }))
+    );
+    expect(response.status).toBe(413);
+    expect(mocks.merchant).not.toHaveBeenCalled();
+  });
+  it('sends large valid snapshots through the RPC body, not query filters', async () => {
+    mocks.merchant.mockResolvedValue({ merchantId, role: 'owner' });
+    mocks.permission.mockReturnValue(true);
+    mocks.rpc.mockReturnValue({
+      returns: () => ({
+        maybeSingle: async () => ({ data: { id: productId }, error: null }),
+      }),
+    });
+    mocks.eq.mockClear();
+    const previous = { source: 'x'.repeat(12000) };
+    expect(
+      (
+        await PUT(
+          request(JSON.stringify({ ...validBody, expectedMetadata: previous }))
+        )
+      ).status
+    ).toBe(200);
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'update_product_discovery_metadata_guarded',
+      expect.objectContaining({ p_expected_metadata: previous })
+    );
+    expect(mocks.eq).not.toHaveBeenCalled();
   });
 });

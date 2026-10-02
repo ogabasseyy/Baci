@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { hasPermission } from '@/lib/api-permissions';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { proposeDiscoveryFacts } from '@/lib/discovery-facts-review';
+import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import {
   getMerchantForApiRequest,
   toUserAccess,
@@ -84,13 +85,20 @@ export async function PUT(request: NextRequest) {
       csrf.response ??
       NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
     );
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
-  }
-  const parsed = updateProductDiscoveryMetadataSchema.safeParse(body);
+  const bodyResult = await readBoundedJsonBody(request, 96 * 1024);
+  if (!bodyResult.ok)
+    return NextResponse.json(
+      {
+        error:
+          bodyResult.reason === 'too_large'
+            ? 'Request too large'
+            : 'Invalid JSON',
+      },
+      { status: bodyResult.reason === 'too_large' ? 413 : 400 }
+    );
+  const parsed = updateProductDiscoveryMetadataSchema.safeParse(
+    bodyResult.body
+  );
   if (!parsed.success)
     return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
   const merchant = await getMerchantForApiRequest(supabase, user.id, {
@@ -101,21 +109,25 @@ export async function PUT(request: NextRequest) {
   if (!hasPermission(toUserAccess(merchant), 'products', 'edit')) {
     return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
   }
-  let update = supabase
-    .from('products')
-    .update({ discovery_metadata: parsed.data.metadata })
-    .eq('merchant_id', merchant.merchantId)
-    .eq('id', parsed.data.productId);
-  if (parsed.data.expectedMetadata !== undefined) {
-    update =
-      parsed.data.expectedMetadata === null
-        ? update.is('discovery_metadata', null)
-        : update.eq(
-            'discovery_metadata',
-            JSON.stringify(parsed.data.expectedMetadata)
-          );
-  }
-  const { data, error } = await update.select('id').maybeSingle();
+  // RPC sends the snapshot in the POST body, avoiding URL length limits.
+  const { data, error } =
+    parsed.data.expectedMetadata !== undefined
+      ? await supabase
+          .rpc('update_product_discovery_metadata_guarded', {
+            p_product_id: parsed.data.productId,
+            p_merchant_id: merchant.merchantId,
+            p_metadata: parsed.data.metadata,
+            p_expected_metadata: parsed.data.expectedMetadata,
+          })
+          .returns<{ id: string }[]>()
+          .maybeSingle()
+      : await supabase
+          .from('products')
+          .update({ discovery_metadata: parsed.data.metadata })
+          .eq('merchant_id', merchant.merchantId)
+          .eq('id', parsed.data.productId)
+          .select('id')
+          .maybeSingle();
   if (
     error?.code === '23514' &&
     error.message?.includes('products_discovery_metadata_object')

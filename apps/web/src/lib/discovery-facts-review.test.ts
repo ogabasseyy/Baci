@@ -70,3 +70,18 @@ describe('discovery facts review proposals', () => {
     expect(result.draft).toEqual({ attributes: { ram_gb: '8' } });
   });
 });
+
+it('keeps an invalid raw snapshot unchanged when adding proposed identity', () => {
+  const snapshot = { attributes: { ram_gb: '8' } };
+  const result = proposeDiscoveryFacts({
+    category: 'Laptops',
+    metadata: { model: 'Known' },
+    discovery_metadata: snapshot,
+  });
+  expect(snapshot).toEqual({ attributes: { ram_gb: '8' } });
+  expect(result.draft).toMatchObject({
+    product_type: 'laptop',
+    model: 'Known',
+  });
+  expect(result.draft).not.toBe(snapshot);
+});

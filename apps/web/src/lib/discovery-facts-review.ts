@@ -21,7 +21,7 @@ export function proposeDiscoveryFacts(input: {
     warnings.push('Existing facts are invalid. Repair them before saving.');
   const draft = existing.success
     ? { ...existing.data }
-    : object(input.discovery_metadata);
+    : { ...object(input.discovery_metadata) };
   const categoryTypes: Record<string, string> = {
     Smartphones: 'phone',
     Laptops: 'laptop',

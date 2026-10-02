@@ -183,6 +183,15 @@ test('preview verifies sensitive markings before injecting stand-ins', () => {
   assert.match(prepare, /SUPABASE_AGENTIC_JWT_PRIVATE_JWK=""/);
 });
 
+test('preview mints the JWK stand-in only after the blank precondition', () => {
+  const prepare = jobBlock('prepare');
+  assert.ok(
+    prepare.indexOf('Ensure JWK stand-in precondition') <
+      prepare.indexOf('--generate-es256-jwk-standin'),
+    'the blank precondition must precede JWK generation (Preview has no legacy fallback to verify)'
+  );
+});
+
 test('preview build uses stand-ins, never real server secrets', () => {
   assert.doesNotMatch(executable, /QUIZ_RPC_SERVER_SECRET:\s*\$\{\{/);
   assert.match(executable, /build-time-presence-stand-in/);

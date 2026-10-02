@@ -123,9 +123,9 @@ jobs:
             printf '%s\n' 'SUPABASE_AGENTIC_JWT_PRIVATE_JWK=""' >> .vercel/.env.preview.local
           fi
       - name: Ensure build-time presence of runtime-only scoped Supabase JWT key
-        # Generate a fresh build-only JWK inside the injector to satisfy
-        # build validation; Vercel remains the runtime source of the
-        # sensitive Preview value.
+        # Preview carries no signing material: mint a build-only JWK
+        # stand-in for build validation. Stand-in success never implies
+        # production env readiness (deploy.yml verifies the real fallback).
         run: node .github/scripts/inject-prebuilt-env-secret.mjs SUPABASE_AGENTIC_JWT_PRIVATE_JWK .vercel/.env.preview.local --generate-es256-jwk-standin
       # The pulled env file holds Preview values Vercel does not mark
       # sensitive (sensitive ones pull as blank); NEXT_PUBLIC_* are baked
@@ -239,7 +239,7 @@ jobs:
     needs: [build]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    # Same-ref deploys serialize and never cancel, so every deploy reaches a logged outcome.
+    # Same-ref deploys serialize (cancel:false); burst redispatch may displace a queued run loudly — every started deploy logs its outcome.
     concurrency:
       group: preview-deploy-${{ inputs.ref }}
       cancel-in-progress: false

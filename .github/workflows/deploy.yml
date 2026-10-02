@@ -121,8 +121,9 @@ jobs:
         # the gate requires latched AND NOT tracking_stale. The latch is
         # bound to the installed SHA: a manual promote of a different
         # tree invalidates it until a fresh smoke re-latches. It also
-        # records the enablement scope and token fingerprint the smoke
-        # observed: flips and rotations invalidate until re-smoked. This
+        # records the enablement scope and credential fingerprint the smoke
+        # observed: flips, rotations, and endpoint moves invalidate until
+        # re-smoked. This
         # step never fails: every error reports latched=false / stale=true.
         # Tracking pushes don't need the signal (they run the smoke).
         # GITHUB_TOKEN is the auto-provided read-scoped job token (fetch
@@ -266,7 +267,7 @@ jobs:
         # this revision. The gate requires it for tracking=false pushes,
         # so a web push after a smoke-failed tracking push cannot deploy
         # the cron removal with a broken worker. The latch records
-        # `<scope>:<sha>:<token-fingerprint>` for the environment the smoke
+        # `<scope>:<sha>:<credential-fingerprint>` for the environment the smoke
         # just observed: a GIGL-disabled skip (exit 0 no-op) latches a
         # DISABLED scope, which authorizes the bypass only while the worker
         # is still disabled — a disabled run can never certify future

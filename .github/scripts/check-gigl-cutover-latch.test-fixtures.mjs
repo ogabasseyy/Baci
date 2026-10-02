@@ -104,8 +104,13 @@ export function checkoutAt(origin, root, name, sha) {
   return checkout;
 }
 
-export function tokenFingerprintOf(token) {
-  return createHash('sha256').update(token, 'utf8').digest('hex');
+export function tokenFingerprintOf(token, url = '', anon = '') {
+  // Mirrors resolve-gigl-latch-identity.sh: the credential fingerprint
+  // binds URL + anon + token, and a missing token hashes to the
+  // well-known empty value (vacuous) regardless of endpoint.
+  return createHash('sha256')
+    .update(token === '' ? '' : `${url}\n${anon}\n${token}`, 'utf8')
+    .digest('hex');
 }
 
 function tokenInEnvFile(envFile) {
@@ -169,6 +174,13 @@ export function check({
     GITHUB_OUTPUT: output,
     GITHUB_TOKEN: githubToken,
   };
+  // Hermetic identity: the check runs the real resolver in default
+  // (caller-wins) mode, so runner exports must not leak into the
+  // fixture fingerprint.
+  delete env.GIGL_ENABLED;
+  delete env.GIGL_TRACKING_WORKER_TOKEN;
+  delete env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  delete env.NEXT_PUBLIC_SUPABASE_URL;
   if (omitOutput) {
     delete env.GITHUB_OUTPUT;
   }

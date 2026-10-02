@@ -86,4 +86,33 @@ describe('deploy tracking import graph', () => {
       );
     }
   });
+
+  it('keeps every worker-reachable cron file in the tracking filter', () => {
+    // The cron directory has no recursive glob (notification-only fixes
+    // must not demand a poller rollout), so exact entries must cover
+    // every file the worker actually loads — a new worker import here
+    // fails this test until it is added to the filter.
+    const filter = readFileSync(
+      join(workerRoot, '..', '.github', 'filters', 'deploy.yml'),
+      'utf8'
+    );
+    const tracking = filter.slice(
+      filter.indexOf('tracking:'),
+      filter.indexOf('migrations:')
+    );
+    const cronFiles = [...collectReachable()].filter((file) =>
+      file.startsWith('app/api/cron/gigl-tracking/')
+    );
+
+    assert.ok(cronFiles.length > 0, 'expected worker cron files to exist');
+    for (const file of cronFiles) {
+      assert.match(
+        tracking,
+        new RegExp(
+          `^  - 'apps/web/src/${file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'$`,
+          'm'
+        )
+      );
+    }
+  });
 });

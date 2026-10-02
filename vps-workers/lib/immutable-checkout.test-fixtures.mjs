@@ -133,6 +133,7 @@ export function stubPnpmCalls(root) {
     [
       '#!/usr/bin/env bash',
       'echo "$*" >> "$PNPM_CALLS_LOG"',
+      'echo "PUPPETEER_SKIP_DOWNLOAD=$PUPPETEER_SKIP_DOWNLOAD" >> "$PNPM_CALLS_LOG"',
       'mkdir -p apps/web/node_modules/.bin',
       "printf '#!/usr/bin/env bash\\necho tsx-stub\\n' > apps/web/node_modules/.bin/tsx",
       'chmod +x apps/web/node_modules/.bin/tsx',

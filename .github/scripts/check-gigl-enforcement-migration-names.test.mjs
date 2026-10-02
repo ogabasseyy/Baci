@@ -84,6 +84,16 @@ describe('check-gigl-enforcement-migration-names', () => {
     assert.match(result.stderr, /20260107500000_rpc_perf\.sql/);
   });
 
+  it('fails a hook-setting reset without gigl in the filename', () => {
+    const result = runCheck({
+      '20260107600000_auth_tune.sql':
+        'ALTER ROLE authenticator RESET pgrst.db_pre_request;\n',
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /20260107600000_auth_tune\.sql/);
+  });
+
   it('treats uppercase GIGL as unnamed (the tracking glob is case-sensitive)', () => {
     const result = runCheck({
       '20260108000000_GIGL_hook.sql':

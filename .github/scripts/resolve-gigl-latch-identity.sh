@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 # Prints the GIGL latch identity for a worker directory as one line:
-#   <scope> <token-fingerprint>
+#   <scope> <credential-fingerprint>
 # scope is `disabled` or `enabled`; fingerprint is the sha256 of the
-# effective GIGL_TRACKING_WORKER_TOKEN (empty string when absent). Exits
-# nonzero when the fingerprint cannot be computed; callers fail closed.
+# effective Supabase URL, anon key, and worker token (newline-joined).
+# Binding all three database credentials -- not just the token --
+# forces a fresh smoke when the poller is repointed at an unverified
+# endpoint. When the token is absent the fingerprint is the sha256 of
+# the empty string regardless of URL/anon: nothing authenticates without
+# the token, and the well-known empty value preserves vacuity detection
+# (prepare defers exit-42 on a vacuous disabled latch). Exits nonzero
+# when the fingerprint cannot be computed; callers fail closed.
 # Usage:
 #   resolve-gigl-latch-identity.sh <remote-dir>
 #
@@ -55,7 +61,12 @@ if ! command -v python3 >/dev/null 2>&1; then
   echo "resolve-gigl-latch-identity: python3 is required" >&2
   exit 1
 fi
-fingerprint="$(effective GIGL_TRACKING_WORKER_TOKEN | python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.read().encode()).hexdigest())')"
+identity_token="$(effective GIGL_TRACKING_WORKER_TOKEN)"
+if [ -z "$identity_token" ]; then
+  fingerprint="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+else
+  fingerprint="$({ effective NEXT_PUBLIC_SUPABASE_URL; echo; effective NEXT_PUBLIC_SUPABASE_ANON_KEY; echo; printf '%s' "$identity_token"; } | python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.read().encode()).hexdigest())')"
+fi
 if [[ ! "$fingerprint" =~ ^[0-9a-f]{64}$ ]]; then
   echo "resolve-gigl-latch-identity: fingerprint failed" >&2
   exit 1

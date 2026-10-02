@@ -14,16 +14,17 @@
 # different tree (rollback, or the exit-42 unverified path) would leave a
 # latch that still validates while an unsmoked worker polls.
 #
-# Latch format is `<scope>:<sha>:<token-fingerprint>` where scope is the
-# effective GIGL enablement the smoke observed. A disabled-scoped latch
-# authorizes the bypass only while the worker is STILL disabled (vacuous
-# cutover); any enablement flip in either direction invalidates, so a
-# disabled smoke can never certify future enabled function and an enabled
-# latch cannot survive a disable/re-enable cycle unproven. BOTH scopes
-# bind the token fingerprint: a disabled latch written while the token
-# was missing or expired latches WITHOUT the live hook probe, so a
-# token that appears afterwards must force a re-smoke — otherwise the
-# vacuous latch would certify a JWT the hook never confined. Token
+# Latch format is `<scope>:<sha>:<credential-fingerprint>` where scope is
+# the effective GIGL enablement the smoke observed. A disabled-scoped
+# latch authorizes the bypass only while the worker is STILL disabled
+# (vacuous cutover); any enablement flip in either direction invalidates,
+# so a disabled smoke can never certify future enabled function and an
+# enabled latch cannot survive a disable/re-enable cycle unproven. BOTH
+# scopes bind the credential fingerprint (URL + anon key + token): a
+# disabled latch written while the token was missing or expired latches
+# WITHOUT the live hook probe, so a token that appears afterwards must
+# force a re-smoke — otherwise the vacuous latch would certify a JWT the
+# hook never confined. Credential
 # EXPIRY is enforced at runtime instead: the VPS poller fails loud every
 # 5 minutes on a bad token, so expiry can stall polling but never pass
 # silently.

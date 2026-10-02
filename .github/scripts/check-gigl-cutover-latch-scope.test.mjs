@@ -170,4 +170,22 @@ describe('GIGL cutover latch scope and token binding', () => {
     assert.equal(values.latched, 'true');
     assert.equal(values.tracking_stale, 'false');
   });
+
+  it('invalidates a latch when the endpoint moves but the token does not', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      scope: 'enabled',
+      envFile:
+        'NEXT_PUBLIC_SUPABASE_URL=https://new.supabase.co\nGIGL_TRACKING_WORKER_TOKEN=same-token\n',
+      token: 'same-token',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'false');
+    assert.equal(values.tracking_stale, 'true');
+  });
 });

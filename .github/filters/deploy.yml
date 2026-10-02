@@ -84,7 +84,14 @@ tracking:
   - 'vps-workers/package.json'
   - 'vps-workers/pnpm-lock.yaml'
   - 'vps-workers/pnpm-workspace.yaml'
-  - 'apps/web/src/app/api/cron/gigl-tracking/**'
+  # No gigl-tracking/** glob: the VPS poller imports only the monitor
+  # batch/worker (plus the shared nullable-arg helper), while
+  # notifications stay on the Vercel service-role route — a
+  # notification-only fix must not demand a poller rollout. Exact
+  # entries, kept complete by deploy-tracking-graph.test.mjs.
+  - 'apps/web/src/app/api/cron/gigl-tracking/run-gigl-tracking-monitor-batch.ts'
+  - 'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-monitor-worker.ts'
+  - 'apps/web/src/app/api/cron/gigl-tracking/nullable-supabase-rpc-argument.ts'
   - 'apps/web/src/lib/gigl-tracking-worker-client.ts'
   - 'apps/web/src/lib/verify-gigl-tracking-worker-capability.ts'
   - 'apps/web/src/lib/shipping/gigl*'

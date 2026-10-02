@@ -99,7 +99,11 @@ describe('immutable per-SHA checkouts', () => {
       PNPM_CALLS_LOG: pnpmLog,
     });
     assert.equal(installed.status, 0, installed.stderr);
-    assert.match(readFileSync(pnpmLog, 'utf8'), /install --frozen-lockfile/);
+    const pnpmCalls = readFileSync(pnpmLog, 'utf8');
+    assert.match(pnpmCalls, /install --frozen-lockfile/);
+    // No browser download during provision: the SSH install never sees
+    // the staged .env, so the skip must be inline (matches runtime).
+    assert.match(pnpmCalls, /PUPPETEER_SKIP_DOWNLOAD=1/);
 
     rmSync(pnpmLog, { force: true });
     const cached = runCheckoutScript(provisionScript, [staging, shas[1]], {

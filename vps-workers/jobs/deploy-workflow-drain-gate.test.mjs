@@ -200,6 +200,20 @@ describe('production cache-invalidation drain rollout gate', () => {
     assert.match(tracking, /^ {2}- 'vps-workers\/pnpm-workspace\.yaml'$/m);
     assert.match(
       tracking,
+      /^ {2}- 'apps\/web\/src\/app\/api\/cron\/gigl-tracking\/run-gigl-tracking-monitor-batch\.ts'$/m
+    );
+    assert.match(
+      tracking,
+      /^ {2}- 'apps\/web\/src\/app\/api\/cron\/gigl-tracking\/gigl-tracking-monitor-worker\.ts'$/m
+    );
+    assert.match(
+      tracking,
+      /^ {2}- 'apps\/web\/src\/app\/api\/cron\/gigl-tracking\/nullable-supabase-rpc-argument\.ts'$/m
+    );
+    // No recursive glob: notification-only fixes must not demand a
+    // poller rollout (completeness is pinned by the graph test).
+    assert.doesNotMatch(
+      tracking,
       /^ {2}- 'apps\/web\/src\/app\/api\/cron\/gigl-tracking\/\*\*'$/m
     );
     assert.match(tracking, /^ {2}- 'supabase\/migrations\/\*gigl\*'$/m);

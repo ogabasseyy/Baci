@@ -17,8 +17,10 @@ afterEach(() => {
   }
 });
 
-const fingerprintOf = (value) =>
-  createHash('sha256').update(value, 'utf8').digest('hex');
+const fingerprintOf = (token, url = '', anon = '') =>
+  createHash('sha256')
+    .update(token === '' ? '' : `${url}\n${anon}\n${token}`, 'utf8')
+    .digest('hex');
 
 function resolve({ envFile = null, processEnv = {} }) {
   const remote = mkdtempSync(join(tmpdir(), 'baci-gigl-identity-'));
@@ -29,6 +31,8 @@ function resolve({ envFile = null, processEnv = {} }) {
   const env = { ...process.env };
   delete env.GIGL_ENABLED;
   delete env.GIGL_TRACKING_WORKER_TOKEN;
+  delete env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  delete env.NEXT_PUBLIC_SUPABASE_URL;
   Object.assign(env, processEnv);
   const result = spawnSync('bash', [script, remote], { encoding: 'utf8', env });
   assert.equal(result.status, 0, result.stderr);
@@ -96,6 +100,42 @@ describe('GIGL latch identity resolver', () => {
       envFile: 'GIGL_TRACKING_WORKER_TOKEN=aaa.bbb.ccc\n',
     });
     assert.equal(fingerprint, fingerprintOf('aaa.bbb.ccc'));
+  });
+
+  it('binds the Supabase URL and anon key into the fingerprint', () => {
+    const { fingerprint } = resolve({
+      envFile:
+        'NEXT_PUBLIC_SUPABASE_URL=https://project.supabase.co\nNEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key\nGIGL_TRACKING_WORKER_TOKEN=aaa.bbb.ccc\n',
+    });
+    assert.equal(
+      fingerprint,
+      fingerprintOf(
+        'aaa.bbb.ccc',
+        'https://project.supabase.co',
+        'anon-key'
+      )
+    );
+  });
+
+  it('ignores endpoint values when the token is absent (vacuous)', () => {
+    const { fingerprint } = resolve({
+      envFile:
+        'NEXT_PUBLIC_SUPABASE_URL=https://project.supabase.co\nNEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key\n',
+    });
+    assert.equal(fingerprint, fingerprintOf(''));
+  });
+
+  it('changes the fingerprint when the endpoint moves but the token does not', () => {
+    const before = resolve({
+      envFile:
+        'NEXT_PUBLIC_SUPABASE_URL=https://old.supabase.co\nGIGL_TRACKING_WORKER_TOKEN=aaa.bbb.ccc\n',
+    }).fingerprint;
+    const after = resolve({
+      envFile:
+        'NEXT_PUBLIC_SUPABASE_URL=https://new.supabase.co\nGIGL_TRACKING_WORKER_TOKEN=aaa.bbb.ccc\n',
+    }).fingerprint;
+
+    assert.notEqual(before, after);
   });
 
   it('fingerprints the empty string when the token is absent', () => {

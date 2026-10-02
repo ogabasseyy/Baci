@@ -105,7 +105,12 @@ if [ -x "$repo_dir/apps/web/node_modules/.bin/tsx" ] || [ -x "$repo_dir/node_mod
 fi
 if [ ! -f "$install_marker" ] || [ "$install_toolchain_present" != "1" ]; then
   echo "Installing immutable checkout dependencies (shared pnpm store)."
-  if ! (cd "$repo_dir" && CI=true pnpm install --frozen-lockfile); then
+  # This SSH command does not source the staged worker .env, so the
+  # runtime default (run-web-script.sh) never reaches the install: skip
+  # the Puppeteer Chrome download explicitly, or a fresh host, a
+  # Puppeteer bump, or an unreachable download host fails the install
+  # before the smoke and blocks the worker rollout.
+  if ! (cd "$repo_dir" && CI=true PUPPETEER_SKIP_DOWNLOAD=1 pnpm install --frozen-lockfile); then
     rm -f "$install_marker"
     echo "Direct-worker checkout dependency install failed." >&2
     exit 1

@@ -241,6 +241,11 @@ test('preview redacts privileged values before the exposure check', () => {
       prepare.indexOf('assert-preview-env-allowlist'),
     'redaction must precede the exposure check'
   );
+  assert.match(
+    previewEnvRedact,
+    /s\/\^export\[\[:blank:\]\]/,
+    'redact patterns must accept the export-prefixed form the gate allows'
+  );
   for (const key of DENIED_KEYS) {
     assert.match(
       previewEnvRedact,

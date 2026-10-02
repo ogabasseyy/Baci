@@ -64,13 +64,14 @@ fi
 # same question by promoting; previews verify with a bounded read-only
 # inspect). Bare inspect proves existence only, so wait for completion
 # (self-bounding --timeout; verified: exit 0 on Ready, 1 on Error) and
-# require the Ready marker too, so an exit-semantics drift cannot sell
-# a failed deployment as success. Either failure keeps the timeout
-# status: loud and retryable, never a false 'Preview ready'.
+# require readyState READY from the machine-readable JSON too, so
+# neither exit-semantics nor display-wording drift can sell a failed
+# deployment as success. Either failure keeps the timeout status: loud
+# and retryable, never a false 'Preview ready'.
 if [ "$deploy_status" -eq 124 ] || [ "$deploy_status" -eq 137 ]; then
   if [ -n "$preview_url" ]; then
-    inspect_output="$("$vercel_runner" inspect --wait --timeout 5m "$preview_url" 2>&1)" || inspect_failed=1
-    if [ "${inspect_failed:-0}" -ne 0 ] || ! printf '%s' "$inspect_output" | grep -qiE '^status[[:space:]]+.*ready'; then
+    inspect_output="$("$vercel_runner" inspect --wait --timeout 5m --format json "$preview_url" 2>/dev/null)" || inspect_failed=1
+    if [ "${inspect_failed:-0}" -ne 0 ] || ! printf '%s' "$inspect_output" | node -e "let s='';process.stdin.on('data',c=>s+=c).on('end',()=>{try{process.exit(JSON.parse(s).readyState==='READY'?0:1)}catch(e){process.exit(1)}})"; then
       echo "Deploy timed out and $preview_url did not verify as a Ready deployment; check the Vercel dashboard for an orphaned deployment before retrying." >&2
       exit "$deploy_status"
     fi

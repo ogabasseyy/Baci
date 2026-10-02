@@ -79,13 +79,13 @@ test('deploy script survives CLI hangs and captures diagnostics', () => {
   assert.match(previewDeployScript, /PIPESTATUS\[0\]/);
   assert.match(previewDeployScript, /deploy_status.*124/);
   // Timeout-with-URL reports success only after the captured deployment
-  // verifies Ready: bounded wait plus exit code plus the Ready marker
-  // (production's promote-verification analog).
+  // verifies Ready: bounded wait plus exit code plus readyState READY
+  // from machine-readable JSON (production's promote-verification analog).
   assert.match(
     previewDeployScript,
-    /inspect --wait --timeout 5m "\$preview_url"/
+    /inspect --wait --timeout 5m --format json "\$preview_url"/
   );
-  assert.match(previewDeployScript, /\^status\[\[:space:\]\]\+\.\*ready/);
+  assert.match(previewDeployScript, /JSON\.parse\(s\)\.readyState==='READY'/);
   // Non-timeout failures reject the run even when a URL was printed.
   assert.match(previewDeployScript, /deploy_status" -ne 0.*-ne 124.*-ne 137/);
 });

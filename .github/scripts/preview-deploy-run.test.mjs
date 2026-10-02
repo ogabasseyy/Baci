@@ -43,11 +43,11 @@ function withHarness(callback) {
 function runDeploy({ cwd, stub, outputs, summary }, stubBody, extraEnv = {}) {
   // argv[1] doubles as the CLI runner: the deploy phase invokes the stub
   // argless, while the timeout-path readiness check calls it with
-  // `inspect <url>` (FAKE_INSPECT_EXIT defaults to live, status line
-  // defaults to Ready; FAKE_INSPECT_STATUS overrides the line).
+  // `inspect <url>` (FAKE_INSPECT_EXIT defaults to live, inspect JSON
+  // defaults to readyState READY; FAKE_INSPECT_STATUS overrides it).
   writeFileSync(
     stub,
-    `#!/usr/bin/env bash\nif [ "\${1:-}" = inspect ]; then printf '%s\\n' "\${FAKE_INSPECT_STATUS:-status Ready}"; exit "\${FAKE_INSPECT_EXIT:-0}"; fi\n${stubBody}\n`,
+    `#!/usr/bin/env bash\nif [ "\${1:-}" = inspect ]; then\ninspect_status="\${FAKE_INSPECT_STATUS:-}"\nif [ -z "$inspect_status" ]; then inspect_status='{"readyState":"READY"}'; fi\nprintf '%s\\n' "$inspect_status"\nexit "\${FAKE_INSPECT_EXIT:-0}"\nfi\n${stubBody}\n`,
     { mode: 0o755 }
   );
   return spawnSync('bash', [SCRIPT, stub], {
@@ -106,12 +106,12 @@ test('fails a hung deploy whose URL does not inspect as live', () => {
   });
 });
 
-test('fails a hung deploy whose inspect exits clean but never reports Ready', () => {
+test('fails a hung deploy whose inspect exits clean but reports readyState ERROR', () => {
   withHarness((harness) => {
     const result = runDeploy(harness, `echo 'Preview: ${PREVIEW_URL}'`, {
       FAKE_TIMEOUT_EXIT: '124',
       FAKE_INSPECT_EXIT: '0',
-      FAKE_INSPECT_STATUS: 'status ● Error',
+      FAKE_INSPECT_STATUS: '{"readyState":"ERROR","id":"dpl_abc"}',
     });
     assert.equal(result.status, 124);
     assert.match(result.stderr, /did not verify as a Ready deployment/);
@@ -119,12 +119,12 @@ test('fails a hung deploy whose inspect exits clean but never reports Ready', ()
   });
 });
 
-test('accepts a hung deploy whose inspect reports the Ready marker', () => {
+test('accepts a hung deploy whose inspect reports readyState READY', () => {
   withHarness((harness) => {
     const result = runDeploy(harness, `echo 'Preview: ${PREVIEW_URL}'`, {
       FAKE_TIMEOUT_EXIT: '124',
       FAKE_INSPECT_EXIT: '0',
-      FAKE_INSPECT_STATUS: 'status\t● Ready',
+      FAKE_INSPECT_STATUS: '{\n  "readyState": "READY",\n  "id": "dpl_abc"\n}',
     });
     assert.equal(result.status, 0, result.stderr);
     assert.match(read(harness.outputs), new RegExp(`preview_url=${PREVIEW_URL}`));

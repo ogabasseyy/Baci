@@ -113,6 +113,29 @@ test('rejects embedded credentials in allowlisted URLs without echoing them', ()
   });
 });
 
+test('redact patterns blank export-prefixed privileged keys', () => {
+  const redactPatterns = fileURLToPath(
+    new URL('./preview-env-redact.sed', import.meta.url),
+  );
+  const directory = mkdtempSync(join(tmpdir(), 'preview-env-redact-'));
+  try {
+    const envFile = join(directory, '.env.preview.local');
+    writeFileSync(
+      envFile,
+      'export CRON_SECRET="real"\nexport KV_REST_API_URL="https://x.upstash.io"\n'
+    );
+    const sed = spawnSync('sed', ['-E', '-f', redactPatterns, envFile], {
+      encoding: 'utf8',
+    });
+    assert.equal(sed.status, 0, sed.stderr);
+    assert.match(sed.stdout, /^CRON_SECRET=\"\"$/m);
+    assert.doesNotMatch(sed.stdout, /real/);
+    assert.match(sed.stdout, /^KV_REST_API_URL="https:\/\/x\.upstash\.io"$/m);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('accepts the export-prefixed assignment form', () => {
   withFiles('export NEXT_PUBLIC_SHOP="ogabassey"\nexport CRON_SECRET=""\n', '# seeded\nCRON_SECRET\n', (envFile, allowFile) => {
     const result = run(envFile, allowFile);

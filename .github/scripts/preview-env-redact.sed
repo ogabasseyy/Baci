@@ -10,6 +10,9 @@
 # embed bearer tokens by provider convention, so they are credentials, not
 # endpoints. If redaction misses a key, the exposure allowlist check
 # fails the workflow: denied keys must NOT appear in preview-env-allowlist.txt.
+# Strip an optional export prefix first so the key patterns match
+# uniformly (the exposure gate accepts the export form).
+s/^export[[:blank:]][[:blank:]]*//
 s/^ADDRESS_AUTOCOMPLETE_KV_REST_API_READ_ONLY_TOKEN=.*/ADDRESS_AUTOCOMPLETE_KV_REST_API_READ_ONLY_TOKEN=""/
 s/^ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN=.*/ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN=""/
 s/^ADDRESS_AUTOCOMPLETE_KV_URL=.*/ADDRESS_AUTOCOMPLETE_KV_URL=""/

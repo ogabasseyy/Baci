@@ -61,13 +61,19 @@ BEGIN
   WHERE rco.receipt_claim_id = v_claim.id;
 
   IF v_claim.manual_notification_id IS NOT NULL THEN
-    -- Mirror the sender's proforma rule (resolveInvoiceTypeCode with
+    -- A marked row shows the kind the sender snapshotted at dispatch, so a
+    -- later payment cannot rewrite the preview away from the sent
+    -- attachment. Unmarked rows (never dispatched, or reset after a
+    -- definite rejection) fall back to the live rule below, which mirrors
+    -- the sender's proforma rule (resolveInvoiceTypeCode with
     -- wasPaid=false): an unpaid, invoice-method order with no accepted
-    -- payment and no explicit stored code previews as the proforma the
-    -- customer actually received, not a commercial invoice.
+    -- payment and no explicit stored code previews as proforma.
     SELECT COALESCE(
       (
         SELECT CASE
+          WHEN n.dispatch_started_at IS NOT NULL
+            AND n.metadata->>'sent_document_kind' IN ('receipt', 'invoice', 'proforma_invoice')
+          THEN n.metadata->>'sent_document_kind'
           WHEN n.event_type = 'manual_order_invoice'
             AND lower(btrim(o.payment_method)) = 'invoice'
             AND o.payment_status IS DISTINCT FROM 'paid'

@@ -356,6 +356,15 @@ describe('send manual order document', () => {
     ).toBeUndefined();
   });
 
+  it('snapshots the rendered kind in the dispatch marker', async () => {
+    const db = database();
+    await sendManualOrderDocument({ supabase: db.client, row });
+    const markCall = db.rpc.mock.calls.find(
+      ([fn]) => fn === 'mark_manual_document_dispatch_started'
+    );
+    expect(markCall?.[1]).toMatchObject({ p_document_kind: 'receipt' });
+  });
+
   it('retries instead of dispatching when the dispatch marker reports a stale order', async () => {
     const db = database({}, { dispatchStatus: 'stale' });
     // The marker runs as beforeTransportDispatch, so the provider mock is

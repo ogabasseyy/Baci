@@ -198,7 +198,12 @@ export async function sendManualOrderDocument({
     // The atomic RPC already committed dispatch_started_at: a second
     // conditional write here would match zero rows and fail every send.
     if (started) {
-      await markManualDocumentDispatchStarted(supabase, row, order);
+      await markManualDocumentDispatchStarted(
+        supabase,
+        row,
+        order,
+        pdfDocumentKind
+      );
       dispatchStarted = true;
       return;
     }

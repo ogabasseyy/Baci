@@ -1,9 +1,11 @@
 'use client';
 
+import type { CheckoutOrderSubmissionContext } from './checkout-order-submission-types';
+import type { useCheckoutAttemptSession } from './use-checkout-attempt-session';
 import { useCheckoutCryptoSession } from './use-checkout-crypto-session';
 import { useCheckoutDvaSession } from './use-checkout-dva-session';
+import type { useCheckoutFormSession } from './use-checkout-form-session';
 import { useCheckoutOrderSubmission } from './use-checkout-order-submission';
-import type { CheckoutOrderSubmissionContext } from './checkout-order-submission-types';
 import { useStorefrontCustomerSession } from './use-storefront-customer-session';
 import { useWalletFundedBankTransfer } from './use-wallet-funded-bank-transfer';
 import { useWalletFundedOrderCompletion } from './use-wallet-funded-order-completion';
@@ -17,23 +19,46 @@ export interface CheckoutPaymentExecutionOptions {
     currencyCode: string;
   };
   form: {
-    account: Omit<Submission['account'], 'waitForResolvedCustomerAuth'>;
-    contact: Submission['contact'];
+    session: ReturnType<typeof useCheckoutFormSession>['form'];
+    account: ReturnType<typeof useCheckoutFormSession>['account'];
+    user: Submission['account']['user'];
   };
   cart: Submission['cart'];
-  delivery: Submission['delivery'];
-  merchant: Submission['merchant'];
-  navigation: Submission['navigation'];
-  order: Pick<
-    Submission['order'],
-    | 'pending'
-    | 'clearPending'
-    | 'setPending'
-    | 'setOrderCreated'
-    | 'clearCheckoutSession'
+  delivery: Omit<
+    Submission['delivery'],
+    | 'method'
+    | 'airportType'
+    | 'airportRequiresQuote'
+    | 'newAddressStreet'
+    | 'newAddressCity'
+    | 'newAddressState'
   >;
+  merchant: Submission['merchant'];
+  navigation: {
+    flow: Pick<
+      Submission['navigation'],
+      'setCurrentStep' | 'setCompletedSteps'
+    >;
+    pushSuccessRoute: Submission['navigation']['pushSuccessRoute'];
+    getHref: Submission['navigation']['getHref'];
+  };
   payment: Submission['payment'];
-  attempt: Pick<Submission, 'resumed' | 'processing'>;
+  attempt: Pick<
+    ReturnType<typeof useCheckoutAttemptSession>,
+    | 'resumedOrder'
+    | 'preferredGateway'
+    | 'resumeTrackingToken'
+    | 'resumeMerchantSlug'
+    | 'pendingCheckoutOrder'
+    | 'clearPendingCheckoutOrder'
+    | 'setPendingCheckoutOrder'
+    | 'setCheckoutOrderCreated'
+    | 'setIsProcessing'
+    | 'isOrderInFlightRef'
+    | 'tryBeginSubmission'
+    | 'releaseSubmission'
+    | 'handleSubmissionError'
+  >;
 }
 
 /** Owns payment resources and submission around the authoritative checkout sessions. */
@@ -44,7 +69,6 @@ export function useCheckoutPaymentExecution({
   delivery,
   merchant,
   navigation,
-  order,
   payment,
   attempt,
 }: CheckoutPaymentExecutionOptions) {
@@ -54,24 +78,24 @@ export function useCheckoutPaymentExecution({
   const dva = useCheckoutDvaSession({
     checkoutCart: cart.checkoutCart,
     clearCart: cart.clearCart,
-    clearCheckoutSession: order.clearCheckoutSession,
-    clearPendingCheckoutOrder: order.clearPending,
+    clearCheckoutSession: form.session.clear,
+    clearPendingCheckoutOrder: attempt.clearPendingCheckoutOrder,
     currencyCode: identity.currencyCode,
     getHref: navigation.getHref,
     merchantSlug: identity.merchantSlug,
   });
   const crypto = useCheckoutCryptoSession({
     merchantId: identity.merchantId,
-    clearCheckoutSession: order.clearCheckoutSession,
-    clearPendingCheckoutOrder: order.clearPending,
+    clearCheckoutSession: form.session.clear,
+    clearPendingCheckoutOrder: attempt.clearPendingCheckoutOrder,
     clearCart: cart.clearCart,
     getHref: navigation.getHref,
-    isOrderInFlightRef: attempt.processing.isOrderInFlightRef,
+    isOrderInFlightRef: attempt.isOrderInFlightRef,
   });
   const completeWalletFundedOrder = useWalletFundedOrderCompletion({
     clearCart: cart.clearCart,
-    clearCheckoutSession: order.clearCheckoutSession,
-    clearPendingCheckoutOrder: order.clearPending,
+    clearCheckoutSession: form.session.clear,
+    clearPendingCheckoutOrder: attempt.clearPendingCheckoutOrder,
     getHref: navigation.getHref,
     paymentMethod: payment.session.method,
   });
@@ -82,17 +106,41 @@ export function useCheckoutPaymentExecution({
   });
   const { handlePlaceOrder } = useCheckoutOrderSubmission({
     account: {
-      ...form.account,
-      waitForResolvedCustomerAuth:
-        customerSession.waitForResolvedAuthenticated,
+      createAccount: form.account.createAccount,
+      password: form.account.password,
+      user: form.user,
+      waitForResolvedCustomerAuth: customerSession.waitForResolvedAuthenticated,
     },
     cart,
-    contact: form.contact,
-    delivery,
+    contact: {
+      customerEmail: form.session.values.customerEmail,
+      customerPhone: form.session.values.customerPhone,
+      firstName: form.session.values.firstName,
+      lastName: form.session.values.lastName,
+      newsletterOptIn: form.session.values.newsletterOptIn,
+    },
+    delivery: {
+      ...delivery,
+      method: form.session.values.deliveryMethod,
+      airportType: form.session.values.airportType,
+      airportRequiresQuote: form.session.values.airportRequiresQuote,
+      newAddressStreet: form.session.values.newAddressStreet,
+      newAddressCity: form.session.values.newAddressCity,
+      newAddressState: form.session.values.newAddressState,
+    },
     merchant,
-    navigation,
+    navigation: {
+      setCurrentStep: navigation.flow.setCurrentStep,
+      setCompletedSteps: navigation.flow.setCompletedSteps,
+      pushSuccessRoute: navigation.pushSuccessRoute,
+      getHref: navigation.getHref,
+    },
     order: {
-      ...order,
+      pending: attempt.pendingCheckoutOrder,
+      clearPending: attempt.clearPendingCheckoutOrder,
+      setPending: attempt.setPendingCheckoutOrder,
+      setOrderCreated: attempt.setCheckoutOrderCreated,
+      clearCheckoutSession: form.session.clear,
       setDvaData: dva.setDvaData,
       setIsInitializingDva: dva.setIsInitializingDva,
       setPendingCryptoOrder: crypto.setPendingCryptoOrder,
@@ -101,8 +149,19 @@ export function useCheckoutPaymentExecution({
       walletFundedTransfer,
     },
     payment,
-    resumed: attempt.resumed,
-    processing: attempt.processing,
+    resumed: {
+      order: attempt.resumedOrder,
+      preferredGateway: attempt.preferredGateway,
+      trackingToken: attempt.resumeTrackingToken,
+      merchantSlugFromResume: attempt.resumeMerchantSlug,
+    },
+    processing: {
+      setIsProcessing: attempt.setIsProcessing,
+      isOrderInFlightRef: attempt.isOrderInFlightRef,
+      tryBeginSubmission: attempt.tryBeginSubmission,
+      releaseSubmission: attempt.releaseSubmission,
+      handleSubmissionError: attempt.handleSubmissionError,
+    },
   });
 
   return { crypto, dva, handlePlaceOrder, walletFundedTransfer };

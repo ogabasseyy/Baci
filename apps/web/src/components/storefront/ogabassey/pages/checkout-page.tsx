@@ -1,31 +1,30 @@
 'use client';
 
-import { useCheckoutDeliverySession } from './checkout/hooks/use-checkout-delivery-session';
-import { useCheckoutFormSession } from './checkout/hooks/use-checkout-form-session';
-
 import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
 import { useEffect } from 'react';
-import { useCart } from '@/hooks/cart';
-import { useMerchantSafe } from '@/hooks/use-merchant-client';
-import { useCurrency } from '@/hooks/use-currency';
 import { useAuthSafe } from '@/contexts/auth-context';
-import { asRoute } from '@/lib/routes';
-import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
+import { useCart } from '@/hooks/cart';
+import { useCurrency } from '@/hooks/use-currency';
+import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import {
   isBankTransferCheckoutAvailable,
   isKorapayCheckoutAvailable,
   isPaystackCheckoutAvailable,
 } from '@/lib/checkout/payment-gateway-availability';
-import { isNgnChargeCurrency } from './checkout/components/payment-step-availability';
-import { useCheckoutAttemptSession } from './checkout/hooks/use-checkout-attempt-session';
-import { useRedvaultPaymentAvailability } from './checkout/hooks/use-redvault-payment-availability';
-import { useCheckoutPaymentExecution } from './checkout/hooks/use-checkout-payment-execution';
-import { deriveCheckoutCartModel } from './checkout/derive-checkout-cart-model';
-import { deriveCheckoutOrderSummaryPresentation } from './checkout/derive-checkout-order-summary-presentation';
-import { useCheckoutFinancialSession } from './checkout/hooks/use-checkout-financial-session';
+import { asRoute } from '@/lib/routes';
+import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import { CheckoutResumeStatus } from './checkout/components/CheckoutResumeStatus';
 import { CheckoutScreen } from './checkout/components/CheckoutScreen';
+import { isNgnChargeCurrency } from './checkout/components/payment-step-availability';
+import { deriveCheckoutCartModel } from './checkout/derive-checkout-cart-model';
+import { deriveCheckoutOrderSummaryPresentation } from './checkout/derive-checkout-order-summary-presentation';
+import { useCheckoutAttemptSession } from './checkout/hooks/use-checkout-attempt-session';
+import { useCheckoutDeliverySession } from './checkout/hooks/use-checkout-delivery-session';
+import { useCheckoutFinancialSession } from './checkout/hooks/use-checkout-financial-session';
+import { useCheckoutFormSession } from './checkout/hooks/use-checkout-form-session';
+import { useCheckoutPaymentExecution } from './checkout/hooks/use-checkout-payment-execution';
+import { useRedvaultPaymentAvailability } from './checkout/hooks/use-redvault-payment-availability';
 export const CheckoutPage: React.FC = () => {
   const { cart, clearCart, isHydrated, removeFromCart } = useCart();
   const merchantContext = useMerchantSafe();
@@ -68,7 +67,9 @@ export const CheckoutPage: React.FC = () => {
   const router = useRouter();
 
   const getHref = (path: string) =>
-    path.startsWith('http') ? path : `${basePath || ''}${path === '/' ? '' : path}`;
+    path.startsWith('http')
+      ? path
+      : `${basePath || ''}${path === '/' ? '' : path}`;
 
   const searchParams = useSearchParams();
   const auth = useAuthSafe();
@@ -108,12 +109,8 @@ export const CheckoutPage: React.FC = () => {
     newsletterOptIn,
   } = checkoutForm;
 
-  const {
-    currentStep,
-    completedSteps,
-    setCurrentStep,
-    setCompletedSteps,
-  } = checkoutFlow;
+  const { currentStep, completedSteps, setCurrentStep, setCompletedSteps } =
+    checkoutFlow;
   // Mobile app order resume state
   // When opening from mobile app with ?orderId=xxx&gateway=credpal, we resume that order
   const checkoutAttempt = useCheckoutAttemptSession({
@@ -138,27 +135,17 @@ export const CheckoutPage: React.FC = () => {
   });
   const {
     pendingCheckoutOrder,
-    setPendingCheckoutOrder,
     clearPendingCheckoutOrder,
-    setCheckoutOrderCreated,
     displayModel: checkoutDisplay,
     resumeOrderId,
-    resumeTrackingToken,
-    resumeLookupEmail,
-    resumeMerchantSlug,
     preferredGateway,
     isProcessing,
-    setIsProcessing,
     isOrderInFlightRef,
-    tryBeginSubmission,
-    releaseSubmission,
-    handleSubmissionError,
     resumedOrder,
     isLoadingResumedOrder,
     resumeOrderError,
   } = checkoutAttempt;
   const {
-    displayItems,
     effectiveCheckoutCartTotal,
     effectiveItemSubtotal,
     hasCheckoutCartItems,
@@ -199,14 +186,9 @@ export const CheckoutPage: React.FC = () => {
     customerEmail,
   });
   const { quotes: deliveryQuotes, cost: deliveryCost } = delivery;
-  const {
-    items: shippingQuotes,
-    selectedId: selectedQuoteId,
-    matchesSelectedMethod: selectedQuoteMatchesDeliveryMethod,
-  } = deliveryQuotes;
+  const { selectedId: selectedQuoteId } = deliveryQuotes;
 
   // Note: newAddressState, newAddressCity, newAddressStreet are now part of checkoutForm (persisted)
-
 
   // Live and resumed amount arithmetic feeds the payment session and summary.
   const { orderTotals, paymentSession, summaryAmounts } =
@@ -248,28 +230,19 @@ export const CheckoutPage: React.FC = () => {
         currencyCode,
       },
       form: {
-        account: {
-          createAccount: account.createAccount,
-          password: account.password,
-          user,
-        },
-        contact: {
-          customerEmail,
-          customerPhone,
-          firstName,
-          lastName,
-          newsletterOptIn,
-        },
+        session: checkoutFormState,
+        account,
+        user,
       },
-      cart: { cart, checkoutCart, checkoutCartTotal, clearCart, removeFromCart },
+      cart: {
+        cart,
+        checkoutCart,
+        checkoutCartTotal,
+        clearCart,
+        removeFromCart,
+      },
       delivery: {
         session: delivery,
-        method: deliveryMethod,
-        airportType,
-        airportRequiresQuote,
-        newAddressStreet,
-        newAddressCity,
-        newAddressState,
         merchantCountry,
         giftWrappingCost,
         effectiveItemSubtotal,
@@ -277,17 +250,9 @@ export const CheckoutPage: React.FC = () => {
       },
       merchant,
       navigation: {
-        setCurrentStep,
-        setCompletedSteps,
+        flow: checkoutFlow,
         pushSuccessRoute: (url) => router.push(asRoute(url)),
         getHref,
-      },
-      order: {
-        pending: pendingCheckoutOrder,
-        clearPending: clearPendingCheckoutOrder,
-        setPending: setPendingCheckoutOrder,
-        setOrderCreated: setCheckoutOrderCreated,
-        clearCheckoutSession,
       },
       payment: {
         session: paymentSession,
@@ -297,21 +262,7 @@ export const CheckoutPage: React.FC = () => {
         redvaultAvailable: redvaultAvailability.available,
         currencyCode,
       },
-      attempt: {
-        resumed: {
-          order: resumedOrder,
-          preferredGateway,
-          trackingToken: resumeTrackingToken,
-          merchantSlugFromResume: resumeMerchantSlug,
-        },
-        processing: {
-          setIsProcessing,
-          isOrderInFlightRef,
-          tryBeginSubmission,
-          releaseSubmission,
-          handleSubmissionError,
-        },
-      },
+      attempt: checkoutAttempt,
     });
 
   const isPayForMeValid = paymentSession.payForMe.isValid;
@@ -384,7 +335,6 @@ export const CheckoutPage: React.FC = () => {
   // Empty cart check - only show after hydration confirms cart is genuinely empty
   // Skip this check when resuming an order (cart is empty during order resumption)
 
-
   const checkoutScreenSteps = {
     flow: checkoutFlow,
     onSignIn: checkoutAuth.open,
@@ -442,7 +392,10 @@ export const CheckoutPage: React.FC = () => {
           onConfirmTransfer: dva.handleDvaConfirmTransfer,
         },
       }}
-      summary={{ presentation: orderSummaryPresentation, payment: paymentSession }}
+      summary={{
+        presentation: orderSummaryPresentation,
+        payment: paymentSession,
+      }}
       steps={checkoutScreenSteps}
     />
   );

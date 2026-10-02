@@ -259,4 +259,9 @@ export const EXPECTED_DISCOVERY_PENDING_SOURCES = [
       'supabase/migrations/20261002090731_managed_nullable_base_stock.sql',
     sha256: '0ed09e157c402d13b0179a249c0c036c12c9e85d729166fffc8e4d2ec307ae10',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261002090732_base_option_nullable_manage_parity.sql',
+    sha256: 'eddef46a18502231f9b28fa6537b8c9cc857846f8ce176c7edb8979080850e33',
+  },
 ] as const;

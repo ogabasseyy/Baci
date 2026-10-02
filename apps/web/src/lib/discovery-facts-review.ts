@@ -6,7 +6,7 @@ function object(value: unknown): Record<string, unknown> {
     : {};
 }
 
-/** Proposals require merchant review. No descriptions, titles or option facts are mined. */
+/** Proposals require evidence review. No descriptions, titles or option facts are mined. */
 export function proposeDiscoveryFacts(input: {
   category: string | null;
   metadata: unknown;
@@ -21,7 +21,7 @@ export function proposeDiscoveryFacts(input: {
     warnings.push('Existing facts are invalid. Repair them before saving.');
   const draft = existing.success
     ? { ...existing.data }
-    : { ...object(input.discovery_metadata) };
+    : structuredClone(object(input.discovery_metadata));
   const categoryTypes: Record<string, string> = {
     Smartphones: 'phone',
     Laptops: 'laptop',

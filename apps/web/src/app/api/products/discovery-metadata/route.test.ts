@@ -139,6 +139,19 @@ describe('product discovery metadata API', () => {
 
   it('rejects invalid JSON, schema-invalid input, and invalid merchant identifiers', async () => {
     expect((await PUT(request('{'))).status).toBe(400);
+    let nested: unknown = 'leaf';
+    for (let index = 0; index < 64; index++) nested = [nested];
+    expect(
+      (
+        await PUT(
+          request(
+            JSON.stringify({ ...validBody, expectedMetadata: { nested } })
+          )
+        )
+      ).status
+    ).toBe(400);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+
     expect(
       (await PUT(request(JSON.stringify({ ...validBody, unexpected: true }))))
         .status

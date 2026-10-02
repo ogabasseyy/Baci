@@ -103,3 +103,22 @@ it('bounds Unicode snapshots in UTF-8 bytes rather than code units', () => {
     }).success
   ).toBe(true);
 });
+
+it('rejects excessive snapshot depth safely before recursive JSON validation', () => {
+  let nested: unknown = 'leaf';
+  for (let index = 0; index < 64; index++) nested = [nested];
+  expect(() =>
+    schema.safeParse({ productId, metadata: {}, expectedMetadata: { nested } })
+  ).not.toThrow();
+  expect(
+    schema.safeParse({ productId, metadata: {}, expectedMetadata: { nested } })
+      .success
+  ).toBe(false);
+  expect(
+    schema.safeParse({
+      productId,
+      metadata: {},
+      expectedMetadata: { nested: [['leaf']] },
+    }).success
+  ).toBe(true);
+});

@@ -11,3 +11,9 @@ PUT replaces the full document. expectedMetadata is sent in a bounded RPC POST b
 Affected API, schema and proposal tests plus web lint/typecheck are required. The new guarded-update migration must apply before the reader/writer deploy. No private environment edits or catalog mutations occur in this PR. Require exact-head CI and clean Codex review before merge, then verify deployed session reads and guarded writes. Fact coverage, semantic activation, MCP deployment, live relevance QA and app submission remain separate gates.
 
 A guarded no-match intentionally conflates stale facts and inaccessible/deleted products; callers reload and reauthorize instead of using it as an existence probe.
+
+The optimistic concurrency guarantee applies to this API and its guarded RPC, not every direct products-table writer. Existing tenant RLS and metadata CHECK constraints remain authoritative for direct Supabase writes. No global table-write restriction is introduced.
+
+GET deliberately rejects unknown parameters; clients must use the documented cursor and merchantId fields. UUID traversal is not a transaction snapshot: inserts or deletes during a scan require a fresh full pass. Research uses a saved catalog snapshot, then repeats the catalog ID audit and freshly re-reads each product before guarded writes; coverage is claimed only for that reviewed set.
+
+Raw snapshots are limited to 32 levels of JSON nesting before recursive JSON validation, in addition to the UTF-8 byte and request body budgets. Drafts are deep-cloned so research edits cannot mutate their concurrency snapshots.

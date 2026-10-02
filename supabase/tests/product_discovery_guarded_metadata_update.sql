@@ -1,8 +1,8 @@
 BEGIN;
 INSERT INTO auth.users (id) VALUES ('ab120000-0000-4000-8000-000000000001');
--- Merchant audit triggers require an actor even during fixture setup.
-SELECT set_config('request.jwt.claim.sub','ab120000-0000-4000-8000-000000000001',true);
-SELECT set_config('request.jwt.claim.role','authenticated',true);
+-- Use the database-principal audit actor for privileged fixture setup.
+-- Authenticate the actual RLS assertions only after both tenant rows exist.
+SELECT set_config('app.audit_actor_user_id','ab120000-0000-4000-8000-000000000001',true);
 INSERT INTO public.merchants (id, user_id, email, business_name, slug, is_published)
 VALUES ('ab120000-0000-4000-8000-000000000002','ab120000-0000-4000-8000-000000000001','guard@example.test','Guard test','guard-test',true),
 ('ab120000-0000-4000-8000-000000000003',NULL,'other-guard@example.test','Other guard','other-guard',true);

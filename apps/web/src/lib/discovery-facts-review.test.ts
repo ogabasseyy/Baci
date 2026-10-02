@@ -85,3 +85,17 @@ it('keeps an invalid raw snapshot unchanged when adding proposed identity', () =
   });
   expect(result.draft).not.toBe(snapshot);
 });
+
+it('isolates nested draft edits from the raw invalid snapshot', () => {
+  const snapshot = { attributes: { ram_gb: '8' } };
+  const result = proposeDiscoveryFacts({
+    category: null,
+    metadata: {},
+    discovery_metadata: snapshot,
+  });
+  expect(result.draft.attributes).not.toBe(snapshot.attributes);
+  if (result.draft.attributes && typeof result.draft.attributes === 'object') {
+    Object.assign(result.draft.attributes, { ram_gb: 16 });
+  }
+  expect(snapshot.attributes.ram_gb).toBe('8');
+});

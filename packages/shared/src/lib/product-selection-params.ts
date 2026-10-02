@@ -15,6 +15,7 @@ export interface ProductWithSelectionAxesLike<
   TVariant extends ProductDefaultVariantLike = ProductDefaultVariantLike,
 > extends ProductWithDefaultVariantLike<TVariant> {
   attributeAxes?: string[] | null;
+  offers?: Array<{ condition?: string | null }> | null;
   variant_attributes?: Record<string, string[] | null | undefined> | null;
 }
 

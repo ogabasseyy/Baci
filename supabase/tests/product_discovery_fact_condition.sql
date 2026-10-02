@@ -70,6 +70,34 @@ BEGIN
   IF cardinality(fact_ids) IS DISTINCT FROM 3 THEN
     RAISE EXCEPTION 'unconditioned facts must stay fail-open, got %', fact_ids;
   END IF;
+  -- Scalar filters beyond the public schema limits narrow to no rows.
+  SELECT array_agg(product_id) INTO fact_ids
+  FROM public.search_product_discovery_facts(
+    merchant_id_param => 'cb58d110-0000-4000-8000-000000000604',
+    query_text => 'black',
+    brand_filter => repeat('b', 51)
+  );
+  IF fact_ids IS NOT NULL THEN
+    RAISE EXCEPTION 'over-long brand filters must narrow to no rows, got %', fact_ids;
+  END IF;
+  SELECT array_agg(product_id) INTO fact_ids
+  FROM public.search_product_discovery_facts(
+    merchant_id_param => 'cb58d110-0000-4000-8000-000000000604',
+    query_text => 'black',
+    category_filter => repeat('c', 51)
+  );
+  IF fact_ids IS NOT NULL THEN
+    RAISE EXCEPTION 'over-long category filters must narrow to no rows, got %', fact_ids;
+  END IF;
+  SELECT array_agg(product_id) INTO fact_ids
+  FROM public.search_product_discovery_facts(
+    merchant_id_param => 'cb58d110-0000-4000-8000-000000000604',
+    query_text => 'black',
+    condition_filter => repeat('n', 51)
+  );
+  IF fact_ids IS NOT NULL THEN
+    RAISE EXCEPTION 'over-long condition filters must narrow to no rows, got %', fact_ids;
+  END IF;
 END;
 $$;
 

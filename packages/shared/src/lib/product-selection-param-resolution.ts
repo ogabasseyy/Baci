@@ -58,18 +58,32 @@ export function resolveVariantSelectionParamResolution<
     );
 
     // Paired offer links carry both params and the variant they name has no
-    // condition of its own, so the explicit condition survives. When the
-    // matched variant carries a conflicting condition, the variant wins and
-    // the param drops: downstream seeds fall back to the variant, keeping
-    // price, label, and cart consistent instead of mixing axes.
+    // condition of its own, so the explicit condition survives only when the
+    // product can actually sell it: the parent family, or a matching offer.
+    // Otherwise the PDP would seed an unoffered grade and the cart would
+    // carry a phantom condition. A named variant carrying its own condition
+    // proves the grade itself, so agreement still retains; when it carries a
+    // conflicting condition, the variant wins and the param drops: downstream
+    // seeds fall back to the variant, keeping price, label, and cart
+    // consistent instead of mixing axes. Invalid ids echo both params.
     const [match] = matches;
     const variantCondition =
       matches.length === 1
         ? normalizeCanonicalProductCondition(match?.condition)
         : '';
+    const parentCondition =
+      normalizeCanonicalProductCondition(product.condition) || 'new';
+    const conditionOffered = (product.offers ?? []).some(
+      (offer) =>
+        normalizeCanonicalProductCondition(offer.condition) ===
+        extracted.condition
+    );
     const retainCondition =
       extracted.condition &&
-      (!variantCondition || variantCondition === extracted.condition);
+      (matches.length !== 1 ||
+        (variantCondition
+          ? variantCondition === extracted.condition
+          : extracted.condition === parentCondition || conditionOffered));
     return {
       extracted,
       matches,

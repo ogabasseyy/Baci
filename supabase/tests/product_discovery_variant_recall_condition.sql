@@ -30,7 +30,11 @@ VALUES
   ('cb58d110-0000-4000-8000-000000000516', 'cb58d110-0000-4000-8000-000000000503',
    'Inactive offer', 'inactive-offer', 50000, 'active', false, true, 'new', '{}'),
   ('cb58d110-0000-4000-8000-000000000517', 'cb58d110-0000-4000-8000-000000000503',
-   'Open-box 256GB', 'open-box-256gb', 50000, 'active', true, true, 'new', '{}');
+   'Open-box 256GB', 'open-box-256gb', 50000, 'active', true, true, 'new', '{}'),
+  ('cb58d110-0000-4000-8000-000000000518', 'cb58d110-0000-4000-8000-000000000503',
+   'Depleted bare offer', 'depleted-bare-offer', 50000, 'active', false, true, 'new', '{}'),
+  ('cb58d110-0000-4000-8000-000000000519', 'cb58d110-0000-4000-8000-000000000503',
+   'Stocked bare offer', 'stocked-bare-offer', 50000, 'active', false, true, 'new', '{}');
 
 INSERT INTO public.product_variants (id, product_id, merchant_id, attributes, stock_quantity, condition)
 VALUES
@@ -50,7 +54,13 @@ VALUES
   ('cb58d110-0000-4000-8000-000000000526', 'cb58d110-0000-4000-8000-000000000516',
    'cb58d110-0000-4000-8000-000000000503', '{"storage_gb":256}', 5, 'new'),
   ('cb58d110-0000-4000-8000-000000000527', 'cb58d110-0000-4000-8000-000000000517',
-   'cb58d110-0000-4000-8000-000000000503', '{"storage_gb":256}', 5, 'open_box');
+   'cb58d110-0000-4000-8000-000000000503', '{"storage_gb":256}', 5, 'open_box'),
+  -- Conditionless variants under variant-less flags resolve through the
+  -- base or the bare offer below.
+  ('cb58d110-0000-4000-8000-000000000528', 'cb58d110-0000-4000-8000-000000000518',
+   'cb58d110-0000-4000-8000-000000000503', '{"storage_gb":256}', 5, NULL),
+  ('cb58d110-0000-4000-8000-000000000529', 'cb58d110-0000-4000-8000-000000000519',
+   'cb58d110-0000-4000-8000-000000000503', '{"storage_gb":256}', 5, NULL);
 
 INSERT INTO public.product_offers (id, product_id, merchant_id, condition, price, stock_quantity, status)
 VALUES
@@ -59,7 +69,13 @@ VALUES
   ('cb58d110-0000-4000-8000-000000000532', 'cb58d110-0000-4000-8000-000000000515',
    'cb58d110-0000-4000-8000-000000000503', 'used', 40000, 2, 'active'),
   ('cb58d110-0000-4000-8000-000000000533', 'cb58d110-0000-4000-8000-000000000516',
-   'cb58d110-0000-4000-8000-000000000503', 'used', 40000, 2, 'sold_out');
+   'cb58d110-0000-4000-8000-000000000503', 'used', 40000, 2, 'sold_out'),
+  -- A depleted bare offer on a managed product satisfies nothing; the
+  -- stocked twin is the positive control.
+  ('cb58d110-0000-4000-8000-000000000534', 'cb58d110-0000-4000-8000-000000000518',
+   'cb58d110-0000-4000-8000-000000000503', 'used', 40000, 0, 'active'),
+  ('cb58d110-0000-4000-8000-000000000535', 'cb58d110-0000-4000-8000-000000000519',
+   'cb58d110-0000-4000-8000-000000000503', 'used', 40000, 2, 'active');
 
 -- Helper pins run as service_role like the other direct discovery calls;
 -- only the published RPC surface runs as the public caller below.
@@ -93,13 +109,15 @@ BEGIN
     p_limit => 10,
     p_condition => 'used'
   );
-  IF cardinality(recall_ids) IS DISTINCT FROM 3
+  IF cardinality(recall_ids) IS DISTINCT FROM 4
     OR NOT (recall_ids @> ARRAY[
       'cb58d110-0000-4000-8000-000000000512'::uuid,
       'cb58d110-0000-4000-8000-000000000513'::uuid,
-      'cb58d110-0000-4000-8000-000000000514'::uuid
+      'cb58d110-0000-4000-8000-000000000514'::uuid,
+      'cb58d110-0000-4000-8000-000000000519'::uuid
     ])
-    OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000511'::uuid] THEN
+    OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000511'::uuid]
+    OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000518'::uuid] THEN
     RAISE EXCEPTION 'used recall must keep variant, offer and base matches only, got %', recall_ids;
   END IF;
   SELECT array_agg(product_id) INTO recall_ids
@@ -109,7 +127,7 @@ BEGIN
     p_limit => 10,
     p_condition => 'new'
   );
-  IF cardinality(recall_ids) IS DISTINCT FROM 5
+  IF cardinality(recall_ids) IS DISTINCT FROM 7
     OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000512'::uuid]
     OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000517'::uuid] THEN
     RAISE EXCEPTION 'new recall must drop the used-only and open-box-only products, got %', recall_ids;
@@ -133,9 +151,31 @@ BEGIN
     '[{"key":"storage_gb","operator":"eq","value":256}]'::jsonb,
     10
   );
-  IF cardinality(recall_ids) IS DISTINCT FROM 7 THEN
+  IF cardinality(recall_ids) IS DISTINCT FROM 9 THEN
     RAISE EXCEPTION 'unconditioned recall must stay fail-open, got %', recall_ids;
   END IF;
+  -- Scalar filters beyond the public schema limits reject before the query.
+  BEGIN
+    PERFORM * FROM public.search_product_variant_recall(
+      p_merchant_id => 'cb58d110-0000-4000-8000-000000000503',
+      p_brand => repeat('b', 51));
+    RAISE EXCEPTION 'over-long brand filters must be rejected';
+  EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
+  END;
+  BEGIN
+    PERFORM * FROM public.search_product_variant_recall(
+      p_merchant_id => 'cb58d110-0000-4000-8000-000000000503',
+      p_category => repeat('c', 51));
+    RAISE EXCEPTION 'over-long category filters must be rejected';
+  EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
+  END;
+  BEGIN
+    PERFORM * FROM public.search_product_variant_recall(
+      p_merchant_id => 'cb58d110-0000-4000-8000-000000000503',
+      p_condition => repeat('n', 51));
+    RAISE EXCEPTION 'over-long condition filters must be rejected';
+  EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
+  END;
 END;
 $$;
 

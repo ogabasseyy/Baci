@@ -36,6 +36,21 @@ VALUES
   ('e5100000-0000-4000-8000-000000000618', 'e5100000-0000-4000-8000-000000000601',
    'Undated Zed', 'undated-zed', 'Zed', 'Audio', 50000, 'active', NULL, 'new', '{}');
 
+-- A used parent whose variants are all explicitly new: the base never
+-- sells on a variant product, so a used browse must not admit it.
+INSERT INTO public.products
+  (id, merchant_id, name, slug, brand, category, price, status, created_at, condition, has_variants, discovery_metadata)
+VALUES
+  ('e5100000-0000-4000-8000-000000000619', 'e5100000-0000-4000-8000-000000000601',
+   'Used parent new variants', 'used-parent-new-variants', 'UsedGoods', 'Audio', 50000, 'active', NULL, 'used', true, '{}');
+
+INSERT INTO public.product_variants (id, product_id, merchant_id, attributes, stock_quantity, condition)
+VALUES
+  ('e5100000-0000-4000-8000-000000000631', 'e5100000-0000-4000-8000-000000000619',
+   'e5100000-0000-4000-8000-000000000601', '{"storage_gb":128}', 5, 'new'),
+  ('e5100000-0000-4000-8000-000000000632', 'e5100000-0000-4000-8000-000000000619',
+   'e5100000-0000-4000-8000-000000000601', '{"storage_gb":256}', 5, 'new');
+
 SET LOCAL ROLE anon;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
 
@@ -89,9 +104,10 @@ BEGIN
     p_sort => 'newest',
     p_limit => 10
   );
-  IF cardinality(browse_ids) IS DISTINCT FROM 6
+  IF cardinality(browse_ids) IS DISTINCT FROM 7
     OR browse_ids[1] IS DISTINCT FROM 'e5100000-0000-4000-8000-000000000614'::uuid
-    OR browse_ids[6] IS DISTINCT FROM 'e5100000-0000-4000-8000-000000000618'::uuid THEN
+    OR browse_ids[6] IS DISTINCT FROM 'e5100000-0000-4000-8000-000000000618'::uuid
+    OR browse_ids[7] IS DISTINCT FROM 'e5100000-0000-4000-8000-000000000619'::uuid THEN
     RAISE EXCEPTION 'newest browse must lead with the 2025 row and park undated rows last, got %', browse_ids;
   END IF;
   -- Requested conditions narrow before paging: only the used base
@@ -112,7 +128,7 @@ BEGIN
     p_condition => 'new',
     p_limit => 10
   );
-  IF cardinality(browse_ids) IS DISTINCT FROM 5
+  IF cardinality(browse_ids) IS DISTINCT FROM 6
     OR browse_ids @> ARRAY['e5100000-0000-4000-8000-000000000617'::uuid] THEN
     RAISE EXCEPTION 'new browse must drop the used base, got %', browse_ids;
   END IF;
@@ -135,6 +151,28 @@ BEGIN
   IF cardinality(browse_ids) IS DISTINCT FROM 2 THEN
     RAISE EXCEPTION 'browse paging must honor limit and offset, got %', browse_ids;
   END IF;
+  -- Scalar filters beyond the public schema limits reject before the query.
+  BEGIN
+    PERFORM * FROM public.search_products_browse(
+      p_merchant_id => 'e5100000-0000-4000-8000-000000000601',
+      p_brand => repeat('b', 51));
+    RAISE EXCEPTION 'over-long brand filters must be rejected';
+  EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
+  END;
+  BEGIN
+    PERFORM * FROM public.search_products_browse(
+      p_merchant_id => 'e5100000-0000-4000-8000-000000000601',
+      p_category => repeat('c', 51));
+    RAISE EXCEPTION 'over-long category filters must be rejected';
+  EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
+  END;
+  BEGIN
+    PERFORM * FROM public.search_products_browse(
+      p_merchant_id => 'e5100000-0000-4000-8000-000000000601',
+      p_condition => repeat('n', 51));
+    RAISE EXCEPTION 'over-long condition filters must be rejected';
+  EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
+  END;
 END;
 $$;
 

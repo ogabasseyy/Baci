@@ -90,6 +90,41 @@ describe('product-selection-param-resolution', () => {
     });
   });
 
+  it('drops a condition neither the parent family nor an offer carries', () => {
+    const product = {
+      ...baseProduct,
+      offers: [{ condition: 'new' }],
+      variants: [{ id: 'variant-ungraded', condition: null }],
+    };
+    const resolution = resolveVariantSelectionParamResolution(
+      product,
+      new URLSearchParams('variantId=variant-ungraded&condition=used')
+    );
+
+    expect(resolution.type).toBe('variant_id');
+    expect(resolution.selectionInput).toEqual({
+      variantId: 'variant-ungraded',
+    });
+  });
+
+  it('retains a condition an actual offer carries', () => {
+    const product = {
+      ...baseProduct,
+      offers: [{ condition: 'refurbished' }],
+      variants: [{ id: 'variant-ungraded', condition: null }],
+    };
+    const resolution = resolveVariantSelectionParamResolution(
+      product,
+      new URLSearchParams('variantId=variant-ungraded&condition=open_box')
+    );
+
+    expect(resolution.type).toBe('variant_id');
+    expect(resolution.selectionInput).toEqual({
+      condition: 'open_box',
+      variantId: 'variant-ungraded',
+    });
+  });
+
   it('retains the condition param when the variantId is invalid', () => {
     const resolution = resolveVariantSelectionParamResolution(
       baseProduct,

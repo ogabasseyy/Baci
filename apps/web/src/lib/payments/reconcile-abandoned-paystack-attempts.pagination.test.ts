@@ -11,6 +11,7 @@ it('checks the next stale attempt before rechecking 25 held attempts on the next
     id: `attempt-${index}`,
     order_id: 'order-1',
     merchant_id: 'merchant-1',
+    gateway: 'paystack',
     gateway_reference: `BAC-${index}`,
     amount: 100,
     currency: 'NGN',
@@ -28,6 +29,7 @@ it('checks the next stale attempt before rechecking 25 held attempts on the next
       candidatesEqCalls.push(args);
       return candidates;
     }),
+    ilike: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
     is: vi.fn().mockReturnThis(),
     neq: vi.fn().mockReturnThis(),

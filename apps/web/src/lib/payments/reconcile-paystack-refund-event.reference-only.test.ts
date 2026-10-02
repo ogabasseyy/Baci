@@ -50,6 +50,31 @@ describe('Paystack reference-only refund events', () => {
     );
   });
 
+  it('reconciles a shared-reference payment stored with legacy casing', async () => {
+    const candidates = buildPaymentCandidates([
+      cancelledPaymentRow({ gateway: ' Paystack ' }),
+    ]);
+    const review = buildReviewInsert();
+    const from = vi
+      .fn()
+      .mockReturnValue(buildPaymentCandidates([]))
+      .mockReturnValueOnce(candidates)
+      .mockReturnValueOnce(buildRefundCandidates([]))
+      .mockReturnValueOnce(review);
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
+
+    await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
+
+    expect(candidates.ilike).toHaveBeenCalledWith('gateway', '%paystack%');
+    expect(review.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'order_cancellation_refund_requires_review',
+        order_id: 'order-1',
+        txn_id: 'payment-1',
+      })
+    );
+  });
+
   it('files stalled matches when no completed payment carries the reference', async () => {
     const completed = buildPaymentCandidates([]);
     const stalled = buildPaymentCandidates([cancelledPaymentRow()]);

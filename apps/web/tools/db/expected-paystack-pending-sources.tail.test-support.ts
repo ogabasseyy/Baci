@@ -359,4 +359,14 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
       'supabase/migrations/20260928183800_claim_refund_notifications_attempt_order.sql',
     sha256: 'c8033cee61b1e8b9cc821b48e1bfdf30b3383b94d03a13cbb0d891ec395ebc87',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928183900_normalize_abandoned_sweep_rpc_gateways.sql',
+    sha256: '7154827a5e1f41e61efb40a476bd159c474094768bf7a98a3b7b6371e2b6aebc',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928184000_transition_legacy_terminal_verdicts.sql',
+    sha256: '5c44ac11967635f731e6db31fee0afef0f7545a2da623bf9a570618f55aa5d36',
+  },
 ];

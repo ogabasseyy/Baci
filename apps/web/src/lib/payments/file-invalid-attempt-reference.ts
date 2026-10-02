@@ -7,7 +7,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  * the row is durably resolved. A conflicting open review (23505) merges
  * this attempt's evidence into the existing order review before stamping:
  * the stamp prevents reselection while the transaction remains pending, so
- * unmerged evidence would strand an unidentified row.
+ * unmerged evidence would strand an unidentified row. When the merge finds
+ * no open review for this order, the global ref slot belongs to another
+ * order's capture: refile without occupying paystack_ref (like the
+ * duplicate-capture filers) so this attempt keeps its own operations
+ * review instead of colliding forever.
  */
 export async function fileInvalidAttemptReference({
   attempt,
@@ -24,21 +28,22 @@ export async function fileInvalidAttemptReference({
   reason: string;
   supabase: SupabaseClient;
 }): Promise<boolean> {
+  const row = {
+    issue_type: 'abandoned_attempt_evidence_mismatch',
+    order_id: attempt.order_id,
+    merchant_id: attempt.merchant_id,
+    txn_id: attempt.id,
+    paystack_ref: attempt.gateway_reference,
+    reason: `Stale Paystack attempt ${attempt.gateway_reference} carries a reference provider verification rejects (${reason}); correct the reference or retire the row`,
+    metadata: {
+      payment_transaction_id: attempt.id,
+      local_reference: attempt.gateway_reference,
+      invalid_reference: true,
+    },
+  };
   const { error: reviewError } = await supabase
     .from('reconciliation_review')
-    .insert({
-      issue_type: 'abandoned_attempt_evidence_mismatch',
-      order_id: attempt.order_id,
-      merchant_id: attempt.merchant_id,
-      txn_id: attempt.id,
-      paystack_ref: attempt.gateway_reference,
-      reason: `Stale Paystack attempt ${attempt.gateway_reference} carries a reference provider verification rejects (${reason}); correct the reference or retire the row`,
-      metadata: {
-        payment_transaction_id: attempt.id,
-        local_reference: attempt.gateway_reference,
-        invalid_reference: true,
-      },
-    });
+    .insert(row);
   if (reviewError && (reviewError as { code?: string }).code !== '23505') {
     return false;
   }
@@ -53,7 +58,19 @@ export async function fileInvalidAttemptReference({
         p_reason: `invalid reference rejected by verification (${reason})`,
       }
     );
-    if (mergeError || merged !== true) return false;
+    if (mergeError) return false;
+    if (merged !== true) {
+      // No open review for this order: the ref slot is owned by
+      // another order's capture. File without occupying paystack_ref
+      // so this attempt keeps its own operations review instead of
+      // colliding forever; the column stays truthful — this review
+      // never claims the reference — while metadata keeps the full
+      // gateway evidence.
+      const { error: nullRefError } = await supabase
+        .from('reconciliation_review')
+        .insert({ ...row, paystack_ref: null });
+      if (nullRefError) return false;
+    }
   }
   const { data: stamped, error: stampError } = await supabase.rpc(
     'stamp_abandoned_sweep_resolution_v1',

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { normalizePaymentGateway } from './normalize-payment-gateway';
 
 const RECOVERY_MATCH_PAGE_SIZE = 10;
 // Full passes over the completed set before acknowledging: a webhook
@@ -9,6 +10,7 @@ const RECOVERY_MATCH_MAX_PASSES = 3;
 
 export interface CompletedPaymentMatch {
   amount: number;
+  gateway: string | null;
   gateway_reference: string | null;
   id: string;
   merchant_id: string;
@@ -38,10 +40,14 @@ export async function fetchCompletedPaymentsByReference(
     let added = 0;
     let lastId: string | null = null;
     for (;;) {
+      // Legacy rows may pad or re-case the gateway (` Paystack `):
+      // prefilter case-insensitively server-side, then exact-normalize
+      // each row so only genuine Paystack legs match. The keyset cursor
+      // below still advances over the unfiltered page.
       const filtered = supabase
         .from('transactions')
-        .select('id, order_id, merchant_id, gateway_reference, amount')
-        .eq('gateway', 'paystack')
+        .select('id, order_id, merchant_id, gateway, gateway_reference, amount')
+        .ilike('gateway', '%paystack%')
         .eq('gateway_reference', gatewayReference)
         .eq('transaction_type', 'payment')
         .eq('status', 'completed')
@@ -53,6 +59,7 @@ export async function fetchCompletedPaymentsByReference(
       if (paymentError) throw new Error('refund_event_payment_lookup_failed');
       const page = (payments ?? []) as CompletedPaymentMatch[];
       for (const row of page) {
+        if (normalizePaymentGateway(row.gateway) !== 'PAYSTACK') continue;
         if (candidates.has(row.id)) continue;
         candidates.set(row.id, row);
         added++;

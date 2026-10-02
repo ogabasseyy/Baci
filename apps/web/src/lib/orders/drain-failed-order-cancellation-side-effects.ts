@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { ORDER_WITH_ITEMS_QUERY } from '@/lib/order-queries';
+import { CANCELLATION_EMAIL_CLAIM_WRITE_ALLOWANCE_MS } from '@/lib/orders/cancellation-drain-deadline';
 import { EMAIL_ATTEMPTS_PER_SENDER } from '@/lib/orders/execute-customer-email-cancellation-side-effect';
 import { executeOrderCancellationSideEffect } from '@/lib/orders/execute-order-cancellation-side-effect';
 import type { CancellationEmailSender } from '@/lib/orders/order-cancellation-side-effect-types';
@@ -17,10 +18,6 @@ import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail-send-budget';
 const DEFAULT_LIMIT = 10;
 const MAX_ATTEMPTS = 5;
 const STALE_CLAIM_MINUTES = 15;
-// Allowance for the claim RPC itself when rechecking the email budget
-// after the order/merchant reads: mirrors zeptomail's audit-write
-// margin for a single database write.
-const CLAIM_WRITE_ALLOWANCE_MS = 8_000;
 
 export interface CancellationSideEffectDrainSummary {
   drained: Array<{ orderId: string; step: OrderCancellationSideEffectStep }>;
@@ -225,7 +222,7 @@ export async function drainFailedOrderCancellationSideEffects({
         emailCutoff !== undefined &&
         emailCutoff - Date.now() <
           zeptomailSendAdmissionBudgetMs(EMAIL_ATTEMPTS_PER_SENDER) +
-            CLAIM_WRITE_ALLOWANCE_MS
+            CANCELLATION_EMAIL_CLAIM_WRITE_ALLOWANCE_MS
       ) {
         logger.info({
           message:

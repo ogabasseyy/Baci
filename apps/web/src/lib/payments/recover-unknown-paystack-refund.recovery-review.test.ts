@@ -25,6 +25,7 @@ vi.mock('@/lib/logger', () => ({
 
 const firstPayment = {
   amount: 100,
+  gateway: 'paystack',
   gateway_reference: 'PSK-1',
   id: 'pay-1',
   merchant_id: 'merchant-1',
@@ -32,6 +33,7 @@ const firstPayment = {
 };
 const secondPayment = {
   amount: 100,
+  gateway: 'paystack',
   gateway_reference: 'PSK-1',
   id: 'pay-2',
   merchant_id: 'merchant-2',
@@ -47,6 +49,7 @@ const order = {
 function selectQuery(data: unknown, error: unknown = null) {
   return {
     eq: vi.fn().mockReturnThis(),
+    ilike: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
     is: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockResolvedValue({ data, error }),

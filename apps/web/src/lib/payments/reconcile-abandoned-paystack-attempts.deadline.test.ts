@@ -4,6 +4,7 @@ import { reconcileAbandonedPaystackAttempts } from './reconcile-abandoned-paysta
 it('stops starting attempts at the pass deadline', async () => {
   const candidates = {
     eq: vi.fn().mockReturnThis(),
+    ilike: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
     is: vi.fn().mockReturnThis(),
     neq: vi.fn().mockReturnThis(),
@@ -12,6 +13,7 @@ it('stops starting attempts at the pass deadline', async () => {
         {
           amount: 100,
           currency: 'NGN',
+          gateway: 'paystack',
           gateway_reference: 'BAC-1',
           id: 'attempt-1',
           merchant_id: 'merchant-1',

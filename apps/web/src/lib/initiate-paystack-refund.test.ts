@@ -104,17 +104,19 @@ describe('initiateRefund', () => {
     });
   });
 
-  it.each([null, undefined, 'ok', 42])(
-    'reports a successful envelope without refund data as ambiguous (%s)',
-    async (data) => {
-      mocks.paystackRequest.mockResolvedValue({ data, success: true });
+  it.each([
+    null,
+    undefined,
+    'ok',
+    42,
+  ])('reports a successful envelope without refund data as ambiguous (%s)', async (data) => {
+    mocks.paystackRequest.mockResolvedValue({ data, success: true });
 
-      await expect(initiateRefund('PSK-1', 10000)).resolves.toMatchObject({
-        code: 'MALFORMED_RESPONSE',
-        success: false,
-      });
-    }
-  );
+    await expect(initiateRefund('PSK-1', 10000)).resolves.toMatchObject({
+      code: 'MALFORMED_RESPONSE',
+      success: false,
+    });
+  });
 
   it('passes a well-formed success payload through', async () => {
     const data = {

@@ -81,6 +81,9 @@ export async function processAbandonedPaystackAttempt(
     verify: typeof verifyTransaction;
   }
 ): Promise<void> {
+  // No gateway predicate: the id/order/merchant/reference/status
+  // filters already bind the row, and the sweep normalizes legacy
+  // gateway spellings (` Paystack `) an exact match would miss.
   const guardAttempt = () =>
     supabase
       .from('transactions')
@@ -89,7 +92,6 @@ export async function processAbandonedPaystackAttempt(
       .eq('order_id', attempt.order_id)
       .eq('merchant_id', attempt.merchant_id)
       .eq('transaction_type', 'payment')
-      .eq('gateway', 'paystack')
       .eq('gateway_reference', attempt.gateway_reference)
       .eq('status', attempt.status);
   const hold = async (reason: string) => {
@@ -274,7 +276,6 @@ export async function processAbandonedPaystackAttempt(
       .eq('order_id', attempt.order_id)
       .eq('merchant_id', attempt.merchant_id)
       .eq('transaction_type', 'payment')
-      .eq('gateway', 'paystack')
       .eq('gateway_reference', attempt.gateway_reference)
       .eq('status', attempt.status)
       .select('id');

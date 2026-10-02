@@ -298,6 +298,72 @@ describe('recoverUnknownPaystackRefund', () => {
     expect(insert).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'not-a-number',
+    -5,
+    null,
+  ])('files invalid evidence before rejecting a malformed transaction (%s)', async (transaction) => {
+    mocks.fetchRefund.mockResolvedValue({
+      data: {
+        amount: 10000,
+        currency: 'NGN',
+        id: 202,
+        status: 'processed',
+        transaction,
+      },
+      success: true,
+    });
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const rpc = vi.fn().mockResolvedValue({ error: null });
+    const from = vi.fn().mockReturnValue({ insert });
+    const supabase = { from, rpc } as never;
+
+    await expect(
+      recoverUnknownPaystackRefund(supabase, 202, 'PSK-1')
+    ).rejects.toThrow('paystack_refund_transaction_invalid');
+    // Polling can never rediscover an unknown refund: the malformed
+    // evidence stays visible after provider retries stop.
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'paystack_refund_evidence_invalid',
+        paystack_ref: 'PSK-1',
+        reason: expect.stringContaining('malformed transaction pointer'),
+      })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_paystack_refund_recovery_watch_v1',
+      expect.objectContaining({ p_provider_refund_id: 202 })
+    );
+    expect(mocks.fetchPaystackPaymentById).not.toHaveBeenCalled();
+  });
+
+  it('keys the malformed-transaction review by refund when the event carries no reference', async () => {
+    mocks.fetchRefund.mockResolvedValue({
+      data: {
+        amount: 10000,
+        currency: 'NGN',
+        id: 202,
+        status: 'processed',
+        transaction: undefined,
+      },
+      success: true,
+    });
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    const rpc = vi.fn().mockResolvedValue({ error: null });
+    const from = vi.fn().mockReturnValue({ insert });
+    const supabase = { from, rpc } as never;
+
+    await expect(recoverUnknownPaystackRefund(supabase, 202)).rejects.toThrow(
+      'paystack_refund_transaction_invalid'
+    );
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'paystack_refund_evidence_invalid',
+        paystack_ref: 'unknown-refund:202',
+      })
+    );
+  });
+
   it('files a review when the recovered row fails deterministically', async () => {
     mocks.reconcilePaystackCancellationRefund.mockRejectedValue(
       new Error('paystack_refund_evidence_mismatch')

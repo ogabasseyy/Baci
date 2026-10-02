@@ -32,6 +32,7 @@ vi.mock('@/lib/logger', () => ({
 
 const payment = {
   amount: 100,
+  gateway: 'paystack',
   gateway_reference: 'PSK-1',
   id: 'pay-1',
   merchant_id: 'merchant-1',

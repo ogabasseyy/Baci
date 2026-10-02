@@ -21,6 +21,7 @@ export function cancelledPaymentRow(overrides: Record<string, unknown> = {}) {
     merchant_id: 'merchant-1',
     amount: 100,
     currency: 'NGN',
+    gateway: 'paystack',
     cancel_order: {
       cancelled_at: '2026-09-27T00:00:00Z',
       shipping_status: 'cancelled',
@@ -34,6 +35,7 @@ export function buildPaymentCandidates(rows: unknown[]) {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     gt: vi.fn().mockReturnThis(),
+    ilike: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
     limit: vi.fn().mockResolvedValue({ data: rows, error: null }),
     order: vi.fn().mockReturnThis(),
@@ -61,6 +63,7 @@ export function buildPaymentLookup() {
         id: '11111111-1111-4111-8111-111111111111',
         order_id: 'order-1',
         merchant_id: 'merchant-1',
+        gateway: 'paystack',
         gateway_reference: 'PSK-1',
         amount: 100,
         currency: 'NGN',

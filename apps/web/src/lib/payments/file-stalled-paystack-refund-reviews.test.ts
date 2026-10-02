@@ -24,18 +24,21 @@ function stalledChain(limit: ReturnType<typeof vi.fn>) {
   const chain: {
     eq: ReturnType<typeof vi.fn>;
     gt: ReturnType<typeof vi.fn>;
+    ilike: ReturnType<typeof vi.fn>;
     in: ReturnType<typeof vi.fn>;
     limit: ReturnType<typeof vi.fn>;
     order: ReturnType<typeof vi.fn>;
   } = {
     eq: vi.fn(),
     gt: vi.fn(),
+    ilike: vi.fn(),
     in: vi.fn(),
     limit,
     order: vi.fn(),
   };
   chain.eq.mockReturnValue(chain);
   chain.gt.mockReturnValue(chain);
+  chain.ilike.mockReturnValue(chain);
   chain.in.mockReturnValue(chain);
   chain.order.mockReturnValue(chain);
   return chain;
@@ -66,6 +69,7 @@ const refund = { amount: 10000, currency: 'NGN', status: 'processed' };
 const stalled = [
   {
     amount: 100,
+    gateway: 'paystack',
     gateway_reference: 'PSK-1',
     id: 'pay-stalled',
     merchant_id: 'merchant-1',
@@ -126,6 +130,48 @@ describe('fileStalledPaystackRefundReviews', () => {
     expect(mocks.loggerInfo).toHaveBeenCalledWith(
       expect.objectContaining({ refundId: 202 })
     );
+    expect(filed).toBe(0);
+  });
+
+  it.each([
+    'Paystack',
+    ' paystack ',
+  ])('files a legacy stalled payment stored as %s', async (gateway) => {
+    const rows = [{ ...stalled[0], gateway }];
+    const { chain, supabase } = database([rows]);
+
+    const filed = await fileStalledPaystackRefundReviews(supabase, {
+      evidence,
+      gatewayReference: 'PSK-1',
+      refund,
+      refundId: 202,
+    });
+
+    expect(chain.ilike).toHaveBeenCalledWith('gateway', '%paystack%');
+    expect(
+      mocks.fileCancelledPaystackRefundCandidateReviews
+    ).toHaveBeenCalledWith(supabase, rows, evidence, reason);
+    expect(filed).toBe(1);
+  });
+
+  it('skips a foreign gateway the loose prefilter admitted', async () => {
+    const { supabase } = database([
+      [{ ...stalled[0], gateway: 'korapay', id: 'pay-foreign' }],
+    ]);
+
+    const filed = await fileStalledPaystackRefundReviews(supabase, {
+      evidence,
+      gatewayReference: 'PSK-1',
+      refund,
+      refundId: 202,
+    });
+
+    expect(
+      mocks.fileCancelledPaystackRefundCandidateReviews
+    ).not.toHaveBeenCalled();
+    expect(
+      mocks.fileActiveOrderPaystackRefundCandidateReviews
+    ).not.toHaveBeenCalled();
     expect(filed).toBe(0);
   });
 

@@ -31,13 +31,13 @@ BEGIN
   IF (raw #>> '{}') ~* '^[[:space:]   -     　﻿]*ram([^a-z0-9_]|$)' AND filter_key IS DISTINCT FROM 'ram_gb' THEN
     RETURN NULL;
   END IF;
-  label := pg_catalog.lower(match[5]);
+  label := pg_catalog.translate(match[5], 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz');
   IF label IS NOT NULL AND NOT ((filter_key = 'ram_gb' AND label IN ('ram', 'memory'))
     OR (filter_key = 'storage_gb' AND label IN ('ssd', 'hdd', 'nvme', 'emmc'))) THEN
     RETURN NULL;
   END IF;
   num := match[2]::numeric;
-  unit := pg_catalog.lower(match[3]);
+  unit := pg_catalog.translate(match[3], 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz');
   IF filter_key IN ('storage_gb', 'ram_gb') THEN
     IF unit IS NULL OR unit = 'gb' THEN RETURN num;
     ELSIF unit = 'tb' THEN RETURN num * 1024;
@@ -87,9 +87,9 @@ AS $$
 DECLARE
   axis text;
 BEGIN
-  axis := pg_catalog.lower(pg_catalog.regexp_replace(pg_catalog.regexp_replace(
+  axis := pg_catalog.translate(pg_catalog.regexp_replace(pg_catalog.regexp_replace(
     pg_catalog.regexp_replace(entry_key, '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g'),
-    '([a-z0-9])([A-Z])', '\1_\2', 'g'), '[[:space:].-]+', '_', 'g'));
+    '([a-z0-9])([A-Z])', '\1_\2', 'g'), '[[:space:].-]+', '_', 'g'), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz');
   axis := CASE axis WHEN 'colour' THEN 'color' WHEN 'gpu' THEN 'graphics'
     WHEN 'ram_options' THEN 'ram' WHEN 'storage_capacity' THEN 'storage' ELSE axis END;
   RETURN (filter_key = 'storage_gb' AND axis IN ('storage', 'storage_gb', 'capacity'))
@@ -156,11 +156,11 @@ BEGIN
     IF pg_catalog.jsonb_typeof(last_value) IS DISTINCT FROM 'string' THEN RETURN false; END IF;
     -- Collapse internal whitespace like the matcher, which normalizes
     -- both sides: without this a multi-space value falsely mismatches.
-    actual_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
-      pg_catalog.normalize(last_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
+    actual_text := pg_catalog.regexp_replace(pg_catalog.translate(pg_catalog.regexp_replace(
+      pg_catalog.normalize(last_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g'), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'),
       '[[:space:]   -     　﻿]+', ' ', 'g');
-    expected_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
-      pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
+    expected_text := pg_catalog.regexp_replace(pg_catalog.translate(pg_catalog.regexp_replace(
+      pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g'), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'),
       '[[:space:]   -     　﻿]+', ' ', 'g');
     IF actual_text IS DISTINCT FROM expected_text THEN RETURN true; ELSE RETURN false; END IF;
   END IF;
@@ -220,11 +220,11 @@ BEGIN
     IF pg_catalog.jsonb_typeof(last_value) IS DISTINCT FROM 'string' THEN RETURN false; END IF;
     -- Collapse internal whitespace like the matcher, which normalizes
     -- both sides: without this a multi-space value falsely mismatches.
-    actual_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
-      pg_catalog.normalize(last_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
+    actual_text := pg_catalog.regexp_replace(pg_catalog.translate(pg_catalog.regexp_replace(
+      pg_catalog.normalize(last_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g'), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'),
       '[[:space:]   -     　﻿]+', ' ', 'g');
-    expected_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
-      pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
+    expected_text := pg_catalog.regexp_replace(pg_catalog.translate(pg_catalog.regexp_replace(
+      pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g'), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'),
       '[[:space:]   -     　﻿]+', ' ', 'g');
     -- A blank constraint value never matches in the loader, even against a
     -- blank variant value.
@@ -284,11 +284,11 @@ BEGIN
     RETURN actual_float <= (filter_value)::text::float8;
   ELSE
     IF pg_catalog.jsonb_typeof(last_value) IS DISTINCT FROM 'string' THEN RETURN true; END IF;
-    actual_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
-      pg_catalog.normalize(last_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
+    actual_text := pg_catalog.regexp_replace(pg_catalog.translate(pg_catalog.regexp_replace(
+      pg_catalog.normalize(last_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g'), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'),
       '[[:space:]   -     　﻿]+', ' ', 'g');
-    expected_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
-      pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
+    expected_text := pg_catalog.regexp_replace(pg_catalog.translate(pg_catalog.regexp_replace(
+      pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g'), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'),
       '[[:space:]   -     　﻿]+', ' ', 'g');
     -- A blank constraint value never matches in the loader, even against a
     -- blank variant value.

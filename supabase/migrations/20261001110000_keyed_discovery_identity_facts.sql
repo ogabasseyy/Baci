@@ -12,9 +12,9 @@ RETURNS text
 LANGUAGE sql IMMUTABLE PARALLEL SAFE SECURITY INVOKER SET search_path = ''
 AS $$
   SELECT pg_catalog.regexp_replace(
-    pg_catalog.lower(pg_catalog.regexp_replace(
+    pg_catalog.translate(pg_catalog.regexp_replace(
       pg_catalog.normalize(raw, 'NFKC'),
-      '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
+      '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g'), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'),
     '[[:space:]   -     　﻿-]+', '_', 'g');
 $$;
 
@@ -26,9 +26,9 @@ RETURNS text
 LANGUAGE sql IMMUTABLE PARALLEL SAFE SECURITY INVOKER SET search_path = ''
 AS $$
   SELECT pg_catalog.regexp_replace(
-    pg_catalog.lower(pg_catalog.regexp_replace(
+    pg_catalog.translate(pg_catalog.regexp_replace(
       pg_catalog.normalize(raw, 'NFC'),
-      '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
+      '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g'), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'),
     '[[:space:]   -     　﻿]+', ' ', 'g');
 $$;
 
@@ -75,11 +75,11 @@ DECLARE
   normalized text;
   categorized text;
 BEGIN
-  normalized := pg_catalog.lower(pg_catalog.regexp_replace(
+  normalized := pg_catalog.translate(pg_catalog.regexp_replace(
     pg_catalog.regexp_replace(
       pg_catalog.normalize(product_type, 'NFKC'),
       '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g'),
-    '[[:space:]   -     　﻿-]+', '_', 'g'));
+    '[[:space:]   -     　﻿-]+', '_', 'g'), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz');
   IF nullif(normalized, '') IS NOT NULL THEN
     RETURN CASE normalized
       WHEN 'phone' THEN 'phone' WHEN 'phones' THEN 'phone'
@@ -97,9 +97,9 @@ BEGIN
   -- Storefront category map, mirroring productTypeOf exactly (NFC
   -- lowercase with interior spaces collapsed; no underscore mapping here).
   categorized := pg_catalog.regexp_replace(
-    pg_catalog.lower(pg_catalog.regexp_replace(
+    pg_catalog.translate(pg_catalog.regexp_replace(
       pg_catalog.normalize(category, 'NFC'),
-      '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
+      '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g'), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'),
     '[[:space:]   -     　﻿]+', ' ', 'g');
   IF categorized = 'smartphones' THEN RETURN 'phone'; END IF;
   IF categorized = 'laptops' THEN RETURN 'laptop'; END IF;
@@ -180,9 +180,9 @@ AS $$
   WHERE p.merchant_id = merchant_id_param AND p.status = 'active'
     AND pg_catalog.char_length(query_text) <= 16000
     AND (brand_filter IS NULL OR pg_catalog.strpos(
-      pg_catalog.lower(p.brand), pg_catalog.lower(brand_filter)) > 0)
+      pg_catalog.translate(p.brand, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), pg_catalog.translate(brand_filter, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')) > 0)
     AND (category_filter IS NULL OR pg_catalog.strpos(
-      pg_catalog.lower(p.category), pg_catalog.lower(category_filter)) > 0)
+      pg_catalog.translate(p.category, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), pg_catalog.translate(category_filter, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')) > 0)
     AND discovery.product_discovery_search_document_v5(p.name, p.brand, p.category,
       p.description, p.discovery_metadata)
       @@ pg_catalog.to_tsquery('simple'::regconfig, query_text)

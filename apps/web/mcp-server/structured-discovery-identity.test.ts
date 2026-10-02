@@ -46,6 +46,11 @@ describe('structuredDiscoveryIdentity.normalizeText', () => {
     expect(structuredDiscoveryIdentity.normalizeText(42)).toBeUndefined();
     expect(structuredDiscoveryIdentity.normalizeText('   ')).toBeUndefined();
   });
+
+  it('folds ASCII only so SQL translate() agrees on contextual casing', () => {
+    expect(structuredDiscoveryIdentity.normalizeText('ΟΣ')).toBe('ΟΣ');
+    expect(structuredDiscoveryIdentity.normalizeText('İI')).toBe('İi');
+  });
 });
 
 describe('structuredDiscoveryIdentity.productTypeOf', () => {

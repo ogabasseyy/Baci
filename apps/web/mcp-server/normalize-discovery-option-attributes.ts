@@ -1,4 +1,4 @@
-import { canonicalizeCommerceVariantAxis } from '@baci/shared/lib';
+import { canonicalizeCommerceVariantAxis, toAsciiLowerCase } from '@baci/shared/lib';
 
 const keys: Record<string, string> = {
   storage: 'storage_gb', storage_gb: 'storage_gb', capacity: 'storage_gb', storage_capacity: 'storage_gb',
@@ -24,7 +24,7 @@ export function normalizeDiscoveryOptionAttributes(attributes: Record<string, un
       // NFC, matching the matcher: NFKC would fold compatibility characters
       // (full-width, ligatures, circled digits) that the intent side preserves,
       // incorrectly rejecting identical values.
-      result[key] = typeof rawValue === 'string' ? rawValue.normalize('NFC').trim().toLowerCase() : null;
+      result[key] = typeof rawValue === 'string' ? toAsciiLowerCase(rawValue.normalize('NFC').trim()) : null;
       continue;
     }
     // A malformed overriding variant attribute must not inherit the base value.

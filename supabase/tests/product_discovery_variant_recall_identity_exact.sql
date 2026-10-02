@@ -47,6 +47,14 @@ BEGIN
        'model' || pg_catalog.chr(31) || 'a b', 'UTF8'), 'sha256'), 'hex') THEN
     RAISE EXCEPTION 'model lexeme diverged from the tag plus matcher-normalized digest';
   END IF;
+  IF discovery.discovery_identity_matcher_normalize('ΟΣ') IS DISTINCT FROM 'ΟΣ' THEN
+    RAISE EXCEPTION 'matcher normalization must fold ASCII only, matching toAsciiLowerCase';
+  END IF;
+  IF discovery.discovery_identity_lexeme('brand', 'ΟΣ') IS DISTINCT FROM
+     'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+       'brand' || pg_catalog.chr(31) || 'ΟΣ', 'UTF8'), 'sha256'), 'hex') THEN
+    RAISE EXCEPTION 'brand lexeme diverged from the ASCII-folded digest';
+  END IF;
 END;
 $$;
 

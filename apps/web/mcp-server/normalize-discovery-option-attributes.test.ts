@@ -33,7 +33,11 @@ it('maps the shared commerce axis aliases storage_capacity and ram_options', () 
     .toEqual({ storage_gb: 256, ram_gb: 16 });
 });
 it('preserves compatibility characters exactly as the matcher does', () => {
-  expect(normalizeDiscoveryOptionAttributes({ color: "\uFF32\uFF45\uFF44" })).toEqual({ color: "\uFF52\uFF45\uFF44" });
+  // Non-ASCII stays case-sensitive: full Unicode lowering diverges across
+  // the JS/SQL boundary (Greek final sigma, Turkish dotted I), so both
+  // sides fold ASCII only and agree bit for bit.
+  expect(normalizeDiscoveryOptionAttributes({ color: "\uFF32\uFF45\uFF44" })).toEqual({ color: "\uFF32\uFF45\uFF44" });
+  expect(normalizeDiscoveryOptionAttributes({ color: "\u039F\u03A3" })).toEqual({ color: "\u039F\u03A3" });
 });
 
 it('resolves camelCase, dotted, and hyphenated axis spellings', () => {

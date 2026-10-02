@@ -1,4 +1,4 @@
-import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
+import { normalizeCanonicalProductCondition, toAsciiLowerCase } from '@baci/shared/lib';
 import { canonicalizeDiscoveryProductType } from '../src/schemas/canonical-discovery-product-type';
 import type { McpDiscoveryIntent } from '../src/schemas/mcp-discovery-intent';
 import { productDiscoveryMetadataSchema } from '../src/schemas/product-discovery-metadata';
@@ -10,7 +10,7 @@ type IdentityVerdict = { excluded: boolean; unverified: boolean };
 
 function normalizeText(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
-  const result = value.normalize('NFC').trim().toLocaleLowerCase('en-US').replace(/\s+/g, ' ');
+  const result = toAsciiLowerCase(value.normalize('NFC').trim()).replace(/\s+/g, ' ');
   return result || undefined;
 }
 

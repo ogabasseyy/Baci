@@ -75,9 +75,10 @@ export function formatSearchProductsResponse({
         optionParams.set('variantId', matchedOption.variantId);
       }
     }
-    const url = typeof p.slug === 'string' && p.slug !== ''
-      ? `https://ogabassey.com/products/${encodeURIComponent(p.slug)}${optionParams.size > 0 ? `?${optionParams}` : ''}`
-      : undefined;
+    // Slugless products fall back to the ID like the widget and cart
+    // handoff: omitting the link would drop the matched option params.
+    const slugOrId = typeof p.slug === 'string' && p.slug !== '' ? p.slug : p.id;
+    const url = `https://ogabassey.com/products/${encodeURIComponent(slugOrId)}${optionParams.size > 0 ? `?${optionParams}` : ''}`;
     return {
       id: p.id,
       ...(descriptionExcerpt ? { description_excerpt: descriptionExcerpt } : {}),
@@ -96,7 +97,7 @@ export function formatSearchProductsResponse({
       matched_option: 'selectedOption' in selection ? selection.selectedOption : undefined,
       available_variants: availableOptions || 'Standard',
       last_updated: p.updated_at,
-      ...(url === undefined ? {} : { url }),
+      url,
     };
   });
 

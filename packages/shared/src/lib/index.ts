@@ -43,4 +43,5 @@ export * from './santa-granted-price';
 export * from './select-preferred-order-payment-account';
 export * from './string-values';
 export * from './supabase-error-log';
+export * from './to-ascii-lower-case';
 export * from './vtu-loyalty-points';

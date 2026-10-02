@@ -81,6 +81,11 @@ it('digests brand, model, and compatibility exactly like the final matcher', () 
     .toBe('(factbb1bdab90230c0d7d60bd6e9016c5357bf3eb7bf3b8a58b9be181828eec3c879)');
 });
 
+it('digests contextual-casing identities with ASCII-only folding', () => {
+  expect(buildDiscoveryFactRetrievalQuery(intent({ brands: ['ΟΣ'] })))
+    .toBe('(fact7ea1740e780393da898dc5490ddfdb16be57df3a9cc5d8095ade94bf24f21a12)');
+});
+
 it('distinguishes separators the matcher keeps apart', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ model: 'A B' })))
     .toBe('(fact30e73134aeeac105b298f75d72cc78649c474f946c9c7a1751322ecfc5033251)');

@@ -147,6 +147,18 @@ describe('discoverStructuredProducts', () => {
     expect(result).toMatchObject({ priceScanComplete: false, coverage: 'partial', incompleteReason: 'candidate_limit' });
   });
 
+  it('ignores window truncation from products definitively excluded by identity', async () => {
+    const excluded = product('excluded-laptop', { product_type: 'laptop' }, { has_variants: true });
+    const variants = Array.from({ length: 129 }, (_, index) => ({
+      id: `v-${index}`, product_id: 'excluded-laptop', attributes: {}, price_override: 100 + index, stock_quantity: 1,
+    }));
+    const fixture = client({ products: [excluded, product('match-phone', { product_type: 'phone' })], variants });
+    const result = await discoverStructuredProducts(input(fixture.supabase,
+      intent({ product_type: 'phone' }), { query: 'phone', args: { sort: 'price_asc' } }));
+    expect(result.selectedProducts.map(({ product: s }) => s.id)).toEqual(['match-phone']);
+    expect(result).toMatchObject({ priceScanComplete: true, coverage: 'complete' });
+  });
+
   it.each(['variant', 'offer'])('marks failed %s hydration incomplete instead of claiming no match', async (source) => {
     const p = product('options', { product_type: 'phone' }, {
       manage_stock: true, stock_quantity: 0, has_variants: source === 'variant', has_condition_offers: source === 'offer',

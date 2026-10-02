@@ -22,6 +22,7 @@ describe('canonicalizeDiscoveryProductType', () => {
     ['Cables', 'cable'],
     ['Security Cameras', 'security_camera'],
     ['Fragrance Diffusers', 'fragrance_diffuser'],
+    ['ΟΣ', 'ΟΣ'],
   ])('canonicalizes %s to %s', (input, expected) => {
     expect(canonicalizeDiscoveryProductType(input)).toBe(expected);
   });

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { toAsciiLowerCase } from '@baci/shared/lib';
 import { canonicalizeDiscoveryProductType } from '../src/schemas/canonical-discovery-product-type';
 import type { McpDiscoveryIntent } from '../src/schemas/mcp-discovery-intent';
 import { structuredDiscoveryIdentity } from './structured-discovery-identity';
@@ -113,7 +114,7 @@ function identityKey(prefix: string, value: string): string | undefined {
   // skipping the term would strand exact matches past the browse window.
   // Overlong lexemes digest identically: the stripped key is ASCII-only,
   // so code-point length equals SQL char_length exactly.
-  const normalized = value.normalize('NFKC').trim().toLocaleLowerCase('en-US')
+  const normalized = toAsciiLowerCase(value.normalize('NFKC').trim())
     .replace(/[\s-]+/g, '_');
   const key = normalized.replace(/[^a-z0-9_]/g, '');
   if (key && Array.from(key).length <= MAX_IDENTITY_LEXEME_CHARS) return `${prefix}${key}`;

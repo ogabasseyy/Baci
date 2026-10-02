@@ -101,6 +101,8 @@ it('keeps the recall matchers in the helper migration under the size limit', () 
   expect(helpers).toContain('recall_variant_filter_exactly_matches');
   expect(helpers).toContain('recall_variant_filter_loader_accepts');
   expect(helpers).toContain('(ram[[:space:]');
+  expect(helpers).toContain('pg_catalog.translate(');
+  expect(helpers).not.toContain('pg_catalog.lower(');
   expect(helpers).not.toContain('search_product_variant_recall(');
 });
 
@@ -151,6 +153,8 @@ it('ranks variant recall by joint branch verdicts before attribute tiers', () =>
   expect(recall).toContain('discovery_identity_matcher_normalize');
   expect(recall).not.toContain('discovery_identity_normalize(');
   expect(recall).toContain('p.manage_stock IS FALSE');
+  expect(recall).toContain('pg_catalog.translate(');
+  expect(recall).not.toContain('pg_catalog.lower(');
   expect(recall).toContain('complete_alternative_count');
   expect(recall).toContain('clear_branch_count');
   expect(recall).toContain('identity_excluded');
@@ -176,6 +180,8 @@ it('measures product-type length on the canonicalized SQL value', () => {
   expect(length).toContain(
     'canonical_identity_product_type(facts ->> top_key, NULL)'
   );
+  expect(length).toContain('pg_catalog.translate(');
+  expect(length).not.toContain('pg_catalog.lower(');
 });
 
 it('moves index builders out of the exposed schema without changing the serving contract', () => {
@@ -187,6 +193,8 @@ it('moves index builders out of the exposed schema without changing the serving 
   expect(move).toContain('USAGE ON SCHEMA discovery TO anon, authenticated, service_role');
   expect(move).toContain('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts(');
   expect(move).toContain('SECURITY INVOKER');
+  expect(move).toContain('pg_catalog.translate(');
+  expect(move).not.toContain('pg_catalog.lower(');
 });
 
 it('stages the builder move so a mid-migration failure stays retry-safe', () => {
@@ -252,6 +260,8 @@ it('indexes key-specific identity lexemes for capped retrieval', () => {
   expect(identity).toContain('discovery.discovery_identity_lexeme');
   expect(identity).toContain('discovery.discovery_identity_matcher_normalize');
   expect(identity).toContain("tag IN ('brand', 'model', 'compat')");
+  expect(identity).toContain('pg_catalog.translate(');
+  expect(identity).not.toContain('pg_catalog.lower(');
   expect(identity).toContain("'fact' || pg_catalog.encode(extensions.digest");
   expect(identity).toContain("tag || pg_catalog.chr(31) || normalized");
   expect(identity).toContain('CREATE INDEX CONCURRENTLY products_discovery_identity_search_idx_new');

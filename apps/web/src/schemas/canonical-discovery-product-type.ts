@@ -1,10 +1,11 @@
+import { toAsciiLowerCase } from '@baci/shared/lib';
+
 /** Canonicalize common public catalog type aliases while preserving custom types. */
 export function canonicalizeDiscoveryProductType(value: string) {
-  const canonical = value
-    .normalize('NFKC')
-    .trim()
-    .toLocaleLowerCase('en-US')
-    .replace(/[\s-]+/g, '_');
+  const canonical = toAsciiLowerCase(value.normalize('NFKC').trim()).replace(
+    /[\s-]+/g,
+    '_'
+  );
 
   if (
     [

@@ -86,12 +86,12 @@ AS $$
             'sha256'), 'hex'), ' ')
         FROM (
           SELECT attribute.key,
-            pg_catalog.lower(pg_catalog.normalize(
+            pg_catalog.translate(pg_catalog.normalize(
               pg_catalog.regexp_replace(
                 pg_catalog.regexp_replace(
                   pg_catalog.normalize(attribute.value #>> '{}', 'NFC'),
                   '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g'),
-                '[[:space:]   -     　﻿]+', ' ', 'g'), 'NFC')) AS normalized_value
+                '[[:space:]   -     　﻿]+', ' ', 'g'), 'NFC'), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') AS normalized_value
           FROM pg_catalog.jsonb_each(facts -> 'attributes') AS attribute(key, value)
           WHERE attribute.key IN ('color', 'connector', 'processor', 'connectivity')
             AND pg_catalog.jsonb_typeof(attribute.value) = 'string'
@@ -161,9 +161,9 @@ AS $$
   WHERE p.merchant_id = merchant_id_param AND p.status = 'active'
     AND pg_catalog.char_length(query_text) <= 16000
     AND (brand_filter IS NULL OR pg_catalog.strpos(
-      pg_catalog.lower(p.brand), pg_catalog.lower(brand_filter)) > 0)
+      pg_catalog.translate(p.brand, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), pg_catalog.translate(brand_filter, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')) > 0)
     AND (category_filter IS NULL OR pg_catalog.strpos(
-      pg_catalog.lower(p.category), pg_catalog.lower(category_filter)) > 0)
+      pg_catalog.translate(p.category, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), pg_catalog.translate(category_filter, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')) > 0)
     AND discovery.product_discovery_search_document_v4(p.name, p.brand, p.category,
       p.description, p.discovery_metadata)
       @@ pg_catalog.to_tsquery('simple'::regconfig, query_text)

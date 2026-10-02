@@ -90,6 +90,22 @@ describe('formatSearchProductsResponse', () => {
     expect(getSafeCatalogImageUrl).toHaveBeenCalledWith('https://cdn.ogabassey.com/products/laptop.webp');
   });
 
+  it('keeps option params on the ID fallback link for slugless products', () => {
+    const slugless = [{ ...selectedProducts[0], product: { ...selectedProducts[0].product, slug: null } }];
+    const response = formatSearchProductsResponse({
+      selectedProducts: slugless as unknown as Parameters<typeof formatSearchProductsResponse>[0]['selectedProducts'],
+      sanitizedQuery: 'Baci laptop',
+      coverage: 'complete',
+      searchMode: 'structured',
+      semanticUnavailable: false,
+      requestedCondition: undefined,
+      getSafeCatalogImageUrl: () => undefined,
+    });
+    expect(response.structuredContent).toMatchObject({
+      products: [{ url: 'https://ogabassey.com/products/laptop-1?variantId=variant-1' }],
+    });
+  });
+
   it('formats empty result text and status while retaining coverage', () => {
     const response = formatSearchProductsResponse({
       selectedProducts: [],

@@ -21,11 +21,11 @@ BEGIN
   -- can create trimmable edges, e.g. U+3000), or whitespace-only values
   -- canonicalize to a phantom underscore the runtime never produces. The
   -- class is the JS trim set, copied from product_discovery_text_length.
-  normalized := pg_catalog.lower(pg_catalog.regexp_replace(
+  normalized := pg_catalog.translate(pg_catalog.regexp_replace(
     pg_catalog.regexp_replace(
       pg_catalog.normalize(product_type, 'NFKC'),
       '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g'),
-    '[[:space:]   -     　﻿-]+', '_', 'g'));
+    '[[:space:]   -     　﻿-]+', '_', 'g'), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz');
   IF nullif(normalized, '') IS NOT NULL THEN
     RETURN CASE normalized
       WHEN 'phone' THEN 'phone' WHEN 'phones' THEN 'phone'
@@ -43,9 +43,9 @@ BEGIN
   -- Storefront category map, mirroring productTypeOf exactly (NFC
   -- lowercase with interior spaces collapsed; no underscore mapping here).
   categorized := pg_catalog.regexp_replace(
-    pg_catalog.lower(pg_catalog.regexp_replace(
+    pg_catalog.translate(pg_catalog.regexp_replace(
       pg_catalog.normalize(category, 'NFC'),
-      '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
+      '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g'), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'),
     '[[:space:]   -     　﻿]+', ' ', 'g');
   IF categorized = 'smartphones' THEN RETURN 'phone'; END IF;
   IF categorized = 'laptops' THEN RETURN 'laptop'; END IF;

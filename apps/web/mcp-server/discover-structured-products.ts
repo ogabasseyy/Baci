@@ -80,7 +80,11 @@ export async function discoverStructuredProducts({ intent, query, args, merchant
       // already reports partial for the truncation.
       if (match && !row.variantWindowTruncated) selected.push(match);
       if (lookupFailureCouldMatter(row, intent, match, args.condition)) optionsLookupFailed = true;
-      if (row.variantWindowTruncated) variantWindowTruncated = true;
+      // Truncation on a definitively excluded row cannot hide a match: the
+      // verified identity already rules out every alternative (same veto as
+      // lookup failures), so it must not invalidate an ordered scan.
+      if (row.variantWindowTruncated && !(match === undefined &&
+        structuredDiscoveryIdentity.isRowExcludedByIdentity(row, intent))) variantWindowTruncated = true;
     }
   }
   if (args.sort === 'newest') selected.sort((a, b) =>

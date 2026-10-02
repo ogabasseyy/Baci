@@ -85,6 +85,20 @@ describe('Paystack cancellation refund reconciliation', () => {
     );
   });
 
+  it('accepts a legacy padded currency copied from the payment', async () => {
+    const db = database();
+    await expect(
+      reconcilePaystackCancellationRefund(db as never, {
+        ...refund,
+        currency: ' ngn ',
+      })
+    ).resolves.toBe('updated');
+    expect(db.rpc).toHaveBeenCalledWith(
+      'record_verified_paystack_cancellation_refund_v1',
+      expect.objectContaining({ p_refund_id: 'refund-1' })
+    );
+  });
+
   it('files a deterministic rejection when the provider lookup 404s', async () => {
     provider.fetchRefund.mockResolvedValueOnce({
       code: 'HTTP_404',

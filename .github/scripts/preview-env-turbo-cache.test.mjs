@@ -80,6 +80,13 @@ test('redacted build env is accepted by turbo with the job cache mode', (t) => {
       }
       env[match[1]] = value;
     }
+    // Prove both deletions behaviorally: without this, the job-mode
+    // assignment below would mask a TURBO_CACHE deletion regression.
+    assert.ok(!('TURBO_CACHE' in env), 'redacted file must carry no TURBO_CACHE');
+    assert.ok(
+      !('TURBO_REMOTE_ONLY' in env),
+      'redacted file must carry no TURBO_REMOTE_ONLY'
+    );
     env.TURBO_CACHE = cacheModes[0];
     // Prove every sibling-flag state, not just the fixture's true/true.
     for (const download of ['true', 'false']) {

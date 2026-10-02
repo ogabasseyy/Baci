@@ -10,6 +10,7 @@ import type { GiglFetchOptions } from '@/lib/shipping/providers/gigl.constants';
 import {
   GiglWrapperSchemaMissingError,
   verifyGiglTrackingWorkerCapability,
+  verifyGiglTrackingWorkerScopePathProbe,
   verifyGiglTrackingWorkerScopeProbe,
 } from '@/lib/verify-gigl-tracking-worker-capability';
 
@@ -108,8 +109,14 @@ export async function runGiglTrackingCapabilityVerification({
     // disabled latch must not certify that broader authority.
     try {
       if (await verifyGiglTrackingWorkerScopeProbe(client)) {
-        logger.info('[gigl-capability] scope hook verified active');
-        return 0;
+        if (await verifyGiglTrackingWorkerScopePathProbe(client)) {
+          logger.info('[gigl-capability] scope hook verified active');
+          return 0;
+        }
+        logger.error(
+          '[gigl-capability] PostgREST scope hook is not enforcing the RPC path allowlist; check the hook definition and re-run'
+        );
+        return 1;
       }
     } catch (error) {
       if (error instanceof GiglWrapperSchemaMissingError) {
@@ -130,15 +137,24 @@ export async function runGiglTrackingCapabilityVerification({
     const client = createGiglTrackingWorkerClient(env);
     if (await verifyGiglTrackingWorkerCapability(client)) {
       if (await verifyGiglTrackingWorkerScopeProbe(client)) {
-        // Last: the wrapper checks prove the database capability but
-        // never authenticate to the provider. Probe the login before
+        // A method-only hook passes the GET probe above while letting
+        // POST reach any PUBLIC RPC: prove path enforcement before
         // the latch below can authorize dropping the Vercel schedule.
-        if (await verifyProviderAuth()) {
-          logger.info('[gigl-capability] restricted wrapper verified');
-          return 0;
+        if (await verifyGiglTrackingWorkerScopePathProbe(client)) {
+          // Last: the wrapper checks prove the database capability but
+          // never authenticate to the provider. Probe the login before
+          // latching.
+          if (await verifyProviderAuth()) {
+            logger.info('[gigl-capability] restricted wrapper verified');
+            return 0;
+          }
+          logger.error(
+            '[gigl-capability] GIGL provider login failed; verify GIGL_EMAIL, GIGL_PASSWORD, and GIGL_BASE_URL, then re-run'
+          );
+          return 1;
         }
         logger.error(
-          '[gigl-capability] GIGL provider login failed; verify GIGL_EMAIL, GIGL_PASSWORD, and GIGL_BASE_URL, then re-run'
+          '[gigl-capability] PostgREST scope hook is not enforcing the RPC path allowlist; check the hook definition and re-run'
         );
         return 1;
       }

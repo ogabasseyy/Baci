@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runGiglTrackingCapabilityVerification } from './verify-gigl-tracking-worker-capability';
 
-const { createClient, verifyCapability, verifyScopeProbe } = vi.hoisted(
-  () => ({
+const { createClient, verifyCapability, verifyPathProbe, verifyScopeProbe } =
+  vi.hoisted(() => ({
     createClient: vi.fn(() => ({ rpc: vi.fn() })),
     verifyCapability: vi.fn(),
+    verifyPathProbe: vi.fn(),
     verifyScopeProbe: vi.fn(),
-  })
-);
+  }));
 
 vi.mock('@/lib/gigl-tracking-worker-client', async (importOriginal) => {
   const original =
@@ -25,6 +25,7 @@ vi.mock('@/lib/verify-gigl-tracking-worker-capability', async (importOriginal) =
   return {
     GiglWrapperSchemaMissingError: original.GiglWrapperSchemaMissingError,
     verifyGiglTrackingWorkerCapability: verifyCapability,
+    verifyGiglTrackingWorkerScopePathProbe: verifyPathProbe,
     verifyGiglTrackingWorkerScopeProbe: verifyScopeProbe,
   };
 });
@@ -35,6 +36,7 @@ describe('runGiglTrackingCapabilityVerification', () => {
   it('passes only after the live restricted wrapper smoke succeeds', async () => {
     verifyCapability.mockResolvedValue(true);
     verifyScopeProbe.mockResolvedValue(true);
+    verifyPathProbe.mockResolvedValue(true);
     const verifyProviderAuth = vi.fn(async () => true);
     const logger = { error: vi.fn(), info: vi.fn() };
 
@@ -49,10 +51,32 @@ describe('runGiglTrackingCapabilityVerification', () => {
     expect(createClient).toHaveBeenCalledOnce();
     expect(verifyCapability).toHaveBeenCalledOnce();
     expect(verifyScopeProbe).toHaveBeenCalledOnce();
+    expect(verifyPathProbe).toHaveBeenCalledOnce();
     expect(verifyProviderAuth).toHaveBeenCalledOnce();
     expect(logger.info).toHaveBeenCalledWith(
       '[gigl-capability] restricted wrapper verified'
     );
+  });
+
+  it('fails closed when the hook stops enforcing the path allowlist', async () => {
+    verifyCapability.mockResolvedValue(true);
+    verifyScopeProbe.mockResolvedValue(true);
+    verifyPathProbe.mockResolvedValue(false);
+    const verifyProviderAuth = vi.fn(async () => true);
+    const logger = { error: vi.fn(), info: vi.fn() };
+
+    await expect(
+      runGiglTrackingCapabilityVerification({
+        env: { NODE_ENV: 'test' },
+        logger,
+        verifyProviderAuth,
+      })
+    ).resolves.toBe(1);
+
+    expect(logger.error).toHaveBeenCalledWith(
+      '[gigl-capability] PostgREST scope hook is not enforcing the RPC path allowlist; check the hook definition and re-run'
+    );
+    expect(verifyProviderAuth).not.toHaveBeenCalled();
   });
 
   it('fails closed when the scope hook is not enforcing', async () => {
@@ -70,6 +94,7 @@ describe('runGiglTrackingCapabilityVerification', () => {
     expect(logger.error).toHaveBeenCalledWith(
       '[gigl-capability] PostgREST scope hook is not active; reload PostgREST config and re-run'
     );
+    expect(verifyPathProbe).not.toHaveBeenCalled();
   });
 
   it('fails closed without exposing the credential error', async () => {
@@ -111,6 +136,7 @@ describe('runGiglTrackingCapabilityVerification', () => {
 
   it('probes the scope hook when disabled with a usable token', async () => {
     verifyScopeProbe.mockResolvedValue(true);
+    verifyPathProbe.mockResolvedValue(true);
     const logger = { error: vi.fn(), info: vi.fn() };
 
     await expect(
@@ -128,6 +154,24 @@ describe('runGiglTrackingCapabilityVerification', () => {
     );
     expect(verifyCapability).not.toHaveBeenCalled();
     expect(verifyScopeProbe).toHaveBeenCalledOnce();
+    expect(verifyPathProbe).toHaveBeenCalledOnce();
+  });
+
+  it('fails closed when disabled with an unenforced path allowlist', async () => {
+    verifyScopeProbe.mockResolvedValue(true);
+    verifyPathProbe.mockResolvedValue(false);
+    const logger = { error: vi.fn(), info: vi.fn() };
+
+    await expect(
+      runGiglTrackingCapabilityVerification({
+        env: { GIGL_ENABLED: 'off', NODE_ENV: 'test' },
+        logger,
+      })
+    ).resolves.toBe(1);
+
+    expect(logger.error).toHaveBeenCalledWith(
+      '[gigl-capability] PostgREST scope hook is not enforcing the RPC path allowlist; check the hook definition and re-run'
+    );
   });
 
   it('fails closed when disabled with a token but an inactive hook', async () => {

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   GiglWrapperSchemaMissingError,
   verifyGiglTrackingWorkerCapability,
+  verifyGiglTrackingWorkerScopePathProbe,
   verifyGiglTrackingWorkerScopeProbe,
 } from './verify-gigl-tracking-worker-capability';
 
@@ -158,5 +159,48 @@ describe('verifyGiglTrackingWorkerScopeProbe', () => {
     await expect(
       verifyGiglTrackingWorkerScopeProbe({ rpc } as never)
     ).resolves.toBe(true);
+  });
+});
+
+describe('verifyGiglTrackingWorkerScopePathProbe', () => {
+  it('passes only on the hook denial for a POST outside the allowlist', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: {
+        code: '42501',
+        message: 'GIGL worker request is outside its capability scope',
+      },
+    });
+
+    await expect(
+      verifyGiglTrackingWorkerScopePathProbe({ rpc } as never)
+    ).resolves.toBe(true);
+    // A plain POST (no `{ get: true }`) to the inner claim RPC: real
+    // and schema-typed, but outside the five wrapper paths.
+    expect(rpc).toHaveBeenCalledWith('claim_due_gigl_tracking_monitors', {
+      p_limit: 0,
+      p_worker_id: 'gigl-capability-path-probe',
+    });
+  });
+
+  it('fails closed on a method-only hook without deferring', async () => {
+    // A hook weakened to method-only lets this POST through to the
+    // inner function, which raises before any write (it demands
+    // service_role). That error — and a silent success — must fail
+    // closed, never throw schema-missing: this probe runs strictly
+    // after a schema-proving probe, so deferral would misread a
+    // weakened hook as "not deployed yet".
+    for (const error of [
+      { code: '42501', message: 'GIGL monitor claims require service role' },
+      { code: '22023', message: 'bounded validation failure' },
+      { code: 'PGRST202', message: 'not found' },
+      null,
+    ]) {
+      const rpc = vi.fn().mockResolvedValue({ data: null, error });
+
+      await expect(
+        verifyGiglTrackingWorkerScopePathProbe({ rpc } as never)
+      ).resolves.toBe(false);
+    }
   });
 });

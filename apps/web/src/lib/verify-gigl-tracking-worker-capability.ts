@@ -98,3 +98,32 @@ export async function verifyGiglTrackingWorkerScopeProbe(
     (error.message ?? '').includes(SCOPE_HOOK_DENIAL_MESSAGE)
   );
 }
+
+/**
+ * Proves the hook enforces the PATH allowlist, not just the POST
+ * method. POSTs the inner claim RPC — a real, schema-typed function
+ * outside the five wrapper paths — and requires the hook's own
+ * denial. A hook weakened to method-only lets this through, but the
+ * inner function raises before any write (it demands service_role),
+ * so the probe is harmless either way and only the intact hook
+ * satisfies it.
+ *
+ * No schema-missing deferral, unlike the probes above: this runs
+ * strictly after a schema-proving probe (the wrapper check, or the
+ * GET probe on the disabled path — both throw 42 pre-migration), so
+ * anything but the hook's denial is definitively a weakened hook. A
+ * method-only hook surfaces this POST as an inner-function error,
+ * which must fail closed, never defer.
+ */
+export async function verifyGiglTrackingWorkerScopePathProbe(
+  client: GiglTrackingRpcClient
+): Promise<boolean> {
+  const { error } = await client.rpc('claim_due_gigl_tracking_monitors', {
+    p_limit: 0,
+    p_worker_id: 'gigl-capability-path-probe',
+  });
+  return (
+    error?.code === '42501' &&
+    (error.message ?? '').includes(SCOPE_HOOK_DENIAL_MESSAGE)
+  );
+}

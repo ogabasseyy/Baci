@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runGiglTrackingCapabilityVerification } from './verify-gigl-tracking-worker-capability';
 
-const { createClient, verifyCapability, verifyScopeProbe } = vi.hoisted(
-  () => ({
+const { createClient, verifyCapability, verifyPathProbe, verifyScopeProbe } =
+  vi.hoisted(() => ({
     createClient: vi.fn(() => ({ rpc: vi.fn() })),
     verifyCapability: vi.fn(),
+    verifyPathProbe: vi.fn(),
     verifyScopeProbe: vi.fn(),
-  })
-);
+  }));
 
 vi.mock('@/lib/gigl-tracking-worker-client', async (importOriginal) => {
   const original =
@@ -25,6 +25,7 @@ vi.mock('@/lib/verify-gigl-tracking-worker-capability', async (importOriginal) =
   return {
     GiglWrapperSchemaMissingError: original.GiglWrapperSchemaMissingError,
     verifyGiglTrackingWorkerCapability: verifyCapability,
+    verifyGiglTrackingWorkerScopePathProbe: verifyPathProbe,
     verifyGiglTrackingWorkerScopeProbe: verifyScopeProbe,
   };
 });
@@ -35,6 +36,7 @@ describe('runGiglTrackingCapabilityVerification provider probe', () => {
   it('fails closed when the provider login probe fails', async () => {
     verifyCapability.mockResolvedValue(true);
     verifyScopeProbe.mockResolvedValue(true);
+    verifyPathProbe.mockResolvedValue(true);
     const logger = { error: vi.fn(), info: vi.fn() };
 
     await expect(
@@ -53,6 +55,7 @@ describe('runGiglTrackingCapabilityVerification provider probe', () => {
   it('fails closed without exposing a throwing probe error', async () => {
     verifyCapability.mockResolvedValue(true);
     verifyScopeProbe.mockResolvedValue(true);
+    verifyPathProbe.mockResolvedValue(true);
     const logger = { error: vi.fn(), info: vi.fn() };
 
     await expect(
@@ -92,6 +95,7 @@ describe('runGiglTrackingCapabilityVerification provider probe', () => {
 
   it('skips the provider probe while GIGL is disabled', async () => {
     verifyScopeProbe.mockResolvedValue(true);
+    verifyPathProbe.mockResolvedValue(true);
     const verifyProviderAuth = vi.fn(async () => true);
     const logger = { error: vi.fn(), info: vi.fn() };
 
@@ -135,6 +139,7 @@ describe('runGiglTrackingCapabilityVerification provider probe', () => {
       );
       verifyCapability.mockResolvedValue(true);
       verifyScopeProbe.mockResolvedValue(true);
+      verifyPathProbe.mockResolvedValue(true);
       const logger = { error: vi.fn(), info: vi.fn() };
 
       await expect(

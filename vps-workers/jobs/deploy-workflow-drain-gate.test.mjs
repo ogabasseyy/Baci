@@ -98,6 +98,19 @@ describe('production cache-invalidation drain rollout gate', () => {
     // step): it proves live token+hook function for the gate's bypass.
     assert.match(capability, /Persist GIGL cutover latch/);
     assert.match(capability, /\.gigl-capability-smoke-ok/);
+    // The latch must bind the token actually smoked: capture the
+    // identity before the smoke and refuse to persist on any drift,
+    // so a mid-job .env edit cannot latch an unsmoked token.
+    assert.match(capability, /Capture pre-smoke latch identity/);
+    assert.ok(
+      capability.indexOf('Capture pre-smoke latch identity') <
+        capability.indexOf('smoke-gigl-worker-capability.sh')
+    );
+    assert.match(capability, /GIGL_PRE_SMOKE_IDENTITY/);
+    assert.match(
+      capability,
+      /\[ "\$identity" != "\$\{GIGL_PRE_SMOKE_IDENTITY:-\}" \]/
+    );
   });
 
   it('keeps the web release behind migrations and prebuilt-only', () => {

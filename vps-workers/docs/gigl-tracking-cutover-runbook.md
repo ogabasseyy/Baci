@@ -15,10 +15,67 @@ only poller. Three gates protect the cutover, in run order:
    FUNCTIONS, so web pushes stay blocked after a smoke failure until
    some smoke succeeds. The latch records `<scope>:<sha>:<fingerprint>`
    for the environment the smoke observed and is re-validated on every
-   read: the installed SHA, the enablement scope, and (when enabled)
-   the proven token must all still match, or the bypass closes until
-   re-smoked. The latch persists across `deploy.sh` promotes and never
+   read: the installed SHA, the enablement scope, and the proven token
+   fingerprint must all still match, or the bypass closes until
+   re-smoked. Fingerprint binding is scope-agnostic: a disabled latch
+   written with no usable token latches WITHOUT the live hook probe, so
+   a token that appears afterwards forces a re-smoke. The latch also
+   binds the token actually smoked: the persist step re-resolves the
+   identity and refuses to write on any drift since the pre-smoke
+   capture. The latch persists across `deploy.sh` promotes and never
    needs manual maintenance.
+
+## Immutable worker checkouts
+
+Cron executes the TypeScript poller from the `BACI_REPO_DIR` checkout,
+so an in-place `git pull` there would change what the installed
+schedule runs immediately — before prepare, migrations, or the
+capability smoke complete. `deploy.sh` therefore never pulls in place:
+
+- Prepare provisions an immutable per-SHA worktree
+  (`<base>/app-<sha>`, detached, never pulled after creation),
+  installs its dependencies, and smokes THAT revision.
+- Promote flips the `BACI_REPO_DIR` symlink (`<base>/app-live`) to the
+  new worktree atomically, inside the same deploy lock as the file
+  promote — wrappers, SHA marker, and executed code change together,
+  and no poll can straddle two revisions mid-run.
+- Old worktrees retire automatically (current + previous kept, older
+  ones removed past a one-hour guard).
+
+First deploy with this scheme migrates once: the legacy in-place
+checkout stays frozen as the object source for future worktrees, the
+release symlink takes the `app-live` sibling name, and the live `.env`
+is re-pointed to it. Never pull the legacy path again. Roll back by
+re-running `deploy.sh` from the older SHA (missing worktrees are
+re-created from fetch); for an emergency manual rollback,
+`ln -sfn <base>/app-<sha> <base>/app-live` under
+`flock -x /tmp/baci-workers-deploy.lock`, then re-smoke.
+
+Known residual window: promote lands new code before the workflow's
+`db-migrations` apply, so a tracking change that needs a new migration
+fails its polls loudly (missing RPC) until migrations land, then heals.
+No shipment state is processed ahead of its schema silently — the
+claim call fails before any write. Moving the flip itself
+post-migration (a workflow flip job) would close even the loud window
+and is tracked as a follow-up, not this cutover.
+
+## Scoped GIGL process environment
+
+The shared worker `.env` holds every worker's secrets, but the
+provider-facing GIGL poller and its capability smoke load only an
+allowlist: the `GIGL_*` namespace (credentials plus present and future
+knobs), `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `BACI_REPO_DIR`. In particular the
+`SUPABASE_SERVICE_ROLE_KEY` and all other workers' credentials never
+enter these processes, so code execution there cannot bypass the five
+wrapper restrictions. Consequences:
+
+- Runtime flags for the poller (if ever needed) must come from cron
+  exports, not the shared `.env` — non-allowlisted file entries are
+  invisible to it. A caller-exported value still wins over the file
+  (dotenv precedence preserved).
+- The VPS preflight still validates the FULL shared file (all workers'
+  requirements); only the GIGL processes themselves are scoped.
 
 ## First rollout
 
@@ -27,7 +84,9 @@ fail) — this is announced and intentional:
 
 1. Pull main on the deploy machine.
 2. Run `bash vps-workers/deploy.sh` from a clean checkout (refuses
-   dirty trees; deploys the merge commit).
+   dirty trees; deploys the merge commit). No VPS-side `git pull` is
+   needed or wanted — `deploy.sh` provisions the immutable checkout
+   itself; pulling the live path in place would run unverified code.
 3. Re-run failed workflow jobs: readiness passes, migrations apply,
    the smoke writes the latch, the deploy lands.
 

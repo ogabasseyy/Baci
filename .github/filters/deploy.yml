@@ -53,7 +53,9 @@ tracking:
   # GIGL install/SHA/smoke gates and freeze releases on worker drift.
   # deploy.sh installs the tracking schedule, prepare-worker-release.sh
   # stages the release SHA, the bin/jobs entries are the poller +
-  # capability chain, and the manifests feed the VPS preflight.
+  # capability chain, and the manifests feed the VPS preflight. The
+  # provision/flip helpers are the checkout half of
+  # prepare-worker-release.sh: they decide which revision cron executes.
   # The monorepo manifests (apps/web/package.json, root package.json,
   # pnpm-lock.yaml) are excluded ON PURPOSE: the VPS poller runs its own
   # older code + dependency tree self-consistently, so a manifest-only
@@ -66,12 +68,15 @@ tracking:
   # intentionally bypass the worker gates, so follow a time-sensitive
   # dependency fix with a manual deploy.sh instead of assuming rollout.
   - 'vps-workers/deploy.sh'
+  - 'vps-workers/bin/gigl-tracking-scoped-env.sh'
   - 'vps-workers/bin/process-gigl-tracking.sh'
   - 'vps-workers/bin/run-web-script.sh'
   - 'vps-workers/bin/verify-gigl-direct-workers-installed.sh'
   - 'vps-workers/bin/verify-gigl-tracking-worker-capability.sh'
   - 'vps-workers/jobs/preflight-direct-web-workers.mjs'
   - 'vps-workers/lib/prepare-worker-release.sh'
+  - 'vps-workers/lib/provision-immutable-checkout.sh'
+  - 'vps-workers/lib/flip-immutable-checkout.sh'
   - 'vps-workers/package.json'
   - 'vps-workers/pnpm-lock.yaml'
   - 'vps-workers/pnpm-workspace.yaml'

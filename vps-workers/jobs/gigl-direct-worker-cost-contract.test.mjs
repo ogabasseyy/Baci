@@ -64,15 +64,26 @@ describe('GIGL direct worker cost contract', () => {
   });
 
   it('requires the direct scripts and wrappers in the exact-SHA release', () => {
+    const provisioner = readFileSync(
+      join(repoRoot, 'vps-workers', 'lib', 'provision-immutable-checkout.sh'),
+      'utf8'
+    );
     assert.match(
-      releaseHelper,
+      provisioner,
       /apps\/web\/src\/scripts\/process-gigl-tracking\.ts/
     );
     assert.match(
-      releaseHelper,
-      /"\$remote_dir\/bin\/process-gigl-tracking\.sh"/
+      provisioner,
+      /"\$staging_dir\/bin\/process-gigl-tracking\.sh"/
     );
-    assert.match(releaseHelper, /verify-gigl-tracking-worker-capability\.sh/);
+    assert.match(
+      provisioner,
+      /verify-gigl-tracking-worker-capability\.sh/
+    );
+    assert.match(
+      releaseHelper,
+      /lib\/provision-immutable-checkout\.sh/
+    );
   });
 
   it('runs the GIGL gate suites in the deployment-scripts CI step', () => {

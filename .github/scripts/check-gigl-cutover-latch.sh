@@ -19,11 +19,14 @@
 # authorizes the bypass only while the worker is STILL disabled (vacuous
 # cutover); any enablement flip in either direction invalidates, so a
 # disabled smoke can never certify future enabled function and an enabled
-# latch cannot survive a disable/re-enable cycle unproven. Enabled latches
-# additionally bind the proven token fingerprint, so rotation, replacement,
-# or removal of the token forces a re-smoke. Token EXPIRY is enforced at
-# runtime instead: the VPS poller fails loud every 5 minutes on a bad
-# token, so expiry can stall polling but never pass silently.
+# latch cannot survive a disable/re-enable cycle unproven. BOTH scopes
+# bind the token fingerprint: a disabled latch written while the token
+# was missing or expired latches WITHOUT the live hook probe, so a
+# token that appears afterwards must force a re-smoke — otherwise the
+# vacuous latch would certify a JWT the hook never confined. Token
+# EXPIRY is enforced at runtime instead: the VPS poller fails loud every
+# 5 minutes on a bad token, so expiry can stall polling but never pass
+# silently.
 set -euo pipefail
 
 remote_dir="${1:?remote dir is required}"
@@ -77,7 +80,10 @@ if [ "$latched" = true ]; then
   current_fingerprint="${identity#* }"
   if [ "$current_scope" != "$latch_scope" ]; then
     invalidate_latch
-  elif [ "$latch_scope" = "enabled" ] && [ "$current_fingerprint" != "$latch_fingerprint" ]; then
+  elif [ "$current_fingerprint" != "$latch_fingerprint" ]; then
+    # Fingerprint binding is scope-agnostic: a vacuous disabled latch
+    # (written with no usable token, hence no hook probe) must not
+    # survive the appearance of a token it never confined.
     invalidate_latch
   fi
 fi

@@ -116,18 +116,54 @@ describe('GIGL cutover latch scope and token binding', () => {
     assert.equal(values.tracking_stale, 'true');
   });
 
-  it('ignores token changes on a disabled latch', () => {
+  it('invalidates a vacuous disabled latch when a token appears', () => {
     const { origin, root, tip } = fixture();
     const checkout = checkoutAt(origin, root, 'checkout', tip);
 
-    // Provisioning a token while disabled must not freeze web deploys;
-    // the still-disabled scope check alone authorizes the vacuous bypass.
+    // The latch was written with no usable token, hence WITHOUT the live
+    // hook probe. A token provisioned afterwards while still disabled
+    // must force a re-smoke: the vacuous latch cannot certify a JWT the
+    // hook never confined.
     const { result, values } = check({
       checkout,
       latch: tip,
       scope: 'disabled',
       envFile: 'GIGL_ENABLED=off\nGIGL_TRACKING_WORKER_TOKEN=new-token\n',
       token: '',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'false');
+    assert.equal(values.tracking_stale, 'true');
+  });
+
+  it('invalidates a disabled latch when its token rotates', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      scope: 'disabled',
+      envFile: 'GIGL_ENABLED=off\nGIGL_TRACKING_WORKER_TOKEN=new-token\n',
+      token: 'old-token',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'false');
+    assert.equal(values.tracking_stale, 'true');
+  });
+
+  it('accepts a disabled latch while its token is unchanged', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      scope: 'disabled',
+      envFile: 'GIGL_ENABLED=off\nGIGL_TRACKING_WORKER_TOKEN=same-token\n',
+      token: 'same-token',
     });
 
     assert.equal(result.status, 0, result.stderr);

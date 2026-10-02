@@ -77,56 +77,64 @@ describe('deploy crontab', () => {
 
   it('requires the remote worker checkout to match the deploying commit', () => {
     const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
+    const provisioner = readFileSync(
+      join(workerRoot, 'lib', 'provision-immutable-checkout.sh'),
+      'utf8'
+    );
 
     assert.match(deployScript, /APP_SHA=\$\(git rev-parse HEAD\)/);
-    assert.match(releaseHelper, /git -C "\$repo_dir" rev-parse --verify HEAD/);
     assert.match(
       releaseHelper,
+      /lib\/provision-immutable-checkout\.sh/
+    );
+    assert.match(provisioner, /git -C "\$repo_dir" rev-parse --verify HEAD/);
+    assert.match(
+      provisioner,
       /git -C "\$repo_dir" status --porcelain=v1 --untracked-files=all/
     );
     assert.match(
-      releaseHelper,
+      provisioner,
       /Direct-worker checkout is dirty\.[\s\S]*?exit 1/
     );
     assert.match(
-      releaseHelper,
+      provisioner,
       /if \[ "\$actual_sha" != "\$expected_sha" \]; then[\s\S]*?echo "Direct-worker checkout does not match the deploying commit\." >&2[\s\S]*?exit 1[\s\S]*?fi/
     );
     assert.match(
-      releaseHelper,
+      provisioner,
       /apps\/web\/src\/scripts\/process-petrock-reconciliation\.ts/
     );
     assert.match(
-      releaseHelper,
+      provisioner,
       /apps\/web\/src\/scripts\/process-quiz-finalization\.ts/
     );
     assert.match(
-      releaseHelper,
+      provisioner,
       /tsx_bin="\$repo_dir\/apps\/web\/node_modules\/\.bin\/tsx"/
     );
     assert.match(
-      releaseHelper,
+      provisioner,
       /tsx_bin="\$repo_dir\/node_modules\/\.bin\/tsx"/
     );
-    assert.doesNotMatch(releaseHelper, /pnpm .*exec tsx/);
+    assert.doesNotMatch(provisioner, /pnpm .*exec tsx/);
     assert.match(
-      releaseHelper,
+      provisioner,
       /Direct-worker checkout is missing \$script_path\.[\s\S]*?exit 1/
     );
     assert.match(
-      releaseHelper,
+      provisioner,
       /Direct-worker checkout is missing the reviewed web toolchain\.[\s\S]*?exit 1/
     );
     assert.match(
-      releaseHelper,
-      /"\$remote_dir\/bin\/process-petrock-reconciliation\.sh"/
+      provisioner,
+      /"\$staging_dir\/bin\/process-petrock-reconciliation\.sh"/
     );
     assert.match(
-      releaseHelper,
-      /"\$remote_dir\/bin\/process-quiz-finalization\.sh"/
+      provisioner,
+      /"\$staging_dir\/bin\/process-quiz-finalization\.sh"/
     );
     assert.match(
-      releaseHelper,
+      provisioner,
       /if \[ ! -x "\$wrapper_path" \]; then[\s\S]*?Missing or non-executable direct-worker wrapper: \$wrapper_path[\s\S]*?exit 1/
     );
     assert.ok(

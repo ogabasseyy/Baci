@@ -236,6 +236,16 @@ jobs:
           BACI_EXPECTED_APP_SHA: ${{ github.sha }}
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
         run: vps-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke
+      - name: Capture pre-smoke latch identity
+        # The smoke and the latch persist below are separate steps: an
+        # operator edit to the worker .env between them would otherwise
+        # latch a fingerprint the live probe never smoked. Capture the
+        # identity now; the persist step re-resolves and refuses to write
+        # on any drift, forcing a clean re-run.
+        env:
+          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
+        run: |
+          echo "GIGL_PRE_SMOKE_IDENTITY=$(.github/scripts/resolve-gigl-latch-identity.sh "$VPS_WORKER_REMOTE_DIR")" >> "$GITHUB_ENV"
       - name: Smoke the live GIGL wrapper capability
         env:
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
@@ -251,11 +261,19 @@ jobs:
         # DISABLED scope, which authorizes the bypass only while the worker
         # is still disabled — a disabled run can never certify future
         # enabled function, and any enablement flip or token change since
-        # the smoke invalidates. deploy.sh preserves this file on promote.
+        # the smoke invalidates. The identity must also be unchanged
+        # since the pre-smoke capture: a token rotated or removed between
+        # the smoke and this persist was never probed, so a drifted
+        # identity fails the job instead of latching it. deploy.sh
+        # preserves this file on promote.
         env:
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
         run: |
           identity="$(.github/scripts/resolve-gigl-latch-identity.sh "$VPS_WORKER_REMOTE_DIR")"
+          if [ "$identity" != "${GIGL_PRE_SMOKE_IDENTITY:-}" ]; then
+            echo "::error::GIGL latch identity changed between the capability smoke and the latch persist; refusing to latch an unsmoked token." >&2
+            exit 1
+          fi
           printf '%s:%s:%s' "${identity%% *}" '${{ github.sha }}' "${identity#* }" \
             > "$VPS_WORKER_REMOTE_DIR/.gigl-capability-smoke-ok"
 

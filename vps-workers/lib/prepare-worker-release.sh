@@ -13,6 +13,11 @@ prepare_worker_release() {
   echo "==> Staging worker files at $VPS:$STAGING_DIR"
   rsync -av --delete --exclude='.env*' --exclude='node_modules' --exclude='logs' --exclude='locks' \
     "$WORKER_ROOT/" "$VPS:$STAGING_DIR/"
+  # The GIGL scoped-env filter reads the shared dotenv through the same
+  # tested parser as the CI gates; ship it next to the filter (single
+  # source: .github/scripts/gigl-dotenv.sh) so the two can never
+  # disagree on export/quote/comment forms.
+  rsync -av "$WORKER_ROOT/../.github/scripts/gigl-dotenv.sh" "$VPS:$STAGING_DIR/bin/gigl-dotenv.sh"
   if ! ssh "$VPS" "test -f '$REMOTE_DIR/.env'"; then
     echo "Missing $VPS:$REMOTE_DIR/.env; create it before running this deploy." >&2
     exit 1
@@ -33,79 +38,10 @@ prepare_worker_release() {
     exit 1
   fi
 
-  echo "==> Verifying direct-worker application checkout"
-  ssh "$VPS" "bash -s -- '$STAGING_DIR' '$APP_SHA'" <<'REMOTE_SH'
-set -euo pipefail
-
-remote_dir="$1"
-expected_sha="$2"
-env_file="$remote_dir/.env"
-repo_dir="$(
-  awk '
-    /^BACI_REPO_DIR=/ {
-      sub(/^BACI_REPO_DIR=/, "")
-      print
-      exit
-    }
-  ' "$env_file"
-)"
-repo_dir="${repo_dir%\"}"
-repo_dir="${repo_dir#\"}"
-repo_dir="${repo_dir%\'}"
-repo_dir="${repo_dir#\'}"
-
-case "$repo_dir" in
-  /*) ;;
-  *)
-    echo "BACI_REPO_DIR must be an absolute path." >&2
-    exit 1
-    ;;
-esac
-
-actual_sha="$(git -C "$repo_dir" rev-parse --verify HEAD)"
-if [ -n "$(git -C "$repo_dir" status --porcelain=v1 --untracked-files=all)" ]; then
-  echo "Direct-worker checkout is dirty." >&2
-  exit 1
-fi
-if [ "$actual_sha" != "$expected_sha" ]; then
-  echo "Direct-worker checkout does not match the deploying commit." >&2
-  exit 1
-fi
-
-for script_path in \
-  apps/web/src/scripts/process-gigl-tracking.ts \
-  apps/web/src/scripts/process-petrock-reconciliation.ts \
-  apps/web/src/scripts/process-quiz-finalization.ts
-do
-  if [ ! -f "$repo_dir/$script_path" ]; then
-    echo "Direct-worker checkout is missing $script_path." >&2
-    exit 1
-  fi
-done
-
-for wrapper_path in \
-  "$remote_dir/bin/process-gigl-tracking.sh" \
-  "$remote_dir/bin/verify-gigl-tracking-worker-capability.sh" \
-  "$remote_dir/bin/process-petrock-reconciliation.sh" \
-  "$remote_dir/bin/process-quiz-finalization.sh"
-do
-  if [ ! -x "$wrapper_path" ]; then
-    echo "Missing or non-executable direct-worker wrapper: $wrapper_path" >&2
-    exit 1
-  fi
-done
-
-tsx_bin="$repo_dir/apps/web/node_modules/.bin/tsx"
-if [ ! -x "$tsx_bin" ]; then
-  # Mirror run-web-script.sh: a workspace-root install also satisfies the
-  # worker entrypoints, so validate the same fallback before failing.
-  tsx_bin="$repo_dir/node_modules/.bin/tsx"
-fi
-if [ ! -x "$tsx_bin" ] || ! "$tsx_bin" --version >/dev/null; then
-  echo "Direct-worker checkout is missing the reviewed web toolchain." >&2
-  exit 1
-fi
-REMOTE_SH
+  echo "==> Provisioning immutable application checkout for $APP_SHA"
+  # The provisioner ships inside the staged tree, so this revision's own
+  # checkout logic runs (not whatever a previous promote installed).
+  ssh "$VPS" "bash '$STAGING_DIR/lib/provision-immutable-checkout.sh' '$STAGING_DIR' '$APP_SHA'"
 
   echo "==> Verifying the live GIGL database capability"
   gigl_capability_status=0
@@ -124,11 +60,12 @@ REMOTE_SH
 
 promote_worker_release() {
   echo "==> Promoting validated worker files to $VPS:$REMOTE_DIR"
-  ssh "$VPS" "flock -x /tmp/baci-workers-deploy.lock bash -s -- '$STAGING_DIR' '$REMOTE_DIR'" <<'REMOTE_SH'
+  ssh "$VPS" "flock -x /tmp/baci-workers-deploy.lock bash -s -- '$STAGING_DIR' '$REMOTE_DIR' '$APP_SHA'" <<'REMOTE_SH'
 set -euo pipefail
 
 staging_dir="$1"
 remote_dir="$2"
+expected_sha="$3"
 
 mkdir -p "$remote_dir"
 # The capability-smoke latch survives promotes: it records that a live
@@ -142,5 +79,12 @@ mkdir -p "$remote_dir"
 rsync -a --delete --exclude='.env*' --exclude='logs' --exclude='locks' --exclude='.gigl-capability-smoke-ok' \
   "$staging_dir/" "$remote_dir/"
 mkdir -p "$remote_dir/logs" "$remote_dir/locks"
+
+# Atomically switch the delegated checkout to this release's immutable
+# per-SHA worktree inside this same deploy lock, so wrappers, SHA
+# marker, and executed code change together: cron resolves BACI_REPO_DIR
+# once per invocation, so no poll can run unverified code or straddle
+# two revisions mid-run.
+bash "$staging_dir/lib/flip-immutable-checkout.sh" "$remote_dir" "$expected_sha"
 REMOTE_SH
 }

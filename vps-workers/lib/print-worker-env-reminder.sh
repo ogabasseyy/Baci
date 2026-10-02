@@ -20,7 +20,7 @@ print_worker_env_reminder() {
   echo "         QUIZ_PRODUCTION_APPROVED=false"
   echo "         QUIZ_RPC_SERVER_SECRET=..."
   echo "         QUIZ_DEVICE_HASH_PEPPER=..."
-  echo "         BACI_REPO_DIR=/opt/baci/app"
+  echo "         BACI_REPO_DIR=/opt/baci/app  # object-source clone; deploy.sh manages per-SHA worktrees + the live symlink, never pull in place"
   echo "         GIGL_BASE_URL=..."
   echo "         GIGL_EMAIL=..."
   echo "         GIGL_PASSWORD=..."

@@ -209,16 +209,43 @@ describe('deploy source guards', () => {
     assert.notEqual(promotionStart, -1);
     assert.match(promotionSource, /rsync -a --delete/);
     assert.match(promotionSource, /mkdir -p.*logs.*locks/);
+    // The checkout flip shares the deploy lock with the file promote,
+    // so wrappers, SHA marker, and executed code change together.
+    assert.match(
+      promotionSource,
+      /lib\/flip-immutable-checkout\.sh" "\$remote_dir" "\$expected_sha"/
+    );
   });
 
-  it('validates the direct worker toolchain without allowing pnpm to mutate it', () => {
+  it('provisions the immutable checkout before smoking it', () => {
     const source = readFileSync(releaseHelper, 'utf8');
 
     assert.match(
       source,
+      /lib\/provision-immutable-checkout\.sh' '\$STAGING_DIR' '\$APP_SHA'/
+    );
+    assert.ok(
+      source.indexOf('provision-immutable-checkout.sh') <
+        source.indexOf('Verifying the live GIGL database capability')
+    );
+  });
+
+  it('validates the direct worker toolchain without allowing pnpm to mutate it', () => {
+    const provisioner = readFileSync(
+      join(workerRoot, 'lib', 'provision-immutable-checkout.sh'),
+      'utf8'
+    );
+
+    assert.match(
+      provisioner,
       /tsx_bin="\$repo_dir\/apps\/web\/node_modules\/\.bin\/tsx"/
     );
-    assert.match(source, /tsx_bin="\$repo_dir\/node_modules\/\.bin\/tsx"/);
-    assert.doesNotMatch(source, /pnpm .*exec tsx/);
+    assert.match(
+      provisioner,
+      /tsx_bin="\$repo_dir\/node_modules\/\.bin\/tsx"/
+    );
+    assert.doesNotMatch(provisioner, /pnpm .*exec tsx/);
+    assert.match(provisioner, /worktree add --detach/);
+    assert.match(provisioner, /pnpm install --frozen-lockfile/);
   });
 });

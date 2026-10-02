@@ -69,7 +69,7 @@ describe('deliverAdminPushTest', () => {
       'Delivery check'
     );
 
-    expect(result).toEqual({ failed: 0, sent: 1 });
+    expect(result).toEqual({ failed: 0, sent: 1, uncertain: 0 });
     expect(mocks.from).toHaveBeenCalledWith('push_tokens');
     expect(query.eq).toHaveBeenNthCalledWith(1, 'user_id', 'user-1');
     expect(query.eq).toHaveBeenNthCalledWith(2, 'is_active', true);
@@ -108,8 +108,28 @@ describe('deliverAdminPushTest', () => {
       'Delivery check'
     );
 
-    expect(result).toEqual({ failed: 0, sent: 0 });
+    expect(result).toEqual({ failed: 0, sent: 0, uncertain: 0 });
     expect(mocks.sendChunks).not.toHaveBeenCalled();
+  });
+
+  it('reports uncertain delivery instead of definitive failure', async () => {
+    mockTokenQuery({
+      data: [{ token: 'ExponentPushToken[one]' }],
+      error: null,
+    });
+    mocks.sendChunks.mockResolvedValue({
+      deliveryUncertain: true,
+      tickets: [{ status: 'error' }],
+    });
+
+    const result = await deliverAdminPushTest(
+      { from: mocks.from } as never,
+      'user-1',
+      'Push test',
+      'Delivery check'
+    );
+
+    expect(result).toEqual({ failed: 0, sent: 0, uncertain: 1 });
   });
 
   it('reports provider failure only as a count', async () => {
@@ -128,6 +148,6 @@ describe('deliverAdminPushTest', () => {
       'Delivery check'
     );
 
-    expect(result).toEqual({ failed: 1, sent: 0 });
+    expect(result).toEqual({ failed: 1, sent: 0, uncertain: 0 });
   });
 });

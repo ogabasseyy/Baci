@@ -283,6 +283,27 @@ export async function recoverUnknownPaystackRefund(
       });
       continue;
     }
+    if (pass === 0) {
+      // The decisive scan ran without the reference lock: a payment
+      // completing after the final read would leave this supposedly
+      // stable single candidate silently ambiguous, finalizing the
+      // wrong cancellation with no handoff. Re-scan atomically under
+      // the lock the completion path claims under before recovering:
+      // rows returned mean the payment landed first (loop around to
+      // handle them, including a newly visible ambiguity), while the
+      // open watch catches completions that land after the rescan.
+      candidates = await openPaystackRefundRecoveryWatch(supabase, {
+        evidence: {
+          amount_minor: current.amount,
+          currency: current.currency,
+          provider_payment_transaction_id: current.transaction,
+          provider_refund_status: current.status,
+        },
+        providerRefundId: refundId,
+        reference: resolvedPaymentReference,
+      });
+      continue;
+    }
     await recordRecoveredPaystackRefund(supabase, {
       current,
       evidence,

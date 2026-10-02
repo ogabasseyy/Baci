@@ -1,9 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { verifyTransaction } from '@/lib/paystack';
+import {
+  isDefinitiveProviderRejection,
+  isVerificationUnavailable,
+} from './classify-paystack-verify-outcome';
 import { fileInvalidAttemptReference } from './file-invalid-attempt-reference';
 import { fileUnresolvedAttemptReference } from './file-unresolved-attempt-reference';
 import type { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
 import { guardAbandonedPaystackAttempt } from './guard-abandoned-paystack-attempt';
+import { processMissingReferenceAttempt } from './process-missing-reference-attempt';
 import type { AbandonedPaystackAttemptSummary } from './reconcile-abandoned-paystack-attempts';
 import { resolveAbandonedAttemptMismatch } from './resolve-abandoned-attempt-mismatch';
 import { resolveVerifiedAbandonedAttemptCapture } from './resolve-verified-abandoned-attempt-capture';
@@ -30,37 +35,6 @@ function paidOrderStatus(
   return Array.isArray(paidOrder)
     ? paidOrder[0]?.payment_status
     : paidOrder.payment_status;
-}
-
-function isVerificationUnavailable(code: string | undefined): boolean {
-  if (code === 'NETWORK_ERROR' || code === 'CONFIG_ERROR') return true;
-  const status = Number(/^HTTP_(\d{3})$/.exec(code ?? '')?.[1]);
-  return (
-    status === 401 ||
-    status === 403 ||
-    status === 408 ||
-    status === 429 ||
-    status >= 500
-  );
-}
-
-// Client errors other than auth/timeout/rate-limit/missing mean Paystack
-// deterministically rejects this reference: it will never verify on
-// retry, so review it instead of holding it as an outage forever. A 408
-// is a transient provider timeout, not a verdict on the reference:
-// retiring it would stamp a still-pending transaction out of future
-// sweeps while cancellation keeps rejecting pending attempts.
-function isDefinitiveProviderRejection(code: string | undefined): boolean {
-  const status = Number(/^HTTP_(\d{3})$/.exec(code ?? '')?.[1]);
-  return (
-    status >= 400 &&
-    status < 500 &&
-    status !== 401 &&
-    status !== 403 &&
-    status !== 404 &&
-    status !== 408 &&
-    status !== 429
-  );
 }
 
 /** Verify one superseded attempt and retire, complete, hold, or review it. */
@@ -121,22 +95,10 @@ export async function processAbandonedPaystackAttempt(
 
   const gatewayReference = attempt.gateway_reference;
   if (gatewayReference == null) {
-    // Missing-reference rows can never verify — there is no reference
-    // to check — yet still block merchant cancellation while
-    // pending/processing. File the evidence and stamp without
-    // guarding, verifying, or rotating; the stamp (not retirement)
-    // removes them from automated retries.
-    const filed = await fileInvalidAttemptReference({
-      attempt,
-      reason: 'gateway_reference_missing',
-      supabase,
+    await processMissingReferenceAttempt(supabase, attempt, {
+      hold,
+      summary,
     });
-    if (filed) {
-      summary.reviewsFiled.push(attempt.id);
-      return;
-    }
-    summary.failed = true;
-    await hold('invalid_reference');
     return;
   }
   // Narrowed view for the verifiable path below: every helper from

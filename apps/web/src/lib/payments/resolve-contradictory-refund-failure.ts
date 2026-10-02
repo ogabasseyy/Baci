@@ -3,6 +3,7 @@ import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-tra
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
 import { DeliveryUncertainError } from '@/lib/orders/run-order-cancellation-side-effect';
 import { fetchAllOrderRefundRows } from './fetch-all-order-refund-rows';
+import { normalizePaymentGateway } from './normalize-payment-gateway';
 
 interface ContradictionRow {
   created_at: string;
@@ -58,10 +59,17 @@ function replacementMatchesFailedLeg(
   const failedLeg = failed.metadata?.payment_transaction_id;
   if (typeof failedLeg !== 'string' || failedLeg.length === 0) return false;
   if (replacement.metadata?.payment_transaction_id !== failedLeg) return false;
+  // Normalize (trim + uppercase) for both matching and Paystack
+  // classification: a bare casefold accepts a ` paystack `/` paystack `
+  // pair yet fails to recognize the replacement as Paystack, letting
+  // a merely locally completed, unverified replacement suppress the
+  // failure alert.
+  const replacementGateway = normalizePaymentGateway(replacement.gateway);
+  const failedGateway = normalizePaymentGateway(failed.gateway);
   if (
-    typeof replacement.gateway !== 'string' ||
-    typeof failed.gateway !== 'string' ||
-    replacement.gateway.toLowerCase() !== failed.gateway.toLowerCase()
+    replacementGateway === '' ||
+    failedGateway === '' ||
+    replacementGateway !== failedGateway
   ) {
     return false;
   }
@@ -75,7 +83,7 @@ function replacementMatchesFailedLeg(
   // A locally completed Paystack refund counts only after it is
   // provider-verified; other gateways keep local-status trust.
   if (
-    replacement.gateway.toLowerCase() === 'paystack' &&
+    replacementGateway === 'PAYSTACK' &&
     replacement.metadata?.provider_refund_status !== 'processed'
   ) {
     return false;

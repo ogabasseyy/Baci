@@ -33,9 +33,10 @@ export function senderLoopWorstMs(maxAttempts: number): number {
 /**
  * Budget a send must start with to guarantee completion before its
  * cutoff: the primary sender's worst retry loop plus the 10s abort
- * buffer. The platform-sender fallback needs no extra reservation — it
- * declines unless its own loop fits the remaining budget, so a send
- * admitted with this budget always finishes before the cutoff.
+ * buffer. The platform-sender fallback needs no extra reservation —
+ * under a deadline it is a single shot that declines unless one
+ * attempt fits the remaining budget, so a send admitted with this
+ * budget always finishes before the cutoff.
  */
 export function zeptomailSendAdmissionBudgetMs(
   maxAttemptsPerSender: number = ZEPTOMAIL_MAX_RETRIES + 1

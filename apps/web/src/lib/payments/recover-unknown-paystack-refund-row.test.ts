@@ -25,6 +25,7 @@ vi.mock('./hold-paystack-refund-for-review', () => ({
 const refund = {
   amount: 100,
   currency: 'NGN',
+  gateway: 'paystack',
   gateway_reference: '202',
   id: 'refund-1',
   merchant_id: 'merchant-1',
@@ -36,12 +37,15 @@ const refund = {
 function lookupQuery(data: unknown, error: unknown = null) {
   const query: {
     eq: ReturnType<typeof vi.fn>;
-    maybeSingle: ReturnType<typeof vi.fn>;
+    ilike: ReturnType<typeof vi.fn>;
+    limit: ReturnType<typeof vi.fn>;
   } = {
     eq: vi.fn(),
-    maybeSingle: vi.fn().mockResolvedValue({ data, error }),
+    ilike: vi.fn(),
+    limit: vi.fn().mockResolvedValue({ data, error }),
   };
   query.eq.mockReturnValue(query);
+  query.ilike.mockReturnValue(query);
   return query;
 }
 
@@ -62,19 +66,39 @@ describe('lookupLocalRefundByProviderId', () => {
   });
 
   it('returns the local refund row for the provider id', async () => {
-    const { from, query, supabase } = database(refund);
+    const { from, query, supabase } = database([refund]);
 
     const result = await lookupLocalRefundByProviderId(supabase, 202);
 
     expect(result).toEqual(refund);
     expect(from).toHaveBeenCalledWith('transactions');
     expect(query.eq).toHaveBeenCalledWith('transaction_type', 'refund');
-    expect(query.eq).toHaveBeenCalledWith('gateway', 'paystack');
+    expect(query.ilike).toHaveBeenCalledWith('gateway', '%paystack%');
     expect(query.eq).toHaveBeenCalledWith('gateway_reference', '202');
   });
 
+  it('matches a held legacy row despite padded gateway casing', async () => {
+    const legacy = { ...refund, gateway: ' Paystack ' };
+    const { supabase } = database([legacy]);
+
+    const result = await lookupLocalRefundByProviderId(supabase, 202);
+
+    expect(result).toEqual(legacy);
+  });
+
+  it('throws when duplicate audit rows share the provider id', async () => {
+    const { supabase } = database([
+      refund,
+      { ...refund, gateway: ' Paystack ', id: 'refund-2' },
+    ]);
+
+    await expect(lookupLocalRefundByProviderId(supabase, 202)).rejects.toThrow(
+      'refund_event_lookup_failed'
+    );
+  });
+
   it('returns null when no row matches', async () => {
-    const { supabase } = database(null);
+    const { supabase } = database([]);
 
     const result = await lookupLocalRefundByProviderId(supabase, 202);
 

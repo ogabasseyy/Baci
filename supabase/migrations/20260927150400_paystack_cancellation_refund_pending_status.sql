@@ -143,12 +143,17 @@ BEGIN
   IF (SELECT auth.role()) IS DISTINCT FROM 'service_role' THEN
     RAISE EXCEPTION 'unauthorized' USING ERRCODE = '42501';
   END IF;
+  -- Normalize the gateway: the candidate selectors admit legacy
+  -- `Paystack` / ` paystack ` rows, and an exact match here would
+  -- update nothing for them — the caller then throws even after the
+  -- review was filed, 503ing every sweep on the still-unheld row.
   UPDATE public.transactions
     SET metadata = coalesce(metadata, '{}'::jsonb) ||
       jsonb_build_object('refund_reconciliation_hold', left(p_reason, 120)),
       updated_at = now()
     WHERE id = p_refund_id AND transaction_type = 'refund'
-      AND gateway = 'paystack' AND status IN ('refund_pending', 'pending', 'failed');
+      AND public.normalized_gateway_name_v1(gateway) = 'PAYSTACK'
+      AND status IN ('refund_pending', 'pending', 'failed');
   GET DIAGNOSTICS v_count = ROW_COUNT;
   IF v_count = 1 THEN RETURN true; END IF;
   -- A completed row needs no hold: polling ignores terminal rows and the
@@ -157,7 +162,8 @@ BEGIN
   RETURN EXISTS (
     SELECT 1 FROM public.transactions
     WHERE id = p_refund_id AND transaction_type = 'refund'
-      AND gateway = 'paystack' AND status = 'completed'
+      AND public.normalized_gateway_name_v1(gateway) = 'PAYSTACK'
+      AND status = 'completed'
   );
 END;
 $$;

@@ -53,6 +53,20 @@ describe('extractDuplicateCaptureEvidence', () => {
     });
   });
 
+  it('falls back to the top-level Juicyway status when payment omits it', () => {
+    expect(
+      extractDuplicateCaptureEvidence('juicyway', {
+        id: 'session-1',
+        payment: { amount: 12.5, currency: 'USDC', id: 'payment-1' },
+        status: 'completed',
+      })
+    ).toEqual({
+      providerAmount: 12.5,
+      providerReference: 'payment-1',
+      providerStatus: 'completed',
+    });
+  });
+
   it('returns null when the Paystack response has no charge id', () => {
     expect(
       extractDuplicateCaptureEvidence('paystack', {

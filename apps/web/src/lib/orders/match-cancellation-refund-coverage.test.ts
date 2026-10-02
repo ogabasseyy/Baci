@@ -115,7 +115,7 @@ describe('matchCancellationRefundCoverage', () => {
     expect(coverage.unattributedUnlinkedCount).toBe(1);
   });
 
-  it('requires exact gateway equality for attribution', () => {
+  it('normalizes gateway casing for attribution like the claim gate', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId: () => null,
       refundRows: [row({ gateway: 'PayPal' })],
@@ -123,11 +123,29 @@ describe('matchCancellationRefundCoverage', () => {
       transactions: [leg({ gateway: 'paypal' })],
     });
 
-    // The claim gate compares gateways exactly: attributing here would
-    // mark the leg refunded while the gate still sees it uncovered,
-    // deferring forever instead of refunding or quarantining.
-    expect(coverage.refundedPaymentIds).toEqual(new Set());
-    expect(coverage.unattributedUnlinkedCount).toBe(1);
+    // The claim gate trims and uppercases both gateways: exact
+    // equality here would quarantine a covered legacy leg as
+    // delivery_uncertain while the gate still sees it covered.
+    expect(coverage.refundedPaymentIds).toEqual(new Set(['payment-1']));
+    expect(coverage.unattributedUnlinkedCount).toBe(0);
+  });
+
+  it('attributes a padded legacy refund to its completed leg', () => {
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId: () => null,
+      refundRows: [
+        row({
+          gateway: 'paystack',
+          metadata: { provider_refund_status: 'processed' },
+        }),
+      ],
+      soleCompletedLegId: 'payment-1',
+      transactions: [leg({ gateway: ' Paystack ' })],
+    });
+
+    expect(coverage.refundedPaymentIds).toEqual(new Set(['payment-1']));
+    expect(coverage.unattributedUnlinkedCount).toBe(0);
+    expect(coverage.mismatchedIds).toEqual(new Set());
   });
 
   it('waits on attributed unverified paystack rows instead of covering', () => {
@@ -156,10 +174,10 @@ describe('matchCancellationRefundCoverage', () => {
     });
 
     // The gateway column permits null, but the aggregate claim's
-    // `refund.gateway = payment.gateway` never matches NULL — so
-    // normalizing both sides to '' here would finish the side effect
-    // as completed while the order stays paid and settlement
-    // unreversed. Missing gateways mismatch into quarantine.
+    // NULLIF-normalized equality never matches missing gateways — so
+    // equating them here would finish the side effect as completed
+    // while the order stays paid and settlement unreversed. Missing
+    // gateways mismatch into quarantine.
     expect(coverage.refundedPaymentIds).toEqual(new Set());
     expect(coverage.mismatchedIds).toEqual(new Set(['payment-1']));
   });
@@ -172,8 +190,8 @@ describe('matchCancellationRefundCoverage', () => {
       transactions: [leg({ gateway: null as never })],
     });
 
-    // Exact `===` would equate two missing gateways where the SQL
-    // `=` does not: attribution must not exceed the gate.
+    // Missing gateways never match the claim gate's NULLIF
+    // equality, so attribution must leave them unattributed too.
     expect(coverage.refundedPaymentIds).toEqual(new Set());
     expect(coverage.unattributedUnlinkedCount).toBe(1);
   });

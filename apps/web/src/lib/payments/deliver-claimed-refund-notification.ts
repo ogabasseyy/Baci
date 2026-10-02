@@ -2,10 +2,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { escapeHtmlText } from '@/lib/sanitize';
 import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail-send-budget';
 import { assertRefundNotificationSendTime } from './assert-refund-notification-send-time';
-import { attemptMerchantRefundPush } from './attempt-merchant-refund-push';
 import { awaitRefundNotificationDeadline } from './await-refund-notification-deadline';
+import { deliverMerchantRefundNotification } from './deliver-merchant-refund-notification';
 import { refundNotificationLedgerAmount } from './refund-notification-ledger';
-import { resolveContradictoryRefundFailure } from './resolve-contradictory-refund-failure';
 
 export type RefundEmailSender = (message: {
   to: string;
@@ -61,7 +60,7 @@ export interface ClaimedRefundNotification {
   generation: number;
 }
 
-interface RefundNotificationOrder {
+export interface RefundNotificationOrder {
   id: string;
   merchant_id: string;
   order_number: string | null;
@@ -73,7 +72,7 @@ interface RefundNotificationOrder {
   cancelled_at: string | null;
 }
 
-interface RefundNotificationMerchant {
+export interface RefundNotificationMerchant {
   id: string;
   business_name: string;
   email: string;
@@ -85,17 +84,6 @@ export type RefundNotificationOutcome =
   | 'sent'
   | 'failed'
   | 'delivery_uncertain';
-
-// Worst-case allowance for the merchant-push phase (token read, one
-// Expo request, audit write) before the merchant-email fallback. The
-// 150s row budget cannot cover an unbounded push plus the email send,
-// so the push is skipped unless both phases fit (see below): starting
-// a push that starves the email burns the attempt on a budget-only
-// failure every backlog run until the notification dead-letters, even
-// with healthy delivery. Typical pushes finish in seconds; a push
-// that overruns its allowance still fails the row retryably via the
-// post-push email assert instead of stranding it as uncertain.
-const MERCHANT_PUSH_PHASE_WORST_MS = 30_000;
 
 /**
  * Deliver one claimed refund notification and report its outcome.
@@ -213,108 +201,19 @@ export async function deliverClaimedRefundNotification({
         lastError = 'refund_customer_email_rejected';
       }
     } else {
-      const completed = row.event_type === 'processed_merchant_push';
-      // A refunded order usually means a later processed event
-      // superseded this alert — but a post-transition failure is fresh
-      // contradiction: suppress only on durable replacement evidence.
-      const contradictoryFailure =
-        !completed && order.payment_status === 'refunded';
-      const superseded =
-        contradictoryFailure &&
-        (await resolveContradictoryRefundFailure(supabase, row, order));
-      if (superseded) {
-        outcome = 'sent';
-      } else {
-        const title = completed ? 'Refund processed' : 'Refund needs attention';
-        const body = completed
-          ? `Refunds totaling ${amount} have been processed for cancelled order #${orderNumber}.`
-          : `Paystack could not complete the refund for order #${orderNumber}. Check the refund in Paystack.`;
-        // Skip the push unless the push phase plus the capped fallback
-        // email both fit the remaining row budget: with only email
-        // room left, sending the email directly beats burning the
-        // attempt on a push that starves it.
-        const pushAllowanceMs =
-          MERCHANT_PUSH_PHASE_WORST_MS + zeptomailSendAdmissionBudgetMs(1);
-        const pushFits =
-          deadlineMs === undefined ||
-          deadlineMs - Date.now() >= pushAllowanceMs;
-        if (sendMerchantPush && pushFits) {
-          const push = await attemptMerchantRefundPush({
-            body,
-            completed,
-            deadlineMs,
-            merchantId: merchant.id,
-            orderId: order.id,
-            orderNumber,
-            sendMerchantPush,
-            title,
-          });
-          outcome = push.outcome;
-          lastError = push.lastError;
-          // Uncertain dispatch stays terminal: retrying or emailing after
-          // a possibly-delivered push double-notifies the merchant.
-          if (push.outcome === 'delivery_uncertain') {
-            throw new Error('refund_merchant_push_uncertain');
-          }
+      ({ lastError, outcome } = await deliverMerchantRefundNotification(
+        supabase,
+        {
+          amount,
+          deadlineMs,
+          merchant,
+          order,
+          orderNumber,
+          row,
+          sendEmail,
+          sendMerchantPush,
         }
-        // No active app token: deliver the same notification by email.
-        if (outcome !== 'sent' && !merchant.email) {
-          outcome = 'failed';
-          throw new Error('refund_merchant_contact_missing');
-        }
-        if (outcome !== 'sent') {
-          outcome = 'failed';
-          // The fallback email runs capped at one primary attempt
-          // (the verified-wedge precedent): the row budget already
-          // spent the push phase, and the sweep retries transient
-          // failures next tick. Assert the single-attempt budget —
-          // the full four-attempt loop never fits after a push.
-          assertRefundNotificationSendTime(
-            deadlineMs,
-            zeptomailSendAdmissionBudgetMs(1)
-          );
-          outcome = 'delivery_uncertain';
-          const result = await awaitRefundNotificationDeadline(
-            sendEmail({
-              maxAttemptsPerSender: 1,
-              ...(deadlineMs !== undefined && {
-                signal: AbortSignal.timeout(
-                  Math.max(1, deadlineMs - Date.now() - 10_000)
-                ),
-                // Match the signal's 10s buffer: the platform-sender
-                // fallback is a single shot that declines unless one
-                // attempt fits.
-                fallbackDeadlineMs: deadlineMs - 10_000,
-              }),
-              to: merchant.email,
-              subject: `${title}: order #${orderNumber}`,
-              textContent: body,
-              htmlContent: `<p>${escapeHtmlText(body)}</p>`,
-              emailType: 'notifications',
-              auditContext: {
-                merchantId: merchant.id,
-                orderId: order.id,
-                metadata: {
-                  trigger: completed
-                    ? 'paystack_refund_processed_merchant'
-                    : 'paystack_refund_attention_merchant',
-                },
-              },
-            }),
-            deadlineMs
-          );
-          if (result.success) {
-            outcome = 'sent';
-            lastError = null;
-          } else if (result.deliveryOutcome === 'unknown') {
-            outcome = 'delivery_uncertain';
-            lastError = 'refund_merchant_email_unknown';
-          } else {
-            outcome = 'failed';
-            lastError = 'refund_merchant_email_rejected';
-          }
-        }
-      }
+      ));
     }
   } catch (error) {
     lastError =

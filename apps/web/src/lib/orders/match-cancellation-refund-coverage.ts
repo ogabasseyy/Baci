@@ -65,22 +65,20 @@ export function matchCancellationRefundCoverage({
       if (attributed) unattributedUnlinkedCount += 1;
       continue;
     }
-    // Attributed rows keep the claim SQL's exact gateway equality: the
-    // linked path normalizes case, but attribution must never exceed
-    // what the gate covers, or the leg would defer forever — covered
-    // here, uncovered there — instead of refunding or quarantining.
-    // Both paths stay null-safe like the SQL `=`: the gateway column
-    // permits null, and normalizing missing gateways to '' would mark
+    // Both paths normalize exactly like the claim gate
+    // (whitespace-trimmed, uppercased; missing gateways never match):
+    // exact equality here would disagree with the gate on a legacy
+    // `Paystack` leg with a `paystack` refund, quarantining the side
+    // effect as delivery_uncertain while the claim still sees the
+    // leg covered by the remaining refund_pending leg. The gateway
+    // column permits null, and equating missing gateways would mark
     // a legacy leg covered here while the aggregate claim never
     // recognizes it — finishing the side effect as completed with
     // the order paid and settlement unreversed. Missing gateways
     // mismatch into quarantine instead.
-    const gatewayMatches = attributed
-      ? row.gateway != null &&
-        leg.gateway != null &&
-        row.gateway === leg.gateway
-      : normalizeMoneyField(row.gateway) !== '' &&
-        normalizeMoneyField(row.gateway) === normalizeMoneyField(leg.gateway);
+    const gatewayMatches =
+      normalizeMoneyField(row.gateway) !== '' &&
+      normalizeMoneyField(row.gateway) === normalizeMoneyField(leg.gateway);
     if (
       !gatewayMatches ||
       normalizeMoneyField(row.currency) !== normalizeMoneyField(leg.currency)

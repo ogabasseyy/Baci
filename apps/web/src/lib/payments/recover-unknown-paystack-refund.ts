@@ -2,10 +2,14 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { fetchCompletedPaymentsByReference } from './fetch-completed-payments-by-reference';
 import { fileCancelledPaystackRefundCandidateReviews } from './file-cancelled-paystack-refund-candidate-reviews';
-import { fileInvalidPaystackRefundEvidenceReview } from './file-invalid-paystack-refund-evidence-review';
+import {
+  fileInvalidPaystackRefundEvidenceReview,
+  fileUnclaimedPaystackRefundCandidateReview,
+} from './file-invalid-paystack-refund-evidence-review';
 import { fileInvalidRefundEvidenceBeforeReject } from './file-invalid-refund-evidence-before-reject';
 import { fileActiveOrderPaystackRefundCandidateReviews } from './file-provider-refund-outside-cancellation-review';
 import { fileStalledPaystackRefundReviews } from './file-stalled-paystack-refund-reviews';
+import { fileUnusablePaystackRefundEvidence } from './file-unusable-paystack-refund-evidence';
 import { openPaystackRefundRecoveryWatch } from './open-paystack-refund-recovery-watch';
 import { recordRecoveredPaystackRefund } from './record-recovered-paystack-refund';
 import { resolvePaystackRefundRecoveryWatch } from './resolve-paystack-refund-recovery-watch';
@@ -63,66 +67,13 @@ export async function recoverUnknownPaystackRefund(
     typeof current.currency !== 'string' ||
     typeof current.status !== 'string'
   ) {
-    // The provider answered but its evidence is unusable: acknowledging
-    // would drop the refund permanently (polling cannot rediscover an
-    // unknown refund), so file it against the resolved payment's orders
-    // and throw for redelivery instead. Merges are idempotent, so a
-    // transient provider glitch recovers on redelivery while a
-    // permanently malformed shape stays visible for operations.
-    const invalidReason = `Paystack refund ${refundId} returned unusable provider evidence for reference ${resolvedPaymentReference}`;
-    if (candidates.length === 0) {
-      // No candidate orders for the order-scoped filers — but throwing
-      // with no durable trace would let the malformed evidence vanish
-      // with the last provider retry, so file the generic review
-      // first. The throw still stands: a transient glitch recovers on
-      // redelivery while the review keeps the wedge visible.
-      await fileInvalidPaystackRefundEvidenceReview(supabase, {
-        evidence,
-        reason: invalidReason,
-        reference: resolvedPaymentReference,
-        refundId,
-      });
-      await resolvePaystackRefundRecoveryWatch(supabase, {
-        providerRefundId: refundId,
-        reference: resolvedPaymentReference,
-      });
-      throw new Error('paystack_refund_evidence_unmatched');
-    }
-    await fileCancelledPaystackRefundCandidateReviews(
-      supabase,
+    await fileUnusablePaystackRefundEvidence(supabase, {
       candidates,
+      current,
       evidence,
-      invalidReason
-    );
-    // The cancellation queue drops active orders, but a potentially
-    // refunded active order must not rely on provider redeliveries
-    // alone: persist the malformed evidence to the non-cancellation
-    // queue too, so it stays visible after retries stop. Amounts are
-    // sanitized because the provider shape is unusable by definition.
-    await fileActiveOrderPaystackRefundCandidateReviews(
-      supabase,
-      candidates,
-      evidence,
-      invalidReason,
-      {
-        amount:
-          Number.isSafeInteger(current.amount) && current.amount > 0
-            ? current.amount / 100
-            : 0,
-        currency:
-          typeof current.currency === 'string' ? current.currency : 'unknown',
-        status: typeof current.status === 'string' ? current.status : 'unknown',
-      }
-    );
-    // The malformed evidence is durably filed: resolve the watch (a
-    // no-op when none is open) so a later completion cannot claim it
-    // and file stale evidence. The throw still stands for glitch
-    // recovery on redelivery.
-    await resolvePaystackRefundRecoveryWatch(supabase, {
-      providerRefundId: refundId,
       reference: resolvedPaymentReference,
+      refundId,
     });
-    throw new Error('paystack_refund_evidence_invalid');
   }
   for (let pass = 0; ; pass++) {
     const payment = candidates[0];
@@ -134,23 +85,36 @@ export async function recoverUnknownPaystackRefund(
       // cancellation queue but still need operations eyes, so they file
       // into the non-cancellation queue below.
       const reason = `Paystack refund ${refundId} matches multiple completed payments for reference ${resolvedPaymentReference}`;
-      await fileCancelledPaystackRefundCandidateReviews(
-        supabase,
+      const multiCancelledFiled =
+        await fileCancelledPaystackRefundCandidateReviews(
+          supabase,
+          candidates,
+          evidence,
+          reason
+        );
+      const multiActiveFiled =
+        await fileActiveOrderPaystackRefundCandidateReviews(
+          supabase,
+          candidates,
+          evidence,
+          reason,
+          {
+            amount: current.amount / 100,
+            currency: current.currency,
+            status: current.status,
+          }
+        );
+      // Order-less matches are skipped by both queues: file them
+      // generically so every match is durably retained before the
+      // acknowledge below.
+      await fileUnclaimedPaystackRefundCandidateReview(supabase, {
         candidates,
         evidence,
-        reason
-      );
-      await fileActiveOrderPaystackRefundCandidateReviews(
-        supabase,
-        candidates,
-        evidence,
+        filed: [multiCancelledFiled, multiActiveFiled],
         reason,
-        {
-          amount: current.amount / 100,
-          currency: current.currency,
-          status: current.status,
-        }
-      );
+        reference: resolvedPaymentReference,
+        refundId,
+      });
       // Every match is retained in a durable review: resolve the
       // watch (a no-op when this run never opened one) so a later
       // unrelated completion cannot claim it and file stale

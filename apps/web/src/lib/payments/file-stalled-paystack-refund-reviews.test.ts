@@ -5,6 +5,7 @@ import { fileStalledPaystackRefundReviews } from './file-stalled-paystack-refund
 const mocks = vi.hoisted(() => ({
   fileActiveOrderPaystackRefundCandidateReviews: vi.fn(),
   fileCancelledPaystackRefundCandidateReviews: vi.fn(),
+  fileUnclaimedPaystackRefundCandidateReview: vi.fn(),
   loggerInfo: vi.fn(),
 }));
 
@@ -15,6 +16,10 @@ vi.mock('./file-cancelled-paystack-refund-candidate-reviews', () => ({
 vi.mock('./file-provider-refund-outside-cancellation-review', () => ({
   fileActiveOrderPaystackRefundCandidateReviews:
     mocks.fileActiveOrderPaystackRefundCandidateReviews,
+}));
+vi.mock('./file-invalid-paystack-refund-evidence-review', () => ({
+  fileUnclaimedPaystackRefundCandidateReview:
+    mocks.fileUnclaimedPaystackRefundCandidateReview,
 }));
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), info: mocks.loggerInfo, warn: vi.fn() },
@@ -82,6 +87,13 @@ const reason =
 describe('fileStalledPaystackRefundReviews', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.fileCancelledPaystackRefundCandidateReviews.mockResolvedValue([
+      'pay-stalled',
+    ]);
+    mocks.fileActiveOrderPaystackRefundCandidateReviews.mockResolvedValue([]);
+    mocks.fileUnclaimedPaystackRefundCandidateReview.mockResolvedValue(
+      undefined
+    );
   });
 
   it('files both queues when stalled payments match', async () => {
@@ -105,6 +117,16 @@ describe('fileStalledPaystackRefundReviews', () => {
     expect(
       mocks.fileActiveOrderPaystackRefundCandidateReviews
     ).toHaveBeenCalledWith(supabase, stalled, evidence, reason, refund);
+    expect(
+      mocks.fileUnclaimedPaystackRefundCandidateReview
+    ).toHaveBeenCalledWith(supabase, {
+      candidates: stalled,
+      evidence,
+      filed: [['pay-stalled'], []],
+      reason,
+      reference: 'PSK-1',
+      refundId: 202,
+    });
     expect(mocks.loggerInfo).toHaveBeenCalledWith(
       expect.objectContaining({ refundId: 202 })
     );

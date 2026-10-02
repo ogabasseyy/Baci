@@ -160,7 +160,7 @@ describe('fileActiveOrderPaystackRefundCandidateReviews', () => {
       .mockReturnValue({ insert });
     const supabase = { from, rpc: vi.fn() } as unknown as SupabaseClient;
 
-    await fileActiveOrderPaystackRefundCandidateReviews(
+    const filed = await fileActiveOrderPaystackRefundCandidateReviews(
       supabase,
       [
         candidate('pay-1', 'order-9', 'merchant-9'),
@@ -172,6 +172,7 @@ describe('fileActiveOrderPaystackRefundCandidateReviews', () => {
       refund
     );
 
+    expect(filed).toEqual(['pay-1', 'pay-2']);
     expect(insert).toHaveBeenCalledTimes(1);
     expect(insert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -202,7 +203,7 @@ describe('fileActiveOrderPaystackRefundCandidateReviews', () => {
       .mockReturnValue({ insert });
     const supabase = { from, rpc: vi.fn() } as unknown as SupabaseClient;
 
-    await fileActiveOrderPaystackRefundCandidateReviews(
+    const filed = await fileActiveOrderPaystackRefundCandidateReviews(
       supabase,
       [candidate('pay-1', 'order-1', 'merchant-1')],
       evidence,
@@ -211,6 +212,7 @@ describe('fileActiveOrderPaystackRefundCandidateReviews', () => {
     );
 
     expect(insert).not.toHaveBeenCalled();
+    expect(filed).toEqual([]);
   });
 
   it('throws when the order lookup fails', async () => {

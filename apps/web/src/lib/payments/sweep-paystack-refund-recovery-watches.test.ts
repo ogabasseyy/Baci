@@ -31,22 +31,24 @@ function chain(result: { data: unknown; error: unknown }) {
 function database({
   watches = { data: [], error: null },
   writes = { data: [], error: null },
+  retired = { data: 0, error: null },
 }: {
   watches?: { data: unknown; error: unknown };
   writes?: { data: unknown; error: unknown };
+  retired?: { data: unknown; error: unknown };
 } = {}) {
   const selectChain = chain(watches);
-  // One shared write chain: the rotation update runs only when a row
-  // failed, so the retire call's position varies by test.
   const writeChain = chain(writes);
   const from = vi
     .fn()
     .mockReturnValueOnce(selectChain)
     .mockReturnValue(writeChain);
+  const rpc = vi.fn().mockResolvedValue(retired);
   return {
     from,
+    rpc,
     selectChain,
-    supabase: { from } as unknown as SupabaseClient,
+    supabase: { from, rpc } as unknown as SupabaseClient,
     writeChain,
   };
 }
@@ -58,8 +60,8 @@ describe('sweepPaystackRefundRecoveryWatches', () => {
 
   it('re-drives open watches before retiring the stale ones', async () => {
     mocks.recover.mockResolvedValue(undefined);
-    const { from, writeChain, supabase } = database({
-      writes: { data: [{ id: 'watch-1' }], error: null },
+    const { from, rpc, supabase } = database({
+      retired: { data: 1, error: null },
       watches: {
         data: [
           {
@@ -75,15 +77,15 @@ describe('sweepPaystackRefundRecoveryWatches', () => {
 
     const summary = await sweepPaystackRefundRecoveryWatches(supabase);
 
-    expect(from).toHaveBeenNthCalledWith(1, 'paystack_refund_recovery_watch');
-    expect(from).toHaveBeenNthCalledWith(2, 'paystack_refund_recovery_watch');
+    expect(from).toHaveBeenCalledTimes(1);
     expect(mocks.recover).toHaveBeenCalledWith(supabase, 202, 'PSK-1');
-    // Retirement only covers redriven watches recovery left open: a
-    // handled watch resolves during the redrive and the status filter
+    // Retirement only covers redriven watches recovery left open, and
+    // runs under the advisory reference lock with a final payment
+    // rescan: a handled watch resolves during the redrive and the RPC
     // skips it.
-    expect(writeChain.in as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
-      'id',
-      ['watch-1']
+    expect(rpc).toHaveBeenCalledWith(
+      'retire_paystack_refund_recovery_watches_v1',
+      { p_watch_ids: ['watch-1'] }
     );
     expect(summary).toEqual({
       checked: 1,
@@ -132,7 +134,7 @@ describe('sweepPaystackRefundRecoveryWatches', () => {
   it('counts failures per row and never retires a failed redrive', async () => {
     mocks.recover.mockRejectedValueOnce(new Error('provider down'));
     mocks.recover.mockResolvedValueOnce(undefined);
-    const { writeChain, supabase } = database({
+    const { rpc, writeChain, supabase } = database({
       watches: {
         data: [
           {
@@ -164,9 +166,9 @@ describe('sweepPaystackRefundRecoveryWatches', () => {
       expect.objectContaining({ watchId: 'watch-1', refundId: 202 })
     );
     // The failed watch stays open for the next run even if stale.
-    expect(writeChain.in as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
-      'id',
-      ['watch-2']
+    expect(rpc).toHaveBeenCalledWith(
+      'retire_paystack_refund_recovery_watches_v1',
+      { p_watch_ids: ['watch-2'] }
     );
     // ...but rotates behind the backlog so one bad batch cannot pin
     // the bounded sweep.
@@ -226,7 +228,7 @@ describe('sweepPaystackRefundRecoveryWatches', () => {
 
   it('skips retirement entirely when nothing was redriven', async () => {
     mocks.recover.mockResolvedValue(undefined);
-    const { from, supabase } = database({
+    const { from, rpc, supabase } = database({
       watches: {
         data: [
           {
@@ -248,6 +250,7 @@ describe('sweepPaystackRefundRecoveryWatches', () => {
 
     expect(mocks.recover).not.toHaveBeenCalled();
     expect(from).toHaveBeenCalledTimes(1);
+    expect(rpc).not.toHaveBeenCalled();
     expect(summary).toEqual({
       checked: 0,
       failed: 0,

@@ -137,7 +137,7 @@ describe('processCancellationDrain', () => {
       1_270_000
     );
     await expect(response.json()).resolves.toEqual(
-      expect.objectContaining({ success: true })
+      expect.objectContaining({ skippedDueToBudget: false, success: true })
     );
   });
 
@@ -155,6 +155,8 @@ describe('processCancellationDrain', () => {
       );
 
       expect(response.status).toBe(200);
+      // The zero-limit call still runs: its exhausted/uncertain
+      // counts feed the 503 signal. Only the claim loop stands down.
       expect(mocks.drainPaystackRefundNotifications).toHaveBeenCalledWith(
         supabase,
         mocks.sendEmail,
@@ -166,6 +168,9 @@ describe('processCancellationDrain', () => {
         expect.objectContaining({
           message: expect.stringContaining('cron budget exhausted'),
         })
+      );
+      await expect(response.json()).resolves.toEqual(
+        expect.objectContaining({ skippedDueToBudget: true, success: true })
       );
     } finally {
       now.mockRestore();
@@ -186,19 +191,26 @@ describe('processCancellationDrain', () => {
       );
 
       expect(response.status).toBe(200);
+      // A zero limit skips the call outright instead of issuing
+      // empty select round-trips; the payload substitutes the same
+      // empty summary the full settlement path uses.
       expect(
         mocks.drainFailedOrderCancellationSideEffects
-      ).toHaveBeenCalledWith(
-        expect.objectContaining({
-          deadlineMs: 1_090_000,
-          emailDeadlineMs: 1_116_000,
-          limit: 0,
-          sendCancellationEmail: mocks.sendEmail,
-        })
-      );
+      ).not.toHaveBeenCalled();
       expect(mocks.loggerWarn).toHaveBeenCalledWith(
         expect.objectContaining({
           message: expect.stringContaining('side-effect drain'),
+        })
+      );
+      await expect(response.json()).resolves.toEqual(
+        expect.objectContaining({
+          cancellationSideEffectDrain: {
+            drained: [],
+            failed: [],
+            skipped: [],
+          },
+          skippedDueToBudget: true,
+          success: true,
         })
       );
     } finally {

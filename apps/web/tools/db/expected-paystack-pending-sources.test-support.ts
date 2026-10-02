@@ -1,6 +1,11 @@
 export const EXPECTED_PAYSTACK_PENDING_SOURCES = [
   {
     repositoryPath:
+      'supabase/migrations/20260927150300_paystack_abandoned_attempt_candidates_idx.sql',
+    sha256: '0cd541085b710ecadb72bd3376b042f76bdd77ddc6097a503c736c301a43785d',
+  },
+  {
+    repositoryPath:
       'supabase/migrations/20260811100000_manual_paystack_partial_reconciliation.sql',
     sha256: 'e9a10beaff84817e25b0f185d1aa672636ffcb052b8d19d678081cbaa9c5f09a',
   },

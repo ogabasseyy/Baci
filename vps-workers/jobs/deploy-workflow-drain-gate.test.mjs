@@ -237,8 +237,9 @@ describe('production cache-invalidation drain rollout gate', () => {
     // Explicit paths (no vps-workers/** glob) risk silent under-triggering
     // when GIGL worker files are added, so every gigl/tracking-named
     // behavioral file must appear in the filter. Non-behavioral matches
-    // (tests, docs, runtime dirs) and the non-tracking GIGL directory
-    // sync (no worker token) are excluded by design.
+    // (tests, shared test fixtures, docs, runtime dirs) and the
+    // non-tracking GIGL directory sync (no worker token) are excluded
+    // by design.
     const filter = readFileSync(
       join(workerRoot, '..', '.github', 'filters', 'deploy.yml'),
       'utf8'
@@ -258,7 +259,7 @@ describe('production cache-invalidation drain rollout gate', () => {
     const discovered = entries.filter(
       (entry) =>
         /gigl|tracking/i.test(entry) &&
-        !/\.test\./.test(entry) &&
+        !/\.test[.-]/.test(entry) &&
         !entry.startsWith('docs/') &&
         !entry.startsWith('logs/') &&
         !entry.startsWith('locks/') &&

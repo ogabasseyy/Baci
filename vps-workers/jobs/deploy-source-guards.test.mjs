@@ -262,4 +262,32 @@ describe('deploy source guards', () => {
     assert.match(provisioner, /worktree add --detach/);
     assert.match(provisioner, /pnpm install --frozen-lockfile/);
   });
+
+  it('quiesces every scheduled worker lock across the sync and flip', () => {
+    const source = readFileSync(releaseHelper, 'utf8');
+    const promotionStart = source.indexOf(
+      'flock -x /tmp/baci-workers-deploy.lock'
+    );
+    const promotionEnd = source.indexOf('REMOTE_SH\n\n', promotionStart);
+    const promotionSource = source.slice(promotionStart, promotionEnd);
+
+    // Lock names come from the installed crontab (promote runs before
+    // the crontab install, so these are exactly the entries that can
+    // tick) plus any lock file already present: no enumerated list to
+    // drift when workers are added.
+    assert.match(
+      promotionSource,
+      /crontab -l.*locks\/\[A-Za-z0-9_.-\]\+\\.lock/
+    );
+    assert.match(promotionSource, /locks\/\*\.lock/);
+    // Each lock is held exclusive on an open fd (released only when
+    // the remote shell exits after the flip), acquired before the sync.
+    const quiesceIndex = promotionSource.indexOf('flock -x "$gigl_quiesce_fd"');
+    assert.notEqual(quiesceIndex, -1);
+    assert.ok(quiesceIndex < promotionSource.indexOf('rsync -a --delete'));
+    assert.ok(
+      promotionSource.indexOf('rsync -a --delete') <
+        promotionSource.indexOf('flip-immutable-checkout.sh')
+    );
+  });
 });

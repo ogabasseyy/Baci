@@ -98,6 +98,7 @@ describe('GIGL direct worker cost contract', () => {
     for (const suite of [
       'check-gigl-cutover-latch.test.mjs',
       'check-gigl-cutover-latch-scope.test.mjs',
+      'gigl-dotenv.test.mjs',
       'resolve-gigl-latch-identity.test.mjs',
       'verify-gigl-fallback-token.test.mjs',
       'smoke-gigl-worker-capability.test.mjs',

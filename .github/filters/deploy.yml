@@ -97,6 +97,29 @@ tracking:
   - 'apps/web/src/lib/shipping/gigl*'
   - 'apps/web/src/lib/shipping/providers/gigl*'
   - 'apps/web/src/lib/shipping/providers/base.ts'
+  # Shared runtime dependencies of the files above: the poller executes
+  # them from the VPS checkout, so a change must refresh the worker like
+  # any other worker file (a logger redaction fix, for example, must
+  # reach the poller). Exact entries, kept complete by
+  # deploy-tracking-graph.test.mjs, which covers the full runtime graph
+  # (type-only imports are erased and stay untracked).
+  - 'apps/web/src/lib/logger.ts'
+  - 'apps/web/src/lib/shipping/build-order-shipment-receiver.ts'
+  - 'apps/web/src/lib/shipping/matches-gigl-provider-rate.ts'
+  - 'apps/web/src/lib/shipping/merchant-location.ts'
+  - 'apps/web/src/lib/shipping/merchant-sender-comparison.ts'
+  - 'apps/web/src/lib/shipping/order-shipment-booking-error.ts'
+  - 'apps/web/src/lib/shipping/order-shipment-booking-utils.ts'
+  - 'apps/web/src/lib/shipping/package-dimensions.ts'
+  - 'apps/web/src/lib/shipping/quote-provider-failure.ts'
+  - 'apps/web/src/lib/shipping/shipping-config.ts'
+  - 'apps/web/src/lib/shipping/surviving-shipment-quantity.ts'
+  - 'apps/web/src/lib/shipping/tracking-types.ts'
+  - 'apps/web/src/lib/shipping/types.ts'
+  - 'apps/web/src/lib/storefront-build-read-fetch.ts'
+  - 'apps/web/src/lib/storefront-public-read-fetch.ts'
+  - 'apps/web/src/lib/supabase/compose-fetch-signal.ts'
+  - 'apps/web/src/lib/supabase/public.ts'
   - 'packages/shared/src/lib/gigl-tracking-status.ts'
   - 'apps/web/src/scripts/process-gigl-tracking.ts'
   - 'apps/web/src/scripts/verify-gigl-tracking-worker-capability.ts'

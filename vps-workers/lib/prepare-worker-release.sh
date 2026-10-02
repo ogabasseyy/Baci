@@ -111,7 +111,12 @@ promote_worker_release() {
   # versa) skips instead of running mixed-revision. A running poll delays
   # promote by at most one tick (its own timeout + kill-after); lock order
   # is deploy-then-gigl while cron takes gigl only, so no cycle. The
-  # locks dir is pre-created because flock will not create parents.
+  # remote script additionally quiesces EVERY scheduled worker lock
+  # (parsed from the installed crontab) across the same window, because
+  # the flipped checkout symlink is shared: without that, a Petrock,
+  # quiz, or other tick could read half-synced wrappers or straddle two
+  # revisions. The locks dir is pre-created because flock will not
+  # create parents.
   ssh "$VPS" "mkdir -p '$REMOTE_DIR/locks' && flock -x /tmp/baci-workers-deploy.lock flock -x '$REMOTE_DIR/locks/gigl-tracking.lock' bash -s -- '$STAGING_DIR' '$REMOTE_DIR' '$APP_SHA'" <<'REMOTE_SH'
 set -euo pipefail
 
@@ -128,9 +133,44 @@ mkdir -p "$remote_dir"
 # app-checkout.sha at read time, so promoting a DIFFERENT tree (rollback
 # or the exit-42 unverified path) invalidates the preserved latch until
 # a fresh smoke re-latches the installed revision.
+mkdir -p "$remote_dir/logs" "$remote_dir/locks"
+
+# Quiesce every scheduled worker across the sync and flip: the checkout
+# symlink is shared, so a non-GIGL tick that lands mid-promote could
+# read half-synced wrappers or straddle two revisions. Lock names come
+# from the installed crontab (promote runs before the crontab install,
+# so these are exactly the entries that can tick now) plus any lock
+# file already present, in sorted order. Cron takes each lock
+# non-blocking, so ticks skip instead of queueing; blocking here waits
+# for at most one in-flight tick per worker, and crons never block, so
+# no lock cycle can form. Each fd stays open (hence held) until this
+# remote shell exits, which is after the flip below.
+gigl_quiesce_names="$(
+  {
+    crontab -l 2>/dev/null | grep -o -E 'locks/[A-Za-z0-9_.-]+\.lock' | sed 's|^locks/||' || true
+    for gigl_quiesce_path in "$remote_dir"/locks/*.lock; do
+      [ -e "$gigl_quiesce_path" ] || continue
+      basename "$gigl_quiesce_path"
+    done
+  } | sort -u
+)"
+gigl_quiesce_fd=10
+while IFS= read -r gigl_quiesce_name; do
+  [ -n "$gigl_quiesce_name" ] || continue
+  # Append mode: open (creating) without truncating, then hold
+  # exclusive. Numeric fds via eval (not exec {fd}) stay compatible
+  # with bash 3.2; the interpolated fd is arithmetic and the name
+  # charset above excludes `/` and quotes, so no traversal.
+  # shellcheck disable=SC2094
+  eval "exec ${gigl_quiesce_fd}>>\"\$remote_dir/locks/${gigl_quiesce_name}\"" || exit 1
+  flock -x "$gigl_quiesce_fd" || exit 1
+  gigl_quiesce_fd=$((gigl_quiesce_fd + 1))
+done <<EOF
+$gigl_quiesce_names
+EOF
+
 rsync -a --delete --exclude='.env*' --exclude='logs' --exclude='locks' --exclude='.gigl-capability-smoke-ok' \
   "$staging_dir/" "$remote_dir/"
-mkdir -p "$remote_dir/logs" "$remote_dir/locks"
 
 # Atomically switch the delegated checkout to this release's immutable
 # per-SHA worktree inside this same deploy lock, so wrappers, SHA

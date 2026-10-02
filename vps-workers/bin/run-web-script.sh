@@ -119,7 +119,7 @@ if [ ! -f "$SCRIPT_FILE" ]; then
   exit 1
 fi
 
-if [ ! -f "$ENV_FILE" ]; then
+if [ "$ENV_FILE" != "/dev/null" ] && [ ! -f "$ENV_FILE" ]; then
   echo "[$LABEL] Missing env file: $ENV_FILE" >&2
   exit 1
 fi

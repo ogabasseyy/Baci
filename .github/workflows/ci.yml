@@ -413,6 +413,7 @@ jobs:
           .github/scripts/check-gigl-cutover-latch.test.mjs
           .github/scripts/check-gigl-enforcement-migration-names.test.mjs
           .github/scripts/check-gigl-cutover-latch-scope.test.mjs
+          .github/scripts/gigl-dotenv.test.mjs
           .github/scripts/resolve-gigl-latch-identity.test.mjs
           .github/scripts/verify-gigl-fallback-token.test.mjs
           .github/scripts/smoke-gigl-worker-capability.test.mjs

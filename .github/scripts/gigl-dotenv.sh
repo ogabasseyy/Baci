@@ -7,8 +7,11 @@
 # the capability smoke loads): optional leading whitespace, optional
 # `export` prefix, spaces around `=`, one layer of matched surrounding
 # quotes stripped, otherwise a quote-aware trailing `#` comment stripped.
-# Prints nothing when the file or key is absent. Anything else (multiline
-# values, escapes) is out of subset and parses literally.
+# Prints nothing when the file or key is absent. Backslash escapes stay
+# literal in the value (dotenv expands only \n and \r), but inside
+# double quotes an escape never ends the quoted region, so a `#` after
+# `\"` stays data exactly as dotenv parses it. Multiline values are out
+# of subset.
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   echo 'gigl-dotenv.sh must be sourced, not executed' >&2
   exit 2
@@ -33,13 +36,21 @@ gigl_dotenv_value() {
       quote = ""
       for (i = 1; i <= length(value); i++) {
         char = substr(value, i, 1)
-        if (quote == "") {
+        if (quote == dq && char == "\\" && i < length(value)) {
+          # An escape inside double quotes: copy both characters
+          # literally (escapes stay literal per the subset contract)
+          # without letting an escaped quote end the quoted region,
+          # or a `#` after it would wrongly start a comment.
+          i++
+          uncommented = uncommented char substr(value, i, 1)
+        } else if (quote == "") {
           if (char == "#") break
           if (char == dq || char == sq) quote = char
-        } else if (char == quote) {
-          quote = ""
+          uncommented = uncommented char
+        } else {
+          if (char == quote) quote = ""
+          uncommented = uncommented char
         }
-        uncommented = uncommented char
       }
       value = uncommented
       sub(/^[ \t]+/, "", value)

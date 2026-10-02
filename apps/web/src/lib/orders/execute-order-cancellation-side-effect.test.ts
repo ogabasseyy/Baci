@@ -1,3 +1,7 @@
+vi.mock('./check-cancellation-refund-provider', () => ({
+  checkCancellationRefundProvider: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -64,7 +68,11 @@ function refundClient({
 }: {
   insertError?: Error | null;
   payments?: (typeof paystackPayment)[];
-  refundRows?: { metadata: Record<string, unknown>; status: string }[];
+  refundRows?: {
+    amount: number;
+    metadata: Record<string, unknown>;
+    status: string;
+  }[];
 } = {}) {
   const insert = vi.fn().mockResolvedValue({ error: insertError });
   const paymentLookup = transactionQuery(payments);
@@ -152,10 +160,25 @@ describe('executeOrderCancellationSideEffect', () => {
     );
   });
 
+  it('does not submit refunds when completed captures exceed the recorded amount paid', async () => {
+    const supabase = refundClient({
+      payments: [{ ...paystackPayment, amount: 101 }],
+    });
+    await expect(
+      executeOrderCancellationSideEffect({
+        merchant,
+        order,
+        step: 'refund',
+        supabase: supabase as never,
+      })
+    ).rejects.toThrow('no refundable amount');
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+  });
+
   it('refunds every completed gateway payment without replaying recorded legs', async () => {
     const supabase = refundClient({
       payments: [
-        paystackPayment,
+        { ...paystackPayment, amount: 60 },
         {
           ...paystackPayment,
           amount: 40,
@@ -165,6 +188,7 @@ describe('executeOrderCancellationSideEffect', () => {
       ],
       refundRows: [
         {
+          amount: 60,
           metadata: { payment_transaction_id: 'payment-1' },
           status: 'completed',
         },

@@ -79,3 +79,22 @@ describe('Order cancellation email', () => {
     });
   });
 });
+
+describe('cancellation refund status wording', () => {
+  it('does not promise that a queued refund has already succeeded', () => {
+    const html = generateOrderCancellationEmail({
+      orderNumber: 'ORD-1',
+      customerName: 'Buyer',
+      items: [],
+      totalAmount: 100,
+      amountPaid: 100,
+      refundAmount: 100,
+      cancelledBy: 'merchant',
+      merchantName: 'Store',
+      merchantUrl: 'https://example.com',
+      currency: 'NGN',
+    });
+    expect(html).toContain('Cancellation starts the refund workflow');
+    expect(html).not.toContain('will be processed within 3-5 business days');
+  });
+});

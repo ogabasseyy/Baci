@@ -82,6 +82,25 @@ test('refuses symlinks without following them', () => {
   }
 });
 
+test('reports the materialized count to the step summary', () => {
+  const root = layout({ 'node_modules/ok/index.js': 'ok' });
+  try {
+    const summary = join(root, 'summary.md');
+    writeFileSync(summary, '');
+    const result = spawnSync('node', [SCRIPT, root], {
+      encoding: 'utf8',
+      env: { ...process.env, GITHUB_STEP_SUMMARY: summary },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(
+      readFileSync(summary, 'utf8'),
+      /Prebuilt refs materialized: 1 file/
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('fails closed on a missing quarantine dir', () => {
   const root = mkdtempSync(join(tmpdir(), 'preview-materialize-empty-'));
   try {

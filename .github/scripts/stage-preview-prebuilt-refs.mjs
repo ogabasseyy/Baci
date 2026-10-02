@@ -21,7 +21,7 @@
 //
 // Usage: stage-preview-prebuilt-refs.mjs [project-root] [staging-dir]
 // Defaults: root = cwd, staging = <root>/.preview-refs-stage (recreated).
-import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 const root = resolve(process.argv[2] ?? process.cwd());
@@ -54,8 +54,9 @@ mkdirSync(stage, { recursive: true });
 const staged = [];
 const skipped = [];
 const stagedValues = new Set();
+const missingValues = new Set();
+const unusableConfigs = [];
 let stringValues = 0;
-let missingValues = 0;
 
 for (const configPath of vcConfigs(outputDir)) {
   let config;
@@ -68,6 +69,8 @@ for (const configPath of vcConfigs(outputDir)) {
   const maps = config?.filePathMap;
   if (!maps || typeof maps !== 'object') continue;
   const kept = {};
+  let usable = 0;
+  let missing = 0;
   for (const [key, value] of Object.entries(maps)) {
     // Only missing, protected, and invalid values leave the shipped map:
     // the CLI would ENOENT, wrongly upload, or crash on them. Absolute,
@@ -84,6 +87,7 @@ for (const configPath of vcConfigs(outputDir)) {
     if (isAbsolute(value)) {
       skipped.push({ value, reason: 'absolute' });
       kept[key] = value;
+      usable += 1;
       continue;
     }
     const abs = resolve(root, value);
@@ -91,12 +95,14 @@ for (const configPath of vcConfigs(outputDir)) {
     if (rel === '' || rel === '.' || rel.startsWith(`..${sep}`) || rel === '..' || isAbsolute(rel)) {
       skipped.push({ value, reason: 'escapes-root' });
       kept[key] = value;
+      usable += 1;
       continue;
     }
     const posixRel = rel.split(sep).join('/');
     if (posixRel === '.vercel/output' || posixRel.startsWith('.vercel/output/')) {
       skipped.push({ value, reason: 'inside-output' });
       kept[key] = value;
+      usable += 1;
       continue;
     }
     if (
@@ -120,7 +126,8 @@ for (const configPath of vcConfigs(outputDir)) {
       // failing the whole build. The guardrail below catches a
       // systematically wrong base, where nothing real stages.
       skipped.push({ value, reason: 'missing' });
-      missingValues += 1;
+      missingValues.add(value);
+      missing += 1;
       continue;
     }
     const dest = join(stage, rel);
@@ -129,7 +136,9 @@ for (const configPath of vcConfigs(outputDir)) {
     staged.push(posixRel);
     stagedValues.add(value);
     kept[key] = value;
+    usable += 1;
   }
+  if (missing > 0 && usable === 0) unusableConfigs.push(configPath);
   if (Object.keys(kept).length !== Object.keys(maps).length) {
     config.filePathMap = kept;
     writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
@@ -137,15 +146,31 @@ for (const configPath of vcConfigs(outputDir)) {
 }
 
 // Canary, not a correctness gate: dropped refs are redundant with the
-// self-contained .func dirs (platform deploys prove it), so truncation
-// cannot break the deployment. But phantoms scale ~1 per traced package
-// while staged files scale many per package, so phantoms dominating the
-// staged set smells like a systematically wrong base. Refuse to ship it.
-if (stringValues > 0 && missingValues > staged.length) {
+// self-contained .func dirs (platform git-push deploys never consume
+// filePathMap, and production works), so truncation cannot break the
+// deployment. But phantoms scale ~1 per traced package while staged files
+// scale many per package, so phantoms dominating the staged set smells
+// like a systematically wrong base. Refuse to ship it.
+if (stringValues > 0 && missingValues.size > stagedValues.size) {
   console.error(
-    `error: ${missingValues} missing reference(s) dominate ${staged.length} staged; refusing to ship (wrong base?)`
+    `error: ${missingValues.size} missing reference(s) dominate ${stagedValues.size} staged; refusing to ship (wrong base?)`
   );
   process.exit(1);
+}
+if (unusableConfigs.length > 0) {
+  console.error(
+    `error: ${unusableConfigs.length} function(s) lost every usable reference:\n` +
+      unusableConfigs.map((p) => `  ${p}`).join('\n')
+  );
+  process.exit(1);
+}
+if (missingValues.size > 0) {
+  const shown = [...missingValues].slice(0, 20);
+  console.error(
+    `WARNING: dropped ${missingValues.size} phantom reference(s) from shipped maps:\n` +
+      shown.map((v) => `  ${v}`).join('\n') +
+      (missingValues.size > shown.length ? `\n  ...and ${missingValues.size - shown.length} more` : '')
+  );
 }
 
 staged.sort();
@@ -156,3 +181,19 @@ writeFileSync(
 console.log(
   `staged ${new Set(staged).size} referenced file(s), skipped ${skipped.length}`
 );
+// Surface truncation on the build summary (same convention as the deploy
+// helper): dropped refs are listed in the job output and the manifest,
+// and this line makes the counts visible without opening either.
+if (process.env.GITHUB_STEP_SUMMARY) {
+  // Values are build-controlled: strip span-breaking characters (same
+  // rule as the deploy helper's ref sanitization).
+  const dropped = skipped
+    .filter((s) => s.reason === 'missing')
+    .map((s) => s.value.replace(/[`\r\n]/g, ''));
+  appendFileSync(
+    process.env.GITHUB_STEP_SUMMARY,
+    `### Prebuilt refs\nstaged ${new Set(staged).size}, skipped ${skipped.length} (${dropped.length} phantom)\n` +
+      dropped.slice(0, 20).map((v) => `- \`${v}\``).join('\n') +
+      (dropped.length > 0 ? '\n' : '')
+  );
+}

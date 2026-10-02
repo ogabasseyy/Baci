@@ -163,6 +163,69 @@ test('drops phantom references from the shipped maps', () => {
   }
 });
 
+test('fails a function that loses every usable reference', () => {
+  const root = layout({
+    '.vercel/output/functions/healthy.func/.vc-config.json': JSON.stringify({
+      filePathMap: {
+        '/1.js': 'node_modules/a/one.js',
+        '/2.js': 'node_modules/a/two.js',
+        '/3.js': 'node_modules/a/three.js',
+        '/4.js': 'node_modules/a/four.js',
+        '/5.js': 'node_modules/a/five.js',
+      },
+    }),
+    '.vercel/output/functions/broken.func/.vc-config.json': JSON.stringify({
+      filePathMap: {
+        '/gone1.js': 'node_modules/gone/one.js',
+        '/gone2.js': 'node_modules/gone/two.js',
+      },
+    }),
+    'node_modules/a/one.js': '1',
+    'node_modules/a/two.js': '2',
+    'node_modules/a/three.js': '3',
+    'node_modules/a/four.js': '4',
+    'node_modules/a/five.js': '5',
+  });
+  try {
+    // Global ratio passes (2 missing vs 5 staged); per-config must fire.
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], {
+      encoding: 'utf8',
+    });
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /lost every usable reference/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('warns and summarizes phantom drops without failing', () => {
+  const configRel = '.vercel/output/functions/a.func/.vc-config.json';
+  const root = layout({
+    [configRel]: JSON.stringify({
+      filePathMap: {
+        '/gone.js': 'node_modules/gone/index.js',
+        '/ok.js': 'node_modules/ok/index.js',
+      },
+    }),
+    'node_modules/ok/index.js': 'ok',
+  });
+  try {
+    const summary = join(root, 'summary.md');
+    writeFileSync(summary, '');
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], {
+      encoding: 'utf8',
+      env: { ...process.env, GITHUB_STEP_SUMMARY: summary },
+    });
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /WARNING: dropped 1 phantom reference/);
+    const text = readFileSync(summary, 'utf8');
+    assert.match(text, /staged 1, skipped 1 \(1 phantom\)/);
+    assert.match(text, /node_modules\/gone\/index\.js/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('fails closed when missing refs dominate staged files', () => {
   const root = layout({
     '.vercel/output/functions/a.func/.vc-config.json': JSON.stringify({

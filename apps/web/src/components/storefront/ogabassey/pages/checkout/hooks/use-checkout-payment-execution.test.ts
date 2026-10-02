@@ -39,12 +39,12 @@ vi.mock('./use-wallet-funded-bank-transfer', () => ({
 import { useCheckoutCryptoSession } from './use-checkout-crypto-session';
 import { useCheckoutDvaSession } from './use-checkout-dva-session';
 import { useCheckoutOrderSubmission } from './use-checkout-order-submission';
+import { useCheckoutPaymentExecution } from './use-checkout-payment-execution';
 import { useStorefrontCustomerSession } from './use-storefront-customer-session';
 import {
   useWalletFundedBankTransfer,
   type WalletFundedOrderPaidPayload,
 } from './use-wallet-funded-bank-transfer';
-import { useCheckoutPaymentExecution } from './use-checkout-payment-execution';
 
 const dva = {
   closeDvaModal: vi.fn(),
@@ -65,11 +65,17 @@ const handlePlaceOrder = vi.fn();
 const waitForResolvedCustomerAuth = vi.fn(async () => true);
 
 function createOptions(
-  resumed: CheckoutPaymentExecutionOptions['attempt']['resumed'] = {
-    order: null,
+  resumed: Pick<
+    CheckoutPaymentExecutionOptions['attempt'],
+    | 'resumedOrder'
+    | 'preferredGateway'
+    | 'resumeTrackingToken'
+    | 'resumeMerchantSlug'
+  > = {
+    resumedOrder: null,
     preferredGateway: null,
-    trackingToken: null,
-    merchantSlugFromResume: null,
+    resumeTrackingToken: null,
+    resumeMerchantSlug: null,
   },
   identity: CheckoutPaymentExecutionOptions['identity'] = {
     merchantId: 'merchant-1',
@@ -80,18 +86,29 @@ function createOptions(
   return {
     identity,
     form: {
+      session: {
+        values: {
+          customerEmail: 'ada@example.test',
+          customerPhone: '+2348031234567',
+          firstName: 'Ada',
+          lastName: 'Okafor',
+          newsletterOptIn: false,
+          deliveryMethod: 'door',
+          airportType: 'delivery',
+          airportRequiresQuote: false,
+          newAddressStreet: '1 Main St',
+          newAddressCity: 'Lagos',
+          newAddressState: 'Lagos',
+        } as CheckoutPaymentExecutionOptions['form']['session']['values'],
+        clear: vi.fn(),
+      } as unknown as CheckoutPaymentExecutionOptions['form']['session'],
       account: {
         createAccount: false,
         password: '',
-        user: null,
+        setCreateAccount: vi.fn(),
+        setPassword: vi.fn(),
       },
-      contact: {
-        customerEmail: 'ada@example.test',
-        customerPhone: '+2348031234567',
-        firstName: 'Ada',
-        lastName: 'Okafor',
-        newsletterOptIn: false,
-      },
+      user: null,
     },
     cart: {
       cart: [],
@@ -103,20 +120,17 @@ function createOptions(
     delivery: {} as unknown as CheckoutPaymentExecutionOptions['delivery'],
     merchant: null,
     navigation: {
-      setCurrentStep: vi.fn(),
-      setCompletedSteps: vi.fn(),
+      flow: {
+        setCurrentStep: vi.fn(),
+        setCompletedSteps: vi.fn(),
+      },
       pushSuccessRoute: vi.fn(),
       getHref: (path) => `/shop${path}`,
     },
-    order: {
-      pending: null,
-      clearPending: vi.fn(),
-      setPending: vi.fn(),
-      setOrderCreated: vi.fn(),
-      clearCheckoutSession: vi.fn(),
-    },
     payment: {
-      session: { method: 'bank_transfer' } as unknown as CheckoutPaymentExecutionOptions['payment']['session'],
+      session: {
+        method: 'bank_transfer',
+      } as unknown as CheckoutPaymentExecutionOptions['payment']['session'],
       bankTransferAvailable: true,
       paystackAvailable: true,
       korapayAvailable: false,
@@ -124,14 +138,16 @@ function createOptions(
       currencyCode: 'NGN',
     },
     attempt: {
-      resumed,
-      processing: {
-        setIsProcessing: vi.fn(),
-        isOrderInFlightRef: { current: false },
-        tryBeginSubmission: vi.fn(() => true),
-        releaseSubmission: vi.fn(),
-        handleSubmissionError: vi.fn(),
-      },
+      ...resumed,
+      pendingCheckoutOrder: null,
+      clearPendingCheckoutOrder: vi.fn(),
+      setPendingCheckoutOrder: vi.fn(),
+      setCheckoutOrderCreated: vi.fn(),
+      setIsProcessing: vi.fn(),
+      isOrderInFlightRef: { current: false },
+      tryBeginSubmission: vi.fn(() => true),
+      releaseSubmission: vi.fn(),
+      handleSubmissionError: vi.fn(),
     },
   };
 }
@@ -174,7 +190,7 @@ describe('useCheckoutPaymentExecution', () => {
     expect(vi.mocked(useCheckoutCryptoSession)).toHaveBeenCalledWith(
       expect.objectContaining({
         merchantId: 'merchant-1',
-        isOrderInFlightRef: options.attempt.processing.isOrderInFlightRef,
+        isOrderInFlightRef: options.attempt.isOrderInFlightRef,
       })
     );
     expect(vi.mocked(useWalletFundedBankTransfer)).toHaveBeenCalledWith(
@@ -206,12 +222,12 @@ describe('useCheckoutPaymentExecution', () => {
     vi.useFakeTimers();
     const resumedOrder = {
       id: 'order-resume-1',
-    } as unknown as CheckoutPaymentExecutionOptions['attempt']['resumed']['order'];
+    } as unknown as CheckoutPaymentExecutionOptions['attempt']['resumedOrder'];
     const options = createOptions({
-      order: resumedOrder,
+      resumedOrder,
       preferredGateway: 'credpal',
-      trackingToken: 'tracking-1',
-      merchantSlugFromResume: 'test-store',
+      resumeTrackingToken: 'tracking-1',
+      resumeMerchantSlug: 'test-store',
     });
     const { result } = renderHook(() => useCheckoutPaymentExecution(options));
     const submission = vi.mocked(useCheckoutOrderSubmission).mock.calls[0]?.[0];
@@ -227,7 +243,12 @@ describe('useCheckoutPaymentExecution', () => {
       trackingToken: 'paid-track-1',
     };
 
-    expect(submission?.resumed).toBe(options.attempt.resumed);
+    expect(submission?.resumed).toEqual({
+      order: options.attempt.resumedOrder,
+      preferredGateway: options.attempt.preferredGateway,
+      trackingToken: options.attempt.resumeTrackingToken,
+      merchantSlugFromResume: options.attempt.resumeMerchantSlug,
+    });
     expect(result.current.walletFundedTransfer).toBe(walletTransfer);
     expect(completion).toBeTypeOf('function');
     act(() => completion?.(payload));
@@ -240,9 +261,9 @@ describe('useCheckoutPaymentExecution', () => {
       reference: 'intent-1',
       total: 5000,
     });
-    expect(options.order.clearPending).toHaveBeenCalledOnce();
+    expect(options.attempt.clearPendingCheckoutOrder).toHaveBeenCalledOnce();
     expect(mocks.clearIdempotencyKey).toHaveBeenCalledWith('fingerprint-1');
-    expect(options.order.clearCheckoutSession).toHaveBeenCalledOnce();
+    expect(options.form.session.clear).toHaveBeenCalledOnce();
     expect(mocks.push).toHaveBeenCalledWith(
       '/shop/order-success?orderId=order-paid-1&wallet=true&trackingToken=paid-track-1'
     );
@@ -250,38 +271,131 @@ describe('useCheckoutPaymentExecution', () => {
     expect(options.cart.clearCart).toHaveBeenCalledOnce();
   });
 
-  it.each([null, undefined])(
-    'keeps unresolved merchant identity safe and preserves submission guards (%s)',
-    (merchantId) => {
-      const options = createOptions(undefined, {
-        merchantId,
-        merchantSlug: undefined,
-        currencyCode: 'NGN',
-      });
-      const { result } = renderHook(() => useCheckoutPaymentExecution(options));
-      const submission = vi.mocked(useCheckoutOrderSubmission).mock.calls[0]?.[0];
+  it('maps latest persisted form values and attempt callbacks into submission', () => {
+    const initial = createOptions();
+    const { rerender } = renderHook(
+      ({ options }: { options: CheckoutPaymentExecutionOptions }) =>
+        useCheckoutPaymentExecution(options),
+      { initialProps: { options: initial } }
+    );
+    const latestPaymentSession = {
+      method: 'paystack',
+      total: 9600,
+      wallet: { remainingAmount: 8200 },
+    };
+    const latestTryBeginSubmission = vi.fn(() => false);
+    const next = {
+      ...initial,
+      form: {
+        ...initial.form,
+        session: {
+          ...initial.form.session,
+          values: {
+            ...initial.form.session.values,
+            customerEmail: 'new@example.test',
+            customerPhone: '+2348000000000',
+            firstName: 'New',
+            lastName: 'Customer',
+            newsletterOptIn: true,
+            deliveryMethod: 'airport',
+            airportType: 'pickup',
+            airportRequiresQuote: true,
+            newAddressStreet: '2 Main St',
+            newAddressCity: 'Abuja',
+            newAddressState: 'FCT',
+          },
+        },
+      },
+      payment: {
+        ...initial.payment,
+        session:
+          latestPaymentSession as unknown as CheckoutPaymentExecutionOptions['payment']['session'],
+      },
+      attempt: {
+        ...initial.attempt,
+        tryBeginSubmission: latestTryBeginSubmission,
+      },
+    } as unknown as CheckoutPaymentExecutionOptions;
 
-      expect(vi.mocked(useStorefrontCustomerSession)).toHaveBeenCalledWith(undefined);
-      expect(vi.mocked(useCheckoutCryptoSession)).toHaveBeenCalledWith(
-        expect.objectContaining({ merchantId })
-      );
-      expect(vi.mocked(useWalletFundedBankTransfer)).toHaveBeenCalledWith(
-        expect.objectContaining({ merchantId: undefined, merchantSlug: undefined })
-      );
-      expect(submission?.account.waitForResolvedCustomerAuth).toBe(
-        waitForResolvedCustomerAuth
-      );
-      expect(submission?.processing).toBe(options.attempt.processing);
-      expect(submission?.processing.tryBeginSubmission).toBe(
-        options.attempt.processing.tryBeginSubmission
-      );
-      expect(submission?.processing.releaseSubmission).toBe(
-        options.attempt.processing.releaseSubmission
-      );
-      expect(submission?.processing.handleSubmissionError).toBe(
-        options.attempt.processing.handleSubmissionError
-      );
-      expect(result.current.handlePlaceOrder).toBe(handlePlaceOrder);
-    }
-  );
+    rerender({ options: next });
+
+    const submission = vi
+      .mocked(useCheckoutOrderSubmission)
+      .mock.calls.at(-1)?.[0];
+    expect(submission?.contact).toEqual({
+      customerEmail: 'new@example.test',
+      customerPhone: '+2348000000000',
+      firstName: 'New',
+      lastName: 'Customer',
+      newsletterOptIn: true,
+    });
+    expect(submission?.delivery).toEqual(
+      expect.objectContaining({
+        method: 'airport',
+        airportType: 'pickup',
+        airportRequiresQuote: true,
+        newAddressStreet: '2 Main St',
+        newAddressCity: 'Abuja',
+        newAddressState: 'FCT',
+      })
+    );
+    expect(submission?.payment.session).toBe(latestPaymentSession);
+    expect(submission?.payment.session.total).toBe(9600);
+    expect(submission?.payment.session.wallet.remainingAmount).toBe(8200);
+    expect(submission?.account.createAccount).toBe(
+      next.form.account.createAccount
+    );
+    expect(submission?.navigation.setCurrentStep).toBe(
+      next.navigation.flow.setCurrentStep
+    );
+    expect(submission?.order.pending).toBe(next.attempt.pendingCheckoutOrder);
+    expect(submission?.order.clearPending).toBe(
+      next.attempt.clearPendingCheckoutOrder
+    );
+    expect(submission?.order.clearCheckoutSession).toBe(
+      next.form.session.clear
+    );
+    expect(submission?.processing.tryBeginSubmission).toBe(
+      latestTryBeginSubmission
+    );
+  });
+
+  it.each([
+    null,
+    undefined,
+  ])('keeps unresolved merchant identity safe and preserves submission guards (%s)', (merchantId) => {
+    const options = createOptions(undefined, {
+      merchantId,
+      merchantSlug: undefined,
+      currencyCode: 'NGN',
+    });
+    const { result } = renderHook(() => useCheckoutPaymentExecution(options));
+    const submission = vi.mocked(useCheckoutOrderSubmission).mock.calls[0]?.[0];
+
+    expect(vi.mocked(useStorefrontCustomerSession)).toHaveBeenCalledWith(
+      undefined
+    );
+    expect(vi.mocked(useCheckoutCryptoSession)).toHaveBeenCalledWith(
+      expect.objectContaining({ merchantId })
+    );
+    expect(vi.mocked(useWalletFundedBankTransfer)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchantId: undefined,
+        merchantSlug: undefined,
+      })
+    );
+    expect(submission?.account.waitForResolvedCustomerAuth).toBe(
+      waitForResolvedCustomerAuth
+    );
+    expect(submission?.processing.tryBeginSubmission).toBe(
+      options.attempt.tryBeginSubmission
+    );
+    expect(submission?.processing.releaseSubmission).toBe(
+      options.attempt.releaseSubmission
+    );
+    expect(submission?.processing.handleSubmissionError).toBe(
+      options.attempt.handleSubmissionError
+    );
+    expect(result.current.handlePlaceOrder).toBe(handlePlaceOrder);
+  });
 });

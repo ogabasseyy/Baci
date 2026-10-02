@@ -18,7 +18,9 @@ function isImportedHistoricalOrder(input: {
   externalSource?: string | null;
   importJobId?: string | null;
 }) {
-  return Boolean(input.externalSource || input.importJobId);
+  // A blank staff-entered source is absent, not imported: match the trigger
+  // and sender truthiness so the archive agrees with the queued email.
+  return Boolean(input.externalSource?.trim() || input.importJobId);
 }
 
 interface DocumentEligibilityInput {

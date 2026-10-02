@@ -6,7 +6,10 @@ import {
 import { resolveInvoicePaymentAccount } from '@/lib/invoice-payment-account';
 import { buildManualOrderDocumentEmailContent } from '@/lib/manual-order-document-email';
 import { markManualDocumentDispatchStarted } from '@/lib/mark-manual-document-dispatch-started';
-import { resolveOrderNotificationRecipient } from '@/lib/order-notification-recipient';
+import {
+  resolveNotificationReplyTo,
+  resolveOrderNotificationRecipient,
+} from '@/lib/order-notification-recipient';
 import { renderManualOrderDocumentPdf } from '@/lib/render-manual-order-document-pdf';
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { resolveManualDocumentClaimDomain } from '@/lib/resolve-manual-document-claim-domain';
@@ -78,15 +81,19 @@ export async function sendManualOrderDocument({
   const order = orderParsed.data;
   const merchant = merchantParsed.data;
   // Neither status column has a database constraint: normalize legacy
-  // spellings (Paid, CANCELLED, padded) like the enqueue trigger so the
-  // sender agrees with the trigger on what is terminal, paid, or eligible.
-  const paymentStatus = order.payment_status.trim().toLowerCase();
+  // spellings (Paid, CANCELLED, padded, spaced) exactly like the enqueue
+  // trigger so the sender agrees with the trigger on what is terminal,
+  // paid, or eligible.
+  const paymentStatus = order.payment_status
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
   if (
     order.merchant_id !== row.merchant_id ||
     merchant.id !== row.merchant_id ||
     !order.recorded_by_user_id ||
     order.import_job_id ||
-    order.external_source ||
+    order.external_source?.trim() ||
     ['cancelled', 'canceled', 'returned', 'failed'].includes(
       order.shipping_status.trim().toLowerCase()
     ) ||
@@ -238,8 +245,7 @@ export async function sendManualOrderDocument({
       fromName:
         merchant.email_sender_name || merchant.business_name || merchant.slug,
       // merchant.email is the private login address: never a reply target.
-      // Omitting replyTo lets the provider fall back to the sender identity.
-      replyTo: merchant.support_email || undefined,
+      replyTo: resolveNotificationReplyTo(merchant.support_email),
       clientReference: `order:${order.id}:${row.event_type}`,
       beforeTransportDispatch: () => persistDispatch(true),
       resetTransportDispatch: () => persistDispatch(false),

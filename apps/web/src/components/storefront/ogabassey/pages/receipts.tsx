@@ -47,6 +47,8 @@ interface ReceiptListItem {
   total: string;
   status: 'Paid' | 'Partially Paid' | 'Unpaid';
   paymentStatus: 'paid' | 'partially_paid' | 'unpaid';
+  /** Resolved proforma kind from the orders API invoice type code. */
+  documentKind: 'proforma' | null;
   balance: string;
   firstProductName: string;
   firstProductImage: string | null;
@@ -203,6 +205,16 @@ async function fetchReceiptListItems(
         ? 'paid'
         : paymentStatus;
 
+    // The orders API resolves unpaid invoice-method orders to Peppol type
+    // 325 (proforma); carry that kind so the modal labels and prints the
+    // emailed proforma instead of an ordinary invoice. Settled orders keep
+    // the commercial receipt even if a stale 325 travels with them.
+    const documentKind =
+      (order.invoice_type_code as string) === '325' &&
+      rendererPaymentStatus !== 'paid'
+        ? 'proforma'
+        : null;
+
     const rawOrder: ReceiptOrder = {
       order_number:
         (order.order_number as string) ||
@@ -257,6 +269,7 @@ async function fetchReceiptListItems(
       total: formatCurrency(total),
       status: statusLabel,
       paymentStatus: paymentStatus as ReceiptListItem['paymentStatus'],
+      documentKind,
       balance: formatCurrency(Math.max(0, total - amountPaid)),
       firstProductName,
       firstProductImage: getReceiptItemImage(items[0]),
@@ -274,6 +287,8 @@ export const OgabasseyV2Receipts: React.FC = () => {
   const [receipts, setReceipts] = useState<ReceiptListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<ReceiptOrder | null>(null);
+  const [selectedDocumentKind, setSelectedDocumentKind] =
+    useState<'proforma' | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Fetch orders
@@ -339,6 +354,7 @@ export const OgabasseyV2Receipts: React.FC = () => {
 
   const handleViewReceipt = (receipt: ReceiptListItem) => {
     setSelectedOrder(receipt.rawOrder);
+    setSelectedDocumentKind(receipt.documentKind);
     setIsModalOpen(true);
   };
 
@@ -532,9 +548,11 @@ export const OgabasseyV2Receipts: React.FC = () => {
                           className="group-hover/btn:scale-110 transition-transform"
                         />
                         View{' '}
-                        {receipt.paymentStatus === 'unpaid'
-                          ? 'Invoice'
-                          : 'Receipt'}
+                        {receipt.documentKind === 'proforma'
+                          ? 'Proforma'
+                          : receipt.paymentStatus === 'unpaid'
+                            ? 'Invoice'
+                            : 'Receipt'}
                       </button>
                     </div>
                   </div>
@@ -550,6 +568,7 @@ export const OgabasseyV2Receipts: React.FC = () => {
         onClose={() => setIsModalOpen(false)}
         orderData={selectedOrder}
         merchantData={merchantReceiptData}
+        documentKind={selectedDocumentKind}
       />
     </div>
   );

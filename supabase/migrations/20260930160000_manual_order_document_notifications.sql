@@ -21,6 +21,7 @@ RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   v_order public.orders%ROWTYPE;
   v_event text;
+  v_payment_status text;
 BEGIN
   -- FOR NO KEY UPDATE still serializes against the claim/mark FOR SHARE
   -- locks but does not conflict with the FOR KEY SHARE locks foreign-key
@@ -30,22 +31,30 @@ BEGIN
   WHERE o.id = p_order_id FOR NO KEY UPDATE;
   IF NOT FOUND OR NOT v_order.manual_document_notification_eligible
     OR v_order.recorded_by_user_id IS NULL
-    OR v_order.import_job_id IS NOT NULL OR v_order.external_source IS NOT NULL
+    OR v_order.import_job_id IS NOT NULL
+    -- A blank staff-entered source is absent, not imported: the sender and
+    -- storefront both use truthiness, so the trigger must agree or the
+    -- advertised email never queues.
+    OR nullif(btrim(COALESCE(v_order.external_source, '')), '') IS NOT NULL
     OR v_order.customer_id IS NULL
     OR COALESCE(btrim(v_order.customer_email), '') = ''
     OR lower(btrim(COALESCE(v_order.shipping_status, ''))) IN ('cancelled', 'canceled', 'returned', 'failed')
     OR NOT EXISTS (SELECT 1 FROM public.order_items AS oi WHERE oi.order_id = v_order.id)
   THEN RETURN; END IF;
+  -- The column has no status constraint, so legacy spellings (Paid, PAID,
+  -- padded, spaced) normalize like the sender and storefront guards:
+  -- trim, lowercase, and fold internal whitespace to underscores.
+  v_payment_status := regexp_replace(
+    lower(btrim(COALESCE(v_order.payment_status, ''))), '\s+', '_', 'g'
+  );
   -- A fully-covered balance is substantively paid even when staff left a
   -- non-paid label (e.g. an over-amount partial): queue the receipt the
-  -- customer is owed, never a zero-balance invoice. The column has no
-  -- status constraint, so legacy spellings (Paid, PAID, padded) normalize
-  -- like the sender and storefront guards; otherwise the archive shows a
-  -- document the trigger never queues.
+  -- customer is owed, never a zero-balance invoice; otherwise the archive
+  -- shows a document the trigger never queues.
   IF v_order.amount_paid >= v_order.total
-    AND lower(btrim(COALESCE(v_order.payment_status, ''))) IN ('paid', 'unpaid', 'pending', 'partially_paid') THEN
+    AND v_payment_status IN ('paid', 'unpaid', 'pending', 'partially_paid') THEN
     v_event := 'manual_order_receipt';
-  ELSIF lower(btrim(COALESCE(v_order.payment_status, ''))) IN ('unpaid', 'pending', 'partially_paid') THEN
+  ELSIF v_payment_status IN ('unpaid', 'pending', 'partially_paid') THEN
     v_event := 'manual_order_invoice';
   ELSE RETURN; END IF;
 
@@ -215,6 +224,7 @@ DECLARE
   v_order public.orders%ROWTYPE;
   v_customer public.customers%ROWTYPE;
   v_claim_id uuid;
+  v_payment_status text;
 BEGIN
   IF p_token_hash IS NULL OR p_token_hash !~ '^[a-f0-9]{64}$' THEN
     RETURN jsonb_build_object('status', 'skipped');
@@ -235,18 +245,24 @@ BEGIN
   IF v_order IS NULL OR v_order.merchant_id IS DISTINCT FROM v_notification.merchant_id THEN
     RETURN jsonb_build_object('status', 'skipped');
   END IF;
+  -- Fold internal whitespace exactly like the enqueue path: the claim
+  -- re-check must agree with the trigger that queued the row.
+  v_payment_status := regexp_replace(
+    lower(btrim(COALESCE(v_order.payment_status, ''))), '\s+', '_', 'g'
+  );
   IF NOT v_order.manual_document_notification_eligible
     OR v_order.recorded_by_user_id IS NULL
-    OR v_order.import_job_id IS NOT NULL OR v_order.external_source IS NOT NULL
+    OR v_order.import_job_id IS NOT NULL
+    OR nullif(btrim(COALESCE(v_order.external_source, '')), '') IS NOT NULL
     OR COALESCE(btrim(v_order.customer_email), '') = ''
     OR lower(btrim(COALESCE(v_order.shipping_status, ''))) IN ('cancelled', 'canceled', 'returned', 'failed')
     OR NOT EXISTS (SELECT 1 FROM public.order_items AS oi WHERE oi.order_id = v_order.id)
     OR v_order.total IS NULL OR v_order.amount_paid IS NULL
     OR (v_notification.event_type = 'manual_order_receipt'
-      AND (lower(btrim(COALESCE(v_order.payment_status, ''))) NOT IN ('paid', 'unpaid', 'pending', 'partially_paid')
+      AND (v_payment_status NOT IN ('paid', 'unpaid', 'pending', 'partially_paid')
         OR v_order.amount_paid < v_order.total))
     OR (v_notification.event_type = 'manual_order_invoice'
-      AND (lower(btrim(COALESCE(v_order.payment_status, ''))) NOT IN ('unpaid', 'pending', 'partially_paid')
+      AND (v_payment_status NOT IN ('unpaid', 'pending', 'partially_paid')
         OR v_order.amount_paid >= v_order.total))
   THEN RETURN jsonb_build_object('status', 'skipped'); END IF;
 

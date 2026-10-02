@@ -98,4 +98,13 @@ describe('storefront account document content validity', () => {
   it('shows unpaid orders with valid content', () => {
     expect(isManualOrderDocumentAvailable(manualInput())).toBe(true);
   });
+
+  it.each([
+    '',
+    '   ',
+  ])('treats a blank external source as a manual order', (externalSource) => {
+    expect(
+      isManualOrderDocumentAvailable(manualInput({ externalSource }))
+    ).toBe(true);
+  });
 });

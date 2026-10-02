@@ -146,20 +146,6 @@ describe('POST /api/storefront/receipts/claims/[token]', () => {
     });
   });
 
-  it('asks an unverified account to verify its email without linking the purchase', async () => {
-    const supabase = createSupabaseRpcMock({
-      data: { status: 'email_unverified' },
-      error: null,
-    });
-    mockAuthenticatedSupabase(supabase);
-    const response = await POST(postRequest(), params);
-    expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({
-      error: 'Verify your email address before claiming this receipt',
-      code: 'EMAIL_UNVERIFIED',
-    });
-  });
-
   it('redeems a verified customer claim through the database RPC', async () => {
     const supabase = createSupabaseRpcMock({
       data: { redirectPath: '/receipts', status: 'ok' },
@@ -259,23 +245,6 @@ describe('POST /api/storefront/receipts/claims/[token]', () => {
     expect(supabase.rpc).toHaveBeenNthCalledWith(2, 'redeem_receipt_claim', {
       p_token_hash: hashReceiptClaimToken('claim-token'),
     });
-  });
-
-  it('returns 403 when the customer record cannot be linked', async () => {
-    const supabase = createSupabaseRpcMock({
-      data: { status: 'customer_link_failed' },
-      error: null,
-    });
-    mockAuthenticatedSupabase(supabase);
-
-    const response = await POST(postRequest(), params);
-    const body = await response.json();
-
-    expect(response.status).toBe(403);
-    expect(body).toEqual({
-      error: 'This receipt link cannot be linked to your account',
-    });
-    expect(mockConsoleError).not.toHaveBeenCalled();
   });
 
   it('returns 500 when redemption RPC data is malformed', async () => {

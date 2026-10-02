@@ -22,6 +22,12 @@ BEGIN
     RETURN NULL;
   END IF;
 
+  -- The RPC is directly invocable via PostgREST, so the loader's 410 check
+  -- alone cannot hide an expired claim: return nothing past expiry.
+  IF v_claim.expires_at IS NOT NULL AND v_claim.expires_at <= now() THEN
+    RETURN NULL;
+  END IF;
+
   SELECT jsonb_build_object(
     'business_name', m.business_name,
     'slug', m.slug

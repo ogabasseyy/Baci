@@ -272,6 +272,22 @@ INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, cu
 VALUES ('10000000-0000-4000-8000-000000000036', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', '  UNPAID  ', 0);
 INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000036', 'Device', 1, 100);
 SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000036' AND event_type = 'manual_order_invoice'), 'padded uppercase payment queues invoice');
+-- Internal whitespace folds like the storefront: a spaced legacy status
+-- queues instead of silently dropping the email.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000041', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'Partially Paid', 0);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000041', 'Device', 1, 100);
+SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000041' AND event_type = 'manual_order_invoice'), 'spaced legacy payment queues invoice');
+-- Blank sources are absent, not imported: the email queues either way.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid, external_source)
+VALUES ('10000000-0000-4000-8000-000000000042', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'paid', 100, ''),
+('10000000-0000-4000-8000-000000000043', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'paid', 100, '   ');
+INSERT INTO public.order_items (order_id, name, quantity, price) SELECT id, 'Device', 1, 100 FROM public.orders WHERE id IN ('10000000-0000-4000-8000-000000000042', '10000000-0000-4000-8000-000000000043');
+SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000042' AND event_type = 'manual_order_receipt'), 'empty source queues receipt');
+SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000043' AND event_type = 'manual_order_receipt'), 'whitespace source queues receipt');
+-- An expired claim previews as nothing, even through a direct RPC call.
+UPDATE public.receipt_claims SET expires_at = now() - interval '1 second' WHERE token_hash = repeat('9', 64);
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('9', 64)) IS NULL), 'expired manual claim previews as nothing');
 -- Commit, not rollback: the database is disposable (dropped after the run),
 -- and the redemption/dispatch script reuses this state (enabled triggers,
 -- merchants, customers, orders) in the same session.

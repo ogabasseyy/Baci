@@ -20765,6 +20765,7 @@ export type Database = {
         Args: {
           brand_filter?: string;
           category_filter?: string;
+          condition_filter?: string;
           merchant_id_param: string;
           query_text: string;
           result_limit?: number;
@@ -20790,6 +20791,7 @@ export type Database = {
         Args: {
           p_brand?: string;
           p_category?: string;
+          p_condition?: string;
           p_excluded_types?: Json;
           p_filters?: Json;
           p_identity?: Json;
@@ -20800,6 +20802,39 @@ export type Database = {
         Returns: {
           attributes: Json;
           product_id: string;
+        }[];
+      };
+      search_products_browse: {
+        Args: {
+          p_brand?: string;
+          p_category?: string;
+          p_condition?: string;
+          p_limit?: number;
+          p_merchant_id: string;
+          p_offset?: number;
+          p_sort?: string;
+        };
+        Returns: {
+          available_conditions: string[];
+          brand: string;
+          category: string;
+          compare_at_price: number;
+          condition: string;
+          condition_detail: string;
+          created_at: string;
+          description: string;
+          discovery_metadata: Json;
+          has_condition_offers: boolean;
+          has_variants: boolean;
+          id: string;
+          images: Json;
+          inventory_tracking_policy: string;
+          manage_stock: boolean;
+          name: string;
+          price: number;
+          slug: string;
+          stock_quantity: number;
+          updated_at: string;
         }[];
       };
       search_products_v2: {

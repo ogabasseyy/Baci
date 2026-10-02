@@ -104,4 +104,9 @@ export const EXPECTED_DISCOVERY_PENDING_SOURCES = [
       'supabase/migrations/20261001220000_browse_condition_narrowing.sql',
     sha256: '400a97858abfd287a8c3ba16fb87a3c561aebb60d7e5580cccd460dd85869b20',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261001230000_fact_condition_narrowing.sql',
+    sha256: '74ee5ea8b3466e8b8ef75957d17c7d55a05b29d0ca37be505f0b57daa0f967cb',
+  },
 ] as const;

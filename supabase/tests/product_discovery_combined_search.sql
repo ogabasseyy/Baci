@@ -152,7 +152,7 @@ BEGIN
         'type' || pg_catalog.chr(31) || '手机', 'UTF8'), 'sha256'), 'hex')) THEN
     RAISE EXCEPTION 'Non-ASCII custom type digest missed the identity';
   END IF;
-  IF (SELECT prosecdef FROM pg_proc WHERE oid = 'public.search_product_discovery_facts(uuid,text,integer,integer,text,text)'::regprocedure) THEN
+  IF (SELECT prosecdef FROM pg_proc WHERE oid = 'public.search_product_discovery_facts(uuid,text,integer,integer,text,text,text)'::regprocedure) THEN
     RAISE EXCEPTION 'Fact retrieval must preserve invoker RLS';
   END IF;
 END;

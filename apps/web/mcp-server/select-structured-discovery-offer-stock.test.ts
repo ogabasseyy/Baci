@@ -31,6 +31,19 @@ it('summarizes a null-stock direct variant match as in stock from the parent', (
   expect(selected?.stockSummary).toMatchObject({ inStock: true });
 });
 
+it('reports a strict serialized match as managed under an unmanaged parent', () => {
+  const row = makeRow({ manage_stock: false, stock_quantity: 0 });
+  row.availableVariants = [
+    { id: 'variant-strict', product_id: 'phone', attributes: { storage_gb: 256 }, price_override: 700,
+      stock_quantity: 3, effective_policy: 'serialized_strict' },
+  ] as typeof row.availableVariants;
+  const selected = selectStructuredDiscoveryOffer(row, intent({ attributes: [
+    { key: 'storage_gb', operator: 'eq', value: 256 },
+  ] }));
+  expect(selected?.selectedOption).toMatchObject({ kind: 'variant', option_id: 'variant-strict' });
+  expect(selected?.stockSummary).toMatchObject({ inStock: true });
+});
+
 it('summarizes a paired offer through the null-stock variant parent fallback', () => {
   const row = makeRow({ has_condition_offers: true });
   row.allVariants = [

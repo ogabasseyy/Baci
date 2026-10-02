@@ -22,6 +22,20 @@ it('canonicalizes the requested recall condition before comparing', () => {
   expect(recall).not.toContain('NULLIF(p_condition');
 });
 
+it('narrows fact retrieval by condition before the ranking cap', () => {
+  const facts = readFileSync(new URL('../../../supabase/migrations/20261001230000_fact_condition_narrowing.sql', import.meta.url), 'utf8');
+  expect(facts.split('\n').length).toBeLessThanOrEqual(300);
+  expect(facts).toContain(
+    'DROP FUNCTION IF EXISTS public.search_product_discovery_facts(uuid, text, integer, integer, text, text);'
+  );
+  expect(facts).toContain('condition_filter text DEFAULT NULL');
+  expect(facts).toContain('LANGUAGE sql STABLE SECURITY INVOKER');
+  expect(facts).toContain('CREATE OR REPLACE FUNCTION discovery.product_condition_option_matches(');
+  expect(facts).toContain('LANGUAGE sql STABLE SECURITY DEFINER');
+  expect(facts).toContain('discovery.condition_offer_selectable(p_product_id, p_has_variants, p_condition)');
+  expect(facts).not.toContain('pg_catalog.lower(');
+});
+
 it('narrows browse by condition before paging with nulls last', () => {
   const browse = readFileSync(new URL('../../../supabase/migrations/20261001220000_browse_condition_narrowing.sql', import.meta.url), 'utf8');
   expect(browse.split('\n').length).toBeLessThanOrEqual(300);

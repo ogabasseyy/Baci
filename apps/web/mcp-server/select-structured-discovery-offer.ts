@@ -198,15 +198,10 @@ export function selectStructuredDiscoveryOffer(
     const offerCore = { kind: 'offer' as const,
       condition: normalizeCanonicalProductCondition(typeof offer.condition === 'string' ? offer.condition : null) || baseCondition,
       price, stockQuantity: offer.stock_quantity, sourceOption: rawOffer };
-    // Offers carry no spec attributes, so on variant products each offer pairs
-    // with every selectable universe variant (the PDP selects offer and variant
-    // independently) and the live variant proves the specification. One bare
-    // candidate survives when nothing pairs, for spec-less intents.
-    // Pairs evaluate before allocating: a 16-offer by 128-variant product
-    // would otherwise materialize thousands of normalized candidates per
-    // search. Normalization is memoized per variant and only matching pairs
-    // become candidates, so the match-then-sort below sees exactly the set
-    // the eager version would have kept.
+    // Offers pair with every selectable variant (PDP selects both
+    // independently) while one bare candidate survives for spec-less
+    // intents. Pairs evaluate before allocating (memoized per variant),
+    // so only matching pairs become candidates.
     if (pairings.length === 0) addCandidate({ ...offerCore, attributes: {}, compareAtPrice: productCompareAtPrice });
     for (const rawVariant of pairings) {
       // PDP parity: resolveCurrentOffer replaces any selected offer price
@@ -259,8 +254,13 @@ export function selectStructuredDiscoveryOffer(
   // isPublicVariantPurchasable; raw null is read before coercion to zero.
   const childStock = (rawQuantity: unknown) =>
     stockQuantity(rawQuantity == null ? getEffectiveStock(parentStock) : rawQuantity);
+  // A serialized_strict selection is stock-gated by projected units even
+  // under an unmanaged parent; other policies keep the parent's state.
+  const selectedPolicy = match.kind === 'variant' ? record(match.sourceOption).effective_policy
+    : pairedOffer ? record(match.pairedVariant).effective_policy : undefined;
   const stockSummary = getMcpProductStockSummary({
     ...product,
+    manage_stock: selectedPolicy === 'serialized_strict' ? true : product.manage_stock,
     has_variants: match.kind === 'variant',
     has_condition_offers: match.kind === 'offer' && !pairedOffer,
     stock_quantity: match.kind === 'base' ? stockQuantity(product.stock_quantity)

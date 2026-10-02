@@ -75,7 +75,7 @@ describe('loadStructuredDiscoveryCandidates', () => {
     expect(result.truncated).toBe(false);
     expect(fixture.rpc).toHaveBeenCalledWith('search_product_discovery_facts', {
       merchant_id_param: 'merchant-1', query_text: 'ZX-42', result_limit: 100, result_offset: 0,
-      brand_filter: null, category_filter: null,
+      brand_filter: null, category_filter: null, condition_filter: null,
     });
   });
 
@@ -85,16 +85,16 @@ describe('loadStructuredDiscoveryCandidates', () => {
       factQuery: '(phone & (samsung | google) & 256gb)', merchantId: 'merchant-1', supabase: fixture.supabase });
     expect(fixture.rpc).toHaveBeenCalledWith('search_product_discovery_facts', {
       merchant_id_param: 'merchant-1', query_text: '(phone & (samsung | google) & 256gb)', result_limit: 100, result_offset: 0,
-      brand_filter: null, category_filter: null,
+      brand_filter: null, category_filter: null, condition_filter: null,
     });
   });
 
-  it('narrows fact retrieval by brand and category before the cap', async () => {
+  it('narrows fact retrieval by brand, category and condition before the cap', async () => {
     const fixture = setup({ lexicalPages: [[]], products: [] });
     await loadStructuredDiscoveryCandidates({ factQuery: '(phone)', merchantId: 'merchant-1',
-      supabase: fixture.supabase, brand: 'Samsung', category: 'Smartphones' });
+      supabase: fixture.supabase, brand: 'Samsung', category: 'Smartphones', condition: 'used' });
     expect(fixture.rpc).toHaveBeenCalledWith('search_product_discovery_facts', expect.objectContaining({
-      brand_filter: 'Samsung', category_filter: 'Smartphones',
+      brand_filter: 'Samsung', category_filter: 'Smartphones', condition_filter: 'used',
     }));
   });
 

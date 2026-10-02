@@ -27,16 +27,19 @@ const READ_ONLY_TOOL_ANNOTATIONS = {
   readOnlyHint: true,
 } as const;
 
+import { SEARCH_PRODUCTS_INTENT_SCHEMA } from './mcp-server-card-intent-schema';
+
 export const PUBLIC_MCP_TOOLS = [
   {
     name: 'search_products',
     title: 'Search Products',
     description:
-      'Search for products in Ogabassey store. Returns rich details including variants, stock confidence, and price trends. Always use this for general product queries.',
+      'Search for products in Ogabassey store. Returns rich details including variants, stock confidence, and price trends. Always use this for general product queries. Always supply intent with explicit shopper constraints and query with retrieval keywords. Includes short merchant-provided description excerpts for context. Call get_product for full details before specific technical claims; descriptions do not establish verified compatibility, specifications, price, or availability.',
     inputSchema: {
       $schema: DRAFT_07_SCHEMA,
       type: 'object',
       properties: {
+        intent: SEARCH_PRODUCTS_INTENT_SCHEMA,
         query: {
           description: 'Search query (product name, brand, or keywords)',
           type: 'string',
@@ -66,6 +69,7 @@ export const PUBLIC_MCP_TOOLS = [
         },
         limit: { default: 10, type: 'number', minimum: 1, maximum: 20 },
       },
+      required: ['intent'],
     },
     annotations: READ_ONLY_TOOL_ANNOTATIONS,
   },

@@ -2,6 +2,7 @@
 
 import type { SearchParamSource } from '@baci/shared/lib';
 import { useState } from 'react';
+import { projectPublicVariantSelection } from '@/lib/project-public-variant-selection';
 import {
   getVariantConditionOptions,
   hasVariantConditionAxis,
@@ -45,15 +46,19 @@ export function useProductDetailsSelectionState(
     productData,
     effectiveAxes
   );
-  const variantResolutionVariants = applySingleOptionAxisSelectionsToVariants(
-    productData.variants,
-    singleOptionAxisSelections
+  const variantResolutionVariants = projectPublicVariantSelection(
+    { ...productData, price: relatedProductsProduct.price, manage_stock: productData.manage_stock !== false },
+    applySingleOptionAxisSelectionsToVariants(productData.variants, singleOptionAxisSelections)
   );
   const variantResolutionProduct = {
     price: relatedProductsProduct.price,
     condition: productData.condition,
     manage_stock: productData.manage_stock,
     variants: variantResolutionVariants,
+    // Route-condition validation retains an independent condition only for
+    // the parent family or a matching offer; the offers must ride along or
+    // valid paired-offer links lose their grade here.
+    offers: productData.offers,
   };
   // PDP-only price-first default; feeds/cart keep the shared resolver.
   const defaultVariantSelection =
@@ -109,6 +114,7 @@ export function useProductDetailsSelectionState(
       attributes: variant.attributes ?? {},
       condition: variant.condition ?? null,
       id: variant.id ?? null,
+      inventory_tracking_policy: variant.inventory_tracking_policy ?? null,
       // Reseed when price-first inputs change client-side.
       price_modifier: variant.price_modifier ?? null,
       price_override: variant.price_override ?? null,

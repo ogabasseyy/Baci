@@ -33,6 +33,7 @@ function database() {
     id: '11111111-1111-4111-8111-111111111111',
     order_id: 'order-1',
     merchant_id: 'merchant-1',
+    gateway: 'paystack',
     gateway_reference: 'PSK-1',
     amount: 100,
     currency: 'NGN',
@@ -336,5 +337,115 @@ describe('Paystack cancellation refund reconciliation', () => {
       })
     ).rejects.toThrow('refund_payment_link_mismatch');
     expect(db.rpc).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'Paystack',
+    ' paystack ',
+    'PAYSTACK',
+  ])('accepts a linked payment stored as %s', async (gateway) => {
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          id: '11111111-1111-4111-8111-111111111111',
+          order_id: 'order-1',
+          merchant_id: 'merchant-1',
+          gateway,
+          gateway_reference: 'PSK-1',
+          amount: 100,
+          currency: 'NGN',
+          status: 'completed',
+        },
+        error: null,
+      }),
+    };
+    const db = {
+      from: vi.fn(() => query),
+      rpc: vi.fn().mockResolvedValue({ data: 'processed', error: null }),
+    };
+
+    await expect(
+      reconcilePaystackCancellationRefund(db as never, refund)
+    ).resolves.toBe('updated');
+    expect(db.rpc).toHaveBeenCalledWith(
+      'record_verified_paystack_cancellation_refund_v1',
+      expect.objectContaining({ p_refund_id: 'refund-1' })
+    );
+  });
+
+  it.each([
+    'korapay',
+    '',
+    null,
+  ])('holds a linked payment with gateway %s for review', async (gateway) => {
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          id: '11111111-1111-4111-8111-111111111111',
+          order_id: 'order-1',
+          merchant_id: 'merchant-1',
+          gateway,
+          gateway_reference: 'PSK-1',
+          amount: 100,
+          currency: 'NGN',
+          status: 'completed',
+        },
+        error: null,
+      }),
+    };
+    const db = {
+      from: vi.fn(() => query),
+      rpc: vi.fn().mockResolvedValue({ data: 'processed', error: null }),
+    };
+
+    await expect(
+      reconcilePaystackCancellationRefund(db as never, refund)
+    ).rejects.toThrow('refund_payment_link_mismatch');
+    expect(db.rpc).not.toHaveBeenCalled();
+  });
+
+  it('correlates an unlinked legacy refund with a padded sole Paystack leg', async () => {
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      gt: vi.fn().mockResolvedValue({
+        data: [
+          {
+            id: 'payment-1',
+            gateway: ' Paystack ',
+            gateway_reference: 'PSK-1',
+            amount: 100,
+            currency: 'NGN',
+          },
+          {
+            id: 'payment-9',
+            gateway: ' wallet ',
+            gateway_reference: 'WALLET-9',
+            amount: 100,
+            currency: 'NGN',
+          },
+        ],
+        error: null,
+      }),
+    };
+    const db = {
+      from: vi.fn(() => query),
+      rpc: vi.fn().mockResolvedValue({ data: 'processed', error: null }),
+    };
+
+    await expect(
+      reconcilePaystackCancellationRefund(db as never, {
+        ...refund,
+        metadata: {},
+      })
+    ).resolves.toBe('updated');
+    expect(db.rpc).toHaveBeenCalledWith(
+      'record_verified_paystack_cancellation_refund_v1',
+      expect.objectContaining({ p_refund_id: 'refund-1' })
+    );
   });
 });

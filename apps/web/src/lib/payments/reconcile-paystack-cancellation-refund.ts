@@ -16,6 +16,13 @@ const EXTERNAL_PAYMENT_GATEWAYS_EXCLUSION = new Set([
   'pay_on_delivery',
 ]);
 
+// Legacy rows may pad or re-case gateway names (` Paystack `). Normalize
+// exactly like the aggregate coverage paths: missing/blank never matches.
+const normalizeGatewayName = (value: unknown): string =>
+  String(value ?? '')
+    .trim()
+    .toUpperCase();
+
 async function resolveLinkedPayment(
   supabase: SupabaseClient,
   refund: RefundRow,
@@ -24,18 +31,22 @@ async function resolveLinkedPayment(
   const { data: payment, error } = await supabase
     .from('transactions')
     .select(
-      'id, order_id, merchant_id, gateway_reference, amount, currency, status'
+      'id, order_id, merchant_id, gateway, gateway_reference, amount, currency, status'
     )
     .eq('id', paymentId)
     .eq('order_id', refund.order_id)
     .eq('merchant_id', refund.merchant_id)
     .eq('transaction_type', 'payment')
-    .eq('gateway', 'paystack')
     .eq('status', 'completed')
     .maybeSingle();
   // A failed read is an outage, not evidence: classifying it as a
   // mismatch would hold a valid refund out of polling permanently.
   if (error) throw new Error('refund_event_lookup_failed');
+  // The id/order/merchant/type/status filters already bind the row; an
+  // exact gateway match here would misfile a legacy `Paystack` leg as a
+  // bad link, so normalize before the gateway check instead.
+  if (payment && normalizeGatewayName(payment.gateway) !== 'PAYSTACK')
+    throw new Error('refund_payment_link_mismatch');
   return payment;
 }
 
@@ -58,12 +69,12 @@ async function resolveSoleLegacyPayment(
   const candidates = (data ?? []).filter(
     (payment) =>
       !EXTERNAL_PAYMENT_GATEWAYS_EXCLUSION.has(
-        String(payment.gateway ?? '').toLowerCase()
+        normalizeGatewayName(payment.gateway).toLowerCase()
       )
   );
   if (candidates.length !== 1) throw new Error('refund_payment_link_mismatch');
   const [sole] = candidates;
-  if (sole?.gateway !== 'paystack')
+  if (normalizeGatewayName(sole?.gateway) !== 'PAYSTACK')
     throw new Error('refund_payment_link_mismatch');
   return sole;
 }

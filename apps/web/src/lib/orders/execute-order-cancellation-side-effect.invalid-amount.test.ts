@@ -70,7 +70,9 @@ describe('cancellation refund invalid amounts', () => {
   it.each([
     'NaN',
     Number.POSITIVE_INFINITY,
-  ])('quarantines a non-finite leg amount (%s) without calling the provider', async (amount) => {
+    0,
+    -50,
+  ])('quarantines an invalid leg amount (%s) without calling the provider', async (amount) => {
     // Quarantine is mocked to resolve here, so the fail-closed
     // predicate below it is the backstop under test.
     await expect(runRefund(amount)).rejects.toThrow(
@@ -82,17 +84,6 @@ describe('cancellation refund invalid amounts', () => {
         reason: expect.stringContaining('invalid amount'),
       })
     );
-    expect(mocks.initiateRefund).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    0, -50,
-  ])('keeps the fail-closed throw for a non-positive leg amount (%s)', async (amount) => {
-    await expect(runRefund(amount)).rejects.toThrow(
-      'Completed payment transaction has no refundable amount'
-    );
-
-    expect(mocks.quarantineRefund).not.toHaveBeenCalled();
     expect(mocks.initiateRefund).not.toHaveBeenCalled();
   });
 });

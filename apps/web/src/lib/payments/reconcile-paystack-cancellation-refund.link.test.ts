@@ -74,6 +74,7 @@ describe('Paystack cancellation refund link validation', () => {
       data: {
         amount: 100,
         currency: 'NGN',
+        gateway: 'paystack',
         gateway_reference: 'PSK-1',
         id: '11111111-1111-4111-8111-111111111111',
         merchant_id: 'merchant-1',

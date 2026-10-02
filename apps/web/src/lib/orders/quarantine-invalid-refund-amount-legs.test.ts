@@ -39,14 +39,34 @@ describe('quarantineInvalidRefundAmountLegs', () => {
   });
 
   it.each([
-    [100],
     [0],
     [-50],
-  ])('does nothing when every leg amount is finite (%s)', async (amount) => {
+    ['0'],
+  ])('quarantines a non-positive leg (%s) instead of burning retries', async (amount) => {
+    const valid = { amount: 100, id: 'payment-1' };
+    const corrupt = { amount, id: 'payment-2' };
+
     await quarantineInvalidRefundAmountLegs({
       order,
       supabase,
-      transactions: [{ amount, id: 'payment-1' }] as never,
+      transactions: [valid, corrupt] as never,
+    });
+
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        order,
+        preflight: true,
+        reason: expect.stringContaining('invalid amount'),
+        transactions: [corrupt],
+      })
+    );
+  });
+
+  it('does nothing when every leg amount is finite and positive', async () => {
+    await quarantineInvalidRefundAmountLegs({
+      order,
+      supabase,
+      transactions: [{ amount: 100, id: 'payment-1' }] as never,
     });
 
     expect(mocks.quarantineRefund).not.toHaveBeenCalled();

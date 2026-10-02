@@ -147,11 +147,14 @@ describe('executeOrderCancellationSideEffect', () => {
     );
   });
 
-  it('rejects a completed gateway transaction with no refundable amount', async () => {
+  it('quarantines a completed gateway transaction with no refundable amount', async () => {
     const supabase = refundClient({
       payments: [{ ...paystackPayment, amount: 0 }],
     });
 
+    // A zero-amount leg files an operations review and throws
+    // terminally instead of burning the five-attempt budget on a
+    // fail-closed throw that leaves even the valid legs unrefunded.
     await expect(
       executeOrderCancellationSideEffect({
         merchant,
@@ -159,7 +162,13 @@ describe('executeOrderCancellationSideEffect', () => {
         step: 'refund',
         supabase: supabase as never,
       })
-    ).rejects.toThrow('no refundable amount');
+    ).rejects.toBeInstanceOf(DeliveryUncertainError);
+    expect(supabase.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'order_cancellation_refund_requires_review',
+        reason: expect.stringContaining('invalid amount'),
+      })
+    );
     expect(mocks.initiateRefund).not.toHaveBeenCalled();
   });
 

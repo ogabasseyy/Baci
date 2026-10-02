@@ -70,12 +70,19 @@ function harness() {
 beforeEach(() => vi.clearAllMocks());
 
 describe('drainFailedPaidOrderSideEffectRow', () => {
-  it('skips rows from unhealable gateways', async () => {
+  it('retires and skips rows from unhealable gateways', async () => {
     const { drain, finalizePayment } = harness();
+    mocks.retireTerminalSideEffectDrain.mockResolvedValue(true);
 
     await expect(
       drain(row({ gateway: 'manual', gateway_response: { ok: true } }))
     ).resolves.toEqual({ action: 'skipped', reason: 'unhealable_gateway' });
+    expect(mocks.retireTerminalSideEffectDrain).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-1',
+        resolution: 'unhealable_gateway',
+      })
+    );
     expect(finalizePayment).not.toHaveBeenCalled();
     expect(mocks.verifyGatewayCharge).not.toHaveBeenCalled();
   });

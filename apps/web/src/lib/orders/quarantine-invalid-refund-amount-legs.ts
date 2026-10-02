@@ -4,12 +4,14 @@ import type { CancellationOrder } from '@/lib/orders/order-cancellation-side-eff
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
 
 /**
- * Quarantine completed legs whose amount is not finite before any
- * provider call. The refund reduction treats NaN as zero while its
- * predicate accepts it, and the refund API omits a non-positive
- * amount — so a corrupt leg would reach the provider as a full
- * refund. Quarantine files the operations review and throws, so the
- * caller never refunds or retries corrupt legs.
+ * Quarantine completed legs whose amount is not finite or not positive
+ * before any provider call. The refund reduction treats NaN as zero
+ * while its predicate accepts it, and the refund API omits a
+ * non-positive amount — so a corrupt leg would reach the provider as
+ * a full refund. Quarantine files the operations review and throws,
+ * so the caller never refunds corrupt legs — and never burns the
+ * shared retry budget on a fail-closed predicate throw that files no
+ * review and strands even the valid legs.
  */
 export async function quarantineInvalidRefundAmountLegs({
   order,
@@ -20,9 +22,10 @@ export async function quarantineInvalidRefundAmountLegs({
   supabase: Pick<SupabaseClient, 'from' | 'rpc'>;
   transactions: GatewayPaymentTransaction[];
 }): Promise<void> {
-  const invalidAmountLegs = transactions.filter(
-    (transaction) => !Number.isFinite(Number(transaction.amount))
-  );
+  const invalidAmountLegs = transactions.filter((transaction) => {
+    const amount = Number(transaction.amount);
+    return !Number.isFinite(amount) || amount <= 0;
+  });
   if (invalidAmountLegs.length === 0) return;
   await quarantineRefund({
     order,

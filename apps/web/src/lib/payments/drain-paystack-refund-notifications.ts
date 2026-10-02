@@ -42,10 +42,40 @@ export async function drainPaystackRefundNotifications(
   supabase: SupabaseClient,
   sendEmail: RefundEmailSender,
   limit = 20
-): Promise<{ claimed: number; sent: number; failed: number }> {
+): Promise<{
+  claimed: number;
+  sent: number;
+  failed: number;
+  exhausted: number;
+}> {
   let claimed = 0;
   let sent = 0;
   let failed = 0;
+  let exhausted = 0;
+  if (limit > 0) {
+    // Rows that burned all five attempts are dead-lettered by the first
+    // claim below. Count them first so the terminal transition is
+    // reported instead of happening silently.
+    const {
+      data,
+      count,
+      error: exhaustedError,
+    } = await supabase
+      .from('paystack_cancellation_refund_notifications')
+      .select('order_id, event_type', { count: 'exact' })
+      .eq('status', 'failed')
+      .gte('attempts', 5)
+      .limit(10);
+    if (exhaustedError) throw new Error('refund_notification_claim_failed');
+    exhausted = count ?? 0;
+    if (exhausted > 0) {
+      logger.error({
+        message: 'Paystack cancellation refund notifications exhausted retries',
+        exhausted,
+        sample: data ?? [],
+      });
+    }
+  }
   // Claim one row at a time: serial sends can each take tens of seconds
   // against a fixed route deadline, and unfinished processing rows are
   // deliberately never retried. A batch claimed up front could strand
@@ -269,5 +299,5 @@ export async function drainPaystackRefundNotifications(
     if (outcome === 'sent') sent++;
     else failed++;
   }
-  return { claimed, sent, failed };
+  return { claimed, sent, failed, exhausted };
 }

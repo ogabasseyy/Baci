@@ -1,7 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  loggerError: vi.fn(),
   sendEmail: vi.fn(),
+}));
+
+vi.mock('@/lib/logger', () => ({
+  logger: {
+    error: mocks.loggerError,
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
 }));
 
 import { drainPaystackRefundNotifications } from './drain-paystack-refund-notifications';
@@ -22,6 +31,7 @@ describe('Paystack refund notifications', () => {
       claimed: 1,
       sent: 1,
       failed: 0,
+      exhausted: 0,
     });
     expect(mocks.sendEmail).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -57,7 +67,7 @@ describe('Paystack refund notifications', () => {
     });
     await expect(
       drainPaystackRefundNotifications(db as never, mocks.sendEmail)
-    ).resolves.toEqual({ claimed: 1, sent: 1, failed: 0 });
+    ).resolves.toEqual({ claimed: 1, sent: 1, failed: 0, exhausted: 0 });
     expect(mocks.sendEmail).toHaveBeenCalledWith(
       expect.objectContaining({ to: 'buyer@example.com' })
     );
@@ -115,7 +125,7 @@ describe('Paystack refund notifications', () => {
     });
     await expect(
       drainPaystackRefundNotifications(db as never, mocks.sendEmail)
-    ).resolves.toEqual({ claimed: 1, sent: 1, failed: 0 });
+    ).resolves.toEqual({ claimed: 1, sent: 1, failed: 0, exhausted: 0 });
     expect(mocks.sendEmail.mock.calls[0][0].textContent).toContain('100');
     expect(db.finish.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'sent' })
@@ -183,6 +193,30 @@ describe('Paystack refund notifications', () => {
     await drainPaystackRefundNotifications(db as never, mocks.sendEmail);
     expect(db.finish.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'failed' })
+    );
+  });
+
+  it('reports notifications that exhausted their retries', async () => {
+    const db = database('processed_customer_email');
+    db.finish.limit.mockResolvedValueOnce({
+      data: [{ event_type: 'processed_customer_email', order_id: 'order-9' }],
+      count: 1,
+      error: null,
+    });
+
+    const summary = await drainPaystackRefundNotifications(
+      db as never,
+      mocks.sendEmail
+    );
+
+    expect(summary.exhausted).toBe(1);
+    expect(db.finish.select).toHaveBeenCalledWith(
+      'order_id, event_type',
+      expect.objectContaining({ count: 'exact' })
+    );
+    expect(db.finish.gte).toHaveBeenCalledWith('attempts', 5);
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({ exhausted: 1 })
     );
   });
 });

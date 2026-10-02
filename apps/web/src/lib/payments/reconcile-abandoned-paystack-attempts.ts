@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
 import { verifyTransaction } from '@/lib/paystack';
 import { fileInvalidAttemptReference } from './file-invalid-attempt-reference';
 import { resolveAbandonedAttemptMismatch } from './resolve-abandoned-attempt-mismatch';
@@ -53,6 +54,7 @@ export async function reconcileAbandonedPaystackAttempts({
   verify = verifyTransaction,
   limit = DEFAULT_LIMIT,
   olderThanMinutes = DEFAULT_OLDER_THAN_MINUTES,
+  deadlineMs,
   scheduleAfter = () => {
     // No-op default for unit tests; the cron route passes after().
   },
@@ -61,6 +63,7 @@ export async function reconcileAbandonedPaystackAttempts({
   verify?: typeof verifyTransaction;
   limit?: number;
   olderThanMinutes?: number;
+  deadlineMs?: number;
   scheduleAfter?: (task: () => Promise<void>) => void;
 }): Promise<AbandonedPaystackAttemptSummary> {
   const summary: AbandonedPaystackAttemptSummary = {
@@ -99,6 +102,16 @@ export async function reconcileAbandonedPaystackAttempts({
   }
 
   for (const attempt of (attempts ?? []) as PendingAttempt[]) {
+    // Stop starting attempts at the pass deadline: serial provider
+    // verification can outlast the invocation budget, and unstarted rows
+    // stay eligible for the next sweep.
+    if (deadlineMs !== undefined && Date.now() >= deadlineMs) {
+      logger.info({
+        message: 'Stopping abandoned-attempt sweep at pass deadline',
+        attemptId: attempt.id,
+      });
+      break;
+    }
     summary.checked += 1;
     const guardAttempt = () =>
       supabase

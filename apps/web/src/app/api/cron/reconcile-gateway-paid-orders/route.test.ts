@@ -123,6 +123,27 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
     );
   });
 
+  it('shares the invocation budget across the three passes', async () => {
+    mocks.reconcileWedgedGatewayOrders.mockResolvedValue({ checked: 0 });
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    try {
+      const response = await GET(buildRequest(`Bearer ${CRON_SECRET}`));
+
+      expect(response.status).toBe(200);
+      expect(mocks.reconcileAbandonedPaystackAttempts).toHaveBeenCalledWith(
+        expect.objectContaining({ deadlineMs: 1_090_000 })
+      );
+      expect(mocks.reconcileWedgedGatewayOrders).toHaveBeenCalledWith(
+        expect.objectContaining({ deadlineMs: 1_180_000 })
+      );
+      expect(mocks.drainFailedPaidOrderSideEffects).toHaveBeenCalledWith(
+        expect.objectContaining({ deadlineMs: 1_270_000 })
+      );
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it('surfaces and logs recovered/stranded side effects even when nothing else changed', async () => {
     mocks.reconcileWedgedGatewayOrders.mockResolvedValue({
       checked: 0,

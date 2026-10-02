@@ -58,10 +58,12 @@ export async function drainFailedPaidOrderSideEffects({
   supabase,
   scheduleAfter,
   limit = DEFAULT_LIMIT,
+  deadlineMs,
 }: {
   supabase: SupabaseClient;
   scheduleAfter: (task: () => Promise<void>) => void;
   limit?: number;
+  deadlineMs?: number;
 }): Promise<FailedSideEffectDrainSummary> {
   const summary: FailedSideEffectDrainSummary = {
     drained: [],
@@ -153,6 +155,16 @@ export async function drainFailedPaidOrderSideEffects({
   }
 
   for (const [orderId, row] of byOrder) {
+    // Stop starting orders at the pass deadline: serial side-effect
+    // execution can outlast the invocation budget, and unstarted rows
+    // stay failed for the next drain.
+    if (deadlineMs !== undefined && Date.now() >= deadlineMs) {
+      logger.info({
+        message: 'Stopping paid side-effect drain at pass deadline',
+        orderId,
+      });
+      break;
+    }
     try {
       const txn = row.transactions;
       const gateway = txn.gateway;

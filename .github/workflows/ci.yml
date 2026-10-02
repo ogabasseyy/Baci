@@ -413,6 +413,9 @@ jobs:
           .github/scripts/preview-workflow-redact-contract.test.mjs
           .github/scripts/preview-env-turbo-cache.test.mjs
           .github/scripts/stage-preview-prebuilt-refs.test.mjs
+          .github/scripts/stage-preview-prebuilt-refs-guardrails.test.mjs
+          .github/scripts/stage-preview-prebuilt-refs-hardening.test.mjs
+          .github/scripts/stage-preview-prebuilt-refs-report.test.mjs
           .github/scripts/materialize-preview-prebuilt-refs.test.mjs
           .github/scripts/preview-deploy-run.test.mjs
       - name: Verify Quiz Assets

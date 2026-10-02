@@ -56,9 +56,10 @@ test('stages referenced files preserving root-relative layout', () => {
   }
 });
 
-test('skips absolute, escaping, internal, and protected references', () => {
+test('keeps CLI-handled skips in maps, drops protected paths', () => {
+  const configRel = '.vercel/output/functions/a.func/.vc-config.json';
   const root = layout({
-    '.vercel/output/functions/a.func/.vc-config.json': JSON.stringify({
+    [configRel]: JSON.stringify({
       filePathMap: {
         '/a.js': '/etc/passwd',
         '/b.js': '../../outside.js',
@@ -83,23 +84,186 @@ test('skips absolute, escaping, internal, and protected references', () => {
       manifest.skipped.map((s) => s.reason).sort(),
       ['absolute', 'escapes-root', 'inside-output', 'protected-path', 'protected-path']
     );
+    const rewritten = JSON.parse(readFileSync(join(root, configRel), 'utf8'));
+    assert.deepEqual(rewritten.filePathMap, {
+      '/a.js': '/etc/passwd',
+      '/b.js': '../../outside.js',
+      '/c.js': '.vercel/output/functions/a.func/bundled.js',
+      '/ok.js': 'node_modules/ok/index.js',
+    });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('fails closed on missing references and missing output', () => {
+test('drops invalid entries with a manifest trace', () => {
+  const configRel = '.vercel/output/functions/a.func/.vc-config.json';
+  const root = layout({
+    [configRel]: JSON.stringify({
+      filePathMap: {
+        '/n.js': 42,
+        '/e.js': '',
+        '/ok.js': 'node_modules/ok/index.js',
+      },
+    }),
+    'node_modules/ok/index.js': 'ok',
+  });
+  try {
+    const stage = join(root, 'stage');
+    const run = spawnSync('node', [SCRIPT, root, stage], { encoding: 'utf8' });
+    assert.equal(run.status, 0, run.stderr);
+    const rewritten = JSON.parse(readFileSync(join(root, configRel), 'utf8'));
+    assert.deepEqual(rewritten.filePathMap, {
+      '/ok.js': 'node_modules/ok/index.js',
+    });
+    const manifest = JSON.parse(
+      readFileSync(join(stage, '.preview-refs-manifest.json'), 'utf8')
+    );
+    assert.deepEqual(
+      manifest.skipped.map((s) => s.reason).sort(),
+      ['invalid', 'invalid']
+    );
+    assert.deepEqual(
+      manifest.skipped.map((s) => s.value).sort(),
+      ['/e.js=""', '/n.js=42']
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('drops phantom references from the shipped maps', () => {
+  const configRel = '.vercel/output/functions/a.func/.vc-config.json';
+  const root = layout({
+    [configRel]: JSON.stringify({
+      filePathMap: {
+        '/gone.js': 'apps/web/.next/node_modules/gone-abc123',
+        '/ok.js': 'node_modules/ok/index.js',
+        '/ok2.js': 'node_modules/ok2/index.js',
+      },
+    }),
+    'node_modules/ok/index.js': 'ok',
+    'node_modules/ok2/index.js': 'ok2',
+  });
+  try {
+    const stage = join(root, 'stage');
+    const run = spawnSync('node', [SCRIPT, root, stage], { encoding: 'utf8' });
+    assert.equal(run.status, 0, run.stderr);
+    const rewritten = JSON.parse(readFileSync(join(root, configRel), 'utf8'));
+    assert.deepEqual(rewritten.filePathMap, {
+      '/ok.js': 'node_modules/ok/index.js',
+      '/ok2.js': 'node_modules/ok2/index.js',
+    });
+    const manifest = JSON.parse(
+      readFileSync(join(stage, '.preview-refs-manifest.json'), 'utf8')
+    );
+    assert.deepEqual(manifest.refs, ['node_modules/ok/index.js', 'node_modules/ok2/index.js']);
+    assert.deepEqual(manifest.skipped, [
+      { value: 'apps/web/.next/node_modules/gone-abc123', reason: 'missing' },
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('fails a function that loses every usable reference', () => {
+  const root = layout({
+    '.vercel/output/functions/healthy.func/.vc-config.json': JSON.stringify({
+      filePathMap: {
+        '/1.js': 'node_modules/a/one.js',
+        '/2.js': 'node_modules/a/two.js',
+        '/3.js': 'node_modules/a/three.js',
+        '/4.js': 'node_modules/a/four.js',
+        '/5.js': 'node_modules/a/five.js',
+      },
+    }),
+    '.vercel/output/functions/broken.func/.vc-config.json': JSON.stringify({
+      filePathMap: {
+        '/gone1.js': 'node_modules/gone/one.js',
+        '/gone2.js': 'node_modules/gone/two.js',
+      },
+    }),
+    '.vercel/output/functions/emptied.func/.vc-config.json': JSON.stringify({
+      filePathMap: {
+        '/p.js': 'trusted-ops/evil.js',
+        '/i.js': 42,
+      },
+    }),
+    'node_modules/a/one.js': '1',
+    'node_modules/a/two.js': '2',
+    'node_modules/a/three.js': '3',
+    'node_modules/a/four.js': '4',
+    'node_modules/a/five.js': '5',
+  });
+  try {
+    // Global ratio passes (2 missing vs 5 staged); per-config must fire.
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], { encoding: 'utf8' });
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /lost every usable reference/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('warns and summarizes phantom drops without failing', () => {
+  const configRel = '.vercel/output/functions/a.func/.vc-config.json';
+  const longPhantom = `node_modules/${'x'.repeat(250)}.js`;
+  const root = layout({
+    [configRel]: JSON.stringify({
+      filePathMap: {
+        '/gone.js': 'node_modules/gone/index.js',
+        '/long.js': longPhantom,
+        '/ok.js': 'node_modules/ok/index.js',
+        '/ok2.js': 'node_modules/ok2/index.js',
+        '/ok3.js': 'node_modules/ok3/index.js',
+      },
+    }),
+    'node_modules/ok/index.js': 'ok',
+    'node_modules/ok2/index.js': 'ok2',
+    'node_modules/ok3/index.js': 'ok3',
+  });
+  try {
+    const summary = join(root, 'summary.md');
+    writeFileSync(summary, '');
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], {
+      encoding: 'utf8',
+      env: { ...process.env, GITHUB_STEP_SUMMARY: summary },
+    });
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stderr, /WARNING: dropped 2 dangling reference/);
+    assert.match(run.stderr, /serve-verify this preview/);
+    assert.match(run.stderr, /::warning::Dropped 2 dangling/);
+    const text = readFileSync(summary, 'utf8');
+    assert.match(text, /staged 3, skipped 2 \(2 dangling\)/);
+    assert.match(text, /do not trust READY alone/);
+    assert.match(text, /node_modules\/gone\/index\.js/);
+    assert.ok(!text.includes('x'.repeat(201)));
+    assert.ok(text.includes(`\`${longPhantom.slice(0, 200)}\``));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('fails closed when missing refs dominate staged files', () => {
   const root = layout({
     '.vercel/output/functions/a.func/.vc-config.json': JSON.stringify({
       filePathMap: { '/gone.js': 'node_modules/gone/index.js' },
     }),
+    '.vercel/output/functions/b.func/.vc-config.json': JSON.stringify({
+      filePathMap: {
+        '/gone2.js': 'node_modules/gone2/index.js',
+        '/abs.js': '/etc/passwd',
+        '/ok.js': 'node_modules/ok/index.js',
+      },
+    }),
+    'node_modules/ok/index.js': 'ok',
   });
   try {
-    const missing = spawnSync('node', [SCRIPT, root, join(root, 's1')], {
+    const dominated = spawnSync('node', [SCRIPT, root, join(root, 's1')], {
       encoding: 'utf8',
     });
-    assert.equal(missing.status, 1);
-    assert.match(missing.stderr, /missing from the source tree/);
+    assert.equal(dominated.status, 1);
+    assert.match(dominated.stderr, /refusing to ship/);
     const empty = layout({});
     try {
       const noOutput = spawnSync('node', [SCRIPT, empty, join(empty, 's2')], {

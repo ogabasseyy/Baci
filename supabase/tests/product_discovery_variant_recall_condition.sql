@@ -44,6 +44,20 @@ VALUES (
   'cb58d110-0000-4000-8000-000000000503', 'used', 40000, 2
 );
 
+-- Helper pins run as service_role like the other direct discovery calls;
+-- only the published RPC surface runs as the public caller below.
+DO $$
+BEGIN
+  IF discovery.canonical_product_condition('Open Box') IS DISTINCT FROM 'open_box'
+    OR discovery.canonical_product_condition('uk_used') IS DISTINCT FROM 'used'
+    OR discovery.canonical_product_condition('REFURBISHED') IS DISTINCT FROM 'open_box'
+    OR discovery.canonical_product_condition('bogus') IS NOT NULL
+    OR discovery.canonical_product_condition(NULL) IS NOT NULL THEN
+    RAISE EXCEPTION 'canonical condition helper diverged from the runtime normalizer';
+  END IF;
+END;
+$$;
+
 -- Exercise the recall RPC as its public storefront caller, under publication RLS.
 SET LOCAL ROLE anon;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
@@ -54,13 +68,6 @@ DECLARE
 BEGIN
   IF current_user <> 'anon' THEN
     RAISE EXCEPTION 'RPC regression must run as the public caller';
-  END IF;
-  IF discovery.canonical_product_condition('Open Box') IS DISTINCT FROM 'open_box'
-    OR discovery.canonical_product_condition('uk_used') IS DISTINCT FROM 'used'
-    OR discovery.canonical_product_condition('REFURBISHED') IS DISTINCT FROM 'open_box'
-    OR discovery.canonical_product_condition('bogus') IS NOT NULL
-    OR discovery.canonical_product_condition(NULL) IS NOT NULL THEN
-    RAISE EXCEPTION 'canonical condition helper diverged from the runtime normalizer';
   END IF;
   SELECT array_agg(product_id) INTO recall_ids
   FROM public.search_product_variant_recall(

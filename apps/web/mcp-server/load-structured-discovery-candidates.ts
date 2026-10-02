@@ -34,7 +34,7 @@ type LoadStructuredDiscoveryCandidatesInput = {
   semanticSearch?: (query: string, offset: number) => Promise<string[]>;
 };
 
-type BrowseFilters = { brand?: string; category?: string; sort?: string };
+type BrowseFilters = { brand?: string; category?: string; condition?: string; sort?: string };
 
 type SearchProductsArgs = { sort: 'relevance' };
 
@@ -131,6 +131,7 @@ async function loadBrowseRows(merchantId: string, supabase: SupabaseClient, filt
       p_brand: filters.brand,
       p_category: filters.category,
       p_sort: filters.sort,
+      p_condition: filters.condition,
       p_limit: limit,
       p_offset: offset,
     });
@@ -184,7 +185,7 @@ export async function loadStructuredDiscoveryCandidates({
   semanticUnavailable: boolean;
 }> {
   if (!query && (!factQuery || factQuery === '(a & !a)')) {
-    const result = await loadBrowseRows(merchantId, supabase, { brand, category, sort });
+    const result = await loadBrowseRows(merchantId, supabase, { brand, category, condition, sort });
     return { products: result.products, truncated: result.truncated, semanticUnavailable: false };
   }
 

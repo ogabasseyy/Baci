@@ -89,4 +89,19 @@ export const EXPECTED_DISCOVERY_PENDING_SOURCES = [
       'supabase/migrations/20261001190000_ascii_mcp_search_browse.sql',
     sha256: 'aa1e6ca03d97406672096fbfc128abc4ed9f6d6a5fcbdbed7eaa057dfe2fcc2a',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261001200000_condition_offer_selectable.sql',
+    sha256: '5608cd3d5611cd2a7ac89c263941e6708c4e0555b1337e4bac60d2d503d40f51',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261001210000_variant_recall_condition_gate.sql',
+    sha256: '0d238bef0696c597083c741a7ad6ca503f0713561a5699beeaddb84898fdcdd0',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261001220000_browse_condition_narrowing.sql',
+    sha256: '400a97858abfd287a8c3ba16fb87a3c561aebb60d7e5580cccd460dd85869b20',
+  },
 ] as const;

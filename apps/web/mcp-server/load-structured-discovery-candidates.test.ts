@@ -235,13 +235,13 @@ describe('loadStructuredDiscoveryCandidates', () => {
       data: name === 'search_products_browse' ? productRows(['p-1']) : [], error: null,
     }));
     const result = await loadStructuredDiscoveryCandidates({
-      merchantId: 'merchant-3', supabase: fixture.supabase, brand: 'S%ms_ng', category: 'Phones',
+      merchantId: 'merchant-3', supabase: fixture.supabase, brand: 'S%ms_ng', category: 'Phones', condition: 'used',
     });
     expect(result.products).toHaveLength(1);
     // Bound parameters match literally: LIKE wildcards ride raw, no escaping.
     expect(fixture.rpc).toHaveBeenCalledWith('search_products_browse', {
       p_merchant_id: 'merchant-3', p_brand: 'S%ms_ng', p_category: 'Phones',
-      p_sort: undefined, p_limit: 100, p_offset: 0,
+      p_sort: undefined, p_condition: 'used', p_limit: 100, p_offset: 0,
     });
   });
 

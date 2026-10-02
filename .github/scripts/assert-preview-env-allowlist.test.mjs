@@ -193,6 +193,65 @@ test('accepts the real pull-output shape through normalize, redact, and exposure
   }
 });
 
+test('redacted build env is accepted by turbo with the job cache mode', () => {
+  const fixture = fileURLToPath(
+    new URL('./fixtures/preview-env-pull-shape.fixture.env', import.meta.url),
+  );
+  const redactPatterns = fileURLToPath(
+    new URL('./preview-env-redact.sed', import.meta.url),
+  );
+  const directory = mkdtempSync(join(tmpdir(), 'preview-env-turbo-'));
+  try {
+    const envFile = join(directory, '.env.preview.local');
+    copyFileSync(fixture, envFile);
+    for (const args of [
+      ['-E', 's/=["\']?\\[SENSITIVE[[:blank:]]*\\]["\']?[[:space:]]*$/=""/', envFile],
+      ['-E', '-f', redactPatterns, envFile],
+    ]) {
+      const sed = spawnSync('sed', args, { encoding: 'utf8' });
+      assert.equal(sed.status, 0, sed.stderr);
+      writeFileSync(envFile, sed.stdout);
+    }
+    // Offer the redacted file to turbo exactly as `vercel build` would,
+    // plus the job-level cache mode (must mirror the build job step).
+    // Tokens stay unset: --dry must prove hermetic, offline acceptance.
+    const env = { ...process.env };
+    delete env.TURBO_TOKEN;
+    delete env.TURBO_TEAM;
+    for (const rawLine of readFileSync(envFile, 'utf8').split('\n')) {
+      const match = /^(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(
+        rawLine.trim()
+      );
+      if (!match) continue;
+      let value = match[2].trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      env[match[1]] = value;
+    }
+    env.TURBO_CACHE = 'remote:r,local:rw';
+    const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
+    const dry = spawnSync(
+      'pnpm',
+      ['exec', 'turbo', 'build', '--filter=@baci/web', '--dry=json'],
+      {
+        cwd: repoRoot,
+        env,
+        encoding: 'utf8',
+        timeout: 180000,
+        maxBuffer: 64 * 1024 * 1024,
+      }
+    );
+    assert.equal(dry.status, 0, (dry.stderr || '').slice(-2000));
+    assert.doesNotMatch(dry.stderr || '', /Cannot set `cache` config/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('exits nonzero when inputs are missing', () => {
   const missing = spawnSync('node', [SCRIPT], { encoding: 'utf8' });
   assert.equal(missing.status, 2);

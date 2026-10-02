@@ -13,6 +13,13 @@
 # Strip an optional export prefix first so the key patterns match
 # uniformly (the exposure gate accepts the export form).
 s/^export[[:blank:]][[:blank:]]*//
+# Cache-mode ownership (not privilege): the build job sets TURBO_CACHE
+# explicitly, and any pulled TURBO_CACHE value would fight it while the
+# deprecated TURBO_REMOTE_ONLY flag aborts turbo outright when combined
+# with cache config (verified failure). Blank both so the job owns the
+# mode deterministically.
+s/^TURBO_CACHE=.*/TURBO_CACHE=""/
+s/^TURBO_REMOTE_ONLY=.*/TURBO_REMOTE_ONLY=""/
 s/^ADDRESS_AUTOCOMPLETE_KV_REST_API_READ_ONLY_TOKEN=.*/ADDRESS_AUTOCOMPLETE_KV_REST_API_READ_ONLY_TOKEN=""/
 s/^ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN=.*/ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN=""/
 s/^ADDRESS_AUTOCOMPLETE_KV_URL=.*/ADDRESS_AUTOCOMPLETE_KV_URL=""/

@@ -188,17 +188,19 @@ BEGIN
     OR browse_ids @> ARRAY['e5100000-0000-4000-8000-000000000625'::uuid] THEN
     RAISE EXCEPTION 'newest browse must lead with the 2025 row and park undated rows last, got %', browse_ids;
   END IF;
-  -- Requested conditions narrow before paging: only the used base
-  -- survives a used request, and it drops out of a new request.
+  -- Requested conditions narrow before paging: the used base and the
+  -- depleted new base with a stocked used offer survive a used request,
+  -- and both drop out of a new request.
   SELECT array_agg(id) INTO browse_ids
   FROM public.search_products_browse(
     p_merchant_id => 'e5100000-0000-4000-8000-000000000601',
     p_condition => 'used',
     p_limit => 10
   );
-  IF cardinality(browse_ids) IS DISTINCT FROM 1
-    OR browse_ids[1] IS DISTINCT FROM 'e5100000-0000-4000-8000-000000000617'::uuid THEN
-    RAISE EXCEPTION 'used browse must keep the used base only, got %', browse_ids;
+  IF cardinality(browse_ids) IS DISTINCT FROM 2
+    OR browse_ids[1] IS DISTINCT FROM 'e5100000-0000-4000-8000-000000000617'::uuid
+    OR browse_ids[2] IS DISTINCT FROM 'e5100000-0000-4000-8000-000000000627'::uuid THEN
+    RAISE EXCEPTION 'used browse must keep the used base and used offer only, got %', browse_ids;
   END IF;
   SELECT array_agg(id) INTO browse_ids
   FROM public.search_products_browse(

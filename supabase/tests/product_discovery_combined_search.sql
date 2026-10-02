@@ -176,40 +176,40 @@ VALUES (
   true
 );
 
-INSERT INTO public.products (id, merchant_id, name, slug, brand, price, status, discovery_metadata)
+INSERT INTO public.products (id, merchant_id, name, slug, brand, price, status, manage_stock, discovery_metadata)
 VALUES
   ('cb58d110-0000-4000-8000-000000000202', 'cb58d110-0000-4000-8000-000000000201',
-   'Generic handset', 'generic-handset', 'Samsung', 50000, 'active',
+   'Generic handset', 'generic-handset', 'Samsung', 50000, 'active', false,
    '{"product_type":"phone","attributes":{"storage_gb":256}}'::jsonb),
   ('cb58d110-0000-4000-8000-000000000203', 'cb58d110-0000-4000-8000-000000000201',
-   'Generic handset', 'generic-handset-2', 'Google', 50000, 'active',
+   'Generic handset', 'generic-handset-2', 'Google', 50000, 'active', false,
    '{"product_type":"phone","attributes":{"storage_gb":256}}'::jsonb),
   ('cb58d110-0000-4000-8000-000000000204', 'cb58d110-0000-4000-8000-000000000201',
-   'camera camera camera', 'camera-thrice', 'Acme', 50000, 'active',
+   'camera camera camera', 'camera-thrice', 'Acme', 50000, 'active', false,
    '{"product_type":"camera"}'::jsonb),
   ('cb58d110-0000-4000-8000-000000000205', 'cb58d110-0000-4000-8000-000000000201',
-   'camera', 'camera-once', 'Acme', 50000, 'active',
+   'camera', 'camera-once', 'Acme', 50000, 'active', false,
    '{"product_type":"camera"}'::jsonb),
   ('cb58d110-0000-4000-8000-000000000206', 'cb58d110-0000-4000-8000-000000000201',
-   'Capacity fixture', 'ram-eight-storage-128', 'Acme', 50000, 'active',
+   'Capacity fixture', 'ram-eight-storage-128', 'Acme', 50000, 'active', false,
    '{"attributes":{"ram_gb":8,"storage_gb":128}}'::jsonb),
   ('cb58d110-0000-4000-8000-000000000207', 'cb58d110-0000-4000-8000-000000000201',
-   'Capacity fixture', 'ram-128-storage-eight', 'Acme', 50000, 'active',
+   'Capacity fixture', 'ram-128-storage-eight', 'Acme', 50000, 'active', false,
    '{"attributes":{"ram_gb":128,"storage_gb":8}}'::jsonb),
   ('cb58d110-0000-4000-8000-000000000208', 'cb58d110-0000-4000-8000-000000000201',
-   'USB-C accessory', 'connector-marketing-only', 'Acme', 50000, 'active',
+   'USB-C accessory', 'connector-marketing-only', 'Acme', 50000, 'active', false,
    '{"attributes":{"connector":"Lightning"}}'::jsonb),
   ('cb58d110-0000-4000-8000-000000000209', 'cb58d110-0000-4000-8000-000000000201',
-   'Accessory', 'connector-exact', 'Acme', 50000, 'active',
+   'Accessory', 'connector-exact', 'Acme', 50000, 'active', false,
    '{"attributes":{"connector":"  Usb-C  "}}'::jsonb),
   ('cb58d110-0000-4000-8000-000000000210', 'cb58d110-0000-4000-8000-000000000201',
-   'Accessory', 'connector-other-key', 'Acme', 50000, 'active',
+   'Accessory', 'connector-other-key', 'Acme', 50000, 'active', false,
    '{"attributes":{"connector":"Lightning","color":"USB-C"}}'::jsonb),
   ('cb58d110-0000-4000-8000-000000000211', 'cb58d110-0000-4000-8000-000000000201',
-   'phone phone phone', 'phone-marketing-accessory', 'Acme', 50000, 'active',
+   'phone phone phone', 'phone-marketing-accessory', 'Acme', 50000, 'active', false,
    '{"product_type":"accessory"}'::jsonb),
   ('cb58d110-0000-4000-8000-000000000212', 'cb58d110-0000-4000-8000-000000000201',
-   'Display fixture', 'screen-six-half', 'Acme', 50000, 'active',
+   'Display fixture', 'screen-six-half', 'Acme', 50000, 'active', false,
    '{"attributes":{"screen_inches":6.5}}'::jsonb);
 
 INSERT INTO public.products

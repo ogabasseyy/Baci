@@ -30,14 +30,19 @@ VALUES
   );
 
 INSERT INTO public.products
-  (id, merchant_id, name, slug, brand, price, status, has_variants, condition, discovery_metadata)
+  (id, merchant_id, name, slug, brand, price, status, has_variants, condition,
+   manage_stock, discovery_metadata)
 VALUES
   ('cb58d110-0000-4000-8000-000000000621', 'cb58d110-0000-4000-8000-000000000604',
-   'Black new widget', 'black-new-widget', 'Acme', 50000, 'active', false, 'new',
+   'Black new widget', 'black-new-widget', 'Acme', 50000, 'active', false, 'new', false,
    '{"product_type":"phone","attributes":{"color":"black"}}'),
   ('cb58d110-0000-4000-8000-000000000622', 'cb58d110-0000-4000-8000-000000000604',
-   'Black new gadget', 'black-new-gadget', 'Acme', 50000, 'active', false, 'new',
-   '{"product_type":"phone","attributes":{"color":"black"}}'),
+   'Black new gadget', 'black-new-gadget', 'Acme', 50000, 'active', false, 'new', false,
+   '{"product_type":"phone","attributes":{"color":"black"}}');
+
+INSERT INTO public.products
+  (id, merchant_id, name, slug, brand, price, status, has_variants, condition, discovery_metadata)
+VALUES
   ('cb58d110-0000-4000-8000-000000000623', 'cb58d110-0000-4000-8000-000000000604',
    'Black widget', 'black-widget', 'Acme', 50000, 'active', true, 'new',
    '{"product_type":"phone","attributes":{"color":"black"}}'),
@@ -69,16 +74,17 @@ VALUES
 -- Exclusion fixtures live on their own merchant: a phone, a tablet, and a
 -- type-less row that drops with the phone under a nonempty exclusion list.
 INSERT INTO public.products
-  (id, merchant_id, name, slug, brand, price, status, has_variants, condition, discovery_metadata)
+  (id, merchant_id, name, slug, brand, price, status, has_variants, condition,
+   manage_stock, discovery_metadata)
 VALUES
   ('cb58d110-0000-4000-8000-000000000637', 'cb58d110-0000-4000-8000-000000000605',
-   'Black exclusion phone', 'black-exclusion-phone', 'Excl', 50000, 'active', false, 'new',
+   'Black exclusion phone', 'black-exclusion-phone', 'Excl', 50000, 'active', false, 'new', false,
    '{"product_type":"phone"}'),
   ('cb58d110-0000-4000-8000-000000000638', 'cb58d110-0000-4000-8000-000000000605',
-   'Black exclusion tablet', 'black-exclusion-tablet', 'Excl', 50000, 'active', false, 'new',
+   'Black exclusion tablet', 'black-exclusion-tablet', 'Excl', 50000, 'active', false, 'new', false,
    '{"product_type":"tablet"}'),
   ('cb58d110-0000-4000-8000-000000000639', 'cb58d110-0000-4000-8000-000000000605',
-   'Black exclusion typeless', 'black-exclusion-typeless', 'Excl', 50000, 'active', false, 'new',
+   'Black exclusion typeless', 'black-exclusion-typeless', 'Excl', 50000, 'active', false, 'new', false,
    '{}');
 
 INSERT INTO public.product_variants (id, product_id, merchant_id, attributes, stock_quantity, condition)

@@ -1,6 +1,11 @@
 -- Public variant eligibility stays in parity across recall, browse, condition
 -- matching, and bounded hydration, including legacy NULL-managed parents.
 BEGIN;
+INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password,
+  email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
+VALUES ('cb58d110-0000-4000-8000-000000000801', '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated', 'projection-actor@example.test', 'test',
+  now(), now(), now(), '{}'::jsonb, '{}'::jsonb);
 SET LOCAL ROLE service_role;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 
@@ -11,12 +16,14 @@ VALUES
   ('cb58d110-0000-4000-8000-000000000812', 'unpublished-projection@example.test',
    'Unpublished Projection', 'unpublished-projection', false);
 
-INSERT INTO public.branches (id, merchant_id, name, active)
+SELECT pg_catalog.set_config('app.branch_audit_actor_id', 'cb58d110-0000-4000-8000-000000000801', true);
+
+INSERT INTO public.branches (id, merchant_id, name, active, is_default)
 VALUES
   ('cb58d110-0000-4000-8000-000000000821',
-   'cb58d110-0000-4000-8000-000000000811', 'Public Branch', true),
+   'cb58d110-0000-4000-8000-000000000811', 'Public Branch', true, true),
   ('cb58d110-0000-4000-8000-000000000822',
-   'cb58d110-0000-4000-8000-000000000811', 'Inactive Branch', false);
+   'cb58d110-0000-4000-8000-000000000811', 'Inactive Branch', true, false);
 
 INSERT INTO public.products
   (id, merchant_id, name, slug, price, stock_quantity, status, has_variants, manage_stock,
@@ -55,6 +62,11 @@ VALUES
   ('cb58d110-0000-4000-8000-000000000853', 'cb58d110-0000-4000-8000-000000000811',
    'cb58d110-0000-4000-8000-000000000843', 'cb58d110-0000-4000-8000-000000000822',
    'serial', 'other-branch-unit', 'available');
+
+SELECT pg_catalog.set_config('app.branch_deactivation_rpc', 'on', true);
+UPDATE public.branches SET active = false
+WHERE id = 'cb58d110-0000-4000-8000-000000000822';
+SELECT pg_catalog.set_config('app.branch_deactivation_rpc', 'off', true);
 
 -- The helper is deliberately private even to app roles. Run its unit
 -- assertions as the migration-test connection owner before public RPC checks.

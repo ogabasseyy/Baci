@@ -11,6 +11,7 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import {
   discoveryFactsQuerySchema,
+  discoveryResearchPageSchema,
   updateProductDiscoveryMetadataSchema,
 } from '@/schemas/update-product-discovery-metadata';
 
@@ -35,42 +36,37 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Merchant not found' }, { status: 404 });
   if (!hasPermission(toUserAccess(merchant), 'products', 'edit'))
     return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
-  let query = supabase
-    .from('products')
-    .select(
-      'id,name,category,metadata,discovery_metadata,specifications,mpn,color'
-    )
-    .eq('merchant_id', merchant.merchantId)
-    .order('id')
-    .limit(21);
-  if (cursor) query = query.gt('id', cursor);
-  const { data, error } = await query;
+  const { data, error } = await supabase
+    .rpc('get_product_discovery_research_page', {
+      p_merchant_id: merchant.merchantId,
+      p_cursor: cursor ?? null,
+    })
+    .select('product,revision');
   if (error)
     return NextResponse.json(
       { error: 'Could not load catalog facts' },
       { status: 500 }
     );
-  const rows = data ?? [];
+  const parsedRows = discoveryResearchPageSchema.safeParse(data ?? []);
+  if (!parsedRows.success)
+    return NextResponse.json(
+      { error: 'Could not load catalog facts' },
+      { status: 500 }
+    );
+  const rows = parsedRows.data;
   return NextResponse.json(
     {
-      products: rows.slice(0, 20).map((row) => ({
+      products: rows.slice(0, 20).map(({ product: row, revision }) => ({
         id: row.id,
         name: row.name,
-        expectedMetadata: row.discovery_metadata,
-        expectedSource: {
-          name: row.name,
-          category: row.category,
-          metadata: row.metadata,
-          specifications: row.specifications,
-          mpn: row.mpn,
-          color: row.color,
-        },
+        expectedRevision: revision,
+        currentMetadata: row.discovery_metadata,
         ...proposeDiscoveryFacts(row),
         specifications: row.specifications,
         mpn: row.mpn,
         color: row.color,
       })),
-      nextCursor: rows.length > 20 ? rows[19].id : null,
+      nextCursor: rows.length > 20 ? rows[19].product.id : null,
     },
     { headers: { 'Cache-Control': 'no-store' } }
   );
@@ -123,8 +119,7 @@ export async function PUT(request: NextRequest) {
       p_product_id: parsed.data.productId,
       p_merchant_id: merchant.merchantId,
       p_metadata: parsed.data.metadata,
-      p_expected_metadata: parsed.data.expectedMetadata,
-      p_expected_source: parsed.data.expectedSource,
+      p_expected_revision: parsed.data.expectedRevision,
     })
     .returns<{ id: string }[]>()
     .maybeSingle();

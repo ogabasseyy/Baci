@@ -314,4 +314,9 @@ export const EXPECTED_DISCOVERY_PENDING_SOURCES = [
       'supabase/migrations/20261002222000_guard_discovery_research_source.sql',
     sha256: '6bdf8fc2ed996a9a447af9413f52ad59f49387b9a8c10446600fc52d397ffec6',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261002233000_lossless_discovery_research_revision.sql',
+    sha256: 'f40235da51a6df7218841429fa0057c2ac2d5b24170b1b78f3ce77d4797ee09d',
+  },
 ] as const;

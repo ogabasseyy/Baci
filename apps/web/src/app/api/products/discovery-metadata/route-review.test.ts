@@ -5,14 +5,12 @@ const mocks = vi.hoisted(() => ({
   user: vi.fn(),
   merchant: vi.fn(),
   permission: vi.fn(),
-  from: vi.fn(),
-  eq: vi.fn(),
-  gt: vi.fn(),
+  rpc: vi.fn(),
   result: { data: [] as unknown[], error: null as unknown },
 }));
 vi.mock('next/headers', () => ({ cookies: async () => ({}) }));
 vi.mock('@/lib/supabase/server', () => ({
-  createClient: () => ({ auth: { getUser: mocks.user }, from: mocks.from }),
+  createClient: () => ({ auth: { getUser: mocks.user }, rpc: mocks.rpc }),
 }));
 vi.mock('@/lib/get-merchant-for-api-request', () => ({
   getMerchantForApiRequest: mocks.merchant,
@@ -32,77 +30,81 @@ beforeEach(() => {
   mocks.user.mockResolvedValue({ data: { user: { id: 'user' } }, error: null });
   mocks.merchant.mockResolvedValue({ merchantId: 'merchant' });
   mocks.permission.mockReturnValue(true);
-  const query = {
-    select: vi.fn().mockReturnThis(),
-    eq: mocks.eq,
-    gt: mocks.gt,
-    order: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockReturnThis(),
-    // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are intentionally thenable.
-    then: (resolve: (v: unknown) => void) => resolve(mocks.result),
-  };
-  mocks.eq.mockReturnValue(query);
-  mocks.gt.mockReturnValue(query);
-  mocks.from.mockReturnValue(query);
+  mocks.rpc.mockReturnValue({ select: async () => mocks.result });
 });
-it('authenticates and checks edit permission before loading source fields', async () => {
+it('authenticates and authorizes product editing before source reads', async () => {
   mocks.user.mockResolvedValueOnce({ data: { user: null }, error: null });
   expect((await GET(request())).status).toBe(401);
-  expect(mocks.from).not.toHaveBeenCalled();
-  mocks.permission.mockReturnValue(false);
+  expect(mocks.rpc).not.toHaveBeenCalled();
+  mocks.permission.mockReturnValueOnce(false);
   expect((await GET(request())).status).toBe(403);
-  expect(mocks.from).not.toHaveBeenCalled();
+  expect(mocks.rpc).not.toHaveBeenCalled();
 });
-it('scopes pagination to merchant and returns a bounded review page with raw snapshot', async () => {
+it('returns an opaque database revision unchanged even if JSON numbers round in JavaScript', async () => {
   const cursor = '11111111-1111-4111-8111-111111111111';
+  const revision = 'b'.repeat(64);
+  const metadata = JSON.parse('{"serial":9007199254740993}');
+  expect(metadata.serial).toBe(9007199254740992);
   mocks.result.data = Array.from({ length: 21 }, (_, i) => ({
-    id: String(i),
-    name: 'Phone',
-    category: 'Smartphones',
-    metadata: {},
-    discovery_metadata: null,
-    specifications: [],
-    mpn: null,
-    color: null,
-  }));
-  const response = await GET(request(`?cursor=${cursor}`));
-  const body = await response.json();
-  expect(mocks.eq).toHaveBeenCalledWith('merchant_id', 'merchant');
-  expect(mocks.gt).toHaveBeenCalledWith('id', cursor);
-  expect(body.products).toHaveLength(20);
-  expect(body.nextCursor).toBe('19');
-  expect(body.products[0]).toMatchObject({
-    draft: { product_type: 'phone' },
-    expectedMetadata: null,
-    expectedSource: {
+    product: {
+      id: `11111111-1111-4111-8111-${String(i + 1).padStart(12, '0')}`,
       name: 'Phone',
       category: 'Smartphones',
-      metadata: {},
+      metadata,
+      discovery_metadata: null,
       specifications: [],
       mpn: null,
       color: null,
     },
+    revision,
+  }));
+  const response = await GET(request(`?cursor=${cursor}`));
+  const body = await response.json();
+  expect(mocks.rpc).toHaveBeenCalledWith(
+    'get_product_discovery_research_page',
+    { p_merchant_id: 'merchant', p_cursor: cursor }
+  );
+  expect(body.products).toHaveLength(20);
+  expect(body.nextCursor).toBe('11111111-1111-4111-8111-000000000020');
+  expect(body.products[0]).toMatchObject({
+    draft: { product_type: 'phone' },
+    currentMetadata: null,
+    expectedRevision: revision,
   });
+  expect(body.products[0]).not.toHaveProperty('expectedSource');
   expect(response.headers.get('Cache-Control')).toBe('no-store');
 });
-it('rejects bad cursors and sanitizes database failures', async () => {
+it('rejects invalid query fields before merchant lookup and sanitizes database failures', async () => {
   expect((await GET(request('?cursor=bad'))).status).toBe(400);
+  expect((await GET(request('?tracking=unknown'))).status).toBe(400);
   expect(mocks.merchant).not.toHaveBeenCalled();
-  expect(mocks.from).not.toHaveBeenCalled();
+  expect(mocks.rpc).not.toHaveBeenCalled();
   mocks.result.error = { message: 'private database error' };
   const response = await GET(request());
   expect(response.status).toBe(500);
   expect(await response.text()).not.toContain('private database');
 });
-
-it('authorizes requested merchant and rejects inaccessible catalogs', async () => {
+it('authorizes explicit merchant selection independently and uses a null first-page cursor', async () => {
   const merchantId = '11111111-1111-4111-8111-111111111111';
   expect((await GET(request(`?merchantId=${merchantId}`))).status).toBe(200);
   expect(mocks.merchant).toHaveBeenCalledWith(expect.anything(), 'user', {
     requestedMerchantId: merchantId,
   });
+  expect(mocks.rpc).toHaveBeenCalledWith(
+    'get_product_discovery_research_page',
+    { p_merchant_id: 'merchant', p_cursor: null }
+  );
   mocks.merchant.mockResolvedValueOnce(null);
-  mocks.from.mockClear();
+  mocks.rpc.mockClear();
   expect((await GET(request(`?merchantId=${merchantId}`))).status).toBe(404);
-  expect(mocks.from).not.toHaveBeenCalled();
+  expect(mocks.rpc).not.toHaveBeenCalled();
+});
+
+it('rejects malformed RPC data without leaking source values', async () => {
+  mocks.result.data = [
+    { product: { id: 'bad', name: 'private source' }, revision: 'invalid' },
+  ];
+  const response = await GET(request());
+  expect(response.status).toBe(500);
+  expect(await response.text()).not.toContain('private source');
 });

@@ -28,7 +28,7 @@ AS $$
   END;
 $$;
 
-DROP FUNCTION IF EXISTS public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb);
+DROP FUNCTION IF EXISTS public.search_product_variant_recall(uuid, jsonb, integer, integer); -- live .0930 form: a missed overload makes short calls ambiguous (42725).
 CREATE OR REPLACE FUNCTION public.search_product_variant_recall(
   p_merchant_id uuid,
   p_filters jsonb DEFAULT '[]'::jsonb,

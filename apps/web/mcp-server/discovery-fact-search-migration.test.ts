@@ -140,7 +140,7 @@ it('ranks variant recall by joint branch verdicts before attribute tiers', () =>
   const recall = readFileSync(new URL('../../../supabase/migrations/20261001150000_variant_recall_identity_rank.sql', import.meta.url), 'utf8');
   expect(recall.split('\n').length).toBeLessThanOrEqual(300);
   expect(recall).toContain(
-    'DROP FUNCTION IF EXISTS public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb);'
+    'DROP FUNCTION IF EXISTS public.search_product_variant_recall(uuid, jsonb, integer, integer);'
   );
   expect(recall).toContain("p_identity jsonb DEFAULT '[]'::jsonb");
   expect(recall).toContain("p_excluded_types jsonb DEFAULT '[]'::jsonb");

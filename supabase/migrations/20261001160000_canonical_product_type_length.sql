@@ -3,9 +3,9 @@
 -- NFKC-canonicalized output, so a direct PostgREST write of 100
 -- compatibility ligatures passed the boundary and then failed the reader,
 -- dropping the product's indexed facts. Length now applies to the same
--- canonicalized value the runtime uses. The shared canonicalizer is also
--- tightened to the exact runtime pipeline (trim after NFKC with the JS
--- trim set), replacing the index-normalizer approximation it started with.
+-- canonicalized value the runtime uses. The shared canonicalizer below
+-- re-pins the definition originating in 20261001110000 (the v5 index build
+-- executes it, so it must exist before this migration runs).
 DROP FUNCTION IF EXISTS discovery.canonical_identity_product_type(text, text);
 CREATE FUNCTION discovery.canonical_identity_product_type(product_type text, category text)
 RETURNS text

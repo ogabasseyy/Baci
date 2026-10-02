@@ -7,6 +7,32 @@
 -- Deferred rows (provider-awaiting work that must not consume retries)
 -- are reclaimable without incrementing attempts, so a pending refund
 -- that completes late still resumes its remaining legs.
+-- Forward-declare the shared gateway normalizer (canonically created in
+-- 20260928183650_gateway_name_normalization.sql): the internal-gateway
+-- predicates below and the 20260928176000 backfill key on it, and both
+-- run before 183650. The canonical migration re-applies this identical
+-- definition, so replay stays idempotent.
+CREATE OR REPLACE FUNCTION public.normalized_gateway_name_v1(
+  p_gateway text
+) RETURNS text
+LANGUAGE sql IMMUTABLE SET search_path = '' AS $$
+  SELECT NULLIF(
+    upper(
+      regexp_replace(
+        COALESCE(p_gateway, ''),
+        '^\s+|\s+$',
+        '',
+        'g'
+      )
+    ),
+    ''
+  );
+$$;
+
+-- Legacy internal-payment rows may pad or re-case the gateway
+-- (`Wallet`, ` wallet `): normalize before the internal-set lookup so
+-- they are not mistaken for external legs. Missing or blank gateways
+-- coalesce back to '' and stay external, as before.
 CREATE OR REPLACE FUNCTION public.claim_order_cancellation_side_effect(
   p_order_id uuid,
   p_step text,
@@ -52,8 +78,8 @@ BEGIN
        -- of stranding it behind a rejection.
        AND t.status IN ('completed', 'refund_pending', 'refunded')
        AND t.amount > 0
-       AND COALESCE(t.gateway, '') NOT IN (
-         'wallet', 'savings', 'store_credit', 'cash', 'manual', 'pay_on_delivery'
+       AND COALESCE(public.normalized_gateway_name_v1(t.gateway), '') NOT IN (
+         'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY'
        )
   ) THEN
     RAISE EXCEPTION 'refund_not_required';
@@ -81,8 +107,8 @@ BEGIN
        -- the outstanding refund.
        AND payment.status IN ('completed', 'refund_pending')
        AND payment.amount > 0
-       AND COALESCE(payment.gateway, '') NOT IN (
-         'wallet', 'savings', 'store_credit', 'cash', 'manual', 'pay_on_delivery'
+       AND COALESCE(public.normalized_gateway_name_v1(payment.gateway), '') NOT IN (
+         'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY'
        )
        AND NOT EXISTS (
          SELECT 1 FROM public.transactions refund
@@ -156,9 +182,9 @@ BEGIN
                      AND only_payment.transaction_type = 'payment'
                      AND only_payment.status = 'completed'
                      AND only_payment.amount > 0
-                     AND COALESCE(only_payment.gateway, '') NOT IN (
-                       'wallet', 'savings', 'store_credit', 'cash', 'manual',
-                       'pay_on_delivery'
+                     AND COALESCE(public.normalized_gateway_name_v1(only_payment.gateway), '') NOT IN (
+                       'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL',
+                       'PAY_ON_DELIVERY'
                      )
                 )
               )

@@ -72,6 +72,25 @@ export async function drainFailedPaidOrderSideEffectRow({
     const txn = row.transactions;
     const gateway = txn.gateway;
     if (!isHealableGateway(gateway)) {
+      // The parent selects failed rows without a gateway filter into a
+      // bounded unordered batch: returning without retiring would let a
+      // handful of legacy/unsupported-gateway rows occupy every
+      // invocation and starve healable rows. The gateway never changes,
+      // so retire the row terminally instead of skipping it forever.
+      await retireTerminalSideEffectDrain({
+        fileWedgeReview,
+        orderId,
+        reason: `Paid-order side-effect drain cannot verify gateway ${gateway}; manual reconciliation required`,
+        resolution: 'unhealable_gateway',
+        supabase,
+        transaction: {
+          gateway,
+          gateway_reference: txn.gateway_reference,
+          id: txn.id,
+          metadata: txn.metadata,
+          order_id: orderId,
+        },
+      });
       return { action: 'skipped', reason: 'unhealable_gateway' };
     }
     if (!txn.gateway_reference) {

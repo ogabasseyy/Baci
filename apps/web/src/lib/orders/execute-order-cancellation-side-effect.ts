@@ -163,10 +163,11 @@ export async function executeOrderCancellationSideEffect({
       transactions,
     });
   }
-  // A legacy/corrupt non-finite leg amount must never reach the
-  // provider (the reduction below would treat NaN as zero while the
-  // predicate accepts it): quarantine it for review first. Zero and
-  // negative legs keep the existing fail-closed predicate throw below.
+  // A legacy/corrupt non-finite or non-positive leg amount must
+  // never reach the provider (the reduction below would treat NaN as
+  // zero while the predicate accepts it): quarantine it for review
+  // first. The predicate below stays as a fail-closed backstop for
+  // callers that skip this preflight.
   await quarantineInvalidRefundAmountLegs({ order, supabase, transactions });
   const gatewayRefundAmount = transactions.reduce(
     (total, transaction) => total + (Number(transaction.amount) || 0),

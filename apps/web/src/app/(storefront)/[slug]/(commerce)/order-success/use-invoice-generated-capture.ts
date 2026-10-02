@@ -87,6 +87,7 @@ export function useInvoiceGeneratedCapture({
     budgetOrderRef.current = orderId;
     attemptsRef.current = 0;
   }
+  // biome-ignore lint/correctness/useExhaustiveDependencies: primitive deps intentionally avoid identity restarts; the budget ref bounds attempts across restarts.
   useEffect(() => {
     if (!orderId || !order || !isUnpaidInvoiceOrder(order)) {
       return;
@@ -155,7 +156,6 @@ export function useInvoiceGeneratedCapture({
     // refreshes replace the object while the primitives are unchanged,
     // and an identity dep would restart the lane pointlessly. The
     // budget ref still bounds total attempts across restarts.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: primitive deps intentionally avoid identity restarts; the budget ref bounds attempts across restarts.
   }, [
     isProforma,
     lookupEmail,

@@ -206,12 +206,9 @@ if (unusableConfigs.length > 0) {
   );
   process.exit(1);
 }
-// Both guardrails passed: apply the buffered map rewrites now, so a
-// failed run never leaves truncated maps behind for a retry to see.
-for (const { configPath, config, kept } of pendingRewrites) {
-  config.filePathMap = kept;
-  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
-}
+// Guardrails passed. Warnings, manifest, and summary all land before
+// any map is touched (rewrites apply last), so any failure above
+// leaves the original maps on disk for a same-workspace retry.
 const droppedProtected = skipped.filter((s) => s.reason === 'protected-path').length;
 const droppedInvalid = skipped.filter((s) => s.reason === 'invalid').length;
 if (droppedProtected > 0 || droppedInvalid > 0) {
@@ -221,6 +218,9 @@ if (droppedProtected > 0 || droppedInvalid > 0) {
   const total = droppedProtected + droppedInvalid;
   console.error(
     `WARNING: dropped ${parts.join(' and ')} ${total === 1 ? 'entry' : 'entries'} from shipped maps (see .preview-refs-manifest.json)`
+  );
+  console.error(
+    `::warning::Dropped ${parts.join(' and ')} filePathMap ${total === 1 ? 'entry' : 'entries'} from shipped preview maps; serve-verify this preview.`
   );
 }
 if (missingCount > 0) {
@@ -233,6 +233,9 @@ if (missingCount > 0) {
       shown.map((v) => `  ${v}`).join('\n') +
       (missingCount > shown.length ? `\n  ...and ${missingCount - shown.length} more` : '') +
       '\nDropped refs can fail at request time: serve-verify this preview (fonts, hero payload), do not trust READY alone.'
+  );
+  console.error(
+    `::warning::Dropped ${missingCount} dangling filePathMap reference(s) from shipped preview maps; serve-verify this preview, do not trust READY alone.`
   );
 }
 
@@ -260,8 +263,8 @@ if (process.env.GITHUB_STEP_SUMMARY) {
     `(${dropped.length} dangling` +
     (guardedCounts.length > 0 ? `, ${guardedCounts.join(', ')}` : '') +
     ')';
-  // Best-effort annotation: maps are already rewritten and the manifest
-  // written, so a broken summary path must not fail the build.
+  // Best-effort annotation: the manifest is written and no map is
+  // touched yet, so a broken summary path must not fail the build.
   try {
     appendFileSync(
       process.env.GITHUB_STEP_SUMMARY,
@@ -275,4 +278,11 @@ if (process.env.GITHUB_STEP_SUMMARY) {
   } catch (error) {
     console.error(`WARNING: could not write step summary: ${error.message}`);
   }
+}
+// Last step: apply the buffered map rewrites. Everything fallible
+// above (guards, manifest, summary) completed first, so a failure
+// anywhere earlier leaves the original maps for a retry to see.
+for (const { configPath, config, kept } of pendingRewrites) {
+  config.filePathMap = kept;
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 }

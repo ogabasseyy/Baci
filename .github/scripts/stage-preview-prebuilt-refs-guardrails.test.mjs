@@ -180,6 +180,7 @@ test('warns about protected and invalid drops that pass the guards', () => {
       run.stderr,
       /WARNING: dropped 1 protected-path and 1 invalid entries/
     );
+    assert.match(run.stderr, /::warning::Dropped 1 protected-path and 1 invalid/);
     const text = readFileSync(summary, 'utf8');
     assert.match(text, /\(0 dangling, 1 protected, 1 invalid\)/);
   } finally {

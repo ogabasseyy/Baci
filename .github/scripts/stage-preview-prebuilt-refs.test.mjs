@@ -231,6 +231,7 @@ test('warns and summarizes phantom drops without failing', () => {
     assert.equal(run.status, 0, run.stderr);
     assert.match(run.stderr, /WARNING: dropped 2 dangling reference/);
     assert.match(run.stderr, /serve-verify this preview/);
+    assert.match(run.stderr, /::warning::Dropped 2 dangling/);
     const text = readFileSync(summary, 'utf8');
     assert.match(text, /staged 3, skipped 2 \(2 dangling\)/);
     assert.match(text, /do not trust READY alone/);

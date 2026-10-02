@@ -261,6 +261,36 @@ describe('send manual order document', () => {
     );
   });
 
+  it('clears the dispatch marker after a definite provider rejection', async () => {
+    const db = database();
+    sendEmail.mockImplementationOnce(async (message) => {
+      await message.beforeTransportDispatch();
+      return { success: false, error: 'provider rejected' };
+    });
+    expect(await sendManualOrderDocument({ supabase: db.client, row })).toEqual(
+      { status: 'failed', error: 'provider rejected' }
+    );
+    expect(db.updates).toContainEqual({
+      table: 'order_notification_outbox',
+      values: { dispatch_started_at: null },
+    });
+  });
+
+  it('keeps the dispatch marker after an indeterminate provider outcome', async () => {
+    const db = database();
+    sendEmail.mockImplementationOnce(async (message) => {
+      await message.beforeTransportDispatch();
+      return { success: false, deliveryOutcome: 'unknown', error: 'timeout' };
+    });
+    expect(await sendManualOrderDocument({ supabase: db.client, row })).toEqual(
+      { status: 'failed', error: 'timeout', deliveryOutcome: 'unknown' }
+    );
+    expect(db.updates).not.toContainEqual({
+      table: 'order_notification_outbox',
+      values: { dispatch_started_at: null },
+    });
+  });
+
   it('requires a claim ID before sending', async () => {
     const db = database();
     db.rpc.mockResolvedValueOnce({ data: { status: 'created' }, error: null });

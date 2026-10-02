@@ -247,7 +247,12 @@ export async function sendManualOrderDocument({
         metadata: { trigger: row.event_type, outbox_id: row.id },
       },
     });
-    if (!result.success)
+    if (!result.success) {
+      // A definite rejection never reached the customer: clear the dispatch
+      // marker so the bounded retry re-claims cleanly instead of skipping
+      // forever on a stale marker. Unknown outcomes keep the marker to
+      // preserve at-most-once delivery.
+      if (result.deliveryOutcome !== 'unknown') await persistDispatch(false);
       return {
         status: 'failed',
         error: result.error || 'Document email failed',
@@ -255,6 +260,7 @@ export async function sendManualOrderDocument({
           ? { deliveryOutcome: 'unknown' as const }
           : {}),
       };
+    }
     providerAccepted = true;
     const { data: marked, error: markError } = await supabase
       .from('receipt_claims')

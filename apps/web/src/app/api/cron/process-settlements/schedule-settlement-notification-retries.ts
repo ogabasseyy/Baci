@@ -31,7 +31,7 @@ export async function scheduleSettlementNotificationRetries({
 }: {
   items: SettlementNotificationRetryItem[];
   logScope: { merchantId: string } | { merchantIds: string[] };
-  reason: 'missing-email' | 'rejected';
+  reason: 'error' | 'missing-email' | 'rejected';
   supabase: SupabaseClient;
 }): Promise<void> {
   const retryGroups = new Map<number, string[]>();
@@ -67,7 +67,9 @@ export async function scheduleSettlementNotificationRetries({
         message:
           reason === 'rejected'
             ? 'Settlement notification dead-lettered after repeated rejections'
-            : 'Settlement notification dead-lettered: merchant email missing',
+            : reason === 'error'
+              ? 'Settlement notification dead-lettered after repeated errors'
+              : 'Settlement notification dead-lettered: merchant email missing',
         ...logScope,
         settlementIds: ids,
         attempts,

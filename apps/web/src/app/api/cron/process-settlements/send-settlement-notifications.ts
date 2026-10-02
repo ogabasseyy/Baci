@@ -110,6 +110,11 @@ export async function sendSettlementNotifications({
 
     // Send one email per merchant
     for (const [, data] of merchantSettlements) {
+      // Hoisted for the catch: a throw during revalidation, email
+      // preparation, or delivery must still advance these rows
+      // through retry accounting, or they pin the bounded
+      // oldest-first batch on every invocation.
+      let stillSettled: MerchantSettlementBatch['settlements'] = [];
       try {
         const settlementIds = data.settlements.map((s) => s.id);
 
@@ -133,7 +138,7 @@ export async function sendSettlementNotifications({
             }>
           ).map((row) => [row.id, row])
         );
-        const stillSettled = data.settlements.filter((item) => {
+        stillSettled = data.settlements.filter((item) => {
           const row = current.get(item.id);
           return row?.status === 'settled' && row.settlement_notified === false;
         });
@@ -224,6 +229,23 @@ export async function sendSettlementNotifications({
           message: 'Failed to send settlement notification',
           merchantId: data.merchantId,
           error: emailError,
+        });
+        // Thrown errors are pre-dispatch (revalidation read, email
+        // build, sender-domain resolution): ZeptoMail resolves
+        // post-dispatch outcomes instead of throwing, and the
+        // notified mark above resolves its errors for explicit
+        // checking — so nothing thrown here was announced, and the
+        // rows rejoin the retry queue rather than pinning the
+        // batch. A throw before revalidation completed falls back
+        // to the whole merchant batch; the scheduler's guarded
+        // update skips rows that reversed since the batch read.
+        const retryItems =
+          stillSettled.length > 0 ? stillSettled : data.settlements;
+        await scheduleSettlementNotificationRetries({
+          items: retryItems,
+          logScope: { merchantId: data.merchantId },
+          reason: 'error',
+          supabase,
         });
         notificationResults.failed++;
       }

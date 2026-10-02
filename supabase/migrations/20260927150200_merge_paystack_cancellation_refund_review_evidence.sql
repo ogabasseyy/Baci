@@ -21,7 +21,10 @@ BEGIN
     SELECT 1 FROM public.transactions
     WHERE id = p_refund_id AND order_id = p_order_id
       AND merchant_id = p_merchant_id AND transaction_type = 'refund'
-      AND gateway = 'paystack'
+      -- Legacy rows may pad or re-case the gateway (` Paystack `):
+      -- an exact match would reject the merge and wedge the caller
+      -- on its own order's open review.
+      AND public.normalized_gateway_name_v1(gateway) = 'PAYSTACK'
   ) THEN
     RETURN false;
   END IF;

@@ -41,6 +41,33 @@ describe('fileRefundEvidenceReview', () => {
     );
   });
 
+  it('persists without paystack_ref on a cross-order collision', async () => {
+    const insert = vi
+      .fn()
+      .mockResolvedValueOnce({ error: { code: '23505' } })
+      .mockResolvedValueOnce({ error: null });
+    const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
+    const db = { from: vi.fn(() => ({ insert })), rpc };
+
+    await fileRefundEvidenceReview(db as never, refund, 'evidence_mismatch');
+
+    // The merge only absorbs into this order's review, so a miss
+    // means another order owns the reference slot: the retry leaves
+    // it unoccupied instead of throwing the worker into rotation.
+    expect(insert).toHaveBeenCalledTimes(2);
+    expect(insert).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ paystack_ref: '42' })
+    );
+    expect(insert).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        paystack_ref: null,
+        txn_id: 'refund-1',
+      })
+    );
+  });
+
   it('throws when the merge fails', async () => {
     const insert = vi.fn().mockResolvedValue({ error: { code: '23505' } });
     const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
@@ -49,6 +76,7 @@ describe('fileRefundEvidenceReview', () => {
     await expect(
       fileRefundEvidenceReview(db as never, refund, 'evidence_mismatch')
     ).rejects.toThrow('refund_evidence_review_persistence_failed');
+    expect(insert).toHaveBeenCalledTimes(2);
   });
 
   it('throws on non-conflict insert errors', async () => {

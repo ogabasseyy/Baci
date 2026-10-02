@@ -206,8 +206,9 @@ BEGIN
       OR v_created > now() - make_interval(days => 7) THEN
       CONTINUE;
     END IF;
-    PERFORM pg_advisory_xact_lock(
-      hashtext('paystack-refund-recovery-watch:' || v_reference)
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(
+        'baci_paystack_refund_watch:' || v_reference, 0)
     );
     IF EXISTS (
       SELECT 1 FROM public.transactions AS t
